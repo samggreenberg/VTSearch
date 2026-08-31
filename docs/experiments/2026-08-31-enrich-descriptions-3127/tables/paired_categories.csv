@@ -1,0 +1,756 @@
+embedder,media_type,corpus,dataset,category,query,base,arm,delta,cluster
+bge,text,20newsgroups,20newsgroups_l,sports,baseball games and athletic competition,0.701657,0.622057,-0.0796,20newsgroups|sports
+bge,text,20newsgroups,20newsgroups_l,science,outer space exploration and astronomy,0.703353,0.652397,-0.050956,20newsgroups|science
+bge,text,20newsgroups,20newsgroups_l,cars,automobiles and car reviews,0.499763,0.37013,-0.129633,20newsgroups|cars
+bge,text,20newsgroups,20newsgroups_l,hockey,ice hockey games and NHL scores,0.857019,0.831541,-0.025478,20newsgroups|hockey
+bge,text,20newsgroups,20newsgroups_l,electronics,electronic circuits and components,0.351417,0.263759,-0.08765799999999996,20newsgroups|electronics
+bge,text,20newsgroups,20newsgroups_l,religion,christian faith and religious practice,0.721166,0.686018,-0.03514799999999996,20newsgroups|religion
+bge,text,20newsgroups,20newsgroups_l,world,world politics and government affairs,0.177931,0.152969,-0.024962000000000012,20newsgroups|world
+bge,text,20newsgroups,20newsgroups_l,business,buying and selling merchandise,0.185532,0.161645,-0.02388699999999999,20newsgroups|business
+bge,text,20newsgroups,20newsgroups_l,technology,computer graphics and image rendering,0.71764,0.634901,-0.0827389999999999,20newsgroups|technology
+bge,text,20newsgroups,20newsgroups_l,medicine,medical diseases and health treatments,0.489659,0.427607,-0.062051999999999996,20newsgroups|medicine
+bge,text,20newsgroups,20newsgroups_l,crypto,cryptography and data encryption,0.798411,0.775667,-0.022743999999999986,20newsgroups|crypto
+bge,text,20newsgroups,20newsgroups_l,atheism,atheism and arguments against religion,0.419234,0.406821,-0.012413000000000007,20newsgroups|atheism
+bge,text,20newsgroups,20newsgroups_l,motorcycles,motorcycle riding and maintenance,0.557099,0.43763,-0.11946899999999999,20newsgroups|motorcycles
+bge,text,20newsgroups,20newsgroups_l,mideast,middle east politics and conflict,0.77894,0.70525,-0.07368999999999992,20newsgroups|mideast
+bge,text,20newsgroups,20newsgroups_l,guns,firearms and gun legislation,0.656338,0.626972,-0.029366000000000003,20newsgroups|guns
+bge,text,20newsgroups,20newsgroups_m,sports,baseball games and athletic competition,0.724249,0.689107,-0.03514200000000001,20newsgroups|sports
+bge,text,20newsgroups,20newsgroups_m,science,outer space exploration and astronomy,0.706297,0.640978,-0.0653189999999999,20newsgroups|science
+bge,text,20newsgroups,20newsgroups_m,cars,automobiles and car reviews,0.574108,0.43517,-0.13893799999999995,20newsgroups|cars
+bge,text,20newsgroups,20newsgroups_m,hockey,ice hockey games and NHL scores,0.813919,0.789167,-0.024751999999999996,20newsgroups|hockey
+bge,text,20newsgroups,20newsgroups_m,electronics,electronic circuits and components,0.275425,0.192311,-0.08311399999999997,20newsgroups|electronics
+bge,text,20newsgroups,20newsgroups_m,religion,christian faith and religious practice,0.710625,0.643255,-0.06736999999999993,20newsgroups|religion
+bge,text,20newsgroups,20newsgroups_m,world,world politics and government affairs,0.202634,0.167443,-0.035191,20newsgroups|world
+bge,text,20newsgroups,20newsgroups_m,business,buying and selling merchandise,0.236355,0.187946,-0.04840900000000001,20newsgroups|business
+bge,text,20newsgroups,20newsgroups_m,technology,computer graphics and image rendering,0.763593,0.664243,-0.09934999999999994,20newsgroups|technology
+bge,text,20newsgroups,20newsgroups_m,medicine,medical diseases and health treatments,0.503719,0.427131,-0.07658800000000004,20newsgroups|medicine
+bge,text,20newsgroups,20newsgroups_m,crypto,cryptography and data encryption,0.789046,0.765692,-0.023353999999999986,20newsgroups|crypto
+bge,text,20newsgroups,20newsgroups_m,atheism,atheism and arguments against religion,0.438184,0.425279,-0.012905,20newsgroups|atheism
+bge,text,20newsgroups,20newsgroups_m,motorcycles,motorcycle riding and maintenance,0.581643,0.456702,-0.12494100000000002,20newsgroups|motorcycles
+bge,text,20newsgroups,20newsgroups_m,mideast,middle east politics and conflict,0.701597,0.630405,-0.07119200000000003,20newsgroups|mideast
+bge,text,20newsgroups,20newsgroups_m,guns,firearms and gun legislation,0.531449,0.495308,-0.03614099999999992,20newsgroups|guns
+bge,text,20newsgroups,20newsgroups_s,sports,baseball games and athletic competition,0.728944,0.650002,-0.07894200000000007,20newsgroups|sports
+bge,text,20newsgroups,20newsgroups_s,science,outer space exploration and astronomy,0.716763,0.646271,-0.070492,20newsgroups|science
+bge,text,20newsgroups,20newsgroups_s,cars,automobiles and car reviews,0.566821,0.430661,-0.13616,20newsgroups|cars
+bge,text,20newsgroups,20newsgroups_s,hockey,ice hockey games and NHL scores,0.808873,0.786713,-0.022159999999999958,20newsgroups|hockey
+bge,text,20newsgroups,20newsgroups_s,electronics,electronic circuits and components,0.34958,0.264966,-0.08461400000000002,20newsgroups|electronics
+bge,text,20newsgroups,20newsgroups_s,religion,christian faith and religious practice,0.674364,0.641203,-0.033160999999999996,20newsgroups|religion
+bge,text,20newsgroups,20newsgroups_s,world,world politics and government affairs,0.197135,0.185836,-0.011299000000000003,20newsgroups|world
+bge,text,20newsgroups,20newsgroups_s,business,buying and selling merchandise,0.239398,0.21021,-0.02918799999999999,20newsgroups|business
+bge,text,20newsgroups,20newsgroups_s,technology,computer graphics and image rendering,0.739556,0.650013,-0.08954300000000004,20newsgroups|technology
+bge,text,20newsgroups,20newsgroups_s,medicine,medical diseases and health treatments,0.463142,0.404902,-0.058240000000000014,20newsgroups|medicine
+bge,text,20newsgroups,20newsgroups_s,crypto,cryptography and data encryption,0.779555,0.770115,-0.009440000000000004,20newsgroups|crypto
+bge,text,20newsgroups,20newsgroups_s,atheism,atheism and arguments against religion,0.461213,0.400681,-0.060531999999999975,20newsgroups|atheism
+bge,text,20newsgroups,20newsgroups_s,motorcycles,motorcycle riding and maintenance,0.593467,0.508893,-0.08457399999999993,20newsgroups|motorcycles
+bge,text,20newsgroups,20newsgroups_s,mideast,middle east politics and conflict,0.761234,0.702718,-0.05851600000000001,20newsgroups|mideast
+bge,text,20newsgroups,20newsgroups_s,guns,firearms and gun legislation,0.681179,0.655245,-0.025934000000000013,20newsgroups|guns
+clap,audio,esc50,esc50_l,dog,a dog barking,1.0,0.991004,-0.008996000000000004,esc50|dog
+clap,audio,esc50,esc50_l,rooster,a rooster crowing at dawn,0.966472,0.856924,-0.10954799999999998,esc50|rooster
+clap,audio,esc50,esc50_l,pig,a pig oinking,0.799441,0.764278,-0.035162999999999944,esc50|pig
+clap,audio,esc50,esc50_l,cow,a cow mooing,0.529137,0.57022,0.04108299999999998,esc50|cow
+clap,audio,esc50,esc50_l,frog,frogs croaking,0.990922,1.0,0.00907800000000003,esc50|frog
+clap,audio,esc50,esc50_l,cat,a cat meowing,1.0,0.994631,-0.005368999999999957,esc50|cat
+clap,audio,esc50,esc50_l,hen,a hen clucking,0.56678,0.399065,-0.16771499999999995,esc50|hen
+clap,audio,esc50,esc50_l,insects,buzzing insects,0.417362,0.501757,0.084395,esc50|insects
+clap,audio,esc50,esc50_l,sheep,sheep bleating,0.978261,0.963055,-0.015206000000000053,esc50|sheep
+clap,audio,esc50,esc50_l,crow,a crow cawing,1.0,1.0,0.0,esc50|crow
+clap,audio,esc50,esc50_l,rain,rain falling,0.941432,0.873224,-0.06820800000000005,esc50|rain
+clap,audio,esc50,esc50_l,sea_waves,ocean waves crashing on the shore,0.941649,0.943524,0.001875000000000071,esc50|sea_waves
+clap,audio,esc50,esc50_l,crackling_fire,crackling fire in a fireplace,0.994983,1.0,0.005017000000000049,esc50|crackling_fire
+clap,audio,esc50,esc50_l,crickets,crickets chirping at night,0.811859,0.887693,0.07583399999999996,esc50|crickets
+clap,audio,esc50,esc50_l,chirping_birds,birds singing and chirping,0.750742,0.733888,-0.016854000000000036,esc50|chirping_birds
+clap,audio,esc50,esc50_l,water_drops,dripping water drops,0.660891,0.869603,0.208712,esc50|water_drops
+clap,audio,esc50,esc50_l,wind,wind howling,0.499327,0.524938,0.025610999999999995,esc50|wind
+clap,audio,esc50,esc50_l,pouring_water,pouring water from a container,0.989384,0.96098,-0.028404000000000096,esc50|pouring_water
+clap,audio,esc50,esc50_l,toilet_flush,a toilet flushing,1.0,0.994631,-0.005368999999999957,esc50|toilet_flush
+clap,audio,esc50,esc50_l,thunderstorm,thunderstorm with loud thunder,0.981741,0.984295,0.0025540000000000562,esc50|thunderstorm
+clap,audio,esc50,esc50_l,crying_baby,a baby crying,0.994631,0.981227,-0.013404000000000083,esc50|crying_baby
+clap,audio,esc50,esc50_l,sneezing,someone sneezing,0.994631,0.994983,0.00035199999999990794,esc50|sneezing
+clap,audio,esc50,esc50_l,clapping,people clapping and applauding,1.0,1.0,0.0,esc50|clapping
+clap,audio,esc50,esc50_l,breathing,heavy breathing,0.847591,0.910089,0.062498000000000054,esc50|breathing
+clap,audio,esc50,esc50_l,coughing,someone coughing,0.759343,0.685931,-0.07341200000000003,esc50|coughing
+clap,audio,esc50,esc50_l,footsteps,footsteps walking,0.87916,0.907449,0.028288999999999898,esc50|footsteps
+clap,audio,esc50,esc50_l,laughing,people laughing,0.939913,0.731311,-0.20860199999999995,esc50|laughing
+clap,audio,esc50,esc50_l,brushing_teeth,brushing teeth,0.998188,0.998188,0.0,esc50|brushing_teeth
+clap,audio,esc50,esc50_l,snoring,someone snoring loudly,0.980381,0.98153,0.0011490000000000666,esc50|snoring
+clap,audio,esc50,esc50_l,drinking_sipping,drinking and sipping,0.919496,0.962433,0.042937,esc50|drinking_sipping
+clap,audio,esc50,esc50_l,door_wood_knock,knocking on a wooden door,1.0,1.0,0.0,esc50|door_wood_knock
+clap,audio,esc50,esc50_l,mouse_click,mouse clicking,0.852727,0.822636,-0.03009099999999998,esc50|mouse_click
+clap,audio,esc50,esc50_l,keyboard_typing,keyboard typing,0.987019,0.983918,-0.0031010000000000204,esc50|keyboard_typing
+clap,audio,esc50,esc50_l,door_wood_creep,a creaking wooden door,0.0,0.0,0.0,esc50|door_wood_creep
+clap,audio,esc50,esc50_l,can_opening,opening a can,0.961841,0.955922,-0.0059189999999998966,esc50|can_opening
+clap,audio,esc50,esc50_l,washing_machine,a washing machine running,0.783481,0.733742,-0.04973899999999998,esc50|washing_machine
+clap,audio,esc50,esc50_l,vacuum_cleaner,a vacuum cleaner,0.909889,0.869649,-0.04023999999999994,esc50|vacuum_cleaner
+clap,audio,esc50,esc50_l,clock_alarm,an alarm clock ringing,0.695202,0.743463,0.048261,esc50|clock_alarm
+clap,audio,esc50,esc50_l,clock_tick,a clock ticking,0.865691,0.843822,-0.021869000000000027,esc50|clock_tick
+clap,audio,esc50,esc50_l,glass_breaking,glass shattering,1.0,1.0,0.0,esc50|glass_breaking
+clap,audio,esc50,esc50_l,helicopter,a helicopter flying,0.802573,0.797401,-0.005171999999999954,esc50|helicopter
+clap,audio,esc50,esc50_l,chainsaw,a chainsaw cutting wood,0.92249,0.913508,-0.008982000000000046,esc50|chainsaw
+clap,audio,esc50,esc50_l,siren,an emergency siren,0.966781,0.949287,-0.01749400000000001,esc50|siren
+clap,audio,esc50,esc50_l,car_horn,a car horn honking,0.994631,0.980538,-0.014093000000000022,esc50|car_horn
+clap,audio,esc50,esc50_l,engine,an engine revving,0.760884,0.619306,-0.14157799999999998,esc50|engine
+clap,audio,esc50,esc50_l,train,a train passing by,0.825948,0.781172,-0.04477600000000004,esc50|train
+clap,audio,esc50,esc50_l,church_bells,church bells ringing,1.0,1.0,0.0,esc50|church_bells
+clap,audio,esc50,esc50_l,airplane,an airplane flying overhead,0.904332,0.913127,0.008794999999999997,esc50|airplane
+clap,audio,esc50,esc50_l,fireworks,fireworks exploding,0.955548,0.855133,-0.10041499999999992,esc50|fireworks
+clap,audio,esc50,esc50_l,hand_saw,hand-sawing wood,0.982163,0.97693,-0.005233000000000043,esc50|hand_saw
+clap,audio,esc50,esc50_m,dog,a dog barking,1.0,1.0,0.0,esc50|dog
+clap,audio,esc50,esc50_m,rooster,a rooster crowing at dawn,0.96097,0.95877,-0.0021999999999999797,esc50|rooster
+clap,audio,esc50,esc50_m,pig,a pig oinking,0.939899,0.934732,-0.005167000000000033,esc50|pig
+clap,audio,esc50,esc50_m,cow,a cow mooing,0.763768,0.772034,0.008265999999999996,esc50|cow
+clap,audio,esc50,esc50_m,frog,frogs croaking,0.981151,0.979167,-0.0019839999999999858,esc50|frog
+clap,audio,esc50,esc50_m,cat,a cat meowing,1.0,1.0,0.0,esc50|cat
+clap,audio,esc50,esc50_m,hen,a hen clucking,0.593443,0.449699,-0.14374400000000004,esc50|hen
+clap,audio,esc50,esc50_m,insects,buzzing insects,0.41747,0.51967,0.10219999999999996,esc50|insects
+clap,audio,esc50,esc50_m,sheep,sheep bleating,0.983333,0.932311,-0.05102200000000001,esc50|sheep
+clap,audio,esc50,esc50_m,crow,a crow cawing,1.0,1.0,0.0,esc50|crow
+clap,audio,esc50,esc50_m,rain,rain falling,0.959402,0.72515,-0.23425200000000002,esc50|rain
+clap,audio,esc50,esc50_m,sea_waves,ocean waves crashing on the shore,0.651829,0.681096,0.029267000000000043,esc50|sea_waves
+clap,audio,esc50,esc50_m,crackling_fire,crackling fire in a fireplace,0.972222,0.979167,0.006944999999999979,esc50|crackling_fire
+clap,audio,esc50,esc50_m,crickets,crickets chirping at night,0.951221,1.0,0.04877900000000002,esc50|crickets
+clap,audio,esc50,esc50_m,chirping_birds,birds singing and chirping,0.913161,0.909127,-0.004033999999999982,esc50|chirping_birds
+clap,audio,esc50,esc50_m,water_drops,dripping water drops,0.836249,0.899939,0.06369000000000002,esc50|water_drops
+clap,audio,esc50,esc50_m,wind,wind howling,0.46296,0.476376,0.013416000000000039,esc50|wind
+clap,audio,esc50,esc50_m,pouring_water,pouring water from a container,1.0,1.0,0.0,esc50|pouring_water
+clap,audio,esc50,esc50_m,toilet_flush,a toilet flushing,1.0,0.97907,-0.020930000000000004,esc50|toilet_flush
+clap,audio,esc50,esc50_m,thunderstorm,thunderstorm with loud thunder,0.986645,0.986645,0.0,esc50|thunderstorm
+clap,audio,esc50,esc50_m,crying_baby,a baby crying,1.0,1.0,0.0,esc50|crying_baby
+clap,audio,esc50,esc50_m,sneezing,someone sneezing,0.99359,1.0,0.006410000000000027,esc50|sneezing
+clap,audio,esc50,esc50_m,clapping,people clapping and applauding,1.0,1.0,0.0,esc50|clapping
+clap,audio,esc50,esc50_m,breathing,heavy breathing,0.451943,0.515142,0.063199,esc50|breathing
+clap,audio,esc50,esc50_m,coughing,someone coughing,0.907109,0.870781,-0.03632800000000003,esc50|coughing
+clap,audio,esc50,esc50_m,footsteps,footsteps walking,0.389588,0.471513,0.08192500000000003,esc50|footsteps
+clap,audio,esc50,esc50_m,laughing,people laughing,1.0,0.988095,-0.011905000000000054,esc50|laughing
+clap,audio,esc50,esc50_m,brushing_teeth,brushing teeth,0.928161,0.927903,-0.00025799999999998047,esc50|brushing_teeth
+clap,audio,esc50,esc50_m,snoring,someone snoring loudly,1.0,1.0,0.0,esc50|snoring
+clap,audio,esc50,esc50_m,drinking_sipping,drinking and sipping,0.611196,0.599481,-0.01171499999999992,esc50|drinking_sipping
+clap,audio,esc50,esc50_m,door_wood_knock,knocking on a wooden door,1.0,1.0,0.0,esc50|door_wood_knock
+clap,audio,esc50,esc50_m,mouse_click,mouse clicking,0.851411,0.824052,-0.027359000000000022,esc50|mouse_click
+clap,audio,esc50,esc50_m,keyboard_typing,keyboard typing,0.986645,0.755322,-0.23132299999999995,esc50|keyboard_typing
+clap,audio,esc50,esc50_m,door_wood_creep,a creaking wooden door,0.0,0.0,0.0,esc50|door_wood_creep
+clap,audio,esc50,esc50_m,can_opening,opening a can,1.0,0.940308,-0.05969199999999997,esc50|can_opening
+clap,audio,esc50,esc50_m,washing_machine,a washing machine running,0.508915,0.45446,-0.05445500000000003,esc50|washing_machine
+clap,audio,esc50,esc50_m,vacuum_cleaner,a vacuum cleaner,0.981151,0.967699,-0.01345200000000002,esc50|vacuum_cleaner
+clap,audio,esc50,esc50_m,clock_alarm,an alarm clock ringing,0.603202,0.709494,0.10629199999999994,esc50|clock_alarm
+clap,audio,esc50,esc50_m,clock_tick,a clock ticking,0.854041,0.860659,0.006617999999999902,esc50|clock_tick
+clap,audio,esc50,esc50_m,glass_breaking,glass shattering,1.0,0.99359,-0.006410000000000027,esc50|glass_breaking
+clap,audio,esc50,esc50_m,helicopter,a helicopter flying,0.890216,0.854898,-0.03531799999999996,esc50|helicopter
+clap,audio,esc50,esc50_m,chainsaw,a chainsaw cutting wood,0.913337,0.913337,0.0,esc50|chainsaw
+clap,audio,esc50,esc50_m,siren,an emergency siren,0.967699,1.0,0.032301000000000024,esc50|siren
+clap,audio,esc50,esc50_m,car_horn,a car horn honking,0.97549,0.955128,-0.02036199999999999,esc50|car_horn
+clap,audio,esc50,esc50_m,engine,an engine revving,0.614199,0.463396,-0.15080300000000008,esc50|engine
+clap,audio,esc50,esc50_m,train,a train passing by,0.778472,0.7338,-0.044672000000000045,esc50|train
+clap,audio,esc50,esc50_m,church_bells,church bells ringing,1.0,1.0,0.0,esc50|church_bells
+clap,audio,esc50,esc50_m,airplane,an airplane flying overhead,0.933307,0.931985,-0.0013220000000000454,esc50|airplane
+clap,audio,esc50,esc50_m,fireworks,fireworks exploding,1.0,0.913896,-0.08610399999999996,esc50|fireworks
+clap,audio,esc50,esc50_m,hand_saw,hand-sawing wood,1.0,1.0,0.0,esc50|hand_saw
+clap,audio,esc50,esc50_s,dog,a dog barking,1.0,1.0,0.0,esc50|dog
+clap,audio,esc50,esc50_s,rooster,a rooster crowing at dawn,0.942857,0.87619,-0.06666699999999992,esc50|rooster
+clap,audio,esc50,esc50_s,pig,a pig oinking,0.680952,0.747619,0.06666700000000003,esc50|pig
+clap,audio,esc50,esc50_s,cow,a cow mooing,0.510909,0.553333,0.04242400000000002,esc50|cow
+clap,audio,esc50,esc50_s,frog,frogs croaking,1.0,1.0,0.0,esc50|frog
+clap,audio,esc50,esc50_s,cat,a cat meowing,1.0,1.0,0.0,esc50|cat
+clap,audio,esc50,esc50_s,hen,a hen clucking,0.8,0.572222,-0.22777800000000004,esc50|hen
+clap,audio,esc50,esc50_s,insects,buzzing insects,0.505952,0.722619,0.21666700000000005,esc50|insects
+clap,audio,esc50,esc50_s,sheep,sheep bleating,1.0,1.0,0.0,esc50|sheep
+clap,audio,esc50,esc50_s,crow,a crow cawing,1.0,1.0,0.0,esc50|crow
+clap,audio,esc50,esc50_s,rain,rain falling,1.0,1.0,0.0,esc50|rain
+clap,audio,esc50,esc50_s,sea_waves,ocean waves crashing on the shore,0.618301,0.632367,0.014066000000000023,esc50|sea_waves
+clap,audio,esc50,esc50_s,crackling_fire,crackling fire in a fireplace,1.0,1.0,0.0,esc50|crackling_fire
+clap,audio,esc50,esc50_s,crickets,crickets chirping at night,0.317879,0.434925,0.11704599999999998,esc50|crickets
+clap,audio,esc50,esc50_s,chirping_birds,birds singing and chirping,0.837037,0.72037,-0.11666700000000008,esc50|chirping_birds
+clap,audio,esc50,esc50_s,water_drops,dripping water drops,0.902857,0.966667,0.06381000000000003,esc50|water_drops
+clap,audio,esc50,esc50_s,wind,wind howling,0.385797,0.449483,0.06368600000000002,esc50|wind
+clap,audio,esc50,esc50_s,pouring_water,pouring water from a container,0.966667,0.966667,0.0,esc50|pouring_water
+clap,audio,esc50,esc50_s,toilet_flush,a toilet flushing,1.0,1.0,0.0,esc50|toilet_flush
+clap,audio,esc50,esc50_s,thunderstorm,thunderstorm with loud thunder,1.0,1.0,0.0,esc50|thunderstorm
+clap,audio,esc50,esc50_s,crying_baby,a baby crying,0.776949,0.745992,-0.030957000000000012,esc50|crying_baby
+clap,audio,esc50,esc50_s,sneezing,someone sneezing,1.0,1.0,0.0,esc50|sneezing
+clap,audio,esc50,esc50_s,clapping,people clapping and applauding,1.0,1.0,0.0,esc50|clapping
+clap,audio,esc50,esc50_s,breathing,heavy breathing,0.630952,0.800909,0.16995700000000002,esc50|breathing
+clap,audio,esc50,esc50_s,coughing,someone coughing,1.0,0.902857,-0.09714299999999998,esc50|coughing
+clap,audio,esc50,esc50_s,footsteps,footsteps walking,1.0,1.0,0.0,esc50|footsteps
+clap,audio,esc50,esc50_s,laughing,people laughing,1.0,0.966667,-0.033332999999999946,esc50|laughing
+clap,audio,esc50,esc50_s,brushing_teeth,brushing teeth,1.0,1.0,0.0,esc50|brushing_teeth
+clap,audio,esc50,esc50_s,snoring,someone snoring loudly,0.876667,0.876667,0.0,esc50|snoring
+clap,audio,esc50,esc50_s,drinking_sipping,drinking and sipping,0.852857,0.629524,-0.223333,esc50|drinking_sipping
+clap,audio,esc50,esc50_s,door_wood_knock,knocking on a wooden door,1.0,1.0,0.0,esc50|door_wood_knock
+clap,audio,esc50,esc50_s,mouse_click,mouse clicking,0.78619,0.876667,0.09047699999999992,esc50|mouse_click
+clap,audio,esc50,esc50_s,keyboard_typing,keyboard typing,1.0,0.942857,-0.057143000000000055,esc50|keyboard_typing
+clap,audio,esc50,esc50_s,door_wood_creep,a creaking wooden door,0.0,0.0,0.0,esc50|door_wood_creep
+clap,audio,esc50,esc50_s,can_opening,opening a can,1.0,0.966667,-0.033332999999999946,esc50|can_opening
+clap,audio,esc50,esc50_s,washing_machine,a washing machine running,0.747619,0.66359,-0.08402900000000002,esc50|washing_machine
+clap,audio,esc50,esc50_s,vacuum_cleaner,a vacuum cleaner,0.78619,0.68619,-0.10000000000000009,esc50|vacuum_cleaner
+clap,audio,esc50,esc50_s,clock_alarm,an alarm clock ringing,0.738889,0.858824,0.11993500000000001,esc50|clock_alarm
+clap,audio,esc50,esc50_s,clock_tick,a clock ticking,1.0,1.0,0.0,esc50|clock_tick
+clap,audio,esc50,esc50_s,glass_breaking,glass shattering,1.0,1.0,0.0,esc50|glass_breaking
+clap,audio,esc50,esc50_s,helicopter,a helicopter flying,0.706061,0.720909,0.014847999999999972,esc50|helicopter
+clap,audio,esc50,esc50_s,chainsaw,a chainsaw cutting wood,0.911111,0.844444,-0.06666700000000003,esc50|chainsaw
+clap,audio,esc50,esc50_s,siren,an emergency siren,0.942857,1.0,0.057143000000000055,esc50|siren
+clap,audio,esc50,esc50_s,car_horn,a car horn honking,0.942857,0.942857,0.0,esc50|car_horn
+clap,audio,esc50,esc50_s,engine,an engine revving,1.0,1.0,0.0,esc50|engine
+clap,audio,esc50,esc50_s,train,a train passing by,1.0,0.966667,-0.033332999999999946,esc50|train
+clap,audio,esc50,esc50_s,church_bells,church bells ringing,1.0,1.0,0.0,esc50|church_bells
+clap,audio,esc50,esc50_s,airplane,an airplane flying overhead,1.0,1.0,0.0,esc50|airplane
+clap,audio,esc50,esc50_s,fireworks,fireworks exploding,1.0,0.902857,-0.09714299999999998,esc50|fireworks
+clap,audio,esc50,esc50_s,hand_saw,hand-sawing wood,1.0,1.0,0.0,esc50|hand_saw
+e5,text,20newsgroups,20newsgroups_l,sports,baseball games and athletic competition,0.743534,0.668159,-0.07537500000000008,20newsgroups|sports
+e5,text,20newsgroups,20newsgroups_l,science,outer space exploration and astronomy,0.704427,0.623675,-0.08075200000000005,20newsgroups|science
+e5,text,20newsgroups,20newsgroups_l,cars,automobiles and car reviews,0.614801,0.506801,-0.1080000000000001,20newsgroups|cars
+e5,text,20newsgroups,20newsgroups_l,hockey,ice hockey games and NHL scores,0.86777,0.802778,-0.06499200000000005,20newsgroups|hockey
+e5,text,20newsgroups,20newsgroups_l,electronics,electronic circuits and components,0.502152,0.479877,-0.022275000000000045,20newsgroups|electronics
+e5,text,20newsgroups,20newsgroups_l,religion,christian faith and religious practice,0.659992,0.616032,-0.04396,20newsgroups|religion
+e5,text,20newsgroups,20newsgroups_l,world,world politics and government affairs,0.166517,0.144952,-0.021565,20newsgroups|world
+e5,text,20newsgroups,20newsgroups_l,business,buying and selling merchandise,0.417042,0.303452,-0.11359000000000002,20newsgroups|business
+e5,text,20newsgroups,20newsgroups_l,technology,computer graphics and image rendering,0.747941,0.720885,-0.02705599999999997,20newsgroups|technology
+e5,text,20newsgroups,20newsgroups_l,medicine,medical diseases and health treatments,0.752066,0.668675,-0.08339099999999999,20newsgroups|medicine
+e5,text,20newsgroups,20newsgroups_l,crypto,cryptography and data encryption,0.688918,0.668268,-0.020650000000000057,20newsgroups|crypto
+e5,text,20newsgroups,20newsgroups_l,atheism,atheism and arguments against religion,0.375615,0.36775,-0.007864999999999955,20newsgroups|atheism
+e5,text,20newsgroups,20newsgroups_l,motorcycles,motorcycle riding and maintenance,0.648147,0.555953,-0.092194,20newsgroups|motorcycles
+e5,text,20newsgroups,20newsgroups_l,mideast,middle east politics and conflict,0.613034,0.540204,-0.07282999999999995,20newsgroups|mideast
+e5,text,20newsgroups,20newsgroups_l,guns,firearms and gun legislation,0.617587,0.577921,-0.03966599999999998,20newsgroups|guns
+e5,text,20newsgroups,20newsgroups_m,sports,baseball games and athletic competition,0.748398,0.686529,-0.06186900000000006,20newsgroups|sports
+e5,text,20newsgroups,20newsgroups_m,science,outer space exploration and astronomy,0.755505,0.664481,-0.091024,20newsgroups|science
+e5,text,20newsgroups,20newsgroups_m,cars,automobiles and car reviews,0.698719,0.612197,-0.08652199999999999,20newsgroups|cars
+e5,text,20newsgroups,20newsgroups_m,hockey,ice hockey games and NHL scores,0.832712,0.756153,-0.07655900000000004,20newsgroups|hockey
+e5,text,20newsgroups,20newsgroups_m,electronics,electronic circuits and components,0.409876,0.363551,-0.046325000000000005,20newsgroups|electronics
+e5,text,20newsgroups,20newsgroups_m,religion,christian faith and religious practice,0.631193,0.583288,-0.047904999999999975,20newsgroups|religion
+e5,text,20newsgroups,20newsgroups_m,world,world politics and government affairs,0.189707,0.158004,-0.03170299999999998,20newsgroups|world
+e5,text,20newsgroups,20newsgroups_m,business,buying and selling merchandise,0.472684,0.336131,-0.13655299999999998,20newsgroups|business
+e5,text,20newsgroups,20newsgroups_m,technology,computer graphics and image rendering,0.768852,0.736805,-0.03204699999999994,20newsgroups|technology
+e5,text,20newsgroups,20newsgroups_m,medicine,medical diseases and health treatments,0.738133,0.647969,-0.09016400000000002,20newsgroups|medicine
+e5,text,20newsgroups,20newsgroups_m,crypto,cryptography and data encryption,0.669134,0.663102,-0.006032000000000037,20newsgroups|crypto
+e5,text,20newsgroups,20newsgroups_m,atheism,atheism and arguments against religion,0.373496,0.365561,-0.00793499999999997,20newsgroups|atheism
+e5,text,20newsgroups,20newsgroups_m,motorcycles,motorcycle riding and maintenance,0.648552,0.545914,-0.10263800000000001,20newsgroups|motorcycles
+e5,text,20newsgroups,20newsgroups_m,mideast,middle east politics and conflict,0.535465,0.492738,-0.04272699999999996,20newsgroups|mideast
+e5,text,20newsgroups,20newsgroups_m,guns,firearms and gun legislation,0.559153,0.505006,-0.054147000000000056,20newsgroups|guns
+e5,text,20newsgroups,20newsgroups_s,sports,baseball games and athletic competition,0.694189,0.637995,-0.056193999999999966,20newsgroups|sports
+e5,text,20newsgroups,20newsgroups_s,science,outer space exploration and astronomy,0.712223,0.629914,-0.08230900000000008,20newsgroups|science
+e5,text,20newsgroups,20newsgroups_s,cars,automobiles and car reviews,0.752181,0.638897,-0.11328399999999994,20newsgroups|cars
+e5,text,20newsgroups,20newsgroups_s,hockey,ice hockey games and NHL scores,0.835847,0.784655,-0.051192000000000015,20newsgroups|hockey
+e5,text,20newsgroups,20newsgroups_s,electronics,electronic circuits and components,0.452805,0.43868,-0.014124999999999999,20newsgroups|electronics
+e5,text,20newsgroups,20newsgroups_s,religion,christian faith and religious practice,0.654102,0.591379,-0.06272299999999997,20newsgroups|religion
+e5,text,20newsgroups,20newsgroups_s,world,world politics and government affairs,0.196124,0.167204,-0.02892,20newsgroups|world
+e5,text,20newsgroups,20newsgroups_s,business,buying and selling merchandise,0.467329,0.351351,-0.11597799999999997,20newsgroups|business
+e5,text,20newsgroups,20newsgroups_s,technology,computer graphics and image rendering,0.78244,0.761608,-0.020832000000000073,20newsgroups|technology
+e5,text,20newsgroups,20newsgroups_s,medicine,medical diseases and health treatments,0.740262,0.671559,-0.06870299999999996,20newsgroups|medicine
+e5,text,20newsgroups,20newsgroups_s,crypto,cryptography and data encryption,0.69691,0.686798,-0.01011200000000001,20newsgroups|crypto
+e5,text,20newsgroups,20newsgroups_s,atheism,atheism and arguments against religion,0.37768,0.362902,-0.014778000000000013,20newsgroups|atheism
+e5,text,20newsgroups,20newsgroups_s,motorcycles,motorcycle riding and maintenance,0.663185,0.604979,-0.05820599999999998,20newsgroups|motorcycles
+e5,text,20newsgroups,20newsgroups_s,mideast,middle east politics and conflict,0.60109,0.557863,-0.043227000000000015,20newsgroups|mideast
+e5,text,20newsgroups,20newsgroups_s,guns,firearms and gun legislation,0.692725,0.666132,-0.02659300000000009,20newsgroups|guns
+siglip,image,caltech101,caltech101_m,airplanes,a photograph of an airplane,0.998562,0.998612,5.0000000000105516e-05,caltech101|airplanes
+siglip,image,caltech101,caltech101_m,bonsai,a photograph of a bonsai tree,1.0,1.0,0.0,caltech101|bonsai
+siglip,image,caltech101,caltech101_m,car_side,a photograph of a car from the side,1.0,1.0,0.0,caltech101|car_side
+siglip,image,caltech101,caltech101_m,chandelier,a photograph of a chandelier,1.0,1.0,0.0,caltech101|chandelier
+siglip,image,caltech101,caltech101_m,cougar_face,a photograph of a cougar face,1.0,1.0,0.0,caltech101|cougar_face
+siglip,image,caltech101,caltech101_m,crab,a photograph of a crab,1.0,1.0,0.0,caltech101|crab
+siglip,image,caltech101,caltech101_m,dalmatian,a photograph of a dalmatian dog,1.0,1.0,0.0,caltech101|dalmatian
+siglip,image,caltech101,caltech101_m,dolphin,a photograph of a dolphin,1.0,1.0,0.0,caltech101|dolphin
+siglip,image,caltech101,caltech101_m,elephant,a photograph of an elephant,0.997076,0.997076,0.0,caltech101|elephant
+siglip,image,caltech101,caltech101_m,ferry,a photograph of a ferry boat,0.963241,0.963762,0.0005209999999999937,caltech101|ferry
+siglip,image,caltech101,caltech101_m,flamingo,a photograph of a flamingo,1.0,1.0,0.0,caltech101|flamingo
+siglip,image,caltech101,caltech101_m,grand_piano,a photograph of a grand piano,1.0,1.0,0.0,caltech101|grand_piano
+siglip,image,caltech101,caltech101_m,hawksbill,a photograph of a hawksbill turtle,1.0,1.0,0.0,caltech101|hawksbill
+siglip,image,caltech101,caltech101_m,helicopter,a photograph of a helicopter,0.986178,0.986178,0.0,caltech101|helicopter
+siglip,image,caltech101,caltech101_m,ibis,a photograph of an ibis bird,0.996522,0.996522,0.0,caltech101|ibis
+siglip,image,caltech101,caltech101_m,kangaroo,a photograph of a kangaroo,0.998333,1.0,0.001666999999999974,caltech101|kangaroo
+siglip,image,caltech101,caltech101_m,ketch,a photograph of a ketch sailing boat,0.999053,0.999053,0.0,caltech101|ketch
+siglip,image,caltech101,caltech101_m,lamp,a photograph of a lamp,0.806781,0.76428,-0.04250100000000001,caltech101|lamp
+siglip,image,caltech101,caltech101_m,laptop,a photograph of a laptop computer,1.0,1.0,0.0,caltech101|laptop
+siglip,image,caltech101,caltech101_m,nautilus,a photograph of a nautilus shell,1.0,1.0,0.0,caltech101|nautilus
+siglip,image,caltech101,caltech101_m,starfish,a photograph of a starfish,1.0,1.0,0.0,caltech101|starfish
+siglip,image,caltech101,caltech101_m,stop_sign,a photograph of a stop sign,1.0,1.0,0.0,caltech101|stop_sign
+siglip,image,caltech101,caltech101_m,sunflower,a photograph of a sunflower,1.0,1.0,0.0,caltech101|sunflower
+siglip,image,caltech101,caltech101_m,trilobite,a photograph of a trilobite fossil,1.0,1.0,0.0,caltech101|trilobite
+siglip,image,caltech101,caltech101_m,watch,a photograph of a wristwatch,0.999787,0.999351,-0.00043599999999999195,caltech101|watch
+siglip,image,caltech101,caltech101_s,airplanes,a photograph of an airplane,0.999176,0.999548,0.00037200000000003897,caltech101|airplanes
+siglip,image,caltech101,caltech101_s,bonsai,a photograph of a bonsai tree,1.0,1.0,0.0,caltech101|bonsai
+siglip,image,caltech101,caltech101_s,car_side,a photograph of a car from the side,1.0,1.0,0.0,caltech101|car_side
+siglip,image,caltech101,caltech101_s,chandelier,a photograph of a chandelier,1.0,1.0,0.0,caltech101|chandelier
+siglip,image,caltech101,caltech101_s,cougar_face,a photograph of a cougar face,1.0,1.0,0.0,caltech101|cougar_face
+siglip,image,caltech101,caltech101_s,crab,a photograph of a crab,1.0,1.0,0.0,caltech101|crab
+siglip,image,caltech101,caltech101_s,dalmatian,a photograph of a dalmatian dog,1.0,1.0,0.0,caltech101|dalmatian
+siglip,image,caltech101,caltech101_s,dolphin,a photograph of a dolphin,1.0,1.0,0.0,caltech101|dolphin
+siglip,image,caltech101,caltech101_s,elephant,a photograph of an elephant,1.0,1.0,0.0,caltech101|elephant
+siglip,image,caltech101,caltech101_s,ferry,a photograph of a ferry boat,1.0,1.0,0.0,caltech101|ferry
+siglip,image,caltech101,caltech101_s,flamingo,a photograph of a flamingo,1.0,1.0,0.0,caltech101|flamingo
+siglip,image,caltech101,caltech101_s,grand_piano,a photograph of a grand piano,1.0,1.0,0.0,caltech101|grand_piano
+siglip,image,caltech101,caltech101_s,hawksbill,a photograph of a hawksbill turtle,1.0,1.0,0.0,caltech101|hawksbill
+siglip,image,caltech101,caltech101_s,helicopter,a photograph of a helicopter,0.986645,0.986645,0.0,caltech101|helicopter
+siglip,image,caltech101,caltech101_s,ibis,a photograph of an ibis bird,1.0,1.0,0.0,caltech101|ibis
+siglip,image,caltech101,caltech101_s,kangaroo,a photograph of a kangaroo,1.0,1.0,0.0,caltech101|kangaroo
+siglip,image,caltech101,caltech101_s,ketch,a photograph of a ketch sailing boat,1.0,1.0,0.0,caltech101|ketch
+siglip,image,caltech101,caltech101_s,lamp,a photograph of a lamp,0.852083,0.86875,0.016666999999999987,caltech101|lamp
+siglip,image,caltech101,caltech101_s,laptop,a photograph of a laptop computer,1.0,1.0,0.0,caltech101|laptop
+siglip,image,caltech101,caltech101_s,nautilus,a photograph of a nautilus shell,1.0,1.0,0.0,caltech101|nautilus
+siglip,image,caltech101,caltech101_s,starfish,a photograph of a starfish,1.0,1.0,0.0,caltech101|starfish
+siglip,image,caltech101,caltech101_s,stop_sign,a photograph of a stop sign,1.0,1.0,0.0,caltech101|stop_sign
+siglip,image,caltech101,caltech101_s,sunflower,a photograph of a sunflower,1.0,1.0,0.0,caltech101|sunflower
+siglip,image,caltech101,caltech101_s,trilobite,a photograph of a trilobite fossil,1.0,1.0,0.0,caltech101|trilobite
+siglip,image,caltech101,caltech101_s,watch,a photograph of a wristwatch,1.0,1.0,0.0,caltech101|watch
+siglip,image,caltech256,caltech256_a,003.backpack,a photograph of a backpack,0.993089,0.991438,-0.001650999999999958,caltech256|003.backpack
+siglip,image,caltech256,caltech256_a,024.butterfly,a photograph of a butterfly,0.998322,0.99821,-0.00011200000000000099,caltech256|024.butterfly
+siglip,image,caltech256,caltech256_a,028.camel,a photograph of a camel,0.984837,0.990633,0.005796000000000023,caltech256|028.camel
+siglip,image,caltech256,caltech256_a,029.cannon,a photograph of a cannon,0.995437,0.994329,-0.0011079999999999979,caltech256|029.cannon
+siglip,image,caltech256,caltech256_a,038.chimp,a photograph of a chimpanzee,0.995334,0.995126,-0.000208000000000097,caltech256|038.chimp
+siglip,image,caltech256,caltech256_a,046.computer-monitor,a photograph of a computer monitor,0.993195,0.991481,-0.0017140000000001043,caltech256|046.computer-monitor
+siglip,image,caltech256,caltech256_a,069.fighter-jet,a photograph of a fighter jet,1.0,0.999899,-0.00010100000000001774,caltech256|069.fighter-jet
+siglip,image,caltech256,caltech256_a,084.giraffe,a photograph of a giraffe,0.997832,0.996626,-0.0012060000000000404,caltech256|084.giraffe
+siglip,image,caltech256,caltech256_a,085.goat,a photograph of a goat,0.994492,0.995414,0.0009219999999999784,caltech256|085.goat
+siglip,image,caltech256,caltech256_a,086.golden-gate-bridge,a photograph of the Golden Gate Bridge,1.0,1.0,0.0,caltech256|086.golden-gate-bridge
+siglip,image,caltech256,caltech256_a,096.hammock,a photograph of a hammock,0.996265,0.995933,-0.00033199999999999896,caltech256|096.hammock
+siglip,image,caltech256,caltech256_a,107.hot-air-balloon,a photograph of a hot air balloon,1.0,1.0,0.0,caltech256|107.hot-air-balloon
+siglip,image,caltech256,caltech256_a,122.kayak,a photograph of a kayak,0.993118,0.991605,-0.0015129999999999866,caltech256|122.kayak
+siglip,image,caltech256,caltech256_a,129.leopards-101,a photograph of a leopard,0.999059,0.999356,0.0002969999999999917,caltech256|129.leopards-101
+siglip,image,caltech256,caltech256_a,132.light-house,a photograph of a lighthouse,0.997887,0.997147,-0.0007399999999999629,caltech256|132.light-house
+siglip,image,caltech256,caltech256_a,145.motorbikes-101,a photograph of a motorbike,0.999832,0.999921,8.899999999989472e-05,caltech256|145.motorbikes-101
+siglip,image,caltech256,caltech256_a,147.mushroom,a photograph of a mushroom,0.993083,0.992914,-0.00016900000000008575,caltech256|147.mushroom
+siglip,image,caltech256,caltech256_a,151.ostrich,a photograph of an ostrich,0.995413,0.99527,-0.00014300000000000423,caltech256|151.ostrich
+siglip,image,caltech256,caltech256_a,158.penguin,a photograph of a penguin,0.999218,0.999264,4.599999999999049e-05,caltech256|158.penguin
+siglip,image,caltech256,caltech256_a,167.pyramid,a photograph of a pyramid,0.969925,0.95061,-0.019315000000000082,caltech256|167.pyramid
+siglip,image,caltech256,caltech256_a,178.school-bus,a photograph of a school bus,1.0,1.0,0.0,caltech256|178.school-bus
+siglip,image,caltech256,caltech256_a,200.stained-glass,a photograph of stained glass,0.990173,0.98611,-0.004062999999999928,caltech256|200.stained-glass
+siglip,image,caltech256,caltech256_a,207.swan,a photograph of a swan,0.997554,0.997715,0.00016099999999996673,caltech256|207.swan
+siglip,image,caltech256,caltech256_a,245.windmill,a photograph of a windmill,0.998912,0.999215,0.0003029999999999422,caltech256|245.windmill
+siglip,image,caltech256,caltech256_a,246.wine-bottle,a photograph of a wine bottle,0.988188,0.988562,0.0003740000000000965,caltech256|246.wine-bottle
+siglip,image,enrico,enrico_a,Camera,a camera viewfinder screen,0.734301,0.712429,-0.021872000000000003,enrico|Camera
+siglip,image,enrico,enrico_a,Chat,a chat conversation screen with message bubbles,0.315852,0.326132,0.010279999999999956,enrico|Chat
+siglip,image,enrico,enrico_a,Dialer,a phone dialer with a numeric keypad,0.0,0.0,0.0,enrico|Dialer
+siglip,image,enrico,enrico_a,Editor,a text or document editor screen,0.016535,0.019825,0.003289999999999998,enrico|Editor
+siglip,image,enrico,enrico_a,Form,a form with input fields to fill in,0.384284,0.396176,0.011891999999999958,enrico|Form
+siglip,image,enrico,enrico_a,Gallery,a grid gallery of photos or thumbnails,0.300054,0.318236,0.01818200000000003,enrico|Gallery
+siglip,image,enrico,enrico_a,List,a scrollable list of items,0.293146,0.283794,-0.009352000000000027,enrico|List
+siglip,image,enrico,enrico_a,Login,a login or sign-in screen,0.507038,0.510122,0.0030839999999999756,enrico|Login
+siglip,image,enrico,enrico_a,Maps,a map view showing streets,0.108824,0.107536,-0.0012879999999999975,enrico|Maps
+siglip,image,enrico,enrico_a,MediaPlayer,a media player with playback controls,0.190633,0.20241,0.01177700000000001,enrico|MediaPlayer
+siglip,image,enrico,enrico_a,Menu,a navigation menu or drawer,0.16903,0.167102,-0.001928000000000013,enrico|Menu
+siglip,image,enrico,enrico_a,Modal,a modal dialog or popup overlay,0.089225,0.08741,-0.0018149999999999972,enrico|Modal
+siglip,image,enrico,enrico_a,News,a news or article feed,0.261321,0.338408,0.07708699999999996,enrico|News
+siglip,image,enrico,enrico_a,Profile,a user profile screen,0.112763,0.119824,0.007060999999999998,enrico|Profile
+siglip,image,enrico,enrico_a,Search,a search screen with a search bar and results,0.180396,0.174186,-0.006209999999999993,enrico|Search
+siglip,image,enrico,enrico_a,Settings,a settings or preferences screen,0.158306,0.162065,0.0037589999999999846,enrico|Settings
+siglip,image,enrico,enrico_a,Terms,a terms of service or legal text screen,0.097684,0.149942,0.052257999999999985,enrico|Terms
+siglip,image,enrico,enrico_a,Tutorial,an onboarding or tutorial walkthrough screen,0.284444,0.280109,-0.004334999999999978,enrico|Tutorial
+siglip,image,enrico,enrico_m,Camera,a camera viewfinder screen,1.0,1.0,0.0,enrico|Camera
+siglip,image,enrico,enrico_m,Chat,a chat conversation screen with message bubbles,0.135989,0.159812,0.02382300000000001,enrico|Chat
+siglip,image,enrico,enrico_m,Dialer,a phone dialer with a numeric keypad,0.0,0.0,0.0,enrico|Dialer
+siglip,image,enrico,enrico_m,Editor,a text or document editor screen,0.021195,0.024314,0.0031190000000000002,enrico|Editor
+siglip,image,enrico,enrico_m,Form,a form with input fields to fill in,0.287792,0.307708,0.01991599999999999,enrico|Form
+siglip,image,enrico,enrico_m,Gallery,a grid gallery of photos or thumbnails,0.301863,0.320463,0.018600000000000005,enrico|Gallery
+siglip,image,enrico,enrico_m,List,a scrollable list of items,0.285174,0.267542,-0.01763199999999998,enrico|List
+siglip,image,enrico,enrico_m,Login,a login or sign-in screen,0.507778,0.527828,0.020050000000000012,enrico|Login
+siglip,image,enrico,enrico_m,Maps,a map view showing streets,0.091808,0.09058,-0.0012280000000000069,enrico|Maps
+siglip,image,enrico,enrico_m,MediaPlayer,a media player with playback controls,0.32789,0.331982,0.0040919999999999845,enrico|MediaPlayer
+siglip,image,enrico,enrico_m,Menu,a navigation menu or drawer,0.123955,0.125987,0.002031999999999992,enrico|Menu
+siglip,image,enrico,enrico_m,Modal,a modal dialog or popup overlay,0.123482,0.127952,0.004470000000000016,enrico|Modal
+siglip,image,enrico,enrico_m,News,a news or article feed,0.179481,0.229305,0.04982400000000001,enrico|News
+siglip,image,enrico,enrico_m,Profile,a user profile screen,0.189115,0.235293,0.046178,enrico|Profile
+siglip,image,enrico,enrico_m,Search,a search screen with a search bar and results,0.171841,0.167219,-0.004621999999999987,enrico|Search
+siglip,image,enrico,enrico_m,Settings,a settings or preferences screen,0.116256,0.114437,-0.0018190000000000012,enrico|Settings
+siglip,image,enrico,enrico_m,Terms,a terms of service or legal text screen,0.067722,0.104989,0.037266999999999995,enrico|Terms
+siglip,image,enrico,enrico_m,Tutorial,an onboarding or tutorial walkthrough screen,0.296208,0.295371,-0.0008370000000000322,enrico|Tutorial
+clap_general,audio,esc50,esc50_l,dog,a dog barking,0.996298,0.996298,0.0,esc50|dog
+clap_general,audio,esc50,esc50_l,rooster,a rooster crowing at dawn,1.0,1.0,0.0,esc50|rooster
+clap_general,audio,esc50,esc50_l,pig,a pig oinking,0.910121,0.9217,0.011579000000000006,esc50|pig
+clap_general,audio,esc50,esc50_l,cow,a cow mooing,0.84491,0.875436,0.030525999999999942,esc50|cow
+clap_general,audio,esc50,esc50_l,frog,frogs croaking,0.962026,0.943115,-0.01891100000000001,esc50|frog
+clap_general,audio,esc50,esc50_l,cat,a cat meowing,1.0,1.0,0.0,esc50|cat
+clap_general,audio,esc50,esc50_l,hen,a hen clucking,0.28951,0.294456,0.004946000000000006,esc50|hen
+clap_general,audio,esc50,esc50_l,insects,buzzing insects,0.572188,0.900214,0.32802599999999993,esc50|insects
+clap_general,audio,esc50,esc50_l,sheep,sheep bleating,1.0,1.0,0.0,esc50|sheep
+clap_general,audio,esc50,esc50_l,crow,a crow cawing,0.963174,0.996298,0.03312400000000004,esc50|crow
+clap_general,audio,esc50,esc50_l,rain,rain falling,0.926699,0.94951,0.022810999999999915,esc50|rain
+clap_general,audio,esc50,esc50_l,sea_waves,ocean waves crashing on the shore,0.942132,0.93605,-0.006081999999999921,esc50|sea_waves
+clap_general,audio,esc50,esc50_l,crackling_fire,crackling fire in a fireplace,0.980331,0.986825,0.006494,esc50|crackling_fire
+clap_general,audio,esc50,esc50_l,crickets,crickets chirping at night,0.975474,0.984934,0.009460000000000024,esc50|crickets
+clap_general,audio,esc50,esc50_l,chirping_birds,birds singing and chirping,0.83818,0.795031,-0.04314899999999999,esc50|chirping_birds
+clap_general,audio,esc50,esc50_l,water_drops,dripping water drops,0.750124,0.805366,0.05524200000000001,esc50|water_drops
+clap_general,audio,esc50,esc50_l,wind,wind howling,0.733002,0.815563,0.082561,esc50|wind
+clap_general,audio,esc50,esc50_l,pouring_water,pouring water from a container,0.985448,0.703922,-0.28152599999999994,esc50|pouring_water
+clap_general,audio,esc50,esc50_l,toilet_flush,a toilet flushing,0.996298,0.993559,-0.002739000000000047,esc50|toilet_flush
+clap_general,audio,esc50,esc50_l,thunderstorm,thunderstorm with loud thunder,0.985093,0.985934,0.0008409999999999807,esc50|thunderstorm
+clap_general,audio,esc50,esc50_l,crying_baby,a baby crying,0.969225,0.965198,-0.004027000000000003,esc50|crying_baby
+clap_general,audio,esc50,esc50_l,sneezing,someone sneezing,0.996298,1.0,0.003701999999999983,esc50|sneezing
+clap_general,audio,esc50,esc50_l,clapping,people clapping and applauding,0.979622,0.971587,-0.008035000000000014,esc50|clapping
+clap_general,audio,esc50,esc50_l,breathing,heavy breathing,0.822769,0.871478,0.048709,esc50|breathing
+clap_general,audio,esc50,esc50_l,coughing,someone coughing,0.78687,0.860385,0.073515,esc50|coughing
+clap_general,audio,esc50,esc50_l,footsteps,footsteps walking,0.817317,0.966479,0.14916200000000002,esc50|footsteps
+clap_general,audio,esc50,esc50_l,laughing,people laughing,0.817987,0.77251,-0.04547699999999999,esc50|laughing
+clap_general,audio,esc50,esc50_l,brushing_teeth,brushing teeth,0.973862,0.98878,0.014917999999999987,esc50|brushing_teeth
+clap_general,audio,esc50,esc50_l,snoring,someone snoring loudly,0.977878,0.963015,-0.01486300000000007,esc50|snoring
+clap_general,audio,esc50,esc50_l,drinking_sipping,drinking and sipping,0.939163,0.926708,-0.012454999999999994,esc50|drinking_sipping
+clap_general,audio,esc50,esc50_l,door_wood_knock,knocking on a wooden door,0.994631,0.996522,0.001890999999999976,esc50|door_wood_knock
+clap_general,audio,esc50,esc50_l,mouse_click,mouse clicking,0.961719,0.968116,0.006396999999999986,esc50|mouse_click
+clap_general,audio,esc50,esc50_l,keyboard_typing,keyboard typing,0.929699,0.996298,0.06659899999999996,esc50|keyboard_typing
+clap_general,audio,esc50,esc50_l,door_wood_creep,a creaking wooden door,0.0,0.0,0.0,esc50|door_wood_creep
+clap_general,audio,esc50,esc50_l,can_opening,opening a can,0.991668,0.990077,-0.001591000000000009,esc50|can_opening
+clap_general,audio,esc50,esc50_l,washing_machine,a washing machine running,0.914261,0.901406,-0.01285499999999995,esc50|washing_machine
+clap_general,audio,esc50,esc50_l,vacuum_cleaner,a vacuum cleaner,0.872585,0.888483,0.015897999999999968,esc50|vacuum_cleaner
+clap_general,audio,esc50,esc50_l,clock_alarm,an alarm clock ringing,0.977899,0.992236,0.014337000000000044,esc50|clock_alarm
+clap_general,audio,esc50,esc50_l,clock_tick,a clock ticking,0.867158,0.868186,0.0010280000000000289,esc50|clock_tick
+clap_general,audio,esc50,esc50_l,glass_breaking,glass shattering,1.0,1.0,0.0,esc50|glass_breaking
+clap_general,audio,esc50,esc50_l,helicopter,a helicopter flying,0.593283,0.590979,-0.0023039999999999727,esc50|helicopter
+clap_general,audio,esc50,esc50_l,chainsaw,a chainsaw cutting wood,0.951048,0.971112,0.02006399999999997,esc50|chainsaw
+clap_general,audio,esc50,esc50_l,siren,an emergency siren,0.982261,0.97866,-0.0036010000000000764,esc50|siren
+clap_general,audio,esc50,esc50_l,car_horn,a car horn honking,0.983549,0.98878,0.005230999999999986,esc50|car_horn
+clap_general,audio,esc50,esc50_l,engine,an engine revving,0.769054,0.784432,0.015378000000000003,esc50|engine
+clap_general,audio,esc50,esc50_l,train,a train passing by,0.985374,0.981974,-0.0033999999999999586,esc50|train
+clap_general,audio,esc50,esc50_l,church_bells,church bells ringing,1.0,1.0,0.0,esc50|church_bells
+clap_general,audio,esc50,esc50_l,airplane,an airplane flying overhead,0.740217,0.754493,0.014275999999999955,esc50|airplane
+clap_general,audio,esc50,esc50_l,fireworks,fireworks exploding,1.0,0.996522,-0.003477999999999981,esc50|fireworks
+clap_general,audio,esc50,esc50_l,hand_saw,hand-sawing wood,0.964396,0.968016,0.0036199999999999566,esc50|hand_saw
+clap_general,audio,esc50,esc50_m,dog,a dog barking,1.0,1.0,0.0,esc50|dog
+clap_general,audio,esc50,esc50_m,rooster,a rooster crowing at dawn,0.956313,0.96048,0.004167000000000032,esc50|rooster
+clap_general,audio,esc50,esc50_m,pig,a pig oinking,1.0,1.0,0.0,esc50|pig
+clap_general,audio,esc50,esc50_m,cow,a cow mooing,0.93556,0.934037,-0.001522999999999941,esc50|cow
+clap_general,audio,esc50,esc50_m,frog,frogs croaking,0.988095,0.981151,-0.00694399999999995,esc50|frog
+clap_general,audio,esc50,esc50_m,cat,a cat meowing,1.0,1.0,0.0,esc50|cat
+clap_general,audio,esc50,esc50_m,hen,a hen clucking,0.388414,0.368739,-0.019674999999999998,esc50|hen
+clap_general,audio,esc50,esc50_m,insects,buzzing insects,0.494897,0.962121,0.46722400000000003,esc50|insects
+clap_general,audio,esc50,esc50_m,sheep,sheep bleating,1.0,1.0,0.0,esc50|sheep
+clap_general,audio,esc50,esc50_m,crow,a crow cawing,0.975275,0.988095,0.012819999999999943,esc50|crow
+clap_general,audio,esc50,esc50_m,rain,rain falling,0.892325,0.84789,-0.044435,esc50|rain
+clap_general,audio,esc50,esc50_m,sea_waves,ocean waves crashing on the shore,0.955094,0.940447,-0.014646999999999966,esc50|sea_waves
+clap_general,audio,esc50,esc50_m,crackling_fire,crackling fire in a fireplace,1.0,1.0,0.0,esc50|crackling_fire
+clap_general,audio,esc50,esc50_m,crickets,crickets chirping at night,1.0,0.99359,-0.006410000000000027,esc50|crickets
+clap_general,audio,esc50,esc50_m,chirping_birds,birds singing and chirping,0.87822,0.87328,-0.0049400000000000555,esc50|chirping_birds
+clap_general,audio,esc50,esc50_m,water_drops,dripping water drops,0.864242,0.903105,0.03886300000000009,esc50|water_drops
+clap_general,audio,esc50,esc50_m,wind,wind howling,0.643055,0.714729,0.0716739999999999,esc50|wind
+clap_general,audio,esc50,esc50_m,pouring_water,pouring water from a container,1.0,0.850398,-0.149602,esc50|pouring_water
+clap_general,audio,esc50,esc50_m,toilet_flush,a toilet flushing,1.0,1.0,0.0,esc50|toilet_flush
+clap_general,audio,esc50,esc50_m,thunderstorm,thunderstorm with loud thunder,1.0,1.0,0.0,esc50|thunderstorm
+clap_general,audio,esc50,esc50_m,crying_baby,a baby crying,1.0,0.99359,-0.006410000000000027,esc50|crying_baby
+clap_general,audio,esc50,esc50_m,sneezing,someone sneezing,0.932143,0.968813,0.03666999999999998,esc50|sneezing
+clap_general,audio,esc50,esc50_m,clapping,people clapping and applauding,0.939156,0.919772,-0.019383999999999957,esc50|clapping
+clap_general,audio,esc50,esc50_m,breathing,heavy breathing,0.482245,0.481233,-0.0010119999999999574,esc50|breathing
+clap_general,audio,esc50,esc50_m,coughing,someone coughing,0.883749,0.917504,0.03375499999999998,esc50|coughing
+clap_general,audio,esc50,esc50_m,footsteps,footsteps walking,0.500521,0.667784,0.16726300000000005,esc50|footsteps
+clap_general,audio,esc50,esc50_m,laughing,people laughing,0.691094,0.628227,-0.062867,esc50|laughing
+clap_general,audio,esc50,esc50_m,brushing_teeth,brushing teeth,1.0,1.0,0.0,esc50|brushing_teeth
+clap_general,audio,esc50,esc50_m,snoring,someone snoring loudly,0.99359,0.983333,-0.01025699999999996,esc50|snoring
+clap_general,audio,esc50,esc50_m,drinking_sipping,drinking and sipping,0.701889,0.826479,0.12458999999999998,esc50|drinking_sipping
+clap_general,audio,esc50,esc50_m,door_wood_knock,knocking on a wooden door,0.99359,0.986645,-0.006944999999999979,esc50|door_wood_knock
+clap_general,audio,esc50,esc50_m,mouse_click,mouse clicking,0.849809,0.936975,0.08716599999999997,esc50|mouse_click
+clap_general,audio,esc50,esc50_m,keyboard_typing,keyboard typing,0.976389,0.972222,-0.004166999999999921,esc50|keyboard_typing
+clap_general,audio,esc50,esc50_m,door_wood_creep,a creaking wooden door,0.0,0.0,0.0,esc50|door_wood_creep
+clap_general,audio,esc50,esc50_m,can_opening,opening a can,1.0,0.988095,-0.011905000000000054,esc50|can_opening
+clap_general,audio,esc50,esc50_m,washing_machine,a washing machine running,0.773411,0.817224,0.04381299999999999,esc50|washing_machine
+clap_general,audio,esc50,esc50_m,vacuum_cleaner,a vacuum cleaner,0.99359,0.968813,-0.024776999999999938,esc50|vacuum_cleaner
+clap_general,audio,esc50,esc50_m,clock_alarm,an alarm clock ringing,0.813354,0.898781,0.08542700000000003,esc50|clock_alarm
+clap_general,audio,esc50,esc50_m,clock_tick,a clock ticking,0.935134,0.942424,0.007290000000000019,esc50|clock_tick
+clap_general,audio,esc50,esc50_m,glass_breaking,glass shattering,1.0,1.0,0.0,esc50|glass_breaking
+clap_general,audio,esc50,esc50_m,helicopter,a helicopter flying,0.554782,0.536964,-0.017818,esc50|helicopter
+clap_general,audio,esc50,esc50_m,chainsaw,a chainsaw cutting wood,0.938329,0.951389,0.013060000000000072,esc50|chainsaw
+clap_general,audio,esc50,esc50_m,siren,an emergency siren,0.968813,0.937359,-0.03145399999999998,esc50|siren
+clap_general,audio,esc50,esc50_m,car_horn,a car horn honking,0.99359,0.988095,-0.005495000000000028,esc50|car_horn
+clap_general,audio,esc50,esc50_m,engine,an engine revving,0.723839,0.780642,0.05680299999999994,esc50|engine
+clap_general,audio,esc50,esc50_m,train,a train passing by,1.0,1.0,0.0,esc50|train
+clap_general,audio,esc50,esc50_m,church_bells,church bells ringing,1.0,1.0,0.0,esc50|church_bells
+clap_general,audio,esc50,esc50_m,airplane,an airplane flying overhead,0.84439,0.874003,0.029613,esc50|airplane
+clap_general,audio,esc50,esc50_m,fireworks,fireworks exploding,1.0,1.0,0.0,esc50|fireworks
+clap_general,audio,esc50,esc50_m,hand_saw,hand-sawing wood,1.0,0.983333,-0.016666999999999987,esc50|hand_saw
+clap_general,audio,esc50,esc50_s,dog,a dog barking,1.0,1.0,0.0,esc50|dog
+clap_general,audio,esc50,esc50_s,rooster,a rooster crowing at dawn,1.0,0.966667,-0.033332999999999946,esc50|rooster
+clap_general,audio,esc50,esc50_s,pig,a pig oinking,1.0,1.0,0.0,esc50|pig
+clap_general,audio,esc50,esc50_s,cow,a cow mooing,0.611667,0.629524,0.017857000000000012,esc50|cow
+clap_general,audio,esc50,esc50_s,frog,frogs croaking,1.0,1.0,0.0,esc50|frog
+clap_general,audio,esc50,esc50_s,cat,a cat meowing,1.0,1.0,0.0,esc50|cat
+clap_general,audio,esc50,esc50_s,hen,a hen clucking,0.522222,0.497222,-0.024999999999999967,esc50|hen
+clap_general,audio,esc50,esc50_s,insects,buzzing insects,0.697619,0.966667,0.26904800000000006,esc50|insects
+clap_general,audio,esc50,esc50_s,sheep,sheep bleating,1.0,1.0,0.0,esc50|sheep
+clap_general,audio,esc50,esc50_s,crow,a crow cawing,1.0,1.0,0.0,esc50|crow
+clap_general,audio,esc50,esc50_s,rain,rain falling,1.0,1.0,0.0,esc50|rain
+clap_general,audio,esc50,esc50_s,sea_waves,ocean waves crashing on the shore,0.82619,0.82619,0.0,esc50|sea_waves
+clap_general,audio,esc50,esc50_s,crackling_fire,crackling fire in a fireplace,1.0,1.0,0.0,esc50|crackling_fire
+clap_general,audio,esc50,esc50_s,crickets,crickets chirping at night,0.942857,0.942857,0.0,esc50|crickets
+clap_general,audio,esc50,esc50_s,chirping_birds,birds singing and chirping,1.0,1.0,0.0,esc50|chirping_birds
+clap_general,audio,esc50,esc50_s,water_drops,dripping water drops,1.0,1.0,0.0,esc50|water_drops
+clap_general,audio,esc50,esc50_s,wind,wind howling,0.308658,0.493333,0.18467500000000003,esc50|wind
+clap_general,audio,esc50,esc50_s,pouring_water,pouring water from a container,0.885,0.654444,-0.23055599999999998,esc50|pouring_water
+clap_general,audio,esc50,esc50_s,toilet_flush,a toilet flushing,1.0,1.0,0.0,esc50|toilet_flush
+clap_general,audio,esc50,esc50_s,thunderstorm,thunderstorm with loud thunder,1.0,1.0,0.0,esc50|thunderstorm
+clap_general,audio,esc50,esc50_s,crying_baby,a baby crying,0.942857,0.902857,-0.039999999999999925,esc50|crying_baby
+clap_general,audio,esc50,esc50_s,sneezing,someone sneezing,1.0,1.0,0.0,esc50|sneezing
+clap_general,audio,esc50,esc50_s,clapping,people clapping and applauding,1.0,1.0,0.0,esc50|clapping
+clap_general,audio,esc50,esc50_s,breathing,heavy breathing,1.0,1.0,0.0,esc50|breathing
+clap_general,audio,esc50,esc50_s,coughing,someone coughing,1.0,1.0,0.0,esc50|coughing
+clap_general,audio,esc50,esc50_s,footsteps,footsteps walking,1.0,1.0,0.0,esc50|footsteps
+clap_general,audio,esc50,esc50_s,laughing,people laughing,0.44127,0.692222,0.250952,esc50|laughing
+clap_general,audio,esc50,esc50_s,brushing_teeth,brushing teeth,1.0,1.0,0.0,esc50|brushing_teeth
+clap_general,audio,esc50,esc50_s,snoring,someone snoring loudly,0.966667,0.942857,-0.02381000000000011,esc50|snoring
+clap_general,audio,esc50,esc50_s,drinking_sipping,drinking and sipping,0.942857,1.0,0.057143000000000055,esc50|drinking_sipping
+clap_general,audio,esc50,esc50_s,door_wood_knock,knocking on a wooden door,1.0,1.0,0.0,esc50|door_wood_knock
+clap_general,audio,esc50,esc50_s,mouse_click,mouse clicking,0.966667,1.0,0.033332999999999946,esc50|mouse_click
+clap_general,audio,esc50,esc50_s,keyboard_typing,keyboard typing,1.0,1.0,0.0,esc50|keyboard_typing
+clap_general,audio,esc50,esc50_s,door_wood_creep,a creaking wooden door,0.0,0.0,0.0,esc50|door_wood_creep
+clap_general,audio,esc50,esc50_s,can_opening,opening a can,1.0,1.0,0.0,esc50|can_opening
+clap_general,audio,esc50,esc50_s,washing_machine,a washing machine running,0.966667,1.0,0.033332999999999946,esc50|washing_machine
+clap_general,audio,esc50,esc50_s,vacuum_cleaner,a vacuum cleaner,0.81,0.926667,0.11666699999999997,esc50|vacuum_cleaner
+clap_general,audio,esc50,esc50_s,clock_alarm,an alarm clock ringing,1.0,1.0,0.0,esc50|clock_alarm
+clap_general,audio,esc50,esc50_s,clock_tick,a clock ticking,0.789286,0.783333,-0.005953000000000097,esc50|clock_tick
+clap_general,audio,esc50,esc50_s,glass_breaking,glass shattering,1.0,1.0,0.0,esc50|glass_breaking
+clap_general,audio,esc50,esc50_s,helicopter,a helicopter flying,0.316061,0.391204,0.07514300000000002,esc50|helicopter
+clap_general,audio,esc50,esc50_s,chainsaw,a chainsaw cutting wood,0.902857,0.926667,0.023809999999999998,esc50|chainsaw
+clap_general,audio,esc50,esc50_s,siren,an emergency siren,0.911111,0.942857,0.03174599999999994,esc50|siren
+clap_general,audio,esc50,esc50_s,car_horn,a car horn honking,1.0,1.0,0.0,esc50|car_horn
+clap_general,audio,esc50,esc50_s,engine,an engine revving,1.0,1.0,0.0,esc50|engine
+clap_general,audio,esc50,esc50_s,train,a train passing by,1.0,1.0,0.0,esc50|train
+clap_general,audio,esc50,esc50_s,church_bells,church bells ringing,1.0,1.0,0.0,esc50|church_bells
+clap_general,audio,esc50,esc50_s,airplane,an airplane flying overhead,1.0,0.966667,-0.033332999999999946,esc50|airplane
+clap_general,audio,esc50,esc50_s,fireworks,fireworks exploding,1.0,1.0,0.0,esc50|fireworks
+clap_general,audio,esc50,esc50_s,hand_saw,hand-sawing wood,1.0,1.0,0.0,esc50|hand_saw
+siglip,image,rico_screen2words,rico_screen2words_a,Books & Reference,a screen from a books or reference reading app,0.306166,0.304472,-0.0016939999999999733,rico_screen2words|Books & Reference
+siglip,image,rico_screen2words,rico_screen2words_a,Business,a screen from a business app,0.137376,0.136765,-0.0006110000000000004,rico_screen2words|Business
+siglip,image,rico_screen2words,rico_screen2words_a,Communication,a screen from a messaging or communication app,0.250024,0.242198,-0.007826000000000027,rico_screen2words|Communication
+siglip,image,rico_screen2words,rico_screen2words_a,Finance,a screen from a banking or finance app,0.477826,0.490897,0.013071,rico_screen2words|Finance
+siglip,image,rico_screen2words,rico_screen2words_a,Food & Drink,a screen from a food or drink ordering app,0.298504,0.29573,-0.0027739999999999987,rico_screen2words|Food & Drink
+siglip,image,rico_screen2words,rico_screen2words_a,Health & Fitness,a screen from a health or fitness tracking app,0.523117,0.510708,-0.012409000000000003,rico_screen2words|Health & Fitness
+siglip,image,rico_screen2words,rico_screen2words_a,Maps & Navigation,a screen from a maps or navigation app,0.240297,0.239105,-0.0011919999999999986,rico_screen2words|Maps & Navigation
+siglip,image,rico_screen2words,rico_screen2words_a,Music & Audio,a screen from a music or audio streaming app,0.521356,0.517378,-0.003978000000000037,rico_screen2words|Music & Audio
+siglip,image,rico_screen2words,rico_screen2words_a,News & Magazines,a screen from a news or magazine app,0.404007,0.397726,-0.006280999999999981,rico_screen2words|News & Magazines
+siglip,image,rico_screen2words,rico_screen2words_a,Photography,a screen from a photography or camera app,0.0,0.0,0.0,rico_screen2words|Photography
+siglip,image,rico_screen2words,rico_screen2words_a,Productivity,a screen from a productivity app,0.0,0.0,0.0,rico_screen2words|Productivity
+siglip,image,rico_screen2words,rico_screen2words_a,Shopping,a screen from a shopping or e-commerce app,0.563507,0.569819,0.006311999999999984,rico_screen2words|Shopping
+siglip,image,rico_screen2words,rico_screen2words_a,Social,a screen from a social networking app,0.299151,0.288632,-0.010519,rico_screen2words|Social
+siglip,image,rico_screen2words,rico_screen2words_a,Sports,a screen from a sports app,0.515369,0.488976,-0.026392999999999944,rico_screen2words|Sports
+siglip,image,rico_screen2words,rico_screen2words_a,Travel & Local,a screen from a travel or local guide app,0.315459,0.313173,-0.0022860000000000102,rico_screen2words|Travel & Local
+siglip,image,rico_screen2words,rico_screen2words_a,Weather,a screen from a weather forecast app,0.536423,0.533394,-0.0030289999999999484,rico_screen2words|Weather
+siglip,image,rico_screen2words,rico_screen2words_m,Books & Reference,a screen from a books or reference reading app,0.331526,0.326426,-0.005099999999999993,rico_screen2words|Books & Reference
+siglip,image,rico_screen2words,rico_screen2words_m,Business,a screen from a business app,0.14772,0.151796,0.004075999999999996,rico_screen2words|Business
+siglip,image,rico_screen2words,rico_screen2words_m,Communication,a screen from a messaging or communication app,0.243983,0.23534,-0.008643000000000012,rico_screen2words|Communication
+siglip,image,rico_screen2words,rico_screen2words_m,Finance,a screen from a banking or finance app,0.42335,0.442402,0.019052000000000013,rico_screen2words|Finance
+siglip,image,rico_screen2words,rico_screen2words_m,Food & Drink,a screen from a food or drink ordering app,0.211203,0.205607,-0.00559599999999999,rico_screen2words|Food & Drink
+siglip,image,rico_screen2words,rico_screen2words_m,Health & Fitness,a screen from a health or fitness tracking app,0.498503,0.485304,-0.01319899999999996,rico_screen2words|Health & Fitness
+siglip,image,rico_screen2words,rico_screen2words_m,Maps & Navigation,a screen from a maps or navigation app,0.20721,0.209883,0.002672999999999981,rico_screen2words|Maps & Navigation
+siglip,image,rico_screen2words,rico_screen2words_m,Music & Audio,a screen from a music or audio streaming app,0.529156,0.521875,-0.007280999999999982,rico_screen2words|Music & Audio
+siglip,image,rico_screen2words,rico_screen2words_m,News & Magazines,a screen from a news or magazine app,0.392444,0.385509,-0.0069350000000000245,rico_screen2words|News & Magazines
+siglip,image,rico_screen2words,rico_screen2words_m,Photography,a screen from a photography or camera app,0.0,0.0,0.0,rico_screen2words|Photography
+siglip,image,rico_screen2words,rico_screen2words_m,Productivity,a screen from a productivity app,0.0,0.0,0.0,rico_screen2words|Productivity
+siglip,image,rico_screen2words,rico_screen2words_m,Shopping,a screen from a shopping or e-commerce app,0.56987,0.571349,0.001479000000000008,rico_screen2words|Shopping
+siglip,image,rico_screen2words,rico_screen2words_m,Social,a screen from a social networking app,0.267775,0.254585,-0.01318999999999998,rico_screen2words|Social
+siglip,image,rico_screen2words,rico_screen2words_m,Sports,a screen from a sports app,0.476799,0.457945,-0.018853999999999982,rico_screen2words|Sports
+siglip,image,rico_screen2words,rico_screen2words_m,Travel & Local,a screen from a travel or local guide app,0.323782,0.320212,-0.0035700000000000176,rico_screen2words|Travel & Local
+siglip,image,rico_screen2words,rico_screen2words_m,Weather,a screen from a weather forecast app,0.658946,0.650428,-0.008518000000000026,rico_screen2words|Weather
+siglip,image,rvl_cdip,rvl_cdip_a,advertisement,a printed advertisement,0.754695,0.762848,0.008152999999999966,rvl_cdip|advertisement
+siglip,image,rvl_cdip,rvl_cdip_a,budget,a budget spreadsheet with numbers and totals,0.39195,0.377743,-0.014207000000000025,rvl_cdip|budget
+siglip,image,rvl_cdip,rvl_cdip_a,email,an email message with headers,0.48841,0.480184,-0.008226000000000011,rvl_cdip|email
+siglip,image,rvl_cdip,rvl_cdip_a,file folder,a file folder cover sheet,0.614024,0.564668,-0.049356000000000066,rvl_cdip|file folder
+siglip,image,rvl_cdip,rvl_cdip_a,form,a blank or filled paper form,0.203927,0.195578,-0.008348999999999995,rvl_cdip|form
+siglip,image,rvl_cdip,rvl_cdip_a,handwritten,a handwritten note or letter,0.735477,0.7455,0.010023000000000004,rvl_cdip|handwritten
+siglip,image,rvl_cdip,rvl_cdip_a,invoice,an invoice or bill,0.555396,0.554519,-0.0008770000000000167,rvl_cdip|invoice
+siglip,image,rvl_cdip,rvl_cdip_a,letter,a typed business letter,0.56963,0.574415,0.004785000000000039,rvl_cdip|letter
+siglip,image,rvl_cdip,rvl_cdip_a,memo,an office memo,0.268022,0.248879,-0.019142999999999993,rvl_cdip|memo
+siglip,image,rvl_cdip,rvl_cdip_a,news article,a newspaper or news article page,0.749147,0.737982,-0.01116499999999998,rvl_cdip|news article
+siglip,image,rvl_cdip,rvl_cdip_a,presentation,presentation slides,0.314671,0.298387,-0.016283999999999965,rvl_cdip|presentation
+siglip,image,rvl_cdip,rvl_cdip_a,questionnaire,a questionnaire or survey,0.531729,0.535721,0.0039919999999999956,rvl_cdip|questionnaire
+siglip,image,rvl_cdip,rvl_cdip_a,resume,a resume or CV,0.520546,0.508347,-0.01219899999999996,rvl_cdip|resume
+siglip,image,rvl_cdip,rvl_cdip_a,scientific publication,a scientific journal publication page,0.763341,0.733193,-0.030148000000000064,rvl_cdip|scientific publication
+siglip,image,rvl_cdip,rvl_cdip_a,scientific report,a scientific or technical report,0.142251,0.160862,0.018611000000000016,rvl_cdip|scientific report
+siglip,image,rvl_cdip,rvl_cdip_a,specification,a technical specification document,0.224728,0.244226,0.019497999999999988,rvl_cdip|specification
+siglip,image,rvl_cdip,rvl_cdip_m,advertisement,a printed advertisement,0.771294,0.776371,0.005076999999999998,rvl_cdip|advertisement
+siglip,image,rvl_cdip,rvl_cdip_m,budget,a budget spreadsheet with numbers and totals,0.353219,0.367198,0.01397900000000002,rvl_cdip|budget
+siglip,image,rvl_cdip,rvl_cdip_m,email,an email message with headers,0.57053,0.575342,0.0048120000000000385,rvl_cdip|email
+siglip,image,rvl_cdip,rvl_cdip_m,file folder,a file folder cover sheet,0.567486,0.535096,-0.03239000000000003,rvl_cdip|file folder
+siglip,image,rvl_cdip,rvl_cdip_m,form,a blank or filled paper form,0.198361,0.213944,0.015582999999999986,rvl_cdip|form
+siglip,image,rvl_cdip,rvl_cdip_m,handwritten,a handwritten note or letter,0.61893,0.652404,0.033474000000000004,rvl_cdip|handwritten
+siglip,image,rvl_cdip,rvl_cdip_m,invoice,an invoice or bill,0.567032,0.573213,0.006180999999999992,rvl_cdip|invoice
+siglip,image,rvl_cdip,rvl_cdip_m,letter,a typed business letter,0.650877,0.65297,0.0020930000000000115,rvl_cdip|letter
+siglip,image,rvl_cdip,rvl_cdip_m,memo,an office memo,0.379831,0.357457,-0.02237399999999995,rvl_cdip|memo
+siglip,image,rvl_cdip,rvl_cdip_m,news article,a newspaper or news article page,0.719208,0.684339,-0.03486899999999993,rvl_cdip|news article
+siglip,image,rvl_cdip,rvl_cdip_m,presentation,presentation slides,0.235014,0.239732,0.004718,rvl_cdip|presentation
+siglip,image,rvl_cdip,rvl_cdip_m,questionnaire,a questionnaire or survey,0.537877,0.539607,0.0017299999999998983,rvl_cdip|questionnaire
+siglip,image,rvl_cdip,rvl_cdip_m,resume,a resume or CV,0.454253,0.420267,-0.033986000000000016,rvl_cdip|resume
+siglip,image,rvl_cdip,rvl_cdip_m,scientific publication,a scientific journal publication page,0.85021,0.833834,-0.016376000000000057,rvl_cdip|scientific publication
+siglip,image,rvl_cdip,rvl_cdip_m,scientific report,a scientific or technical report,0.211964,0.20082,-0.011144000000000015,rvl_cdip|scientific report
+siglip,image,rvl_cdip,rvl_cdip_m,specification,a technical specification document,0.279948,0.299144,0.019196000000000046,rvl_cdip|specification
+xclip,video,ucf101,ucf101_l,ApplyEyeMakeup,someone applying eye makeup,0.899385,0.885424,-0.013961000000000001,ucf101|ApplyEyeMakeup
+xclip,video,ucf101,ucf101_l,ApplyLipstick,someone applying lipstick,0.261004,0.316939,0.05593500000000001,ucf101|ApplyLipstick
+xclip,video,ucf101,ucf101_l,Archery,a person shooting a bow and arrow,0.89175,0.8929,0.0011499999999999844,ucf101|Archery
+xclip,video,ucf101,ucf101_l,BabyCrawling,a baby crawling on the floor,0.988636,0.970053,-0.018582999999999905,ucf101|BabyCrawling
+xclip,video,ucf101,ucf101_l,BalanceBeam,a gymnast on the balance beam,0.826988,0.925451,0.09846300000000008,ucf101|BalanceBeam
+xclip,video,ucf101,ucf101_l,BandMarching,a marching band performing,0.966639,0.961085,-0.005554000000000059,ucf101|BandMarching
+xclip,video,ucf101,ucf101_l,BaseballPitch,a baseball pitcher throwing a pitch,0.965814,0.965747,-6.699999999992823e-05,ucf101|BaseballPitch
+xclip,video,ucf101,ucf101_l,Basketball,people playing basketball,0.366562,0.340667,-0.025895,ucf101|Basketball
+xclip,video,ucf101,ucf101_l,BasketballDunk,a basketball dunk,0.947473,0.955491,0.00801799999999997,ucf101|BasketballDunk
+xclip,video,ucf101,ucf101_l,BenchPress,a person doing bench presses,1.0,1.0,0.0,ucf101|BenchPress
+xclip,video,ucf101,ucf101_m,ApplyEyeMakeup,someone applying eye makeup,0.954236,0.947194,-0.007041999999999993,ucf101|ApplyEyeMakeup
+xclip,video,ucf101,ucf101_m,ApplyLipstick,someone applying lipstick,0.204452,0.211248,0.0067959999999999965,ucf101|ApplyLipstick
+xclip,video,ucf101,ucf101_m,Archery,a person shooting a bow and arrow,0.906371,0.893688,-0.012683,ucf101|Archery
+xclip,video,ucf101,ucf101_m,BabyCrawling,a baby crawling on the floor,1.0,0.966667,-0.033332999999999946,ucf101|BabyCrawling
+xclip,video,ucf101,ucf101_m,BalanceBeam,a gymnast on the balance beam,0.561892,0.734533,0.17264100000000004,ucf101|BalanceBeam
+xclip,video,ucf101,ucf101_m,BandMarching,a marching band performing,0.979167,0.972222,-0.006944999999999979,ucf101|BandMarching
+xclip,video,ucf101,ucf101_m,BaseballPitch,a baseball pitcher throwing a pitch,1.0,1.0,0.0,ucf101|BaseballPitch
+xclip,video,ucf101,ucf101_m,Basketball,people playing basketball,0.482101,0.435072,-0.04702899999999999,ucf101|Basketball
+xclip,video,ucf101,ucf101_m,BasketballDunk,a basketball dunk,0.808799,0.808799,0.0,ucf101|BasketballDunk
+xclip,video,ucf101,ucf101_m,BenchPress,a person doing bench presses,1.0,1.0,0.0,ucf101|BenchPress
+xclip,video,ucf101,ucf101_s,ApplyEyeMakeup,someone applying eye makeup,0.876667,0.926667,0.050000000000000044,ucf101|ApplyEyeMakeup
+xclip,video,ucf101,ucf101_s,ApplyLipstick,someone applying lipstick,0.562476,0.517105,-0.04537099999999994,ucf101|ApplyLipstick
+xclip,video,ucf101,ucf101_s,Archery,a person shooting a bow and arrow,1.0,1.0,0.0,ucf101|Archery
+xclip,video,ucf101,ucf101_s,BabyCrawling,a baby crawling on the floor,1.0,1.0,0.0,ucf101|BabyCrawling
+xclip,video,ucf101,ucf101_s,BalanceBeam,a gymnast on the balance beam,0.86,0.966667,0.10666700000000007,ucf101|BalanceBeam
+xclip,video,ucf101,ucf101_s,BandMarching,a marching band performing,1.0,1.0,0.0,ucf101|BandMarching
+xclip,video,ucf101,ucf101_s,BaseballPitch,a baseball pitcher throwing a pitch,0.818452,0.760673,-0.057778999999999914,ucf101|BaseballPitch
+xclip,video,ucf101,ucf101_s,Basketball,people playing basketball,0.525102,0.525102,0.0,ucf101|Basketball
+xclip,video,ucf101,ucf101_s,BasketballDunk,a basketball dunk,0.926667,0.926667,0.0,ucf101|BasketballDunk
+xclip,video,ucf101,ucf101_s,BenchPress,a person doing bench presses,1.0,1.0,0.0,ucf101|BenchPress
+siglip,image,vggface2_faces,vggface2_faces_m,Aishwarya Rai Bachchan,a photo of Aishwarya Rai Bachchan,1.0,1.0,0.0,vggface2_faces|Aishwarya Rai Bachchan
+siglip,image,vggface2_faces,vggface2_faces_m,Alodia Gosiengfiao,a photo of Alodia Gosiengfiao,0.134775,0.121768,-0.013007000000000005,vggface2_faces|Alodia Gosiengfiao
+siglip,image,vggface2_faces,vggface2_faces_m,Anne-Marie Duff,a photo of Anne-Marie Duff,0.102087,0.128426,0.026339000000000015,vggface2_faces|Anne-Marie Duff
+siglip,image,vggface2_faces,vggface2_faces_m,Annette Bening,a photo of Annette Bening,0.678813,0.659534,-0.019279000000000046,vggface2_faces|Annette Bening
+siglip,image,vggface2_faces,vggface2_faces_m,Brendan Rodgers,a photo of Brendan Rodgers,0.050487,0.051592,0.0011050000000000018,vggface2_faces|Brendan Rodgers
+siglip,image,vggface2_faces,vggface2_faces_m,Carlo Conti,a photo of Carlo Conti,0.440158,0.466546,0.026388000000000023,vggface2_faces|Carlo Conti
+siglip,image,vggface2_faces,vggface2_faces_m,Clare Grant,a photo of Clare Grant,0.040488,0.041372,0.0008839999999999959,vggface2_faces|Clare Grant
+siglip,image,vggface2_faces,vggface2_faces_m,Edward Furlong,a photo of Edward Furlong,0.040952,0.0445,0.0035479999999999956,vggface2_faces|Edward Furlong
+siglip,image,vggface2_faces,vggface2_faces_m,Evangelos Venizelos,a photo of Evangelos Venizelos,0.10778,0.139879,0.032099,vggface2_faces|Evangelos Venizelos
+siglip,image,vggface2_faces,vggface2_faces_m,Ewan McGregor,a photo of Ewan McGregor,0.795311,0.763404,-0.03190700000000002,vggface2_faces|Ewan McGregor
+siglip,image,vggface2_faces,vggface2_faces_m,Frank de Boer,a photo of Frank de Boer,0.042731,0.05499,0.012258999999999999,vggface2_faces|Frank de Boer
+siglip,image,vggface2_faces,vggface2_faces_m,Frankie Muniz,a photo of Frankie Muniz,0.467573,0.487534,0.019961000000000007,vggface2_faces|Frankie Muniz
+siglip,image,vggface2_faces,vggface2_faces_m,Genelia DSouza,a photo of Genelia DSouza,0.99939,0.99939,0.0,vggface2_faces|Genelia DSouza
+siglip,image,vggface2_faces,vggface2_faces_m,Gregg Popovich,a photo of Gregg Popovich,0.599656,0.564258,-0.03539799999999993,vggface2_faces|Gregg Popovich
+siglip,image,vggface2_faces,vggface2_faces_m,Grzegorz Schetyna,a photo of Grzegorz Schetyna,0.546188,0.478544,-0.06764399999999998,vggface2_faces|Grzegorz Schetyna
+siglip,image,vggface2_faces,vggface2_faces_m,Haley Joel Osment,a photo of Haley Joel Osment,0.940274,0.937694,-0.0025800000000000267,vggface2_faces|Haley Joel Osment
+siglip,image,vggface2_faces,vggface2_faces_m,Himesh Reshammiya,a photo of Himesh Reshammiya,1.0,1.0,0.0,vggface2_faces|Himesh Reshammiya
+siglip,image,vggface2_faces,vggface2_faces_m,Ileana DCruz,a photo of Ileana DCruz,0.993273,0.994433,0.0011600000000000499,vggface2_faces|Ileana DCruz
+siglip,image,vggface2_faces,vggface2_faces_m,Jessica Seinfeld,a photo of Jessica Seinfeld,0.209974,0.231919,0.021944999999999992,vggface2_faces|Jessica Seinfeld
+siglip,image,vggface2_faces,vggface2_faces_m,Kareena Kapoor Khan,a photo of Kareena Kapoor Khan,0.99881,0.99939,0.0005800000000000249,vggface2_faces|Kareena Kapoor Khan
+siglip,image,vggface2_faces,vggface2_faces_m,Karl Urban,a photo of Karl Urban,0.910607,0.907192,-0.003415000000000057,vggface2_faces|Karl Urban
+siglip,image,vggface2_faces,vggface2_faces_m,Katie Holmes,a photo of Katie Holmes,0.94058,0.928733,-0.011846999999999941,vggface2_faces|Katie Holmes
+siglip,image,vggface2_faces,vggface2_faces_m,Kevin Dillon,a photo of Kevin Dillon,0.85633,0.867545,0.011214999999999975,vggface2_faces|Kevin Dillon
+siglip,image,vggface2_faces,vggface2_faces_m,Kevin Jonas,a photo of Kevin Jonas,0.972831,0.970278,-0.0025530000000000275,vggface2_faces|Kevin Jonas
+siglip,image,vggface2_faces,vggface2_faces_m,Kim Wilde,a photo of Kim Wilde,0.925252,0.891383,-0.03386899999999993,vggface2_faces|Kim Wilde
+siglip,image,vggface2_faces,vggface2_faces_m,Kimora Lee Simmons,a photo of Kimora Lee Simmons,0.868708,0.875419,0.0067109999999999115,vggface2_faces|Kimora Lee Simmons
+siglip,image,vggface2_faces,vggface2_faces_m,Liam Neeson,a photo of Liam Neeson,0.881789,0.909362,0.02757299999999996,vggface2_faces|Liam Neeson
+siglip,image,vggface2_faces,vggface2_faces_m,Lin Dan,a photo of Lin Dan,1.0,1.0,0.0,vggface2_faces|Lin Dan
+siglip,image,vggface2_faces,vggface2_faces_m,Liza Minnelli,a photo of Liza Minnelli,0.984375,0.9826,-0.001774999999999971,vggface2_faces|Liza Minnelli
+siglip,image,vggface2_faces,vggface2_faces_m,Manuel Neuer,a photo of Manuel Neuer,0.681498,0.747188,0.06568999999999992,vggface2_faces|Manuel Neuer
+siglip,image,vggface2_faces,vggface2_faces_m,Marissa Jaret Winokur,a photo of Marissa Jaret Winokur,0.880246,0.864879,-0.01536700000000002,vggface2_faces|Marissa Jaret Winokur
+siglip,image,vggface2_faces,vggface2_faces_m,Martha Reeves,a photo of Martha Reeves,0.830983,0.695591,-0.13539200000000007,vggface2_faces|Martha Reeves
+siglip,image,vggface2_faces,vggface2_faces_m,Marvin Humes,a photo of Marvin Humes,0.990502,0.986138,-0.0043640000000000345,vggface2_faces|Marvin Humes
+siglip,image,vggface2_faces,vggface2_faces_m,Park Bo-young,a photo of Park Bo-young,0.780683,0.756829,-0.023854000000000042,vggface2_faces|Park Bo-young
+siglip,image,vggface2_faces,vggface2_faces_m,Ricky Schroder,a photo of Ricky Schroder,0.095851,0.089101,-0.006750000000000006,vggface2_faces|Ricky Schroder
+siglip,image,vggface2_faces,vggface2_faces_m,Spencer Pratt,a photo of Spencer Pratt,0.25726,0.244695,-0.012564999999999993,vggface2_faces|Spencer Pratt
+siglip,image,vggface2_faces,vggface2_faces_m,Trudie Styler,a photo of Trudie Styler,0.124738,0.107211,-0.017527,vggface2_faces|Trudie Styler
+siglip,image,vggface2_faces,vggface2_faces_m,Vivica A. Fox,a photo of Vivica A. Fox,0.827405,0.771611,-0.0557939999999999,vggface2_faces|Vivica A. Fox
+siglip,image,vggface2_faces,vggface2_faces_m,Wendi Deng Murdoch,a photo of Wendi Deng Murdoch,0.247938,0.172019,-0.07591899999999999,vggface2_faces|Wendi Deng Murdoch
+siglip,image,vggface2_faces,vggface2_faces_m,Yulia Volkova,a photo of Yulia Volkova,0.211315,0.188649,-0.02266599999999999,vggface2_faces|Yulia Volkova
+siglip,image,vggface2_faces,vggface2_faces_s,Aishwarya Rai Bachchan,a photo of Aishwarya Rai Bachchan,1.0,1.0,0.0,vggface2_faces|Aishwarya Rai Bachchan
+siglip,image,vggface2_faces,vggface2_faces_s,Alodia Gosiengfiao,a photo of Alodia Gosiengfiao,0.224727,0.19406,-0.030667,vggface2_faces|Alodia Gosiengfiao
+siglip,image,vggface2_faces,vggface2_faces_s,Anne-Marie Duff,a photo of Anne-Marie Duff,0.109587,0.143191,0.03360400000000001,vggface2_faces|Anne-Marie Duff
+siglip,image,vggface2_faces,vggface2_faces_s,Annette Bening,a photo of Annette Bening,0.647221,0.624989,-0.02223200000000003,vggface2_faces|Annette Bening
+siglip,image,vggface2_faces,vggface2_faces_s,Brendan Rodgers,a photo of Brendan Rodgers,0.049435,0.050132,0.0006970000000000032,vggface2_faces|Brendan Rodgers
+siglip,image,vggface2_faces,vggface2_faces_s,Carlo Conti,a photo of Carlo Conti,0.726332,0.77901,0.052678,vggface2_faces|Carlo Conti
+siglip,image,vggface2_faces,vggface2_faces_s,Clare Grant,a photo of Clare Grant,0.042498,0.042605,0.00010699999999999599,vggface2_faces|Clare Grant
+siglip,image,vggface2_faces,vggface2_faces_s,Edward Furlong,a photo of Edward Furlong,0.044827,0.046809,0.0019820000000000046,vggface2_faces|Edward Furlong
+siglip,image,vggface2_faces,vggface2_faces_s,Evangelos Venizelos,a photo of Evangelos Venizelos,0.111353,0.152232,0.04087900000000001,vggface2_faces|Evangelos Venizelos
+siglip,image,vggface2_faces,vggface2_faces_s,Ewan McGregor,a photo of Ewan McGregor,0.741884,0.667455,-0.07442899999999997,vggface2_faces|Ewan McGregor
+siglip,image,vggface2_faces,vggface2_faces_s,Frank de Boer,a photo of Frank de Boer,0.039487,0.055735,0.016248,vggface2_faces|Frank de Boer
+siglip,image,vggface2_faces,vggface2_faces_s,Frankie Muniz,a photo of Frankie Muniz,0.62516,0.623175,-0.0019850000000000145,vggface2_faces|Frankie Muniz
+siglip,image,vggface2_faces,vggface2_faces_s,Genelia DSouza,a photo of Genelia DSouza,1.0,1.0,0.0,vggface2_faces|Genelia DSouza
+siglip,image,vggface2_faces,vggface2_faces_s,Gregg Popovich,a photo of Gregg Popovich,0.55627,0.569624,0.013353999999999977,vggface2_faces|Gregg Popovich
+siglip,image,vggface2_faces,vggface2_faces_s,Grzegorz Schetyna,a photo of Grzegorz Schetyna,0.284393,0.254588,-0.029805000000000026,vggface2_faces|Grzegorz Schetyna
+siglip,image,vggface2_faces,vggface2_faces_s,Haley Joel Osment,a photo of Haley Joel Osment,0.933838,0.928986,-0.0048519999999999675,vggface2_faces|Haley Joel Osment
+siglip,image,vggface2_faces,vggface2_faces_s,Himesh Reshammiya,a photo of Himesh Reshammiya,1.0,1.0,0.0,vggface2_faces|Himesh Reshammiya
+siglip,image,vggface2_faces,vggface2_faces_s,Ileana DCruz,a photo of Ileana DCruz,0.995833,0.995833,0.0,vggface2_faces|Ileana DCruz
+siglip,image,vggface2_faces,vggface2_faces_s,Jessica Seinfeld,a photo of Jessica Seinfeld,0.198521,0.188269,-0.010252000000000011,vggface2_faces|Jessica Seinfeld
+siglip,image,vggface2_faces,vggface2_faces_s,Kareena Kapoor Khan,a photo of Kareena Kapoor Khan,1.0,1.0,0.0,vggface2_faces|Kareena Kapoor Khan
+siglip,image,vggface2_faces,vggface2_faces_s,Karl Urban,a photo of Karl Urban,0.852383,0.838763,-0.013619999999999965,vggface2_faces|Karl Urban
+siglip,image,vggface2_faces,vggface2_faces_s,Katie Holmes,a photo of Katie Holmes,0.962222,0.964603,0.0023809999999999665,vggface2_faces|Katie Holmes
+siglip,image,vggface2_faces,vggface2_faces_s,Kevin Dillon,a photo of Kevin Dillon,0.90334,0.909828,0.006487999999999938,vggface2_faces|Kevin Dillon
+siglip,image,vggface2_faces,vggface2_faces_s,Kevin Jonas,a photo of Kevin Jonas,0.992157,0.985965,-0.006191999999999975,vggface2_faces|Kevin Jonas
+siglip,image,vggface2_faces,vggface2_faces_s,Kim Wilde,a photo of Kim Wilde,0.916754,0.896555,-0.020198999999999967,vggface2_faces|Kim Wilde
+siglip,image,vggface2_faces,vggface2_faces_s,Kimora Lee Simmons,a photo of Kimora Lee Simmons,0.917407,0.921586,0.004179000000000044,vggface2_faces|Kimora Lee Simmons
+siglip,image,vggface2_faces,vggface2_faces_s,Liam Neeson,a photo of Liam Neeson,0.877421,0.909642,0.032220999999999944,vggface2_faces|Liam Neeson
+siglip,image,vggface2_faces,vggface2_faces_s,Lin Dan,a photo of Lin Dan,1.0,1.0,0.0,vggface2_faces|Lin Dan
+siglip,image,vggface2_faces,vggface2_faces_s,Liza Minnelli,a photo of Liza Minnelli,1.0,1.0,0.0,vggface2_faces|Liza Minnelli
+siglip,image,vggface2_faces,vggface2_faces_s,Manuel Neuer,a photo of Manuel Neuer,0.825056,0.894873,0.06981700000000002,vggface2_faces|Manuel Neuer
+siglip,image,vggface2_faces,vggface2_faces_s,Marissa Jaret Winokur,a photo of Marissa Jaret Winokur,0.923618,0.92283,-0.0007880000000000109,vggface2_faces|Marissa Jaret Winokur
+siglip,image,vggface2_faces,vggface2_faces_s,Martha Reeves,a photo of Martha Reeves,0.775507,0.696783,-0.0787239999999999,vggface2_faces|Martha Reeves
+siglip,image,vggface2_faces,vggface2_faces_s,Marvin Humes,a photo of Marvin Humes,1.0,0.995833,-0.004167000000000032,vggface2_faces|Marvin Humes
+siglip,image,vggface2_faces,vggface2_faces_s,Park Bo-young,a photo of Park Bo-young,0.928864,0.926357,-0.002507000000000037,vggface2_faces|Park Bo-young
+siglip,image,vggface2_faces,vggface2_faces_s,Ricky Schroder,a photo of Ricky Schroder,0.085101,0.082325,-0.0027760000000000007,vggface2_faces|Ricky Schroder
+siglip,image,vggface2_faces,vggface2_faces_s,Spencer Pratt,a photo of Spencer Pratt,0.326922,0.310815,-0.016106999999999982,vggface2_faces|Spencer Pratt
+siglip,image,vggface2_faces,vggface2_faces_s,Trudie Styler,a photo of Trudie Styler,0.116565,0.121335,0.0047699999999999965,vggface2_faces|Trudie Styler
+siglip,image,vggface2_faces,vggface2_faces_s,Vivica A. Fox,a photo of Vivica A. Fox,0.912823,0.871478,-0.041345000000000076,vggface2_faces|Vivica A. Fox
+siglip,image,vggface2_faces,vggface2_faces_s,Wendi Deng Murdoch,a photo of Wendi Deng Murdoch,0.316728,0.257255,-0.059473,vggface2_faces|Wendi Deng Murdoch
+siglip,image,vggface2_faces,vggface2_faces_s,Yulia Volkova,a photo of Yulia Volkova,0.422685,0.394049,-0.028635999999999995,vggface2_faces|Yulia Volkova
+siglip,image,visual_genome,visual_genome_m,person,a person,0.202228,0.199412,-0.002815999999999985,visual_genome|person
+siglip,image,visual_genome,visual_genome_m,man,a man,0.466188,0.473488,0.007300000000000029,visual_genome|man
+siglip,image,visual_genome,visual_genome_m,woman,a woman,0.266432,0.258751,-0.007680999999999993,visual_genome|woman
+siglip,image,visual_genome,visual_genome_m,car,a car on the street,0.666191,0.664256,-0.00193500000000002,visual_genome|car
+siglip,image,visual_genome,visual_genome_m,bus,a bus,0.620523,0.646144,0.025621000000000005,visual_genome|bus
+siglip,image,visual_genome,visual_genome_m,train,a train,0.674664,0.701621,0.02695700000000001,visual_genome|train
+siglip,image,visual_genome,visual_genome_m,truck,a truck,0.235177,0.220937,-0.014240000000000003,visual_genome|truck
+siglip,image,visual_genome,visual_genome_m,bike,a bicycle,0.363838,0.360354,-0.003483999999999987,visual_genome|bike
+siglip,image,visual_genome,visual_genome_m,boat,a boat on the water,0.607489,0.611632,0.004143000000000008,visual_genome|boat
+siglip,image,visual_genome,visual_genome_m,plane,an airplane,0.488444,0.480422,-0.008021999999999974,visual_genome|plane
+siglip,image,visual_genome,visual_genome_m,dog,a dog,0.480865,0.47806,-0.002805000000000002,visual_genome|dog
+siglip,image,visual_genome,visual_genome_m,cat,a cat,0.688901,0.744332,0.05543100000000001,visual_genome|cat
+siglip,image,visual_genome,visual_genome_m,horse,a horse,0.835446,0.847904,0.012457999999999969,visual_genome|horse
+siglip,image,visual_genome,visual_genome_m,elephant,an elephant,0.922867,0.887022,-0.035845000000000016,visual_genome|elephant
+siglip,image,visual_genome,visual_genome_m,giraffe,a giraffe,0.792091,0.781548,-0.010542999999999969,visual_genome|giraffe
+siglip,image,visual_genome,visual_genome_m,zebra,a zebra,0.859409,0.867784,0.008375000000000021,visual_genome|zebra
+siglip,image,visual_genome,visual_genome_m,cow,a cow,0.667202,0.663979,-0.003222999999999976,visual_genome|cow
+siglip,image,visual_genome,visual_genome_m,sheep,a sheep,0.653619,0.745715,0.09209600000000007,visual_genome|sheep
+siglip,image,visual_genome,visual_genome_m,bird,a bird,0.496726,0.506371,0.009645000000000015,visual_genome|bird
+siglip,image,visual_genome,visual_genome_m,bear,a bear,0.547676,0.504367,-0.04330900000000004,visual_genome|bear
+siglip,image,visual_genome,visual_genome_m,building,a building,0.774773,0.77391,-0.0008630000000000582,visual_genome|building
+siglip,image,visual_genome,visual_genome_m,window,a window,0.61014,0.629631,0.019491000000000036,visual_genome|window
+siglip,image,visual_genome,visual_genome_m,tree,a tree,0.611799,0.613884,0.0020850000000000035,visual_genome|tree
+siglip,image,visual_genome,visual_genome_m,sign,a street sign,0.500165,0.505186,0.005021000000000053,visual_genome|sign
+siglip,image,visual_genome,visual_genome_m,clock,a clock,0.425252,0.419831,-0.005421000000000009,visual_genome|clock
+siglip,image,visual_genome,visual_genome_m,umbrella,an umbrella,0.539872,0.523095,-0.016777000000000042,visual_genome|umbrella
+siglip,image,visual_genome,visual_genome_m,chair,a chair,0.388723,0.372146,-0.01657700000000001,visual_genome|chair
+siglip,image,visual_genome,visual_genome_m,table,a table,0.569949,0.551506,-0.018442999999999987,visual_genome|table
+siglip,image,visual_genome,visual_genome_m,bench,a bench,0.372604,0.350378,-0.022225999999999968,visual_genome|bench
+siglip,image,visual_genome,visual_genome_m,bottle,a bottle,0.13457,0.147979,0.013409000000000004,visual_genome|bottle
+siglip,image,visual_genome,visual_genome_m,plate,a plate of food,0.397221,0.434098,0.03687699999999999,visual_genome|plate
+siglip,image,visual_genome,visual_genome_m,pizza,a pizza,0.668423,0.775047,0.10662400000000005,visual_genome|pizza
+siglip,image,visual_genome,visual_genome_m,banana,a banana,0.651002,0.677116,0.02611400000000008,visual_genome|banana
+siglip,image,visual_genome,visual_genome_m,laptop,a laptop computer,0.469279,0.468376,-0.0009029999999999871,visual_genome|laptop
+siglip,image,visual_genome,visual_genome_m,kite,a kite in the sky,0.729985,0.700553,-0.029432000000000014,visual_genome|kite
+siglip,image,visual_genome,visual_genome_m,skateboard,a skateboard,0.621908,0.589847,-0.032061000000000006,visual_genome|skateboard
+siglip,image,visual_genome,visual_genome_m,surfboard,a surfboard,0.637009,0.621847,-0.015162000000000009,visual_genome|surfboard
+siglip,image,visual_genome,visual_genome_m,hat,a person wearing a hat,0.221624,0.171485,-0.05013899999999999,visual_genome|hat
+siglip,image,visual_genome,visual_genome_m,jacket,a person wearing a jacket,0.195504,0.184205,-0.011299000000000003,visual_genome|jacket
+siglip,image,visual_genome,visual_genome_m,snow,a snowy scene,0.609765,0.600635,-0.009129999999999971,visual_genome|snow
+siglip,image,visual_genome,visual_genome_s,person,a person,0.255107,0.24784,-0.007266999999999968,visual_genome|person
+siglip,image,visual_genome,visual_genome_s,man,a man,0.475904,0.495092,0.019187999999999983,visual_genome|man
+siglip,image,visual_genome,visual_genome_s,woman,a woman,0.313436,0.309729,-0.003707000000000016,visual_genome|woman
+siglip,image,visual_genome,visual_genome_s,car,a car on the street,0.817665,0.819479,0.0018139999999999823,visual_genome|car
+siglip,image,visual_genome,visual_genome_s,bus,a bus,0.327446,0.347813,0.02036699999999997,visual_genome|bus
+siglip,image,visual_genome,visual_genome_s,train,a train,0.388889,0.47619,0.08730100000000002,visual_genome|train
+siglip,image,visual_genome,visual_genome_s,truck,a truck,0.239533,0.239922,0.00038900000000000046,visual_genome|truck
+siglip,image,visual_genome,visual_genome_s,bike,a bicycle,0.266633,0.291018,0.02438499999999999,visual_genome|bike
+siglip,image,visual_genome,visual_genome_s,boat,a boat on the water,0.809345,0.805076,-0.004268999999999967,visual_genome|boat
+siglip,image,visual_genome,visual_genome_s,plane,an airplane,0.469373,0.44203,-0.027343000000000006,visual_genome|plane
+siglip,image,visual_genome,visual_genome_s,dog,a dog,0.661511,0.707658,0.04614700000000005,visual_genome|dog
+siglip,image,visual_genome,visual_genome_s,cat,a cat,1.0,1.0,0.0,visual_genome|cat
+siglip,image,visual_genome,visual_genome_s,horse,a horse,0.115668,0.113149,-0.0025190000000000073,visual_genome|horse
+siglip,image,visual_genome,visual_genome_s,elephant,an elephant,0.668753,0.668477,-0.000276000000000054,visual_genome|elephant
+siglip,image,visual_genome,visual_genome_s,giraffe,a giraffe,1.0,1.0,0.0,visual_genome|giraffe
+siglip,image,visual_genome,visual_genome_s,zebra,a zebra,1.0,1.0,0.0,visual_genome|zebra
+siglip,image,visual_genome,visual_genome_s,cow,a cow,0.278571,0.293478,0.014907000000000004,visual_genome|cow
+siglip,image,visual_genome,visual_genome_s,sheep,a sheep,0.666667,0.7,0.033332999999999946,visual_genome|sheep
+siglip,image,visual_genome,visual_genome_s,bird,a bird,0.320479,0.330538,0.010058999999999985,visual_genome|bird
+siglip,image,visual_genome,visual_genome_s,bear,a bear,0.0026,0.001978,-0.0006219999999999997,visual_genome|bear
+siglip,image,visual_genome,visual_genome_s,building,a building,0.799623,0.794173,-0.005449999999999955,visual_genome|building
+siglip,image,visual_genome,visual_genome_s,window,a window,0.61164,0.625164,0.013524000000000092,visual_genome|window
+siglip,image,visual_genome,visual_genome_s,tree,a tree,0.667046,0.682444,0.015398000000000023,visual_genome|tree
+siglip,image,visual_genome,visual_genome_s,sign,a street sign,0.584132,0.586733,0.0026009999999999645,visual_genome|sign
+siglip,image,visual_genome,visual_genome_s,clock,a clock,0.14231,0.142712,0.00040200000000001346,visual_genome|clock
+siglip,image,visual_genome,visual_genome_s,umbrella,an umbrella,0.24435,0.23047,-0.013880000000000003,visual_genome|umbrella
+siglip,image,visual_genome,visual_genome_s,chair,a chair,0.596319,0.558959,-0.03736000000000006,visual_genome|chair
+siglip,image,visual_genome,visual_genome_s,table,a table,0.628209,0.607605,-0.020604000000000067,visual_genome|table
+siglip,image,visual_genome,visual_genome_s,bench,a bench,0.162794,0.172273,0.009479000000000015,visual_genome|bench
+siglip,image,visual_genome,visual_genome_s,bottle,a bottle,0.125872,0.130244,0.004371999999999987,visual_genome|bottle
+siglip,image,visual_genome,visual_genome_s,plate,a plate of food,0.363372,0.381355,0.017983000000000027,visual_genome|plate
+siglip,image,visual_genome,visual_genome_s,pizza,a pizza,0.087677,0.089199,0.0015219999999999956,visual_genome|pizza
+siglip,image,visual_genome,visual_genome_s,banana,a banana,0.22709,0.237234,0.010144000000000014,visual_genome|banana
+siglip,image,visual_genome,visual_genome_s,laptop,a laptop computer,0.134917,0.157651,0.022734000000000004,visual_genome|laptop
+siglip,image,visual_genome,visual_genome_s,kite,a kite in the sky,0.0,0.0,0.0,visual_genome|kite
+siglip,image,visual_genome,visual_genome_s,skateboard,a skateboard,0.0,0.0,0.0,visual_genome|skateboard
+siglip,image,visual_genome,visual_genome_s,surfboard,a surfboard,0.0,0.0,0.0,visual_genome|surfboard
+siglip,image,visual_genome,visual_genome_s,hat,a person wearing a hat,0.189321,0.126614,-0.06270699999999998,visual_genome|hat
+siglip,image,visual_genome,visual_genome_s,jacket,a person wearing a jacket,0.219175,0.207627,-0.011548000000000003,visual_genome|jacket
+siglip,image,visual_genome,visual_genome_s,snow,a snowy scene,0.593033,0.624373,0.031339999999999923,visual_genome|snow

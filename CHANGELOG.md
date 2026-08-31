@@ -17,6 +17,16 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The Settings -> Sorting "Enrich descriptions" tooltip described a
+  different feature.** It read "Prepend item filenames to text-sort queries to
+  improve matching for named items"; the setting has never touched filenames.
+  It averages the text-sort query over the embedder's phrasing templates
+  ("a photo of ...", "the sound of ...") instead of embedding it as typed. The
+  tooltip now says that, and says where it helps: the #3127 measurement across
+  every media-type default found it worth +0.014 AP on CLAP audio search,
+  inert on images, and -0.057 on text search -- so the default stays **off**.
+  (Issue #3127.)
+
 - **The calibrated cutoff no longer counts your own votes in its picture of
   the collection.** The threshold estimator reads score distributions over
   the whole collection to place the Good/Bad line; the voted items' scores

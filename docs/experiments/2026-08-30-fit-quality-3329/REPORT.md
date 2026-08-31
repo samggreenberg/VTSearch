@@ -737,7 +737,7 @@ is the one fit in this whole inventory that does exactly what it says.
 
 **But compaction is off in production.** `PROJECTION_COMPACT_DEFAULT` is `False`
 and has been since the July UMAP-tuning sweep
-([`2026-07-22-vtsbrowse-umap-tuning.html`](../../reports/2026-07-22-vtsbrowse-umap-tuning.html)),
+([`2026-07-22-vtsbrowse-umap-tuning.html`](../2026-07-22-vtsbrowse-umap-tuning/report.html)),
 which found `compact_layout` costs ~2 % taxonomy separability and ~5–6 %
 neighbourhood structure on *every* dataset and embedder. `compact` is not a
 user-facing setting: `resolve_projection_params` hard-wires it to that constant
