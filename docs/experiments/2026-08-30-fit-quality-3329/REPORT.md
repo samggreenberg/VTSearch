@@ -411,6 +411,12 @@ are more self-similar than they are similar to everything else**, though by
 layer 3 nearly half of them have no ground-truth category holding even half
 their members.
 
+**Bound it correctly, though:** the guard has exactly one production consumer —
+an on-demand HTTP endpoint — and the "typicality-tempered diversity probe" the
+inventory expected to be affected reads the typicality *ordering*, not the
+p-value, so it is untouched. This is a broken diagnostic, not a silent defect in
+the loop.
+
 **And the obvious repair does not work.** Calibrating α per embedder — the first
 thing this report recommended — was then priced, and it makes `dinov3_patch`
 *worse* (separation 0.13 → 0.043). That result is kept in the report rather than
@@ -569,6 +575,44 @@ atlas built on `coco_val` reads Visual Genome as z = **−15**, i.e. *more*
 typical than its own holdout. A corpus change that a human would call obvious is
 invisible to it.
 
+## How much does it matter? The blast radius, traced
+
+Part 1 pre-registered H4 so that "the fit is wrong and it costs nothing" was a
+reportable finding. Part 2's equivalent is not a regression — it is a question
+about **reachability**, and it is answered by tracing consumers rather than by
+another grid.
+
+| symbol | production consumers |
+|---|---|
+| `domain_shift_report` | **one**: `vtsearch/routes/datasets/registry.py:524`, an HTTP endpoint that compares a named reference dataset against the active one on demand |
+| `typicality_pvalues` | **none** outside `domain_shift_report` itself |
+| `typicality_pvalue` (singular) | **none** — one test, no callers |
+
+**So the entire calibrated-typicality machinery — the LOO correction, the
+per-node quantile grids, the path averaging — is reachable only through one
+on-demand diagnostic endpoint.** It is not in the click loop, not in
+acquisition, and not in training. The finding above is real and the guard is
+broken for `dinov3_patch`, but what it breaks is a report a user explicitly asks
+for, not a decision the app takes on its own.
+
+**This corrects the inventory's own framing.** The [#3329
+issue](https://github.com/samggreenberg/VTSearch/issues/3329) says that if the
+p-values are not uniform then "the domain-shift verdicts and the
+typicality-tempered diversity probes are both miscalibrated". The first half
+holds. **The second does not.** `CoverageAtlas.next_sample` — the
+typicality-tempered probe — reads `node["ids"]`, which is sorted by raw
+`mu · x`, and gates on `node["rbar"]`. It never touches `t_quantiles` or a
+p-value. The calibration defect lives entirely in the quantile grid and the
+combiner, so **the diversity probe is untouched by it**: it depends on the
+typicality *ordering*, which is unaffected, not on the calibrated *value*, which
+is not.
+
+That is worth stating plainly because it changes what to do. A miscalibrated
+guard inside the acquisition loop would be urgent; a miscalibrated guard behind
+one diagnostic endpoint is a correctness bug in a feature whose answer a user
+might act on, and it should be fixed or disabled for patch embedders — but
+nothing is silently going wrong in the loop because of it.
+
 ## B6 — the obvious repair, priced: it does not work
 
 The recommendation this run first wrote down was "calibrate α per embedder",
@@ -724,9 +768,14 @@ this grid does not do.
 
 **Do not trust `domain_shift_report` on a patch embedder.** For
 `dinov3_patch` it is close to a constant "shifted" — and per part 1 that is the
-embedder whose `max_patch` arm is the only one worth running. Anything gated on
-it for that arm is gated on noise. The single-vector embedders are fine at the
-operating point.
+embedder whose `max_patch` arm is the only one worth running. The single-vector
+embedders are fine at the operating point.
+
+**But bound it correctly: nothing in the loop is gated on it.** The guard has
+exactly one production consumer, an on-demand HTTP endpoint, and the diversity
+probe that the inventory expected to be affected reads the typicality *ordering*
+rather than the p-value. This is a broken diagnostic, not a silent training
+defect.
 
 **Neither obvious fix works, and both were measured rather than assumed.**
 Removing the path averaging makes calibration *worse* (KS 0.103 → 0.132).
