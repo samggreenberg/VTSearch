@@ -61,6 +61,7 @@ def mods(_on_path):
         "roster": importlib.import_module("roster"),
         "shortlist": importlib.import_module("shortlist"),
         "audit": importlib.import_module("audit_to_corrections"),
+        "report": importlib.import_module("make_report"),
     }
 
 
@@ -842,6 +843,54 @@ class TestManifest:
         mods["common"].write_manifest([_page(mods, "spods/1", "spods")], path)
         for line in path.read_text().splitlines():
             json.loads(line)
+
+
+# ------------------------------------------------------------------ report
+
+
+class TestReport:
+    def test_scale_section_bands_against_the_measured_floor(self, mods, tmp_path):
+        from PIL import Image
+
+        img = tmp_path / "p.png"
+        Image.new("RGB", (1000, 1400), "white").save(img)
+        # One sub-floor mark and three above it.
+        pages = [
+            _page(mods, "spods/001", "spods", [("logo", (0, 0, 20, 18), "spods/a", "gt")], path=str(img)),
+            _page(mods, "spods/002", "spods", [("logo", (0, 0, 90, 70), "spods/a", "gt")], path=str(img)),
+            _page(mods, "spods/003", "spods", [("logo", (0, 0, 200, 150), "spods/a", "gt")], path=str(img)),
+            _page(mods, "spods/004", "spods", [("logo", (0, 0, 300, 200), "spods/a", "gt")], path=str(img)),
+        ]
+        html = mods["report"].section_scale(pages, {})
+        assert "32px" in html
+        # One of four marks is below the floor; the share must be reported, not
+        # buried, because a class built from sub-floor instances measures the
+        # floor rather than the method.
+        assert "25% of labelled marks fall below" in html
+
+    def test_scale_section_is_empty_without_labelled_marks(self, mods):
+        assert mods["report"].section_scale([_page(mods, "u/1", "ucsf")], {}) == ""
+
+    def test_overview_warns_when_nothing_is_verified(self, mods):
+        classes = {"spods/a": {"n_instances": 3, "audit": {"membership_verified": False}}}
+        html = mods["report"].section_overview([_page(mods, "spods/1", "spods")], classes, {})
+        assert "Nothing here is verified yet" in html
+
+    def test_overview_drops_the_warning_once_verified(self, mods):
+        classes = {"spods/a": {"n_instances": 3, "audit": {"membership_verified": True}}}
+        html = mods["report"].section_overview([_page(mods, "spods/1", "spods")], classes, {})
+        assert "Nothing here is verified yet" not in html
+
+    def test_tables_escape_their_content(self, mods):
+        html = mods["report"]._table(["c"], [["<script>x</script>"]])
+        assert "<script>" not in html
+        assert "&lt;script&gt;" in html
+
+    def test_every_provenance_the_builder_emits_has_a_gloss(self, mods):
+        # A provenance with no explanation in the report is a label the reader
+        # cannot interpret, which defeats the point of tracking provenance.
+        emitted = {"gt", "clustered", "clustered_band", "candidate", "synthetic"}
+        assert emitted <= set(mods["report"]._PROVENANCE_MEANING)
 
 
 # ------------------------------------------------------------- embed cells
