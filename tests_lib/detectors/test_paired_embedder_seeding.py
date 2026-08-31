@@ -141,10 +141,10 @@ def text_tower(monkeypatch):
     """``embed_text_query`` answering only for SigLIP, as the real towers do."""
     import vtscore.embedding.helpers as helpers
 
-    calls: list[tuple[str, str | None]] = []
+    calls: list[tuple[str, str | None, bool]] = []
 
-    def _embed(text, media_type, embedder_name=None):  # noqa: ARG001
-        calls.append((text, embedder_name))
+    def _embed(text, media_type, enrich=False, embedder_name=None):  # noqa: ARG001
+        calls.append((text, embedder_name, enrich))
         if embedder_name != "siglip":
             return None  # DINOv3 has no text tower
         return np.asarray([1.0, 0.0], dtype=np.float32)
@@ -160,7 +160,7 @@ _SIGLIP = {1: [1.0, 0.0], 2: [0.0, 1.0]}
 _DINOV3 = {1: [0.0, 1.0], 2: [1.0, 0.0]}
 
 
-def test_pair_ranks_in_the_text_space_over_the_learn_ids(run_cells, queried, text_tower, monkeypatch, tmp_path):
+def test_pair_ranks_in_the_text_space_over_the_learn_ids(cfg, run_cells, queried, text_tower, monkeypatch, tmp_path):
     """SigLIP orders the opening; the ids are the DINOv3 cell's own."""
     learn = {cid: _media({"dinov3_patch": v}, "dinov3_patch") for cid, v in _DINOV3.items()}
     text = {cid: _media({"siglip": v}, "siglip") for cid, v in _SIGLIP.items()}
@@ -175,7 +175,12 @@ def test_pair_ranks_in_the_text_space_over_the_learn_ids(run_cells, queried, tex
 
     assert set(scores) == set(learn)
     assert scores[1] > scores[2], "the opening must follow SigLIP, not DINOv3"
-    assert ("a boat on the water", "siglip") in text_tower
+    assert ("a boat on the water", "siglip", False) in text_tower
+    # #3341: the opening must be embedded the way the app embeds it, not
+    # however `embed_text_query` happens to default.  The harness passes
+    # cfg.SEED_ENRICH explicitly, which tracks the app's shipped
+    # `enrich_descriptions` default (off).
+    assert all(enrich is cfg.SEED_ENRICH for _text, _name, enrich in text_tower)
 
 
 def test_pair_prefers_vectors_already_on_the_media(run_cells, queried, text_tower, monkeypatch, tmp_path):
