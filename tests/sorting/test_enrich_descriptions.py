@@ -302,7 +302,13 @@ class TestEnrichDescriptionsSetting:
         after #3077 moved the audio default to ``clap_general``: it is worth
         +0.014 +/- 0.009 AP there, inert on ``siglip``, and **-0.057 +/- 0.009
         on ``e5``** -- worse on 45 of 45 text categories, and on ``bge`` too.
-        Equal-weighted over the four defaults the setting is negative.  See
+
+        #3341 then removed the wrappers from the four embedders that measured
+        negative, so the setting is no longer net-negative -- but the default
+        still stays off, for a different reason: the only gain left standing,
+        ``clap_general``'s +0.014, does not clear its own 2 SE, and ESC-50's 50
+        categories are already fully used, so resolving it needs a second audio
+        corpus.  See
         ``docs/experiments/2026-08-31-enrich-descriptions-3127/REPORT.md``
         before flipping this.
         """
@@ -444,3 +450,77 @@ class TestEvalTextSortEnrich:
             eval_text_sort(medias, queries, "image", k_values=[5], enrich=False)
 
         assert all(kw["enrich"] is False for kw in call_kwargs)
+
+
+# =====================================================================
+# The #3127 study harness vs. the tree it measures
+# =====================================================================
+
+
+class TestEnrichStudyCandidateWrappers:
+    """`scripts/experiments/enrich/run_enrich.py` keeps its own wrapper table.
+
+    It has to: #3341 emptied the list on the four embedders this very study
+    measured negative, so a harness that read `description_wrappers` would
+    find nothing on them, emit an `enriched` arm identical to `plain`, and
+    report a flat zero while looking healthy. The table holds the pre-#3341
+    templates so the report stays reproducible and a new checkpoint can be
+    measured against a set it does not yet ship.
+
+    That copy can rot, which is what these tests are for: on every media type
+    where an embedder still ships wrappers, the table must be that same list.
+    """
+
+    @staticmethod
+    def _module():
+        import importlib.util
+        from pathlib import Path
+
+        path = Path(__file__).resolve().parents[2] / "scripts" / "experiments" / "enrich" / "run_enrich.py"
+        spec = importlib.util.spec_from_file_location("_enrich_run_enrich", path)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    @pytest.mark.parametrize(
+        ("media_type", "embedder_name"),
+        [("audio", "clap_general"), ("image", "siglip2"), ("video", "xclip")],
+    )
+    def test_table_matches_the_embedders_that_still_ship_wrappers(self, media_type, embedder_name):
+        from vtscore.media import get_embedder
+
+        table = self._module().CANDIDATE_WRAPPERS
+        assert table[media_type] == get_embedder(embedder_name).description_wrappers, (
+            f"the study's {media_type} templates have drifted from {embedder_name}'s; "
+            "the harness would measure a set nobody ships"
+        )
+
+    def test_every_media_type_has_a_candidate_set_with_the_identity(self):
+        """The bare `{text}` arm is the analyzer's planted answer."""
+        table = self._module().CANDIDATE_WRAPPERS
+        assert set(table) == {"audio", "image", "text", "video"}
+        for media_type, wrappers in table.items():
+            assert len(wrappers) >= 3, media_type
+            assert "{text}" in wrappers, f"{media_type} lost the identity arm"
+
+    def test_emptied_embedders_resolve_to_the_candidate_set(self):
+        """The four #3341 emptied are still measurable, and flagged as such."""
+        from vtscore.media import get_embedder
+
+        module = self._module()
+        for name, media_type in (("siglip", "image"), ("clap", "audio"), ("e5", "text"), ("bge", "text")):
+            wrappers, source = module._wrappers_for(get_embedder(name))
+            assert source == "candidate", name
+            assert wrappers == module.CANDIDATE_WRAPPERS[media_type], name
+
+    def test_override_restores_the_embedders_own_property(self):
+        """The class patch must not leak past the cell."""
+        from vtscore.media import get_embedder
+
+        module = self._module()
+        emb = get_embedder("siglip")
+        assert emb.description_wrappers == []
+        with module._wrappers_override(emb, ["a photo of {text}"]):
+            assert emb.description_wrappers == ["a photo of {text}"]
+        assert emb.description_wrappers == []
