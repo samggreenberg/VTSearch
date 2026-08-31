@@ -185,12 +185,15 @@ def fit_step(samples: list[dict], byte_scaled: bool) -> Optional[StepCoeffs]:
 
     xs = [s["n"] for s in samples]
     ys = [s["seconds"] for s in samples]
-    intercept, slope, _r2 = affine_fit(xs, ys)
+    intercept, slope, r2 = affine_fit(xs, ys)
     if slope <= 0:
         # No credible scaling signal (a flat step, or noise swamping a short
-        # one). Report the typical cost and claim nothing about growth.
+        # one). Report the typical cost and claim nothing about growth. The r2
+        # is deliberately NOT carried here: it describes a line this branch has
+        # just declined to use, so reporting it would attach a goodness score to
+        # coefficients that are a median.
         return StepCoeffs(a=max(0.0, statistics.median(ys)))
-    return StepCoeffs(a=max(0.0, intercept), b=slope)
+    return StepCoeffs(a=max(0.0, intercept), b=slope, r2=r2)
 
 
 def _cell_variants(row: dict) -> tuple[tuple[str, str, str], ...]:

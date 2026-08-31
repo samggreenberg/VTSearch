@@ -1,4 +1,23 @@
-# Is the 2-component Gaussian mixture a *good* fit? — results (issue #3329)
+# Is anything in VTSearch a *good* fit? — results (issue #3329)
+
+Two parts, run and written a day apart, kept in one document because they answer
+one question about different fits.
+
+| part | subject | pre-registration |
+|---|---|---|
+| **[Part 1](#bluf)** (below) | the 2-component score mixture — the fit that sets every threshold | [`PREREG.md`](PREREG.md) |
+| **[Part 2](#part-2--the-rest-of-the-inventory-embedding-space-structure-and-the-browse-projection)** | the Coverage Atlas, the kNN conformal rule, the UMAP layout, the compaction radius | [`PREREG-part2.md`](PREREG-part2.md) |
+
+**If you read one thing:** part 1 found the score mixture is a mildly bad fit
+that costs nothing, and part 2 found the Coverage Atlas's domain-shift guard is
+**inverted for `dinov3_patch`** — it fires on 80 % of its own held-out data,
+which makes it close to a constant for the one embedder region voting depends
+on. Both parts also found the same inversion: the arm that fits *worst* is the
+arm that *works* best.
+
+---
+
+## Part 1 — the score mixture
 
 Findings for the run pre-registered in [`PREREG.md`](PREREG.md). Nothing in the
 pre-registration was edited after the array was submitted; where this report
@@ -358,3 +377,272 @@ Recorded so the next study does not over-read this one.
   `dinov3_patch/whole_image` compare against an arm that does not beat typing.
 - **`regret_honest` is a simulated quantity.** H4's negative slope is a
   within-harness association; nothing here measures a real user's regret.
+
+---
+
+# Part 2 — the rest of the inventory: embedding-space structure and the browse projection
+
+Pre-registered in [`PREREG-part2.md`](PREREG-part2.md), written before this grid
+was submitted. Part 1 above measured the score mixture, which decides every
+threshold; this part measures the four fits the [#3329
+inventory](https://github.com/samggreenberg/VTSearch/issues/3329) listed under
+**B** (embedding-space structure) and **C** (browse projection), plus the one
+item from **D** that was a fix rather than a measurement.
+
+## BLUF
+
+**The Coverage Atlas's stated null is false, and the guard built on it is
+usable for four of five embedders and inverted for the fifth.**
+`domain_shift_report`'s docstring says in-domain typicality p-values are
+"roughly uniform, so about *alpha* of them fall below *alpha*". They are not
+uniform anywhere. For the single-vector embedders the departure is harmless at
+the operating point; for **`dinov3_patch` the guard fires on 80 % of its own
+held-out data**, which makes it close to a constant "shifted" for the one
+embedder that region voting depends on.
+
+**The browse projection is good at exactly what it is for and bad at what it
+is not**, and both halves were unmeasured until now: neighbourhoods survive
+(trustworthiness 0.96 at k=10), global distance does not (Shepard ρ = 0.29),
+and the projection costs about 1.7 points of k-NN class purity.
+
+**The compaction radius is honest** — the one fit in this whole inventory that
+does what it says.
+
+| # | claim | bar | measured | verdict |
+|---|---|---|---|---|
+| B1 | in-domain p-values not uniform | median KS > 0.05 | **0.103 ± 0.0015** | **confirmed** |
+| B2 | under-dispersed, and averaging is why | sd < 0.27; deepest widens on ≥ 4 embedders | **0.250 ± 0.0012**; widens on **5/5** | **confirmed** |
+| B3 | dispersion tracks path length | Spearman ρ > 0.5 | **0.24** | **refuted** |
+| B4 | the guard is conservative on its own data | 0 self-fires, median z ≤ 0 | **5 of 25 fire**; median z −0.85 | **refuted** |
+| B5 | it still separates real domains | > 50 % of cross pairs fire | **64 %** different-source, 20 % same-source | **confirmed** |
+| C1 | local structure kept, global lost | trust > 0.95 **and** Shepard < 0.6 | **0.956** and **0.288** | **confirmed** |
+| C2 | projection costs class purity | drop > 0 on ≥ 4 embedders | **5/5**, median **0.017** | **confirmed (small)** |
+| C3 | the 90th-percentile radius contains ~90 % | 0.85–0.95 | **0.894** | **confirmed** |
+
+## What was run
+
+**75 cells** — 5 datasets × 5 embedders × 3 seeds — plus **125 cross-dataset
+pairs** (every ordered build/query dataset pair under each embedder). All 75
+`COMPLETED`, none dropped, max 104 s per cell.
+
+| axis | values |
+|---|---|
+| datasets | `vg_scale_any`, `coco_val`, `caltech101_m`, `vg_box_large`, `visual_genome_m` |
+| embedders | `siglip`, `dinov3_patch`, `clip`, `clip_l`, `siglip2_l` |
+
+Three sources (Visual Genome, COCO, Caltech-101) is what makes B5 answerable:
+two slices of Visual Genome are not the domain change the guard exists for, and
+the report reads them apart. The atlas is built exactly as production builds it
+(`k=3`, `auto_max_depth(n, k=3)` — the call in
+`vtscore/detectors/labeling_progress.py`), so the null under test is the shipped
+estimator's own.
+
+**The conformal family is a positive control**, and it passes: split-conformal
+support p-values are uniform by construction, and they read **KS 0.047** across
+every cell. Part 1 lost a hypothesis to an instrument defect that emitted
+plausible numbers, so this grid carries a family whose right answer is known in
+advance. Its passing is what licenses reading the atlas numbers as the atlas's.
+
+## B1–B3 — the atlas's null, and why it fails
+
+![atlas PIT](figures/atlas_pit_uniformity.png)
+
+*Empirical CDF of in-domain typicality p-values against the uniform diagonal the
+guard's docstring asserts, one line per cell, coloured by embedder. A calibrated
+p-value lies on the dashed line. Left is what ships; middle removes the path
+averaging; right is the in-sample build points. **The red lines are
+`dinov3_patch`** — visibly the worst in all three panels. This is a PIT plot,
+not a fit-quality plot: it says nothing about whether the atlas partitions the
+space well, only whether its p-values mean what they claim.*
+
+The shipped p-values are **under-dispersed**: sd **0.250 ± 0.0012** against
+U(0,1)'s 0.289. The mechanism is visible in the code — `typicality_pvalues`
+scores at *every* calibrated node along the root-to-leaf path and returns the
+**mean**, and the mean of several correlated uniforms concentrates on 0.5.
+
+**B2 confirmed, B3 refuted, and the pair is more interesting than either.**
+Removing the averaging does widen the distribution on **5 of 5** embedders
+(sd 0.250 → 0.313, now *over*-dispersed) — but it makes the overall calibration
+**worse**, not better: KS 0.103 → 0.132. And across cells the under-dispersion
+does not track path length (ρ = 0.24, against a pre-registered 0.5). So the
+averaging is not simply "the bug". The per-node calibration is itself off, and
+the averaging partially *masks* it.
+
+### What a calibrated aggregation would look like
+
+Pre-registration asked whether the averaging was to blame. That question has a
+follow-up worth more than the answer, so every candidate combiner was priced on
+the same paths in one pass:
+
+| combiner | KS from uniform | sd | flag rate at α = 0.05 |
+|---|---|---|---|
+| **median** | **0.071 ± 0.0020** | 0.276 | 0.077 |
+| `mean` (shipped) | 0.103 ± 0.0015 | 0.250 | **0.043** |
+| deepest node only | 0.132 ± 0.0037 | 0.313 | 0.156 |
+| Fisher | 0.186 ± 0.0029 | 0.381 | 0.198 |
+| min | 0.329 ± 0.0025 | 0.234 | 0.226 |
+
+![combiner comparison](figures/atlas_combiner_comparison.png)
+
+*Left: the pooled PIT of each candidate. Right: the two numbers that have to be
+read together — distance from uniform over the whole distribution, and the flag
+rate at the single α the guard actually uses. Neither alone is a verdict.*
+
+**No combiner is calibrated, and the shipped one is best at exactly the number
+anyone would check.** `mean` gives a 4.3 % flag rate against a nominal 5 % —
+close enough that a spot check passes — while being second-worst in overall
+shape. `median` is a third closer to uniform overall (0.071 vs 0.103, 16 SE
+apart) but over-flags at α. That combination is precisely how the
+`dinov3_patch` failure below stayed invisible: the guard's aggregate operating
+point looks right while its distribution is wrong, and the average over
+embedders hides the one that is badly wrong.
+
+![dispersion vs path length](figures/atlas_dispersion_vs_pathlen.png)
+
+*Each point is one cell. If path averaging alone explained the under-dispersion,
+this would slope down; it does not (ρ = 0.24). `dinov3_patch` (red) sits high at
+every path length — its p-values are the least compressed and the least
+calibrated, which is the combination that produces false alarms.*
+
+## B4–B5 — the guard's actual operating point
+
+Pre-registered as a pair, because a guard that never fires on its own data looks
+correct and a guard that never fires on anything is broken; only both readings
+say which.
+
+| embedder | fires on its **own** held-out data | detects a **different corpus** | fires on a same-corpus slice | separation |
+|---|---|---|---|---|
+| **`dinov3_patch`** | **0.80** | 0.93 | **1.00** | **0.13** |
+| `clip_l` | 0.20 | 0.50 | 0.00 | 0.30 |
+| `clip` | 0.00 | 0.57 | 0.00 | 0.57 |
+| `siglip` | 0.00 | 0.71 | 0.00 | **0.71** |
+| `siglip2_l` | 0.00 | 0.50 | 0.00 | 0.50 |
+
+![domain shift matrix](figures/atlas_domain_shift_matrix.png)
+
+*Atlas built on the row, queried with the column; the number is the binomial z
+and `*` means `shifted` fired. The diagonal is the null — a held-out split of
+the atlas's own build data, where firing is a false positive. **Read the
+`dinov3_patch` panel's diagonal**: 4 of its 5 cells fire on their own data.
+Every other embedder's diagonal is quiet.*
+
+**`dinov3_patch` fires on nearly everything** — 80 % of its own held-out
+splits, 93 % of different-corpus queries, 100 % of same-corpus slices — leaving
+a separation of 0.13 between "this is my own data" and "this is a different
+corpus". As a detector it is close to a constant. `siglip`, by contrast,
+separates cleanly: never fires on its own data, never on a sibling VG slice,
+and fires on 71 % of genuine corpus changes.
+
+**The mechanism is concentration.** The atlas fits a von Mises–Fisher mean
+direction per node, and `dinov3_patch` is the least concentrated space in the
+grid:
+
+| embedder | node r̄ (median) | r̄ 10th pct | atlas depth | in-domain frac below α=0.05 |
+|---|---|---|---|---|
+| `clip` | 0.70 | 0.53 | 8 | 0.042 |
+| `siglip` | 0.69 | 0.52 | 7 | 0.041 |
+| `siglip2_l` | 0.67 | 0.49 | 8 | 0.032 |
+| `clip_l` | 0.66 | 0.50 | 8 | 0.054 |
+| **`dinov3_patch`** | **0.61** | **0.38** | **10** | **0.137** |
+
+Lower r̄ means the per-node vMF model describes its own points worse; the atlas
+compensates by splitting deeper (hitting the `max_depth` cap of 10), and the
+p-values come out **2.7× more likely to fall below α** than nominal on data
+drawn from the build distribution itself.
+
+**B5 with the sources read apart:** 64 % of different-source pairs fire against
+20 % of same-source slices. The guard does discriminate — but the misses are
+structured. Caltech-101 is caught every time in both directions (z up to +261);
+COCO against Visual Genome is caught **1 of 5 times**, and under `siglip` an
+atlas built on `coco_val` reads Visual Genome as z = **−15**, i.e. *more*
+typical than its own holdout. A corpus change that a human would call obvious is
+invisible to it.
+
+## C1–C3 — the browse projection
+
+![projection quality](figures/projection_quality.png)
+
+*Top left: trustworthiness (solid) and continuity (dashed) against neighbourhood
+size, median over cells per embedder. Top right: the Shepard diagram — original
+cosine distance against laid-out euclidean distance, pooled. Bottom left: k-NN
+class purity lost by projecting. Bottom right: the realised containment of the
+compaction radius against its nominal 0.90.*
+
+**C1 confirmed as the split verdict it was pre-registered as.**
+Trustworthiness is **0.956** at k=10 and decays to 0.90–0.93 by k=50; Shepard
+ρ is **0.288**. The canvas is a neighbourhood-inspection tool and it preserves
+neighbourhoods; it does not preserve global distance and never claimed to — but
+nothing in the tree measured either until now, and a reader who believes the
+picture shows global structure is being misled by it. The Shepard panel makes
+that concrete: one embedding distance of 0.5 maps to laid-out distances from
+0 to 40.
+
+**C2 confirmed and small.** Purity drops on 5 of 5 embedders, median **0.017**
+— from 0.85 in the embedding to 0.83 in the layout. Real, consistent, and not
+worth acting on.
+
+**C3 confirmed, and it is the good news of the inventory.** The
+90th-percentile core radius realises **0.894** containment against a nominal
+0.90, on every cell, independent of embedder. `_build_units` fits a statistic
+and that statistic means what it says.
+
+## Part D — the r² that was computed and thrown away
+
+`vtscore/timing/fit.py` was the one place in the tree that already computed a
+goodness-of-fit statistic and discarded it: `affine_fit` returns an OLS r² and
+`fit_step` unpacked it into `_r2` and dropped it. It is now kept on
+`StepCoeffs`, serialized by `to_json`, and round-tripped by `from_json`.
+
+**NaN means "not fitted as a line", which is a different statement from a bad
+fit** — the byte-scaled path and the median fallback never draw one, so they
+carry no r² rather than a misleading zero, and `to_json` omits the key entirely.
+
+**No measurement accompanies this fix**, and that is a gap rather than a
+finding: there is no recorded timing profile on this cluster to read an r² off.
+Producing one needs a real dataset load with `VTSEARCH_RECORD_TIMING` set, which
+this grid does not do.
+
+## What this licenses, and what it does not
+
+**Do not trust `domain_shift_report` on a patch embedder.** For
+`dinov3_patch` it is close to a constant "shifted" — and per part 1 that is the
+embedder whose `max_patch` arm is the only one worth running. Anything gated on
+it for that arm is gated on noise. The single-vector embedders are fine at the
+operating point.
+
+**If the guard is to be fixed, the fix is not "remove the averaging".** That
+makes calibration worse. The `median` combiner is a third closer to uniform and
+is a two-line change, but it over-flags at α and would need its threshold moved
+with it. The honest recommendation is to **calibrate the guard empirically** —
+choose the α that gives the intended false-alarm rate *per embedder*, since this
+run shows a fixed α cannot serve all five.
+
+**The browse canvas needs no change.** C1's split verdict is the expected
+behaviour of UMAP, C2's cost is 1.7 points, and C3 is correct.
+
+**Nothing here contradicts part 1**, and one thing rhymes with it: the arm with
+the worst structural fit statistics (`dinov3_patch`) is again the arm that works
+best in the click loop. Part 1 found the same inversion for the score mixture.
+Twice now, on unrelated families, "fits badly" and "works badly" have pointed in
+opposite directions.
+
+## Limits
+
+- **Five datasets, three sources.** B5's 64 % detection rate is over 70 ordered
+  pairs of which many are Caltech-vs-something; a grid with more distinct
+  corpora would estimate it better.
+- **Seeds move the split, not the data.** Three seeds give the split's
+  variability, not the dataset's; the SEs above are within-dataset.
+- **The cross-dataset stage ran at one split seed**, so B4's per-embedder rates
+  are over 5 datasets, not 15 cells. `dinov3_patch`'s 4-of-5 is a small
+  denominator — the direction is unambiguous, the rate is not precise.
+- **UMAP is scored on a 3000-point subsample** (trustworthiness is O(n²)), and
+  it is fitted with a fixed `random_state`; production is unseeded by design, so
+  these are one draw from a distribution of layouts.
+- **`caltech101_m` is near the resolution floor** for B2/B3: its atlases average
+  only ~2.9 calibrated nodes per item, and 9 of 75 cells fall below the path
+  length of 3 that PREREG named as making the averaging claim vacuous.
+- **§11 of the inventory is untouched** — the SIFT/VLAD RANSAC reprojection
+  error and the MatchStats verification MLP need structural-search fixtures this
+  grid does not build — as is **§10**, Toponymy's suppressed warnings, which
+  needs the captioner stack. Both remain open.
