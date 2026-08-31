@@ -328,7 +328,13 @@ def anchor_mass_fraction(n_haystack: int, n_anchors: int, anchor_weight: float) 
     ``kappa*v / (N + kappa*v)`` - the quantity that decides whether "anchored"
     is a description of the fit or only of its guards.  At the shipped
     ``FOLD_ANCHOR_WEIGHT`` of 0.3 with 20 votes against a 50k haystack sample
-    this is 1.2e-4, and the E-step never sees the anchors at all (they are
+    this is 1.2e-4 - but the haystack size is doing most of that work, and it is
+    not a constant: on a ~2k haystack the same 20 votes carry 3e-3, an order of
+    magnitude more, so the share has to be READ per step rather than argued once.
+    ``v`` is the fold's own anchor COUNT (``FoldAnchoredCut.anchor_counts``), not
+    the number of folds that anchored; passing the latter understated this by
+    the fold's vote count on the first real run (#3329).  The E-step never sees
+    the anchors at all (they are
     clamped one-hot), so the labels move the fitted means by at most that share
     of the distance between the anchor mean and the component mean.
 
@@ -392,7 +398,7 @@ def fit_quality_row(
     cut: float | None = None,
     labels: Optional[np.ndarray] = None,
     label_scores: Optional[np.ndarray] = None,
-    anchored_fit: GmmFit1D | None = None,
+    unanchored_fit: GmmFit1D | None = None,
     n_anchors: int = 0,
     anchor_weight: float = 0.0,
 ) -> dict[str, Any]:
@@ -438,9 +444,19 @@ def fit_quality_row(
         row["ident_mu_hi_err"] = ident["mu_hi_err"]
         row["ident_n"] = ident["n_ident"]
 
-    if anchored_fit is not None:
-        row["anchored_dmu_lo"] = float(anchored_fit.mu_lo - fit.mu_lo)
-        row["anchored_dmu_hi"] = float(anchored_fit.mu_hi - fit.mu_hi)
-        row["anchored_dw_lo"] = float(anchored_fit.w_lo - fit.w_lo)
+    # *fit* is the SHIPPED (anchored) fit, because every other statistic in this
+    # row has to describe the fit the app actually cut from; *unanchored_fit* is
+    # the counterfactual refitted on the same sample.  The delta is therefore
+    # anchored MINUS unanchored - "how far did the labels move it?".
+    #
+    # This used to take the opposite argument, `anchored_fit`, which no call
+    # site ever passed: the three columns were emitted as NaN on every row of
+    # the first real run (#3329) and H3 scored as a refutation it had never
+    # measured.  Keeping *fit* as the shipped one is what makes the parameter
+    # passable from the fold scope at all.
+    if unanchored_fit is not None:
+        row["anchored_dmu_lo"] = float(fit.mu_lo - unanchored_fit.mu_lo)
+        row["anchored_dmu_hi"] = float(fit.mu_hi - unanchored_fit.mu_hi)
+        row["anchored_dw_lo"] = float(fit.w_lo - unanchored_fit.w_lo)
 
     return row

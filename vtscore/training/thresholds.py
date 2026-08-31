@@ -1179,6 +1179,12 @@ class FoldAnchoredCut:
     fold_haystacks: tuple[np.ndarray, ...]
     final_haystack: np.ndarray
     n_anchored: int
+    #: Per-fold count of anchors that actually reached that fold's fit - 0 for a
+    #: fold that degenerated and fell back to its unanchored GMM.  ``n_anchored``
+    #: counts FOLDS, so it cannot answer "how much mass did the labels carry?";
+    #: that needs the vote count per fold, which is otherwise discarded here.
+    #: Empty when the cut was built by a caller that predates the field.
+    anchor_counts: tuple[int, ...] = ()
     cut_rule: str = FOLD_ANCHOR_CUT_RULE
     combine: str = FOLD_ANCHOR_COMBINE
     #: Only read by the eval-only ``"q_tilt"`` rule; see
@@ -1344,19 +1350,26 @@ def fit_fold_anchored_cut(
         return None
     fits: list[GmmFit1D] = []
     haystacks: list[np.ndarray] = []
+    anchor_counts: list[int] = []
     n_anchored = 0
     for hay, ordering in zip(fold_haystack_scores, fold_anchor_orderings, strict=True):
         a_scores, a_labels = scored_ordering(ordering)
         arr = gmm_fit_array(scored_only(hay))
         fit, provenance = fit_anchored_score_gmm(arr, a_scores, a_labels, anchor_weight=anchor_weight)
+        n_anchors = 0
         if fit is None:
             fit = fit_score_gmm(arr)
             if fit is None:
                 continue
         elif provenance == "anchored":
             n_anchored += 1
+            # The anchors this fold's fit actually used.  A fold that fell back
+            # records 0: its fit saw no anchors, so the mass they carried in it
+            # is zero, not "the number we hoped to anchor with".
+            n_anchors = int(np.size(a_scores))
         fits.append(fit)
         haystacks.append(np.sort(arr))
+        anchor_counts.append(n_anchors)
     if not fits:
         return None
     return FoldAnchoredCut(
@@ -1364,6 +1377,7 @@ def fit_fold_anchored_cut(
         fold_haystacks=tuple(haystacks),
         final_haystack=np.sort(final_arr),
         n_anchored=n_anchored,
+        anchor_counts=tuple(anchor_counts),
         cut_rule=cut_rule,
         combine=combine,
     )

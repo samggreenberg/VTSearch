@@ -152,3 +152,33 @@ class TestFoldScope:
         # The H3 statistic has to be readable off the frame, not recomputed.
         assert all(np.isfinite(r["anchor_mass_frac"]) for r in fold_rows)
         assert all(r["anchor_kappa"] > 0 for r in fold_rows)
+
+    def test_fold_rows_carry_a_measured_anchor_drift(self):
+        # BOTH halves of H3 have to arrive populated. On the first real run
+        # neither did: `anchored_dmu_*` was NaN on all 11,520 fold rows because
+        # no call site passed the counterfactual, and `anchor_n` was the count
+        # of FOLDS rather than of votes. Either alone is enough to score H3 as
+        # a refutation of something never measured (#3329).
+        sink: list[dict] = []
+        _run(sink, stride=1, max_steps=20)
+        fold_rows = [r for r in sink if str(r["scope"]).startswith("fold")]
+        if not fold_rows:
+            pytest.skip("no fold-anchored cut formed on this small synthetic run")
+        anchored = [r for r in fold_rows if r["anchor_n"] > 0]
+        if not anchored:
+            pytest.skip("no fold anchored on this small synthetic run")
+        assert all(np.isfinite(r["anchored_dmu_lo"]) for r in anchored)
+        assert all(np.isfinite(r["anchored_dmu_hi"]) for r in anchored)
+        assert all(np.isfinite(r["anchored_dw_lo"]) for r in anchored)
+
+    def test_the_anchor_count_tracks_votes_rather_than_folds(self):
+        # `anchor_n` flat across a growing label set is the signature of the
+        # fold-count bug: the votes each fold anchors on are its held-out share,
+        # which grows with the run.
+        sink: list[dict] = []
+        _run(sink, stride=1, max_steps=20)
+        anchored = [r for r in sink if str(r["scope"]).startswith("fold") and r["anchor_n"] > 0]
+        if len({int(r["t"]) for r in anchored}) < 2:
+            pytest.skip("too few anchored checkpoints on this small synthetic run")
+        n_folds = max(int(r["n_folds"]) for r in anchored)
+        assert max(int(r["anchor_n"]) for r in anchored) > n_folds

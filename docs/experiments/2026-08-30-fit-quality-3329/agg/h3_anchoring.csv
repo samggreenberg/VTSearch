@@ -1,0 +1,4 @@
+arm,n_fold_rows,abs_dmu_lo_median,abs_dmu_lo_se,anchor_mass_frac_median,kappa,inert
+siglip+dinov3_patch/max_patch,3840,0.0004438816623612,1.1258259008504112e-05,0.00379507202866005,0.3,False
+siglip+dinov3_patch/whole_image,3840,0.002320289026336,8.536867880607335e-05,0.0036452004860267,0.3,False
+siglip/whole_image,3840,0.0019430043687916,5.268888849033251e-05,0.0023359937706832,0.3,False

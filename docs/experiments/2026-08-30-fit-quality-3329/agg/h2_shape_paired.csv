@@ -1,0 +1,4 @@
+arm,n_pairs,d_skew_pooled_minus_image,se,resolvable
+siglip+dinov3_patch/max_patch,1924,0.7755975460219013,0.010761428212827984,True
+siglip+dinov3_patch/whole_image,1924,0.0,0.0,False
+siglip/whole_image,1924,0.0,0.0,False

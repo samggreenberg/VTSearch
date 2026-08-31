@@ -101,17 +101,36 @@ export CALIB_REQUIRE_OPENING="${CALIB_REQUIRE_OPENING:-text}"
 export CALIB_REQUIRE_SEED_QUERY="${CALIB_REQUIRE_SEED_QUERY:-1}"
 
 LOGS="$CALIB_EXP/logs"
-mkdir -p "$LOGS" "$CALIB_RESULTS/cells"
+# `analysis/` is created here rather than by the job that writes into it:
+# `text_baseline.py` does its whole pass and hands the path to pandas only at
+# the end, so a missing directory costs the entire run and surfaces as a write
+# error 47s in, with nothing to show for it.
+mkdir -p "$LOGS" "$CALIB_RESULTS/cells" "$CALIB_EXP/analysis"
 
-# Sizing is UNMEASURED on this configuration -- run `size` before `cells` and
-# replace these. The starting points are lifted from launch_scale.sh's measured
-# vg_scale grid (region p90 1206s / 7.8G at 150 steps), scaled down for the
-# 100-step horizon and the four disabled variant families, then left with the
-# same 12G because that is preflight check 7b's floor for patch cells and
-# because under-sizing killed 74 of 108 cells in #3156.
+# MEASURED on this configuration by `size 0,12` (2026-08-30, jobs 601323/601324
+# on rack2n09 -- backpack/seed 0 of each embedder, off a clean worktree at
+# dev f8ad3253):
+#
+#   siglip / whole_image                  2m56s    607 MiB
+#   siglip+dinov3_patch (BOTH styles)    21m16s    6.7 GiB
+#
+# The region cell sizes the array, and it is 7x the binary one because it runs
+# whole_image AND max_patch in the one task.
+#
+# TIME drops from the inherited 6h to 2h -- 5.6x the measured region cell, which
+# is headroom for the slower categories without parking a 6h reservation the
+# backfill scheduler has to plan around.
+#
+# MEM stays at 12G even though the peak was 6.7 GiB: preflight check 7b floors
+# patch arrays there because measured max_patch peaks run 9-14 GB across
+# categories and under-sizing killed 74 of 108 cells in #3156. So 12G is now a
+# measured 1.8x headroom on this cell rather than an inherited number.
+#
+# CPUS stays at 2: the region cell burned 20m49s of CPU over 21m14s wall (~1.0
+# core) with BLAS pinned to one thread.
 MEM="${CALIB_MEM:-12G}"
 CPUS="${CALIB_CPUS:-2}"
-TIME="${CALIB_TIME:-6:00:00}"
+TIME="${CALIB_TIME:-2:00:00}"
 PARTITION="${CALIB_PARTITION:-cpu}"
 GRES="${CALIB_GRES:-none}"
 CONC="${CALIB_CONC:-70}"

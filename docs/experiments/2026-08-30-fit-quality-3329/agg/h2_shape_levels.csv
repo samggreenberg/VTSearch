@@ -1,0 +1,4 @@
+arm,n_steps,n_steps_above_class_floor,skew_neg_median,skew_neg_se,meets_bar
+siglip+dinov3_patch/max_patch,1924,1924,0.8527322398373964,0.013774316329995682,True
+siglip+dinov3_patch/whole_image,1924,1924,0.33113044750257836,0.010583984402380937,False
+siglip/whole_image,1924,1924,0.575593933376193,0.013344362304474347,False
