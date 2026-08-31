@@ -1064,7 +1064,8 @@ class TestReportWholePageFigure:
         red = self._colour_bbox(im, mods["report"]._HIGHLIGHT_COLOUR)
         assert red == (400, 400, 700, 620)
         # ...and the other instance is still drawn, in its kind's colour.
-        assert self._colour_bbox(im, mods["report"]._KIND_COLOURS["logo"])[:2] == (100, 100)
+        blue = self._colour_bbox(im, mods["report"]._KIND_COLOURS["logo"])
+        assert blue is not None and blue[:2] == (100, 100)
 
     def test_every_figure_carries_a_red_box(self, mods, tmp_path):
         # The prose promises one; a page whose largest mark is unlabelled used
