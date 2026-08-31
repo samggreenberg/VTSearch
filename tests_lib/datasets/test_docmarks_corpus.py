@@ -112,6 +112,36 @@ class TestMaskToBoxes:
     def test_empty_mask_is_no_boxes(self, mods):
         assert mods["common"].mask_to_boxes(np.zeros((50, 50), dtype=np.uint8)) == []
 
+    def test_inverted_masks_are_detected_not_swallowed(self, mods):
+        # SPODS ships 1-bit masks with the mark BLACK on white paper. Read as
+        # "non-zero is foreground" this yields one page-sized box per page --
+        # which does not crash, it silently produces 1,088 identical rectangles
+        # that cluster into a single class and look like a working corpus. On the
+        # real data that is exactly what happened: 2,176 marks, 1 class.
+        mask = np.full((200, 200), 255, dtype=np.uint8)
+        mask[10:40, 10:50] = 0  # the mark, dark on light
+        boxes = mods["common"].mask_to_boxes(mask, min_area_frac=0.0)
+        assert boxes == [(10, 10, 40, 30)]
+
+    def test_normal_polarity_still_works(self, mods):
+        mask = np.zeros((200, 200), dtype=np.uint8)
+        mask[10:40, 10:50] = 255
+        assert mods["common"].mask_to_boxes(mask, min_area_frac=0.0) == [(10, 10, 40, 30)]
+
+    def test_polarity_can_be_forced(self, mods):
+        # A genuinely dense mask (body text on a full page) can be forced rather
+        # than left to the minority heuristic.
+        mask = np.zeros((100, 100), dtype=np.uint8)
+        mask[0:80, :] = 255  # 80% lit: "auto" would invert this
+        auto = mods["common"].mask_to_boxes(mask, min_area_frac=0.0, polarity="auto")
+        forced = mods["common"].mask_to_boxes(mask, min_area_frac=0.0, polarity="light")
+        assert auto == [(0, 80, 100, 20)]
+        assert forced == [(0, 0, 100, 80)]
+
+    def test_an_unknown_polarity_is_refused(self, mods):
+        with pytest.raises(ValueError, match="unknown polarity"):
+            mods["common"].mask_to_boxes(np.zeros((10, 10), dtype=np.uint8), polarity="sideways")
+
 
 class TestMergeOverlapping:
     def test_merges_a_fragmented_stamp_into_one_mark(self, mods):
