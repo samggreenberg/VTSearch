@@ -47,12 +47,34 @@ which: a decommissioned hostname (SPODS's own page still advertises the dead
 extractor, or a UCSF endpoint that is down. Seconds now, a queue slot later.
 
 **RAR extractor.** SPODS is RAR4. The builder tries `bsdtar`, `7z`, `unar`,
-`unrar` in that order; `bsdtar` (libarchive) is the one most likely to be on a
-compute node, and reads RAR4 fine. If none is present the probe says so.
+`unrar` in that order. **On this cluster none of the four is present** — not on
+the login nodes and not on a compute node, so the hope that `bsdtar` would be
+there did not survive contact. `libarchive.so.13` is installed but the `bsdtar`
+binary that fronts it is not, so the probe reports `rar extractor: NONE FOUND`
+and SPODS is unreachable, Kaggle token or no Kaggle token.
 
-**Kaggle token.** `~/.kaggle/kaggle.json`, or `KAGGLE_USERNAME` +
-`KAGGLE_KEY` in the job environment. Needed only for StaVer and Tobacco800; a
-SPODS-only roster does not touch Kaggle.
+Fixed once, for the user, by dropping a static 7-Zip in `~/.local/bin`:
+
+```bash
+cd /expscratch/$USER && curl -sLO https://www.7-zip.org/a/7z2501-linux-x64.tar.xz
+tar xf 7z2501-linux-x64.tar.xz 7zz && install -m 755 7zz ~/.local/bin/7zz
+ln -sf ~/.local/bin/7zz ~/.local/bin/7z          # the name the builder looks for
+```
+
+It is a single static binary with no dependencies, and `7zz i` lists the `Rar3`
+codec that RAR4 needs. `launch_docmarks.sh` prepends `~/.local/bin` to `PATH`
+because a **login shell has that directory and an sbatch job does not** — the
+probe passing interactively is not evidence the job will find the extractor.
+
+**Kaggle token.** `~/.kaggle/kaggle.json`, `~/.kaggle/access_token`, or
+`KAGGLE_USERNAME` + `KAGGLE_KEY` in the job environment. Needed only for StaVer
+and Tobacco800; a SPODS-only roster does not touch Kaggle.
+
+`access_token` is the file "Create New Token" writes today, and the one
+`kagglesdk` reads; the probe accepts it as of #3343. Also note the `kaggle` CLI
+itself is not installed on this cluster — `uv tool install kaggle` puts it in
+`~/.local/bin` without touching the shared venv, which is what the launcher's
+`PATH` already picks up.
 
 Then the standard gate, which checks the things a script cannot:
 

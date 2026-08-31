@@ -243,21 +243,33 @@ class FetchError(RuntimeError):
 def kaggle_download(slug: str, dest: Path, *, unzip: bool = True) -> Path:
     """Download a Kaggle dataset *slug* (``owner/name``) into *dest*.
 
-    Uses the Kaggle CLI, which reads ``~/.kaggle/kaggle.json`` or the
-    ``KAGGLE_USERNAME`` / ``KAGGLE_KEY`` environment pair.  Raises
-    :class:`FetchError` with the setup instruction when no credential is
-    present, rather than failing halfway through a grid job with a 403.
+    Uses the Kaggle CLI, which reads ``~/.kaggle/kaggle.json``,
+    ``~/.kaggle/access_token`` or the ``KAGGLE_USERNAME`` / ``KAGGLE_KEY``
+    environment pair.  Raises :class:`FetchError` with the setup instruction
+    when no credential is present, rather than failing halfway through a grid
+    job with a 403.
+
+    ``access_token`` is checked because it is what Kaggle's own "Create New
+    Token" now writes, and what ``kagglesdk`` reads natively (its
+    ``kaggle_creds.py`` / ``kaggle_oauth.py``).  Accepting only ``kaggle.json``
+    made a *working* credential look like a missing one: on the GRID the probe
+    reported both Kaggle sources BLOCKED while ``kaggle datasets download``
+    succeeded from the very same shell, against the very same token.  This gate
+    exists to fail fast instead of 403-ing mid-job, so a false BLOCKED is the
+    one way it can be worse than having no gate at all.
     """
     dest.mkdir(parents=True, exist_ok=True)
     if any(dest.iterdir()):
         return dest
 
     has_env = bool(os.environ.get("KAGGLE_USERNAME") and os.environ.get("KAGGLE_KEY"))
-    has_file = (Path.home() / ".kaggle" / "kaggle.json").exists()
+    kaggle_dir = Path.home() / ".kaggle"
+    has_file = (kaggle_dir / "kaggle.json").exists() or (kaggle_dir / "access_token").exists()
     if not (has_env or has_file):
         raise FetchError(
             f"Kaggle credentials not found, needed for '{slug}'. "
-            "Put a token at ~/.kaggle/kaggle.json (Kaggle > Settings > Create New Token), "
+            "Put a token at ~/.kaggle/kaggle.json or ~/.kaggle/access_token "
+            "(Kaggle > Settings > Create New Token writes one of the two), "
             "or export KAGGLE_USERNAME and KAGGLE_KEY."
         )
 

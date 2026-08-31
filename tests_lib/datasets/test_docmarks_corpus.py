@@ -1031,3 +1031,79 @@ class TestEmbedCells:
         forward = mods["embed"].load_medias(pages, {}, "siglip")
         reverse = mods["embed"].load_medias(list(reversed(pages)), {}, "siglip")
         assert {i: m["origin_name"] for i, m in forward.items()} == {i: m["origin_name"] for i, m in reverse.items()}
+
+
+class TestKaggleCredentialGate:
+    """The gate in ``kaggle_download`` must not reject a credential that works.
+
+    It exists to turn a mid-job 403 into an up-front error message, which is
+    worth having -- but that makes a *false* BLOCKED the one failure mode worse
+    than no gate at all: the run never starts, and the message sends you to
+    look for a token you already have.  That is exactly what happened on the
+    GRID in #3343.  Kaggle's "Create New Token" wrote ``~/.kaggle/access_token``
+    and ``kagglesdk`` read it happily -- ``kaggle datasets download`` pulled the
+    32.8 MB Tobacco800 archive from the same shell -- while the probe reported
+    both Kaggle sources unreachable, because the gate looked only for
+    ``kaggle.json``.
+
+    So each accepted form is pinned here by name.  A future Kaggle rename is
+    fine; silently narrowing the set is not.
+    """
+
+    @pytest.fixture
+    def _no_env(self, monkeypatch):
+        monkeypatch.delenv("KAGGLE_USERNAME", raising=False)
+        monkeypatch.delenv("KAGGLE_KEY", raising=False)
+
+    @pytest.mark.parametrize("filename", ["kaggle.json", "access_token"])
+    def test_credential_file_is_accepted(self, mods, monkeypatch, tmp_path, _no_env, filename):
+        kaggle_dir = tmp_path / ".kaggle"
+        kaggle_dir.mkdir()
+        (kaggle_dir / filename).write_text("token-contents")
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+
+        dest = tmp_path / "dest"
+        calls = []
+        monkeypatch.setattr(
+            mods["common"].subprocess,
+            "run",
+            lambda cmd, **kw: calls.append(cmd) or _CompletedStub(),
+        )
+        mods["common"].kaggle_download("owner/name", dest)
+        # It got as far as shelling out, which is all this gate governs.
+        assert calls and calls[0][:3] == ["kaggle", "datasets", "download"]
+
+    def test_env_pair_is_accepted(self, mods, monkeypatch, tmp_path):
+        monkeypatch.setenv("KAGGLE_USERNAME", "someone")
+        monkeypatch.setenv("KAGGLE_KEY", "somekey")
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+
+        calls = []
+        monkeypatch.setattr(
+            mods["common"].subprocess,
+            "run",
+            lambda cmd, **kw: calls.append(cmd) or _CompletedStub(),
+        )
+        mods["common"].kaggle_download("owner/name", tmp_path / "dest")
+        assert calls
+
+    def test_no_credential_still_fails_fast(self, mods, monkeypatch, tmp_path, _no_env):
+        (tmp_path / ".kaggle").mkdir()
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+
+        def _explode(*a, **kw):  # pragma: no cover - the point is it is unreached
+            raise AssertionError("shelled out to the CLI with no credential")
+
+        monkeypatch.setattr(mods["common"].subprocess, "run", _explode)
+        with pytest.raises(mods["common"].FetchError) as exc:
+            mods["common"].kaggle_download("owner/name", tmp_path / "dest")
+        # The message has to name every place a token is accepted, or it sends
+        # the reader off to create a second one they do not need.
+        assert "kaggle.json" in str(exc.value)
+        assert "access_token" in str(exc.value)
+
+
+class _CompletedStub:
+    returncode = 0
+    stdout = ""
+    stderr = ""

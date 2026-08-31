@@ -14,11 +14,11 @@
 # when present, stable Solr cursor order), so a killed job restarts where it
 # stopped -- which is what makes a multi-day reservation safe.
 #
-# SOURCES default to spods,ucsf, NOT the full four.  StaVer and Tobacco800 are
-# Kaggle-hosted and blocked without a token; the UCSF pull is the 74 h pole and
-# is entirely independent of them.  Start the pole now, add the anchors later:
-# the sources are cached, so a rebuild with all four re-runs only clustering
-# and manifest writing.  Set VTS_DOCMARKS_SOURCES once the token is in place.
+# SOURCES is all four.  StaVer and Tobacco800 were Kaggle-blocked until #3343
+# taught the credential gate about ~/.kaggle/access_token (the file "Create New
+# Token" actually writes); with that, all four probe OK.  If a token ever goes
+# missing again, VTS_DOCMARKS_SOURCES=spods,ucsf still runs the 74 h pole -- the
+# anchors fold in later off cached sources for the price of a re-cluster.
 #
 # RAR EXTRACTOR.  SPODS is RAR4 and no compute node here ships bsdtar, 7z,
 # unar or unrar.  A static 7-Zip 25.01 (x64) is installed at ~/.local/bin/7zz
@@ -38,15 +38,28 @@ export PATH="$HOME/.local/bin:$PATH"
 export VTS_DOCMARKS_RAW="${VTS_DOCMARKS_RAW:-/expscratch/$USER/docmarks/raw}"
 export VTS_DOCMARKS_OUT="${VTS_DOCMARKS_OUT:-/expscratch/$USER/docmarks/corpus}"
 
-SOURCES="${VTS_DOCMARKS_SOURCES:-spods,ucsf}"
+SOURCES="${VTS_DOCMARKS_SOURCES:-spods,staver,tobacco800,ucsf}"
 DISTRACTORS="${VTS_DOCMARKS_DISTRACTORS:-200000}"
 LETTERHEAD="${VTS_DOCMARKS_LETTERHEAD:-2000}"
 ROSTER_ARG=""
 [ -n "${VTS_DOCMARKS_ROSTER:-}" ] && ROSTER_ARG="--roster ${VTS_DOCMARKS_ROSTER}"
 
-# The pull is one stream; the CPUs are for rendering PDFs to 150 dpi PNGs
-# behind it.  MEM is the runbook number -- clustering holds every mark at once.
-MEM="${VTS_DOCMARKS_MEM:-16G}"
+# The pull is one stream; the CPUs are for rendering PDFs behind it.
+#
+# MEM is 64G, not the runbook's 16G, and the number is measured rather than
+# inherited.  The smoke build (job 602791: 1088 SPODS + 453 UCSF pages, 160
+# letterhead candidates) peaked at MaxRSS 6.5 GB -- already 41% of 16G on a
+# corpus 1/130th the size.  Clustering holds every mark in memory at once, and
+# the mark count is driven by the letterhead candidates, which go from 160 to
+# 8 authors x 2000 = 16,000 in the real build.  16G would be a coin flip three
+# days into an unattended job; on the `cpu` partition, where nodes sit idle and
+# the per-user cap is ~1 TB, the usual "an over-fat --mem wedges you off idle
+# GPUs" tradeoff simply does not apply.  Over-provision here.
+#
+# CPUS is 8 but the smoke burned ~1.0 core: SPODS mask decomposition is
+# single-threaded and the UCSF pull is one polite stream.  The headroom is for
+# PDF rendering, which is the only parallel stage; do not read 8 as measured.
+MEM="${VTS_DOCMARKS_MEM:-64G}"
 CPUS="${VTS_DOCMARKS_CPUS:-8}"
 TIME="${VTS_DOCMARKS_TIME:-4-00:00:00}"
 PARTITION="${VTS_DOCMARKS_PARTITION:-cpu}"
@@ -100,7 +113,8 @@ status)
   echo
   echo "raw:    $(du -sh "$VTS_DOCMARKS_RAW" 2>/dev/null | cut -f1)"
   echo "out:    $(du -sh "$VTS_DOCMARKS_OUT" 2>/dev/null | cut -f1)"
-  echo "pages:  $(find "$VTS_DOCMARKS_RAW" -name "*.png" 2>/dev/null | wc -l) rendered"
+  echo "pdfs:   $(find "$VTS_DOCMARKS_RAW/ucsf/pdf" -name "*.pdf" 2>/dev/null | wc -l) fetched"
+  echo "pages:  $(find "$VTS_DOCMARKS_OUT/images" -type f 2>/dev/null | wc -l) rendered"
   echo "free:   $(df -h "$VTS_DOCMARKS_OUT" | tail -1 | awk "{print \$4}")"
   tail -5 "$(ls -t "$LOGS"/build-*.out 2>/dev/null | head -1)" 2>/dev/null
   ;;
