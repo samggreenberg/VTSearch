@@ -1302,7 +1302,7 @@ class TestReportWholePageFigure:
         # Same contract as the provenance glosses: a kind with no swatch falls
         # back to grey and reads as "some other mark", which is the one thing
         # this figure is supposed to stop doing.
-        emitted = set(mods["spods"].MARK_CATEGORIES) | set(mods["spods"].CONTEXT_CATEGORIES)
+        emitted = set(mods["spods"].MARK_CATEGORIES) | set(mods["spods"].LOCALISED_CONTEXT_CATEGORIES)
         assert emitted <= set(mods["report"]._KIND_COLOURS)
         assert emitted <= set(mods["report"]._KIND_MEANING)
 
