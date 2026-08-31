@@ -1,58 +1,146 @@
-# Is anything in VTSearch a *good* fit? — results (issue #3329)
+# Is anything in VTSearch a *good* fit? (issue #3329)
 
-Two parts, run and written a day apart, kept in one document because they answer
-one question about different fits.
+[#3329](https://github.com/samggreenberg/VTSearch/issues/3329) asked one
+question — *"we have ways to get the BEST fit in each of these cases, but I
+don't ever look to see if it's a GOOD fit"* — and listed eleven fits to check.
+This is the answer for all of them: what was measured, what it costs, and what
+to do.
 
-| part | subject | pre-registration |
-|---|---|---|
-| **[Part 1](#bluf)** (below) | the 2-component score mixture — the fit that sets every threshold | [`PREREG.md`](PREREG.md) |
-| **[Part 2](#part-2--the-rest-of-the-inventory-embedding-space-structure-and-the-browse-projection)** | the Coverage Atlas, the kNN conformal rule, the UMAP layout, the compaction radius | [`PREREG-part2.md`](PREREG-part2.md) |
+Two runs, a day apart, pre-registered separately and reported together.
 
-**If you read one thing:** part 1 found the score mixture is a mildly bad fit
-that costs nothing, and part 2 found the Coverage Atlas's domain-shift guard is
-**inverted for `dinov3_patch`** — it fires on 80 % of its own held-out data,
-which makes it close to a constant for the one embedder region voting depends
-on. Both parts also found the same inversion: the arm that fits *worst* is the
-arm that *works* best.
+| | subject | grid | pre-registration |
+|---|---|---|---|
+| **Part 1** | the 2-component score mixture — the fit that sets every threshold | 192 cells × 100 clicks | [`PREREG.md`](PREREG.md) |
+| **Part 2** | the Coverage Atlas, the kNN conformal rule, the UMAP layout, the compaction radius, the browse regions | 75 cells + 125 dataset pairs | [`PREREG-part2.md`](PREREG-part2.md) |
 
 ---
 
-## Part 1 — the score mixture
+## The short version
 
-Findings for the run pre-registered in [`PREREG.md`](PREREG.md). Nothing in the
-pre-registration was edited after the array was submitted; where this report
-departs from it, it says so and why.
+**1. No fit in the inventory is costing anything in the click loop.** The score
+mixture is mildly miscalibrated in exactly the place predicted and ~30× smaller
+than predicted, and the misfit that exists goes with *lower* cost, not higher
+([H1](#h1--the-tail-misfit-is-real-and-small),
+[H4](#h4--the-gate-refuted-with-the-opposite-sign)). That is the outcome the
+pre-registration was built to be able to return, and it closes this line cheaply.
 
-## BLUF
+**2. One fit is genuinely broken, and it is not one part 1 looked at.** The
+Coverage Atlas's `domain_shift_report` documents a null — in-domain p-values
+"roughly uniform" — that is false for every embedder, and for **`dinov3_patch`
+the guard fires on 80 % of its own held-out data**
+([B4](#b4b5--the-guards-actual-operating-point)). As a detector it is close to a
+constant.
 
-**The mixture is a mildly bad fit, in exactly the place predicted and nowhere
-near the predicted size — and the misfit that does exist goes with *lower* cost,
-not higher.** The Bad mode really is right-skewed under max-pooling, and the
-shipped anchoring really does leave the fit alone, but neither costs anything at
-the operating point.
+**3. But bound it correctly: nothing in the loop is gated on it.** Traced, not
+assumed — `domain_shift_report` has exactly **one** production consumer, an
+on-demand HTTP endpoint ([blast radius](#how-much-does-it-matter-the-blast-radius-traced)).
+This also **corrects the issue's own framing**: the "typicality-tempered
+diversity probes" it expected to be affected read the typicality *ordering*, not
+the p-value, and are untouched.
 
-**#3329's answer for this fit: the fit is not the problem.** That is the
-outcome H4 was pre-registered to be able to return, and it closes this line
-cheaply rather than launching a fit-replacement programme on an aesthetic
-objection.
+**4. Both obvious repairs were priced, and both fail.** Removing the atlas's
+path averaging makes calibration *worse*
+([B2](#b1b3--the-atlass-null-and-why-it-fails)); calibrating α per embedder —
+the first thing this report recommended — makes `dinov3_patch` worse still
+([B6](#b6--the-obvious-repair-priced-it-does-not-work)). Kept in the report
+rather than quietly swapped out, because a recommendation nobody prices is how
+this issue started.
 
-**The sharper answer, which the run was not designed to produce, is in the
-[worked-cell figure](#the-worked-cell--the-figure-3329-asked-for):** the arm with
-the *worst* distance-to-CDF statistics is the only one whose fitted components
-actually land on the true classes, and the arm with the *best* ones never learns
-anything at all. A 2-Gaussian mixture fits an unseparated blob beautifully. So
-"is it a good fit?" and "is it doing its job?" are close to opposite questions
-here, and the absolute goodness-of-fit statistics this issue asked for answer
-only the first.
+**5. Twice, on unrelated families, "fits badly" and "works badly" point in
+opposite directions.** The arm with the worst distance-to-CDF statistics is the
+only one whose fitted components land on the true classes
+([worked cell](#the-worked-cell--the-figure-3329-asked-for)); the embedder with
+the worst structural fit statistics is the one the click loop depends on.
+**Distance to the fitted CDF is not a measure of whether a model is doing its
+job** — which is the general answer to the question the issue asked.
+
+**6. The browse canvas needs no change.** It is good at exactly what it is for
+and bad at what it is not, and both halves were unmeasured until now:
+neighbourhoods survive (trustworthiness **0.956** at k=10), global distance does
+not (Shepard ρ **0.288**), the projection costs **1.7 points** of k-NN class
+purity, and **all 2832 regions** are more self-similar than they are similar to
+everything else ([C1–C2](#c1c2--the-browse-projection),
+[C4](#c4--are-the-browse-canvass-named-regions-coherent-inventory-item-10)). The
+one caveat is that coarse signs are weak.
+
+**7. `dinov3_patch`'s geometry is the through-line, seen four independent ways.**
+Atlas node r̄ 0.61 vs 0.66–0.70, a displaced Shepard distance range, and both
+the within- and between-cluster region cosines. Its space is far less
+concentrated than the four single-vector spaces, which is why a fixed α fails on
+it — and a standing warning about any other threshold in the tree tuned on
+cosine magnitudes.
+
+---
+
+## Action items
+
+Ranked by value over effort. Nothing here is urgent; item 1 is a correctness bug
+in a user-facing diagnostic, the rest are hygiene.
+
+| # | do | why | evidence | size |
+|---|---|---|---|---|
+| **1** | **Stop running `domain_shift_report` on patch embedders** — gate it at `registry.py:524` and return "not supported for this embedder" rather than a verdict | 0.13 separation between "my own data" and "a different corpus" is not carrying information; the endpoint currently answers a user's direct question with noise | [B4](#b4b5--the-guards-actual-operating-point), [B6](#b6--the-obvious-repair-priced-it-does-not-work) | one guard clause |
+| **2** | **Delete the false null from `typicality_pvalues`' docstring** and say what the p-values actually are: under-dispersed (sd 0.250 vs 0.289), path-averaged, uncalibrated | The docstring's claim is the reason nobody checked for two years. It is false for all five embedders, not just the broken one | [B1–B2](#b1b3--the-atlass-null-and-why-it-fails) | one docstring |
+| **3** | **Record one timing profile** with `VTSEARCH_RECORD_TIMING` on a real dataset load, and read the r² this PR started keeping | The r² is now persisted but has never been looked at; the fix is untested against real data | [Appendix A](#d--the-timing-statistic-that-was-computed-and-thrown-away) | one dataset load |
+| **4** | **Label coarse browse signs as approximate** in the UI, or stop showing signs below layer 2 | At layers 2–3, 45–48 % of regions have no ground-truth category holding even half their members — the sign names something no single label describes | [C4](#c4--are-the-browse-canvass-named-regions-coherent-inventory-item-10) | UX call, small |
+| **5** | **Audit other cosine-magnitude thresholds for patch embedders** — anywhere in the tree a constant is compared against a similarity | Four independent measurements say `dinov3_patch`'s absolute cosines live in a different range; `domain_shift_report` is the instance that was caught, not necessarily the only one | [§6 above](#the-short-version) | a grep and a think |
+| **6** | *If* the atlas guard is wanted on patch embedders: **fix the per-node vMF model**, not a threshold on top of it | r̄ = 0.61 says the mean-direction model describes this space poorly; every threshold repair was priced and failed | [B6](#b6--the-obvious-repair-priced-it-does-not-work) | real work, unbudgeted |
+
+### Do *not* do these
+
+- **Do not launch a fit-replacement programme for the score mixture.** H1 and H4
+  together say the tail error at the operating point is a few per cent and is
+  associated with *lower* cost. The #2836 `misspecification` term (+0.0129) is
+  real as an accounting entry, but this run finds no cost attached to it at the
+  shipped operating point.
+- **Do not switch the atlas to the `median` combiner on its own.** It is a
+  two-line change and a third closer to uniform (KS 0.071 vs 0.103), but it
+  over-flags at α (7.7 % against a nominal 5 %) and does not touch the
+  per-embedder failure that matters.
+- **Do not remove the atlas's path averaging.** The obvious suspect; measured;
+  it makes calibration worse (KS 0.103 → 0.132).
+- **Do not re-enable browse compaction on the strength of C3.** C3 says the
+  packing radius is honestly fitted; it says nothing about the separability cost
+  that switched compaction off. See [Appendix A](#c3--the-compaction-radius-dormant-code).
+- **Do not read H2 as a licence to build a Gumbel-family fit.** Max-pooling
+  really does manufacture a right-skewed Bad mode, but H4 says the payoff for
+  modelling it is not visible here.
+
+---
+
+## Every claim, scored
+
+**Twelve** pre-registered claims, **two** priced after the fact, and two
+inventory items that were a fix and a blocker rather than a hypothesis. Bars
+were fixed before each run was submitted; where this report departs from a
+pre-registration, the section says so and why.
 
 | # | claim | pre-registered bar | measured | verdict |
 |---|---|---|---|---|
-| H1 | misfit concentrated in the tail, Gaussian **under**-predicts | median `tail_ratio` > 1.5 region / > 1.2 binary | **1.02–1.05** | **refuted** — real, ~30× too small |
-| H2 | Bad mode right-skewed under max-pooling | `shape_skew_neg` > 0.5 on `max_patch`; paired diff > 2 SE | **0.85**; paired **+0.78 ± 0.011** | **confirmed** |
-| H3 | shipped anchoring is inert | \|`anchored_dmu_lo`\| < 0.01 **and** mass < 1e-3 | **0.0004–0.0023** ✓; **0.0023–0.0038** ✗ | **prediction holds, mechanism refuted** |
-| H4 | misfit predicts regret | slope > 0 at > 2 SE, partial R² ≥ 0.05 | partial R² **0.053–0.089**; slope **negative** | **refuted, with the opposite sign** |
+| [H1](#h1--the-tail-misfit-is-real-and-small) | misfit concentrated in the tail, Gaussian **under**-predicts | median `tail_ratio` > 1.5 region / > 1.2 binary | **1.02–1.05** | **refuted** — real, ~30× too small |
+| [H2](#h2--confirmed-and-it-is-the-pooling-not-the-embedder) | Bad mode right-skewed under max-pooling | `shape_skew_neg` > 0.5 on `max_patch`; paired diff > 2 SE | **0.85**; paired **+0.78 ± 0.011** | **confirmed** |
+| [H3](#h3--the-prediction-holds-the-argument-for-it-does-not) | shipped anchoring is inert | \|`anchored_dmu_lo`\| < 0.01 **and** mass < 1e-3 | **0.0004–0.0023** ✓; **0.0023–0.0038** ✗ | **prediction holds, mechanism refuted** |
+| [H4](#h4--the-gate-refuted-with-the-opposite-sign) | misfit predicts regret | slope > 0 at > 2 SE, partial R² ≥ 0.05 | partial R² **0.053–0.089**; slope **negative** | **refuted, with the opposite sign** |
+| [B1](#b1b3--the-atlass-null-and-why-it-fails) | in-domain p-values not uniform | median KS > 0.05 | **0.103 ± 0.0015** | **confirmed** |
+| [B2](#b1b3--the-atlass-null-and-why-it-fails) | under-dispersed, and averaging is why | sd < 0.27; deepest widens on ≥ 4 embedders | **0.250 ± 0.0012**; widens on **5/5** | **confirmed** |
+| [B3](#b1b3--the-atlass-null-and-why-it-fails) | dispersion tracks path length | Spearman ρ > 0.5 | **0.24** | **refuted** |
+| [B4](#b4b5--the-guards-actual-operating-point) | the guard is conservative on its own data | 0 self-fires, median z ≤ 0 | **5 of 25 fire**; median z −0.85 | **refuted** |
+| [B5](#b4b5--the-guards-actual-operating-point) | it still separates real domains | > 50 % of cross pairs fire | **64 %** different-source, 20 % same-source | **confirmed** |
+| [B6](#b6--the-obvious-repair-priced-it-does-not-work) | *(priced after the fact)* the per-embedder α repair | — | separation 0.13 → **0.043** | **repair fails** |
+| [C1](#c1c2--the-browse-projection) | local structure kept, global lost | trust > 0.95 **and** Shepard < 0.6 | **0.956** and **0.288** | **confirmed** |
+| [C2](#c1c2--the-browse-projection) | projection costs class purity | drop > 0 on ≥ 4 embedders | **5/5**, median **0.017** | **confirmed (small)** |
+| [C3](#c3--the-compaction-radius-dormant-code) | the 90th-percentile radius contains ~90 % | 0.85–0.95 | **0.894** | **confirmed** — *of code that is switched off* |
+| [C4](#c4--are-the-browse-canvass-named-regions-coherent-inventory-item-10) | *(priced after the fact)* browse regions are coherent | — | **0 of 2832** below the diagonal | **coherent** |
+| [D](#d--the-timing-statistic-that-was-computed-and-thrown-away) | the timing r² that was discarded | *(a fix, not a measurement)* | now kept and round-tripped | **fixed, unmeasured** |
+| [§10, §11](#e--what-is-still-not-measured) | Toponymy warnings; SIFT/VLAD RANSAC | — | — | **blocked on data** |
 
-## What was run
+---
+
+# Part 1 — the score mixture
+
+The fit that sets every threshold in the app.
+
+## What was run (192 cells)
 
 `vg_scale_any` × {`siglip`, `siglip+dinov3_patch`} × 12 categories × 8 seeds =
 **192 cells**, 100 clicks, shipped defaults, `CALIB_SAFE_THRESHOLDS=1`.
@@ -67,8 +155,12 @@ only the first.
 
 None of PREREG's uninterpretability conditions fired.
 
+`CALIB_SAFE_THRESHOLDS=1` is what makes the **fold scope** populated, and that
+matters more than it sounds: at the harness default those rows would be silently
+empty and this study would have measured the unanchored sim fit twice.
+
 **The array was run twice.** The first run could not score H3 — the instrument
-was broken in two ways (see [Instrument defects](#instrument-defects-found-and-fixed)).
+was broken in two ways ([Appendix B](#b--instrument-defects-found-and-fixed)).
 After the fix, H1, H2 and H4 came back **bit-identical**, which is the evidence
 that the fix touched only the anchor columns. All numbers below are from the
 second run.
@@ -215,11 +307,13 @@ Generated by `figures_fitq_3329.py` from the same frames as the tables above.
 
 ![cost vs clicks](figures/cost_vs_clicks.png)
 
+![average precision vs clicks](figures/average_precision_vs_clicks.png)
+
 *Mean over all 96 cells per arm, with an inter-quartile band; click 0 is each
-cell's own free text sort, and every curve is anchored there. Lower is better.
-Read the distance from the left-hand dot to the right-hand end as what the
-clicking bought over what typing already gave. It does **not** license a
-per-embedder claim: the arms differ in embedder and pooling together.*
+cell's own free text sort, and every curve is anchored there. Lower is better on
+cost, higher on AP. Read the distance from the left-hand dot to the right-hand
+end as what the clicking bought over what typing already gave. It does **not**
+license a per-embedder claim: the arms differ in embedder and pooling together.*
 
 | arm | text sort (0 clicks) | crossover | cost @ 100 | AP @ 100 |
 |---|---|---|---|---|
@@ -238,7 +332,8 @@ comparison against an arm that never learns, and should be read as such.
 
 *Every seed of every category as its own line, one panel per arm. The spread is
 the finding the mean hides: within each arm there are cells that never leave the
-floor and cells that are excellent by click 20.*
+floor and cells that are excellent by click 20. The AP equivalent is
+`figures/average_precision_vs_clicks_runs__vg_scale_any.png`.*
 
 ### The four pre-registered statistics over clicks
 
@@ -311,134 +406,21 @@ own curve. Built with
 It carries no supervised-skyline floor (#3322): this grid was not run with
 `CALIB_SKYLINE_ARMS`, so there is no learnability ceiling drawn on it.
 
-## Instrument defects found (and fixed)
-
-Three, all of which emitted plausible numbers rather than failing. They are
-recorded here because the first run's output was *readable and wrong*.
-
-1. **The baseline could not write.** `text_baseline.py` completes its whole pass
-   before handing the path to pandas, so a missing `$CALIB_EXP/analysis` cost
-   the entire run and surfaced as a write error 47 s in.
-2. **The base-row filter emptied the main frame.** `load_main` filtered *both*
-   variant columns to blank — right for `gmm_variant`, wrong for `pool_variant`,
-   which the harness stamps with the base pooling's own name, `max`. All 192
-   cells were dropped, and **H4 was written out as an empty CSV and scored as a
-   null it had never computed.** The selftest passed because its fixture planted
-   `pool_variant: ""`, a value nothing in the harness emits.
-3. **H3 was unmeasurable, twice over.** `anchored_dmu_*` were filled only when
-   handed an `anchored_fit` that no call site ever passed — 0 of 11 520 fold
-   rows. And `anchor_mass_frac` was computed from `n_anchored`, which counts
-   **folds** (0/1/2), where the formula needs the fold's **vote** count;
-   `anchor_n` sat flat at 2.0 from click 5 to click 100.
-
-**The common shape, worth carrying forward:** each of these produced a number a
-reader would accept — a flat 2.9e-4, an empty CSV read as a null, NaN read as
-"did not move". The existing test for the drift statistic checked only its
-**null** (identical fits → zero drift), which passes whether or not the column
-is ever computed. A test that a statistic is *finite* is not a test that it was
-*measured*. The new tests assert the columns arrive populated and move with a
-planted displacement.
-
-## What this licenses, and what it does not
-
-**Do not launch a fit-replacement programme for this fit.** H1 and H4 together
-say the Gaussian's tail error at the operating point is a few per cent and is
-not associated with higher cost. The #2836 `misspecification` term (+0.0129) is
-real as an accounting entry, but this run finds no cost attached to it at the
-shipped operating point.
-
-**H2 stands as a mechanism result, not a cost result.** Max-pooling really does
-manufacture a right-skewed Bad mode. If a Gumbel-family fit is ever worth
-building, this is the evidence for where it belongs — but H4 says the payoff for
-building it is not visible here.
-
-**The `max_patch` arm remains the one worth running.** It reaches cost 0.24
-against the text sort's 0.38 and crosses at click 10, while also being the
-worst-fitting arm on every distributional statistic. That combination is itself
-the study's tidiest summary: **fit quality and usefulness point in opposite
-directions here.**
-
-## Limits
-
-Recorded so the next study does not over-read this one.
-
-- **One dataset, one prevalence.** `vg_scale_any` holds prevalence at 7.1 % by
-  construction — chosen so the statistics are comparable, at the cost of saying
-  nothing about how any of this moves with prevalence. Banding is the obvious
-  follow-up.
-- **One horizon.** 100 clicks. H1's tail ratio is still rising at click 100 on
-  two of three arms, so a longer run may not stay under the bar.
-- **Two folds.** `calibrate_count=2`, so every fold statistic is a median over
-  two fits per cell.
-- **H3's mass bar was set for the wrong haystack.** 1e-3 was derived for 50k
-  points; at ~2k it is crossed by click 20 on every arm. The bar, not the
-  finding, is what needs restating next time.
-- **The middle geometry never learns**, so level comparisons against
-  `dinov3_patch/whole_image` compare against an arm that does not beat typing.
-- **`regret_honest` is a simulated quantity.** H4's negative slope is a
-  within-harness association; nothing here measures a real user's regret.
-
 ---
 
-# Part 2 — the rest of the inventory: embedding-space structure and the browse projection
+# Part 2 — embedding-space structure and the browse projection
 
-Pre-registered in [`PREREG-part2.md`](PREREG-part2.md), written before this grid
-was submitted. Part 1 above measured the score mixture, which decides every
-threshold; this part measures the four fits the [#3329
+The four fits the [#3329
 inventory](https://github.com/samggreenberg/VTSearch/issues/3329) listed under
 **B** (embedding-space structure) and **C** (browse projection), plus the one
-item from **D** that was a fix rather than a measurement.
+item under **D** that was a fix rather than a measurement.
 
-## BLUF
+Part 1's fits are recomputed at every click, so they rode the voting loop for
+free. **These do not.** The atlas, the conformal rule, the UMAP layout and the
+compaction radius are each fitted **once per dataset**, so the axis that buys
+information here is not clicks — it is dataset × embedder.
 
-**The Coverage Atlas's stated null is false, and the guard built on it is
-usable for four of five embedders and inverted for the fifth.**
-`domain_shift_report`'s docstring says in-domain typicality p-values are
-"roughly uniform, so about *alpha* of them fall below *alpha*". They are not
-uniform anywhere. For the single-vector embedders the departure is harmless at
-the operating point; for **`dinov3_patch` the guard fires on 80 % of its own
-held-out data**, which makes it close to a constant "shifted" for the one
-embedder that region voting depends on.
-
-**The browse projection is good at exactly what it is for and bad at what it
-is not**, and both halves were unmeasured until now: neighbourhoods survive
-(trustworthiness 0.96 at k=10), global distance does not (Shepard ρ = 0.29),
-and the projection costs about 1.7 points of k-NN class purity.
-
-**The compaction radius is honest** — the one fit in this whole inventory that
-does what it says, though it is fitted in code that is *off* in production
-(compaction was switched off by the July sweep; see C3) — and so is the region
-clustering: **all 2832 browse regions
-are more self-similar than they are similar to everything else**, though by
-layer 3 nearly half of them have no ground-truth category holding even half
-their members.
-
-**Bound it correctly, though:** the guard has exactly one production consumer —
-an on-demand HTTP endpoint — and the "typicality-tempered diversity probe" the
-inventory expected to be affected reads the typicality *ordering*, not the
-p-value, so it is untouched. This is a broken diagnostic, not a silent defect in
-the loop.
-
-**And the obvious repair does not work.** Calibrating α per embedder — the first
-thing this report recommended — was then priced, and it makes `dinov3_patch`
-*worse* (separation 0.13 → 0.043). That result is kept in the report rather than
-quietly replacing the recommendation, because a recommendation nobody prices is
-how this whole issue started.
-
-| # | claim | bar | measured | verdict |
-|---|---|---|---|---|
-| B1 | in-domain p-values not uniform | median KS > 0.05 | **0.103 ± 0.0015** | **confirmed** |
-| B2 | under-dispersed, and averaging is why | sd < 0.27; deepest widens on ≥ 4 embedders | **0.250 ± 0.0012**; widens on **5/5** | **confirmed** |
-| B3 | dispersion tracks path length | Spearman ρ > 0.5 | **0.24** | **refuted** |
-| B4 | the guard is conservative on its own data | 0 self-fires, median z ≤ 0 | **5 of 25 fire**; median z −0.85 | **refuted** |
-| B5 | it still separates real domains | > 50 % of cross pairs fire | **64 %** different-source, 20 % same-source | **confirmed** |
-| B6 | *(not pre-registered)* the per-embedder α repair | — | separation 0.13 → **0.043** | **repair fails** |
-| C1 | local structure kept, global lost | trust > 0.95 **and** Shepard < 0.6 | **0.956** and **0.288** | **confirmed** |
-| C2 | projection costs class purity | drop > 0 on ≥ 4 embedders | **5/5**, median **0.017** | **confirmed (small)** |
-| C3 | the 90th-percentile radius contains ~90 % | 0.85–0.95 | **0.894** | **confirmed** *(dormant code — compaction is off)* |
-| C4 | *(not pre-registered)* browse regions are coherent | — | **0 of 2832** below the diagonal | **coherent** |
-
-## What was run
+## What was run (75 cells + 125 pairs)
 
 **75 cells** — 5 datasets × 5 embedders × 3 seeds — plus **125 cross-dataset
 pairs** (every ordered build/query dataset pair under each embedder). All 75
@@ -597,8 +579,7 @@ acquisition, and not in training. The finding above is real and the guard is
 broken for `dinov3_patch`, but what it breaks is a report a user explicitly asks
 for, not a decision the app takes on its own.
 
-**This corrects the inventory's own framing.** The [#3329
-issue](https://github.com/samggreenberg/VTSearch/issues/3329) says that if the
+**This corrects the inventory's own framing.** The #3329 issue says that if the
 p-values are not uniform then "the domain-shift verdicts and the
 typicality-tempered diversity probes are both miscalibrated". The first half
 holds. **The second does not.** `CoverageAtlas.next_sample` — the
@@ -654,15 +635,16 @@ poorly — or, cheaply and immediately, **not running this guard on a patch
 embedder at all**, since a detector with 0.04 separation is not carrying
 information.
 
-## C1–C3 — the browse projection
+## C1–C2 — the browse projection
 
 ![projection quality](figures/projection_quality.png)
 
 *Top left: trustworthiness (solid) and continuity (dashed) against neighbourhood
 size, median over cells per embedder. Top right: the Shepard diagram — original
 cosine distance against laid-out euclidean distance, pooled. Bottom left: k-NN
-class purity lost by projecting. Bottom right: the realised containment of the
-compaction radius against its nominal 0.90.*
+class purity lost by projecting. Bottom right: C3, the realised containment of
+the compaction radius against its nominal 0.90 — see
+[Appendix A](#c3--the-compaction-radius-dormant-code).*
 
 **C1 confirmed as the split verdict it was pre-registered as.**
 Trustworthiness is **0.956** at k=10 and decays to 0.90–0.93 by k=50; Shepard
@@ -687,32 +669,6 @@ the other four — roughly 0.8–1.1 where they sit at 0.2–0.7. That is the sa
 low-concentration geometry the r̄ table above blames for its atlas
 miscalibration, showing up in a measurement that has nothing to do with the
 atlas.
-
-**C3 confirmed — but read it as a property of dormant code.** The
-90th-percentile core radius realises **0.894** containment against a nominal
-0.90, on every cell, independent of embedder. `_build_units` fits a statistic
-and that statistic means what it says.
-
-**Compaction is off in production and this measurement does not change that.**
-`PROJECTION_COMPACT_DEFAULT` is `False` and has been since the July UMAP-tuning
-sweep ([`2026-07-22-vtsbrowse-umap-tuning.html`](../../reports/2026-07-22-vtsbrowse-umap-tuning.html)),
-which found `compact_layout` costs ~2 % taxonomy separability and ~5–6 %
-neighbourhood structure on *every* dataset and embedder. `compact` is not a
-user-facing setting: `resolve_projection_params` hard-wires it to that constant
-with no override path, and all three production call sites
-(`datasets/stages/projection.py`, `detectors/positives_browse.py`,
-`routes/projection.py`) thread that one resolved value. So no shipped layout is
-compacted, and the layout measured here was fit at the default — this is the
-radius the packer *would* use, evaluated on the uncompacted layout users
-actually see.
-
-That is worth knowing in one direction only. The sweep rejected compaction on
-what it *costs*, and a reasonable objection to that verdict would be that the
-packing had been mis-fitted — that the circles were wrong and the cost was an
-artefact. They are not. The radius statistic is sound, so the price the sweep
-measured is the real price of the idea. **This is not evidence for turning
-compaction back on**: nothing in this run re-examined the separability cost that
-switched it off.
 
 ## C4 — are the browse canvas's named regions coherent? (inventory item 10)
 
@@ -751,7 +707,7 @@ is the *desirable* shape — a sign shown at low zoom covers more ground and is
 allowed to be broader — but it puts a number on where the signs stop meaning
 much: at layers 2 and 3, **45–48 % of regions have no ground-truth category
 holding even half their members**, so nearly half the coarse signs are naming
-something no single label describes.
+something no single label describes. That is [action item 4](#action-items).
 
 **And `dinov3_patch` separates again — for the fourth time, independently.**
 Its regions sit in a completely different band of the left panel (between-cosine
@@ -764,14 +720,43 @@ the grid. **Any threshold tuned on cosine magnitudes from the other four
 embedders will be wrong for it** — which is the general form of the
 `domain_shift_report` failure, arrived at from four unrelated measurements.
 
-**What is still not measured for item 10:** Toponymy's suppressed warnings
-(#2558). Capturing them needs a full fit including the namer, and the namer
-needs per-item texts — which on these datasets would have to be synthesised from
-the ground-truth categories, making the naming easier than production's and the
-warning rate unrepresentative. Rather than report a number that flatters the
-thing under test, this half is left open.
+---
 
-## Part D — the r² that was computed and thrown away
+# Appendices
+
+## A — measured, no action needed
+
+Two inventory items came back clean or inert. They are recorded here rather than
+in the body so the findings above are not diluted by them.
+
+### C3 — the compaction radius (dormant code)
+
+The 90th-percentile core radius `_build_units` fits realises **0.894**
+containment against a nominal 0.90, on every cell, independent of embedder. It
+is the one fit in this whole inventory that does exactly what it says.
+
+**But compaction is off in production.** `PROJECTION_COMPACT_DEFAULT` is `False`
+and has been since the July UMAP-tuning sweep
+([`2026-07-22-vtsbrowse-umap-tuning.html`](../../reports/2026-07-22-vtsbrowse-umap-tuning.html)),
+which found `compact_layout` costs ~2 % taxonomy separability and ~5–6 %
+neighbourhood structure on *every* dataset and embedder. `compact` is not a
+user-facing setting: `resolve_projection_params` hard-wires it to that constant
+with no override path, and all three production call sites
+(`datasets/stages/projection.py`, `detectors/positives_browse.py`,
+`routes/projection.py`) thread that one resolved value. So no shipped layout is
+compacted, and the layout measured here was fit at the default — this is the
+radius the packer *would* use, evaluated on the uncompacted layout users
+actually see.
+
+That is worth knowing in one direction only. The sweep rejected compaction on
+what it *costs*, and a reasonable objection to that verdict would be that the
+packing had been mis-fitted — that the circles were wrong and the cost was an
+artefact. They are not. The radius statistic is sound, so the price the sweep
+measured is the real price of the idea. **This is not evidence for turning
+compaction back on**: nothing in this run re-examined the separability cost that
+switched it off.
+
+### D — the timing statistic that was computed and thrown away
 
 `vtscore/timing/fit.py` was the one place in the tree that already computed a
 goodness-of-fit statistic and discarded it: `affine_fit` returns an OLS r² and
@@ -785,54 +770,59 @@ carry no r² rather than a misleading zero, and `to_json` omits the key entirely
 **No measurement accompanies this fix**, and that is a gap rather than a
 finding: there is no recorded timing profile on this cluster to read an r² off.
 Producing one needs a real dataset load with `VTSEARCH_RECORD_TIMING` set, which
-this grid does not do.
+this grid does not do — [action item 3](#action-items).
 
-## What this licenses, and what it does not
+## B — instrument defects found and fixed
 
-**Do not trust `domain_shift_report` on a patch embedder.** For
-`dinov3_patch` it is close to a constant "shifted" — and per part 1 that is the
-embedder whose `max_patch` arm is the only one worth running. The single-vector
-embedders are fine at the operating point.
+Three, in part 1, all of which emitted plausible numbers rather than failing.
+They are recorded because the first run's output was *readable and wrong*.
 
-**But bound it correctly: nothing in the loop is gated on it.** The guard has
-exactly one production consumer, an on-demand HTTP endpoint, and the diversity
-probe that the inventory expected to be affected reads the typicality *ordering*
-rather than the p-value. This is a broken diagnostic, not a silent training
-defect.
+1. **The baseline could not write.** `text_baseline.py` completes its whole pass
+   before handing the path to pandas, so a missing `$CALIB_EXP/analysis` cost
+   the entire run and surfaced as a write error 47 s in.
+2. **The base-row filter emptied the main frame.** `load_main` filtered *both*
+   variant columns to blank — right for `gmm_variant`, wrong for `pool_variant`,
+   which the harness stamps with the base pooling's own name, `max`. All 192
+   cells were dropped, and **H4 was written out as an empty CSV and scored as a
+   null it had never computed.** The selftest passed because its fixture planted
+   `pool_variant: ""`, a value nothing in the harness emits.
+3. **H3 was unmeasurable, twice over.** `anchored_dmu_*` were filled only when
+   handed an `anchored_fit` that no call site ever passed — 0 of 11 520 fold
+   rows. And `anchor_mass_frac` was computed from `n_anchored`, which counts
+   **folds** (0/1/2), where the formula needs the fold's **vote** count;
+   `anchor_n` sat flat at 2.0 from click 5 to click 100.
 
-**Neither obvious fix works, and both were measured rather than assumed.**
-Removing the path averaging makes calibration *worse* (KS 0.103 → 0.132).
-Calibrating α per embedder — the recommendation this report first reached for —
-**makes `dinov3_patch` worse still** when priced properly (separation 0.13 →
-0.043; see [B6](#b6--the-obvious-repair-priced-it-does-not-work)). The `median`
-combiner is a third closer to uniform and is a two-line change, but it
-over-flags at α and does not address the per-embedder failure either.
+**The common shape, worth carrying forward:** each of these produced a number a
+reader would accept — a flat 2.9e-4, an empty CSV read as a null, NaN read as
+"did not move". The existing test for the drift statistic checked only its
+**null** (identical fits → zero drift), which passes whether or not the column
+is ever computed. A test that a statistic is *finite* is not a test that it was
+*measured*. The new tests assert the columns arrive populated and move with a
+planted displacement.
 
-**The actionable recommendation is therefore narrower than "recalibrate": stop
-running this guard on patch embedders**, and if it is wanted there, fix the
-atlas's per-node vMF model rather than any threshold on top of it.
+## C — limits
 
-**The browse canvas needs no change.** C1's split verdict is the expected
-behaviour of UMAP, C2's cost is 1.7 points, C3 is correct (of a packer that is
-switched off), and C4 finds every region coherent. The one thing worth knowing is that coarse signs are weak: at
-the two coarsest layers roughly half the regions have no dominant ground-truth
-category, so a sign at low zoom should be read as "roughly this way" rather than
-as a label.
+Recorded so the next study does not over-read this one.
 
-**`dinov3_patch`'s geometry is the run's through-line.** Four independent
-measurements — the atlas's node r̄, the Shepard distance range, and both the
-within- and between-cluster cosines of the browse regions — say the same thing:
-its embedding space is far less concentrated than the four single-vector spaces.
-That is why a guard with a fixed α fails on it, and it is a standing warning
-about any other threshold in the tree tuned on cosine magnitudes.
+**Part 1**
 
-**Nothing here contradicts part 1**, and one thing rhymes with it: the arm with
-the worst structural fit statistics (`dinov3_patch`) is again the arm that works
-best in the click loop. Part 1 found the same inversion for the score mixture.
-Twice now, on unrelated families, "fits badly" and "works badly" have pointed in
-opposite directions.
+- **One dataset, one prevalence.** `vg_scale_any` holds prevalence at 7.1 % by
+  construction — chosen so the statistics are comparable, at the cost of saying
+  nothing about how any of this moves with prevalence. Banding is the obvious
+  follow-up.
+- **One horizon.** 100 clicks. H1's tail ratio is still rising at click 100 on
+  two of three arms, so a longer run may not stay under the bar.
+- **Two folds.** `calibrate_count=2`, so every fold statistic is a median over
+  two fits per cell.
+- **H3's mass bar was set for the wrong haystack.** 1e-3 was derived for 50k
+  points; at ~2k it is crossed by click 20 on every arm. The bar, not the
+  finding, is what needs restating next time.
+- **The middle geometry never learns**, so level comparisons against
+  `dinov3_patch/whole_image` compare against an arm that does not beat typing.
+- **`regret_honest` is a simulated quantity.** H4's negative slope is a
+  within-harness association; nothing here measures a real user's regret.
 
-## Limits
+**Part 2**
 
 - **Five datasets, three sources.** B5's 64 % detection rate is over 70 ordered
   pairs of which many are Caltech-vs-something; a grid with more distinct
@@ -848,7 +838,21 @@ opposite directions.
 - **`caltech101_m` is near the resolution floor** for B2/B3: its atlases average
   only ~2.9 calibrated nodes per item, and 9 of 75 cells fall below the path
   length of 3 that PREREG named as making the averaging claim vacuous.
-- **§11 of the inventory is untouched** — the SIFT/VLAD RANSAC reprojection
-  error and the MatchStats verification MLP need structural-search fixtures this
-  grid does not build — as is **§10**, Toponymy's suppressed warnings, which
-  needs the captioner stack. Both remain open.
+
+## E — what is still not measured
+
+Two inventory items are blocked on data rather than effort. They are left open
+rather than answered badly.
+
+- **§11 — SIFT/VLAD RANSAC reprojection error and the MatchStats verification
+  MLP.** Structural search is *instance* matching, and every corpus in the pile
+  carries *category* labels, so a ground-truth-positive pair would be two
+  different boats that legitimately share no structure. Needs an instance-level
+  corpus — OpenLogo, or the #2351 screenshot set — neither of which is on the
+  cluster.
+- **§10 (the naming half) — Toponymy's suppressed warnings (#2558).** Capturing
+  them needs a full fit including the namer, and the namer needs per-item texts,
+  which on these datasets would have to be synthesised from the ground-truth
+  categories. That would make the naming easier than production's and the
+  warning rate unrepresentative — flattering the thing under test. The
+  *clustering* half of §10 is answered above in [C4](#c4--are-the-browse-canvass-named-regions-coherent-inventory-item-10).
