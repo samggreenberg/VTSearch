@@ -561,7 +561,18 @@ loaded via `spec_from_file_location` so discovery still works.
 
 | Property               | Returns     | Description                                |
 |------------------------|-------------|--------------------------------------------|
-| `description_wrappers` | `list[str]` | Templates with `{text}` for enriched embedding (e.g. `["the sound of {text}"]`) |
+| `description_wrappers` | `list[str]` | Templates with `{text}` for enriched embedding (e.g. `["the sound of {text}"]`). Default `[]` — see below |
+
+Whether a prompt ensemble helps is a property of the **embedder**, not of the
+media type, and the default (`[]`) is a real answer rather than an unfilled
+slot: issue #3127 measured enrichment on/off over 22 eval datasets and 560
+paired queries and found it a clear loss on `e5`, `bge`, `siglip` and `clap`
+(text enrichment lost on 45 of 45 categories), and a gain only on
+`clap_general` and `xclip`.  Issue #3341 therefore emptied the list on the four
+losers, so the *Enrich descriptions* setting is a no-op there instead of a
+small, silent cost.  Leave `description_wrappers` empty unless you have
+measured a gain on **your** checkpoint; a sibling model's templates are not
+evidence.
 
 **Instance attributes:**
 

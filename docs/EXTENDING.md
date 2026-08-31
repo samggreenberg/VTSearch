@@ -266,7 +266,7 @@ See [EXTENDING-media.md § Adding a Media Embedder](EXTENDING-media.md#adding-a-
 - [ ] Create `vtscore/media/<type>/embedder.py` (or `embedder_<variant>.py` for alternatives)
 - [ ] Subclass `MediaEmbedder`, implement `name`, `media_type_id`, `_load_models_impl()`, `embed_media()`
 - [ ] Optionally implement `embed_text()` for text-query sorting
-- [ ] Optionally set `description_wrappers` for enriched text embedding
+- [ ] Leave `description_wrappers` empty unless you have *measured* that a prompt ensemble beats the typed query on your checkpoint (see [EXTENDING-media.md](EXTENDING-media.md#adding-a-media-embedder))
 - [ ] Expose `EMBEDDER = YourEmbedder()` at module level (auto-discovery picks it up; no `__init__.py` edits needed; symlinked files are supported)
 - [ ] Test: load a dataset and verify embeddings are generated
 

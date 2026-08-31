@@ -17,6 +17,18 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **"Enrich descriptions" is now a per-model choice, and can no longer make
+  your search worse.** The setting averages a typed query over several
+  phrasings ("the sound of a dog", "a recording of a dog", "a dog", ...)
+  instead of embedding it as typed. Measured across 22 evaluation collections
+  and 560 queries, that helps on some models and hurts on others: it is a gain
+  on CLAP General (audio) and X-CLIP (video), and a loss on SigLIP (images),
+  E5 and BGE (text) and the faster CLAP -- for text it ranked *worse on all 45
+  categories tested*. The phrasings are now attached to the models they
+  actually help, so turning the setting on is simply a no-op for the rest,
+  rather than a small silent cost. The default stays **off**. (Issue #3341,
+  following #3127.)
+
 - **The Settings -> Sorting "Enrich descriptions" tooltip described a
   different feature.** It read "Prepend item filenames to text-sort queries to
   improve matching for named items"; the setting has never touched filenames.
