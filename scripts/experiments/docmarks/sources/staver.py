@@ -136,7 +136,8 @@ def build_pages(
     page from its size.  The merge runs over the *unfiltered* components and the
     area floor is applied to each merged group's ink; reversing that deletes a
     broken stamp's fragments before the merge can reassemble them, which is the
-    bug this counter was built to detect (issue #3361)."""
+    bug this counter was built to detect (issue #3361).
+    """
     from PIL import Image
 
     scans_dir, masks_dir, info_dir = find_tree(unpacked)
