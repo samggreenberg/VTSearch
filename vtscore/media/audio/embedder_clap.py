@@ -36,5 +36,17 @@ class AudioClapEmbedder(_ClapBase):
     def model_id(self) -> str:
         return CLAP_MODEL_ID
 
+    @property
+    def description_wrappers(self) -> list[str]:
+        """No wrappers: the sound-prompt ensemble helps ``clap_general``, not this.
+
+        #3127 ran the same five templates on both general-purpose CLAP
+        checkpoints and they split by model: +0.014 +/- 0.009 AP on
+        ``clap_general`` (which keeps them, inherited from
+        :class:`~vtscore.media.audio._clap_shared._ClapBase`) and
+        -0.010 +/- 0.008 on this one.  See #3341.
+        """
+        return []
+
 
 EMBEDDER = AudioClapEmbedder()

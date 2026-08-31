@@ -1,7 +1,7 @@
 """Tests for the Enrich Sort Descriptions feature.
 
 Covers:
-- description_wrappers property on each media type
+- description_wrappers: the per-embedder split measured by #3127/#3341
 - embed_text_enriched method (base class logic)
 - enrich_descriptions setting (get/set/persist)
 - embed_text_query with enrich=True
@@ -18,11 +18,7 @@ import pytest
 
 from vtscore.eval.config import EvalQuery
 from vtscore.eval.runner import eval_text_sort
-from vtscore.media.audio.embedder_clap import AudioClapEmbedder
 from vtscore.media.embedder import MediaEmbedder
-from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
-from vtscore.media.text.embedder_e5 import TextE5Embedder
-from vtscore.media.video.embedder_xclip import VideoXClipEmbedder
 from vtscore.embedding.helpers import embed_text_query
 
 
@@ -32,47 +28,99 @@ from vtscore.embedding.helpers import embed_text_query
 
 
 class TestDescriptionWrappers:
-    def test_audio_has_wrappers(self):
-        emb = AudioClapEmbedder()
-        wrappers = emb.description_wrappers
-        assert len(wrappers) >= 3
-        for w in wrappers:
-            assert "{text}" in w
+    """Which embedders enrich, and which embed the typed query plainly.
 
-    def test_image_has_wrappers(self):
-        emb = ImageSiglipEmbedder()
-        wrappers = emb.description_wrappers
-        assert len(wrappers) >= 3
-        for w in wrappers:
-            assert "{text}" in w
+    Enrichment is a property of the **embedder**, not of the media type.
+    #3127 measured the ensemble on/off across 22 eval datasets and 560 paired
+    queries (paired Delta in text-sort average precision, SEs clustered on
+    (corpus, category)) and the answer split by model:
 
-    def test_text_has_wrappers(self):
-        emb = TextE5Embedder()
-        wrappers = emb.description_wrappers
-        assert len(wrappers) >= 3
-        for w in wrappers:
-            assert "{text}" in w
+    ======================  ==================
+    embedder                Delta AP
+    ======================  ==================
+    ``clap_general``        +0.014 +/- 0.009
+    ``xclip``               +0.008 +/- 0.014
+    ``siglip``              -0.001 +/- 0.002
+    ``clap``                -0.010 +/- 0.008
+    ``e5``                  -0.057 +/- 0.009
+    ``bge``                 -0.059 +/- 0.009
+    ======================  ==================
 
-    def test_video_has_wrappers(self):
-        emb = VideoXClipEmbedder()
-        wrappers = emb.description_wrappers
-        assert len(wrappers) >= 3
-        for w in wrappers:
-            assert "{text}" in w
+    Every individual template was negative on the bottom four, so #3341 gave
+    them an empty wrapper list: ``embed_text_enriched`` degrades to
+    ``embed_text`` there and the Enrich Sort Descriptions setting can no longer
+    cost anything.  These tests pin that split so the templates are not
+    re-added by a later "every embedder should have wrappers" sweep.
+    """
 
-    def test_wrappers_include_bare_text(self):
-        """Each embedder should include a plain '{text}' wrapper."""
-        for emb_cls in (AudioClapEmbedder, ImageSiglipEmbedder, TextE5Embedder, VideoXClipEmbedder):
-            emb = emb_cls()
-            assert "{text}" in emb.description_wrappers, f"{emb_cls.__name__} missing bare '{{text}}' wrapper"
+    #: Measured worse than the typed query on every template (#3127).
+    PLAIN_QUERY_EMBEDDERS = ("siglip", "clap", "e5", "bge")
+
+    #: The only two embedders with a positive point estimate on their own model.
+    ENRICHING_EMBEDDERS = ("clap_general", "xclip")
+
+    def test_measured_negative_embedders_have_no_wrappers(self):
+        from vtscore.media import get_embedder
+
+        for name in self.PLAIN_QUERY_EMBEDDERS:
+            emb = get_embedder(name)
+            assert emb is not None, f"{name} is not registered"
+            assert emb.description_wrappers == [], (
+                f"{name} measured worse than the typed query on every wrapper (#3127); "
+                "an empty list here is the measured answer, not an unfilled slot"
+            )
+
+    def test_measured_positive_embedders_keep_their_wrappers(self):
+        from vtscore.media import get_embedder
+
+        for name in self.ENRICHING_EMBEDDERS:
+            emb = get_embedder(name)
+            assert emb is not None, f"{name} is not registered"
+            wrappers = emb.description_wrappers
+            assert len(wrappers) >= 3, f"{name} lost the wrappers #3127 measured a gain from"
+            for w in wrappers:
+                assert "{text}" in w
+
+    def test_enriching_embedders_include_bare_text(self):
+        """The ensemble must average the plain query back in."""
+        from vtscore.media import get_embedder
+
+        for name in self.ENRICHING_EMBEDDERS:
+            assert "{text}" in get_embedder(name).description_wrappers, f"{name} missing bare '{{text}}' wrapper"
 
     def test_wrappers_format_correctly(self):
-        """All wrappers should format without errors."""
-        for emb_cls in (AudioClapEmbedder, ImageSiglipEmbedder, TextE5Embedder, VideoXClipEmbedder):
-            emb = emb_cls()
+        """Every wrapper still in the tree must format without errors."""
+        from vtscore.media import all_embedders
+
+        for emb in all_embedders():
             for wrapper in emb.description_wrappers:
-                result = wrapper.format(text="test query")
-                assert "test query" in result
+                assert "test query" in wrapper.format(text="test query")
+
+    def test_no_wrappers_means_setting_is_a_no_op(self):
+        """With no wrappers, enrich=True and enrich=False are the same query."""
+
+        class PlainEmbedder(MediaEmbedder):
+            @property
+            def name(self):
+                return "plain"
+
+            @property
+            def media_type_id(self):
+                return "plain"
+
+            def _load_models_impl(self):
+                pass
+
+            def _embed_media_impl(self, media):
+                return None
+
+            def embed_text(self, text):
+                assert text == "boats", "the typed query must reach embed_text unwrapped"
+                return np.array([1.0, 0.0])
+
+        emb = PlainEmbedder()
+        assert emb.description_wrappers == []
+        np.testing.assert_array_equal(emb.embed_text_enriched("boats"), emb.embed_text("boats"))
 
 
 # =====================================================================

@@ -42,6 +42,7 @@ def build_seed_scores(
     media_type: str = "image",
     embedder_name: str = "siglip",
     categories: Optional[dict[str, list[str]]] = None,
+    enrich: bool = False,
 ) -> dict[str, dict[str, dict[int, float]]]:
     """Build ``{dataset: {category: {media_id: cosine}}}`` text-sort rankings.
 
@@ -58,6 +59,13 @@ def build_seed_scores(
             the embedder the medias were embedded with (``"siglip"``).
         categories: Optional ``{dataset: [category, ...]}`` restriction; when a
             dataset is present only those categories' queries are embedded.
+        enrich: Whether to embed the query through the embedder's
+            ``description_wrappers`` ensemble rather than plainly.  Defaults to
+            ``False`` to match the app's shipped ``enrich_descriptions``
+            setting — the simulated user's opening must be the sort a real user
+            actually sees.  Pass the app's value explicitly if it ever stops
+            defaulting to off, or the seed ranking silently stops being the
+            one the run's arms were opened on (#3341).
 
     Returns:
         Nested mapping suitable for ``run_voting_iterations_eval(seed_scores=…)``.
@@ -85,7 +93,7 @@ def build_seed_scores(
             cat = query.target_category
             if wanted is not None and cat not in wanted:
                 continue
-            qvec = embed_text_query(query.text, media_type, embedder_name=embedder_name)
+            qvec = embed_text_query(query.text, media_type, enrich=enrich, embedder_name=embedder_name)
             if qvec is None:
                 continue
             cos = matrix @ _unit(np.asarray(qvec, dtype=np.float32))  # (N,)
