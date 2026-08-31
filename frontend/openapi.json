@@ -11116,7 +11116,7 @@
     },
     "/api/datasets/registry/{dataset_id}/domain-shift": {
       "get": {
-        "description": "*dataset_id* names the **reference** dataset \u2014 the one a detector was\ntrained on.  Its coverage atlas is queried with every embedding of the\n**active** dataset (the ``X-Dataset-Id`` header), yielding calibrated\ntypicality p-values.  The response summarises them: ``frac_atypical``\nis roughly the proportion of the active dataset that lies outside the\nreference domain, and ``shifted`` is the headline verdict.  Use it\nbefore trusting a detector trained on *dataset_id* against the active\ndataset without hands-on verification.",
+        "description": "*dataset_id* names the **reference** dataset \u2014 the one a detector was\ntrained on.  Its coverage atlas is queried with every embedding of the\n**active** dataset (the ``X-Dataset-Id`` header), yielding calibrated\ntypicality p-values.  The response summarises them: ``frac_atypical``\nis roughly the proportion of the active dataset that lies outside the\nreference domain, and ``shifted`` is the headline verdict.  Use it\nbefore trusting a detector trained on *dataset_id* against the active\ndataset without hands-on verification.\n\n**Refused for patch embedders** (400).  The guard's separation between\n\"my own data\" and \"a different corpus\" collapses to 0.13 on\n``dinov3_patch`` \u2014 close to a constant \u2014 because patch spaces are far\nless concentrated than single-vector ones, and every threshold repair\nwas priced and failed.  See\n``docs/experiments/2026-08-30-fit-quality-3329/REPORT.md`` (B4-B6).",
         "operationId": "dataset_domain_shift",
         "responses": {
           "200": {
@@ -11130,7 +11130,7 @@
             "description": "OK"
           },
           "400": {
-            "description": "Reference dataset has no coverage atlas, embedders differ, or the active dataset has no embeddings."
+            "description": "Reference dataset has no coverage atlas, embedders differ, the reference uses a patch embedder (unsupported), or the active dataset has no embeddings."
           },
           "403": {
             "description": "Access denied for the current user."
