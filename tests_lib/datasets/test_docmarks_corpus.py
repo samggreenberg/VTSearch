@@ -1031,3 +1031,113 @@ class TestEmbedCells:
         forward = mods["embed"].load_medias(pages, {}, "siglip")
         reverse = mods["embed"].load_medias(list(reversed(pages)), {}, "siglip")
         assert {i: m["origin_name"] for i, m in forward.items()} == {i: m["origin_name"] for i, m in reverse.items()}
+
+
+# -------------------------------------------------------------------- probe
+
+
+class TestKaggleProbe:
+    """``--probe`` must stay a metadata call.
+
+    It used to reach Kaggle by downloading the bundle into ``raw/_probe_*``:
+    ~2 GB of transfer, fetched a second time by the real build, never reclaimed
+    — under a name and a runbook that both promised "seconds" (issue #3356).
+    The cheapness is the whole feature, so it is pinned here.
+    """
+
+    @staticmethod
+    def _with_creds(monkeypatch):
+        monkeypatch.setenv("KAGGLE_USERNAME", "someone")
+        monkeypatch.setenv("KAGGLE_KEY", "deadbeef")
+
+    @staticmethod
+    def _run(monkeypatch, mods, *, stdout="", stderr="", returncode=0, exc=None):
+        """Stub ``subprocess.run`` and record the argv it was handed."""
+        import subprocess
+
+        seen = []
+
+        def fake_run(cmd, **kwargs):
+            seen.append(cmd)
+            if exc is not None:
+                raise exc
+            if returncode:
+                raise subprocess.CalledProcessError(returncode, cmd, output=stdout, stderr=stderr)
+            return subprocess.CompletedProcess(cmd, 0, stdout=stdout, stderr=stderr)
+
+        monkeypatch.setattr(mods["common"].subprocess, "run", fake_run)
+        return seen
+
+    def test_lists_files_instead_of_downloading(self, monkeypatch, mods, tmp_path):
+        self._with_creds(monkeypatch)
+        monkeypatch.chdir(tmp_path)
+        seen = self._run(monkeypatch, mods, stdout="name,size,creationDate\ngt.zip,44MB,2020-01-01\n")
+
+        mods["common"].kaggle_probe("owner/name")
+
+        (cmd,) = seen
+        assert cmd[:4] == ["kaggle", "datasets", "files", "-d"]
+        assert "download" not in cmd
+        # Nothing may be staged anywhere: no destination is even passed.
+        assert not any(str(tmp_path) in str(part) for part in cmd)
+        assert list(tmp_path.iterdir()) == []
+
+    def test_a_missing_token_is_reported_before_the_cli_runs(self, monkeypatch, mods, tmp_path):
+        monkeypatch.delenv("KAGGLE_USERNAME", raising=False)
+        monkeypatch.delenv("KAGGLE_KEY", raising=False)
+        monkeypatch.setenv("HOME", str(tmp_path))  # no ~/.kaggle/kaggle.json under here
+        monkeypatch.setenv("USERPROFILE", str(tmp_path))
+        seen = self._run(monkeypatch, mods)
+
+        with pytest.raises(mods["common"].FetchError, match=r"kaggle\.json"):
+            mods["common"].kaggle_probe("owner/name")
+        assert seen == []
+
+    def test_a_missing_cli_names_the_install(self, monkeypatch, mods):
+        self._with_creds(monkeypatch)
+        self._run(monkeypatch, mods, exc=FileNotFoundError("kaggle"))
+
+        with pytest.raises(mods["common"].FetchError, match="pip install kaggle"):
+            mods["common"].kaggle_probe("owner/name")
+
+    def test_a_nonzero_exit_quotes_stderr(self, monkeypatch, mods):
+        self._with_creds(monkeypatch)
+        self._run(monkeypatch, mods, returncode=1, stderr="boom")
+
+        with pytest.raises(mods["common"].FetchError, match="boom"):
+            mods["common"].kaggle_probe("owner/name")
+
+    @pytest.mark.parametrize(
+        "stdout",
+        [
+            "403 - Forbidden\n",  # the CLI swallows API errors and still exits 0
+            "404 - Not Found\n",
+            "",
+            "name,size,creationDate\n",  # a header with no rows is not a dataset
+        ],
+    )
+    def test_exit_zero_is_not_taken_as_success(self, monkeypatch, mods, stdout):
+        self._with_creds(monkeypatch)
+        self._run(monkeypatch, mods, stdout=stdout)
+
+        with pytest.raises(mods["common"].FetchError, match="owner/name"):
+            mods["common"].kaggle_probe("owner/name")
+
+
+class TestReclaimProbeDirs:
+    def test_removes_stale_probe_dirs_and_reports_their_size(self, mods, tmp_path):
+        stale = tmp_path / "_probe_staver" / "nested"
+        stale.mkdir(parents=True)
+        (stale / "big.bin").write_bytes(b"x" * 2048)
+        keep = tmp_path / "staver"
+        keep.mkdir()
+        (keep / "real.bin").write_bytes(b"y" * 16)
+
+        dirs, freed = mods["build"]._reclaim_probe_dirs(tmp_path)
+
+        assert (dirs, freed) == (1, 2048)
+        assert not (tmp_path / "_probe_staver").exists()
+        assert (keep / "real.bin").exists()
+
+    def test_a_missing_raw_root_is_not_an_error(self, mods, tmp_path):
+        assert mods["build"]._reclaim_probe_dirs(tmp_path / "never-created") == (0, 0)
