@@ -76,7 +76,7 @@ A detector on disk is a JSON file at
   "media_type": "audio",
   "input_spec": {"clipper": "sound_tiling", "clipper_params": {"duration": "2.0"}},
   "labelset": {
-    "elements": [
+    "labels": [
       {
         "label": "good",
         "origin": {"importer": "server_folder", "params": {"folder": "/data/esc50"}},
@@ -205,11 +205,13 @@ every detector route:
    provided (the haystack the mixture is fitted on).  Without one, the
    cross-calibration cut ships alone.
 
-Returns `(model, threshold)`. Today this function consults
-`vtsearch.state` to read `get_inclusion`, `get_calibrate_count`,
-and `get_calibration_fraction` - a Phase 3 seam.
-Library consumers running outside an app should pass these via
-`CoreConfig` (the existing `state` shims read from there already).
+Returns `(model, threshold)`. The function reads `get_inclusion`,
+`get_calibrate_count`, and `get_calibration_fraction` from
+`vtscore.state` (not `vtsearch.state` — the seam has been fully
+extracted); those getters in turn resolve through `CoreConfig`.
+Library consumers running outside an app should register a
+`register_core_config_builder` provider so the getters see their
+values.
 
 ### `train_and_score(...)`
 
@@ -232,14 +234,14 @@ The function is the per-vote hot path:
   is resolved on the fly via
   `vtscore.media.patch_embed.nearest_patch_to_box` - image-level voting
   on a patch-aware media gets the same vector as in v1.
-- Where the mix-in schedule puts zero weight on the cross-cal cut (with
-  the production schedule, at 6 labels or fewer) the cross-cal trainings
-  are skipped, because the blend would discard the result anyway. The
-  condition is asked of the schedule (`xcal_is_discarded`) rather than
-  hard-coded, so changing the schedule carries its own skip. The
-  placeholder left behind is `NO_GOOD_THRESHOLD` on every path: it is
-  normally discarded, but a degenerate GMM makes the blend fall back to
-  it, and "admit nothing" is the safe reading of "never computed".
+- The cross-cal cut is always trained now: the fold-anchored
+  population estimator needs the same per-fold models the cross-cal
+  path produces, so the earlier "skip when the blend would discard
+  it" short-circuit (and its `xcal_is_discarded` predicate) has been
+  removed. The placeholder left behind on any degenerate path is
+  `NO_GOOD_THRESHOLD` — normally discarded, but a degenerate GMM makes
+  the blend fall back to it, and "admit nothing" is the safe reading
+  of "never computed".
 - `_score_all_media` (line 187) takes one of two paths. Region-aware
   datasets flatten all `(media, region)` vectors into one tensor, run
   a single forward pass, and max-pool per media so the winning region

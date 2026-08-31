@@ -132,10 +132,6 @@
 
 <!-- item-sep -->
 
-- [ ] #2405 — Dedup colliding sibling signs in KeyphraseNamer
-
-<!-- item-sep -->
-
 - **Scale run** — urbansound8k_a or a ~20k mixed corpus to validate the
   `base_min_cluster_size ∝ n` rule and the naming-cost model.
 
@@ -145,11 +141,6 @@
   recover document-type structure (ARI flat at 0.38 on RVL-CDIP); if
   taxonomy-grade doc browsing becomes a requirement, evaluate a
   Donut/LayoutLM-class embedder as a selectable image embedder.
-
-<!-- item-sep -->
-
-- [ ] #2291 — RVL-CDIP single-class mirror
-- [ ] #2292 — Enrico URL/layout rot
 
 <!-- item-sep -->
 

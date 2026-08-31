@@ -158,12 +158,6 @@ Two measurements constrain what comes next:
 
 <!-- item-sep -->
 
-<!-- item-sep -->
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
 - **Finish the review and close the loop.** The negative review is drafted by a
   triage pass and awaits the reviewer's audit slate (`make_audit_pass.py`: the
   flags, whose disagreement rate is the triage's precision, plus an unflagged

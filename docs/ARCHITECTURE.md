@@ -198,6 +198,10 @@ VTSearch/
 │   │   ├── normalize.py            Vector normalisation shared by every scoring path
 │   │   ├── matrix.py               Cached contiguous (N, D) embedding matrix on DatasetContext;
 │   │   │                           mmap-backed via a `<pkl_stem>.embids/embmat.npy` sidecar
+│   │   ├── precomputed.py          Validation gate for externally-supplied vectors (npz manifests,
+│   │   │                           importer-provided embeddings); raises MismatchedVectorError
+│   │   ├── stack.py                Records the transformers/torch stack an embedding was produced by,
+│   │   │                           so re-embedding on a different host can detect processor / kernel drift
 │   │   └── loader.py               initialize_models, smart_preload_in_background
 │   │
 │   ├── detectors/                  Detector lifecycle; resolve→embed→train pipeline
@@ -236,7 +240,11 @@ VTSearch/
 │   │   ├── loader_demo.py          load_demo_dataset, _stamp_demo_origin
 │   │   ├── load_pipeline.py        Background-task load orchestration (gate handoff, stage sequencing)
 │   │   ├── ingest.py               Shared ingest core, driven by ingest_task.py as a background job
-│   │   ├── container.py            Dataset container (medias + metadata) written to / read from pickles
+│   │   ├── container.py            Dataset container: a ZIP with `medias.pkl` + `meta.json` and
+│   │   │                           optionally `projection.npz`; the pickle is one member of the container,
+│   │   │                           not the container itself
+│   │   ├── ingest_task.py          Background driver for the shared ingest core; registers work on the
+│   │   │                           detector_loading_tasks tracker consumed by /api/events
 │   │   ├── clipper_chain.py        Clipper/cleaner chain execution + origin stamping
 │   │   ├── archive.py              Local zip/tar/rar extraction + cached loading (local_archive origin)
 │   │   ├── archive_stream.py       Streaming archive-member reads (no full extraction)
@@ -292,6 +300,10 @@ VTSearch/
 │   │   ├── cut_rules.py            Decision-cut rules under test
 │   │   ├── calibration_metrics.py  Calibration quality metrics
 │   │   ├── metrics.py              mAP, P@k, R@k, F1 calculations
+│   │   ├── fit_quality.py          Absolute goodness-of-fit for score mixtures (#3329)
+│   │   ├── score_dumps.py          Per-media prediction dumps behind the aggregate FPR/FNR
+│   │   ├── transfer_rules.py       Transfer bias/variance estimators (#2883)
+│   │   ├── startup_schedule.py     Autopilot warm-up schedule for the voting-iterations harness
 │   │   ├── timing_benchmark.py     Step-timing benchmark feeding vtscore/timing/
 │   │   └── visualize.py            Matplotlib chart generation
 │   │
@@ -303,19 +315,22 @@ VTSearch/
 │   │   ├── pyramid.py              Stage 2: hex/square-tile zoom pyramid
 │   │   ├── params.py               Projection knobs (n_neighbors, min_dist, …) + their identity
 │   │   ├── persistence.py          Projection (de)serialization (npz <-> meta)
-│   │   └── signposts: the region "street sign" name layer —
-│   │       ├── labels.py           RegionLabelSet + the labeler signature a stale set is checked on
-│   │       ├── signpost_prep.py    Region selection + sampling ahead of captioning
-│   │       ├── signpost_captioners.py  Pluggable captioners (zero-shot tags, toponymy, …)
-│   │       ├── signpost_texts.py   Per-media-type tag vocabularies (browse_signpost_vocab override)
-│   │       ├── signpost_build.py   Builds the RegionLabelSet for a frozen layout
-│   │       └── demo_signposts.py   Pre-baked signposts shipped with the demo datasets
+│   │   ├── labels.py               Signposts — RegionLabelSet + the labeler signature a stale set is checked on
+│   │   ├── signpost_prep.py        Signposts — region selection + sampling ahead of captioning
+│   │   ├── signpost_captioners.py  Signposts — pluggable captioners (zero-shot tags, toponymy, …)
+│   │   ├── signpost_texts.py       Signposts — per-media-type tag vocabularies (browse_signpost_vocab override)
+│   │   ├── signpost_build.py       Signposts — builds the RegionLabelSet for a frozen layout
+│   │   └── demo_signposts.py       Signposts — pre-baked signposts shipped with the demo datasets
 │   │
 │   ├── concurrency/                Async jobs, memory budgeting, progress tracking
 │   │   ├── async_jobs.py           AsyncJob, JobManager, eval_jobs, learned_sort_jobs
 │   │   ├── gate.py                 ConcurrencyGate (dynamic-limit semaphore for load phases)
 │   │   ├── memory_budget.py        cap_workers_by_memory
 │   │   ├── events.py               SSE channel registry feeding /api/events (push, replaces polling)
+│   │   ├── notifications.py        Producer side of the one-shot server→client toast pipeline;
+│   │   │                           publishes on the `notification` SSE channel and is what
+│   │   │                           `PluginBase.notify()` calls when a plugin wants to surface a
+│   │   │                           user-visible message without failing the run
 │   │   └── progress.py             ProgressTracker, update_progress, cancel_dataset_progress
 │   │
 │   ├── state/                      Multi-dataset / multi-detector global state (library tier)
@@ -376,8 +391,11 @@ VTSearch/
 │   ├── state/                      App-tier state shim; re-exports vtscore.state.* and adds
 │   │                               proxy view (medias, good_votes, bad_votes, …) from state_proxies.py
 │   │
-│   ├── state_proxies.py            _ProxyDict / _ProxyList per-request resolution
-│   │                               (checks flask.g, falls back to thread-local)
+│   ├── state_proxies.py            _ProxyDict / _ProxyList that delegate to the active
+│   │                               context via vtscore.state.core.get_active_context /
+│   │                               get_active_detector_context. The flask.g check lives on
+│   │                               the resolver — vtsearch/shim/ — not here; state_proxies.py
+│   │                               is Flask-free.
 │   │
 │   ├── shim/                       Flask glue: context resolvers, persistence hooks,
 │   │                               achievement recorders, CoreConfig builder,

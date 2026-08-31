@@ -18,53 +18,12 @@ rejected.
 
 ---
 
-## Filed issues (1 still open)
+## Filed issues
 
-Severity and recommended implementer model in parentheses. Bodies — failure
-scenario, suggested fix, verifier's confirmation — live in the issues; this list
-carries pointers only.
-
-### Flask API layer
-
-
-### App core (settings, auth, CLI)
-
-
-### State & concurrency
-
-
-### Training & detectors
-
-
-### Media & embedding
-
-
-### Datasets & IO
-
-
-### Eval harness
-
-
-### Projection, plugins & security utils
-
-
-### Frontend — browse surface
-
-- [ ] #2966 — Hover state is not re-resolved when a drag pan ends, so the lifted bin / preview / right-click target go stale (low, Sonnet 5)
-
-### Frontend — dashboard & modals
-
-
-### Frontend — services & views
-
-
-### Frontend — styles & templates
-
-
-### Security
-
-
-### Tests & tooling
+All 69 confirmed defects from the audit have shipped (the closed issues, with
+their fixes, live in the tracker — grep `label:claude` closed issues in the
+audit's date range if you need the history). What still lives in this file is
+the "Improvement proposals" section below.
 
 
 ---

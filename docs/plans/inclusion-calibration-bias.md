@@ -45,9 +45,10 @@ it rather than re-simulating the vote order.
   or simply suppressing the confident framing of the Inclusion budget in the UI
   until enough votes exist. Measure with the existing harness before changing
   production; the 12-vote cell is the one that matters. This plan owns the
-  measurement spec for these options (issue #2788): the separate cold-start
-  pre-registration was folded in here once PR #2789 showed the sub-quorum window
-  it targeted is unreachable on the Autopilot flow.
+  measurement spec for these options: the separate cold-start
+  pre-registration (originally issue #2788, closed not-planned) was folded in
+  here once PR #2789 showed the sub-quorum window it targeted is unreachable
+  on the Autopilot flow.
 
 <!-- item-sep -->
 
