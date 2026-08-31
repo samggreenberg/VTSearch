@@ -6,10 +6,11 @@ merged PRs are the record of what already landed. See `CLAUDE.md` for the full
 policy (ship-and-prune, `<!-- item-sep -->` sentinels, issues-vs-plans, and the
 rule that a plan may *reference* an issue but must never duplicate its body).
 
-**Where the other archives live.** Finished measurements are written up in
-[`docs/experiments/`](../experiments/) (per-study `REPORT.md`s) and
-[`docs/reports/`](../reports/) (standalone HTML studies — see
-[its index](../reports/README.md)). A plan links *into* those; it does not restate
+**Where the other archive lives.** Finished measurements are written up in
+[`docs/experiments/`](../experiments/) — one directory per study, holding its
+`REPORT.md`, the generated tables and figures, and (for a long study) a
+self-contained `report.html` reading copy. See [its
+index](../experiments/README.md). A plan links *into* those; it does not restate
 them.
 
 This index groups plans by area and deliberately says nothing about their

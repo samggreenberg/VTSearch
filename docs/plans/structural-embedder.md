@@ -3,7 +3,7 @@
 **Status:** v1 (SIFT + VLAD + RANSAC two-stage retrieve-then-verify, across all
 scoring paths) has shipped. **Stage-1 recall is the end-to-end quality ceiling**,
 confirmed twice — a ROxford spike and then a 27k-image OpenLogo study on real
-in-the-wild photos ([report](../reports/2026-07-11-structural-search-openlogo.html)).
+in-the-wild photos ([report](../experiments/2026-07-11-structural-search-openlogo/REPORT.md)).
 The open follow-ups below are ordered by that study's leverage ranking. The living
 design spec is further down.
 
@@ -40,7 +40,7 @@ reorders what was previously planned here.
 - **Ship the SuperPoint + LightGlue backend (the module exists; nothing consumes
   it).** OpenLogo found **65% of true pairs die at the descriptor-matching step,
   before RANSAC ever runs**, and the follow-up screenshot/scanned-document study
-  ([report](../reports/2026-07-13-screenshot-iconography.html)) confirmed SIFT
+  ([report](../experiments/2026-07-13-screenshot-iconography/REPORT.md)) confirmed SIFT
   itself is the bottleneck on line art: it verifies **5.1%** of true scanned-doc
   pairs against SP+LG's **41%**, and as a ranker SP+LG reaches AP 0.395 / 0.481 on
   the two document corpora against SigLIP's 0.204 / 0.235 — **the first
