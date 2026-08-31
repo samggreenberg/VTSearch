@@ -643,7 +643,11 @@ Dynamic select options, same contract as the dataset-importer variant.
 POST /api/votes/seed-from-examples
 ```
 
-**Body:** `{"examples": [{"type": "media", "filename": "abc123.wav"}, ...]}`
+**Body:** `{"examples": [{"type": "media", "value": "abc123.wav"}, ...]}`
+
+The per-example field is named `value` (the same shape used by the
+detector-registration endpoint in `detectors.md`), not `filename` — the code
+reads `ex.get("value", "")` and silently skips anything else.
 
 Seeds good votes from a detector's media examples. For each `type: "media"`
 entry the file is read out of `example_media/` and MD5'd: a matching loaded

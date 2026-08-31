@@ -83,7 +83,7 @@ sources is always one click away.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/dataset-panel.dark.png" />
-  <img src="assets/dataset-panel.light.png" alt="The Add Dataset dialog: the Demo tab lists ready-made datasets (Downloaded and Synthetic Media), while the Files tab imports media from the server" width="720" />
+  <img src="assets/dataset-panel.light.png" alt="The Add Dataset dialog: the Demo tab lists ready-made datasets (Downloaded and Synthetic Media), while the Services and Files tabs import your own data" width="720" />
 </picture>
 
 VTSearch ships two populated categories, which boil down to two choices:
@@ -91,8 +91,8 @@ VTSearch ships two populated categories, which boil down to two choices:
 - **Demo datasets** (the **Demo** tab) - two importers, neither of which
   needs data of your own:
   - **Downloaded Media** - a catalogue of open datasets across all five
-    media types (audio, image, text, video, document), grouped under a
-    **per-media-type tab bar** so you can narrow it to just audio, just
+    media types (audio, image, text, video, document), narrowed by a
+    **per-media-type dropdown** so you can filter to just audio, just
     images, and so on. Each demo downloads on first use (~15 MB to
     ~1.2 GB depending on dataset) and is cached, so subsequent loads are
     instant.
@@ -119,13 +119,13 @@ install registers one, so on a default deployment the tab reads *"No
 importers in this category."* See `docs/EXTENDING-plugins.md` if you want to
 add one.
 
-The **Downloaded Media** catalogue is a table: pick a media type from its
-tab bar, then click the dataset you want. Each row carries a readiness
+The **Downloaded Media** catalogue is a table: pick a media type from the
+dropdown, then click the dataset you want. Each row carries a readiness
 badge telling you whether it is already cached or still needs downloading.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/importer-picker.dark.png" />
-  <img src="assets/importer-picker.light.png" alt="The Demo importer on Downloaded Media: the per-media-type tab bar and the demo-dataset catalogue with per-row readiness badges" width="720" />
+  <img src="assets/importer-picker.light.png" alt="The Demo importer on Downloaded Media: the per-media-type dropdown and the demo-dataset catalogue with per-row readiness badges" width="720" />
 </picture>
 
 Every other importer shows a small form for the fields it needs - here, the
@@ -561,8 +561,9 @@ It has two tabs:
   *average* - it surfaces items resembling what the examples have in
   common, and each example is seeded as a Good vote when the detector
   loads. When the active dataset offers more than one kind of embedder, a
-  **Detector Embedder Type** picker appears so you can choose which one
-  this detector uses: **Semantic**, **Patch Semantic**, or **Structural**.
+  **Detector Embedder Type** picker appears under the **Advanced ▾**
+  section (collapsed by default) so you can choose which one this
+  detector uses: **Semantic**, **Patch Semantic**, or **Structural**.
   That choice fixes what the detector is compatible with later. If the
   dataset's embedder can't search by text, you'll see a note that you can
   still create the detector but must label a few examples to train it.
@@ -713,10 +714,14 @@ The Settings modal (gear icon) is organised into eight tabs:
   detectors auto-run is chosen on the Dashboard's **AutoRun** tab.)
 - **Autopilot** - the guided-workflow knobs described under
   [Configuring Autopilot](#configuring-autopilot).
-- **Browser** - per-media-type look of the spatial Browse view (tile
-  shape, colour scheme, cell size), plus a **Graphics** control that
-  applies to every media type. Leave Graphics on **Auto** and VTSearch
-  picks for you: browsers without hardware acceleration get the cheaper
+- **Browser** - per-media-type look of the spatial Browse view
+  (signposts, signpost text, colormap, cell size, thumbnail border,
+  popup thumbnail size, mouse-zooms per level; the tile shape is chosen
+  automatically from the media type — squares for browsable thumbnails,
+  hexagons for audio and text — and is not a setting), plus a
+  **Graphics** control that applies to every media type. Leave Graphics
+  on **Auto** and VTSearch picks for you: browsers without hardware
+  acceleration get the cheaper
   animations automatically. Choose **Reduced** if panning or zooming the
   map still feels laggy - every animation keeps playing, but the costly
   effects (image smoothing during motion, drop shadows) are dropped.
@@ -809,7 +814,7 @@ each other - and renders it as a pannable, zoomable density map.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/browse-view.dark.png" />
-  <img src="assets/browse-view.light.png" alt="The Browse map: a pannable hex-density map of a synthetic image dataset, with the legend and minimap on the right" width="720" />
+  <img src="assets/browse-view.light.png" alt="The Browse map: a pannable square-tile density map of a synthetic image dataset, with the legend and minimap on the right" width="720" />
 </picture>
 
 Browse is a way to *see

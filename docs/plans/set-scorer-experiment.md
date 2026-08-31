@@ -9,13 +9,13 @@ of #2886 (adopt MaxPatch, drop the HAC tree from ingest).
 
 Two studies pin down why the HAC tree lost and where the remaining headroom is:
 
-- The max-patch study (`docs/experiments/max-patch/REPORT.md`): raw-patch
+- The max-patch study (`docs/experiments/2026-07-29-max-patch/REPORT.md`): raw-patch
   leaves fix the node-dilution problem — the raw-patch tree (MaxPatchHAC) has
   the **best ranking of any arm** (AP 0.492) — but it loses at the operating
   point because max-pooling ~392 candidates gives the max score a heavy
   false-positive tail. "The lever is the candidate set you pool over, not the
   structure of the tree."
-- The calibration study (`docs/experiments/calibration/REPORT.md`): the
+- The calibration study (`docs/experiments/2026-07-31-calibration/REPORT.md`): the
   raw-patch tree is provably **calibration-bottlenecked** — lowest oracle cost
   of any VG arm (0.253, vs MaxPatch's trained 0.358) with significantly larger
   regret (p = 0.013). Both pre-registered fixed re-pools failed: `topk` made it

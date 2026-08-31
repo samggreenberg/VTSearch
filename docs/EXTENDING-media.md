@@ -425,11 +425,19 @@ class CodeBertEmbedder(MediaEmbedder):
             return None
 
     # --- Optional: text embedding ---
+    # Override `_embed_text_impl` (the subclass hook), NOT `embed_text`.
+    # `embed_text` is a framework wrapper that L2-normalises the returned
+    # vector so text queries stay unit-norm — cosine and dot-product
+    # scorers downstream depend on that. A plugin that overrides
+    # `embed_text` directly and forgets to normalise silently poisons
+    # every score.
 
-    def embed_text(self, text: str) -> Optional[np.ndarray]:
-        """Embed a text query into the SAME vector space as embed_media().
+    def _embed_text_impl(self, text: str) -> Optional[np.ndarray]:
+        """Embed a text query into the SAME vector space as _embed_media_impl.
 
         Used for text-query sorting. Default returns None (no text sort).
+        The framework wraps this with `embed_text`, which handles locking
+        and L2-normalisation.
         """
         if self._model is None:
             self.load_models()
@@ -546,7 +554,7 @@ loaded via `spec_from_file_location` so discovery still works.
 
 | Method                                | Signature                                          | Description                          |
 |---------------------------------------|----------------------------------------------------|--------------------------------------|
-| `embed_text(text)`                    | `(str) -> Optional[np.ndarray]`                    | Embed a text query (default: `None`) |
+| `_embed_text_impl(text)`              | `(str) -> Optional[np.ndarray]`                    | Embed a text query (default: `None`). Override this, not `embed_text` — the public wrapper handles locking and L2-normalisation. |
 | `embed_text_enriched(text)`           | `(str) -> Optional[np.ndarray]`                    | Average over `description_wrappers`  |
 | `_embed_media_bulk_impl(medias)`      | `(list[dict]) -> list[Optional[np.ndarray]]`       | Embed a list of medias. Default loops over `embed_media` with per-item progress. Override for a native bulk path (e.g. a remote API that accepts many items per request); overrides that batch internally must emit their own progress through `self._on_progress`. |
 
@@ -554,6 +562,8 @@ loaded via `spec_from_file_location` so discovery still works.
 
 | Method                                | Signature                                                       | Description                          |
 |---------------------------------------|-----------------------------------------------------------------|--------------------------------------|
+| `embed_media(media)`                  | `(dict) -> Optional[np.ndarray]`                                | Single-item public entrypoint. Acquires `_embed_lock`, calls `_embed_media_impl`, L2-normalises the result. |
+| `embed_text(text)`                    | `(str) -> Optional[np.ndarray]`                                 | Single-item text-query entrypoint. Calls `_embed_text_impl` and L2-normalises the result. |
 | `embed_media_bulk(medias)`            | `(list[dict]) -> list[Optional[np.ndarray]]`                    | List-shaped public entrypoint. Calls `_embed_media_bulk_impl` and short-circuits empty input. |
 | `embed_medias(medias)`                | `(dict[int, dict]) -> dict[int, Optional[np.ndarray]]`          | Sugar for callers with id-keyed medias (e.g. importers). Delegates to `embed_media_bulk`, pairs vectors back to input keys. |
 
@@ -561,7 +571,18 @@ loaded via `spec_from_file_location` so discovery still works.
 
 | Property               | Returns     | Description                                |
 |------------------------|-------------|--------------------------------------------|
-| `description_wrappers` | `list[str]` | Templates with `{text}` for enriched embedding (e.g. `["the sound of {text}"]`) |
+| `description_wrappers` | `list[str]` | Templates with `{text}` for enriched embedding (e.g. `["the sound of {text}"]`). Default `[]` — see below |
+
+Whether a prompt ensemble helps is a property of the **embedder**, not of the
+media type, and the default (`[]`) is a real answer rather than an unfilled
+slot: issue #3127 measured enrichment on/off over 22 eval datasets and 560
+paired queries and found it a clear loss on `e5`, `bge`, `siglip` and `clap`
+(text enrichment lost on 45 of 45 categories), and a gain only on
+`clap_general` and `xclip`.  Issue #3341 therefore emptied the list on the four
+losers, so the *Enrich descriptions* setting is a no-op there instead of a
+small, silent cost.  Leave `description_wrappers` empty unless you have
+measured a gain on **your** checkpoint; a sibling model's templates are not
+evidence.
 
 **Instance attributes:**
 
@@ -588,7 +609,7 @@ loaded via `spec_from_file_location` so discovery still works.
 | `ImageDinov3SingleEmbedder` / `ImageDinov3PatchEmbedder` | `dinov3_single` / `dinov3_patch` | `image` | DINOv3 ViT-B/16 (facebook/dinov3-vitb16-pretrain-lvd1689m), HF-gated | 768 |
 | `ImageEupeSingleEmbedder` / `ImageEupePatchEmbedder` | `eupe_single` / `eupe_patch` | `image` | EUPE ViT-B/16 (facebookresearch/EUPE), FAIR Noncommercial Research Licence | 768 |
 | `ImageSiftVladEmbedder` | `sift_vlad` | `image` | SIFT/VLAD instance matching (classical, no text encoder) | 8192 (64 × 128) |
-| `ImageFaceEmbedder` | `face` | `image` | FaceNet identity (InceptionResnetV1, face crops, no text encoder) | 512 |
+| `FaceEmbedder` | `face` | `face` | FaceNet identity (InceptionResnetV1, face crops, no text encoder) | 512 |
 | `TextE5Embedder` | `e5` | `text` | E5-base-v2 (intfloat/e5-base-v2) | 768 |
 | `TextBGEEmbedder` | `bge` | `text` | BGE-base-en-v1.5 (BAAI/bge-base-en-v1.5) | 768 |
 | `VideoXClipEmbedder` | `xclip` | `video` | X-CLIP (microsoft/xclip-base-patch32) | 768 |
@@ -1150,9 +1171,14 @@ fresh instance. Callers should call `cleanup()` when done.
 ### File structure
 
 ```
-vtscore/datasets/sources/<your_source>/
-└── __init__.py       # Source factory + SOURCE instance (required)
+vtscore/datasets/sources/<your_source>.py     # Source factory + SOURCE instance (required)
 ```
+
+Media sources are **flat `.py` modules**, not sub-packages — the discovery scan
+(`discover_modules=True` in `vtscore/datasets/sources/__init__.py`) walks module
+files and picks up their `SOURCE` sentinel. A source built inside a subdirectory
+`__init__.py` is never seen. Every built-in source (`local_folder.py`,
+`http_archive.py`, `pullwrest.py`, …) follows this shape.
 
 ### What to implement
 
@@ -1168,7 +1194,7 @@ ingest path uses whatever is in `FetchedItem` to avoid redundant local
 work (re-embedding from disk, re-reading for file size, etc.).
 
 ```python
-# vtscore/datasets/sources/s3/__init__.py
+# vtscore/datasets/sources/s3.py
 
 from __future__ import annotations
 

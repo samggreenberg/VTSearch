@@ -2,7 +2,7 @@
 
 The rule replaced the min-cost argmin search, whose threshold provably could
 not move with inclusion whenever the calibration folds ranked their held-out
-votes perfectly (see docs/experiments/inclusion-knob/REPORT.md).  The
+votes perfectly (see docs/experiments/2026-07-27-inclusion-knob/REPORT.md).  The
 properties pinned here are the ones the replacement was chosen for:
 
 * **Monotone by construction**: the threshold is non-increasing in inclusion,

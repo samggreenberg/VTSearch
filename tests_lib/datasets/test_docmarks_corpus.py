@@ -61,6 +61,7 @@ def mods(_on_path):
         "roster": importlib.import_module("roster"),
         "shortlist": importlib.import_module("shortlist"),
         "audit": importlib.import_module("audit_to_corrections"),
+        "report": importlib.import_module("make_report"),
     }
 
 
@@ -110,6 +111,36 @@ class TestMaskToBoxes:
 
     def test_empty_mask_is_no_boxes(self, mods):
         assert mods["common"].mask_to_boxes(np.zeros((50, 50), dtype=np.uint8)) == []
+
+    def test_inverted_masks_are_detected_not_swallowed(self, mods):
+        # SPODS ships 1-bit masks with the mark BLACK on white paper. Read as
+        # "non-zero is foreground" this yields one page-sized box per page --
+        # which does not crash, it silently produces 1,088 identical rectangles
+        # that cluster into a single class and look like a working corpus. On the
+        # real data that is exactly what happened: 2,176 marks, 1 class.
+        mask = np.full((200, 200), 255, dtype=np.uint8)
+        mask[10:40, 10:50] = 0  # the mark, dark on light
+        boxes = mods["common"].mask_to_boxes(mask, min_area_frac=0.0)
+        assert boxes == [(10, 10, 40, 30)]
+
+    def test_normal_polarity_still_works(self, mods):
+        mask = np.zeros((200, 200), dtype=np.uint8)
+        mask[10:40, 10:50] = 255
+        assert mods["common"].mask_to_boxes(mask, min_area_frac=0.0) == [(10, 10, 40, 30)]
+
+    def test_polarity_can_be_forced(self, mods):
+        # A genuinely dense mask (body text on a full page) can be forced rather
+        # than left to the minority heuristic.
+        mask = np.zeros((100, 100), dtype=np.uint8)
+        mask[0:80, :] = 255  # 80% lit: "auto" would invert this
+        auto = mods["common"].mask_to_boxes(mask, min_area_frac=0.0, polarity="auto")
+        forced = mods["common"].mask_to_boxes(mask, min_area_frac=0.0, polarity="light")
+        assert auto == [(0, 80, 100, 20)]
+        assert forced == [(0, 0, 100, 80)]
+
+    def test_an_unknown_polarity_is_refused(self, mods):
+        with pytest.raises(ValueError, match="unknown polarity"):
+            mods["common"].mask_to_boxes(np.zeros((10, 10), dtype=np.uint8), polarity="sideways")
 
 
 class TestMergeOverlapping:
@@ -604,14 +635,37 @@ class TestTiers:
 
 
 class TestClustering:
-    def test_phash_is_deterministic_and_64_bit(self, mods):
+    def test_phash_is_deterministic_and_sized_by_the_block(self, mods):
         from PIL import Image
 
         rng = np.random.default_rng(42)
         img = Image.fromarray(rng.integers(0, 255, (120, 90), dtype=np.uint8))
         a, b = mods["cluster"].phash(img), mods["cluster"].phash(img)
-        assert a.shape == (64,)
+        assert a.shape == (mods["cluster"].PHASH_BLOCK ** 2,)
         assert np.array_equal(a, b)
+
+    def test_the_hash_is_wide_enough_to_separate_two_ringed_stamps(self, mods):
+        # 64 bits could not: a book stamp and an elephant stamp, both circular
+        # with a heavy border, merged into one class of 32 and no threshold
+        # split them. A stamp's ring is low-frequency and its interior is not,
+        # so an 8x8 block encodes "is a round stamp" rather than which one.
+        assert mods["cluster"].PHASH_BLOCK >= 16
+
+    def test_the_radial_taper_damps_the_border_not_the_middle(self, mods):
+        arr = np.full((64, 64), 10.0)
+        arr[2, 2] = 250.0  # corner ink, where a border ring lives
+        arr[32, 32] = 250.0  # centre ink, where the mark's identity lives
+        out = mods["cluster"]._radial_taper(arr)
+        centre_kept = (out[32, 32] - arr.mean()) / (250.0 - arr.mean())
+        corner_kept = (out[2, 2] - arr.mean()) / (250.0 - arr.mean())
+        assert centre_kept > 0.99
+        assert corner_kept < 0.01
+
+    def test_the_taper_leaves_a_flat_crop_flat(self, mods):
+        # Fading toward the crop's own mean, not toward white: fading to white
+        # would replace the border ring with a different strong edge.
+        arr = np.full((32, 32), 7.5)
+        assert np.allclose(mods["cluster"]._radial_taper(arr), 7.5)
 
     def test_phash_is_scale_invariant(self, mods):
         from PIL import Image
@@ -672,35 +726,67 @@ class TestClustering:
         labels = mods["cluster"].single_linkage(dist, 0.2, cannot_link=[(0, 1)])
         assert labels[0] != labels[1]
 
-    def test_separations_resolve_by_page_id_not_row_index(self, mods):
+    def test_pairs_resolve_by_page_id_not_row_index(self, mods):
         MarkRef = mods["cluster"].MarkRef
         refs = [
             MarkRef(0, 0, "spods/001", "logo", (0, 0, 10, 10)),
             MarkRef(1, 0, "spods/002", "logo", (0, 0, 10, 10)),
         ]
-        assert mods["cluster"].resolve_separations(refs, [("spods/001", "spods/002")]) == [(0, 1)]
+        assert mods["cluster"].resolve_pairs(refs, [("spods/001", "spods/002")]) == [(0, 1)]
 
-    def test_a_separation_naming_a_dropped_page_is_skipped(self, mods):
+    def test_a_pair_naming_a_dropped_page_is_skipped(self, mods):
         MarkRef = mods["cluster"].MarkRef
         refs = [MarkRef(0, 0, "spods/001", "logo", (0, 0, 10, 10))]
         # Pages come and go with tier budgets; a stale pair must not refuse the
         # build.
-        assert mods["cluster"].resolve_separations(refs, [("spods/001", "spods/999")]) == []
+        assert mods["cluster"].resolve_pairs(refs, [("spods/001", "spods/999")]) == []
 
-    def test_separations_round_trip_and_deduplicate(self, mods, tmp_path):
-        path = tmp_path / "separations.json"
-        mods["cluster"].save_separations(
-            [
-                {"left_page_id": "b", "right_page_id": "a"},
-                {"left_page_id": "a", "right_page_id": "b"},
-            ],
+    def test_adjudications_round_trip_and_deduplicate(self, mods, tmp_path):
+        path = tmp_path / "adjudications.json"
+        mods["cluster"].save_adjudications(
+            [{"left_page_id": "d", "right_page_id": "c"}],
+            [{"left_page_id": "b", "right_page_id": "a"}, {"left_page_id": "a", "right_page_id": "b"}],
             path,
         )
+        same, different = mods["cluster"].load_adjudications(path)
         # (a, b) and (b, a) are one decision, not two.
-        assert mods["cluster"].load_separations(path) == [("a", "b")]
+        assert same == [("c", "d")]
+        assert different == [("a", "b")]
 
-    def test_no_separations_file_means_no_constraints(self, mods, tmp_path):
-        assert mods["cluster"].load_separations(tmp_path / "missing.json") == []
+    def test_no_adjudication_file_means_no_constraints(self, mods, tmp_path):
+        assert mods["cluster"].load_adjudications(tmp_path / "missing.json") == ([], [])
+
+    def test_a_pair_ruled_both_ways_is_refused(self, mods, tmp_path):
+        # Storing both would let whichever is applied last silently win, and the
+        # loser is a human decision nobody would know had been discarded.
+        with pytest.raises(ValueError, match="both same and different"):
+            mods["cluster"].save_adjudications(
+                [{"left_page_id": "a", "right_page_id": "b"}],
+                [{"left_page_id": "a", "right_page_id": "b"}],
+                tmp_path / "adjudications.json",
+            )
+
+    def test_must_link_joins_marks_the_threshold_would_split(self, mods):
+        # The operating strategy: run strict so the partition over-splits, then
+        # repair by hand. A merge has to beat the distance, or the repair does
+        # not survive the next re-cluster.
+        dist = np.array([[0.0, 0.9], [0.9, 0.0]])
+        assert mods["cluster"].single_linkage(dist, 0.1) == [0, 1]
+        assert mods["cluster"].single_linkage(dist, 0.1, must_link=[(0, 1)]) == [0, 0]
+
+    def test_a_merge_and_a_separation_that_conflict_are_refused(self, mods):
+        dist = np.array([[0.0, 0.9], [0.9, 0.0]])
+        with pytest.raises(ValueError, match="both same and different"):
+            mods["cluster"].single_linkage(dist, 0.1, must_link=[(0, 1)], cannot_link=[(0, 1)])
+
+    def test_a_merge_carries_its_group_across_a_separation(self, mods):
+        # a must-link b; c is separated from a. c must therefore stay apart from
+        # b too, or the separation is honoured only against the row that
+        # happened to be named in it.
+        dist = np.array([[0.0, 0.9, 0.01], [0.9, 0.0, 0.01], [0.01, 0.01, 0.0]])
+        labels = mods["cluster"].single_linkage(dist, 0.1, must_link=[(0, 1)], cannot_link=[(0, 2)])
+        assert labels[0] == labels[1]
+        assert labels[2] != labels[0]
 
     def test_merge_order_is_independent_of_row_order(self, mods):
         # Once constraints can block a merge, "which merge happened first"
@@ -842,6 +928,54 @@ class TestManifest:
         mods["common"].write_manifest([_page(mods, "spods/1", "spods")], path)
         for line in path.read_text().splitlines():
             json.loads(line)
+
+
+# ------------------------------------------------------------------ report
+
+
+class TestReport:
+    def test_scale_section_bands_against_the_measured_floor(self, mods, tmp_path):
+        from PIL import Image
+
+        img = tmp_path / "p.png"
+        Image.new("RGB", (1000, 1400), "white").save(img)
+        # One sub-floor mark and three above it.
+        pages = [
+            _page(mods, "spods/001", "spods", [("logo", (0, 0, 20, 18), "spods/a", "gt")], path=str(img)),
+            _page(mods, "spods/002", "spods", [("logo", (0, 0, 90, 70), "spods/a", "gt")], path=str(img)),
+            _page(mods, "spods/003", "spods", [("logo", (0, 0, 200, 150), "spods/a", "gt")], path=str(img)),
+            _page(mods, "spods/004", "spods", [("logo", (0, 0, 300, 200), "spods/a", "gt")], path=str(img)),
+        ]
+        html = mods["report"].section_scale(pages, {})
+        assert "32px" in html
+        # One of four marks is below the floor; the share must be reported, not
+        # buried, because a class built from sub-floor instances measures the
+        # floor rather than the method.
+        assert "25% of labelled marks fall below" in html
+
+    def test_scale_section_is_empty_without_labelled_marks(self, mods):
+        assert mods["report"].section_scale([_page(mods, "u/1", "ucsf")], {}) == ""
+
+    def test_overview_warns_when_nothing_is_verified(self, mods):
+        classes = {"spods/a": {"n_instances": 3, "audit": {"membership_verified": False}}}
+        html = mods["report"].section_overview([_page(mods, "spods/1", "spods")], classes, {})
+        assert "Nothing here is verified yet" in html
+
+    def test_overview_drops_the_warning_once_verified(self, mods):
+        classes = {"spods/a": {"n_instances": 3, "audit": {"membership_verified": True}}}
+        html = mods["report"].section_overview([_page(mods, "spods/1", "spods")], classes, {})
+        assert "Nothing here is verified yet" not in html
+
+    def test_tables_escape_their_content(self, mods):
+        html = mods["report"]._table(["c"], [["<script>x</script>"]])
+        assert "<script>" not in html
+        assert "&lt;script&gt;" in html
+
+    def test_every_provenance_the_builder_emits_has_a_gloss(self, mods):
+        # A provenance with no explanation in the report is a label the reader
+        # cannot interpret, which defeats the point of tracking provenance.
+        emitted = {"gt", "clustered", "clustered_band", "candidate", "synthetic"}
+        assert emitted <= set(mods["report"]._PROVENANCE_MEANING)
 
 
 # ------------------------------------------------------------- embed cells

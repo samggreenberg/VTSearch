@@ -531,7 +531,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             arms=arms,
             baseline=baseline,
             title="calibration_fraction (#3287)",
-            subtitle="Colour = calibration_fraction · one panel per geometry × category",
+            subtitle="One chart per calibration_fraction × geometry × category; tick 'overlay on one chart' to compare them directly.",
         )
 
     write_report(out, frame, by_band, paired, vd, vg, spread, trap, counts, prov, figs)

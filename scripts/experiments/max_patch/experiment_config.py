@@ -23,7 +23,7 @@ single-vector baseline.
 **The ``max_hac`` arm the study ran against is gone.**  It was a delegation to
 the production HAC region tree, which #2886 deleted when it adopted MaxPatch, so
 the arm cannot be re-run from this tree; its published numbers live in
-``docs/experiments/max-patch/REPORT.md`` and ``analyze.py`` still labels
+``docs/experiments/2026-07-29-max-patch/REPORT.md`` and ``analyze.py`` still labels
 ``max_hac`` rows found in archived result CSVs.
 """
 
@@ -50,6 +50,15 @@ SINGLE_STYLES = ["whole_image"]
 N_CATEGORIES = int(os.environ.get("MAXPATCH_N_CATEGORIES", "6"))
 SEEDS = list(range(int(os.environ.get("MAXPATCH_N_SEEDS", "4"))))
 MAX_STEPS = int(os.environ.get("MAXPATCH_MAX_STEPS", "150"))
+
+#: Whether the simulated user's opening query is embedded through the
+#: embedder's ``description_wrappers`` ensemble ("Enrich Sort Descriptions") or
+#: plainly.  Tracks the app's shipped default for ``enrich_descriptions``
+#: (``vtsearch/settings_models.py``), which is ``False``; passed explicitly at
+#: every ``embed_text_query`` call so the opening this harness measures is the
+#: one a real user sees rather than whatever the library happens to default to
+#: (#3341).  The sibling knob is ``calibration/experiment_config.SEED_ENRICH``.
+SEED_ENRICH = os.environ.get("MAXPATCH_SEED_ENRICH", "0") == "1"
 
 # --- Startup-sort exemplars ---
 # Per category, this many candidate exemplars are cropped + embedded at prepare

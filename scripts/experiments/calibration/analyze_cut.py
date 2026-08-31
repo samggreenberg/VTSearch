@@ -28,7 +28,7 @@ scales with that offset, and that the prior-free crossing beats both incumbents.
 **The tail sweep** (#2881) rides along in both halves: ``tail_alpha_stability``
 says where the oracle cut sits in the fitted Bad tail, and ``tail_alpha_curve``
 says what it costs to aim there, as a function of the one constant.  Its
-pre-registration is ``docs/experiments/gmm-cut/PREREG-2881.md``.
+pre-registration is ``docs/experiments/2026-08-04-gmm-cut/PREREG-2881.md``.
 
 Writes ``results/summary_cut.json``, ``results/agg/cut_*.csv``,
 ``results/figures/cut_*.png`` and a ``results/REPORT_CUT.md`` draft.
@@ -141,7 +141,10 @@ def tail_alpha_of(variant: str) -> float | None:
 #: telling the analyzer, and :func:`unclassified_variants` says so — see there
 #: for why that has to be loud rather than silent.
 NON_CANDIDATES: tuple[str, ...] = ("xcal_only",)
-NON_CANDIDATE_PREFIXES: tuple[str, ...] = ("image_",)
+#: ``skyline_`` is here for the same reason ``ORACLE_VARIANTS`` exists: the #3322
+#: skyline arms read ground-truth labels the app can never see, so they are
+#: diagnostics that decompose the cost rather than rules competing to ship.
+NON_CANDIDATE_PREFIXES: tuple[str, ...] = ("image_", "skyline_")
 
 #: The variant that *reconstructs* the production rule of #2836's era.  Kept as
 #: the historical contrast, but it is a reconstruction and reconstructions go

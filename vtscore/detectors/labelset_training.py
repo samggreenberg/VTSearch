@@ -579,6 +579,35 @@ def build_xy_from_labelset(
     return X_list, y_list, groups, score_rows
 
 
+def labeled_media_ids(labelset: LabelSet, snap: dict[int, dict[str, Any]] | None) -> set[int]:
+    """The media ids in *snap* that carry a good/bad label in *labelset*.
+
+    These are the in-dataset media the detector trains on, and therefore the
+    ids the fold-anchored threshold must drop from its haystacks (issue #3308;
+    see :func:`vtscore.detectors.training._fused_threshold`).  Cross-dataset
+    elements that resolve to nothing in *snap* are absent from the haystack
+    already, so they contribute nothing here.
+    """
+    if not snap:
+        return set()
+    from vtscore.detectors.labelset_elements import resolve_current_dataset_cid  # noqa: PLC0415
+    from vtscore.state import build_media_lookup  # noqa: PLC0415
+
+    # ``build_media_lookup`` reads ``media["id"]``; every Flask-loaded snap
+    # carries it equal to the dict key, but minimal snaps (tests, embedded
+    # callers) may not - default it to the key rather than requiring it.
+    lookups = build_media_lookup({cid: {**m, "id": m.get("id", cid)} for cid, m in snap.items()})
+
+    ids: set[int] = set()
+    for elem in labelset.elements:
+        if elem.label not in ("good", "bad"):
+            continue
+        cid = resolve_current_dataset_cid(elem, lookups)
+        if cid is not None and cid in snap:
+            ids.add(cid)
+    return ids
+
+
 # ---------------------------------------------------------------------------
 # Cross-dataset local features (structural / SIFT-VLAD detectors)
 # ---------------------------------------------------------------------------
@@ -798,6 +827,7 @@ def train_from_labelset(
         det_ctx=det_ctx,
         groups=groups,
         score_rows=score_rows,
+        voted_ids=labeled_media_ids(labelset, snap),
     )
     det_ctx.model = mlp
     det_ctx.threshold = threshold
@@ -844,6 +874,7 @@ def labelset_train_and_score(
         det_ctx=det_ctx,
         groups=groups,
         score_rows=score_rows,
+        voted_ids=labeled_media_ids(labelset, clips_dict),
     )
 
     # Stage-2 structural re-rank for a saved structural detector reloaded

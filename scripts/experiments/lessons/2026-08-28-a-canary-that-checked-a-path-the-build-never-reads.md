@@ -44,7 +44,10 @@ source-level assertion fails if the builder ever spells `val2017.zip` inline
 again. That last one is the real guard — it pins the *identity*, not the
 behaviour.
 
-**Related, and still only advice.** `box_sheets.py` reads COCO pixels from the
-same non-existent `COCO_IMAGES` directory. It does not error; `path_of` simply
-returns `None` for every media and the sheet comes out empty. Nobody has asked
-it for a COCO sheet yet. Filed separately.
+**Related, and fixed since.** `box_sheets.py` read COCO pixels from the same
+non-existent `COCO_IMAGES` directory. It did not error; `path_of` simply
+returned `None` for every media and the sheet came out empty. Filed as #3305 and
+repaired the same day: it resolves through `pc.COCO_VAL_ZIP` (directories first,
+then archives read member-wise) and now *fails* when no image source resolves,
+because an empty contact sheet is the one output that looks like an answer and
+contains none.

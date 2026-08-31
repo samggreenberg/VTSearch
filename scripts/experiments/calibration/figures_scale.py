@@ -25,6 +25,11 @@ import os
 from collections import defaultdict
 from pathlib import Path
 
+# One wrapped-panel-grid helper, not two: both figure scripts face the same
+# problem (a row of panels that grows with the arm count) and a second copy is
+# a second place for the wrap rule to be different.
+from figures_overview import legend_in_spare, panel_grid
+
 BANDS = ("small", "medium", "large")
 COLORS = {"small": "#c2410c", "medium": "#0f766e", "large": "#3730a3"}
 
@@ -95,8 +100,9 @@ def main() -> int:
 
     # 1 + 2: trajectories, averaged and per-run
     for per_run in (False, True):
-        fig, axes = plt.subplots(1, len(arms), figsize=(5.2 * len(arms), 4.2), sharey=True)
-        axes = axes if len(arms) > 1 else [axes]
+        # Wrapped at three: five arms in one row is a 26-inch figure, and a
+        # report renders it scaled to the column width (see `panel_grid`).
+        fig, axes, leftmost, spare = panel_grid(len(arms), 5.2, 4.2)
         for ax, arm in zip(axes, arms):
             for b in BANDS:
                 if per_run:
@@ -111,8 +117,10 @@ def main() -> int:
             ax.set_title(arm, fontsize=10)
             ax.set_xlabel("votes spent")
             ax.grid(alpha=0.25, linewidth=0.5)
-        axes[0].set_ylabel("cost (lower is better)")
-        axes[0].legend(title="band", fontsize=9)
+        for axi in leftmost:
+            axi.set_ylabel("cost (lower is better)")
+        if not legend_in_spare(axes, spare, title="band", fontsize=9):
+            axes[0].legend(title="band", fontsize=9)
         fig.suptitle(
             "Cost as votes are spent, by target size band"
             + (" — one line per run" if per_run else " — mean over runs"),

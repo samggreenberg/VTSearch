@@ -242,7 +242,7 @@ See [EXTENDING-plugins.md § Adding a Settings Exporter](EXTENDING-plugins.md#ad
 
 See [EXTENDING-media.md § Adding a Media Source](EXTENDING-media.md#adding-a-media-source).
 
-- [ ] Create `vtscore/datasets/sources/<name>/__init__.py`
+- [ ] Create `vtscore/datasets/sources/<name>.py` (media sources are flat `.py` modules, not sub-packages)
 - [ ] Create a `MediaSource` subclass with `list_items()`, `fetch_item()`, `resolve_path()`
 - [ ] Create a factory class with `name` and `create_from_origin(origin)` method
 - [ ] Expose `SOURCE = YourFactory()` at module level
@@ -254,7 +254,7 @@ See [EXTENDING-media.md § Adding a Media Type](EXTENDING-media.md#adding-a-medi
 
 - [ ] Create `vtscore/media/<type>/` directory with `__init__.py`, `media_type.py`
 - [ ] Subclass `MediaType` and implement all abstract properties and methods
-- [ ] Expose `MEDIA_TYPE` and `CLIPPERS` sentinels in `__init__.py` (embedders are discovered per-module; see the embedder checklist below)
+- [ ] Expose `MEDIA_TYPE`, `CLIPPERS`, and (if you ship them) `CLEANERS` sentinels in `__init__.py` (embedders are discovered per-module; see the embedder checklist below)
 - [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
 - [ ] Override `pickle_extra_fields` if you use custom clip keys
 - [ ] Test: import a folder of your media type, verify clips appear and are sortable
@@ -266,7 +266,7 @@ See [EXTENDING-media.md § Adding a Media Embedder](EXTENDING-media.md#adding-a-
 - [ ] Create `vtscore/media/<type>/embedder.py` (or `embedder_<variant>.py` for alternatives)
 - [ ] Subclass `MediaEmbedder`, implement `name`, `media_type_id`, `_load_models_impl()`, `embed_media()`
 - [ ] Optionally implement `embed_text()` for text-query sorting
-- [ ] Optionally set `description_wrappers` for enriched text embedding
+- [ ] Leave `description_wrappers` empty unless you have *measured* that a prompt ensemble beats the typed query on your checkpoint (see [EXTENDING-media.md](EXTENDING-media.md#adding-a-media-embedder))
 - [ ] Expose `EMBEDDER = YourEmbedder()` at module level (auto-discovery picks it up; no `__init__.py` edits needed; symlinked files are supported)
 - [ ] Test: load a dataset and verify embeddings are generated
 

@@ -42,7 +42,7 @@ repos:
         # (200 dpi) and a multi-panel comparison runs ~1 MB, which the old cap
         # rejected - pushing studies to downsample their evidence to satisfy a
         # guard aimed at something else entirely.  Raised again from 2 MB for the
-        # self-contained study pages in `docs/reports/`: one carries every figure
+        # self-contained `report.html` study pages: one carries every figure
         # and every photograph inline, which is the whole point of the format,
         # and the alternative was degrading the evidence to fit the guard.
         args: ["--maxkb=4000"]

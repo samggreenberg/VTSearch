@@ -128,13 +128,16 @@ class TextBGEEmbedder(MediaEmbedder):
 
     @property
     def description_wrappers(self) -> list[str]:
-        return [
-            "a document about {text}",
-            "an article discussing {text}",
-            "{text}",
-            "a text passage about {text}",
-            "writing on the topic of {text}",
-        ]
+        """No wrappers: every template measured worse than the typed query.
+
+        #3127 ran the five document-style templates over the text eval corpora
+        and enrichment lost on **45 of 45 categories** for both text
+        embedders (``bge``: -0.059 +/- 0.009 AP).  Retrieval-tuned sentence encoders
+        are trained on queries that already read like the user's typed one, so
+        padding them with "a document about ..." moves the query off the
+        manifold rather than onto it.  See #3341.
+        """
+        return []
 
     def _embed_media_impl(self, media: dict) -> Optional[np.ndarray]:
         if self._model is None:

@@ -13,7 +13,7 @@
 # get analysed as one.
 #
 # Pre-registration -- read it before reading the output:
-#   docs/experiments/gmm-cut/PREREG-2881.md
+#   docs/experiments/2026-08-04-gmm-cut/PREREG-2881.md
 #
 # The theory bench is deliberately not launched.  Its CANDIDATE_RULES list does
 # not carry the tail family, and #2846's recommendation was to stop trusting the

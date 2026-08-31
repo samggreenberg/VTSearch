@@ -8,7 +8,7 @@ gated on the experiment's decision rules below.
 The threshold's calibration votes are not drawn from the haystack distribution —
 they are chosen by the detector's own sort, the most biased sampler available.
 The selection-bias study
-([`docs/experiments/inclusion-knob/SELECTION-BIAS.md`](../experiments/inclusion-knob/SELECTION-BIAS.md))
+([`docs/experiments/2026-07-27-inclusion-knob/SELECTION-BIAS.md`](../experiments/2026-07-27-inclusion-knob/SELECTION-BIAS.md))
 measured what that costs, and the answer splits cleanly by **labeling flow**:
 
 - **Autopilot votes are safe.** Margin sampling (Hard phase) pulls calibration

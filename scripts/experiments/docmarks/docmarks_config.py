@@ -159,7 +159,26 @@ CLUSTER_BACKEND = os.environ.get("VTS_DOCMARKS_CLUSTER_BACKEND", "phash")
 
 #: Agglomerative merge threshold, in the backend's own distance units
 #: (normalised Hamming for ``phash``, cosine distance for ``siglip``).
-CLUSTER_THRESHOLD = float(os.environ.get("VTS_DOCMARKS_CLUSTER_THRESHOLD", "0.18"))
+#:
+#: **Deliberately strict, because the two errors do not cost the same.** An
+#: over-split shows up in the audit as one obvious pair of near-identical
+#: classes and costs one merge click; an over-merge is invisible, and quietly
+#: makes a class mean two things for as long as the corpus lives.  So the
+#: threshold is set below where merging starts and the repair is done by hand,
+#: with every merge recorded in ``adjudications.json`` and replayed on each
+#: re-cluster so the work is done once.
+#:
+#: 0.16 is read off a sweep of the real corpus (2,096 SPODS marks, 256-bit
+#: hash).  Between 0.08 and 0.16 the largest component is pinned at 60 marks
+#: (2.9%) while usable classes climb from 36 to 51; it starts merging at 0.18,
+#: reaches 28% at 0.22 and chains outright by 0.26.  0.16 is the top of the
+#: flat region — the most the clustering can assemble before it starts
+#: assembling things that do not belong together.
+#:
+#: Re-run ``tune_clustering.py`` whenever the source set or the descriptor
+#: changes; this number is a property of the data, and it does not travel. It
+#: moved from 0.05 when the hash went from 64 to 256 bits.
+CLUSTER_THRESHOLD = float(os.environ.get("VTS_DOCMARKS_CLUSTER_THRESHOLD", "0.16"))
 
 # --------------------------------------------------------------------------
 # Synthesis (layer 3)

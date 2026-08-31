@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import math
 import time
+from collections.abc import Container, Sequence
 from dataclasses import dataclass
 from typing import Any, NamedTuple
 
@@ -69,7 +70,7 @@ _GMM_MAX_SAMPLES = 50_000
 
 #: The shipped Train/Calibrate split of each calibration fold, per the **space
 #: the detector learns in** (issue #3287 measured them separately; see
-#: ``docs/experiments/calibration-fraction-3287/REPORT.md``).  The value is the
+#: ``docs/experiments/2026-08-27-calibration-fraction-3287/REPORT.md``).  The value is the
 #: **Calibrate** share, so ``0.3`` means 70% Train / 30% Calibrate.
 #:
 #: * ``single_vector`` - one embedding vector per media.  Spending more votes
@@ -166,49 +167,73 @@ def inclusion_cost_weights(inclusion_value: int) -> tuple[float, float]:
 #: moves it *up* the ranking, and so returns *more* positives.
 #:
 #: ``-1`` is the only value that passes the pre-registered ship rule in **all
-#: **two** binary environments measured, and this constant is deliberately **not**
-#: gated by voting mode.  The history is worth keeping, because the first answer
-#: was bigger and did not survive:
+#: **four** environments measured, and this constant is deliberately **not**
+#: gated by voting mode.  The history is worth keeping, because the value moved
+#: twice before it settled:
 #:
 #: * ``coco_val x siglip2`` (binary, PR #2876) found an interior optimum at
 #:   ``-3``: positives per 100 votes 4 -> 18, final cost 0.137 -> 0.129 (95% CI
 #:   [-0.025, -0.005]), average precision 0.696 -> 0.817.  #2878 shipped it.
 #: * ``visual_genome_m x siglip`` (binary, PR #2891) **rejected** ``-3``: cost CI
-#:   [+0.003, +0.022] against a +0.01 tolerance.  Only ``-1`` passed.
+#:   [+0.003, +0.022] against a +0.01 tolerance.  #2909 cut the value to ``-1``.
+#: * ``visual_genome_m x dinov3_patch`` (region, PR #2909) was **voided** by
+#:   #2943 - see ``REPORT_REGION_VOTING.md``'s banner.
+#: * ``vg_scale_any`` (PR #3318, #2877 on the pile) measured three environments
+#:   at once, on **verified labels at 7.1% prevalence in every cell**, and
+#:   restores ``-3``.
 #:
-#: So the disagreement runs along the *environment*, not the voting mode: the
-#: largest split (``-3`` ships on COCO, fails on VG) is **within** binary voting,
-#: which no mode gate can reach - and that leg alone is what sets this value.
-#: ``-1`` is the value with no measured harm in either environment.  Do not raise
-#: it without a further environment; do not gate it by mode without evidence that
-#: mode - and not label supply - is the axis.
+#: **Why ``-3`` and not ``-1``.**  Against the shipped ``-1``, paired on the same
+#: cells, ``-3`` improves *every* endpoint at once on the shipped default arm
+#: (``siglip x whole_image``, 192 pairs): final cost **-0.020** (95% CI
+#: [-0.029, -0.011]), positives per 100 votes **11 -> 20**, AP **+0.045**, oracle
+#: cost -0.011, and deep-spike incidence unchanged at 0.0%.  It is not a trade.
+#: On ``siglip+dinov3_patch x max_patch`` (real region voting) ``-3`` is free:
+#: +12 positives, cost CI [-0.001, +0.010], no spike rise.
 #:
-#: **The region-voting check is still OUTSTANDING.**  It was run (PR #2909) and
-#: its result is **void**: that run predates #2943, which fixed the harness
-#: scoring the acquisition pool by each media's whole-image vector while cutting
-#: the threshold on region max-pooled scores.  On a patch dataset that put the
-#: cut above the entire pool - pinned on 39% of ``k=-3`` steps against 1.5% of
-#: the ``k=+2`` falsifier - so the aggressive arms were clamped and the lever was
-#: partly inert exactly where the decision needed it live.  The two binary
-#: environments are unaffected (``patch_grid`` on 0/4193, so they scored and cut
-#: in one space).  Read the banner on
-#: ``docs/experiments/acquisition-inclusion/REPORT_REGION_VOTING.md`` before
-#: citing anything from that run, and re-run it before concluding anything about
-#: voting mode.
+#: **Why #2891's rejection does not block it.**  That environment is
+#: ``visual_genome_m``, whose free-text labels have measured recall **0.76** over
+#: these classes (``scripts/experiments/pile/coco_anchor.py``).  Roughly a
+#: quarter of true positives are labelled negative there, so an arm that finds
+#: *more* true positives is charged for them as false alarms - a bias against
+#: precisely the aggressive arms under test.  ``vg_scale_any`` exists to remove
+#: it (COCO-exhaustive labels plus a human review pass), and on it ``-3`` passes.
+#: The pattern fits: every clean-label environment adopts ``-3``; the one noisy
+#: one rejects it.  This is a well-supported explanation, not a proven cause -
+#: #2877's cells are archived and the counterfactual was not re-run.
 #:
-#: **The known cost of this conservatism**: on a starved COCO-like environment
-#: ``-1`` finds 6 positives per 100 votes where ``-3`` finds 18.  Under binary
-#: voting the benefit is sharply concentrated in *starved* cells and turns
-#: negative in well-supplied ones (measured on arm-independent axes: AP response
-#: slope -0.0207 on log prevalence, CI [-0.0259, -0.0159]).  A **supply-dependent**
-#: offset - aggressive while positives are scarce, relaxing as they accumulate -
-#: is the way to recover COCO's gain without charging the other environments'
-#: tails, and it subsumes the voting-mode question entirely (#2910).
+#: **The one environment that wants ``-1`` is not a mode.**  A patch embedder
+#: with no box supervision (``siglip+dinov3_patch x whole_image`` - a DINOv3
+#: detector whose users vote whole images instead of dragging boxes) rejects
+#: ``-2``/``-3``/``-4`` on deep-spike incidence, 4.5% -> 22.7/28.8/35.6%
+#: (p<1e-4), while their *cost* deltas are negative.  That arm is not reachable
+#: today (DINOv3 does not ship), and it is **not** what a voting-mode gate would
+#: select: the two *binary* environments disagree with each other more than the
+#: modes do.  If a patch embedder ever ships, gate on the **scoring geometry**
+#: that actually resolves (a patch embedder falling back to ``whole_image``), not
+#: on how the user voted.
 #:
-#: See ``docs/experiments/acquisition-inclusion/REPORT.md`` (COCO) and
-#: ``REPORT_SECOND_ENVIRONMENT.md`` (VG binary) for the two live environments,
-#: and ``REPORT_REGION_VOTING.md`` for the voided region run and how to redo it.
-ACQUISITION_INCLUSION_OFFSET = -1
+#: **The mechanism is threshold stability, not cost.**  Measured within one
+#: embedder on the same 264 cells, region voting takes oracle cost 0.382 -> 0.218
+#: and AP 0.517 -> 0.762, and the 8x spike rise that rejects ``-3`` under
+#: whole-image scoring does not happen at all (2.7% -> 1.5%, p=0.51).  Aggressive
+#: acquisition destabilises the cut when the ranking is poorly separated; it is
+#: safe when the ranking separates well.
+#:
+#: **Not measured past ``-4``.**  On the shipped default ``-4`` is at least as
+#: good as ``-3`` on every endpoint (+18 positives, AP +0.057, cost -0.017) and
+#: the trend has not turned - so ``-4`` is the edge of the grid, not an optimum.
+#: It is not shipped because it costs a small but resolvable regression under
+#: region voting (+0.006, CI [+0.001, +0.013]) where ``-3`` is free.  Extending
+#: the grid to ``-5``/``-6`` on the shipped arm is filed as #3319.
+#:
+#: Everything here is measured at a **100-click horizon**, as every prior
+#: environment was.  Nothing says what this value does in the deep regime.
+#:
+#: See ``docs/experiments/2026-08-07-acquisition-inclusion/REPORT_PILE_2877.md`` (the three
+#: environments this value rests on), ``REPORT.md`` (COCO), and
+#: ``REPORT_SECOND_ENVIRONMENT.md`` / ``REPORT_REGION_VOTING.md`` for the two
+#: superseded readings.
+ACQUISITION_INCLUSION_OFFSET = -3
 
 
 def acquisition_inclusion(inclusion_value: int, offset: int = ACQUISITION_INCLUSION_OFFSET) -> int:
@@ -219,7 +244,7 @@ def acquisition_inclusion(inclusion_value: int, offset: int = ACQUISITION_INCLUS
     same discipline :func:`inclusion_cost_weights` follows.  *offset* exists for
     the harness's arms; production always takes the default.
 
-    An *offset*, not an absolute value.  The run that measured ``-3`` held
+    An *offset*, not an absolute value.  The runs that measured ``-3`` held
     reporting at inclusion 0, where the two readings coincide; away from 0 only
     the offset preserves what was measured, because the mechanism is the *gap*
     between where the line is drawn and where sampling happens.  Reading ``-3``
@@ -961,7 +986,7 @@ def rank_transfer(
 #: and found performance degrading monotonically as κ grew, leaving the optimum
 #: on the grid's bottom edge; the 2026-08-06 anchor-mass sweep extended the grid
 #: to κ ∈ {0.01 … 3} across six environments and found the optimum **interior**
-#: at κ=0.3 (docs/experiments/population-anchored-calibration/REPORT.md).
+#: at κ=0.3 (docs/experiments/2026-08-05-population-anchored-calibration/REPORT.md).
 FOLD_ANCHOR_WEIGHT = 0.3
 
 #: Production cut rule for the fold-anchored threshold: the **midpoint
@@ -988,7 +1013,7 @@ FOLD_ANCHOR_WEIGHT = 0.3
 #:
 #: **The tilt is measured** (issue #2865, 336 cells over four environments and
 #: thirteen stops of the knob, on the shipped head; see
-#: ``docs/experiments/inclusion-cut-rule/REPORT.md``).  It held: no candidate
+#: ``docs/experiments/2026-08-21-inclusion-cut-rule/REPORT.md``).  It held: no candidate
 #: both delivered more of the knob and stayed within the pre-registered 0.01
 #: regret tolerance at every stop.  Two numbers worth keeping here - the ``mid``
 #: cut this replaced admitted **one** set for the whole slider in every one of
@@ -1003,6 +1028,108 @@ FOLD_ANCHOR_CUT_RULE = "mid_tilt"
 #: shipped ``calibrate_count=2`` the mean and the median coincide.
 FOLD_ANCHOR_COMBINE = "qmean"
 
+#: Minimum unlabeled-remainder size for the voted-media haystack exclusion
+#: (issue #3308).  The fold-anchored estimator drops the voted media from its
+#: haystacks - their scores under the models trained on them are optimistically
+#: shifted - but only while the remainder is still big enough to *be* a
+#: population estimate.  Below this many remaining scores the exclusion is
+#: switched off entirely and the full (contaminated) haystack is used, because
+#: two failure modes take over at once: the empirical quantiles the transfer
+#: runs on lose resolution (1/n per order statistic), and after deep Autopilot
+#: voting the leftover items are exactly the ones acquisition never found
+#: interesting, so the remainder is a *selection-biased* sample of the corpus.
+#: Measured on the overlapping-data eval environment (60-item sim set, votes
+#: driven to exhaustion, 8 seeds paired step-for-step): exclusion is *neutral*
+#: at remainder 50-56 (-0.004 +/- 0.007 direct cost, and only trajectory noise
+#: downstream) and harmful below - +0.025 at remainder 40-49, +0.057 at 30-39,
+#: +0.18 under 10 (the cut collapses onto a handful of drained leftovers,
+#: FNR 0.7-0.9).  A 200-item synthetic single-vector environment is clearly
+#: *positive* (-0.03 to -0.06) at every measured remainder >=60, even with 70%
+#: of the corpus voted.  60 is therefore the smallest floor with a measured
+#: win above it and nothing but measured neutrality or harm below it.  The
+#: switch is all-or-nothing, never partial, so the fold haystacks and the
+#: final realization sample always cover one identical population.
+#:
+#: **Both measurements behind this number are synthetic**, which is why issue
+#: #3312 puts it on the GRID against real embeddings.  Until that run reports,
+#: read 60 as the value that no *measured* cell argues against rather than as a
+#: located optimum.
+EXCLUSION_MIN_REMAINDER = 60
+
+
+def resolve_exclusion_floor(min_remainder: float | None = None) -> float:
+    """The remainder floor the #3308 vote exclusion should use.
+
+    ``None`` - what every production caller passes - resolves to the shipped
+    :data:`EXCLUSION_MIN_REMAINDER`, the same three-state contract
+    :func:`production_split_for` and
+    :func:`~vtscore.training.blend_schedules.production_schedule_for` follow.
+    A float pins it, and ``math.inf`` switches the exclusion off entirely (the
+    pre-#3308 behaviour), so one scalar spans the whole axis with no sentinel:
+    0 always excludes, ``inf`` never does, and the shipped value sits between.
+
+    The override exists for the #3312 eval arms.  Nothing in the app passes it
+    - there is no user setting for the floor - so the app and the harness's
+    default arm resolve through this same call and cannot drift apart.
+    """
+    return float(EXCLUSION_MIN_REMAINDER if min_remainder is None else min_remainder)
+
+
+def drop_voted(
+    scores: "list[float] | np.ndarray",
+    score_ids: "Sequence[int]",
+    voted_ids: "Container[int]",
+) -> np.ndarray:
+    """*scores* with the entries whose id is in *voted_ids* removed.
+
+    Filters against **this array's own ids** rather than a mask computed
+    elsewhere, because the id order is not guaranteed to be the same for two
+    different models: the app's snapshot scorer is row-ordered and stable, but
+    the harness's region path returns rows sorted by score, which is
+    model-dependent by construction.  A shared positional mask would silently
+    drop the wrong media there.
+    """
+    arr = np.asarray(scores, dtype=np.float64)
+    if arr.size == 0:
+        return arr
+    keep = np.fromiter((i not in voted_ids for i in score_ids), dtype=bool, count=len(score_ids))
+    return arr[keep]
+
+
+def apply_vote_exclusion(
+    scores: "list[float] | np.ndarray",
+    score_ids: "Sequence[int]",
+    voted_ids: "set[int] | None",
+    *,
+    min_remainder: float | None = None,
+) -> tuple[np.ndarray, bool]:
+    """``(haystack, applied)`` - the population the threshold should be fitted on.
+
+    **The single decision point for the #3308 exclusion**, called once per
+    training step on the *final* model's scores.  When it returns
+    ``applied=True`` the caller must put every other haystack in that step -
+    each calibration fold's - through :func:`drop_voted` as well; when it
+    returns ``False`` every haystack keeps its full population.  Both the app
+    (:func:`vtscore.detectors.training._fused_threshold`) and the eval
+    harness's default arm route through here, so the floor policy exists in one
+    place and the "all-or-nothing, never partial" contract is structural rather
+    than a rule each caller has to remember.
+
+    The exclusion is declined - ``applied=False``, *scores* returned whole -
+    when nothing is voted, or when it would leave fewer than
+    :func:`resolve_exclusion_floor`'s remainder.  A remainder of zero always
+    declines, whatever the floor: an empty haystack is not a population
+    estimate, it is the absence of one.
+    """
+    arr = np.asarray(scores, dtype=np.float64)
+    if not voted_ids or arr.size == 0:
+        return arr, False
+    kept = drop_voted(arr, score_ids, voted_ids)
+    if kept.size == 0 or kept.size < resolve_exclusion_floor(min_remainder):
+        return arr, False
+    return kept, True
+
+
 #: Step size of the **eval-only** ``"q_tilt"`` cut rule (issue #2865's candidate
 #: 3), in units of combined-fold quantile per inclusion step.
 #:
@@ -1015,7 +1142,7 @@ FOLD_ANCHOR_COMBINE = "qmean"
 #:
 #: **The step size has now been swept, and the rule lost at every value of it**
 #: (issue #2865: {0.005, 0.01, 0.02, 0.04, 0.08} x four environments; see
-#: ``docs/experiments/inclusion-cut-rule/REPORT.md``).  Small steps keep the
+#: ``docs/experiments/2026-08-21-inclusion-cut-rule/REPORT.md``).  Small steps keep the
 #: knob and cannot move far enough at large ``|k|``; large steps run the
 #: quantile past 1.0 and admit nothing at the ends.  There is no value at which
 #: ``q_tilt`` is not worse than the shipped ``mid_tilt``, so 0.02 remains what
@@ -1052,6 +1179,12 @@ class FoldAnchoredCut:
     fold_haystacks: tuple[np.ndarray, ...]
     final_haystack: np.ndarray
     n_anchored: int
+    #: Per-fold count of anchors that actually reached that fold's fit - 0 for a
+    #: fold that degenerated and fell back to its unanchored GMM.  ``n_anchored``
+    #: counts FOLDS, so it cannot answer "how much mass did the labels carry?";
+    #: that needs the vote count per fold, which is otherwise discarded here.
+    #: Empty when the cut was built by a caller that predates the field.
+    anchor_counts: tuple[int, ...] = ()
     cut_rule: str = FOLD_ANCHOR_CUT_RULE
     combine: str = FOLD_ANCHOR_COMBINE
     #: Only read by the eval-only ``"q_tilt"`` rule; see
@@ -1217,19 +1350,26 @@ def fit_fold_anchored_cut(
         return None
     fits: list[GmmFit1D] = []
     haystacks: list[np.ndarray] = []
+    anchor_counts: list[int] = []
     n_anchored = 0
     for hay, ordering in zip(fold_haystack_scores, fold_anchor_orderings, strict=True):
         a_scores, a_labels = scored_ordering(ordering)
         arr = gmm_fit_array(scored_only(hay))
         fit, provenance = fit_anchored_score_gmm(arr, a_scores, a_labels, anchor_weight=anchor_weight)
+        n_anchors = 0
         if fit is None:
             fit = fit_score_gmm(arr)
             if fit is None:
                 continue
         elif provenance == "anchored":
             n_anchored += 1
+            # The anchors this fold's fit actually used.  A fold that fell back
+            # records 0: its fit saw no anchors, so the mass they carried in it
+            # is zero, not "the number we hoped to anchor with".
+            n_anchors = int(np.size(a_scores))
         fits.append(fit)
         haystacks.append(np.sort(arr))
+        anchor_counts.append(n_anchors)
     if not fits:
         return None
     return FoldAnchoredCut(
@@ -1237,6 +1377,7 @@ def fit_fold_anchored_cut(
         fold_haystacks=tuple(haystacks),
         final_haystack=np.sort(final_arr),
         n_anchored=n_anchored,
+        anchor_counts=tuple(anchor_counts),
         cut_rule=cut_rule,
         combine=combine,
     )
@@ -1261,7 +1402,7 @@ def fold_anchored_gmm_threshold(
     it beats the previously shipped ``κ=1, rate`` head to head in 6 of 6
     environments, and forcing it everywhere leaves each environment within
     0.0067 of its own optimum.  See
-    ``docs/experiments/population-anchored-calibration/REPORT.md``.  The eval
+    ``docs/experiments/2026-08-05-population-anchored-calibration/REPORT.md``.  The eval
     harness calls this same function for its default arm, so a measured
     baseline cannot drift from the app.
 
@@ -1321,7 +1462,7 @@ def calculate_gmm_threshold(scores: list[float]) -> float:
     :func:`_weighted_gaussian_crossing`) on the geometry argument that max-pooling
     fattens the Bad mode, so the midpoint cuts inside Bad mass.  #2799 measured the
     two as paired within-step variants and the crossing lost on cost in every
-    max-pooled window (report ``docs/experiments/safe-thresholds/REPORT.md``), so
+    max-pooled window (report ``docs/experiments/2026-08-03-safe-thresholds/REPORT.md``), so
     #2833 reverted to the midpoint.  The crossing solver is retained for the eval
     variant family and for #2836, which is looking for a third, better-founded cut.
 
@@ -1543,7 +1684,7 @@ def conformal_threshold(
     distinct optima as the calibration set had ranking errors, so on
     well-separated votes (the common case) the threshold never moved with
     inclusion; quantiles move whenever the scores have any spread (see
-    docs/experiments/inclusion-knob/REPORT.md and issue #2693).
+    docs/experiments/2026-07-27-inclusion-knob/REPORT.md and issue #2693).
 
     The rule, for ``k = inclusion_value`` (``BASE = CONFORMAL_BASE_BUDGET``):
 
@@ -2436,7 +2577,7 @@ def calculate_safe_threshold(
     instead, because the two modes want different curves.
 
     **No longer the shipped safe threshold.**  The 2026-08-05 population-
-    anchored run (docs/experiments/population-anchored-calibration/REPORT.md)
+    anchored run (docs/experiments/2026-08-05-population-anchored-calibration/REPORT.md)
     retired the schedule in favour of *fusing* the two estimators rather than
     averaging them as rivals: :func:`fold_anchored_gmm_threshold` is the
     production path now.  This blend survives as its fallback, for the label

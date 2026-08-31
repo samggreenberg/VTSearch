@@ -110,7 +110,7 @@ REFERENCE_ARM = "tv_cpu"
 #: node pinned there is only one way for the reference to differ from itself.
 FLOOR_ARMS = ["tv_cpu_rep"]
 
-#: The margin the calibration studies resolve (docs/experiments/overview-bench).
+#: The margin the calibration studies resolve (docs/experiments/2026-08-12-overview-bench).
 #: Same value #3143 adopted; a processor change is adoptable only if the
 #: benchmark moves by less than this.
 DECISION_MARGIN = float(os.environ.get("VTS_FASTPROC_MARGIN", "0.005"))

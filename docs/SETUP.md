@@ -242,7 +242,7 @@ build (~2 GB).
 
 ## Building the frontend
 
-The Angular frontend must be built after checking out the code; the compiled files are not committed to Git. You'll need **Node.js 22+** and **npm**.
+The Angular frontend must be built after checking out the code; the compiled files are not committed to Git. You'll need **Node.js 20.19+** (or 22.12+ / 24+) and **npm**. Angular 21's engine range accepts all three; the shipped Dockerfiles use `node:20-slim`. The install commands below use Node 22 as the LTS default, but a Node 20.19+ install already on your machine works without upgrading.
 
 Check if they're installed:
 

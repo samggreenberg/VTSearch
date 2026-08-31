@@ -131,21 +131,49 @@ def stable_rank(key: str, salt: str) -> float:
 # --------------------------------------------------------------------------
 
 
-def mask_to_boxes(mask: Any, min_area_frac: float = 0.0002) -> list[tuple[int, int, int, int]]:
+def mask_to_boxes(
+    mask: Any,
+    min_area_frac: float = 0.0002,
+    *,
+    polarity: str = "auto",
+) -> list[tuple[int, int, int, int]]:
     """Connected components of a binary *mask* as ``(x, y, w, h)`` boxes.
 
     SPODS and StaVer both ship per-category pixel masks rather than boxes, so
     this is the first step for either.  Components below *min_area_frac* of the
     page are dropped as scanning speckle.
 
-    *mask* is a 2-D numpy array; anything non-zero is foreground.
+    **Polarity is detected, not assumed.**  SPODS ships 1-bit masks with the
+    mark in *black* on white paper, so a naive "non-zero is foreground" reads
+    99.8% of every page as one enormous mark — which is not a crash, it is 1,088
+    page-sized boxes that cluster into a single class and look superficially
+    like a working corpus. Taking the minority phase as foreground is safe
+    because a ground-truth mask marks a *mark*: on real SPODS pages the marked
+    fraction runs 0.2–1.1%, and any mask where most of the page is "on" is
+    inverted by definition of the task.
+
+    Pass ``polarity="light"`` or ``"dark"`` to force it when a source's masks are
+    genuinely dense (a text mask on a very full page can approach half, though
+    none observed comes close).
     """
     import numpy as np
 
     arr = np.asarray(mask)
     if arr.ndim == 3:  # RGB(A) mask -> any channel lit
         arr = arr[..., :3].max(axis=2)
-    binary = (arr > 0).astype("uint8")
+
+    threshold = arr.max() / 2 if arr.max() > 1 else 0
+    lit = arr > threshold
+    if polarity == "auto":
+        foreground = lit if lit.mean() <= 0.5 else ~lit
+    elif polarity == "light":
+        foreground = lit
+    elif polarity == "dark":
+        foreground = ~lit
+    else:
+        raise ValueError(f"unknown polarity {polarity!r} (expected auto|light|dark)")
+
+    binary = foreground.astype("uint8")
     if not binary.any():
         return []
 

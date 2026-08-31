@@ -299,11 +299,12 @@ bollard, which no amount of prose establishes as convincingly.
 
 **Give a long report a reading copy.** `REPORT.md` is the archive and renders
 inline on GitHub, but bitmap plots cannot be zoomed and a 900-line document wants
-a table of contents. `make_bench_html.py` builds a self-contained page under
-[`docs/reports/`](../../../docs/reports/) from the markdown — vector figures
-inlined, photographs embedded, one file. **Generate it, never hand-write it:** a
-second copy of the narrative drifts from the first, and the point is that both
-renderings say the same thing.
+a table of contents. `make_bench_html.py` builds a self-contained page from the
+markdown — vector figures inlined, photographs embedded, one file — and writes it
+as `report.html` **in the study's own directory**, beside the `REPORT.md` it came
+from, so a reader never has to look in a second place for the same study.
+**Generate it, never hand-write it:** a second copy of the narrative drifts from
+the first, and the point is that both renderings say the same thing.
 
 Reports cite only analysis code that is **in the tree**: `scripts/check-docs.py`
 now enforces that for `docs/experiments/`. A report whose script never got

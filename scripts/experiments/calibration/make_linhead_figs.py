@@ -15,7 +15,7 @@ figure and a table cannot disagree.  Four things the tables cannot show:
 Usage:
 
     python make_linhead_figs.py --results /expscratch/$USER/linhead-2808/results \\
-        --out docs/experiments/linhead-convergence-2808/figures
+        --out docs/experiments/2026-08-19-linhead-convergence-2808/figures
 """
 
 from __future__ import annotations

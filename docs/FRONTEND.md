@@ -106,7 +106,7 @@ frontend/
 ├── ng-openapi-gen.json     Generated-client config (output: src/app/generated/api-client)
 ├── openapi.json            Committed snapshot of the Flask spec (see §7)
 ├── proxy.conf.json         Dev server: /api and /static → localhost:5000
-├── vitest.config.ts        isolate: true (see §10)
+├── vitest.config.ts        isolate: false — the cascade guard is in test-setup.ts (see §10)
 ├── docs-assets/            Symlink to docs/user/ — the in-app user guide is served from here
 ├── public/                 Favicons, logo (copied verbatim into the build output)
 ├── scripts/
@@ -646,9 +646,12 @@ even though runtime behaviour is unaffected:
 `src/test-setup.ts` installs the inert jsdom stubs (`EventSource`,
 `ResizeObserver`, `scrollIntoView`, `CSS.escape`, media element methods,
 canvas `getContext`) and resets the `TestBed` before each test so a throwing
-teardown cannot cascade. `vitest.config.ts` sets `isolate: true` so a dirty
-singleton cannot poison later files. No spec uses `fakeAsync`/`tick`: time is
-driven with `vi.useFakeTimers()` plus real macrotask drains.
+teardown cannot cascade — that per-test reset *is* the cascade guard.
+`vitest.config.ts` deliberately leaves `isolate: false` (the builder's
+default): per-file isolation cost 3–4× the runtime and the guard in
+`test-setup.ts` covers the same failure mode. No spec uses
+`fakeAsync`/`tick`: time is driven with `vi.useFakeTimers()` plus real
+macrotask drains.
 
 ---
 

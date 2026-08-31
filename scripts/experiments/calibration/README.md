@@ -208,11 +208,108 @@ position Autopilot's Hard pick samples around — which is why
 at its own K. Pass those arm dirs to the analyzer
 (`python analyze_folds_2897.py /exp/$USER/calibration-folds-2897-ab-k8`) to get
 the `screen_agrees` check. Analyzer: `analyze_folds_2897.py`; design and
-pre-registered decision rules: `docs/experiments/calibration-fold-count/REPORT.md`.
+pre-registered decision rules: `docs/experiments/2026-08-12-calibration-fold-count/REPORT.md`.
 
 Not to be confused with the older `analyze_folds.py` / `launch_folds_2861.sh`,
 which moved the fold count to 4 only to unlock the anchored `qmean`/`qmedian`
 combine question — it measures no cost and covers region voting only.
+
+## Supervised skyline / training regret (issue #3322)
+
+```bash
+CALIB_SKYLINE_ARMS=skyline_train_full ./launch_cells.sh
+```
+
+Splits the frame's `oracle_cost` into a **learnability floor** and the headroom
+the interactive loop left on the table:
+
+```
+cost = skyline_oracle_cost + training_regret + regret
+```
+
+`skyline_train_full` trains the same head, through the same trainer, on the
+**entire sim split with full ground-truth labels**, and scores the untouched
+test split. That answers the routing question no other column answers: when a
+cell is expensive, buy a better *embedder* (high floor) or a better
+*acquisition loop* (high `training_regret`)? A stuck run with a low floor was a
+findable class the loop missed; one with a high floor was never learnable in
+that space.
+
+Add `skyline_test_xfit` for the cross-fitted test-side bracket partner. It is
+**never** a naive train-on-test fit — a ~769-parameter head on a test set of
+comparable size shatters near-arbitrary labelings and would report `d / n_test`
+under the name "learnability" — so it folds the test split and scores each item
+with a head that never saw it, the SVM analogue of `honest_test_oracle`.
+
+Nearly free: the skyline is vote-independent, so it costs **one extra fit per
+arm per cell**, not one per click. Both arms emit a single `t = 0` row tagged in
+`gmm_variant`, and the four decomposition columns
+(`skyline_oracle_cost{,_honest}`, `training_regret{,_honest}`) are filled on
+every row of the run so the identity holds within a row.
+
+Scoped to the **whole-image** column in v1: a patch column's skyline needs a
+supervision decision (GT boxes vs. a multiple-instance problem) that is still
+open on #3321, so the harness warns and skips there rather than improvising one.
+See [`docs/EVAL.md`](../../../docs/EVAL.md) for the full read, and
+`tests_lib/detectors/test_skyline_arm.py` for the telescope, vote-independence
+and cross-fitting checks.
+
+## Voted-media exclusion floor (issue #3312)
+
+```bash
+cd /exp/$USER/projects/vts-exclusion-3312/scripts/experiments/calibration
+python selftest_analyze_exclusion.py          # planted answer; run before the array
+bash launch_exclusion_3308.sh prepare         # stage 0, ONCE, shared by every arm
+bash launch_exclusion_3308.sh baseline        # the click-0 text-sort anchor
+bash launch_exclusion_3308.sh size A 0        # time ONE cell per stage AND per geometry
+bash launch_exclusion_3308.sh size B 12
+bash launch_exclusion_3308.sh arms            # both stages, then one cross-arm analyze
+```
+
+Prices PR #3311: the #3308 exclusion drops the voted media from every haystack
+the fold-anchored estimator fits on, and ships behind a floor
+(`EXCLUSION_MIN_REMAINDER = 60`) that switches it off when too little of the
+collection would be left. **Both numbers behind that floor are synthetic**, which
+is what this study exists to fix.
+
+The arm axis is one number — `CALIB_EXCLUDE_VOTED`, the smallest remainder at
+which the exclusion still fires — so the arms are ordered and need no sentinel:
+`off` (= `inf`, the pre-#3308 baseline), `always` (= 0, no floor), a numeric
+floor such as `250`, and **unset**, which resolves through the app's own
+`resolve_exclusion_floor` and is therefore the incumbent. Unset is deliberate:
+pinning `60` would freeze the arm against a constant that can move underneath
+the study.
+
+Two stages, because the two questions live in different regimes, and
+`CALIB_SIM_FRACTION` is the instrument that separates them — it sets the
+haystack the threshold is fitted on, and therefore the votes-to-haystack ratio
+the effect is bounded by. **Stage A** (`sim_fraction=0.5`, 150 clicks) is
+production scale, where the remainder never falls below ~1950 and the floor is
+inert *by construction*: `always`, the app arm and `f250` are the same estimator
+there, so only `off` vs the app arm is a contrast. **Stage B**
+(`sim_fraction=0.10`, 380 clicks) drives the remainder 419 → 40, so each arm
+switches its exclusion off at a different, known step and a difference is
+attributable to the floor rather than to the arm.
+
+These are full runs, not paired re-cuts: the floor sets the threshold, which
+sets the acquisition cut, which sets the next vote — the same reason
+`calibrate_count` (#2897) and `calibration_fraction` (#3287) each needed live
+A/Bs after their screens.
+
+Two validity checks run before any verdict, both reported in `REPORT_exclusion.md`.
+The **trap check** asserts that two arms whose floors agree above some remainder
+produce *identical* thresholds above it — they are the same estimator there, so
+anything under 1.0 means an arm ran under the wrong environment. The **floor
+regime** table reconstructs, from `n_remainder` alone, where each arm's
+exclusion was actually live, so an arm that never excludes (or always does)
+cannot be mistaken for a contrast about the floor.
+
+Preflight gained a check for this study's own design error: a horizon that
+outruns its haystack does not fail, it silently *truncates*, which would make
+`max_steps` a property of the dataset rather than of the design.
+
+Analyzer: `analyze_exclusion.py`. Design and pre-registered decision rules:
+`docs/experiments/2026-08-28-voted-exclusion-3308/PLAN.md`.
 
 ## Good Mining: sweeping the Autopilot **opening** (issue #3267)
 
@@ -294,11 +391,20 @@ panel. The far left is what typing was worth, the far right is what clicking was
 worth, and how many clicks it took to overtake the query is reported as a number
 in `REPORT_startup.md`'s crossover table rather than eyeballed off a crossing.
 
-The coverage strip under each panel is the denominator: a starved cell trains no
-detector and emits no metric row, so an arm that starves on a third of its grid
-would otherwise have its mean computed over the two thirds that worked and look
-*better* for it. The mean is dashed wherever it describes fewer than 95% of the
-arm's cells; only a solid segment is a level worth quoting.
+**Coverage is the denominator.** A starved cell trains no detector and emits no
+metric row, so an arm that starves on a third of its grid would otherwise have
+its mean computed over the two thirds that worked and look *better* for it. The
+mean is dashed wherever it describes fewer than 95% of the arm's cells; only a
+solid segment is a level worth quoting.
+
+A coverage strip under the panel draws that fraction outright, but only when the
+dashing does not already tell it: on a healthy grid every arm ramps to full
+inside the first handful of clicks and then holds a flat 100% line across the
+rest of the axis, so the strip is drawn only when a shortfall reaches past
+`CURVE_STRIP_SPAN` (default 25%) of the click axis, or when coverage falls back
+after reaching full. Suppressed, the panel title names the click from which
+every arm is fully measured. `coverage` is a column of the emitted CSV either
+way; set `CURVE_STRIP_SPAN=0` to get the strip unconditionally.
 
 ### The interactive viewer
 
@@ -315,12 +421,36 @@ their own without a re-run.
 | arms | any **non-empty** subset |
 | seeds | averaged, or every seed its own line |
 | metric | cost, precision, recall, F1, FPR, FNR, average precision, AUROC |
+| draw › oracle threshold | off (default), or the cheating-threshold line dotted beside the solid performance line |
+| draw › overlay on one chart | off (default), one chart per varying dimension with its ±1 SD shadow; on, all of them on one chart in distinct hues, shadows off |
 
-Hue is assigned to whichever dimension is actually being compared — the first
-varying one among arm → category → dataset that has at most 8 values — and every
-other varying dimension becomes a panel. The legend states which, in words. A
-dimension with more values than the palette's 8 validated slots folds into small
-multiples rather than getting invented hues.
+**Overlay is the shadow/comparison trade, made explicit.** Off, every varying
+dimension becomes its own chart holding exactly one bold line, so the shaded
+spread underneath it is readable and colour carries no meaning. On, they all
+land on one chart in distinct hues with the shadows dropped — because two
+translucent bands over one another are a third shape nobody can read the overlap
+of. Embedders overlay like anything else: the ban that keeps them out of one
+*number* is a ban on pooling, and two lines pool nothing. Past the palette's 8
+contrast-checked slots hues are generated on the golden angle, and the page says
+when that happened.
+
+**Four reference quantities, drawn as what each one is.** Two lines — the
+performance the loop achieved (solid) and the same model at the **oracle
+threshold** (dotted, same hue, behind the checkbox; the gap between them is the
+calibration regret) — and two points, notched into the margins: the free **text
+sort** at the left and the supervised **skyline** (issue #3322) at the right.
+Nothing joins the text-sort notch to the curve: no detector exists in between, so
+the gap is the honest drawing. The notches are marks in the margin rather than
+rules across the panel because each is a level that holds at one x, and a rule
+would claim it holds at every x — which for the skyline would read as "the
+learnability floor was reachable at click 3".
+
+The oracle is offered on every metric that is a statement about **one cut**.
+The harness emits only the oracle cut's cost and its FPR/FNR, so precision,
+recall and F1 there are reconstructed from those rates and the split's class
+counts — the same confusion matrix in a different unit. `average_precision` and
+`auroc` integrate over every threshold, so re-cutting cannot move them; the box
+disables itself and says so rather than drawing one line twice.
 
 Both chip controls are non-empty by construction — the last remaining chip is
 locked, with a tooltip, rather than snapping silently back — because an empty
@@ -338,6 +468,35 @@ python viewer.py --results "$CALIB_EXP/results" \
   --baseline "$OUT/text_baseline.csv" --out "$OUT/viewer.html"
 python selftest_viewer.py     # planted-answer check on the codec and the pooling
 ```
+
+The skyline notch needs skyline rows, so it appears only for a run launched with
+`CALIB_SKYLINE_ARMS` (see [Supervised skyline / training regret](#supervised-skyline--training-regret-issue-3322)
+above). `viewer.py` reads them straight out of the cell CSVs, because
+`analyze_spikes.load_arm` — which every analyzer goes through — filters
+`gmm_variant`-tagged rows out by design, and a skyline reads ground-truth labels
+the app can never see. A run without them still builds; the page just has no
+floor, and the builder says so. `--no-skyline` skips the pass.
+
+A study that finished before #3322 can still get a floor without re-running its
+loop. The skyline is vote-independent, so a second, cheaper pass over the same
+cells measures the same quantity — and `--skyline-results` reads it from that
+pass's results root while the curves keep coming from the original one:
+
+```bash
+CALIB_EXP=/expscratch/$USER/<study>-skyline CALIB_SKYLINE_ARMS=skyline_train_full \
+  CALIB_VGSCALE_EMBEDDERS=<the whole-image columns> bash launch_scale.sh cells
+python viewer.py --results "$ORIGINAL" --arms results=prod \
+  --skyline-results /expscratch/$USER/<study>-skyline \
+  --baseline "$OUT/text_baseline.csv" --out "$OUT/viewer.html"
+```
+
+Point the second root at a pass over the **same cells** — symlink the original
+run's `prepare_info.json` and `crops` into it, as `launch_scale.sh size` does,
+so the two agree on what each cell is. Rows from a foreign grid are dropped
+(they land by `(dataset, embedder, category)`), but rows from the same grid at a
+different configuration would be taken at face value. Re-running the loop
+instead would work too, and costs more than the floor: it **replaces** the
+performance rows the report's tables were read off.
 
 To redraw the PNGs without re-running the analysis:
 

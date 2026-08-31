@@ -107,7 +107,7 @@ documented workarounds; this section describes the code as it stands.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `VTSEARCH_DATA_DIR` | `<repo root>/data` | **Relocates the entire data directory** (settings, per-user dirs, model cache, embeddings, detectors, media, demo downloads). The default is anchored to the *repository root*, not the current working directory, so a systemd unit or cron job started from elsewhere still finds existing state. This is the one variable most production deployments need: point it at a persistent volume outside the checkout so a redeploy never touches user state. |
-| `VTSEARCH_MODELS_DIR` | `$VTSEARCH_DATA_DIR/models` | HuggingFace model cache. Split it out from the data dir when several instances should share one ~3.8 GB model download. |
+| `VTSEARCH_MODELS_DIR` | `$VTSEARCH_DATA_DIR/models` | HuggingFace model cache. Split it out from the data dir when several instances should share one ~4.1 GB model download. Read independently of `VTSEARCH_DATA_DIR`, so setting only this variable works even with the data dir unset. |
 | `VTSEARCH_SECRET_KEY` | `vtsearch-dev-key-change-in-production` | Flask session secret key (**set this to a random value in production**) |
 | `VTSEARCH_PORT` | `5000` | Bind port for the **dev server** (`python app.py`); `--port` wins over it. Gunicorn ignores this — use `VTSEARCH_BIND` below. |
 | `VTSEARCH_LOG_LEVEL` | `WARNING` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). `INFO`/`DEBUG` also turn on the per-request access log. |
@@ -548,7 +548,7 @@ single-user default keeps `user_settings.json` directly in the data dir. See
 
 | Path | Preserve? | Why |
 |------|-----------|-----|
-| `data/models/` | **Yes** | Re-downloading is slow (~3.8 GB) |
+| `data/models/` | **Yes** | Re-downloading is slow (~4.1 GB) |
 | `data/embeddings/` | **Yes** | Contains cached embeddings; losing them means recomputing |
 | `data/settings.json` | **Yes** | Server settings: directories, concurrency limits, deployment locks |
 | `data/user_settings.json`, `data/<username>/user_settings.json` | **Yes** | Every user preference, including each user's Auto-Find detector list |
@@ -926,10 +926,10 @@ docker run -p 5000:5000 -v /path/on/host:/app/data vtsearch
 ### Resource considerations
 
 - **Memory**: Each embedding model uses ~500 MB–1.5 GB of RAM when loaded.
-  With all four loaded simultaneously, expect ~4–6 GB total application
+  With all five loaded simultaneously, expect ~4–6 GB total application
   memory. Models are loaded lazily; only the media types actually used are
   loaded.
-- **Disk**: The `data/models/` directory uses ~3.8 GB. Dataset embeddings
+- **Disk**: The `data/models/` directory uses ~4.1 GB. Dataset embeddings
   and media files vary by dataset size.
 - **CPU**: `OMP_NUM_THREADS=1` and `MKL_NUM_THREADS=1` are set to reduce
   per-operation memory. This trades single-operation throughput for lower

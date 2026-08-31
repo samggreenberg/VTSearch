@@ -8,6 +8,8 @@ an admin's sweep works.
 
 import json
 
+import math
+
 import pytest
 
 from vtscore import timing
@@ -284,6 +286,60 @@ class TestFitting:
         coeffs = _fit(samples, byte_scaled=False)
         assert coeffs.b == 0.0
         assert coeffs.a == pytest.approx(3.0)
+
+    def test_the_fits_r2_is_kept_not_discarded(self):
+        # `affine_fit` has always computed an r2 and `fit_step` threw it away at
+        # the call site, which made this the one place in the tree that measured
+        # a fit's quality and discarded it (#3329). A clean line must arrive
+        # with r2 ~ 1, and a noisy one materially below it, or the number is
+        # being carried without meaning anything.
+        clean = _fit(
+            [{"n": float(x), "size_mb": 0.0, "seconds": 1.0 + 0.01 * x} for x in (100, 200, 300, 400)],
+            byte_scaled=False,
+        )
+        assert clean.b > 0
+        assert clean.r2 == pytest.approx(1.0)
+
+        noisy = _fit(
+            [
+                {"n": 100.0, "size_mb": 0.0, "seconds": 2.0},
+                {"n": 200.0, "size_mb": 0.0, "seconds": 9.0},
+                {"n": 300.0, "size_mb": 0.0, "seconds": 4.0},
+                {"n": 400.0, "size_mb": 0.0, "seconds": 12.0},
+            ],
+            byte_scaled=False,
+        )
+        assert noisy.b > 0
+        assert noisy.r2 < 0.9
+
+    def test_a_step_that_was_not_fitted_as_a_line_has_no_r2(self):
+        # NaN here means "not fitted this way", which is a different statement
+        # from a bad fit: the median fallback and the byte-scaled path never
+        # drew a line, so attaching a goodness score to them would be a lie.
+        median_fallback = _fit(
+            [
+                {"n": 100.0, "size_mb": 0.0, "seconds": 5.0},
+                {"n": 200.0, "size_mb": 0.0, "seconds": 3.0},
+                {"n": 300.0, "size_mb": 0.0, "seconds": 1.0},
+            ],
+            byte_scaled=False,
+        )
+        assert math.isnan(median_fallback.r2)
+        byte_scaled = _fit([{"n": 500.0, "size_mb": 100.0, "seconds": 10.0}], byte_scaled=True)
+        assert math.isnan(byte_scaled.r2)
+        assert "r2" not in median_fallback.to_json()
+
+    def test_r2_survives_a_json_round_trip(self):
+        coeffs = StepCoeffs(a=1.0, b=2.0, r2=0.9876)
+        assert coeffs.to_json()["r2"] == pytest.approx(0.9876)
+        # `from_json` is Optional-returning (it parses untrusted profile JSON),
+        # so narrow before reading the field rather than chaining through it.
+        parsed = StepCoeffs.from_json(coeffs.to_json())
+        assert parsed is not None
+        assert parsed.r2 == pytest.approx(0.9876)
+        bare = StepCoeffs.from_json({"a": 1.0})
+        assert bare is not None
+        assert math.isnan(bare.r2)
 
     def test_byte_scaled_step_fits_a_per_mb_rate(self):
         samples = [

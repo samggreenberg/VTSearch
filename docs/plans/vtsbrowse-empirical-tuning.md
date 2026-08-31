@@ -12,7 +12,7 @@ taxonomy-separability metric and label-free structure guards, CPU-verified with
 `vtscore/projection/params.py:resolve_projection_params` (the one resolver every
 projection fit path calls); the harness is
 `scripts/experiments/umap_params/` and the write-up is
-[`docs/reports/2026-07-22-vtsbrowse-umap-tuning.html`](../reports/2026-07-22-vtsbrowse-umap-tuning.html).
+[`docs/experiments/2026-07-22-vtsbrowse-umap-tuning/`](../experiments/2026-07-22-vtsbrowse-umap-tuning/REPORT.md).
 
 Three facts from that run shape the work still owed: `n_neighbors` tracks the
 embedder, not N (so a per-embedder *constant* is right, and no `n_neighbors(N)`

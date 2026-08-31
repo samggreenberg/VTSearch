@@ -414,7 +414,7 @@ exclude_lines = [
 # Skip generated, binary, frontend node_modules (including nested
 # node_modules npm installs), serialized formats, and any in-repo
 # virtualenv (third-party site-packages must never be spell-checked).
-# docs/reports/*.html are generated experiment reports with embedded
+# A study's report.html is a generated experiment report with embedded
 # base64 image data URIs, the same class of binary-ish content *.svg is
 # already skipped for.  A study's viewer.html (scripts/experiments/
 # calibration/viewer.py) is the same class again: a self-contained page
@@ -423,7 +423,7 @@ exclude_lines = [
 # slides/_build and slides/_out are gitignored deck-build artifacts; the
 # rendered PDFs there decode as mojibake that codespell "corrects", which
 # used to fail any test run that happened after `slides/render.sh`.
-skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,static,model_cache,.git,*.ipynb,package-lock.json,*venv*,.venv,venv,*docs/reports/*.html,*docs/experiments/*/viewer.html,*vtscore/projection/assets*,*slides/_build*,*slides/_out*"
+skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,static,model_cache,.git,*.ipynb,package-lock.json,*venv*,.venv,venv,*docs/experiments/*/report.html,*docs/experiments/*/viewer.html,*vtscore/projection/assets*,*slides/_build*,*slides/_out*"
 # Domain terms (clap/siglip/xclip = embedder names; wrest/caller/recaller =
 # extension scaffold names), legitimate code identifiers (numer/denom in
 # slope formulas, medias as the global state proxy, goup as a TS method,
@@ -433,4 +433,4 @@ skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,s
 # pre-select, unparseable, invokable). usera = the "userA" persona in
 # design docs; teh = Yee Whye Teh in references. mane/tread are object
 # parts in the VG scale-study exclusion vocabulary (pile_config).
-ignore-words-list = "clap,siglip,xclip,wrest,caller,recaller,medias,numer,denom,goup,ans,repid,invokable,unparseable,copys,re-use,re-used,re-uses,re-using,re-declaring,pre-select,pre-selects,pre-selected,fpr,ths,ot,te,ser,lod,usera,teh,provence,mane,tread"
+ignore-words-list = "clap,siglip,xclip,wrest,caller,recaller,medias,numer,denom,goup,ans,repid,invokable,unparseable,copys,re-use,re-used,re-uses,re-using,re-declaring,pre-select,pre-selects,pre-selected,fpr,ths,ot,te,ser,lod,usera,teh,provence,mane,tread,shepard"

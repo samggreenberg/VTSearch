@@ -45,7 +45,7 @@ python -m vtscore.eval [OPTIONS]
 | `--output FILE` | Write JSON results to FILE | none |
 | `--plot-dir DIR` | Save visualisation PNGs to DIR | none |
 | `--no-plot` | Disable plot generation | off |
-| `--enrich-descriptions` | Use enriched (wrapper-averaged) text embeddings for text-sort | off |
+| `--enrich-descriptions` | Use enriched (wrapper-averaged) text embeddings for text-sort. A no-op on embedders that declare no wrappers, which since #3341 is most of them — `siglip`, `clap`, `e5` and `bge` all measured worse enriched than plain | off |
 | `--calibrate-count K` | Number of random Train/Calibrate splits for threshold calibration | `2` |
 | `--calibration-fraction F` | Fraction of training data reserved for calibration | unset = the app's per-space default (0.3 single-vector / 0.5 patch) |
 | `--embedder NAME` | Build each demo dataset with this embedder (empty = media-type default) | `` |
@@ -61,7 +61,8 @@ python -m vtscore.eval --mode text --datasets caltech101_s caltech256_a --output
 # Learned sort with a different train/test split
 python -m vtscore.eval --mode learned --train-fraction 0.7 --seed 123 --plot-dir eval_output
 
-# Learned sort with safe thresholds and calibration tuning
+# Learned sort with more calibration folds (the "safe thresholds" toggle is gone;
+# the trainer's fold-anchored path is now unconditional)
 python -m vtscore.eval --mode learned --calibrate-count 4 --plot-dir eval_output
 
 # Region voting on Visual Genome: re-embed with a patch embedder, then have
@@ -283,7 +284,7 @@ Metrics are still recorded at every trainable step in both modes — fidelity ch
 
 The selector and the metrics read **different thresholds**. Reporting and every emitted metric stay at `inclusion`; the threshold handed to the picks is re-cut at `inclusion + acq_inclusion_offset` from the same fold-anchored fit. This mirrors production, which decoupled the two jobs in PR #2876 — see [`docs/ML.md`](ML.md#threshold-calibration) for the mechanism and the measured effect.
 
-The default is `ACQUISITION_INCLUSION_OFFSET` — the shipped value, **not** `0` — so an unconfigured run measures what users actually get. (PR #2876 shipped `-3`; PR #2891 cut it to `-1` after a second environment rejected `-3`. Read the constant, not a number written here.) Pass `acq_inclusion_offset=0` for the pre-#2876 control where one threshold did both jobs; that is also the value the study's `prod` arm ran at. Note that this changes what a re-run of any *pre-#2876* study measures: those runs were all implicitly at offset 0, so reproducing one byte-for-byte means passing it explicitly, the same way `autopilot_fidelity=False` reproduces the pre-fidelity harness.
+The default is `ACQUISITION_INCLUSION_OFFSET` — the shipped value, **not** `0` — so an unconfigured run measures what users actually get. (PR #2876 shipped `-3`; PR #2891 cut it to `-1` after a second environment rejected `-3`; the #2877 pile run then restored `-3` after measuring three environments on verified labels. Read the constant, not a number written here.) Pass `acq_inclusion_offset=0` for the pre-#2876 control where one threshold did both jobs; that is also the value the study's `prod` arm ran at. Note that this changes what a re-run of any *pre-#2876* study measures: those runs were all implicitly at offset 0, so reproducing one byte-for-byte means passing it explicitly, the same way `autopilot_fidelity=False` reproduces the pre-fidelity harness.
 
 Three columns make the lever verifiable rather than assumed, all measured in the **pool** distribution the selector ranks:
 
@@ -326,6 +327,33 @@ Each metric row carries the operating point at that step's threshold — `cost` 
 - **`recall` is exactly `1 - fnr`** and is emitted anyway: it is the word a reader picks off a menu, and asking them to invert an FNR in their head is where reading errors come from.
 
 `DETECTION_METRICS` in the same module carries each metric's label and its **direction**, and is what the report figures and the interactive viewer read — so nothing downstream decides for itself which way is "better".
+
+#### The supervised skyline and training regret (`skyline_arms`)
+
+`cost = oracle_cost + regret` splits a step's cost into "the ranking" and "the cut", but `oracle_cost` still conflates two causes that call for opposite fixes: **no linear head in this embedding can separate the class**, and **a head could, but 10–200 clicks did not find it**. Pass `skyline_arms=["skyline_train_full"]` (requires `emit_calibration_metrics`) to split them:
+
+```
+cost = skyline_oracle_cost   (learnability floor: embedding + head capacity)
+     + training_regret       (headroom the interactive loop left on the table)
+     + regret                (what the cut rule gave away on the ranking it got)
+```
+
+`skyline_train_full` is the standard supervised-skyline arm: the **same head, through the same trainer**, trained on the entire simulation split with **full ground-truth labels** and evaluated on the untouched test split — same hypothesis class, same features, full supervision, disjoint eval. It delegates to `_train_and_calibrate` rather than fitting an estimator of its own, so the gap it measures is "fewer labels" and not "a different trainer" (and so it needs no `Mirror(...)` entry to stay drift-proof).
+
+`training_regret` is defined on **rankings** — `oracle_cost(mortal) − oracle_cost(skyline)` — which is what makes the telescope exact. Routing the skyline through a calibrated cut would re-mix in the term `regret` already isolates, so the skyline's own threshold is the test oracle's: `cost == oracle_cost` and `regret == 0` on a skyline row **by construction**. Read its `oracle_cost`, never its `regret`.
+
+Four things to know before reading the numbers:
+
+- **The row is per *run*, not per step.** A skyline is vote-independent, so it is emitted once per `(cell, seed)` at `t = 0` with `app_trained = 0`, tagged in `gmm_variant` like every other variant family. The four decomposition columns (`skyline_oracle_cost`, `skyline_oracle_cost_honest`, `training_regret`, `training_regret_honest`) are then filled on *every* row of the run, so the identity holds within a row. Cost: one extra fit per arm per cell, not per click.
+- **Negative `training_regret` is legal.** Unlike the threshold oracle, the skyline is not a per-run optimum over the same object — region votes carry box information an image-labelled skyline lacks, and small samples get lucky. Nothing clamps it.
+- **The terms are sum-pinned**, so the same caution `_operating_metrics` documents for `rule_inefficiency` / `calibration_shift` applies verbatim: they share noise by construction, so don't read one half moving as an effect when the knob also moves the yardstick.
+- **The gap bundles several causes** — how many labels, *which* labels (the acquisition policy), and the full split's imbalance. Read it as "headroom left by the interactive loop", not as one cause.
+
+`skyline_test_xfit` is the optional bracket partner, and it is **cross-fitted**: the test split is partitioned into folds and each item is scored by a head that never saw it. A naive train-on-test fit is not an option — a ~769-parameter linear head on a test set of comparable size can shatter near-arbitrary labelings, so it would report near-zero cost on a genuinely unlearnable class and its "regret" would measure `d / n_test` rather than learnability. It is the SVM analogue of `honest_test_oracle`, which does the same thing one level down for the *cut*; its pooled scores share a ranking but not a calibrated scale, so read it for `oracle_cost` / `auroc` / `average_precision` only.
+
+**v1 is the whole-image column.** Full supervision hands out *image* labels, but the mortal `max_patch` flow trains on GT-box-pooled vectors, so a patch column's skyline is a design decision — "oracle boxes + all images", or the multiple-instance problem of which patch of a positive image is the positive — and issue #3321 holds it open. The harness warns and skips on a patch style rather than improvising one, so a sweep over both columns still gets the decomposition on the column that has one.
+
+Set `CALIB_SKYLINE_ARMS=skyline_train_full` to turn the arm on in the calibration experiment runner.
 
 #### The pick log (`pick_sink`)
 

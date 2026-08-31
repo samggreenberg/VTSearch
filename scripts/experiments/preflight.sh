@@ -618,6 +618,31 @@ v = env("CALIB_BLEND_SCHEDULE")
 if v is not None:
     rows.append(("blend_schedule", v, "<unset> = the app's per-mode default"))
 
+# The #3314 adaptive fold count.  The app has no such thing: `calibrate_count`
+# is a constant there, so ANY schedule is a divergence and has to be declared -
+# including one whose early phase happens to equal today's constant, since the
+# knob's whole effect is that the count stops being one.  Checked separately
+# from `calibrate_count` above because the two can be set together and mean
+# different arms (the schedule's tail IS `calibrate_count`).
+v = env("CALIB_FOLD_COUNT_SCHEDULE")
+if v is not None:
+    rows.append(("fold_count_schedule", v, "<unset> = a constant calibrate_count, as the app has"))
+
+# The #3308 voted-media exclusion floor, which #3312 sweeps as an arm axis.
+# Unset resolves through the app's own `resolve_exclusion_floor`, so an unset
+# env var IS the production arm.  Every other value is a divergence - INCLUDING
+# a numeric pin that happens to equal today's shipped floor, because pinning it
+# freezes the arm against a constant that can move underneath the study.
+v = env("CALIB_EXCLUDE_VOTED")
+if v is not None and v.strip().lower() not in ("", "default", "app"):
+    rows.append(
+        (
+            "exclusion_floor",
+            v,
+            "<unset> = the app's own floor (currently %g)" % T.resolve_exclusion_floor(None),
+        )
+    )
+
 # The anchored/fold-anchored grid (#2852) is emitted only under CALIB_ANCHORED=1
 # and is off by default.  Checking its knobs unconditionally makes every study
 # that does not use the family declare a divergence it does not have - and a
@@ -966,6 +991,66 @@ PY
       ;;
     *) say_fail "could not check the grid against prepare: $GRIDCHK" ;;
   esac
+fi
+
+# --- 16. A horizon that outruns its own haystack ------------------------------
+# `sim_fraction` sets the simulation set: the pool the user votes out of AND the
+# haystack the threshold's population estimate is fitted on.  `max_steps` is how
+# many of those items get voted.  When the second approaches the first the run
+# does not fail, it *truncates* - the loop stops when the pool empties - so a
+# grid asking for 380 steps on a 200-media sim set silently becomes a ~200-step
+# grid, and every arm's horizon becomes a property of the environment rather
+# than of the design.  Worse for a study sweeping a *remainder* floor: the last
+# steps are fitted on a handful of leftovers, which is the regime where the
+# estimator is least trustworthy and most variable.
+#
+# Only checked when the study moves `sim_fraction` off its 0.5 default, since
+# that is the knob that makes the collision possible (#3312).
+if [[ -n "${CALIB_SIM_FRACTION:-}" && -n "${CALIB_MAX_STEPS:-}" ]]; then
+  PINFO=""
+  for cand in "${REUSE_PREPARE:-}/prepare_info.json" "$EXP/results/prepare_info.json"; do
+    [[ -n "$cand" && -r "$cand" ]] && { PINFO="$cand"; break; }
+  done
+  if [[ -z "$PINFO" ]]; then
+    say_ok "horizon vs haystack not checked (no prepare_info.json yet)"
+  else
+  HORIZON=$(PINFO="$PINFO" python - <<'PY' 2>&1
+import json, os
+frac = float(os.environ["CALIB_SIM_FRACTION"])
+steps = int(os.environ["CALIB_MAX_STEPS"])
+info = json.loads(open(os.environ["PINFO"]).read())
+worst = []
+for ds, arms in sorted((info.get("datasets") or {}).items()):
+    for emb, rec in sorted((arms or {}).items()):
+        n = int((rec or {}).get("n_medias") or 0)
+        if not n:
+            continue
+        n_sim = max(1, int(n * frac))
+        worst.append((n_sim - steps, "%s x %s" % (ds, emb), n_sim))
+worst.sort()
+if not worst:
+    print("SKIP\tprepare_info records no n_medias")
+elif worst[0][0] <= 0:
+    print("FAILS\t%s: sim set is %d media, horizon is %d steps" % (worst[0][1], worst[0][2], steps))
+else:
+    print("HOLDS\t%s: %d media in the sim set, %d left after %d steps"
+          % (worst[0][1], worst[0][2], worst[0][0], steps))
+PY
+  )
+  HORIZON=$(printf '%s\n' "$HORIZON" | tail -1)
+  case "$HORIZON" in
+    HOLDS*) say_ok "horizon fits its haystack - tightest ${HORIZON#HOLDS?}" ;;
+    SKIP*)  say_ok "horizon vs haystack not checked (${HORIZON#SKIP?})" ;;
+    FAILS*)
+      say_fail "the horizon exhausts the sim set: ${HORIZON#FAILS?}"
+      echo "        -> the run does not fail, it TRUNCATES: the loop ends when the pool"
+      echo "           empties, so max_steps stops being the design and starts being a"
+      echo "           property of the dataset - and differently per dataset"
+      echo "        -> raise CALIB_SIM_FRACTION or lower CALIB_MAX_STEPS"
+      ;;
+    *) say_fail "could not check the horizon against the haystack: $HORIZON" ;;
+  esac
+  fi
 fi
 
 echo

@@ -21,7 +21,7 @@ off as curated truth.
 
 Providers are registered per media type.  Phase 1 ships the no-new-models
 tier resolved by the audio/image signpost studies
-(``docs/reports/2026-07-12-toponymy-{audio,image}-signposts.html``):
+(``docs/experiments/2026-07-12-toponymy-{audio,image}-signposts/``):
 
 * **audio** — CLAP zero-shot tags against the AudioSet-527 vocabulary
   (template ``"The sound of {}"``, top-5), the audio study's locked default;

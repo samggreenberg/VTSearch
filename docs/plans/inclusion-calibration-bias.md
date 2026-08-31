@@ -11,7 +11,7 @@ That concern was measured and came back mostly negative: under the real
 Autopilot vote order the budget converges at about the same rate as random
 sampling (FNR excess 0.004 at 100 votes), because Autopilot's Hard phase biases
 the cut conservatively *low* and its New phase already injects atlas diversity.
-See [`docs/experiments/inclusion-knob/SELECTION-BIAS.md`](../experiments/inclusion-knob/SELECTION-BIAS.md).
+See [`docs/experiments/2026-07-27-inclusion-knob/SELECTION-BIAS.md`](../experiments/2026-07-27-inclusion-knob/SELECTION-BIAS.md).
 **So no bias-correction work is warranted right now.** What remains is a
 cold-start gap and some documentation.
 
@@ -45,14 +45,15 @@ it rather than re-simulating the vote order.
   or simply suppressing the confident framing of the Inclusion budget in the UI
   until enough votes exist. Measure with the existing harness before changing
   production; the 12-vote cell is the one that matters. This plan owns the
-  measurement spec for these options (issue #2788): the separate cold-start
-  pre-registration was folded in here once PR #2789 showed the sub-quorum window
-  it targeted is unreachable on the Autopilot flow.
+  measurement spec for these options: the separate cold-start
+  pre-registration (originally issue #2788, closed not-planned) was folded in
+  here once PR #2789 showed the sub-quorum window it targeted is unreachable
+  on the Autopilot flow.
 
 <!-- item-sep -->
 
 - **Region-bag (grouped) calibration arm — measured; bias present at high k.**
-  The calibration study (#2781, `docs/experiments/calibration/REPORT.md`) ran the
+  The calibration study (#2781, `docs/experiments/2026-07-31-calibration/REPORT.md`) ran the
   grouped path (`_compute_fold_orderings_grouped`) on Visual Genome region voting
   and compared its Inclusion-budget compliance to the ungrouped single-vector
   path. The grouped path **overshoots the FNR cap materially at k ≥ 1** (measured

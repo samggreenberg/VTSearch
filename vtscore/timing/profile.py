@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import threading
 from dataclasses import dataclass, field
@@ -179,6 +180,14 @@ class StepCoeffs:
     a: float = 0.0
     b: float = 0.0
     per_mb: float = 0.0
+    #: Goodness of the affine fit these coefficients came from, or NaN when the
+    #: step was not fitted that way (a byte-scaled step, a median fallback, or a
+    #: hand-written profile).  `affine_fit` has always computed this and
+    #: `fit_step` threw it away at the call site, which made this the one place
+    #: in the tree that measured a fit's quality and then discarded it (#3329).
+    #: Kept so a profile can be read for whether its cost model describes the
+    #: deployment it was measured on.
+    r2: float = float("nan")
 
     def seconds(self, n: float = 0.0, size_mb: float = 0.0) -> float:
         """Predicted wall-clock seconds for this step, never negative.
@@ -202,6 +211,7 @@ class StepCoeffs:
             return None
         try:
             return cls(
+                r2=float(raw.get("r2", float("nan"))),
                 a=float(raw.get("a", 0.0)),
                 b=float(raw.get("b", 0.0)),
                 per_mb=float(raw.get("per_mb", 0.0)),
@@ -216,6 +226,11 @@ class StepCoeffs:
             out["b"] = round(self.b, 9)
         if self.per_mb:
             out["per_mb"] = round(self.per_mb, 6)
+        # NaN means "this step was not fitted as a line", which is a different
+        # statement from a bad fit, so it is omitted rather than written as
+        # null: `from_json` defaults it back to NaN either way.
+        if not math.isnan(self.r2):
+            out["r2"] = round(self.r2, 4)
         return out
 
 

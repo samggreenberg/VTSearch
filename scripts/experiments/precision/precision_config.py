@@ -188,7 +188,7 @@ REFERENCE_ARM = "fp32_l40s"
 #: They are marked as a group instead, and their spread is itself the finding.
 FLOOR_ARMS = ["fp32_v100", "fp32_v100_rack7n03", "fp32_notf32_l40s", "fp32_det_l40s", "fp32_det_v100"]
 
-#: The margin the calibration studies resolve (see docs/experiments/overview-bench).
+#: The margin the calibration studies resolve (see docs/experiments/2026-08-12-overview-bench).
 #: A precision change is adoptable only if the benchmark moves by less than this.
 DECISION_MARGIN = float(os.environ.get("VTS_PRECISION_MARGIN", "0.005"))
 

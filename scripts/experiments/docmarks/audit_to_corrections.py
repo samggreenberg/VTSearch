@@ -179,10 +179,19 @@ def apply_distinctive(classes: dict[str, Any], verdicts: list[dict[str, Any]]) -
 
 
 def apply_confusable(
+    pages: list[Page],
     classes: dict[str, Any],
     verdicts: list[dict[str, Any]],
-) -> tuple[list[str], list[str], list[dict[str, Any]]]:
-    """``same`` merges two classes; ``different`` records a permanent separation.
+) -> tuple[list[str], list[str], list[dict[str, Any]], list[dict[str, Any]]]:
+    """``same`` merges the two classes; ``different`` separates them for good.
+
+    Both verdicts are recorded as page-id pairs and replayed on every future
+    re-cluster, so an afternoon of merging is not undone the next time a
+    threshold moves.
+
+    The two are deliberately not symmetric in cost, which is the whole reason
+    the threshold runs strict: a split shows up here as one obvious pair to
+    merge, while a bad merge never shows up at all.
 
     A ``different`` verdict is the only way the corpus can state "these must be
     told apart", and it is stored against **page ids** rather than class ids so
@@ -193,16 +202,53 @@ def apply_confusable(
     changes: list[str] = []
     problems: list[str] = []
     separations: list[dict[str, Any]] = []
+    merges: list[dict[str, Any]] = []
+    #: A class merged away is gone from `classes`, but a later verdict may
+    #: still name it; follow the chain rather than reporting a missing class.
+    moved: dict[str, str] = {}
+
+    def resolve(cid: str) -> str:
+        seen = set()
+        while cid in moved and cid not in seen:
+            seen.add(cid)
+            cid = moved[cid]
+        return cid
 
     for row in verdicts:
-        left, right = row["left_class_id"], row["right_class_id"]
+        left, right = resolve(row["left_class_id"]), resolve(row["right_class_id"])
         verdict = str(row["verdict"]).strip().lower()
+        if left == right:
+            changes.append(f"{row['left_class_id']} / {row['right_class_id']}: already one class")
+            continue
         lmeta, rmeta = classes.get(left), classes.get(right)
         if lmeta is None or rmeta is None:
             problems.append(f"{left} / {right}: one of the pair is not in classes.json")
             continue
 
-        if verdict == "different":
+        if verdict == "same":
+            # Merge into the larger class, so the surviving id is the one whose
+            # instances dominate it and the name keeps meaning what it meant.
+            keep, gone = (left, right) if lmeta["n_instances"] >= rmeta["n_instances"] else (right, left)
+            kmeta, gmeta = classes[keep], classes[gone]
+            merges.append(
+                {
+                    "left_page_id": kmeta["page_ids"][0],
+                    "right_page_id": gmeta["page_ids"][0],
+                    "kept_class_id": keep,
+                    "merged_class_id": gone,
+                    "note": row.get("notes", ""),
+                }
+            )
+            for page in pages:
+                for i, mark in enumerate(page.marks):
+                    if mark.class_id == gone:
+                        page.marks[i] = Mark(mark.kind, mark.box, keep, mark.provenance)
+            kmeta["page_ids"] = sorted(set(kmeta["page_ids"]) | set(gmeta["page_ids"]))
+            kmeta["n_instances"] = len(kmeta["page_ids"])
+            classes.pop(gone)
+            moved[gone] = keep
+            changes.append(f"{gone} merged into {keep} ({kmeta['n_instances']} instances)")
+        elif verdict == "different":
             lmeta.setdefault("distinct_from", [])
             rmeta.setdefault("distinct_from", [])
             if right not in lmeta["distinct_from"]:
@@ -222,15 +268,10 @@ def apply_confusable(
                 }
             )
             changes.append(f"{left} != {right}: separation recorded")
-        elif verdict == "same":
-            problems.append(
-                f"{left} / {right}: judged the same mark — record it as "
-                f"'merge_into:{left}' on the cluster task, which moves the instances"
-            )
         else:
             problems.append(f"{left} / {right}: unrecognised verdict {verdict!r} (expected same|different)")
 
-    return changes, problems, separations
+    return changes, problems, separations, merges
 
 
 def apply_letterhead(classes: dict[str, Any], verdicts: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
@@ -311,13 +352,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     classes_path = args.corpus / "classes.json"
     manifest_path = args.corpus / "corpus.jsonl"
-    separations_path = args.corpus / "separations.json"
+    adjudications_path = args.corpus / "adjudications.json"
     classes = json.loads(classes_path.read_text(encoding="utf-8"))
     verdicts = load_verdicts(args.corpus / "audit" / args.task / "verdicts.jsonl")
 
-    mutates_pages = args.task in ("cluster", "membership")
+    mutates_pages = args.task in ("cluster", "membership", "confusable")
     pages = list(read_manifest(manifest_path)) if mutates_pages else []
     new_separations: list[dict[str, Any]] = []
+    new_merges: list[dict[str, Any]] = []
     resplit: list[str] = []
 
     if args.task == "membership":
@@ -325,7 +367,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     elif args.task == "cluster":
         changes, problems, resplit = apply_cluster(pages, classes, verdicts)
     elif args.task == "confusable":
-        changes, problems, new_separations = apply_confusable(classes, verdicts)
+        changes, problems, new_separations, new_merges = apply_confusable(pages, classes, verdicts)
     elif args.task == "distinctive":
         changes, problems = apply_distinctive(classes, verdicts)
     else:
@@ -348,12 +390,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(f"  {note}")
         print("  re-run make_audit_slate.py --task cluster to review the new pieces")
 
-    if new_separations:
-        from cluster_marks import load_separations, save_separations
+    if new_separations or new_merges:
+        from cluster_marks import load_adjudications, save_adjudications
 
-        existing = [{"left_page_id": a, "right_page_id": b} for a, b in load_separations(separations_path)]
-        save_separations(existing + new_separations, separations_path)
-        print(f"  wrote {len(new_separations)} separation(s) to {separations_path}")
+        old_same, old_diff = load_adjudications(adjudications_path)
+        save_adjudications(
+            [{"left_page_id": a, "right_page_id": b} for a, b in old_same] + new_merges,
+            [{"left_page_id": a, "right_page_id": b} for a, b in old_diff] + new_separations,
+            adjudications_path,
+        )
+        print(f"  wrote {len(new_merges)} merge(s) and {len(new_separations)} separation(s) to {adjudications_path}")
 
     classes_path.write_text(json.dumps(classes, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     if mutates_pages:

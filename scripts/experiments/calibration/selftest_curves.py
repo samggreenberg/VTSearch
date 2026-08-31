@@ -15,6 +15,10 @@ subset and said nothing".  Every check here is one of those:
   so the far left of the figure is what typing got for free;
 * an arm that never beats that anchor must report **no crossover**, not the last
   click it happened to be measured at;
+* the coverage strip must be drawn only when coverage says something the
+  dashed rule above it does not — a healthy grid must not spend a quarter of
+  the figure restating the crossing the line thickness already marks — while a
+  starving, never-recovering, or falling-back denominator must keep it;
 * the per-run panel must **count** the runs that drew no line at all.
 
 Run: ``python selftest_curves.py``
@@ -191,6 +195,67 @@ def main() -> int:  # noqa: C901
             "the stretch between the anchor and the first trained click is not drawn solid",
             bool((gap["coverage"] < C.SOLID_COVERAGE).all()),
             str(gap["coverage"].unique()),
+        )
+
+        # --- the coverage strip: drawn only when it says something ----------
+        # The dashed/solid switch already marks the SOLID_COVERAGE crossing, so
+        # a grid where every arm ramps to full inside the first few clicks and
+        # holds there would spend a quarter of the figure redrawing it.
+        t_axis = np.arange(0, N_STEP + 1)
+        healthy = np.where(t_axis < FIRST_T, 0.0, 1.0)
+        healthy[0] = 1.0  # every cell has a text sort at click 0
+        ok &= _check(
+            "a grid where every arm ramps to full early does NOT get the strip",
+            not C._strip_worth_drawing([healthy, healthy], t_axis),
+        )
+        late = healthy.copy()
+        late[t_axis <= int(0.6 * N_STEP)] = 0.4
+        late[0] = 1.0
+        ok &= _check(
+            "a shortfall reaching past a quarter of the click axis DOES",
+            C._strip_worth_drawing([healthy, late], t_axis),
+        )
+        never = np.full_like(healthy, 0.4)
+        never[0] = 1.0
+        ok &= _check(
+            "an arm that never recovers DOES",
+            C._strip_worth_drawing([never], t_axis),
+        )
+        # Cells dropping back out of the average is a different failure from
+        # starting late, and it is worth drawing however early it happens.
+        dip = healthy.copy()
+        dip[FIRST_T + 2] = 0.5
+        ok &= _check(
+            "coverage falling back after reaching full DOES, even early",
+            C._strip_worth_drawing([dip], t_axis),
+            f"dip at t={FIRST_T + 2}, last shortfall well inside {C.STRIP_SPAN:.0%} of the axis",
+        )
+        ok &= _check(
+            "...and the click-0-to-click-1 step is not mistaken for such a fall",
+            not C._strip_worth_drawing([healthy], t_axis),
+        )
+        # The one fact the suppressed strip was carrying.
+        ok &= _check(
+            "the suppressed strip's fact is the click from which all arms are measured",
+            C._fully_measured_from([healthy, healthy], t_axis) == FIRST_T,
+            str(C._fully_measured_from([healthy, healthy], t_axis)),
+        )
+        ok &= _check(
+            "...taken over the slowest arm, not the fastest",
+            C._fully_measured_from([healthy, late], t_axis) == int(0.6 * N_STEP) + 1,
+            str(C._fully_measured_from([healthy, late], t_axis)),
+        )
+        ok &= _check(
+            "...and withheld when an arm never gets there",
+            C._fully_measured_from([never], t_axis) is None,
+        )
+        # The starving grid above is exactly the case the strip exists for.
+        ok &= _check(
+            "the planted starving grid keeps its strip",
+            C._strip_worth_drawing(
+                [curve[curve["arm"] == a].groupby("t")["coverage"].mean().to_numpy() for a in arms],
+                np.arange(0, N_STEP + 1),
+            ),
         )
 
         # --- the level itself ----------------------------------------------

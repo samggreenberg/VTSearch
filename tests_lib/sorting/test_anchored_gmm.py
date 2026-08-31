@@ -401,7 +401,7 @@ class TestFoldAnchored:
 class TestShippedFoldAnchoredDefaults:
     """The production settings the 2026-08-06 anchor-mass sweep picked.
 
-    ``docs/experiments/population-anchored-calibration/REPORT.md`` recommends
+    ``docs/experiments/2026-08-05-population-anchored-calibration/REPORT.md`` recommends
     ``fold_anchored κ=0.3, mid cut``: the first run's grid bottomed out at κ=1
     so its winner sat on the edge, and extending the grid two decades down
     across six environments moved both the mass *and* the rule.  The shipped

@@ -48,7 +48,10 @@ COCO_ROOT = Path(os.environ.get("VTS_COCO_ROOT", "/exp/scale26/datasets/external
 #: `coco_val` REBUILD-BROKEN against a source that was present and fine (#3299).
 COCO_VAL_ZIP = COCO_ROOT / "images" / "val2017.zip"
 #: Where the images live *if* somebody extracts them. Optional, and not part of
-#: the rebuild path; `box_sheets.py` looks here for pixels to draw.
+#: the rebuild path: nothing depends on this directory existing. `box_sheets.py`
+#: prefers it (a loose JPEG is cheaper than a zip member) but falls back to
+#: :data:`COCO_VAL_ZIP`, which is where the pixels have always actually been --
+#: it used to read only this path and drew empty sheets instead (#3305).
 COCO_IMAGES = COCO_ROOT / "images" / "val2017"
 COCO_ANNOTATIONS = COCO_ROOT / "derived" / "objects_flat_val2017.jsonl.gz"
 
@@ -238,7 +241,7 @@ POLYSEMOUS_NAMES: frozenset[str] = frozenset(
 #: pervasive: its negative pool is both thin and least trustworthy, since a
 #: ubiquitous thing is exactly what an annotator stops bothering to mark. `sky`
 #: is the worked example -- 18.8% prevalent as annotated, plainly higher in
-#: truth (`docs/experiments/overview-bench/REPORT.md`). Measured, not listed,
+#: truth (`docs/experiments/2026-08-12-overview-bench/REPORT.md`). Measured, not listed,
 #: because which names are pervasive is a property of the corpus.
 PERVASIVE_PREVALENCE = float(os.environ.get("VTS_PERVASIVE_PREVALENCE", "0.10"))
 

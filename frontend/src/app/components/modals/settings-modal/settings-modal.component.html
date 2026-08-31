@@ -190,7 +190,7 @@
         <!-- Sorting & Calibration -->
         @if (activeSettingsTab() === 'sorting') {
           <h3>Sorting &amp; Tuning</h3>
-          <label class="checkbox-row" title="Prepend item filenames to text-sort queries to improve matching for named items">
+          <label class="checkbox-row" title="Average the text-sort query over the model's phrasing templates (e.g. &quot;a photo of …&quot;, &quot;the sound of …&quot;) instead of embedding it as typed. Only the models measured to benefit carry templates (CLAP General audio, X-CLIP video); on every other model this has no effect (issues #3127, #3341)">
             <input type="checkbox" [ngModel]="settings().enrich_descriptions" (ngModelChange)="onToggle('enrich_descriptions', $event)" />
             Enrich descriptions
           </label>

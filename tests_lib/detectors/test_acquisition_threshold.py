@@ -5,7 +5,7 @@ New picks read a threshold as a **rank position** instead, so they take their ow
 cut :data:`~vtscore.training.thresholds.ACQUISITION_INCLUSION_OFFSET` inclusion
 steps below it - which raises it and moves it *up* the ranking.  PR #2876
 measured that at 4.5x the positives per 100 votes and lower cost; see
-``docs/experiments/acquisition-inclusion/REPORT.md``.
+``docs/experiments/2026-08-07-acquisition-inclusion/REPORT.md``.
 
 The direction is the opposite of the intuition from the cost weights, and the
 offset is relative rather than absolute.  Both are easy to get backwards and
@@ -39,12 +39,17 @@ def _clips(rng: np.random.Generator, cids: range) -> dict[int, dict]:
 #: empirical quantile of this haystack (:meth:`FoldAnchoredCut.threshold_at`),
 #: so the haystack's own spacing is the finest gap two cuts can be apart: with
 #: 20 items a quantile has to move a full 5% before the threshold moves at all.
-#: :data:`ACQUISITION_INCLUSION_OFFSET` is one inclusion step, whose tilt is
-#: routinely smaller than that, so on a 20-item haystack the acquisition cut
-#: lands on the *same* haystack element as the reporting cut and a strict ``>``
-#: degenerates into an equality.  100 resolves a single step with room to spare
-#: (verified across seeds), keeping the direction pin about the offset rather
-#: than about discretization.
+#: :data:`ACQUISITION_INCLUSION_OFFSET` is a *few* inclusion steps (three, as
+#: shipped), and the tilt of even three of them is routinely smaller than that,
+#: so on a 20-item haystack the acquisition cut lands on the *same* haystack
+#: element as the reporting cut and a strict ``>`` degenerates into an equality.
+#: 100 resolves a single step with room to spare (verified across seeds), which
+#: is the harder requirement and therefore still the right size, keeping the
+#: direction pin about the offset rather than about discretization.
+#:
+#: Deliberately sized against ONE step rather than against whatever the constant
+#: currently is: the fixture should not need re-sizing every time the shipped
+#: offset moves, and it has moved three times (-3, -1, -3).
 #:
 #: The 20-item version *looked* nondeterministic (issue #3101): it failed only
 #: in a full run, from a fully seeded fixture.  What varied with process

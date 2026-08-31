@@ -21,7 +21,7 @@ What the tables cannot show, and why this script exists:
 
 Usage:
 
-    python make_cutincl_figs.py --out docs/experiments/cut-inclusion-2865/figures \\
+    python make_cutincl_figs.py --out docs/experiments/2026-08-21-inclusion-cut-rule/figures \\
         --results /expscratch/$USER/cut-incl-2865/results
 """
 

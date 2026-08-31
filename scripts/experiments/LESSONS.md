@@ -72,11 +72,15 @@ correct union of the two branches with no judgement involved.
 
 | Date | Lesson | Issue |
 |---|---|---|
+| 2026-08-30 | [an instrument check called a healthy run broken](lessons/2026-08-30-an-instrument-check-gated-on-the-wrong-invariant.md) | #3196 |
+| 2026-08-29 | [a fresh worktree ran 49 fewer tests and still said ALL TESTS PASSED](lessons/2026-08-29-a-fresh-worktree-ran-49-fewer-tests.md) | #2877 |
+| 2026-08-29 | [a per-mode split that still pooled two environments](lessons/2026-08-29-a-per-mode-split-that-still-pooled-two-environments.md) | #2877 |
 | 2026-08-28 | [a canary that checked a path the build never reads](lessons/2026-08-28-a-canary-that-checked-a-path-the-build-never-reads.md) | #3299 |
 | 2026-08-28 | [a committed figure is *output*, and git merged it clean](lessons/2026-08-28-a-committed-figure-is-output-not-a-file.md) | #3280 |
 | 2026-08-28 | [a detached worktree ate a commit, and `git push` said OK](lessons/2026-08-28-a-detached-worktree-ate-a-commit-and-the-push-said-ok.md) | #3292 |
 | 2026-08-28 | [a figure that hung, and three fixes that were not it](lessons/2026-08-28-a-figure-that-hung-and-three-fixes-that-were-not-it.md) | #3156 |
 | 2026-08-28 | [I nearly rebuilt a pile dataset another session was rebuilding (#3281, #3284)](lessons/2026-08-28-nearly-rebuilt-a-dataset-another-session-owned.md) | #3281, #3284 |
+| 2026-08-28 | [the column named `fold_seconds` was a fifteenth of what a fold count costs](lessons/2026-08-28-the-column-named-fold-seconds-was-a-third.md) | #3314 |
 | 2026-08-28 | [the GPU picker reported every GPU on the cluster as free](lessons/2026-08-28-the-gpu-picker-reported-every-gpu-free.md) | #3299 |
 | 2026-08-27 | [a box normalised twice](lessons/2026-08-27-a-box-normalised-twice.md) | #3281 |
 | 2026-08-27 | [a repair moves more than the defect](lessons/2026-08-27-a-repair-moves-more-than-the-defect.md) | #3281 |

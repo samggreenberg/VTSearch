@@ -15,7 +15,7 @@ of geometry the vote/score paths need on top of it:
     grid cells in row-major order).
 
 There is no region *tree*.  The Max-Patch study
-(``docs/experiments/max-patch/REPORT.md``) measured the HAC region tree that
+(``docs/experiments/2026-07-29-max-patch/REPORT.md``) measured the HAC region tree that
 used to live here against tree-free raw patches over 23 scale-band Visual
 Genome categories and the tree lost on both halves of the error at every scale
 band, so ingest now stores only ``media["patch_grid"]`` and every vote / score

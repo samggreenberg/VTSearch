@@ -15,7 +15,7 @@ are all rectangular, printed, shelved objects, and whether each one is a "book"
 is a decision, not a fact. That is not hypothetical here. Visual Genome's own
 `book` annotation is the worst of the twelve classes VTSearch re-reviewed for
 `vg_scale`: 3 of 20 sampled negatives actually held one, against zero for eight
-of the other classes (`docs/experiments/vg-scale/DATASHEET.md`).
+of the other classes (`docs/experiments/2026-08-25-vg-scale/DATASHEET.md`).
 
 The photographs are **COCO val2017**, which carries `book` as an annotated
 class. `coco_fixture.ensure_corpus` downloads it on demand into

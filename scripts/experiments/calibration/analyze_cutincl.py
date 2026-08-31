@@ -324,12 +324,14 @@ def regret_vs_incumbent(df: pd.DataFrame, incumbent: str, agg: Path) -> pd.DataF
 # ------------------------------------------------------- (b) knob liveness
 
 
-def knob_liveness(df: pd.DataFrame, agg: Path) -> pd.DataFrame:
-    """How much of the knob each arm actually delivers, per (arm, env).
+def liveness_per_step(df: pd.DataFrame) -> pd.DataFrame:
+    """One row per (arm, env, cell, step): what the whole slider did at that step.
 
-    Computed per *step* (one trajectory point is one realization of the whole
-    knob) and then averaged, because that is the unit a user experiences: at a
-    given moment, how many distinct answers does dragging the slider produce?
+    Split out of :func:`knob_liveness` so a cross-run analysis can pair these
+    rows between two trajectories before they are averaged away - #3196 pairs
+    them by cell across two *heads*, which cannot share a trajectory.  One
+    implementation, because a second copy of this arithmetic is how two studies
+    come to disagree about what "the knob is dead" means.
 
     * ``distinct_admitted`` - distinct admitted sets across the swept ``k``.
     * ``knob_yield`` - that count as a share of the swept ``k``; 1.0 means every
@@ -376,6 +378,19 @@ def knob_liveness(df: pd.DataFrame, agg: Path) -> pd.DataFrame:
         return per_step
     per_step["knob_yield"] = per_step["distinct_admitted"] / per_step["n_ks"]
     per_step["dead_step_rate"] = per_step["dead_steps"] / per_step["adjacent_pairs"].replace(0, np.nan)
+    return per_step
+
+
+def knob_liveness(df: pd.DataFrame, agg: Path) -> pd.DataFrame:
+    """How much of the knob each arm actually delivers, per (arm, env).
+
+    Averages :func:`liveness_per_step` over steps and cells, because the per-step
+    frame is the unit a user experiences: at a given moment, how many distinct
+    answers does dragging the slider produce?
+    """
+    per_step = liveness_per_step(df)
+    if per_step.empty:
+        return per_step
     per_step.to_csv(agg / "cutincl_liveness_per_step.csv", index=False)
 
     g = (

@@ -1451,7 +1451,18 @@ class MediaEmbedder(ABC):
         """Wrapper templates for enriching sort descriptions.
 
         Each template is a format string containing ``{text}``.  Override in
-        subclasses to provide media-specific wrappers that improve embedding quality.
+        subclasses to provide media-specific wrappers that improve embedding
+        quality.
+
+        Whether wrappers help is a property of the **embedder**, not of the
+        media type: #3127 measured enrichment on/off across 22 eval datasets
+        and 560 paired queries and found the ensemble a clear loss on ``e5``,
+        ``bge``, ``siglip`` and ``clap``, and a gain only on ``clap_general``
+        and ``xclip``.  So an empty list here is a real answer -- "no wrapper
+        beats the typed query on this model" -- and not merely an unfilled
+        slot.  Return ``[]`` (the default) unless you have measured otherwise;
+        :meth:`embed_text_enriched` then degrades to :meth:`embed_text` and the
+        Enrich Sort Descriptions setting is a no-op for that embedder.
         """
         return []
 

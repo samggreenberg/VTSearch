@@ -1,6 +1,6 @@
 """Aggregate the **Autopilot** selection-bias sweep into the report's tables.
 
-Reads ``docs/experiments/inclusion-knob/autopilot_sweep.csv`` (written by
+Reads ``docs/experiments/2026-07-27-inclusion-knob/autopilot_sweep.csv`` (written by
 :mod:`run_autopilot_sweep`, whose biased arm is the repo's own Autopilot
 selector) and writes ``autopilot_tables.md`` next to it.
 

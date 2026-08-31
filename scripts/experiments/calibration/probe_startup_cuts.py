@@ -60,7 +60,7 @@ def probe_cell(ds: str, emb: str, cat: str, medias: dict) -> dict | None:
     text = cfg.seed_query_text(ds, cat)
     if not text:
         return None
-    qvec = embed_text_query(text, "image", embedder_name=emb)
+    qvec = embed_text_query(text, "image", enrich=cfg.SEED_ENRICH, embedder_name=emb)
     if qvec is None:
         return None
 

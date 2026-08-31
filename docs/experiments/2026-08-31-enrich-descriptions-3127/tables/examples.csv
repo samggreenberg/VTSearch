@@ -1,0 +1,21 @@
+media_type,embedder,dataset,category,query,ap_plain,ap_enriched,delta
+audio,clap_general,esc50_l,pouring_water,pouring water from a container,0.985448,0.703922,-0.28152599999999994
+audio,clap,esc50_m,rain,rain falling,0.959402,0.72515,-0.23425200000000002
+audio,clap,esc50_m,keyboard_typing,keyboard typing,0.986645,0.755322,-0.23132299999999995
+audio,clap_general,esc50_s,pouring_water,pouring water from a container,0.885,0.654444,-0.23055599999999998
+audio,clap,esc50_s,hen,a hen clucking,0.8,0.572222,-0.22777800000000004
+audio,clap,esc50_s,drinking_sipping,drinking and sipping,0.852857,0.629524,-0.223333
+audio,clap,esc50_l,laughing,people laughing,0.939913,0.731311,-0.20860199999999995
+audio,clap,esc50_l,hen,a hen clucking,0.56678,0.399065,-0.16771499999999995
+audio,clap,esc50_m,engine,an engine revving,0.614199,0.463396,-0.15080300000000008
+audio,clap_general,esc50_m,pouring_water,pouring water from a container,1.0,0.850398,-0.149602
+audio,clap_general,esc50_m,footsteps,footsteps walking,0.500521,0.667784,0.16726300000000005
+audio,clap,esc50_s,breathing,heavy breathing,0.630952,0.800909,0.16995700000000002
+video,xclip,ucf101_m,BalanceBeam,a gymnast on the balance beam,0.561892,0.734533,0.17264100000000004
+audio,clap_general,esc50_s,wind,wind howling,0.308658,0.493333,0.18467500000000003
+audio,clap,esc50_l,water_drops,dripping water drops,0.660891,0.869603,0.208712
+audio,clap,esc50_s,insects,buzzing insects,0.505952,0.722619,0.21666700000000005
+audio,clap_general,esc50_s,laughing,people laughing,0.44127,0.692222,0.250952
+audio,clap_general,esc50_s,insects,buzzing insects,0.697619,0.966667,0.26904800000000006
+audio,clap_general,esc50_l,insects,buzzing insects,0.572188,0.900214,0.32802599999999993
+audio,clap_general,esc50_m,insects,buzzing insects,0.494897,0.962121,0.46722400000000003

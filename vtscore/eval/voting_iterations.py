@@ -48,6 +48,7 @@ if TYPE_CHECKING:
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.eval.al_strategies import ALContext, select_next
 from vtscore.eval.autopilot_flow import SMART_WINDOW, AutopilotFlow, app_has_detector
+from vtscore.eval.fit_quality import FIT_QUALITY_COLUMNS, fit_quality_row
 from vtscore.eval.startup_schedule import StartupState, parse_startup_schedule, round_cut
 from vtscore.eval.labels import evaluable_pool, media_is_positive, region_box_for_category
 from vtscore.eval.score_dumps import maybe_dump_predictions
@@ -57,7 +58,9 @@ from vtscore.training.mlp import LINEAR_HEAD, LINEAR_SVM_HEAD, _auto_hidden_dim,
 from vtscore.training.thresholds import (
     ACQUISITION_INCLUSION_OFFSET,
     CUT_KIND_INTERIOR,
+    apply_vote_exclusion,
     FOLD_ANCHOR_QTILT_STEP,
+    FOLD_ANCHOR_WEIGHT,
     NO_GOOD_THRESHOLD,
     acquisition_inclusion,
     anchored_gmm_fit,
@@ -130,6 +133,82 @@ PRODUCTION_HEAD: str = "linear_svm"
 #: region tree from ingest.
 PRODUCTION_PATCH_STYLE: str = "max_patch"
 
+#: The one detection style the #3322 skyline is defined for in v1 - spelled here
+#: rather than imported for the same reason :data:`_SAFE_GMM_VARIANTS` spells its
+#: rule names: this module is deliberately import-light at module scope.
+#: ``test_skyline_arm`` pins it against :class:`~vtscore.eval.patch_styles.WholeImageStyle`.
+_WHOLE_IMAGE_STYLE: str = "whole_image"
+
+
+#: The **supervised-skyline** arms (issue #3322), tagged in the ``gmm_variant``
+#: column exactly like every other variant family, and emitted **once per run**
+#: rather than once per step: a skyline is vote-independent, so its row is a
+#: constant of the ``(cell, seed)`` and repeating it 150 times would only invite
+#: a reader to average it against itself.
+#:
+#: * ``skyline_train_full`` - the **primary** arm and the one the decomposition
+#:   is defined against.  The same head, trained through the same trainer, on the
+#:   **entire simulation split with full ground-truth labels**, evaluated on the
+#:   untouched test split.  The standard supervised-skyline arm from the
+#:   active-learning literature: same hypothesis class, same features, full
+#:   supervision, disjoint eval, so its cost is "how learnable is this class in
+#:   this embedding with this head" and nothing else.
+#: * ``skyline_test_xfit`` - the optional **bracket** partner, cross-fitted over
+#:   the test split (train on K-1 folds, score the held-out one).  Never a naive
+#:   train-on-test fit: a ~769-parameter linear head on a test set of comparable
+#:   size can shatter near-arbitrary labelings, so a naive fit would report
+#:   ``d / n_test`` under the name "learnability" and hand back near-zero cost on
+#:   a class nothing can learn.  Cross-fitting is the SVM analogue of
+#:   :func:`~vtscore.eval.transfer_rules.honest_test_oracle`, which does the same
+#:   thing one level down for the *cut*.
+SKYLINE_TRAIN_FULL: str = "skyline_train_full"
+SKYLINE_TEST_XFIT: str = "skyline_test_xfit"
+SKYLINE_ARMS: tuple[str, ...] = (SKYLINE_TRAIN_FULL, SKYLINE_TEST_XFIT)
+
+#: ``threshold_provenance`` on a skyline row.  A skyline is a statement about a
+#: **ranking**, so it is deliberately *not* routed through a calibrated cut - that
+#: would re-mix in exactly the term ``regret`` already isolates.  Its threshold is
+#: the test oracle's, which makes ``cost == oracle_cost`` and ``regret == 0`` on
+#: the row **by construction**: read a skyline row's ``oracle_cost``, never its
+#: ``regret``.
+SKYLINE_PROVENANCE: str = "skyline_test_oracle"
+
+#: RNG salt for the cross-fitted arm's test-set partition.  Combined with the
+#: run's own ``seed`` so the folds are reproducible per cell, and kept off the
+#: trajectory's ``RandomState`` so turning the arm on cannot move a single vote.
+_SKYLINE_SEED: int = 3322
+
+#: The three-term decomposition the skyline unlocks (issue #3322), NaN on every
+#: row of a run that did not ask for :data:`SKYLINE_TRAIN_FULL`.
+#:
+#: ``cost = skyline_oracle_cost + training_regret + regret`` - the learnability
+#: floor, what the interactive loop left on the table, and what the cut rule gave
+#: away on the ranking it got.  ``oracle_cost`` alone conflates the first two:
+#: a cell can be expensive because no linear head in this embedding separates the
+#: class, or because 10-200 clicks did not find the head that does, and those two
+#: diagnoses buy different things (a better embedder vs. a better acquisition
+#: loop).  ``training_regret`` is defined on **rankings** -
+#: ``oracle_cost(mortal) - oracle_cost(skyline)`` - which is what makes the
+#: telescope exact.
+#:
+#: The honest columns re-base the same split off the cross-fitted reference, so
+#: ``cost = skyline_oracle_cost_honest + training_regret_honest + regret_honest``
+#: telescopes too.  **The terms share noise by construction** (they sum to a
+#: pinned total), so the sum-pinned caution `_operating_metrics` documents for
+#: ``rule_inefficiency`` / ``calibration_shift`` transfers verbatim: do not read
+#: one half moving as an effect when the knob also moves the yardstick.
+#:
+#: **Negative ``training_regret`` is legal and is information, not a bug.**
+#: Unlike the threshold oracle, the skyline is not a per-run optimum over the
+#: same object: region votes carry box information an image-labelled skyline
+#: lacks, and small samples get lucky.  Nothing clamps it.
+_SKYLINE_COLUMNS: tuple[str, ...] = (
+    "skyline_oracle_cost",
+    "skyline_oracle_cost_honest",
+    "training_regret",
+    "training_regret_honest",
+)
+
 
 def _resolve_hidden_dim(head: str, n_votes: int) -> int:
     """``hidden_dim`` sentinel for *head* at *n_votes* votes.
@@ -163,6 +242,16 @@ _IDENT_COLUMNS: tuple[str, ...] = (
     "t",
     "n_good",
     "n_bad",
+    #: The simulation set this cell voted out of and fitted its threshold's
+    #: population estimate on, and what is left of it after this step's votes
+    #: (issue #3312).  ``n_remainder`` is exactly the count
+    #: :func:`~vtscore.training.thresholds.apply_vote_exclusion` compares
+    #: against the #3308 floor, so the pair reconstructs per step both whether
+    #: the exclusion fired and how big it could possibly have been - the effect
+    #: is bounded by ``1 - n_remainder / n_haystack``, the votes' share of the
+    #: haystack, which is the axis that study bands on.
+    "n_haystack",
+    "n_remainder",
     "phase",
     "app_trained",
     #: The parameterised opening this run took (issue #3267), verbatim - so a
@@ -187,6 +276,31 @@ _IDENT_COLUMNS: tuple[str, ...] = (
 
 #: Canonical column order for the voting-iterations result frame.  Kept in one
 #: place so :func:`run_voting_iterations_eval` and downstream tooling agree.
+#: Every column that is a **wall clock**, and therefore the set a determinism
+#: check has to exclude.  Defined here, beside the code that emits them, because
+#: it was defined in three test files instead: adding one timing column (#3314's
+#: `final_score_seconds`) then broke four tests in two of the three, each with
+#: its own private copy of this list, and the fourth would have gone on silently
+#: comparing a column it no longer covered.  A new timing column now joins one
+#: tuple and every consumer follows.
+TIMING_COLUMNS: frozenset[str] = frozenset(
+    {
+        "elapsed_seconds",
+        "train_seconds",
+        "xcal_seconds",
+        "final_score_seconds",
+        "pool_score_seconds",
+        "test_score_seconds",
+        # Per-K calibration clocks (#3314), on the fold-count arms only.
+        "fold_seconds",
+        "fold_fit_seconds",
+        "fold_score_seconds",
+        "anchored_seconds",
+        "cal_seconds",
+    }
+)
+
+
 _VOTING_COLUMNS: tuple[str, ...] = (
     *_IDENT_COLUMNS,
     "cost",
@@ -206,8 +320,20 @@ _VOTING_COLUMNS: tuple[str, ...] = (
     "n_flagged",
     "auroc",
     "average_precision",
+    #: The fold count the STEP lived at (#3314).  Equal to the run's
+    #: `calibrate_count` everywhere except under `fold_count_schedule`, where it
+    #: is what the schedule resolved for this step's vote count.  On the plain
+    #: frame as well as the calibration one, because it describes the step and
+    #: not the study: a frame that cannot say how many folds a row was cut with
+    #: cannot be pooled with one that can.
+    "calibrate_count",
     "train_seconds",
     "xcal_seconds",
+    #: The final model's own pass over the haystack, on the shipped
+    #: safe-threshold path (#3314); NaN when safe thresholds are off, where
+    #: there is no such pass.  A wall clock like its neighbours, so it varies
+    #: run to run.
+    "final_score_seconds",
     "pool_score_seconds",
     "test_score_seconds",
     "backend",
@@ -277,8 +403,9 @@ _PICK_COLUMNS: tuple[str, ...] = (
 #: (issue #2799), tagged in ``gmm_variant`` (``""`` on every other row).  The
 #: fold-count arms (issues #2897, #3116, #3115) ride the same tag as
 #: ``folds_k{K}_{xcal,blend,anchored,anchored_qmedian,tmean,tmedian,qmean,qmedian}``
-#: and additionally fill ``fold_count`` / ``fold_seconds`` / ``n_cal_scores`` /
-#: ``n_folds_used``.
+#: and additionally fill ``fold_count`` / ``fold_seconds`` / ``fold_fit_seconds``
+#: / ``fold_score_seconds`` / ``anchored_seconds`` / ``cal_seconds`` /
+#: ``n_cal_scores`` / ``n_folds_used``.
 _CALIBRATION_COLUMNS: tuple[str, ...] = (
     *_IDENT_COLUMNS,
     "pool_variant",
@@ -321,12 +448,25 @@ _CALIBRATION_COLUMNS: tuple[str, ...] = (
     "rule_inefficiency",
     "calibration_shift",
     "calibration_shift_honest",
+    *_SKYLINE_COLUMNS,
     "n_pool_rows",
     "fold_count",
     "fold_seconds",
+    "fold_fit_seconds",
+    "fold_score_seconds",
+    "anchored_seconds",
+    "cal_seconds",
     "n_cal_scores",
     "n_folds_used",
+    #: The fold count the STEP lived at (#3314).  Equal to the run's
+    #: `calibrate_count` everywhere except under `fold_count_schedule`, where it
+    #: is what the schedule resolved for this step's vote count.
+    "calibrate_count",
     "train_seconds",
+    #: The final model's pass over the haystack (#3314): app work, paid once
+    #: per step whatever the fold count, so it belongs in the denominator of a
+    #: cost ratio rather than in the calibration term.
+    "final_score_seconds",
     "xcal_seconds",
     "pool_score_seconds",
     "test_score_seconds",
@@ -433,6 +573,52 @@ _CUT_DIAGNOSTIC_COLUMNS: tuple[str, ...] = (
     "oracle_lo_sf_gauss",
     "oracle_lo_sf_evt",
 )
+
+#: Column order for the **goodness-of-fit** side frame (issue #3329): one row per
+#: (step, scope), where *scope* is either a calibration fold of the **shipped**
+#: fold-anchored cut or the labelled sim set under one pooling geometry.
+#:
+#: This frame exists because every other diagnostic in this module is
+#: *relative* - ``evt_loglik_gain`` prices one family against another, the
+#: ``tau_*`` chain prices one cut against another - and a misfit both sides share
+#: cancels in every one of them.  ``vtscore.eval.fit_quality`` scores a fit
+#: against its own data instead, and this is where those statistics leave the
+#: run.
+#:
+#: Two scopes, because the two questions live on different populations and
+#: conflating them would silently compare a fold model's haystack with the final
+#: model's sim set:
+#:
+#: * ``fold<i>`` - fold *i* of the shipped :class:`FoldAnchoredCut`, scored
+#:   against **its own** haystack.  Label-free, so it carries the distance and
+#:   anchoring columns only.  Nothing in the eval tier has ever read
+#:   ``FoldAnchoredCut.fits``; these are the shipped mixture's first observations.
+#: * ``sim:<geometry>`` - the unanchored mixture on the labelled sim scores.
+#:   Carries the class-shape and identification columns, which need labels.
+_FIT_QUALITY_COLUMNS: tuple[str, ...] = (
+    *_IDENT_COLUMNS,
+    "scope",
+    "fold_index",
+    "n_folds",
+    "n_fit_sample",
+    "fit_ok",
+    # The fitted mixture itself, so a row is self-contained: an analyzer can
+    # re-derive any statistic here without needing the run's other frames.
+    "fq_w_lo",
+    "fq_mu_lo",
+    "fq_var_lo",
+    "fq_w_hi",
+    "fq_mu_hi",
+    "fq_var_hi",
+    "fq_cut",
+    *FIT_QUALITY_COLUMNS,
+)
+
+#: Emit a goodness-of-fit row every this many steps (plus the first three, where
+#: the fit moves fastest).  The mixture evolves slowly against the vote count, so
+#: a row per step would multiply the fit cost by the horizon to resolve a curve
+#: that a fifth of the points already resolves.
+FIT_QUALITY_STRIDE_DEFAULT = 5
 
 #: Column order for the inclusion-budget sweep side frame (long format, one row
 #: per (step, inclusion k)); written to a separate CSV by the runner.
@@ -691,6 +877,8 @@ def _safe_threshold_for_step(
     inclusion: int,
     style_obj: Any = None,
     schedule: str | None = None,
+    voted_ids: "set[int] | None" = None,
+    exclusion_min_remainder: float | None = None,
 ) -> tuple[float, list[float], list[int], list[Any], str, "FoldAnchoredCut | None"]:
     """The harness's **shipped** safe threshold - the same rule the app applies.
 
@@ -722,12 +910,37 @@ def _safe_threshold_for_step(
     with them so a variant can attach each score's true label without assuming
     the scorer preserved any ordering, and the per-fold haystack score arrays
     so the fold-anchored variant grid re-fits without re-scoring.
+
+    *voted_ids* drives the app's #3308 exclusion, and drives it through the app's
+    own :func:`~vtscore.training.thresholds.apply_vote_exclusion` /
+    :func:`~vtscore.training.thresholds.drop_voted` rather than a copy of them:
+    the voted items are dropped from every haystack the fold-anchored estimator
+    fits on - the per-fold arrays (which are also what the returned
+    ``fold_haystacks`` carry, so the variant grids inherit the same population
+    convention) and the final model's realization sample - unless the remainder
+    falls under the floor, in which case the whole step keeps its full
+    haystacks.  The *returned* sim scores stay complete: they feed evaluation
+    and acquisition, not the fit.
+
+    *exclusion_min_remainder* is the **#3312 arm knob** and the one thing here
+    that is allowed to differ from the app: ``None`` (every production caller,
+    and the harness's own default arm) resolves to the shipped floor, ``0``
+    excludes unconditionally, and ``math.inf`` switches the exclusion off
+    entirely - the pre-#3308 baseline.  Because the resolution happens inside
+    :func:`~vtscore.training.thresholds.resolve_exclusion_floor`, the default
+    arm cannot drift from the app even though the knob exists.
     """
     import numpy as np  # noqa: PLC0415
 
-    from vtscore.training.thresholds import fit_fold_anchored_cut  # noqa: PLC0415
+    from vtscore.training.thresholds import drop_voted, fit_fold_anchored_cut  # noqa: PLC0415
 
     final_model = step.torch_model
+    # The final model's pass over the haystack (#3314).  Real app work - it is
+    # what the shipped cut is realized on and what the browse view ranks - and
+    # it is K-INDEPENDENT, so it belongs in the denominator of a cost ratio and
+    # not in `cal_seconds`.  Untimed it would simply be missing from the step,
+    # which makes every fold count look more expensive than it is.
+    t_final = time.monotonic()
     if style_obj is not None or region_aware:
         assert final_model is not None
         ids, all_scores = _score_sim_set_with_model(
@@ -737,14 +950,38 @@ def _safe_threshold_for_step(
         # Trainer-agnostic: the SVM arms have no torch model to forward.
         ids = sorted(sim_ids)
         all_scores = np.asarray(step.predict(np.asarray(X_all_clips))).ravel().tolist()
+    details["final_score_seconds"] = time.monotonic() - t_final
+
+    # The floor decision is taken once, on the final model's remainder, and
+    # applies to every haystack in the step - all-or-nothing, so the fold and
+    # final populations can never diverge.  ``apply_vote_exclusion`` is the
+    # app's own decision function, so the default arm reproduces production by
+    # construction rather than by a comment promising it does.
+    fit_final, excluding = apply_vote_exclusion(all_scores, ids, voted_ids, min_remainder=exclusion_min_remainder)
+
+    def _hay(scores: list[float], score_ids: list[int]) -> "np.ndarray":
+        """One fold's haystack under this step's exclusion decision."""
+        return drop_voted(scores, score_ids, voted_ids or ()) if excluding else np.asarray(scores, dtype=np.float64)
 
     fold_models = details.get("fold_models") or []
     fold_orderings = details.get("fold_orderings") or []
     n_folds = min(len(fold_models), len(fold_orderings))
     fold_haystacks: list[Any] = []
+    # Per-fold haystack scoring seconds (#3314).  Scoring the sim set with each
+    # fold model is a real, K-proportional part of the calibration a live run at
+    # K pays for - the shipped rule anchors every fold's mixture on that fold's
+    # own haystack - and it is paid *here*, outside `train_seconds`,
+    # `xcal_seconds`, `pool_score_seconds` and `test_score_seconds`.  Left
+    # unmeasured it is invisible to every cost model built out of those four,
+    # which would make a fold-count affordability ceiling read a fraction of
+    # what K actually costs.
+    haystack_seconds: list[float] = []
     for model in fold_models[:n_folds]:
-        _fids, fscores = _score_sim_set_with_model(model, region_aware, sim_clips, X_all_clips, sim_ids, style_obj)
-        fold_haystacks.append(np.asarray(fscores, dtype=np.float64))
+        t_hay = time.monotonic()
+        fids, fscores = _score_sim_set_with_model(model, region_aware, sim_clips, X_all_clips, sim_ids, style_obj)
+        hay = _hay(fscores, fids)
+        haystack_seconds.append(time.monotonic() - t_hay)
+        fold_haystacks.append(hay)
 
     # #3116: the #2897 fold-count arms need a haystack per fold to re-fit the
     # *shipped* rule at each K, and `details["fold_models"]` is trimmed to the
@@ -758,11 +995,20 @@ def _safe_threshold_for_step(
     if fold_data is not None and fold_data.get("models"):
         extended = list(fold_haystacks)
         for model in fold_data["models"][len(extended) :]:
-            _fids, fscores = _score_sim_set_with_model(model, region_aware, sim_clips, X_all_clips, sim_ids, style_obj)
-            extended.append(np.asarray(fscores, dtype=np.float64))
+            t_hay = time.monotonic()
+            fids, fscores = _score_sim_set_with_model(model, region_aware, sim_clips, X_all_clips, sim_ids, style_obj)
+            hay = _hay(fscores, fids)
+            haystack_seconds.append(time.monotonic() - t_hay)
+            extended.append(hay)
         fold_data["haystacks"] = extended
+        # Aligned with `haystacks`, so a K-prefix of one is a K-prefix of the
+        # other.  Every entry is one scoring pass over the same sim set, so the
+        # seconds are comparable across folds and across K by construction.
+        fold_data["haystack_seconds"] = haystack_seconds
 
-    cut = fit_fold_anchored_cut(fold_haystacks, fold_orderings[:n_folds], all_scores) if fold_haystacks else None
+    cut = (
+        fit_fold_anchored_cut(fold_haystacks, fold_orderings[:n_folds], fit_final.tolist()) if fold_haystacks else None
+    )
     if cut is not None:
         anchored = cut.threshold_at(inclusion)
         if np.isfinite(anchored):
@@ -1054,6 +1300,16 @@ def _operating_metrics(
         # conformal quantile is taken over, which is what K actually buys.
         "fold_count": nan,
         "fold_seconds": nan,
+        # #3314: `fold_seconds` counts the fold *fits* and the conformal rule's
+        # overhead only.  A live run at K also scores the sim set once per fold
+        # and fits production's anchored mixture over the prefix, both of which
+        # scale with K and neither of which lands in `train_seconds`,
+        # `xcal_seconds`, `pool_score_seconds` or `test_score_seconds`.
+        # `cal_seconds` is the sum of all four and is what a cost ceiling reads.
+        "fold_fit_seconds": nan,
+        "fold_score_seconds": nan,
+        "anchored_seconds": nan,
+        "cal_seconds": nan,
         "n_cal_scores": nan,
         # #3115: how many of the K folds actually contributed a cut, parsed off
         # the arm's own provenance.  A combine rule and a pooled quantile weight
@@ -1098,6 +1354,11 @@ def _operating_metrics(
         "rule_inefficiency": _r(rule_inefficiency),
         "calibration_shift": _r(calibration_shift),
         "calibration_shift_honest": _r(calibration_shift_honest),
+        # The #3322 decomposition (see `_SKYLINE_COLUMNS`).  Filled in one pass
+        # after the run, from the skyline arm's own row - a skyline is
+        # vote-independent, so there is nothing per-step to compute here, and
+        # NaN is the honest value on a run that asked for no skyline.
+        **dict.fromkeys(_SKYLINE_COLUMNS, nan),
         "n_pool_rows": _r(float(n_pool_rows)),
     }
 
@@ -1192,6 +1453,116 @@ _ORACLE_VARIANTS: frozenset[str] = frozenset(
 )
 
 
+def _fit_quality_rows(
+    base_row: dict[str, Any],
+    safe_cut: Any,
+    sim_scores_by_geometry: dict[str, Any],
+    sim_labels_by_geometry: dict[str, Any],
+    threshold: float,
+) -> list[dict[str, Any]]:
+    """Goodness-of-fit rows for one step (issue #3329).
+
+    Two scopes, deliberately not pooled - see :data:`_FIT_QUALITY_COLUMNS`.
+
+    The **fold** scopes read ``safe_cut.fits`` against ``safe_cut.fold_haystacks``,
+    which is the shipped estimator scored against its own data.  Nothing else in
+    the eval tier reads those fits at all, so a fold row is the only place the
+    threshold the app actually computes is compared to the distribution it claims
+    to describe.  They are label-free: a fold haystack is the unlabelled
+    remainder under *that fold's* model, and the sim labels belong to the final
+    model's score scale, so attaching them here would compare two scalings.
+
+    The **sim** scopes fit the unanchored mixture to the labelled sim scores and
+    carry the shape and identification statistics.  Both pooling geometries are
+    emitted because ``pooled`` and ``image`` are the same media under the same
+    model with only the pooling changed - the exactly-paired form of "does
+    max-pooling make the Bad mode non-Gaussian?".
+    """
+    import numpy as np  # noqa: PLC0415
+
+    from vtscore.training.thresholds import fit_score_gmm, gmm_fit_array  # noqa: PLC0415
+
+    rows: list[dict[str, Any]] = []
+
+    if safe_cut is not None:
+        fits = getattr(safe_cut, "fits", ()) or ()
+        haystacks = getattr(safe_cut, "fold_haystacks", ()) or ()
+        anchor_counts = getattr(safe_cut, "anchor_counts", ()) or ()
+        for i, (fit, hay) in enumerate(zip(fits, haystacks, strict=False)):
+            arr = np.asarray(hay, dtype=np.float64).ravel()
+            # The votes THIS fold anchored on - its held-out share - which is
+            # what the mass fraction needs.  The obvious-looking `n_anchored` is
+            # a count of FOLDS (0/1/2), and passing it produced a mass share
+            # flat at 2.9e-4 across every click of the first real run, off by
+            # the fold's vote count (#3329).  Recorded on the cut rather than
+            # recomputed here so the two cannot disagree.
+            n_anchors = int(anchor_counts[i]) if i < len(anchor_counts) else 0
+            # The counterfactual the H3 delta is against: the same sample, the
+            # same estimator, no anchors.  `fold_haystacks[i]` IS the array the
+            # shipped fit was fitted to (sorted), so the two fits are comparable
+            # point for point.
+            unanchored = fit_score_gmm(arr)
+            fq = fit_quality_row(
+                arr,
+                fit,
+                cut=threshold,
+                n_anchors=n_anchors,
+                anchor_weight=float(getattr(safe_cut, "anchor_weight", FOLD_ANCHOR_WEIGHT)),
+                unanchored_fit=unanchored,
+            )
+            rows.append(
+                {
+                    **base_row,
+                    "scope": f"fold{i}",
+                    "fold_index": i,
+                    "n_folds": len(fits),
+                    "n_fit_sample": int(arr.size),
+                    "fit_ok": fit is not None,
+                    "fq_w_lo": fit.w_lo,
+                    "fq_mu_lo": fit.mu_lo,
+                    "fq_var_lo": fit.var_lo,
+                    "fq_w_hi": fit.w_hi,
+                    "fq_mu_hi": fit.mu_hi,
+                    "fq_var_hi": fit.var_hi,
+                    "fq_cut": float(threshold),
+                    **fq,
+                }
+            )
+
+    for geometry, scores in sim_scores_by_geometry.items():
+        if scores is None:
+            continue
+        labels = sim_labels_by_geometry.get(geometry)
+        arr = gmm_fit_array(np.asarray(scores, dtype=np.float64).ravel())
+        fit = fit_score_gmm(arr)
+        fq = fit_quality_row(
+            arr,
+            fit,
+            cut=threshold,
+            labels=labels,
+            label_scores=np.asarray(scores, dtype=np.float64).ravel() if labels is not None else None,
+        )
+        rows.append(
+            {
+                **base_row,
+                "scope": f"sim:{geometry}",
+                "fold_index": -1,
+                "n_folds": 0,
+                "n_fit_sample": int(arr.size),
+                "fit_ok": fit is not None,
+                "fq_w_lo": None if fit is None else fit.w_lo,
+                "fq_mu_lo": None if fit is None else fit.mu_lo,
+                "fq_var_lo": None if fit is None else fit.var_lo,
+                "fq_w_hi": None if fit is None else fit.w_hi,
+                "fq_mu_hi": None if fit is None else fit.mu_hi,
+                "fq_var_hi": None if fit is None else fit.var_hi,
+                "fq_cut": float(threshold),
+                **fq,
+            }
+        )
+    return rows
+
+
 def _safe_gmm_variant_rows(
     details: dict[str, Any],
     base_scores: "np.ndarray",
@@ -1231,7 +1602,7 @@ def _safe_gmm_variant_rows(
     stand-in is what keeps ``rate`` commensurable with the ``cross`` and
     ``priorfree`` siblings it is differenced against - at inclusion 0 it is what
     keeps ``rate`` bit-identical to ``priorfree``, which is how every report in
-    ``docs/experiments/gmm-cut/`` reads those rows.  It is no longer *invisible*
+    ``docs/experiments/2026-08-04-gmm-cut/`` reads those rows.  It is no longer *invisible*
     though: ``cut_fallback_kind`` carries
     :data:`~vtscore.eval.cut_rules.CUT_KIND_MIDPOINT` on exactly these steps,
     against the production family's ``continued`` / ``degenerate_midpoint``, so
@@ -1449,18 +1820,93 @@ def _schedule_variant_rows(
     return rows
 
 
+def _fold_schedule_segment(part: str) -> tuple[int, int]:
+    """One ``"K@N"`` segment as ``(cut, count)``, or a ValueError naming it.
+
+    Split out of :func:`parse_fold_count_schedule` so the validation reads as a
+    list of the four ways a spec can be wrong rather than as branches inside the
+    parse loop.  The error says which SEGMENT was bad, because a schedule is
+    typed into a launcher and "invalid schedule" would leave a reader diffing
+    the string by eye.
+    """
+    k_str, sep, n_str = part.strip().partition("@")
+    if not sep:
+        raise ValueError(f"fold-count schedule segment {part!r} is not 'K@N'")
+    try:
+        k, n = int(k_str), int(n_str)
+    except ValueError as exc:
+        raise ValueError(f"fold-count schedule segment {part!r} is not 'K@N': {exc}") from exc
+    if k < 1:
+        raise ValueError(f"fold-count schedule segment {part!r}: K must be >= 1")
+    if n < 1:
+        raise ValueError(f"fold-count schedule segment {part!r}: N must be >= 1")
+    return n, k
+
+
+def parse_fold_count_schedule(spec: str | None, base: int) -> "Callable[[int], int] | None":
+    """Eval-only (#3314): resolve ``calibrate_count`` per step from the vote count.
+
+    ``"K@N"`` means ``K(n_votes) = K while n_votes < N, else base`` - the family
+    pre-registered in ``docs/experiments/2026-08-28-calibration-fold-count-3310/PLAN.md``,
+    written the issue's way round: *more folds while the labelset is small,
+    decaying to production's count*.  Several segments may be chained
+    (``"8@25,4@60"``), and they are read in ascending ``N`` order, so the first
+    cut a vote count falls under wins and the ordering in the string does not
+    matter.
+
+    This is a **harness knob and not a shipped setting**.  ``CALIBRATE_COUNT``
+    and the app's own constant are untouched, so no other study's arm moves:
+    a run that does not set it resolves to *base* at every step, which is
+    exactly what the constant did before.  If the schedule ever ships, the
+    right shape is a ``production_fold_count_for(n_votes)`` beside
+    ``production_split_for``, with ``scripts/check-eval-app-sync.py`` gaining
+    the mirror - the same discipline #3287's split fraction went through.
+
+    Returns ``None`` for an empty spec, so the caller's fast path is the
+    unscheduled one.
+    """
+    if not spec or not spec.strip():
+        return None
+    segments = sorted(_fold_schedule_segment(part) for part in spec.split(",") if part.strip())
+    if not segments:
+        return None
+
+    def resolve(n_votes: int) -> int:
+        for cut, k in segments:
+            if n_votes < cut:
+                return k
+        return base
+
+    return resolve
+
+
+def _stop(timings: dict[str, float] | None, started: float) -> None:
+    """Record ``anchored_seconds`` since *started*, when the caller wants timings."""
+    if timings is not None:
+        timings["anchored_seconds"] = time.monotonic() - started
+
+
 def _fold_count_arms(
     prefix: list[tuple[list[float], list[float]]],
     xcal: float,
     inclusion: int,
     haystacks: "list[np.ndarray] | None",
-    sim_pooled_scores: list[float] | None,
+    final_fit_scores: list[float] | None,
     ctx: BlendContext | None,
     gmm_cut: float | None,
     gmm_fit: Any,
     schedule: str | None,
+    timings: dict[str, float] | None = None,
 ) -> list[tuple[str, float, str, float]]:
     """``(arm, threshold, provenance, blend weight)`` for one fold prefix.
+
+    *timings*, when given, collects the wall clock of the parts a **live** run
+    at this K would actually pay for (#3314) - currently ``anchored_seconds``,
+    the fit of production's fold-anchored mixture over this prefix.  The other
+    arms here are counterfactual re-cuts of the same folds and cost a live run
+    nothing, so they are deliberately not timed: a cost model built off the
+    whole function would price the study's own instrumentation as if the user
+    waited through it.
 
     Split out of :func:`_fold_count_variant_rows` so the arm table is one
     readable list rather than a branch pile inside the K loop; every arm here is
@@ -1470,6 +1916,11 @@ def _fold_count_arms(
     ``haystacks`` is ``None`` when the step does not carry one sim-set score
     array per fold in the prefix, which gates every arm that has to read a cut
     in the fold's own distribution (:func:`~vtscore.training.thresholds.rank_transfer`).
+    ``final_fit_scores`` is the final model's haystack the quantile-realizing
+    arms cut on - under the #3308 convention the caller passes it with the
+    voted items already dropped, matching the fold ``haystacks``; the ``blend``
+    arm's GMM inputs (*gmm_cut*, *gmm_fit*) are fitted upstream on the full
+    distribution, as production's fallback is.
     """
     import dataclasses  # noqa: PLC0415
 
@@ -1498,7 +1949,7 @@ def _fold_count_arms(
     # `transferable` binds that condition once - "can this arm read a cut in a
     # fold's own scale?" - so it is asked in one place instead of re-derived at
     # each use site, and so both `None` cases narrow for the type checker.
-    final_scores = sim_pooled_scores if sim_pooled_scores else None
+    final_scores = final_fit_scores if final_fit_scores else None
     transferable = haystacks if (haystacks is not None and final_scores is not None) else None
     for combine in FOLD_CONFORMAL_COMBINES:
         quantile_space = combine.startswith("q")
@@ -1526,14 +1977,28 @@ def _fold_count_arms(
     # the stronger contrast: the two rows differ in the combine and in *nothing
     # else*, including the fits' own numerical noise.
     if transferable is not None and final_scores is not None:
+        # Timed with the fallback inside it (#3314): a step whose anchored fit
+        # degenerates still pays for the attempt *and* for the ladder the
+        # shipped helper walks afterwards, and that is what a user waits
+        # through.  Charging those steps only for the branch they did not take
+        # would under-price exactly the cold-start regime this study reads.
+        t_anchored = time.monotonic()
         cut = fit_fold_anchored_cut(transferable, prefix, final_scores)
         if cut is None:
             # Both arms land on the same terminal fallback; take it from the
             # shipped helper rather than duplicating its ladder here.
             value, prov = fold_anchored_gmm_threshold(transferable, prefix, final_scores, inclusion)
+            _stop(timings, t_anchored)
             arms.extend([("anchored", value, prov, nan), ("anchored_qmedian", value, prov, nan)])
         else:
-            arms.append(("anchored", cut.threshold_at(inclusion), cut.provenance, nan))
+            shipped = cut.threshold_at(inclusion)
+            # The clock stops HERE, on production's own cut and before the
+            # `qmedian` re-cut: that arm is a counterfactual read of the same
+            # fitted mixture and costs a live run nothing, so timing it would
+            # charge K for the harness's own instrumentation.  (Sharing the fit
+            # is exactly why the two arms are cheap; see the note above.)
+            _stop(timings, t_anchored)
+            arms.append(("anchored", shipped, cut.provenance, nan))
             robust = dataclasses.replace(cut, combine="qmedian")
             arms.append(("anchored_qmedian", robust.threshold_at(inclusion), robust.provenance, nan))
     return arms
@@ -1548,8 +2013,15 @@ def _fold_count_variant_rows(
     counts: list[int],
     sim_pooled_scores: list[float] | None,
     schedule: str | None,
+    sim_fit_scores: list[float] | None = None,
 ) -> list[dict[str, Any]]:
     """One metric row per calibration **fold count** K (issue #2897).
+
+    *sim_fit_scores* is the sim haystack under the #3308 population convention
+    (voted items dropped); the ``anchored`` / quantile-space arms realize their
+    cuts on it, mirroring the shipped rule, while the retired ``blend`` arm
+    keeps fitting *sim_pooled_scores* - production's fallback blend also keeps
+    the full distribution.  ``None`` falls back to *sim_pooled_scores*.
 
     The study's screen for "does more cross-calibration buy anything, and what
     does it cost".  It is exact rather than approximate, because the folds are
@@ -1604,10 +2076,29 @@ def _fold_count_variant_rows(
     touches, so re-fitting it per K would return the same cut at K times the
     price.  The gap #3116 identified is the missing arm above, not the hoist.
 
-    ``fold_seconds`` is the calibration wall clock this K would have cost: the
-    measured fit time of its own folds plus the count-independent overhead of
-    the threshold rule.  It is measured inside the Kmax run, so every K's timing
-    shares one machine, one process and one cache state - the *ratios* are the
+    **The cost columns.**  ``fold_seconds`` is what #2897 and #3116 read: the
+    measured fit time of this K's own folds plus the count-independent overhead
+    of the threshold rule.  It is *not* the whole price of K, and #3314 found
+    that reading it as one under-states the exchange rate badly, because two
+    other K-proportional pieces of the shipped calibration are paid outside it
+    and outside every other timing column the frame carries:
+
+    * ``fold_score_seconds`` - one scoring pass over the sim set per fold, so
+      the shipped rule can anchor each fold's mixture on that fold's own
+      haystack (measured in :func:`_safe_threshold_for_step`).
+    * ``anchored_seconds`` - production's ``fit_fold_anchored_cut`` over the
+      prefix: one anchored EM per fold.
+
+    ``cal_seconds`` sums all of it (``fold_fit_seconds + overhead +
+    fold_score_seconds + anchored_seconds``) and is the column an affordability
+    ceiling has to read.  ``train_seconds``, ``xcal_seconds``,
+    ``pool_score_seconds`` and ``test_score_seconds`` cover the *rest* of the
+    step and none of them covers the safe-threshold block, so
+    ``cal_seconds + train_seconds + pool_score_seconds + test_score_seconds`` is
+    the per-step wall clock a live run at K would have.
+
+    All of it is measured inside the one Kmax run, so every K's timing shares
+    one machine, one process and one cache state - the *ratios* are the
     load-bearing part, not the absolute seconds.
 
     This is the study's screen, not its verdict, for the usual reason (see
@@ -1630,6 +2121,7 @@ def _fold_count_variant_rows(
     seconds = fold_data["seconds"]
     overhead = float(fold_data.get("overhead_seconds") or 0.0)
     haystacks = fold_data.get("haystacks") or []
+    haystack_seconds = fold_data.get("haystack_seconds") or []
     if not orderings:
         return []
 
@@ -1651,19 +2143,35 @@ def _fold_count_variant_rows(
         cal_scores = np.array([s for scores, _ in prefix for s in scores])
         cal_labels = np.array([lb for _, labels_ in prefix for lb in labels_])
         xcal = threshold_from_fold_orderings(prefix, inclusion)
-        fold_seconds = _r(float(sum(seconds[:k])) + overhead)
+        fold_fit_seconds = float(sum(seconds[:k]))
+        fold_seconds = _r(fold_fit_seconds + overhead)
+        # The rest of what a live run at K pays for, beside the fold fits
+        # (#3314).  Scoring the sim set once per fold is K-proportional and is
+        # measured in `_safe_threshold_for_step`; the anchored fit over the
+        # prefix is measured below, inside `_fold_count_arms`.
+        fold_score_seconds = float(sum(haystack_seconds[:k])) if len(haystack_seconds) >= k else float("nan")
+        timings: dict[str, float] = {}
 
         arms = _fold_count_arms(
             prefix,
             xcal,
             inclusion,
             haystacks[:k] if len(haystacks) >= k else None,
-            sim_pooled_scores,
+            sim_fit_scores if sim_fit_scores is not None else sim_pooled_scores,
             ctx,
             gmm_cut,
             gmm_fit,
             schedule,
+            timings=timings,
         )
+        anchored_seconds = float(timings.get("anchored_seconds", float("nan")))
+        # The FULL calibration wall clock at K: fold fits + one haystack scoring
+        # pass per fold + production's anchored fit over the prefix + the
+        # count-independent overhead of the conformal rule.  `fold_seconds` is
+        # deliberately left as it was (#2897/#3116 read it, and archived runs
+        # are compared against it), but it is only the first of those four
+        # terms, so an affordability rule must read THIS column.
+        cal_seconds = _r(fold_fit_seconds + overhead + fold_score_seconds + anchored_seconds)
 
         for arm, threshold, provenance, weight in arms:
             row = _operating_metrics(
@@ -1684,6 +2192,10 @@ def _fold_count_variant_rows(
             row["blend_weight"] = _r(weight)
             row["fold_count"] = k
             row["fold_seconds"] = fold_seconds
+            row["fold_fit_seconds"] = _r(fold_fit_seconds)
+            row["fold_score_seconds"] = _r(fold_score_seconds)
+            row["anchored_seconds"] = _r(anchored_seconds)
+            row["cal_seconds"] = cal_seconds
             row["n_cal_scores"] = int(cal_scores.size)
             row["n_folds_used"] = _folds_used(provenance, k)
             rows.append(row)
@@ -1715,6 +2227,7 @@ def _anchored_variant_rows(
     rules: list[str],
     fold_combines: list[str],
     fold_anchored: bool,
+    sim_fit_scores: list[float] | None = None,
 ) -> list[dict[str, Any]]:
     """Metric rows for the anchored-mixture threshold arms (issue #2852).
 
@@ -1764,7 +2277,13 @@ def _anchored_variant_rows(
     anchor_labels = [1.0] * sum(1 for cid in good_ids if cid in score_by_id) + [0.0] * sum(
         1 for cid in bad_ids if cid in score_by_id
     )
-    final_scores = np.asarray(sim_scores, dtype=np.float64)
+    # The #3308 population convention: the voted items anchor the fits, so they
+    # are dropped from the free haystack sample instead of sitting in it twice
+    # (once free, once clamped) - matching the shipped cut and the (already
+    # filtered) *fold_haystacks* the fold family re-cuts.  *sim_fit_scores*
+    # carries the caller's floor decision (resolve_exclusion_floor), so this
+    # family can never diverge from the shipped population convention.
+    final_scores = np.asarray(sim_fit_scores if sim_fit_scores is not None else sim_scores, dtype=np.float64)
 
     rows: list[dict[str, Any]] = []
 
@@ -2097,6 +2616,11 @@ def _cut_inclusion_rows(
     Every row is scored under the cost weights of **its own** ``k`` and against
     the oracle cut at that same ``k`` - the run's reporting inclusion does not
     enter - so regret is comparable along the knob as well as across arms.
+
+    *sim_scores* arrives under the #3308 population convention (the caller
+    passes the voted-items-dropped haystack when it has one), matching the
+    already-filtered *fold_haystacks*, so every re-cut here realizes its
+    quantile on the same population the shipped cut does.
     """
     import numpy as np  # noqa: PLC0415
 
@@ -2876,6 +3400,315 @@ def _svm_train_and_calibrate(
 
 
 # ------------------------------------------------------------------
+# Supervised skyline (issue #3322)
+# ------------------------------------------------------------------
+
+
+def _skyline_fit_and_score(
+    good_ids: list[int],
+    bad_ids: list[int],
+    score_ids: list[int],
+    clips_dict: dict[int, dict[str, Any]],
+    target_category: str,
+    *,
+    trainer: str,
+    head: str,
+    style_obj: Any,
+    region_voting: bool,
+    input_dim: int,
+    inclusion: int,
+    calibrate_count: int,
+    calibration_fraction: float,
+) -> tuple[dict[int, float], _StepModel, dict[str, float], float]:
+    """Train one fully-supervised head and score *score_ids* with it.
+
+    The whole point of the skyline is that it differs from a mortal step in
+    **the labels and nothing else**, so this goes through
+    :func:`_train_and_calibrate` rather than fitting an estimator of its own:
+    same head, same inclusion class-weights, same pinned fit seed, same backend,
+    same bag-aware flooding.  A skyline that trained through a private
+    ``LinearSVC`` would report "fewer labels" and "different trainer" as one
+    number, and would need its own ``Mirror(...)`` entry in
+    ``scripts/check-eval-app-sync.py`` to stay honest; delegation needs neither.
+
+    The threshold the trainer calibrates is computed and **discarded** - the
+    caller takes the test oracle's cut instead (see :data:`SKYLINE_PROVENANCE`).
+    It is paid for rather than skipped because the alternative is a second entry
+    point into the trainer that only the skyline uses, which is exactly the kind
+    of near-copy this module keeps out.
+
+    Returns ``({media_id: score}, step, timings, test_score_seconds)``.
+    """
+    from vtscore.eval import calibration_metrics as cm  # noqa: PLC0415
+
+    step, _threshold, _n_labels, timings, _details = _train_and_calibrate(
+        trainer,
+        dict.fromkeys(good_ids),
+        dict.fromkeys(bad_ids),
+        clips_dict,
+        target_category,
+        region_voting=region_voting,
+        input_dim=input_dim,
+        inclusion=inclusion,
+        calibrate_count=calibrate_count,
+        calibration_fraction=calibration_fraction,
+        head=head,
+        style_obj=style_obj,
+        emit_calibration_metrics=False,
+    )
+    assert step.torch_model is not None  # v1 runs the styled torch path only
+    t_score = time.monotonic()
+    ids, flat, seg = style_obj.node_scores(step.torch_model, {cid: clips_dict[cid] for cid in score_ids})
+    pooled = cm.segment_max_pool(flat, seg)
+    score_seconds = time.monotonic() - t_score
+    return ({cid: float(v) for cid, v in zip(ids, pooled, strict=True)}, step, timings, score_seconds)
+
+
+def _skyline_arm_rows(
+    arms: list[str],
+    clips_dict: dict[int, dict[str, Any]],
+    target_category: str,
+    sim_ids: list[int],
+    test_ids: list[int],
+    inclusion: int,
+    *,
+    trainer: str,
+    head: str,
+    style_obj: Any,
+    region_voting: bool,
+    input_dim: int,
+    calibrate_count: int,
+    calibration_fraction: float,
+    seed: int,
+) -> list[dict[str, Any]]:
+    """One metric row per requested skyline arm (issue #3322), or ``[]``.
+
+    Both arms are scored on the **untouched test split** - the same ``test_ids``
+    every mortal row is scored on, pooled through the same
+    ``style_obj.node_scores`` + segment max, so the two sides of
+    ``training_regret`` differ in the model and in nothing else.  The #3308
+    population convention is satisfied trivially rather than by re-applying
+    :func:`~vtscore.training.thresholds.apply_vote_exclusion`: that convention is
+    about the *haystack a threshold's population estimate is fitted on*, and a
+    skyline fits no such estimate - it takes the test oracle's cut - so there is
+    no haystack here to exclude votes from.
+
+    ``skyline_test_xfit`` pools **cross-fitted** scores: the test split is
+    partitioned into :data:`~vtscore.eval.transfer_rules.HONEST_ORACLE_FOLDS`
+    folds and each item is scored by a head that never saw it.  Two caveats ride
+    on that row and neither is a defect:
+
+    * The pooled scores come from K different heads, so they share a *ranking*
+      but not a calibrated scale.  That is fine for ``oracle_cost`` / ``auroc`` /
+      ``average_precision``, which is all this arm is read for.
+    * Its ``oracle_cost`` is still a sample minimum over those pooled scores, and
+      is optimistic for exactly the reason ``oracle_cost`` always is - which is
+      why ``oracle_cost_honest`` ships beside it, cross-fitting the *cut* on top
+      of the cross-fitted *model*.
+
+    Returns each row already carrying its ``gmm_variant`` tag and its own timing
+    / backend columns; the caller supplies the identifying columns.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    from vtscore.eval import calibration_metrics as cm  # noqa: PLC0415
+
+    nan = float("nan")
+    started = time.monotonic()
+    ordered_test = sorted(test_ids)
+    test_labels = np.array(
+        [1.0 if media_is_positive(clips_dict[cid], target_category) else 0.0 for cid in ordered_test],
+        dtype=np.float64,
+    )
+    wf, wn = cm.inclusion_weights(inclusion)
+
+    def _row(name: str, score_map: dict[int, float], step: _StepModel, timings: dict[str, float], secs: float):
+        scores = np.array([score_map[cid] for cid in ordered_test], dtype=np.float64)
+        o_thr, _o_cost, _o_fpr, _o_fnr = cm.oracle_cut(scores, test_labels, wf, wn)
+        if not np.isfinite(o_thr):
+            return None
+        row = _operating_metrics(
+            scores,
+            test_labels,
+            float(o_thr),
+            inclusion,
+            None,
+            None,
+            pool_variant="max",
+            provenance=SKYLINE_PROVENANCE,
+            n_pool_rows=1.0,
+        )
+        row["gmm_variant"] = name
+        row["schedule"] = ""
+        row.update(
+            {
+                "calibrate_count": calibrate_count,
+                "train_seconds": round(timings["train_seconds"], 6),
+                "final_score_seconds": nan,
+                "xcal_seconds": round(timings["xcal_seconds"], 6),
+                "pool_score_seconds": nan,
+                "test_score_seconds": round(secs, 6),
+                "backend": step.backend,
+                "device": step.device,
+                "elapsed_seconds": round(time.monotonic() - started, 3),
+            }
+        )
+        return row
+
+    rows: list[dict[str, Any]] = []
+
+    if SKYLINE_TRAIN_FULL in arms:
+        sim_pos = [cid for cid in sorted(sim_ids) if media_is_positive(clips_dict[cid], target_category)]
+        sim_neg = [cid for cid in sorted(sim_ids) if not media_is_positive(clips_dict[cid], target_category)]
+        if sim_pos and sim_neg:
+            score_map, step, timings, secs = _skyline_fit_and_score(
+                sim_pos,
+                sim_neg,
+                ordered_test,
+                clips_dict,
+                target_category,
+                trainer=trainer,
+                head=head,
+                style_obj=style_obj,
+                region_voting=region_voting,
+                input_dim=input_dim,
+                inclusion=inclusion,
+                calibrate_count=calibrate_count,
+                calibration_fraction=calibration_fraction,
+            )
+            row = _row(SKYLINE_TRAIN_FULL, score_map, step, timings, secs)
+            if row is not None:
+                rows.append(row)
+
+    if SKYLINE_TEST_XFIT in arms:
+        xfit = _skyline_xfit_scores(
+            ordered_test,
+            clips_dict,
+            target_category,
+            trainer=trainer,
+            head=head,
+            style_obj=style_obj,
+            region_voting=region_voting,
+            input_dim=input_dim,
+            inclusion=inclusion,
+            calibrate_count=calibrate_count,
+            calibration_fraction=calibration_fraction,
+            seed=seed,
+        )
+        if xfit is not None:
+            row = _row(SKYLINE_TEST_XFIT, *xfit)
+            if row is not None:
+                rows.append(row)
+
+    return rows
+
+
+def _skyline_xfit_scores(
+    ordered_test: list[int],
+    clips_dict: dict[int, dict[str, Any]],
+    target_category: str,
+    *,
+    trainer: str,
+    head: str,
+    style_obj: Any,
+    region_voting: bool,
+    input_dim: int,
+    inclusion: int,
+    calibrate_count: int,
+    calibration_fraction: float,
+    seed: int,
+) -> tuple[dict[int, float], _StepModel, dict[str, float], float] | None:
+    """Cross-fitted test-side skyline scores: every item scored by a head that never saw it.
+
+    Partitions *ordered_test* into :data:`~vtscore.eval.transfer_rules.HONEST_ORACLE_FOLDS`
+    folds, trains the fully-supervised head on the complement of each, and scores
+    the held-out fold with it.  ``None`` when the split cannot be made honestly -
+    fewer items than folds, or a fold whose complement carries only one class -
+    which leaves the bracket arm out of the frame rather than quietly falling back
+    to the train-on-test fit it exists to avoid.
+
+    Returns the same tuple shape as :func:`_skyline_fit_and_score`, with the
+    per-fold wall clocks summed and the *last* fold's step standing in for the
+    backend/device columns (every fold trains on the same backend).
+    """
+    import numpy as np  # noqa: PLC0415
+
+    from vtscore.eval.transfer_rules import HONEST_ORACLE_FOLDS  # noqa: PLC0415
+
+    if len(ordered_test) < HONEST_ORACLE_FOLDS:
+        return None
+    # Seeded off the run's own seed, never off the trajectory's RandomState:
+    # drawing from `rng` would move every subsequent vote, so turning the arm on
+    # would silently change the run it is meant to describe.
+    order = np.random.default_rng([_SKYLINE_SEED, seed]).permutation(len(ordered_test))
+    scores: dict[int, float] = {}
+    timings = {"train_seconds": 0.0, "xcal_seconds": 0.0}
+    total_secs = 0.0
+    step: _StepModel | None = None
+    for part in np.array_split(order, HONEST_ORACLE_FOLDS):
+        held = [ordered_test[i] for i in part]
+        if not held:
+            continue
+        held_set = set(held)
+        fit_pos: list[int] = []
+        fit_neg: list[int] = []
+        for cid in ordered_test:
+            if cid in held_set:
+                continue
+            (fit_pos if media_is_positive(clips_dict[cid], target_category) else fit_neg).append(cid)
+        if not fit_pos or not fit_neg:
+            return None
+        score_map, step, fold_timings, secs = _skyline_fit_and_score(
+            fit_pos,
+            fit_neg,
+            held,
+            clips_dict,
+            target_category,
+            trainer=trainer,
+            head=head,
+            style_obj=style_obj,
+            region_voting=region_voting,
+            input_dim=input_dim,
+            inclusion=inclusion,
+            calibrate_count=calibrate_count,
+            calibration_fraction=calibration_fraction,
+        )
+        scores.update({cid: score_map[cid] for cid in held})
+        timings["train_seconds"] += fold_timings["train_seconds"]
+        timings["xcal_seconds"] += fold_timings["xcal_seconds"]
+        total_secs += secs
+    if step is None or len(scores) != len(ordered_test):
+        return None
+    return scores, step, timings, total_secs
+
+
+def _apply_skyline_decomposition(rows: list[dict[str, Any]], skyline_rows: list[dict[str, Any]]) -> None:
+    """Fill the :data:`_SKYLINE_COLUMNS` on *rows* from the primary skyline arm.
+
+    ``training_regret = oracle_cost(row) - oracle_cost(skyline)`` on the naive
+    reference and the cross-fitted one alike, so both decompositions telescope
+    exactly against the ``regret`` / ``regret_honest`` the row already carries.
+    Applied to the skyline rows too, which makes ``skyline_train_full``'s own
+    ``training_regret`` exactly ``0`` and ``skyline_test_xfit``'s the bracket
+    between the two references - both of which are the right readings.
+
+    A no-op when :data:`SKYLINE_TRAIN_FULL` did not run: the columns stay NaN
+    rather than being re-based on the bracket partner, which measures capacity on
+    the test sample and not learnability.
+    """
+    ref = next((r for r in skyline_rows if r["gmm_variant"] == SKYLINE_TRAIN_FULL), None)
+    if ref is None:
+        return
+    floor = ref["oracle_cost"]
+    floor_honest = ref["oracle_cost_honest"]
+    for row in [*rows, *skyline_rows]:
+        row["skyline_oracle_cost"] = floor
+        row["skyline_oracle_cost_honest"] = floor_honest
+        row["training_regret"] = _r(row["oracle_cost"] - floor)
+        row["training_regret_honest"] = _r(row["oracle_cost_honest"] - floor_honest)
+
+
+# ------------------------------------------------------------------
 # Single (seed, dataset, category) evaluation
 # ------------------------------------------------------------------
 
@@ -2889,6 +3722,7 @@ def simulate_voting_iterations(  # noqa: C901
     sim_fraction: float = 0.5,
     safe_thresholds: bool = True,
     calibrate_count: int = 2,
+    fold_count_schedule: str | None = None,
     calibration_fraction: Optional[float] = None,
     region_voting: bool = False,
     strategy: str = "autopilot",
@@ -2907,6 +3741,8 @@ def simulate_voting_iterations(  # noqa: C901
     blend_schedule: Optional[str] = None,
     schedule_variants: Optional[list[str]] = None,
     cut_diag_sink: Optional[list[dict[str, Any]]] = None,
+    fit_quality_sink: Optional[list[dict[str, Any]]] = None,
+    fit_quality_stride: int = FIT_QUALITY_STRIDE_DEFAULT,
     autopilot_fidelity: bool = True,
     anchored_thresholds: bool = False,
     anchored_weights: Optional[list[float]] = None,
@@ -2921,6 +3757,8 @@ def simulate_voting_iterations(  # noqa: C901
     acq_rank_percentile: Optional[float] = None,
     startup_schedule: Optional[str] = None,
     pick_sink: Optional[list[dict[str, Any]]] = None,
+    exclusion_min_remainder: Optional[float] = None,
+    skyline_arms: Optional[list[str]] = None,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -2988,6 +3826,15 @@ def simulate_voting_iterations(  # noqa: C901
             chain.
         calibrate_count: Number of random Train/Calibrate splits for threshold
             calibration (default 2).
+        fold_count_schedule: **Eval-only** (#3314).  ``"K@N"`` resolves
+            *calibrate_count* per step from the vote count -
+            ``K(n_votes) = K while n_votes < N, else calibrate_count`` - so a
+            run can spend more folds where they are cheapest and decay to
+            production's count as the labelset grows.  ``None`` (every other
+            caller) keeps *calibrate_count* constant, which is byte-identical
+            to the behaviour before the knob existed.  See
+            :func:`parse_fold_count_schedule` for why this is a harness knob
+            and not a shipped setting.
         calibration_fraction: Fraction of labelled data reserved for
             calibration in each split.  ``None`` (default) resolves to the
             **app's** per-space split
@@ -3105,6 +3952,15 @@ def simulate_voting_iterations(  # noqa: C901
             ``K == calibrate_count`` reproduces this step's own conformal cut;
             see :func:`_fold_count_variant_rows`.  Costs ``Kmax - calibrate_count``
             extra fold fits per step and nothing else.
+        skyline_arms: **Supervised-skyline** arms to measure once per run
+            (issue #3322; see :data:`SKYLINE_ARMS`).  ``None``/``[]`` (default)
+            = off, and every other study runs exactly as before.  Requires
+            ``emit_calibration_metrics``, because the arm exists to split that
+            frame's ``oracle_cost`` into a learnability floor plus a
+            ``training_regret``; skipped with a warning on a patch column, whose
+            skyline needs a supervision decision this does not improvise (see
+            :data:`_SKYLINE_COLUMNS` and issue #3321).  Costs one extra fit per
+            arm per run - the skyline is vote-independent - not one per step.
         autopilot_fidelity: When ``True`` (default) the simulated user follows
             the app's own phase machine
             (:class:`vtscore.eval.autopilot_flow.AutopilotFlow`): no detector is
@@ -3144,6 +4000,11 @@ def simulate_voting_iterations(  # noqa: C901
     # These are pre-registered experiment knobs, so they are validated beside
     # the other argument checks rather than deep in the loop: a run that dies
     # forty minutes in on a typo has held a cluster slot for nothing.
+    # Parsed here, with the other pre-registered knobs, and not in the loop: a
+    # malformed schedule must kill the cell at second zero rather than forty
+    # minutes in, and the parse is what validates the spec at all.
+    _fold_schedule = parse_fold_count_schedule(fold_count_schedule, calibrate_count)
+
     startup_state: StartupState | None = None
     if startup_schedule:
         if seed_scores is None:
@@ -3154,6 +4015,18 @@ def simulate_voting_iterations(  # noqa: C901
         if not autopilot_fidelity or strategy != "autopilot":
             raise ValueError("startup_schedule requires autopilot_fidelity and the autopilot strategy")
         startup_state = StartupState(parse_startup_schedule(startup_schedule))
+
+    skyline_arms = list(skyline_arms or [])
+    if skyline_arms:
+        unknown = [a for a in skyline_arms if a not in SKYLINE_ARMS]
+        if unknown:
+            raise ValueError(f"unknown skyline arm(s) {unknown}; expected a subset of {list(SKYLINE_ARMS)}")
+        if not emit_calibration_metrics:
+            raise ValueError(
+                "skyline_arms requires emit_calibration_metrics: the decomposition is defined "
+                "against the calibration frame's oracle_cost/regret columns, which the plain "
+                "frame does not carry"
+            )
 
     if acq_rank_percentile is not None:
         if acq_inclusion_offset != 0:
@@ -3227,7 +4100,7 @@ def simulate_voting_iterations(  # noqa: C901
             "region_voting=True but no media carries a patch_grid, so every Good "
             "vote falls back to its whole-image embedding: this run is BINARY "
             "voting. Region voting needs a patch embedder (e.g. dinov3_patch). "
-            "See docs/experiments/acquisition-inclusion/REPORT_SECOND_ENVIRONMENT.md.",
+            "See docs/experiments/2026-08-07-acquisition-inclusion/REPORT_SECOND_ENVIRONMENT.md.",
             RuntimeWarning,
             stacklevel=2,
         )
@@ -3257,6 +4130,29 @@ def simulate_voting_iterations(  # noqa: C901
         from vtscore.eval.patch_styles import resolve_style  # noqa: PLC0415
 
         style_obj = resolve_style(style)
+
+    # **v1 is the whole-image columns.**  Full supervision hands out *image*
+    # labels, but the mortal max_patch flow trains on GT-box-pooled vectors (the
+    # sim user drags a box), so a patch column's skyline is a design decision -
+    # "oracle boxes + all images", or the multiple-instance problem of which
+    # patch of a positive image is the positive - and not something to improvise
+    # inside a metric row.  That decision is the named open item on #3321.  Skip
+    # rather than raise: a sweep over `styles=["whole_image", "max_patch"]` should
+    # get the decomposition on the column that has one instead of dying on the
+    # column that doesn't, and the skip is loud here and visible in the frame
+    # (no `skyline_*` rows, NaN decomposition columns) rather than silent.
+    if skyline_arms and (style_obj is None or style_obj.name != _WHOLE_IMAGE_STYLE):
+        import warnings  # noqa: PLC0415
+
+        warnings.warn(
+            f"skyline_arms={skyline_arms} skipped for style={style or 'none'!r}: the supervised "
+            f"skyline is scoped to the {_WHOLE_IMAGE_STYLE!r} column in v1, because a patch "
+            "column's skyline needs a supervision decision (GT boxes vs. multiple-instance) "
+            "that is still open - see issue #3321.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        skyline_arms = []
     # Mirror the app's per-mode schedule default (#2841): with no explicit arm, a
     # patch dataset blends under the region schedule and a single-vector one
     # under the binary schedule, exactly as `_blend_schedule_for_snap` decides in
@@ -3444,6 +4340,7 @@ def simulate_voting_iterations(  # noqa: C901
                 }
             )
 
+        n_votes_now = len(good_votes) + len(bad_votes)
         # Need at least 1 good and 1 bad to train
         if not good_votes or not bad_votes:
             step = None
@@ -3460,6 +4357,11 @@ def simulate_voting_iterations(  # noqa: C901
                 )
             continue
 
+        # The live fold count for THIS step.  Constant unless #3314's schedule
+        # knob is set, and then a function of the vote count only - never of
+        # anything the step has already computed, so the count is decided
+        # before the fit and cannot depend on it.
+        step_calibrate_count = calibrate_count if _fold_schedule is None else _fold_schedule(n_votes_now)
         step, threshold, n_labels, timings, details = _train_and_calibrate(
             trainer,
             good_votes,
@@ -3469,7 +4371,7 @@ def simulate_voting_iterations(  # noqa: C901
             region_voting=region_voting,
             input_dim=input_dim,
             inclusion=inclusion,
-            calibrate_count=calibrate_count,
+            calibrate_count=step_calibrate_count,
             calibration_fraction=calibration_fraction,
             head=head,
             style_obj=style_obj,
@@ -3505,6 +4407,8 @@ def simulate_voting_iterations(  # noqa: C901
                     inclusion,
                     style_obj=style_obj,
                     schedule=blend_schedule,
+                    voted_ids=set(good_votes) | set(bad_votes),
+                    exclusion_min_remainder=exclusion_min_remainder,
                 )
             )
             if emit_calibration_metrics:
@@ -3619,6 +4523,17 @@ def simulate_voting_iterations(  # noqa: C901
             "t": t,
             "n_good": len(good_votes),
             "n_bad": len(bad_votes),
+            # The haystack the threshold was fitted on, and what is left of it
+            # after this step's votes.  `n_remainder` is *exactly* the quantity
+            # the #3308 exclusion floor is compared against
+            # (`apply_vote_exclusion` counts the unvoted scores), and `pool` has
+            # already had this step's vote removed by the time this row is
+            # built - so an analyzer can reconstruct, per step, whether the
+            # exclusion fired, without the harness having to report it (#3312).
+            # Their ratio is the axis the mechanism runs on: the effect is
+            # bounded by the votes' share of the haystack.
+            "n_haystack": len(sim_ids),
+            "n_remainder": len(pool),
             "phase": flow.phase if flow is not None else "",
             "app_trained": 1 if (flow is None or app_has_detector(flow.phase)) else 0,
             "startup_schedule": startup_schedule or "",
@@ -3629,7 +4544,18 @@ def simulate_voting_iterations(  # noqa: C901
             "report_pool_percentile": _pool_percentile(pool_scores, threshold),
         }
         timing_cols = {
+            # The fold count this step actually LIVED at.  Constant on every run
+            # but #3314's scheduled arm - and recorded regardless, because a
+            # run-level knob whose only other record is the directory the cells
+            # were read out of is unreadable in a frame concatenated across arms
+            # (#3287's `calibration_fraction` lesson, one knob over).
+            "calibrate_count": step_calibrate_count,
             "train_seconds": round(timings["train_seconds"], 6),
+            #: The final model's own pass over the haystack, on the shipped
+            #: safe-threshold path (#3314).  NaN when safe thresholds are off,
+            #: where there is no such pass.  K-independent, so a per-step cost
+            #: ratio wants it in the denominator.
+            "final_score_seconds": round(float(details.get("final_score_seconds", float("nan"))), 6),
             "xcal_seconds": round(timings["xcal_seconds"], 6),
             "pool_score_seconds": round(pool_score_seconds, 6),
             "test_score_seconds": round(test_score_seconds, 6),
@@ -3640,6 +4566,23 @@ def simulate_voting_iterations(  # noqa: C901
 
         if calibration is not None:
             metric_rows, base_scores, base_labels = calibration
+            # The final model's haystack under the #3308 population convention:
+            # the voted items dropped, exactly as `_safe_threshold_for_step`
+            # dropped them from the fold haystacks - so every fold-anchored
+            # variant fit below stays paired with the shipped cut's population.
+            # The same floor applies, via the same decision function, so a
+            # variant grid can never sit on a different population than the
+            # shipped cut it is measured against.
+            _voted_step_ids = set(good_votes) | set(bad_votes)
+            sim_fit_scores: list[float] | None = None
+            if sim_pooled_scores is not None:
+                _fit_arr, _ = apply_vote_exclusion(
+                    sim_pooled_scores,
+                    sim_pooled_ids,
+                    _voted_step_ids,
+                    min_remainder=exclusion_min_remainder,
+                )
+                sim_fit_scores = _fit_arr.tolist()
             # One extra row per safe-threshold GMM variant (issue #2799), all
             # evaluated against the same held-out max-pooled test scores.
             if X_sim_image is not None and sim_pooled_scores is not None:
@@ -3662,6 +4605,26 @@ def simulate_voting_iterations(  # noqa: C901
                 if cut_diag_sink is not None:
                     for dr in diag_rows:
                         cut_diag_sink.append({**base_row, **dr})
+            # The #3329 goodness-of-fit frame.  Deliberately NOT nested in the
+            # block above: that one needs `X_sim_image`, which only a region run
+            # has, and the binary control arm is half of this study's design -
+            # gating on it would have emitted nothing for exactly the arm the
+            # max-pooling hypothesis is contrasted against.  The `image`
+            # geometry rides along only where it exists.
+            if (
+                fit_quality_sink is not None
+                and sim_pooled_scores is not None
+                and (t <= 3 or t % max(1, fit_quality_stride) == 0)
+            ):
+                fq_scores: dict[str, Any] = {"pooled": sim_pooled_scores}
+                fq_labels: dict[str, Any] = {
+                    "pooled": np.array([pool_labels[cid] for cid in sim_pooled_ids], dtype=np.float64)
+                }
+                if X_sim_image is not None:
+                    fq_image_ids = sorted(sim_ids)
+                    fq_scores["image"] = np.asarray(step.predict(X_sim_image)).ravel().tolist()
+                    fq_labels["image"] = np.array([pool_labels[cid] for cid in fq_image_ids], dtype=np.float64)
+                fit_quality_sink.extend(_fit_quality_rows(base_row, safe_cut, fq_scores, fq_labels, threshold))
             # One extra row per mix-in schedule (issue #2841), on the production
             # cut.  Independent of the cut-variant rows above: the schedule
             # screen only needs the pooled sim scores the blend actually fits.
@@ -3692,6 +4655,7 @@ def simulate_voting_iterations(  # noqa: C901
                         counts=fold_count_variants,
                         sim_pooled_scores=sim_pooled_scores,
                         schedule=blend_schedule,
+                        sim_fit_scores=sim_fit_scores,
                     )
                 )
             # The #2852 anchored-mixture arms, paired against the same test
@@ -3717,6 +4681,7 @@ def simulate_voting_iterations(  # noqa: C901
                             else list(_ANCHORED_FOLD_COMBINES)
                         ),
                         fold_anchored=anchored_fold_arms,
+                        sim_fit_scores=sim_fit_scores,
                     )
                 )
             for mr in metric_rows:
@@ -3734,7 +4699,7 @@ def simulate_voting_iterations(  # noqa: C901
                     base_scores,
                     base_labels,
                     sim_fold_haystacks,
-                    sim_pooled_scores,
+                    sim_fit_scores if sim_fit_scores is not None else sim_pooled_scores,
                     cut_inclusion_ks,
                     weights=anchored_weights if anchored_weights is not None else list(_ANCHORED_WEIGHTS),
                     rules=anchored_rules if anchored_rules is not None else list(_ANCHORED_RULES),
@@ -3748,6 +4713,62 @@ def simulate_voting_iterations(  # noqa: C901
                     cut_inclusion_sink.append({**base_row, **cr})
         else:
             rows.append({**base_row, **metrics, **timing_cols})
+
+    # --- The supervised skyline (issue #3322), once per run. ---
+    #
+    # Deliberately **after** the loop rather than before it: every fit here draws
+    # from some RNG somewhere, and a skyline computed up front would have to be
+    # proved not to perturb the trajectory it is meant to describe.  Computed
+    # here it cannot, whatever the trainer does internally - the votes are
+    # already cast.  `test_skyline_does_not_perturb_the_trajectory` pins that.
+    if skyline_arms:
+        skyline_rows = _skyline_arm_rows(
+            skyline_arms,
+            clips_dict,
+            target_category,
+            sim_ids,
+            test_ids,
+            inclusion,
+            trainer=trainer,
+            head=head,
+            style_obj=style_obj,
+            region_voting=region_voting,
+            input_dim=input_dim,
+            calibrate_count=calibrate_count,
+            calibration_fraction=calibration_fraction,
+            seed=seed,
+        )
+        _apply_skyline_decomposition(rows, skyline_rows)
+        # `t=0` and `app_trained=0`: the skyline belongs to no step, so it is
+        # given a step index no trajectory can occupy (the first *trainable*
+        # step is t>=2) rather than being duplicated onto all of them.  The vote
+        # counts are the full supervision it was handed, and `n_remainder=0`
+        # says exactly what that means - nothing in the haystack was left
+        # unlabelled.
+        n_sky_good = sum(1 for cid in sim_ids if pool_labels[cid] == 1.0)
+        skyline_ident = {
+            "seed": seed,
+            "dataset": dataset_name,
+            "category": target_category,
+            "strategy": strategy,
+            "trainer": trainer,
+            "head": head if trainer == "mlp" else "",
+            "style": style or "",
+            "prevalence_arm": prevalence_arm,
+            "realized_prevalence": realized_prevalence,
+            "t": 0,
+            "n_good": n_sky_good,
+            "n_bad": len(sim_ids) - n_sky_good,
+            "n_haystack": len(sim_ids),
+            "n_remainder": 0,
+            "phase": "",
+            "app_trained": 0,
+            "startup_schedule": startup_schedule or "",
+            "acq_threshold": float("nan"),
+            "acq_pool_percentile": float("nan"),
+            "report_pool_percentile": float("nan"),
+        }
+        rows.extend({**skyline_ident, **sr} for sr in skyline_rows)
 
     return rows
 

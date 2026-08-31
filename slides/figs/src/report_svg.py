@@ -1,6 +1,6 @@
 """Recover the plotted series from a committed matplotlib SVG.
 
-The overview-benchmark figures in `docs/experiments/overview-bench/figures/`
+The overview-benchmark figures in `docs/experiments/2026-08-12-overview-bench/figures/`
 are the only surviving copy of their own data: they were drawn from per-step
 cell CSVs under a GRID scratch directory that is not in the repo and will not
 outlive the study. Re-tailoring one of those figures for a slide therefore

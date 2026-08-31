@@ -58,6 +58,19 @@ from vtscore.timing.profile import normalize_device as _normalize_device
 # measurement host (and equally unloadable in a served app on it):
 # video/videomae + video/languagebind (transformers version skew) and
 # audio/paraspeechclap (upstream HF weights file removed).
+# The two ``beats`` rows were measured later (2026-08-31, issue #3062, Grid
+# rack5n04 v100 node, sweep under /exp/…/calib-3062) once that embedder landed
+# in #3076 — same esc50 demo and same harness, so the terms stay comparable
+# with their audio siblings. That sweep also fixed a fitting bug: the cold
+# first load of a process folds one-time costs (CUDA context, the cuML/UMAP JIT
+# behind finalize:coverage) into the embed/finalize phases at the smallest ``n``
+# measured, so ``fit_load_weights.py`` now fits those two phases from warm rows
+# only, as it already did for the model phase. Including the cold row put
+# beats' b_fin at 0.0018 s/item against a warm 0.0040 (R² 0.08 vs 0.999) — and
+# 0.0040 is what agrees with the five sibling audio rows, whose finalize work
+# is embedder-independent. The 45 rows above predate that fix; their b_fin
+# values (~0.0038) are already warm-consistent, but a full re-fit would confirm
+# them.
 # ``b_load`` is the per-item source read/decode cost inside the "loading" step
 # (step 2 covers warm model load *plus* reading every source file into medias —
 # for a 1000-file audio demo over NFS that decode is tens of seconds, so it
@@ -82,6 +95,14 @@ LOAD_COST_MODEL: dict[tuple[str, str, str], dict[str, float]] = {
         "b_embed": 1.213088,
         "a_fin": 0.1727,
         "b_fin": 0.003869,
+    },
+    ("cpu", "audio", "beats"): {
+        "a_model": 0.5,
+        "b_load": _AUDIO_B_LOAD,
+        "a_embed": 0.0,
+        "b_embed": 0.309655,
+        "a_fin": 0.0,
+        "b_fin": 0.004325,
     },
     ("cpu", "audio", "clap"): {
         "a_model": 0.5,
@@ -282,6 +303,14 @@ LOAD_COST_MODEL: dict[tuple[str, str, str], dict[str, float]] = {
         "b_embed": 0.047166,
         "a_fin": 0.4869,
         "b_fin": 0.003928,
+    },
+    ("cuda+cuml", "audio", "beats"): {
+        "a_model": 0.5,
+        "b_load": _AUDIO_B_LOAD,
+        "a_embed": 0.2051,
+        "b_embed": 0.034625,
+        "a_fin": 0.0,
+        "b_fin": 0.004026,
     },
     ("cuda+cuml", "audio", "clap"): {
         "a_model": 0.5,

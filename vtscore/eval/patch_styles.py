@@ -28,7 +28,7 @@ a cropped exemplar seeds the startup sort.  The styles are:
 
 The ``max_hac`` arm (the pre-#2886 production pipeline: K-means-pooled HAC
 leaves, snap-to-node Good votes, CLS+leaf floods) is **gone**.  It lost the
-study - ``docs/experiments/max-patch/REPORT.md`` - and production no longer
+study - ``docs/experiments/2026-07-29-max-patch/REPORT.md`` - and production no longer
 carries the tree it delegated to, so the arm could only have been kept alive by
 re-implementing the very code the study told us to delete.  Its numbers live in
 the report.

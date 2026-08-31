@@ -124,10 +124,13 @@ is still promoted so a queued follow-up runs. The manager is
 thread-safe (internal `RLock`) but **not** re-entrant - the target must
 not call `mgr.start()` on the same manager.
 
-When a job spawns its daemon thread, the manager calls
-`vtsearch.auth.set_thread_user(job.user)` before invoking the target so
-per-user settings resolution works from inside the worker; cleared in a
-`finally` block. Library-only consumers leave `user=None`.
+When a job spawns its daemon thread, the manager enters the Flask-free
+`vtscore.state.current_user.thread_user(job.user)` context manager
+before invoking the target so per-user settings resolution works from
+inside the worker; the context manager clears the thread-local on exit.
+`JobManager` never imports from `vtsearch.auth` — the whole point of the
+`current_user` extraction is that `start()` stands alone. Library-only
+consumers leave `user=None`.
 
 ### Module-level managers and `JOB_MANAGERS`
 

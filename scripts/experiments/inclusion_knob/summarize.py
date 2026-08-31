@@ -1,6 +1,6 @@
 """Stage 2: aggregate the sweep CSV into figures + markdown tables for the report.
 
-Reads ``docs/experiments/inclusion-knob/sweep.csv`` and writes, next to it:
+Reads ``docs/experiments/2026-07-27-inclusion-knob/sweep.csv`` and writes, next to it:
 
 * ``fig_knob_response.png``   - included fraction vs inclusion, per design/arm
 * ``fig_recall_fpr.png``      - recall & FPR vs inclusion, per design

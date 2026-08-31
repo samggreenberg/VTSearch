@@ -30,6 +30,7 @@ select the *same* categories and their pickles are interchangeable.
 
 from __future__ import annotations
 
+import math
 import os
 import zlib
 
@@ -184,6 +185,25 @@ EXPERIMENT_QUERIES: dict[str, dict[str, str]] = {
 }
 
 
+#: Whether the simulated user's opening query is embedded through the
+#: embedder's ``description_wrappers`` ensemble ("Enrich Sort Descriptions") or
+#: plainly.
+#:
+#: This must track the app's shipped default for ``enrich_descriptions``
+#: (``vtsearch/settings_models.py``), which is ``False``: the opening and the
+#: click-0 anchor are supposed to be the sort a real user sees, and a harness
+#: that quietly embeds plainly while the app enriches is measuring a different
+#: opening than the one it reports.  Every ``embed_text_query`` call in this
+#: harness passes it explicitly rather than leaning on the library default, so
+#: that if the app's default ever moves there is exactly one line to change and
+#: it is grep-able (#3341).
+#:
+#: Note that under #3341 enrichment is per-embedder: ``siglip`` -- this study's
+#: text half -- returns no wrappers at all, so flipping this to ``True`` is a
+#: no-op there rather than a silent re-ranking.
+SEED_ENRICH = os.environ.get("CALIB_SEED_ENRICH", "0") == "1"
+
+
 def seed_query_text(dataset: str, category: str) -> str:
     """The text a user would type to find *category* in *dataset*, or "".
 
@@ -334,7 +354,26 @@ EXEMPLAR_CANDIDATES = int(os.environ.get("CALIB_EXEMPLAR_CANDIDATES", "8"))
 
 # --- Production-faithful fixed choices (pre-registered) ---
 INCLUSION = 0
-SIM_FRACTION = 0.5
+#: Share of a cell's medias that become the **simulation set** - the pool the
+#: user votes out of AND the haystack the threshold's population estimate is
+#: fitted on; the rest is the held-out test set every metric is scored against.
+#:
+#: 0.5 for every study before #3312, where it was a constant rather than a knob.
+#: It became one because it is that study's *instrument*: the #3308 voted-media
+#: exclusion is bounded in size by the votes' share of the haystack, so the
+#: only way to place cells on both sides of the effect - and on both sides of
+#: the ``EXCLUSION_MIN_REMAINDER`` floor - is to move the haystack's size while
+#: holding the horizon fixed.  At 0.5 on ``vg_scale_any`` a 150-click run votes
+#: ~7% of a ~2100-media haystack and the floor never binds; at 0.08 it votes
+#: ~45% of ~340 and the floor decides most of the run.
+#:
+#: Shrinking it cuts both ways and the trade is deliberate: the test set grows
+#: (tighter metrics) while the sim set's positive count falls with it, so a
+#: small fraction needs ``CALIB_MIN_SIM_POSITIVES`` to keep cells that cannot
+#: seed out of the frame.  The split is a plain permutation, not stratified.
+SIM_FRACTION = float(os.environ.get("CALIB_SIM_FRACTION", "0.5"))
+if not 0.0 < SIM_FRACTION < 1.0:
+    raise ValueError(f"CALIB_SIM_FRACTION={SIM_FRACTION} must lie strictly in (0, 1)")
 #: Number of cross-calibration folds.  Production is 2, which is why it was a
 #: constant - but 2 folds make the fold-anchored ``qmean``/``qmedian`` combine
 #: arms byte-identical, so the combine question cannot be asked without moving
@@ -364,6 +403,57 @@ _CALIBRATION_FRACTION_ENV = os.environ.get("CALIB_CALIBRATION_FRACTION", "").str
 CALIBRATION_FRACTION: float | None = float(_CALIBRATION_FRACTION_ENV) if _CALIBRATION_FRACTION_ENV else None
 if CALIBRATION_FRACTION is not None and not 0.0 < CALIBRATION_FRACTION < 1.0:
     raise ValueError(f"CALIB_CALIBRATION_FRACTION={CALIBRATION_FRACTION} must lie strictly in (0, 1)")
+#: The #3312 arm axis: the minimum unlabeled remainder at which the #3308
+#: voted-media exclusion still applies.  One scalar spans the whole axis, so
+#: the arms are ordered and no sentinel is needed:
+#:
+#:   ``off``    -> ``math.inf`` - the exclusion never fires (pre-#3308 baseline)
+#:   ``always`` -> ``0``        - unconditional exclusion, no floor
+#:   ``<int>``  -> that floor   - e.g. ``60``, the shipped constant
+#:   unset      -> ``None``     - resolve through the app's own
+#:                               ``resolve_exclusion_floor``, i.e. whatever a
+#:                               live detector does.  This is the DEFAULT and
+#:                               is what keeps the harness's default arm equal
+#:                               to production; pinning anything else is a
+#:                               divergence preflight check 12 requires the
+#:                               study to declare.
+#:
+#: Like every other knob upstream of the threshold, moving this moves the
+#: *trajectory* - a different cut is a different acquisition rank, which is a
+#: different next vote - so an exclusion contrast is a run-level A/B and NOT a
+#: paired arm re-cut inside one run.
+_EXCLUDE_VOTED_ENV = os.environ.get("CALIB_EXCLUDE_VOTED", "").strip().lower()
+if _EXCLUDE_VOTED_ENV in ("", "default", "app"):
+    EXCLUSION_MIN_REMAINDER: float | None = None
+elif _EXCLUDE_VOTED_ENV in ("off", "never", "inf"):
+    EXCLUSION_MIN_REMAINDER = math.inf
+elif _EXCLUDE_VOTED_ENV in ("always", "0"):
+    EXCLUSION_MIN_REMAINDER = 0.0
+else:
+    try:
+        EXCLUSION_MIN_REMAINDER = float(_EXCLUDE_VOTED_ENV)
+    except ValueError:
+        raise ValueError(
+            f"CALIB_EXCLUDE_VOTED={_EXCLUDE_VOTED_ENV!r} is not one of "
+            "'off' / 'always' / a non-negative number / unset (= the app's default)"
+        ) from None
+    if EXCLUSION_MIN_REMAINDER < 0:
+        raise ValueError(f"CALIB_EXCLUDE_VOTED={_EXCLUDE_VOTED_ENV!r} must not be negative")
+
+
+def exclusion_arm_name() -> str:
+    """Short label for this run's exclusion arm, for logs and the cell column."""
+    if EXCLUSION_MIN_REMAINDER is None:
+        from vtscore.training.thresholds import resolve_exclusion_floor
+
+        return f"app(f{resolve_exclusion_floor(None):g})"
+    if EXCLUSION_MIN_REMAINDER == math.inf:
+        return "off"
+    if EXCLUSION_MIN_REMAINDER == 0.0:
+        return "always"
+    return f"f{EXCLUSION_MIN_REMAINDER:g}"
+
+
 #: The #2781 study pre-registered safe_thresholds OFF (conformal path only);
 #: the #2799 safe-threshold GMM study flips this on via CALIB_SAFE_THRESHOLDS=1.
 SAFE_THRESHOLDS = os.environ.get("CALIB_SAFE_THRESHOLDS", "0") == "1"
@@ -379,6 +469,15 @@ ANCHORED = os.environ.get("CALIB_ANCHORED", "0") == "1"
 #: in the anchored EM.  Log-spaced from "one label = one haystack point" to
 #: "labels dominate the fit" - the fusion knob the sweep exists to place.
 ANCHORED_WEIGHTS = [float(w) for w in os.environ.get("CALIB_ANCHORED_WEIGHTS", "1,3,10,30,100").split(",") if w]
+#: #3329: emit the goodness-of-fit side frame (``__fitq.csv``).  Off by default
+#: - it costs one extra unanchored EM fit per emitted step per geometry, which
+#: is pure overhead for every study that is not asking whether the mixture fits.
+FIT_QUALITY = os.environ.get("CALIB_FIT_QUALITY", "0") == "1"
+#: Emit a goodness-of-fit row every this many steps (the first three always
+#: emit).  5 keeps ~20 points on a 100-click horizon, which resolves the
+#: trajectory at a fifth of the fit cost of every step.
+FIT_QUALITY_STRIDE = int(os.environ.get("CALIB_FIT_QUALITY_STRIDE", "5"))
+
 #: Cut rules re-cutting each anchored fit: production midpoint, and the
 #: rate-optimal crossing (well-founded on an anchored fit, where the
 #: components *are* the classes - the #2836 identification term is gone).
@@ -432,6 +531,33 @@ CUT_INCLUSION_QTILT_STEPS = [float(s) for s in os.environ.get("CALIB_CUT_INCL_QT
 #: Cost: ``max(FOLD_COUNTS) - CALIBRATE_COUNT`` extra fold fits per step, so the
 #: grid's *maximum* sets the price, not its length.  Size it from a real cell.
 FOLD_COUNTS = [int(k) for k in os.environ.get("CALIB_FOLD_COUNTS", "").split(",") if k.strip()]
+
+#: The **live** fold count as a function of the vote count (issue #3314):
+#: ``"K@N"`` = ``K(n_votes) = K while n_votes < N, else`` :data:`CALIBRATE_COUNT`.
+#: Empty (the default) = off, and every other study runs exactly as before -
+#: this is the whole reason it is a separate knob rather than a widening of
+#: :data:`CALIBRATE_COUNT`, which stays a scalar that no other launcher has to
+#: learn a new grammar for.
+#:
+#: Unlike :data:`FOLD_COUNTS` this is NOT counterfactual: it moves the threshold
+#: the app would have shown, which moves the acquisition cut, which moves the
+#: votes.  It therefore needs a full run per schedule, exactly like
+#: :data:`CALIBRATE_COUNT` itself - the screen cannot see it.
+FOLD_COUNT_SCHEDULE = os.environ.get("CALIB_FOLD_COUNT_SCHEDULE", "").strip() or None
+
+#: **Supervised-skyline** arms to measure once per run (issue #3322), splitting
+#: ``oracle_cost`` into a learnability floor plus the headroom the interactive
+#: loop left on the table.  Empty (the default) = off, and every other study runs
+#: exactly as before.
+#:
+#: ``CALIB_SKYLINE_ARMS=skyline_train_full`` is the headline: the same head,
+#: through the same trainer, on the entire sim split with full ground-truth
+#: labels.  Add ``skyline_test_xfit`` for the cross-fitted test-side bracket
+#: partner.  Both are vote-independent, so the price is one extra fit per arm per
+#: cell rather than one per click - and both are scoped to the whole-image column
+#: in v1 (a patch column's skyline needs a supervision decision that is still
+#: open on #3321; the harness warns and skips there rather than improvising one).
+SKYLINE_ARMS = [a.strip() for a in os.environ.get("CALIB_SKYLINE_ARMS", "").split(",") if a.strip()]
 
 #: Which head each step trains (``vtscore.eval.voting_iterations.HEADS``).
 #: Unset (the default) hands ``head=None`` to the harness, which resolves it to

@@ -29,7 +29,7 @@ simulation via `simulate_voting_iterations(style=...)`.
 > (K-means-pooled HAC leaves, snap-to-node Good votes, CLS+leaf floods)
 > delegated to production code that #2886 deleted when it adopted MaxPatch, so
 > the arm was dropped from the grid rather than reimplemented. Its published
-> numbers are in `docs/experiments/max-patch/REPORT.md`, and `analyze.py` still
+> numbers are in `docs/experiments/2026-07-29-max-patch/REPORT.md`, and `analyze.py` still
 > labels `max_hac` rows found in archived result CSVs.
 
 **Startup sort**: each cell's exemplar is a cropped positive (ground-truth box,
