@@ -25,6 +25,7 @@ The scripts are loose modules, not package members, so the directory goes on
 
 import importlib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -976,6 +977,171 @@ class TestReport:
         # cannot interpret, which defeats the point of tracking provenance.
         emitted = {"gt", "clustered", "clustered_band", "candidate", "synthetic"}
         assert emitted <= set(mods["report"]._PROVENANCE_MEANING)
+
+
+class TestReportWholePageFigure:
+    """The "whole pages, marks boxed" figure and the caption that measures it.
+
+    The caption's px/% is the number a reader quotes for "how small is the
+    target", so it has to describe a mark that is actually a *target*.  Sized
+    over every mark instead, an underlined heading welded into one component by
+    its own rule wins the title on a real SPODS page — and because such a mark
+    carries no ``class_id``, highlighting by class id then reddened nothing at
+    all, leaving the prose promising a colour the figure never drew.
+    """
+
+    @staticmethod
+    def _blank(tmp_path, size=(1000, 1400)):
+        from PIL import Image
+
+        path = tmp_path / "p.png"
+        Image.new("RGB", size, "white").save(path)
+        return str(path)
+
+    @staticmethod
+    def _text(html):
+        """*html* with the inlined image bytes removed.
+
+        A base64 payload is made of characters an assertion like ``"403px" not
+        in html`` can match by chance, so the captions are checked against the
+        markup only.
+        """
+        return re.sub(r'src="data:[^"]*"', "", html)
+
+    @staticmethod
+    def _colour_bbox(im, colour):
+        arr = np.asarray(im)
+        hit = np.all(arr == np.array(colour, dtype=arr.dtype), axis=-1)
+        ys, xs = np.nonzero(hit)
+        if not len(xs):
+            return None
+        return int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())
+
+    def test_caption_measures_a_labelled_mark_not_the_biggest_box(self, mods, tmp_path):
+        page = _page(
+            mods,
+            "spods/00622",
+            "spods",
+            [
+                ("logo", (50, 50, 120, 100), "spods/logo_a", "clustered"),
+                ("text", (60, 400, 403, 40), None, "gt"),  # an underlined heading
+            ],
+            path=self._blank(tmp_path),
+        )
+        html = self._text(mods["report"].section_full_pages([page], 4, 11))
+        assert "120px" in html
+        assert "403px" not in html
+        assert "<code>logo</code>" in html
+
+    def test_caption_population_matches_the_scale_section(self, mods, tmp_path):
+        # Both must band the same marks, or the histogram and the captions
+        # describe different corpora.
+        marks = [
+            ("logo", (50, 50, 120, 100), "spods/logo_a", "clustered"),
+            ("signature", (600, 1200, 300, 200), None, "gt"),
+        ]
+        page = _page(mods, "spods/00622", "spods", marks, path=self._blank(tmp_path))
+        html = self._text(mods["report"].section_full_pages([page], 4, 11))
+        sides = [m.longest_side() for m in page.marks if m.class_id and m.area() > 0]
+        assert f"{max(sides)}px" in html
+        assert "300px" not in html
+
+    def test_exactly_one_box_is_red_even_when_a_class_repeats_on_the_page(self, mods, tmp_path):
+        # Highlighting by class id reddens every instance of that class; the
+        # caption describes one of them.
+        page = _page(
+            mods,
+            "spods/00001",
+            "spods",
+            [
+                ("logo", (100, 100, 120, 90), "spods/logo_a", "clustered"),
+                ("logo", (400, 400, 300, 220), "spods/logo_a", "clustered"),
+            ],
+            path=self._blank(tmp_path),
+        )
+        biggest = max(page.marks, key=lambda m: m.area())
+        im = mods["report"]._page_with_boxes(page, highlight=biggest)
+        red = self._colour_bbox(im, mods["report"]._HIGHLIGHT_COLOUR)
+        assert red == (400, 400, 700, 620)
+        # ...and the other instance is still drawn, in its kind's colour.
+        assert self._colour_bbox(im, mods["report"]._KIND_COLOURS["logo"])[:2] == (100, 100)
+
+    def test_every_figure_carries_a_red_box(self, mods, tmp_path):
+        # The prose promises one; a page whose largest mark is unlabelled used
+        # to produce a figure with no red pixel in it at all.
+        page = _page(
+            mods,
+            "spods/00622",
+            "spods",
+            [
+                ("logo", (50, 50, 120, 100), "spods/logo_a", "clustered"),
+                ("text", (60, 400, 403, 40), None, "gt"),
+            ],
+            path=self._blank(tmp_path),
+        )
+        biggest = max((m for m in page.marks if m.class_id), key=lambda m: m.area())
+        im = mods["report"]._page_with_boxes(page, highlight=biggest)
+        assert self._colour_bbox(im, mods["report"]._HIGHLIGHT_COLOUR) is not None
+
+    def test_kinds_are_drawn_in_distinguishable_colours(self, mods, tmp_path):
+        # The single most useful thing this figure can say is that the box on a
+        # handwritten signature is a deliberately non-queryable mark rather than
+        # a mislabelled logo.  One shade of blue for everything withholds it.
+        page = _page(
+            mods,
+            "spods/00622",
+            "spods",
+            [
+                ("logo", (50, 50, 120, 100), None, "gt"),
+                ("stamp", (300, 300, 160, 160), None, "gt"),
+                ("signature", (600, 1200, 200, 90), None, "gt"),
+                ("text", (60, 400, 403, 40), None, "gt"),
+            ],
+            path=self._blank(tmp_path),
+        )
+        im = mods["report"]._page_with_boxes(page)
+        drawn = {c for _, c in im.getcolors(1 << 20)}
+        seen = [mods["report"]._KIND_COLOURS[k] for k in ("logo", "stamp", "signature", "text")]
+        assert all(c in drawn for c in seen)
+        assert len(set(seen)) == len(seen)
+
+    def test_legend_names_only_the_kinds_actually_drawn(self, mods, tmp_path):
+        # A legend that promises a colour the figure never draws is the same
+        # bug as prose that does, one line further down.
+        page = _page(
+            mods,
+            "spods/00622",
+            "spods",
+            [("logo", (50, 50, 120, 100), "spods/logo_a", "clustered")],
+            path=self._blank(tmp_path),
+        )
+        legend = mods["report"]._legend([page])
+        assert "<code>logo</code>" in legend
+        assert "signature" not in legend
+        assert mods["report"]._rgb(mods["report"]._KIND_COLOURS["logo"]) in legend
+
+    def test_zero_area_marks_are_neither_drawn_nor_advertised(self, mods, tmp_path):
+        page = _page(
+            mods,
+            "spods/00622",
+            "spods",
+            [
+                ("logo", (50, 50, 120, 100), "spods/logo_a", "clustered"),
+                ("stamp", (10, 10, 0, 0), None, "gt"),
+            ],
+            path=self._blank(tmp_path),
+        )
+        assert mods["report"].kinds_drawn([page]) == ["logo"]
+        im = mods["report"]._page_with_boxes(page)
+        assert self._colour_bbox(im, mods["report"]._KIND_COLOURS["stamp"]) is None
+
+    def test_every_kind_the_sources_emit_has_a_colour_and_a_gloss(self, mods):
+        # Same contract as the provenance glosses: a kind with no swatch falls
+        # back to grey and reads as "some other mark", which is the one thing
+        # this figure is supposed to stop doing.
+        emitted = set(mods["spods"].MARK_CATEGORIES) | set(mods["spods"].CONTEXT_CATEGORIES)
+        assert emitted <= set(mods["report"]._KIND_COLOURS)
+        assert emitted <= set(mods["report"]._KIND_MEANING)
 
 
 # ------------------------------------------------------------- embed cells
