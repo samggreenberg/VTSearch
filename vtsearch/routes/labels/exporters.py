@@ -8,6 +8,14 @@ Endpoints
 GET  /api/exporters
     List all registered exporters with their metadata and field definitions.
 
+POST /api/exporters/field-options/<exporter_name>
+    Return dropdown options for a ``dynamic_options`` field.  Delegates
+    to ``get_field_options(field_key, current_values)`` on the exporter,
+    the same contract the importer families use, so an exporter whose
+    destination list is only knowable at runtime (a mailbox, a bucket, a
+    remote queue) can populate its select in the Export modal and in the
+    Auto-Find results-exporter settings.
+
 POST /api/exporters/export
     Run a specific exporter on the payload supplied in the request body.
     ``payload_kind`` says whether that payload is a scored run
@@ -35,7 +43,15 @@ from flask_smorest import Blueprint, abort
 from vtscore.exporters import get_exporter, list_exporters
 from vtscore.exporters.base import ResultsExporter
 from vtscore.security.url_validation import validate_browser_url
-from vtsearch.routes._shared import validate_exporter_field_values
+from vtsearch.routes._shared import (
+    get_plugin_or_404,
+    plugin_field_options,
+    validate_exporter_field_values,
+)
+from vtsearch.schemas.datasets import (
+    ImporterFieldOptionsRequestSchema,
+    ImporterFieldOptionsResponseSchema,
+)
 from vtsearch.schemas.labels import (
     ExporterEntrySchema,
     RunExportRequestSchema,
@@ -78,6 +94,31 @@ def get_exporters():
     from vtsearch.settings import filter_visible_plugins
 
     return [exp.to_dict() for exp in filter_visible_plugins("exporters", list_exporters())]
+
+
+@exporters_bp.route("/api/exporters/field-options/<exporter_name>", methods=["POST"])
+@exporters_bp.arguments(ImporterFieldOptionsRequestSchema)
+@exporters_bp.response(200, ImporterFieldOptionsResponseSchema)
+@exporters_bp.alt_response(400, description="Unknown or non-dynamic field key.")
+@exporters_bp.alt_response(404, description="Unknown exporter name.")
+@exporters_bp.alt_response(500, description="get_field_options did not return a list.")
+@exporters_bp.alt_response(501, description="Exporter does not implement get_field_options.")
+@exporters_bp.alt_response(502, description="Remote service backing dynamic options raised an error.")
+def exporter_field_options(body: dict, exporter_name: str):
+    """Return dropdown options for a dynamic-options field on an exporter.
+
+    Same contract as ``POST /api/dataset/import/<name>/options``: the
+    exporter's ``get_field_options(field_key, current_values)`` is called
+    with the supplied snapshot of current form values, and plugin errors
+    (network failure, auth error, etc.) surface as a 502 with the
+    original message so the frontend can display them inline.
+    """
+    exporter, err = get_plugin_or_404(get_exporter, list_exporters, exporter_name, "exporter")
+    if err:
+        return err
+    assert exporter is not None  # narrowed by err check
+
+    return plugin_field_options(exporter, body)
 
 
 @exporters_bp.route("/api/exporters/export", methods=["POST"])

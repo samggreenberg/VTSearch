@@ -118,9 +118,11 @@ class PluginField:
     be computed at runtime (e.g. by querying a remote service).  The plugin
     must implement ``get_field_options(field_key, current_values)`` to return
     the list.  The frontend re-fetches options every time any field listed
-    in :attr:`depends_on` changes value.  Currently honoured by dataset
-    importers (``POST /api/dataset/import/<name>/options``); other plugin
-    families may opt in similarly.
+    in :attr:`depends_on` changes value.  Honoured by dataset importers
+    (``POST /api/dataset/import/<name>/options``), label importers
+    (``POST /api/label-importers/field-options/<name>``), seed importers,
+    datasource importers, and results exporters
+    (``POST /api/exporters/field-options/<name>``).
     """
 
     key: str
@@ -495,6 +497,37 @@ class PluginBase:
         """
         return self.display_name
 
+    # -- Dynamic field options ----------------------------------------------
+
+    def get_field_options(self, field_key: str, current_values: dict[str, Any]) -> list[FieldOption]:
+        """Return the dropdown options for a ``dynamic_options`` field.
+
+        Override this on any plugin declaring a :class:`PluginField` with
+        ``dynamic_options=True``.  The frontend calls it through that
+        family's options route (e.g.
+        ``POST /api/exporters/field-options/<name>``) when the form is
+        first built and again whenever a field listed in this field's
+        :attr:`~PluginField.depends_on` changes.
+
+        Args:
+            field_key: :attr:`PluginField.key` of the field whose options
+                are being requested.
+            current_values: Snapshot of every form field's current value,
+                keyed by :attr:`PluginField.key`.  Values are plain
+                strings (empty for unfilled fields).
+
+        Returns:
+            The allowed options.  Each is either a plain string (shown
+            verbatim) or a ``(value, label)`` tuple (the option submits
+            the opaque ``value`` while displaying ``label``).
+
+        Raises:
+            NotImplementedError: When the plugin declares no dynamic
+                fields, or does not handle *field_key*.  Subclasses should
+                delegate to ``super()`` for keys they do not recognise.
+        """
+        raise NotImplementedError(f"{type(self).__name__}.get_field_options({field_key!r}) is not implemented")
+
     # -- User notifications -------------------------------------------------
 
     def notify(
@@ -559,7 +592,10 @@ class PluginBase:
                 continue
             if f.default:
                 kwargs["default"] = f.default
-            if f.field_type == "select" and f.options and not f.allow_free_text:
+            if f.field_type == "select" and f.options and not f.allow_free_text and not f.dynamic_options:
+                # A dynamic-options select computes its list at runtime, so its
+                # declared ``options`` are only a seed - pinning argparse to them
+                # would reject every value the plugin resolves later.
                 kwargs["choices"] = f.options
             if f.field_type == "number":
                 kwargs["type"] = int if f.is_integer_number() else float

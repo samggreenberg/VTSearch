@@ -7,6 +7,7 @@ import { takeUntil } from 'rxjs/operators';
 import { IconComponent } from '../../../icon/icon.component';
 import { ImporterField } from '../../../../models/api.models';
 import { ExportersApiService } from '../../../../services/exporters-api.service';
+import { DynamicFieldOptions } from '../../../../utils/dynamic-field-options';
 import type { ExporterEntry } from '../../../../generated/api-client/models/exporter-entry';
 
 /** The selected exporter + its per-exporter field-value map, emitted to the
@@ -51,6 +52,10 @@ export class AutoFindSettingsComponent implements OnInit, OnDestroy {
     effect(() => {
       this.activeExporter = this.autofindExporter() || '';
       this.fieldValues = this.cloneFieldValues(this.autofindExporterFieldValues());
+      // Reads `loadingExporters`, so this also re-runs when the exporter list
+      // lands - the first moment the restored exporter's fields are known and
+      // its dynamic selects can be filled.
+      this.syncFieldOptions();
     });
   }
 
@@ -76,6 +81,25 @@ export class AutoFindSettingsComponent implements OnInit, OnDestroy {
   /** Working copy of the per-exporter field values (cloned from the input so
    *  edits don't mutate the parent's object before it persists them). */
   fieldValues: Record<string, Record<string, string>> = {};
+
+  /** Option lists for the active exporter's ``dynamic_options`` fields.
+   *  Without this the select rendered only the options frozen into the
+   *  plugin definition, so an exporter that computes its destinations at
+   *  runtime had an empty dropdown here (issue #3360).
+   *
+   *  ``onApplied`` persists the auto-selected value: the helper writes its
+   *  pick straight into the values object, which alone would leave the
+   *  parent (and the saved settings) holding a blank. */
+  readonly fieldOptions = new DynamicFieldOptions(
+    (key, values) => this.exportersApi.getFieldOptions(this.activeExporter, key, values),
+    () => this.commitWorkingValues(),
+  );
+
+  /** The active exporter's field values as one stable, mutable object — what
+   *  :class:`DynamicFieldOptions` reads its ``depends_on`` snapshot from and
+   *  writes its auto-selected value into. ``fieldValues`` (which the template
+   *  and the parent read) is re-derived from it on every commit. */
+  private workingValues: Record<string, string> = {};
 
   private destroy$ = new Subject<void>();
 
@@ -115,6 +139,7 @@ export class AutoFindSettingsComponent implements OnInit, OnDestroy {
     if (name && !this.fieldValues[name]) {
       this.fieldValues[name] = this.defaultFieldValues(name);
     }
+    this.syncFieldOptions();
     this.emitChange();
   }
 
@@ -130,13 +155,14 @@ export class AutoFindSettingsComponent implements OnInit, OnDestroy {
     return this.fieldValues[this.activeExporter]?.[key] ?? '';
   }
 
-  /** Write a field value for the active exporter and emit the change. */
+  /** Write a field value for the active exporter and emit the change. Any
+   *  ``dynamic_options`` field declaring *key* in its ``depends_on`` gets its
+   *  option list re-fetched against the new value. */
   setFieldValue(key: string, value: string): void {
     if (!this.activeExporter) return;
-    const current = { ...(this.fieldValues[this.activeExporter] || {}) };
-    current[key] = value;
-    this.fieldValues = { ...this.fieldValues, [this.activeExporter]: current };
-    this.emitChange();
+    this.workingValues[key] = value;
+    this.fieldOptions.refreshDependentsOf(key, this.activeFields, this.workingValues);
+    this.commitWorkingValues();
   }
 
   /** Concrete `<input type>` for a plugin field, mirroring the auto-detect
@@ -146,6 +172,39 @@ export class AutoFindSettingsComponent implements OnInit, OnDestroy {
     if (field.field_type === 'email') return 'email';
     if (field.field_type === 'url') return 'url';
     return 'text';
+  }
+
+  /** Exporter whose dynamic option lists have already been fetched.
+   *  ``null`` until the exporter list has loaded, because the fields (and so
+   *  which of them are dynamic) aren't known before then. */
+  private optionsLoadedFor: string | null = null;
+
+  /** Fetch the active exporter's dynamic option lists, once per exporter.
+   *
+   *  The guard is what keeps this safe to call from the seeding effect: the
+   *  parent re-pushes both inputs on every emit, so an unguarded fetch here
+   *  would answer its own auto-selection with another fetch, forever. */
+  private syncFieldOptions(): void {
+    if (this.loadingExporters()) return;
+    if (this.optionsLoadedFor === this.activeExporter) return;
+    this.optionsLoadedFor = this.activeExporter;
+
+    // Drop the tab we just left: ``reset`` invalidates its in-flight requests
+    // too, so a late response can't populate this exporter's dropdown.
+    this.fieldOptions.reset();
+    this.workingValues = this.activeExporter
+      ? { ...(this.fieldValues[this.activeExporter] || {}) }
+      : {};
+    if (!this.activeExporter) return;
+    this.fieldOptions.refreshAll(this.activeFields, this.workingValues);
+  }
+
+  /** Publish :attr:`workingValues` onto ``fieldValues`` and emit, so an
+   *  auto-selected dynamic option is persisted like a typed one. */
+  private commitWorkingValues(): void {
+    if (!this.activeExporter) return;
+    this.fieldValues = { ...this.fieldValues, [this.activeExporter]: { ...this.workingValues } };
+    this.emitChange();
   }
 
   private defaultFieldValues(name: string): Record<string, string> {

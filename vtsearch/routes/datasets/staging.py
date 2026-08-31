@@ -47,9 +47,9 @@ from vtscore.datasets.registry import (
 )
 from vtsearch.auth import get_current_user
 from vtsearch.routes._shared import (
-    _normalise_option,
     abort_if_semantic_only_embedders,
     get_plugin_or_404,
+    plugin_field_options,
     register_plugin_typed_routes,
     validate_plugin_args,
 )
@@ -621,25 +621,7 @@ def importer_field_options(body: dict, importer_name: str):
         return err
     assert importer is not None  # narrowed by err check
 
-    field_key = body["field_key"].strip()
-    values = body.get("values") or {}
-
-    field = next((f for f in importer.fields if f.key == field_key), None)
-    if field is None:
-        abort(400, message=f"Unknown field: {field_key!r}")
-    if not getattr(field, "dynamic_options", False):
-        abort(400, message=f"Field {field_key!r} is not dynamic")
-
-    try:
-        options = importer.get_field_options(field_key, values)
-    except NotImplementedError as exc:
-        abort(501, message=str(exc) or "Importer does not implement get_field_options")
-    except Exception as exc:  # noqa: BLE001 (surface remote-service errors verbatim)
-        abort(502, message=str(exc) or type(exc).__name__)
-
-    if not isinstance(options, list):
-        abort(500, message="get_field_options must return a list")
-    return {"options": [_normalise_option(o) for o in options]}
+    return plugin_field_options(importer, body)
 
 
 @datasets_staging_bp.route("/api/dataset/import/<importer_name>/suggested-name", methods=["POST"])

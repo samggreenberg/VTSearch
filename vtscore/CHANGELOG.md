@@ -142,6 +142,17 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`PluginBase.get_field_options(field_key, current_values)`** — the
+  dynamic-select hook now lives on the shared plugin base instead of on the
+  importer families alone, so every plugin family inherits it and a results
+  exporter can compute its options at runtime (issue #3360). The default
+  raises `NotImplementedError` naming the field, matching what the importer
+  bases already did; existing overrides are unaffected. A dynamic select's
+  declared `options` are also no longer used as the `choices` of its
+  auto-generated CLI flag — they are a seed for the first render, not the
+  allowed set, so pinning argparse to them rejected every value the plugin
+  resolved at runtime.
+
 - `vtscore.eval.seed_scores.build_seed_scores` accepts an `enrich` keyword
   (default `False`, matching the app's shipped `enrich_descriptions`
   default), so a simulated-user study can open on the same sort a real user

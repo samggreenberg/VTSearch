@@ -11,15 +11,21 @@ Covers:
   surfaces other plugin exceptions as 502 with the message body.
 - The ReCaller scaffold declares its ``query_id`` field as dynamic and
   routes ``get_field_options`` through ``_rc_list_queries``.
+- The ``POST /api/exporters/field-options/<name>`` route does the same for
+  results exporters, whose dynamic selects had no route at all (issue
+  #3360), and the export route accepts a value the declared options don't
+  list.
 """
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from typing import cast
 
 import pytest
 
 from vtscore.datasets.importers.base import DatasetImporter
+from vtscore.exporters.base import ResultsExporter
 from vtscore.plugins import PluginField
 
 
@@ -385,3 +391,135 @@ class TestReCallerDynamicQueryId:
         rc = get_importer("recaller")
         with pytest.raises(NotImplementedError):
             rc.get_field_options("not_a_field", {})
+
+
+# ---------------------------------------------------------------------------
+# /api/exporters/field-options/<name> route
+# ---------------------------------------------------------------------------
+
+
+class _StubExporter(ResultsExporter):
+    """Results exporter whose destination list is computed at runtime.
+
+    The shape issue #3360 reported: a ``dynamic_options`` select is useless
+    unless the exporter families have an options route of their own.
+    """
+
+    name = "_stub_dynamic_exporter"
+    display_name = "Stub Dynamic Exporter"
+    description = "Test exporter with a dynamic-options field."
+    fields = [
+        PluginField("account", "Account", "select", options=["personal", "team"], default="personal"),
+        PluginField(
+            "mailbox",
+            "Mailbox",
+            "select",
+            dynamic_options=True,
+            depends_on=["account"],
+        ),
+    ]
+
+    def __init__(self, fail_with: Exception | None = None) -> None:
+        super().__init__()
+        self._fail_with = fail_with
+
+    def get_field_options(self, field_key, current_values):
+        if self._fail_with is not None:
+            raise self._fail_with
+        if field_key == "mailbox":
+            account = current_values.get("account", "personal")
+            return [(f"{account}-inbox", f"{account.title()} Inbox"), f"{account}-archive"]
+        return super().get_field_options(field_key, current_values)
+
+    def export_find_results(self, results, field_values):  # pragma: no cover; unused here
+        return {"message": "ok"}
+
+
+@contextmanager
+def _registered_exporter(exporter):
+    from vtscore.exporters import get_exporter
+
+    registry = get_exporter.__self__
+    registry._ensure_discovered()
+    registry._items[exporter.name] = exporter
+    try:
+        yield exporter
+    finally:
+        registry._items.pop(exporter.name, None)
+
+
+class TestExporterFieldOptionsRoute:
+    URL_TEMPLATE = "/api/exporters/field-options/{name}"
+
+    def test_returns_options_from_exporter(self, client):
+        with _registered_exporter(_StubExporter()) as stub:
+            resp = client.post(
+                self.URL_TEMPLATE.format(name=stub.name),
+                json={"field_key": "mailbox", "values": {"account": "team"}},
+            )
+        assert resp.status_code == 200
+        assert resp.get_json() == {
+            "options": [
+                {"value": "team-inbox", "label": "Team Inbox"},
+                {"value": "team-archive", "label": "team-archive"},
+            ]
+        }
+
+    def test_unknown_exporter_returns_404(self, client):
+        resp = client.post(
+            self.URL_TEMPLATE.format(name="does_not_exist"),
+            json={"field_key": "mailbox", "values": {}},
+        )
+        assert resp.status_code == 404
+
+    def test_unknown_field_returns_400(self, client):
+        with _registered_exporter(_StubExporter()) as stub:
+            resp = client.post(
+                self.URL_TEMPLATE.format(name=stub.name),
+                json={"field_key": "no_such_field", "values": {}},
+            )
+        assert resp.status_code == 400
+        assert "Unknown field" in resp.get_json()["message"]
+
+    def test_static_field_returns_400(self, client):
+        with _registered_exporter(_StubExporter()) as stub:
+            resp = client.post(
+                self.URL_TEMPLATE.format(name=stub.name),
+                json={"field_key": "account", "values": {}},
+            )
+        assert resp.status_code == 400
+        assert "not dynamic" in resp.get_json()["message"]
+
+    def test_not_implemented_returns_501(self, client):
+        with _registered_exporter(_StubExporter(fail_with=NotImplementedError("nope"))) as stub:
+            resp = client.post(
+                self.URL_TEMPLATE.format(name=stub.name),
+                json={"field_key": "mailbox", "values": {}},
+            )
+        assert resp.status_code == 501
+        assert resp.get_json()["message"] == "nope"
+
+    def test_plugin_exception_returns_502(self, client):
+        with _registered_exporter(_StubExporter(fail_with=RuntimeError("remote service down"))) as stub:
+            resp = client.post(
+                self.URL_TEMPLATE.format(name=stub.name),
+                json={"field_key": "mailbox", "values": {}},
+            )
+        assert resp.status_code == 502
+        assert resp.get_json()["message"] == "remote service down"
+
+    def test_export_accepts_a_value_absent_from_the_declared_options(self, client):
+        """A dynamic select's value is whatever the plugin resolved, so the
+        export route must not validate it against the declared list."""
+        with _registered_exporter(_StubExporter()) as stub:
+            resp = client.post(
+                "/api/exporters/export",
+                json={
+                    "exporter_name": stub.name,
+                    "payload_kind": "find_results",
+                    "results": {"detectors": {}},
+                    "field_values": {"account": "team", "mailbox": "team-inbox"},
+                },
+            )
+        assert resp.status_code == 200, resp.get_json()
+        assert resp.get_json()["success"] is True
