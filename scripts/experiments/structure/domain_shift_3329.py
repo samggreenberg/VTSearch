@@ -68,6 +68,7 @@ def main(argv: list[str] | None = None) -> int:
         common.log(f"  atlas[{d}]: {atlases[d].total_nodes} nodes, depth {atlases[d].depth()}")
 
     rows = []
+    pvals: dict[str, np.ndarray] = {}
     for build_ds in names:
         atlas = atlases[build_ds]
         for query_ds in names:
@@ -79,6 +80,10 @@ def main(argv: list[str] | None = None) -> int:
                 q = q[np.random.default_rng(args.seed + 7).choice(q.shape[0], args.max_query, replace=False)]
             rep = domain_shift_report(atlas, q)
             p = np.asarray(atlas.typicality_pvalues(q), dtype=np.float64)
+            # The p-values themselves, not only the verdict at the shipped
+            # alpha: the guard's alpha is a knob, and re-scoring it at a
+            # different one afterwards is impossible from a summary row.
+            pvals[f"{build_ds}|{query_ds}"] = p.astype(np.float32)
             rows.append(
                 {
                     "embedder": args.embedder,
@@ -103,6 +108,7 @@ def main(argv: list[str] | None = None) -> int:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(rows).to_csv(out / f"domainshift_{args.embedder}.csv", index=False)
+    np.savez_compressed(out / f"domainshift_{args.embedder}.npz", **pvals)
     common.log(f"wrote {len(rows)} pairs")
     return 0
 

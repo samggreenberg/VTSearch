@@ -408,6 +408,12 @@ and the projection costs about 1.7 points of k-NN class purity.
 **The compaction radius is honest** — the one fit in this whole inventory that
 does what it says.
 
+**And the obvious repair does not work.** Calibrating α per embedder — the first
+thing this report recommended — was then priced, and it makes `dinov3_patch`
+*worse* (separation 0.13 → 0.043). That result is kept in the report rather than
+quietly replacing the recommendation, because a recommendation nobody prices is
+how this whole issue started.
+
 | # | claim | bar | measured | verdict |
 |---|---|---|---|---|
 | B1 | in-domain p-values not uniform | median KS > 0.05 | **0.103 ± 0.0015** | **confirmed** |
@@ -415,6 +421,7 @@ does what it says.
 | B3 | dispersion tracks path length | Spearman ρ > 0.5 | **0.24** | **refuted** |
 | B4 | the guard is conservative on its own data | 0 self-fires, median z ≤ 0 | **5 of 25 fire**; median z −0.85 | **refuted** |
 | B5 | it still separates real domains | > 50 % of cross pairs fire | **64 %** different-source, 20 % same-source | **confirmed** |
+| B6 | *(not pre-registered)* the per-embedder α repair | — | separation 0.13 → **0.043** | **repair fails** |
 | C1 | local structure kept, global lost | trust > 0.95 **and** Shepard < 0.6 | **0.956** and **0.288** | **confirmed** |
 | C2 | projection costs class purity | drop > 0 on ≥ 4 embedders | **5/5**, median **0.017** | **confirmed (small)** |
 | C3 | the 90th-percentile radius contains ~90 % | 0.85–0.95 | **0.894** | **confirmed** |
@@ -558,6 +565,45 @@ atlas built on `coco_val` reads Visual Genome as z = **−15**, i.e. *more*
 typical than its own holdout. A corpus change that a human would call obvious is
 invisible to it.
 
+## B6 — the obvious repair, priced: it does not work
+
+The recommendation this run first wrote down was "calibrate α per embedder",
+since a fixed α clearly cannot serve all five. That is a recommendation nobody
+had priced, so it was priced: for each embedder, read the α that *would* have
+produced a 5 % false-alarm rate on its own held-out data, then re-score every
+cross-dataset pair at that α under the same `z > 3 and frac >= 2α` rule. The α
+is fitted on the **self** pairs and scored on the **cross** pairs; fitting and
+scoring on the same pairs would guarantee a flattering answer.
+
+| embedder | α\* | false alarms 0.05 → α\* | detection 0.05 → α\* | separation 0.05 → α\* |
+|---|---|---|---|---|
+| `siglip` | 0.059 | 0.00 → 0.00 | 0.71 → 0.71 | 0.71 → **0.71** |
+| `clip` | 0.064 | 0.00 → 0.00 | 0.57 → 0.57 | 0.57 → **0.57** |
+| `siglip2_l` | 0.067 | 0.00 → 0.00 | 0.50 → 0.50 | 0.50 → **0.50** |
+| `clip_l` | 0.043 | 0.20 → 0.20 | 0.50 → 0.50 | 0.30 → **0.30** |
+| **`dinov3_patch`** | **0.0068** | 0.80 → 0.60 | 0.93 → 0.64 | 0.13 → **0.043** |
+
+**The repair fails, and it fails worst exactly where it was needed.** For the
+four embedders that were already fine, α\* lands within a whisker of 0.05 and
+nothing moves — which is itself a check that the procedure is sane. For
+`dinov3_patch` the α that would buy a 5 % false-alarm rate is **0.0068**, seven
+times smaller than shipped, and even there the false-alarm rate only falls to
+0.60 while detection falls from 0.93 to 0.64. **Separation gets worse, 0.13 →
+0.043.**
+
+The reason is that no threshold separates these distributions: `dinov3_patch`'s
+in-domain p-values overlap its out-of-domain ones almost completely, so moving
+the cut trades false alarms for misses at roughly one for one. Lowering α also
+loosens the guard's second condition — `frac >= 2α` is *easier* to satisfy as α
+shrinks — which is why the false-alarm rate does not fall as far as the α
+suggests it should.
+
+**So the fix is not a threshold.** It has to be either the atlas's per-node
+model — the vMF mean-direction fit that r̄ = 0.61 says describes this space
+poorly — or, cheaply and immediately, **not running this guard on a patch
+embedder at all**, since a detector with 0.04 separation is not carrying
+information.
+
 ## C1–C3 — the browse projection
 
 ![projection quality](figures/projection_quality.png)
@@ -621,12 +667,17 @@ embedder whose `max_patch` arm is the only one worth running. Anything gated on
 it for that arm is gated on noise. The single-vector embedders are fine at the
 operating point.
 
-**If the guard is to be fixed, the fix is not "remove the averaging".** That
-makes calibration worse. The `median` combiner is a third closer to uniform and
-is a two-line change, but it over-flags at α and would need its threshold moved
-with it. The honest recommendation is to **calibrate the guard empirically** —
-choose the α that gives the intended false-alarm rate *per embedder*, since this
-run shows a fixed α cannot serve all five.
+**Neither obvious fix works, and both were measured rather than assumed.**
+Removing the path averaging makes calibration *worse* (KS 0.103 → 0.132).
+Calibrating α per embedder — the recommendation this report first reached for —
+**makes `dinov3_patch` worse still** when priced properly (separation 0.13 →
+0.043; see [B6](#b6--the-obvious-repair-priced-it-does-not-work)). The `median`
+combiner is a third closer to uniform and is a two-line change, but it
+over-flags at α and does not address the per-embedder failure either.
+
+**The actionable recommendation is therefore narrower than "recalibrate": stop
+running this guard on patch embedders**, and if it is wanted there, fix the
+atlas's per-node vMF model rather than any threshold on top of it.
 
 **The browse canvas needs no change.** C1's split verdict is the expected
 behaviour of UMAP, C2's cost is 1.7 points, and C3 is correct.

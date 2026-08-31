@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 from typing import Any, Optional
 
@@ -278,6 +279,86 @@ def b5_by_source(shift: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+#: The false-alarm rate the guard's alpha is *supposed* to deliver. `alpha` is
+#: both the p-value cut and the claimed rate, which is exactly the identity this
+#: run finds broken.
+TARGET_FALSE_ALARM = 0.05
+
+
+def per_embedder_alpha_repair(results: Path, shift: pd.DataFrame) -> pd.DataFrame:
+    """Does the recommended repair - a per-embedder alpha - actually work?
+
+    A report that ends at "the guard is miscalibrated, calibrate it per
+    embedder" is a recommendation nobody has priced.  This prices it: for each
+    embedder, read the alpha that WOULD have produced a 5% false-alarm rate on
+    its own held-out data, then re-score every cross-dataset pair at that alpha
+    and report the detection rate it buys.
+
+    The repair is honest only if the alpha is fitted on the SELF pairs and
+    scored on the CROSS pairs, which is what happens here - fitting it on the
+    pairs it is then evaluated against would guarantee a flattering answer.
+
+    ``shifted`` in the shipped guard is ``z > 3 and frac >= 2*alpha``; the same
+    rule is applied at the repaired alpha so the comparison is like for like.
+    """
+    files = sorted(Path(results).glob("domainshift_*.npz"))
+    if not files or shift.empty:
+        return pd.DataFrame()
+    rows = []
+    for f in files:
+        emb = f.stem.replace("domainshift_", "")
+        z = np.load(f)
+        g = shift[shift["embedder"] == emb]
+        if g.empty:
+            continue
+        # The alpha that gives a 5% flag rate on this embedder's OWN data: the
+        # 5th percentile of the in-domain p-values, pooled over its datasets.
+        self_p = [z[k] for k in z.files if k.split("|")[0] == k.split("|")[1] and k in z.files]
+        if not self_p:
+            continue
+        pooled_self = np.concatenate(self_p)
+        alpha_star = float(np.quantile(pooled_self, TARGET_FALSE_ALARM))
+        fired_self, fired_diff, fired_same = [], [], []
+        for _, r in g.iterrows():
+            key = f"{r['build_dataset']}|{r['query_dataset']}"
+            if key not in z.files:
+                continue
+            pv = z[key]
+            frac = float(np.mean(pv < alpha_star))
+            n = pv.size
+            se = math.sqrt(alpha_star * (1.0 - alpha_star) / n) if n else 0.0
+            zz = (frac - alpha_star) / se if se > 0 else 0.0
+            fired = bool(zz > 3.0 and frac >= 2.0 * alpha_star)
+            if r["is_self"]:
+                fired_self.append(fired)
+            elif DATASET_SOURCE.get(r["build_dataset"]) != DATASET_SOURCE.get(r["query_dataset"]):
+                fired_diff.append(fired)
+            else:
+                fired_same.append(fired)
+        rows.append(
+            {
+                "embedder": emb,
+                "alpha_shipped": 0.05,
+                "alpha_star": alpha_star,
+                "fp_rate_shipped": float(g[g["is_self"]]["shifted"].mean()),
+                "fp_rate_repaired": float(np.mean(fired_self)) if fired_self else float("nan"),
+                "detect_different_source_shipped": float(
+                    g[
+                        (~g["is_self"])
+                        & (g["build_dataset"].map(DATASET_SOURCE) != g["query_dataset"].map(DATASET_SOURCE))
+                    ]["shifted"].mean()
+                ),
+                "detect_different_source_repaired": float(np.mean(fired_diff)) if fired_diff else float("nan"),
+                "detect_same_source_repaired": float(np.mean(fired_same)) if fired_same else float("nan"),
+            }
+        )
+    out = pd.DataFrame(rows)
+    if not out.empty:
+        out["separation_shipped"] = out["detect_different_source_shipped"] - out["fp_rate_shipped"]
+        out["separation_repaired"] = out["detect_different_source_repaired"] - out["fp_rate_repaired"]
+    return out.sort_values("separation_repaired", ascending=False).reset_index(drop=True)
+
+
 def c1_c3_projection(df: pd.DataFrame) -> pd.DataFrame:
     trust = _wide(df, "umap", "layout", "trustworthiness_k10", "trust_k10")
     trust50 = _wide(df, "umap", "layout", "trustworthiness_k50", "trust_k50")
@@ -369,6 +450,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     b4emb = b4_by_embedder(shift)
     comb = combiner_comparison(df)
     b5src = b5_by_source(shift)
+    repair = per_embedder_alpha_repair(results, shift)
 
     for name, frame in (
         ("b1_b2_atlas_uniformity", uni),
@@ -379,6 +461,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         ("b4_guard_operating_point", b4emb),
         ("b5_power_by_source", b5src),
         ("b2_combiner_comparison", comb),
+        ("b6_alpha_repair", repair),
     ):
         frame.to_csv(out / "agg" / f"{name}.csv", index=False)
 
@@ -426,6 +509,15 @@ def main(argv: Optional[list[str]] = None) -> int:
         )
         if not b5src.empty and (b5src["pairs"] == "different source").any()
         else float("nan"),
+        "repair_min_separation_shipped": float(repair["separation_shipped"].min())
+        if not repair.empty
+        else float("nan"),
+        "repair_min_separation_repaired": float(repair["separation_repaired"].min())
+        if not repair.empty
+        else float("nan"),
+        "repair_helps": bool(
+            not repair.empty and repair["separation_repaired"].min() > repair["separation_shipped"].min()
+        ),
         "b5_share_shifted_same_source": float(
             b5src.loc[b5src["pairs"] == "same source (slices of one corpus)", "share_shifted"].iloc[0]
         )
