@@ -1107,3 +1107,57 @@ class _CompletedStub:
     returncode = 0
     stdout = ""
     stderr = ""
+
+
+class TestRealMirrorLayouts:
+    """Layout facts measured on the real archives, not on the documented ones.
+
+    #3343 pulled both Kaggle sources for the first time and each was parsed
+    wrongly by a `--probe`-clean, 107-test-green builder.  Neither failure
+    raised: one produced warnings and an empty source, the other produced a
+    warning about data that was entirely present.  Fixtures could not have
+    caught either, because a fixture is built from the layout the docs
+    describe, and both bugs live in the gap between that and the mirror.
+
+    So these pin the *mirror's* conventions by name.
+    """
+
+    @pytest.mark.parametrize(
+        "gt_name,scan_stem",
+        [
+            ("stampDS-00001-px", "stampds-00001"),  # pixel-accurate masks
+            ("stampDS-00001-gt", "stampds-00001"),  # binary maps
+            ("stampDS-00001_px", "stampds-00001"),
+            ("stampDS-00001", "stampds-00001"),  # no suffix: unchanged
+        ],
+    )
+    def test_staver_gt_stem_maps_to_its_scan(self, mods, gt_name, scan_stem):
+        """StaVer GT filenames carry a suffix the scan does not.
+
+        The scan is ``scans/stampDS-00001.png``; the mask is
+        ``ground-truth-pixel/stampDS-00001-px.png``.  Indexing masks by raw stem
+        matched nothing on the real archive: 427 "no ground-truth mask"
+        warnings and zero StaVer pages in the corpus, a source that looked
+        skipped rather than broken.
+        """
+        assert mods["staver"].gt_stem_key(gt_name) == scan_stem
+
+    def test_tobacco800_zoneless_page_is_not_reported_unmatched(self, mods):
+        """A GEDI file with no zones is a negative, not a missing image.
+
+        430 of Tobacco800's 1,290 pages have an empty ``DL_PAGE``.  They are
+        kept on purpose as in-domain negatives, so counting them as GT that
+        "had no matching image" describes absent data using data that is
+        present -- and buries any real mismatch in the noise.
+        """
+        zoneless = (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<GEDI xmlns="http://lamp.cfar.umd.edu/GEDI" version="1.0">'
+            '<DL_DOCUMENT src="aao54e00_1.tif" NrOfPages="1" docTag="xml">'
+            '<DL_PAGE gedi_type="DL_PAGE" src="aao54e00_1.tif" pageID="1" width="2592" height="3300">'
+            "</DL_PAGE></DL_DOCUMENT></GEDI>"
+        )
+        parsed = mods["tobacco800"].parse_gedi(zoneless)
+        # The key exists with an empty list -- that is what made `if marks:`
+        # the wrong test, and it is the behaviour the fix depends on.
+        assert parsed == {"aao54e00_1": []}

@@ -41,6 +41,26 @@ _INFO_DIR_HINTS = ("info", "infos")
 
 _IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"}
 
+#: Stem suffixes the ground-truth files carry that the scan does not.  On the
+#: Kaggle mirror a page is ``scans/stampDS-00001.png``, its pixel mask is
+#: ``ground-truth-pixel/stampDS-00001-px.png`` and its binary map is
+#: ``ground-truth-maps/stampDS-00001-gt.png``.  Indexing masks by raw stem
+#: therefore matches nothing at all: measured on the real archive (#3343) it
+#: produced 427 "no ground-truth mask" warnings and ZERO usable StaVer pages,
+#: while looking for all the world like a source that had simply been skipped.
+#: The fixtures could not catch this because they were built from the
+#: documented layout, which does not mention the suffixes.
+_GT_STEM_SUFFIXES = ("-px", "-gt", "_px", "_gt")
+
+
+def gt_stem_key(stem: str) -> str:
+    """The scan stem a ground-truth filename belongs to, lowercased."""
+    low = stem.lower()
+    for suffix in _GT_STEM_SUFFIXES:
+        if low.endswith(suffix):
+            return low[: -len(suffix)]
+    return low
+
 
 def fetch(raw_root: Path) -> Path:
     """Download StaVer from Kaggle.  Returns the unpacked directory."""
@@ -133,8 +153,8 @@ def build_pages(
     from PIL import Image
 
     scans_dir, masks_dir, info_dir = find_tree(unpacked)
-    masks_by_stem = {p.stem.lower(): p for p in masks_dir.rglob("*") if p.suffix.lower() in _IMAGE_SUFFIXES}
-    info_by_stem = {p.stem.lower(): p for p in (info_dir.rglob("*") if info_dir else []) if p.is_file()}
+    masks_by_stem = {gt_stem_key(p.stem): p for p in masks_dir.rglob("*") if p.suffix.lower() in _IMAGE_SUFFIXES}
+    info_by_stem = {gt_stem_key(p.stem): p for p in (info_dir.rglob("*") if info_dir else []) if p.is_file()}
 
     scans = sorted(p for p in scans_dir.rglob("*") if p.suffix.lower() in _IMAGE_SUFFIXES)
     if limit is not None:

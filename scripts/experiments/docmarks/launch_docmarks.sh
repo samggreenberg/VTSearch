@@ -121,7 +121,18 @@ status)
 
 embed)
   tier="${2:-s}"
-  GRES="gpu:$(python3 "$WT/scripts/slurm/pick_gpu.py"):1"
+  # `VTS_GPU` is set in the grid ~/.bashrc, and pick_gpu honours it by design
+  # ("VTS_GPU is set; not querying the scheduler") -- which here would inherit
+  # a v100 pin the embed stage never chose.  GRID-PLAYBOOK sec.2 is explicit
+  # that a named type is a pin that outlives its reason in both directions, and
+  # v100 has already cost 2.3x on a siglip2_l embed while L40S nodes idled.
+  # Clear it so the scheduler actually gets asked.  VTS_DOCMARKS_GPU overrides.
+  if [ -n "${VTS_DOCMARKS_GPU:-}" ]; then
+    GRES="gpu:$VTS_DOCMARKS_GPU:1"
+  else
+    GRES="gpu:$(env -u VTS_GPU python3 "$WT/scripts/slurm/pick_gpu.py"):1"
+  fi
+  echo "gres: $GRES"
   RUNNER="/exp/$USER/.docmarks-embed-$tier.$$.sh"
   cat > "$RUNNER" <<RUNNER_EOF
 #!/usr/bin/env bash
