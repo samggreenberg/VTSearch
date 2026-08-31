@@ -534,11 +534,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
     # identity.  UCSF is in this list on purpose: its `author` metadata is a
     # candidate pool, not a class, so its letterhead bands are adjudicated by
     # the same path as SPODS's and StaVer's marks rather than being trusted.
-    from cluster_marks import cluster_source, load_separations, write_cluster_report
+    from cluster_marks import cluster_source, load_adjudications, write_cluster_report
 
-    separations = load_separations(args.out / "separations.json")
-    if separations:
-        print(f"\nhonouring {len(separations)} adjudicated different-mark pair(s)")
+    same, different = load_adjudications(args.out / "adjudications.json")
+    if same or different:
+        print(f"\nhonouring {len(same)} hand-merged and {len(different)} hand-separated pair(s)")
 
     summaries = []
     for source in ("spods", "staver", "ucsf"):
@@ -549,7 +549,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
             source,
             backend=args.cluster_backend,
             threshold=args.cluster_threshold,
-            separations=separations,
+            same=same,
+            different=different,
             provenance="clustered_band" if source == "ucsf" else "clustered",
         )
         if not summary["marks"]:
@@ -693,7 +694,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
         "rejection_reasons": ({c: r for c, r in rejected.items() if r != "not on the roster"} if chosen else rejected),
         "survival_curve": {str(k): v for k, v in curve.items()},
         "needs_hand_crop": needs_hand_crop,
-        "separations_honoured": len(separations),
+        "merges_honoured": len(same),
+        "separations_honoured": len(different),
         "hard_negative_pairs": sorted(
             {
                 tuple(sorted((cid, other)))

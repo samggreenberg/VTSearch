@@ -231,12 +231,83 @@ dataset × embedder cross-product, so adding DocMarks and `sift_vlad` there woul
 silently schedule `sift_vlad` cells for all six existing datasets, on a mount
 the playbook already calls chronically full.
 
-## Before running this on the grid
+## Strict partition, cheap merge
 
-`python build_corpus.py --probe` first. Every source fails differently — a
-decommissioned hostname, a missing Kaggle token, an absent RAR extractor — and
-finding out which costs seconds now and a queue slot later. SPODS needs one of
-`bsdtar` / `7z` / `unar` / `unrar`; StaVer and Tobacco800 need a Kaggle token.
+The two clustering errors do not cost the same, so the threshold is not set
+where it is "most accurate":
 
-Then `bash ../preflight.sh`, and size from a real cell rather than a guess:
-build tier `s` first and read its actual seconds.
+- An **over-split** shows up in the audit as one obvious pair of near-identical
+  classes. One click.
+- An **over-merge** shows up nowhere. The class quietly means two things for as
+  long as the corpus lives, and every number computed on it is wrong in a
+  direction nobody can see.
+
+So the threshold runs **strict**, the partition over-splits on purpose, and the
+repair is done by hand. Both directions of every hand decision are recorded in
+`adjudications.json` as page-id pairs and replayed on every future re-cluster —
+`same` becomes a must-link, `different` a cannot-link — so an afternoon of
+merging is not undone the next time a number moves. A pair ruled both ways is
+refused rather than resolved by whichever is applied last.
+
+Measured on 2,096 real SPODS marks with the 256-bit hash:
+
+| threshold | classes | largest component | share | classes with ≥10 |
+|---:|---:|---:|---:|---:|
+| 0.08 | 969 | 60 | 2.9% | 36 |
+| **0.16** | **503** | **60** | **2.9%** | **51** |
+| 0.18 | 413 | 90 | 4.3% | 50 |
+| 0.20 | 367 | 126 | 6.0% | 49 |
+| 0.22 | 288 | 593 | 28.3% | 37 |
+| 0.26 | 124 | 1,474 | 70.3% | 16 |
+
+Read the **share** column, not the class count. 0.16 is the top of the flat
+region: the most the clustering assembles before it starts assembling things
+that do not belong together.
+
+## The descriptor had to be widened to get here
+
+The first real run merged a red **book** stamp (5 instances) and a blue
+**elephant** stamp (27) into one class, and no threshold separated them — a
+single pair at Hamming 2/64 bridged the set, so it was one group at 0.04 and 21
+fragments at 0.03.
+
+The mechanism is frequency. A stamp's border ring is big, smooth and
+low-frequency; the interior that says *which* stamp is not. An 8×8 DCT block
+keeps almost nothing but the ring, so a 64-bit hash encoded "is a round stamp".
+The hash is now 16×16 (256 bits) with a soft radial taper toward the crop's own
+mean, and on that class it gives exactly {27 elephants} + {5 books}.
+
+It stays **greyscale** on purpose: the same elephant appears in blue on 26
+pages and red on one, and belongs in a single class.
+
+Clustering on SigLIP crop vectors would have separated them trivially and was
+rejected: SigLIP is one arm of the eval, so letting it define the classes would
+tilt the comparison toward it. The proposal step stays model-free.
+
+Re-run `tune_clustering.py` whenever the source set or the descriptor changes.
+The number is a property of the data and does not travel — it moved from 0.05
+to 0.16 when the hash went from 64 to 256 bits.
+
+## Looking at what you built
+
+```bash
+python make_report.py --corpus <dir> --out docs/experiments/<date>-docmarks/report.html
+```
+
+One self-contained HTML page: counts per source and provenance, whole pages with
+marks boxed in situ (the only way to see how small the target is), every class
+as a strip of its own instances, the distractor pool, and the mark-size
+distribution against the 32px structural floor. Images are inlined, so the file
+survives being archived or opened on a machine with no access to `/expscratch`.
+
+## Running it at full scale
+
+A tier-`s` SPODS-only build fits on a laptop. Tiers `m` and `l` need the
+cluster — see **[`GRID-RUNBOOK.md`](GRID-RUNBOOK.md)** for sizing, staging, the
+resume story and what to check afterwards.
+
+`python build_corpus.py --probe` first, wherever you run. Every source fails
+differently — a decommissioned hostname, a missing Kaggle token, an absent RAR
+extractor — and finding out which costs seconds now and a queue slot later.
+SPODS needs one of `bsdtar` / `7z` / `unar` / `unrar`; StaVer and Tobacco800
+need a Kaggle token.
