@@ -231,6 +231,32 @@ dataset × embedder cross-product, so adding DocMarks and `sift_vlad` there woul
 silently schedule `sift_vlad` cells for all six existing datasets, on a mount
 the playbook already calls chronically full.
 
+## The clustering threshold is measured, not chosen
+
+Single linkage does not degrade gracefully. Measured on SPODS's 2,096 real
+marks:
+
+| threshold | classes | largest component | share | classes with ≥10 |
+|---:|---:|---:|---:|---:|
+| 0.005–0.030 | 1,153 | 31 | 1.5% | 32 |
+| **0.040–0.060** | **728** | **60** | **2.9%** | **41** |
+| 0.080 | 458 | 382 | 18.2% | 43 |
+| 0.100 | 230 | 1,021 | 48.7% | 28 |
+| 0.180 | 34 | 1,818 | 86.7% | 9 |
+
+Read the **share** column, not the class count: at 0.18 the corpus reports 34
+classes, which sounds like an inventory and is actually one blob of 1,818 marks
+with a tail. An earlier default of 0.18 — validated on a three-class fixture —
+produced exactly that, and it did not look like an error.
+
+The plateaus are wide because pHash distances are quantised to multiples of
+1/64, so every threshold between two steps gives an identical partition; 0.04,
+0.05 and 0.06 are the same corpus. That makes 0.05 a safe working point rather
+than a knife edge.
+
+Re-run `tune_clustering.py` whenever the source set or the descriptor changes.
+The number is a property of the data and does not travel.
+
 ## Looking at what you built
 
 ```bash
