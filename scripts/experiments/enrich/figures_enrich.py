@@ -128,15 +128,18 @@ def wrappers(per_wrapper: pd.DataFrame, per_mt: pd.DataFrame, outdir: Path, dpi:
             ax.axhline(float(ens.iloc[0]), color="#c0392b", ls="--", lw=1.4)
             ax.annotate(
                 "enriched (mean of all 5)",
-                (0.02, float(ens.iloc[0])),
+                (0.98, float(ens.iloc[0])),
                 xycoords=("axes fraction", "data"),
                 fontsize=7.5,
                 color="#c0392b",
+                ha="right",
                 va="bottom",
             )
         ax.axhline(0, color="#444", lw=0.9)
         ax.set_xticks(xs)
-        ax.set_xticklabels([w.replace("{text}", "…") for w in sub["wrapper"]], rotation=30, ha="right", fontsize=7)
+        # The identity wrapper is the reference, not a zero-height mystery bar.
+        labels = ["(typed text alone)" if w == "{text}" else w.replace("{text}", "…") for w in sub["wrapper"]]
+        ax.set_xticklabels(labels, rotation=30, ha="right", fontsize=7)
         ax.set_title(f"{emb}  ({mt})" + ("" if DEFAULTS.get(mt) == emb else "  — control"), fontsize=9)
         ax.set_ylabel("Δ AP vs plain")
     for ax in axes.flat[len(embs) :]:

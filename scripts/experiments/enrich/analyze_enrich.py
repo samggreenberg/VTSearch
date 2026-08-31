@@ -172,6 +172,88 @@ def planted_answer_check(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def write_examples(pair: pd.DataFrame, tables: Path) -> None:
+    """The categories that actually moved, in both directions, with their queries.
+
+    An error rate a reader cannot see behind is a number they have to take on
+    faith, so both tails are written out verbatim: overall, and again *within*
+    each default -- a global top-10 is all audio, whose per-category swings are
+    an order of magnitude wider than anyone else's, which is itself a finding
+    rather than a reason to hide the rest.
+    """
+    cols = ["media_type", "embedder", "dataset", "category", "query", "base", "arm", "delta"]
+    names = {"base": "ap_plain", "arm": "ap_enriched"}
+    ordered = pair.sort_values("delta")
+    pd.concat([ordered.head(10), ordered.tail(10)])[cols].rename(columns=names).to_csv(
+        tables / "examples.csv", index=False
+    )
+
+    tails = []
+    for (mt, emb), g in pair.groupby(["media_type", "embedder"]):
+        if DEFAULT_EMBEDDERS.get(mt) != emb:
+            continue
+        g = g.sort_values("delta")
+        tails.append(pd.concat([g.head(5), g.tail(5)]))
+    if tails:
+        pd.concat(tails)[cols].rename(columns=names).to_csv(tables / "examples_by_media_type.csv", index=False)
+
+
+def mechanism_tables(pair: pd.DataFrame, per_wrapper: pd.DataFrame, tables: Path) -> None:
+    """Two cheap reads on *why* a wrapper helps or hurts, from rows already here.
+
+    Both are descriptive, and neither is a controlled test -- four wrappers per
+    embedder is four points. They are written out so the report's mechanism
+    section quotes measurements rather than a story.
+    """
+    # (a) does the damage scale with how much generic prefix the wrapper adds?
+    if len(per_wrapper):
+        w = per_wrapper.copy()
+        w["wrapper_extra_words"] = w["wrapper"].map(lambda t: len(t.replace("{text}", "").split()))
+        w[["embedder", "media_type", "arm", "wrapper", "wrapper_extra_words", "delta", "se_cluster"]].sort_values(
+            ["embedder", "wrapper_extra_words"]
+        ).to_csv(tables / "mechanism_wrapper_length.csv", index=False)
+
+    # (b) does it scale with how short the typed query is -- i.e. how large a
+    # fraction of the embedded string the wrapper becomes?
+    rows = []
+    q = pair.copy()
+    q["query_words"] = q["query"].map(lambda t: len(str(t).split()))
+    for (mt, emb), g in q.groupby(["media_type", "embedder"]):
+        by_cat = g.groupby("cluster").agg(delta=("delta", "mean"), query_words=("query_words", "first"))
+        if by_cat["query_words"].nunique() < 2:
+            continue
+        rows.append(
+            {
+                "media_type": mt,
+                "embedder": emb,
+                "n_categories": len(by_cat),
+                "pearson_r": float(by_cat["delta"].corr(by_cat["query_words"])),
+                "spearman_r": float(by_cat["delta"].corr(by_cat["query_words"], method="spearman")),
+                "mean_query_words": float(by_cat["query_words"].mean()),
+            }
+        )
+    if rows:
+        pd.DataFrame(rows).to_csv(tables / "mechanism_query_length.csv", index=False)
+
+
+def probe_table(probe_dir: Path, tables: Path) -> pd.DataFrame | None:
+    """Fold in `probe_text_prompt.py`: what does the query/passage gap cost?
+
+    Same datasets, same metric, same pairing as everything else, so the number
+    can be put beside the enrichment difference without an apology.
+    """
+    paths = sorted(probe_dir.glob("probe_prompt__*.csv")) if probe_dir.is_dir() else []
+    if not paths:
+        return None
+    df = pd.concat([pd.read_csv(p) for p in paths], ignore_index=True)
+    df["media_type"] = "text"
+    df["corpus"] = df["dataset"].map(corpus_of)
+    pair = paired(df, "passage", base="query")
+    out = summarise_by(pair, ["embedder"])
+    out.to_csv(tables / "probe_query_vs_passage.csv", index=False)
+    return out
+
+
 def verdict(per_mt: pd.DataFrame, pooled: dict) -> dict:
     """Apply the pre-registered rule to the four media-type defaults."""
     defaults = per_mt[per_mt.apply(lambda r: DEFAULT_EMBEDDERS.get(r["media_type"]) == r["embedder"], axis=1)]
@@ -196,13 +278,67 @@ def verdict(per_mt: pd.DataFrame, pooled: dict) -> dict:
     }
 
 
-def main() -> int:
+def wrapper_arms(df: pd.DataFrame, tables: Path, metric: str) -> pd.DataFrame:
+    """Every individual wrapper against `plain`, per embedder.
+
+    "Enrichment helps" and "one of its five templates helps" are different
+    findings with different fixes, and the docs note this issue asks for has to
+    say which.
+    """
+    rows = []
+    for arm in sorted(a for a in df["arm"].unique() if a.startswith("w")):
+        pair = paired(df, arm, metric=metric)
+        for (emb, mt), g in pair.groupby(["embedder", "media_type"]):
+            rec = summarise(g)
+            rec.update(
+                {
+                    "arm": arm,
+                    "embedder": emb,
+                    "media_type": mt,
+                    "wrapper": df[(df["arm"] == arm) & (df["embedder"] == emb)]["wrapper"].iloc[0],
+                }
+            )
+            rows.append(rec)
+    out = pd.DataFrame(rows)
+    if len(out):
+        out = out[
+            [
+                "embedder",
+                "media_type",
+                "arm",
+                "wrapper",
+                "map_plain",
+                "map_arm",
+                "delta",
+                "se_cluster",
+                "se_naive",
+                "n_pairs",
+                "n_clusters",
+                "helped",
+                "hurt",
+            ]
+        ].sort_values(["media_type", "embedder", "arm"])
+        out.to_csv(tables / "per_wrapper.csv", index=False)
+    return out
+
+
+def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser()
     ap.add_argument("--results", required=True, type=Path)
     ap.add_argument("--out", required=True, type=Path, help="study directory (tables/ and figures/ land here)")
     ap.add_argument("--metric", default="ap", help="metric column to pair on (default: ap)")
+    ap.add_argument(
+        "--probe",
+        type=Path,
+        default=None,
+        help="probe results dir (default: <results>/../results_probe)",
+    )
     ap.add_argument("--no-figures", action="store_true")
-    args = ap.parse_args()
+    return ap
+
+
+def main() -> int:
+    args = build_parser().parse_args()
 
     tables = args.out / "tables"
     figures = args.out / "figures"
@@ -253,47 +389,10 @@ def main() -> int:
         )
 
     # --- 4. per-wrapper diagnostic ---
-    wrap_rows = []
-    for arm in sorted(a for a in df["arm"].unique() if a.startswith("w")):
-        p = paired(df, arm, metric=args.metric)
-        for (emb, mt), g in p.groupby(["embedder", "media_type"]):
-            s = summarise(g)
-            s.update(
-                {
-                    "arm": arm,
-                    "embedder": emb,
-                    "media_type": mt,
-                    "wrapper": df[(df["arm"] == arm) & (df["embedder"] == emb)]["wrapper"].iloc[0],
-                }
-            )
-            wrap_rows.append(s)
-    per_wrapper = pd.DataFrame(wrap_rows)
-    if len(per_wrapper):
-        per_wrapper = per_wrapper[
-            [
-                "embedder",
-                "media_type",
-                "arm",
-                "wrapper",
-                "map_plain",
-                "map_arm",
-                "delta",
-                "se_cluster",
-                "se_naive",
-                "n_pairs",
-                "n_clusters",
-                "helped",
-                "hurt",
-            ]
-        ].sort_values(["media_type", "embedder", "arm"])
-        per_wrapper.to_csv(tables / "per_wrapper.csv", index=False)
+    per_wrapper = wrapper_arms(df, tables, args.metric)
 
     # --- 5. literal examples: the categories that actually moved ---
-    ex = pair.sort_values("delta")
-    examples = pd.concat([ex.head(10), ex.tail(10)])[
-        ["media_type", "embedder", "dataset", "category", "query", "base", "arm", "delta"]
-    ].rename(columns={"base": "ap_plain", "arm": "ap_enriched"})
-    examples.to_csv(tables / "examples.csv", index=False)
+    write_examples(pair, tables)
 
     # --- 6. cost: what the extra encoder passes cost per query ---
     cost = (
@@ -308,6 +407,12 @@ def main() -> int:
         cost["extra_s_per_query"] = (cost["enriched"] - cost["plain"]) / cost["n_queries"]
     cost.to_csv(tables / "arm_cost.csv", index=False)
 
+    mechanism_tables(pair, per_wrapper, tables)
+    probe = probe_table(args.probe or args.results.parent / "results_probe", tables)
+    if probe is not None:
+        print("\n=== probe: ranking with the passage encoder instead of the query encoder ===")
+        print(probe[["embedder", "n_pairs", "map_plain", "map_arm", "delta", "se_cluster"]].to_string(index=False))
+
     call = verdict(per_mt, pooled)
     summary = {
         "pooled": pooled,
@@ -316,7 +421,9 @@ def main() -> int:
         "cells": int(df.groupby(["embedder", "dataset"]).ngroups),
         "paired_observations": int(len(pair)),
     }
-    (args.out / "verdict.json").write_text(json.dumps(summary, indent=2))
+    # Trailing newline: the file is committed, and end-of-file-fixer rewrites
+    # (and so fails) any commit that carries one without.
+    (args.out / "verdict.json").write_text(json.dumps(summary, indent=2) + "\n")
 
     print("\n=== per media type (enriched - plain, paired on AP) ===")
     show = per_mt.copy()

@@ -1,0 +1,41 @@
+media_type,embedder,dataset,category,query,ap_plain,ap_enriched,delta
+audio,clap_general,esc50_l,pouring_water,pouring water from a container,0.985448,0.703922,-0.28152599999999994
+audio,clap_general,esc50_s,pouring_water,pouring water from a container,0.885,0.654444,-0.23055599999999998
+audio,clap_general,esc50_m,pouring_water,pouring water from a container,1.0,0.850398,-0.149602
+audio,clap_general,esc50_m,laughing,people laughing,0.691094,0.628227,-0.062867
+audio,clap_general,esc50_l,laughing,people laughing,0.817987,0.77251,-0.04547699999999999
+audio,clap_general,esc50_s,wind,wind howling,0.308658,0.493333,0.18467500000000003
+audio,clap_general,esc50_s,laughing,people laughing,0.44127,0.692222,0.250952
+audio,clap_general,esc50_s,insects,buzzing insects,0.697619,0.966667,0.26904800000000006
+audio,clap_general,esc50_l,insects,buzzing insects,0.572188,0.900214,0.32802599999999993
+audio,clap_general,esc50_m,insects,buzzing insects,0.494897,0.962121,0.46722400000000003
+image,siglip,vggface2_faces_m,Martha Reeves,a photo of Martha Reeves,0.830983,0.695591,-0.13539200000000007
+image,siglip,vggface2_faces_s,Martha Reeves,a photo of Martha Reeves,0.775507,0.696783,-0.0787239999999999
+image,siglip,vggface2_faces_m,Wendi Deng Murdoch,a photo of Wendi Deng Murdoch,0.247938,0.172019,-0.07591899999999999
+image,siglip,vggface2_faces_s,Ewan McGregor,a photo of Ewan McGregor,0.741884,0.667455,-0.07442899999999997
+image,siglip,vggface2_faces_m,Grzegorz Schetyna,a photo of Grzegorz Schetyna,0.546188,0.478544,-0.06764399999999998
+image,siglip,vggface2_faces_s,Manuel Neuer,a photo of Manuel Neuer,0.825056,0.894873,0.06981700000000002
+image,siglip,enrico_a,News,a news or article feed,0.261321,0.338408,0.07708699999999996
+image,siglip,visual_genome_s,train,a train,0.388889,0.47619,0.08730100000000002
+image,siglip,visual_genome_m,sheep,a sheep,0.653619,0.745715,0.09209600000000007
+image,siglip,visual_genome_m,pizza,a pizza,0.668423,0.775047,0.10662400000000005
+text,e5,20newsgroups_m,business,buying and selling merchandise,0.472684,0.336131,-0.13655299999999998
+text,e5,20newsgroups_s,business,buying and selling merchandise,0.467329,0.351351,-0.11597799999999997
+text,e5,20newsgroups_l,business,buying and selling merchandise,0.417042,0.303452,-0.11359000000000002
+text,e5,20newsgroups_s,cars,automobiles and car reviews,0.752181,0.638897,-0.11328399999999994
+text,e5,20newsgroups_l,cars,automobiles and car reviews,0.614801,0.506801,-0.1080000000000001
+text,e5,20newsgroups_s,electronics,electronic circuits and components,0.452805,0.43868,-0.014124999999999999
+text,e5,20newsgroups_s,crypto,cryptography and data encryption,0.69691,0.686798,-0.01011200000000001
+text,e5,20newsgroups_m,atheism,atheism and arguments against religion,0.373496,0.365561,-0.00793499999999997
+text,e5,20newsgroups_l,atheism,atheism and arguments against religion,0.375615,0.36775,-0.007864999999999955
+text,e5,20newsgroups_m,crypto,cryptography and data encryption,0.669134,0.663102,-0.006032000000000037
+video,xclip,ucf101_s,BaseballPitch,a baseball pitcher throwing a pitch,0.818452,0.760673,-0.057778999999999914
+video,xclip,ucf101_m,Basketball,people playing basketball,0.482101,0.435072,-0.04702899999999999
+video,xclip,ucf101_s,ApplyLipstick,someone applying lipstick,0.562476,0.517105,-0.04537099999999994
+video,xclip,ucf101_m,BabyCrawling,a baby crawling on the floor,1.0,0.966667,-0.033332999999999946
+video,xclip,ucf101_l,Basketball,people playing basketball,0.366562,0.340667,-0.025895
+video,xclip,ucf101_s,ApplyEyeMakeup,someone applying eye makeup,0.876667,0.926667,0.050000000000000044
+video,xclip,ucf101_l,ApplyLipstick,someone applying lipstick,0.261004,0.316939,0.05593500000000001
+video,xclip,ucf101_l,BalanceBeam,a gymnast on the balance beam,0.826988,0.925451,0.09846300000000008
+video,xclip,ucf101_s,BalanceBeam,a gymnast on the balance beam,0.86,0.966667,0.10666700000000007
+video,xclip,ucf101_m,BalanceBeam,a gymnast on the balance beam,0.561892,0.734533,0.17264100000000004

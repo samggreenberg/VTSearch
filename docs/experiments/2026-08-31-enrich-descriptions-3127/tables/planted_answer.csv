@@ -1,0 +1,7 @@
+embedder,arm,n,max_abs_delta,ok
+bge,w2,45,0.0,True
+clap,w2,150,0.0,True
+e5,w2,45,0.0,True
+siglip,w3,335,0.0,True
+clap_general,w2,150,0.0,True
+xclip,w2,30,0.0,True

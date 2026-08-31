@@ -1,0 +1,31 @@
+embedder,media_type,arm,wrapper,wrapper_extra_words,delta,se_cluster
+bge,text,w2,{text},0,0.0,0.0
+bge,text,w0,a document about {text},3,-0.08493173333333331,0.014788553983108787
+bge,text,w1,an article discussing {text},3,-0.09151959999999999,0.012927682261986418
+bge,text,w3,a text passage about {text},4,-0.12454695555555556,0.01857582714404861
+bge,text,w4,writing on the topic of {text},5,-0.08693217777777776,0.012495204237354115
+clap,audio,w2,{text},0,0.0,0.0
+clap,audio,w3,audio of {text},2,-0.04266374666666666,0.01286243893653024
+clap,audio,w0,the sound of {text},3,-0.008872586666666666,0.013562976068412901
+clap,audio,w1,a recording of {text},3,-0.023564973333333336,0.011283544770714974
+clap,audio,w4,the noise of {text},3,-0.03491322,0.013534021530799894
+clap_general,audio,w2,{text},0,0.0,0.0
+clap_general,audio,w3,audio of {text},2,0.00148124,0.01681999698404054
+clap_general,audio,w0,the sound of {text},3,0.01400006,0.012044387269961697
+clap_general,audio,w1,a recording of {text},3,0.001928273333333336,0.009318538591099148
+clap_general,audio,w4,the noise of {text},3,-0.004204559999999998,0.011706589999890124
+e5,text,w2,{text},0,0.0,0.0
+e5,text,w0,a document about {text},3,-0.10094871111111113,0.01531303122090286
+e5,text,w1,an article discussing {text},3,-0.09379500000000002,0.01386713189768255
+e5,text,w3,a text passage about {text},4,-0.10935986666666668,0.015785368657618714
+e5,text,w4,writing on the topic of {text},5,-0.12701293333333333,0.014316501492226769
+siglip,image,w3,{text},0,0.0,0.0
+siglip,image,w0,a photo of {text},3,-0.0060907761194029875,0.002408744696208137
+siglip,image,w1,a photograph of {text},3,-0.007467588059701494,0.0026390777678300522
+siglip,image,w2,an image of {text},3,-0.0020491104477611964,0.0024676093066608993
+siglip,image,w4,a picture of {text},3,-0.004527465671641793,0.0021807818935931597
+xclip,video,w2,{text},0,0.0,0.0
+xclip,video,w3,footage of {text},2,-0.04269739999999999,0.013727956883475698
+xclip,video,w0,a video of {text},3,0.006210633333333338,0.020971824920943134
+xclip,video,w1,a media showing {text},3,0.013787600000000014,0.021661111444404555
+xclip,video,w4,a video media of {text},4,0.003935133333333339,0.022441081822924897

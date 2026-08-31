@@ -1,0 +1,20 @@
+{
+  "pooled": {
+    "delta": -0.008977495621890545,
+    "se": 0.004655210568461443,
+    "n_media_types": 4
+  },
+  "verdict": "DO_NOT_FLIP__HARMS_A_DEFAULT",
+  "margin_se": 2.0,
+  "n_defaults": 4,
+  "harmed": [
+    "text"
+  ],
+  "helped": [],
+  "pooled_delta": -0.008977495621890545,
+  "pooled_se": 0.004655210568461443,
+  "pooled_resolved": false,
+  "planted_answer_ok": true,
+  "cells": 28,
+  "paired_observations": 755
+}

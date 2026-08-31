@@ -197,6 +197,28 @@ The **document** media type has no embedding model of its own. Documents (PDF, D
 
 Embeddings are computed once when a dataset is loaded. The full-image vector lands in each clip's `"embeddings"` dict, keyed by embedder name (`numpy.ndarray` values; read it through the `media_embedding` accessor); patch embedders additionally populate `"patch_grid"` (`H × W × D` fp16 ndarray, re-derived at load — never persisted). The detector head trains on these pre-computed vectors, so training is fast (typically < 1 second for 200 epochs on a few hundred labeled examples).
 
+### Description enrichment
+
+The Settings toggle **Enrich descriptions** (`enrich_descriptions`, off by default) changes one thing: the *query* vector. With it on, `embed_text_query` replaces the embedding of what you typed with the L2-normalised mean over the embedder's `description_wrappers` applied to it — SigLIP's are `"a photo of {text}"`, `"a photograph of {text}"`, `"an image of {text}"`, `"{text}"`, `"a picture of {text}"` — via `MediaEmbedder.embed_text_enriched`. Media vectors are untouched, and the Text Sort box (`vtsearch/routes/sorting.py`) is its only consumer. It costs 5 text-encoder passes instead of 1 on the query alone (~20-30 ms), cached per `(embedder, media type, enrich, text)`.
+
+**It is not a general improvement, and the default stays off.** Measured across every media-type default on 22 eval datasets and 560 paired queries ([`docs/experiments/2026-08-31-enrich-descriptions-3127/`](experiments/2026-08-31-enrich-descriptions-3127/REPORT.md), issue #3127), paired difference in text-sort average precision:
+
+| media type | embedder | enrichment |
+|---|---|---|
+| `audio` | `clap_general` **(default)** | **+0.014 ± 0.009** — helps, but below 2 SE |
+| `audio` | `clap` | −0.010 ± 0.008 |
+| `image` | `siglip` **(default)** | −0.001 ± 0.002 — inert on average, and the sign varies by corpus (`enrico` +0.01, `vggface2` −0.008) |
+| `text` | `e5` **(default)** | **−0.057 ± 0.009** — worse on 45 of 45 categories |
+| `text` | `bge` | −0.059 ± 0.009 — worse on 45 of 45 |
+| `video` | `xclip` **(default)** | +0.008 ± 0.014 on AP, but −0.010 on P@10 |
+
+Two things worth knowing before changing any of this:
+
+- **The effect belongs to the embedder-and-corpus pair, not to enrichment.** The wrappers were written per media type, and only two templates in the tree have a positive point estimate on their own embedder: `"the sound of {text}"` on `clap_general` (+0.014, which is the whole of that media type's gain) and `"a media showing {text}"` on `xclip`. Every wrapper is negative on `siglip`, `e5`, `bge` and `clap`.
+- **`{text}` is itself one of the five templates**, so enrichment always averages the plain query back in. Where the other four hurt, that is the only reason the ensemble does not hurt as much as they do.
+
+`face` (no text tower) and `document` (no embedder of its own) cannot text-sort, so the setting is inert for them.
+
 ### Region-aware training on patch datasets
 
 Every patch media has one **score-row stack** — `media_score_rows` in `vtscore/embedding/matrix.py` — and it is the single definition of the geometry:

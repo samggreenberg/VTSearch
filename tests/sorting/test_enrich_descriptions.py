@@ -248,6 +248,16 @@ class TestEmbedTextQueryEnrich:
 
 class TestEnrichDescriptionsSetting:
     def test_default_is_false(self):
+        """Off is a measured decision, not an oversight.
+
+        Issue #3127 re-measured enrichment against every media-type default
+        after #3077 moved the audio default to ``clap_general``: it is worth
+        +0.014 +/- 0.009 AP there, inert on ``siglip``, and **-0.057 +/- 0.009
+        on ``e5``** -- worse on 45 of 45 text categories, and on ``bge`` too.
+        Equal-weighted over the four defaults the setting is negative.  See
+        ``docs/experiments/2026-08-31-enrich-descriptions-3127/REPORT.md``
+        before flipping this.
+        """
         from vtsearch import settings as settings_mod
 
         assert settings_mod.get_enrich_descriptions() is False
