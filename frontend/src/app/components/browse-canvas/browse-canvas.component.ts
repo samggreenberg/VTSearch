@@ -1582,6 +1582,11 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
    * text and paints what the layout kept. The view level is *continuous* (the
    * unrounded form of the LOD picker's level), so signs grow/fade smoothly
    * through a zoom rather than stepping at level boundaries.
+   *
+   * Signs the layout marked `approximate` — the coarse bands whose ground-truth
+   * purity is measurably weak (issue #3346) — letter in italic with a `~`
+   * prefix, at slightly lower opacity and with no drop shadow, so they read as
+   * "roughly this way" rather than as a name.
    */
   private drawSigns(ctx: CanvasRenderingContext2D): void {
     const meta = this.meta();
@@ -1597,8 +1602,8 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
         height: this.height,
         viewLevel: viewLevelForZoom(meta.base_radius, this.effZoom, this.targetRadius),
       },
-      (text, fontPx) => {
-        ctx.font = this.signFont(fontPx);
+      (text, fontPx, approximate) => {
+        ctx.font = this.signFont(fontPx, approximate);
         return ctx.measureText(text).width;
       },
     );
@@ -1613,7 +1618,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
       // more-offset shadow — see `signShadow`. Shadow blurs are among the most
       // expensive canvas ops under software rasterization, and the signs repaint
       // on every pan frame — low-effects mode paints them flat (issue #2695).
-      const shadow = this.lowFx ? null : signShadow(sign.scale, sign.fontPx);
+      const shadow = this.lowFx ? null : signShadow(sign.scale, sign.fontPx, sign.approximate);
       ctx.globalAlpha = sign.alpha * 0.6;
       ctx.fillStyle = pillBg;
       if (shadow) {
@@ -1631,16 +1636,20 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
       ctx.shadowOffsetY = 0;
       ctx.globalAlpha = sign.alpha;
       ctx.fillStyle = textColor;
-      ctx.font = this.signFont(sign.fontPx);
-      ctx.fillText(sign.label.text, sign.sx, sign.sy);
+      ctx.font = this.signFont(sign.fontPx, sign.approximate);
+      ctx.fillText(sign.text, sign.sx, sign.sy);
     }
     ctx.restore();
   }
 
   /** Canvas font spec for a sign at `fontPx`. Semibold so the lettering holds
-   *  up over busy density fills without needing an outline. */
-  private signFont(fontPx: number): string {
-    return `600 ${fontPx}px ${SIGN_FONT_FAMILY}`;
+   *  up over busy density fills without needing an outline; italic when the sign
+   *  names one of the weak coarse bands, which is the hedge's quietest half (the
+   *  `~` prefix and the missing shadow carry it at small sizes). Both the
+   *  measure pass and the paint pass go through here so a pill is never sized in
+   *  a face it isn't drawn in. */
+  private signFont(fontPx: number, approximate = false): string {
+    return `${approximate ? 'italic ' : ''}600 ${fontPx}px ${SIGN_FONT_FAMILY}`;
   }
 
   /** Translucent fill + dashed accent border for the in-progress marquee. */
