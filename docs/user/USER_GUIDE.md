@@ -844,6 +844,16 @@ region when you're zoomed out, finer names inside it as you zoom in. They
 turn "there's a dense blob at the top-left" into "that blob is dogs
 barking."
 
+Some names come with a visible hedge: `~ Foraging birds`, in italics and
+without the slight shadow the other names carry. That marks the broadest
+couple of zoom bands, where a region covers so much ground that no single
+name really describes it - measured across 2832 regions, roughly half the
+regions at those bands have no majority category at all. The name is still
+the best short answer to "what is over here", and it is still worth
+steering by; the `~` is there so you read it as a direction rather than a
+label. Names at the finer bands, and names lettered from a dataset's own
+category paths, never carry it.
+
 The signpost toggle sits in the bottom-left control cluster next to Region
 select, and is greyed out on a map that has no names to show. Naming
 happens when the map is built, so a freshly built map may letter itself a
