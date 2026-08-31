@@ -176,8 +176,20 @@ def eupe_features_to_patch_output(
     patches_n = patches / torch.clamp(patches.norm(dim=-1, keepdim=True), min=1e-8)
     sims = patches_n @ cls_n  # (N,) cosine similarity per patch to CLS
     # Softmax with a moderate temperature so a few cells dominate without
-    # collapsing to a one-hot. Empirically tunable in the caltech101_s
-    # sweep alongside K and α.
+    # collapsing to a one-hot.
+    #
+    # The 4.0 is an inverse temperature applied directly to **cosine
+    # magnitudes**, so how peaked this map comes out depends on the spread of
+    # patch-to-CLS cosines in the embedder's space, which differs per embedder
+    # (#3329 part 2 measured dinov3_patch as the least concentrated space in
+    # its grid).  It was tuned in the caltech101_s sweep alongside the K and α
+    # of the HAC region tree — the tree #2886 deleted — and nothing has read
+    # ``patch_saliency`` since: ingest drops it (see
+    # ``vtscore.datasets.stages.embedding._attach_patch_grid_to_media``) and no
+    # other caller exists.  So the #3347 audit found the constant real but
+    # inert, and left it rather than re-tuning a number with no consumer.
+    # Anything that revives saliency-weighted pooling must re-derive this
+    # per embedder rather than inherit 4.0.
     saliency = torch.softmax(sims * 4.0, dim=-1).reshape(side, side)
 
     return PatchEmbedOutput(
