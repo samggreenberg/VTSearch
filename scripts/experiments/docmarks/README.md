@@ -291,7 +291,7 @@ to 0.16 when the hash went from 64 to 256 bits.
 ## Looking at what you built
 
 ```bash
-python make_report.py --corpus <dir> --out docs/reports/<date>-docmarks.html
+python make_report.py --corpus <dir> --out docs/experiments/<date>-docmarks/report.html
 ```
 
 One self-contained HTML page: counts per source and provenance, whole pages with

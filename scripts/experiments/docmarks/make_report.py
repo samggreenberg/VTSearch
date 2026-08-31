@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Render a look-at-it report for a built DocMarks corpus.
 
-    python make_report.py --corpus <dir> --out docs/reports/<date>-docmarks-v0.html
+    python make_report.py --corpus <dir> --out docs/experiments/<date>-docmarks/report.html
 
 Counts tell you a corpus is the right size; only pictures tell you it is the
 right corpus.  This renders both, with the images inline so the file is one
