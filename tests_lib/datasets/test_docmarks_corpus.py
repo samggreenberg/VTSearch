@@ -1483,3 +1483,59 @@ class TestReclaimProbeDirs:
 
     def test_a_missing_raw_root_is_not_an_error(self, mods, tmp_path):
         assert mods["build"]._reclaim_probe_dirs(tmp_path / "never-created") == (0, 0)
+
+
+class TestKaggleProbeParsesRealCliOutput:
+    """The probe must read what the CLI actually prints, not an idealised CSV.
+
+    Kaggle CLI 2.2.4 emits a pagination preamble before the listing and uses
+    CRLF inside it::
+
+        Next Page Token = CfDJ8ImuQD4OY2pEnVW2WQ-kgndQdHqu9wY-...
+        name,size,creationDate\r
+        ground-truth-maps/.../stampDS-00001-gt.png,9151,2018-04-11 ...\r
+
+    Reading row 0 as the header made every reachable dataset report unreachable.
+    The failure is the expensive direction for this function: it exists so that
+    a missing token is caught before a queue slot is burned, so a false BLOCKED
+    costs precisely what the probe was written to save, and it does it while
+    looking like a correctly-working guard.
+
+    Captured verbatim from the GRID rather than imagined, which is the only
+    reason the preamble is in here at all.
+    """
+
+    _REAL = (
+        "Next Page Token = CfDJ8ImuQD4OY2pEnVW2WQ-kgnf0jam8ELDf3ktjyVw0Ztjp\n"
+        "name,size,creationDate\r\n"
+        "Tobacc800_Groundtruth_v2.0/Overview.txt,1634,2023-01-09 09:10:46.734000\r\n"
+        "Tobacc800_Groundtruth_v2.0/aah97e00-page02_1.xml,502,2023-01-09 09:10:46.711000\r\n"
+    )
+
+    def _run(self, mods, monkeypatch, stdout):
+        monkeypatch.setenv("KAGGLE_USERNAME", "someone")
+        monkeypatch.setenv("KAGGLE_KEY", "somekey")
+
+        class _Proc:
+            returncode = 0
+            stderr = ""
+
+            def __init__(self, out):
+                self.stdout = out
+
+        monkeypatch.setattr(mods["common"].subprocess, "run", lambda *a, **k: _Proc(stdout))
+        mods["common"].kaggle_probe("owner/name")
+
+    def test_preamble_and_crlf_are_tolerated(self, mods, monkeypatch):
+        self._run(mods, monkeypatch, self._REAL)  # must not raise
+
+    def test_a_plain_csv_still_passes(self, mods, monkeypatch):
+        self._run(mods, monkeypatch, "name,size\nfoo.png,10\n")
+
+    def test_a_listing_with_no_rows_still_fails(self, mods, monkeypatch):
+        with pytest.raises(mods["common"].FetchError):
+            self._run(mods, monkeypatch, "Next Page Token = abc\nname,size,creationDate\r\n")
+
+    def test_an_error_message_still_fails(self, mods, monkeypatch):
+        with pytest.raises(mods["common"].FetchError):
+            self._run(mods, monkeypatch, "403 - Forbidden - Permission denied\n")

@@ -294,9 +294,25 @@ def kaggle_probe(slug: str) -> None:
     except subprocess.CalledProcessError as exc:
         raise FetchError(f"kaggle metadata call for '{slug}' failed: {exc.stderr.strip()[:400]}") from exc
 
-    rows = [line for line in (proc.stdout or "").splitlines() if line.strip()]
-    header = rows[0].lower().split(",") if rows else []
-    if "name" not in header or len(rows) < 2:
+    # FIND the header rather than assuming it is the first line.  Kaggle CLI
+    # 2.2.4 prints a pagination preamble ahead of the CSV, and the CSV itself is
+    # CRLF, so the naive read of this output is wrong twice over:
+    #
+    #     Next Page Token = CfDJ8ImuQD4OY2pEnVW2WQ-kgndQdHqu9wY-...
+    #     name,size,creationDate\r
+    #     ground-truth-maps/.../stampDS-00001-gt.png,9151,2018-04-11 ...\r
+    #
+    # Taking row 0 as the header made every reachable dataset report as
+    # unreachable -- `staver BLOCKED` and `tobacco800 BLOCKED` against a token
+    # that had just downloaded 32.8 MB from the same shell.  Since this probe
+    # exists so a missing token is caught before a queue slot is burned, a false
+    # negative here costs exactly what the probe was written to save.
+    rows = [line.strip() for line in (proc.stdout or "").splitlines() if line.strip()]
+    header_at = next(
+        (i for i, row in enumerate(rows) if "name" in [cell.strip() for cell in row.lower().split(",")]),
+        None,
+    )
+    if header_at is None or len(rows) - header_at < 2:
         detail = " ".join((proc.stdout or "").split())[:400] or "(no output)"
         raise FetchError(f"kaggle could not list '{slug}': {detail}")
 
