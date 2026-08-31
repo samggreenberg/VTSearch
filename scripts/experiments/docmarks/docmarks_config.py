@@ -78,9 +78,20 @@ MIN_INSTANCES = int(os.environ.get("VTS_DOCMARKS_MIN_INSTANCES", "10"))
 #: floor, not the method.
 MIN_MARK_PX = int(os.environ.get("VTS_DOCMARKS_MIN_MARK_PX", "32"))
 
-#: Connected components smaller than this fraction of the page are dropped as
-#: mask speckle rather than treated as marks.
+#: A *merged* mark carrying less ink than this fraction of the page is dropped
+#: as mask speckle.  It is applied after the merge, never before: a stamp's
+#: fragments are each individually below it, so filtering first deletes the
+#: evidence that the stamp is there (issue #3361).
 MIN_MARK_AREA_FRAC = float(os.environ.get("VTS_DOCMARKS_MIN_MARK_AREA_FRAC", "0.0002"))
+
+#: A mark covering at least this fraction of its page is rejected as a mask
+#: artefact, with a warning naming the page.  A mark is a thing *on* a page,
+#: not the page: the case this catches is a ruled table whose borders weld the
+#: whole grid into one connected component (``spods/00975`` reached 45.9%).
+#: The bar is deliberately loose — the observed median mark covers 0.76% of its
+#: page and p90 is near 2%, so 25% is more than ten times the largest mark
+#: anyone has looked at and agreed with.
+MAX_MARK_AREA_FRAC = float(os.environ.get("VTS_DOCMARKS_MAX_MARK_AREA_FRAC", "0.25"))
 
 # --------------------------------------------------------------------------
 # Contamination — which sources may serve as distractors for which classes

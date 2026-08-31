@@ -323,13 +323,25 @@ def load_anchor_sources(
         from sources import spods
 
         unpacked = spods.fetch(raw)
-        pages.extend(spods.build_pages(unpacked, min_area_frac=cfg.MIN_MARK_AREA_FRAC, limit=limit))
+        got, warns = spods.build_pages(
+            unpacked,
+            min_area_frac=cfg.MIN_MARK_AREA_FRAC,
+            max_area_frac=cfg.MAX_MARK_AREA_FRAC,
+            limit=limit,
+        )
+        pages.extend(got)
+        warnings.extend(warns)
 
     if "staver" in selected:
         from sources import staver
 
         unpacked = staver.fetch(raw)
-        got, warns = staver.build_pages(unpacked, min_area_frac=cfg.MIN_MARK_AREA_FRAC, limit=limit)
+        got, warns = staver.build_pages(
+            unpacked,
+            min_area_frac=cfg.MIN_MARK_AREA_FRAC,
+            max_area_frac=cfg.MAX_MARK_AREA_FRAC,
+            limit=limit,
+        )
         pages.extend(got)
         warnings.extend(warns)
 
@@ -614,6 +626,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
         from synth_compose import build_synthetic_pages
         from sources import artwork
 
+        # Every mark is localised ink someone could retrieve, so any of them
+        # disqualifies a page as a blank canvas.  The page-body text mask is
+        # deliberately *not* a mark (see sources/spods.py) — when it was, this
+        # line disqualified nearly every SPODS page for carrying a heading.
         marked = {p.page_id for p in pages if p.marks}
         backgrounds = [Path(p.path) for p in pages if p.page_id not in marked]
         if not backgrounds:
