@@ -81,6 +81,23 @@ def _capabilities(embedder_name: str) -> tuple[bool, bool, bool]:
     )
 
 
+def embedder_supports_patch_regions(embedder_name: str | None) -> bool:
+    """Whether *embedder_name* produces a patch grid.
+
+    The public single-capability read of the middle flag from
+    :func:`_capabilities`, for callers that need the patch bit on its own
+    rather than the full role-typed triple.  A blank or unregistered name is
+    ``False`` - "cannot do this", not an error - matching :func:`_capabilities`.
+
+    Distinct from asking whether a given *media* carries patch rows: this reads
+    the embedder's declared capability, so it answers the question before any
+    media is in hand (e.g. gating a route on the dataset's registry entry).
+    """
+    if not embedder_name:
+        return False
+    return _capabilities(embedder_name)[1]
+
+
 def expected_dim_for_embedder(embedder_name: str | None) -> int | None:
     """Return the declared output width of *embedder_name*, or ``None`` if unknown.
 
