@@ -635,14 +635,37 @@ class TestTiers:
 
 
 class TestClustering:
-    def test_phash_is_deterministic_and_64_bit(self, mods):
+    def test_phash_is_deterministic_and_sized_by_the_block(self, mods):
         from PIL import Image
 
         rng = np.random.default_rng(42)
         img = Image.fromarray(rng.integers(0, 255, (120, 90), dtype=np.uint8))
         a, b = mods["cluster"].phash(img), mods["cluster"].phash(img)
-        assert a.shape == (64,)
+        assert a.shape == (mods["cluster"].PHASH_BLOCK ** 2,)
         assert np.array_equal(a, b)
+
+    def test_the_hash_is_wide_enough_to_separate_two_ringed_stamps(self, mods):
+        # 64 bits could not: a book stamp and an elephant stamp, both circular
+        # with a heavy border, merged into one class of 32 and no threshold
+        # split them. A stamp's ring is low-frequency and its interior is not,
+        # so an 8x8 block encodes "is a round stamp" rather than which one.
+        assert mods["cluster"].PHASH_BLOCK >= 16
+
+    def test_the_radial_taper_damps_the_border_not_the_middle(self, mods):
+        arr = np.full((64, 64), 10.0)
+        arr[2, 2] = 250.0  # corner ink, where a border ring lives
+        arr[32, 32] = 250.0  # centre ink, where the mark's identity lives
+        out = mods["cluster"]._radial_taper(arr)
+        centre_kept = (out[32, 32] - arr.mean()) / (250.0 - arr.mean())
+        corner_kept = (out[2, 2] - arr.mean()) / (250.0 - arr.mean())
+        assert centre_kept > 0.99
+        assert corner_kept < 0.01
+
+    def test_the_taper_leaves_a_flat_crop_flat(self, mods):
+        # Fading toward the crop's own mean, not toward white: fading to white
+        # would replace the border ring with a different strong edge.
+        arr = np.full((32, 32), 7.5)
+        assert np.allclose(mods["cluster"]._radial_taper(arr), 7.5)
 
     def test_phash_is_scale_invariant(self, mods):
         from PIL import Image

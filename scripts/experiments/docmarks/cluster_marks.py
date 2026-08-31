@@ -36,9 +36,28 @@ import numpy as np
 from sources._common import Mark, Page
 
 #: Side length the crop is normalised to before hashing.
-PHASH_RESIZE = 32
-#: Low-frequency DCT block kept.  64 coefficients -> a 64-bit hash.
-PHASH_BLOCK = 8
+PHASH_RESIZE = 64
+
+#: Low-frequency DCT block kept.  16x16 coefficients -> a 256-bit hash.
+#:
+#: This was 8x8 (64 bits), and 64 bits could not tell two round stamps apart.
+#: Measured on the real corpus: a red book stamp and a blue elephant stamp,
+#: both circular with a heavy ring border, landed in one class of 32 and no
+#: threshold separated them — a single pair at Hamming 2/64 bridged the set, so
+#: it was one group at 0.04 and 21 fragments at 0.03.
+#:
+#: The mechanism is a frequency argument.  A stamp's border ring is a big,
+#: smooth, *low*-frequency structure, and its interior — the part that says
+#: which stamp this is — is higher-frequency detail.  An 8x8 block keeps almost
+#: nothing but the ring, so the descriptor encodes "is a round stamp" rather
+#: than "which round stamp".  Keeping 16x16 pushes the balance the other way.
+PHASH_BLOCK = 16
+
+#: Fraction of the crop's half-diagonal over which the radial taper acts.  The
+#: border is also the part of a mark that varies least between *different*
+#: marks, so damping it costs little discrimination and removes a lot of shared
+#: signal.  Applied on top of the bigger DCT block, not instead of it.
+PHASH_TAPER = 0.22
 
 
 @dataclass(frozen=True)
@@ -71,8 +90,30 @@ def _dct2(block: np.ndarray) -> np.ndarray:
     return basis @ block @ basis.T
 
 
+def _radial_taper(arr: np.ndarray, width: float = PHASH_TAPER) -> np.ndarray:
+    """Fade the crop's outer annulus toward its own mean.
+
+    A stamp's border ring is the single strongest thing in the image and the
+    *least* informative: near enough every round stamp has one, so it is shared
+    signal that crowds out the interior.  Fading toward the mean rather than to
+    white avoids replacing one strong edge with another.
+
+    The taper is radial because the marks that need separating are round, and
+    it is soft because a hard mask would itself be a circular edge — the exact
+    artefact being removed.
+    """
+    n = arr.shape[0]
+    axis = (np.arange(n) - (n - 1) / 2) / ((n - 1) / 2)
+    radius = np.hypot(*np.meshgrid(axis, axis, indexing="ij"))
+    # 1 in the middle, falling smoothly to 0 at the corners of the inscribed
+    # circle and beyond.
+    weight = np.clip((1.0 - radius) / max(width, 1e-6), 0.0, 1.0)
+    weight = weight * weight * (3 - 2 * weight)  # smoothstep
+    return arr.mean() + (arr - arr.mean()) * weight
+
+
 def phash(image: Any) -> np.ndarray:
-    """A 64-bit perceptual hash of *image*, as a boolean vector.
+    """A perceptual hash of *image* as a boolean vector, `PHASH_BLOCK`² bits.
 
     Scale-invariant by construction (everything is resized to a fixed square),
     which is what we want: the same stamp appears at whatever size the scanner
@@ -80,9 +121,13 @@ def phash(image: Any) -> np.ndarray:
     and reintroduced as a separate gate in :func:`distance_matrix`, because two
     marks with very different aspect ratios are not the same mark however
     similar their normalised pixels look.
+
+    Greyscale on purpose, so ink colour never splits a class.  Confirmed on the
+    real corpus, where the same elephant stamp appears in blue on 26 pages and
+    red on one, and lands in a single group.
     """
     grey = image.convert("L").resize((PHASH_RESIZE, PHASH_RESIZE))
-    arr = np.asarray(grey, dtype=np.float64)
+    arr = _radial_taper(np.asarray(grey, dtype=np.float64))
     coeffs = _dct2(arr)[:PHASH_BLOCK, :PHASH_BLOCK]
     flat = coeffs.flatten()
     # Drop the DC term before taking the median: it encodes overall brightness,
