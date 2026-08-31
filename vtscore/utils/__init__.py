@@ -1,9 +1,9 @@
 """Small leftover helpers.
 
 State, plugins, sync, concurrency, security, and audio helpers have moved
-to their own top-level packages - see ``vtsearch/state``, ``vtsearch/plugins``,
-``vtsearch/sync``, ``vtsearch/concurrency``, ``vtsearch/security``, and
-``vtsearch/media/audio``.
+to their own top-level packages - see ``vtscore/state``, ``vtscore/plugins``,
+``vtscore/sync``, ``vtscore/concurrency``, ``vtscore/security``, and
+``vtscore/media/audio``.
 
 Remaining here:
 - :mod:`vtscore.utils.hashing` - ``content_md5``/``content_sha1``/``file_md5``

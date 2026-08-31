@@ -62,9 +62,9 @@ v22 breaking change is a no-op here (see the audit below).
   "modernize toward signal-first authoring" project decoupled from the version
   bump. Sliced into per-cluster, ~PR-sized issues (each folds any coupled
   `ngOnChanges` into `computed`/`effect`, since signal inputs don't fire
-  `ngOnChanges`), tagged with a recommended Claude model by difficulty:
-
-  - [ ] #2541 — Progress widgets (Fable 5)
+  `ngOnChanges`), tagged with a recommended Claude model by difficulty.
+  (The first slice — progress widgets, #2541 — has shipped; file further
+  clusters as new issues as they come up.)
 
 <!-- item-sep -->
 

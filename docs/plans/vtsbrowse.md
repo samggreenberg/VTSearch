@@ -133,10 +133,6 @@ Pieces of the live feature left open, to pick up alongside the follow-ups above:
 
 <!-- item-sep -->
 
-- [ ] #2402 — Browse: re-centre a bin's representative after a lopsided partial removal
-
-<!-- item-sep -->
-
 ## Design spec (living)
 
 The completed feature's contract. Kept below the open work because it mostly

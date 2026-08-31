@@ -61,7 +61,8 @@ python -m vtscore.eval --mode text --datasets caltech101_s caltech256_a --output
 # Learned sort with a different train/test split
 python -m vtscore.eval --mode learned --train-fraction 0.7 --seed 123 --plot-dir eval_output
 
-# Learned sort with safe thresholds and calibration tuning
+# Learned sort with more calibration folds (the "safe thresholds" toggle is gone;
+# the trainer's fold-anchored path is now unconditional)
 python -m vtscore.eval --mode learned --calibrate-count 4 --plot-dir eval_output
 
 # Region voting on Visual Genome: re-embed with a patch embedder, then have

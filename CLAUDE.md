@@ -1,8 +1,8 @@
 # VTSearch
 
-Trainable media search tool. Searches collections of audio, images, text, video, and documents using a **detector**: a small trained ranker that scores each item by how well it matches. Two ways to search: **train a new detector** (vote good/bad on a handful of items; a linear SVM head learns to rank the rest) or **use an existing detector** (saved or imported). Trained detectors are reusable across compatible datasets. Text queries (LAION-CLAP, SigLIP, X-CLIP, E5 embeddings) seed either flow or work as a quick stand-alone search. Flask + Angular + PyTorch.
+See [README.md](README.md) for the product one-liner and pitch — the README is the authoritative source (it is hash-matched and served raw), so this file does not restate it.
 
-Architecture, state model, plugin systems, auth, and the directory map all live in **`docs/ARCHITECTURE.md`**. This file holds the testing rules and the policy/gotchas that must be in context every turn.
+Architecture, state model, plugin systems, auth, and the directory map all live in **[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)**. This file holds the testing rules and the policy/gotchas that must be in context every turn.
 
 ## Ask Questions via `AskUserQuestion`: NOT prose (CRITICAL, READ FIRST)
 
@@ -422,24 +422,26 @@ Wrapping everything: a wall-clock cap (`VTSEARCH_TEST_TIMEOUT`, default **1800s 
 
 ## Test Groups
 
-Tests are grouped by folder under `tests/` and `tests_lib/`. Each folder is a pytest marker; `./run-tests.sh <group>` runs all tests in `tests[_lib]/<group>/`. New tests inherit their group from the folder they're added to.
+Tests are grouped by folder under `tests/` and `tests_lib/`. Each folder is a pytest marker; `./run-tests.sh <group>` runs all tests in `tests[_lib]/<group>/`. New tests inherit their group from the folder they're added to. Not every group lives in both trees — the "Tier" column below says which one has the folder; missing an app-tier folder for `projection` (or a lib-tier folder for `api` / `converters`) is by design, not a gap.
 
-| Group | Description |
-|-------|-------------|
-| `core` | Basic app functionality (audio, medias, votes, inclusion, settings, frontend, torch config) |
-| `api` | API contracts, error handling, security, dashboard, embed |
-| `sorting` | Sort algorithms, diversity, safe thresholds, enriched text sort |
-| `datasets` | Dataset loading, splitting, dedup, parallel/chunked/thin loading, multi-dataset context |
-| `io` | Importers, exporters, label I/O, settings I/O, sync sources, PDF/NPZ import |
-| `detectors` | Detectors, embedders, clippers, eval, processors, training |
-| `downloads` | Demo dataset downloads (AG News, BBC, GTZAN, IMDB, image sources, UCSF, video, generic extract) |
-| `integration` | End-to-end workflows, thread safety, async jobs |
-| `cli` | CLI autodetect, load sort window, progress bars |
-| `converters` | Media converters (document, video, image) |
-| `projection` | VTSBrowse UMAP projection + hex-tile pyramid (library tier) |
-| `frontend` | Frontend-only gate: Angular `build:prod` + `npm audit` + the headless Vitest unit suite. No Python tests; `./run-tests.sh frontend` skips pytest. Also runs as part of the full `./run-tests.sh`. |
-| `slides` | Slide-deck gate: `ruff`, `codespell`, `check-docs.py`, `slides/build.py --check`. No Python tests, no whole-repo gates. **The one group that also gates a push**, because a change confined to `slides/` cannot reach the rest of the repo: nothing imports `slides/build.py`, `pyrightconfig.json` excludes it, and no test in either tree reads a deck. Self-policing — the group refuses to run when the branch changes anything outside `slides/`, so the exemption can't be taken by mistake. Also runs as part of the full `./run-tests.sh`. |
-| `gpu` | CUDA-only tests (excluded by default) |
+| Group | Tier | Description |
+|-------|------|-------------|
+| `core` | both | Basic app functionality (audio, medias, votes, inclusion, settings, frontend, torch config) |
+| `api` | app only | API contracts, error handling, security, dashboard, embed |
+| `sorting` | both | Sort algorithms, diversity, safe thresholds, enriched text sort |
+| `datasets` | both | Dataset loading, splitting, dedup, parallel/chunked/thin loading, multi-dataset context |
+| `io` | both | Importers, exporters, label I/O, settings I/O, sync sources, PDF/NPZ import |
+| `detectors` | both | Detectors, embedders, clippers, eval, processors, training |
+| `downloads` | both | Demo dataset downloads (AG News, BBC, GTZAN, IMDB, image sources, UCSF, video, generic extract) |
+| `integration` | both | End-to-end workflows, thread safety, async jobs |
+| `cli` | both | CLI autodetect, load sort window, progress bars |
+| `converters` | app only | Media converters (document, video, image) |
+| `projection` | lib only | VTSBrowse UMAP projection + hex-tile pyramid |
+| `frontend` | n/a | Frontend-only gate: Angular `build:prod` + `npm audit` + the headless Vitest unit suite. No Python tests; `./run-tests.sh frontend` skips pytest. Also runs as part of the full `./run-tests.sh`. |
+| `slides` | n/a | Slide-deck gate — see the note below the table. |
+| `gpu` | lib only | CUDA-only tests (excluded by default) |
+
+The `slides` group runs `ruff`, `codespell`, `check-docs.py`, and `slides/build.py --check`; no Python tests, no whole-repo gates. **The one group that also gates a push**, because a change confined to `slides/` cannot reach the rest of the repo: nothing imports `slides/build.py`, `pyrightconfig.json` excludes it, and no test in either tree reads a deck. Self-policing — the group refuses to run when the branch changes anything outside `slides/`, so the exemption can't be taken by mistake. Also runs as part of the full `./run-tests.sh`.
 
 **Recommended workflow**: Run `./run-tests.sh <group>` for the area you changed, then `./run-tests.sh` for the full suite.
 

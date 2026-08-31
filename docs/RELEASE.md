@@ -49,7 +49,7 @@ Use the summary verbatim as the PR body (step 5) and also output it in chat, wri
 
 `scripts/punchcard/punchcard.py` is a **pure renderer**: it reads the hand-maintained data file `scripts/punchcard/pr_merges.txt` (one `<pr_number>|<merged_at_utc_iso8601>` line per merged PR) and rewrites the PNG. It does **not** generate the data file — you refresh that yourself first.
 
-- Append a line for each PR merged into `dev` since the last release. These are the same PRs you enumerate for the release range in step 3 / step 6; take each one's number and its merge timestamp (`merged_at`, UTC ISO 8601) and add `<pr_number>|<merged_at>` to `scripts/punchcard/pr_merges.txt`. The file is sorted-unique by PR number, so keep it that way.
+- Append a line for each PR merged into `dev` since the last release. Enumerate the merge commits from step 3's `origin/main..origin/dev` window (step 6 walks the same window to get the PR numbers); take each PR's number and merge timestamp (`merged_at`, UTC ISO 8601) and add `<pr_number>|<merged_at>` to `scripts/punchcard/pr_merges.txt`. The file is sorted-unique by PR number, so keep it that way.
 - Run `python scripts/punchcard/punchcard.py`, which rewrites `scripts/punchcard/vtsearch_pr_punchcard.png`.
 - Commit the regenerated PNG and the updated `pr_merges.txt`.
 
@@ -123,7 +123,7 @@ The script is a pure function from data to plan — it does no network I/O, beca
 python scripts/reconcile-solved-labels.py --input plan-input.json
 ```
 
-It prints five buckets. **Apply `ADD`, `REMOVE`, and `CLEAR ASSIGNEE` directly** — they are unambiguous. **Do not apply `NEEDS REVIEW`**; read those issues yourself. An issue lands there for one of three reasons, all genuinely undecidable from the outside:
+It prints four action buckets (`ADD`, `REMOVE`, `NEEDS REVIEW`, `CLEAR ASSIGNEE`) plus a `no change: N issue(s)` summary line at the end. **Apply `ADD`, `REMOVE`, and `CLEAR ASSIGNEE` directly** — they are unambiguous. **Do not apply `NEEDS REVIEW`**; read those issues yourself. An issue lands there for one of three reasons, all genuinely undecidable from the outside:
 
 - **A fix pointer is not the newest comment.** The later comment may be a maintainer saying "thanks" or the reporter saying the fix does not work. Tagging would bury a dispute — hiding an issue that still needs solving — while skipping would leave solved work in the human queue.
 - **A comment claims a fix by commit SHA** instead of `Addressed in #M`. The script has only the JSON you piped in, so it cannot map a commit to its PR — but the claim is real, so it is surfaced. Resolve it with `git log --ancestry-path <sha>..origin/dev --merges --oneline | tail -1` to find the merge that carried it, then re-run with a corrected pointer.

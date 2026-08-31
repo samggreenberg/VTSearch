@@ -99,10 +99,12 @@ detector → sort).
   specs install `provideZonelessChangeDetection()`. A bump must not reintroduce
   `zone.js` — it is absent from the polyfills and from `package.json`.
 - **Isolation + cascade guard.** The unit-test builder defaults to
-  `isolate: false`; `vitest.config.ts` flips it to `isolate: true` so a dirty
-  `TestBed` singleton can't poison later files, and `test-setup.ts` resets the
-  TestBed at the start of each test so a throwing teardown doesn't cascade
-  "test module already instantiated".
+  `isolate: false`; `vitest.config.ts` deliberately leaves it there (per-file
+  isolation cost 3–4× the runtime). The cascade guard is `test-setup.ts`,
+  which resets the TestBed at the start of each test so a throwing teardown
+  doesn't cascade "test module already instantiated". A bump must not
+  reintroduce `isolate: true` without weighing the runtime cost, and must not
+  drop the per-test reset without a replacement guard.
 
 ### Risks / watch-items
 

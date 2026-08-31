@@ -29,15 +29,6 @@ folds.
 
 <!-- item-sep -->
 
-<!-- item-sep -->
-
-- [ ] #2853 — Deep-vote calibration harness: checkpoints to 300+, paired
-  blend-schedule and threshold-rule arms (Sonnet 5)
-
-<!-- item-sep -->
-
-<!-- item-sep -->
-
 - **Give binary voting a path back to `cap50`.** The fused threshold covers
   binary-voting detectors too, unconditionally since #2863, and there it is at
   best a dead heat with the `cap50` blend it replaced (−0.0004 n.s. at the
