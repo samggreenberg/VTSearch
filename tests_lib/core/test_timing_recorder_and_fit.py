@@ -332,8 +332,14 @@ class TestFitting:
     def test_r2_survives_a_json_round_trip(self):
         coeffs = StepCoeffs(a=1.0, b=2.0, r2=0.9876)
         assert coeffs.to_json()["r2"] == pytest.approx(0.9876)
-        assert StepCoeffs.from_json(coeffs.to_json()).r2 == pytest.approx(0.9876)
-        assert math.isnan(StepCoeffs.from_json({"a": 1.0}).r2)
+        # `from_json` is Optional-returning (it parses untrusted profile JSON),
+        # so narrow before reading the field rather than chaining through it.
+        parsed = StepCoeffs.from_json(coeffs.to_json())
+        assert parsed is not None
+        assert parsed.r2 == pytest.approx(0.9876)
+        bare = StepCoeffs.from_json({"a": 1.0})
+        assert bare is not None
+        assert math.isnan(bare.r2)
 
     def test_byte_scaled_step_fits_a_per_mb_rate(self):
         samples = [

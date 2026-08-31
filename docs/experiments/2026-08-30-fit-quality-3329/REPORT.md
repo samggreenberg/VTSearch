@@ -579,7 +579,18 @@ that concrete: one embedding distance of 0.5 maps to laid-out distances from
 
 **C2 confirmed and small.** Purity drops on 5 of 5 embedders, median **0.017**
 — from 0.85 in the embedding to 0.83 in the layout. Real, consistent, and not
-worth acting on.
+worth acting on. It is not uniform, though: on the cells whose embedding purity
+is already above ~0.95 the drop goes **negative**, i.e. the 2-D layout is
+*cleaner* by class than the space it came from. That is what a projection which
+throws away the dimensions the classes do not use looks like, and it is a
+reason not to read the median as a cost paid everywhere.
+
+**The Shepard panel also corroborates the atlas result independently.**
+`dinov3_patch` (red) occupies a completely different cosine-distance range from
+the other four — roughly 0.8–1.1 where they sit at 0.2–0.7. That is the same
+low-concentration geometry the r̄ table above blames for its atlas
+miscalibration, showing up in a measurement that has nothing to do with the
+atlas.
 
 **C3 confirmed, and it is the good news of the inventory.** The
 90th-percentile core radius realises **0.894** containment against a nominal

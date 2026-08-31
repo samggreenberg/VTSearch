@@ -183,14 +183,20 @@ def projection_panel(df: pd.DataFrame, proj: pd.DataFrame, results: Path, outdir
     ax.legend(fontsize=7, frameon=False)
 
     ax = axes[0][1]
-    f = sorted(Path(results).glob("struct_*.npz"))
+    # ONE file per embedder, not the first six: sorted order puts three seeds of
+    # one embedder first, so `[:6]` drew two embedders in a monochrome pile and
+    # lost the thing the panel is for - that the embedders occupy different
+    # cosine-distance ranges.
+    per_emb: dict[str, Path] = {}
+    for cand in sorted(Path(results).glob("struct_*.npz")):
+        emb = cand.stem.replace("struct_", "").split("__")[1]
+        per_emb.setdefault(emb, cand)
     drawn = False
-    for p in f[:6]:
-        z = np.load(p)
+    for emb, cand in sorted(per_emb.items()):
+        z = np.load(cand)
         if "shepard_hi" not in z.files:
             continue
-        emb = p.stem.replace("struct_", "").split("__")[-1]
-        ax.scatter(z["shepard_hi"], z["shepard_lo"], s=1.5, alpha=0.10, color=EMB_COLOURS.get(emb, "#666"))
+        ax.scatter(z["shepard_hi"], z["shepard_lo"], s=1.5, alpha=0.16, color=EMB_COLOURS.get(emb, "#666"), label=emb)
         drawn = True
     if drawn:
         ax.set_xlabel("cosine distance in the embedding")
@@ -198,6 +204,9 @@ def projection_panel(df: pd.DataFrame, proj: pd.DataFrame, results: Path, outdir
         med = proj["shepard"].median()
         ax.set_title(f"Shepard diagram — global distance is NOT preserved\nmedian Spearman {med:.2f}", fontsize=9)
         ax.grid(alpha=0.25, lw=0.5)
+        leg = ax.legend(fontsize=7, frameon=False, markerscale=6)
+        for handle in leg.legend_handles:
+            handle.set_alpha(1.0)
 
     ax = axes[1][0]
     # Plotted as the DROP, not as layout-vs-embedding: purity runs 0.28-1.0 and
