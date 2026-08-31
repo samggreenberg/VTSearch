@@ -310,4 +310,5 @@ resume story and what to check afterwards.
 differently — a decommissioned hostname, a missing Kaggle token, an absent RAR
 extractor — and finding out which costs seconds now and a queue slot later.
 SPODS needs one of `bsdtar` / `7z` / `unar` / `unrar`; StaVer and Tobacco800
-need a Kaggle token.
+need a Kaggle token. The probe is metadata-only — it fetches no source bytes —
+so asking it repeatedly is free.
