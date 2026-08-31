@@ -199,7 +199,7 @@ Embeddings are computed once when a dataset is loaded. The full-image vector lan
 
 ### Description enrichment
 
-The Settings toggle **Enrich descriptions** (`enrich_descriptions`, off by default) changes one thing: the *query* vector. With it on, `embed_text_query` replaces the embedding of what you typed with the L2-normalised mean over the embedder's `description_wrappers` applied to it — SigLIP's are `"a photo of {text}"`, `"a photograph of {text}"`, `"an image of {text}"`, `"{text}"`, `"a picture of {text}"` — via `MediaEmbedder.embed_text_enriched`. Media vectors are untouched, and the Text Sort box (`vtsearch/routes/sorting.py`) is its only consumer. It costs 5 text-encoder passes instead of 1 on the query alone (~20-30 ms), cached per `(embedder, media type, enrich, text)`.
+The Settings toggle **Enrich descriptions** (`enrich_descriptions`, off by default) changes one thing: the *query* vector. With it on, `embed_text_query` replaces the embedding of what you typed with the L2-normalised mean over the embedder's `description_wrappers` applied to it — `clap_general`'s are `"the sound of {text}"`, `"a recording of {text}"`, `"{text}"`, `"audio of {text}"`, `"the noise of {text}"` — via `MediaEmbedder.embed_text_enriched`. Media vectors are untouched, and the Text Sort box (`vtsearch/routes/sorting.py`) is its only consumer. It costs 5 text-encoder passes instead of 1 on the query alone (~20-30 ms), cached per `(embedder, media type, enrich, text)`.
 
 **It is not a general improvement, and the default stays off.** Measured across every media-type default on 22 eval datasets and 560 paired queries ([`docs/experiments/2026-08-31-enrich-descriptions-3127/`](experiments/2026-08-31-enrich-descriptions-3127/REPORT.md), issue #3127), paired difference in text-sort average precision:
 
@@ -214,8 +214,12 @@ The Settings toggle **Enrich descriptions** (`enrich_descriptions`, off by defau
 
 Two things worth knowing before changing any of this:
 
-- **The effect belongs to the embedder-and-corpus pair, not to enrichment.** The wrappers were written per media type, and only two templates in the tree have a positive point estimate on their own embedder: `"the sound of {text}"` on `clap_general` (+0.014, which is the whole of that media type's gain) and `"a media showing {text}"` on `xclip`. Every wrapper is negative on `siglip`, `e5`, `bge` and `clap`.
-- **`{text}` is itself one of the five templates**, so enrichment always averages the plain query back in. Where the other four hurt, that is the only reason the ensemble does not hurt as much as they do.
+- **The effect belongs to the embedder-and-corpus pair, not to enrichment.** The wrappers were written per media type, and only two templates in the tree have a positive point estimate on their own embedder: `"the sound of {text}"` on `clap_general` (+0.014, which is the whole of that media type's gain) and `"a media showing {text}"` on `xclip`. Every wrapper measured negative on `siglip`, `e5`, `bge` and `clap`.
+- **`{text}` is itself one of the five templates**, so where an embedder has wrappers, enrichment always averages the plain query back in. Where the other four hurt, that is the only reason the ensemble did not hurt as much as they did — it is why `siglip`'s four negative templates netted out to only −0.001.
+
+**Which is why the wrapper list is now per-embedder** (issue #3341). Because the sign belongs to the model rather than the media type, `siglip`, `e5`, `bge` and `clap` declare **no wrappers at all**: `embed_text_enriched` falls back to `embed_text`, and the toggle is a no-op for them instead of a small silent cost. `clap_general` and `xclip` — the only two with a positive point estimate on their own model — keep theirs. The global default still stays off: `clap_general`'s +0.014 does not clear its own 2 SE, ESC-50's 50 categories are already fully used, and resolving it needs a second audio corpus.
+
+Two general CLAP checkpoints disagree on the *identical* five templates, so **a sibling model's prompts are not evidence for yours**. A new embedder should leave `description_wrappers` empty unless it has measured otherwise — see [EXTENDING-media.md](EXTENDING-media.md#adding-a-media-embedder).
 
 `face` (no text tower) and `document` (no embedder of its own) cannot text-sort, so the setting is inert for them.
 
