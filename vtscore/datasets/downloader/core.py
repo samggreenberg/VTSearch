@@ -253,6 +253,39 @@ ENRICO_TOPICS_URL = "https://raw.githubusercontent.com/luileito/enrico/master/de
 RICO_SCREEN2WORDS_REPO_ID = "bevaya/RICO-Screen2Words"
 RICO_SCREEN2WORDS_SHARDS = [f"data/train-{i:05d}-of-00008.parquet" for i in range(8)]
 
+# Rico UI semantics ("Voxel51/rico"): the same Rico screenshot corpus as
+# RICO-Screen2Words, but carrying the *element-level* annotations rather than a
+# whole-screen label — 66,261 Android screens whose ``detections`` list one entry
+# per visible UI element with a normalized ``[x, y, w, h]`` box, a 25-way
+# component ``label`` (Icon, Text, Text Button, List Item, …) and, for icons, a
+# ``content_or_function`` naming the icon's semantics ("search", "arrow_backward",
+# "notifications", …).  CC BY 4.0.  This is VTSearch's only *boxed screenshot*
+# demo: every other born-digital source labels the screen as a whole, so nothing
+# else can answer "box this search icon, find every other search icon".
+#
+# Same FiftyOne-export layout as OpenLogo (``samples.json`` + a ``data/`` media
+# tree), so it reuses the same stdlib parse — no ``fiftyone`` dependency.  Two
+# differences drive the download strategy below:
+#   * ``filepath`` is nested (``data/data_<k>/<screen_id>.jpg``) across 67 shard
+#     folders of 1,000 screenshots each, not one flat folder.
+#   * the media is ~7.7 GB, far too much to pull for a small variant.  So the
+#     manifest is fetched first, sliced, and only the shard folders the slice
+#     actually lands in are fetched — an (S) load pulls ~2 shards, not all 67.
+RICO_ICONS_REPO_ID = "Voxel51/rico"
+#: One shard folder holds 1,000 screenshots; the last is partial (66,261 total).
+RICO_ICONS_SHARD_SIZE = 1000
+RICO_ICONS_SHARD_COUNT = 67
+#: Measured from the HF file tree (2026-09-01): ~115.6 MB per full shard folder.
+RICO_ICONS_SHARD_MB = 116
+#: ``samples.json`` is one 535 MB document and is fetched for *every* variant,
+#: so it dominates the (S) download. Parsed a sample at a time — see
+#: ``_iter_fiftyone_samples`` — so the peak cost is the file text, not a full
+#: object tree.
+RICO_ICONS_MANIFEST_MB = 535
+#: Parallel workers for the image shards: 1,000 small JPEGs per folder makes this
+#: latency-bound on per-file round trips, exactly like OpenLogo.
+RICO_ICONS_DOWNLOAD_WORKERS = 16
+
 # RVL-CDIP: 16-class document-image classification.  The canonical
 # ``aharley/rvl_cdip`` is a 38 GB tarball (impractical as a demo); instead we
 # pull a demo-sized, class-balanced 100-images-per-class parquet mirror whose
@@ -320,6 +353,10 @@ ENRICO_DOWNLOAD_SIZE_MB = 110
 RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB = 1720
 RVL_CDIP_DOWNLOAD_SIZE_MB = 180
 OPENLOGO_DOWNLOAD_SIZE_MB = 4640
+#: Whole-corpus figure (manifest + all 67 image shards). Each Rico-icons demo
+#: variant advertises its own smaller total, since it fetches only the shards
+#: its slice lands in — see ``_rico_icons_size_mb`` in the image demo sources.
+RICO_ICONS_DOWNLOAD_SIZE_MB = RICO_ICONS_MANIFEST_MB + RICO_ICONS_SHARD_COUNT * RICO_ICONS_SHARD_MB
 # Verified against the servers' Content-Length (2026-07-14): images.zip is
 # 9,730,308,001 B (9280 MiB), images2.zip 5,471,658,058 B (5218 MiB), and
 # objects.json.zip 55,323,929 B (53 MiB).  These only seed the "Downloading

@@ -15,6 +15,27 @@ not list every commit. Use `git log` for the full history.
 
 ## Unreleased
 
+### Added
+
+- **New demo dataset: Rico Icons -- screenshots with boxed, labelled icons.**
+  Four new image demos (`rico_icons_s/m/l/a`) built on the Rico UI-semantics
+  corpus: 66,261 Android screenshots whose annotations sit on the *elements*
+  rather than the screen. Each media carries the icon classes visible on it as
+  multi-label categories (32 curated semantics -- Search, Back arrow, Overflow
+  menu, Notification bell, ...) plus one ground-truth bounding box per icon
+  instance. This is the first demo in the tree that boxes something *inside* a
+  screenshot: every other born-digital source (Enrico, RICO App UIs) labels the
+  screen as a whole, and the only two boxed sources (Visual Genome, OpenLogo)
+  are natural photographs. Boxes are stored normalised, exactly like Visual
+  Genome's.
+
+  Unlike every other demo, the four size variants advertise **different**
+  download figures (~0.9 / 1.1 / 1.5 / 8.3 GB). The corpus's screenshots run to
+  ~7.7 GB across 67 shard folders, so the loader fetches the annotation manifest
+  first, slices it, and then pulls only the shard folders that slice actually
+  lands in -- an (S) load costs two folders, not sixty-seven. Re-loading, or
+  moving from (S) to (M), pays only for the shards it adds.
+
 ### Changed
 
 - **"Enrich descriptions" is now a per-model choice, and can no longer make
