@@ -410,6 +410,13 @@ Data importers let users load datasets from new sources (S3 buckets,
 databases, APIs, etc.). The system auto-discovers importers at runtime; no
 changes to routes or core code are needed.
 
+**Library contract:**
+[`vtscore/docs/extending/dataset-importers.md`](../vtscore/docs/extending/dataset-importers.md)
+states the same contract from the library side, and is the guide to follow
+when shipping an importer as a separate distribution rather than adding one
+to this repo. This section is the in-repo path: the same contract plus the
+app-tier wiring.
+
 ### File structure
 
 ```
@@ -510,7 +517,6 @@ class S3Importer(DatasetImporter):
         # Delegate to the standard folder loader
         from vtscore.datasets.loader import load_dataset_from_folder
         load_dataset_from_folder(download_dir, media_type, medias, thin=thin)
-
 
 # This module-level instance is what the registry discovers.
 IMPORTER = S3Importer()
@@ -1428,6 +1434,13 @@ needs no changes; it is credited with both kinds (nothing can tell which it
 handles) and logs a line at import pointing at the named methods. New exporters
 should implement those instead.
 
+**Library contract:**
+[`vtscore/docs/extending/results-exporters.md`](../vtscore/docs/extending/results-exporters.md)
+states the same contract from the library side, and is the guide to follow
+when shipping an exporter as a separate distribution rather than adding one
+to this repo. This section is the in-repo path: the same contract plus the
+app-tier wiring.
+
 ### File structure
 
 ```
@@ -1666,6 +1679,13 @@ every import is declared there. They are picked up the next time you run
 
 Label importers let users import pre-existing labels (good/bad votes) from
 external sources. Auto-discovered at runtime.
+
+**Library contract:**
+[`vtscore/docs/extending/label-importers.md`](../vtscore/docs/extending/label-importers.md)
+states the same contract from the library side, and is the guide to follow
+when shipping a label importer as a separate distribution rather than adding
+one to this repo. This section is the in-repo path: the same contract plus
+the app-tier wiring.
 
 ### File structure
 
@@ -2065,6 +2085,13 @@ change and imports them on sync.
 
 Use a **Label Importer** (above) for one-shot label import. Use a
 **Labelset Source** when you want ongoing automatic sync per-detector.
+
+**Library contract:**
+[`vtscore/docs/extending/labelset-sources.md`](../vtscore/docs/extending/labelset-sources.md)
+states the same contract from the library side, and is the guide to follow
+when shipping a labelset source as a separate distribution rather than
+adding one to this repo. This section is the in-repo path: the same contract
+plus the app-tier wiring.
 
 ### File structure
 
