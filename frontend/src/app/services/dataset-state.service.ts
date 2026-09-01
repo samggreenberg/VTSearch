@@ -1,4 +1,4 @@
-import { Injectable, OnDestroy, inject, signal } from '@angular/core';
+import { Injectable, OnDestroy, Signal, computed, inject, signal } from '@angular/core';
 import { toObservable } from '@angular/core/rxjs-interop';
 import { Subject, forkJoin, of } from 'rxjs';
 import { catchError, switchMap, takeUntil } from 'rxjs/operators';
@@ -88,6 +88,28 @@ export class DatasetStateService implements OnDestroy {
   get detectors(): DetectorRegistryEntry[] {
     return this._detectors();
   }
+
+  // By-id indexes over the two registries. Every consumer that wants "the
+  // entry for this id" used to scan the array with `find(d => d.id === x)`;
+  // the Maps give them one shared, memoised lookup instead. Reading them is
+  // signal-tracked exactly like reading `datasets` / `detectors`, so this is
+  // a readability change and never a reactivity one: a `computed` recomputes
+  // the Map only when the underlying registry array is replaced.
+  //
+  // The point is not the O(1) — the registries hold tens of entries, so the
+  // scan was never a cost. It is that `datasetById().get(id)` says what it
+  // means, and that `ActiveDatasetService` / `ActiveDetectorService` can be
+  // one-liners over a single index rather than each re-deriving a lookup.
+
+  /** Dataset registry keyed by id. */
+  readonly datasetById: Signal<ReadonlyMap<string, DatasetRegistryEntry>> = computed(
+    () => new Map(this._datasets().map((d) => [d.id, d])),
+  );
+
+  /** Detector registry keyed by id. */
+  readonly detectorById: Signal<ReadonlyMap<string, DetectorRegistryEntry>> = computed(
+    () => new Map(this._detectors().map((d) => [d.id, d])),
+  );
 
   get loading(): boolean {
     return this._loading();

@@ -1,10 +1,8 @@
-import { ChangeDetectionStrategy, Component, inject, OnDestroy, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 
 import { Router } from '@angular/router';
-import { Subject, combineLatest } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
-import { DatasetStateService } from '../../services/dataset-state.service';
-import { ActiveContextService } from '../../services/active-context.service';
+import { ActiveDatasetService } from '../../services/active-dataset.service';
+import { ActiveDetectorService } from '../../services/active-detector.service';
 import { PulldownControlService } from '../../services/pulldown-control.service';
 import { DatasetRegistryEntry } from '../../models/api.models';
 import { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
@@ -26,37 +24,28 @@ import { DetectorRegistryEntry } from '../../generated/api-client/models/detecto
   templateUrl: './incompatible-pair-explainer.component.html',
   styleUrl: './incompatible-pair-explainer.component.scss',
 })
-export class IncompatiblePairExplainerComponent implements OnInit, OnDestroy {
+export class IncompatiblePairExplainerComponent {
   private router = inject(Router);
-  private activeContext = inject(ActiveContextService);
-  private datasetState = inject(DatasetStateService);
+  private activeDataset = inject(ActiveDatasetService);
+  private activeDetector = inject(ActiveDetectorService);
   private pulldownControl = inject(PulldownControlService);
 
-  dataset: DatasetRegistryEntry | null = null;
-  detector: DetectorRegistryEntry | null = null;
-
-  private destroy$ = new Subject<void>();
-
-  ngOnInit(): void {
-    combineLatest([
-      this.activeContext.pair$,
-      this.datasetState.datasets$,
-      this.datasetState.detectors$,
-    ])
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(([pair, datasets, detectors]) => {
-        this.dataset = pair.datasetId
-          ? datasets.find((d) => d.id === pair.datasetId) ?? null
-          : null;
-        this.detector = pair.modelId
-          ? detectors.find((d) => d.id === pair.modelId) ?? null
-          : null;
-      });
+  // Signal reads behind getters, not fields written from a subscribe.
+  //
+  // The old subscribe assigned plain fields on an OnPush component without
+  // `markForCheck()`, which under zoneless CD schedules nothing. It repainted
+  // anyway, and still would: `AppComponent` only mounts this component once
+  // it has decided the pair is incompatible, so the fields are always read
+  // fresh at first paint, and a later change unmounts it rather than
+  // updating it in place. The pattern was one refactor away from being a
+  // real staleness bug, not a bug today — reading the signal inside a
+  // template-evaluated getter is tracked, so it cannot become one.
+  get dataset(): DatasetRegistryEntry | null {
+    return this.activeDataset.dataset();
   }
 
-  ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
+  get detector(): DetectorRegistryEntry | null {
+    return this.activeDetector.detector();
   }
 
   get bothMissing(): boolean {
