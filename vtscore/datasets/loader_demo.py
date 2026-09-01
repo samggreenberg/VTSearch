@@ -317,11 +317,13 @@ def load_demo_dataset(
     if converter_name:
         from vtscore.converters.runner import apply_converter_to_demo
 
+        # No embedder_name: conversion changes the media type, so the
+        # source-type embedder resolved above does not apply to the outputs.
+        # The framework embed stage picks the target type's embedder.
         apply_converter_to_demo(
             converter_name=converter_name,
             dataset_name=dataset_name,
             medias=medias,
-            embedder_name=embedder_name,
             on_progress=on_progress,
         )
 

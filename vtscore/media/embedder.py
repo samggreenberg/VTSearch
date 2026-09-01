@@ -1200,6 +1200,41 @@ class MediaEmbedder(ABC):
         Override this instead of :meth:`load_models`.
         """
 
+    def loaded_backbone(self) -> tuple[Any, Any]:
+        """Return ``(model, processor)`` for this embedder's underlying backbone.
+
+        This is the *supported* way to reach the raw model behind an
+        embedder - for custom forward passes, intermediate-layer probes, and
+        the convenience getters in :mod:`vtscore.embedding.loader`
+        (:func:`~vtscore.embedding.loader.get_clap_model` and friends).
+        Prefer :meth:`embed_media` / :meth:`embed_text` for anything that
+        just needs vectors; reach for the backbone only when you genuinely
+        need to drive it yourself.
+
+        Loads the model first if it is not already resident, so callers need
+        not call :meth:`load_models` themselves.  The second element is
+        ``None`` for embedders whose backbone needs no separate processor
+        (e.g. a ``SentenceTransformer``).
+
+        The default implementation reads the ``_model`` / ``_processor``
+        attribute convention that :meth:`load_models` itself relies on, so it
+        works for any embedder built the usual way.  An embedder that holds
+        its backbone elsewhere - or wraps several - should **override this**
+        rather than leave callers guessing.
+
+        :raises RuntimeError: when no backbone is resident after
+            :meth:`load_models` returned.  Failing loudly here beats handing
+            back ``None`` and surfacing as an unrelated crash later.
+        """
+        self.load_models()
+        model = getattr(self, "_model", None)
+        if model is None:
+            raise RuntimeError(
+                f"The '{self.name}' embedder exposes no backbone after load_models(). "
+                "Override loaded_backbone() to return (model, processor)."
+            )
+        return model, getattr(self, "_processor", None)
+
     # ------------------------------------------------------------------
     # Embedding
     # ------------------------------------------------------------------

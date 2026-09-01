@@ -239,9 +239,10 @@ See `vtscore.security.path_validation.get_file_access_base_dir` and
 
 Every public embedder ID is a plain string constant. They are
 *identifiers only* - none of these constants load anything at import
-time. The actual download + load is lazy, driven by
-`vtscore.embedding.loader` getters (`get_clap_model`, `get_xclip_model`,
-`get_e5_model`, etc.).
+time. The actual download + load is lazy, driven by each embedder's
+`load_models()` (reached via `MediaEmbedder.loaded_backbone()`, or the
+`vtscore.embedding.loader` getters `get_clap_model`, `get_xclip_model`,
+`get_e5_model` that wrap it).
 
 | Constant                       | Value                                                                                  | Notes                                                                                  |
 |--------------------------------|----------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------|

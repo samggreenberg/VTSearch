@@ -149,9 +149,3 @@ class _CrossModalHFEmbedder(MediaEmbedder):
         except Exception:
             logging.getLogger(__name__).exception("Error embedding text query for image (%s)", self._label)
             return None
-
-    # Internal helper used by loader.py bridge
-    def _get_model_and_processor(self):
-        if self._model is None:
-            self.load_models()
-        return self._model, self._processor

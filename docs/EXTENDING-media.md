@@ -790,7 +790,7 @@ overwrite the first.
 | `parameters`         | `list[dict[str, Any]]`   | Configurable parameters (key, label, type, default, description)  |
 | `creation_questions` | `list[dict[str, Any]]`   | Questions shown at creation time (defaults to `parameters`)       |
 | `with_params(p)`     | `(dict) -> MediaClipper` | Return a **new** clipper with overridden parameters; never mutate `self` |
-| `resolve_for_durations(d)` | `(list[float]) -> MediaClipper` | Per-dataset hook called once at load time                  |
+| `resolve_for_durations(d)` | `(list[float]) -> MediaClipper` | **Reserved - never called.** An override here is inert; use `resolve_for_media` |
 | `resolve_for_media(m)` | `(dict) -> MediaClipper` | Per-media hook; used by auto-selecting clippers (e.g. `video_auto`) |
 
 Parameter dicts support an optional `description` key alongside `label`

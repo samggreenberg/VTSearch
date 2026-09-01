@@ -46,7 +46,7 @@ Optional overrides:
 | `parameters` (property) | `[]` | List of `{key, label, type, default, min, max, step, description}` dicts describing user-configurable knobs |
 | `creation_questions` (property) | `parameters` | Questions shown when the user first picks this clipper (defaults to `parameters`) |
 | `with_params(params)` | returns `self` | Return a new clipper instance with overridden parameters |
-| `resolve_for_durations(durations)` | returns `self` | Per-dataset hook called once at load time |
+| `resolve_for_durations(durations)` | returns `self` | **Reserved - never called.** Kept for compatibility; an override here is inert, so put the logic in `resolve_for_media` |
 | `resolve_for_media(media)` | returns `self` | Per-media hook called per item - used by auto-selecting clippers (e.g. tile when long, pass-through when short) |
 
 Each dict returned by `clip()` must preserve the original's structure

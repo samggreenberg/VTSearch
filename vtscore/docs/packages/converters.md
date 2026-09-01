@@ -306,7 +306,12 @@ run_converters_on_folder(
 
 The runner also exposes `apply_converter_to_demo` (`runner.py`)
 for the demo-dataset case: convert every existing media in a dict
-in-place (replacing it with the converted outputs).
+in-place (replacing it with the converted outputs). Its `embedder_name`
+parameter is **accepted and ignored** - conversion changes the media
+type, so an embedder chosen for the source type does not apply to the
+outputs, and the framework embed stage resolves the target type's
+embedder itself. The parameter stays for out-of-tree callers that
+still pass it.
 
 ---
 

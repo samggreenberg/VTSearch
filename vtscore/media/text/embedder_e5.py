@@ -226,11 +226,5 @@ class TextE5Embedder(MediaEmbedder):
             logging.getLogger(__name__).exception("Error embedding text query for text")
             return None
 
-    # Internal helper used by loader.py bridge
-    def _get_model(self) -> Optional[SentenceTransformer]:
-        if self._model is None:
-            self.load_models()
-        return self._model
-
 
 EMBEDDER = TextE5Embedder()
