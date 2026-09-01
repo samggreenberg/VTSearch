@@ -16,6 +16,7 @@ message instead of a bare ``ImportError``.
 
 from __future__ import annotations
 
+import logging
 import sys
 import tomllib
 from pathlib import Path
@@ -167,18 +168,24 @@ def test_pdf_preview_reports_the_missing_package(without_module) -> None:
 )
 def test_document_converters_report_the_missing_package(
     without_module,
-    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
     module_path: str,
     class_name: str,
 ) -> None:
-    """Converters return no clips (their existing contract) but say why."""
+    """Converters return no clips (their existing contract) but say why.
+
+    The message goes through the module logger rather than ``print`` so the
+    embedding application can level and route it; see
+    ``vtscore/docs/extending/converters.md`` § Reporting failures.
+    """
     import importlib
 
     converter = getattr(importlib.import_module(module_path), class_name)()
     without_module("fitz")
 
-    assert converter.convert({"filename": "doc.pdf", "media_bytes": b"%PDF-1.4"}) == []
-    assert "PyMuPDF" in capsys.readouterr().out
+    with caplog.at_level(logging.WARNING, logger=module_path):
+        assert converter.convert({"filename": "doc.pdf", "media_bytes": b"%PDF-1.4"}) == []
+    assert any("PyMuPDF" in r.getMessage() for r in caplog.records)
 
 
 def test_yolo_extractor_reports_the_missing_package(without_module) -> None:
