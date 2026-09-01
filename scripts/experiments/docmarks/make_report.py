@@ -11,9 +11,11 @@ months later on a machine with no access to ``/expscratch``.
 Sections, in the order a reader needs them:
 
 1. **What is in it** — pages per source, marks per kind, class inventory.
-2. **Full pages** — marks boxed in situ, because the single most important
-   property of this task is how *small* the target is against the page, and no
-   crop conveys that.
+2. **Full pages** — marks boxed in situ and coloured by kind, because the single
+   most important property of this task is how *small* the target is against the
+   page, and no crop conveys that.  The one red box on each page is the largest
+   mark carrying a class identity — the same mark the caption measures, and the
+   same population the Scale section bands.
 3. **The Goods** — every roster/candidate class as a strip of its own instances,
    so within-class variation is visible at a glance.
 4. **The Bads** — distractor pages, and specifically the near-misses: other
@@ -41,7 +43,7 @@ from typing import Any, Optional, Sequence
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import docmarks_config as cfg  # noqa: E402
-from sources._common import Page, read_manifest  # noqa: E402
+from sources._common import Mark, Page, read_manifest  # noqa: E402
 
 #: Thumbnail long side, in px, per figure kind.  Kept small deliberately: the
 #: report is meant to be scrolled, and a 4000px scan inlined at full size makes
@@ -76,8 +78,50 @@ def _crop(page: Page, box: tuple[int, int, int, int], pad_frac: float = 0.12) ->
         )
 
 
-def _page_with_boxes(page: Page, *, highlight: Optional[str] = None) -> Any:
-    """The whole page with every mark outlined, so scale is visible in context."""
+#: Box colour per mark kind.  Kind is the single most useful thing the whole-page
+#: figure can convey — a box on a handwritten signature is a *deliberately*
+#: non-queryable mark, not a mislabelled logo — and one shade of blue for
+#: everything withholds exactly that.  This dict is the only source of truth:
+#: the drawing code and the HTML legend both read it, so a kind cannot appear in
+#: one and be missing from the other.
+_KIND_COLOURS: dict[str, tuple[int, int, int]] = {
+    "logo": (70, 130, 200),
+    "stamp": (35, 145, 115),
+    "signature": (230, 150, 20),
+    "text": (165, 165, 165),
+    "icon": (150, 95, 185),
+}
+_KIND_FALLBACK = (110, 110, 110)
+
+#: The largest *labelled* mark on the page — the one the caption measures.
+_HIGHLIGHT_COLOUR = (215, 25, 28)
+
+#: Kinds drawn thin and muted: recorded for context, never promoted to a query
+#: class, so they should not read as competing for the reader's attention.
+_MUTED_KINDS = frozenset({"text"})
+
+_KIND_MEANING = {
+    "logo": "queryable",
+    "stamp": "queryable",
+    "signature": "recorded, never queryable (a signature is a different mark every time it is made)",
+    "text": "the page body, drawn muted; never queryable",
+    "icon": "queryable",
+}
+
+
+def _rgb(colour: tuple[int, int, int]) -> str:
+    return "rgb({},{},{})".format(*colour)
+
+
+def _page_with_boxes(page: Page, *, highlight: Optional[Mark] = None) -> Any:
+    """The whole page with every mark outlined, so scale is visible in context.
+
+    Boxes are coloured by ``mark.kind``; *highlight*, when given, is the one
+    :class:`Mark` drawn in red.  It is matched by identity rather than by
+    ``class_id`` for two reasons: a class-id match reddens *every* instance of
+    that class on the page, and the marks worth highlighting are not always the
+    ones carrying a ``class_id`` at all.
+    """
     from PIL import Image, ImageDraw
 
     with Image.open(page.path) as src:
@@ -88,10 +132,35 @@ def _page_with_boxes(page: Page, *, highlight: Optional[str] = None) -> Any:
         if mark.area() <= 0:
             continue
         x, y, w, h = mark.box
-        hot = highlight is not None and mark.class_id == highlight
-        colour = (215, 25, 28) if hot else (70, 130, 200)
-        draw.rectangle([x, y, x + w, y + h], outline=colour, width=width * (2 if hot else 1))
+        if highlight is not None and mark is highlight:
+            colour, line = _HIGHLIGHT_COLOUR, width * 2
+        else:
+            colour = _KIND_COLOURS.get(mark.kind, _KIND_FALLBACK)
+            line = max(1, width // 2) if mark.kind in _MUTED_KINDS else width
+        draw.rectangle([x, y, x + w, y + h], outline=colour, width=line)
     return im
+
+
+def kinds_drawn(pages: Sequence[Page]) -> list[str]:
+    """The mark kinds that actually get a box in a figure built from *pages*."""
+    return sorted({m.kind for p in pages for m in p.marks if m.area() > 0})
+
+
+def _legend(pages: Sequence[Page], *, highlight_label: str = "") -> str:
+    """A swatch-per-kind legend, listing only what the figure actually draws."""
+    items = []
+    if highlight_label:
+        items.append(
+            f'<li><span class="sw" style="background:{_rgb(_HIGHLIGHT_COLOUR)}"></span>{_esc(highlight_label)}</li>'
+        )
+    for kind in kinds_drawn(pages):
+        colour = _KIND_COLOURS.get(kind, _KIND_FALLBACK)
+        meaning = _KIND_MEANING.get(kind, "")
+        gloss = f" — {_esc(meaning)}" if meaning else ""
+        items.append(
+            f'<li><span class="sw" style="background:{_rgb(colour)}"></span><code>{_esc(kind)}</code>{gloss}</li>'
+        )
+    return f'<ul class="legend">{"".join(items)}</ul>' if items else ""
 
 
 # --------------------------------------------------------------------------
@@ -128,6 +197,10 @@ code { font:13px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace; background:#f4
 .bar { height:9px; background:var(--cool); display:inline-block; vertical-align:middle; border-radius:1px; }
 .warn { background:#fff6f5; border-left:3px solid var(--hot); padding:10px 14px; margin:16px 0; font-size:14px; }
 .warn strong { color:var(--hot); }
+.legend { list-style:none; padding:0; margin:10px 0 2px; display:flex; flex-direction:column;
+  gap:4px; font-size:13px; color:var(--dim); max-width:74ch; }
+.legend li { display:flex; align-items:flex-start; gap:7px; }
+.legend .sw { width:13px; height:13px; border-radius:2px; margin-top:3px; flex:0 0 auto; }
 """
 
 
@@ -218,19 +291,30 @@ def section_full_pages(pages: Sequence[Page], n: int, seed: int) -> str:
 
     figs = []
     for page in picks:
-        biggest = max((m for m in page.marks if m.area() > 0), key=lambda m: m.area())
+        # Measured over the *labelled* marks only — the same population
+        # ``section_scale`` bands.  Sizing over every mark instead lets a
+        # signature, or a heading welded into one component by its underline,
+        # win the title and put a body-text number in a caption a reader quotes.
+        labelled = [m for m in page.marks if m.class_id and m.area() > 0]
+        if not labelled:
+            continue
+        biggest = max(labelled, key=lambda m: m.area())
         frac = biggest.area() / float(page.width * page.height)
         figs.append(
-            f'<figure><img src="{_b64(_page_with_boxes(page, highlight=biggest.class_id), long_side=THUMB_PAGE)}">'
-            f"<figcaption>{_esc(page.page_id)} — largest mark is "
+            f'<figure><img src="{_b64(_page_with_boxes(page, highlight=biggest), long_side=THUMB_PAGE)}">'
+            f"<figcaption>{_esc(page.page_id)} — largest labelled mark "
+            f"(<code>{_esc(biggest.kind)}</code>) is "
             f"{biggest.longest_side()}px, {frac:.2%} of the page</figcaption></figure>"
         )
     return (
         "<h2>Whole pages, marks boxed</h2>"
         "<p>The defining property of this task is the ratio between the target and the page. "
-        "Red is the largest labelled mark; blue is every other mark the source annotates. "
+        "Every mark the source annotates is boxed, coloured by kind. Exactly one box is red: the "
+        "largest mark that carries a class identity, which is the one the caption measures — so the "
+        "picture and its number always describe the same box. "
         "A crop gallery makes these look easy; this is what the matcher actually sees.</p>"
-        f'<div class="pages">{"".join(figs)}</div>'
+        + _legend(picks, highlight_label="the largest labelled mark on that page — the one the caption measures")
+        + f'<div class="pages">{"".join(figs)}</div>'
     )
 
 
@@ -302,8 +386,7 @@ def section_bads(pages: Sequence[Page], classes: dict[str, Any], n: int, seed: i
         f"<p><strong>{len(unlabelled):,}</strong> pages carry no labelled mark and serve as distractors: "
         + ", ".join(f"{v:,} from <code>{k}</code>" for k, v in sorted(by_source.items()))
         + ". These need no labels — only to be <em>safe to score against</em>, which the contamination "
-        "rules decide.</p>"
-        f'<div class="pages">{thumbs}</div>'
+        "rules decide.</p>" + _legend(picks) + f'<div class="pages">{thumbs}</div>'
         "<h3>Near misses — the negatives that actually matter</h3>"
         "<p>A blank page is a trivial negative. The hard one is a real mark on a real scan that simply "
         "is not the mark being searched for. Each of these is a positive for one class and a negative "

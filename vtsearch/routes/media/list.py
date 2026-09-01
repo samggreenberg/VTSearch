@@ -28,6 +28,7 @@ from vtscore.media.audio.ffmpeg import get_ffmpeg_exe
 from vtscore.media.base import MediaResponse
 from vtscore.security.path_validation import resolve_media_file_path
 from vtscore.utils.hashing import content_md5
+from vtscore.utils.hits import hit_custom_metadata
 from vtsearch.schemas.media import (
     MediaAddToPileResponseSchema,
     MediaBatchRequestSchema,
@@ -584,7 +585,8 @@ def batch_medias(body: dict):
     omitted.  Each item's ``custom_metadata`` is the media type's
     ``display_metadata`` - including the curated "Source" / "Derived Via" /
     "Imported Via" provenance lines distilled from ``origin.params`` - with
-    any importer-supplied ``custom_metadata`` layered on top.
+    any importer-supplied ``custom_metadata`` layered on top, minus the
+    ``embedding`` plumbing key.
     """
     from vtscore.datasets.archive_stream import archive_member_ref  # noqa: PLC0415
     from vtscore.media import get as get_media_type  # noqa: PLC0415
@@ -609,7 +611,11 @@ def batch_medias(body: dict):
             custom: dict[str, Any] = mt.display_metadata(c)
         except KeyError:
             custom = {}
-        importer_custom = c.get("custom_metadata")
+        # Re-derived rather than read straight off the media: an importer may
+        # ship a pre-computed vector nested inside ``custom_metadata`` via
+        # ``custom_metadata_map``, and a numpy array here would fail JSON
+        # encoding for the whole batch.
+        importer_custom = hit_custom_metadata(c)
         if importer_custom:
             custom.update(importer_custom)
         media_data["custom_metadata"] = custom

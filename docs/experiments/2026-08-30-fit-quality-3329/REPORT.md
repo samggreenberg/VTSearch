@@ -68,7 +68,11 @@ Atlas node r̄ 0.61 vs 0.66–0.70, a displaced Shepard distance range, and both
 the within- and between-cluster region cosines. Its space is far less
 concentrated than the four single-vector spaces, which is why a fixed α fails on
 it — and a standing warning about any other threshold in the tree tuned on
-cosine magnitudes.
+cosine magnitudes. That warning has since been discharged: the
+[inventory](AUDIT-cosine-thresholds.md) found one such constant on the live
+click loop (the atlas's own `_CALIBRATION_MIN_RBAR`, which the r̄ table below
+clears by ~4× at `dinov3_patch`'s worst measured decile), one inert, and one
+confined to an experiment arm.
 
 ---
 
@@ -86,7 +90,7 @@ keep updated.
 | **2** | **Delete the false null from `typicality_pvalues`' docstring** and say what the p-values actually are: under-dispersed (sd 0.250 vs 0.289), path-averaged, uncalibrated | The docstring's claim is the reason nobody checked for two years. It is false for all five embedders, not just the broken one | [B1–B2](#b1b3--the-atlass-null-and-why-it-fails) | one docstring | **done** |
 | **3** | **Record one timing profile** with `VTSEARCH_RECORD_TIMING` on a real dataset load, and read the r² this PR started keeping | The r² is now persisted but has never been looked at; the fix is untested against real data | [Appendix A](#d--the-timing-statistic-that-was-computed-and-thrown-away) | one dataset load | #3345 |
 | **4** | **Label coarse browse signs as approximate** in the UI, or stop showing signs below layer 2 | At layers 2–3, 45–48 % of regions have no ground-truth category holding even half their members — the sign names something no single label describes | [C4](#c4--are-the-browse-canvass-named-regions-coherent-inventory-item-10) | UX call, small | #3346 |
-| **5** | **Audit other cosine-magnitude thresholds for patch embedders** — anywhere in the tree a constant is compared against a similarity | Four independent measurements say `dinov3_patch`'s absolute cosines live in a different range; `domain_shift_report` is the instance that was caught, not necessarily the only one | [§6 above](#the-short-version) | a grep and a think | #3347 |
+| **5** | **Audit other cosine-magnitude thresholds for patch embedders** — anywhere in the tree a constant is compared against a similarity | Four independent measurements say `dinov3_patch`'s absolute cosines live in a different range; `domain_shift_report` is the instance that was caught, not necessarily the only one | [§6 above](#the-short-version) | a grep and a think | #3347, [inventory](AUDIT-cosine-thresholds.md) |
 | **6** | *If* the atlas guard is wanted on patch embedders: **fix the per-node vMF model**, not a threshold on top of it | r̄ = 0.61 says the mean-direction model describes this space poorly; every threshold repair was priced and failed | [B6](#b6--the-obvious-repair-priced-it-does-not-work) | real work, unbudgeted | #3348 |
 
 ### Do *not* do these

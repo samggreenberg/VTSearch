@@ -29,6 +29,7 @@ import { SortingApiService } from '../../../services/sorting-api.service';
 import type { LabelFilter } from '../../../services/sorting-api.service';
 import { ToastService } from '../../../services/toast.service';
 import { ImporterField } from '../../../models/api.models';
+import { DynamicFieldOptions } from '../../../utils/dynamic-field-options';
 import {
   openBlankTab,
   openExternalUrl,
@@ -173,6 +174,19 @@ export class ExportModalComponent implements OnInit {
   selectedExporter: ExporterEntry | null = null;
   formValues: Record<string, string> = {};
   readonly submitting = signal(false);
+
+  /** Option lists for the active exporter's ``dynamic_options`` fields. An
+   *  exporter whose destinations are only knowable at runtime (mailboxes,
+   *  buckets, remote queues) fills its select from
+   *  ``POST /api/exporters/field-options/<name>`` rather than from a list
+   *  frozen at plugin-definition time (issue #3360). */
+  readonly fieldOptions = new DynamicFieldOptions((key, values) =>
+    this.exportersApi.getFieldOptions(this.activeExporterName, key, values),
+  );
+
+  /** Exporter the in-flight option fetches belong to. Read by the fetcher
+   *  above at subscribe time, so it must be set before any refresh. */
+  private activeExporterName = '';
 
   /** Dataset display name for default filenames. */
   private readonly datasetName = computed(
@@ -552,6 +566,23 @@ export class ExportModalComponent implements OnInit {
       this.formValues[f.key] = value;
       this.lastAutoValues[f.key] = value;
     }
+    // Drop the previous exporter's lists (and invalidate anything still in
+    // flight for it) before fetching this one's.
+    this.fieldOptions.reset();
+    this.activeExporterName = exporter.name;
+    this.fieldOptions.refreshAll(this.exporterFieldsOf(exporter), this.formValues);
+  }
+
+  /** Re-fetch the option lists of every field that depends on the one the
+   *  user just edited. */
+  onFieldChanged(changedKey: string): void {
+    const exporter = this.activeTabExporter ?? this.selectedExporter;
+    if (!exporter) return;
+    this.fieldOptions.refreshDependentsOf(
+      changedKey,
+      this.exporterFieldsOf(exporter),
+      this.formValues,
+    );
   }
 
   /** Re-resolve templated defaults once a variable they need arrives.

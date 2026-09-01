@@ -215,6 +215,13 @@ Field semantics - `field_type` literals, `dynamic_options`,
 `depends_on`, number-field type inference - are documented in detail in
 [`plugins.md#pluginfield`](plugins.md#pluginfield).
 
+A `dynamic_options` select is served by
+`POST /api/exporters/field-options/<name>`, which calls the exporter's
+`get_field_options(field_key, current_values)`. Both surfaces that render
+an exporter's fields use it - the app's Export modal and its Auto-Find
+results-exporter settings - so an exporter whose destinations are only
+knowable at runtime fills its dropdown in either place.
+
 ## Built-in exporters
 
 | Name | Target | Notes |

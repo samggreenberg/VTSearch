@@ -46,6 +46,12 @@ which: a decommissioned hostname (SPODS's own page still advertises the dead
 `ernet.in` host), a missing Kaggle token (StaVer, Tobacco800), an absent RAR
 extractor, or a UCSF endpoint that is down. Seconds now, a queue slot later.
 
+**The probe downloads nothing**, so it is safe to run repeatedly on a login
+node: a `HEAD` for SPODS, a file listing for the Kaggle mirrors, a result count
+for UCSF. It also sweeps away any `_probe_*` directories left under
+`$VTS_DOCMARKS_RAW` by the version that *did* fetch (~2 GB of duplicated
+StaVer/Tobacco800 bytes), reporting what it reclaimed.
+
 **RAR extractor.** SPODS is RAR4. The builder tries `bsdtar`, `7z`, `unar`,
 `unrar` in that order; `bsdtar` (libarchive) is the one most likely to be on a
 compute node, and reads RAR4 fine. If none is present the probe says so.

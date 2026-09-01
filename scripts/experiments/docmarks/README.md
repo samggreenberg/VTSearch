@@ -130,6 +130,52 @@ with it: **synthetic numbers quantify a mechanism, real numbers size the
 effect.** A finding that appears only in `synth` is a hypothesis about the
 pipeline, not a claim about documents.
 
+## Masks to marks: decompose, merge, *then* filter
+
+SPODS and StaVer ship pixel masks, not boxes, so `sources/_common.py` has to
+decide what counts as one mark. The order of those three steps is the whole
+game, and getting it wrong is silent.
+
+A mark's mask is **not one connected component**. A rubber stamp is a ring, the
+text inside it, and however many broken arcs the ink left behind; a script stamp
+is one component per pen stroke. Each of those is individually tiny. So an area
+floor applied to *raw* components deletes eleven fragments of the dozen as
+speckle, the merge that exists to reassemble them never sees them, and the one
+or two chunkiest survivors get promoted to classes of their own. That is how a
+class called `spods/stamp_00129_1` came to be 38 instances of the word **New**,
+clipped out of a three-line "Dy.Manager / NewEastZone" stamp (issue #3361).
+
+So: **decompose, merge, then filter**, with the floor applied to the merged
+group's *ink* (a ring is mostly hole, so its box area proves nothing). The only
+filter that runs before the merge is an absolute few-pixel one, because true
+single-pixel scan noise carries no evidence either way but can bridge the gap
+between two marks that should stay apart.
+
+The merge gap is a fraction of the page's longest side (`MERGE_GAP_FRAC`), not a
+pixel count — SPODS pages are A4 at 300 DPI (~2,476×3,480) and StaVer's are not.
+0.035 is read off a sweep of all 1,088 SPODS pages: **from gap 90 px through gap
+300 px the output is byte-identical** — one mark per page that has one, median
+428 px, largest box 3.5% of the page — because nothing else lies within 300 px
+of a mark. Below 90 the merge under-runs and splits real stamps across their own
+line spacing. StaVer's recorded stamp count is the independent check on the
+other side; it is the source that actually carries two stamps on one page.
+
+Two consequences worth stating plainly:
+
+- **The `text` mask yields no marks.** It is the page body — a property of the
+  page, not a thing on it. Filtered, what survived was not even words: it was
+  whichever headings and ruled tables had an underline welding their glyphs into
+  one component, about 1.1 per page. They were never query classes, but they
+  were real entries in `page.marks` and leaked into everything that read it
+  without a kind filter, starting with the synthetic-background selector. The
+  mask is kept as `meta["text_frac"]` and `meta["text_components"]`; the
+  documented non-queryable negative control is `signature`, which is a localised
+  mark and stays one.
+- **A box covering more than `MAX_MARK_AREA_FRAC` of its page is rejected**,
+  with a warning naming the page. Nothing in SPODS trips it after the above —
+  the largest surviving mark is 3.5% — which is the point: it is a tripwire for
+  the next source, not a filter this one needs.
+
 ## Three kinds of negative
 
 Not all distractors are equal, and the manifest keeps them distinct:
@@ -249,20 +295,29 @@ repair is done by hand. Both directions of every hand decision are recorded in
 merging is not undone the next time a number moves. A pair ruled both ways is
 refused rather than resolved by whichever is applied last.
 
-Measured on 2,096 real SPODS marks with the 256-bit hash:
+Measured on 2,054 real SPODS marks with the 256-bit hash, after the mask
+decomposition was fixed:
 
 | threshold | classes | largest component | share | classes with ≥10 |
 |---:|---:|---:|---:|---:|
-| 0.08 | 969 | 60 | 2.9% | 36 |
-| **0.16** | **503** | **60** | **2.9%** | **51** |
-| 0.18 | 413 | 90 | 4.3% | 50 |
-| 0.20 | 367 | 126 | 6.0% | 49 |
-| 0.22 | 288 | 593 | 28.3% | 37 |
-| 0.26 | 124 | 1,474 | 70.3% | 16 |
+| 0.02 | 1,261 | 31 | 1.5% | 31 |
+| 0.08 | 800 | 31 | 1.5% | 40 |
+| **0.10** | **672** | **31** | **1.5%** | **44** |
+| 0.12 | 523 | 166 | 8.1% | 47 |
+| 0.14 | 428 | 354 | 17.2% | 43 |
+| 0.16 | 310 | 653 | 31.8% | 36 |
+| 0.22 | 138 | 1,288 | 62.7% | 22 |
 
-Read the **share** column, not the class count. 0.16 is the top of the flat
+Read the **share** column, not the class count. 0.10 is the top of the flat
 region: the most the clustering assembles before it starts assembling things
-that do not belong together.
+that do not belong together. Note that 0.16 — the value read off the *previous*
+sweep, and perfectly defensible against those marks — now chains a third of the
+corpus while still reporting a plausible 310 classes. **The threshold is a
+property of the marks, so a change in what a mark *is* invalidates it.** Fixing
+the decomposition (issue #3361) replaced "the one chunkiest fragment of each
+stamp" with "the whole stamp", which is a different object to hash; the sweep
+had to be re-read from scratch, and the class count moving the *right* way (36
+usable classes at 0.16 before, 44 at 0.10 now) is not what tells you so.
 
 ## The descriptor had to be widened to get here
 
@@ -310,4 +365,5 @@ resume story and what to check afterwards.
 differently — a decommissioned hostname, a missing Kaggle token, an absent RAR
 extractor — and finding out which costs seconds now and a queue slot later.
 SPODS needs one of `bsdtar` / `7z` / `unar` / `unrar`; StaVer and Tobacco800
-need a Kaggle token.
+need a Kaggle token. The probe is metadata-only — it fetches no source bytes —
+so asking it repeatedly is free.

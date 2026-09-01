@@ -78,9 +78,20 @@ MIN_INSTANCES = int(os.environ.get("VTS_DOCMARKS_MIN_INSTANCES", "10"))
 #: floor, not the method.
 MIN_MARK_PX = int(os.environ.get("VTS_DOCMARKS_MIN_MARK_PX", "32"))
 
-#: Connected components smaller than this fraction of the page are dropped as
-#: mask speckle rather than treated as marks.
+#: A *merged* mark carrying less ink than this fraction of the page is dropped
+#: as mask speckle.  It is applied after the merge, never before: a stamp's
+#: fragments are each individually below it, so filtering first deletes the
+#: evidence that the stamp is there (issue #3361).
 MIN_MARK_AREA_FRAC = float(os.environ.get("VTS_DOCMARKS_MIN_MARK_AREA_FRAC", "0.0002"))
+
+#: A mark covering at least this fraction of its page is rejected as a mask
+#: artefact, with a warning naming the page.  A mark is a thing *on* a page,
+#: not the page: the case this catches is a ruled table whose borders weld the
+#: whole grid into one connected component (``spods/00975`` reached 45.9%).
+#: The bar is deliberately loose — the observed median mark covers 0.76% of its
+#: page and p90 is near 2%, so 25% is more than ten times the largest mark
+#: anyone has looked at and agreed with.
+MAX_MARK_AREA_FRAC = float(os.environ.get("VTS_DOCMARKS_MAX_MARK_AREA_FRAC", "0.25"))
 
 # --------------------------------------------------------------------------
 # Contamination — which sources may serve as distractors for which classes
@@ -168,17 +179,23 @@ CLUSTER_BACKEND = os.environ.get("VTS_DOCMARKS_CLUSTER_BACKEND", "phash")
 #: with every merge recorded in ``adjudications.json`` and replayed on each
 #: re-cluster so the work is done once.
 #:
-#: 0.16 is read off a sweep of the real corpus (2,096 SPODS marks, 256-bit
-#: hash).  Between 0.08 and 0.16 the largest component is pinned at 60 marks
-#: (2.9%) while usable classes climb from 36 to 51; it starts merging at 0.18,
-#: reaches 28% at 0.22 and chains outright by 0.26.  0.16 is the top of the
-#: flat region — the most the clustering can assemble before it starts
-#: assembling things that do not belong together.
+#: 0.10 is read off a sweep of the real corpus (2,054 SPODS marks, 256-bit
+#: hash).  From 0.02 to 0.10 the largest component is pinned at 31 marks (1.5%)
+#: — the size of a legitimate class here — while usable classes climb from 31 to
+#: 44; it breaks at 0.12 (166 marks, 8.1%), reaches 31.8% at 0.16 and chains
+#: outright by 0.22.  0.10 is the top of the flat region — the most the
+#: clustering can assemble before it starts assembling things that do not belong
+#: together — and it sits in the valley of a now cleanly bimodal distance
+#: histogram (a within-class mode below 0.06, the between-class bulk above 0.18).
 #:
 #: Re-run ``tune_clustering.py`` whenever the source set or the descriptor
-#: changes; this number is a property of the data, and it does not travel. It
-#: moved from 0.05 when the hash went from 64 to 256 bits.
-CLUSTER_THRESHOLD = float(os.environ.get("VTS_DOCMARKS_CLUSTER_THRESHOLD", "0.16"))
+#: changes; this number is a property of the data, and it does not travel.  It
+#: moved from 0.05 when the hash went from 64 to 256 bits, and from 0.16 when
+#: the mask decomposition was fixed (issue #3361) — that is the point.  The
+#: marks the descriptor sees are different objects now: whole stamps instead of
+#: the one chunkiest fragment of each, so 0.16 chained 653 marks (31.8%) into a
+#: single class while still reporting a plausible-looking 310.
+CLUSTER_THRESHOLD = float(os.environ.get("VTS_DOCMARKS_CLUSTER_THRESHOLD", "0.10"))
 
 # --------------------------------------------------------------------------
 # Synthesis (layer 3)

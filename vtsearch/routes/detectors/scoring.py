@@ -19,10 +19,10 @@ from flask_smorest import Blueprint, abort
 from vtscore.concurrency.memory_budget import cap_workers_by_memory
 from vtscore.concurrency.progress import CancelledError, find_progress, update_find_progress
 from vtscore.detectors.model_loading import resolve_or_train_detector
-from vtscore.embedding.media_vectors import EMBEDDINGS_KEY
 from vtsearch.routes._shared import (
     find_idle,
     find_idle_on_crash,
+    media_info_for_response,
     require_dataset_header,
     require_detector_header,
 )
@@ -45,18 +45,6 @@ detector_scoring_bp = Blueprint(
     __name__,
     description="Run a detector against the active dataset (find-label) "
     "or run every Auto-Find detector at once (auto-detect).",
-)
-
-# Keys excluded from API responses (large binary/vector data).  ``embeddings``
-# is the v3 dict-keyed vector store (``vtscore/embedding/media_vectors.py``);
-# ``embedding`` is its dropped legacy singular form, kept here so a media dict
-# rehydrated from an old pickle can't leak one either.
-_HEAVYWEIGHT_KEYS = (
-    EMBEDDINGS_KEY,
-    "embedding",
-    "media_bytes",
-    "media_string",
-    "thumbnail_bytes",
 )
 
 
@@ -115,11 +103,6 @@ def _type_incompatible_message(det_data: dict | None) -> str:
         f"This detector scores in a {label} embedder space, which the active "
         "dataset doesn't provide. Load a dataset that binds a matching embedder type."
     )
-
-
-def _media_info_for_response(media: dict) -> dict:
-    """Return a copy of *media* without heavyweight fields."""
-    return {k: v for k, v in media.items() if k not in _HEAVYWEIGHT_KEYS}
 
 
 def _abort_if_find_cancelled() -> None:
@@ -494,7 +477,7 @@ def _score_detector_for_auto_detect(
         positive_hits = []
         negative_hits = []
         for cid, score in zip(all_ids, scores, strict=True):
-            clip_info = _media_info_for_response(snap[cid])
+            clip_info = media_info_for_response(snap[cid])
             clip_info["score"] = round(score, 4)
             if score >= threshold:
                 positive_hits.append(clip_info)

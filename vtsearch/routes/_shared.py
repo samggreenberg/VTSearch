@@ -15,7 +15,9 @@ from marshmallow import ValidationError
 from werkzeug.exceptions import HTTPException
 
 from vtscore.concurrency.progress import update_find_progress
+from vtscore.embedding.media_vectors import EMBEDDINGS_KEY
 from vtscore.utils.hashing import content_md5, new_md5
+from vtscore.utils.hits import hit_custom_metadata
 
 if TYPE_CHECKING:
     from vtscore.plugins import PluginBase
@@ -399,6 +401,48 @@ def _normalise_option(option: Any) -> dict[str, str]:
     return {"value": text, "label": text}
 
 
+def plugin_field_options(plugin: PluginBase, body: dict) -> dict:
+    """Resolve one ``dynamic_options`` field's option list for *plugin*.
+
+    The body of every plugin family's options route (dataset importers,
+    label importers, seed importers, datasource importers, results
+    exporters): validate that the named field exists and is dynamic, call
+    the plugin's ``get_field_options(field_key, current_values)`` with the
+    supplied snapshot of form values, and coerce the result into the
+    ``{"options": [{"value", "label"}, ...]}`` response shape.
+
+    Args:
+        plugin: The already-resolved plugin instance.
+        body: The parsed ``ImporterFieldOptionsRequestSchema`` body
+            (``field_key`` plus a ``values`` snapshot).
+
+    Aborts:
+        400 for an unknown or non-dynamic ``field_key``; 501 when the
+        plugin does not implement the hook; 502 for any other plugin
+        error (network failure, auth error) so the frontend can show the
+        message inline; 500 when the hook returns a non-list.
+    """
+    field_key = body["field_key"].strip()
+    values = body.get("values") or {}
+
+    field = next((f for f in plugin.fields if f.key == field_key), None)
+    if field is None:
+        abort(400, message=f"Unknown field: {field_key!r}")
+    if not getattr(field, "dynamic_options", False):
+        abort(400, message=f"Field {field_key!r} is not dynamic")
+
+    try:
+        options = plugin.get_field_options(field_key, values)
+    except NotImplementedError as exc:
+        abort(501, message=str(exc) or "Importer does not implement get_field_options")
+    except Exception as exc:  # noqa: BLE001 (surface remote-service errors verbatim)
+        abort(502, message=str(exc) or type(exc).__name__)
+
+    if not isinstance(options, list):
+        abort(500, message="get_field_options must return a list")
+    return {"options": [_normalise_option(o) for o in options]}
+
+
 def get_json_or_400():
     """Parse the request body as JSON, returning a 400 response on failure.
 
@@ -599,6 +643,41 @@ def run_plugin_or_error(plugin: PluginBase, method: str, *args):
         verb = method.replace("_", " ").capitalize()
         return None, error_response(f"{verb} failed: {exc}", 500, detail=format_exception_detail(exc))
     return result, None
+
+
+#: Media keys never serialized into an API response (large binary/vector data).
+#: ``embeddings`` is the v3 dict-keyed vector store
+#: (:mod:`vtscore.embedding.media_vectors`); ``embedding`` is its dropped
+#: legacy singular form, kept here so a media dict rehydrated from an old
+#: pickle can't leak one either.
+_HEAVYWEIGHT_KEYS = (
+    EMBEDDINGS_KEY,
+    "embedding",
+    "media_bytes",
+    "media_string",
+    "thumbnail_bytes",
+)
+
+
+def media_info_for_response(media: dict) -> dict:
+    """Return a copy of *media* safe to serialize into an API response.
+
+    Two filters, because one is not enough.  The top-level
+    :data:`_HEAVYWEIGHT_KEYS` sweep drops the vectors and the raw bytes, and
+    then ``custom_metadata`` is re-derived through
+    :func:`vtscore.utils.hits.hit_custom_metadata`: an importer may ship a
+    pre-computed vector *nested* inside it via ``custom_metadata_map``, which
+    a top-level key filter cannot see and which the free-form
+    ``fields.Dict`` in the response schemas waves straight through.  Left in,
+    it either balloons the response or fails JSON encoding outright.
+
+    The re-derived dict is fresh, so a route that mutates the returned
+    ``custom_metadata`` cannot reach back into the loaded media.
+    """
+    info = {k: v for k, v in media.items() if k not in _HEAVYWEIGHT_KEYS}
+    if isinstance(info.get("custom_metadata"), dict):
+        info["custom_metadata"] = hit_custom_metadata(media)
+    return info
 
 
 def windowed_sort_extras(results: list[dict], threshold: float | None) -> dict[str, Any]:

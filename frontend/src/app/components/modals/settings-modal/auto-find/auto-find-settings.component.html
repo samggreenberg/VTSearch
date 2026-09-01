@@ -51,16 +51,43 @@
       @for (field of activeFields; track field.key) {
         <div class="form-group">
           <label class="form-label">{{ field.label || field.key }}{{ field.required ? ' *' : '' }}</label>
-          @if (field.field_type === 'select') {
+          @if (field.field_type === 'select' && field.allow_free_text) {
+            <input
+              type="text"
+              class="form-input"
+              [attr.list]="'autofind-' + field.key + '-list'"
+              [ngModel]="fieldValue(field.key)"
+              (ngModelChange)="setFieldValue(field.key, $event)"
+              [disabled]="!!fieldOptions.loading()[field.key]"
+              [placeholder]="fieldOptions.loading()[field.key] ? 'Loading…' : (field.placeholder || field.description || '')"
+              [attr.aria-label]="field.label || field.key" />
+            <datalist [id]="'autofind-' + field.key + '-list'">
+              @for (opt of fieldOptions.optionsFor(field); track opt.value) {
+                <option [value]="opt.value">{{ opt.label }}</option>
+              }
+            </datalist>
+            @if (field.dynamic_options && fieldOptions.error()[field.key]) {
+              <p class="error-text">{{ fieldOptions.error()[field.key] }}</p>
+            }
+          } @else if (field.field_type === 'select') {
             <select
               class="form-select"
               [ngModel]="fieldValue(field.key)"
               (ngModelChange)="setFieldValue(field.key, $event)"
+              [disabled]="!!fieldOptions.loading()[field.key] || (!!field.dynamic_options && fieldOptions.optionsFor(field).length === 0)"
               [attr.aria-label]="field.label || field.key">
-              @for (opt of field.options || []; track opt) {
-                <option [value]="opt">{{ opt }}</option>
+              @if (field.dynamic_options && fieldOptions.loading()[field.key]) {
+                <option value="">Loading…</option>
+              } @else if (field.dynamic_options && fieldOptions.optionsFor(field).length === 0 && !fieldOptions.error()[field.key]) {
+                <option value="">No options available</option>
+              }
+              @for (opt of fieldOptions.optionsFor(field); track opt.value) {
+                <option [value]="opt.value">{{ opt.label }}</option>
               }
             </select>
+            @if (field.dynamic_options && fieldOptions.error()[field.key]) {
+              <p class="error-text">{{ fieldOptions.error()[field.key] }}</p>
+            }
           } @else if (field.field_type === 'number') {
             <input
               type="number"

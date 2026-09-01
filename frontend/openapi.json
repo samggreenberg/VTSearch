@@ -13565,6 +13565,70 @@
         ]
       }
     },
+    "/api/exporters/field-options/{exporter_name}": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "exporter_name",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "Same contract as ``POST /api/dataset/import/<name>/options``: the\nexporter's ``get_field_options(field_key, current_values)`` is called\nwith the supplied snapshot of current form values, and plugin errors\n(network failure, auth error, etc.) surface as a 502 with the\noriginal message so the frontend can display them inline.",
+        "operationId": "exporter_field_options",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImporterFieldOptionsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImporterFieldOptionsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "Unknown or non-dynamic field key."
+          },
+          "404": {
+            "description": "Unknown exporter name."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "500": {
+            "description": "get_field_options did not return a list."
+          },
+          "501": {
+            "description": "Exporter does not implement get_field_options."
+          },
+          "502": {
+            "description": "Remote service backing dynamic options raised an error."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return dropdown options for a dynamic-options field on an exporter.",
+        "tags": [
+          "exporters"
+        ]
+      }
+    },
     "/api/extract": {
       "post": {
         "operationId": "run_extract",
@@ -14847,7 +14911,7 @@
     },
     "/api/medias/batch": {
       "post": {
-        "description": "Callers request only the IDs they need (e.g. the ones currently visible\nin a virtual-scrolling viewport), keeping payload size bounded.  Use\n:func:`list_media_ids` (``GET /api/medias/ids``) to discover which\nmedia IDs exist in the loaded dataset.\n\nReturns a JSON array of media metadata dicts; unknown IDs are silently\nomitted.  Each item's ``custom_metadata`` is the media type's\n``display_metadata`` - including the curated \"Source\" / \"Derived Via\" /\n\"Imported Via\" provenance lines distilled from ``origin.params`` - with\nany importer-supplied ``custom_metadata`` layered on top.",
+        "description": "Callers request only the IDs they need (e.g. the ones currently visible\nin a virtual-scrolling viewport), keeping payload size bounded.  Use\n:func:`list_media_ids` (``GET /api/medias/ids``) to discover which\nmedia IDs exist in the loaded dataset.\n\nReturns a JSON array of media metadata dicts; unknown IDs are silently\nomitted.  Each item's ``custom_metadata`` is the media type's\n``display_metadata`` - including the curated \"Source\" / \"Derived Via\" /\n\"Imported Via\" provenance lines distilled from ``origin.params`` - with\nany importer-supplied ``custom_metadata`` layered on top, minus the\n``embedding`` plumbing key.",
         "operationId": "batch_medias",
         "requestBody": {
           "content": {

@@ -25,6 +25,7 @@ The scripts are loose modules, not package members, so the directory goes on
 
 import importlib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -143,6 +144,97 @@ class TestMaskToBoxes:
             mods["common"].mask_to_boxes(np.zeros((10, 10), dtype=np.uint8), polarity="sideways")
 
 
+#: A page the size of a real scan, so that the 0.0002 area floor is a real
+#: number (260 px of ink) rather than something a toy fixture can clear by
+#: accident.
+_PAGE_W, _PAGE_H = 1000, 1300
+
+
+def _stroke_stamp(origin=(120, 120), strokes=12):
+    """A "stamp" mask built the way a real one decomposes: many thin strokes.
+
+    Each stroke is 2 px wide and 24 px tall -- 48 filled px against a floor of
+    ``0.0002 * 1000 * 1300`` = 260 px, so *every* fragment is individually well
+    below it -- and consecutive strokes sit 10 px apart, further than the old
+    fixed ``gap=6`` could bridge.
+    """
+    mask = np.zeros((_PAGE_H, _PAGE_W), dtype=np.uint8)
+    ox, oy = origin
+    for i in range(strokes):
+        x = ox + i * 10
+        mask[oy : oy + 24, x : x + 2] = 255
+    return mask
+
+
+class TestFragmentingStamps:
+    """The geometry bug of issue #3361, pinned from both ends.
+
+    A stamp's mask is not one component: it is a ring, the text inside it, and a
+    broken arc where the ink did not take -- or, for a script stamp, one
+    component per pen stroke. Every one of those is individually below the area
+    floor. Running the floor *before* the merge therefore deleted eleven of the
+    dozen as "speckle", left the merge nothing to reassemble, and promoted the
+    one or two chunkiest survivors to classes of their own. That is how
+    ``spods/stamp_00129_1`` came to be 38 instances of the word "New".
+
+    The failure is silent in both directions, which is why both are pinned: too
+    strict a floor yields *zero* boxes where a mark plainly is, and too small a
+    gap yields *two*.
+    """
+
+    def test_a_stamp_of_sub_floor_strokes_is_one_box_not_zero_and_not_two(self, mods):
+        mask = _stroke_stamp()
+        gap = mods["common"].merge_gap_for_page(_PAGE_W, _PAGE_H)
+
+        boxes = mods["common"].mask_to_boxes(mask, min_area_frac=0.0002, merge_gap=gap)
+
+        assert len(boxes) == 1, f"expected one stamp, got {len(boxes)}: {boxes}"
+        x, y, w, h = boxes[0]
+        assert (x, y) == (120, 120)
+        assert (w, h) == (112, 24)
+
+    def test_filtering_before_merging_is_what_loses_it(self, mods):
+        # The old order, spelled out: floor first (mask_to_boxes with no merge),
+        # then merge. Every stroke is below the floor, so nothing survives to
+        # merge and the stamp vanishes entirely.
+        mask = _stroke_stamp()
+        filtered_first = mods["common"].mask_to_boxes(mask, min_area_frac=0.0002, merge_gap=0)
+        assert mods["common"].merge_overlapping(filtered_first, gap=6) == []
+
+    def test_the_merged_group_is_judged_on_its_ink_not_its_box(self, mods):
+        # A ring is mostly hole, so a merged group's box area wildly overstates
+        # how much ink it carries. The floor must see the ink.
+        comps = mods["common"].mask_components(_stroke_stamp())
+        merged = mods["common"].merge_components(comps, gap=16)
+        assert len(merged) == 1
+        assert merged[0].ink == sum(c.ink for c in comps) == 12 * 48
+        assert merged[0].ink < merged[0].box[2] * merged[0].box[3]
+
+    def test_true_single_pixel_speckle_cannot_bridge_two_marks(self, mods):
+        # The one filter that must still run *before* the merge. Two marks 40 px
+        # apart, with a trail of single pixels between them: keep the trail and
+        # the merge welds the pair into one mark.
+        mask = np.zeros((300, 300), dtype=np.uint8)
+        mask[100:140, 40:80] = 255
+        mask[100:140, 160:200] = 255
+        for x in range(85, 160, 10):
+            mask[120, x] = 255
+        boxes = mods["common"].mask_to_boxes(mask, min_area_frac=0.0, merge_gap=12)
+        assert len(boxes) == 2
+
+
+class TestMergeGap:
+    def test_scales_with_the_page(self, mods):
+        gap = mods["common"].merge_gap_for_page
+        # A gap in pixels does not travel between a 950 px scan and a 2,500 px
+        # one: the fragments of a broken stamp sit a fixed fraction of the stamp
+        # apart, and the stamp is a fixed fraction of the page.
+        assert gap(2500, 3300) > gap(950, 1300) > gap(200, 200)
+
+    def test_never_falls_below_the_absolute_floor(self, mods):
+        assert mods["common"].merge_gap_for_page(10, 10) == mods["common"].MERGE_GAP_MIN_PX
+
+
 class TestMergeOverlapping:
     def test_merges_a_fragmented_stamp_into_one_mark(self, mods):
         # A rubber stamp's mask breaks into a ring plus its inner text; left
@@ -157,6 +249,21 @@ class TestMergeOverlapping:
         assert len(mods["common"].merge_overlapping(boxes, gap=6)) == 2
 
 
+class TestRejectOversize:
+    def test_a_page_sized_box_is_rejected_and_reported(self, mods):
+        # spods/00975: a ruled table whose borders weld the whole grid into one
+        # component, boxed at 45.9% of the page and captioned "the largest mark".
+        table = (30, 40, 900, 700)
+        stamp = (100, 100, 200, 200)
+        kept, rejected = mods["common"].reject_oversize([stamp, table], 1000, 1400, 0.25)
+        assert kept == [stamp]
+        assert rejected == [table]
+
+    def test_an_ordinary_mark_is_untouched(self, mods):
+        kept, rejected = mods["common"].reject_oversize([(10, 10, 90, 90)], 1000, 1400, 0.25)
+        assert (kept, rejected) == ([(10, 10, 90, 90)], [])
+
+
 # ------------------------------------------------------------------- sources
 
 
@@ -168,23 +275,79 @@ class TestSpods:
     def test_page_number(self, mods, name, expected):
         assert mods["spods"].page_number(Path(name)) == expected
 
-    def test_marks_for_page_reads_every_category(self, mods, tmp_path):
+    @staticmethod
+    def _write_gt(gt, page_no, masks):
+        """``{kind: 2-D array}`` -> ``gt/<kind>/image (n).png``."""
         from PIL import Image
 
-        gt = tmp_path / "gt"
-        for kind, box in (("logo", (20, 20, 60, 40)), ("stamp", (200, 300, 80, 80))):
-            arr = np.zeros((600, 500), dtype=np.uint8)
-            x, y, w, h = box
-            arr[y : y + h, x : x + w] = 255
-            (gt / kind).mkdir(parents=True)
-            Image.fromarray(arr).save(gt / kind / "image (7).png")
+        for kind, arr in masks.items():
+            (gt / kind).mkdir(parents=True, exist_ok=True)
+            Image.fromarray(arr).save(gt / kind / f"image ({page_no}).png")
 
-        marks = mods["spods"].marks_for_page(gt, 7, min_area_frac=0.0)
-        by_kind = {m.kind: m.box for m in marks}
+    @staticmethod
+    def _box_mask(box, shape=(600, 500)):
+        arr = np.zeros(shape, dtype=np.uint8)
+        x, y, w, h = box
+        arr[y : y + h, x : x + w] = 255
+        return arr
+
+    def test_marks_for_page_reads_every_category(self, mods, tmp_path):
+        gt = tmp_path / "gt"
+        self._write_gt(
+            gt,
+            7,
+            {
+                "logo": self._box_mask((20, 20, 60, 40)),
+                "stamp": self._box_mask((200, 300, 80, 80)),
+            },
+        )
+
+        found = mods["spods"].marks_for_page(gt, 7, width=500, height=600, min_area_frac=0.0)
+        by_kind = {m.kind: m.box for m in found.marks}
         assert by_kind == {"logo": (20, 20, 60, 40), "stamp": (200, 300, 80, 80)}
         # Identity is never invented at parse time: SPODS does not ship it.
-        assert all(m.class_id is None for m in marks)
-        assert all(m.provenance == "gt" for m in marks)
+        assert all(m.class_id is None for m in found.marks)
+        assert all(m.provenance == "gt" for m in found.marks)
+
+    def test_a_stroke_built_stamp_survives_the_floor_as_one_mark(self, mods, tmp_path):
+        # The end-to-end shape of issue #3361, through the real adapter: a stamp
+        # whose components are each below the area floor must come out as one
+        # box, not zero and not several.
+        gt = tmp_path / "gt"
+        self._write_gt(gt, 3, {"stamp": _stroke_stamp()})
+
+        found = mods["spods"].marks_for_page(gt, 3, width=_PAGE_W, height=_PAGE_H, min_area_frac=0.0002)
+        assert [m.kind for m in found.marks] == ["stamp"]
+        assert found.marks[0].box == (120, 120, 112, 24)
+
+    def test_the_text_mask_becomes_page_metadata_not_marks(self, mods, tmp_path):
+        # SPODS' text mask is the page body. Emitted as marks it produced ~1.1
+        # "marks" per page -- whichever headings and table rules had an underline
+        # welding their glyphs into one component -- which were never query
+        # classes but leaked into every consumer that read `page.marks` without a
+        # kind filter, starting with the synthetic-background selector.
+        gt = tmp_path / "gt"
+        body = np.zeros((600, 500), dtype=np.uint8)
+        body[100:130, 40:460] = 255  # an underlined heading: one fat component
+        body[200:210, 40:200] = 255
+        self._write_gt(gt, 9, {"logo": self._box_mask((20, 20, 60, 40)), "text": body})
+
+        found = mods["spods"].marks_for_page(gt, 9, width=500, height=600, min_area_frac=0.0002)
+
+        assert [m.kind for m in found.marks] == ["logo"]
+        assert found.meta["text_components"] == 2
+        assert found.meta["text_frac"] == pytest.approx((30 * 420 + 10 * 160) / (500 * 600), rel=1e-3)
+
+    def test_a_page_scale_box_is_rejected_with_a_warning(self, mods, tmp_path):
+        # spods/00975 boxed 45.9% of the page and the report captioned it "the
+        # largest mark".
+        gt = tmp_path / "gt"
+        self._write_gt(gt, 11, {"stamp": self._box_mask((20, 20, 400, 350))})
+
+        found = mods["spods"].marks_for_page(gt, 11, width=500, height=600, min_area_frac=0.0002, max_area_frac=0.25)
+        assert found.marks == []
+        assert len(found.warnings) == 1
+        assert "46.7% of the page" in found.warnings[0]
 
     def test_find_tree_reports_an_unrecognised_layout(self, mods, tmp_path):
         (tmp_path / "something-else").mkdir()
@@ -978,6 +1141,172 @@ class TestReport:
         assert emitted <= set(mods["report"]._PROVENANCE_MEANING)
 
 
+class TestReportWholePageFigure:
+    """The "whole pages, marks boxed" figure and the caption that measures it.
+
+    The caption's px/% is the number a reader quotes for "how small is the
+    target", so it has to describe a mark that is actually a *target*.  Sized
+    over every mark instead, an underlined heading welded into one component by
+    its own rule wins the title on a real SPODS page — and because such a mark
+    carries no ``class_id``, highlighting by class id then reddened nothing at
+    all, leaving the prose promising a colour the figure never drew.
+    """
+
+    @staticmethod
+    def _blank(tmp_path, size=(1000, 1400)):
+        from PIL import Image
+
+        path = tmp_path / "p.png"
+        Image.new("RGB", size, "white").save(path)
+        return str(path)
+
+    @staticmethod
+    def _text(html):
+        """*html* with the inlined image bytes removed.
+
+        A base64 payload is made of characters an assertion like ``"403px" not
+        in html`` can match by chance, so the captions are checked against the
+        markup only.
+        """
+        return re.sub(r'src="data:[^"]*"', "", html)
+
+    @staticmethod
+    def _colour_bbox(im, colour):
+        arr = np.asarray(im)
+        hit = np.all(arr == np.array(colour, dtype=arr.dtype), axis=-1)
+        ys, xs = np.nonzero(hit)
+        if not len(xs):
+            return None
+        return int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())
+
+    def test_caption_measures_a_labelled_mark_not_the_biggest_box(self, mods, tmp_path):
+        page = _page(
+            mods,
+            "spods/00622",
+            "spods",
+            [
+                ("logo", (50, 50, 120, 100), "spods/logo_a", "clustered"),
+                ("text", (60, 400, 403, 40), None, "gt"),  # an underlined heading
+            ],
+            path=self._blank(tmp_path),
+        )
+        html = self._text(mods["report"].section_full_pages([page], 4, 11))
+        assert "120px" in html
+        assert "403px" not in html
+        assert "<code>logo</code>" in html
+
+    def test_caption_population_matches_the_scale_section(self, mods, tmp_path):
+        # Both must band the same marks, or the histogram and the captions
+        # describe different corpora.
+        marks = [
+            ("logo", (50, 50, 120, 100), "spods/logo_a", "clustered"),
+            ("signature", (600, 1200, 300, 200), None, "gt"),
+        ]
+        page = _page(mods, "spods/00622", "spods", marks, path=self._blank(tmp_path))
+        html = self._text(mods["report"].section_full_pages([page], 4, 11))
+        sides = [m.longest_side() for m in page.marks if m.class_id and m.area() > 0]
+        assert f"{max(sides)}px" in html
+        assert "300px" not in html
+
+    def test_exactly_one_box_is_red_even_when_a_class_repeats_on_the_page(self, mods, tmp_path):
+        # Highlighting by class id reddens every instance of that class; the
+        # caption describes one of them.
+        page = _page(
+            mods,
+            "spods/00001",
+            "spods",
+            [
+                ("logo", (100, 100, 120, 90), "spods/logo_a", "clustered"),
+                ("logo", (400, 400, 300, 220), "spods/logo_a", "clustered"),
+            ],
+            path=self._blank(tmp_path),
+        )
+        biggest = max(page.marks, key=lambda m: m.area())
+        im = mods["report"]._page_with_boxes(page, highlight=biggest)
+        red = self._colour_bbox(im, mods["report"]._HIGHLIGHT_COLOUR)
+        assert red == (400, 400, 700, 620)
+        # ...and the other instance is still drawn, in its kind's colour.
+        blue = self._colour_bbox(im, mods["report"]._KIND_COLOURS["logo"])
+        assert blue is not None and blue[:2] == (100, 100)
+
+    def test_every_figure_carries_a_red_box(self, mods, tmp_path):
+        # The prose promises one; a page whose largest mark is unlabelled used
+        # to produce a figure with no red pixel in it at all.
+        page = _page(
+            mods,
+            "spods/00622",
+            "spods",
+            [
+                ("logo", (50, 50, 120, 100), "spods/logo_a", "clustered"),
+                ("text", (60, 400, 403, 40), None, "gt"),
+            ],
+            path=self._blank(tmp_path),
+        )
+        biggest = max((m for m in page.marks if m.class_id), key=lambda m: m.area())
+        im = mods["report"]._page_with_boxes(page, highlight=biggest)
+        assert self._colour_bbox(im, mods["report"]._HIGHLIGHT_COLOUR) is not None
+
+    def test_kinds_are_drawn_in_distinguishable_colours(self, mods, tmp_path):
+        # The single most useful thing this figure can say is that the box on a
+        # handwritten signature is a deliberately non-queryable mark rather than
+        # a mislabelled logo.  One shade of blue for everything withholds it.
+        page = _page(
+            mods,
+            "spods/00622",
+            "spods",
+            [
+                ("logo", (50, 50, 120, 100), None, "gt"),
+                ("stamp", (300, 300, 160, 160), None, "gt"),
+                ("signature", (600, 1200, 200, 90), None, "gt"),
+                ("text", (60, 400, 403, 40), None, "gt"),
+            ],
+            path=self._blank(tmp_path),
+        )
+        im = mods["report"]._page_with_boxes(page)
+        drawn = {c for _, c in im.getcolors(1 << 20)}
+        seen = [mods["report"]._KIND_COLOURS[k] for k in ("logo", "stamp", "signature", "text")]
+        assert all(c in drawn for c in seen)
+        assert len(set(seen)) == len(seen)
+
+    def test_legend_names_only_the_kinds_actually_drawn(self, mods, tmp_path):
+        # A legend that promises a colour the figure never draws is the same
+        # bug as prose that does, one line further down.
+        page = _page(
+            mods,
+            "spods/00622",
+            "spods",
+            [("logo", (50, 50, 120, 100), "spods/logo_a", "clustered")],
+            path=self._blank(tmp_path),
+        )
+        legend = mods["report"]._legend([page])
+        assert "<code>logo</code>" in legend
+        assert "signature" not in legend
+        assert mods["report"]._rgb(mods["report"]._KIND_COLOURS["logo"]) in legend
+
+    def test_zero_area_marks_are_neither_drawn_nor_advertised(self, mods, tmp_path):
+        page = _page(
+            mods,
+            "spods/00622",
+            "spods",
+            [
+                ("logo", (50, 50, 120, 100), "spods/logo_a", "clustered"),
+                ("stamp", (10, 10, 0, 0), None, "gt"),
+            ],
+            path=self._blank(tmp_path),
+        )
+        assert mods["report"].kinds_drawn([page]) == ["logo"]
+        im = mods["report"]._page_with_boxes(page)
+        assert self._colour_bbox(im, mods["report"]._KIND_COLOURS["stamp"]) is None
+
+    def test_every_kind_the_sources_emit_has_a_colour_and_a_gloss(self, mods):
+        # Same contract as the provenance glosses: a kind with no swatch falls
+        # back to grey and reads as "some other mark", which is the one thing
+        # this figure is supposed to stop doing.
+        emitted = set(mods["spods"].MARK_CATEGORIES) | set(mods["spods"].LOCALISED_CONTEXT_CATEGORIES)
+        assert emitted <= set(mods["report"]._KIND_COLOURS)
+        assert emitted <= set(mods["report"]._KIND_MEANING)
+
+
 # ------------------------------------------------------------- embed cells
 
 
@@ -1031,3 +1360,113 @@ class TestEmbedCells:
         forward = mods["embed"].load_medias(pages, {}, "siglip")
         reverse = mods["embed"].load_medias(list(reversed(pages)), {}, "siglip")
         assert {i: m["origin_name"] for i, m in forward.items()} == {i: m["origin_name"] for i, m in reverse.items()}
+
+
+# -------------------------------------------------------------------- probe
+
+
+class TestKaggleProbe:
+    """``--probe`` must stay a metadata call.
+
+    It used to reach Kaggle by downloading the bundle into ``raw/_probe_*``:
+    ~2 GB of transfer, fetched a second time by the real build, never reclaimed
+    — under a name and a runbook that both promised "seconds" (issue #3356).
+    The cheapness is the whole feature, so it is pinned here.
+    """
+
+    @staticmethod
+    def _with_creds(monkeypatch):
+        monkeypatch.setenv("KAGGLE_USERNAME", "someone")
+        monkeypatch.setenv("KAGGLE_KEY", "deadbeef")
+
+    @staticmethod
+    def _run(monkeypatch, mods, *, stdout="", stderr="", returncode=0, exc=None):
+        """Stub ``subprocess.run`` and record the argv it was handed."""
+        import subprocess
+
+        seen = []
+
+        def fake_run(cmd, **kwargs):
+            seen.append(cmd)
+            if exc is not None:
+                raise exc
+            if returncode:
+                raise subprocess.CalledProcessError(returncode, cmd, output=stdout, stderr=stderr)
+            return subprocess.CompletedProcess(cmd, 0, stdout=stdout, stderr=stderr)
+
+        monkeypatch.setattr(mods["common"].subprocess, "run", fake_run)
+        return seen
+
+    def test_lists_files_instead_of_downloading(self, monkeypatch, mods, tmp_path):
+        self._with_creds(monkeypatch)
+        monkeypatch.chdir(tmp_path)
+        seen = self._run(monkeypatch, mods, stdout="name,size,creationDate\ngt.zip,44MB,2020-01-01\n")
+
+        mods["common"].kaggle_probe("owner/name")
+
+        (cmd,) = seen
+        assert cmd[:4] == ["kaggle", "datasets", "files", "-d"]
+        assert "download" not in cmd
+        # Nothing may be staged anywhere: no destination is even passed.
+        assert not any(str(tmp_path) in str(part) for part in cmd)
+        assert list(tmp_path.iterdir()) == []
+
+    def test_a_missing_token_is_reported_before_the_cli_runs(self, monkeypatch, mods, tmp_path):
+        monkeypatch.delenv("KAGGLE_USERNAME", raising=False)
+        monkeypatch.delenv("KAGGLE_KEY", raising=False)
+        monkeypatch.setenv("HOME", str(tmp_path))  # no ~/.kaggle/kaggle.json under here
+        monkeypatch.setenv("USERPROFILE", str(tmp_path))
+        seen = self._run(monkeypatch, mods)
+
+        with pytest.raises(mods["common"].FetchError, match=r"kaggle\.json"):
+            mods["common"].kaggle_probe("owner/name")
+        assert seen == []
+
+    def test_a_missing_cli_names_the_install(self, monkeypatch, mods):
+        self._with_creds(monkeypatch)
+        self._run(monkeypatch, mods, exc=FileNotFoundError("kaggle"))
+
+        with pytest.raises(mods["common"].FetchError, match="pip install kaggle"):
+            mods["common"].kaggle_probe("owner/name")
+
+    def test_a_nonzero_exit_quotes_stderr(self, monkeypatch, mods):
+        self._with_creds(monkeypatch)
+        self._run(monkeypatch, mods, returncode=1, stderr="boom")
+
+        with pytest.raises(mods["common"].FetchError, match="boom"):
+            mods["common"].kaggle_probe("owner/name")
+
+    @pytest.mark.parametrize(
+        "stdout",
+        [
+            "403 - Forbidden\n",  # the CLI swallows API errors and still exits 0
+            "404 - Not Found\n",
+            "",
+            "name,size,creationDate\n",  # a header with no rows is not a dataset
+        ],
+    )
+    def test_exit_zero_is_not_taken_as_success(self, monkeypatch, mods, stdout):
+        self._with_creds(monkeypatch)
+        self._run(monkeypatch, mods, stdout=stdout)
+
+        with pytest.raises(mods["common"].FetchError, match="owner/name"):
+            mods["common"].kaggle_probe("owner/name")
+
+
+class TestReclaimProbeDirs:
+    def test_removes_stale_probe_dirs_and_reports_their_size(self, mods, tmp_path):
+        stale = tmp_path / "_probe_staver" / "nested"
+        stale.mkdir(parents=True)
+        (stale / "big.bin").write_bytes(b"x" * 2048)
+        keep = tmp_path / "staver"
+        keep.mkdir()
+        (keep / "real.bin").write_bytes(b"y" * 16)
+
+        dirs, freed = mods["build"]._reclaim_probe_dirs(tmp_path)
+
+        assert (dirs, freed) == (1, 2048)
+        assert not (tmp_path / "_probe_staver").exists()
+        assert (keep / "real.bin").exists()
+
+    def test_a_missing_raw_root_is_not_an_error(self, mods, tmp_path):
+        assert mods["build"]._reclaim_probe_dirs(tmp_path / "never-created") == (0, 0)
