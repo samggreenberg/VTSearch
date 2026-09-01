@@ -45,6 +45,7 @@ DOC_FOR: dict[str, str] = {
     "concurrency": "concurrency.md",
     "config.py": "config.md",
     "converters": "converters.md",
+    "coverage": "coverage.md",
     "datasets": "datasets.md",
     "datasource_importers": "datasource-importers.md",
     "detectors": "detectors.md",

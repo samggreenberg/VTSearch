@@ -20,7 +20,7 @@ from vtscore.datasets.loader_pickle import load_dataset_from_pickle
 from vtscore.state.core import DatasetContext
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.state.coverage import restore_coverage_atlas_from_cache
-from vtscore.state.coverage_atlas import CoverageAtlas
+from vtscore.coverage.atlas import CoverageAtlas
 
 
 def _png_bytes(color: tuple[int, int, int]) -> bytes:

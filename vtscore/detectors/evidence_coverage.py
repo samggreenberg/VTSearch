@@ -25,7 +25,7 @@ For each active-dataset item ``x`` with predicted class ``ŷ``, two signals:
   the null "``x`` is drawn from the class it was assigned", ``D`` is
   approximately uniform, so an excess of small values (well above ``alpha``) is
   the domain-shift signal — the same shape as
-  :func:`~vtscore.state.coverage_atlas.domain_shift_report`, but keyed on
+  :func:`~vtscore.coverage.atlas.domain_shift_report`, but keyed on
   *evidence* coverage rather than *data* coverage.
 - **TS(x)** — the trust-score ratio of Jiang et al. [11]: distance to the
   nearest evidence of the *other* class over distance to the predicted class.
@@ -53,7 +53,7 @@ _EPS = 1e-12
 DEFAULT_K = 1
 
 #: Default significance level for the support p-value.  Matches
-#: :func:`~vtscore.state.coverage_atlas.domain_shift_report` so the two reports
+#: :func:`~vtscore.coverage.atlas.domain_shift_report` so the two reports
 #: read on the same scale.
 DEFAULT_ALPHA = 0.05
 
@@ -204,7 +204,7 @@ def evidence_coverage_report(
     other class's evidence), ``median_trust`` (median ``TS``), and
     ``unsupported`` (headline: the excess of vacuum items is both statistically
     clear, ``z > 3``, and practically large, at least ``2 * alpha``).  Mirrors
-    :func:`~vtscore.state.coverage_atlas.domain_shift_report` so the two read on
+    :func:`~vtscore.coverage.atlas.domain_shift_report` so the two read on
     one scale.
     """
     pos = _normalize(pos_vectors)

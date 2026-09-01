@@ -2844,11 +2844,11 @@ def _build_eval_atlas(embeddings: dict[int, np.ndarray], min_node_size: int) -> 
 
     Returns ``None`` when there are no vectors.  Uses the same hierarchical
     k-means partition the live dataset builds (see
-    :class:`~vtscore.state.coverage_atlas.CoverageAtlas`); *min_node_size* is
+    :class:`~vtscore.coverage.atlas.CoverageAtlas`); *min_node_size* is
     exposed so a caller with a small simulation set can drive the partition
     deeper than the production floor (20) and actually resolve density cells.
     """
-    from vtscore.state.coverage_atlas import CoverageAtlas, auto_max_depth  # noqa: PLC0415
+    from vtscore.coverage.atlas import CoverageAtlas, auto_max_depth  # noqa: PLC0415
 
     if not embeddings:
         return None

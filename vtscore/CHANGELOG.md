@@ -10,6 +10,34 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ## [Unreleased]
 
+### Deprecated
+
+- **`vtscore.state.coverage_atlas` and `vtscore.state.near_dupes` have moved**
+  (issue #3391). Both were pure algorithms filed under `state/`: neither
+  references `DatasetContext` or `_state_lock`, and the Coverage Atlas sat
+  beside its own wiring module (`state/coverage.py`) as a near-homograph pair
+  in which only one of the two was actually state.
+
+  - `vtscore.state.coverage_atlas` → **`vtscore.coverage`** (a new package;
+    the module itself is `vtscore.coverage.atlas`). Exports `CoverageAtlas`,
+    `auto_max_depth`, `domain_shift_report` and the `COVERAGE_ATLAS_*`
+    partition defaults.
+  - `vtscore.state.near_dupes` → **`vtscore.media.near_dupes`**, beside the
+    media types whose bytes it hashes.
+
+  **Nothing breaks yet.** Both old module paths remain as aliases that
+  re-export the new location and raise a `DeprecationWarning` on import;
+  attribute access falls through to the new module, so even private names
+  keep resolving. They will be removed in a future release — update imports
+  to the new paths.
+
+  The `vtscore.state` re-exports are **unchanged**: `build_coverage_atlas*`,
+  `coverage_atlas_*`, `collapse_near_duplicates`, `phash_image` and
+  `simhash_text` all still import from `vtscore.state` exactly as before, as
+  do their `vtsearch.state` counterparts. `vtscore.state.sort_results_cache`
+  has **not** moved: it exports a process-global mutable singleton with its
+  own lock, which is state by any reading.
+
 ### Changed
 
 - **`description_wrappers` is now a per-embedder, measured choice, and four

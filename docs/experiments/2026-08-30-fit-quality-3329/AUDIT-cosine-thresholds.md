@@ -47,7 +47,7 @@ however many literals sit near it.
 
 ### 1. `_CALIBRATION_MIN_RBAR = 0.1` — the only one on the live path
 
-`vtscore/state/coverage_atlas.py`. A floor on each node's mean resultant length
+`vtscore/coverage/atlas.py`. A floor on each node's mean resultant length
 r̄ = ‖Σ unit vectors‖ / n, which is a cosine magnitude: the average cosine of a
 node's members to their own mean direction. Two consumers, and they are not
 equally exposed:
@@ -169,7 +169,7 @@ reason rather than re-derive it.
 
 | site | what the constant actually meets |
 |---|---|
-| `_THRESHOLDS = {"image": 4, "text": 4}` (`vtscore/state/near_dupes.py`) | Hamming distance out of 64 bits, over pHash/SimHash of **pixels and text**. The module docstring draws this line itself: a perceptual hash answers "these *are* the same thing", an embedding answers "these *mean* the same thing" |
+| `_THRESHOLDS = {"image": 4, "text": 4}` (`vtscore/media/near_dupes.py`) | Hamming distance out of 64 bits, over pHash/SimHash of **pixels and text**. The module docstring draws this line itself: a perceptual hash answers "these *are* the same thing", an embedding answers "these *mean* the same thing" |
 | `_LOWE_RATIO = 0.75` (`vtscore/media/structural.py`) | ratio of two SIFT descriptor **L2** distances — and a ratio at that |
 | `_LG_FILTER_THRESHOLD = 0.1` (`vtscore/media/structural_splg.py`) | LightGlue match confidence |
 | `_RANSAC_REPROJ_THRESHOLD = 0.02`, `_MIN_SANE_SCALE`/`_MAX_SANE_SCALE` (`vtscore/media/structural_geometry.py`) | normalised pixel reprojection error and a scale sanity band |

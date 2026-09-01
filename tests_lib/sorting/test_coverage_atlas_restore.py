@@ -9,7 +9,7 @@ import numpy as np
 
 from vtscore.state.core import DatasetContext
 from vtscore.state.coverage import restore_coverage_atlas_from_cache
-from vtscore.state.coverage_atlas import CoverageAtlas
+from vtscore.coverage.atlas import CoverageAtlas
 
 
 def _ctx_with_vectors(n, seed=7):
