@@ -145,13 +145,32 @@ out("## H1 — does the frontier turn?\n")
 if best is not None:
     kb = K[best]
     deeper = [a for a in neg if K[a] < kb]
-    worse = [a for a in deeper if front[a]["cost"]["mean_delta"] > front[best]["cost"]["mean_delta"] + TOL]
-    turned = bool(deeper) and bool(worse)
     out(
         f"Minimum paired cost delta is at **`{best}` (k={kb:g})**, "
         f"{front[best]['cost']['mean_delta']:+.4f} "
         f"[{front[best]['cost']['ci95_lo']:+.4f}, {front[best]['cost']['ci95_hi']:+.4f}].\n"
     )
+    # A turn is a RESOLVABLE rise past the minimum, not a point estimate that
+    # happens to sit above it.  Contrasted arm-to-arm on the same cells, so the
+    # comparison does not inherit the control's variance twice; the CI must
+    # clear the tolerance, exactly as H2's test does.
+    out("Is any arm deeper than the minimum **resolvably** worse than it?\n")
+    out("| deeper arm | k | Δ cost vs the minimum [95% CI] | resolvably worse? |")
+    out("|---|---:|---|---|")
+    worse = []
+    for a in deeper:
+        d = A._paired(traj, "final_cost", a, control=best)
+        if not d.get("n_pairs"):
+            continue
+        rose = d["ci95_lo"] > TOL
+        if rose:
+            worse.append(a)
+        out(
+            f"| `{a}` | {K[a]:g} | {d['mean_delta']:+.4f} "
+            f"[{d['ci95_lo']:+.4f}, {d['ci95_hi']:+.4f}] | {'YES' if rose else 'no'} |"
+        )
+    out()
+    turned = bool(worse)
     if not deeper:
         out(
             "The minimum is at the EDGE of the grid — the frontier has not turned "
@@ -159,14 +178,15 @@ if best is not None:
         )
     elif turned:
         out(
-            f"Arms deeper than the minimum that are worse by more than the tolerance: "
-            f"{', '.join('`%s`' % w for w in worse)}. **The frontier turns — H1 supported.**\n"
+            f"Resolvably worse past the minimum: {', '.join('`%s`' % w for w in worse)}. "
+            f"**The frontier turns — H1 supported.**\n"
         )
     else:
         out(
-            "No arm deeper than the minimum is worse by more than the tolerance: the "
-            "frontier is **flat past the optimum**, not turning. H1 falsified in its "
-            "strong form — the knob has a plateau, not a peak.\n"
+            "No arm deeper than the minimum is resolvably worse than it: the frontier "
+            "is **flat past the optimum**, not turning. H1 falsified in its strong "
+            "form — the knob has a plateau, not a peak, and the practical reading is "
+            "that anything past the plateau's near edge buys positives for free.\n"
         )
 
 # --- H4: the posterior-flip landmark ----------------------------------------
