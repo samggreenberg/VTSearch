@@ -26,7 +26,8 @@ import { LabelSessionService } from '../../services/label-session.service';
 import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { LabelsetStateService } from '../../services/labelset-state.service';
-import { SortStateService, SortMode, SelectMode, SortedItem } from '../../services/sort-state.service';
+import { SortStateService, SortMode, SelectMode } from '../../services/sort-state.service';
+import { autoSelectNext as pickNextMedia } from '../../utils/auto-select-next';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { AutopilotStateService } from '../../services/autopilot-state.service';
 import { EmbedderCapabilityService } from '../../services/embedder-capability.service';
@@ -1453,46 +1454,27 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // --- Helpers ---
 
+  /**
+   * Advance to the next media the current Sort + Select says to show.
+   *
+   * The rule itself lives in {@link autoSelectNext} (`utils/auto-select-next`)
+   * as a pure function so it can be unit-tested and so the eval harness's copy
+   * of it can be digest-pinned; this method is the side-effecting half —
+   * applying the selection, or firing the coverage-atlas probe the `new` mode
+   * asks for.
+   */
   private autoSelectNext(excludeId?: number): void {
-    const sortOrder = this.sortState.sortOrder;
-    if (!sortOrder || sortOrder.length === 0) return;
-    const goodVotes = this.voteState.goodVotes;
-    const badVotes = this.voteState.badVotes;
-
-    const isVoted = (id: number): boolean =>
-      id === excludeId || goodVotes.has(id) || badVotes.has(id);
-
-    if (this.sortState.selectMode === 'top') {
-      const next = sortOrder.find((s) => !isVoted(s.id));
-      if (next) this.mediaState.selectMedia(next.id);
-    } else if (this.sortState.selectMode === 'hard' && this.sortState.acqThreshold !== null) {
-      // The *acquisition* cut, not the decision line: this reads the threshold
-      // as a rank position, which is why it wants one further up the ranking
-      // than the one the user is shown (#2876).
-      const threshold = this.sortState.acqThreshold!;
-      // Find the index where the threshold falls in the sorted (descending) list.
-      // This is the first position whose score is at or below the threshold.
-      let thresholdIndex = sortOrder.length;
-      for (let i = 0; i < sortOrder.length; i++) {
-        if (sortOrder[i].score <= threshold) {
-          thresholdIndex = i;
-          break;
-        }
-      }
-      // Pick the unlabeled item whose index is closest to the threshold index.
-      // This avoids biasing toward one side when scores cluster unevenly.
-      let best: SortedItem | null = null;
-      let bestDist = Infinity;
-      for (let i = 0; i < sortOrder.length; i++) {
-        if (isVoted(sortOrder[i].id)) continue;
-        const dist = Math.abs(i - thresholdIndex);
-        if (dist < bestDist) {
-          bestDist = dist;
-          best = sortOrder[i];
-        }
-      }
-      if (best) this.mediaState.selectMedia(best.id);
-    } else if (this.sortState.selectMode === 'new') {
+    const pick = pickNextMedia({
+      sortOrder: this.sortState.sortOrder,
+      selectMode: this.sortState.selectMode,
+      acqThreshold: this.sortState.acqThreshold,
+      goodVotes: this.voteState.goodVotes,
+      badVotes: this.voteState.badVotes,
+      excludeId,
+    });
+    if (pick.kind === 'media') {
+      this.mediaState.selectMedia(pick.id);
+    } else if (pick.kind === 'diversity') {
       this.fetchDiversityNext();
     }
   }

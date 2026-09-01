@@ -54,6 +54,7 @@ PINS_PATH = REPO_ROOT / "scripts" / "eval-app-sync.pins.json"
 
 AUTOPILOT_TS = "frontend/src/app/services/autopilot-state.service.ts"
 LABEL_VIEW_TS = "frontend/src/app/components/label-view/label-view.component.ts"
+AUTO_SELECT_TS = "frontend/src/app/utils/auto-select-next.ts"
 
 
 @dataclass(frozen=True)
@@ -126,6 +127,40 @@ MIRRORS: list[Mirror] = [
             "mapping is the phase subscription in the same component, which additionally "
             "kicks off the sort request. This anchor is the one place the whole table is "
             "written out in one block, so it is what the digest watches."
+        ),
+    ),
+    Mirror(
+        id="autopilot.auto_select_next",
+        app=f"ts:{AUTO_SELECT_TS}::export function autoSelectNext(",
+        harness="vtscore/eval/al_strategies.py::_hard_pick_by_index",
+        kind="ported",
+        note=(
+            "The app's auto-advance rule - which item each Select mode shows next. `top` takes "
+            "the highest-ranked unvoted row; `hard` takes the unvoted row nearest the "
+            "acquisition cut BY RANK INDEX, not by score; `new` defers to the coverage atlas. "
+            "_hard_pick_by_index is the `hard` branch verbatim, and it is the branch every "
+            "simulated vote after the seed phase goes through, so a change to the rule that "
+            "does not reach the harness silently re-points every study's vote order. Rank space "
+            "is the load-bearing detail: a score-space argmin biases toward whichever side of "
+            "the line is denser, which is the whole reason the app measures in indices. Note "
+            "the cutoff index is computed over the FULL window, voted rows included, so it does "
+            "not slide as votes accumulate - the harness's `ordered` list must stay the full "
+            "ranking rather than the pool. Also re-check the tie rule: both sides scan "
+            "ascending by index with a strict `<`, so an exact tie takes the higher-ranked row. "
+            "Extracted out of the label-view component (#3428) so this digest covers the pick "
+            "rule alone rather than the component's sort plumbing; "
+            "frontend/src/app/utils/auto-select-next.spec.ts states the same cases executably."
+        ),
+        divergence=(
+            "The harness mirrors only the `hard` branch here. `top` is trivial and is "
+            "reproduced inline by the phase-faithful strategy; `new` is not ported at all - "
+            "_atlas_next DELEGATES to CoverageAtlas.next_sample, the same call the app's New "
+            "pick makes through /api/coverage-atlas/next, so it cannot drift and needs no pin. "
+            "The app's guard that a `new` pick still requires a loaded ranking is a UI "
+            "precondition (the window steers the probe's scores) with no harness counterpart, "
+            "as is `excludeId`: it covers the instant between casting a vote and that vote "
+            "landing in goodVotes/badVotes, which a simulation never observes because it "
+            "records the vote before asking for the next pick."
         ),
     ),
     Mirror(
