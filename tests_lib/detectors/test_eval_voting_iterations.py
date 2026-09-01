@@ -412,9 +412,9 @@ class TestProductionCalibrationFidelity:
     """
 
     def _spy_calibration(self, monkeypatch):
-        from vtscore.eval import voting_iterations
+        from vtscore.eval import step_trainers
 
-        real = voting_iterations.calibration_folds
+        real = step_trainers.calibration_folds
         captured: list[dict] = []
 
         def spy(X_list, y_list, input_dim, *, rng=None, hidden_dim: int = 0, **kw):
@@ -429,7 +429,7 @@ class TestProductionCalibrationFidelity:
             )
             return real(X_list, y_list, input_dim, rng=rng, hidden_dim=hidden_dim, **kw)
 
-        monkeypatch.setattr(voting_iterations, "calibration_folds", spy)
+        monkeypatch.setattr(step_trainers, "calibration_folds", spy)
         return captured
 
     @pytest.mark.parametrize("head", [None, "mlp"])
