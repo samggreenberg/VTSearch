@@ -122,7 +122,7 @@ frontend/
         ├── services/       API services, state services, coordination services (§4)
         ├── guards/         Route guards that resolve the URL pair into context (§6)
         ├── interceptors/   The four HTTP interceptors (§7)
-        ├── directives/     Cross-cutting DOM behaviour (`no-focus-steal`)
+        ├── directives/     Cross-cutting DOM behaviour (`no-focus-steal`, `panel-resize`)
         ├── models/         Hand-written types the OpenAPI spec cannot describe (§7)
         ├── utils/          Pure functions — no Angular DI, trivially unit-testable
         ├── testing/        Shared TestBed fragments and zoneless helpers (§10)
@@ -171,7 +171,8 @@ by `AppComponent` inside `@defer` blocks, so any surface can start those flows.
 ### Label view (`components/label-view/`)
 
 The training loop. A three-panel layout (`vt-left-panel`, `vt-center-panel`,
-`vt-right-panel`) with draggable dividers (`panel-resize.directive.ts`), plus
+`vt-right-panel`) with draggable dividers (the shared
+`directives/panel-resize.directive.ts`), plus
 `LabelViewPanelStateService` — a **component-provided** (not root) service
 holding per-media-type panel preferences.
 
@@ -323,9 +324,9 @@ this codebase, and it is silent.
   no exceptions today. A new component should be too.
 - **Callbacks from outside Angular must write a signal.** The SSE pump, canvas
   RAF loops, and the drag handlers that deliberately run outside Angular
-  (`panel-resize.directive.ts`) all reach the UI either by writing a signal or
-  by emitting through a template-bound output. `NgZone.run()` is a no-op here
-  and is not the fix.
+  (`directives/panel-resize.directive.ts`) all reach the UI either by writing a
+  signal or by emitting through a template-bound output. `NgZone.run()` is a
+  no-op here and is not the fix.
 - **A `BehaviorSubject` service is not wrong, but its bridge is load-bearing.**
   Roughly a third of the services still hold RxJS subjects; each is
   change-detected via its `toSignal`/`AsyncPipe` bridge. A missed bridge is a

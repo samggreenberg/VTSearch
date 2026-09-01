@@ -149,7 +149,7 @@ care.
 - [ ] #3417 — Extract browse-canvas's thumbnail store and animation controller (Opus 4.8)
 - [ ] #3423 — browse-bin-popup: split the member grid, then signalize (Sonnet 5 → Opus 4.8, staged)
 - [ ] #3428 — Promote `SortStateService` from anemic store to orchestrator; extract `autoSelectNext` (Opus 4.8)
-- [ ] #3433 — Seven hand-rolled divider drags against one shared `PanelResizeDirective` (Opus 4.8)
+- [ ] #3433 — Promote `PanelResizeDirective` out of `label-view/` and document which drag shapes it covers (Sonnet 5)
 
 ## Frontend — duplication & dead code
 

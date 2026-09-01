@@ -40,7 +40,7 @@ import type { LabelingStatusResponse } from '../../generated/api-client/models/l
 import type { LearnedSortResponse } from '../../generated/api-client/models/learned-sort-response';
 import { formatProgressMessage } from '../../utils/format-progress';
 import { snapPanelWidthToGridColumns, iconSizeToGoalWidth } from '../../utils/grid-icon-size';
-import { PanelResizeDirective } from './panel-resize.directive';
+import { PanelResizeDirective } from '../../directives/panel-resize.directive';
 import { LabelViewPanelStateService } from './label-view-panel-state.service';
 import { buildMediaContextMenuItems } from './media-context-menu-items';
 
