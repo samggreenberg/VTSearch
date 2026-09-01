@@ -30,6 +30,7 @@ and is the foundation every other `vtscore` subsystem builds on.
 | `vtscore/media/structural.py` | Structural (instance-matching) features and geometric verification |
 | `vtscore/media/structural_geometry.py` | Parametrised geometric verification models |
 | `vtscore/media/structural_splg.py` | SuperPoint + LightGlue structural backend |
+| `vtscore/media/near_dupes.py` | Near-duplicate detection (image pHash, text SimHash) and collapsing |
 | `vtscore/media/torch_setup.py` | Runtime torch configuration for embedder code |
 
 **Media types** - one self-registering sub-package each. Every one holds a
@@ -469,6 +470,32 @@ out-of-tree implementations.
   `torch.set_num_threads` the first time torch is imported. Every
   code path that touches torch (embedders, head training, scoring)
   must call this first. `embedder_load_setup` does it for you.
+
+---
+
+## Near-duplicate collapsing
+
+`vtscore.state.collapse_duplicates` matches on **exact** MD5 (see [`state.md`](state.md#media-lookup)). `vtscore/media/near_dupes.py`
+catches the rest: a re-encoded JPEG and a reformatted copy of the same
+article are not byte-identical but are the same item for labeling
+purposes, and leaving both in inflates the dataset and wastes votes.
+
+| Function | Description |
+|----------|-------------|
+| `phash_image(thumbnail_bytes)` | 64-bit DCT perceptual hash, or `None` for missing / undecodable bytes |
+| `simhash_text(text)` | 64-bit SimHash over word 4-shingles, or `None` for empty text |
+| `collapse_near_duplicates(media_dict, on_progress=None)` | Group by Hamming distance and collapse each group; returns the group count |
+
+Only `image` and `text` media are considered; every other type is left
+untouched, and any item whose hash comes back `None` is simply left
+ungrouped. Grouping is banded LSH over the 64-bit hashes plus a
+union-find, so it does not pay the O(N²) pairwise comparison.
+
+This runs *after* the exact-MD5 pass, so some group members are already
+`dupe_set` representatives; their members are merged into the near-dup
+group rather than nested. The representative keeps a `dupe_set` origin
+listing every member's provenance, exactly as in the exact case. It is
+opt-in per dataset via `DatasetContext.merge_near_duplicates`.
 
 ---
 

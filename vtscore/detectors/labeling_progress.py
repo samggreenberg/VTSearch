@@ -329,7 +329,7 @@ def _build_coverage_atlas(clips_dict: dict[int, dict[str, Any]]) -> Any:
     if ctx_atlas is not None and ctx_atlas.vector_to_leaf.keys() == vectors.keys():
         return ctx_atlas.structural_clone()
 
-    from vtscore.state.coverage_atlas import CoverageAtlas, auto_max_depth  # noqa: PLC0415
+    from vtscore.coverage.atlas import CoverageAtlas, auto_max_depth  # noqa: PLC0415
 
     # Cap the depth exactly as every other build site does
     # (``build_coverage_atlas`` / ``build_coverage_atlas_for_context``).

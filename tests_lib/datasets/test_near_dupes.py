@@ -1,6 +1,6 @@
 """Tests for near-duplicate detection and collapsing (images + text).
 
-Covers the pure library-tier logic in :mod:`vtscore.state.near_dupes`:
+Covers the pure library-tier logic in :mod:`vtscore.media.near_dupes`:
 pHash / SimHash, connected-components grouping over a tight Hamming
 threshold, representative selection (file_size -> centroid -> id), the
 ``dupe_set`` collapse (including merging pre-existing exact dupe_sets), and
@@ -22,7 +22,7 @@ from vtscore.state import (
     phash_image,
     simhash_text,
 )
-from vtscore.state.near_dupes import _hamming
+from vtscore.media.near_dupes import _hamming
 
 # A realistic document-length paragraph.  Near-dup text detection (tight
 # SimHash threshold) is meant to catch reformatted/re-encoded copies of a
@@ -273,7 +273,7 @@ class TestNearDupeProgress:
         """
         import copy  # noqa: PLC0415
 
-        from vtscore.state import near_dupes  # noqa: PLC0415
+        from vtscore.media import near_dupes  # noqa: PLC0415
 
         arr = _photo_arr(500)
         base = {

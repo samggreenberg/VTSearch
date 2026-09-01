@@ -493,7 +493,7 @@ def dataset_domain_shift(dataset_id: str):
     from vtsearch.state import get_active_context, get_context
     from vtscore.embedding.binding import embedder_supports_patch_regions
     from vtscore.embedding.media_vectors import media_embedding
-    from vtscore.state.coverage_atlas import domain_shift_report
+    from vtscore.coverage.atlas import domain_shift_report
 
     entry = _reg_get(dataset_id)
     if entry is None:

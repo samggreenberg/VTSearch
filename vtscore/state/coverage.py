@@ -82,7 +82,7 @@ def build_coverage_atlas(
     """
     import numpy as np
 
-    from vtscore.state.coverage_atlas import CoverageAtlas, auto_max_depth
+    from vtscore.coverage.atlas import CoverageAtlas, auto_max_depth
 
     with _state_lock:
         ds_ctx = get_active_context()
@@ -121,7 +121,7 @@ def build_coverage_atlas_for_context(
     """
     import numpy as np
 
-    from vtscore.state.coverage_atlas import CoverageAtlas, auto_max_depth
+    from vtscore.coverage.atlas import CoverageAtlas, auto_max_depth
 
     with _state_lock:
         medias_snapshot = dict(ctx.medias)
@@ -161,7 +161,7 @@ def build_coverage_atlas_serializable(
     """
     import numpy as np
 
-    from vtscore.state.coverage_atlas import CoverageAtlas, auto_max_depth
+    from vtscore.coverage.atlas import CoverageAtlas, auto_max_depth
 
     vectors: dict[int, np.ndarray] = {}
     for cid, media in medias.items():
@@ -199,7 +199,7 @@ def restore_coverage_atlas_from_cache(ctx: DatasetContext, cached: object) -> bo
     if not cached:
         return False
 
-    from vtscore.state.coverage_atlas import CoverageAtlas
+    from vtscore.coverage.atlas import CoverageAtlas
 
     try:
         atlas = CoverageAtlas.from_serializable(cached)

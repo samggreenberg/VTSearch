@@ -263,7 +263,7 @@ Flooding applies only where scoring is region-aware max-pool: the Learned-sort v
 
 ## Coverage Atlas
 
-The Coverage Atlas (`vtscore/state/coverage_atlas.py`, class `CoverageAtlas`) is a hierarchical k-means partition of a dataset's embedding space that remembers, per region, how much labeled evidence of each class the user has provided. It serves two jobs:
+The Coverage Atlas (`vtscore/coverage/atlas.py`, class `CoverageAtlas`) is a hierarchical k-means partition of a dataset's embedding space that remembers, per region, how much labeled evidence of each class the user has provided. It serves two jobs:
 
 1. **Diversity sampling** — the Training autopilot's "Explore Diversity" phase asks it for the next item to label, so a handful of clicks covers the whole collection and stress-tests the model where it is most likely to be wrong.
 2. **Domain-shift detection** — it answers "how typical is this item of the data this atlas was built on?" with a calibrated p-value, so a detector trained on dataset A can be sanity-checked against dataset B before anyone trusts its scores there.
@@ -390,7 +390,7 @@ The same machinery is available in the library tier:
 
 ```python
 import numpy as np
-from vtscore.state.coverage_atlas import CoverageAtlas, domain_shift_report
+from vtscore.coverage.atlas import CoverageAtlas, domain_shift_report
 
 atlas = CoverageAtlas({mid: vec for mid, vec in train_vectors.items()}, k=3)
 
@@ -408,7 +408,7 @@ Build is the same order as the embedding-matrix work a dataset load already does
 ## Key Files
 
 - `vtscore/training/mlp.py`: `build_model`, `train_model`, `build_model_from_weights`
-- `vtscore/state/coverage_atlas.py`: `CoverageAtlas`, `domain_shift_report`
+- `vtscore/coverage/atlas.py`: `CoverageAtlas`, `domain_shift_report`
 - `vtscore/state/coverage.py`: atlas build/restore/resync helpers, vote wiring
 - `vtscore/training/thresholds/`: `calculate_cross_calibration_threshold`, `fold_anchored_gmm_threshold` (`anchored.py`), `calculate_safe_threshold` (`blend.py`), `calculate_gmm_threshold` (`gmm.py`), `conformal_threshold` (`conformal.py`)
 - `vtscore/detectors/training.py`: `train_and_score`, `train_and_threshold`, origin-based detector training

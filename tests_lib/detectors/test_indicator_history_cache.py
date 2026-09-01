@@ -196,7 +196,7 @@ class TestFallbackAtlasDepth:
         while every other build site passes ``auto_max_depth``, so the throwaway
         atlas cost many more k-means fits than the real one.
         """
-        import vtscore.state.coverage_atlas as ca
+        import vtscore.coverage.atlas as ca
 
         monkeypatch.setattr(lp, "_active_context_atlas", lambda: None)
         monkeypatch.setattr(ca, "auto_max_depth", lambda n, k=3, **kw: 2)
@@ -208,7 +208,7 @@ class TestFallbackAtlasDepth:
 
     def test_reuses_the_context_atlas_structure_when_ids_match(self, monkeypatch):
         """The clone path skips the hierarchical k-means entirely."""
-        from vtscore.state.coverage_atlas import CoverageAtlas
+        from vtscore.coverage.atlas import CoverageAtlas
 
         clips = _clips(120)
         vectors = {cid: media[EMBEDDINGS_KEY]["test"] for cid, media in clips.items()}

@@ -22,9 +22,7 @@ infrastructure that drives long-running operations on these contexts.
 | `vtscore/state/votes.py` | Vote / label operations, label history, text-sort suggestions, learned scores, the Find queue |
 | `vtscore/state/clicks.py` | Click-time ordinals (`assign_click_time`, `remove_click_time`, `get_vote_click_times`) |
 | `vtscore/state/coverage.py` | Build / restore / mutate the active dataset's coverage atlas |
-| `vtscore/state/coverage_atlas.py` | The `CoverageAtlas` structure: hierarchical partition, evidence channels, calibrated typicality |
 | `vtscore/state/media_lookup.py` | Origin / MD5 / name lookup tables, cached per context; exact-duplicate collapsing |
-| `vtscore/state/near_dupes.py` | Near-duplicate detection (image pHash, text SimHash) and collapsing |
 | `vtscore/state/sort_results_cache.py` | Process-global cache of full sorted result lists for windowed paging |
 | `vtscore/state/current_user.py` | Flask-free half of user identity: resolver hook + thread-local user |
 | `vtscore/state/__init__.py` | Public re-exports, the setting-persistence hooks, and the cross-cutting `snapshot_medias` / `clear_all` helpers |
@@ -38,7 +36,6 @@ infrastructure that drives long-running operations on these contexts.
 - [Click times](#click-times)
 - [Coverage atlas](#coverage-atlas)
 - [Media lookup](#media-lookup)
-- [Near-duplicate collapsing](#near-duplicate-collapsing)
 - [Sorted-result window cache](#sorted-result-window-cache)
 - [Current user](#current-user)
 - [Setting-persistence hooks](#setting-persistence-hooks)
@@ -408,27 +405,15 @@ point in the labeling history.
 A hierarchical k-means partition of a dataset's embeddings, used to pick
 the next maximally-diverse training sample and to answer "has this
 region been exercised?". The atlas lives on
-`DatasetContext.coverage_atlas`; `vtscore/state/coverage.py` holds the
-helpers that build and mutate it, and `vtscore/state/coverage_atlas.py`
-holds the `CoverageAtlas` structure itself.
+`DatasetContext.coverage_atlas`, and `vtscore/state/coverage.py` holds the
+helpers below that build and mutate it.
 
-It replaces the old **diversity tree**, keeping what the tree threw
-away. Three differences matter to callers:
-
-- **Evidence channels, not a "seen" bit.** Each node counts labeled
-  evidence per class (`n_pos` / `n_neg`), so "verified good here",
-  "verified bad here" and "never exercised" are distinguishable. Hence
-  `coverage_atlas_label(cid, good=...)` takes a polarity where
-  `diversity_tree_label(cid)` did not.
-- **Mean-centered geometry.** Vectors are mean-centered and
-  re-normalised before partitioning: contrastive embeddings concentrate
-  in a narrow cone, so raw cosines are uniformly high and the centering
-  is what restores contrast.
-- **Calibrated typicality.** Each node stores a quantile grid of its own
-  points' typicality `t(x) = mu · x`, so `typicality_pvalues(matrix)`
-  returns p-values rather than raw distances - which is what
-  `domain_shift_report` uses to detect a detector being pointed at a
-  dataset it was not trained on.
+The **structure itself** is a separate package,
+[`vtscore.coverage`](coverage.md) - a pure algorithm that holds no state and
+takes no lock. What it keeps per node (evidence channels, mean-centered
+geometry, vMF moments, calibrated typicality) is documented there. One
+consequence shows up in this API: `coverage_atlas_label(cid, good=...)` takes
+a polarity, where the diversity tree's `diversity_tree_label(cid)` did not.
 
 | Function | Description |
 |----------|-------------|
@@ -521,31 +506,10 @@ synthetic `"importer": "dupe_set"` origin whose `members` list records
 each duplicate's original provenance, then deletes the non-representative
 entries.
 
----
-
-## Near-duplicate collapsing
-
-`collapse_duplicates` above matches on **exact** MD5. `vtscore/state/near_dupes.py`
-catches the rest: a re-encoded JPEG and a reformatted copy of the same
-article are not byte-identical but are the same item for labeling
-purposes, and leaving both in inflates the dataset and wastes votes.
-
-| Function | Description |
-|----------|-------------|
-| `phash_image(thumbnail_bytes)` | 64-bit DCT perceptual hash, or `None` for missing / undecodable bytes |
-| `simhash_text(text)` | 64-bit SimHash over word 4-shingles, or `None` for empty text |
-| `collapse_near_duplicates(media_dict, on_progress=None)` | Group by Hamming distance and collapse each group; returns the group count |
-
-Only `image` and `text` media are considered; every other type is left
-untouched, and any item whose hash comes back `None` is simply left
-ungrouped. Grouping is banded LSH over the 64-bit hashes plus a
-union-find, so it does not pay the O(N²) pairwise comparison.
-
-This runs *after* the exact-MD5 pass, so some group members are already
-`dupe_set` representatives; their members are merged into the near-dup
-group rather than nested. The representative keeps a `dupe_set` origin
-listing every member's provenance, exactly as in the exact case. It is
-opt-in per dataset via `DatasetContext.merge_near_duplicates`.
+*Near*-duplicate collapsing - the perceptual-hash pass that catches
+re-encoded and reformatted copies - is a pure algorithm and lives with the
+media types whose bytes it hashes: see
+[`media.md`](media.md#near-duplicate-collapsing).
 
 ---
 

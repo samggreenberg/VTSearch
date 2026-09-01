@@ -7,7 +7,7 @@ cuML is importable, the two heavyweight CPU clustering steps run on the GPU:
 - UMAP projection (:mod:`vtscore.projection.umap_projection`) →
   ``cuml.manifold.UMAP`` instead of ``umap-learn``.
 - the coverage atlas's hierarchical k-means
-  (:mod:`vtscore.state.coverage_atlas`) → ``cuml.cluster.KMeans`` instead of
+  (:mod:`vtscore.coverage.atlas`) → ``cuml.cluster.KMeans`` instead of
   ``sklearn.cluster.KMeans``.
 
 cuML's UMAP/KMeans are deliberately API-compatible with their CPU counterparts,

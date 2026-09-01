@@ -52,7 +52,7 @@ import numpy as np
 from vtscore.eval.startup_schedule import is_startup_phase
 
 if TYPE_CHECKING:
-    from vtscore.state.coverage_atlas import CoverageAtlas
+    from vtscore.coverage.atlas import CoverageAtlas
 
 
 # Initial-phase vote targets, matching the app's Autopilot defaults
