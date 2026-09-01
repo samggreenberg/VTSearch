@@ -21,12 +21,9 @@ import numpy as np
 import pytest
 
 from vtscore.detectors.training import _fused_threshold
-from vtscore.eval.voting_iterations import (
-    _blend_xcal_input,
-    _resolve_hidden_dim,
-    _safe_threshold_for_step,
-    _train_and_calibrate,
-)
+from vtscore.eval.step_model import resolve_hidden_dim
+from vtscore.eval.step_trainers import _train_and_calibrate
+from vtscore.eval.voting_iterations import _blend_xcal_input, _safe_threshold_for_step
 from vtscore.training.blend_schedules import BlendContext
 from vtscore.training.thresholds import NO_GOOD_THRESHOLD, calculate_safe_threshold, calibration_folds
 
@@ -132,7 +129,7 @@ class TestFallbackBlendParity:
                 DIM,
                 calibrate_count=2,
                 calibration_fraction=0.5,
-                hidden_dim=_resolve_hidden_dim("mlp", len(good_votes) + len(bad_votes)),
+                hidden_dim=resolve_hidden_dim("mlp", len(good_votes) + len(bad_votes)),
                 rng=np.random.RandomState(42),
             ),
             {},

@@ -13,7 +13,8 @@ import pytest
 
 from vtscore.eval.patch_styles import resolve_style
 from vtscore.eval.voting_columns import CALIBRATION_COLUMNS
-from vtscore.eval.voting_iterations import _calibrate_with_details, simulate_voting_iterations
+from vtscore.eval.step_trainers import _calibrate_with_details
+from vtscore.eval.voting_iterations import simulate_voting_iterations
 from vtscore.training.mlp import _auto_hidden_dim
 from vtscore.training.thresholds import calculate_cross_calibration_threshold
 

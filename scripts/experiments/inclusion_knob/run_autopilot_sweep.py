@@ -192,7 +192,7 @@ def _votes_autopilot(
     import torch
 
     from vtscore.eval.al_strategies import ALContext, select_next
-    from vtscore.eval.voting_iterations import _build_eval_atlas
+    from vtscore.eval.step_trainers import _build_eval_atlas
     from vtscore.training.mlp import _auto_hidden_dim, train_model
     from vtscore.utils.scores import sigmoid_to_finite_array
 

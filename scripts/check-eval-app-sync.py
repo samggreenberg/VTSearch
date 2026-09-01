@@ -158,7 +158,7 @@ MIRRORS: list[Mirror] = [
             "module-level `_cached_steps` MLP cache, which is built for one interactive "
             "detector advancing a vote at a time. The *rules* are copied; only the input "
             "plumbing differs - and only in where the models come from, not in how they are "
-            "scored: the caller (`voting_iterations._labelset_error_costs`) re-scores the "
+            "scored: the caller (`step_trainers._labelset_error_costs`) re-scores the "
             "whole window against the *current* labelset every step, as `_eval_cached_models` "
             "does. Handing in a history of frozen per-step costs instead would silently change "
             "the statistic the slope measures (issue #2923), which is not a declared divergence."
@@ -196,7 +196,7 @@ MIRRORS: list[Mirror] = [
     Mirror(
         id="training.train_and_threshold",
         app="py:vtscore.detectors.training.train_and_threshold",
-        harness="vtscore/eval/voting_iterations.py::_style_train_and_calibrate",
+        harness="vtscore/eval/step_trainers.py::_style_train_and_calibrate",
         kind="default",
         note=(
             "The app's canonical train + calibrate pipeline, which the harness reproduces step "
@@ -205,7 +205,7 @@ MIRRORS: list[Mirror] = [
             "default arm trains a detector the app no longer ships. Note "
             "_mlp_train_and_calibrate is the single-vector path and reproduces the same shape. "
             "The head is the one knob mirrored by name: this function's `hidden_dim` must equal "
-            "`_resolve_hidden_dim(voting_iterations.PRODUCTION_HEAD, ...)`, which "
+            "`resolve_hidden_dim(step_model.PRODUCTION_HEAD, ...)`, which "
             "tests_lib/detectors/test_harness_linear_head.py pins by training this pipeline for "
             "real - so a head change fails the suite as well as tripping this digest."
         ),

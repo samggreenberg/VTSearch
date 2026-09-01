@@ -125,7 +125,7 @@ With the default `MLP_HIDDEN_MIN=8` and `MLP_HIDDEN_MAX=32` (from
 `vtscore.config`), the heuristic keeps the model small when only a
 handful of labels exist - n_train=10 picks 8 (floored), n_train=60 picks 20,
 n_train=120 picks 32 (capped). The function is private but stable; the eval
-harness's `_resolve_hidden_dim` (`vtscore/eval/voting_iterations.py`) calls it
+harness's `resolve_hidden_dim` (`vtscore/eval/step_model.py`) calls it
 for the `"mlp"` arm. The detector code no longer does - it passes
 `LINEAR_SVM_HEAD` for both the final model and the cross-calibration fold
 models, so fold thresholds stay directly comparable to the full-data model.

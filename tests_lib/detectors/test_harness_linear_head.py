@@ -25,6 +25,8 @@ import numpy as np
 import pytest
 import torch.nn as nn
 
+import vtscore.eval.step_model as step_model
+import vtscore.eval.step_trainers as step_trainers
 import vtscore.eval.voting_iterations as vi
 from vtscore.eval.patch_styles import resolve_style
 from vtscore.eval.voting_columns import IDENT_COLUMNS
@@ -40,11 +42,11 @@ def _votes(medias, n=6):
 
 
 def test_resolve_hidden_dim_maps_heads_to_sentinels():
-    assert vi._resolve_hidden_dim("linear_svm", 40) == LINEAR_SVM_HEAD
-    assert vi._resolve_hidden_dim("linear", 40) == LINEAR_HEAD == 0
-    assert vi._resolve_hidden_dim("mlp", 40) == _auto_hidden_dim(40)
+    assert step_model.resolve_hidden_dim("linear_svm", 40) == LINEAR_SVM_HEAD
+    assert step_model.resolve_hidden_dim("linear", 40) == LINEAR_HEAD == 0
+    assert step_model.resolve_hidden_dim("mlp", 40) == _auto_hidden_dim(40)
     with pytest.raises(ValueError, match="unknown head"):
-        vi._resolve_hidden_dim("logreg", 40)
+        step_model.resolve_hidden_dim("logreg", 40)
 
 
 def test_the_default_head_is_the_head_the_app_trains(monkeypatch):
@@ -75,7 +77,7 @@ def test_the_default_head_is_the_head_the_app_trains(monkeypatch):
     train_and_threshold(X_list, y_list)
 
     assert seen, "the app never trained a model"
-    assert set(seen) == {vi._resolve_hidden_dim(vi.PRODUCTION_HEAD, len(y_list))}
+    assert set(seen) == {step_model.resolve_hidden_dim(step_model.PRODUCTION_HEAD, len(y_list))}
 
 
 def test_unknown_head_is_rejected_early():
@@ -100,25 +102,25 @@ def test_linear_head_reaches_the_final_model_and_the_calibration_folds(style, he
     good_votes, bad_votes = _votes(medias)
 
     seen: dict[str, list] = {"train": [], "calib": []}
-    real_train = vi.train_model
+    real_train = step_trainers.train_model
 
     def spy_train(X, y, input_dim, **kw):
         seen["train"].append(kw.get("hidden_dim"))
         return real_train(X, y, input_dim, **kw)
 
-    monkeypatch.setattr(vi, "train_model", spy_train)
+    monkeypatch.setattr(step_trainers, "train_model", spy_train)
     for name in ("calibration_folds", "compute_grouped_fold_node_scores"):
-        real = getattr(vi, name)
+        real = getattr(step_trainers, name)
 
         def spy_calib(*args, _real=real, **kw):
             seen["calib"].append(kw.get("hidden_dim"))
             return _real(*args, **kw)
 
-        monkeypatch.setattr(vi, name, spy_calib)
+        monkeypatch.setattr(step_trainers, name, spy_calib)
 
     style_obj = None if style is None else resolve_style(style)
 
-    step, threshold, _n, _timings, _details = vi._train_and_calibrate(
+    step, threshold, _n, _timings, _details = step_trainers._train_and_calibrate(
         "mlp",
         good_votes,
         bad_votes,
@@ -148,7 +150,7 @@ def test_linear_head_reaches_the_final_model_and_the_calibration_folds(style, he
 
 def _default_arm_step(medias):
     good_votes, bad_votes = _votes(medias)
-    return vi._train_and_calibrate(
+    return step_trainers._train_and_calibrate(
         "mlp",
         good_votes,
         bad_votes,
@@ -178,7 +180,7 @@ def test_the_mlp_arm_is_still_reachable_by_name():
     medias, _ = _planted_dataset(n_per_cat=10, seed=0)
     good_votes, bad_votes = _votes(medias)
 
-    step, _threshold, n_labels, _t, _d = vi._train_and_calibrate(
+    step, _threshold, n_labels, _t, _d = step_trainers._train_and_calibrate(
         "mlp",
         good_votes,
         bad_votes,
@@ -202,7 +204,7 @@ def test_default_runs_record_the_production_head():
     medias, _ = _planted_dataset(n_per_cat=20, seed=0)
     rows = vi.simulate_voting_iterations(medias, target_category="cat0", seed=0, max_steps=8)
     assert rows, "no rows produced"
-    assert {r["head"] for r in rows} == {vi.PRODUCTION_HEAD}
+    assert {r["head"] for r in rows} == {step_model.PRODUCTION_HEAD}
 
 
 def test_rows_record_the_head_and_linear_runs_end_to_end():
@@ -223,7 +225,7 @@ def test_rows_record_the_head_and_linear_runs_end_to_end():
     assert rows, "no rows produced"
     assert {r["head"] for r in rows} == {"linear_svm"}
     assert "head" in IDENT_COLUMNS
-    assert vi.PRODUCTION_HEAD == "linear_svm"
+    assert step_model.PRODUCTION_HEAD == "linear_svm"
     # The #2799 variant rows still ride along under safe_thresholds.
     assert {r["gmm_variant"] for r in rows} >= {"", "xcal_only", "pooled_cross"}
     for r in rows:
