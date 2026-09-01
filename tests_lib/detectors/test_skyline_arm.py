@@ -19,15 +19,14 @@ import numpy as np
 import pytest
 
 from vtscore.eval.patch_styles import WholeImageStyle
+from vtscore.eval.voting_columns import CALIBRATION_COLUMNS, SKYLINE_COLUMNS
 from vtscore.eval.voting_iterations import (
-    _CALIBRATION_COLUMNS,
-    _SKYLINE_COLUMNS,
-    _WHOLE_IMAGE_STYLE,
     SKYLINE_ARMS,
     SKYLINE_PROVENANCE,
     SKYLINE_TEST_XFIT,
     SKYLINE_TRAIN_FULL,
     TIMING_COLUMNS,
+    _WHOLE_IMAGE_STYLE,
     _skyline_arm_rows,
     _skyline_fit_and_score,
     simulate_voting_iterations,
@@ -117,7 +116,7 @@ def test_one_row_per_arm_per_run_at_step_zero():
         assert r["t"] == 0
         assert r["app_trained"] == 0
         assert r["threshold_provenance"] == SKYLINE_PROVENANCE
-        assert set(_CALIBRATION_COLUMNS).issubset(r.keys())
+        assert set(CALIBRATION_COLUMNS).issubset(r.keys())
     assert all(r["t"] >= 1 for r in mortal)
 
 
@@ -153,7 +152,7 @@ def test_columns_are_nan_without_the_arm():
     assert rows
     assert all(not r["gmm_variant"].startswith("skyline") for r in rows)
     for r in rows:
-        for col in _SKYLINE_COLUMNS:
+        for col in SKYLINE_COLUMNS:
             assert np.isnan(r[col])
 
 
@@ -211,7 +210,7 @@ def test_skyline_does_not_perturb_the_trajectory():
     without, _ = _split(_run(medias, arms=()))
     with_sky, _ = _split(_run(medias, arms=SKYLINE_ARMS))
     assert len(without) == len(with_sky)
-    ignore = TIMING_COLUMNS | set(_SKYLINE_COLUMNS)
+    ignore = TIMING_COLUMNS | set(SKYLINE_COLUMNS)
     for a, b in zip(without, with_sky, strict=True):
         for key in set(a) | set(b):
             if key in ignore:

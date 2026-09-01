@@ -17,7 +17,8 @@ import numpy as np
 import pytest
 
 from vtscore.eval.cut_rules import CUT_KIND_MIDPOINT
-from vtscore.eval.voting_iterations import _CALIBRATION_COLUMNS, simulate_voting_iterations
+from vtscore.eval.voting_columns import CALIBRATION_COLUMNS
+from vtscore.eval.voting_iterations import simulate_voting_iterations
 from vtscore.training.thresholds import CUT_KIND_CONTINUED, CUT_KIND_DEGENERATE_MIDPOINT, CUT_KIND_INTERIOR
 
 # Reuse the synthetic planted-patch dataset builders from the Max-Patch tests.
@@ -85,7 +86,7 @@ class TestAnchoredVariantRows:
         rank = [r for r in rows if r["gmm_variant"] == _RANK]
         assert anchored and fold and rank
         for r in (*anchored, *fold, *rank):
-            assert set(_CALIBRATION_COLUMNS).issubset(r.keys())
+            assert set(CALIBRATION_COLUMNS).issubset(r.keys())
             assert np.isfinite(r["threshold"])
             # The estimator replaces the blend: raw threshold, no ramp weight.
             assert np.isnan(r["blend_weight"])

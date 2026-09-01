@@ -12,11 +12,8 @@ import numpy as np
 import pytest
 
 from vtscore.eval.patch_styles import resolve_style
-from vtscore.eval.voting_iterations import (
-    _CALIBRATION_COLUMNS,
-    _calibrate_with_details,
-    simulate_voting_iterations,
-)
+from vtscore.eval.voting_columns import CALIBRATION_COLUMNS
+from vtscore.eval.voting_iterations import _calibrate_with_details, simulate_voting_iterations
 from vtscore.training.mlp import _auto_hidden_dim
 from vtscore.training.thresholds import calculate_cross_calibration_threshold
 
@@ -186,7 +183,7 @@ def test_calibration_columns_and_invariants():
     rows, sweep = _run_emit("max_patch_pca_hac")
     for r in rows:
         # every declared column present
-        assert set(_CALIBRATION_COLUMNS).issubset(r.keys())
+        assert set(CALIBRATION_COLUMNS).issubset(r.keys())
         assert r["threshold_provenance"] in {"conformal", "no_good_sentinel", "too_few_default", "gmm_blend"}
         assert r["degenerate"] in (0, 1)
         # the oracle can never cost more than the trained cut -> regret >= 0

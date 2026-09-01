@@ -55,7 +55,7 @@ whole usable inclusion range can land inside a couple of rank percent, which
 makes an arm grid that looks well spread in ``k`` almost inert in the space the
 picks actually live in.  ``q`` names the rank position directly, so a study can
 establish whether *position* is the mechanism before asking whether ``k`` is a
-usable handle on it.  Read :data:`~vtscore.eval.voting_iterations._PICK_COLUMNS`'
+usable handle on it.  Read :data:`~vtscore.eval.voting_columns.PICK_COLUMNS`'
 ``startup_cut_percentile`` to see where each round's cut really landed; a ``k``
 family that does not separate there has not been tested, whatever its spec says.
 

@@ -221,10 +221,10 @@ class TestSimulateVotingIterations:
             dataset_name="test_ds",
             calibrate_count=1,
         )
-        from vtscore.eval.voting_iterations import _VOTING_COLUMNS
+        from vtscore.eval.voting_columns import VOTING_COLUMNS
 
         for row in rows:
-            assert set(row.keys()) == set(_VOTING_COLUMNS)
+            assert set(row.keys()) == set(VOTING_COLUMNS)
             assert row["strategy"] == "autopilot"
             assert row["trainer"] == "mlp"
             assert row["prevalence_arm"] == "natural"
@@ -497,10 +497,10 @@ class TestRunVotingIterationsEval:
             categories={"ds1": ["alpha"]},
             calibrate_count=1,
         )
-        from vtscore.eval.voting_iterations import _VOTING_COLUMNS
+        from vtscore.eval.voting_columns import VOTING_COLUMNS
 
         assert isinstance(df, pd.DataFrame)
-        assert list(df.columns) == list(_VOTING_COLUMNS)
+        assert list(df.columns) == list(VOTING_COLUMNS)
 
     def test_multiple_seeds(self):
         medias = _make_separable_clips(n_per_cat=6)

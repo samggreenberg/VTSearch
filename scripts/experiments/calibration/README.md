@@ -27,15 +27,15 @@ its own recalibrated threshold, tagged in the `pool_variant` column.
    `siglip_l` pairs.
 2. **`run_cells.py`** — one SLURM-array task per `(dataset, embedder, category,
    seed)` cell; runs every style for the embedder, emitting the calibration
-   metrics (`_CALIBRATION_COLUMNS`) to `results/cells/task_<idx>.csv` and the
-   inclusion sweep (`_INCLUSION_SWEEP_COLUMNS`) to `task_<idx>__sweep.csv`.
+   metrics (`CALIBRATION_COLUMNS`) to `results/cells/task_<idx>.csv` and the
+   inclusion sweep (`INCLUSION_SWEEP_COLUMNS`) to `task_<idx>__sweep.csv`.
 3. **`analyze.py`** — concatenates the cells, computes the pre-registered
    deliverables, writes `results/summary.json`, `results/agg/*.csv`,
    `results/figures/*.png`, and a `results/REPORT.md` draft.
 
 Under `CALIB_SAFE_THRESHOLDS=1` each step also emits one row per **cut variant**
 (`gmm_variant`; `_SAFE_GMM_VARIANTS`) and a per-(step, geometry) **cut
-decomposition** frame (`_CUT_DIAGNOSTIC_COLUMNS`) to `task_<idx>__cutdiag.csv`.
+decomposition** frame (`CUT_DIAGNOSTIC_COLUMNS`) to `task_<idx>__cutdiag.csv`.
 Two alternative analyzers read those: `analyze_safe.py` (the #2799 safe-on/off
 question) and `analyze_cut.py` (the #2836 question of *which* cut and *why*).
 
@@ -137,7 +137,7 @@ usable folds — a midpoint of two component means never looks at the cost weigh
 inclusion arrives as. `mid_tilt` (#2868) restored the tilt while reproducing the
 measured arm bit-for-bit at 0; this run prices that tilt.
 
-`CALIB_CUT_INCL_KS` turns on a side frame (`_CUT_INCLUSION_COLUMNS` →
+`CALIB_CUT_INCL_KS` turns on a side frame (`CUT_INCLUSION_COLUMNS` →
 `task_<idx>__cutincl.csv`): one row per (step, fold-anchored arm, inclusion `k`),
 each scored under the cost weights of **its own** `k` and against the oracle at
 that same `k`, so regret is comparable along the knob as well as across arms.

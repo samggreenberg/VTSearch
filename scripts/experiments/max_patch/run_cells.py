@@ -136,7 +136,8 @@ def main(argv: list[str] | None = None) -> int:
 
     import pandas as pd
 
-    from vtscore.eval.voting_iterations import _VOTING_COLUMNS, simulate_voting_iterations
+    from vtscore.eval.voting_columns import VOTING_COLUMNS
+    from vtscore.eval.voting_iterations import simulate_voting_iterations
 
     from vtscore.datasets import loader as _loader  # isort: skip
 
@@ -180,7 +181,7 @@ def main(argv: list[str] | None = None) -> int:
     outdir = common.Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
     out = outdir / f"task_{idx:04d}.csv"
-    columns = [*_VOTING_COLUMNS, "embedder", "seed_mode", "seed_query"]
+    columns = [*VOTING_COLUMNS, "embedder", "seed_mode", "seed_query"]
     pd.DataFrame(all_rows, columns=pd.Index(columns)).to_csv(out, index=False)
     common.log(f"wrote {len(all_rows)} rows to {out}")
     return 0

@@ -19,9 +19,8 @@ import numpy as np
 import pytest
 
 from vtscore.eval.cut_rules import CUT_KIND_MIDPOINT
+from vtscore.eval.voting_columns import CALIBRATION_COLUMNS, CUT_DIAGNOSTIC_COLUMNS
 from vtscore.eval.voting_iterations import (
-    _CALIBRATION_COLUMNS,
-    _CUT_DIAGNOSTIC_COLUMNS,
     _ORACLE_VARIANTS,
     _SAFE_GMM_VARIANTS,
     _safe_gmm_variant_rows,
@@ -116,7 +115,7 @@ class TestSafeGmmVariantRows:
     def test_columns_and_tags(self):
         rows = _run_safe("max_patch")
         for r in rows:
-            assert set(_CALIBRATION_COLUMNS).issubset(r.keys())
+            assert set(CALIBRATION_COLUMNS).issubset(r.keys())
         base = [r for r in rows if r["gmm_variant"] == ""]
         variant = [r for r in rows if r["gmm_variant"] != ""]
         assert base and variant
@@ -229,7 +228,7 @@ class TestCutDiagnosticFrame:
         for t in steps:
             assert {d["geometry"] for d in diag if d["t"] == t} == {"pooled", "image"}
         for d in diag:
-            assert set(_CUT_DIAGNOSTIC_COLUMNS).issubset(d.keys())
+            assert set(CUT_DIAGNOSTIC_COLUMNS).issubset(d.keys())
 
     def test_cuts_agree_with_the_variant_rows(self):
         """The frame is a second view of the same fit, not a second fit."""

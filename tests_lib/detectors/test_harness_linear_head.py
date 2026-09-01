@@ -27,6 +27,7 @@ import torch.nn as nn
 
 import vtscore.eval.voting_iterations as vi
 from vtscore.eval.patch_styles import resolve_style
+from vtscore.eval.voting_columns import IDENT_COLUMNS
 from vtscore.training.mlp import LINEAR_HEAD, LINEAR_SVM_HEAD, _auto_hidden_dim
 
 from .test_max_patch_style import DIM, _planted_dataset
@@ -221,7 +222,7 @@ def test_rows_record_the_head_and_linear_runs_end_to_end():
     )
     assert rows, "no rows produced"
     assert {r["head"] for r in rows} == {"linear_svm"}
-    assert "head" in vi._IDENT_COLUMNS
+    assert "head" in IDENT_COLUMNS
     assert vi.PRODUCTION_HEAD == "linear_svm"
     # The #2799 variant rows still ride along under safe_thresholds.
     assert {r["gmm_variant"] for r in rows} >= {"", "xcal_only", "pooled_cross"}

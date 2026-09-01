@@ -146,7 +146,8 @@ def _ident(cat: str, seed: int, t: int, embedder: str, style: str) -> dict:
 
 
 def _fabricate(root: Path, rng: np.random.Generator) -> None:
-    from vtscore.eval.voting_iterations import _CALIBRATION_COLUMNS, _CUT_DIAGNOSTIC_COLUMNS, _SAFE_GMM_VARIANTS
+    from vtscore.eval.voting_columns import CALIBRATION_COLUMNS, CUT_DIAGNOSTIC_COLUMNS
+    from vtscore.eval.voting_iterations import _SAFE_GMM_VARIANTS
 
     cells = root / "cells"
     cells.mkdir(parents=True, exist_ok=True)
@@ -306,9 +307,9 @@ def _fabricate(root: Path, rng: np.random.Generator) -> None:
                         diag.append(d)
 
                 pd.DataFrame(
-                    rows, columns=pd.Index([*_CALIBRATION_COLUMNS, "embedder", "seed_mode", "seed_query"])
+                    rows, columns=pd.Index([*CALIBRATION_COLUMNS, "embedder", "seed_mode", "seed_query"])
                 ).to_csv(cells / f"task_{idx:04d}.csv", index=False)
-                pd.DataFrame(diag, columns=pd.Index([*_CUT_DIAGNOSTIC_COLUMNS, "embedder"])).to_csv(
+                pd.DataFrame(diag, columns=pd.Index([*CUT_DIAGNOSTIC_COLUMNS, "embedder"])).to_csv(
                     cells / f"task_{idx:04d}__cutdiag.csv", index=False
                 )
                 idx += 1
