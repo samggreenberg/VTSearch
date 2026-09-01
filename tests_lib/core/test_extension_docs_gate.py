@@ -152,7 +152,8 @@ class TestMemberInvariant:
 
     def test_module_level_function_passes(self, monkeypatch, tmp_path):
         """A free function is a real symbol, just not a method."""
-        assert check(monkeypatch, tmp_path, "| `x` | y | set via `set_progress_callback()` |") == []
+        body = "| `_on_progress` | callback | process-wide via `set_progress_callback()` |"
+        assert check(monkeypatch, tmp_path, body) == []
 
     def test_ignore_entry_excuses_a_dict_key(self, monkeypatch, tmp_path):
         body = "| `step` | int | A parameter-dict key |"
