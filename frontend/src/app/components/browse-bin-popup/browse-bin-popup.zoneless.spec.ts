@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { signal } from '@angular/core';
+import { signal, type WritableSignal } from '@angular/core';
 import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -669,15 +669,15 @@ describe('BrowseBinPopupComponent (docked presentation)', () => {
  * instance rather than through a rendered ArrowRight round-trip.
  */
 describe('BrowseBinPopupComponent (keyboard focus sync)', () => {
+  // The rendered state is signal-backed behind read-only getters, so the stub
+  // seeds the backing signals and asserts through the public getters.
   interface GridState {
-    ids: number[];
-    columns: number;
-    previewId: number | null;
-    cdr: { markForCheck: () => void };
+    _ids: WritableSignal<number[]>;
+    _columns: WritableSignal<number>;
+    _previewId: WritableSignal<number | null>;
     grid: () => { revealAndFocus: (index: number) => void } | undefined;
     mediaType: () => string;
     mediaTypeCaps: { usesThumbnails: (t: string) => boolean };
-    selection: { has: (id: number) => boolean; addAll: (ids: number[]) => void; remove: (id: number) => void };
     moveFocus(dCol: number, dRow: number): void;
   }
 
@@ -685,52 +685,50 @@ describe('BrowseBinPopupComponent (keyboard focus sync)', () => {
     const component = Object.create(BrowseBinPopupComponent.prototype) as BrowseBinPopupComponent;
     const state = component as unknown as GridState;
     const revealed: number[] = [];
-    state.ids = [10, 20, 30, 40];
-    state.columns = 2;
-    state.previewId = 10;
-    state.cdr = { markForCheck: vi.fn() };
+    state._ids = signal([10, 20, 30, 40]);
+    state._columns = signal(2);
+    state._previewId = signal<number | null>(10);
     state.grid = () => ({ revealAndFocus: (index: number) => revealed.push(index) });
     // Non-thumbnail media so `previewOnly` is false and the grid path is live.
     state.mediaType = () => 'text';
     state.mediaTypeCaps = { usesThumbnails: (t: string) => t !== 'text' };
-    state.selection = { has: () => false, addAll: vi.fn(), remove: vi.fn() };
     return { component, state, revealed };
   }
 
   it('walks the viewed item and hands the entry to the grid to reveal + focus', () => {
-    const { state, revealed } = makeGridComponent();
+    const { component, state, revealed } = makeGridComponent();
 
     state.moveFocus(1, 0);
 
     // The highlight advanced to id 20 …
-    expect(state.previewId).toBe(20);
+    expect(component.previewId).toBe(20);
     // … and the grid was told to scroll it in and take DOM focus, so Enter/Space
     // now act on the highlighted item.
     expect(revealed).toEqual([1]);
   });
 
   it('walks a whole row at a time for vertical steps', () => {
-    const { state, revealed } = makeGridComponent();
+    const { component, state, revealed } = makeGridComponent();
 
     state.moveFocus(0, 1);
 
-    expect(state.previewId).toBe(30);
+    expect(component.previewId).toBe(30);
     expect(revealed).toEqual([2]);
   });
 
   it('clamps at the ends of the bin rather than walking off it', () => {
-    const { state, revealed } = makeGridComponent();
+    const { component, state, revealed } = makeGridComponent();
 
     state.moveFocus(-1, 0);
 
     // Already on the first member: nothing moved, and the grid was not disturbed.
-    expect(state.previewId).toBe(10);
+    expect(component.previewId).toBe(10);
     expect(revealed).toEqual([]);
   });
 
   it('syncs the highlight to DOM focus that arrives by Tab or click', () => {
-    const { component, state } = makeGridComponent();
+    const { component } = makeGridComponent();
     component.onEntryFocus(30);
-    expect(state.previewId).toBe(30);
+    expect(component.previewId).toBe(30);
   });
 });
