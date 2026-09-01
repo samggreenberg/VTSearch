@@ -7,6 +7,81 @@ into rule inefficiency vs calibration→test shift, hunts the runaway-threshold
 bug, tests whether re-pooling can save the raw-patch tree, and checks the
 Inclusion budget under grouped calibration. Design: `docs/plans/calibration-experiment.md`.
 
+## Which file belongs to which study
+
+<!-- BEGIN INDEX -->
+
+**This directory is flat on purpose.** ~120 scripts, ~20 concluded studies, one
+namespace. #3409 proposed `git mv`-ing each concluded study into a subdirectory;
+that was declined, because the cost is real and the benefit is not. These are
+archival cluster scripts: the launcher `cd`s here and every file reaches its
+neighbours by bare sibling import (`import common`), so a subdirectory breaks
+imports in ~50 files and paths in 32 shell launchers, with **no test or type
+coverage to catch a mistake** (`pyrightconfig.json` excludes `scripts/`, no
+pytest reads them). Roughly 110 backticked references in concluded `REPORT.md`s
+name these paths, and a report is a record of what was run at a path that
+existed, not a document to rewrite when the tree is tidied. And the cross-study
+imports the flat namespace enables are mostly *deliberate*: `analyze_folds_3314`
+builds on `analyze_folds_2897` because #3314 is the follow-up to #2897, and
+`analyze_transfer` reuses `analyze_cut`'s decomposition because #2883 is the
+last link of the #2836 chain. Splitting them would force duplication or a shared
+layer that re-flattens what the split just separated.
+
+What the subdirectories were actually wanted for is **knowing which file belongs
+to which study**, and that is a table. `scripts/check-calibration-index.py`
+(a `run-tests.sh` gate) requires this index to be *total* in both directions:
+every `.py` and `.sh` here appears in it exactly once, and every file it names
+exists. So a new study's files cannot land unclassified, and a deletion cannot
+leave a phantom row.
+
+### The shared layer
+
+Everything below the studies. Edit these with the care of a library, not a
+script: a change here moves every study's numbers at once, and several are what
+a report's committed-figure requirement points at.
+
+| Files | What they are |
+|---|---|
+| `common.py`, `experiment_config.py` | Env/`sys.path` setup (call `setup_env()` before importing anything under `vtscore`) and the pre-registered grid. |
+| `_cells_io.py` | Cell-pickle I/O, main-vs-side frame discovery (`SIDE_FRAME_SUFFIXES`), the opening assertion, and `load_arm` — the per-arm loader six callers across five studies use (it lived in `analyze_spikes.py` until #3409, and that module re-exports the name). |
+| `prepare_data.py`, `run_cells.py`, `analyze.py`, `launch_all.sh`, `launch_cells.sh` | The three-stage pipeline (#2781). Every study launcher is a wrapper that flips pre-registered knobs over these and re-points `CALIB_EXP`. |
+| `noop.py` | The analyze step for a launcher whose analysis runs separately. |
+| `curves.py`, `selftest_curves.py` | The standard quality-over-clicks figure pair every simulated-user study owes. One implementation; do not write it again. |
+| `viewer.py`, `selftest_viewer.py` | The interactive `viewer.html` every study's report links to. `--reskin` pushes a template change onto committed pages. |
+| `make_bench_html.py` | A study's `report.html` reading copy, generated from its own `REPORT.md`. |
+| `bench_cells.py` | Pure-pandas reading and pairing of overview-benchmark cells, shared by the bench analyzers. |
+
+### The studies
+
+Newest last, matching [`docs/experiments/`](../../../docs/experiments/README.md)'s
+own ordering in reverse. A study's report is the record of what it found; the
+files here are how it was produced.
+
+| Study | Files |
+|---|---|
+| **#2781 Calibration regret** — [report](../../../docs/experiments/2026-07-31-calibration/REPORT.md) | The base pipeline itself; see the shared layer above. |
+| **#2799 Safe thresholds** — [report](../../../docs/experiments/2026-08-03-safe-thresholds/REPORT.md) | `launch_safe.sh`, `launch_safe_ab.sh`, `launch_ab_cells.sh`, `analyze_safe.py`, `analyze_ab.py`, `selftest_analyze_ab.py` |
+| **#2836 GMM cut rule** — [report](../../../docs/experiments/2026-08-04-gmm-cut/REPORT.md) | `launch_cut.sh`, `launch_tail_2881.sh`, `theory_bench.py`, `analyze_cut.py`, `selftest_analyze_cut.py`, `make_cut_2846_fig.py` |
+| **#2841 Mix-in schedule** — [report](../../../docs/experiments/2026-08-04-mixin-schedule/REPORT.md) | `launch_mixin.sh`, `build_coco_pickle.py`, `analyze_mixin.py`, `selftest_analyze_mixin.py` |
+| **#2852 Anchored mixture**, and the #2861 anchor-mass sweep — [report](../../../docs/experiments/2026-08-05-population-anchored-calibration/REPORT.md) | `launch_anchored.sh`, `analyze_anchored.py`, `selftest_analyze_anchored.py`, `launch_rate_2861.sh`, `launch_folds_2861.sh`, `analyze_rate.py`, `analyze_folds.py`, `selftest_analyze_rate.py`, `make_rate_figs.py`, `theory_kappa_bench.py` |
+| **#2877 / #2905 Acquisition–reporting decoupling** — [report](../../../docs/experiments/2026-08-07-acquisition-inclusion/REPORT.md) | `launch_acq_incl.sh`, `launch_acq_incl_vg.sh`, `launch_acq_2877.sh`, `launch_acq_region_2905.sh`, `analyze_acq.py`, `selftest_analyze_acq.py`, `per_env_acq_2877.py`, `status_acq_2877.sh`, `bump_acq_2877_throttle.sh`, `probe_acq_divergence.sh` |
+| **#2847 Do the MLP-era spikes survive?** — [report](../../../docs/experiments/2026-08-07-spike-check-2847/REPORT.md) | `launch_spike_2847.sh`, `analyze_spikes.py`, `selftest_analyze_spikes.py` |
+| **#2897 Fold count** — [report](../../../docs/experiments/2026-08-12-calibration-fold-count/REPORT.md) | `launch_folds_2897.sh`, `launch_folds_2897_ab.sh`, `chain_folds_2897_ab.sh`, `status_folds_2897.sh`, `analyze_folds_2897.py`, `selftest_analyze_folds_2897.py` |
+| **Overview benchmark** (production defaults across the pile) — [report](../../../docs/experiments/2026-08-12-overview-bench/REPORT.md) | `launch_bench.sh`, `launch_errdump.sh`, `launch_horizon.sh`, `analyze_bench.py`, `analyze_bench_interaction.py`, `analyze_horizon.py`, `make_bench_figs.py`, `error_report.py`, `make_error_sheets.py`, `label_noise.py`, `text_baseline.py` |
+| **#2808 Linear-head convergence** — [report](../../../docs/experiments/2026-08-19-linhead-convergence-2808/REPORT.md) | `launch_linhead_2808.sh`, `make_linhead_figs.py` (analysis reuses `analyze_spikes.py`) |
+| **#2865 Cut rule × Inclusion** — [report](../../../docs/experiments/2026-08-21-inclusion-cut-rule/REPORT.md) | `launch_incl_2865.sh`, `analyze_cutincl.py`, `selftest_analyze_cutincl.py`, `make_cutincl_figs.py` |
+| **#2883 Is `transfer` bias or variance?** — [report](../../../docs/experiments/2026-08-24-transfer-2883/REPORT.md) | `launch_transfer_2883.sh`, `analyze_transfer.py`, `selftest_analyze_transfer.py` |
+| **#3115 Fold combine rule** — [report](../../../docs/experiments/2026-08-25-calibration-fold-combine/REPORT.md) | `launch_folds_3115.sh`, `folds_combine_3115.py`, `make_folds_3115_figs.py` |
+| **#3156 Scale / the descriptive map** — [report](../../../docs/experiments/2026-08-25-vg-scale/REPORT.md) | `launch_scale.sh`, `analyse_all.sh`, `analyze_scale.py`, `analyze_overview.py`, `analyze_phases.py`, `analyze_tail_overlap.py`, `figures_scale.py`, `figures_overview.py`, `figures_trajectory.py`, `pick_sheets.py` |
+| **#3287 Calibration fraction** — [report](../../../docs/experiments/2026-08-27-calibration-fraction-3287/REPORT.md) | `launch_calfrac_3287.sh`, `run_3292.sh`, `analyze_calfrac.py`, `selftest_analyze_calfrac.py` |
+| **#3267 Good Mining (the Autopilot opening)** — [report](../../../docs/experiments/2026-08-27-good-mining-3267/REPORT.md) | `launch_good_mining.sh`, `analyse_good_mining.sh`, `analyze_startup.py`, `selftest_analyze_startup.py`, `make_startup_sheets.py`, `probe_startup_cuts.py` |
+| **#3310 / #3314 Fold count, cost and benefit** — [report](../../../docs/experiments/2026-08-28-calibration-fold-count-3310/REPORT.md) | `launch_folds_3314.sh`, `status_folds_3314.sh`, `analyze_folds_3314.py`, `selftest_analyze_folds_3314.py`, `scratch_folds_3310.py` |
+| **#3312 Voted-media exclusion floor** — [plan](../../../docs/experiments/2026-08-28-voted-exclusion-3308/PLAN.md) (no report yet) | `launch_exclusion_3308.sh`, `analyze_exclusion.py`, `selftest_analyze_exclusion.py` |
+| **#3196 Inclusion knob under the linear SVM head** — [report](../../../docs/experiments/2026-08-29-inclusion-knob-3196/REPORT.md) | `launch_incl_3196.sh`, `analyze_incl_3196.py`, `selftest_analyze_incl_3196.py`, `figures_incl_3196.py` |
+| **#3329 Is the 2-component mixture a good fit?** — [report](../../../docs/experiments/2026-08-30-fit-quality-3329/REPORT.md) | `launch_fitq_3329.sh`, `analyze_fitq_3329.py`, `selftest_analyze_fitq_3329.py`, `figures_fitq_3329.py`, `worked_cell_3329.py` |
+
+<!-- END INDEX -->
+
 ## Arms
 
 | Dataset | Embedder | Style(s) | Calibration |

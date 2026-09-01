@@ -100,7 +100,7 @@ is derivable from the other at an acceptable size:
 ``skyline``
     Per ``(group, arm, metric)``: one number, not a series.  Read straight out
     of the cell CSVs (:func:`load_skyline`) rather than out of the main frame,
-    because ``analyze_spikes.load_arm`` filters skyline rows out by design — a
+    because ``_cells_io.load_arm`` filters skyline rows out by design — a
     skyline reads ground-truth labels the app can never see, so it must never
     land in a mean of what the app achieved.
 ``runs``
@@ -184,7 +184,7 @@ TEMPLATE = Path(__file__).with_name("viewer_template.html")
 TOKEN = "__VIEWER" + "_PAYLOAD__"
 
 #: The **supervised-skyline** arms (issue #3322), in preference order.  These
-#: rows are tagged in ``gmm_variant``, so ``analyze_spikes.load_arm`` filters
+#: rows are tagged in ``gmm_variant``, so ``_cells_io.load_arm`` filters
 #: them out of the main frame by construction and the viewer re-reads the cell
 #: CSVs for them (:func:`load_skyline`).
 #:
@@ -551,7 +551,7 @@ def load_skyline(results: Path, dirs: Sequence[str], arms: Sequence[str]) -> pd.
     """The **supervised-skyline** rows (issue #3322) under *results*, if any.
 
     These have to be read separately because
-    :func:`analyze_spikes.load_arm` — which every analyzer and
+    :func:`_cells_io.load_arm` — which every analyzer and
     :func:`curves._load` go through — keeps only *base* rows, and a skyline row
     is tagged in ``gmm_variant`` precisely so it cannot be mistaken for one.
     That filter is right: a skyline reads ground-truth labels the app can never

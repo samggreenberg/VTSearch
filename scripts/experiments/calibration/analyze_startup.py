@@ -118,7 +118,7 @@ TEXT_BASELINE = os.environ.get("GM_TEXT_BASELINE", "")
 def load_picks(arm_dir: Path) -> tuple[pd.DataFrame, dict]:
     """Concatenate one arm's ``__picks.csv`` cells, with provenance.
 
-    Separate from :func:`analyze_spikes.load_arm` because the pick log is the
+    Separate from :func:`_cells_io.load_arm` because the pick log is the
     frame that records the *opening*, and the opening emits no main row.  An
     unreadable or zero-byte cell is counted, never dropped in silence.
     """

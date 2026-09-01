@@ -434,6 +434,17 @@ if ! $_is_slides_run; then
         _blocked "extension docs check failed"
         exit 1
     fi
+
+    # Calibration script index: every .py/.sh in scripts/experiments/calibration/
+    # is filed under exactly one study (or the shared layer) in that directory's
+    # README, and every file the index names exists. The directory is flat by
+    # decision (#3409), so the table IS the navigation - and an unchecked table
+    # decays back into 120 unclassified files. Pure stdlib, ~20ms.
+    echo "Checking calibration script index..."
+    if ! python scripts/check-calibration-index.py ; then
+        _blocked "calibration script index is out of date"
+        exit 1
+    fi
 fi
 
 # Slide decks: every deck manifest names fragments that exist and figures that
