@@ -137,6 +137,7 @@ class TestBothPathsAgree:
         assert (lazy is None) == (chain is None)
         if lazy is None:
             return
+        assert chain is not None  # implied by the equality above; states it for the type checker
 
         # ...and on what was recorded.  The shapes differ by design (a hashable
         # cache key vs. a ChainStep); the content behind them must not.
