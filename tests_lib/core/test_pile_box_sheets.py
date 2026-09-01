@@ -2,7 +2,7 @@
 
 The sheet resolved COCO images through ``pile_config.COCO_IMAGES`` -- a
 directory the staging area has never held; it holds ``val2017.zip``, which is
-what ``build_pile._load_coco`` has always read. Nothing failed: the resolver
+what ``pilebuild.loaders.coco.load`` has always read. Nothing failed: the resolver
 returned ``None`` for every media and the sheet came out with no thumbnails at
 all, which is the one output that looks like an answer and contains none.
 

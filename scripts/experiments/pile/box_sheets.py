@@ -52,7 +52,7 @@ IMAGE_DIRS = {
 #: directory holds the file. COCO needs this: the staging area holds
 #: `val2017.zip` and has never held `val2017/`, so a directory-only resolver
 #: found nothing for every COCO media and drew an empty sheet (#3305).
-#: `build_pile._load_coco` has always read pixels out of the same zip.
+#: `pilebuild.loaders.coco.load` has always read pixels out of the same zip.
 IMAGE_ZIPS = {
     "vg": [],
     "coco": [pc.COCO_VAL_ZIP],
@@ -67,7 +67,7 @@ class ImageSource:
     """Where a sheet's pixels come from -- and what to say when there are none.
 
     Resolution is by basename against extracted directories first, then against
-    the archives, mirroring the member lookup in ``build_pile._load_coco``. The
+    the archives, mirroring the member lookup in ``pilebuild.loaders.coco.load``. The
     cell pickles drop ``media_bytes`` (`_cells_io._DROP_FIELDS`), so the
     original source really is the only place the pixels are.
     """

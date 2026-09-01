@@ -1,0 +1,326 @@
+"""The ``vg_scale`` build's passes, exercised without the 100 GB of VG source.
+
+``build_pile.py`` assembles this dataset in six passes over the Visual Genome
+source. Two of them are where this pile's expensive bugs have actually lived:
+
+* :func:`apply_corrections` is the single point at which a human verdict's box
+  crosses from normalised into pixel space. Getting that wrong is #3281 -- the
+  region write normalises the already-normalised coordinate, divides it by ~500
+  and parks the box on the frame origin, and *nothing downstream can see it*
+  because the band is derived from the same corrupted box, so the cell name and
+  its contents stay consistent with each other all the way into a published
+  study.
+* :func:`designate_cells` decides whether a rebuild keeps the images a human has
+  already reviewed. Two separate regressions here orphaned reviews (49 of 360
+  negatives; 99 of 360 boxed positives) while producing cells that looked
+  perfect: right count, right vectors, right geometry.
+
+Both used to be inline blocks in a 304-line function that needs the whole VG
+tree to call, so neither had a test. They are ordinary functions now, and these
+are the properties their comments claim.
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+import pytest
+
+_PILE_DIR = Path(__file__).resolve().parents[2] / "scripts" / "experiments" / "pile"
+
+
+@pytest.fixture(scope="module")
+def vgs():
+    """``pilebuild.loaders.vg_scale``, imported without ``build_pile``'s env setup.
+
+    Importing ``build_pile`` runs ``pile_config.setup_env()``, which edits
+    ``sys.meta_path`` and ``sys.path`` process-wide -- which is why
+    ``test_pile_box_scan.py`` drives it through a subprocess. The passes under
+    test deliberately depend on nothing but ``pile_config``'s constants, so they
+    import directly and run in-process.
+    """
+    if str(_PILE_DIR) not in sys.path:
+        sys.path.insert(0, str(_PILE_DIR))
+    from pilebuild.loaders import vg_scale
+
+    return vg_scale
+
+
+@pytest.fixture(scope="module")
+def pc():
+    if str(_PILE_DIR) not in sys.path:
+        sys.path.insert(0, str(_PILE_DIR))
+    import pile_config
+
+    return pile_config
+
+
+def _verdict(present: bool, boxes: list[list[float]] | None = None) -> dict:
+    return {"present": present, "boxes": boxes or []}
+
+
+class TestApplyCorrections:
+    """The one place a box changes space (#3281)."""
+
+    def test_normalised_box_becomes_pixels_exactly_once(self, vgs):
+        """A reviewer's box survives the pixel round trip bit for bit.
+
+        This is the assertion #3281 would have failed: the correction arrives
+        normalised, is scaled up here by the same (W, H) the region write later
+        divides by, and must come back out as the reviewer drew it. Skipping the
+        conversion leaves a box ~500x too small that still bands consistently.
+        """
+        drawn = [0.2, 0.4, 0.6, 0.8]
+        labels = {7: {}}
+        box_dims = {7: (640, 480)}
+        vgs.apply_corrections(labels, {(7, "bus"): _verdict(True, [drawn])}, box_dims, set())
+
+        stored = labels[7]["bus"][0]
+        assert stored == [0.2 * 640, 0.4 * 480, 0.6 * 640, 0.8 * 480]
+
+        W, H = box_dims[7]
+        assert [stored[0] / W, stored[1] / H, stored[2] / W, stored[3] / H] == drawn
+
+    def test_box_is_scaled_by_the_anchored_dims_not_the_vg_copy(self, vgs):
+        """COCO-anchored images band in COCO's space, not the VG downscale.
+
+        VG ships 500 px copies of COCO's 640 px originals. ``box_dims`` carries
+        whichever space the image's *other* boxes were measured in, and the
+        correction has to use that one or the reviewed box lands somewhere the
+        VG-derived boxes are not.
+        """
+        labels = {7: {}}
+        vgs.apply_corrections(labels, {(7, "bus"): _verdict(True, [[0.0, 0.0, 0.5, 0.5]])}, {7: (640, 480)}, set())
+        assert labels[7]["bus"][0] == [0.0, 0.0, 320.0, 240.0]
+
+    def test_present_without_a_box_is_unbanded_not_a_negative(self, vgs):
+        """No size was measured, so no band can be claimed -- and it is not clean."""
+        labels = {7: {"bus": [[1.0, 1.0, 2.0, 2.0]]}}
+        unbanded = vgs.apply_corrections(labels, {(7, "bus"): _verdict(True)}, {7: (640, 480)}, set())
+
+        assert unbanded == {(7, "bus")}
+        assert "bus" not in labels[7]
+
+    def test_absent_verdict_removes_the_class(self, vgs):
+        labels = {7: {"bus": [[1.0, 1.0, 2.0, 2.0]], "dog": [[3.0, 3.0, 4.0, 4.0]]}}
+        unbanded = vgs.apply_corrections(labels, {(7, "bus"): _verdict(False)}, {7: (640, 480)}, set())
+
+        assert labels[7] == {"dog": [[3.0, 3.0, 4.0, 4.0]]}
+        assert unbanded == set()
+
+    def test_every_reviewed_image_becomes_exhaustive(self, vgs):
+        """ "Nobody looked" and "somebody looked and saw nothing" must stay distinct."""
+        exhaustive: set[int] = set()
+        labels = {7: {}, 8: {}}
+        vgs.apply_corrections(labels, {(7, "bus"): _verdict(False)}, {7: (640, 480), 8: (640, 480)}, exhaustive)
+        assert exhaustive == {7}
+
+    def test_verdict_for_an_unknown_image_is_ignored(self, vgs):
+        labels: dict[int, dict] = {}
+        assert vgs.apply_corrections(labels, {(99, "bus"): _verdict(True)}, {}, set()) == set()
+        assert labels == {}
+
+
+class TestAnchorToCoco:
+    """COCO's exhaustive labels replace VG's, except where the copies disagree."""
+
+    def _truth(self, boxes):
+        return {100: {"bus": boxes}}
+
+    def test_anchored_image_takes_cocos_labels_and_cocos_pixel_space(self, vgs, pc):
+        labels = {7: {"dog": [[1.0, 1.0, 2.0, 2.0]]}}
+        box_dims, exhaustive, n_anchored, n_reframed = vgs.anchor_to_coco(
+            labels,
+            dims={7: (500, 375)},
+            coco_of={7: 100},
+            truth=self._truth([[10.0, 10.0, 20.0, 20.0]]),
+            coco_dims={100: (640, 480)},
+            wanted={"bus", "dog"},
+        )
+        # REPLACED, not merged: VG's unverifiable `dog` is exactly what the
+        # repair is removing.
+        assert labels[7] == {"bus": [[10.0, 10.0, 20.0, 20.0]]}
+        assert box_dims[7] == (640, 480)
+        assert exhaustive == {7} and (n_anchored, n_reframed) == (1, 0)
+
+    def test_reframed_copy_keeps_vgs_own_labels(self, vgs):
+        """A transposed copy is a different framing; COCO's box does not describe it."""
+        labels = {7: {"dog": [[1.0, 1.0, 2.0, 2.0]]}}
+        box_dims, exhaustive, n_anchored, n_reframed = vgs.anchor_to_coco(
+            labels,
+            dims={7: (375, 500)},  # transposed against COCO's 640x480
+            coco_of={7: 100},
+            truth=self._truth([[10.0, 10.0, 20.0, 20.0]]),
+            coco_dims={100: (640, 480)},
+            wanted={"bus", "dog"},
+        )
+        assert labels[7] == {"dog": [[1.0, 1.0, 2.0, 2.0]]}
+        assert box_dims[7] == (375, 500)
+        assert exhaustive == set() and (n_anchored, n_reframed) == (0, 1)
+
+    def test_classes_outside_c_are_dropped_from_cocos_labels(self, vgs):
+        labels = {7: {}}
+        vgs.anchor_to_coco(
+            labels,
+            dims={7: (640, 480)},
+            coco_of={7: 100},
+            truth={100: {"bus": [[1.0, 1.0, 2.0, 2.0]], "toaster": [[3.0, 3.0, 4.0, 4.0]]}},
+            coco_dims={100: (640, 480)},
+            wanted={"bus"},
+        )
+        assert labels[7] == {"bus": [[1.0, 1.0, 2.0, 2.0]]}
+
+    def test_unanchored_images_keep_vg_dims(self, vgs):
+        labels = {7: {}, 8: {}}
+        box_dims, _, n_anchored, _ = vgs.anchor_to_coco(
+            labels, dims={7: (500, 375), 8: (600, 400)}, coco_of={}, truth={}, coco_dims={}, wanted={"bus"}
+        )
+        assert box_dims == {7: (500, 375), 8: (600, 400)} and n_anchored == 0
+
+
+class TestBandCandidates:
+    def _labels_with_area_fraction(self, pc, frac: float):
+        """One image whose single ``bus`` box covers *frac* of a 100x100 frame."""
+        side = (frac * 10000) ** 0.5
+        return {7: {"bus": [[0.0, 0.0, side, side]]}}, {7: (100, 100)}
+
+    def test_image_lands_in_the_band_its_union_box_falls_in(self, vgs, pc):
+        band, (lo, hi) = next(iter(pc.BOX_BANDS.items()))
+        labels, box_dims = self._labels_with_area_fraction(pc, (lo + hi) / 2)
+        supply, boxes_for, clean = vgs.band_candidates(labels, box_dims, set())
+
+        assert supply["bus"][band] == [7]
+        assert boxes_for[(7, pc.scale_cell("bus", band))] == labels[7]["bus"]
+        assert clean == []
+
+    def test_scattered_instances_are_excluded_from_every_band(self, vgs, pc):
+        """The union box describes the scatter, not the object nobody would drag."""
+        labels = {7: {"bus": [[0.0, 0.0, 1.0, 1.0], [99.0, 99.0, 100.0, 100.0]]}}
+        supply, boxes_for, clean = vgs.band_candidates(labels, {7: (100, 100)}, set())
+
+        assert all(not ids for bands in supply.values() for ids in bands.values())
+        assert boxes_for == {} and clean == []
+
+    def test_image_with_no_class_joins_the_clean_pool(self, vgs):
+        supply, _, clean = vgs.band_candidates({7: {}}, {7: (100, 100)}, set())
+        assert clean == [7]
+
+    def test_an_unbanded_pair_keeps_the_image_out_of_the_clean_pool(self, vgs, pc):
+        """A reviewer said the object IS there; it is not a true negative."""
+        cls = pc.SCALE_CLASSES[0]
+        _, _, clean = vgs.band_candidates({7: {}}, {7: (100, 100)}, {(7, cls)})
+        assert clean == []
+
+
+class TestDesignateCells:
+    """Selection must be stable under a changing pool, and keep reviewed images."""
+
+    def _supply(self, pc, cls: str, band: str, ids: list[int]):
+        supply = {c: {b: [] for b in pc.BOX_BANDS} for c in pc.SCALE_CLASSES}
+        supply[cls][band] = list(ids)
+        return supply
+
+    def test_adding_a_candidate_moves_only_that_candidate(self, vgs, pc):
+        """The whole reason selection ranks by hash instead of sampling.
+
+        ``rng.sample`` is deterministic given the same list, but any edit to the
+        pool reshuffles the entire draw -- and a rebuild then silently retires
+        images a human already reviewed.
+        """
+        cls, band = pc.SCALE_CLASSES[0], next(iter(pc.BOX_BANDS))
+        cell = pc.scale_cell(cls, band)
+        pool = list(range(1000, 1000 + pc.SCALE_N_POS + 20))
+
+        before = vgs.designate_cells(self._supply(pc, cls, band, pool), {}, {})[cell]
+        after = vgs.designate_cells(self._supply(pc, cls, band, [7777, *pool]), {}, {})[cell]
+
+        assert len(before) == len(after) == pc.SCALE_N_POS
+        # At most one seat changes hands: the newcomer's, if it out-ranks the
+        # last incumbent. A reshuffle would move nearly all of them.
+        assert len(set(before) - set(after)) <= 1
+
+    def test_reviewed_images_outrank_unreviewed_ones_for_a_seat(self, vgs, pc):
+        """A correction can move an image to a cell that is already full.
+
+        If it lands nowhere, the review quietly stops covering it -- which is
+        what happened to 99 of 360 boxed positives the first time round.
+        """
+        cls, band = pc.SCALE_CLASSES[0], next(iter(pc.BOX_BANDS))
+        cell = pc.scale_cell(cls, band)
+        pool = list(range(1000, 1000 + pc.SCALE_N_POS + 50))
+        # Whichever candidates the hash draw would have left out.
+        unlucky = [i for i in pool if i not in vgs.designate_cells(self._supply(pc, cls, band, pool), {}, {})[cell]]
+        assert unlucky, "test needs a pool larger than the cell"
+
+        corrections = {(i, cls): {"present": True} for i in unlucky[:5]}
+        chosen = vgs.designate_cells(self._supply(pc, cls, band, pool), corrections, {})[cell]
+
+        assert set(unlucky[:5]) <= set(chosen)
+        assert len(chosen) == pc.SCALE_N_POS
+
+    def test_a_roster_pins_membership_across_a_rule_change(self, vgs, pc):
+        """The roster is what a review was carried out against; it wins."""
+        cls, band = pc.SCALE_CLASSES[0], next(iter(pc.BOX_BANDS))
+        cell = pc.scale_cell(cls, band)
+        pool = list(range(1000, 1000 + pc.SCALE_N_POS + 50))
+        pinned = pool[-pc.SCALE_N_POS :]
+
+        chosen = vgs.designate_cells(self._supply(pc, cls, band, pool), {}, {"cells": {cell: pinned}})[cell]
+        assert set(chosen) == set(pinned)
+
+    def test_roster_entries_that_are_no_longer_eligible_drop_out(self, vgs, pc):
+        """A correction can move or remove an image; the shortfall backfills by rank."""
+        cls, band = pc.SCALE_CLASSES[0], next(iter(pc.BOX_BANDS))
+        cell = pc.scale_cell(cls, band)
+        pool = list(range(1000, 1000 + pc.SCALE_N_POS + 10))
+
+        chosen = vgs.designate_cells(
+            self._supply(pc, cls, band, pool), {}, {"cells": {cell: [*pool[: pc.SCALE_N_POS - 1], 424242]}}
+        )[cell]
+
+        assert 424242 not in chosen
+        assert len(chosen) == pc.SCALE_N_POS
+        assert set(pool[: pc.SCALE_N_POS - 1]) <= set(chosen)
+
+    def test_an_undersupplied_cell_is_reported_not_padded(self, vgs, pc, capsys):
+        cls, band = pc.SCALE_CLASSES[0], next(iter(pc.BOX_BANDS))
+        cell = pc.scale_cell(cls, band)
+        chosen = vgs.designate_cells(self._supply(pc, cls, band, [1, 2, 3]), {}, {})[cell]
+
+        assert chosen == [1, 2, 3] or set(chosen) == {1, 2, 3}
+        assert f"UNDER-SUPPLIED {cell}" in capsys.readouterr().out
+
+
+class TestDrawNegatives:
+    def test_roster_negatives_are_kept_and_the_rest_backfilled(self, vgs, pc):
+        clean = list(range(1, pc.SCALE_N_NEG + pc.SCALE_N_NEG_SPARE + 100))
+        keep = clean[-10:]
+
+        negatives, spares = vgs.draw_negatives(clean, {"negatives": keep})
+
+        assert set(keep) <= set(negatives)
+        assert len(negatives) == pc.SCALE_N_NEG
+        assert len(spares) == pc.SCALE_N_NEG_SPARE
+        assert not set(negatives) & set(spares)
+
+    def test_a_roster_entry_that_is_no_longer_clean_drops_out(self, vgs, pc):
+        clean = list(range(1, pc.SCALE_N_NEG + pc.SCALE_N_NEG_SPARE + 100))
+
+        negatives, spares = vgs.draw_negatives(clean, {"negatives": [424242]})
+
+        assert 424242 not in negatives and 424242 not in spares
+        assert len(negatives) == pc.SCALE_N_NEG
+
+    def test_a_short_clean_pool_yields_what_there_is(self, vgs, pc):
+        negatives, spares = vgs.draw_negatives([1, 2, 3], {})
+        assert sorted([*negatives, *spares]) == [1, 2, 3]
+
+
+class TestRank:
+    def test_rank_is_cell_local(self, vgs):
+        """Two cells order the same image independently, so one cell's edit is local."""
+        assert vgs.rank("bus@small", 7) != vgs.rank("bus@large", 7)
+
+    def test_rank_is_stable_across_processes(self, vgs):
+        assert vgs.rank("bus@small", 7) == vgs.rank("bus@small", 7)

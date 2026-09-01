@@ -140,7 +140,6 @@ care.
 - [ ] #3407 — Eight hand-rolled `load_cells` copies, and the live `bench_cells._SIDECARS` regression (Sonnet 5)
 - [ ] #3408 — `run_autopilot_sweep.py` re-implements the harness vote loop against a retired configuration (Sonnet 5)
 - [ ] #3409 — `scripts/experiments/calibration/` is 124 files in one flat directory (Sonnet 5)
-- [ ] #3410 — `build_pile.py`: a seven-subcommand multi-tool with a 303-line dataset loader (Opus 4.8)
 - [ ] #3411 — `common.py` forked seven ways; `_cells_io.py` forked twice (Haiku 4.5)
 - [ ] #3414 — The Smart-indicator FP/FN cost loop is a mirror that doesn't need to be one (Opus 4.8)
 
