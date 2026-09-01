@@ -293,7 +293,7 @@ class ServerSettings(BaseModel):
     # Browse UMAP projection knobs (Stage 1).  They change the map layout, so
     # a per-deployment operator may want to tune them.  The persisted
     # projection is keyed on these values (see
-    # ``vtsearch.routes.projection._projection_params_match``), so a change
+    # ``vtscore.projection.store.projection_params_match``), so a change
     # forces a recompute instead of serving a layout fit under the old params.
     projection_n_neighbors: Annotated[int, _clamp(2, 200)] = PROJECTION_N_NEIGHBORS
     projection_min_dist: Annotated[float, _clamp(0.0, 0.99)] = PROJECTION_MIN_DIST

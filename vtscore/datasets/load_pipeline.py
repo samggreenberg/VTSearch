@@ -613,7 +613,7 @@ def _run_origin_load_in_background(
                     if build_projection:
                         fin.begin("projection")
                         try:
-                            _build_projection_stage(ctx, fin, context_id)
+                            _build_projection_stage(ctx, fin)
                         except Exception:
                             traceback.print_exc()
                     # Embedder warm-up is fire-and-forget so the dashboard row goes

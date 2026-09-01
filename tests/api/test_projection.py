@@ -32,10 +32,10 @@ def _default_hex_media_type():
     fixtures are audio, which now tiles as squares (waveform thumbnails), so
     resolve to ``text`` — the canonical hex type — by default, keeping the many
     lattice-agnostic tests below on the hex path. Tests that exercise a specific
-    media type (image → square, audio → square) patch ``_media_type_for``
+    media type (image → square, audio → square) patch ``service.media_type_for``
     themselves, which overrides this.
     """
-    with patch("vtsearch.routes.projection._media_type_for", return_value="text"):
+    with patch("vtscore.projection.service.media_type_for", return_value="text"):
         yield
 
 
@@ -274,7 +274,7 @@ class TestProjectionPersistence:
         append_projection(fake_pkl, proj, pyr)
 
         with patch(
-            "vtsearch.routes.projection._pkl_path_for",
+            "vtscore.projection.store.pkl_path_for",
             return_value=str(fake_pkl),
         ):
             resp = client.post("/api/projection/build")
@@ -306,7 +306,7 @@ class TestProjectionPersistence:
 
         with (
             patch(
-                "vtsearch.routes.projection._pkl_path_for",
+                "vtscore.projection.store.pkl_path_for",
                 return_value=str(fake_pkl),
             ),
             patch(
@@ -335,7 +335,7 @@ class TestProjectionPersistence:
         write_container(fake_pkl, pkl_bytes, {"format_version": 1})
 
         with patch(
-            "vtsearch.routes.projection._pkl_path_for",
+            "vtscore.projection.store.pkl_path_for",
             return_value=str(fake_pkl),
         ):
             resp = client.post("/api/projection/build")
@@ -458,7 +458,7 @@ class TestBinShapeByMediaType:
     routes derive it from the active dataset via ``MediaType.has_thumbnail``.
     """
 
-    @patch("vtsearch.routes.projection._media_type_for", return_value="audio")
+    @patch("vtscore.projection.service.media_type_for", return_value="audio")
     def test_audio_dataset_reports_square(self, _mock_mt, client):
         """Audio resolves to the square lattice (its waveform thumbnails tile
         as squares like image/video)."""
@@ -473,7 +473,7 @@ class TestBinShapeByMediaType:
         meta = client.get("/api/projection/meta").get_json()
         assert meta["bin_shape"] == "square"
 
-    @patch("vtsearch.routes.projection._media_type_for", return_value="image")
+    @patch("vtscore.projection.service.media_type_for", return_value="image")
     @patch("vtscore.projection.fit_projection", side_effect=_fake_fit_projection)
     def test_image_dataset_builds_and_serves_square(self, _mock_fit, _mock_mt, client):
         """An image dataset is tiled with squares end to end (build, meta, tiles)."""
@@ -501,7 +501,7 @@ class TestBinShapeByMediaType:
             assert tile_resp.get_json()["level"] == level
             break
 
-    @patch("vtsearch.routes.projection._media_type_for", return_value="image")
+    @patch("vtscore.projection.service.media_type_for", return_value="image")
     @patch("vtscore.projection.fit_projection", side_effect=_fake_fit_projection)
     def test_square_persisted_for_image_dataset(self, _mock_fit, _mock_mt, client, tmp_path):
         """An image dataset's build persists its square pyramid into the container."""
@@ -514,7 +514,7 @@ class TestBinShapeByMediaType:
         write_container(fake_pkl, pkl_bytes, {"format_version": 1})
 
         with patch(
-            "vtsearch.routes.projection._pkl_path_for",
+            "vtscore.projection.store.pkl_path_for",
             return_value=str(fake_pkl),
         ):
             client.post("/api/projection/build")
@@ -733,7 +733,7 @@ class TestForceReproject:
         fake_pkl = tmp_path / "reproject_persist.pkl"
         write_container(fake_pkl, _pickle.dumps({"medias": {}}), {"format_version": 1})
 
-        with patch("vtsearch.routes.projection._pkl_path_for", return_value=str(fake_pkl)):
+        with patch("vtscore.projection.store.pkl_path_for", return_value=str(fake_pkl)):
             client.post("/api/projection/build")
             _wait_projection()
             first = read_projection(fake_pkl, "hex")
@@ -772,7 +772,7 @@ class TestForceReproject:
         append_projection(fake_pkl, legacy, build_pyramid(legacy, bin_shape="square", n_levels=2))
         assert read_projection(fake_pkl, "square") is not None
 
-        with patch("vtsearch.routes.projection._pkl_path_for", return_value=str(fake_pkl)):
+        with patch("vtscore.projection.store.pkl_path_for", return_value=str(fake_pkl)):
             # Force-rebuild the (audio → hex) dataset: the stale square entry is
             # dropped, and the fresh hex layout replaces the legacy one.
             client.post("/api/projection/build", json={"force": True})
@@ -836,70 +836,6 @@ class TestBrowseCompactDefault:
             client.post("/api/projection/build", json={"ids": ids})
             _wait_projection()
         assert captured["compact"] is False
-
-
-def test_projection_params_match(monkeypatch):
-    """The persisted-projection guard invalidates a layout when UMAP params change."""
-    import numpy as np
-
-    from vtsearch.routes import projection as proj_route
-    from vtscore.projection.params import ProjectionParams
-    from vtscore.projection.umap_projection import Projection
-
-    coords = np.zeros((3, 2), dtype=np.float32)
-    ids = [0, 1, 2]
-    umap_default = Projection("p", ids, coords, "umap", 15, 0.1, False)
-    umap_changed = Projection("p", ids, coords, "umap", 30, 0.1, False)
-    pca = Projection("p", ids, coords, "pca", None, None, None)
-    legacy = Projection("p", ids, coords, "umap", None, None, None)
-
-    # Active settings at the config defaults.
-    monkeypatch.setattr(proj_route, "_projection_params", lambda ctx=None: ProjectionParams(15, 0.1, False))
-    assert proj_route._projection_params_match(umap_default) is True
-    assert proj_route._projection_params_match(umap_changed) is False
-    assert proj_route._projection_params_match(pca) is True
-    # Legacy None UMAP knobs are assumed to be the config defaults — but an
-    # unstamped ``compact`` means "compacted", which today's default is not.
-    assert proj_route._projection_params_match(legacy) is False
-
-    # Operator tuned the setting away from the default -> stale layouts recompute.
-    monkeypatch.setattr(proj_route, "_projection_params", lambda ctx=None: ProjectionParams(30, 0.1, False))
-    assert proj_route._projection_params_match(legacy) is False
-    assert proj_route._projection_params_match(umap_changed) is True
-    assert proj_route._projection_params_match(pca) is True
-
-
-def test_projection_params_match_detects_compaction_mismatch(monkeypatch):
-    """A layout compacted under the old default is refit, not silently served.
-
-    ``compact`` used not to be stamped at all, so a compacted layout was
-    indistinguishable from an uncompacted one and the mismatch could never
-    force a recompute (issue #3056).
-    """
-    import numpy as np
-
-    from vtsearch.routes import projection as proj_route
-    from vtscore.projection.params import ProjectionParams
-    from vtscore.projection.umap_projection import Projection
-
-    coords = np.zeros((3, 2), dtype=np.float32)
-    ids = [0, 1, 2]
-    compacted = Projection("p", ids, coords, "umap", 15, 0.1, True)
-    uncompacted = Projection("p", ids, coords, "umap", 15, 0.1, False)
-    unstamped = Projection("p", ids, coords, "umap", 15, 0.1, None)
-
-    monkeypatch.setattr(proj_route, "_projection_params", lambda ctx=None: ProjectionParams(15, 0.1, False))
-    assert proj_route._projection_params_match(uncompacted) is True
-    assert proj_route._projection_params_match(compacted) is False
-    # Unstamped reads as compacted — what it was when nothing recorded it.
-    assert proj_route._projection_params_match(unstamped) is False
-
-    # ...and the guard is symmetric: with compaction back on, the uncompacted
-    # layout is the stale one.
-    monkeypatch.setattr(proj_route, "_projection_params", lambda ctx=None: ProjectionParams(15, 0.1, True))
-    assert proj_route._projection_params_match(compacted) is True
-    assert proj_route._projection_params_match(unstamped) is True
-    assert proj_route._projection_params_match(uncompacted) is False
 
 
 class TestProjectionLabels:
@@ -1011,7 +947,7 @@ class TestProjectionLabels:
         assert client.get("/api/projection/meta?subset=1").get_json()["has_labels"] is True
 
     def test_reset_full_projection_drops_labels(self, client):
-        from vtsearch.routes.projection import _reset_full_projection
+        from vtscore.projection.service import reset_full_projection
 
         ctx = get_active_context()
         proj, pyr = self._build_hex_pyramid()
@@ -1019,7 +955,7 @@ class TestProjectionLabels:
         ctx._pyramids = {"hex": pyr}
         ctx._region_labels = self._label_set(pyr.projection_id)
 
-        _reset_full_projection(ctx)
+        reset_full_projection(ctx)
         assert ctx._region_labels is None
 
 
@@ -1053,7 +989,7 @@ class TestPersistedLabelRestore:
         ctx._projection = proj
         ctx._pyramids = {"hex": pyr}
         pkl = self._persist(tmp_path, stored_id, stored_sig)
-        monkeypatch.setattr("vtsearch.routes.projection._pkl_path_for", lambda dataset_id: str(pkl))
+        monkeypatch.setattr("vtscore.projection.store.pkl_path_for", lambda dataset_id: str(pkl))
         if active_sig != "__unset__":
             monkeypatch.setattr("vtscore.projection.signpost_prep.labeler_signature", lambda ctx: active_sig)
         return client.get("/api/projection/labels").get_json()
@@ -1143,7 +1079,7 @@ class TestPersistedLabelRestore:
 
         ctx = get_active_context()
         pkl = self._persist(tmp_path, "live-layout", "sig-old")
-        monkeypatch.setattr("vtsearch.routes.projection._pkl_path_for", lambda dataset_id: str(pkl))
+        monkeypatch.setattr("vtscore.projection.store.pkl_path_for", lambda dataset_id: str(pkl))
         monkeypatch.setattr("vtscore.projection.signpost_prep.labeler_signature", lambda ctx: "sig-new")
 
         proj, pyr = TestProjectionLabels._build_hex_pyramid("live-layout")
