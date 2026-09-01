@@ -403,8 +403,12 @@ def load_ucsf(
     to carry a company letterhead, carrying a coarse top-of-page band so the
     mark can be clustered and adjudicated like any other.
     """
+    import time
+
     from sources import ucsf
 
+    started = time.monotonic()
+    cpu_started = time.process_time()
     failures: list[str] = []
 
     def note(doc_id: str, exc: Exception) -> None:
@@ -463,6 +467,20 @@ def load_ucsf(
 
     if failures:
         warnings.append(f"ucsf: skipped {len(failures)} document(s) that failed to download or render")
+
+    # SAY HOW FAST THIS WENT.  A pull that is 2.5x slower than it needs to be
+    # raises no error and fails no cell -- it produces a correct corpus, later --
+    # so the only symptom is an ETA, and an ETA reads as the cost of the work
+    # rather than as a number with a cause.  #3343 ran two days at a third of the
+    # achievable rate on exactly that basis.  Printing the rate and the CPU share
+    # makes "we are waiting on the network with idle cores" a line in the log.
+    elapsed = time.monotonic() - started
+    if elapsed > 0 and pages:
+        cpu = time.process_time() - cpu_started
+        print(
+            f"  ucsf pull: {len(pages):,} page(s) in {elapsed / 3600:.2f} h "
+            f"= {len(pages) / elapsed:.2f} pages/s, {100 * cpu / elapsed:.0f}% CPU"
+        )
     return pages
 
 

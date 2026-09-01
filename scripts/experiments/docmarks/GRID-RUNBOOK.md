@@ -102,17 +102,43 @@ python build_corpus.py \
   --ucsf-letterhead-per-author 2000
 ```
 
-Ask for **16 GB and a wall clock in hours**, not minutes: 200k PDF fetches at a
-polite rate dominate, and the UCSF endpoint is a shared public service — do not
-parallelise the pull across many jobs to go faster. The builder skips a dead id
-rather than aborting, and reports the count at the end; a pull that skips a few
-hundred out of 200k is normal, and a pull that skips tens of thousands means
-something is wrong with the endpoint, not the data.
+Ask for **64 GB and a wall clock in hours**, not minutes. 16 GB was the
+inherited figure; a 1,541-page smoke already peaked at 6.5 GB, and clustering
+holds every mark at once while the letterhead candidates go from 160 to 16,000.
 
-**Resume is free.** Downloads are atomic (temp + rename), rendered pages are
-skipped when present, and the Solr cursor order is stable, so a killed job
-restarts where it stopped. Before resuming, delete zero-byte outputs — they
-count as "done" and resume cannot see that they are empty.
+**Do not parallelise the pull across many jobs.** That is the rule, and it is
+about jobs: a single job fetches 3-wide behind `_Throttle`, which surrenders a
+worker and doubles its delay on any 429/503/509, so pushback converges on serial
+instead of hammering through. `VTS_DOCMARKS_FETCH_WORKERS=1` restores the
+strictly-serial pull.
+
+What that 3 rests on, so the next person can re-derive it rather than trust it:
+~120,000 requests at ~3/s drew **zero** rate-limit responses, and the 4,003
+failures in the first full build were **403 Access Denied** — PDFs indexed but
+not public, permanent and unrelated to pacing. That says we were far below
+UCSF's limit, *not* where the limit is; the throttle exists because those are
+different claims. See
+[`lessons/2026-09-01-a-caution-in-a-runbook-was-read-as-a-measured-limit.md`](../lessons/2026-09-01-a-caution-in-a-runbook-was-read-as-a-measured-limit.md).
+
+The builder skips a dead id rather than aborting and reports the count at the
+end. **Classify the skips before accepting them**: 403s are permanently
+unavailable documents and are normal; a run of 429s means back off; and tens of
+thousands of anything means the endpoint, not the data. The pull also prints its
+own throughput and CPU share when it finishes — a pull that never backs off and
+sits at 37% CPU is under-driven, which is invisible in an ETA.
+
+**Resume is free** — measured, at ~89 pages/s against ~8.6 cold. Downloads are
+atomic (temp + rename), the Solr cursor order is stable, and a page whose PNGs
+are all on disk is **not re-rendered**: its dimensions are read back off the
+images. That last part was false until #3343 (the skip guarded the *save* while
+the render above it ran unconditionally, so a resumed job re-rendered everything
+and threw it away — ~10 h at 200k pages). It is what makes a multi-day pull
+correctable mid-flight rather than something you can only endure, so it is
+pinned by `TestResumeSkipsRendering`.
+
+Before resuming, delete zero-byte outputs — they count as "done" and resume
+cannot see that they are empty — and any `.part` files, which resume via a Range
+header that is only safe if the server honours it.
 
 ## Stage 2 — roster (interactive, off-cluster)
 

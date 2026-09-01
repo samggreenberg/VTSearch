@@ -1848,3 +1848,59 @@ class TestFetchThrottle:
         assert mods["ucsf"]._fetch_workers() == 3
         monkeypatch.setenv("VTS_DOCMARKS_FETCH_WORKERS", "1")
         assert mods["ucsf"]._fetch_workers() == 1
+
+
+class TestResumeSkipsRendering:
+    """A resumed pull must not re-render pages it already has.
+
+    GRID-RUNBOOK promises "Resume is free.  Downloads are atomic, rendered pages
+    are skipped when present".  Two thirds of that was true.  The skip guarded
+    the *save*::
+
+        if not image_path.exists():
+            image.save(image_path)
+
+    while `render_pdf_pages` above it ran unconditionally -- so a resumed job
+    re-rendered every page it already had, at 0.188 s each, and discarded the
+    result.  At 200k pages that is ~10 h per restart, in a builder whose whole
+    design premise is that restarting is cheap.  It mattered four times in two
+    days: a promise that resume is cheap is what makes a long unattended run
+    *correctable* rather than merely endurable.
+
+    So the fast path is pinned as behaviour, not left as an optimisation
+    somebody could reasonably tidy away.  The rendering call is made to explode;
+    if the guard regresses, this test does too.
+    """
+
+    def _fake_png(self, path):
+        from PIL import Image
+
+        Image.new("RGB", (120, 160), "white").save(path)
+
+    def test_all_pages_present_means_no_render_call(self, mods, tmp_path, monkeypatch):
+        out = tmp_path / "images"
+        out.mkdir()
+        self._fake_png(out / "abc12345_0.png")
+
+        import vtscore.datasets.pdf as pdfmod
+
+        def _explode(*a, **kw):  # pragma: no cover - the point is it is unreached
+            raise AssertionError("re-rendered a page that was already on disk")
+
+        monkeypatch.setattr(pdfmod, "render_pdf_pages", _explode)
+
+        got = mods["ucsf"]._render_to_disk(str(tmp_path / "nonexistent.pdf"), str(out), "abc12345", 150, 1)
+        # Dimensions come off the PNG that is already there.
+        assert got == [(0, str(out / "abc12345_0.png"), 120, 160)]
+
+    def test_a_missing_page_still_renders(self, mods, tmp_path, monkeypatch):
+        out = tmp_path / "images"
+        out.mkdir()
+        # Nothing on disk, so the fast path must NOT engage -- otherwise a fresh
+        # pull would quietly produce no images at all.
+        import vtscore.datasets.pdf as pdfmod
+
+        called = []
+        monkeypatch.setattr(pdfmod, "render_pdf_pages", lambda *a, **k: called.append(a) or [])
+        mods["ucsf"]._render_to_disk(str(tmp_path / "x.pdf"), str(out), "def67890", 150, 1)
+        assert called, "a page with no PNG on disk must be rendered"
