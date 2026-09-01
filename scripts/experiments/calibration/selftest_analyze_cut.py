@@ -147,7 +147,7 @@ def _ident(cat: str, seed: int, t: int, embedder: str, style: str) -> dict:
 
 def _fabricate(root: Path, rng: np.random.Generator) -> None:
     from vtscore.eval.voting_columns import CALIBRATION_COLUMNS, CUT_DIAGNOSTIC_COLUMNS
-    from vtscore.eval.voting_iterations import _SAFE_GMM_VARIANTS
+    from vtscore.eval.arms_safe_gmm import _SAFE_GMM_VARIANTS
 
     cells = root / "cells"
     cells.mkdir(parents=True, exist_ok=True)

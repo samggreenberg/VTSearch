@@ -377,7 +377,7 @@ class TestRuleWiring:
     """
 
     def test_every_rule_is_emitted_as_a_pooled_variant(self):
-        from vtscore.eval.voting_iterations import _SAFE_GMM_VARIANTS
+        from vtscore.eval.arms_safe_gmm import _SAFE_GMM_VARIANTS
 
         names = {name for name, _f, _r in _SAFE_GMM_VARIANTS}
         missing = sorted(f"pooled_{r}" for r in ALL_RULES if f"pooled_{r}" not in names)
@@ -391,7 +391,7 @@ class TestRuleWiring:
 
     def test_pooled_variant_rules_all_exist(self):
         """And the converse: a variant naming a rule that was renamed or removed."""
-        from vtscore.eval.voting_iterations import _SAFE_GMM_VARIANTS
+        from vtscore.eval.arms_safe_gmm import _SAFE_GMM_VARIANTS
 
         unknown = sorted({rule for _n, _f, rule in _SAFE_GMM_VARIANTS if rule and rule not in ALL_RULES})
         assert not unknown, f"harness emits variants for rules that do not exist: {unknown}"

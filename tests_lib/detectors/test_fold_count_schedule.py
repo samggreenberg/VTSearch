@@ -32,7 +32,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from vtscore.eval.voting_iterations import parse_fold_count_schedule, simulate_voting_iterations
+from vtscore.eval.arms_fold_count import parse_fold_count_schedule
+from vtscore.eval.voting_iterations import simulate_voting_iterations
 
 from .test_max_patch_style import _planted_dataset
 

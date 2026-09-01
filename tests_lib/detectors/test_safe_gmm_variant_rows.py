@@ -20,12 +20,8 @@ import pytest
 
 from vtscore.eval.cut_rules import CUT_KIND_MIDPOINT
 from vtscore.eval.voting_columns import CALIBRATION_COLUMNS, CUT_DIAGNOSTIC_COLUMNS
-from vtscore.eval.voting_iterations import (
-    _ORACLE_VARIANTS,
-    _SAFE_GMM_VARIANTS,
-    _safe_gmm_variant_rows,
-    simulate_voting_iterations,
-)
+from vtscore.eval.arms_safe_gmm import _ORACLE_VARIANTS, _SAFE_GMM_VARIANTS, _safe_gmm_variant_rows
+from vtscore.eval.voting_iterations import simulate_voting_iterations
 from vtscore.training.thresholds import (
     CUT_KIND_INTERIOR,
     FOLD_ANCHOR_COMBINE,

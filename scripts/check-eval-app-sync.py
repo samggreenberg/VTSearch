@@ -289,7 +289,7 @@ MIRRORS: list[Mirror] = [
     Mirror(
         id="thresholds.fold_anchored_fit_then_cut",
         app="py:vtscore.training.thresholds.anchored.fold_anchored_gmm_threshold",
-        harness="vtscore/eval/voting_iterations.py::_cut_inclusion_arms",
+        harness="vtscore/eval/arms_inclusion.py::_cut_inclusion_arms",
         kind="default",
         note=(
             "The app composes a fold-anchored threshold as fit_fold_anchored_cut(...) then "

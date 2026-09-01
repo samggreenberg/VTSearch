@@ -42,7 +42,7 @@ from vtscore.eval.fit_quality import FIT_QUALITY_COLUMNS
 #: The honest columns re-base the same split off the cross-fitted reference, so
 #: ``cost = skyline_oracle_cost_honest + training_regret_honest + regret_honest``
 #: telescopes too.  **The terms share noise by construction** (they sum to a
-#: pinned total), so the sum-pinned caution `_operating_metrics` documents for
+#: pinned total), so the sum-pinned caution `row_metrics.operating_metrics` documents for
 #: ``rule_inefficiency`` / ``calibration_shift`` transfers verbatim: do not read
 #: one half moving as an effect when the knob also moves the yardstick.
 #:
