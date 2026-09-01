@@ -18,7 +18,7 @@ from typing import Any, cast
 from vtscore.config import DATA_DIR
 from vtscore.media._toponymy_demo import SOURCE_ID as _TOPONYMY_SOURCE_ID
 from vtscore.media._toponymy_demo import TAXONOMY as _TOPONYMY_TAXONOMY
-from vtscore.media.base import DemoDataset, demo_slice
+from vtscore.media.base import DemoDataset, demo_slice, demo_slice_by_category
 from vtscore.media.image._demo_categories import (
     DEMO_CATEGORIES_CALTECH101,
     DEMO_CATEGORIES_CALTECH256,
@@ -740,13 +740,6 @@ _FILE_SOURCE_DOWNLOADERS: dict[str, str] = {
 }
 
 
-def _slice_by_category(by_cat: dict, categories, slice_start, slice_end, slice_frac_start, slice_frac_end) -> list:
-    out: list = []
-    for cat in categories:
-        out.extend(demo_slice(by_cat.get(cat, []), slice_start, slice_end, slice_frac_start, slice_frac_end))
-    return out
-
-
 def _collect_simple_folder_files(source, categories, slice_args, on_progress) -> list:
     """Sources that just download → load_image_metadata_from_folders → group by category."""
     from vtscore.datasets import downloader  # noqa: PLC0415
@@ -758,7 +751,7 @@ def _collect_simple_folder_files(source, categories, slice_args, on_progress) ->
     by_cat: dict = {}
     for _fname, meta in sorted(metadata.items()):
         by_cat.setdefault(meta["category"], []).append((meta["path"], meta["category"]))
-    return _slice_by_category(by_cat, categories, *slice_args)
+    return demo_slice_by_category(by_cat, categories, *slice_args)
 
 
 def _collect_vggface2_files(categories, slice_args, on_progress) -> list:
@@ -783,7 +776,7 @@ def _collect_vggface2_files(categories, slice_args, on_progress) -> list:
             continue
         for img_path in sorted(person_dir.glob("*.jpg")):
             by_cat.setdefault(name, []).append((img_path, name))
-    return _slice_by_category(by_cat, categories, *slice_args)
+    return demo_slice_by_category(by_cat, categories, *slice_args)
 
 
 def _collect_oxford_flowers_files(categories, slice_args, on_progress) -> list:
@@ -797,7 +790,7 @@ def _collect_oxford_flowers_files(categories, slice_args, on_progress) -> list:
     for _fname, meta in sorted(metadata.items()):
         if meta["category"] in categories:
             by_cat.setdefault(meta["category"], []).append((meta["path"], meta["category"]))
-    return _slice_by_category(by_cat, categories, *slice_args)
+    return demo_slice_by_category(by_cat, categories, *slice_args)
 
 
 def _roxford_category_for(stem: str, landmark_set: frozenset[str]) -> str:
@@ -827,7 +820,7 @@ def _collect_roxford_files(categories, slice_args, on_progress) -> list:
             cat = _roxford_category_for(img_path.stem, landmark_set)
             if cat in categories:
                 by_cat.setdefault(cat, []).append((img_path, cat))
-    return _slice_by_category(by_cat, categories, *slice_args)
+    return demo_slice_by_category(by_cat, categories, *slice_args)
 
 
 def _collect_enrico_files(categories, slice_args, on_progress) -> list:
@@ -866,7 +859,7 @@ def _collect_enrico_files(categories, slice_args, on_progress) -> list:
         cat = id_to_cat.get(sid)
         if cat in categories:
             by_cat.setdefault(cat, []).append((img_path, cat))
-    return _slice_by_category(by_cat, categories, *slice_args)
+    return demo_slice_by_category(by_cat, categories, *slice_args)
 
 
 def _collect_places365_files(categories, slice_args, on_progress) -> list:
@@ -880,7 +873,7 @@ def _collect_places365_files(categories, slice_args, on_progress) -> list:
     for _fname, meta in sorted(metadata.items()):
         if meta["category"] in categories:
             by_cat.setdefault(meta["category"], []).append((meta["path"], meta["category"]))
-    return _slice_by_category(by_cat, categories, *slice_args)
+    return demo_slice_by_category(by_cat, categories, *slice_args)
 
 
 def _collect_cifar10_images(categories, slice_args, on_progress) -> list:
