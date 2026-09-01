@@ -23,10 +23,20 @@ only reads from those above it:
 
 Everything below is re-exported here, so ``vtscore.training.thresholds.X``
 resolves exactly as it did when this was one module.  **Patch targets are the
-exception**: rebinding a name on this package does not reach the submodule that
-calls it, so tests that stub an internal (``fit_gmm_threshold``,
-``fit_fold_anchored_cut``, ``_weighted_gaussian_crossing``, ``_GMM_MAX_SAMPLES``,
-``time``) must patch it on the submodule that *uses* it.
+exception**, because a stub has to be installed where the *caller* looks the
+name up, and the split moved some of those lookups:
+
+* A caller outside this package that imports lazily (``from
+  vtscore.training.thresholds import fit_fold_anchored_cut`` inside a function,
+  as :mod:`vtscore.detectors.training` does) re-reads the attribute off this
+  package on every call, so patching the package still reaches it.
+* A caller *inside* a submodule resolves its own module global, which this
+  package's attribute is only a copy of.  Stubbing ``fit_gmm_threshold`` for
+  :func:`~vtscore.training.thresholds.blend.calculate_safe_threshold`, or
+  ``compute_fold_orderings`` for
+  :func:`~vtscore.training.thresholds.conformal.calculate_cross_calibration_threshold`,
+  means patching ``thresholds.blend`` / ``thresholds.conformal`` - not this
+  package, where the rebind is silently ignored.
 """
 
 from __future__ import annotations

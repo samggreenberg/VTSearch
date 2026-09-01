@@ -337,15 +337,15 @@ class TestCalibrationAtTinyLabelCounts:
         """Below 6 labels the fold trainings run: the fold-anchored estimator
         needs their models."""
         from vtscore.detectors import training as detector_training
-        from vtscore.training import thresholds
+        from vtscore.training.thresholds import conformal
 
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4, 5]})  # 5 labels < 6
 
         with unittest.mock.patch.object(
-            thresholds,
+            conformal,
             "compute_fold_orderings",
-            wraps=thresholds.compute_fold_orderings,
+            wraps=conformal.compute_fold_orderings,
         ) as patched:
             _, threshold, _model = detector_training.train_and_score(
                 app_module.medias,
@@ -359,15 +359,15 @@ class TestCalibrationAtTinyLabelCounts:
         """Below 6 labels cross-calibration runs, so both training entry
         points agree instead of one hard-coding 0.5."""
         from vtscore.detectors import training as detector_training
-        from vtscore.training import thresholds
+        from vtscore.training.thresholds import conformal
 
         app_module.good_votes.update({k: None for k in [1, 2]})
         app_module.bad_votes.update({k: None for k in [3, 4, 5]})  # 5 labels < 6
 
         with unittest.mock.patch.object(
-            thresholds,
+            conformal,
             "compute_fold_orderings",
-            wraps=thresholds.compute_fold_orderings,
+            wraps=conformal.compute_fold_orderings,
         ) as patched:
             detector_training.train_and_score(
                 app_module.medias,
@@ -381,15 +381,15 @@ class TestCalibrationAtTinyLabelCounts:
         trainings run too.  The old schedule-derived skip is gone entirely.
         """
         from vtscore.detectors import training as detector_training
-        from vtscore.training import thresholds
+        from vtscore.training.thresholds import conformal
 
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})  # 6 labels
 
         with unittest.mock.patch.object(
-            thresholds,
+            conformal,
             "compute_fold_orderings",
-            wraps=thresholds.compute_fold_orderings,
+            wraps=conformal.compute_fold_orderings,
         ) as patched:
             detector_training.train_and_score(
                 app_module.medias,
@@ -402,15 +402,15 @@ class TestCalibrationAtTinyLabelCounts:
         """At 7 labels - the app's first trained-detector step - calibration
         must run, as it does at every other count."""
         from vtscore.detectors import training as detector_training
-        from vtscore.training import thresholds
+        from vtscore.training.thresholds import conformal
 
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [17, 18, 19, 20]})  # 7 labels
 
         with unittest.mock.patch.object(
-            thresholds,
+            conformal,
             "compute_fold_orderings",
-            wraps=thresholds.compute_fold_orderings,
+            wraps=conformal.compute_fold_orderings,
         ) as patched:
             detector_training.train_and_score(
                 app_module.medias,
@@ -447,7 +447,7 @@ class TestCalibrationCache:
 
     def test_second_call_with_same_inputs_skips_calibration(self):
         from vtscore.detectors import training as detector_training
-        from vtscore.training import thresholds
+        from vtscore.training.thresholds import conformal
 
         self._seed_six_labels()
         det_ctx = self._det_ctx()
@@ -461,7 +461,7 @@ class TestCalibrationCache:
         assert det_ctx.calibration_cache is not None
 
         with unittest.mock.patch.object(
-            thresholds,
+            conformal,
             "compute_fold_orderings",
             side_effect=AssertionError("fold orderings should be cached on repeat call"),
         ) as patched:
@@ -495,7 +495,7 @@ class TestCalibrationCache:
 
     def test_label_change_invalidates_cache(self):
         from vtscore.detectors import training as detector_training
-        from vtscore.training import thresholds
+        from vtscore.training.thresholds import conformal
 
         self._seed_six_labels()
         det_ctx = self._det_ctx()
@@ -514,9 +514,9 @@ class TestCalibrationCache:
         app_module.bad_votes[3] = None
 
         with unittest.mock.patch.object(
-            thresholds,
+            conformal,
             "compute_fold_orderings",
-            wraps=thresholds.compute_fold_orderings,
+            wraps=conformal.compute_fold_orderings,
         ) as patched:
             detector_training.train_and_score(
                 app_module.medias,
@@ -533,7 +533,7 @@ class TestCalibrationCache:
         cached fold orderings (no fold refit) and only re-run the cheap
         min-cost search."""
         from vtscore.detectors import training as detector_training
-        from vtscore.training import thresholds
+        from vtscore.training.thresholds import conformal
 
         self._seed_six_labels()
         det_ctx = self._det_ctx()
@@ -549,9 +549,9 @@ class TestCalibrationCache:
         key_before = det_ctx.calibration_cache[0]
 
         with unittest.mock.patch.object(
-            thresholds,
+            conformal,
             "compute_fold_orderings",
-            wraps=thresholds.compute_fold_orderings,
+            wraps=conformal.compute_fold_orderings,
         ) as patched:
             detector_training.train_and_score(
                 app_module.medias,
@@ -568,14 +568,14 @@ class TestCalibrationCache:
     def test_no_cache_when_det_ctx_missing(self):
         """Without a det_ctx, every call must recompute calibration."""
         from vtscore.detectors import training as detector_training
-        from vtscore.training import thresholds
+        from vtscore.training.thresholds import conformal
 
         self._seed_six_labels()
 
         with unittest.mock.patch.object(
-            thresholds,
+            conformal,
             "compute_fold_orderings",
-            wraps=thresholds.compute_fold_orderings,
+            wraps=conformal.compute_fold_orderings,
         ) as patched:
             detector_training.train_and_score(
                 app_module.medias,

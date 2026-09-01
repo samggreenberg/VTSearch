@@ -19,7 +19,7 @@ import numpy as np
 import pytest
 import torch
 
-from vtscore.training.thresholds import anchored as thresholds_mod
+import vtscore.training.thresholds as thresholds_mod
 from vtscore.detectors.training import _score_all_media, train_and_threshold
 from vtscore.embedding.matrix import get_embedding_matrix_for_snap
 

@@ -20,7 +20,7 @@ import math
 
 import numpy as np
 
-from vtscore.training.thresholds import anchored as thresholds_mod
+import vtscore.training.thresholds as thresholds_mod
 from vtscore.datasets.labelset import LabeledElement, LabelSet
 from vtscore.detectors.labelset_training import labeled_media_ids
 from vtscore.detectors.training import train_and_score, train_and_threshold
