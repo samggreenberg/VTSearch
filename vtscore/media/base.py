@@ -41,6 +41,7 @@ __all__ = [
     "MediaType",
     "ProgressCallback",
     "demo_slice",
+    "demo_slice_by_category",
 ]
 
 
@@ -210,6 +211,29 @@ def demo_slice(items, slice_start, slice_end, slice_frac_start=None, slice_frac_
         end = int(n * slice_frac_end) if slice_frac_end is not None else n
         return items[start:end]
     return items[slice_start:slice_end]
+
+
+def demo_slice_by_category(
+    by_cat: dict,
+    categories,
+    slice_start,
+    slice_end,
+    slice_frac_start=None,
+    slice_frac_end=None,
+) -> list:
+    """Flatten a ``{category: items}`` map into one list, slicing each category.
+
+    The per-category loop every media type's demo loader runs after grouping a
+    downloaded folder's metadata by label: walk *categories* in the caller's
+    order (so the requested subset, and its ordering, is what comes back), and
+    take the same :func:`demo_slice` window out of each bucket.  A category the
+    map doesn't have contributes nothing rather than raising, since the
+    downloaded source may legitimately be missing a requested label.
+    """
+    out: list = []
+    for cat in categories:
+        out.extend(demo_slice(by_cat.get(cat, []), slice_start, slice_end, slice_frac_start, slice_frac_end))
+    return out
 
 
 class MediaType(ABC):

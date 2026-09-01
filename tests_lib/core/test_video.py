@@ -23,7 +23,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from vtscore.media.video import decode
+from vtscore.media.video import _demo_sources, decode
 from vtscore.media.video.media_type import (
     _VIDEO_MIME_TYPES,
     VideoMediaType,
@@ -331,15 +331,15 @@ class TestVideoDemoDatasets:
                 assert f"{family}_{suffix}" in ids
 
     def test_sources_are_downloadable(self):
-        supported = set(self.mt._VIDEO_SOURCE_DOWNLOADERS)
+        supported = set(_demo_sources._VIDEO_SOURCE_DOWNLOADERS)
         assert {d.source for d in self.demos} <= supported
 
     def test_categories_match_family(self):
         by_id = {d.id: d for d in self.demos}
-        assert by_id["ucf101_s"].categories == self.mt._DEMO_CATEGORIES
-        assert by_id["hmdb51_s"].categories == self.mt._HMDB51_CATEGORIES
-        assert by_id["kth_s"].categories == self.mt._KTH_CATEGORIES
-        assert by_id["ucf101_full_s"].categories == self.mt._UCF101_FULL_CATEGORIES
+        assert by_id["ucf101_s"].categories == _demo_sources._DEMO_CATEGORIES
+        assert by_id["hmdb51_s"].categories == _demo_sources._HMDB51_CATEGORIES
+        assert by_id["kth_s"].categories == _demo_sources._KTH_CATEGORIES
+        assert by_id["ucf101_full_s"].categories == _demo_sources._UCF101_FULL_CATEGORIES
 
     def test_all_slice_covers_full_range(self):
         by_id = {d.id: d for d in self.demos}
