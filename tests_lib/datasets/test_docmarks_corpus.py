@@ -1709,3 +1709,88 @@ class TestKaggleProbeParsesRealCliOutput:
     def test_an_error_message_still_fails(self, mods, monkeypatch):
         with pytest.raises(mods["common"].FetchError):
             self._run(mods, monkeypatch, "403 - Forbidden - Permission denied\n")
+
+
+class TestUcsfIndustryIsRecorded:
+    """The Tobacco800 contamination rule needs an industry on the page.
+
+    `industry` is INDEXED BUT NOT STORED in UCSF's Solr: `industry:Tobacco`
+    filters correctly, and `fl=industry` returns nothing at all.  So
+    `first_value(doc, "industry")` was always None, every page in the
+    2026-08-31 build recorded `industry: null`, and
+    `eligible_distractor("tobacco800", "ucsf", None)` could never fire.
+
+    That is the single contamination rule that costs something.  Tobacco800 and
+    UCSF's Tobacco industry are both IIT-CDIP, so an American Tobacco letterhead
+    in a Tobacco800 class genuinely appears on UCSF Tobacco pages -- unlabelled
+    positives, where retrieving one is CORRECT and the metric records a false
+    positive.  The corpus looked fine: 117,028 pages, no warning, a null in a
+    metadata field nobody reads.
+    """
+
+    def test_the_queried_industry_is_stamped_on_the_page(self, mods):
+        page = mods["ucsf"].doc_to_page(
+            {"id": "ffbb0002", "title": "x"}, "/nonexistent/p.png", 1240, 1680, industry="Tobacco"
+        )
+        assert page.meta["industry"] == "Tobacco"
+
+    def test_a_tobacco_page_is_not_eligible_for_a_tobacco800_class(self, mods):
+        assert mods["cfg"].eligible_distractor("tobacco800", "ucsf", "Tobacco") is False
+        # ...and the non-tobacco industries still are: they are different
+        # companies, not the same archive under another name.
+        assert mods["cfg"].eligible_distractor("tobacco800", "ucsf", "Opioids") is True
+
+    def test_a_null_industry_is_what_used_to_slip_through(self, mods):
+        # Pinned as the regression itself: this returning True is precisely the
+        # bug, and it is why the industry must be stamped at pull time.
+        assert mods["cfg"].eligible_distractor("tobacco800", "ucsf", None) is True
+
+
+class TestDistractorPullPlan:
+    """Fill the budget, and spend Tobacco last.
+
+    The six industries are wildly unequal -- measured live: Tobacco 9.4M and
+    Opioids 4.07M against Fossil Fuel 311, Drug 1,064, Chemical 3,657 -- so
+    `budget // 6` asks three of them for ~30k pages that do not exist.  At 200k
+    the even split tops out at 105,031, which is why the 2026-08-31 build
+    stopped at 119,806 pages looking like a job that had run to completion.
+    """
+
+    def test_the_budget_is_actually_filled(self, mods):
+        plan = mods["build"]._plan_distractor_pull(200_000)
+        assert sum(want for _, want in plan) == 200_000
+
+    def test_the_production_budget_draws_no_tobacco_at_all(self, mods):
+        """The 200k case, and the reason the ordering exists.
+
+        Not a style preference: UCSF Tobacco is the same archive as Tobacco800,
+        so every Tobacco page in the haystack is a page Tobacco800's classes
+        cannot safely be scored against -- and worse, a place an unlabelled
+        positive can hide, where a correct retrieval is recorded as a false
+        positive.  Opioids alone has 4.07M single-page documents, so at 200k the
+        budget is filled without touching Tobacco.
+        """
+        plan = dict(mods["build"]._plan_distractor_pull(200_000))
+        assert plan.get("Tobacco", 0) == 0
+        assert sum(plan.values()) == 200_000
+
+    def test_tobacco_is_drawn_only_once_everything_else_is_exhausted(self, mods):
+        cap = mods["build"].UCSF_INDUSTRY_CAPACITY
+        others = sum(v for k, v in cap.items() if k != "Tobacco")
+        plan = mods["build"]._plan_distractor_pull(others + 50_000)
+        drawn = [industry for industry, want in plan if want > 0]
+        assert drawn[-1] == "Tobacco"
+        assert dict(plan)["Tobacco"] == 50_000
+        # ...and only after every other industry was taken to capacity.
+        for industry, want in plan:
+            if industry != "Tobacco":
+                assert want == cap[industry]
+
+    def test_a_small_budget_never_reaches_tobacco(self, mods):
+        plan = dict(mods["build"]._plan_distractor_pull(5_000))
+        assert plan.get("Tobacco", 0) == 0
+
+    def test_no_industry_is_asked_for_more_than_it_has(self, mods):
+        plan = mods["build"]._plan_distractor_pull(200_000)
+        cap = mods["build"].UCSF_INDUSTRY_CAPACITY
+        assert all(want <= cap[industry] for industry, want in plan)

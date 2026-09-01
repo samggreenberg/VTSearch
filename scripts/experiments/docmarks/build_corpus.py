@@ -356,6 +356,38 @@ def load_anchor_sources(
     return pages
 
 
+#: Live 1-page document counts per industry, measured 2026-09-01.  Used only to
+#: ORDER and SIZE the pull; the real counts still come from Solr, and a shortfall
+#: is reported rather than assumed away.
+UCSF_INDUSTRY_CAPACITY: dict[str, int] = {
+    "Tobacco": 9_410_129,
+    "Opioids": 4_070_287,
+    "Food": 71_673,
+    "Chemical": 3_657,
+    "Drug": 1_064,
+    "Fossil Fuel": 311,
+}
+
+
+def _plan_distractor_pull(budget: int) -> list[tuple[str, int]]:
+    """How many distractors to ask each industry for, in pull order.
+
+    Small industries are drained first because they cannot absorb a large share
+    anyway, then Opioids and Food, and Tobacco LAST -- it is the only industry
+    whose pages cost something, being the same archive as Tobacco800.
+    """
+    order = ["Fossil Fuel", "Drug", "Chemical", "Food", "Opioids", "Tobacco"]
+    plan: list[tuple[str, int]] = []
+    left = budget
+    for industry in order:
+        if left <= 0:
+            break
+        take = min(left, UCSF_INDUSTRY_CAPACITY.get(industry, 0))
+        plan.append((industry, take))
+        left -= take
+    return plan
+
+
 def load_ucsf(
     raw: Path,
     out_images: Path,
@@ -396,14 +428,38 @@ def load_ucsf(
                 letterhead_author=author,
                 band_frac=band_frac,
                 on_error=note,
+                # Every name in UCSF_LETTERHEAD_AUTHORS is a tobacco company, so
+                # a page pulled for one is a Tobacco page even though it was
+                # found by an author query rather than an industry one.  Saying
+                # so keeps these 15k pages inside the Tobacco800 exclusion.
+                industry="Tobacco",
             )
         )
 
-    per_industry = max(1, distractor_budget // max(1, len(cfg.UCSF_INDUSTRIES)))
-    for industry in cfg.UCSF_INDUSTRIES:
+    # WATER-FILL, not an even split.  The six industries are wildly unequal --
+    # measured live 2026-09-01: Tobacco 9,410,129 and Opioids 4,070,287 against
+    # Fossil Fuel 311, Drug 1,064, Chemical 3,657 -- so an even share of
+    # `budget/6` asks three of them for ~30k pages that do not exist.  At a 200k
+    # budget the even split can only ever deliver 105,031, and the 2026-08-31
+    # build duly stopped at 119,806 pages looking like a job that had finished.
+    #
+    # The order matters as much as the filling.  An industry is not a property
+    # of the eval -- "find this logo" does not care whether the page it is not
+    # on came from a tobacco firm or a drug firm -- so the mix is free to be
+    # whatever fills the budget, with ONE exception: UCSF's Tobacco industry is
+    # the same archive as Tobacco800, so every Tobacco page added is a page
+    # subtracted from what Tobacco800's classes can safely be scored against.
+    # Draw from the cheap industries first and Tobacco only if the budget still
+    # needs it.
+    per_industry = _plan_distractor_pull(distractor_budget)
+    for industry, want in per_industry:
+        if want <= 0:
+            continue
         query = ucsf.build_query(industry=industry, doc_type=None, max_pages=1)
-        docs = list(ucsf.solr_docs(query, limit=per_industry))
-        pages.extend(ucsf.fetch_and_render(docs, raw, out_images / "ucsf", on_error=note))
+        docs = list(ucsf.solr_docs(query, limit=want))
+        if len(docs) < want:
+            warnings.append(f"ucsf: industry {industry!r} yielded {len(docs):,} of {want:,} requested")
+        pages.extend(ucsf.fetch_and_render(docs, raw, out_images / "ucsf", on_error=note, industry=industry))
 
     if failures:
         warnings.append(f"ucsf: skipped {len(failures)} document(s) that failed to download or render")

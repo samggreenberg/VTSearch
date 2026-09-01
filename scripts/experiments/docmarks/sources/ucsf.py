@@ -199,6 +199,7 @@ def doc_to_page(
     page_index: int = 0,
     letterhead_author: Optional[str] = None,
     band_frac: float = 0.22,
+    industry: Optional[str] = None,
 ) -> Page:
     """One rendered page image plus its Solr metadata as a :class:`Page`.
 
@@ -238,7 +239,16 @@ def doc_to_page(
         marks=marks,
         meta={
             "doc_id": doc_id,
-            "industry": first_value(doc, "industry"),
+            # The industry we QUERIED, not one read back from the response.
+            # `industry` is indexed but NOT stored in UCSF's Solr: `industry:
+            # Tobacco` filters correctly while `fl=industry` returns nothing, so
+            # every page in the 2026-08-31 build recorded `industry: null`.
+            # That silently disarmed the one contamination rule that bites --
+            # Tobacco800 and UCSF's Tobacco industry are both IIT-CDIP, so
+            # scoring one against the other counts a CORRECT retrieval as a
+            # false positive.  The caller knows the industry because it is the
+            # thing it searched for; taking it from there needs no Solr change.
+            "industry": industry or first_value(doc, "industry"),
             "collection": first_value(doc, "collection"),
             "author": first_value(doc, "author"),
             "letterhead_author": letterhead_author,
@@ -312,6 +322,7 @@ def fetch_and_render(
     band_frac: float = 0.22,
     max_pages_per_doc: int = 1,
     on_error: Optional[Any] = None,
+    industry: Optional[str] = None,
 ) -> list[Page]:
     """Download each doc's PDF, render its pages to PNG, return :class:`Page`\\ s.
 
@@ -372,6 +383,7 @@ def fetch_and_render(
                             page_index=idx,
                             letterhead_author=letterhead_author,
                             band_frac=band_frac,
+                            industry=industry,
                         ),
                     )
                 )
