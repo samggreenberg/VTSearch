@@ -8,12 +8,12 @@ tracked in [`codebase-audit-2026-08.md`](codebase-audit-2026-08.md). Unlike the
 August audit (defects), this one targeted **tech debt**: god modules, duplicated
 logic, dead code, layering violations, and unnecessary complexity.
 
-**Everything concrete became an issue.** 76 items were promoted to GitHub issues
-(#3375–#3450) and their bodies deleted from this file, per the one-item-one-home
+**Everything concrete became an issue.** 79 items are tracked as GitHub issues
+(#3375–#3453) with their bodies deleted from this file, per the one-item-one-home
 rule. What remains here is the umbrella: a pointer list per area so the slices
-stay legible as a group, plus the handful of items that are **open questions
-rather than tasks** — those keep their bodies below, because there is nothing to
-file until someone decides.
+stay legible as a group. One design fork is still an open question rather than a
+task, and keeps its body at the bottom, because there is nothing to file until
+someone decides.
 
 The August audit's improvement proposals remain open and complementary; several
 issues below note when they should ship together with one of them.
@@ -187,33 +187,16 @@ care.
 
 # Open questions (not yet tasks)
 
-These five were deliberately **not** filed. Each needs a decision before there is
-anything to implement; filing them as issues would put a question in a queue
-meant for work. Answer one and it becomes an issue (or a deletion) immediately.
+Four of the five questions this audit raised have been answered by the repo
+owner and became issues (or, for the punch-card, a decision to change nothing):
 
-<!-- item-sep -->
+- [ ] #3451 — Delete the four never-implemented integration plugins (Sonnet 5). Bigger than its 865 lines: `docs/EXTENDING-plugins.md` teaches the bulk-fetch hook *from* ReCaller/PullWrest, so the guide needs replacement examples rather than deletions.
+- [ ] #3452 — Find out who uses the autorun extractor/localizer surface before touching it (Sonnet 5). Kept as-is pending an answer from the external developers; #3441 is scoped so the rest of the frontend dead-code sweep lands without waiting.
+- [ ] #3453 — Document the settings-source sync engine and retire its dead cross-worker layer (Opus 4.8). The capability stays — more sources are coming — so this is documentation plus the `.syncmark` layer that `workers = 1` already made unreachable.
 
-- **Is the settings-source sync engine a kept capability?** — `vtsearch/routes/settings/sources.py:52`
+The release punch-card stays exactly as it is; that question is closed.
 
-  None of the eight `/api/settings-sources*` / labelset-source *management* endpoints is called by the frontend (verified against both the path literals and the generated-client method names; the SPA's only adjacent call is `moveLabelsetSourceFile`, which lives in the detectors-registry routes). Behind them, `vtsearch/settings_store.py` carries a dirty-key/sync-marker state machine on the hot path of every settings read, and it is the source of the lock-ordering complexity that `vtsearch/settings.py`'s docstrings warn about in six places. The `.syncmark` cross-worker dedup layer (`settings_store.py:92-155`) guards a multi-worker race that cannot occur: `gunicorn.conf.py:28` hardcodes `workers = 1` and every Dockerfile uses it. Note the *labelset*-source sync itself (detector label sync at load) is live vtscore machinery — the orphan is the settings-source half plus its REST management surface.
-
-  *If kept:* delete the `.syncmark` layer and keep the lazy pull (M). *If dropped:* delete the routes module, the settings-sources plugin family registration, and roughly half of `settings_store.py` (L, Opus 4.8). Either way the endpoints have no SPA consumer, so an external caller is the only thing that could be relying on them.
-
-<!-- item-sep -->
-
-- **Does the autorun extractor/localizer surface ship or die?** — `vtsearch/autorun_processors.py:38`
-
-  ~1000 lines across three tiers with no entry point: `vtsearch/autorun_processors.py` (whose extractor and localizer halves are verbatim copy-paste twins), `vtsearch/routes/processors/crud.py` (10 routes), `vtsearch/routes/processors/scoring.py` (`/api/extract`, `/api/auto-extract`, `/api/localize`, `/api/auto-localize`), `vtsearch/schemas/processors.py`, and `frontend/src/app/services/processors-api.service.ts` — which is referenced by nothing. No template calls any of the endpoints. (The "autorun" strings in `dashboard.component.ts` are the unrelated Auto-Find tab.)
-
-  *If dropped:* delete the app-tier registry, routes, schemas, and the Angular service, and regenerate the OpenAPI snapshot (M, Haiku 4.5). **The `Extractor`/`Localizer` ABCs in `vtscore/media/processors.py` stay regardless** — they are documented external extension API (`docs/EXTENDING-processors.md`), and an out-of-tree processor may well exist even though nothing in this repo drives one. #3441 is scoped so the rest of the frontend dead-code deletion lands without waiting on this.
-
-<!-- item-sep -->
-
-- **Are the four never-implemented integration plugins templates, or clutter?** — `vtscore/exporters/holder/__init__.py:44`
-
-  Every I/O function in four plugin packages raises `NotImplementedError("TODO: implement ...")` behind a `# TODO(dev)` banner (~865 lines across the Holder exporter, the Holder label importer, the ReCaller dataset importer, and the PullWrest source). All are registered with sentinels and merely set `hidden_from_picker = True`, so they are still discovered, still constructed at import, and still resolvable by name. The payload-shaping code around the stubs has no test that could catch a break, because the entry points raise before reaching it. `holder` nonetheless appears in the generated exporter listing in `vtscore/docs/packages/exporters.md:70`.
-
-  *Options:* keep as worked templates (and add a test asserting no *other* registered plugin's entry point raises `NotImplementedError`, so the stub count can't grow); move them out of the auto-discovered directories into a contrib tree; or delete them (git history preserves them). Worth weighing that an external developer may have copied one as a starting point — that argues for keeping them reachable as reference even if they leave the registry.
+What remains is one genuine design fork:
 
 <!-- item-sep -->
 
@@ -222,11 +205,3 @@ meant for work. Answer one and it becomes an issue (or a deletion) immediately.
   All 14 call sites call `CoreConfig.from_settings()` ad hoc, each invoking ~18 settings getters through the app shim, so the frozen-value-object abstraction buys nothing while costing a full settings snapshot per lookup. The design comment at `config.py:793-816` still says "Until those land this class is unused at runtime" — stale for a while now.
 
   *The fork:* either restore the original design (build one snapshot per operation and pass it down, which is a real plumbing change) or accept that the getters won and replace `CoreConfig` with direct calls. Both are defensible; picking one is a design call, not a cleanup. The stale comment should go either way.
-
-<!-- item-sep -->
-
-- **Does anyone look at the punch-card?** — `scripts/punchcard/vtsearch_pr_punchcard.png`
-
-  A 206 KB generated PNG with 19 commits of history, plus a hand-appended `pr_merges.txt`; `docs/RELEASE.md` makes regenerating both a mandatory release step including manual per-PR data entry. Nothing in the repo embeds the image — the only mentions are `CLAUDE.md:604` and the runbook that produces it.
-
-  *If nobody reads it:* delete the PNG and drop the release step (S). *If it is wanted:* embed it somewhere it will be seen and derive `pr_merges.txt` from `git log --merges` inside `scripts/punchcard/punchcard.py` so the release step stops being data entry (S, Sonnet 5).
