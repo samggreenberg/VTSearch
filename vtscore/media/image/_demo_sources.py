@@ -743,7 +743,7 @@ _FILE_SOURCE_DOWNLOADERS: dict[str, str] = {
 def _collect_simple_folder_files(source, categories, slice_args, on_progress) -> list:
     """Sources that just download → load_image_metadata_from_folders → group by category."""
     from vtscore.datasets import downloader  # noqa: PLC0415
-    from vtscore.datasets.loader import load_image_metadata_from_folders  # noqa: PLC0415
+    from vtscore.datasets.metadata import load_image_metadata_from_folders  # noqa: PLC0415
 
     download_fn = getattr(downloader, _FILE_SOURCE_DOWNLOADERS[source])
     img_dir = download_fn(on_progress=on_progress)
@@ -781,7 +781,7 @@ def _collect_vggface2_files(categories, slice_args, on_progress) -> list:
 
 def _collect_oxford_flowers_files(categories, slice_args, on_progress) -> list:
     from vtscore.datasets.downloader import download_oxford_flowers  # noqa: PLC0415
-    from vtscore.datasets.loader import load_oxford_flowers_metadata  # noqa: PLC0415
+    from vtscore.datasets.metadata import load_oxford_flowers_metadata  # noqa: PLC0415
 
     flowers_dir = download_oxford_flowers(on_progress=on_progress)
     metadata = load_oxford_flowers_metadata(flowers_dir, OXFORD_FLOWERS_CATEGORIES)
@@ -864,7 +864,7 @@ def _collect_enrico_files(categories, slice_args, on_progress) -> list:
 
 def _collect_places365_files(categories, slice_args, on_progress) -> list:
     from vtscore.datasets.downloader import download_places365  # noqa: PLC0415
-    from vtscore.datasets.loader import load_places365_metadata  # noqa: PLC0415
+    from vtscore.datasets.metadata import load_places365_metadata  # noqa: PLC0415
 
     places_dir = download_places365(on_progress=on_progress)
     metadata = load_places365_metadata(places_dir, PLACES365_CATEGORIES)
@@ -879,7 +879,7 @@ def _collect_places365_files(categories, slice_args, on_progress) -> list:
 def _collect_cifar10_images(categories, slice_args, on_progress) -> list:
     """Returns a list of (image_array, category) tuples."""
     from vtscore.datasets.downloader import download_cifar10  # noqa: PLC0415
-    from vtscore.datasets.loader import load_cifar10_batch  # noqa: PLC0415
+    from vtscore.datasets.metadata import load_cifar10_batch  # noqa: PLC0415
 
     cifar_dir = download_cifar10(on_progress=on_progress)
     images, labels, label_names = load_cifar10_batch(cifar_dir / "data_batch_1")

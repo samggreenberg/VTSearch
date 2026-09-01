@@ -426,7 +426,7 @@ class TestLoadDemoSourceHmdb51:
     def test_hmdb51_source_populates_clips(self, tmp_path):
         """load_demo_source with source='hmdb51' fills the clips dict."""
         from vtscore.datasets import downloader as dl_module
-        from vtscore.datasets import loader as loader_module
+        from vtscore.datasets import metadata as metadata_module
         from vtscore.media.video.media_type import VideoMediaType
 
         fake_metadata = {
@@ -449,7 +449,7 @@ class TestLoadDemoSourceHmdb51:
 
         with (
             patch.object(dl_module, "download_hmdb51", return_value=tmp_path),
-            patch.object(loader_module, "load_video_metadata_from_folders", return_value=fake_metadata),
+            patch.object(metadata_module, "load_video_metadata_from_folders", return_value=fake_metadata),
         ):
             mt.load_demo_source(
                 source="hmdb51",
@@ -480,7 +480,7 @@ class TestLoadDemoSourceUcf101Full:
     def test_ucf101_full_source_populates_clips(self, tmp_path):
         """load_demo_source with source='ucf101_full' fills the clips dict."""
         from vtscore.datasets import downloader as dl_module
-        from vtscore.datasets import loader as loader_module
+        from vtscore.datasets import metadata as metadata_module
         from vtscore.media.video.media_type import VideoMediaType
 
         fake_metadata = {
@@ -503,7 +503,7 @@ class TestLoadDemoSourceUcf101Full:
 
         with (
             patch.object(dl_module, "download_ucf101_full", return_value=tmp_path),
-            patch.object(loader_module, "load_video_metadata_from_folders", return_value=fake_metadata),
+            patch.object(metadata_module, "load_video_metadata_from_folders", return_value=fake_metadata),
         ):
             mt.load_demo_source(
                 source="ucf101_full",
@@ -534,7 +534,7 @@ class TestLoadDemoSourceKth:
     def test_kth_source_populates_clips(self, tmp_path):
         """load_demo_source with source='kth' fills the clips dict."""
         from vtscore.datasets import downloader as dl_module
-        from vtscore.datasets import loader as loader_module
+        from vtscore.datasets import metadata as metadata_module
         from vtscore.media.video.media_type import VideoMediaType
 
         fake_metadata = {
@@ -557,7 +557,7 @@ class TestLoadDemoSourceKth:
 
         with (
             patch.object(dl_module, "download_kth", return_value=tmp_path),
-            patch.object(loader_module, "load_video_metadata_from_folders", return_value=fake_metadata),
+            patch.object(metadata_module, "load_video_metadata_from_folders", return_value=fake_metadata),
         ):
             mt.load_demo_source(
                 source="kth",
@@ -596,7 +596,7 @@ class TestLoadVideoMetadataFromFolders:
 
     def test_scans_category_subdirectories(self, tmp_path):
         """Finds video files in matching category subdirectories."""
-        from vtscore.datasets.loader import load_video_metadata_from_folders
+        from vtscore.datasets.metadata import load_video_metadata_from_folders
 
         for cat in ("walking", "boxing"):
             d = tmp_path / cat
@@ -614,7 +614,7 @@ class TestLoadVideoMetadataFromFolders:
 
     def test_skips_appledouble_dotfiles(self, tmp_path):
         """macOS AppleDouble sidecars ('._clip.avi') are not counted."""
-        from vtscore.datasets.loader import load_video_metadata_from_folders
+        from vtscore.datasets.metadata import load_video_metadata_from_folders
 
         d = tmp_path / "walking"
         d.mkdir()

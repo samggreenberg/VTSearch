@@ -62,7 +62,7 @@ def main() -> int:
     from vtscore.eval.calibration_metrics import detection_metrics
     from vtscore.training.thresholds import calculate_gmm_threshold, inclusion_cost_weights
 
-    from vtscore.datasets import loader as _loader  # isort: skip
+    from vtscore.config import EMBEDDINGS_DIR  # isort: skip
 
     from _cells_io import load_medias  # noqa: PLC0415
 
@@ -90,7 +90,7 @@ def main() -> int:
             # the DINOv3 pickle would have been worse: two different spaces, and
             # a number rather than a blank.
             text_emb = cfg.text_embedder(emb)
-            pkl = _loader.EMBEDDINGS_DIR / cfg.text_pickle_name(ds, emb)
+            pkl = EMBEDDINGS_DIR / cfg.text_pickle_name(ds, emb)
             if not pkl.exists():
                 common.log(f"SKIP {ds} x {emb}: no text pickle {pkl.name}")
                 continue

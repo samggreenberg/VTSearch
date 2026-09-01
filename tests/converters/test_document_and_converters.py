@@ -765,11 +765,11 @@ class TestLoadDemoWithConverter:
         assert "Invalid dataset" in resp.get_json()["message"]
 
     def test_apply_converter_to_demo_unknown_converter(self):
-        """_apply_converter_to_demo should raise for unknown converters."""
-        from vtscore.datasets.loader import _apply_converter_to_demo
+        """apply_converter_to_demo should raise for unknown converters."""
+        from vtscore.converters.runner import apply_converter_to_demo
 
         with pytest.raises(ValueError, match="Unknown converter"):
-            _apply_converter_to_demo(
+            apply_converter_to_demo(
                 converter_name="nonexistent_converter",
                 dataset_name="test",
                 medias={},
@@ -783,7 +783,7 @@ class TestLoadDemoWithConverter:
         parameter must keep accepting anything - including a name that does
         not resolve - without raising or changing the result.
         """
-        from vtscore.datasets.loader import _apply_converter_to_demo
+        from vtscore.converters.runner import apply_converter_to_demo
 
         pdf_bytes = _make_minimal_pdf("Convert me")
 
@@ -800,10 +800,10 @@ class TestLoadDemoWithConverter:
             }
 
         without: dict = _fresh()
-        _apply_converter_to_demo(converter_name="document2image", dataset_name="d", medias=without)
+        apply_converter_to_demo(converter_name="document2image", dataset_name="d", medias=without)
 
         with_bogus: dict = _fresh()
-        _apply_converter_to_demo(
+        apply_converter_to_demo(
             converter_name="document2image",
             dataset_name="d",
             medias=with_bogus,
@@ -815,11 +815,11 @@ class TestLoadDemoWithConverter:
         assert all(m.get("embedding") is None for m in with_bogus.values())
 
     def test_apply_converter_to_demo_empty_medias(self):
-        """_apply_converter_to_demo with empty medias should produce empty output."""
-        from vtscore.datasets.loader import _apply_converter_to_demo
+        """apply_converter_to_demo with empty medias should produce empty output."""
+        from vtscore.converters.runner import apply_converter_to_demo
 
         medias: dict = {}
-        _apply_converter_to_demo(
+        apply_converter_to_demo(
             converter_name="document2image",
             dataset_name="test",
             medias=medias,
@@ -827,8 +827,8 @@ class TestLoadDemoWithConverter:
         assert medias == {}
 
     def test_apply_converter_to_demo_converts_documents(self):
-        """_apply_converter_to_demo should convert document medias to images."""
-        from vtscore.datasets.loader import _apply_converter_to_demo
+        """apply_converter_to_demo should convert document medias to images."""
+        from vtscore.converters.runner import apply_converter_to_demo
 
         pdf_bytes = _make_minimal_pdf("Convert me")
         medias = {
@@ -841,7 +841,7 @@ class TestLoadDemoWithConverter:
                 "category": "test_cat",
             }
         }
-        _apply_converter_to_demo(
+        apply_converter_to_demo(
             converter_name="document2image",
             dataset_name="test_demo",
             medias=medias,

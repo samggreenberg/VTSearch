@@ -1,13 +1,18 @@
 """Dataset loading and management utilities.
 
 This module is the public façade for dataset loading.  Implementations
-live in dedicated sibling modules; this file holds the shared helpers,
-``export_dataset_to_file``, and re-exports so existing imports
+live in dedicated sibling modules; this file holds
+``export_dataset_to_file`` and re-exports the loaders so existing imports
 (``from vtscore.datasets.loader import ...``) continue to work.
 
+* :mod:`vtscore.datasets.loader_common` - helpers shared by all three
 * :mod:`vtscore.datasets.loader_folder` - folder loaders
 * :mod:`vtscore.datasets.loader_pickle` - pickle/container loaders, image embed
 * :mod:`vtscore.datasets.loader_demo` - demo dataset loader
+
+The façade re-exports *loaders* only.  Metadata parsers live in
+:mod:`vtscore.datasets.metadata` and pickle-safety names in
+:mod:`vtscore.security.pickle`; import them from there.
 
 All public functions that perform I/O accept an optional ``on_progress``
 callback with the signature
@@ -23,33 +28,27 @@ import io
 import pickle
 from typing import Any, Callable
 
-import numpy as np
-
+from vtscore.datasets.loader_common import (  # noqa: F401  - re-exported for consumers
+    ProgressCallback,
+    _embedding_for_pickle,
+    _embeddings_dict_for_pickle,
+)
+from vtscore.datasets.loader_demo import (  # noqa: F401  - re-exported for consumers
+    _stamp_demo_origin,
+    load_demo_dataset,
+)
+from vtscore.datasets.loader_folder import (  # noqa: F401  - re-exported for consumers
+    apply_custom_metadata_md5,
+    load_dataset_from_folder,
+    load_dataset_from_folder_chunked,
+)
+from vtscore.datasets.loader_pickle import (  # noqa: F401  - re-exported for consumers
+    load_dataset_from_pickle,
+    load_dataset_from_pickle_chunked,
+    read_pkl_clipper,
+    read_pkl_embedder,
+)
 from vtscore.embedding.stack import embedding_stack
-from vtscore.config import EMBEDDINGS_DIR  # noqa: F401  - re-exported & patched in tests
-from vtscore.datasets.metadata import (  # noqa: F401  - re-exported for consumers
-    load_audio_metadata_from_folders,
-    load_cifar10_batch,
-    load_esc50_metadata,
-    load_image_metadata_from_folders,
-    load_oxford_flowers_metadata,
-    load_paragraph_metadata_from_folders,
-    load_places365_metadata,
-    load_urbansound8k_metadata,
-    load_video_metadata_from_folders,
-)
-from vtscore.security.pickle import (  # noqa: F401  - re-exported for consumers
-    RestrictedUnpickler,
-    _PICKLE_SAFE_CLASSES,
-    safe_pickle_load,
-)
-
-ProgressCallback = Callable[[str, str, int, int], None]
-
-
-# ---------------------------------------------------------------------------
-# Shared helpers (used by loader_folder / loader_pickle / loader_demo)
-# ---------------------------------------------------------------------------
 
 
 def _loaded_embedder(name: str | None):
@@ -70,76 +69,6 @@ def _loaded_embedder(name: str | None):
     return emb if getattr(emb, "_processor", None) is not None else None
 
 
-def _default_progress() -> ProgressCallback:
-    """Lazily resolve the progress callback for the current thread.
-
-    Checks for a per-thread callback first (set during parallel dataset
-    loading) and falls back to the global singleton.
-    """
-    from vtscore.concurrency.progress import get_thread_progress
-
-    cb = get_thread_progress()
-    if cb is not None:
-        return cb
-    from vtscore.concurrency.progress import update_progress
-
-    return update_progress
-
-
-def _pop_md5_key(d: dict[str, Any]) -> str:
-    """Pop and return the MD5 value from *d*, trying both ``"md5"`` and ``"MD5"`` keys.
-
-    Returns the value (or ``""`` if neither key is present) and removes the
-    matched key from *d* so it doesn't leak into downstream metadata.
-    """
-    for key in ("md5", "MD5"):
-        val = d.get(key)
-        if val:
-            del d[key]
-            return val
-    return ""
-
-
-def _get_md5_value(d: dict[str, Any]) -> str:
-    """Return the MD5 value from *d*, trying both ``"md5"`` and ``"MD5"`` keys.
-
-    Unlike :func:`_pop_md5_key` this does **not** mutate *d*.
-    """
-    return d.get("md5") or d.get("MD5") or ""
-
-
-def _get_embedding_value(d: dict[str, Any]) -> Any:
-    """Return the embedding value from *d* without mutating it.
-
-    Returns ``None`` when the key is absent.
-    """
-    return d.get("embedding")
-
-
-# ---------------------------------------------------------------------------
-# Public loaders - re-exported from sibling modules
-# ---------------------------------------------------------------------------
-
-from vtscore.datasets.loader_folder import (  # noqa: E402, F401
-    apply_custom_metadata_md5,
-    load_dataset_from_folder,
-    load_dataset_from_folder_chunked,
-)
-from vtscore.datasets.loader_pickle import (  # noqa: E402, F401
-    load_dataset_from_pickle,
-    load_dataset_from_pickle_chunked,
-    read_pkl_clipper,
-    read_pkl_embedder,
-)
-from vtscore.datasets.loader_demo import (  # noqa: E402, F401
-    _stamp_demo_origin,
-    load_demo_dataset,
-)
-
-# Backward-compat alias - canonical location is vtscore.converters.runner
-from vtscore.converters.runner import apply_converter_to_demo as _apply_converter_to_demo  # noqa: E402, F401
-
-
 # ---------------------------------------------------------------------------
 # Export
 # ---------------------------------------------------------------------------
@@ -148,38 +77,6 @@ from vtscore.converters.runner import apply_converter_to_demo as _apply_converte
 # making it both smaller and faster than the interpreter default (4 on 3.11).
 # Available on every Python we support (>=3.10), so pin it explicitly.
 _PICKLE_PROTOCOL = 5
-
-
-def _embedding_for_pickle(embedding: Any) -> np.ndarray | None:
-    """Coerce an embedding to a compact ``float32`` ndarray for serialisation.
-
-    Storing the vector as a contiguous ``float32`` array (rather than the old
-    Python ``list`` of boxed floats) roughly halves its pickled footprint and
-    avoids reconstructing hundreds of ``PyFloat`` objects per media on load —
-    the load side already runs every embedding through ``l2_normalize`` /
-    ``np.asarray``, so it accepts arrays and legacy lists alike.
-    """
-    if embedding is None:
-        return None
-    return np.ascontiguousarray(embedding, dtype=np.float32)
-
-
-def _embeddings_dict_for_pickle(embeddings: Any) -> dict[str, np.ndarray] | None:
-    """Coerce a per-embedder ``{name: vector}`` map to compact ``float32`` arrays.
-
-    Returns ``None`` when there is nothing to store (no dict / empty), so a
-    legacy single-vector media adds no key to the pickle and a v3 media carries
-    one entry per bound embedder.  Entries whose vector coerces to ``None`` are
-    dropped.
-    """
-    if not isinstance(embeddings, dict) or not embeddings:
-        return None
-    out: dict[str, np.ndarray] = {}
-    for name, vec in embeddings.items():
-        coerced = _embedding_for_pickle(vec)
-        if name and coerced is not None:
-            out[name] = coerced
-    return out or None
 
 
 def _copy_original_payload(entry: dict[str, Any], media: dict[str, Any]) -> None:

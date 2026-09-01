@@ -86,11 +86,11 @@ def _text_seed_vectors(ds: str, emb: str, medias: dict) -> tuple[dict, str]:
         common.log(f"  paired opening: {text_emb} vectors already on the cell's medias")
         return medias, "multi_vector"
 
-    from vtscore.datasets import loader as _loader  # noqa: PLC0415
+    from vtscore.config import EMBEDDINGS_DIR  # noqa: PLC0415
 
     from _cells_io import load_medias  # noqa: PLC0415
 
-    text_pkl = _loader.EMBEDDINGS_DIR / cfg.text_pickle_name(ds, emb)
+    text_pkl = EMBEDDINGS_DIR / cfg.text_pickle_name(ds, emb)
     if not text_pkl.exists():
         raise FileNotFoundError(
             f"paired embedder {emb!r} needs {text_emb} vectors: neither the cell's medias nor "
@@ -236,11 +236,11 @@ def main(argv: list[str] | None = None) -> int:
         simulate_voting_iterations,
     )
 
-    from vtscore.datasets import loader as _loader  # isort: skip
+    from vtscore.config import EMBEDDINGS_DIR  # isort: skip
 
     from _cells_io import load_medias  # noqa: PLC0415
 
-    pkl = _loader.EMBEDDINGS_DIR / cfg.pickle_name(ds, emb)
+    pkl = EMBEDDINGS_DIR / cfg.pickle_name(ds, emb)
     medias: dict[int, dict] = load_medias(pkl)
     common.log(f"loaded {len(medias)} medias from {pkl}")
 

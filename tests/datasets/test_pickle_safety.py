@@ -15,8 +15,8 @@ from vtscore.datasets.loader import (
     export_dataset_to_file,
     load_dataset_from_pickle,
     load_dataset_from_pickle_chunked,
-    safe_pickle_load,
 )
+from vtscore.security.pickle import safe_pickle_load
 
 
 # ---------------------------------------------------------------------------

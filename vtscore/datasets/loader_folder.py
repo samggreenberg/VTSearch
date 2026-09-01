@@ -20,7 +20,7 @@ from contextlib import closing
 from pathlib import Path
 from typing import Any, Callable, Generator, Iterator, Optional
 
-from vtscore.datasets.loader import (
+from vtscore.datasets.loader_common import (
     ProgressCallback,
     _default_progress,
     _get_embedding_value,

@@ -281,7 +281,7 @@ class TestLoadOxfordFlowersMetadata:
         """Reads imagelabels.mat and maps numeric labels to category names."""
         import scipy.io
 
-        from vtscore.datasets.loader import load_oxford_flowers_metadata
+        from vtscore.datasets.metadata import load_oxford_flowers_metadata
 
         jpg_dir = tmp_path / "jpg"
         jpg_dir.mkdir()
@@ -320,7 +320,7 @@ class TestLoadDemoSourceOxfordFlowers:
     def test_oxford_flowers_populates_clips(self, tmp_path):
         """load_demo_source with source='oxford_flowers_102' fills the clips dict."""
         from vtscore.datasets import downloader as dl_module
-        from vtscore.datasets import loader as loader_module
+        from vtscore.datasets import metadata as metadata_module
         from vtscore.media.image.media_type import ImageMediaType
 
         # Create stub image files.
@@ -338,7 +338,7 @@ class TestLoadDemoSourceOxfordFlowers:
 
         with (
             patch.object(dl_module, "download_oxford_flowers", return_value=tmp_path),
-            patch.object(loader_module, "load_oxford_flowers_metadata", return_value=fake_metadata),
+            patch.object(metadata_module, "load_oxford_flowers_metadata", return_value=fake_metadata),
         ):
             mt.load_demo_source(
                 source="oxford_flowers_102",
@@ -357,7 +357,7 @@ class TestLoadDemoSourceOxfordFlowers:
     def test_oxford_flowers_slice_is_applied(self, tmp_path):
         """slice_start/slice_end limits images per category."""
         from vtscore.datasets import downloader as dl_module
-        from vtscore.datasets import loader as loader_module
+        from vtscore.datasets import metadata as metadata_module
         from vtscore.media.image.media_type import ImageMediaType
 
         fake_metadata = {}
@@ -372,7 +372,7 @@ class TestLoadDemoSourceOxfordFlowers:
 
         with (
             patch.object(dl_module, "download_oxford_flowers", return_value=tmp_path),
-            patch.object(loader_module, "load_oxford_flowers_metadata", return_value=fake_metadata),
+            patch.object(metadata_module, "load_oxford_flowers_metadata", return_value=fake_metadata),
         ):
             mt.load_demo_source(
                 source="oxford_flowers_102",
@@ -401,7 +401,7 @@ class TestLoadDemoSourceFood101:
     def test_food101_populates_clips(self, tmp_path):
         """load_demo_source with source='food101' fills the clips dict."""
         from vtscore.datasets import downloader as dl_module
-        from vtscore.datasets import loader as loader_module
+        from vtscore.datasets import metadata as metadata_module
         from vtscore.media.image.media_type import ImageMediaType
 
         (tmp_path / "img1.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
@@ -418,7 +418,7 @@ class TestLoadDemoSourceFood101:
 
         with (
             patch.object(dl_module, "download_food101", return_value=tmp_path),
-            patch.object(loader_module, "load_image_metadata_from_folders", return_value=fake_metadata),
+            patch.object(metadata_module, "load_image_metadata_from_folders", return_value=fake_metadata),
         ):
             mt.load_demo_source(
                 source="food101",
@@ -449,7 +449,7 @@ class TestLoadDemoSourceEurosat:
     def test_eurosat_populates_clips(self, tmp_path):
         """load_demo_source with source='eurosat' fills the clips dict."""
         from vtscore.datasets import downloader as dl_module
-        from vtscore.datasets import loader as loader_module
+        from vtscore.datasets import metadata as metadata_module
         from vtscore.media.image.media_type import ImageMediaType
 
         (tmp_path / "img1.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
@@ -466,7 +466,7 @@ class TestLoadDemoSourceEurosat:
 
         with (
             patch.object(dl_module, "download_eurosat", return_value=tmp_path),
-            patch.object(loader_module, "load_image_metadata_from_folders", return_value=fake_metadata),
+            patch.object(metadata_module, "load_image_metadata_from_folders", return_value=fake_metadata),
         ):
             mt.load_demo_source(
                 source="eurosat",
@@ -566,7 +566,7 @@ class TestDownloadPlaces365:
 class TestLoadPlaces365Metadata:
     def test_maps_indices_to_categories(self, tmp_path):
         """Reads places365_val.txt and maps numeric indices to category names."""
-        from vtscore.datasets.loader import load_places365_metadata
+        from vtscore.datasets.metadata import load_places365_metadata
 
         val_dir = tmp_path / "val_256"
         val_dir.mkdir()
@@ -587,7 +587,7 @@ class TestLoadPlaces365Metadata:
 
     def test_out_of_range_indices_are_skipped(self, tmp_path):
         """Label indices outside the categories list are silently ignored."""
-        from vtscore.datasets.loader import load_places365_metadata
+        from vtscore.datasets.metadata import load_places365_metadata
 
         (tmp_path / "val_256").mkdir()
         (tmp_path / "places365_val.txt").write_text(
@@ -621,7 +621,7 @@ class TestLoadDemoSourcePlaces365:
     def test_places365_populates_clips(self, tmp_path):
         """load_demo_source with source='places365' fills the clips dict."""
         from vtscore.datasets import downloader as dl_module
-        from vtscore.datasets import loader as loader_module
+        from vtscore.datasets import metadata as metadata_module
         from vtscore.media.image.media_type import ImageMediaType
 
         (tmp_path / "img1.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
@@ -638,7 +638,7 @@ class TestLoadDemoSourcePlaces365:
 
         with (
             patch.object(dl_module, "download_places365", return_value=tmp_path),
-            patch.object(loader_module, "load_places365_metadata", return_value=fake_metadata),
+            patch.object(metadata_module, "load_places365_metadata", return_value=fake_metadata),
         ):
             mt.load_demo_source(
                 source="places365",
@@ -657,7 +657,7 @@ class TestLoadDemoSourcePlaces365:
     def test_places365_filters_by_requested_categories(self, tmp_path):
         """Metadata entries whose category is not requested are dropped."""
         from vtscore.datasets import downloader as dl_module
-        from vtscore.datasets import loader as loader_module
+        from vtscore.datasets import metadata as metadata_module
         from vtscore.media.image.media_type import ImageMediaType
 
         (tmp_path / "img1.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
@@ -674,7 +674,7 @@ class TestLoadDemoSourcePlaces365:
 
         with (
             patch.object(dl_module, "download_places365", return_value=tmp_path),
-            patch.object(loader_module, "load_places365_metadata", return_value=fake_metadata),
+            patch.object(metadata_module, "load_places365_metadata", return_value=fake_metadata),
         ):
             mt.load_demo_source(
                 source="places365",
@@ -692,7 +692,7 @@ class TestLoadDemoSourcePlaces365:
     def test_places365_slice_is_applied(self, tmp_path):
         """slice_start/slice_end limits images per category."""
         from vtscore.datasets import downloader as dl_module
-        from vtscore.datasets import loader as loader_module
+        from vtscore.datasets import metadata as metadata_module
         from vtscore.media.image.media_type import ImageMediaType
 
         fake_metadata = {}
@@ -707,7 +707,7 @@ class TestLoadDemoSourcePlaces365:
 
         with (
             patch.object(dl_module, "download_places365", return_value=tmp_path),
-            patch.object(loader_module, "load_places365_metadata", return_value=fake_metadata),
+            patch.object(metadata_module, "load_places365_metadata", return_value=fake_metadata),
         ):
             mt.load_demo_source(
                 source="places365",

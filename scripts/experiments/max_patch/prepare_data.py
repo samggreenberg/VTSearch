@@ -118,7 +118,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--embedders", nargs="+", default=cfg.EMBEDDERS)
     args = parser.parse_args(argv)
 
-    from vtscore.datasets import loader as _loader
+    from vtscore.config import EMBEDDINGS_DIR
     from vtscore.datasets.loader_demo import load_demo_dataset
     from vtscore.embedding import initialize_models
     from vtscore.embedding.media_vectors import media_embedding
@@ -172,7 +172,7 @@ def main(argv: list[str] | None = None) -> int:
             # every style scoring on the whole-image vector alone.
             from _cells_io import dump_medias  # noqa: PLC0415
 
-            dst = _loader.EMBEDDINGS_DIR / cfg.pickle_name(ds, emb_name)
+            dst = EMBEDDINGS_DIR / cfg.pickle_name(ds, emb_name)
             nbytes = dump_medias(medias, dst)
             common.log(f"  wrote cell pickle {dst.name}: {nbytes / 1e6:.0f} MB")
 

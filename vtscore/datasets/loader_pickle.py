@@ -12,9 +12,7 @@ import logging
 from pathlib import Path
 from typing import Any, Iterator
 
-from vtscore.datasets.loader import (
-    ProgressCallback,
-)
+from vtscore.datasets.loader_common import ProgressCallback
 from vtscore.embedding.normalize import l2_normalize
 from vtscore.utils.hashing import content_md5
 
