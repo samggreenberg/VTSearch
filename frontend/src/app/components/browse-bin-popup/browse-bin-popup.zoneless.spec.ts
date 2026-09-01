@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
-import { of, Subject } from 'rxjs';
+import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BrowseBinPopupComponent } from './browse-bin-popup.component';
@@ -53,6 +53,7 @@ describe('BrowseBinPopupComponent (zoneless positioning)', () => {
     };
     const metadataStub: Partial<MediaMetadataCacheService> = {
       version$: of(0),
+      version: signal(0),
       get: () => undefined,
       ensureLoaded: () => {},
     };
@@ -351,6 +352,7 @@ describe('BrowseBinPopupComponent (docked presentation)', () => {
     };
     const metadataStub: Partial<MediaMetadataCacheService> = {
       version$: of(0),
+      version: signal(0),
       get: () => undefined,
       ensureLoaded: () => {},
     };
@@ -457,7 +459,7 @@ describe('BrowseBinPopupComponent (docked presentation)', () => {
     const cmp = fixture.componentInstance;
     // The grid column is present (not dropped like the floating previewOnly path)…
     const root = fixture.nativeElement as HTMLElement;
-    expect(root.querySelector('.bin-popup-grid-col')).not.toBeNull();
+    expect(root.querySelector('vt-browse-bin-member-grid')).not.toBeNull();
     // …but renders no rows: the lone item lives in the detail pane above.
     expect(cmp.displayRows.length).toBe(0);
 
@@ -655,70 +657,16 @@ describe('BrowseBinPopupComponent (docked presentation)', () => {
   });
 });
 
-describe('BrowseBinPopupComponent (scroll-prefetch re-wiring)', () => {
-  it('re-subscribes prefetch when the member-grid viewport is recreated', () => {
-    // Regression: the popup subscribed scrolledIndexChange only once, but the
-    // viewport lives behind @if (!previewOnly) and the popup is reused across
-    // summons (right-clicking another bin only swaps inputs). A singleton→multi
-    // transition created a fresh viewport whose stream was never subscribed, so
-    // scrolling the member grid never hydrated thumbnails beyond the
-    // initially-prefetched window. In production a constructor effect tracking
-    // the `viewport` view-query signal re-runs ensureScrollSubscription
-    // whenever the instance changes; here the query is stubbed as a plain
-    // function and the method driven directly, since the virtualized grid
-    // doesn't render reliably under jsdom.
-    const component = Object.create(
-      BrowseBinPopupComponent.prototype,
-    ) as BrowseBinPopupComponent;
-    const state = component as unknown as {
-      viewport: () => unknown;
-      scrollSub: unknown;
-      scrollSubscribedViewport: unknown;
-      prefetchVisible(): void;
-      ensureScrollSubscription(): void;
-    };
-    state.scrollSub = null;
-    state.scrollSubscribedViewport = null;
-    const prefetchSpy = vi.fn();
-    state.prefetchVisible = prefetchSpy;
-
-    const vp1 = { scrolledIndexChange: new Subject<number>() };
-    state.viewport = () => vp1;
-    state.ensureScrollSubscription();
-    vp1.scrolledIndexChange.next(0);
-    const callsAfterFirstScroll = prefetchSpy.mock.calls.length;
-    expect(callsAfterFirstScroll).toBeGreaterThan(0);
-
-    // Viewport destroyed (previewOnly summon) …
-    vp1.scrolledIndexChange.complete();
-    state.viewport = () => undefined;
-    state.ensureScrollSubscription();
-
-    // … then a new multi-member summon creates a fresh instance.
-    const vp2 = { scrolledIndexChange: new Subject<number>() };
-    state.viewport = () => vp2;
-    state.ensureScrollSubscription();
-
-    const callsBeforeSecondScroll = prefetchSpy.mock.calls.length;
-    vp2.scrolledIndexChange.next(2);
-    expect(prefetchSpy.mock.calls.length).toBe(callsBeforeSecondScroll + 1);
-  });
-});
-
 /**
- * Keyboard focus sync for the member grid.
+ * Keyboard walk of the viewed item.
  *
- * Arrow keys walk the highlighted item (``previewId``), but before this they
- * left DOM focus behind on whatever entry the user last tabbed/clicked. Enter is
- * only caught by the focused entry's own handler, so it toggled the stale
- * DOM-focused entry rather than the arrow-walked one; Space fired both the
- * document fallback and the focused entry, double-toggling. The fix keeps DOM
- * focus glued to the walked entry (and ``previewId`` glued to DOM focus), and
- * lets the focused entry own its activation without the fallback double-firing.
- *
- * The member grid is virtualized and doesn't render individual entries reliably
- * under jsdom, so these drive the sync contract directly on the component rather
- * than through a rendered ArrowRight → ``document.activeElement`` round-trip.
+ * Arrow keys move `previewId` through the bin, and the grid child is told to
+ * scroll that entry into view and take DOM focus, so Enter/Space act on the
+ * highlighted item rather than on whatever entry last held focus. The focus
+ * mechanics themselves live in (and are tested by) the grid component; what this
+ * pins is that the shell walks the right index and hands it over. The grid is
+ * virtualized and does not render under jsdom, so the contract is driven on the
+ * instance rather than through a rendered ArrowRight round-trip.
  */
 describe('BrowseBinPopupComponent (keyboard focus sync)', () => {
   interface GridState {
@@ -726,98 +674,63 @@ describe('BrowseBinPopupComponent (keyboard focus sync)', () => {
     columns: number;
     previewId: number | null;
     cdr: { markForCheck: () => void };
-    // The `panelRef` view query is a signal; stub it as a plain function.
-    panelRef?: () => { nativeElement: { querySelector: (sel: string) => HTMLElement | null } };
+    grid: () => { revealAndFocus: (index: number) => void } | undefined;
     mediaType: () => string;
     mediaTypeCaps: { usesThumbnails: (t: string) => boolean };
-    scrollRowIntoView: (index: number) => void;
     selection: { has: (id: number) => boolean; addAll: (ids: number[]) => void; remove: (id: number) => void };
     moveFocus(dCol: number, dRow: number): void;
   }
 
-  function makeGridComponent(): { component: BrowseBinPopupComponent; state: GridState } {
+  function makeGridComponent(): { component: BrowseBinPopupComponent; state: GridState; revealed: number[] } {
     const component = Object.create(BrowseBinPopupComponent.prototype) as BrowseBinPopupComponent;
     const state = component as unknown as GridState;
+    const revealed: number[] = [];
     state.ids = [10, 20, 30, 40];
     state.columns = 2;
     state.previewId = 10;
     state.cdr = { markForCheck: vi.fn() };
+    state.grid = () => ({ revealAndFocus: (index: number) => revealed.push(index) });
     // Non-thumbnail media so `previewOnly` is false and the grid path is live.
     state.mediaType = () => 'text';
     state.mediaTypeCaps = { usesThumbnails: (t: string) => t !== 'text' };
-    state.scrollRowIntoView = vi.fn();
     state.selection = { has: () => false, addAll: vi.fn(), remove: vi.fn() };
-    return { component, state };
+    return { component, state, revealed };
   }
 
-  let rafSpy: ReturnType<typeof vi.spyOn>;
-  beforeEach(() => {
-    // Run rAF synchronously so `focusEntry`'s deferred (and retried) focus lands
-    // within the test tick, deterministically.
-    rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
-      cb(0);
-      return 0;
-    });
-  });
-  afterEach(() => rafSpy.mockRestore());
-
-  it('moves DOM focus to the arrow-walked entry', () => {
-    const { component, state } = makeGridComponent();
-    const walked = { focus: vi.fn() } as unknown as HTMLElement;
-    state.panelRef = () => ({
-      nativeElement: {
-        // Only the entry for id 20 (the ArrowRight target from index 0) exists.
-        querySelector: (sel: string) => (sel.includes('"20"') ? walked : null),
-      },
-    });
+  it('walks the viewed item and hands the entry to the grid to reveal + focus', () => {
+    const { state, revealed } = makeGridComponent();
 
     state.moveFocus(1, 0);
 
     // The highlight advanced to id 20 …
     expect(state.previewId).toBe(20);
-    // … and DOM focus followed it, so Enter/Space now act on the highlighted item.
-    expect(walked.focus).toHaveBeenCalledWith({ preventScroll: true });
+    // … and the grid was told to scroll it in and take DOM focus, so Enter/Space
+    // now act on the highlighted item.
+    expect(revealed).toEqual([1]);
   });
 
-  it('retries the focus until the virtualized entry renders, then focuses it', () => {
-    const { state } = makeGridComponent();
-    const walked = { focus: vi.fn() } as unknown as HTMLElement;
-    let calls = 0;
-    state.panelRef = () => ({
-      nativeElement: {
-        // Absent for the first two frames (row still virtualizing in), then in.
-        querySelector: (sel: string) => {
-          if (!sel.includes('"20"')) return null;
-          return ++calls >= 3 ? walked : null;
-        },
-      },
-    });
+  it('walks a whole row at a time for vertical steps', () => {
+    const { state, revealed } = makeGridComponent();
 
-    state.moveFocus(1, 0);
+    state.moveFocus(0, 1);
 
-    expect(walked.focus).toHaveBeenCalledTimes(1);
+    expect(state.previewId).toBe(30);
+    expect(revealed).toEqual([2]);
+  });
+
+  it('clamps at the ends of the bin rather than walking off it', () => {
+    const { state, revealed } = makeGridComponent();
+
+    state.moveFocus(-1, 0);
+
+    // Already on the first member: nothing moved, and the grid was not disturbed.
+    expect(state.previewId).toBe(10);
+    expect(revealed).toEqual([]);
   });
 
   it('syncs the highlight to DOM focus that arrives by Tab or click', () => {
     const { component, state } = makeGridComponent();
     component.onEntryFocus(30);
     expect(state.previewId).toBe(30);
-  });
-
-  it('lets the focused entry own its activation, stopping the fallback double-toggle', () => {
-    const { component, state } = makeGridComponent();
-    const event = {
-      key: 'Enter',
-      preventDefault: vi.fn(),
-      stopPropagation: vi.fn(),
-    } as unknown as KeyboardEvent;
-
-    component.onEntryKeydown(event, 42);
-
-    expect(event.preventDefault).toHaveBeenCalled();
-    // The bubble is stopped so the document-level Space fallback (which acts on
-    // previewId) can't also fire and cancel this toggle.
-    expect(event.stopPropagation).toHaveBeenCalled();
-    expect(state.selection.addAll).toHaveBeenCalledWith([42]);
   });
 });
