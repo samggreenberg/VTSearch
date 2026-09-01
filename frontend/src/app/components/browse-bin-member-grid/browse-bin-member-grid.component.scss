@@ -1,0 +1,235 @@
+// Styles for the bin details' member grid, lifted wholesale out of
+// `browse-bin-popup.component.scss` when the grid was split into its own
+// component. The class names keep their `bin-popup-` prefix: this is still the
+// bin popup's grid, and the DOM contract (notably the `[data-entry-id]` entry
+// lookup) moved across unchanged.
+//
+// The column that used to be `.bin-popup-grid-col` inside the shell is now this
+// component's own host element, and the shell's `.bin-popup--docked` descendant
+// overrides are `:host(.docked)` rules here — a parent stylesheet cannot reach
+// into a child under emulated view encapsulation, so the docked variants have
+// to live with the elements they style.
+
+// The grid column: a fixed-width stack of the member-count label above the
+// scrolling thumbnail grid, so the shell hugs it plus the preview pane. The
+// count sits at the column's top-left; the grid fills the remaining height.
+:host {
+  display: flex;
+  flex-direction: column;
+  width: 280px;
+  height: 100%;
+  flex-shrink: 0;
+  min-height: 0;
+}
+
+// Top row of the grid column: the select-all control + member-count label on
+// the left, and the thumbnail smaller/larger controls pushed to the right (they
+// resize this grid, so they live on its header row rather than in the window
+// header).
+.bin-popup-grid-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  padding: 0 var(--space-2xs) var(--space-2xs);
+}
+
+// Thumbnail size buttons, pushed to the right end of the grid header row.
+.bin-popup-grid-view-controls {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+// Tri-state master checkbox, mirroring the dashboard's select-all button but
+// tuned to this window: smaller icon and tighter padding for the compact header.
+.bin-popup-select-all {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: var(--space-2xs);
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition-base), background var(--transition-base);
+
+  &:hover {
+    background: var(--btn-icon-hover-bg);
+    color: var(--text-primary);
+  }
+}
+
+// Member-count label, right end of the header row.
+.bin-popup-count {
+  flex-shrink: 0;
+  font-size: var(--font-xs);
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+}
+
+// The scrolling thumbnail grid fills the column below the count label.
+.bin-popup-scroll {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+}
+
+// --- Rows ------------------------------------------------------------------
+// One virtual item == one grid row: a CSS grid of fixed-size thumbnail cells.
+.bin-popup-row {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: repeat(var(--popup-cols, 1), 1fr);
+  align-content: start;
+  justify-items: center;
+  column-gap: var(--space-2xs);
+}
+
+// A grid cell: a single thumbnail (the name that used to sit beneath it is gone).
+.bin-popup-entry {
+  box-sizing: border-box;
+  cursor: pointer;
+  color: var(--text-vote);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2px;
+  // Sharp: one item per cell, so its hover fill and selection ring stay square
+  // (rounded is reserved for multi-item piles — see the thumbnail note below).
+  width: var(--popup-cell, 80px);
+  // Animate the "viewed" enlarge (below) so items grow/settle smoothly rather
+  // than popping as focus walks the grid.
+  transition: transform var(--transition-base);
+
+  &:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  // Two orthogonal per-thumb cues, so a thumbnail can show either or BOTH at
+  // once without them fighting. Selection is a BOUNDARY (a ring); "viewed" is a
+  // SIZE/depth cue (enlarge + lift). Different visual channels means a selected
+  // item you're also viewing reads unmistakably as ringed AND lifted.
+  //
+  // Selection: a solid accent ring at the cell edge (mirrors bin selection on
+  // the canvas) plus an accent-tinted fill.
+  &.selected {
+    background: var(--accent-highlight-bg);
+    color: var(--text-primary);
+    box-shadow: 0 0 0 2px var(--accent);
+  }
+
+  // The viewed item (shown in the preview pane / walked by the arrow keys) is
+  // ENLARGED and lifted, mirroring the canvas hover-enlarge. Done with
+  // ``transform`` (painted, not laid out) so the scale never reflows the grid,
+  // shifts row heights, or resizes the popup — layout stays pixel-stable, and
+  // ``z-index`` lifts the growing thumb above its neighbours. The lift uses
+  // ``filter: drop-shadow`` rather than ``box-shadow`` so the selection ring's
+  // box-shadow survives untouched when an item is both selected and viewed. The
+  // size/depth channel is the only on-grid cue for non-thumbnail media too,
+  // which has no preview.
+  &.focused {
+    position: relative;
+    z-index: 1;
+    transform: scale(1.35);
+    filter: drop-shadow(0 3px 6px var(--shadow-dropdown));
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+}
+
+// Thumbnail/placeholder square, sized to the chosen icon size (``--popup-cell``,
+// bound per row); falls back to a compact square if the variable is ever absent.
+// The real thumbnail's wrapper and the no-thumbnail placeholder are the same
+// fixed cell-sized box, so they share these metrics (and the themed ``--bg-body``
+// surface: hidden under a cover-fit <img>, and the backdrop the tinted audio
+// waveform (issue #2369) sits on).
+.bin-popup-thumb-wrap,
+.bin-popup-placeholder {
+  width: var(--popup-cell, 28px);
+  height: var(--popup-cell, 28px);
+  // Sharp corners: each grid thumbnail is a single item, and in the VTSBrowse
+  // corner symbology rounded corners mean a multi-item pile, so a lone item is
+  // drawn as a crisp square. (The wrap's ``overflow: hidden`` clips the <img>.)
+  flex-shrink: 0;
+  background: var(--bg-body);
+}
+
+.bin-popup-thumb-wrap {
+  display: block;
+  overflow: hidden;
+}
+
+// Audio waveform in the grid: the shared ``.waveform-mask`` supplies the accent
+// fill and mask chrome; here we cover-fit it (matching the <img> it replaces).
+// No ``background`` — that would out-specify the shared accent and blank the wave.
+.bin-popup-thumb-wave {
+  // ``display: block`` is required: the wave is a <span> (a non-replaced inline
+  // element, unlike the <img> it replaced), so without it ``width``/``height``
+  // are ignored and the box collapses to nothing (issue #2369 regression). The
+  // parent ``.bin-popup-thumb-wrap`` is a fixed square, so ``height: 100%`` is
+  // definite here.
+  display: block;
+  width: 100%;
+  height: 100%;
+  mask-size: cover;
+  -webkit-mask-size: cover;
+}
+
+.bin-popup-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: var(--bg-body);
+  display: block;
+}
+
+.bin-popup-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: var(--font-lg);
+}
+
+// Docked empty state: no bin has been opened yet.
+.bin-popup-empty-hint {
+  margin: auto;
+  padding: var(--space-md);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+// --- Docked presentation ----------------------------------------------------
+// Rendered as the Browse view's persistent left panel, the grid fills whatever
+// the panel leaves below the detail row instead of sitting at a fixed width.
+:host(.docked) {
+  width: 100%;
+  height: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+
+  // Resize like the right (selection) panel: fixed-width columns packed to the
+  // left with a constant gap, so widening the panel keeps the thumbnails (and
+  // the gaps between them) the same size and only reveals a new column once
+  // there's room for a whole one — instead of the floating window's ``1fr``
+  // tracks, which stretch each thumbnail's cell as the panel grows. The browse
+  // view then "pops" the divider tight to the column count on release (see
+  // ``snappedPanelWidth``), mirroring the right panel's snap.
+  .bin-popup-row {
+    grid-template-columns: repeat(var(--popup-cols, 1), var(--popup-cell, 80px));
+    justify-content: start;
+    column-gap: var(--space-xs);
+  }
+}

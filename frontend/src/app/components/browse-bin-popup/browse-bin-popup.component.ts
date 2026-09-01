@@ -1,34 +1,29 @@
 import { afterNextRender, AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, effect, ElementRef, HostListener, inject, Injector, input, OnDestroy, output, untracked, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { ScrollingModule, CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
-import { Subscription } from 'rxjs';
 import { BrowseSelectionService } from '../../services/browse-selection.service';
 import { MediaMetadataCacheService } from '../../services/media-metadata-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
-import { ViewControlsComponent } from '../view-controls/view-controls.component';
 import { IconComponent } from '../icon/icon.component';
 import { CopyDetailButtonComponent } from '../copy-detail-button/copy-detail-button.component';
+import { BrowseBinMemberGridComponent } from '../browse-bin-member-grid/browse-bin-member-grid.component';
 import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
+import {
+  COUNT_LABEL_HEIGHT,
+  GRID_COLUMN_WIDTH,
+  GRID_CONTENT_WIDTH,
+  GRID_GAP,
+  binGridColumns,
+  binGridRowSize,
+} from '../../utils/bin-grid-metrics';
 import { applyClipWindow, clearClipWindow, clipProgress } from '../../utils/clip-window';
 import { shortcutsBlocked } from '../../utils/keyboard-shortcuts';
 import type { NowPlaying } from '../browse-hover-preview/browse-hover-preview.component';
 import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
 import type { MediaBatchResponse } from '../../generated/api-client/models/media-batch-response';
 
-/** Vertical padding (px) inside every grid cell (``.bin-popup-entry`` 2px top +
- *  2px bottom), always present regardless of icon size. Reserved in {@link
- *  rowSize} so the cell's real rendered height never exceeds its virtual slot. */
-const GRID_CELL_PADDING = 4;
-/** Gap (px) between grid cells (and grid rows); matches ``--space-2xs``-ish. */
-const GRID_GAP = 4;
-/** Width (px) available to lay out cells inside the popup's scroll column (≈ its
- *  width minus padding and the scrollbar). Columns are derived from this. */
-const GRID_CONTENT_WIDTH = 256;
-/** Width (px) of the scrolling grid column; mirrors the historic popup width. */
-const GRID_COLUMN_WIDTH = 280;
 /** Width (px) of the optional metadata column shown left of the preview pane. */
 const METADATA_COLUMN_WIDTH = 200;
 /** Tallest the scrolling body grows before it caps and scrolls internally. */
@@ -36,8 +31,6 @@ const MAX_BODY_PX = 400;
 /** Shortest the scrolling body is ever squeezed to when the visible region is
  *  too short to fit the full popup; below this it just scrolls internally. */
 const MIN_BODY_PX = 80;
-/** Extra rows of metadata prefetched beyond the visible window. */
-const PREFETCH_BUFFER = 50;
 /** Gap (px) kept between the popup and the visible edge when clamping. */
 const EDGE_MARGIN = 8;
 /** Gap (px) between the body's columns (metadata / preview / grid). Mirrors the
@@ -77,8 +70,6 @@ const PREVIEW_OVERSIZE = 2.0;
  * {@link PREVIEW_OVERSIZE}.
  */
 const HOVER_EXTENT_PER_RADIUS = 3;
-/** Vertical room (px) the member-count label takes above the scrolling grid. */
-const COUNT_LABEL_HEIGHT = 22;
 /** Vertical padding (px) inside ``.bin-popup-body`` ({@link BODY_PADDING} on the
  *  top + bottom). The body's bound ``height`` is a *border-box* height (the app
  *  sets ``box-sizing: border-box`` globally), so this padding must be added on
@@ -144,10 +135,18 @@ const DOCKED_MAIN_MIN = 60;
  *   document-level keyboard shortcuts) is disabled; the canvas keeps its own
  *   shortcuts.
  *
- * The members render as a virtualized thumbnail grid (always grid; there is no
- * list mode). Hovering a grid thumbnail paints that item's *full-resolution*
- * original (not its grid thumbnail) into the preview pane, so the user can pull
- * detail out of any pile member in turn. The pane opens showing the bin's
+ * The members themselves render in {@link BrowseBinMemberGridComponent}, which
+ * owns everything below the detail row: the virtualized thumbnail grid (always
+ * grid; there is no list mode), its select-all header, and all of the virtual
+ * viewport's mechanics — scroll-driven metadata prefetch, centring a row,
+ * moving DOM focus onto an entry that has not virtualized in yet. This shell
+ * keeps only what the grid can't own: what to show (it chunks {@link ids} into
+ * {@link rows} because the same chunking feeds its clamp) and what is being
+ * viewed ({@link previewId}), reaching into the grid through the three methods
+ * on that component when the keyboard or a resize needs to move it. Hovering a
+ * grid thumbnail paints that item's *full-resolution* original (not its grid
+ * thumbnail) into the preview pane, so the user can pull detail out of any pile
+ * member in turn. The pane opens showing the bin's
  * representative, so even a singleton bin lands on a large high-res view without
  * any hover. The pane is sized to {@link PREVIEW_OVERSIZE} (50%) larger than the
  * item's on-canvas mouse-over break-out at the current main-canvas thumbnail
@@ -156,9 +155,10 @@ const DOCKED_MAIN_MIN = 60;
  * The thumbnail size of the grid is remembered per media type under the
  * ``grid_icon_size_popup`` setting (independent of the left/right panels), so
  * tuning the popup while browsing one bin becomes the default for every future
- * popup of that media type. The top-right {@link ViewControlsComponent} writes
+ * popup of that media type. The view controls on the grid's header row write
  * that setting and this component re-reads it from {@link SettingsStateService},
- * keyed by the active dataset's media type.
+ * keyed by the active dataset's media type — it needs the size itself, since the
+ * column chunking and the popup's clamped height both derive from it.
  *
  * A second, top-left pair of size buttons controls the *detail canvas* (the
  * large preview pane) rather than the grid thumbnails. Because the popup's
@@ -180,7 +180,7 @@ const DOCKED_MAIN_MIN = 60;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-browse-bin-popup',
   standalone: true,
-  imports: [CommonModule, ScrollingModule, ViewControlsComponent, IconComponent, CopyDetailButtonComponent],
+  imports: [CommonModule, IconComponent, CopyDetailButtonComponent, BrowseBinMemberGridComponent],
   templateUrl: './browse-bin-popup.component.html',
   styleUrl: './browse-bin-popup.component.scss',
 })
@@ -254,7 +254,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
 
   private readonly panelRef = viewChild<ElementRef<HTMLElement>>('panel');
   private readonly headerRef = viewChild<ElementRef<HTMLElement>>('header');
-  private readonly viewport = viewChild(CdkVirtualScrollViewport);
+  private readonly grid = viewChild(BrowseBinMemberGridComponent);
   private readonly audioRef = viewChild<ElementRef<HTMLAudioElement>>('audioEl');
 
   /** Clamped on-screen position; starts at the anchor and is nudged inward. */
@@ -326,13 +326,9 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   /** Whether the one-shot buffering listeners are wired onto the audio element. */
   private audioListenersAttached = false;
 
-  private readonly failedThumbs = new Set<string>();
   /** Ids whose full-res ``/image`` failed; the preview falls back to the
    *  thumbnail for these so it still shows something. */
   private readonly failedPreviews = new Set<number>();
-  private scrollSub: Subscription | null = null;
-  /** The viewport instance whose ``scrolledIndexChange`` is currently subscribed. */
-  private scrollSubscribedViewport: CdkVirtualScrollViewport | null = null;
 
   constructor() {
     // Keep the hover-to-hear preview element in step with the Browse toolbar's
@@ -385,8 +381,8 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
         // the window around it. Deferred so the virtual viewport has the new rows
         // (and, on first open, exists at all — it's created after this effect).
         setTimeout(() => {
-          this.scrollToRep();
-          this.prefetchVisible();
+          this.grid()?.centreOn(this.repIndex());
+          this.prefetchMembers();
         });
       });
     });
@@ -435,8 +431,8 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
         if (!this.docked() || width <= 0) return;
         this.rebuildRows();
         setTimeout(() => {
-          this.viewport()?.checkViewportSize();
-          this.prefetchVisible();
+          this.grid()?.remeasure();
+          this.prefetchMembers();
         });
         this.cdr.markForCheck();
       });
@@ -449,18 +445,6 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
         if (!this.docked() || !np) return;
         this.metadataCache.ensureLoaded([np.mediaId]);
       });
-    });
-    // (Re-)subscribe the member grid's scroll-driven prefetch whenever the
-    // virtual viewport instance changes — it lives behind the template's
-    // ``@if (!previewOnly)``, and the popup is reused across summons while
-    // open (right-clicking another bin only swaps inputs), so a singleton→
-    // multi transition creates a brand-new viewport. Tracking the view query
-    // re-runs this the moment that instance appears; a one-shot
-    // ``ngAfterViewInit`` wiring would strand it (mirrors media-list's
-    // viewport re-wire pattern).
-    effect(() => {
-      this.viewport();
-      untracked(() => this.ensureScrollSubscription());
     });
     // Re-read the popup's thumbnail size whenever settings change (this is how
     // the in-header size buttons take effect, and how a change on one popup
@@ -510,34 +494,17 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit(): void {
-    // Names/thumbnails arrive asynchronously; repaint the visible rows.
+    // Names/thumbnails arrive asynchronously; repaint the metadata column and
+    // the preview pane's labels. (The grid child repaints its own rows.)
     this.metadataCache.version$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => this.cdr.markForCheck());
     this.settingsState.load();
-    this.prefetchVisible();
+    this.prefetchMembers();
     setTimeout(() => this.place());
   }
 
-  /**
-   * (Re-)subscribe the member grid's scroll-driven thumbnail prefetch, keyed
-   * to the viewport *instance*. Driven by the constructor effect tracking the
-   * ``viewport`` view query, so a singleton→multi transition (which creates a
-   * brand-new viewport behind ``@if (!previewOnly)``) re-wires immediately —
-   * a one-shot subscription would leave everything beyond the
-   * initially-prefetched window as ``□`` placeholders with no recovery.
-   */
-  private ensureScrollSubscription(): void {
-    const vp = this.viewport() ?? null;
-    if (!vp || this.scrollSubscribedViewport === vp) return;
-    this.scrollSubscribedViewport = vp;
-    this.scrollSub?.unsubscribe();
-    this.scrollSub = vp.scrolledIndexChange.subscribe(() => this.prefetchVisible());
-    this.prefetchVisible();
-  }
-
   ngOnDestroy(): void {
-    this.scrollSub?.unsubscribe();
     // Drop any in-flight metadata-divider drag listeners (destroyed mid-drag).
     document.removeEventListener('pointermove', this.boundMetaMove);
     document.removeEventListener('pointerup', this.boundMetaUp);
@@ -687,8 +654,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
       // being viewed (the representative until the user hovers/arrows elsewhere)
       // so it stays in view across the size change, then clamp.
       setTimeout(() => {
-        this.viewport()?.checkViewportSize();
-        this.centreRowFor(this.focusIndex());
+        this.grid()?.centreOn(this.focusIndex());
         this.place();
       });
     }
@@ -726,41 +692,6 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     return idx >= 0 ? idx : 0;
   }
 
-  /** Scroll the member grid so the representative's row sits roughly centred, so
-   *  the popup opens looking at the same item whose pile thumbnail was clicked
-   *  rather than the 1-D list's first item. */
-  private scrollToRep(): void {
-    this.centreRowFor(this.repIndex());
-  }
-
-  /** Scroll the member grid so the row holding ``index`` sits roughly centred.
-   *  No-op for a singleton bin (no grid) or before the viewport exists.
-   *
-   *  The virtual viewport may not have applied its scrollable content size yet
-   *  (on open, or right after a thumbnail-size change re-chunks the rows), so the
-   *  browser clamps this scroll back to 0 and a large bin is left sitting at the
-   *  top with the target off-screen. When we meant to scroll down but the offset
-   *  didn't take, retry on the next frame (bounded) until the viewport is
-   *  scrollable and the target sticks. */
-  private centreRowFor(index: number, attempt = 0): void {
-    const vp = this.viewport();
-    if (!vp) return;
-    const row = Math.floor(index / Math.max(1, this.columns));
-    const viewportH = vp.elementRef.nativeElement.clientHeight || this.gridHeight;
-    // The most we can scroll: content height (all rows) minus the visible window.
-    const maxOffset = Math.max(0, this.rows.length * this.rowSize - viewportH);
-    // Centre the row in the visible window, clamped to [0, maxOffset] so we never
-    // scroll past either end.
-    const target = Math.min(
-      maxOffset,
-      Math.max(0, row * this.rowSize - Math.max(0, viewportH - this.rowSize) / 2),
-    );
-    vp.scrollToOffset(target);
-    if (target > 0 && vp.measureScrollOffset('top') < target - 1 && attempt < 5) {
-      requestAnimationFrame(() => this.centreRowFor(index, attempt + 1));
-    }
-  }
-
   /** Width (px) the member grid lays its cells out in: the historic fixed
    *  column width when floating, or the live panel width (minus the body
    *  padding + scrollbar chrome) when docked, so the docked grid re-chunks as
@@ -790,10 +721,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
 
   /** Recompute the column count + row chunking for the current thumbnail size. */
   private rebuildRows(): void {
-    this.columns = Math.max(
-      1,
-      Math.floor((this.gridContentWidth() + GRID_GAP) / (this.gridGoalWidth + GRID_GAP)),
-    );
+    this.columns = binGridColumns(this.gridContentWidth(), this.gridGoalWidth);
     const cols = this.columns;
     const rows: number[][] = [];
     for (let i = 0; i < this.ids.length; i += cols) {
@@ -802,14 +730,11 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     this.rows = rows;
   }
 
-  /** Pixel stride of one virtual grid row: the thumbnail plus its always-present
-   *  vertical cell padding and an inter-row gap. The grid no longer prints a name
-   *  under each thumbnail, so only the thumbnail and padding contribute; accounting
-   *  for the cell padding keeps the row's rendered content from overflowing its
-   *  virtual slot by a sub-pixel, which would otherwise force a stray scrollbar on
-   *  even a single row. */
+  /** Pixel stride of one virtual grid row. Shared with the grid component that
+   *  actually renders the rows, so this clamp can't model a row height the grid
+   *  doesn't use — see ``utils/bin-grid-metrics``. */
   get rowSize(): number {
-    return this.gridGoalWidth + GRID_CELL_PADDING + GRID_GAP;
+    return binGridRowSize(this.gridGoalWidth);
   }
 
   /** Height (px) the grid takes: just enough for its rows, capped (to the room
@@ -1167,31 +1092,8 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     const next = Math.max(0, Math.min(this.ids.length - 1, cur + dCol + dRow * this.columns));
     if (next === cur) return;
     this.previewId = this.ids[next];
-    this.scrollRowIntoView(next);
-    this.focusEntry(next);
+    this.grid()?.revealAndFocus(next);
     this.cdr.markForCheck();
-  }
-
-  /**
-   * Move DOM focus onto the grid entry at ``index`` so keyboard activation
-   * (Enter / Space) targets the arrow-walked item. The entry may not be in the
-   * DOM yet — the row was just scrolled into view and the virtual viewport
-   * renders it on a subsequent frame — so query for it after a frame and retry
-   * (bounded) until it exists. ``preventScroll`` keeps the native focus scroll
-   * from fighting {@link scrollRowIntoView}, which already positioned the row.
-   */
-  private focusEntry(index: number, attempt = 0): void {
-    const panel = this.panelRef()?.nativeElement;
-    const id = this.ids[index];
-    if (!panel || id == null) return;
-    requestAnimationFrame(() => {
-      const el = panel.querySelector<HTMLElement>(`.bin-popup-entry[data-entry-id="${id}"]`);
-      if (el) {
-        el.focus({ preventScroll: true });
-      } else if (attempt < 5) {
-        this.focusEntry(index, attempt + 1);
-      }
-    });
   }
 
   /** Index of the viewed item within {@link ids}, falling back to the
@@ -1199,29 +1101,6 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   private focusIndex(): number {
     const idx = this.previewId == null ? -1 : this.ids.indexOf(this.previewId);
     return idx >= 0 ? idx : this.repIndex();
-  }
-
-  /** True for the viewed item — the one shown in the preview pane and ringed in
-   *  the grid as arrow keys walk through it. */
-  isFocused(id: number): boolean {
-    return this.previewId != null && id === this.previewId;
-  }
-
-  /** Scroll the grid the minimum amount so the row holding ``index`` is fully
-   *  visible (no-op when it already is). */
-  private scrollRowIntoView(index: number): void {
-    const vp = this.viewport();
-    if (!vp) return;
-    const row = Math.floor(index / Math.max(1, this.columns));
-    const rowTop = row * this.rowSize;
-    const rowBottom = rowTop + this.rowSize;
-    const top = vp.measureScrollOffset('top');
-    const viewportH = vp.elementRef.nativeElement.clientHeight || this.gridHeight;
-    if (rowTop < top) {
-      vp.scrollToOffset(rowTop);
-    } else if (rowBottom > top + viewportH) {
-      vp.scrollToOffset(rowBottom - viewportH);
-    }
   }
 
   // --- Dragging (move the popup by its header) ------------------------------
@@ -1256,48 +1135,11 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
 
   // --- Selection (click stays open so the user can scroll + multi-select) ---
 
-  isSelected(id: number): boolean {
-    return this.selection.has(id);
-  }
-
-  /** Tri-state of the select-all control: how many members are selected, as
-   *  none / some / all — mirroring the dashboard's master-checkbox states. */
-  get selectionState(): 'none' | 'some' | 'all' {
-    const total = this.ids.length;
-    if (total === 0) return 'none';
-    const sel = this.selection.selectedCountIn(this.ids);
-    if (sel === 0) return 'none';
-    if (sel >= total) return 'all';
-    return 'some';
-  }
-
-  /** Select every member, or — when all are already selected — clear them.
-   *  Matches the dashboard's toggle-all semantics. */
-  toggleAll(): void {
-    if (this.selectionState === 'all') {
-      this.selection.removeAll(this.ids);
-    } else {
-      this.selection.addAll(this.ids);
-    }
-  }
-
   onEntryClick(id: number): void {
     if (this.selection.has(id)) {
       this.selection.remove(id);
     } else {
       this.selection.addAll([id]);
-    }
-  }
-
-  onEntryKeydown(event: KeyboardEvent, id: number): void {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      // Stop the bubble so the document-level handler's Space fallback (which
-      // acts on {@link previewId}) doesn't also fire and double-toggle. The
-      // focused entry owns its own activation; the fallback is only for when
-      // nothing in the grid holds focus.
-      event.stopPropagation();
-      this.onEntryClick(id);
     }
   }
 
@@ -1463,19 +1305,8 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     return this.metadataCache.get(id)?.filename || `Clip #${id}`;
   }
 
-  hasThumbnailUrl(id: number): boolean {
-    const url = this.thumbnailUrl(id);
-    if (this.failedThumbs.has(url)) return false;
-    const media = this.metadataCache.get(id);
-    return !!media && this.mediaTypeCaps.usesThumbnails(media.media_type);
-  }
-
   thumbnailUrl(id: number): string {
     return this.activeContext.mediaUrl(`/api/medias/${id}/thumbnail`);
-  }
-
-  onThumbnailError(url: string): void {
-    if (url) this.failedThumbs.add(url);
   }
 
   /** Full-res source for the preview pane: the original ``/image`` unless it has
@@ -1494,23 +1325,6 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
       this.failedPreviews.add(id);
       this.cdr.markForCheck();
     }
-  }
-
-  placeholderIcon(id: number): string {
-    if (this.hasThumbnailUrl(id)) return '';
-    const media = this.metadataCache.get(id);
-    if (!media) return '□';
-    if (media.media_type === 'audio') return '♫';
-    if (media.media_type === 'text') return '¶';
-    return '□';
-  }
-
-  trackById(_index: number, id: number): number {
-    return id;
-  }
-
-  trackByRow(index: number): number {
-    return index;
   }
 
   // --- Positioning ---------------------------------------------------------
@@ -1705,22 +1519,22 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
-  /** Prefetch metadata for the items around the visible window of the grid. */
-  private prefetchVisible(): void {
-    if (this.ids.length === 0) return;
-    const cols = this.columns;
-    const vp = this.viewport();
-    if (!vp) {
-      const window = Math.ceil(MAX_BODY_PX / this.rowSize) * cols + PREFETCH_BUFFER;
-      this.metadataCache.ensureLoaded(this.ids.slice(0, window));
+  /**
+   * Keep metadata loading for whatever is on show.
+   *
+   * The member grid prefetches its own visible window (and re-prefetches as it
+   * scrolls), so normally this just nudges it. When no grid is rendered at all —
+   * a floating singleton bin, which drops the grid column for the detail pane
+   * alone — there is exactly one item on show, and the pane plus the metadata
+   * column both read it, so load that one directly.
+   */
+  private prefetchMembers(): void {
+    const grid = this.grid();
+    if (grid) {
+      grid.prefetchVisible();
       return;
     }
-    const startRow = Math.floor(vp.measureScrollOffset('top') / this.rowSize);
-    const visibleRows = Math.ceil(
-      (vp.elementRef.nativeElement.clientHeight || this.gridHeight) / this.rowSize,
-    );
-    const from = Math.max(0, (startRow - Math.ceil(PREFETCH_BUFFER / cols)) * cols);
-    const to = Math.min(this.ids.length, (startRow + visibleRows) * cols + PREFETCH_BUFFER);
-    this.metadataCache.ensureLoaded(this.ids.slice(from, to));
+    const id = this.displayedId;
+    if (id != null) this.metadataCache.ensureLoaded([id]);
   }
 }
