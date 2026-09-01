@@ -60,7 +60,7 @@ A genuine removal is a deliberate library break: raise it with the user first.
   importable from its old path via a package `__init__` re-export or a shim.
 
 **Suggested first wave** (high value, low risk): #3441 and #3434 (verified-dead
-frontend code and repo hygiene), #3389/#3392/#3399 (mechanical vtscore dedup and
+frontend code and repo hygiene), #3389/#3399 (mechanical vtscore dedup and
 converter logging), #3400 (eval defaults that no longer match the shipped
 algorithm), #3382/#3402/#3404. The god-module splits (#3381, #3377, #3405, #3417)
 and the settings rework (#3412) are the highest-payoff items but need Opus-tier
@@ -87,7 +87,6 @@ care.
 - [ ] #3383 — Deduplicate the clipper family: tiling math, segment emission, six no-op clippers (Sonnet 5)
 - [ ] #3386 — Collapse the near-synonymous embedder-resolution wrappers (Sonnet 5)
 - [ ] #3389 — Deduplicate the media registries, the atomic-write ritual, and JSON label extraction (Haiku 4.5)
-- [ ] #3392 — Centralize `_default_progress()` and the `ProgressCallback` alias (Haiku 4.5)
 - [ ] #3394 — Extract one background-import harness shared by both import pipelines (Sonnet 5)
 
 ## Library tier — dead code & unkept promises
@@ -102,7 +101,6 @@ care.
 
 ## Concurrency & progress
 
-- [ ] #3376 — Delete the legacy global dataset-progress system in favour of the per-task registry (Opus 4.8)
 - [ ] #3380 — Back `AsyncJob` with a `ProgressTracker` instead of re-implementing it (Opus 4.8)
 - [ ] #3382 — Route the raw staging thread through `vtsearch.threading.spawn` (Haiku 4.5)
 

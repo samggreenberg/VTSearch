@@ -561,7 +561,7 @@ in place, non-matching files are embedded, inserted with an
 obvious.
 
 - **`vtscore.concurrency.progress`** - long-running-operation
-  progress and cancellation (`ProgressTracker`, `dataset_progress`,
+  progress and cancellation (`ProgressTracker`, `loading_tasks`,
   `sort_progress`, etc.).
 - **`vtscore.detectors.labeling_progress`** - per-step model cache and
   stopping-condition metrics. Used by the labeling-progress UI to

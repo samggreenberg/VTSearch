@@ -872,12 +872,12 @@ class _ThreadLocalProgress:
     ever redirects the progress of embed / model-load calls made *by that
     thread*, which is exactly what every save-and-restore call site wants.  A
     thread that never assigned anything reads the process-wide default
-    (:meth:`MediaEmbedder.set_default_progress_callback`), so background work
-    with no explicit callback still reports into the host application's
-    progress sink.  That fallback narrates work the sink cannot see the end of,
-    so a model load taken through it is terminated explicitly by
-    :meth:`MediaEmbedder._orphan_progress`; background warm-ups that want no
-    progress surface at all should say so with :meth:`MediaEmbedder.silent_progress`.
+    (:meth:`MediaEmbedder.set_default_progress_callback`), which the app wires
+    to :func:`~vtscore.concurrency.progress.update_progress` — itself a
+    per-thread resolution, so an unscoped load on a thread that bound nothing
+    lands in a no-op rather than on a channel nobody can terminate.  Background
+    warm-ups running *inside* a load that did bind a tracker say they want no
+    progress surface with :meth:`MediaEmbedder.silent_progress`.
     """
 
     def __get__(self, obj: "MediaEmbedder | None", objtype: type | None = None) -> Any:
@@ -959,43 +959,11 @@ class MediaEmbedder(ABC):
 
         Sugar over :meth:`progress_scope` for background warm-ups that have no
         progress surface of their own (the smart-preload threads, the
-        post-import embedder warm-up).  Without it those calls fall through to
-        the process-wide default sink, which in the app is the dataset-import
-        channel — see :meth:`_orphan_progress`.
+        post-import embedder warm-up).  Without it a warm-up that runs on a
+        thread which *did* bind a tracker — the tail of an import, say — would
+        narrate itself onto that import's row after the import is over.
         """
         return self.progress_scope(_noop_progress)
-
-    @contextlib.contextmanager
-    def _orphan_progress(self):
-        """Publish a terminal ``idle`` for a model load nobody is watching.
-
-        A thread that installed no :meth:`progress_scope` still reports through
-        the process-wide default sink, which the app wires to the global
-        ``dataset_progress`` tracker — the SSE ``dataset`` channel.  That sink
-        has no idea when the work it is narrating ends, so an unscoped
-        ``load_models`` left the channel parked on its last "Loading … processor…"
-        message forever: an import that had *succeeded* looked exactly like a
-        wedged one, and only a profiler could tell them apart (#3167).
-
-        The load itself is the boundary that knows when the work ends, so it is
-        where the terminal state belongs.  For the duration of an unscoped load
-        this pins the default sink as the thread's own callback (so a nested
-        ``load_models`` doesn't re-arm the same wrapper) and, in a ``finally``,
-        sends one ``idle`` tick to say the phase is over.
-
-        A caller that installed a scope owns its own channel and is left alone;
-        so is a sink that is already the no-op default.
-        """
-        slot = _progress_slot(self)
-        if getattr(slot.local, "cb", None) is not None or slot.default is _noop_progress:
-            yield
-            return
-        sink = slot.default
-        with self.progress_scope(sink):
-            try:
-                yield
-            finally:
-                sink("idle", "", 0, 0)
 
     # ------------------------------------------------------------------
     # Identity
@@ -1179,12 +1147,12 @@ class MediaEmbedder(ABC):
         ``self._model is not None``).
 
         A load whose caller installed no :meth:`progress_scope` reports through
-        the process-wide default sink and is terminated there on the way out;
-        see :meth:`_orphan_progress`.
+        the process-wide default sink, which resolves per-thread and drops the
+        ticks when the thread bound no tracker.
         """
         if getattr(self, "_model", None) is not None:
             return
-        with self._orphan_progress(), self._model_load_lock:
+        with self._model_load_lock:
             try:
                 self._load_models_impl()
             except ImportError as exc:

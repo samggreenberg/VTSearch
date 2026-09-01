@@ -80,7 +80,74 @@ instead, since every commit on `dev` is effectively a new app release.)
   has **not** moved: it exports a process-global mutable singleton with its
   own lock, which is state by any reading.
 
+### Removed
+
+- **The global dataset-progress system: `dataset_progress`, `get_progress()`
+  and `check_dataset_cancelled()`** (issue #3376). Dataset and import progress
+  now lives entirely in the per-task `loading_tasks` registry, one
+  `ProgressTracker` per operation. The SSE `dataset` channel these fed is gone
+  with them; per-task progress rides `loading-tasks`, which the dashboard has
+  read for some time.
+
+  A process-wide progress sink has no owner, and that turned out to be the
+  whole bug class: nothing could say when the work it was narrating had ended,
+  so a finished import and a wedged one produced identical output (#3167). The
+  workarounds it needed were the tell — a `_park_global_progress_if_orphaned()`
+  sweep on the last load out of the door, a synthetic terminal tick appended to
+  every unscoped `load_models()`, and a `LEGACY_PROGRESS_TARGET` special case
+  threaded through cancellation. All are deleted rather than fixed. Removed
+  alongside them: `MediaEmbedder._orphan_progress` (the terminal-tick wrapper),
+  `LoadingTasksTracker.any_worker_alive()`, and `LEGACY_PROGRESS_TARGET`.
+
+  `cancel_dataset_progress()` keeps its name and contract and now cancels
+  exactly the active loading tasks. Its `targets` list no longer contains the
+  string `"dataset_progress"` — every entry is a real task id — so a client
+  that special-cased that value can drop the branch. Cancellation also stopped
+  needing a `reset_cancel()` guard on each new load: a per-task flag starts
+  clear, and a cancel aimed at an earlier load stays with it.
+
+  **For plugin authors:** if you read `dataset_progress` directly or called
+  `get_progress()`, switch to `loading_tasks` — `list_tasks()` for a snapshot
+  of every operation, `get_tracker(task_id)` for one. If you polled
+  `check_dataset_cancelled()`, call `check_cancelled()` on the tracker your
+  operation owns; reporting progress through the thread's sink usually does it
+  for you, since the callbacks the load pipeline binds check cancellation
+  before recording each tick.
+
+### Added
+
+- **`ProgressCallback`, `noop_progress()` and `resolve_progress_callback()` are
+  exported from `vtscore.concurrency.progress`** (issue #3392). The
+  `(status, message, current, total)` type alias had been redeclared in ten
+  modules and the "use the thread's callback, else a default" resolution copied
+  byte-identically into eight; both now have one definition.
+  `resolve_progress_callback()` returns the calling thread's progress callback,
+  or `noop_progress` when none is bound. `vtscore.media.base` re-exports the
+  alias and the no-op, so existing imports from there keep working.
+
 ### Changed
+
+- **`update_progress()` reports into the calling thread's tracker instead of a
+  global one** (issue #3376). It stays public and stays the documented way for
+  an importer to report progress without accepting an `on_progress` argument —
+  it is now the free-function spelling of `resolve_progress_callback()`.
+
+  This **fixes** out-of-tree importers that followed
+  `docs/extending/dataset-importers.md`. Writing straight to the global meant
+  their ticks landed on a channel the dashboard does not render, so the row for
+  their import never moved, and the `"embedding"` status that swaps the
+  download concurrency-gate for the embed gate never reached the pipeline.
+  Both work now with no change to the calling code. Two in-tree importers
+  (`recaller`, and `DatasetImporter`'s default record loop) had the same bug.
+
+  Two narrower changes to its signature: the `staging_result=` parameter is
+  gone (that field belongs to the staging task's own tracker, declared via
+  `create_task(..., extra_fields={"staging_result": None})`), and the remaining
+  extras (`error`, `step`, `total_steps`) are forwarded only when the bound
+  sink's signature accepts them — the four-argument callbacks the load pipeline
+  installs get the four positional arguments alone. Acceptance is decided by
+  inspecting the signature, not by catching `TypeError` from the call, so a
+  `TypeError` raised *inside* a sink still propagates.
 
 - **`description_wrappers` is now a per-embedder, measured choice, and four
   built-in embedders return `[]`** (issue #3341, following #3127). Issue

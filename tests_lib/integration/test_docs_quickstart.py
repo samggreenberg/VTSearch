@@ -549,7 +549,7 @@ class TestNamespacePackageImports:
         from vtscore.concurrency.progress import (  # noqa: F401
             LoadingTasksTracker,
             ProgressTracker,
-            check_dataset_cancelled,
+            resolve_progress_callback,
             update_progress,
         )
         from vtscore.security.path_validation import validate_server_filepath  # noqa: F401

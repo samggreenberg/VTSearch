@@ -511,10 +511,13 @@ predict this deployment will need.
 Yes, with `vtscore.concurrency.progress.cancel_dataset_progress()`
 (import from the module - `vtscore.concurrency` is an implicit namespace
 package with no `__init__.py`, so there is nothing to import *from* it
-directly). The
-operation polls `check_dataset_cancelled()` at chunk boundaries and
+directly), or `cancel_dataset_task(task_id)` for one operation. Both set
+the cancel event on the loading task's own `ProgressTracker`; the
+operation polls `tracker.check_cancelled()` at chunk boundaries and
 raises `CancelledError` when set. Worker functions that want to be
-cancellable should call `check_dataset_cancelled()` periodically
-themselves (not from inside a bounded loop - use a `while True` loop
-with the cancel check at the top; bounded loops can run to completion
-before the cancel signal arrives in some race conditions).
+cancellable should call it periodically themselves (not from inside a
+bounded loop - use a `while True` loop with the cancel check at the top;
+bounded loops can run to completion before the cancel signal arrives in
+some race conditions). Reporting progress through the thread's own sink
+usually does this for you: the callbacks the load pipeline binds check
+cancellation before recording each tick.

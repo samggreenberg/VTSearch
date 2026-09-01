@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Optional
 
 from vtscore.datasets.downloader import core as _core
+from vtscore.concurrency.progress import resolve_progress_callback
 from vtscore.datasets.downloader.core import ProgressCallback
 
 
@@ -23,7 +24,7 @@ def download_ucf101_subset(on_progress: Optional[ProgressCallback] = None) -> Pa
 
     Args:
         on_progress: Optional progress callback. Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         Path to the ``ucf101/`` directory inside ``VIDEO_DIR`` (e.g.
@@ -31,7 +32,7 @@ def download_ucf101_subset(on_progress: Optional[ProgressCallback] = None) -> Pa
         ``.avi`` files.
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     video_dir = _core.VIDEO_DIR / "ucf101"
     _core.VIDEO_DIR.mkdir(exist_ok=True, parents=True)
@@ -97,7 +98,7 @@ def download_hmdb51(on_progress: Optional[ProgressCallback] = None) -> Path:
         one subdirectory per action category with ``.avi`` files.
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     video_dir = _core.VIDEO_DIR / "hmdb51"
     _core.VIDEO_DIR.mkdir(exist_ok=True, parents=True)
@@ -141,7 +142,7 @@ def download_ucf101_full(on_progress: Optional[ProgressCallback] = None) -> Path
         containing 101 category subdirectories with ``.avi`` files.
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     video_dir = _core.VIDEO_DIR / "ucf101_full"
     _core.VIDEO_DIR.mkdir(exist_ok=True, parents=True)
@@ -185,7 +186,7 @@ def download_kth(on_progress: Optional[ProgressCallback] = None) -> Path:
         jogging, running, walking) with ``.avi`` files.
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     video_dir = _core.VIDEO_DIR / "kth"
     _core.VIDEO_DIR.mkdir(exist_ok=True, parents=True)

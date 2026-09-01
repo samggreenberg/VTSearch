@@ -453,9 +453,9 @@ def load_demo_source(  # noqa: C901 - flat per-item embed/defer branching
 ):
 
     if on_progress is None:
-        from vtscore.concurrency.progress import update_progress
+        from vtscore.concurrency.progress import resolve_progress_callback
 
-        on_progress = update_progress
+        on_progress = resolve_progress_callback()
 
     if embedder is None:
         from vtscore.media import embedders_for_type

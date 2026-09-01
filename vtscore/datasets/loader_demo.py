@@ -20,11 +20,8 @@ import numpy as np
 from vtscore.config import EMBEDDINGS_DIR
 from vtscore.embedding.stack import embedding_stack
 from vtscore.datasets.config import DEMO_DATASETS
-from vtscore.datasets.loader_common import (
-    ProgressCallback,
-    _default_progress,
-    _embeddings_dict_for_pickle,
-)
+from vtscore.concurrency.progress import ProgressCallback, resolve_progress_callback
+from vtscore.datasets.loader_common import _embeddings_dict_for_pickle
 from vtscore.datasets.loader_pickle import load_dataset_from_pickle
 
 
@@ -214,7 +211,9 @@ def load_demo_dataset(
     named converter.  The resulting dataset contains the *target* type and
     is cached under a separate pickle key.
 
-    Progress throughout the operation is reported via :func:`update_progress`.
+    Progress throughout the operation is reported through the calling
+    thread's progress sink (see
+    :func:`~vtscore.concurrency.progress.resolve_progress_callback`).
 
     Args:
         dataset_name: Key into ``DEMO_DATASETS`` identifying which demo dataset
@@ -241,7 +240,7 @@ def load_demo_dataset(
             media type does not support the requested demo source.
     """
     if on_progress is None:
-        on_progress = _default_progress()
+        on_progress = resolve_progress_callback()
 
     if dataset_name not in DEMO_DATASETS:
         raise ValueError(f"Unknown dataset: {dataset_name}")

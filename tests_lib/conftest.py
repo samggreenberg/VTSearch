@@ -268,7 +268,7 @@ def _stub_embedding_models():
 
 import vtscore.state.core as _core  # noqa: E402
 from vtscore.concurrency.progress import (  # noqa: E402
-    dataset_progress as _dataset_progress,
+    clear_thread_progress as _clear_thread_progress,
     eval_progress as _eval_progress,
     find_progress as _find_progress,
     loading_tasks as _loading_tasks,
@@ -336,7 +336,10 @@ def reset_contexts(tmp_path, monkeypatch):
     _config.resolve_device.cache_clear()
     _emb_loader.resolve_device.cache_clear()
 
-    _dataset_progress.reset_cancel()
+    # A test that bound a per-thread progress sink must not leak it into the
+    # next one: with the global fallback gone, resolve_progress_callback() reads
+    # this and nothing else.
+    _clear_thread_progress()
     _find_progress.update("idle", "", 0, 0, step=None, total_steps=None, error=None)
     _sort_progress.update("idle", "", 0, 0, step=None, total_steps=None, error=None)
     _eval_progress.update("idle", "", 0, 0, step=None, total_steps=None, error=None)
