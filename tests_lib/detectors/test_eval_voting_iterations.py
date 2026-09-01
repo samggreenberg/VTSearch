@@ -12,8 +12,8 @@ import pytest
 
 from vtscore.eval.step_model import StepModel, good_training_vec, inclusion_weights
 from vtscore.eval.step_trainers import _labelset_error_costs
+from vtscore.eval.voting_columns import TIMING_COLUMNS
 from vtscore.eval.voting_iterations import (
-    TIMING_COLUMNS,
     _split_media_ids,
     run_voting_iterations_eval,
     simulate_voting_iterations,

@@ -19,13 +19,12 @@ import numpy as np
 import pytest
 
 from vtscore.eval.patch_styles import WholeImageStyle
-from vtscore.eval.voting_columns import CALIBRATION_COLUMNS, SKYLINE_COLUMNS
+from vtscore.eval.voting_columns import CALIBRATION_COLUMNS, SKYLINE_COLUMNS, TIMING_COLUMNS
 from vtscore.eval.voting_iterations import (
     SKYLINE_ARMS,
     SKYLINE_PROVENANCE,
     SKYLINE_TEST_XFIT,
     SKYLINE_TRAIN_FULL,
-    TIMING_COLUMNS,
     _WHOLE_IMAGE_STYLE,
     _skyline_arm_rows,
     _skyline_fit_and_score,

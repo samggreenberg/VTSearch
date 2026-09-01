@@ -32,12 +32,8 @@ from vtscore.eval.patch_styles import (
     resolve_style,
     snap_box_to_region,
 )
-from vtscore.eval.voting_columns import VOTING_COLUMNS
-from vtscore.eval.voting_iterations import (
-    TIMING_COLUMNS,
-    run_voting_iterations_eval,
-    simulate_voting_iterations,
-)
+from vtscore.eval.voting_columns import TIMING_COLUMNS, VOTING_COLUMNS
+from vtscore.eval.voting_iterations import run_voting_iterations_eval, simulate_voting_iterations
 from vtscore.media.patch_embed import nearest_patch_to_box
 
 _TIMING_COLS = TIMING_COLUMNS
