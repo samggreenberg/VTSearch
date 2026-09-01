@@ -2,7 +2,7 @@
 
 **Background.** The Inclusion knob maps to a decision threshold via
 split-conformal quantiles of held-out calibration scores
-(`vtscore/training/thresholds.py::conformal_threshold`). Those semantics — "at
+(`vtscore/training/thresholds/conformal.py::conformal_threshold`). Those semantics — "at
 Inclusion `k` you miss at most `alpha(k) = 0.25 * 2^-k` of true matches" —
 assume the calibration examples are **exchangeable** with the inference set, and
 VTSearch's votes are chosen by the detector's own sort rather than at random.

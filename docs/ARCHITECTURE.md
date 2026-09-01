@@ -586,7 +586,7 @@ modules on the right.
 
 ### The ML training pipeline
 
-**Files:** `vtscore/training/mlp.py` / `vtscore/training/thresholds.py`, `vtscore/config.py` (for `TRAIN_EPOCHS`)
+**Files:** `vtscore/training/mlp.py` / `vtscore/training/thresholds/`, `vtscore/config.py` (for `TRAIN_EPOCHS`)
 
 **Dependencies:** `torch`, `sklearn`, `numpy`
 

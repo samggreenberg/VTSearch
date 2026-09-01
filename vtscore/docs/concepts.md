@@ -297,7 +297,7 @@ Training (`vtscore.training.train_model`):
   calls don't race on the global RNG (the linear head has no dropout, so
   this only bites the MLP arm).
 
-Thresholding (`vtscore/training/thresholds.py`):
+Thresholding (`vtscore/training/thresholds/`):
 
 - `calculate_cross_calibration_threshold` runs k-fold cross-cal (k =
   `calibrate_count`), pools the held-out fold scores, and applies the

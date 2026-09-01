@@ -61,7 +61,7 @@ max-pool-aware calibration, not a shippable win today. Separately, **grouped
 ## What this measures
 
 Every retrain picks a decision threshold via cross-calibration + the conformal
-inclusion rule (`vtscore/training/thresholds.py`). At each of 150 voting steps we
+inclusion rule (`vtscore/training/thresholds/conformal.py`). At each of 150 voting steps we
 record, on a held-out test split (inclusion 0, so cost weights are 1/1):
 
 - **`cost` = FPR + FNR** at the **trained** threshold;

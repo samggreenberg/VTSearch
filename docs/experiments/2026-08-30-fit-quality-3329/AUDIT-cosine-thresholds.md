@@ -137,7 +137,7 @@ patch-to-patch cosines. The mechanism above is arithmetic; its magnitude on
 
 ### 4. `return 0.5` in `calculate_gmm_threshold` — degenerate branch
 
-`vtscore/training/thresholds.py`. The function is the app's threshold for every
+`vtscore/training/thresholds/gmm.py`. The function is the app's threshold for every
 cosine and text sort, and it is scale-adaptive by construction (a 2-component
 GMM refit on the scores it is handed). The single literal is the fewer-than-two-
 scores return: a sigmoid-scale sentinel handed back on a cosine scale.
@@ -158,7 +158,7 @@ reason rather than re-derive it.
 
 | site | why the scale cannot reach it |
 |---|---|
-| `calculate_gmm_threshold`, the conformal rule, `fold_anchored_gmm_threshold` (`vtscore/training/thresholds.py`) | every threshold on the sort/vote path is **refit on the observed distribution**. This is why a patch embedder's compressed cosines produce a compressed threshold automatically, and it is the single biggest reason this audit is short |
+| `calculate_gmm_threshold`, the conformal rule, `fold_anchored_gmm_threshold` (`vtscore/training/thresholds/`) | every threshold on the sort/vote path is **refit on the observed distribution**. This is why a patch embedder's compressed cosines produce a compressed threshold automatically, and it is the single biggest reason this audit is short |
 | `support_pvalues` (`vtscore/detectors/evidence_coverage.py`) | a rank-based inductive-conformal p-value — the query's k-NN distance against the class's own leave-one-out distances. Uniform under exchangeability **whatever the geometry**. Same *shape* as the atlas guard, none of its defect: no path averaging, no vMF model, no α fitted on a magnitude |
 | `trust_scores` … `TS < 1.0` (same file) | 1.0 is the exact indifference point of a **ratio** of distances (other class ÷ predicted class), not a fitted magnitude. It survives any monotone rescaling of the distances |
 | `@q0.05` startup cuts (`vtscore/eval/startup_schedule.py`) | an explicit rank quantile of the live sort's own scores |
@@ -181,7 +181,7 @@ reason rather than re-derive it.
 | compaction radius (`vtscore/projection/compaction.py`) | a 90th percentile of 2-D layout coordinates — data-driven, and off by default |
 | `_LOGISTIC_K = 8.0` (`vtscore/training/blend_schedules.py`) | warps a vote-count ramp in [0, 1] |
 | `SMART_FLAT_THRESHOLD`, `STABLE_*` (`vtscore/eval/autopilot_flow.py`) | a relative cost slope and a class-flip rate. Both dimensionless |
-| `NO_GOOD_THRESHOLD = 2.0` (`vtscore/training/thresholds.py`) | a sentinel chosen to exceed **any** score; still above the cosine maximum of 1 |
+| `NO_GOOD_THRESHOLD = 2.0` (`vtscore/training/thresholds/knobs.py`) | a sentinel chosen to exceed **any** score; still above the cosine maximum of 1 |
 
 **No cosine constant to find.** The production MaxPatch path —
 `pool_box_from_media`, `bad_negative_vecs`, `media_score_rows` — selects rows
@@ -196,7 +196,7 @@ it. `frontend/src/` contains no similarity constant at all: the SPA reads
 Two patterns worth copying rather than reinventing, both already in the tree:
 
 - **Key on the capability, not the space's numbers.**
-  `PRODUCTION_SPLIT_BY_SPACE` (`vtscore/training/thresholds.py`) is a dict on
+  `PRODUCTION_SPLIT_BY_SPACE` (`vtscore/training/thresholds/knobs.py`) is a dict on
   `single_vector` vs `patch`, because #3287 measured the two wanting opposite
   train/calibrate splits. It carries the measurement in its comment.
 - **Refuse rather than answer.** #3351 gates the domain-shift endpoint on the
