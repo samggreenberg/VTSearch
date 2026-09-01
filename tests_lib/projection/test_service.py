@@ -382,6 +382,7 @@ class TestTilePayload:
         seen: list[int] = []
         for level, tx, ty in pyr.tiles:
             payload = svc.tile_payload(ctx, "hex", level, tx, ty, subset=False)
+            assert payload is not None
             if level == 0:
                 for cell in payload["cells"]:
                     assert "member_ids" in cell

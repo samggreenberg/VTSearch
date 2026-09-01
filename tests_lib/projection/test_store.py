@@ -208,8 +208,10 @@ class TestLoadPersistedLayout:
         pkl = self._stored(tmp_path, [1, 2, 3], shapes=("hex", "square"))
         ctx = DatasetContext("ds")
         with patch("vtscore.datasets.registry.get_dataset", return_value={"pkl_path": str(pkl)}):
-            assert load_any_persisted_layout(ctx, [1, 2, 3], prefer="square")[1].bin_shape == "square"
-            assert load_any_persisted_layout(ctx, [1, 2, 3], prefer="hex")[1].bin_shape == "hex"
+            square = load_any_persisted_layout(ctx, [1, 2, 3], prefer="square")
+            hexed = load_any_persisted_layout(ctx, [1, 2, 3], prefer="hex")
+        assert square is not None and square[1].bin_shape == "square"
+        assert hexed is not None and hexed[1].bin_shape == "hex"
 
     def test_unregistered_dataset_reads_as_absent(self):
         ctx = DatasetContext("ds")
