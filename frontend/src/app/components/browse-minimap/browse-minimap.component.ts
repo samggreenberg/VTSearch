@@ -1,5 +1,5 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, effect, ElementRef, inject, input, model, NgZone, OnDestroy, output, untracked, viewChild } from '@angular/core';
-import { Subscription } from 'rxjs';
+import { AfterViewInit, ChangeDetectionStrategy, Component, DestroyRef, effect, ElementRef, inject, input, model, NgZone, OnDestroy, output, untracked, viewChild } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { BrowseViewportService, ViewportBounds } from '../../services/browse-viewport.service';
 import { BrowseSelectionService } from '../../services/browse-selection.service';
@@ -48,6 +48,7 @@ export class BrowseMinimapComponent implements AfterViewInit, OnDestroy {
   private tileCache = inject(TileCacheService);
   private viewport = inject(BrowseViewportService);
   private selection = inject(BrowseSelectionService);
+  private destroyRef = inject(DestroyRef);
   private host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   // Repaint whenever the selection mutates, so the overview's tristate tint
@@ -135,8 +136,6 @@ export class BrowseMinimapComponent implements AfterViewInit, OnDestroy {
   private dpr = 1;
   private viewportBounds: ViewportBounds = null;
 
-  private tileLoadSub: Subscription | null = null;
-  private viewportSub: Subscription | null = null;
   private rafId = 0;
   private needsRedraw = false;
   // Repaints when the document theme flips, matching the main canvas.
@@ -171,8 +170,10 @@ export class BrowseMinimapComponent implements AfterViewInit, OnDestroy {
 
     // Overview tiles arrive asynchronously; repaint as the cache fills. The
     // viewport box updates on every pan/zoom the main canvas publishes.
-    this.tileLoadSub = this.tileCache.tileLoaded$.subscribe(() => this.requestRedraw());
-    this.viewportSub = this.viewport.viewport$.subscribe((b) => {
+    this.tileCache.tileLoaded$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.requestRedraw());
+    this.viewport.viewport$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((b) => {
       this.viewportBounds = b;
       this.requestRedraw();
     });
@@ -188,8 +189,6 @@ export class BrowseMinimapComponent implements AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.tileLoadSub?.unsubscribe();
-    this.viewportSub?.unsubscribe();
     this.themeObserver?.disconnect();
     this.resizeObserver?.disconnect();
     this.dprListenerTeardown?.();

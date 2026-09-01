@@ -1,5 +1,6 @@
-import { afterNextRender, AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, effect, ElementRef, HostListener, inject, Injector, input, OnDestroy, output, untracked, viewChild } from '@angular/core';
+import { afterNextRender, AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, effect, ElementRef, HostListener, inject, Injector, input, OnDestroy, output, untracked, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ScrollingModule, CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
 import { Subscription } from 'rxjs';
 import { BrowseSelectionService } from '../../services/browse-selection.service';
@@ -192,6 +193,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   private mediaTypeCaps = inject(MediaTypeCapabilityService);
   private cdr = inject(ChangeDetectorRef);
   private injector = inject(Injector);
+  private destroyRef = inject(DestroyRef);
 
   /** Member media ids of the bin the popup was summoned over. */
   readonly memberIds = input<number[]>([]);
@@ -328,7 +330,6 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   /** Ids whose full-res ``/image`` failed; the preview falls back to the
    *  thumbnail for these so it still shows something. */
   private readonly failedPreviews = new Set<number>();
-  private readonly subs: Subscription[] = [];
   private scrollSub: Subscription | null = null;
   /** The viewport instance whose ``scrolledIndexChange`` is currently subscribed. */
   private scrollSubscribedViewport: CdkVirtualScrollViewport | null = null;
@@ -509,10 +510,10 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit(): void {
-    this.subs.push(
-      // Names/thumbnails arrive asynchronously; repaint the visible rows.
-      this.metadataCache.version$.subscribe(() => this.cdr.markForCheck()),
-    );
+    // Names/thumbnails arrive asynchronously; repaint the visible rows.
+    this.metadataCache.version$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.cdr.markForCheck());
     this.settingsState.load();
     this.prefetchVisible();
     setTimeout(() => this.place());
@@ -536,7 +537,6 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    for (const sub of this.subs) sub.unsubscribe();
     this.scrollSub?.unsubscribe();
     // Drop any in-flight metadata-divider drag listeners (destroyed mid-drag).
     document.removeEventListener('pointermove', this.boundMetaMove);

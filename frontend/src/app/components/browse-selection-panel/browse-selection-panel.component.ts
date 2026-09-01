@@ -1,7 +1,7 @@
-import { ChangeDetectionStrategy, Component, effect, inject, input, OnDestroy, OnInit, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, input, OnDestroy, OnInit, output, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { Subscription } from 'rxjs';
 import { BrowseSelectionService } from '../../services/browse-selection.service';
 import { MediaMetadataCacheService } from '../../services/media-metadata-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
@@ -58,6 +58,7 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
   private activeContext = inject(ActiveContextService);
   private settingsState = inject(SettingsStateService);
   private mediaTypeCaps = inject(MediaTypeCapabilityService);
+  private destroyRef = inject(DestroyRef);
 
   /** Active media type, used to resolve the per-type view-mode + size prefs. */
   readonly mediaType = input('');
@@ -106,7 +107,6 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
   private ids: number[] = [];
   private gridIconSizeRightDict: Record<string, string> = {};
   private readonly thumbnailFailedUrls = new Set<string>();
-  private readonly subs: Subscription[] = [];
 
   // --- Audio audition state machine (mirrors browse-hover-preview) -----------
   /** Never mounted in the DOM — audio here is heard, not shown; the top-left
@@ -159,16 +159,13 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.subs.push(
-      this.metadataCache.version$.subscribe(() => {
-        this.sortedEntries.set(this.buildSortedEntries());
-      }),
-    );
+    this.metadataCache.version$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+      this.sortedEntries.set(this.buildSortedEntries());
+    });
     this.settingsState.load();
   }
 
   ngOnDestroy(): void {
-    for (const sub of this.subs) sub.unsubscribe();
     this.cancelDwell();
     this.stopSweep();
     this.stopAudio();

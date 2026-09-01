@@ -1,5 +1,5 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, effect, ElementRef, inject, input, NgZone, OnDestroy, output, untracked, viewChild } from '@angular/core';
-import { Subscription } from 'rxjs';
+import { AfterViewInit, ChangeDetectionStrategy, Component, DestroyRef, effect, ElementRef, inject, input, NgZone, OnDestroy, output, untracked, viewChild } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { BrowseViewportService } from '../../services/browse-viewport.service';
@@ -101,6 +101,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
   private viewport = inject(BrowseViewportService);
   private selection = inject(BrowseSelectionService);
   private mediaTypeCaps = inject(MediaTypeCapabilityService);
+  private destroyRef = inject(DestroyRef);
 
   private readonly canvasRef = viewChild.required<ElementRef<HTMLCanvasElement>>('canvas');
   readonly meta = input<ProjectionMeta | null>(null);
@@ -465,7 +466,6 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
   private lastClientY = 0;
   private pointerInside = false;
 
-  private tileLoadSub: Subscription | null = null;
   private rafId = 0;
   /** Set in ngOnDestroy: late async callbacks (thumbnail loads, tile
    *  responses) must not schedule new rAF / idle work on a dead component. */
@@ -578,8 +578,6 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
   private boundCanvasMouseLeave = this.onCanvasMouseLeave.bind(this);
   private boundDblClick = this.onDblClick.bind(this);
   private boundContextMenu = this.onContextMenu.bind(this);
-
-  private recenterSub: Subscription | null = null;
 
   // Repaint when the selection changes so the per-cell selection rings track
   // the live set. An effect (not a subscription) so a signal write — including
@@ -713,13 +711,13 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
   ngAfterViewInit(): void {
     this.ctx = this.canvasRef().nativeElement.getContext('2d')!;
 
-    this.tileLoadSub = this.tileCache.tileLoaded$.subscribe(() => {
+    this.tileCache.tileLoaded$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
       this.requestRedraw();
     });
 
     // The minimap publishes recenter requests when the user clicks/drags it;
     // jump the viewport centre there (keeping zoom) and redraw.
-    this.recenterSub = this.viewport.recenter$.subscribe(({ x, y }) => {
+    this.viewport.recenter$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(({ x, y }) => {
       // A minimap jump is a programmatic move, not an elastic gesture: cancel any
       // snap-back / directional glide and hard-clamp straight to the bounds.
       this.cancelSettle();
@@ -770,8 +768,6 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.destroyed = true;
-    this.tileLoadSub?.unsubscribe();
-    this.recenterSub?.unsubscribe();
     this.viewport.setViewport(null);
     this.resizeObserver?.disconnect();
     this.dprListenerTeardown?.();
