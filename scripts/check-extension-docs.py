@@ -97,9 +97,7 @@ IGNORE: dict[tuple[str, str], frozenset[str]] = {
     # The "Not on the ABC, but required by the app" table: `from_config` is an
     # app-side factory convention implemented by concrete processors, and the
     # section says so in as many words.
-    ("docs/EXTENDING-processors.md", "Processor abstract interface reference"): frozenset(
-        {"from_config"}
-    ),
+    ("docs/EXTENDING-processors.md", "Processor abstract interface reference"): frozenset({"from_config"}),
     # Parameter-dict keys tabulated alongside the `parameters` member.
     ("docs/EXTENDING-media.md", "MediaClipper abstract interface reference"): frozenset(
         {"key", "label", "type", "default", "min", "max", "step"}
@@ -107,9 +105,7 @@ IGNORE: dict[tuple[str, str], frozenset[str]] = {
     ("vtscore/docs/extending/clippers.md", "The contract"): frozenset(
         {"key", "label", "type", "default", "min", "max", "step"}
     ),
-    ("vtscore/docs/extending/converters.md", "The contract"): frozenset(
-        {"key", "label", "type", "default", "options"}
-    ),
+    ("vtscore/docs/extending/converters.md", "The contract"): frozenset({"key", "label", "type", "default", "options"}),
 }
 
 _HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*$")
@@ -205,11 +201,7 @@ def _members_of(node: ast.ClassDef) -> set[str]:
         elif isinstance(sub, ast.AnnAssign):
             targets = [sub.target]
         for target in targets:
-            if (
-                isinstance(target, ast.Attribute)
-                and isinstance(target.value, ast.Name)
-                and target.value.id == "self"
-            ):
+            if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) and target.value.id == "self":
                 members.add(target.attr)
     return members
 
@@ -265,9 +257,7 @@ def _documented_members(body: list[str]) -> list[tuple[str, str]]:
     return found
 
 
-def _check_sections(
-    classes: dict[str, dict[str, set[str]]], module_level: set[str]
-) -> list[str]:
+def _check_sections(classes: dict[str, dict[str, set[str]]], module_level: set[str]) -> list[str]:
     """Invariants 1 and 3, which both walk the same sections.
 
     1. Every member named in a contract table exists on one of the section's
