@@ -768,7 +768,6 @@ class TestSupportedPayloads:
         assert actual == {
             "email_smtp": ["find_results", "labelset"],
             "gui": ["find_results", "labelset"],
-            "holder": ["labelset"],
             "open_url": ["find_results", "labelset"],
             "portable_detector": ["detector_bundles"],
             "server_csv_file": ["find_results", "labelset"],
@@ -812,10 +811,10 @@ class TestSupportedPayloads:
     def test_a_subclass_inherits_its_parents_kinds(self):
         from vtscore.exporters import get_exporter
 
-        class Narrowed(type(get_exporter("holder"))):
-            name = "holder_subclass_probe"
+        class Narrowed(type(get_exporter("portable_detector"))):
+            name = "portable_detector_subclass_probe"
 
-        assert sorted(Narrowed().supported_payloads) == ["labelset"]
+        assert sorted(Narrowed().supported_payloads) == ["detector_bundles"]
 
     def test_get_exporters_reports_the_kinds(self, client):
         res = client.get("/api/exporters")
@@ -864,14 +863,14 @@ class TestPayloadKindRouting:
     def test_an_unsupported_pairing_is_a_400_not_a_silent_empty_export(self, client):
         """The bug this contract exists to make impossible.
 
-        Holder reads labels only. Asked for a scored run it must be refused
-        outright, rather than handed a shape it cannot read and left to deliver
-        nothing while reporting success.
+        The portable-detector exporter reads detector bundles only. Asked for
+        a scored run it must be refused outright, rather than handed a shape it
+        cannot read and left to deliver nothing while reporting success.
         """
         res = client.post(
             "/api/exporters/export",
             json={
-                "exporter_name": "holder",
+                "exporter_name": "portable_detector",
                 "field_values": {},
                 "results": SAMPLE_RESULTS,
                 "payload_kind": "find_results",
@@ -880,7 +879,7 @@ class TestPayloadKindRouting:
         assert res.status_code == 400
         message = res.get_json()["message"]
         assert "find_results" in message
-        assert "labelset" in message
+        assert "detector_bundles" in message
 
     def test_an_unknown_kind_is_rejected_by_the_schema(self, client):
         res = client.post(
@@ -1328,8 +1327,8 @@ class TestStreamingExportSupport:
     def test_non_streaming_exporters_do_not(self):
         from vtscore.exporters import get_exporter
 
-        # holder is a hidden scaffold exporter with no incremental mode.
-        assert get_exporter("holder").supports_streaming is False
+        for name in ("open_url", "portable_detector"):
+            assert get_exporter(name).supports_streaming is False
 
 
 class TestResolveStreamBatchSize:

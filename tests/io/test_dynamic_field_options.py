@@ -9,8 +9,6 @@ Covers:
 - The ``POST /api/dataset/import/<name>/options`` route returns the
   importer's options, surfaces ``NotImplementedError`` as 501, and
   surfaces other plugin exceptions as 502 with the message body.
-- The ReCaller scaffold declares its ``query_id`` field as dynamic and
-  routes ``get_field_options`` through ``_rc_list_queries``.
 - The ``POST /api/exporters/field-options/<name>`` route does the same for
   results exporters, whose dynamic selects had no route at all (issue
   #3360), and the export route accepts a value the declared options don't
@@ -339,58 +337,6 @@ class TestImporterMetadataExposes:
         media_type_field = next(f for f in d["fields"] if f["key"] == "media_type")
         assert media_type_field["dynamic_options"] is False
         assert media_type_field["depends_on"] == []
-
-
-# ---------------------------------------------------------------------------
-# ReCaller scaffold: exercises the importer-level wiring
-# ---------------------------------------------------------------------------
-
-
-class TestReCallerDynamicQueryId:
-    def test_query_id_field_is_dynamic_with_media_type_dep(self):
-        from vtscore.datasets.importers import get_importer
-
-        rc = get_importer("recaller")
-        assert rc is not None
-        query_field = next(f for f in rc.fields if f.key == "query_id")
-        assert query_field.dynamic_options is True
-        assert query_field.depends_on == ["media_type"]
-
-    def test_get_field_options_routes_through_rc_list_queries(self, monkeypatch):
-        from vtscore.datasets.importers import get_importer
-        from vtscore.datasets.importers import recaller as rc_module
-
-        rc = get_importer("recaller")
-        captured: list[str] = []
-
-        def fake_list(media_type: str) -> list[str]:
-            captured.append(media_type)
-            return ["q-aaa", "q-bbb"]
-
-        monkeypatch.setattr(rc_module, "_rc_list_queries", fake_list)
-
-        out = rc.get_field_options("query_id", {"media_type": "image"})
-        assert out == ["q-aaa", "q-bbb"]
-        assert captured == ["image"]
-
-    def test_get_field_options_default_media_type(self, monkeypatch):
-        from vtscore.datasets.importers import get_importer
-        from vtscore.datasets.importers import recaller as rc_module
-
-        rc = get_importer("recaller")
-        seen: list[str] = []
-        monkeypatch.setattr(rc_module, "_rc_list_queries", lambda mt: seen.append(mt) or [])
-
-        # Empty current_values falls back to "audio".
-        rc.get_field_options("query_id", {})
-        assert seen == ["audio"]
-
-    def test_get_field_options_unknown_key_raises(self):
-        from vtscore.datasets.importers import get_importer
-
-        rc = get_importer("recaller")
-        with pytest.raises(NotImplementedError):
-            rc.get_field_options("not_a_field", {})
 
 
 # ---------------------------------------------------------------------------

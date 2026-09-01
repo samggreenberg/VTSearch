@@ -3,8 +3,11 @@
 Covers:
 - LabeledElement metadata field: serialisation, round-trip, from_clips_and_votes
 - media_url lazy-fetch: _resolve_media_bytes and _resolve_media_string fallback
-- Plugin discovery: ReCaller importer, Holder exporter, Holder label importer,
-  PullWrest media source are registered
+- Enriched label export surfaces ``origin.params`` as columns
+
+These are the framework hooks an out-of-tree service importer leans on: a
+per-media origin whose params round-trip into exports, arbitrary per-element
+metadata, and media whose bytes live behind a URL rather than on disk.
 """
 
 from __future__ import annotations
@@ -48,7 +51,7 @@ class TestLabeledElementMetadata:
         original = LabeledElement(
             md5="hash1",
             label="bad",
-            origin={"importer": "recaller", "params": {"contentID": "C99"}},
+            origin={"importer": "svc_importer", "params": {"contentID": "C99"}},
             origin_name="C99",
             metadata=meta,
         )
@@ -79,7 +82,7 @@ class TestClipToElementsMetadata:
             1: {
                 "id": 1,
                 "md5": "hash1",
-                "origin": {"importer": "recaller", "params": {"contentID": "C1"}},
+                "origin": {"importer": "svc_importer", "params": {"contentID": "C1"}},
                 "origin_name": "C1",
                 "filename": "C1",
                 "category": "",
@@ -229,194 +232,6 @@ class TestMediaUrlLazyFetch:
 
 
 # ---------------------------------------------------------------------------
-# Plugin discovery
-# ---------------------------------------------------------------------------
-
-
-class TestPluginDiscovery:
-    """Verify that scaffolded plugins are discoverable by their registries."""
-
-    def test_recaller_importer_registered(self):
-        from vtscore.datasets.importers import get_importer
-
-        imp = get_importer("recaller")
-        assert imp is not None
-        assert imp.name == "recaller"
-        assert imp.display_name == "ReCaller Query"
-
-    def test_holder_exporter_registered(self):
-        from vtscore.exporters import get_exporter
-
-        exp = get_exporter("holder")
-        assert exp is not None
-        assert exp.name == "holder"
-        assert exp.display_name == "Holder Package"
-
-    def test_holder_label_importer_registered(self):
-        from vtscore.labels.importers import get_label_importer
-
-        imp = get_label_importer("holder")
-        assert imp is not None
-        assert imp.name == "holder"
-        assert imp.display_name == "Holder Package"
-
-    def test_pullwrest_source_registered(self):
-        from vtscore.datasets.sources import get_source_for_origin
-
-        origin = {
-            "importer": "recaller",
-            "params": {
-                "contentID": "C1",
-                "mediaID": "M1",
-                "media_url": "http://pw/M1",
-                "media_type": "audio",
-            },
-        }
-        source = get_source_for_origin(origin)
-        assert source is not None
-        assert source.name == "pullwrest"
-
-    def test_pullwrest_source_none_without_url(self):
-        from vtscore.datasets.sources import get_source_for_origin
-
-        origin = {"importer": "recaller", "params": {"contentID": "C1"}}
-        source = get_source_for_origin(origin)
-        assert source is None
-
-
-# ---------------------------------------------------------------------------
-# Holder exporter helpers
-# ---------------------------------------------------------------------------
-
-
-class TestHolderExporterHelpers:
-    """Test _extract_content_id and _extract_entry_metadata."""
-
-    def test_extract_content_id_from_metadata(self):
-        from vtscore.exporters.holder import _extract_content_id
-
-        entry = {"metadata": {"contentID": "C1"}, "custom_metadata": {"contentID": "C2"}}
-        assert _extract_content_id(entry) == "C1"  # metadata wins
-
-    def test_extract_content_id_from_custom_metadata(self):
-        from vtscore.exporters.holder import _extract_content_id
-
-        entry = {"custom_metadata": {"contentID": "C2"}}
-        assert _extract_content_id(entry) == "C2"
-
-    def test_extract_content_id_from_origin(self):
-        from vtscore.exporters.holder import _extract_content_id
-
-        entry = {"origin": {"importer": "recaller", "params": {"contentID": "C3"}}}
-        assert _extract_content_id(entry) == "C3"
-
-    def test_extract_content_id_missing(self):
-        from vtscore.exporters.holder import _extract_content_id
-
-        assert _extract_content_id({}) is None
-        assert _extract_content_id({"origin": {"importer": "server_folder", "params": {}}}) is None
-
-    def test_extract_entry_metadata(self):
-        from vtscore.exporters.holder import _extract_entry_metadata
-
-        entry = {
-            "md5": "hash1",
-            "custom_metadata": {"mediaID": "M1", "media_url": "http://pw/M1"},
-            "origin": {"params": {"media_type": "audio"}},
-        }
-        meta = _extract_entry_metadata(entry)
-        assert meta["mediaID"] == "M1"
-        assert meta["md5"] == "hash1"
-        assert meta["media_url"] == "http://pw/M1"
-        assert meta["media_type"] == "audio"
-
-
-# ---------------------------------------------------------------------------
-# Holder label importer entry conversion
-# ---------------------------------------------------------------------------
-
-
-class TestHolderLabelImporterEntry:
-    """Test _entry_to_label conversion."""
-
-    def test_entry_to_label_good(self):
-        from vtscore.labels.importers.holder import _entry_to_label
-
-        entry = {
-            "contentID": "C1",
-            "mediaID": "M1",
-            "md5": "hash1",
-            "media_url": "http://pw/M1",
-            "media_type": "audio",
-        }
-        label = _entry_to_label(entry, "good")
-        assert label["md5"] == "hash1"
-        assert label["label"] == "good"
-        assert label["origin"]["importer"] == "recaller"
-        assert label["origin"]["params"]["contentID"] == "C1"
-        assert label["origin_name"] == "C1"
-        assert label["metadata"]["contentID"] == "C1"
-        assert label["metadata"]["mediaID"] == "M1"
-
-    def test_entry_to_label_bad(self):
-        from vtscore.labels.importers.holder import _entry_to_label
-
-        entry = {"contentID": "C2", "mediaID": "M2", "md5": "hash2", "media_url": "", "media_type": "image"}
-        label = _entry_to_label(entry, "bad")
-        assert label["label"] == "bad"
-        assert label["origin"]["params"]["media_type"] == "image"
-
-
-# ---------------------------------------------------------------------------
-# ReCaller importer structure
-# ---------------------------------------------------------------------------
-
-
-class TestReCallerImporterStructure:
-    """Test ReCaller importer properties (without calling real APIs)."""
-
-    def test_build_origin_is_empty(self):
-        from vtscore.datasets.importers.recaller import ReCallerDatasetImporter
-
-        imp = ReCallerDatasetImporter()
-        origin = imp.build_origin({"query_id": "Q123", "media_type": "audio"})
-        assert origin["importer"] == "recaller"
-        assert origin["params"] == {}
-
-    def test_origin_display(self):
-        from vtscore.datasets.importers.recaller import ReCallerDatasetImporter
-
-        imp = ReCallerDatasetImporter()
-        origin = {"importer": "recaller", "params": {"contentID": "C42"}}
-        assert imp.origin_display(origin) == "recaller:C42"
-
-    def test_origin_display_empty(self):
-        from vtscore.datasets.importers.recaller import ReCallerDatasetImporter
-
-        imp = ReCallerDatasetImporter()
-        origin = {"importer": "recaller", "params": {}}
-        assert imp.origin_display(origin) == "recaller"
-
-    def test_fields(self):
-        from vtscore.datasets.importers.recaller import ReCallerDatasetImporter
-
-        imp = ReCallerDatasetImporter()
-        keys = [f.key for f in imp.fields]
-        assert "query_id" in keys
-        assert "media_type" in keys
-
-    def test_run_raises_without_query_id(self):
-        from vtscore.datasets.importers.recaller import ReCallerDatasetImporter
-
-        imp = ReCallerDatasetImporter()
-        medias: dict = {}
-        import pytest
-
-        with pytest.raises(ValueError, match="query ID"):
-            imp.run({"query_id": "", "media_type": "audio"}, medias)
-
-
-# ---------------------------------------------------------------------------
 # Enriched label export with origin.params flattened
 # ---------------------------------------------------------------------------
 
@@ -441,7 +256,7 @@ class TestEnrichedExportOriginParams:
                 "md5": "enrich_test_hash",
                 "filename": "C1.wav",
                 "origin": {
-                    "importer": "recaller",
+                    "importer": "svc_importer",
                     "params": {
                         "contentID": "C1",
                         "mediaID": "M1",
@@ -496,7 +311,7 @@ class TestEnrichedExportOriginParams:
                 "md5": "override_test_hash",
                 "filename": "C1.wav",
                 "origin": {
-                    "importer": "recaller",
+                    "importer": "svc_importer",
                     "params": {"contentID": "C1_from_origin"},
                 },
                 "origin_name": "C1",

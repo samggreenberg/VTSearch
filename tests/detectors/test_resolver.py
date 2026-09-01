@@ -1149,9 +1149,10 @@ class TestResolveFileContextLifetime:
 
     Before the fix, ``_default_source_resolver`` created the source,
     asked for the path, and let the source go out of scope.  Sources
-    that owned a ``tempfile.TemporaryDirectory`` (e.g. PullWrest) got
-    finalised by GC and the path went stale before ``embed_file``
-    opened it, raising ``FileNotFoundError`` deep inside the embedder.
+    that owned a ``tempfile.TemporaryDirectory`` (e.g. ``http_archive`` on a
+    cache miss) got finalised by GC and the path went stale before
+    ``embed_file`` opened it, raising ``FileNotFoundError`` deep inside the
+    embedder.
     """
 
     def test_source_cleanup_deferred_to_context_exit(self, tmp_path, monkeypatch):

@@ -241,7 +241,7 @@ class TestFullModeExternalByteSource:
     """Full-mode pickle load must keep media whose bytes live outside the pickle.
 
     An archive-member media (``local_archive_member``: audio/video tiles cut
-    from tar shards we never extract) and a URL-backed media (``recaller``
+    from tar shards we never extract) and a URL-backed media (an importer's
     thin mode) both carry no inline bytes and no local file - their bytes
     re-resolve on demand from the shard / the URL.  Full mode used to drop
     every such entry, so reopening the dataset from the dashboard registry
@@ -294,7 +294,7 @@ class TestFullModeExternalByteSource:
 
     def test_full_mode_keeps_url_backed_media(self, tmp_path):
         media = self._base_media()
-        media["origin"] = {"importer": "recaller", "params": {}}
+        media["origin"] = {"importer": "url_backed", "params": {}}
         media["media_url"] = "https://example.invalid/clip.wav"
         medias: dict[int, dict[str, Any]] = {}
         load_dataset_from_pickle(self._write_pickle(tmp_path, media), medias, thin=False)
@@ -316,7 +316,7 @@ class TestFullModeExternalByteSource:
         from vtscore.datasets.loader import export_dataset_to_file
 
         media = self._base_media()
-        media["origin"] = {"importer": "recaller", "params": {}}
+        media["origin"] = {"importer": "url_backed", "params": {}}
         media["media_url"] = "https://example.invalid/clip.wav"
         pkl_path = tmp_path / "roundtrip.pkl"
         pkl_path.write_bytes(export_dataset_to_file({1: media}, embedder="clap", media_type="audio"))

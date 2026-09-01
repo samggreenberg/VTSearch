@@ -201,7 +201,7 @@ def resolve_file_context(
     """Resolve a media file from its origin and keep the backing source alive.
 
     Some :class:`~vtscore.datasets.sources.base.MediaSource` implementations
-    (e.g. PullWrest) materialise the file inside a
+    (e.g. ``http_archive`` on a cache miss) materialise the file inside a
     :class:`tempfile.TemporaryDirectory` they own.  If the source is dropped
     before the caller accesses the file, the temp dir is finalized by GC and
     the path goes stale; ``embed_file`` then crashes with
