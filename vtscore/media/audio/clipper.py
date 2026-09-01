@@ -1,107 +1,21 @@
-"""Audio clippers - tile or pass-through audio media."""
+"""Audio clippers - tile or pass-through audio media.
+
+The WAV byte primitives these clippers run on (:func:`~vtscore.media.audio.wav.wav_slice`,
+:func:`~vtscore.media.audio.wav.wav_duration`) live in :mod:`vtscore.media.audio.wav`;
+:class:`~vtscore.media.audio.wav.AudioDecodeError` is imported here because this is where
+it is *caught* and turned into "leave the media unchanged", and stays importable from this
+module for callers that were already catching it here.
+"""
 
 from __future__ import annotations
 
-import io
 import math
 import os
-import wave
 from pathlib import Path
 from typing import Any
 
+from vtscore.media.audio.wav import AudioDecodeError, wav_duration, wav_slice
 from vtscore.media.clipper import MediaClipper
-
-
-class AudioDecodeError(Exception):
-    """Raised when WAV bytes can't be decoded by stdlib ``wave`` or ``soundfile``.
-
-    Signals a corrupt or unsupported audio payload (e.g. GTZAN's truncated
-    ``jazz.00054.wav``, or a non-audio blob).  Clippers catch this and fall
-    back to returning the media unchanged rather than aborting the whole load.
-    """
-
-
-def _to_pcm_wav(wav_bytes: bytes) -> bytes:
-    """Re-encode WAV bytes into plain PCM that stdlib ``wave`` can parse.
-
-    The stdlib ``wave`` module only understands ``WAVE_FORMAT_PCM`` (tag 1);
-    it raises ``wave.Error`` on ``WAVE_FORMAT_EXTENSIBLE`` (tag 0xFFFE, 65534),
-    which is what UrbanSound8K and many other real-world WAVs use.  ``soundfile``
-    reads those fine, so decode with it and re-write as 16-bit PCM.
-    """
-    import soundfile as sf  # noqa: PLC0415
-
-    data, sr = sf.read(io.BytesIO(wav_bytes), dtype="int16", always_2d=False)
-    buf = io.BytesIO()
-    sf.write(buf, data, sr, format="WAV", subtype="PCM_16")
-    return buf.getvalue()
-
-
-def _checked_wav(wf: wave.Wave_read) -> wave.Wave_read:
-    """Return *wf* if its header is usable, else close it and raise.
-
-    stdlib ``wave`` happily accepts a fmt chunk declaring a sample rate of 0,
-    so a corrupt or truncated header can open cleanly and then blow up with a
-    ``ZeroDivisionError`` in :func:`_wav_duration` (or a ``wave.Error`` from
-    ``setframerate`` in :func:`_wav_slice`).  Reject it up front as a decode
-    failure so callers hit the same graceful-degradation path as any other
-    undecodable payload.
-    """
-    if wf.getframerate() <= 0:
-        wf.close()
-        raise AudioDecodeError("WAV header declares a non-positive sample rate")
-    return wf
-
-
-def _open_wav(wav_bytes: bytes) -> wave.Wave_read:
-    """Open WAV bytes for reading, tolerating non-PCM formats.
-
-    Falls back to re-encoding via :func:`_to_pcm_wav` when stdlib ``wave``
-    can't parse the container (e.g. ``WAVE_FORMAT_EXTENSIBLE``) or parses it
-    into an unusable header.  Raises :class:`AudioDecodeError` when neither
-    path can decode the bytes (corrupt or unsupported payload) so callers can
-    degrade gracefully.
-    """
-    try:
-        return _checked_wav(wave.open(io.BytesIO(wav_bytes), "rb"))
-    except (wave.Error, EOFError, AudioDecodeError):
-        pass
-    try:
-        return _checked_wav(wave.open(io.BytesIO(_to_pcm_wav(wav_bytes)), "rb"))
-    except Exception as exc:  # soundfile LibsndfileError, wave.Error, EOFError, ...
-        raise AudioDecodeError("could not decode audio bytes") from exc
-
-
-def _wav_duration(wav_bytes: bytes) -> float:
-    """Return the duration in seconds of a WAV byte string."""
-    with _open_wav(wav_bytes) as wf:
-        return wf.getnframes() / wf.getframerate()
-
-
-def _wav_slice(wav_bytes: bytes, start: float, end: float) -> bytes:
-    """Extract a [start, end) slice from a WAV byte string.
-
-    Returns a new WAV byte string containing only the requested segment.
-    """
-    with _open_wav(wav_bytes) as wf:
-        sr = wf.getframerate()
-        n_channels = wf.getnchannels()
-        sampwidth = wf.getsampwidth()
-        start_frame = int(start * sr)
-        end_frame = int(end * sr)
-        total_frames = wf.getnframes()
-        start_frame = max(0, min(start_frame, total_frames))
-        end_frame = max(start_frame, min(end_frame, total_frames))
-        wf.setpos(start_frame)
-        frames = wf.readframes(end_frame - start_frame)
-
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as out:
-        out.setnchannels(n_channels)
-        out.setsampwidth(sampwidth)
-        out.setframerate(sr)
-        out.writeframes(frames)
-    return buf.getvalue()
 
 
 class SoundDefaultClipper(MediaClipper):
@@ -182,7 +96,7 @@ class SoundTilingClipper(MediaClipper):
             return [media]
 
         try:
-            total = _wav_duration(wav_bytes)
+            total = wav_duration(wav_bytes)
         except AudioDecodeError:
             return [media]
         seg = self._duration
@@ -202,7 +116,7 @@ class SoundTilingClipper(MediaClipper):
         results: list[dict[str, Any]] = []
         for idx, t0 in enumerate(starts):
             t1 = t0 + seg
-            sliced = _wav_slice(wav_bytes, t0, t1)
+            sliced = wav_slice(wav_bytes, t0, t1)
             tile = dict(media)
             tile["media_bytes"] = sliced
             tile["duration"] = round(t1 - t0, 6)
@@ -352,7 +266,7 @@ class SoundSilenceClipper(MediaClipper):
         try:
             results: list[dict[str, Any]] = []
             for idx, (t0, t1) in enumerate(segments):
-                sliced = _wav_slice(media_bytes, t0, t1)
+                sliced = wav_slice(media_bytes, t0, t1)
                 clip = dict(media)
                 clip["media_bytes"] = sliced
                 clip["duration"] = round(t1 - t0, 6)
@@ -469,7 +383,7 @@ class SoundClipClipper(MediaClipper):
             return [media]
 
         try:
-            total = _wav_duration(wav_bytes)
+            total = wav_duration(wav_bytes)
         except AudioDecodeError:
             return [media]
         t0 = max(0.0, min(self._start, total))
@@ -477,7 +391,7 @@ class SoundClipClipper(MediaClipper):
         if t1 <= t0:
             return [media]
 
-        sliced = _wav_slice(wav_bytes, t0, t1)
+        sliced = wav_slice(wav_bytes, t0, t1)
         clip = dict(media)
         clip["media_bytes"] = sliced
         clip["duration"] = round(t1 - t0, 6)
@@ -691,7 +605,7 @@ class SoundSpeechActivityClipper(MediaClipper):
         try:
             results: list[dict[str, Any]] = []
             for idx, (t0, t1) in enumerate(segments):
-                sliced = _wav_slice(media_bytes, t0, t1)
+                sliced = wav_slice(media_bytes, t0, t1)
                 clip = dict(media)
                 clip["media_bytes"] = sliced
                 clip["duration"] = round(t1 - t0, 6)

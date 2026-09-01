@@ -122,7 +122,7 @@ class AudioSilenceTrimCleaner(MediaCleaner):
         uniformly silent), or the two ends together account for less than
         :data:`_MIN_TRIM_SECONDS`.
         """
-        from vtscore.media.audio.clipper import _wav_duration, _wav_slice  # noqa: PLC0415
+        from vtscore.media.audio.wav import wav_duration, wav_slice  # noqa: PLC0415
         from vtscore.media.audio.silence import detect_nonsilent_segments  # noqa: PLC0415
 
         payload = media.get("media_bytes")
@@ -139,10 +139,10 @@ class AudioSilenceTrimCleaner(MediaCleaner):
             return media
 
         try:
-            total = _wav_duration(media_bytes)
+            total = wav_duration(media_bytes)
             if t0 < _MIN_TRIM_SECONDS and (total - t1) < _MIN_TRIM_SECONDS:
                 return media  # nothing meaningful at either end
-            trimmed = _wav_slice(media_bytes, t0, t1)
+            trimmed = wav_slice(media_bytes, t0, t1)
         except Exception:
             log.debug("audio_silence_trim: undecodable payload, leaving unchanged", exc_info=True)
             return media
