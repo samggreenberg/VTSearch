@@ -5,6 +5,7 @@ import shutil
 import tarfile
 import uuid
 import zipfile
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Optional
 
@@ -476,6 +477,117 @@ def download_openlogo(on_progress: Optional[ProgressCallback] = None) -> Path:
         max_workers=_core.OPENLOGO_DOWNLOAD_WORKERS,
     )
     return extract_dir
+
+
+def _rico_icons_snapshot(allow_patterns: list[str], what: str, on_progress: ProgressCallback) -> Path:
+    """Fetch part of the ``Voxel51/rico`` snapshot into ``DATA_DIR/rico_icons``.
+
+    Shared by :func:`download_rico_icons_manifest` and
+    :func:`download_rico_icons_shards`.  ``allow_patterns`` restricts the fetch to
+    the files a caller actually needs; repeated calls with different patterns
+    accumulate into the same ``local_dir`` (``snapshot_download`` never prunes
+    files outside the current pattern set), which is what lets the manifest be
+    fetched first and the image shards be chosen from it afterwards.
+
+    Args:
+        allow_patterns: ``snapshot_download`` glob patterns, relative to the repo
+            root (e.g. ``["samples.json"]`` or ``["data/data_3/*"]``).
+        what: Human-readable noun for the progress message ("annotations",
+            "screenshots").
+        on_progress: Progress callback.
+
+    Returns:
+        Path to the ``rico_icons/`` directory.
+    """
+    from huggingface_hub import snapshot_download  # noqa: PLC0415
+    from huggingface_hub.utils.tqdm import tqdm as _hf_tqdm  # noqa: PLC0415
+
+    from vtscore.security.hf_auth import get_token  # noqa: PLC0415
+
+    _core.DATA_DIR.mkdir(exist_ok=True)
+    extract_dir = _core.DATA_DIR / "rico_icons"
+
+    # Placeholder while snapshot_download resolves the file list (a network round
+    # trip before any byte is fetched); the per-file bar below supersedes it.
+    on_progress("downloading", f"Downloading Rico UI {what}...", 0, 0)
+
+    class _RicoProgress(_hf_tqdm):  # type: ignore[misc, valid-type]
+        def update(self, n: int = 1) -> Optional[bool]:
+            displayed = super().update(n)
+            total = int(self.total or 0)
+            if total > 0:
+                on_progress("downloading", f"Downloading Rico UI {what}", int(self.n), total)
+            return displayed
+
+    snapshot_download(
+        repo_id=_core.RICO_ICONS_REPO_ID,
+        repo_type="dataset",
+        local_dir=str(extract_dir),
+        allow_patterns=allow_patterns,
+        token=get_token(),
+        tqdm_class=_RicoProgress,
+        max_workers=_core.RICO_ICONS_DOWNLOAD_WORKERS,
+    )
+    return extract_dir
+
+
+def download_rico_icons_manifest(on_progress: Optional[ProgressCallback] = None) -> Path:
+    """Download only ``samples.json`` from the Rico UI-semantics dataset.
+
+    This is the *first* of the two-phase Rico download.  The manifest (~535 MB)
+    carries every screen's element detections — boxes, component classes and icon
+    semantics — and is what the demo loader slices before it knows which image
+    shards it needs.  Fetching it alone keeps a small variant's download to the
+    manifest plus a couple of ~116 MB shard folders instead of the full ~7.7 GB
+    of screenshots.
+
+    Args:
+        on_progress: Optional progress callback. Falls back to the
+            application-wide ``update_progress`` when ``None``.
+
+    Returns:
+        Path to the ``rico_icons/`` directory containing ``samples.json``.
+    """
+    if on_progress is None:
+        on_progress = _core._default_progress()
+
+    _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
+    extract_dir = _core.DATA_DIR / "rico_icons"
+    if (extract_dir / "samples.json").is_file():
+        return extract_dir
+    return _rico_icons_snapshot(["samples.json"], "annotations", on_progress)
+
+
+def download_rico_icons_shards(
+    shard_dirs: Iterable[str],
+    on_progress: Optional[ProgressCallback] = None,
+) -> Path:
+    """Download the named Rico image shard folders (phase two).
+
+    *shard_dirs* are repo-relative folder paths taken from the manifest's
+    ``filepath`` values (``data/data_0``, ``data/data_17``, …); only the folders
+    the current slice actually lands in are fetched.  Folders already present on
+    disk are skipped, so re-loading a variant — or loading (M) after (S) — costs
+    only the shards it adds.
+
+    Args:
+        shard_dirs: Repo-relative shard folder paths.
+        on_progress: Optional progress callback. Falls back to the
+            application-wide ``update_progress`` when ``None``.
+
+    Returns:
+        Path to the ``rico_icons/`` directory containing the ``data/`` tree.
+    """
+    if on_progress is None:
+        on_progress = _core._default_progress()
+
+    extract_dir = _core.DATA_DIR / "rico_icons"
+    # A shard folder is "present" only if it holds at least one decoded JPEG; an
+    # empty directory left by an interrupted fetch must not block a re-download.
+    missing = sorted(d for d in set(shard_dirs) if next((extract_dir / d).glob("*.jpg"), None) is None)
+    if not missing:
+        return extract_dir
+    return _rico_icons_snapshot([f"{d}/*" for d in missing], "screenshots", on_progress)
 
 
 def download_enrico(on_progress: Optional[ProgressCallback] = None) -> Path:

@@ -12,7 +12,7 @@ splitting them out keeps ``media_type.py`` focused on the
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, cast
 
 from vtscore.config import DATA_DIR
@@ -28,6 +28,8 @@ from vtscore.media.image._demo_categories import (
     OPENLOGO_CATEGORIES,
     OXFORD_FLOWERS_CATEGORIES,
     PLACES365_CATEGORIES,
+    RICO_ICON_CATEGORIES,
+    RICO_ICON_IDENTITIES,
     RICO_SCREEN2WORDS_CATEGORIES,
     ROXFORD_CATEGORIES,
     RVL_CDIP_CATEGORIES,
@@ -52,6 +54,9 @@ def build_demo_datasets() -> list[DemoDataset]:
         OPENLOGO_DOWNLOAD_SIZE_MB,
         OXFORD_FLOWERS_DOWNLOAD_SIZE_MB,
         PLACES365_DOWNLOAD_SIZE_MB,
+        RICO_ICONS_MANIFEST_MB,
+        RICO_ICONS_SHARD_COUNT,
+        RICO_ICONS_SHARD_MB,
         RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB,
         ROXFORD_IMAGES_DOWNLOAD_SIZE_MB,
         RVL_CDIP_DOWNLOAD_SIZE_MB,
@@ -83,6 +88,26 @@ def build_demo_datasets() -> list[DemoDataset]:
     places_folder = DATA_DIR / "places365" / "val_256"
     rico_folder = DATA_DIR / "rico_screen2words" / "screenshots"
     rvl_folder = DATA_DIR / "rvl_cdip" / "images"
+    rico_icons_folder = DATA_DIR / "rico_icons" / "data"
+    rico_icons_desc = "Mobile UI screenshots with boxed, labelled icons"
+
+    def rico_icons_mb(frac_start: float, frac_end: float | None) -> int:
+        """Advertised download for one Rico-icons variant.
+
+        Unlike every other demo, the four variants do *not* share one figure:
+        the loader fetches the 535 MB manifest plus only the ~116 MB image
+        shard folders its slice lands in, so (S) really is ~0.9 GB rather than
+        the whole corpus' ~8.3 GB.  A slice spanning a fraction of the corpus
+        touches that fraction of the 67 shards, plus one for straddling a
+        boundary.
+        """
+        if frac_end is None and frac_start == 0.0:
+            shards = RICO_ICONS_SHARD_COUNT
+        else:
+            span = (1.0 if frac_end is None else frac_end) - frac_start
+            shards = min(RICO_ICONS_SHARD_COUNT, round(span * RICO_ICONS_SHARD_COUNT) + 1)
+        return RICO_ICONS_MANIFEST_MB + shards * RICO_ICONS_SHARD_MB
+
     faces_desc = "In-the-wild celebrity photos, one label per person"
     faces_folder = DATA_DIR / "vggface2" / "test"
     return [
@@ -452,6 +477,68 @@ def build_demo_datasets() -> list[DemoDataset]:
             slice_frac_end=None,
             items_per_category=400,
             download_size_mb=RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB,
+        ),
+        # Rico UI semantics: the same born-digital screenshots as the demo above,
+        # but labelled at the *element* level instead of the screen level.  Each
+        # media is one screen; its categories are the icon semantics visible on
+        # it (multi-label, ~2.2 distinct icon classes per screen) and its
+        # ``regions`` carry one ground-truth box per icon.  This is the only demo
+        # in the tree that can answer "box this search icon, then find every
+        # other search icon" — the workflow VTSearch exists for, on the media
+        # type where a semantic embedder alone struggles most.
+        #
+        # Multi-label and sliced *flat* over the image list (not per-category),
+        # like OpenLogo and Visual Genome, so ``items_per_category`` is a tuned
+        # estimate rather than a real per-category count: 66,261 screens of which
+        # a measured ~68.5% carry at least one in-vocab icon (~45,400), over 32
+        # categories, gives 45,400 / 32 ≈ 1,419.
+        DemoDataset(
+            id="rico_icons_s",
+            label="Rico Icons (S)",
+            description=rico_icons_desc,
+            categories=RICO_ICON_CATEGORIES,
+            source="rico_icons",
+            required_folder=rico_icons_folder,
+            slice_frac_start=0.0,
+            slice_frac_end=1 / 32,
+            items_per_category=1419,
+            download_size_mb=rico_icons_mb(0.0, 1 / 32),
+        ),
+        DemoDataset(
+            id="rico_icons_m",
+            label="Rico Icons (M)",
+            description=rico_icons_desc,
+            categories=RICO_ICON_CATEGORIES,
+            source="rico_icons",
+            required_folder=rico_icons_folder,
+            slice_frac_start=1 / 32,
+            slice_frac_end=3 / 32,
+            items_per_category=1419,
+            download_size_mb=rico_icons_mb(1 / 32, 3 / 32),
+        ),
+        DemoDataset(
+            id="rico_icons_l",
+            label="Rico Icons (L)",
+            description=rico_icons_desc,
+            categories=RICO_ICON_CATEGORIES,
+            source="rico_icons",
+            required_folder=rico_icons_folder,
+            slice_frac_start=3 / 32,
+            slice_frac_end=7 / 32,
+            items_per_category=1419,
+            download_size_mb=rico_icons_mb(3 / 32, 7 / 32),
+        ),
+        DemoDataset(
+            id="rico_icons_a",
+            label="Rico Icons (A)",
+            description="All Rico screenshots carrying one of 32 boxed icon classes",
+            categories=RICO_ICON_CATEGORIES,
+            source="rico_icons",
+            required_folder=rico_icons_folder,
+            slice_frac_start=0.0,
+            slice_frac_end=None,
+            items_per_category=1419,
+            download_size_mb=rico_icons_mb(0.0, None),
         ),
         # RVL-CDIP: scanned grayscale *document images* across 16 balanced types
         # (letter, form, email, invoice, resume, memo, …).  A demo-sized,
@@ -925,6 +1012,28 @@ def _collect_visual_genome_files(categories, slice_args, on_progress) -> list:
     return demo_slice([(p, pos, reg) for _id, p, pos, reg in records], *slice_args)
 
 
+def _region_from_norm_xywh(box, label: str) -> dict | None:
+    """Convert a normalized ``[x, y, w, h]`` box to a region dict, or ``None``.
+
+    Both FiftyOne-exported sources (OpenLogo, Rico UI semantics) store detections
+    as a normalized ``[x, y, w, h]`` in the sample manifest, while the rest of the
+    system speaks ``{"box": [x0, y0, x1, y1], "label": ...}`` with corners clamped
+    to ``[0, 1]``.  Malformed, unparseable and degenerate (zero-area) boxes return
+    ``None`` so the caller can drop them without special-casing.
+    """
+    if not (isinstance(box, (list, tuple)) and len(box) == 4):
+        return None
+    try:
+        x, y, w, h = (float(box[0]), float(box[1]), float(box[2]), float(box[3]))
+    except (TypeError, ValueError):
+        return None
+    x0, y0 = min(max(x, 0.0), 1.0), min(max(y, 0.0), 1.0)
+    x1, y1 = min(max(x + w, 0.0), 1.0), min(max(y + h, 0.0), 1.0)
+    if x1 <= x0 or y1 <= y0:
+        return None
+    return {"box": [round(x0, 5), round(y0, 5), round(x1, 5), round(y1, 5)], "label": label}
+
+
 def _openlogo_norm(name: str) -> str:
     """Normalize a brand label to a punctuation/case-insensitive match key.
 
@@ -952,17 +1061,9 @@ def _openlogo_detections_to_labels(detections, norm_to_display) -> tuple[list[st
             continue
         if display not in positive:
             positive.append(display)
-        box = det.get("bounding_box")
-        if not (isinstance(box, (list, tuple)) and len(box) == 4):
-            continue
-        try:
-            x, y, w, h = (float(box[0]), float(box[1]), float(box[2]), float(box[3]))
-        except (TypeError, ValueError):
-            continue
-        x0, y0 = min(max(x, 0.0), 1.0), min(max(y, 0.0), 1.0)
-        x1, y1 = min(max(x + w, 0.0), 1.0), min(max(y + h, 0.0), 1.0)
-        if x1 > x0 and y1 > y0:
-            regions.append({"box": [round(x0, 5), round(y0, 5), round(x1, 5), round(y1, 5)], "label": display})
+        region = _region_from_norm_xywh(det.get("bounding_box"), display)
+        if region is not None:
+            regions.append(region)
     return positive, regions
 
 
@@ -1004,6 +1105,128 @@ def _collect_openlogo_files(categories, slice_args, on_progress) -> list:
 
     records.sort(key=lambda r: r[0])
     return demo_slice([(p, pos, reg) for _fname, p, pos, reg in records], *slice_args)
+
+
+def _iter_fiftyone_samples(path: Path):
+    """Yield the sample dicts from a FiftyOne ``samples.json``, one at a time.
+
+    Rico's manifest is a single 535 MB JSON document.  ``json.load`` would
+    materialise every one of its 66k samples — each carrying a 64-float
+    ``ui_vector`` and dozens of detections — as live Python objects at once,
+    costing multiple gigabytes for data we reduce to a handful of fields per
+    screen.  Decoding one sample at a time with ``raw_decode`` keeps the peak at
+    the file's text plus a single sample, and still uses the stdlib parser, so
+    string escaping and number formats are handled exactly as ``json.load``
+    would.
+
+    Falls back to a whole-document parse if the expected ``{"samples": [...]}``
+    envelope isn't found, so a differently-shaped export still loads.
+    """
+    import json  # noqa: PLC0415
+
+    text = path.read_text(encoding="utf-8")
+    key = text.find('"samples"')
+    start = text.find("[", key) if key != -1 else -1
+    if start == -1:
+        doc = json.loads(text)
+        yield from (doc.get("samples", []) if isinstance(doc, dict) else doc)
+        return
+
+    decoder = json.JSONDecoder()
+    i, n = start + 1, len(text)
+    while True:
+        while i < n and text[i] in " \t\r\n,":
+            i += 1
+        if i >= n or text[i] == "]":
+            return
+        obj, i = decoder.raw_decode(text, i)
+        yield obj
+
+
+def _rico_icon_detections_to_labels(detections, token_to_display) -> tuple[list[str], list]:
+    """Map one Rico screen's detections onto ``(positive_categories, regions)``.
+
+    Only ``Icon`` detections are considered: every element type carries a
+    ``content_or_function``, but on a ``Text`` element that field holds the
+    element's text ("Cosmos 1455 Rocket"), not an icon semantic, so filtering on
+    the component label is what keeps the vocabulary meaningful.  Icons whose
+    semantic is outside *token_to_display* (keyed by the raw snake_case token)
+    are skipped, as are icons with no annotated semantics at all.
+    """
+    positive: list[str] = []
+    regions: list = []
+    for det in detections:
+        if det.get("label") != "Icon":
+            continue
+        token = (det.get("content_or_function") or "").strip().lower()
+        display = token_to_display.get(token)
+        if display is None:
+            continue
+        if display not in positive:
+            positive.append(display)
+        region = _region_from_norm_xywh(det.get("bounding_box"), display)
+        if region is not None:
+            regions.append(region)
+    return positive, regions
+
+
+def _rico_icons_relpath(filepath: str) -> str:
+    """Normalize a manifest ``filepath`` to a repo-relative ``data/data_K/x.jpg``.
+
+    Rico's export stores paths already relative to the repo root, but a FiftyOne
+    manifest can also carry the absolute path of the machine that exported it
+    (OpenLogo's does).  Rebuilding from the last two components covers both, and
+    keeps the shard folder — which is what decides *which* images get downloaded
+    — recoverable either way.
+    """
+    parts = PurePosixPath(filepath.replace("\\", "/")).parts
+    if len(parts) >= 2 and parts[-2].startswith("data_"):
+        return f"data/{parts[-2]}/{parts[-1]}"
+    return filepath.lstrip("/")
+
+
+def _collect_rico_icons_files(categories, slice_args, on_progress) -> list:
+    """Collect Rico screenshots carrying at least one in-vocab boxed icon.
+
+    Two-phase by design: the manifest is downloaded and sliced *before* any image
+    is fetched, so only the shard folders the slice actually lands in are pulled.
+    An (S) load therefore costs the 535 MB manifest plus a couple of ~116 MB
+    folders rather than the corpus's full ~7.7 GB of screenshots.
+
+    Returns a flat, path-sorted, sliced list of
+    ``(img_path, positive_categories, regions)`` — the same record shape the
+    OpenLogo and Visual Genome demos produce, so it shares their embed path.
+    """
+    from vtscore.datasets.downloader import (  # noqa: PLC0415
+        download_rico_icons_manifest,
+        download_rico_icons_shards,
+    )
+
+    ds_dir = download_rico_icons_manifest(on_progress=on_progress)
+
+    on_progress("loading", "Reading Rico UI annotations…", 0, 0)
+    wanted = set(categories)
+    token_to_display = {tok: disp for tok, disp in RICO_ICON_IDENTITIES if disp in wanted}
+
+    records: list = []
+    for sample in _iter_fiftyone_samples(ds_dir / "samples.json"):
+        filepath = sample.get("filepath") or ""
+        if not filepath:
+            continue
+        detections = (sample.get("detections") or {}).get("detections") or []
+        positive, regions = _rico_icon_detections_to_labels(detections, token_to_display)
+        if not positive:
+            continue
+        records.append((_rico_icons_relpath(filepath), positive, regions))
+
+    records.sort(key=lambda r: r[0])
+    selected = demo_slice(records, *slice_args)
+
+    shard_dirs = sorted({PurePosixPath(rel).parent.as_posix() for rel, _pos, _reg in selected})
+    if shard_dirs:
+        download_rico_icons_shards(shard_dirs, on_progress=on_progress)
+
+    return [(ds_dir / rel, pos, reg) for rel, pos, reg in selected if (ds_dir / rel).is_file()]
 
 
 def _ensure_image_embedder_loaded(embedder, on_progress) -> None:
@@ -1309,15 +1532,19 @@ def _embed_vg_images(selected, clips, embedder, on_progress, demo_origin, skip_e
         clip_id += 1
 
 
-def _embed_openlogo_images(selected, clips, embedder, on_progress, demo_origin, skip_embedding=False) -> None:
-    """Embed OpenLogo ``(img_path, positive_categories, regions)`` records into ``clips``.
+def _embed_boxed_multilabel_images(selected, clips, embedder, on_progress, demo_origin, skip_embedding=False) -> None:
+    """Embed ``(img_path, positive_categories, regions)`` records into ``clips``.
 
-    Multi-label (an image may show several brands), mirroring the Visual Genome
-    demo: each clip gets a ``categories`` list (all in-vocab brands present), a
-    ``category`` primary (first brand, for single-label readers), and store-only
-    normalized ground-truth ``regions`` (the boxed brand region is the natural
-    template seed for a structural detector, and the boxes let the Calibration &
-    Evaluation flow score against ground truth).
+    Shared by every demo whose records arrive already boxed and multi-label —
+    OpenLogo (brands) and Rico UI semantics (icons) today.  Each clip gets a
+    ``categories`` list (all in-vocab labels present), a ``category`` primary
+    (the first, for single-label readers), and store-only normalized
+    ground-truth ``regions``: the boxed region is the natural template seed for
+    a structural detector, and the boxes let the Calibration & Evaluation flow
+    score against ground truth.
+
+    Visual Genome has its own variant only because its boxes arrive in source
+    pixel coordinates and must be normalized against each image's decoded size.
     """
 
     from vtscore.media.embedder import media_from_path  # noqa: PLC0415
@@ -1453,8 +1680,19 @@ def load_demo_source(  # noqa: C901 - flat per-source dispatch; one branch per d
         return None
 
     if source == "openlogo":
-        _embed_openlogo_images(
+        _embed_boxed_multilabel_images(
             _collect_openlogo_files(categories, slice_args, on_progress),
+            clips,
+            embedder,
+            on_progress,
+            demo_origin,
+            skip_embedding=skip_embedding,
+        )
+        return None
+
+    if source == "rico_icons":
+        _embed_boxed_multilabel_images(
+            _collect_rico_icons_files(categories, slice_args, on_progress),
             clips,
             embedder,
             on_progress,
