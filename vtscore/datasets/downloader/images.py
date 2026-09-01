@@ -584,9 +584,7 @@ def download_rico_icons_shards(
     extract_dir = _core.DATA_DIR / "rico_icons"
     # A shard folder is "present" only if it holds at least one decoded JPEG; an
     # empty directory left by an interrupted fetch must not block a re-download.
-    missing = sorted(
-        d for d in set(shard_dirs) if next((extract_dir / d).glob("*.jpg"), None) is None
-    )
+    missing = sorted(d for d in set(shard_dirs) if next((extract_dir / d).glob("*.jpg"), None) is None)
     if not missing:
         return extract_dir
     return _rico_icons_snapshot([f"{d}/*" for d in missing], "screenshots", on_progress)

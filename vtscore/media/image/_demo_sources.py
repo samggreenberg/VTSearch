@@ -107,6 +107,7 @@ def build_demo_datasets() -> list[DemoDataset]:
             span = (1.0 if frac_end is None else frac_end) - frac_start
             shards = min(RICO_ICONS_SHARD_COUNT, round(span * RICO_ICONS_SHARD_COUNT) + 1)
         return RICO_ICONS_MANIFEST_MB + shards * RICO_ICONS_SHARD_MB
+
     faces_desc = "In-the-wild celebrity photos, one label per person"
     faces_folder = DATA_DIR / "vggface2" / "test"
     return [

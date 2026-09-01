@@ -277,7 +277,9 @@ class TestLoadDemoSourceRicoIcons:
             # Two instances of one class -> one category, two regions.
             {
                 "filepath": "data/data_0/2.jpg",
-                "detections": {"detections": [_icon("star", [0.1, 0.1, 0.05, 0.05]), _icon("star", [0.3, 0.1, 0.05, 0.05])]},
+                "detections": {
+                    "detections": [_icon("star", [0.1, 0.1, 0.05, 0.05]), _icon("star", [0.3, 0.1, 0.05, 0.05])]
+                },
             },
         ]
         ds_dir = self._prepare(tmp_path, samples)
@@ -323,7 +325,10 @@ class TestLoadDemoSourceRicoIcons:
 
     def test_screens_without_an_in_vocab_icon_are_dropped(self, tmp_path):
         samples = [
-            {"filepath": "data/data_0/1.jpg", "detections": {"detections": [_icon("national_flag", [0.1, 0.1, 0.1, 0.1])]}},
+            {
+                "filepath": "data/data_0/1.jpg",
+                "detections": {"detections": [_icon("national_flag", [0.1, 0.1, 0.1, 0.1])]},
+            },
             {"filepath": "data/data_0/2.jpg", "detections": {"detections": [_icon(None, [0.1, 0.1, 0.1, 0.1])]}},
             {"filepath": "data/data_0/3.jpg", "detections": {"detections": []}},
             {"filepath": "data/data_0/4.jpg"},
