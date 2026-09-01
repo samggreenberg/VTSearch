@@ -3753,7 +3753,7 @@ def simulate_voting_iterations(  # noqa: C901
     cut_inclusion_ks: Optional[list[int]] = None,
     cut_inclusion_sink: Optional[list[dict[str, Any]]] = None,
     cut_inclusion_qtilt_steps: Optional[list[float]] = None,
-    acq_inclusion_offset: int = ACQUISITION_INCLUSION_OFFSET,
+    acq_inclusion_offset: float = ACQUISITION_INCLUSION_OFFSET,
     acq_rank_percentile: Optional[float] = None,
     startup_schedule: Optional[str] = None,
     pick_sink: Optional[list[dict[str, Any]]] = None,

@@ -134,7 +134,7 @@ def classify_threshold_provenance(fallback: float | None) -> str:
     return "unknown"
 
 
-def inclusion_cost_weights(inclusion_value: int) -> tuple[float, float]:
+def inclusion_cost_weights(inclusion_value: float) -> tuple[float, float]:
     """``(fpr_weight, fnr_weight)`` - the rate loss the Inclusion knob names.
 
     Inclusion is defined as a trade-off between the two error *rates*:
@@ -148,6 +148,28 @@ def inclusion_cost_weights(inclusion_value: int) -> tuple[float, float]:
     This is the single definition; :mod:`vtscore.eval.calibration_metrics` and
     :mod:`vtscore.eval.voting_iterations` delegate here so a measured arm and
     the shipped path can never disagree about what an inclusion value costs.
+
+    **What a value MEANS, in one line: inclusion is a log2 likelihood-ratio
+    threshold.**  Because the loss is a weighted sum of *rates*, each normalised
+    by its own class, the prevalence divides out (see
+    :meth:`GmmFit1D.rate_crossing`, which puts the prior-odds factor back into
+    ``lam`` precisely so the cut does not carry it).  Minimising
+    ``w_fp*FPR + w_fn*FNR`` therefore admits exactly the items whose class-
+    conditional likelihood ratio clears ``w_fp / w_fn``::
+
+        include x  <=>  f_pos(x) / f_neg(x)  >  2**-k
+
+    So ``k = 0`` is the neutral-evidence point (LR > 1: admit whatever the Good
+    class explains better than the Bad class), and **each step of the knob is one
+    bit of evidence** - Good's *weight of evidence*, in base 2.  ``k = -3`` asks
+    for 8:1 evidence, ``k = +2`` accepts 4:1 against.  That is what makes the
+    knob portable across datasets and what makes the acquisition *offset* the
+    right parameterisation: a constant shift in evidence-bits is prior-free,
+    while the rank position it lands on is not.
+
+    *inclusion_value* is a float: fractional steps are well defined (a half step
+    is a factor of sqrt(2) in the evidence ratio) and issue #3319 sweeps them.
+    The UI slider still stops at integers.
     """
     if inclusion_value >= 0:
         return 1.0, 2.0**inclusion_value
@@ -236,7 +258,7 @@ def inclusion_cost_weights(inclusion_value: int) -> tuple[float, float]:
 ACQUISITION_INCLUSION_OFFSET = -3
 
 
-def acquisition_inclusion(inclusion_value: int, offset: int = ACQUISITION_INCLUSION_OFFSET) -> int:
+def acquisition_inclusion(inclusion_value: float, offset: float = ACQUISITION_INCLUSION_OFFSET) -> float:
     """The inclusion the **selector's** cut is taken at, given the reporting one.
 
     One definition, shared by the app and the eval harness, so a measured arm
@@ -250,6 +272,10 @@ def acquisition_inclusion(inclusion_value: int, offset: int = ACQUISITION_INCLUS
     between where the line is drawn and where sampling happens.  Reading ``-3``
     absolutely would collapse the gap to nothing at reporting inclusion -3 and
     invert it below that - the direction the ``acq_p2`` arm falsified.
+
+    *offset* may be fractional (issue #3319).  One step is one bit of evidence
+    (:func:`inclusion_cost_weights`), so a half step is a real, realisable
+    operating point of factor sqrt(2), not an interpolation between two settings.
 
     Deliberately unclamped.  The reporting inclusion is clamped to ``[-10, 10]``
     at the API edge, so this can reach -13; the cost weights are exponential but
@@ -1259,7 +1285,7 @@ class FoldAnchoredCut:
         """
         return self._quantile_at(*inclusion_cost_weights(inclusion_value))
 
-    def threshold_at(self, inclusion_value: int) -> float:
+    def threshold_at(self, inclusion_value: float) -> float:
         """The threshold this estimator cuts at *inclusion_value*.
 
         Inclusion reaches the cut only as the rate weights it optimises
@@ -1682,7 +1708,7 @@ def threshold_from_folds(folds: CalibrationFolds, inclusion_value: int) -> float
 def conformal_threshold(
     scores: list[float],
     labels: list[float],
-    inclusion_value: int = 0,
+    inclusion_value: float = 0,
 ) -> float:
     """Split-conformal quantile threshold over held-out calibration scores.
 
@@ -1748,7 +1774,9 @@ def conformal_threshold(
             too-tight band.
         labels: True binary labels (1.0 for good, 0.0 for bad),
             corresponding to ``scores``.
-        inclusion_value: Integer in ``[-10, 10]``; higher includes more.
+        inclusion_value: Number in ``[-10, 10]``; higher includes more.  The
+            reporting knob is an integer, but the rule is continuous in ``k``
+            and the acquisition cut sweeps fractional values (issue #3319).
 
     Returns:
         A float threshold, always realizable within the calibration score
@@ -1765,7 +1793,7 @@ def conformal_threshold(
     if len(pos) == 0 or len(neg) == 0:
         return 0.5
 
-    def _threshold_at(k: int) -> float:
+    def _threshold_at(k: float) -> float:
         fn_cap = float(np.quantile(pos, min(1.0, CONFORMAL_BASE_BUDGET * 2.0**-k)))
         if k > 0:
             # The k=0 floor keeps the seam monotone: q_pos(alpha) can sit

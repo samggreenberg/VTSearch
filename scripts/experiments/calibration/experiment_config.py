@@ -593,11 +593,6 @@ def _schedule_variants() -> list[str]:
 SCHEDULE_VARIANTS = _schedule_variants()
 
 
-def _opt_int(name: str) -> int | None:
-    raw = os.environ.get(name, "").strip()
-    return int(raw) if raw else None
-
-
 def _opt_float(name: str) -> float | None:
     raw = os.environ.get(name, "").strip()
     return float(raw) if raw else None
@@ -618,7 +613,13 @@ def _opt_float(name: str) -> float | None:
 #: here: PR #2876 shipped -3, and it is **-1** today.  A number written into
 #: this comment goes stale silently and a study then mis-states its own
 #: baseline.  ``0`` is the pre-#2876 control, one threshold doing both jobs.
-ACQ_INCLUSION_OFFSET = _opt_int("CALIB_ACQ_INCLUSION_OFFSET")
+#: **Fractional offsets are meaningful and are read as such** (issue #3319).
+#: Inclusion is a log2 scale - one step doubles the price of a false alarm
+#: relative to a miss - so a half step is a factor of sqrt(2), and every rule
+#: that consumes it (the conformal quantiles, ``FoldAnchoredCut.threshold_at``)
+#: is continuous in ``k``.  Parsing this as an int would silently refuse the
+#: half-step grid rather than fail, so it is a float.
+ACQ_INCLUSION_OFFSET = _opt_float("CALIB_ACQ_INCLUSION_OFFSET")
 if ACQ_INCLUSION_OFFSET is None:
     from vtscore.training.thresholds import ACQUISITION_INCLUSION_OFFSET
 
