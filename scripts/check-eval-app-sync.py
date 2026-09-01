@@ -235,11 +235,11 @@ MIRRORS: list[Mirror] = [
     Mirror(
         id="training.blend_schedule_default",
         app="py:vtscore.detectors.training._blend_schedule_for_snap",
-        harness="vtscore/eval/voting_iterations.py::simulate_voting_iterations",
+        harness="vtscore/eval/voting_iterations.py::_resolve_production_defaults",
         kind="default",
         note=(
             "How the app picks a safe-threshold blend schedule when none is named (per voting "
-            "mode). simulate_voting_iterations resolves blend_schedule=None through "
+            "mode). _resolve_production_defaults resolves blend_schedule=None through "
             "production_schedule_for to match; if the app's choice becomes conditional on "
             "something else, that condition has to reach the harness too."
         ),
@@ -247,14 +247,14 @@ MIRRORS: list[Mirror] = [
     Mirror(
         id="training.split_fraction_default",
         app="py:vtscore.detectors.training.resolve_calibration_fraction",
-        harness="vtscore/eval/voting_iterations.py::simulate_voting_iterations",
+        harness="vtscore/eval/voting_iterations.py::_resolve_production_defaults",
         kind="default",
         note=(
             "How the app resolves calibration_fraction when the user has no explicit setting "
             "(#3287/#3290): the per-SPACE production split - 0.3 when the detector learns in a "
             "single-vector space, 0.5 on a patch grid, 0.5 when unknown - keyed on the "
             "embedder's supports_patch_regions capability, NOT on the voting mode. "
-            "simulate_voting_iterations resolves calibration_fraction=None through the same "
+            "_resolve_production_defaults resolves calibration_fraction=None through the same "
             "production_split_for table, keyed on whether any media carries a patch_grid (the "
             "harness's spelling of 'built by a patch embedder'). The values themselves cannot "
             "drift - both sides read PRODUCTION_SPLIT_BY_SPACE - so what this digest watches is "

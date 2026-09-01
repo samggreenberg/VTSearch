@@ -3713,10 +3713,216 @@ def _apply_skyline_decomposition(rows: list[dict[str, Any]], skyline_rows: list[
 # ------------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class _RunKnobs:
+    """The pre-registered knobs of one :func:`simulate_voting_iterations` cell.
+
+    A record rather than a tuple, so adding a knob cannot silently rebind the
+    existing ones at the unpacking call site - the same hazard the keyword-only
+    marker on :func:`simulate_voting_iterations` closes for its callers.
+    """
+
+    fold_schedule: "Callable[[int], int] | None"
+    startup_state: StartupState | None
+    skyline_arms: list[str]
+    head: str
+
+
+def _resolve_head(head: Optional[str], trainer: str) -> str:
+    """Validate an explicit MLP head name, or resolve ``None`` to the app's.
+
+    Raises:
+        ValueError: If *head* is not a known head, or is given for a trainer
+            that fits its own estimator rather than a head.
+    """
+
+    if head is not None:
+        if head not in HEADS:
+            raise ValueError(f"unknown head {head!r}; expected one of {HEADS}")
+        if trainer != "mlp":
+            raise ValueError(f"head={head!r} only applies to the production trainer; got trainer={trainer!r}")
+    # **The default arm must be the app's default.**  Production pins the linear
+    # SVM head on every fit (``hidden_dim = LINEAR_SVM_HEAD`` in
+    # ``vtscore.detectors.training.train_and_threshold``), so an unspecified head
+    # resolves to it — the same way *style* and *blend_schedule* resolve to the
+    # app's geometry and schedule below.  The head fits the final model *and*
+    # the calibration folds, so it moves the thresholds and, through the vote
+    # order, the whole trajectory: defaulting to a retired head would make every
+    # unqualified run measure a detector nobody ships.  ``head="linear"`` (the
+    # logistic head) and ``head="mlp"`` stay available as named legacy arms.
+    head = head or PRODUCTION_HEAD
+    return head
+
+
+def _resolve_startup_state(
+    startup_schedule: Optional[str],
+    seed_scores: Optional[dict[int, float]],
+    autopilot_fidelity: bool,
+    strategy: str,
+) -> StartupState | None:
+    """Parse an explicit startup schedule, checking the run can actually honour it.
+
+    Raises:
+        ValueError: If a schedule is named without the seed sort it addresses
+            positions on, or outside the faithful autopilot strategy it steers.
+    """
+
+    startup_state: StartupState | None = None
+    if startup_schedule:
+        if seed_scores is None:
+            raise ValueError(
+                "startup_schedule needs seed_scores: a schedule names positions on the "
+                "seed sort, and there is no sort to name them on without one"
+            )
+        if not autopilot_fidelity or strategy != "autopilot":
+            raise ValueError("startup_schedule requires autopilot_fidelity and the autopilot strategy")
+        startup_state = StartupState(parse_startup_schedule(startup_schedule))
+    return startup_state
+
+
+def _resolve_run_knobs(
+    *,
+    fold_count_schedule: str | None,
+    calibrate_count: int,
+    startup_schedule: Optional[str],
+    seed_scores: Optional[dict[int, float]],
+    autopilot_fidelity: bool,
+    strategy: str,
+    skyline_arms: Optional[list[str]],
+    emit_calibration_metrics: bool,
+    acq_inclusion_offset: int,
+    acq_rank_percentile: Optional[float],
+    head: Optional[str],
+    trainer: str,
+    style: Optional[str],
+) -> _RunKnobs:
+    """Validate a cell's pre-registered knobs and resolve the defaults among them.
+
+    Called from the top of :func:`simulate_voting_iterations`, before anything
+    expensive runs, and the only place these checks belong: a run that dies
+    forty minutes in on a typo has held a cluster slot for nothing, so a
+    malformed knob has to kill the cell at second zero.  Gathering them under
+    one name is what keeps that contract visible - a ``raise`` added deep in the
+    stepping loop now reads as an obvious departure rather than as one more line
+    among seven hundred.
+
+    Note this resolves only the defaults that can be decided from the arguments
+    alone.  The two that need the loaded pool - the detection *style* and the
+    pair in :func:`_resolve_production_defaults` - are keyed on ``region_aware``
+    and so are resolved later, once the medias have been read.
+
+    Raises:
+        ValueError: If a knob is malformed, or two knobs are mutually exclusive.
+    """
+
+    # These are pre-registered experiment knobs, so they are validated beside
+    # the other argument checks rather than deep in the loop: a run that dies
+    # forty minutes in on a typo has held a cluster slot for nothing.
+    # Parsed here, with the other pre-registered knobs, and not in the loop: a
+    # malformed schedule must kill the cell at second zero rather than forty
+    # minutes in, and the parse is what validates the spec at all.
+    _fold_schedule = parse_fold_count_schedule(fold_count_schedule, calibrate_count)
+
+    startup_state = _resolve_startup_state(startup_schedule, seed_scores, autopilot_fidelity, strategy)
+
+    skyline_arms = list(skyline_arms or [])
+    if skyline_arms:
+        unknown = [a for a in skyline_arms if a not in SKYLINE_ARMS]
+        if unknown:
+            raise ValueError(f"unknown skyline arm(s) {unknown}; expected a subset of {list(SKYLINE_ARMS)}")
+        if not emit_calibration_metrics:
+            raise ValueError(
+                "skyline_arms requires emit_calibration_metrics: the decomposition is defined "
+                "against the calibration frame's oracle_cost/regret columns, which the plain "
+                "frame does not carry"
+            )
+
+    if acq_rank_percentile is not None:
+        if acq_inclusion_offset != 0:
+            raise ValueError(
+                "acq_inclusion_offset and acq_rank_percentile are mutually exclusive; "
+                "pass acq_inclusion_offset=0 to run the rank-pinned arm "
+                f"(the default is {ACQUISITION_INCLUSION_OFFSET}, the shipped acquisition cut)"
+            )
+        if not 0.0 <= acq_rank_percentile <= 1.0:
+            raise ValueError(f"acq_rank_percentile must be in [0, 1], got {acq_rank_percentile}")
+
+    head = _resolve_head(head, trainer)
+
+    if style is not None and trainer != "mlp":
+        raise ValueError(f"detection styles only support the MLP trainer; got trainer={trainer!r}")
+    return _RunKnobs(
+        fold_schedule=_fold_schedule,
+        startup_state=startup_state,
+        skyline_arms=skyline_arms,
+        head=head,
+    )
+
+
+def _resolve_production_defaults(
+    *,
+    blend_schedule: Optional[str],
+    calibration_fraction: Optional[float],
+    region_aware: bool,
+) -> tuple[str, float]:
+    """Resolve the unnamed blend schedule and split fraction to the app's own.
+
+    **The eval default arm must be the app's default.**  Both ``default``
+    mirrors in ``scripts/check-eval-app-sync.py`` -
+    ``training.blend_schedule_default`` and ``training.split_fraction_default`` -
+    name *this* function as their harness side, so a tripped gate points the
+    reconciler at twenty lines instead of at the thousand that make up
+    :func:`simulate_voting_iterations`.  It also gives that gate something real
+    to check: its harness-side test is an existence check on the named symbol,
+    which the enclosing function would satisfy even if both resolutions below
+    were deleted outright.
+
+    Both resolutions are keyed on *region_aware* - whether any media in the pool
+    carries a ``patch_grid`` - which is why they run here rather than in
+    :func:`_resolve_run_knobs`, alongside the knobs that need no pool.
+
+    Args:
+        blend_schedule: The named schedule arm, or ``None`` for the default.
+        calibration_fraction: The explicit Train/Calibrate split, or ``None``.
+        region_aware: Whether the pool carries patch grids.
+
+    Returns:
+        The resolved ``(blend_schedule, calibration_fraction)`` pair.
+    """
+
+    # Mirror the app's per-mode schedule default (#2841): with no explicit arm, a
+    # patch dataset blends under the region schedule and a single-vector one
+    # under the binary schedule, exactly as `_blend_schedule_for_snap` decides in
+    # `vtscore.detectors.training`.  Without this the harness would measure a
+    # schedule no detector actually uses.
+    if blend_schedule is None:
+        from vtscore.training.blend_schedules import production_schedule_for  # noqa: PLC0415
+
+        blend_schedule = production_schedule_for(region_voting=region_aware)
+
+    # Mirror the app's per-space split default (#3287/#3290): with no explicit
+    # arm, the Train/Calibrate fraction of each fold is the one a live
+    # detector would resolve for this dataset's embedder.  ``region_aware``
+    # (any media carrying a ``patch_grid``) is the harness's spelling of "the
+    # pickle was built by a patch embedder" - the same capability the app
+    # reads off ``supports_patch_regions`` in
+    # ``vtscore.detectors.training.resolve_calibration_fraction``, which the
+    # ``training.split_fraction_default`` mirror in
+    # ``scripts/check-eval-app-sync.py`` pins against this block.  Note it is
+    # deliberately NOT the voting mode: ``dinov3_patch`` datasets take 0.5 in
+    # both their styles, including boxless ``whole_image``.
+    if calibration_fraction is None:
+        from vtscore.training.thresholds import production_split_for  # noqa: PLC0415
+
+        calibration_fraction = production_split_for(patch_space=region_aware)
+    return blend_schedule, calibration_fraction
+
+
 def simulate_voting_iterations(  # noqa: C901
     clips_dict: dict[int, dict[str, Any]],
     target_category: str,
     seed: int,
+    *,
     dataset_name: str = "",
     inclusion: int = 0,
     sim_fraction: float = 0.5,
@@ -3997,65 +4203,25 @@ def simulate_voting_iterations(  # noqa: C901
     # RNG seeding via fork_rng, keeping it thread-safe.
     start_time = time.monotonic()
 
-    # These are pre-registered experiment knobs, so they are validated beside
-    # the other argument checks rather than deep in the loop: a run that dies
-    # forty minutes in on a typo has held a cluster slot for nothing.
-    # Parsed here, with the other pre-registered knobs, and not in the loop: a
-    # malformed schedule must kill the cell at second zero rather than forty
-    # minutes in, and the parse is what validates the spec at all.
-    _fold_schedule = parse_fold_count_schedule(fold_count_schedule, calibrate_count)
-
-    startup_state: StartupState | None = None
-    if startup_schedule:
-        if seed_scores is None:
-            raise ValueError(
-                "startup_schedule needs seed_scores: a schedule names positions on the "
-                "seed sort, and there is no sort to name them on without one"
-            )
-        if not autopilot_fidelity or strategy != "autopilot":
-            raise ValueError("startup_schedule requires autopilot_fidelity and the autopilot strategy")
-        startup_state = StartupState(parse_startup_schedule(startup_schedule))
-
-    skyline_arms = list(skyline_arms or [])
-    if skyline_arms:
-        unknown = [a for a in skyline_arms if a not in SKYLINE_ARMS]
-        if unknown:
-            raise ValueError(f"unknown skyline arm(s) {unknown}; expected a subset of {list(SKYLINE_ARMS)}")
-        if not emit_calibration_metrics:
-            raise ValueError(
-                "skyline_arms requires emit_calibration_metrics: the decomposition is defined "
-                "against the calibration frame's oracle_cost/regret columns, which the plain "
-                "frame does not carry"
-            )
-
-    if acq_rank_percentile is not None:
-        if acq_inclusion_offset != 0:
-            raise ValueError(
-                "acq_inclusion_offset and acq_rank_percentile are mutually exclusive; "
-                "pass acq_inclusion_offset=0 to run the rank-pinned arm "
-                f"(the default is {ACQUISITION_INCLUSION_OFFSET}, the shipped acquisition cut)"
-            )
-        if not 0.0 <= acq_rank_percentile <= 1.0:
-            raise ValueError(f"acq_rank_percentile must be in [0, 1], got {acq_rank_percentile}")
-
-    if head is not None:
-        if head not in HEADS:
-            raise ValueError(f"unknown head {head!r}; expected one of {HEADS}")
-        if trainer != "mlp":
-            raise ValueError(f"head={head!r} only applies to the production trainer; got trainer={trainer!r}")
-    # **The default arm must be the app's default.**  Production pins the linear
-    # SVM head on every fit (``hidden_dim = LINEAR_SVM_HEAD`` in
-    # ``vtscore.detectors.training.train_and_threshold``), so an unspecified head
-    # resolves to it — the same way *style* and *blend_schedule* resolve to the
-    # app's geometry and schedule below.  The head fits the final model *and*
-    # the calibration folds, so it moves the thresholds and, through the vote
-    # order, the whole trajectory: defaulting to a retired head would make every
-    # unqualified run measure a detector nobody ships.  ``head="linear"`` (the
-    # logistic head) and ``head="mlp"`` stay available as named legacy arms.
-    head = head or PRODUCTION_HEAD
-
-    if style is not None and trainer != "mlp":
-        raise ValueError(f"detection styles only support the MLP trainer; got trainer={trainer!r}")
+    knobs = _resolve_run_knobs(
+        fold_count_schedule=fold_count_schedule,
+        calibrate_count=calibrate_count,
+        startup_schedule=startup_schedule,
+        seed_scores=seed_scores,
+        autopilot_fidelity=autopilot_fidelity,
+        strategy=strategy,
+        skyline_arms=skyline_arms,
+        emit_calibration_metrics=emit_calibration_metrics,
+        acq_inclusion_offset=acq_inclusion_offset,
+        acq_rank_percentile=acq_rank_percentile,
+        head=head,
+        trainer=trainer,
+        style=style,
+    )
+    _fold_schedule = knobs.fold_schedule
+    startup_state = knobs.startup_state
+    skyline_arms = knobs.skyline_arms
+    head = knobs.head
 
     prevalence_arm = "natural" if target_prevalence is None else f"rare_{target_prevalence:g}"
     if target_prevalence is not None:
@@ -4153,31 +4319,11 @@ def simulate_voting_iterations(  # noqa: C901
             stacklevel=2,
         )
         skyline_arms = []
-    # Mirror the app's per-mode schedule default (#2841): with no explicit arm, a
-    # patch dataset blends under the region schedule and a single-vector one
-    # under the binary schedule, exactly as `_blend_schedule_for_snap` decides in
-    # `vtscore.detectors.training`.  Without this the harness would measure a
-    # schedule no detector actually uses.
-    if blend_schedule is None:
-        from vtscore.training.blend_schedules import production_schedule_for  # noqa: PLC0415
-
-        blend_schedule = production_schedule_for(region_voting=region_aware)
-
-    # Mirror the app's per-space split default (#3287/#3290): with no explicit
-    # arm, the Train/Calibrate fraction of each fold is the one a live
-    # detector would resolve for this dataset's embedder.  ``region_aware``
-    # (any media carrying a ``patch_grid``) is the harness's spelling of "the
-    # pickle was built by a patch embedder" - the same capability the app
-    # reads off ``supports_patch_regions`` in
-    # ``vtscore.detectors.training.resolve_calibration_fraction``, which the
-    # ``training.split_fraction_default`` mirror in
-    # ``scripts/check-eval-app-sync.py`` pins against this block.  Note it is
-    # deliberately NOT the voting mode: ``dinov3_patch`` datasets take 0.5 in
-    # both their styles, including boxless ``whole_image``.
-    if calibration_fraction is None:
-        from vtscore.training.thresholds import production_split_for  # noqa: PLC0415
-
-        calibration_fraction = production_split_for(patch_space=region_aware)
+    blend_schedule, calibration_fraction = _resolve_production_defaults(
+        blend_schedule=blend_schedule,
+        calibration_fraction=calibration_fraction,
+        region_aware=region_aware,
+    )
 
     import torch  # noqa: PLC0415
 
