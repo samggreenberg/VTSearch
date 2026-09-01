@@ -12,8 +12,8 @@ These tests pin the three pieces that fixed it:
 
 * :func:`cached_indicator_history` reads the cache and **never advances it**,
   reporting ``complete=False`` instead, and never blocks on ``_progress_lock``.
-* The stability pass's monitored pool is materialised once per cache lifetime
-  rather than once per label step.
+* The stability pass's monitored pool is materialised once per dataset rather
+  than once per label step.
 * The fallback coverage-atlas build applies the same depth cap as every other
   build site.
 """
@@ -26,6 +26,27 @@ import numpy as np
 
 import vtscore.detectors.labeling_progress as lp
 from vtscore.embedding.media_vectors import EMBEDDINGS_KEY
+
+
+def _active_cache() -> lp._ProgressCache:
+    """The cache for the pair these tests run under, as an entry point would resolve it."""
+    with lp._progress_lock:
+        return lp._active_cache()
+
+
+def _pool_tensor():
+    """The single memoised stability pool tensor, or ``None`` when none is built."""
+    tensors = [pool.X for pool in lp._monitored_pools.values()]
+    return tensors[0] if tensors else None
+
+
+def _linear_model(dim: int = 8):
+    """A tiny fixed linear model producing ``(n, 1)`` logits."""
+    import torch
+    import torch.nn as nn
+
+    torch.manual_seed(0)
+    return nn.Sequential(nn.Linear(dim, 1))
 
 
 def _clips(n: int, dim: int = 8, seed: int = 0) -> dict[int, dict]:
@@ -59,7 +80,7 @@ class TestCachedIndicatorHistory:
         assert complete is False
         assert data == []
         # No steps were built: the cache is exactly as cold as we left it.
-        assert lp._cached_steps == []
+        assert _active_cache().steps == []
 
     def test_warm_cache_returns_series_for_every_metric(self):
         clips = _clips(60)
@@ -100,7 +121,7 @@ class TestCachedIndicatorHistory:
 
         assert complete is False
         # The read must not have rebuilt the cache under the new inclusion.
-        assert lp._cache_inclusion == 0
+        assert _active_cache().inclusion == 0
 
     def test_does_not_block_on_an_in_flight_cache_build(self, monkeypatch):
         """A click landing mid-refresh falls through instead of hanging.
@@ -154,26 +175,55 @@ class TestMonitoredPoolReuse:
         lp.clear_progress_cache()
 
         lp.calculate_prediction_stability_over_time(clips, _history(6), 0)
-        first = lp._cache_monitored_X
+        first = _pool_tensor()
         assert first is not None
-        assert lp._cache_monitored_ids is not None
 
         # Advance the cache with more steps: same pool object, no rebuild.
         lp.calculate_prediction_stability_over_time(clips, _history(12), 0)
-        assert lp._cache_monitored_X is first
+        assert _pool_tensor() is first
+
+    def test_pool_is_shared_by_every_detector_over_one_dataset(self):
+        """The pool is a pure function of ``clips_dict``, so it is keyed by dataset.
+
+        Caching several ``(dataset, detector)`` pairs at once must not multiply
+        the biggest thing this module holds - the pool tensor is up to
+        ``_STABILITY_MAX_SAMPLES`` x embedding-dim floats.
+        """
+        clips = _clips(60)
+        lp.clear_progress_cache()
+
+        lp.calculate_prediction_stability_over_time(clips, _history(6), 0)
+        first = _pool_tensor()
+        assert first is not None
+        dataset_id = _active_cache().key[0]
+
+        # A second detector over the same dataset must reuse that tensor rather
+        # than materialise its own.
+        other = lp._ProgressCache(key=(dataset_id, "det_other"), good_ids={0, 2}, bad_ids={1, 3})
+        with lp._progress_lock:
+            lp._compute_step_stability(
+                other,
+                _linear_model(),
+                threshold=0.5,
+                clips_dict=clips,
+                all_media_ids=sorted(clips),
+                t=1,
+                num_labels=4,
+            )
+
+        assert lp._monitored_pools[dataset_id].X is first
+        assert len(lp._monitored_pools) == 1
 
     def test_pool_is_dropped_on_cache_clear(self):
         """Medias may have changed, so the derived pool must not survive."""
         clips = _clips(60)
         lp.clear_progress_cache()
         lp.calculate_prediction_stability_over_time(clips, _history(6), 0)
-        assert lp._cache_monitored_X is not None
+        assert _pool_tensor() is not None
 
         lp.clear_progress_cache()
 
-        assert lp._cache_monitored_X is None
-        assert lp._cache_monitored_ids is None
-        assert lp._cache_monitored_set is None
+        assert lp._monitored_pools == {}
 
     def test_stability_counts_match_the_unsampled_pool(self):
         """Scoring the whole pool and dropping labels must not change the counts."""
