@@ -111,11 +111,7 @@ def whitelist_names() -> list[str]:
     the section comments can never be mistaken for entries.
     """
     tree = ast.parse(WHITELIST.read_text(), filename=str(WHITELIST))
-    return [
-        node.value.id
-        for node in tree.body
-        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Name)
-    ]
+    return [node.value.id for node in tree.body if isinstance(node, ast.Expr) and isinstance(node.value, ast.Name)]
 
 
 def scavenge():
@@ -170,15 +166,10 @@ def main() -> int:
         return 0
 
     findings = [
-        item
-        for item in items
-        if item.name not in entries and not relpath(item).startswith(REPORT_EXCLUDE_PREFIXES)
+        item for item in items if item.name not in entries and not relpath(item).startswith(REPORT_EXCLUDE_PREFIXES)
     ]
     for item in sorted(findings, key=lambda i: (relpath(i), i.first_lineno)):
-        print(
-            f"{relpath(item)}:{item.first_lineno}: unused {item.typ} "
-            f"'{item.name}' ({item.confidence}% confidence)"
-        )
+        print(f"{relpath(item)}:{item.first_lineno}: unused {item.typ} '{item.name}' ({item.confidence}% confidence)")
     if findings:
         print()
         print(f"{len(findings)} finding(s). Triage per docs/RELEASE.md step 1.")
