@@ -154,6 +154,8 @@ VTSearch/
 │   │   │   structural_geometry.py  the geometric consistency check and
 │   │   │   structural_splg.py      the SPLG local-feature backend
 │   │   ├── lazy_clip.py            Replays converter/clipper recipes to rebuild bytes on demand
+│   │   ├── clip_recipe.py          One parser for the origin.params clip dialects, shared by
+│   │   │                           lazy_clip and the detector resolver's replay path
 │   │   ├── provenance.py           Human-readable Source / Derived Via / Imported Via lines
 │   │   ├── torch_setup.py          Process-wide torch thread + device configuration
 │   │   ├── audio/                  Audio media type, embedders (CLAP, CLAP-Music, CLAP-General,

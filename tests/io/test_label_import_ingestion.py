@@ -322,7 +322,7 @@ class TestClippedReingest:
 
         from vtscore.datasets.ingest import _ingest_via_resolver
         from vtscore.media.audio.audio_generator import generate_wav
-        from vtscore.media.audio.clipper import _wav_slice
+        from vtscore.media.audio.wav import wav_slice
 
         rng = np.random.default_rng(42)
 
@@ -331,7 +331,7 @@ class TestClippedReingest:
         wav_path.write_bytes(wav)
 
         clip_start, clip_end = 0.0, 2.0
-        clip_bytes = _wav_slice(wav, clip_start, clip_end)
+        clip_bytes = wav_slice(wav, clip_start, clip_end)
         expected_clip_md5 = content_md5(clip_bytes)
         parent_md5 = content_md5(wav)
         assert expected_clip_md5 != parent_md5, "clip and parent MD5s must differ"
@@ -441,7 +441,7 @@ class TestClippedReingest:
 
         from vtscore.datasets.ingest import _ingest_via_resolver
         from vtscore.media.audio.audio_generator import generate_wav
-        from vtscore.media.audio.clipper import _wav_slice
+        from vtscore.media.audio.wav import wav_slice
 
         rng = np.random.default_rng(42)
 
@@ -450,7 +450,7 @@ class TestClippedReingest:
         wav_path.write_bytes(wav)
 
         clip_start, clip_end = 0.0, 2.0
-        expected_clip_bytes = _wav_slice(wav, clip_start, clip_end)
+        expected_clip_bytes = wav_slice(wav, clip_start, clip_end)
         assert len(expected_clip_bytes) < len(wav), "clip should be smaller than parent"
 
         origin = {
