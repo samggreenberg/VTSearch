@@ -479,7 +479,7 @@ Three ways the harness relates to the app, in descending order of safety:
 | | How | Can it drift? |
 |---|---|---|
 | **Delegated** | The harness calls the app's function. `MaxPatchStyle.good_vec` / `.bad_vecs` / `._rows_for_media` are thin wrappers over `pool_box_from_media`, `bad_negative_vecs`, and `media_score_rows`. | No — by construction. |
-| **Ported** | The app's logic is re-implemented, because the original is unreachable or unusable. `vtscore/eval/autopilot_flow.py` ports the phase machine from `AutopilotStateService.checkPhaseTransition` (TypeScript — nothing to import) and the three indicators from `vtscore.detectors.labeling_progress` (wrapped in an interactive, lock-guarded single-detector cache a simulation can't use). | Yes — a copy goes stale the moment the original moves. |
+| **Ported** | The app's logic is re-implemented, because the original is unreachable or unusable. `vtscore/eval/autopilot_flow.py` ports the phase machine from `AutopilotStateService.checkPhaseTransition` (TypeScript — nothing to import) and the three indicators from `vtscore.detectors.labeling_progress` (wrapped in an interactive, lock-guarded per-(dataset, detector) cache a simulation can't use). | Yes — a copy goes stale the moment the original moves. |
 | **Default resolution** | The harness resolves "no explicit arm" to whatever the app currently defaults to: `style=None` → `max_patch` on a patch dataset, `blend_schedule=None` → `production_schedule_for(...)`, `calibration_fraction=None` → `production_split_for(...)` (0.3 single-vector / 0.5 patch, keyed on `patch_grid` presence — the harness's spelling of the app's `supports_patch_regions` predicate). | Yes — the app changes its default and the harness keeps serving the old one *under the name "default"*. |
 
 Prefer delegation whenever it's possible; it's the only fix that can't rot.
@@ -507,6 +507,6 @@ Digests ignore comments, docstrings, and formatting (including the magic trailin
 
 A new mirror is a new `Mirror(...)` entry in `MIRRORS`, plus `--update`. Give it a `note` that says what to re-check when the app moves, not just what the code is.
 
-When the harness *intentionally* differs from the app at a mirror, record why in `divergence=`. That doesn't exempt it from the digest — you still re-pin — but the text prints whenever the mirror trips, so whoever reconciles it next knows which differences are deliberate. The ported indicators use this: they take their histories as arguments rather than reading the app's `_cached_steps`, which is plumbing, not a rule change.
+When the harness *intentionally* differs from the app at a mirror, record why in `divergence=`. That doesn't exempt it from the digest — you still re-pin — but the text prints whenever the mirror trips, so whoever reconciles it next knows which differences are deliberate. The ported indicators use this: they take their histories as arguments rather than reading a `_ProgressCache`'s `steps`, which is plumbing, not a rule change.
 
 Named experiment arms (`whole_image`, `max_patch_hac`, `max_patch_pca_hac`) are *supposed* to differ from the app — that's what makes them arms. This gate is about the default arm only.
