@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
 from vtscore.converters.base import MediaConverter, resolve_media_bytes
 from vtscore.plugins import PluginField
+
+logger = logging.getLogger(__name__)
 
 
 def _run_paddleocr(media_bytes: bytes, filename: str, language: str) -> list | None:
@@ -16,28 +19,28 @@ def _run_paddleocr(media_bytes: bytes, filename: str, language: str) -> list | N
 
         from vtscore.media.image.decode import decode_bounded_rgb  # noqa: PLC0415
     except ImportError:
-        print("Image2TextMediaConverter requires Pillow and numpy")
+        logger.warning("image2text requires Pillow and numpy; producing no text")
         return None
 
     try:
         from paddleocr import PaddleOCR  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
     except ImportError:
-        print("Image2TextMediaConverter requires PaddleOCR: pip install paddleocr paddlepaddle")
+        logger.warning("image2text requires PaddleOCR: pip install paddleocr paddlepaddle")
         return None
 
     try:
         # Bounded decode: OCR reads a transcript, not pixel coordinates, so a
         # huge scan can be capped without changing what comes back.
         image, _scale = decode_bounded_rgb(media_bytes)
-    except Exception as e:
-        print(f"Image2TextMediaConverter: failed to open {filename}: {e}")
+    except Exception:
+        logger.error("Failed to open image %s", filename, exc_info=True)
         return None
 
     try:
         model = _make_paddleocr(PaddleOCR, language)
         return model.ocr(np.array(image), cls=True)
-    except Exception as e:
-        print(f"Image2TextMediaConverter: PaddleOCR failed on {filename}: {e}")
+    except Exception:
+        logger.error("PaddleOCR failed on %s", filename, exc_info=True)
         return None
 
 

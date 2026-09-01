@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import subprocess
 import tempfile
 from pathlib import Path
@@ -10,6 +11,8 @@ from typing import Any
 from vtscore.converters.base import MediaConverter
 from vtscore.media.audio.ffmpeg import get_ffmpeg_exe
 from vtscore.plugins import PluginField
+
+logger = logging.getLogger(__name__)
 
 
 class Video2AudioMediaConverter(MediaConverter):
@@ -104,16 +107,18 @@ class Video2AudioMediaConverter(MediaConverter):
                     check=True,
                 )
             except FileNotFoundError:
-                print("Video2AudioMediaConverter requires ffmpeg - install it or 'pip install imageio-ffmpeg'")
+                logger.warning("video2audio requires ffmpeg - install it or 'pip install imageio-ffmpeg'")
                 return []
             except subprocess.CalledProcessError as e:
                 stderr_text = (
                     e.stderr[:500].decode(errors="replace") if isinstance(e.stderr, bytes) else (e.stderr or "")[:500]
                 )
-                print(f"ffmpeg failed for {filename}: {stderr_text}")
+                # ``stderr_text`` is ffmpeg's own diagnostic; the CalledProcessError
+                # traceback adds only our three call frames, so no exc_info here.
+                logger.error("ffmpeg failed for %s: %s", filename, stderr_text)
                 return []
             except subprocess.TimeoutExpired:
-                print(f"ffmpeg timed out for {filename}")
+                logger.warning("ffmpeg timed out for %s", filename)
                 return []
 
             wav_file = Path(wav_path)
