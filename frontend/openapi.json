@@ -15510,7 +15510,7 @@
     },
     "/api/projection/build": {
       "post": {
-        "description": "Body: ``{\"ids\": [...]?, \"force\": bool?}``.  The bin shape is not a request\nparameter \u2014 it is derived from the dataset's media type (see\n:func:`_shape_for`).\n\nReturns immediately.  If the pyramid is already cached or persisted, returns\n``\"ready\"``.  Only the first build of a dataset, where no layout exists yet,\nruns UMAP in the background and returns a ``job_id`` for polling via\n``GET /api/projection/meta``.\n\n``force`` overrides every short-circuit: it discards the existing layout\n(cached + persisted for a full build, or the in-memory subset layout for an\n``ids`` build) and runs a fresh UMAP fit over the current items, returning a\nnew ``projection_id``.  This is the Browser's \"Re-project\" action.",
+        "description": "Body: ``{\"ids\": [...]?, \"force\": bool?}``.  The bin shape is not a request\nparameter \u2014 it is derived from the dataset's media type.\n\nReturns immediately.  If the pyramid is already cached or persisted, returns\n``\"ready\"``.  Only the first build of a dataset, where no layout exists yet,\nruns UMAP in the background and returns a ``job_id`` for polling via\n``GET /api/projection/meta``.\n\n``ids`` projects only the supplied media (e.g. the positive results of a\nFind run), fitting UMAP on just their high-d vectors into an ephemeral\nsubset layout held alongside the full-dataset one.\n\n``force`` overrides every short-circuit: it discards the existing layout\n(cached + persisted for a full build, or the in-memory subset layout for an\n``ids`` build) and runs a fresh UMAP fit over the current items, returning a\nnew ``projection_id``.  This is the Browser's \"Re-project\" action.",
         "operationId": "build_projection",
         "responses": {
           "200": {
@@ -15563,7 +15563,7 @@
     },
     "/api/projection/meta": {
       "get": {
-        "description": "The bin shape is derived from the dataset's media type (see\n:func:`_shape_for`), not a query parameter.  When the pyramid is ready,\nincludes bounds, zoom levels, cell sizing, point count, the dataset's media\ntype, and the ``bin_shape`` the canvas should render.",
+        "description": "The bin shape is derived from the dataset's media type, not a query\nparameter.  When the pyramid is ready, includes bounds, zoom levels, cell\nsizing, point count, the dataset's media type, and the ``bin_shape`` the\ncanvas should render.",
         "operationId": "projection_meta",
         "responses": {
           "200": {
@@ -15588,7 +15588,7 @@
     },
     "/api/projection/subset/remove": {
       "post": {
-        "description": "Re-bins the frozen subset layout onto its existing grid minus the removed\npoints: the remaining points keep their exact 2-D positions and bins, only\ncounts/representatives change.  The ``projection_id`` (layout identity) is\npreserved and a bumped ``content_version`` busts the otherwise-immutable\ntile cache.  The served ``bounds`` shrink to the survivors' extent so the\nclient re-frames to what's left (zoom-to-fit, minimap) instead of keeping\ndead space where the culled points were \u2014 safe because bin assignment is\norigin-independent; bounds only drive client framing.  Returns the updated\nsubset meta for the dataset's shape.\n\nPowers the Browser's \"Remove from Good\" cull, which marks the items Bad via\n``/api/medias/vote-bulk`` and then calls this to make them disappear.",
+        "description": "The remaining points keep their exact 2-D positions and bins; only counts\nand representatives change.  The ``projection_id`` (layout identity) is\npreserved and a bumped ``content_version`` busts the otherwise-immutable\ntile cache.  The served ``bounds`` shrink to the survivors' extent so the\nclient re-frames to what's left (zoom-to-fit, minimap) instead of keeping\ndead space where the culled points were.  Returns the updated subset meta\nfor the dataset's shape.\n\nPowers the Browser's \"Remove from Good\" cull, which marks the items Bad via\n``/api/medias/vote-bulk`` and then calls this to make them disappear.",
         "operationId": "remove_from_subset",
         "requestBody": {
           "content": {
@@ -15629,7 +15629,7 @@
     },
     "/api/projection/tiles/{level}/{tx}/{ty}": {
       "get": {
-        "description": "The bin shape is derived from the dataset's media type (see\n:func:`_shape_for`).  Because the projection is frozen at ingest, tiles are\nimmutable for the life of the dataset and can be cached aggressively by the\nclient.",
+        "description": "The bin shape is derived from the dataset's media type.  Because the\nprojection is frozen at ingest, tiles are immutable for the life of the\ndataset and can be cached aggressively by the client.",
         "operationId": "get_tile",
         "responses": {
           "200": {

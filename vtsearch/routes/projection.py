@@ -120,7 +120,10 @@ def remove_from_subset(body: dict):
     The remaining points keep their exact 2-D positions and bins; only counts
     and representatives change.  The ``projection_id`` (layout identity) is
     preserved and a bumped ``content_version`` busts the otherwise-immutable
-    tile cache.  Returns the updated subset meta for the dataset's shape.
+    tile cache.  The served ``bounds`` shrink to the survivors' extent so the
+    client re-frames to what's left (zoom-to-fit, minimap) instead of keeping
+    dead space where the culled points were.  Returns the updated subset meta
+    for the dataset's shape.
 
     Powers the Browser's "Remove from Good" cull, which marks the items Bad via
     ``/api/medias/vote-bulk`` and then calls this to make them disappear.

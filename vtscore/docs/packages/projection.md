@@ -28,6 +28,13 @@ for the background-job runner the builds ride on.
 | `vtscore/projection/squarebin.py` | Vectorised square-grid binning |
 | `vtscore/projection/persistence.py` | Serialisation helpers shared with the ZIP container |
 
+**The lifecycle** - what turns those stages into a browsable map.
+
+| Module | Concern |
+|--------|---------|
+| `vtscore/projection/store.py` | Where a layout lives on disk: `pkl_path_for`, `persist_projection`, `load_persisted_layout`, and the `projection_params_match` freshness guard |
+| `vtscore/projection/service.py` | The state machine: `build_layout`, `fit_and_install_layout`, the subset fit and cull, and the meta / labels / tile payloads |
+
 **Signposts** - the "street sign" naming layer.
 
 | Module | Concern |
@@ -38,6 +45,7 @@ for the background-job runner the builds ride on.
 | `vtscore/projection/signpost_captioners.py` | The generative text tier (image VLM, audio captioner) |
 | `vtscore/projection/signpost_build.py` | Fit Toponymy over a frozen layout and flatten its topic tree into labels |
 | `vtscore/projection/demo_signposts.py` | Ground-truth signposts read from a dataset's hierarchical `category` |
+| `vtscore/projection/signpost_serve.py` | The read side: which set to letter a layout with, and the background self-heal of a stale one |
 
 ---
 
@@ -244,8 +252,10 @@ lights up the moment it is browsed.
 ## Persistence
 
 `persistence.py` holds the serialisation helpers only; the ZIP container
-module (`vtscore.datasets.container`) does the actual writing, and the
-Browse routes own the HTTP surface.
+module (`vtscore.datasets.container`) does the actual writing; `store.py`
+resolves which container a dataset writes to and judges whether what is
+already stored is still fresh; and the Browse routes own nothing but the
+HTTP surface.
 
 Storing a projection and its pyramid **is** a carve-out from the
 No-Persisted-Vectors rule, and a narrow one: what gets written is the
@@ -262,6 +272,7 @@ it.
 - [`embedding.md`](embedding.md) - `get_embedding_matrix` produces the
   input, and `l2_normalize` is why the euclidean metric is correct.
 - [`state.md`](state.md) - `DatasetContext._projection` / `_pyramids` /
-  `_region_labels` and their subset twins.
+  `_region_labels` and their subset twins, which `service.py` is the one
+  place that drives.
 - [`datasets.md`](datasets.md) - the ingest projection stage, and the
   container format that persists the result.
