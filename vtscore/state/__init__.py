@@ -146,13 +146,14 @@ def get_media(media_id: int) -> dict[str, Any] | None:
 def clear_medias() -> None:
     """Clear all loaded medias from the active dataset's context.
 
-    Drops the cached embedding matrix, the 2-D projection + tile pyramids
-    (one per bin shape), coverage atlas, dataset display name override, and
-    the per-step progress model cache so RAM is released immediately rather
-    than waiting for the next access.
+    Drops every derived cache on the context (see
+    :meth:`~vtscore.state.core.DatasetContext.reset_derived_caches`) plus the
+    coverage atlas, dataset display name override, and the per-step progress
+    model cache, so RAM is released immediately rather than waiting for the
+    next access.
 
-    Clearing ``_projection``/``_pyramids`` is also a correctness guard: the
-    build route serves a cached pyramid without re-checking the media-id
+    Dropping the cached layouts is also a correctness guard: the build routes
+    serve a cached full / subset pyramid without re-checking the media-id
     signature, so a stale pyramid left over a reload-with-changed-contents
     would otherwise be returned for the new data.
     """
@@ -161,17 +162,7 @@ def clear_medias() -> None:
     with _state_lock:
         ctx = _core.get_active_context()
         ctx.medias.clear()  # bumps media_revision via MediasDict
-        ctx._emb_matrix_ids = None
-        ctx._emb_matrix = None
-        ctx._emb_matrix_revision = None
-        ctx._region_matrix_ids = None
-        ctx._region_matrix = None
-        ctx._region_matrix_revision = None
-        ctx._region_media_index = None
-        ctx._region_index_per_row = None
-        ctx._projection = None
-        ctx._pyramids = {}
-        ctx._region_labels = None
+        ctx.reset_derived_caches()
         ctx.coverage_atlas = None
         ctx.dataset_display_name = None
     # ``_progress_lock`` is acquired strictly outside ``_state_lock`` so the

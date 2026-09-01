@@ -505,6 +505,98 @@ class DatasetContext:
         "merge_near_duplicates",
     )
 
+    # ------------------------------------------------------------------
+    # Derived-cache families (deliberately adjacent to ``__slots__``)
+    # ------------------------------------------------------------------
+    # Every slot above is either a *source of truth* for this dataset or a
+    # *derived cache* - something rebuildable, at some cost, from the medias
+    # or from the persisted layout.  The four families below name the caches
+    # and :meth:`reset_derived_caches` drops them by family; every call site
+    # that used to hand-clear a list of private slots goes through it now.
+    #
+    # ``_NON_DERIVED_SLOTS`` names the rest explicitly so the two sets can be
+    # asserted to *partition* ``__slots__`` (see
+    # ``tests_lib/core/test_derived_cache_reset.py``).  That partition is the
+    # whole point: a slot added to ``__slots__`` fails the test until it is
+    # filed as a cache or as state, instead of being quietly missed the way
+    # every hand-written clear-list here had already missed eleven slots by
+    # the time issue #3377 counted them.
+    _DERIVED_CACHE_SLOTS: dict[str, frozenset[str]] = {
+        # Contiguous embedding / flattened-region matrices and their keys.
+        "matrices": frozenset(
+            {
+                "_emb_matrix_ids",
+                "_emb_matrix",
+                "_emb_matrix_revision",
+                "_region_matrix_ids",
+                "_region_matrix",
+                "_region_matrix_revision",
+                "_region_media_index",
+                "_region_index_per_row",
+            }
+        ),
+        # Secondary media lookups (origin key / md5 / name) and their key.
+        "lookups": frozenset(
+            {
+                "_origin_key_index",
+                "_md5_index",
+                "_name_index",
+                "_lookup_index_revision",
+            }
+        ),
+        # VTSBrowse full-dataset layout: projection, per-shape pyramids,
+        # signposts, and the in-flight build / relabel job ids that would
+        # otherwise keep pointing at a discarded layout.
+        "projection": frozenset(
+            {
+                "_projection",
+                "_pyramids",
+                "_full_job_id",
+                "_region_labels",
+                "_relabel_job_id",
+            }
+        ),
+        # VTSBrowse subset layout: the mirror of the above, plus the id list
+        # the cached subset was fit against and its tile-cache token.
+        "subset": frozenset(
+            {
+                "_subset_projection",
+                "_subset_pyramids",
+                "_subset_ids",
+                "_subset_job_id",
+                "_subset_content_version",
+                "_subset_region_labels",
+            }
+        ),
+    }
+
+    #: Slots that are state, not cache - never touched by
+    #: :meth:`reset_derived_caches`.  Each is here for a reason:
+    #:
+    #: * ``dataset_id`` / ``dataset_display_name`` / ``merge_near_duplicates``
+    #:   and the four embedder-binding slots are dataset identity + config.
+    #: * ``_medias`` / ``_media_revision`` are the source of truth the caches
+    #:   are derived *from*.
+    #: * ``coverage_atlas`` is derived, but it is persisted in the dataset
+    #:   pickle and restored by the load pipeline, which owns its lifetime.
+    #: * ``_emb_sidecar_disabled`` is a one-way latch, not a cache: it records
+    #:   that an in-place vector rewrite happened, which no rebuild undoes.
+    _NON_DERIVED_SLOTS: frozenset[str] = frozenset(
+        {
+            "dataset_id",
+            "_medias",
+            "_media_revision",
+            "coverage_atlas",
+            "dataset_display_name",
+            "_emb_sidecar_disabled",
+            "_text_embedder",
+            "_patch_embedder",
+            "_structural_embedder",
+            "_binding_explicit",
+            "merge_near_duplicates",
+        }
+    )
+
     def __init__(self, dataset_id: str = "") -> None:
         self.dataset_id: str = dataset_id
         # ``_media_revision`` must exist before ``_medias`` so the MediasDict's
@@ -596,6 +688,69 @@ class DatasetContext:
         ``invalidate_embedding_matrix``.
         """
         self._media_revision += 1
+
+    # ------------------------------------------------------------------
+    # Derived-cache invalidation
+    # ------------------------------------------------------------------
+
+    def reset_derived_caches(
+        self,
+        *,
+        matrices: bool = True,
+        lookups: bool = True,
+        projection: bool = True,
+        subset: bool = True,
+    ) -> None:
+        """Drop this context's derived caches, by family.
+
+        The single place any of the ``_DERIVED_CACHE_SLOTS`` above are
+        cleared.  Before issue #3377 four call sites each hand-wrote their
+        own list of private slots to ``None``, and all four had drifted from
+        ``__slots__``: ``clear_medias`` alone was missing the four lookup
+        slots, the two full-layout job ids, and all six subset slots, so a
+        reload left a stale subset layout that
+        ``POST /api/projection/subset`` would serve verbatim whenever the new
+        id set happened to match the old one - the exact failure the
+        ``clear_medias`` docstring already called out for ``_projection`` and
+        ``_pyramids``.
+
+        Each keyword drops one family; pass ``False`` to keep one. The
+        default (everything) is what a wholesale medias clear wants.
+
+        Does **not** bump :attr:`media_revision`. Dropping a cache is not a
+        change to the medias, and the revision-keyed caches distinguish the
+        two: a caller signalling an in-place vector rewrite (
+        :func:`vtscore.embedding.matrix.invalidate_embedding_matrix`) bumps
+        it itself.
+        """
+        with _state_lock:
+            if matrices:
+                self._emb_matrix_ids = None
+                self._emb_matrix = None
+                self._emb_matrix_revision = None
+                self._region_matrix_ids = None
+                self._region_matrix = None
+                self._region_matrix_revision = None
+                self._region_media_index = None
+                self._region_index_per_row = None
+            if lookups:
+                self._origin_key_index = None
+                self._md5_index = None
+                self._name_index = None
+                self._lookup_index_revision = None
+            if projection:
+                self._projection = None
+                self._pyramids = {}
+                self._full_job_id = None
+                self._region_labels = None
+                self._relabel_job_id = None
+            if subset:
+                self._subset_projection = None
+                self._subset_pyramids = {}
+                self._subset_ids = None
+                self._subset_job_id = None
+                self._subset_content_version = 0
+                self._subset_region_labels = None
 
     # ------------------------------------------------------------------
     # Role-typed embedder binding
