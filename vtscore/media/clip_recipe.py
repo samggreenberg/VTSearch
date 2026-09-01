@@ -66,12 +66,19 @@ def parse_clip_box(raw: Any) -> tuple[int, int, int, int] | None:
 
 
 def _as_int(raw: Any) -> int | None:
-    """Coerce a params value to ``int``, or ``None`` when it isn't one."""
+    """Coerce a params value to ``int``, or ``None`` when it isn't one.
+
+    ``OverflowError`` is caught alongside the usual coercion failures: a
+    non-finite float survives a pickle round-trip, and ``int(float("inf"))``
+    raises it.  Everything in this module degrades to ``None`` rather than
+    raising, so the replay paths can fall through to whole-file handling
+    instead of propagating out of a byte route.
+    """
     if raw is None:
         return None
     try:
         return int(raw)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
 
 

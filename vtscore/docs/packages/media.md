@@ -25,6 +25,7 @@ and is the foundation every other `vtscore` subsystem builds on.
 | `vtscore/media/cropping.py` | Shared normalised-box cropping helpers |
 | `vtscore/media/patch_embed.py` | Raw patch grids for image embedders (the MaxPatch region geometry) |
 | `vtscore/media/lazy_clip.py` | Derive a clip's bytes from its source on demand |
+| `vtscore/media/clip_recipe.py` | Parse the `origin.params` clip dialects, shared by both replay paths |
 | `vtscore/media/provenance.py` | Human-readable provenance for converter- and clipper-derived media |
 | `vtscore/media/structural.py` | Structural (instance-matching) features and geometric verification |
 | `vtscore/media/structural_geometry.py` | Parametrised geometric verification models |
@@ -37,7 +38,7 @@ and is the foundation every other `vtscore` subsystem builds on.
 
 | Sub-package | Embedders | Also holds |
 |-------------|-----------|------------|
-| `vtscore/media/audio/` | CLAP (general / music), AST, BEATs, ParaSpeechCLAP, Whisper | clipper, cleaner, ffmpeg + decode helpers, silence detection, speech extractor, synthetic audio generator |
+| `vtscore/media/audio/` | CLAP (general / music), AST, BEATs, ParaSpeechCLAP, Whisper | clipper, cleaner, ffmpeg + decode helpers, WAV byte slicing (`wav.py`), silence detection, speech extractor, synthetic audio generator |
 | `vtscore/media/image/` | SigLIP, SigLIP-L, SigLIP 2, SigLIP2-L, CLIP, DINOv2 (patch / single), DINOv3 (patch / single), EUPE (patch / single), SIFT-VLAD | clipper, cleaner, decode, edge trim, thumbnail, YOLO extractor, OCR extractor, face localizer, demo sources |
 | `vtscore/media/text/` | E5, BGE | clipper (paragraph / sentence), cleaner |
 | `vtscore/media/video/` | X-CLIP, LanguageBind, VideoMAE v2 | clipper (tile / scene-detect), cleaner, ffmpeg decode, frame sampling, `clip_box` crop |
