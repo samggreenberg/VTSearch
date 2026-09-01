@@ -1794,3 +1794,57 @@ class TestDistractorPullPlan:
         plan = mods["build"]._plan_distractor_pull(200_000)
         cap = mods["build"].UCSF_INDUSTRY_CAPACITY
         assert all(want <= cap[industry] for industry, want in plan)
+
+
+class TestFetchThrottle:
+    """Concurrency is only defensible because it gives ground.
+
+    UCSF is a shared public archive and README/GRID-RUNBOOK both warn against
+    widening the pull.  The measurement that justifies 3 concurrent fetches --
+    ~120k requests at ~3/s with zero 429/503/509, and 4,003 failures that were
+    all per-document 403s -- shows we are *below* their limit, not where it is.
+    So the pool has to detect the limit rather than assume it, and these pin the
+    behaviour that makes that true.
+    """
+
+    def test_a_rate_limit_costs_a_worker_and_buys_delay(self, mods):
+        t = mods["ucsf"]._Throttle(3)
+        assert (t.workers, t.penalties) == (3, 0)
+        t.penalise()
+        assert t.workers == 2
+        assert t.penalties == 1
+        assert t._delay >= 1.0
+
+    def test_sustained_pushback_converges_on_serial(self, mods):
+        t = mods["ucsf"]._Throttle(3)
+        for _ in range(10):
+            t.penalise()
+        # It gives up workers until it is doing exactly what it did before the
+        # change -- one request at a time -- rather than hammering through.
+        assert t.workers == 1
+        assert t._delay <= 60.0
+
+    def test_success_recovers_slowly(self, mods):
+        t = mods["ucsf"]._Throttle(2)
+        t.penalise()
+        hot = t._delay
+        for _ in range(5):
+            t.reward()
+        assert t._delay < hot
+        # One 429 must not cost the rest of a 200k run, but recovery is gradual
+        # rather than instant or the pool would oscillate against the limit.
+        assert t._delay > 0
+
+    def test_rate_limited_is_distinct_from_a_dead_document(self, mods):
+        # The whole point of the separate class: a 403 is permanent and the
+        # document must be skipped; a 429 means the document is still there and
+        # we asked too fast.  Retrying a 403 wastes the run; skipping a 429
+        # silently shrinks the corpus.
+        assert issubclass(mods["common"].RateLimited, mods["common"].FetchError)
+        assert not issubclass(mods["common"].FetchError, mods["common"].RateLimited)
+
+    def test_default_pool_is_three(self, mods, monkeypatch):
+        monkeypatch.delenv("VTS_DOCMARKS_FETCH_WORKERS", raising=False)
+        assert mods["ucsf"]._fetch_workers() == 3
+        monkeypatch.setenv("VTS_DOCMARKS_FETCH_WORKERS", "1")
+        assert mods["ucsf"]._fetch_workers() == 1

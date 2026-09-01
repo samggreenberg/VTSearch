@@ -380,6 +380,17 @@ class FetchError(RuntimeError):
     """A source could not be fetched, with an actionable reason."""
 
 
+class RateLimited(FetchError):
+    """The server asked us to slow down.
+
+    Separated from :class:`FetchError` because it is the one failure that is
+    about *us* rather than about the document: a 403 on a restricted PDF is
+    permanent and must be skipped, while a 429 means back off and the document
+    is still there.  Conflating them would have the fetcher discard documents it
+    was merely asking for too quickly.
+    """
+
+
 def require_kaggle_credentials(slug: str) -> None:
     """Raise :class:`FetchError` unless a Kaggle credential is in place.
 
@@ -502,6 +513,8 @@ def http_download(url: str, dest: Path, *, chunk: int = 1 << 20, session: Any = 
     headers = {"Range": f"bytes={have}-"} if have else {}
     get = session.get if session is not None else requests.get
     with get(url, headers=headers, stream=True, timeout=(20, 120)) as resp:
+        if resp.status_code in (429, 503, 509):
+            raise RateLimited(f"{url} returned HTTP {resp.status_code}")
         if resp.status_code not in (200, 206):
             raise FetchError(f"{url} returned HTTP {resp.status_code}")
         mode = "ab" if have and resp.status_code == 206 else "wb"

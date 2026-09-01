@@ -51,7 +51,8 @@ import time
 from pathlib import Path
 from typing import Any, Iterator, Optional
 
-from concurrent.futures import ProcessPoolExecutor, as_completed
+import threading
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 
 from . import _common
 from ._common import Mark, Page
@@ -260,6 +261,67 @@ def doc_to_page(
     )
 
 
+def _fetch_workers() -> int:
+    """Concurrent PDF fetches.  Small on purpose.
+
+    README and GRID-RUNBOOK both warn that widening this is rude to a shared
+    public archive.  That warning was written as a caution rather than from a
+    measurement, and the measurement now exists: ~120,000 requests at ~3/s drew
+    zero 429/503/509, and the 4,003 failures in the 2026-08-31 build were
+    per-document **403s** -- PDFs indexed but not public, permanent and
+    unrelated to pacing.
+
+    Absence of a limit at 3 req/s is not proof that 9 req/s is welcome, so the
+    pool does not assume: :class:`_Throttle` shrinks it and inserts delay the
+    moment UCSF says 429, which turns a guess about their tolerance into a
+    measurement of it.
+    """
+    import os
+
+    return max(1, int(os.environ.get("VTS_DOCMARKS_FETCH_WORKERS", "3")))
+
+
+class _Throttle:
+    """Concurrency gate that gives ground when the server pushes back.
+
+    Backs off multiplicatively on a rate-limit response and gives up a worker
+    each time, so sustained pushback converges on serial fetching rather than
+    hammering through it.  Recovers slowly on success, so one 429 does not cost
+    the rest of the run.
+    """
+
+    def __init__(self, workers: int) -> None:
+        self._lock = threading.Lock()
+        self._sem = threading.Semaphore(workers)
+        self._delay = 0.0
+        self.workers = workers
+        self.penalties = 0
+
+    def __enter__(self) -> "_Throttle":
+        self._sem.acquire()
+        with self._lock:
+            delay = self._delay
+        if delay:
+            time.sleep(delay)
+        return self
+
+    def __exit__(self, *exc: Any) -> None:
+        self._sem.release()
+
+    def penalise(self) -> None:
+        with self._lock:
+            self.penalties += 1
+            self._delay = min(60.0, max(1.0, self._delay * 2))
+            if self.workers > 1:
+                self.workers -= 1
+                self._sem.acquire(blocking=False)
+
+    def reward(self) -> None:
+        if self._delay:
+            with self._lock:
+                self._delay = max(0.0, self._delay * 0.9)
+
+
 def _render_workers() -> int:
     """How many render processes to run.
 
@@ -357,7 +419,6 @@ def fetch_and_render(
 
     indexed: list[tuple[int, Page]] = []
     order = 0
-    session = requests.Session()
 
     def _drain(futures: dict, block_until: int) -> None:
         while len(futures) > block_until:
@@ -388,21 +449,54 @@ def fetch_and_render(
                     )
                 )
 
-    with ProcessPoolExecutor(max_workers=workers) as pool:
+    throttle = _Throttle(_fetch_workers())
+    local = threading.local()
+
+    def _session() -> Any:
+        # requests.Session is not documented thread-safe; one per thread costs
+        # nothing and keeps keep-alive working within each.
+        if not hasattr(local, "s"):
+            local.s = requests.Session()
+        return local.s
+
+    def _download(doc: dict[str, Any]) -> tuple[dict[str, Any], Optional[str], Optional[Exception]]:
+        doc_id = str(doc.get("id", ""))
+        if len(doc_id) < 4:
+            return doc, None, None
+        pdf_path = pdf_dir / f"{doc_id}.pdf"
+        if pdf_path.exists() and pdf_path.stat().st_size > 0:
+            return doc, doc_id, None  # cached: no request, no throttle
+        for attempt in range(4):
+            try:
+                with throttle:
+                    _common.http_download(pdf_url(doc_id), pdf_path, session=_session())
+                throttle.reward()
+                return doc, doc_id, None
+            except _common.RateLimited as exc:
+                # Not the document's fault -- back off and ask again.  A 403 is
+                # permanent and drops through to the branch below; conflating
+                # the two would discard documents we merely asked for too fast.
+                throttle.penalise()
+                if attempt == 3:
+                    return doc, None, exc
+            except Exception as exc:  # noqa: BLE001 - a dead id must not kill a 200k pull
+                pdf_path.unlink(missing_ok=True)
+                return doc, None, exc
+        return doc, None, None
+
+    with (
+        ProcessPoolExecutor(max_workers=workers) as pool,
+        ThreadPoolExecutor(max_workers=max(1, _fetch_workers())) as fetchers,
+    ):
         futures: dict = {}
-        for doc in docs:
-            doc_id = str(doc.get("id", ""))
-            if len(doc_id) < 4:
+        for doc, doc_id, exc in fetchers.map(_download, docs):
+            if exc is not None:
+                if on_error:
+                    on_error(str(doc.get("id", "")), exc)
+                continue
+            if doc_id is None:
                 continue
             pdf_path = pdf_dir / f"{doc_id}.pdf"
-            try:
-                _common.http_download(pdf_url(doc_id), pdf_path, session=session)
-            except Exception as exc:  # noqa: BLE001 - a dead id must not kill a 200k pull
-                if on_error:
-                    on_error(doc_id, exc)
-                pdf_path.unlink(missing_ok=True)
-                continue
-
             futures[pool.submit(_render_to_disk, str(pdf_path), str(out_images), doc_id, dpi, max_pages_per_doc)] = (
                 doc,
                 order,
@@ -412,6 +506,9 @@ def fetch_and_render(
             # rendered page's metadata and starve nothing but memory.
             _drain(futures, inflight_cap)
         _drain(futures, 0)
+
+    if throttle.penalties:
+        print(f"  ucsf: backed off {throttle.penalties} time(s); fetch workers now {throttle.workers}")
 
     # Restore document order.  Tier assignment hashes the page id so it does not
     # care, but a manifest that reshuffles between runs is a needless diff and
