@@ -14911,7 +14911,7 @@
     },
     "/api/medias/batch": {
       "post": {
-        "description": "Callers request only the IDs they need (e.g. the ones currently visible\nin a virtual-scrolling viewport), keeping payload size bounded.  Use\n:func:`list_media_ids` (``GET /api/medias/ids``) to discover which\nmedia IDs exist in the loaded dataset.\n\nReturns a JSON array of media metadata dicts; unknown IDs are silently\nomitted.  Each item's ``custom_metadata`` is the media type's\n``display_metadata`` - including the curated \"Source\" / \"Derived Via\" /\n\"Imported Via\" provenance lines distilled from ``origin.params`` - with\nany importer-supplied ``custom_metadata`` layered on top.",
+        "description": "Callers request only the IDs they need (e.g. the ones currently visible\nin a virtual-scrolling viewport), keeping payload size bounded.  Use\n:func:`list_media_ids` (``GET /api/medias/ids``) to discover which\nmedia IDs exist in the loaded dataset.\n\nReturns a JSON array of media metadata dicts; unknown IDs are silently\nomitted.  Each item's ``custom_metadata`` is the media type's\n``display_metadata`` - including the curated \"Source\" / \"Derived Via\" /\n\"Imported Via\" provenance lines distilled from ``origin.params`` - with\nany importer-supplied ``custom_metadata`` layered on top, minus the\n``embedding`` plumbing key.",
         "operationId": "batch_medias",
         "requestBody": {
           "content": {

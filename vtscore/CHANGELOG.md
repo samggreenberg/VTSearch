@@ -142,6 +142,17 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`vtscore.utils.hits.hit_custom_metadata(media)`** — the `custom_metadata`
+  sanitiser `build_media_hit` already applied is now a public export (issue
+  #3368). It returns a fresh copy of a media's importer metadata with the
+  `embedding` key stripped, and exists as a public name because every surface
+  that hands that dict to an outside caller — hits, the app's detector and
+  processor scoring routes, `POST /api/medias/batch`, the label-export blob —
+  has to agree on what it strips. A top-level key filter cannot: a
+  pre-computed vector shipped via `custom_metadata_map` rides *inside*
+  `custom_metadata`, where it would balloon the payload or fail JSON encoding
+  outright. Behaviour of `build_media_hit` is unchanged.
+
 - **`PluginBase.get_field_options(field_key, current_values)`** — the
   dynamic-select hook now lives on the shared plugin base instead of on the
   importer families alone, so every plugin family inherits it and a results
@@ -189,6 +200,17 @@ instead, since every commit on `dev` is effectively a new app release.)
   is loaded onto it. Its Kaldi `compute-fbank-feats` front-end is ported from
   torchaudio's pure-PyTorch implementation rather than taken as a dependency,
   since torchaudio's wheels are built against a pinned torch.
+
+### Fixed
+
+- **A pre-computed vector nested in `custom_metadata` no longer reaches a
+  labelset** (issue #3368). `LabelSet.from_clips_and_votes` copied a media's
+  `custom_metadata` onto every `LabeledElement` verbatim, so a dataset
+  imported through `custom_metadata_map`'s vector channel wrote a numpy array
+  into the detector JSON - a hard `json.dump` failure, and the vector
+  persistence the no-persisted-vectors rule forbids. The dict now goes through
+  `hit_custom_metadata` (see Added above); `LabeledElement.metadata` is `None` when
+  the vector was its only key. No other importer metadata is affected.
 
 ### Changed
 
