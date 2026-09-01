@@ -15,7 +15,9 @@ from marshmallow import ValidationError
 from werkzeug.exceptions import HTTPException
 
 from vtscore.concurrency.progress import update_find_progress
+from vtscore.embedding.media_vectors import EMBEDDINGS_KEY
 from vtscore.utils.hashing import content_md5, new_md5
+from vtscore.utils.hits import hit_custom_metadata
 
 if TYPE_CHECKING:
     from vtscore.plugins import PluginBase
@@ -641,6 +643,41 @@ def run_plugin_or_error(plugin: PluginBase, method: str, *args):
         verb = method.replace("_", " ").capitalize()
         return None, error_response(f"{verb} failed: {exc}", 500, detail=format_exception_detail(exc))
     return result, None
+
+
+#: Media keys never serialized into an API response (large binary/vector data).
+#: ``embeddings`` is the v3 dict-keyed vector store
+#: (:mod:`vtscore.embedding.media_vectors`); ``embedding`` is its dropped
+#: legacy singular form, kept here so a media dict rehydrated from an old
+#: pickle can't leak one either.
+_HEAVYWEIGHT_KEYS = (
+    EMBEDDINGS_KEY,
+    "embedding",
+    "media_bytes",
+    "media_string",
+    "thumbnail_bytes",
+)
+
+
+def media_info_for_response(media: dict) -> dict:
+    """Return a copy of *media* safe to serialize into an API response.
+
+    Two filters, because one is not enough.  The top-level
+    :data:`_HEAVYWEIGHT_KEYS` sweep drops the vectors and the raw bytes, and
+    then ``custom_metadata`` is re-derived through
+    :func:`vtscore.utils.hits.hit_custom_metadata`: an importer may ship a
+    pre-computed vector *nested* inside it via ``custom_metadata_map``, which
+    a top-level key filter cannot see and which the free-form
+    ``fields.Dict`` in the response schemas waves straight through.  Left in,
+    it either balloons the response or fails JSON encoding outright.
+
+    The re-derived dict is fresh, so a route that mutates the returned
+    ``custom_metadata`` cannot reach back into the loaded media.
+    """
+    info = {k: v for k, v in media.items() if k not in _HEAVYWEIGHT_KEYS}
+    if isinstance(info.get("custom_metadata"), dict):
+        info["custom_metadata"] = hit_custom_metadata(media)
+    return info
 
 
 def windowed_sort_extras(results: list[dict], threshold: float | None) -> dict[str, Any]:

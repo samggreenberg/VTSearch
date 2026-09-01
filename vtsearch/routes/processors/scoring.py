@@ -11,7 +11,8 @@ from concurrent.futures import ThreadPoolExecutor
 from flask_smorest import Blueprint, abort
 
 from vtscore.concurrency.memory_budget import cap_workers_by_memory
-from vtscore.embedding.media_vectors import EMBEDDINGS_KEY, media_embedding
+from vtscore.embedding.media_vectors import media_embedding
+from vtsearch.routes._shared import media_info_for_response
 from vtsearch.routes.processors.crud import _build_extractor, _build_localizer
 from vtsearch.schemas.processors import (
     AutoExtractResponseSchema,
@@ -33,23 +34,6 @@ processors_scoring_bp = Blueprint(
     description="Run extractors / localizers against the active dataset, either one-off or via autorun.",
 )
 
-# Keys excluded from API responses (large binary/vector data).  ``embeddings``
-# is the v3 dict-keyed vector store (``vtscore/embedding/media_vectors.py``);
-# ``embedding`` is its dropped legacy singular form, kept here so a media dict
-# rehydrated from an old pickle can't leak one either.
-_HEAVYWEIGHT_KEYS = (
-    EMBEDDINGS_KEY,
-    "embedding",
-    "media_bytes",
-    "media_string",
-    "thumbnail_bytes",
-)
-
-
-def _media_info_for_response(media: dict) -> dict:
-    """Return a copy of *media* without heavyweight fields."""
-    return {k: v for k, v in media.items() if k not in _HEAVYWEIGHT_KEYS}
-
 
 def _apply_processor_to_medias(processor, snap: dict, method: str, result_key: str) -> list[dict]:
     """Run a processor (extractor or localizer) on all medias, returning hits.
@@ -66,7 +50,7 @@ def _apply_processor_to_medias(processor, snap: dict, method: str, result_key: s
         media = snap[media_id]
         hits = func(media)
         if hits:
-            info = _media_info_for_response(media)
+            info = media_info_for_response(media)
             info[result_key] = hits
             results.append(info)
     return results

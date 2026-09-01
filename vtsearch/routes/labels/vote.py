@@ -28,7 +28,7 @@ from vtsearch.state import (
     get_active_detector_context,
     resolve_media_ids,
 )
-from vtscore.utils.hits import build_media_hit
+from vtscore.utils.hits import build_media_hit, hit_custom_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +141,11 @@ def _build_entry_metadata(media: dict) -> dict:
         for k, v in origin.get("params", {}).items():
             meta.setdefault(k, v)
 
-    importer_custom = media.get("custom_metadata")
+    # Sanitised rather than read straight off the media: an importer may ship
+    # a pre-computed vector nested inside ``custom_metadata`` via
+    # ``custom_metadata_map``, and this blob becomes both an export column and
+    # a JSON response field.
+    importer_custom = hit_custom_metadata(media)
     if importer_custom:
         meta.update(importer_custom)
     # Humanize "File Size" for export so rows read "8.0 KB" instead of raw

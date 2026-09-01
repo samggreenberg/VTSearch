@@ -12,7 +12,7 @@ import json
 
 import numpy as np
 
-from vtscore.utils.hits import build_media_hit
+from vtscore.utils.hits import build_media_hit, hit_custom_metadata
 
 
 class TestCustomMetadataOnHit:
@@ -76,3 +76,27 @@ class TestCustomMetadataOnHit:
         assert hit["origin"] == {"importer": "server_folder"}
         assert hit["origin_name"] == "a.wav"
         assert hit["label"] == "good"
+
+
+class TestHitCustomMetadataDirectly:
+    """The sanitiser is public because the app's route helpers reuse it.
+
+    ``vtsearch.routes._shared.media_info_for_response``, ``POST
+    /api/medias/batch`` and the enriched label export all call it, so its
+    contract is pinned here rather than only through ``build_media_hit``.
+    """
+
+    def test_strips_the_embedding_channel(self):
+        media = {"custom_metadata": {"asset_id": "XY-7", "embedding": np.zeros(4, dtype=np.float32)}}
+        assert hit_custom_metadata(media) == {"asset_id": "XY-7"}
+
+    def test_empty_dict_for_a_media_without_usable_metadata(self):
+        for value in ({}, None, "not-a-dict", 7):
+            assert hit_custom_metadata({"custom_metadata": value}) == {}, value
+        assert hit_custom_metadata({}) == {}
+
+    def test_result_is_a_fresh_dict(self):
+        media = {"custom_metadata": {"asset_id": "XY-7"}}
+        out = hit_custom_metadata(media)
+        out["asset_id"] = "mutated"
+        assert media["custom_metadata"] == {"asset_id": "XY-7"}
