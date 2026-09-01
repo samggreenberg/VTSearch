@@ -423,11 +423,10 @@ def _reset_full_projection(ctx) -> None:
     the in-memory projection and every shape's cached pyramid, and drop the
     persisted entries from the container — otherwise a later load, or the
     not-yet-rebuilt other bin shape, would resurrect the stale coordinates
-    (which are shared across shapes).
+    (which are shared across shapes).  The subset layout is deliberately left
+    standing: it is an independent fit the user may still be browsing.
     """
-    ctx._projection = None
-    ctx._pyramids = {}
-    ctx._region_labels = None
+    ctx.reset_derived_caches(matrices=False, lookups=False, projection=True, subset=False)
     pkl_path = _pkl_path_for(ctx.dataset_id)
     if pkl_path is None:
         return
@@ -573,12 +572,10 @@ def _build_subset(ctx, requested_ids: list[int], bin_shape: str, *, force: bool 
         # A different subset — or a forced re-projection — drops the stale layout
         # before fitting.  ``force`` re-fits even when the ids are unchanged, so
         # the survivors of a cull re-spread instead of keeping their old slots.
-        ctx._subset_projection = None
-        ctx._subset_pyramids = {}
+        # Drops the layout, its pyramids, the in-flight job id, the tile-cache
+        # token, and the signposts anchored in the dropped layout.
+        ctx.reset_derived_caches(matrices=False, lookups=False, projection=False, subset=True)
         ctx._subset_ids = sorted_ids
-        ctx._subset_job_id = None
-        ctx._subset_content_version = 0  # fresh layout — reset the tile cache token
-        ctx._subset_region_labels = None  # signposts were anchored in the dropped layout
 
     return _start_subset_umap_build(ctx, sorted_ids, matrix, bin_shape, force=force)
 
