@@ -67,7 +67,7 @@
 # grid is that the new arms are comparable to the old ones.
 #
 # BUT THE OLD CELLS ARE NOT REUSED.  #2877 ran on dev `53dd14cb4`; this runs on
-# `917e7c0ec`, and the production defaults moved in between (#3287/#3290's
+# `faa9fa9ac`, and the production defaults moved in between (#3287/#3290's
 # per-space calibration fraction, #3308's exclusion floor). Mixing cells across
 # those would confound the arm axis with a dev-commit axis, so EVERY arm -
 # including the incumbents `-1`, `-3` and `-4` - is re-run here on one commit.
