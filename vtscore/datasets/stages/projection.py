@@ -1,10 +1,19 @@
 """Projection stage: compute + persist the 2-D Browse projection at ingest.
 
 Opt-in stage that fits UMAP on the cached embedding matrix, builds the
-hex-tile pyramid, caches both on the context, and persists them into the
-dataset container so the Browse canvas opens instantly instead of paying for
-the fit lazily on first visit. Best-effort by contract: the dataset is
-already registered and usable before this runs.
+tile pyramid, letters it with signposts, caches everything on the context,
+and persists it into the dataset container so the Browse canvas opens
+instantly instead of paying for the fit lazily on first visit. Best-effort by
+contract: the dataset is already registered and usable before this runs.
+
+The fit itself is not implemented here — it is
+:func:`vtscore.projection.service.fit_and_install_layout`, the same call the
+lazy Browse-time build makes. That sharing is load-bearing rather than tidy:
+a layout pre-built under different knobs (or a different bin shape) than the
+serve path resolves is *worse* than no pre-build at all, because the first
+Browse open either throws it away and re-fits or serves an arrangement nobody
+configured. What is left in this module is the load-pipeline wiring: progress
+reporting through the loading tracker, and the best-effort contract.
 """
 
 from __future__ import annotations
@@ -17,30 +26,14 @@ from vtscore.datasets.stages._common import _TOTAL_LOAD_STEPS
 if TYPE_CHECKING:
     from vtscore.state import DatasetContext
 
-
-def _persist_projection_to_container(dataset_id: str, proj, pyr) -> None:
-    """Best-effort save of the freshly-built projection into the dataset container.
-
-    Mirrors ``vtsearch.routes.projection._persist_projection`` but resolves
-    the container path through the dataset registry from inside the load
-    pipeline.  Failures are swallowed (logged): the in-memory projection is
-    already cached on the context, and a missing on-disk copy just means the
-    next Browse open recomputes it.
-    """
-    from vtscore.datasets.registry import get_dataset  # noqa: PLC0415
-
-    entry = get_dataset(dataset_id)
-    if entry is None:
-        return
-    pkl_path = entry.get("pkl_path")
-    if not pkl_path:
-        return
-    try:
-        from vtscore.datasets.container import append_projection  # noqa: PLC0415
-
-        append_projection(pkl_path, proj, pyr)
-    except Exception:
-        traceback.print_exc()
+#: What the loading bar says during each of the build's three phases (see
+#: :data:`vtscore.projection.service.BUILD_STEPS`), in the load pipeline's own
+#: voice rather than the job runner's.
+_PHASE_MESSAGES = {
+    1: "Building 2-D projection…",
+    2: "Building tile pyramid…",
+    3: "Naming regions…",
+}
 
 
 def _signpost_texts_stage(ctx: DatasetContext, tracker) -> None:
@@ -87,24 +80,16 @@ def _maybe_signpost_texts_stage(ctx: DatasetContext, fin, enabled: bool) -> None
         traceback.print_exc()
 
 
-def _build_projection_stage(ctx: DatasetContext, tracker, dataset_id: str) -> None:
-    """Compute + persist the 2-D UMAP projection and its signposts at ingest (opt-in).
+def _build_projection_stage(ctx: DatasetContext, tracker) -> None:
+    """Compute + persist the 2-D UMAP projection and its signposts at ingest.
 
     Runs inline as a load stage (after the dataset is registered) so the
     Browse canvas opens instantly instead of paying for the UMAP fit lazily
-    on first visit.  This mirrors the on-demand
-    ``POST /api/projection/build`` path: fit UMAP on the cached embedding
-    matrix, build the hex-tile pyramid, run the signpost labeling over the
-    frozen layout (see ``vtscore.projection.signpost_prep``), cache
-    everything on the context, and persist it into the dataset container.
-
-    "Mirrors" includes the knobs: the fit goes through the same
-    :func:`~vtscore.projection.params.resolve_projection_params` the route
-    uses, never ``fit_projection``'s signature defaults.  A layout fit under
-    different params than the route would resolve is worse than no pre-build
-    at all — the first Browse open either throws it away (params mismatch, so
-    UMAP re-runs and the opt-in bought nothing) or keeps a layout nobody
-    configured.
+    on first visit.  Delegates the whole build to
+    :func:`~vtscore.projection.service.fit_and_install_layout`, which is what
+    ``POST /api/projection/build`` runs in the background — same knobs, same
+    bin shape, same signpost pass, same persistence — so the layout this
+    leaves behind is exactly the one the serve path would have produced.
 
     Best-effort by contract: the dataset is already registered and usable
     before this runs, so any failure here (including a cancellation during
@@ -113,12 +98,7 @@ def _build_projection_stage(ctx: DatasetContext, tracker, dataset_id: str) -> No
     reason.
     """
     from vtscore.embedding.matrix import get_embedding_matrix  # noqa: PLC0415
-    from vtscore.projection import (  # noqa: PLC0415
-        bin_shape_for_media_type,
-        build_pyramid,
-        fit_projection,
-        resolve_projection_params,
-    )
+    from vtscore.projection import service  # noqa: PLC0415
 
     def _progress(current: int, total: int, message: str) -> None:
         tracker.check_cancelled()
@@ -131,6 +111,11 @@ def _build_projection_stage(ctx: DatasetContext, tracker, dataset_id: str) -> No
             total_steps=_TOTAL_LOAD_STEPS,
         )
 
+    def _on_phase(step: int, message: str) -> None:
+        # Also the cancellation checkpoint between phases: ``_progress``
+        # raises through the tracker, so a cancel lands before the next one.
+        _progress(0, 0 if step == 1 else 1, _PHASE_MESSAGES.get(step, message))
+
     try:
         # Cluster in the score embedder's space (patch-else-text; v3 routing).
         sorted_ids, matrix = get_embedding_matrix(ctx, ctx.routed_embedder("score"))
@@ -139,41 +124,12 @@ def _build_projection_stage(ctx: DatasetContext, tracker, dataset_id: str) -> No
     if matrix.size == 0:
         return
 
-    _progress(0, 0, "Building 2-D projection…")
-
-    def _on_fit_progress(status: str, message: str, current: int, total: int) -> None:
-        _progress(current, total, message or "Building 2-D projection…")
-
-    params = resolve_projection_params(ctx)
-    proj = fit_projection(
-        matrix,
+    service.fit_and_install_layout(
+        ctx,
         list(sorted_ids),
-        n_neighbors=params.n_neighbors,
-        min_dist=params.min_dist,
-        compact=params.compact,
-        on_progress=_on_fit_progress,
+        matrix,
+        service.shape_for(ctx),
+        on_phase=_on_phase,
+        on_progress=_progress,
     )
-    _progress(0, 1, "Building tile pyramid…")
-    # The bin shape is a fixed property of the dataset's media type — squares
-    # for browsable-thumbnail media (image/video/document), hexes otherwise —
-    # so build exactly the one shape this dataset will ever use.
-    media_type = next(iter(ctx.medias.values())).get("media_type") if ctx.medias else None
-    pyr = build_pyramid(proj, bin_shape=bin_shape_for_media_type(media_type))
-
-    # Letter the frozen layout before it's cached/persisted, so the first
-    # Browse open finds the signs together with the map (the canvas fetches
-    # labels once per projection_id).  Reuses the texts the pre-registry
-    # stage cached into the pickle; itself best-effort — a labeling failure
-    # must not cost the user the projection they just paid for.
-    try:
-        from vtscore.projection.signpost_prep import prep_signposts  # noqa: PLC0415
-
-        prep_signposts(ctx, proj, subset=False, on_progress=_progress)
-    except Exception:
-        traceback.print_exc()
     _progress(1, 1, "Projection ready")
-
-    ctx._projection = proj
-    ctx._pyramids[pyr.bin_shape] = pyr
-
-    _persist_projection_to_container(dataset_id, proj, pyr)

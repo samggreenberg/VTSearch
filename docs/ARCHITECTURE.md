@@ -317,11 +317,14 @@ VTSearch/
 │   │   ├── pyramid.py              Stage 2: hex/square-tile zoom pyramid
 │   │   ├── params.py               Projection knobs (n_neighbors, min_dist, …) + their identity
 │   │   ├── persistence.py          Projection (de)serialization (npz <-> meta)
+│   │   ├── store.py                Where a layout lives on disk + the params-freshness guard
+│   │   ├── service.py              The layout lifecycle: build / re-bin / reset / subset, and the meta + tile payloads
 │   │   ├── labels.py               Signposts — RegionLabelSet + the labeler signature a stale set is checked on
 │   │   ├── signpost_prep.py        Signposts — region selection + sampling ahead of captioning
 │   │   ├── signpost_captioners.py  Signposts — pluggable captioners (zero-shot tags, toponymy, …)
 │   │   ├── signpost_texts.py       Signposts — per-media-type tag vocabularies (browse_signpost_vocab override)
 │   │   ├── signpost_build.py       Signposts — builds the RegionLabelSet for a frozen layout
+│   │   ├── signpost_serve.py       Signposts — resolving which set to serve over a layout (and self-healing a stale one)
 │   │   └── demo_signposts.py       Signposts — pre-baked signposts shipped with the demo datasets
 │   │
 │   ├── concurrency/                Async jobs, memory budgeting, progress tracking
@@ -423,7 +426,7 @@ VTSearch/
 │       ├── jobs.py                 Job management (/api/jobs/*)
 │       ├── sessions.py             Session management (/api/sessions/*)
 │       ├── achievements.py         Achievement routes (/api/achievements/*)
-│       ├── projection.py           VTSBrowse projection routes (/api/projection/*)
+│       ├── projection.py           VTSBrowse projection routes (/api/projection/*); the lifecycle is vtscore/projection/service.py
 │       ├── datasets/               Dataset routes; listings, load, staging, registry, status, ui
 │       ├── detectors/              Detector routes; crud, labels, registry, scoring, find, export
 │       ├── processors/             Processor routes; crud, scoring (extractors/localizers)
