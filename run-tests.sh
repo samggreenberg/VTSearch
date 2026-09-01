@@ -422,6 +422,18 @@ if ! $_is_slides_run; then
         _blocked "vtscore package docs check failed"
         exit 1
     fi
+
+    # Extension docs: docs/EXTENDING-*.md and vtscore/docs/extending/ state the
+    # contract for the same plugin ABCs in their own words, so each can drift
+    # from the code and from the other. This holds both to the class: every
+    # member named in a contract table exists, and neither presents a public
+    # wrapper as the override point when an _impl hook sits behind it. AST
+    # sweep, imports nothing, ~1s. See scripts/check-extension-docs.py.
+    echo "Checking extension docs..."
+    if ! python scripts/check-extension-docs.py ; then
+        _blocked "extension docs check failed"
+        exit 1
+    fi
 fi
 
 # Slide decks: every deck manifest names fragments that exist and figures that

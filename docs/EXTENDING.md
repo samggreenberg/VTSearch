@@ -5,16 +5,43 @@ cross-cutting sections: authentication, dependencies, and a one-stop
 checklist for every extension type. Start here; open the child doc that
 matches what you want to build.
 
+## Two doc sets, one contract
+
+Most extension points are documented **twice**, on purpose, for two
+different readers:
+
+- **These `docs/EXTENDING-*.md` guides are the in-repo front door.** They
+  are self-contained: interface contract, where the file goes, how
+  discovery works, app-tier wiring (routes, forms, the pickers the
+  frontend renders), and a complete worked example. Read these if you are
+  adding a plugin *to this repository*.
+- **[`vtscore/docs/extending/`](../vtscore/docs/extending/README.md) is
+  the library contract.** It ships inside the semver'd `vtscore` package
+  and covers the same ABCs from the library side, plus the things only an
+  out-of-tree author needs: `importlib.metadata` entry-point registration,
+  packaging, and the Flask-free import rules. Read these if you are
+  shipping a plugin as a **separate distribution**.
+
+Where the two overlap, they describe one class, so they can contradict
+each other. `scripts/check-extension-docs.py` (a `./run-tests.sh` gate)
+holds them to the code: every member either set names in a contract table
+must exist, and neither may present a public wrapper as the override point
+when the class defines an `_impl` hook behind it. When you change a plugin
+ABC, update both sides and let the gate confirm it.
+
 ## Extension guides
 
-| Guide | What you build |
-|-------|----------------|
-| [EXTENDING-plugins.md](EXTENDING-plugins.md) | Data importers, datasource importers, results exporters, label importers, settings importers/exporters/sources, labelset sources: the form-driven auto-discovered plugin families that share a common registry-based architecture (the generated family inventory lives there too). |
-| [EXTENDING-media.md](EXTENDING-media.md) | Media types, embedders, clippers, cleaners, converters, and media sources (anything in `vtscore/media/` or `vtscore/converters/`). |
-| [EXTENDING-processors.md](EXTENDING-processors.md) | Detectors, localizers, and extractors: the three kinds of `Processor`. |
+| Guide | What you build | Library contract |
+|-------|----------------|------------------|
+| [EXTENDING-plugins.md](EXTENDING-plugins.md) | Data importers, datasource importers, results exporters, label importers, settings importers/exporters/sources, labelset sources: the form-driven auto-discovered plugin families that share a common registry-based architecture (the generated family inventory lives there too). | [dataset-importers](../vtscore/docs/extending/dataset-importers.md), [results-exporters](../vtscore/docs/extending/results-exporters.md), [label-importers](../vtscore/docs/extending/label-importers.md), [labelset-sources](../vtscore/docs/extending/labelset-sources.md) |
+| [EXTENDING-media.md](EXTENDING-media.md) | Media types, embedders, clippers, cleaners, converters, and media sources (anything in `vtscore/media/` or `vtscore/converters/`). | [media-types](../vtscore/docs/extending/media-types.md), [embedders](../vtscore/docs/extending/embedders.md), [clippers](../vtscore/docs/extending/clippers.md), [converters](../vtscore/docs/extending/converters.md) |
+| [EXTENDING-processors.md](EXTENDING-processors.md) | Detectors, localizers, and extractors: the three kinds of `Processor`. | — (app tier only; processors are not auto-discovered) |
 
 Each guide explains the interface contract, where files go, how
-discovery/registration works, and includes a complete example.
+discovery/registration works, and includes a complete example. The
+library-tier index — including the families with no app-tier guide of
+their own (datasource importers, seed importers, media sources) — is
+[`vtscore/docs/extending/README.md`](../vtscore/docs/extending/README.md).
 
 ## Cross-cutting reference
 
