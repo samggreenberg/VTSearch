@@ -404,7 +404,8 @@ A flow can legitimately carry both: a nested view shows `← Back` at the top to
 - **Format**: `ruff format .`
 - **Spell check**: `codespell --toml pyproject.toml`
 - **Dependency check**: `python -m deptry .`
-- **Dead code audit** (manual, pre-release): see `.vulture-whitelist.py` for the full invocation (60% confidence, with marshmallow/pydantic field directories excluded and pytest/Flask/dunder noise filtered). Run before each release; not a CI gate.
+- **Dead code audit** (manual, pre-release): `python scripts/vulture-audit.py` — the script owns the invocation (scan paths, excludes, ignore lists, confidence floor), so there is nothing to copy-paste. Scans every tier that defines or consumes first-party Python: `vtsearch/`, `app.py`, `tests/`, `vtscore/`, `tests_lib/`, `scripts/`. Run before each release; the **findings** are not a gate (see `docs/RELEASE.md` step 1 for the triage rules).
+- **Check the vulture whitelist**: `python scripts/vulture-audit.py --check-whitelist` (a `./run-tests.sh` lane; fails when an entry in `.vulture-whitelist.py` suppresses no finding). This is the half of vulture that *is* mechanically checkable — it keeps the whitelist from asserting things nothing can verify — and it means adding an entry is no longer free: whitelist what is genuinely reflective, delete what is genuinely dead.
 
 ## What `run-tests.sh` gates
 
@@ -440,10 +441,11 @@ Wrapping everything: a wall-clock cap (`VTSEARCH_TEST_TIMEOUT`, default **1800s 
 | Types | `pyright` (pinned via `PYRIGHT_PYTHON_FORCE_VERSION`) | Full run only | Scope is `pyrightconfig.json`. |
 | Known CVEs | `pip-audit` | Full run only | Audits the resolved venv, not the requirements files. `PIP_AUDIT_IGNORE` in the script lists advisories with no upstream fix; re-audit and remove an entry once a patched release exists. |
 | Frontend audit | `cd frontend && npm audit --omit=dev` | Full run, `core`, `frontend` | Prod deps only — dev-only advisories don't ship. |
+| Vulture whitelist | `scripts/vulture-audit.py --check-whitelist` | Full run only | Whitelist hygiene, **not** the dead-code audit: fails when an entry in `.vulture-whitelist.py` suppresses no finding. The findings themselves stay a manual pre-release chore, because a hit on a public `vtscore` name is not evidence of anything. Whole-repo scan, ~5s. |
 | Frontend unit tests | `cd frontend && npm run test:ci` | Full run or `frontend` **only** — deliberately off the fast `core` path | Headless Vitest. |
 | Python tests | `pytest tests/ tests_lib/ -n auto --dist loadgroup` | Every run except a `frontend`-only group | |
 
-**Group runs skip the whole-repo stage-3 gates** (pyright, pip-audit, and the frontend gates unless the group asks for them) so the edit/test loop stays in the seconds — the skip is announced in the output, and `VTSEARCH_FULL_GATES=1` forces the complete chain on a group run. Stage 1 runs on every invocation. This is a deliberate trade: the fast inner loop may miss a type error or CVE, which is why **a full `./run-tests.sh` remains mandatory before pushing** — with exactly one exception, `./run-tests.sh slides`, whose narrower scope is a proof rather than a gamble (see the Test Groups table) and which blocks itself the moment the diff stops being slides-only.
+**Group runs skip the whole-repo stage-3 gates** (pyright, pip-audit, the vulture whitelist check, and the frontend gates unless the group asks for them) so the edit/test loop stays in the seconds — the skip is announced in the output, and `VTSEARCH_FULL_GATES=1` forces the complete chain on a group run. Stage 1 runs on every invocation. This is a deliberate trade: the fast inner loop may miss a type error or CVE, which is why **a full `./run-tests.sh` remains mandatory before pushing** — with exactly one exception, `./run-tests.sh slides`, whose narrower scope is a proof rather than a gamble (see the Test Groups table) and which blocks itself the moment the diff stops being slides-only.
 
 ## Test Groups
 

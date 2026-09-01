@@ -48,22 +48,6 @@ def _lookups_for_snap(
     return build_media_lookup(snap)
 
 
-def _embedder_for_active_dataset(snap: dict[int, dict[str, Any]] | None) -> str:
-    """Return the embedder name to use for fresh resolve+embed work.
-
-    Thin alias for the canonical model-keying marker
-    :func:`vtscore.embedding.binding.score_marker_embedder_for_snap`: the
-    **score** embedder (patch-else-text; the v3 routing table) derived from
-    the medias in *snap* so newly embedded cross-dataset vectors line up with
-    the in-dataset vectors the MLP is scored against, falling back to the
-    recorded primary embedder for a slot-less single-vector dataset and ``""``
-    when *snap* is empty.
-    """
-    from vtscore.embedding.binding import score_marker_embedder_for_snap  # noqa: PLC0415
-
-    return score_marker_embedder_for_snap(snap)
-
-
 def _detector_embedder(det_ctx, snap: dict[int, dict[str, Any]] | None) -> str:
     """The embedder a *detector* resolves and embeds its labels in.
 
