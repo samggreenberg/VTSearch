@@ -261,6 +261,29 @@ This is not an absolute bar — a genuinely better contract can be worth it — 
 - **Say so where extension authors will see it:** an `[Unreleased]` entry in `vtscore/CHANGELOG.md`, plus the relevant guide under `docs/EXTENDING-plugins.md` / `vtscore/docs/extending/`.
 - **Raise it with the user before committing to it.** An extension-facing break is a decision to make on purpose, out loud.
 
+### "Dead code" in `vtscore/` is a claim you cannot verify by grepping
+
+Out-of-tree extensions import `vtscore` symbols this repository cannot see, so a
+repo-wide grep proves a symbol is unused *by us* — never that it is unused. Treat
+"no callers found" as a prompt to classify, not a licence to delete:
+
+- **Delete freely:** private (`_`-prefixed) symbols, `vtsearch/` app-tier internals,
+  frontend code, tests, and one-off scripts.
+- **Keep the name, retire the body:** anything exported from a `vtscore` package
+  `__init__`, documented under `vtscore/docs/`, a plugin ABC method, a registry or
+  `register_*` function, an entry-point-facing name, or a public module-level
+  constant. Collapse it to a thin delegation, or deprecate it with an
+  `[Unreleased]` note in `vtscore/CHANGELOG.md`.
+- **Public-but-undocumented is still public.** A name without a leading underscore
+  is importable even when it is absent from `__all__` and from the docs.
+
+A zero-registrant extension point is the shape of a *working* extension point, not
+a dead one: `register_*` hooks, ABC methods no shipped subclass overrides, and
+"backwards-compatible getter" helpers all look unused from inside this repo by
+design. Removing one is a deliberate library break — raise it with the user first,
+per the bullets above. (This rule was written after a full-codebase audit wrote up
+four documented `vtscore` surfaces as deletions on grep evidence alone.)
+
 ## Frontend Scope: Desktop Only
 
 VTSearch is a desktop web app. **Do not design, implement, or test for mobile or narrow viewports.** No responsive breakpoints, no touch-targeted controls, no mobile-only layouts, no concerns about portrait orientation. If a design discussion raises "what about mobile?", the answer is "we don't care." When evaluating a layout, assume a standard desktop viewport and skip mobile considerations entirely.
