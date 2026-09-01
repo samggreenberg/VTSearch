@@ -425,7 +425,8 @@ exclude_lines = [
 # used to fail any test run that happened after `slides/render.sh`.
 skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,static,model_cache,.git,*.ipynb,package-lock.json,*venv*,.venv,venv,*docs/experiments/*/report.html,*docs/experiments/*/viewer.html,*vtscore/projection/assets*,*slides/_build*,*slides/_out*"
 # Domain terms (clap/siglip/xclip = embedder names; wrest/caller/recaller =
-# extension scaffold names), legitimate code identifiers (numer/denom in
+# names of the removed integration scaffolds, kept because vtscore/CHANGELOG.md
+# records their removal), legitimate code identifiers (numer/denom in
 # slope formulas, medias as the global state proxy, goup as a TS method,
 # ans as a shell read-loop variable in scripts/slurm, repid as the
 # camelCase TS mirror of the projection's rep_id field),
