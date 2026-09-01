@@ -219,6 +219,4 @@ class TestAppSchemaCoversTheModels:
         # If one gets added to the schema, drop it from the list rather than
         # leaving a note that contradicts the code.
         contradicted = self.DELIBERATE_OMISSIONS & set(AppSettingsSchema().fields)
-        assert not contradicted, (
-            f"DELIBERATE_OMISSIONS names fields the schema does declare: {sorted(contradicted)}"
-        )
+        assert not contradicted, f"DELIBERATE_OMISSIONS names fields the schema does declare: {sorted(contradicted)}"
