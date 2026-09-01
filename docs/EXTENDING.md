@@ -197,11 +197,17 @@ See [EXTENDING-plugins.md § Adding a Label Importer](EXTENDING-plugins.md#addin
 ### New Settings Source Checklist
 
 See [EXTENDING-plugins.md § Adding a Settings Source](EXTENDING-plugins.md#adding-a-settings-source).
+Unlike the one-shot families, a source stays bound to a user and is
+consulted on every settings read and write, so read
+[§ How the sync engine works](EXTENDING-plugins.md#how-the-sync-engine-works)
+before you start — it carries the contracts (cheap freshness probe,
+dirty-key protection, lock ordering) that the base class cannot express.
 
 - [ ] Create `vtsearch/settings_io/sources/<name>/__init__.py`
 - [ ] Subclass `SettingsSource`, set `name`, `display_name`, `description`, `fields`
 - [ ] Implement `_do_load(self, field_values)`: return a settings dict (override the underscored hook, not `load`)
 - [ ] Implement `_do_save(self, settings_data, field_values)`: persist settings (override the underscored hook, not `save`)
+- [ ] Implement `_do_peek_version(self, field_values)`: a **cheap** freshness token (mtime, ETag, HEAD) — it runs on the hot path of every settings read
 - [ ] Expose `SETTINGS_SOURCE = YourSource()` at module level
 - [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
 - [ ] Test: start the app and check `GET /api/settings-sources` includes your source
