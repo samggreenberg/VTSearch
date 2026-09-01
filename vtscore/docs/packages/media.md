@@ -126,6 +126,7 @@ embedders. Subclasses implement four things:
 | `embed_text(text)`                            | optional | Embed a query into the same space    |
 | `_embed_media_bulk_impl(medias)`              | optional | Batched forward; default loops       |
 | `description_wrappers`                        | optional | Prompts used by `embed_text_enriched`; `[]` (the default, and the measured answer for most models) makes it plain `embed_text` |
+| `loaded_backbone()`                           | optional | Return `(model, processor)` for the raw backbone. The default reads the `_model` / `_processor` convention; override only if your backbone lives elsewhere |
 
 Threading and lock contract:
 
@@ -190,14 +191,19 @@ class MediaClipper(ABC):
     def clip(self, media: dict) -> list[dict]: ...
 ```
 
-Two optional hooks let the dataset-load pipeline tune a clipper at
+One optional hook lets the dataset-load pipeline tune a clipper at
 load time:
 
-- `resolve_for_durations(durations)` (`vtscore/media/clipper.py`) -
-  dataset-level: decide once, given every item's duration.
 - `resolve_for_media(media)` (`vtscore/media/clipper.py`) - per-item:
   auto-route to a different concrete clipper based on each item
-  (e.g. pass-through for short audio, tiling for long).
+  (e.g. pass-through for short audio, tiling for long). Called from
+  `_run_clipper_step` (`vtscore/datasets/clipper_chain.py`).
+
+The ABC also carries `resolve_for_durations(durations)`, a **reserved**
+dataset-level hook that nothing calls: routing used to be decided once
+from the whole duration list and is now decided per item. The name stays
+because it is published contract, but an out-of-tree override of it is
+inert - write the logic in `resolve_for_media` instead.
 
 Clippers may declare `parameters` (UI-tunable knobs) and override
 `with_params()` to return a copy with overridden values. The **resolved**

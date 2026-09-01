@@ -8,7 +8,49 @@ only when a release is cut - there is no auto-bump on commit. (The companion
 [`vtsearch`](../README.md) application uses a git-derived timestamp version
 instead, since every commit on `dev` is effectively a new app release.)
 
-## [Unreleased]
+### Added
+
+- **`MediaEmbedder.loaded_backbone()` - a supported way to reach an embedder's
+  raw model** (issue #3395). Returns `(model, processor)`, loading the model
+  first if needed; the second element is `None` for backbones that need no
+  separate processor. The default implementation reads the `_model` /
+  `_processor` attribute convention that `load_models()` itself relies on, so
+  every embedder built the usual way gets it for free, and an embedder that
+  holds its backbone elsewhere overrides this one documented method. It raises
+  `RuntimeError` rather than returning `None` when no backbone is resident
+  after loading.
+
+  **For plugin authors:** purely additive - nothing is required of an existing
+  embedder. The change worth knowing about is on the *consumer* side: the
+  `vtscore.embedding.loader` getters `get_clap_model`, `get_xclip_model` and
+  `get_e5_model` keep their names, signatures and return shapes, but now go
+  through `loaded_backbone()` instead of reaching into each subclass's private
+  `_get_model_and_processor()` / `_get_model()` via `cast(Any, emb)`. Those six
+  private helpers are gone; nothing outside the getters called them, and a
+  private name was never contract. If you were calling one anyway, call
+  `loaded_backbone()` instead.
+
+### Changed
+
+- **`MediaClipper.resolve_for_durations` is documented as reserved and inert**
+  (issue #3395). The method is unchanged and still part of the ABC - removing
+  it would turn a third-party clipper's silently-inert override into a hard
+  error - but the docstring and all three clipper guides claimed it was "called
+  once per dataset at load time", which stopped being true when auto-routing
+  moved to the per-item `resolve_for_media`. Nothing invokes it. **If you
+  override it, your override never runs**; move the logic to
+  `resolve_for_media`.
+
+- **`apply_converter_to_demo`'s `embedder_name` is documented as accepted and
+  ignored** (issue #3395). Conversion changes the media type, so an embedder
+  chosen for the source type does not apply to the outputs - the framework
+  embed stage resolves the target type's embedder itself. The parameter is
+  kept, since out-of-tree callers may still pass it.
+
+- **`vtscore.timing.profile_covers` keeps its export; its docstring no longer
+  claims callers it does not have** (issue #3395). It named the tuning script's
+  coverage report and the dataset-load path, neither of which calls it. It is
+  public API with no in-repo caller, and is documented as such.
 
 ### Changed
 

@@ -136,6 +136,51 @@ class TestValidateChain:
 # ---------------------------------------------------------------------------
 
 
+class TestResolutionHooks:
+    """``resolve_for_media`` is the hook the pipeline calls; the dataset-level
+    ``resolve_for_durations`` is reserved and inert (issue #3395).
+
+    The docs claimed for a while that ``resolve_for_durations`` ran once per
+    dataset at load time, which meant a third-party clipper could ship an
+    override that never fired.  Pin the real contract here so the claim cannot
+    quietly come back.
+    """
+
+    def test_chain_run_calls_resolve_for_media_and_not_resolve_for_durations(self, monkeypatch):
+        import vtscore.media as media_mod
+        from vtscore.datasets.clipper_chain import apply_chain_to_clips
+        from vtscore.media.clipper import MediaClipper
+
+        calls: list[str] = []
+
+        class _SpyClipper(MediaClipper):
+            @property
+            def name(self) -> str:
+                return "text_sentence"
+
+            @property
+            def media_type(self) -> str:
+                return "text"
+
+            def clip(self, media):
+                return [media]
+
+            def resolve_for_media(self, media):
+                calls.append("media")
+                return self
+
+            def resolve_for_durations(self, durations):
+                calls.append("durations")
+                return self
+
+        monkeypatch.setattr(media_mod, "get_clipper", lambda name: _SpyClipper())
+
+        clips = {1: _make_text_media(1, "First. Second.")}
+        apply_chain_to_clips(clips, [{"kind": "clipper", "name": "text_sentence", "params": {}}])
+
+        assert calls == ["media"], "resolve_for_durations must not be invoked by the load pipeline"
+
+
 class TestApplyChainToClips:
     def test_single_clipper_chain_stamps_legacy_keys(self, monkeypatch):
         """A length-1 clipper chain produces the same origin stamp shape

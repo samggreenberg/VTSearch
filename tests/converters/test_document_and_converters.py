@@ -775,6 +775,45 @@ class TestLoadDemoWithConverter:
                 medias={},
             )
 
+    def test_apply_converter_to_demo_accepts_and_ignores_embedder_name(self):
+        """``embedder_name`` is kept for out-of-tree callers but has no effect.
+
+        Conversion changes the media type, so an embedder chosen for the
+        source type does not apply to the outputs (issue #3395). The
+        parameter must keep accepting anything - including a name that does
+        not resolve - without raising or changing the result.
+        """
+        from vtscore.datasets.loader import _apply_converter_to_demo
+
+        pdf_bytes = _make_minimal_pdf("Convert me")
+
+        def _fresh() -> dict:
+            return {
+                1: {
+                    "id": 1,
+                    "media_type": "document",
+                    "filename": "test.pdf",
+                    "media_bytes": pdf_bytes,
+                    "media_path": "",
+                    "category": "test_cat",
+                }
+            }
+
+        without: dict = _fresh()
+        _apply_converter_to_demo(converter_name="document2image", dataset_name="d", medias=without)
+
+        with_bogus: dict = _fresh()
+        _apply_converter_to_demo(
+            converter_name="document2image",
+            dataset_name="d",
+            medias=with_bogus,
+            embedder_name="no_such_embedder",
+        )
+
+        assert list(with_bogus) == list(without)
+        assert [m["media_type"] for m in with_bogus.values()] == [m["media_type"] for m in without.values()]
+        assert all(m.get("embedding") is None for m in with_bogus.values())
+
     def test_apply_converter_to_demo_empty_medias(self):
         """_apply_converter_to_demo with empty medias should produce empty output."""
         from vtscore.datasets.loader import _apply_converter_to_demo

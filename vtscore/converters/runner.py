@@ -396,7 +396,7 @@ def apply_converter_to_demo(
     converter_name: str,
     dataset_name: str,
     medias: dict[int, dict[str, Any]],
-    embedder_name: str = "",  # noqa: ARG001 - kept for call-site compatibility; framework picks the embedder now
+    embedder_name: str = "",  # noqa: ARG001 - accepted and ignored by design; see the docstring
     on_progress: Optional[ProgressCallback] = None,
 ) -> None:
     """Convert all medias in-place using the named converter.
@@ -406,6 +406,13 @@ def apply_converter_to_demo(
     origin records the demo dataset and the converter used.  Outputs
     leave with ``embedding=None``; the framework embed stage fills them
     in.
+
+    :param embedder_name: **Accepted and ignored.**  Conversion changes the
+        media type, so an embedder chosen for the *source* type does not
+        apply to the outputs - the framework embed stage resolves the
+        target type's embedder itself.  The parameter is kept (rather than
+        removed) because out-of-tree callers may still pass it positionally
+        or by keyword, and dropping it would break them for no gain.
     """
     from vtscore.converters import get_converter  # noqa: PLC0415 - deferred to avoid circular import during eager registry discovery
 
