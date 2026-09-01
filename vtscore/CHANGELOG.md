@@ -201,6 +201,17 @@ instead, since every commit on `dev` is effectively a new app release.)
   torchaudio's pure-PyTorch implementation rather than taken as a dependency,
   since torchaudio's wheels are built against a pinned torch.
 
+### Fixed
+
+- **A pre-computed vector nested in `custom_metadata` no longer reaches a
+  labelset** (issue #3368). `LabelSet.from_clips_and_votes` copied a media's
+  `custom_metadata` onto every `LabeledElement` verbatim, so a dataset
+  imported through `custom_metadata_map`'s vector channel wrote a numpy array
+  into the detector JSON - a hard `json.dump` failure, and the vector
+  persistence the no-persisted-vectors rule forbids. The dict now goes through
+  `hit_custom_metadata` (see Added above); `LabeledElement.metadata` is `None` when
+  the vector was its only key. No other importer metadata is affected.
+
 ### Changed
 
 - **`clap_general` is the default audio embedder**, replacing `clap`.

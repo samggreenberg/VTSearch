@@ -84,9 +84,18 @@ class TestAutoDetectHits:
 
 
 class TestProcessorScoringHits:
-    """``POST /api/extract`` — the same helper, via the processor routes."""
+    """``POST /api/extract`` — the same helper, via the processor routes.
 
-    def test_extract_result_keeps_asset_id_and_drops_vector(self, client, monkeypatch, media_with_nested_vector):
+    Two gates stack here, and only the inner one is this change's: the route
+    builds each row with ``media_info_for_response`` (pinned directly in
+    :class:`TestMediaInfoForResponse`), and ``_ProcessorHitSchema`` then dumps
+    only ``id`` / ``extractions`` / ``localizations``, so the row a client
+    receives carries no importer metadata at all.  Assert the observable
+    outcome — the route serializes at all, and nothing vector-shaped survives
+    — so a later widening of that schema can't quietly reopen the leak.
+    """
+
+    def test_extract_serializes_and_carries_no_vector(self, client, monkeypatch, media_with_nested_vector):
         from vtsearch.routes.processors import scoring as scoring_mod
 
         monkeypatch.setattr(scoring_mod, "_build_extractor", lambda name, extractor_type, config: _StubExtractor())
@@ -98,7 +107,8 @@ class TestProcessorScoringHits:
         assert resp.status_code == 200, resp.get_data(as_text=True)
         rows = [r for r in resp.get_json()["results"] if r["id"] == media_with_nested_vector]
         assert rows, "the seeded media should have produced an extraction hit"
-        _assert_sanitised(rows[0]["custom_metadata"], "an extract result")
+        assert "embedding" not in rows[0].get("custom_metadata", {})
+        assert "embedding" not in rows[0]
 
 
 class TestMediaBatch:
