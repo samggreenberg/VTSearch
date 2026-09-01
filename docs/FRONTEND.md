@@ -304,6 +304,17 @@ this codebase, and it is silent.
   becoming reactive. A signal read through a getter during template evaluation
   *is* tracked as a dependency of that view —
   `testing/getter-signal-zoneless.spec.ts` pins this.
+- **Per-media-type settings prefs go through `SettingsStateService.perMediaType`.**
+  A `{media_type: value}` settings key bound to a media-type signal returns a
+  `computed` value plus a merge-preserving setter, replacing the shadow
+  `Record` field + settings-mirror `effect()` + media-switch `effect()` +
+  hand-spread write that used to be repeated at every consumer. Two things it
+  buys: the value is a real signal (so a template binding on it repaints on its
+  own, instead of relying on some co-located `effect()` to dirty the view), and
+  there is no mirror left to go stale when a key disappears server-side. The
+  setter **merges**; a setter that replaced the dict would wipe every other
+  media type's preference. `LabelViewPanelStateService` is the reference use.
+
 - **Consumers use `effect()`, not `subscribe()`.** A constructor `effect()`
   reading a signal auto-disposes with the component, which is why the
   `takeUntil(destroy$)` / `ngOnDestroy` plumbing has been dropped wherever it
