@@ -218,18 +218,27 @@ def resolve_device() -> str:
 
 # Compute precision for the *embedding* forward pass.  Every image embedder used
 # to load fp32 and run with no autocast, which on a V100 means 15.7 TFLOPS of
-# fp32 instead of 125 TFLOPS on the fp16 tensor cores - measured at 4.2x for
-# ``siglip2_l`` (issue #3143).
+# fp32 instead of 125 TFLOPS on the fp16 tensor cores (issue #3143).
 #
-# The default is deliberately ``"fp32"``, i.e. exactly the old behaviour.  Half
-# precision *changes the vectors* (cosine similarities shift by ~1e-3, against a
-# ~1e-7 fp32 kernel-selection noise floor), and the calibration studies resolve
-# effects of 0.005, so it cannot be turned on silently: the whole pre-embedded
-# pile and every published result (#3129) are fp32, and a pile with some cells
-# fp16 and some fp32 is a confound that would surface months later as an
-# unexplained arm difference.  Flipping this default is gated on the #3143
-# measurement; until then it is the experiment's knob and the user's escape
-# hatch, in both directions.
+# The default is ``"fp32"`` - exactly the old behaviour - and #3143 closed on the
+# decision to *keep* it there rather than flip it.  Two reasons, both measured:
+#
+# * **The speedup is not where the issue put it.**  Its 4.2x was the ``siglip2_l``
+#   forward in isolation, before #3151 overlapped decode with the forward.  End to
+#   end, half precision is 2.0-2.5x on ``siglip2_l`` and **0.99x on the shipped
+#   default ``siglip``**, whose forward is no longer the bottleneck.  A global flip
+#   would buy the default embedder nothing.
+# * **It still changes the vectors**, by 2.9e-06 (``siglip2_l``) / 1.3e-06
+#   (``siglip``) median 1-cos on a fixed node.  Retrieval order survives intact
+#   (Spearman 1 +/- 4e-07), but the whole pre-embedded pile and every published
+#   result (#3129) are fp32, and a pile with some cells fp16 and some fp32 is a
+#   confound that would surface months later as an unexplained arm difference.
+#   It is all cells or none - and two of the three columns would gain nothing.
+#
+# So this stays an opt-in: the escape hatch in both directions, and worth setting
+# for a bulk build on one of the heavy encoders.  ``bf16`` is disqualified on the
+# numbers (1.3e-04 drift, enough to change the top-1 result on 2-3% of categories).
+# Full study: docs/experiments/2026-08-17-embed-precision-3143/REPORT.md.
 #
 # Modes:
 #
