@@ -14,6 +14,35 @@ python build_pile.py --rebuildable            # check every cell could be REBUIL
 python build_pile.py --bands                  # voted-box scale bands (boxed datasets)
 ```
 
+## Where the code lives
+
+`build_pile.py` is the CLI and the per-cell build loop; everything it does
+*inside* a build lives in `pilebuild/`, one module per question:
+
+| Module | Answers |
+|---|---|
+| `pilebuild/loaders/<kind>.py` | how a `DATASETS[ds]["kind"]` is built (`load`) **and** what a rebuild of it reads (`check`) |
+| `pilebuild/vgsource.py`, `boxscan.py` | reading the VG source; choosing a band's categories from the box scan |
+| `pilebuild/corrections.py` | human verdicts, and the one place their boxes cross from normalised into pixel space |
+| `pilebuild/geometry.py` | geometry no honest region box can have; the derived-label digest |
+| `pilebuild/provenance.py` | which machine produced a cell, and its vector hash |
+| `pilebuild/audit.py`, `manifest.py`, `provenance_report.py` | the read-only modes |
+
+**Both halves of a dataset live in one module on purpose.** They used to be two
+`kind` switches a thousand lines apart, and the drift that invites is #3299: the
+rebuild canary checked `COCO_IMAGES` while the builder opened `val2017.zip`
+inline, and reported `coco_val` REBUILD-BROKEN against a staging area that was
+entirely intact. A new dataset kind therefore adds one module carrying both, and
+a kind with no module fails at dispatch instead of falling through to the demo
+loader. `tests_lib/core/test_pile_loaders.py` pins that.
+
+The `vg_scale` build is six named passes rather than one long function, because
+two of them are where this pile's expensive bugs have lived — `apply_corrections`
+(the single normalised→pixel crossing, #3281) and `designate_cells` (whether a
+rebuild keeps the images a human reviewed). Both are ordinary functions taking
+what they read and returning what they produce, so
+`tests_lib/core/test_pile_vg_scale.py` exercises them without the VG source.
+
 ## Why this exists
 
 Before it, each study embedded its own datadir and then later studies
