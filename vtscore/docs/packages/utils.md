@@ -58,15 +58,24 @@ The returned dict always has these keys:
 Optional keys are added only when the corresponding field is present
 on *media*:
 
-| Key            | Added when…                              |
-|----------------|------------------------------------------|
-| `origin`       | `media["origin"] is not None`            |
-| `origin_name`  | `media["origin_name"]` is truthy         |
-| `md5`          | `media["md5"]` is truthy                 |
-| `clip_start`   | `media["clip_start"] is not None`        |
-| `clip_end`     | `media["clip_end"] is not None`          |
-| `clip_box`     | `media["clip_box"] is not None`          |
-| `clip_index`   | `media["clip_index"] is not None`        |
+| Key               | Added when…                                        |
+|-------------------|----------------------------------------------------|
+| `custom_metadata` | `media["custom_metadata"]` is a non-empty dict      |
+| `origin`          | `media["origin"] is not None`                      |
+| `origin_name`     | `media["origin_name"]` is truthy                   |
+| `md5`             | `media["md5"]` is truthy                           |
+| `clip_start`      | `media["clip_start"] is not None`                  |
+| `clip_end`        | `media["clip_end"] is not None`                    |
+| `clip_box`        | `media["clip_box"] is not None`                    |
+| `clip_index`      | `media["clip_index"] is not None`                  |
+
+`custom_metadata` is the importer-supplied metadata the media carries
+(asset ids, catalogue rows, whatever the source system attached), and
+it is what lets an exporter correlate a hit back to that system. It is
+a fresh dict, so mutating it cannot reach back into the loaded media,
+and the `embedding` key is stripped: that key is the pre-computed
+vector channel of `custom_metadata_map`, consumed at load time, and a
+numpy array has no business in an export.
 
 The `clip_*` keys are how sub-medias produced by a clipper round-trip
 through scoring. They are passed through unchanged so the consumer
@@ -84,6 +93,7 @@ media = {
     "origin": {"importer": "server_folder", "params": {"folder": "/srv/sounds"}},
     "origin_name": "/srv/sounds/talk_01.wav",
     "md5": "abc123",
+    "custom_metadata": {"asset_id": "XY-7"},
     "clip_start": 12.5,
     "clip_end": 17.5,
     "clip_index": 2,
@@ -96,6 +106,7 @@ hit = build_media_hit(cid=42, media=media, score=0.873, label="good")
 #     "filename": "talk_01.wav",
 #     "category": "podcast",
 #     "score": 0.873,
+#     "custom_metadata": {"asset_id": "XY-7"},
 #     "origin": {"importer": "server_folder", "params": {"folder": "/srv/sounds"}},
 #     "origin_name": "/srv/sounds/talk_01.wav",
 #     "md5": "abc123",

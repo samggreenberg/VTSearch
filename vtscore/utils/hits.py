@@ -4,6 +4,31 @@ from __future__ import annotations
 
 from typing import Any
 
+#: ``custom_metadata`` keys stripped before the dict reaches a hit.
+#:
+#: ``embedding`` is the pre-computed-vector channel an importer uses to ship a
+#: vector alongside a file (``custom_metadata_map``, see
+#: :func:`vtscore.datasets.loader_folder.load_dataset_from_folder`).  It is
+#: consumed at load time and has no business in an exported hit: it is a numpy
+#: array, so it would break ``json.dumps`` in every JSON exporter, and writing
+#: a vector into an export is exactly the persistence the no-persisted-vectors
+#: rule forbids.  ``_HitSchema`` relies on its media fields being an allowlist
+#: for the same reason, and ``custom_metadata`` is a free-form ``Dict`` that
+#: would wave the vector straight through.
+_CUSTOM_METADATA_EXCLUDED_KEYS = frozenset({"embedding"})
+
+
+def _hit_custom_metadata(media: dict[str, Any]) -> dict[str, Any]:
+    """Return the importer metadata to carry on a hit, or ``{}`` for none.
+
+    Always a fresh dict, so a consumer that mutates a hit's
+    ``custom_metadata`` cannot reach back into the loaded media.
+    """
+    custom = media.get("custom_metadata")
+    if not isinstance(custom, dict):
+        return {}
+    return {k: v for k, v in custom.items() if k not in _CUSTOM_METADATA_EXCLUDED_KEYS}
+
 
 def build_media_hit(
     cid: int,
@@ -24,7 +49,8 @@ def build_media_hit(
 
     Returns:
         A dict with ``id``, ``filename``, ``category``, ``score`` and,
-        when present on the media, ``origin``, ``origin_name``, ``md5``.
+        when present on the media, ``custom_metadata``, ``origin``,
+        ``origin_name``, ``md5``.
     """
     hit: dict[str, Any] = {
         "id": cid,
@@ -32,6 +58,12 @@ def build_media_hit(
         "category": media.get("category", "unknown"),
         "score": round(score, 4),
     }
+    # Importer-supplied metadata is how an exporter correlates a hit back to
+    # the caller's own system (asset ids, catalogue rows, …), so it travels
+    # with the hit whenever the media carries any.
+    custom = _hit_custom_metadata(media)
+    if custom:
+        hit["custom_metadata"] = custom
     if media.get("origin") is not None:
         hit["origin"] = media["origin"]
     if media.get("origin_name"):
