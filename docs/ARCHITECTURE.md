@@ -260,12 +260,12 @@ VTSearch/
 │   │   ├── registry.py             Persistent dataset registry (data/dataset_registry.json)
 │   │   ├── downloader/             Demo dataset downloaders (audio, image, video, text, docs)
 │   │   ├── sources/                MediaSource abstraction (local_folder, local_archive,
-│   │   │                           local_archive_member, http_archive, server_files, pullwrest,
+│   │   │                           local_archive_member, http_archive, server_files,
 │   │   │                           url_download); all fetch/resolve ops return FetchedItem (path +
 │   │   │                           optional embedding, embedder_name, extra metadata)
 │   │   └── importers/              Plugin importers (server_folder, server_files, local_folder,
 │   │                               local_files, local_archive_member, pickle, http_archive,
-│   │                               combine_datasets, demo, synthetic, recaller)
+│   │                               combine_datasets, demo, synthetic)
 │   │
 │   ├── datasource_importers/       Datasource importers: fetch *one* file on demand (server_file,
 │   │                               url_download) rather than ingesting a whole corpus
@@ -275,10 +275,10 @@ VTSearch/
 │   │                               point only; no built-ins ship in-tree
 │   │
 │   ├── exporters/                  Results exporters (server_json_file, server_csv_file,
-│   │                               email_smtp, webhook, open_url, portable_detector, gui, holder)
+│   │                               email_smtp, webhook, open_url, portable_detector, gui)
 │   │
 │   ├── labels/                     Label importers, sync sources, sync utilities
-│   │   ├── importers/              server_json_file, server_csv_file, holder
+│   │   ├── importers/              server_json_file, server_csv_file
 │   │   ├── sources/                server_json_file (bidirectional label sync)
 │   │   └── sync.py                 sync_to/from_labelset_source utilities
 │   │
@@ -742,14 +742,14 @@ A **plugin family** is a registry enumerated by `vtscore.plugins.inventory` (`py
 
 | Family | Tier | Registry | Built-in plugins |
 |---|---|---|---|
-| `importers` | library | Dataset importers | 11 |
+| `importers` | library | Dataset importers | 10 |
 | `datasource_importers` | library | Datasource importers | 2 |
-| `exporters` | library | Results exporters | 8 |
-| `label_importers` | library | Label importers | 3 |
+| `exporters` | library | Results exporters | 7 |
+| `label_importers` | library | Label importers | 2 |
 | `seed_importers` | library | Seed importers | 0 |
 | `labelset_sources` | library | Labelset sources | 1 |
 | `converters` | library | Media converters | 8 |
-| `media_sources` | library | Media sources | 7 |
+| `media_sources` | library | Media sources | 6 |
 | `media_types` | library | Media types | 6 |
 | `embedders` | library | Media embedders | 26 |
 | `clippers` | library | Media clippers | 16 |
@@ -1065,7 +1065,7 @@ Each clip dict includes two provenance fields:
 |-------|------|-------------|
 | `origin` | `dict \| None` | Serialised `Origin` (e.g. `{"importer": "server_folder", "params": {"path": "/data"}}`) |
 | `origin_name` | `str` | Unique name within the origin (typically the filename) |
-| `media_url` | `str \| None` | Remote URL for lazy-fetching media bytes (e.g. PullWrest URL). Used as fallback when `media_bytes` and `media_path` are both absent. Fetched only through the SSRF guard (`fetch_validated_url`): publicly routable `http(s)` only, every redirect hop re-checked |
+| `media_url` | `str \| None` | Remote URL for lazy-fetching media bytes. Used as fallback when `media_bytes` and `media_path` are both absent. Fetched only through the SSRF guard (`fetch_validated_url`): publicly routable `http(s)` only, every redirect hop re-checked |
 
 ### Origin class (`vtscore/datasets/origin.py`)
 

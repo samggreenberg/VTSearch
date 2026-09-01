@@ -45,14 +45,14 @@ A **plugin family** is a registry enumerated by `vtscore.plugins.inventory` (`py
 
 | Family | Tier | Registry | Built-in plugins |
 |---|---|---|---|
-| `importers` | library | Dataset importers | 11 |
+| `importers` | library | Dataset importers | 10 |
 | `datasource_importers` | library | Datasource importers | 2 |
-| `exporters` | library | Results exporters | 8 |
-| `label_importers` | library | Label importers | 3 |
+| `exporters` | library | Results exporters | 7 |
+| `label_importers` | library | Label importers | 2 |
 | `seed_importers` | library | Seed importers | 0 |
 | `labelset_sources` | library | Labelset sources | 1 |
 | `converters` | library | Media converters | 8 |
-| `media_sources` | library | Media sources | 7 |
+| `media_sources` | library | Media sources | 6 |
 | `media_types` | library | Media types | 6 |
 | `embedders` | library | Media embedders | 26 |
 | `clippers` | library | Media clippers | 16 |
@@ -542,7 +542,8 @@ type per query?
 │       Framework loops effective_source_specs() and calls you once
 │       per spec. You yield raw media dicts of spec.source_type;
 │       framework runs spec.converter on each. Best for service-style
-│       multi-media importers (e.g. ReCaller).
+│       multi-media importers (e.g. one query per media type against
+│       a media catalogue).
 │
 ├─ No; one upstream call returns mixed source types in a single
 │  response, and you want to make it only once.
@@ -638,9 +639,9 @@ or `mediaID` selectable export columns.
 
 ### URL-backed media (`media_url`)
 
-For importers that fetch media from a remote service (e.g. PullWrest),
-set `media["media_url"]` to the URL of the media file.  The lazy-loading
-system (`_resolve_media_bytes` / `_resolve_media_string`) resolves media
+For importers that fetch media from a remote service — a media catalogue,
+an object store, a CDN — set `media["media_url"]` to the URL of the media
+file.  The lazy-loading system (`_resolve_media_bytes` / `_resolve_media_string`) resolves media
 in this priority order:
 
 1. `media_bytes` / `media_string`; already in memory.
@@ -802,10 +803,33 @@ The default `run()`:
 Records returning `None` are skipped (gaps are squeezed out, IDs stay
 sequential).
 
-For an end-to-end example see
-`vtscore/datasets/importers/recaller/__init__.py`, which overrides the
-bulk hook to issue DataWrest embedding lookups and PullWrest downloads
-concurrently via a thread pool.
+The bulk hook is where a service importer earns its keep: one round
+trip per batch instead of one per record. Every built-in importer is
+folder-shaped and leaves `_fetch_records_bulk_impl` alone, so there is no
+in-tree example; the shape is a thread pool over the per-record calls,
+yielding in the original order so IDs stay stable:
+
+```python
+    def _fetch_records_bulk_impl(self, records, field_values, thin=False):
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=min(16, max(1, len(records)))) as pool:
+            # One embedding lookup per record, all in flight at once.
+            vectors = list(pool.map(lambda r: _catalogue_embedding(r["id"]), records))
+            # Thin mode skips the byte download entirely; media_url carries it.
+            blobs = [None] * len(records) if thin else list(
+                pool.map(lambda r: _catalogue_bytes(r["url"]), records)
+            )
+
+        return [
+            self._build_media(rec, vec, blob)
+            for rec, vec, blob in zip(records, vectors, blobs)
+        ]
+```
+
+`_catalogue_embedding` / `_catalogue_bytes` stand in for whatever your
+service exposes; `_build_media` is your own assembly of the media dict
+documented above.
 
 ### Dynamic field options
 
@@ -816,8 +840,8 @@ fields it depends on in `depends_on`.  Then implement
 `get_field_options(field_key, current_values)` on your importer:
 
 ```python
-class ReCallerImporter(DatasetImporter):
-    name = "recaller"
+class SavedQueryImporter(DatasetImporter):
+    name = "saved_query"
     fields = [
         PluginField("media_type", "Media Type", "select",
                       options=all_folder_names(), default="audio"),
@@ -906,8 +930,8 @@ Override it when the form holds something opaque — an id, a saved-query
 key, a bucket handle — and only your importer can turn it into words:
 
 ```python
-class ReCallerImporter(DatasetImporter):
-    name = "recaller"
+class SavedQueryImporter(DatasetImporter):
+    name = "saved_query"
     fields = [
         PluginField("media_type", "Media Type", "select", options=all_folder_names()),
         PluginField("query_id", "Query ID", "select", dynamic_options=True,
@@ -1399,7 +1423,7 @@ outputs.
 ## Adding a Results Exporter
 
 Results exporters deliver autodetect results **or labels** to a destination
-(file, webhook, email, Holder, etc.).  Auto-discovered; no changes to
+(file, webhook, email, an external labelling service, etc.).  Auto-discovered; no changes to
 routes needed.
 
 An exporter is a **destination**; *what* gets sent there is a separate axis,
@@ -1493,9 +1517,10 @@ class SftpResultsExporter(ResultsExporter):
 EXPORTER = SftpResultsExporter()
 ```
 
-Implementing only one of the two is fine and common — a Holder-style exporter
-that files items by the label a human gave them declares `export_labelset()`
-alone, and is then absent from the find-results pickers by construction.
+Implementing only one of the two is fine and common — an exporter that files
+items by the label a human gave them, and has nothing to say about a scored
+run, declares `export_labelset()` alone, and is then absent from the
+find-results pickers by construction.
 
 ### ResultsExporter class reference
 

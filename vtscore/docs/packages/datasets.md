@@ -145,8 +145,8 @@ Origin.from_dict(o.to_dict()) == o      # True
 `vtscore/datasets/labelset.py`: one `(md5, label, origin, …)` tuple,
 the unit of a labelset. The optional `metadata` field is a free-form
 `dict[str, Any]` that round-trips through `to_dict()` / `from_dict()`,
-so importers (notably `holder`) can attach external system identifiers
-that survive re-export.
+so an importer can attach external system identifiers that survive
+re-export.
 
 | Field         | Type                                          | Notes                                                              |
 |---------------|-----------------------------------------------|--------------------------------------------------------------------|
@@ -338,7 +338,6 @@ entry-point group; built-ins win on name clashes. See
 | `demo`             | Downloaded Media       | Wraps `load_demo_dataset`.                                                        |
 | `synthetic`        | Synthetic Media        | Generates deterministic media via `vtscore.utils.synthetic`.                      |
 | `combine_datasets` | Combined Datasets      | Hidden. Internal: merges two loaded datasets.                                     |
-| `recaller`         | ReCaller Query         | Hidden. Scaffold for the ReCaller external API.                                   |
 
 **Multi-media imports.** Every importer accepts a `source_specs` form
 value: a list of `SourceSpec(source_type, converter, params)` rows
@@ -414,7 +413,6 @@ each `get_source_for_origin` call returns a fresh instance; call
 |-----------------------|-------------------------------------------------|-------------------------------------------|
 | `server_folder`       | `vtscore/datasets/sources/local_folder.py`      | Local filesystem folder.                  |
 | `http_archive`        | `vtscore/datasets/sources/http_archive.py`      | Downloaded zip / tar; unpacks on demand.  |
-| `pullwrest` (scaffold) | `vtscore/datasets/sources/pullwrest.py`        | External "PullWrest" service (not wired). |
 
 ---
 

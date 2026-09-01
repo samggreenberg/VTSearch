@@ -387,11 +387,11 @@ describe('DatasetImporterModalComponent', () => {
     TestBed.tick();
     const importersWithHidden = [
       ...mockImporters,
-      { name: 'recaller', display_name: 'ReCaller', hidden_from_picker: true, fields: [] },
+      { name: 'hidden_probe', display_name: 'Hidden Probe', hidden_from_picker: true, fields: [] },
     ];
     httpMock.expectOne('/api/dataset/all-importers').flush({ importers: importersWithHidden, tabs: mockTabs });
     flushInitRequests();
-    expect(component.importers().find((i) => i.name === 'recaller')).toBeUndefined();
+    expect(component.importers().find((i) => i.name === 'hidden_probe')).toBeUndefined();
   });
 
   it('should set activePickerView=local_folder when the Local Folder sub-tab is clicked', () => {

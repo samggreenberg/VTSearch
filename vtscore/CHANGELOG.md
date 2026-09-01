@@ -201,6 +201,30 @@ instead, since every commit on `dev` is effectively a new app release.)
   torchaudio's pure-PyTorch implementation rather than taken as a dependency,
   since torchaudio's wheels are built against a pinned torch.
 
+### Removed
+
+- **The four never-implemented integration plugins** (issue #3451): the
+  `holder` results exporter (`vtscore.exporters.holder`), the `holder` label
+  importer (`vtscore.labels.importers.holder`), the `recaller` dataset
+  importer (`vtscore.datasets.importers.recaller`), and the `pullwrest` media
+  source (`vtscore.datasets.sources.pullwrest`). Every I/O entry point in all
+  four raised `NotImplementedError("TODO: implement ...")`, so no code path
+  through them had ever executed; they were registered but
+  `hidden_from_picker`. **Breaking:** `get_exporter("holder")`,
+  `get_label_importer("holder")` and `get_importer("recaller")` now return
+  `None`, `get_source_for_origin({"importer": "recaller", ...})` returns
+  `None`, and the modules no longer import. Their API routes
+  (`/api/dataset/import/recaller`, `/api/dataset/stage-import/recaller`,
+  `/api/label-importers/import/holder`,
+  `/api/detectors/{name}/import-labels/holder`,
+  `/api/detectors/registry/from-labelset/holder`) are gone with them. If you
+  copied one as a starting point, the shapes they demonstrated are now
+  documented directly: service-style dataset importers and the bulk-fetch
+  hook in `docs/EXTENDING-plugins.md` and
+  [`extending/dataset-importers.md`](docs/extending/dataset-importers.md),
+  labelset-only exporters in
+  [`extending/results-exporters.md`](docs/extending/results-exporters.md).
+
 ### Fixed
 
 - **A pre-computed vector nested in `custom_metadata` no longer reaches a
