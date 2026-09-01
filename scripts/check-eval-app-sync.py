@@ -265,7 +265,7 @@ MIRRORS: list[Mirror] = [
     ),
     Mirror(
         id="thresholds.vote_exclusion_floor",
-        app="py:vtscore.training.thresholds.resolve_exclusion_floor",
+        app="py:vtscore.training.thresholds.anchored.resolve_exclusion_floor",
         harness="vtscore/eval/voting_iterations.py::_safe_threshold_for_step",
         kind="default",
         note=(
@@ -288,7 +288,7 @@ MIRRORS: list[Mirror] = [
     ),
     Mirror(
         id="thresholds.fold_anchored_fit_then_cut",
-        app="py:vtscore.training.thresholds.fold_anchored_gmm_threshold",
+        app="py:vtscore.training.thresholds.anchored.fold_anchored_gmm_threshold",
         harness="vtscore/eval/voting_iterations.py::_cut_inclusion_arms",
         kind="default",
         note=(
@@ -317,7 +317,7 @@ MIRRORS: list[Mirror] = [
     ),
     Mirror(
         id="thresholds.rate_cut_no_root",
-        app="py:vtscore.training.thresholds._rate_cut",
+        app="py:vtscore.training.thresholds.gmm._rate_cut",
         harness="vtscore/eval/cut_rules.py::gaussian_cuts",
         kind="default",
         note=(

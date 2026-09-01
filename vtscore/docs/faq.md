@@ -287,7 +287,7 @@ fold's *held-out* votes clamped to their labeled component; each fold's
 midpoint cut is carried to the final model as a quantile, the folds are
 averaged in quantile space, and the Inclusion knob shifts that quantile
 by the rate-optimal cut's own displacement from Inclusion 0. See
-`vtscore/training/thresholds.py:fold_anchored_gmm_threshold`. It is
+`vtscore/training/thresholds/anchored.py:fold_anchored_gmm_threshold`. It is
 unconditional - there used to be a `safe_thresholds` toggle, but the
 fused estimator measured better at every label count, so the toggle was
 removed. `calculate_safe_threshold` remains the fallback for label sets

@@ -72,7 +72,7 @@ care.
 
 - [ ] #3375 — Split `vtscore/config.py` into a package along its five seams (Sonnet 5)
 - [ ] #3377 — Split `vtscore/state/core.py` and centralize `DatasetContext` cache invalidation (Opus 4.8)
-- [ ] #3381 — Split `vtscore/training/thresholds.py` into a package along its five seams (Opus 4.8)
+- [x] #3381 — Split the thresholds module into the `vtscore/training/thresholds/` package along its five seams (Opus 4.8)
 - [ ] #3384 — Extract the load-progress and torch-ops subsystems out of `vtscore/media/embedder.py` (Sonnet 5)
 - [ ] #3387 — Mirror the image demo-source layout for audio, video and text (Haiku 4.5)
 - [ ] #3390 — Replace `labeling_progress.py`'s 15 module globals with a keyed cache dataclass (Opus 4.8)

@@ -26,7 +26,7 @@ import numpy as np
 import pytest
 
 from vtscore.eval.voting_iterations import _CALIBRATION_COLUMNS, simulate_voting_iterations
-from vtscore.training import thresholds as _thresholds
+from vtscore.training.thresholds import conformal as _thresholds
 
 # Reuse the synthetic planted-patch dataset builder from the Max-Patch tests.
 from .sweep_cache import memoize_sweep
@@ -47,7 +47,7 @@ _STUB_FOLD_SECONDS = 1000.0
 class _StubClock:
     """A ``time`` stand-in whose every reading is *seconds* later than the last.
 
-    Installed over ``vtscore.training.thresholds.time`` — whose only clock user
+    Installed over ``vtscore.training.thresholds.conformal.time`` — whose only clock user
     is the per-fold stopwatch, exactly two readings per fold — this prices every
     calibration fold at exactly *seconds*, turning the seconds a row reports
     into a count of the folds it was billed for.  Nothing else in that module

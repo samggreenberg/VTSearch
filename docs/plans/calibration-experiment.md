@@ -8,7 +8,7 @@ outcomes are in
 the harness lives
 in `vtscore/eval/calibration_metrics.py` + the `emit_calibration_metrics` path of
 `vtscore/eval/voting_iterations.py` (+ the provenance/node-score surface in
-`vtscore/training/thresholds.py`), and the runner in
+`vtscore/training/thresholds/`), and the runner in
 `scripts/experiments/calibration/`.
 
 Headline: the #2781 runaway-threshold bug was **not** the `NO_GOOD_THRESHOLD`
