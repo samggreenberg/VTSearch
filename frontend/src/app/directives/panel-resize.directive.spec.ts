@@ -2,11 +2,11 @@ import { Component, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { PanelResizeDirective } from './panel-resize.directive';
-import { configureZoneless } from '../../testing/zoneless-testbed';
-import { settleZoneless } from '../../testing/settle-resource';
+import { configureZoneless } from '../testing/zoneless-testbed';
+import { settleZoneless } from '../testing/settle-resource';
 
 /**
- * Coverage for the vertical-divider drag directive used by `vt-label-view`.
+ * Coverage for the shared vertical-divider drag directive.
  * The width math (`computeWidth`) and the mousedown→move→up lifecycle are the
  * whole surface; jsdom does no layout, so the layout container's bounding rect
  * is stubbed to a fixed 1000px-wide box and the drag is driven with synthetic
@@ -22,6 +22,7 @@ import { settleZoneless } from '../../testing/settle-resource';
         [vtPanelResize]="side()"
         [layoutEl]="layout"
         [minWidth]="minWidth"
+        [maxWidth]="maxWidth()"
         [opposingWidth]="opposingWidth()"
         [centerMin]="centerMin"
         [dividerTotal]="dividerTotal"
@@ -36,6 +37,7 @@ class HostComponent {
   // schedule change detection under zoneless, so the bound input would go stale.
   side = signal<'left' | 'right'>('left');
   opposingWidth = signal(0);
+  maxWidth = signal(Number.POSITIVE_INFINITY);
   minWidth = 100;
   centerMin = 100;
   dividerTotal = 16;
@@ -132,6 +134,25 @@ describe('PanelResizeDirective', () => {
     docMove(950); // raw 950 clamped to 484
     await settleZoneless(fixture);
     expect(host.widths).toEqual([484]);
+  });
+
+  it('caps the width at maxWidth when it bites before the space-derived fit', async () => {
+    host.maxWidth.set(400); // fit is 884, so the absolute cap wins
+    await settleZoneless(fixture);
+    mouseDown(200);
+    docMove(300); // inside both bounds
+    docMove(950); // raw 950 clamped to 400, not 884
+    await settleZoneless(fixture);
+    expect(host.widths).toEqual([300, 400]);
+  });
+
+  it('lets minWidth win when maxWidth inverts the range', async () => {
+    host.maxWidth.set(50); // below minWidth (100) → range inverted
+    await settleZoneless(fixture);
+    mouseDown(200);
+    docMove(300);
+    await settleZoneless(fixture);
+    expect(host.widths).toEqual([100]);
   });
 
   it('stops emitting after mouseup (drag listeners detached)', async () => {
