@@ -1938,7 +1938,7 @@ class TestValidatedVoteSnapshot:
 
         # Simulate the race: votes_dataset_id mismatches active dataset, and
         # the rehydrate hook is bypassed (so the mismatch survives).  Without
-        # the safe=False guard, ``_merge_labelsets_across_datasets`` would
+        # the safe=False guard, ``merge_labelsets_across_datasets`` would
         # drop the active dataset's existing entries and replace them with an
         # empty composition, erasing labels from disk.
         original = _ds_sync.ensure_votes_match_active_dataset

@@ -1,7 +1,7 @@
 """Regression tests: every detector-JSON read→merge→write runs under the sync lock.
 
 Audit follow-up (ninth pass): ``sync_labels_to_loaded_detector`` serialises its
-RMW of ``detectors/<slug>.json`` under ``_label_sync_write_lock``, but four
+RMW of ``detectors/<slug>.json`` under ``label_sync_write_lock``, but four
 route-layer writers (``save_detector_labels``, ``vote_detector_label``,
 ``import_labels_into_detector``, ``find_corrections_to_detector``) did the
 same file's RMW unlocked — a concurrent locked sync and an unlocked route
@@ -18,7 +18,7 @@ detector's labelset with an empty one.
 
 from __future__ import annotations
 
-from vtscore.detectors.label_sync import _label_sync_write_lock
+from vtscore.detectors.labelset_ops import label_sync_write_lock
 from vtscore.detectors.store import _detector_path, _read_detector
 from vtsearch.state import medias
 
@@ -29,7 +29,7 @@ def _record_locked_writes(monkeypatch, module, attr="_write_detector"):
     locked_at_write: list[bool] = []
 
     def recording_write(path, data):
-        locked_at_write.append(_label_sync_write_lock.locked())
+        locked_at_write.append(label_sync_write_lock.locked())
         return real_write(path, data)
 
     monkeypatch.setattr(module, attr, recording_write)

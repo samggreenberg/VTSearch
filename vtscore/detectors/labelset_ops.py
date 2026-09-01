@@ -24,12 +24,24 @@ import :mod:`vtscore.detectors.labelset_ops` once and reach the whole
 surface through it, instead of remembering which of the five sibling
 modules a given function lives in.  The sibling modules remain the
 implementation homes; this is the discoverable seam.
+
+That includes the concurrency contract: any caller doing its own
+read-modify-write of a detector JSON file must hold
+:data:`~vtscore.detectors.label_sync.label_sync_write_lock` across the whole
+pass, and will usually want
+:func:`~vtscore.detectors.label_sync.merge_labelsets_across_datasets` to
+reconcile the result.  Both are re-exported here so a writer never has to
+reach into a sibling module for them.
 """
 
 from __future__ import annotations
 
 from vtscore.detectors.label_restoration import restore_labels_from_detector
-from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
+from vtscore.detectors.label_sync import (
+    label_sync_write_lock,
+    merge_labelsets_across_datasets,
+    sync_labels_to_loaded_detector,
+)
 from vtscore.detectors.labelset_elements import (
     apply_element_vote_in_data,
     build_element_view,
@@ -54,6 +66,8 @@ __all__ = [
     # label_restoration
     "restore_labels_from_detector",
     # label_sync
+    "label_sync_write_lock",
+    "merge_labelsets_across_datasets",
     "sync_labels_to_loaded_detector",
     # labelset_elements
     "apply_element_vote_in_data",

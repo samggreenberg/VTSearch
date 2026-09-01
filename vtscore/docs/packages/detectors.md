@@ -472,6 +472,39 @@ active votes (replaced, flipped, or removed). Skipped entirely when
 `is_find_mode()` is True - find-mode votes are scoring hits on a
 different dataset and don't belong in the training set.
 
+### `label_sync.label_sync_write_lock`
+
+The lock that serialises every read → merge → write pass over a
+detector JSON file. It is public because the contract binds callers
+outside this module: **if you do your own RMW of a detector JSON, hold
+this lock across the whole pass**, or a concurrent sync merges against
+a stale base and one side's just-written entries are lost. (The write
+itself is atomic via `os.replace`, but atomicity doesn't serialise a
+read-modify-write.) Acquire it *before* `_state_lock` - every existing
+taker does, so that ordering is what keeps the pair cycle-free. The
+app's four detector-JSON route writers and
+`sync_labels_to_loaded_detector` are the in-tree takers.
+
+### `label_sync.merge_labelsets_across_datasets(existing_ls, current_ls, current_dataset_medias)`
+
+Merge a freshly-composed per-dataset labelset into the cross-dataset
+one already on disk, and the companion to the lock above: a writer that
+composes a labelset from the active dataset's votes wants this to
+reconcile it. Existing entries that resolve to a media in
+*current_dataset_medias* are dropped (they are re-emitted by
+`current_ls`, the authoritative record of what the user voted there);
+entries that resolve to nothing were accumulated under other datasets
+and are kept verbatim. Ownership is decided by the same origin-or-md5
+resolution `restore_labels_from_detector` uses, so an element that
+becomes a vote on load is one `current_ls` re-emits. Duplicate
+identities in the result are collapsed, first occurrence winning.
+*current_dataset_medias* must be the snapshot *current_ls* was composed
+from, so the two halves can't straddle a dataset switch.
+
+Both names are re-exported from
+[`vtscore.detectors.labelset_ops`](../../detectors/labelset_ops.py);
+prefer importing them from there with the rest of the surface.
+
 ### `label_restoration.restore_labels_from_detector(det_data)` (line 11)
 
 Take a detector-JSON dict, resolve every labelset element against the
