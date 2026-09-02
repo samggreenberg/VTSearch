@@ -660,6 +660,10 @@ def _run_origin_load_in_background(
         pacer = AdaptiveLoadPacer(tracker, cost_terms, calibrated=terms_calibrated)
         stepped = _make_stepped_progress(controller, pacer)
         profiler.bind_thread()  # so FinalizeProgress.begin stamps land here (no-op when off)
+        # Same reason, for the generic recorder: the stage that decides whether
+        # this import embeds or reads a cached pkl is many frames below here,
+        # and binds the fact to the thread rather than to an argument (#3521).
+        timing_recorder.bind_thread()
 
         try:
             with thread_dataset_context(ctx):
@@ -1014,6 +1018,11 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
         # Route the importer's own progress calls (and embedding progress)
         # into this task's tracker instead of the global singleton.
         set_thread_progress(tracker.update)
+        # A staging import of a demo reads the same embeddings pkl a full import
+        # writes, so it forks on the same cache and must record which branch it
+        # took. #3345 measured this leg at 0.000-0.002 s across all four image
+        # tiers for exactly that reason (#3521).
+        timing_recorder.bind_thread()
         controller = _LoadGateController(tracker, task.total_steps)
         try:
             controller.acquire_download()

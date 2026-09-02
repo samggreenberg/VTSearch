@@ -303,10 +303,22 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
                 # Past the auto-build threshold a missing cache is left absent -
                 # the build would cost minutes/GBs and the user can trigger it
                 # on demand via the coverage-atlas endpoint.
+                # Which of the three branches ran is the single most important
+                # thing about this step's timing and the one thing its duration
+                # cannot say. A restore is milliseconds and a rebuild is
+                # minutes; #3345's sweep opened 16 datasets, restored on every
+                # one, and produced a profile pricing the atlas at 2 % of a bar
+                # whose shipped default gives it 85 % — both correct about
+                # different branches, with nothing recording which (#3521).
                 if not restore_coverage_atlas_from_cache(ctx, cached_coverage_atlas):
                     if should_auto_build_coverage_atlas(len(ctx.medias)):
+                        timing_recorder.mark_branch("coverage", "rebuilt")
                         _coverage_progress(0, 0)
                         build_coverage_atlas_for_context(ctx, on_progress=_coverage_progress)
+                    else:
+                        timing_recorder.mark_branch("coverage", "deferred")
+                else:
+                    timing_recorder.mark_branch("coverage", "restored")
                 # Fill the coverage slice to completion in every branch (cache
                 # restore, rebuild, or deferred-above-threshold) so the unified
                 # bar reaches 100% cleanly instead of stalling at the step-1
@@ -420,6 +432,26 @@ def build_dataset_coverage_atlas(dataset_id: str):
         media_type=entry.get("media_type", ""),
         embedder=entry.get("embedder", ""),
     )
+    # This endpoint runs a ``dataset_open``'s second step on its own, over the
+    # same medias, through the same ``build_coverage_atlas_for_context``. Record
+    # it as that step so a sweep can price the rebuild branch without stripping
+    # cached atlases out of anybody's pickles — the only other way to make an
+    # open rebuild, and one that would turn a read-only tuning family into a
+    # destructive one (#3521). ``only_phases`` keeps the run from writing a zero
+    # for ``items``, which it never had the chance to perform.
+    from vtscore import timing
+
+    atlas_recorder = timing.record_task(
+        tracker,
+        "dataset_open",
+        media_type=entry.get("media_type", ""),
+        embedder=entry.get("embedder", "") or "",
+        status_phases={"loading": "coverage"},
+        only_phases=("coverage",),
+    )
+    atlas_recorder.start()
+    atlas_recorder.set_scale(n=len(ctx.medias))
+    atlas_recorder.mark_branch("coverage", "rebuilt")
     tracker.update("loading", "Building coverage atlas…", 0, 0, step=1, total_steps=1)
 
     _request_user = get_current_user()
@@ -428,6 +460,7 @@ def build_dataset_coverage_atlas(dataset_id: str):
         from vtsearch.auth import thread_user
 
         with thread_user(_request_user):
+            ok = True
             try:
 
                 def _progress(current: int, total: int) -> None:
@@ -445,15 +478,21 @@ def build_dataset_coverage_atlas(dataset_id: str):
                     with _state_lock:
                         resync_coverage_atlas_to_detector(ctx, det_ctx)
             except CancelledError:
+                ok = False
                 ctx.coverage_atlas = None
                 tracker.update("idle", "", 0, 0, error="Cancelled", step=None, total_steps=None)
             except Exception as e:
                 import traceback as _tb
 
+                ok = False
                 _tb.print_exc()
                 error_msg = str(e) or repr(e) or "Unknown error building coverage atlas"
                 tracker.update("idle", "", 0, 0, error=error_msg, step=None, total_steps=None)
             finally:
+                # A cancelled or failed build measured how long someone waited
+                # before giving up, not what the rebuild costs; ``ok=False``
+                # keeps the fitter from reading it as the latter.
+                atlas_recorder.finish(ok=ok)
                 _loading_tasks.mark_finished(task_id)
 
     from vtsearch.threading import spawn
