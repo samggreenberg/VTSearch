@@ -470,7 +470,7 @@ def load_demo_source(  # noqa: C901 - flat per-item embed/defer branching
         raise ValueError(f"Unsupported video source: {source!r}")
 
     import vtscore.datasets.downloader as dl_module  # noqa: PLC0415
-    from vtscore.datasets.loader import load_video_metadata_from_folders  # noqa: PLC0415
+    from vtscore.datasets.metadata import load_video_metadata_from_folders  # noqa: PLC0415
 
     download_fn = getattr(dl_module, downloader_name)
     video_dir = download_fn(on_progress=on_progress)

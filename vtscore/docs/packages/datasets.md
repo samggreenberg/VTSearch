@@ -28,7 +28,8 @@ The largest package in the library. Every module, grouped by role.
 
 | Module | Concern |
 |--------|---------|
-| `vtscore/datasets/loader.py` | `export_dataset_to_file` and the shared loader surface |
+| `vtscore/datasets/loader.py` | `export_dataset_to_file` and the loader re-export façade |
+| `vtscore/datasets/loader_common.py` | Helpers shared by the three loader modules (leaf; no cycles) |
 | `vtscore/datasets/loader_folder.py` | Folder loaders (whole and chunked) |
 | `vtscore/datasets/loader_pickle.py` | Pickle loaders (whole and chunked) |
 | `vtscore/datasets/loader_demo.py` | Demo-dataset loader |
@@ -198,7 +199,14 @@ disagreeing labels across inputs are silently removed. See
 ## Loaders and exporter
 
 The public surface in `vtscore/datasets/loader.py` is a re-export façade
-over three sibling modules:
+over three sibling modules. It re-exports **loaders only** — the demo
+metadata parsers live in `vtscore/datasets/metadata.py` and the
+pickle-safety names in `vtscore/security/pickle.py`; import those from
+their own modules rather than through the façade. Helpers the three
+siblings share (`ProgressCallback`, `_default_progress`, the MD5 and
+embedding coercion helpers) live in `vtscore/datasets/loader_common.py`,
+a dependency-free leaf, so the façade can import its siblings at the top
+of the file instead of at the bottom to dodge a cycle.
 
 | Function                        | Module                    | Populates / returns                                  |
 |---------------------------------|---------------------------|------------------------------------------------------|

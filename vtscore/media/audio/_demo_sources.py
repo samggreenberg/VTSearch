@@ -777,7 +777,7 @@ def _collect_audio_files(
 
     if source == "gtzan":
         from vtscore.datasets.downloader import download_gtzan  # noqa: PLC0415
-        from vtscore.datasets.loader import load_audio_metadata_from_folders  # noqa: PLC0415
+        from vtscore.datasets.metadata import load_audio_metadata_from_folders  # noqa: PLC0415
 
         audio_dir = download_gtzan(on_progress=on_progress)
         metadata = load_audio_metadata_from_folders(audio_dir, categories)
@@ -786,7 +786,7 @@ def _collect_audio_files(
 
     if source == "speech_commands_v2":
         from vtscore.datasets.downloader import download_speech_commands_v2  # noqa: PLC0415
-        from vtscore.datasets.loader import load_audio_metadata_from_folders  # noqa: PLC0415
+        from vtscore.datasets.metadata import load_audio_metadata_from_folders  # noqa: PLC0415
 
         audio_dir = download_speech_commands_v2(on_progress=on_progress)
         metadata = load_audio_metadata_from_folders(audio_dir, categories)
@@ -795,7 +795,7 @@ def _collect_audio_files(
 
     if source == "urbansound8k":
         from vtscore.datasets.downloader import download_urbansound8k  # noqa: PLC0415
-        from vtscore.datasets.loader import load_urbansound8k_metadata  # noqa: PLC0415
+        from vtscore.datasets.metadata import load_urbansound8k_metadata  # noqa: PLC0415
 
         us8k_dir = download_urbansound8k(on_progress=on_progress)
         metadata = load_urbansound8k_metadata(us8k_dir)
@@ -834,7 +834,7 @@ def _collect_audio_files(
 
     if not source or source == "esc50":
         from vtscore.datasets.downloader import download_esc50  # noqa: PLC0415
-        from vtscore.datasets.loader import load_esc50_metadata  # noqa: PLC0415
+        from vtscore.datasets.metadata import load_esc50_metadata  # noqa: PLC0415
 
         audio_dir = download_esc50(on_progress=on_progress)
         esc_metadata = load_esc50_metadata(audio_dir.parent)

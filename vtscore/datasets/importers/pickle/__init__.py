@@ -23,7 +23,7 @@ def _get_progress():
     messages to the dashboard row for *this* import.  Reporting straight to the
     global ``update_progress`` singleton (the previous behaviour) published on
     the ``dataset`` channel instead, where the row never reads it.  Mirrors
-    ``vtscore.datasets.loader._default_progress``.
+    ``vtscore.datasets.loader_common._default_progress``.
     """
     from vtscore.concurrency.progress import get_thread_progress, update_progress
 

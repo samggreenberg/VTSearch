@@ -332,12 +332,12 @@ import common
 common.setup_env()
 import experiment_config as cfg
 from _cells_io import load_medias
-from vtscore.datasets import loader as _loader
+from vtscore.config import EMBEDDINGS_DIR
 
 # A paired arm (`siglip+dinov3_patch`) carries its patch grid in the LEARN
 # half's pickle; naming the file by hand here would look for a pickle that has
 # never existed and report the premise as MISSING rather than as held.
-pkl = _loader.EMBEDDINGS_DIR / cfg.pickle_name(ds, emb)
+pkl = EMBEDDINGS_DIR / cfg.pickle_name(ds, emb)
 if not pkl.exists():
     print(f"MISSING {pkl}")
     raise SystemExit(0)

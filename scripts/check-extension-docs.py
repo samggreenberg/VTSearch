@@ -70,6 +70,11 @@ SECTIONS: list[tuple[str, str, tuple[str, ...]]] = [
         "Processor abstract interface reference",
         ("Processor", "Detector", "Localizer", "Extractor"),
     ),
+    # Not an ABC contract: this section spells out how ``dirty_keys`` on
+    # ``UserSyncState`` arbitrates between a local write and an upstream pull.
+    # It is registered because invariant 2 (rightly) flags any "The ... contract"
+    # heading, and the names it does cite are members worth checking.
+    ("docs/EXTENDING-plugins.md", "The dirty-key contract", ("UserSyncState",)),
     # --- library tier ---------------------------------------------------
     ("vtscore/docs/extending/clippers.md", "The contract", ("MediaClipper",)),
     ("vtscore/docs/extending/converters.md", "The contract", ("MediaConverter",)),

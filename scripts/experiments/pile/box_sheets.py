@@ -141,12 +141,12 @@ def main(argv: list[str] | None = None) -> int:
 
     from PIL import Image, ImageDraw, ImageFont
 
-    from vtscore.datasets import loader as _loader
+    from vtscore.config import EMBEDDINGS_DIR
     from vtscore.eval.labels import media_is_positive, region_box_for_category
 
     from _cells_io import load_medias  # noqa: PLC0415
 
-    medias = load_medias(_loader.EMBEDDINGS_DIR / f"{args.dataset}__{args.embedder}.pkl")
+    medias = load_medias(EMBEDDINGS_DIR / f"{args.dataset}__{args.embedder}.pkl")
     images = source_for(args.dataset)
     # Checked before the scan so the message names the *configuration* problem
     # rather than reporting it as an absence of positives.

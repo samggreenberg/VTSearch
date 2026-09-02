@@ -49,7 +49,7 @@ def discover_categories(source: str) -> list[str]:
     if source == "clotho":
         return ["sound"]
     if source == "urbansound8k":
-        from vtscore.datasets.loader import load_urbansound8k_metadata
+        from vtscore.datasets.metadata import load_urbansound8k_metadata
 
         us8k = downloader.download_urbansound8k()
         meta = load_urbansound8k_metadata(us8k)

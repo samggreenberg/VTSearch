@@ -139,11 +139,11 @@ def main(argv: list[str] | None = None) -> int:
     from vtscore.eval.voting_columns import VOTING_COLUMNS
     from vtscore.eval.voting_iterations import simulate_voting_iterations
 
-    from vtscore.datasets import loader as _loader  # isort: skip
+    from vtscore.config import EMBEDDINGS_DIR  # isort: skip
 
     from _cells_io import load_medias  # noqa: PLC0415
 
-    pkl = _loader.EMBEDDINGS_DIR / cfg.pickle_name(ds, emb)
+    pkl = EMBEDDINGS_DIR / cfg.pickle_name(ds, emb)
     medias: dict[int, dict] = load_medias(pkl)
     common.log(f"loaded {len(medias)} medias from {pkl}")
 

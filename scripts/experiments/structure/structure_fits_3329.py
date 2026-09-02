@@ -280,9 +280,9 @@ def load_matrix(dataset: str, embedder: str) -> tuple[np.ndarray, list[int], lis
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "calibration"))
     from _cells_io import load_medias  # noqa: PLC0415
 
-    from vtscore.datasets import loader as _loader  # noqa: PLC0415
+    from vtscore.config import EMBEDDINGS_DIR  # noqa: PLC0415
 
-    pkl = _loader.EMBEDDINGS_DIR / f"{dataset}__{embedder}.pkl"
+    pkl = EMBEDDINGS_DIR / f"{dataset}__{embedder}.pkl"
     medias = load_medias(pkl)
     ids = sorted(medias)
     vecs, keep, cats = [], [], []

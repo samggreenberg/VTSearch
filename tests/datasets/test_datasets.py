@@ -1055,7 +1055,7 @@ class TestDemoCacheEmbedderMismatch:
         mock_mt.load_demo_source.return_value = "/fake/dir"
 
         with (
-            patch("vtscore.datasets.loader.EMBEDDINGS_DIR", embeddings_dir),
+            patch("vtscore.datasets.loader_demo.EMBEDDINGS_DIR", embeddings_dir),
             patch("vtscore.media.get_embedder", return_value=fake_embedder) as mock_get,
             patch("vtscore.media.get", return_value=mock_mt),
         ):
@@ -1096,8 +1096,8 @@ class TestDemoCacheEmbedderMismatch:
             m[1] = {"embedding": np.array([0.1, 0.2]), "file": "/fake/file.png"}
 
         with (
-            patch("vtscore.datasets.loader.EMBEDDINGS_DIR", embeddings_dir),
-            patch("vtscore.datasets.loader.load_dataset_from_pickle", side_effect=fake_load),
+            patch("vtscore.datasets.loader_demo.EMBEDDINGS_DIR", embeddings_dir),
+            patch("vtscore.datasets.loader_demo.load_dataset_from_pickle", side_effect=fake_load),
         ):
             load_demo_dataset(demo_name, medias, embedder_name="clip")
 
@@ -1135,8 +1135,8 @@ class TestDemoCacheEmbedderMismatch:
             m[1] = {"embedding": np.array([0.1]), "file": "/fake/file.png"}
 
         with (
-            patch("vtscore.datasets.loader.EMBEDDINGS_DIR", embeddings_dir),
-            patch("vtscore.datasets.loader.load_dataset_from_pickle", side_effect=fake_load),
+            patch("vtscore.datasets.loader_demo.EMBEDDINGS_DIR", embeddings_dir),
+            patch("vtscore.datasets.loader_demo.load_dataset_from_pickle", side_effect=fake_load),
         ):
             load_demo_dataset(demo_name, medias, embedder_name="siglip")
 
@@ -1208,7 +1208,7 @@ class TestDemoClipperApplied:
         demo_name = "fake_audio_demo"
         medias: dict = {}
         with (
-            patch("vtscore.datasets.loader.EMBEDDINGS_DIR", embeddings_dir),
+            patch("vtscore.datasets.loader_demo.EMBEDDINGS_DIR", embeddings_dir),
             patch.dict("vtscore.datasets.loader_demo.DEMO_DATASETS", {demo_name: self.FAKE_INFO}),
             patch("vtscore.media.embedders_for_type", return_value=[fake_embedder]),
             patch("vtscore.media.get", return_value=mock_mt),
@@ -1286,7 +1286,7 @@ class TestDemoCacheClipperMismatch:
         mock_mt.load_demo_source.return_value = "/fake/dir"
 
         with (
-            patch("vtscore.datasets.loader.EMBEDDINGS_DIR", embeddings_dir),
+            patch("vtscore.datasets.loader_demo.EMBEDDINGS_DIR", embeddings_dir),
             patch.dict("vtscore.datasets.loader_demo.DEMO_DATASETS", {demo_name: TestDemoClipperApplied.FAKE_INFO}),
             patch("vtscore.media.embedders_for_type", return_value=[fake_embedder]),
             patch("vtscore.media.get", return_value=mock_mt),
@@ -1312,9 +1312,9 @@ class TestDemoCacheClipperMismatch:
             m[1] = {"embedding": np.array([0.1]), "media_type": "audio"}
 
         with (
-            patch("vtscore.datasets.loader.EMBEDDINGS_DIR", embeddings_dir),
+            patch("vtscore.datasets.loader_demo.EMBEDDINGS_DIR", embeddings_dir),
             patch.dict("vtscore.datasets.loader_demo.DEMO_DATASETS", {demo_name: TestDemoClipperApplied.FAKE_INFO}),
-            patch("vtscore.datasets.loader.load_dataset_from_pickle", side_effect=fake_load),
+            patch("vtscore.datasets.loader_demo.load_dataset_from_pickle", side_effect=fake_load),
         ):
             medias: dict = {}
             load_demo_dataset(demo_name, medias, clipper_name="sound_tiling", clipper_params={"duration": 2.0})

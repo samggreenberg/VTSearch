@@ -15,7 +15,7 @@ def download_ucf101_subset(on_progress: Optional[ProgressCallback] = None) -> Pa
     HuggingFace and extracts it into ``VIDEO_DIR / "ucf101"`` with one
     subdirectory per action class.  Videos from all splits (train/val/test) are
     merged into a single flat category structure so that
-    :func:`~vtscore.datasets.loader.load_video_metadata_from_folders` can
+    :func:`~vtscore.datasets.metadata.load_video_metadata_from_folders` can
     scan them directly.
 
     If the dataset is already present (at least one ``*.avi`` in a
