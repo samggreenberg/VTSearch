@@ -182,6 +182,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   /** Armed on entry and on each pair reload; consumed once medias first render
    *  to snap both panels tight to the grid (see ``snapPanelsOnLoad``). */
   private pendingSnapOnLoad = false;
+  /** Armed on each pair reload; consumed by the first ranking that lands for
+   *  the new pair, which the centre viewer is then seeded from. See the effect
+   *  in the constructor for why the pair change cannot just auto-select itself.
+   */
+  private pendingSelectOnPairChange = false;
 
   constructor() {
     effect(() => {
@@ -259,6 +264,37 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
           this.autopilotMediaSortPending = false;
           this.triggerAutopilotMediaSort();
         }
+      });
+    });
+
+    // Seed the centre viewer for the new pair, once the pair change produces a
+    // ranking to seed it from.
+    //
+    // The pair change clears the selection, because a media id from the pair we
+    // left means nothing under the new one (`PairScopeService.clearPairState`,
+    // #3489). Something has to put an item back, and on this path nothing did:
+    // *entry* seeds the centre through Autopilot's activation sort
+    // (`triggerAutopilotTextSort` -> `onTextSort` -> `autoSelectNext`), which a
+    // switch never re-runs, and every re-rank a switch *does* fire passes
+    // `autoSelect: false` — correctly, since those same calls also run
+    // underneath a user who is mid-labelling, where moving them off the item
+    // they are looking at is the bug. So the seed is armed by the pair change
+    // itself and consumed here, once, by whichever re-rank happens to land
+    // first (the learned-sort rehydration below, an Autopilot phase change, a
+    // text sort).
+    //
+    // Deliberately silent when no ranking ever arrives: switching to a pair the
+    // detector has no labelset for leaves the centre on its placeholder, which
+    // is exactly where a fresh entry to that same pair leaves it.
+    effect(() => {
+      const order = this.sortState.sortOrder;
+      untracked(() => {
+        if (!this.pendingSelectOnPairChange) return;
+        if (!order || order.length === 0) return;
+        this.pendingSelectOnPairChange = false;
+        // A re-rank that auto-selected on its own (or a click that beat us to
+        // it) already owns the centre; never move the user off it.
+        if (this.mediaState.selectedId() === null) this.autoSelectNext();
       });
     });
 
@@ -370,6 +406,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       this.pendingRehydrateLearned = false;
       // Read by the medias effect when the reload below lands.
       this.pendingSnapOnLoad = true;
+      // Read by the seed effect when the new pair's first ranking lands.
+      this.pendingSelectOnPairChange = true;
     });
     this.loadTrainingVotes();
 
