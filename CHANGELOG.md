@@ -17,6 +17,17 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **Switching dataset or detector no longer leaves the previous pair's item in
+  the centre viewer.** Media ids are per-dataset, so the pair switch cleared the
+  ranking, the threshold and the vote cache but left the *selection* pointing at
+  an item that only existed under the pair you just left. Because the viewer
+  stamps the dataset id into the media URL when it builds it, the stranded item
+  kept loading from its own dataset and rendered normally -- so the grid showed
+  the new pair while the centre showed the old one, with nothing on screen
+  saying so. The selection is now dropped with the rest of the pair's state; the
+  centre reads "Select a media item to view" until the new pair's first pick
+  lands, exactly as it does on a fresh entry.
+
 - **The "arranging your items" wait now shows a remaining-time estimate.**
   Preparing a subset map from Find results renders an ETA chip beside the
   progress bar, but the projection build's status payload never carried an
