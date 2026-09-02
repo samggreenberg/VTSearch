@@ -1,4 +1,7 @@
+import { WritableSignal, signal } from '@angular/core';
 import { ActiveContextService } from '../services/active-context.service';
+import { SettingsStateService } from '../services/settings-state.service';
+import type { AppSettings } from '../generated/api-client/models/app-settings';
 
 /**
  * Shared service stubs for the frontend spec suite.
@@ -23,4 +26,30 @@ export function makeActiveContextStub(
   overrides: Partial<ActiveContextService> = {},
 ): Partial<ActiveContextService> {
   return { mediaUrl: (p: string) => p, ...overrides };
+}
+
+/**
+ * `SettingsStateService` stub for specs that must not hit HTTP but whose
+ * component reads per-media-type preferences.
+ *
+ * `perMediaType` is **borrowed from the real prototype** rather than
+ * reimplemented: it only touches `settingsSignal()` and `update()`, both of
+ * which the stub supplies, so the spec exercises the shipped resolution and
+ * merge logic instead of a copy that could quietly drift from it.
+ *
+ * Returns the stub together with the writable signal behind `settingsSignal`,
+ * so a spec can push a settings value the way a load would.
+ */
+export function makeSettingsStateStub(overrides: Partial<SettingsStateService> = {}): {
+  stub: Partial<SettingsStateService>;
+  settings: WritableSignal<AppSettings | null>;
+} {
+  const settings = signal<AppSettings | null>(null);
+  const stub: Partial<SettingsStateService> = {
+    settingsSignal: settings as SettingsStateService['settingsSignal'],
+    load: noop,
+    perMediaType: SettingsStateService.prototype.perMediaType,
+    ...overrides,
+  };
+  return { stub, settings };
 }

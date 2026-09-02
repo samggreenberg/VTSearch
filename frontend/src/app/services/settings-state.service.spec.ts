@@ -1,3 +1,4 @@
+import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 
@@ -75,6 +76,141 @@ describe('SettingsStateService', () => {
   it('settingsSignal should expose the loaded settings', async () => {
     await load();
     expect(service.settingsSignal()).toEqual(mockSettings);
+  });
+
+  /**
+   * `perMediaType` is the shared replacement for the read/coerce/merge-write
+   * dance that used to be hand-rolled at every per-media-type settings
+   * consumer. Two properties are load-bearing and pinned here: the value is a
+   * real `computed` (so a template binding on it repaints under zoneless), and
+   * the setter MERGES — dropping a sibling media type's entry would silently
+   * destroy a user preference on every media-type switch.
+   */
+  describe('perMediaType', () => {
+    const withDicts = {
+      ...mockSettings,
+      grid_icon_size_right: { audio: 'L', image: 'S' },
+      browse_mouse_zooms_per_level: { audio: 9, image: 2 },
+    };
+
+    async function loadDicts() {
+      service.load();
+      TestBed.tick();
+      httpMock.expectOne('/api/settings').flush(withDicts);
+      await settleResource();
+    }
+
+    it('resolves the active media type\'s entry, and re-resolves on a switch', async () => {
+      const mediaType = signal('audio');
+      const pref = service.perMediaType<string>('grid_icon_size_right', mediaType, {
+        fallback: 'M',
+      });
+      await loadDicts();
+
+      expect(pref.value()).toBe('L');
+      // The whole point of keying on a signal: no mirror to re-hydrate.
+      mediaType.set('image');
+      expect(pref.value()).toBe('S');
+    });
+
+    it('falls back for an unset media type, and for an empty one', async () => {
+      const mediaType = signal('video');
+      const pref = service.perMediaType<string>('grid_icon_size_right', mediaType, {
+        fallback: 'M',
+      });
+      await loadDicts();
+
+      expect(pref.value()).toBe('M');
+      mediaType.set('');
+      expect(pref.value()).toBe('M');
+    });
+
+    it('falls back before settings have loaded', () => {
+      const pref = service.perMediaType<string>('grid_icon_size_right', signal('audio'), {
+        fallback: 'M',
+      });
+      expect(pref.value()).toBe('M');
+      expect(pref.dict()).toEqual({});
+    });
+
+    it('uses coerce to reject an out-of-range stored value', async () => {
+      // A hand-edited settings file (or an older server) can hold anything;
+      // `coerce` is where the clamp/enum check that used to sit inline lives.
+      const pref = service.perMediaType<number>(
+        'browse_mouse_zooms_per_level',
+        signal('audio'),
+        {
+          fallback: 2,
+          coerce: (raw) => (typeof raw === 'number' && raw >= 1 && raw <= 3 ? raw : undefined),
+        },
+      );
+      await loadDicts();
+      // Stored value is 9 — out of range, so the fallback wins.
+      expect(pref.value()).toBe(2);
+    });
+
+    it('set() merges, preserving every other media type\'s entry', async () => {
+      const pref = service.perMediaType<string>('grid_icon_size_right', signal('audio'), {
+        fallback: 'M',
+      });
+      await loadDicts();
+
+      pref.set('XL')?.subscribe();
+      const req = httpMock.expectOne('/api/settings');
+      expect(req.request.method).toBe('PUT');
+      // `image: 'S'` MUST survive. If this regressed, switching media type
+      // would silently reset the sibling type's thumbnail size.
+      expect(req.request.body).toEqual({
+        grid_icon_size_right: { audio: 'XL', image: 'S' },
+      });
+      req.flush({ ...withDicts, grid_icon_size_right: { audio: 'XL', image: 'S' } });
+      TestBed.tick();
+      expect(pref.value()).toBe('XL');
+    });
+
+    it('set() is a no-op with no active media type (nothing to key the write on)', async () => {
+      const pref = service.perMediaType<string>('grid_icon_size_right', signal(''), {
+        fallback: 'M',
+      });
+      await loadDicts();
+
+      expect(pref.set('XL')).toBeNull();
+      httpMock.expectNone('/api/settings');
+    });
+
+    it('does not keep a stale mirror when the key goes absent server-side', async () => {
+      const mediaType = signal('audio');
+      const pref = service.perMediaType<string>('grid_icon_size_right', mediaType, {
+        fallback: 'M',
+      });
+      await loadDicts();
+      expect(pref.value()).toBe('L');
+
+      // Every old consumer hydrated its shadow dict behind an
+      // `if (dict && typeof dict === 'object')` guard, so a key that vanished
+      // (a settings reset) left the last-seen copy in place forever. Reading
+      // through a computed cannot do that.
+      service.update({ volume: 0.4 }).subscribe();
+      httpMock.expectOne('/api/settings').flush({ ...mockSettings, volume: 0.4 });
+      TestBed.tick();
+      expect(pref.dict()).toEqual({});
+      expect(pref.value()).toBe('M');
+    });
+
+    it('ignores a non-dict value stored under the key', async () => {
+      const pref = service.perMediaType<string>('grid_icon_size_right', signal('audio'), {
+        fallback: 'M',
+      });
+      service.load();
+      TestBed.tick();
+      httpMock
+        .expectOne('/api/settings')
+        .flush({ ...mockSettings, grid_icon_size_right: 'L' as unknown });
+      await settleResource();
+
+      expect(pref.dict()).toEqual({});
+      expect(pref.value()).toBe('M');
+    });
   });
 
   describe('Show Animations -> <html> class mirroring', () => {

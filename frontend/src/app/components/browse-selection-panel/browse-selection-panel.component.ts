@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, input, OnDestroy, OnInit, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, input, OnDestroy, OnInit, output, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -95,17 +95,25 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
    *  output the canvas and bin-popup drive. */
   readonly nowPlaying = output<NowPlaying | null>();
 
-  // These are template-bound and written from the selection-refresh and
-  // settings `effect()`s and the metadata-cache `version$` subscribe — none of
-  // which schedule CD for a plain field under zoneless — so they are signals.
-  // (`sortMode` stays plain: it is only written from the bound `(ngModelChange)`.)
+  // These are template-bound and written from the selection-refresh `effect()`
+  // and the metadata-cache `version$` subscribe — neither of which schedules CD
+  // for a plain field under zoneless — so they are signals. (`sortMode` stays
+  // plain: it is only written from the bound `(ngModelChange)`.)
   readonly count = signal(0);
   sortMode: SelectionSortMode = 'time-desc';
-  readonly gridGoalWidth = signal(80);
   readonly sortedEntries = signal<SelectionEntry[]>([]);
 
+  /** Thumbnail size for the active media type, shared with the label view's
+   *  right pane via `grid_icon_size_right`. A `computed` over the settings
+   *  signal, so a size change made elsewhere repaints this panel directly. */
+  private readonly gridIconSizeRight = this.settingsState.perMediaType<string>(
+    'grid_icon_size_right',
+    this.mediaType,
+    { fallback: 'M' },
+  );
+  readonly gridGoalWidth = computed(() => iconSizeToGoalWidth(this.gridIconSizeRight.value()));
+
   private ids: number[] = [];
-  private gridIconSizeRightDict: Record<string, string> = {};
   private readonly thumbnailFailedUrls = new Set<string>();
 
   // --- Audio audition state machine (mirrors browse-hover-preview) -----------
@@ -139,15 +147,6 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
     this.audioEl.addEventListener('playing', () => this.emitNowPlaying(false));
     this.audioEl.addEventListener('canplay', () => this.emitNowPlaying(false));
 
-    effect(() => {
-      const settings = this.settingsState.settingsSignal();
-      if (!settings) return;
-      const sizeDict = settings.grid_icon_size_right;
-      if (sizeDict && typeof sizeDict === 'object') {
-        this.gridIconSizeRightDict = sizeDict as Record<string, string>;
-      }
-      this.applyViewPrefs();
-    });
     // Rebuild the list whenever the selection changes. An effect on the signal
     // (rather than a `changed$` subscription) covers both the initial fill and
     // every later mutation, and schedules the refresh under zoneless from any
@@ -176,12 +175,6 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
     this.count.set(this.ids.length);
     this.metadataCache.ensureLoaded(this.ids);
     this.sortedEntries.set(this.buildSortedEntries());
-  }
-
-  private applyViewPrefs(): void {
-    const mediaType = this.mediaType();
-    if (!mediaType) return;
-    this.gridGoalWidth.set(iconSizeToGoalWidth(this.gridIconSizeRightDict[mediaType] ?? 'M'));
   }
 
   private buildSortedEntries(): SelectionEntry[] {

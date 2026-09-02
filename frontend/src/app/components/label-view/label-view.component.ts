@@ -214,7 +214,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       // loop, plus spurious re-runs that revert a manual collapse toggle while
       // the settings write is still in flight.
       untracked(() => {
-        this.panelState.loadFromSettings(settings);
+        // `panelState` reads the settings signal directly (its prefs are
+        // `computed`s), so there is nothing to hydrate here — this branch only
+        // reacts to the new values.
         if (this.panelState.currentMediaType) {
           this.applyPanelPx();
           // Detect an icon-size change (same media type) and debounce a re-pop.
@@ -559,13 +561,17 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // --- Icon-size auto-pop ---
 
-  /** Right-pane grid goal width for the active media type, read from the live
-   *  settings (the right pane owns its own size dict, unlike the left which is
-   *  mirrored on `panelState`). */
+  /** Right-pane grid goal width for the active media type. The right pane owns
+   *  its own size key (`grid_icon_size_right`); the left one lives on
+   *  `panelState`. Both are `perMediaType` prefs over the settings signal. */
+  private readonly gridIconSizeRight = this.settingsState.perMediaType<string>(
+    'grid_icon_size_right',
+    this.panelState.mediaType,
+    { fallback: 'M' },
+  );
+
   private currentRightGoalWidth(): number {
-    const settings = this.settingsState.settingsSignal();
-    const dict = (settings?.grid_icon_size_right ?? null) as Record<string, string> | null;
-    return iconSizeToGoalWidth(dict?.[this.panelState.currentMediaType] ?? 'M');
+    return iconSizeToGoalWidth(this.gridIconSizeRight.value());
   }
 
   /** Record the current goal widths as the no-pop baseline for the active media
