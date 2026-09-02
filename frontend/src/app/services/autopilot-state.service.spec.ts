@@ -33,34 +33,34 @@ describe('AutopilotStateService', () => {
       service.activate();
       expect(service.shouldAnnounceCompletion).toBe(false);
 
-      service.noteInitialLabelset(false);
+      service.noteInitialLabelset(0, 0);
       expect(service.shouldAnnounceCompletion).toBe(true);
     });
 
     it('withholds it for a detector that was already trained at run start', () => {
       service.activate();
-      service.noteInitialLabelset(true);
+      service.noteInitialLabelset(3, 2);
       expect(service.shouldAnnounceCompletion).toBe(false);
     });
 
     it('ignores every reading after the first, so the user\'s own votes cannot flip it', () => {
       service.activate();
-      service.noteInitialLabelset(false);
+      service.noteInitialLabelset(0, 0);
       // The user labels; the labelset is no longer evidence of anything.
-      service.noteInitialLabelset(true);
+      service.noteInitialLabelset(3, 2);
       expect(service.shouldAnnounceCompletion).toBe(true);
     });
 
     it('offers the hand-off once per run', () => {
       service.activate();
-      service.noteInitialLabelset(false);
+      service.noteInitialLabelset(0, 0);
       service.markCompletionAnnounced();
       expect(service.shouldAnnounceCompletion).toBe(false);
     });
 
     it('re-arms on a new run, but only for a detector that is still untrained', () => {
       service.activate();
-      service.noteInitialLabelset(false);
+      service.noteInitialLabelset(0, 0);
       service.markCompletionAnnounced();
 
       service.deactivate();
@@ -68,8 +68,51 @@ describe('AutopilotStateService', () => {
       expect(service.shouldAnnounceCompletion).toBe(false);
       // Whatever the run just trained is in the labelset now, so the next run
       // reads as already-trained and stays quiet.
-      service.noteInitialLabelset(true);
+      service.noteInitialLabelset(3, 2);
       expect(service.shouldAnnounceCompletion).toBe(false);
+    });
+  });
+
+  describe('retrain mode', () => {
+    // #3535: the panel's `activate()` guess is taken before `/api/votes` has
+    // answered, so on entry to the Train window it is always `false`. The run's
+    // first real reading of the labelset is what decides.
+    it('engages when the run\'s first labelset reading has both classes', () => {
+      service.activate(false);
+      expect(service.state.retrainMode).toBe(false);
+
+      service.noteInitialLabelset(3, 2);
+      expect(service.state.retrainMode).toBe(true);
+    });
+
+    it('stays off for a labelset with only one class', () => {
+      service.activate(false);
+      service.noteInitialLabelset(3, 0);
+      expect(service.state.retrainMode).toBe(false);
+    });
+
+    it('turns a stale reading off again', () => {
+      service.activate(true);
+      service.noteInitialLabelset(0, 0);
+      expect(service.state.retrainMode).toBe(false);
+    });
+
+    it('ignores every reading after the first, so the user\'s own votes cannot flip it', () => {
+      service.activate(false);
+      service.noteInitialLabelset(0, 0);
+      // The user labels a good and a bad; that is training, not a detector that
+      // arrived trained.
+      service.noteInitialLabelset(1, 1);
+      expect(service.state.retrainMode).toBe(false);
+    });
+
+    it('publishes the correction, so a subscriber can act on it', () => {
+      service.activate(false);
+      const seen: boolean[] = [];
+      const sub = service.state$.subscribe((s) => seen.push(s.retrainMode));
+      service.noteInitialLabelset(3, 2);
+      sub.unsubscribe();
+      expect(seen).toEqual([false, true]);
     });
   });
 

@@ -208,9 +208,19 @@ be read for whether its cost model describes the deployment it was measured
 on. `tune_timing_profile.py`'s coverage report prints it per task:
 
 ```
-  dataset_load     3 cells, 16 step-samples
-                   6 affine (median r² 0.98, 2 below 0.90), 3 median-fallback (no credible slope), 6 byte-rate
+  dataset_load     5 cells, 24 step-samples
+                   exact  (device|media|embedder)  2 cells, 6 affine (median r² 1.00)
+                   rollup (device|media|*)         2 cells, 4 affine (median r² 0.98, 1 below 0.90), 4 byte-rate
+                   rollup (device|*|*)             1 cell, 2 affine (median r² 0.29, 2 below 0.90), 1 step withheld (pooled groups disagree)
 ```
+
+The counts are **split by specificity**, in the order
+[`cell_keys`](#the-three-layer-resolution) tries them, because pooling the levels hides the
+one that matters most: `(device, *, *)` is the cell guaranteed to match, and
+it is the weakest. Read down the block and the first level with a cell for
+your media type and encoder is the one that will pace that job. A bare
+"5 cells" cannot tell you whether a sweep bought five measurements or one
+measurement and four fallbacks.
 
 Read the three counts before the r². **A missing r² is not a bad fit** - it
 means the step was not fitted as a line at all, which happens two ways: a
@@ -233,4 +243,29 @@ Two cautions from the measurements in
 - **The rollup cells are much weaker than the exact ones**, which matters
   because the least-specific cell is the one that always matches. Same
   sweep, same rows: exact cells fit to r² 1.00 with 3 % prediction error,
-  and the `(device, *, *)` rollup to r² 0.29 with 50 %.
+  and the `(device, *, *)` rollup to r² 0.29 with 50 % (162 % on one arm).
+
+### Contradicted rollups are not emitted
+
+A rollup is only ever *reached* for a combination the sweep never measured:
+`cell_keys` tries every more specific key first, and the fitter emits a cell
+for everything it saw. So `(device, media, *)` serves only encoders that
+media type was never measured with, and `(device, *, *)` only media types the
+sweep never touched at all. Extrapolation is the rollup's whole job - which
+is why it must not be built by averaging rows measured to be unlike.
+
+Before fitting a rollup step, `fit.py` fits each pooled group on its own and
+asks what the step costs at a size all of them cover. If the cheapest and
+dearest answers differ by more than `_MAX_ROLLUP_SPREAD` (3x), that step is
+**left out of the cell**, and `step_terms` falls it through to the shipped
+default while the rest of the cell still applies. #3345's measured case is
+the one this catches: `(cuda+cuml, *, *)` fitting a single slope through an
+image import at 0.014 s/item and an audio one at 0.102.
+
+The threshold sits well above the spread a healthy rollup shows - that same
+study's media rollups ran at 9 % error - so it fires on disagreement rather
+than on scatter. A merely imprecise rollup still beats the shipped default
+and is kept; a rollup with one group behind it is a rename of the cell it
+backs up and is never suppressed. The withheld count is printed in the
+coverage report, because a step the profile does *not* contain is invisible
+to anything that reads the profile.

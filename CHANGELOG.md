@@ -35,20 +35,24 @@ not list every commit. Use `git log` for the full history.
   was trained and calibrated in. A media with no usable vector in the scored
   space is also reported as `N/A` instead of falling out of both result tables.
 
-- **Switching dataset or detector in the Train window now re-ranks the new
-  pair, instead of landing on an empty work queue.** A pair switch cleared the
-  ranking but re-ran no sort of any kind, so the window settled with nothing to
-  label and a blank centre -- where a fresh entry to that same pair produces a
-  full ranking and an item to look at. Two things caused it. The reload zeroes
-  the vote cache before refilling it, and Autopilot read that gap as "this
-  detector has no labels" rather than "the labels have not arrived yet",
-  dropping you out of the Autopilot tab permanently and resetting the sort mode
-  on the way. And nothing re-ran Autopilot's seed for the new pair: it fires
-  when the Train window opens, which a switch does not do. Autopilot now waits
-  for the vote read before deciding it has nothing to work with, and the pair
-  change re-seeds the new pair's ranking as soon as its votes land -- learned
-  sort when you were in learned mode, otherwise the text or media-example seed
-  Autopilot would have used on entry.
+- **Switching dataset or detector in the Train window now re-ranks the pair you
+  land on.** Opening the window seeds a ranking -- Autopilot activates, its
+  seed sort runs, and an item lands in the centre. A pair *switch* re-ran none
+  of that: it reloaded the media list and the votes and left the new pair with
+  the empty ranking the reset had just installed, so you arrived at an empty
+  work queue and a placeholder centre with no way back short of leaving and
+  re-entering the window. Two faults had to meet. The reload spends a moment
+  with the vote cache cleared, and Autopilot read that moment as "this detector
+  has no labels" rather than "the labels have not arrived yet" -- on a dataset
+  whose embedder cannot search by text that dropped you into Manual for good,
+  and rewrote the sort mode on the way out. And the only re-sort a switch could
+  ever produce was an Autopilot *phase change*, which a pair that lands in the
+  phase you left it in never fires. Autopilot now waits for the vote read
+  before deciding it has nothing to work with, and a switch that nothing else
+  ranked falls back to the sort a fresh entry would have run -- learned sort
+  when the detector has both label classes, otherwise Autopilot's text or
+  example seed. The re-rank never moves the centre off an item you have already
+  started labelling.
 
 - **Switching dataset or detector no longer leaves the previous pair's item in
   the centre viewer.** Media ids are per-dataset, so the pair switch cleared the

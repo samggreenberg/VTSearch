@@ -79,17 +79,30 @@ export class AutopilotStateService {
   }
 
   /**
-   * Record whether the detector held any labels at the start of this run.
+   * Record the run's first real reading of the detector's labelset.
    *
    * Takes effect on the first call after {@link activate} and ignores every
    * later one: once the user starts voting the labelset is no longer evidence
    * of anything, so only the first reading — taken as soon as ``/api/votes``
    * has landed, before the user can have voted — is meaningful.
+   *
+   * Two things read it. {@link startedTrained} asks whether the detector held
+   * *any* labels, and gates the completion hand-off. ``retrainMode`` asks the
+   * stricter question — both classes, so learned sort is available from the
+   * first moment — and it is corrected here rather than left at whatever
+   * {@link activate} guessed, because on entry to the Train window that guess
+   * is always ``false``: the panel mounts on the first render, two round trips
+   * before ``/api/votes`` answers, so a fully trained detector activated as
+   * untrained and spent its first sort on the text hint (#3535).
    */
-  noteInitialLabelset(hasLabels: boolean): void {
+  noteInitialLabelset(goodCount: number, badCount: number): void {
     if (this.initialLabelsetKnown) return;
     this.initialLabelsetKnown = true;
-    this.startedTrained = hasLabels;
+    this.startedTrained = goodCount > 0 || badCount > 0;
+    const retrainMode = goodCount > 0 && badCount > 0;
+    if (retrainMode !== this.stateSubject.value.retrainMode) {
+      this.stateSubject.next({ ...this.stateSubject.value, retrainMode });
+    }
   }
 
   /**
