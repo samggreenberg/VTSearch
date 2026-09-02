@@ -17,6 +17,24 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **Find now calibrates each detector against the corpus it is searching, and
+  scores each head the way that head was trained.** Two independent faults met
+  in the cross-dataset Find route. A detector that is not loaded against the
+  dataset being searched is retrained on the fly, and that retrain was handed no
+  haystack -- so its Good/Bad line came from the pooled cross-calibration rule,
+  which caps false negatives and only floors false positives, i.e. sits below
+  the cut the data supports and returns more matches than the detector actually
+  makes (on a synthetic 2k-media patch corpus it called all 2000 a match, where
+  the population-fitted cut called 728). The corpus was in memory the whole
+  time; it is now what the threshold is fitted on. Separately, both scorers read
+  one image-level vector per media, which is right for the on-the-fly head
+  (trained on image-level label vectors) but wrong for an already-loaded one,
+  whose threshold was calibrated on max-pooled patch scores -- so on a patch
+  dataset a loaded detector was compared against a line drawn for a higher
+  quantity and under-returned. Each path now scores at the geometry its own head
+  was trained and calibrated in. A media with no usable vector in the scored
+  space is also reported as `N/A` instead of falling out of both result tables.
+
 - **Switching dataset or detector no longer leaves the previous pair's item in
   the centre viewer.** Media ids are per-dataset, so the pair switch cleared the
   ranking, the threshold and the vote cache but left the *selection* pointing at

@@ -12,7 +12,7 @@
   "thresholds.vote_exclusion_floor": "4832453572322283bf6cc9b70d9a1d2b8b3aa5da1f354e36bb5d771d43b82a5c",
   "training.blend_schedule_default": "3737e6185aeb219673cbf8126a5306d6e435eba67e73c24cc1975a896bbab7e1",
   "training.calibration_score_rows": "1110937c8efc4198ff299328966afaa2a150ed856868033d701914995beadae1",
-  "training.fused_threshold": "b6c89f8ff74c032b3663cf1077729384aeccc134debae6a85bef469437a9448d",
+  "training.fused_threshold": "91f474212fb281e228e2bfa0c1a2adec154e3b12950b61007c1749eeb9ec2dda",
   "training.split_fraction_default": "fa4b1b9bd042b325086f8e22229e4922ff0b4fe7d862a89c47ec2e70276719a6",
-  "training.train_and_threshold": "d8a2f1b7051e2267a4c82383beea7561d0f215ec71509556aef75062ab1bfe85"
+  "training.train_and_threshold": "33e8c9e139c82d4b0e145bc79e10b30a1ea43265bf8aa8713e55014e1141f710"
 }
