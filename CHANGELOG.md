@@ -38,6 +38,15 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Your Dashboard selection now survives leaving the Dashboard.** Going to
+  Train and back used to drop the highlighted rows and blank the top bar to
+  "Select a dataset" -- even though the pair you had just opened was still
+  loaded -- because the selection lived on the Dashboard component and died
+  with it. It now lives in `DashboardSelectionService`, so the rows come back
+  highlighted and the top bar keeps naming them. The detector grid's
+  Drafts/AutoRun tab travels with the selection it scopes, so returning can no
+  longer leave a hidden AutoRun row feeding the section actions. (Issue #3445.)
+
 - **Switching between two loaded detectors no longer throws away the labeling
   indicators' cached work.** The Smart / Stable per-step cache retrains one MLP
   per label-history step, and it used to be a single slot stamped with whichever

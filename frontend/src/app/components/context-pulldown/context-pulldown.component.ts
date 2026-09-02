@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, HostListener, inject, input, OnDestroy, OnInit, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, effect, ElementRef, HostListener, inject, input, OnDestroy, OnInit, viewChild } from '@angular/core';
 import { TitleCasePipe } from '@angular/common';
 import { NavigationEnd, Router } from '@angular/router';
 
@@ -129,6 +129,22 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
    *  needing a separate per-row subscription. */
   private busyPairs: Map<string, string[]> = new Map();
 
+  constructor() {
+    // On the Dashboard the bar shows the table selection instead of the
+    // loaded context. Rebuild when visibility flips or either half's
+    // selection changes (both halves matter here because a row's
+    // compatibility/busy state depends on the *other* half's pick). An
+    // `effect` rather than a subscription, so the bar stays live off its own
+    // reads: nothing has to remember to push into it, and it keeps
+    // repainting whether or not the Dashboard is mounted.
+    effect(() => {
+      this.dashSelection.dashboardVisible();
+      this.dashSelection.datasetIds();
+      this.dashSelection.detectorIds();
+      this.rebuildRows();
+    });
+  }
+
   ngOnInit(): void {
     this.datasetState.datasets$.pipe(takeUntil(this.destroy$)).subscribe(() => {
       this.rebuildRows();
@@ -139,19 +155,6 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     // moment the user picks a row, rather than waiting for any
     // dataset/detector load to finish.
     this.activeContext.intentPair$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(() => this.rebuildRows());
-    // On the Dashboard the bar mirrors the table selection instead of the
-    // loaded context. Rebuild when visibility flips or either half's
-    // selection changes (both halves matter here because a row's
-    // compatibility/busy state depends on the *other* half's pick).
-    this.dashSelection.dashboardVisible$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(() => this.rebuildRows());
-    this.dashSelection.datasetIds$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(() => this.rebuildRows());
-    this.dashSelection.detectorIds$
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => this.rebuildRows());
     this.datasetState.error$.pipe(takeUntil(this.destroy$)).subscribe((err) => {
@@ -309,12 +312,12 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
   }
 
   pickRow(row: PulldownRow): void {
-    // On the Dashboard the pulldown mirrors the tables: a pick is a plain
-    // single-select of that row (which toggles off if it was the sole
+    // On the Dashboard the pulldown shows the tables' selection: a pick is a
+    // plain single-select of that row (which toggles off if it was the sole
     // pick), never a context load. Off the Dashboard it switches the
     // active/loaded pair as before.
-    if (this.dashSelection.dashboardVisible) {
-      this.dashSelection.requestSelect(this.kind(), row.id);
+    if (this.dashSelection.dashboardVisible()) {
+      this.dashSelection.toggle(this.kind(), row.id, false);
       this.close();
       return;
     }
@@ -340,8 +343,8 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     } else {
       // Seed the new-detector form's media type from the partner dataset:
       // the single selected dataset on the Dashboard, else the active one.
-      const otherDsId = this.dashSelection.dashboardVisible
-        ? singleId(this.dashSelection.datasetIds)
+      const otherDsId = this.dashSelection.dashboardVisible()
+        ? singleId(this.dashSelection.datasetIds())
         : this.activeContext.intentDatasetId;
       const other = otherDsId ? this.datasetState.datasetById().get(otherDsId) : null;
       this.newThingFlows.openNewDetector({
@@ -482,9 +485,11 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
   private switchToNewItem(id: string): void {
     // On the Dashboard a freshly-added item becomes the selected row (the
     // Dashboard also auto-selects new ids, so this just keeps them aligned)
-    // rather than being loaded as the active pair.
-    if (this.dashSelection.dashboardVisible) {
-      this.dashSelection.requestSelect(this.kind(), id);
+    // rather than being loaded as the active pair. `selectOnly`, not the pick
+    // ladder: this is "make the new thing the selection", and the ladder would
+    // toggle it back *off* if the Dashboard's own auto-select got there first.
+    if (this.dashSelection.dashboardVisible()) {
+      this.dashSelection.selectOnly(this.kind(), [id]);
       return;
     }
     if (this.isDataset) {
@@ -504,12 +509,12 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     //    than one — the closed label collapses that to "Multiple").
     //  - Elsewhere, the single intent id (what the user picked), not what's
     //    loaded, so picking a row feels instant while a load runs behind it.
-    const dashMode = this.dashSelection.dashboardVisible;
+    const dashMode = this.dashSelection.dashboardVisible();
     const dsIds = dashMode
-      ? this.dashSelection.datasetIds
+      ? this.dashSelection.datasetIds()
       : idList(this.activeContext.intentDatasetId);
     const detIds = dashMode
-      ? this.dashSelection.detectorIds
+      ? this.dashSelection.detectorIds()
       : idList(this.activeContext.intentModelId);
 
     // The row's own selected set (highlight + label) versus the *other*

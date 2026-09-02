@@ -160,9 +160,13 @@ the component —
 - `DashboardLoadingTasksService` — per-task loading rows, and the
   poll-until-settled-then-refresh bookkeeping.
 - `DashboardSelectionService` — the highlighted table rows (which drive
-  Train / Find / Combine / Delete), bridged to the top-bar pulldowns so they
-  show what is *selected* while the Dashboard is on screen, not merely what is
-  loaded.
+  Train / Find / Combine / Delete), *owned* here rather than mirrored from the
+  component, so the top-bar pulldowns show what is *selected* while the
+  Dashboard is on screen (not merely what is loaded) by reading signals
+  directly, and the selection survives a round trip to another view. Both
+  grids share one `toggle(kind, id, additive)` ladder, and the ids the top bar
+  reads are `computed` over the selection and the registry — the pulldown
+  needs no push, and there is no per-mutation mirror call to forget.
 
 The Add-Dataset and New-Detector flows are *not* owned by the Dashboard at
 all: `NewThingFlowsService` is a singleton opener, and the modals are rendered
