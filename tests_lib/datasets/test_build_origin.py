@@ -264,12 +264,6 @@ class TestInTreeImportersAfterMigration:
         origin = IMPORTER.build_origin({"datasets": "/a.pkl,/b.pkl"})
         assert origin["params"]["datasets"] == "/a.pkl,/b.pkl"
 
-    def test_recaller_origin_is_empty(self):
-        from vtscore.datasets.importers.recaller import IMPORTER
-
-        origin = IMPORTER.build_origin({"query_id": "Q1", "media_type": "audio"})
-        assert origin == {"importer": "recaller", "params": {}}
-
     def test_server_files_origin_includes_paths_file_and_media_type(self):
         from vtscore.datasets.importers.server_files import IMPORTER
 

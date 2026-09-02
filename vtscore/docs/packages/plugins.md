@@ -604,7 +604,7 @@ After `pip install -e .`:
 ```python
 >>> from vtscore.exporters import get_exporter, list_exporters
 >>> [e.name for e in list_exporters()]
-['email_smtp', 'gui', 'holder', 'server_csv_file', 'server_json_file', 'stdout', 'webhook']
+['email_smtp', 'gui', 'open_url', 'portable_detector', 'server_csv_file', 'server_json_file', 'stdout', 'webhook']
 >>> exp = get_exporter("stdout")
 >>> exp.export({"detectors_run": 1, "results": {}}, {"indent": "4"})
 {

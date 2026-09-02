@@ -1206,7 +1206,7 @@ Media sources are **flat `.py` modules**, not sub-packages — the discovery sca
 (`discover_modules=True` in `vtscore/datasets/sources/__init__.py`) walks module
 files and picks up their `SOURCE` sentinel. A source built inside a subdirectory
 `__init__.py` is never seen. Every built-in source (`local_folder.py`,
-`http_archive.py`, `pullwrest.py`, …) follows this shape.
+`http_archive.py`, `server_files.py`, …) follows this shape.
 
 ### What to implement
 

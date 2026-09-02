@@ -366,7 +366,7 @@ with resolve_file_context(origin, origin_name, filename) as path:
 
 | Function                                                             | Behaviour                                                          |
 |----------------------------------------------------------------------|--------------------------------------------------------------------|
-| `resolve_file_context(origin, origin_name, filename)` (line 195)     | **Context manager** - must wrap any code that reads the file. Some sources (PullWrest, http_archive cache misses) materialise files in a tempdir they own; the `ExitStack` keeps that tempdir alive until the `with` block exits. |
+| `resolve_file_context(origin, origin_name, filename)` (line 195)     | **Context manager** - must wrap any code that reads the file. Some sources (`http_archive` cache misses) materialise files in a tempdir they own; the `ExitStack` keeps that tempdir alive until the `with` block exits. |
 | `resolve_file_from_origin(origin, origin_name, filename)` (line 223) | One-shot convenience. Safe for `path.exists()` checks; unsafe for any call that may garbage-collect the source. |
 | `embed_file(file_path, media_type, embedder_name="")` (line 376)     | Pick the embedder for the media type (named, else first registered) and call `embedder.embed_media(media_from_path(...))`. |
 | `resolve_label_embeddings(labels, media_type, progress_callback=None)` (line 691) | Batch entry point. Returns `ResolvedLabels`.            |

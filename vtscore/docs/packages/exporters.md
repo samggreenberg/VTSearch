@@ -2,7 +2,7 @@
 
 Result/labelset exporters: plugins that take a labelset or an
 autodetect-results dict and deliver it somewhere - a file on disk, an
-HTTP webhook, an email, a Holder package. Every exporter is one
+HTTP webhook, an email, an external labelling service. Every exporter is one
 subclass of `LabelsetExporter` plus a module-level `EXPORTER` sentinel,
 discovered by the standard `vtscore.plugins` registry. External code
 adds more by either dropping a module under `vtscore/exporters/<name>/`
@@ -26,7 +26,6 @@ external source) are not here; they live in
 | `vtscore/exporters/webhook/` | POST results to an arbitrary URL |
 | `vtscore/exporters/email_smtp/` | Email results directly via MX lookup |
 | `vtscore/exporters/gui/` | Show results in the browser, or print them on the CLI |
-| `vtscore/exporters/holder/` | Export labels to a Holder package |
 | `vtscore/exporters/open_url/` | Format the labelset into a URL for the browser to open |
 | `vtscore/exporters/portable_detector/` | Write standalone ONNX scoring bundles headlessly |
 
@@ -67,7 +66,7 @@ from vtscore.exporters import get_exporter, list_exporters
 
 exporter = get_exporter("server_json_file")
 print([e.name for e in list_exporters()])
-# ['email_smtp', 'gui', 'holder', 'open_url', 'server_csv_file', 'server_json_file', 'webhook']
+# ['email_smtp', 'gui', 'open_url', 'portable_detector', 'server_csv_file', 'server_json_file', 'webhook']
 ```
 
 `get_exporter(name)` returns `None` when the name is unknown - it does
@@ -152,8 +151,8 @@ custom exporters that only target one of them should raise
 `export()` returns a `dict` that **must** include a `"message"` key - a
 short human-readable confirmation string. The exporter may also include
 arbitrary extra keys (`"filepath"` for file-based exporters,
-`"status_code"` and `"url"` for the webhook, `"holder_id"` for Holder,
-…). The route handler renders the message back to the user; the extra
+`"status_code"` and `"url"` for the webhook, an external package id for a
+service exporter, …). The route handler renders the message back to the user; the extra
 keys are passed through unchanged.
 
 Two extra keys are *interpreted* by the frontend rather than merely
@@ -232,13 +231,10 @@ knowable at runtime fills its dropdown in either place.
 | `open_url` | Formats the labelset into a URL and returns it as `open_url` for the browser to open in a new tab | `opens_url = True`. No network call server-side; substitutes `{ids}` / `{count}` into a user-supplied template, URL-encoding the joined identifiers. Truncates to `max_items` (reported in the message) and refuses a URL over ~2000 characters |
 | `email_smtp` | Sends an email via direct MX delivery | Resolves the recipient domain's MX record (`dnspython`), connects on port 25, sends a multipart plain+HTML summary. Requires a sender domain you control |
 | `gui` | Displays results in the browser (GUI) or prints to stdout (CLI) | `hidden_from_picker = True`. The default exporter for the web UI's autodetect modal; in CLI mode `export_cli()` prints origin + name of each Good hit |
-| `holder` | Creates a new Holder package with Good/Bad folders | `hidden_from_picker = True` until the Holder API client lands. Only labels carrying a `contentID` (typically from a ReCaller import) are written; everything else is silently skipped |
 | `portable_detector` | Writes one standalone ONNX scoring bundle per trained detector | `hidden_from_picker = True`, CLI-only. See below - it is the one exporter that consumes detectors rather than results |
 
 `hidden_from_picker = True` keeps an exporter out of the generic
 picker UI. The `gui` exporter is special-cased by the frontend; the
-`holder` exporter is a scaffold with `NotImplementedError` stubs for
-its Holder API client (see `vtscore/exporters/holder/__init__.py`); the
 `portable_detector` exporter is hidden because the GUI has its own
 dedicated portable-export modal.
 

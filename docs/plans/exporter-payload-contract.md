@@ -43,13 +43,6 @@ Two constraints shaped it, and both still bind anything built on top:
 
 <!-- item-sep -->
 
-- **Un-hide the `holder` exporter.** It is `hidden_from_picker = True  # flip to
-  False once API clients are implemented`, and that comment is now the only
-  thing keeping it back: as a labelset-only exporter it is filtered out of the
-  find-results pickers by construction, so flipping the flag can no longer
-  expose it to a payload it cannot read. Blocked on the Holder API clients, not
-  on the contract.
-
 <!-- item-sep -->
 
 - **Per-AutoRun exporter selection.** The second half of

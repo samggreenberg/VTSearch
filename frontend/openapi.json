@@ -7526,67 +7526,6 @@
         },
         "type": "object"
       },
-      "import_dataset_ReCallerDatasetImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "build_projection": {
-            "default": null,
-            "nullable": true
-          },
-          "cleaners": {
-            "default": null,
-            "nullable": true
-          },
-          "clipper": {
-            "default": null,
-            "nullable": true
-          },
-          "clipper_params": {
-            "default": null,
-            "nullable": true
-          },
-          "dataset_name": {
-            "default": null,
-            "nullable": true
-          },
-          "embedder": {
-            "default": null,
-            "nullable": true
-          },
-          "embedders": {
-            "default": null,
-            "nullable": true
-          },
-          "media_type": {
-            "default": "audio",
-            "enum": [
-              "audio",
-              "document",
-              "face",
-              "image",
-              "text",
-              "video",
-              ""
-            ],
-            "type": "string"
-          },
-          "merge_near_duplicates": {
-            "default": null,
-            "nullable": true
-          },
-          "query_id": {
-            "type": "string"
-          },
-          "source_specs": {
-            "default": null,
-            "nullable": true
-          }
-        },
-        "required": [
-          "query_id"
-        ],
-        "type": "object"
-      },
       "import_dataset_ServerFilesDatasetImporter_Args": {
         "additionalProperties": true,
         "properties": {
@@ -7778,18 +7717,6 @@
         },
         "type": "object"
       },
-      "import_labels_into_detector_HolderLabelImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "holder_id": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "holder_id"
-        ],
-        "type": "object"
-      },
       "import_labels_into_detector_ServerCsvLabelImporter_Args": {
         "additionalProperties": true,
         "properties": {
@@ -7811,22 +7738,6 @@
         },
         "required": [
           "filepath"
-        ],
-        "type": "object"
-      },
-      "register_detector_from_labelset_HolderLabelImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "holder_id": {
-            "type": "string"
-          },
-          "name": {
-            "default": null,
-            "nullable": true
-          }
-        },
-        "required": [
-          "holder_id"
         ],
         "type": "object"
       },
@@ -7859,18 +7770,6 @@
         },
         "required": [
           "filepath"
-        ],
-        "type": "object"
-      },
-      "run_label_import_HolderLabelImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "holder_id": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "holder_id"
         ],
         "type": "object"
       },
@@ -8183,39 +8082,6 @@
             "nullable": true
           }
         },
-        "type": "object"
-      },
-      "stage_import_ReCallerDatasetImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "dataset_name": {
-            "default": null,
-            "nullable": true
-          },
-          "media_type": {
-            "default": "audio",
-            "enum": [
-              "audio",
-              "document",
-              "face",
-              "image",
-              "text",
-              "video",
-              ""
-            ],
-            "type": "string"
-          },
-          "query_id": {
-            "type": "string"
-          },
-          "source_specs": {
-            "default": null,
-            "nullable": true
-          }
-        },
-        "required": [
-          "query_id"
-        ],
         "type": "object"
       },
       "stage_import_ServerFilesDatasetImporter_Args": {
@@ -10103,34 +9969,6 @@
         ]
       }
     },
-    "/api/dataset/import/recaller": {
-      "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "import_dataset__recaller",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/import_dataset_ReCallerDatasetImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run a registered importer by name in a background thread.",
-        "tags": [
-          "datasets_staging"
-        ]
-      }
-    },
     "/api/dataset/import/server_files": {
       "post": {
         "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
@@ -10806,34 +10644,6 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/stage_import_LocalFolderDatasetImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run a registered importer in staging mode.",
-        "tags": [
-          "datasets_staging"
-        ]
-      }
-    },
-    "/api/dataset/stage-import/recaller": {
-      "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "stage_import__recaller",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/stage_import_ReCallerDatasetImporter_Args"
               }
             }
           },
@@ -11873,34 +11683,6 @@
         ]
       }
     },
-    "/api/detectors/registry/from-labelset/holder": {
-      "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "register_detector_from_labelset__holder",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/register_detector_from_labelset_HolderLabelImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Create a detector seeded with labels from a label importer.",
-        "tags": [
-          "detectors_registry"
-        ]
-      }
-    },
     "/api/detectors/registry/from-labelset/server_csv_file": {
       "post": {
         "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
@@ -12718,45 +12500,6 @@
         "summary": "Set/replace the examples for a detector.",
         "tags": [
           "detectors_crud"
-        ]
-      }
-    },
-    "/api/detectors/{name}/import-labels/holder": {
-      "parameters": [
-        {
-          "in": "path",
-          "name": "name",
-          "required": true,
-          "schema": {
-            "minLength": 1,
-            "type": "string"
-          }
-        }
-      ],
-      "post": {
-        "description": "Unlike the regular ``/api/label-importers/import/`` route, this does\n**not** require a dataset to be loaded.  The imported label entries are\nmerged directly into the detector's persisted labelset, and the\ndetector-registry entry is updated so the dashboard reflects the new\ncount.\n\nWhen the detector is loaded into memory, the new labels are also resolved\nagainst the loaded dataset's medias, applied to the detector's votes, and\na fresh MLP is trained with a cross-validated threshold, all inside the\nloaded detector context.\n\nPlugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "import_labels_into_detector__holder",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/import_labels_into_detector_HolderLabelImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run a label importer and merge results into this detector's labelset.",
-        "tags": [
-          "detectors_labels"
         ]
       }
     },
@@ -14293,34 +14036,6 @@
           }
         },
         "summary": "Return dropdown options for a dynamic-options field on a label importer.",
-        "tags": [
-          "label_importers"
-        ]
-      }
-    },
-    "/api/label-importers/import/holder": {
-      "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "run_label_import__holder",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/run_label_import_HolderLabelImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run the named label importer and apply the resulting labels.",
         "tags": [
           "label_importers"
         ]

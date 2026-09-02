@@ -282,7 +282,7 @@ vtscore/
 │   │   ├── synthetic/                  # deterministic synthetic media
 │   │   ├── demo/                       # bundled demo datasets
 │   │   └── …                           # see packages/datasets.md
-│   ├── sources/                        # MediaSource resolvers (local_folder, http_archive, pullwrest)
+│   ├── sources/                        # MediaSource resolvers (local_folder, http_archive, …)
 │   ├── origin.py                       # Origin dataclass
 │   ├── labelset.py                     # LabelSet + LabeledElement
 │   ├── loader.py                       # façade re-exporting loader_folder/loader_pickle/loader_demo

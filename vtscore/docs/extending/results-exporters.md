@@ -132,8 +132,11 @@ The built-in [`server_json_file`](../../exporters/server_json_file/__init__.py),
 [`server_csv_file`](../../exporters/server_csv_file/), and
 [`webhook`](../../exporters/webhook/__init__.py) exporters all follow
 this pattern. Implement only one when only one makes sense -
-[`holder`](../../exporters/holder/__init__.py) files items by the label
-a human gave them, so it declares `export_labelset()` alone.
+[`portable_detector`](../../exporters/portable_detector/__init__.py)
+consumes trained detectors rather than either results shape, so it
+declares neither and stands alone on `detector_bundles`. An exporter
+that files items by the label a human gave them, and has nothing to say
+about a scored run, would likewise declare `export_labelset()` alone.
 
 ### Legacy single-method exporters
 

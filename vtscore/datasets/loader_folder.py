@@ -518,7 +518,7 @@ _PARALLEL_MIN_FILES = 64
 
 
 def _folder_ingest_workers() -> int:
-    """Worker count for the parallel per-file build (mirrors near_dupes/recaller)."""
+    """Worker count for the parallel per-file build (mirrors near_dupes)."""
     return min(8, os.cpu_count() or 4)
 
 

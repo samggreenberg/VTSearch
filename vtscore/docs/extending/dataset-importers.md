@@ -56,9 +56,9 @@ Then either:
 - Implement `list_records(field_values) → list` plus
   `fetch_record(record, field_values, thin) → dict | None`, optionally
   overriding `_fetch_records_bulk_impl()` for batched / concurrent
-  fetches; used by service-style importers (see
-  [`vtscore/datasets/importers/recaller/__init__.py`](../../datasets/importers/recaller/__init__.py)
-  for a working example that issues concurrent thread-pool fetches).
+  fetches; used by service-style importers (see the
+  [worked example](#worked-example) below - no in-tree importer takes
+  this path today, since every built-in one is folder-shaped).
 
 Expose a module-level `IMPORTER = YourImporter()` so the registry picks
 it up. The sentinel must be an already-instantiated plugin object, not
@@ -103,7 +103,7 @@ for the importer-side instance attributes that feed into the loader):
 | `embedder` | `str` | Yes when `embeddings` is set | Name of the embedder that produced the vector (must match the dict key) |
 | `media_bytes` | `bytes \| None` | Conditional | The actual content; `None` in thin mode |
 | `media_path` | `str \| None` | Conditional | Local path; required for thin mode if no `media_url` |
-| `media_url` | `str \| None` | Optional | Remote URL for lazy-fetch (PullWrest-style) |
+| `media_url` | `str \| None` | Optional | Remote URL the framework lazy-fetches bytes from on demand |
 | `media_string` | `str \| None` | Conditional | Text content (text-type media only) |
 | `duration` | `float` | Yes | Seconds; `0` for non-temporal media |
 | `file_size` | `int` | Yes | Bytes |
@@ -116,8 +116,8 @@ Folder-style importers usually delegate everything after the download
 to `vtscore.datasets.loader.load_dataset_from_folder`, which walks the
 folder, embeds files (skipping any whose name appears in
 `self.content_vectors`), and assigns IDs. Service-style importers
-build the dicts directly (see the recaller importer for a real
-example).
+build the dicts directly (see the [worked example](#worked-example)
+below).
 
 ### Origins
 
@@ -193,8 +193,10 @@ one that fits your backend:
 The first three hooks all hand back raw source-type media; the
 framework runs converters and ingests.  Only `run()` gives up that
 help in exchange for full control.  The built-in `server_folder`
-importer is the canonical `run()`-shaped example; `recaller` is the
-canonical `fetch_source_media()`-shaped example.
+importer is the canonical `run()`-shaped example; the per-source-type
+hooks have no in-tree user, so read the ABC in
+`vtscore/datasets/importers/base/dataset_importer.py` for their exact
+contract.
 
 The default `fetch_source_media()` delegates to `list_records()` +
 `fetch_record()`, and the default `fetch_all_source_media()`

@@ -248,11 +248,11 @@ class TestStreamingExporterGuard:
     def test_non_streaming_exporter_raises(self):
         from vtscore.cli import _run_streaming_pipeline
 
-        # holder is a registered exporter with no incremental (streaming) mode.
+        # open_url is a registered exporter with no incremental (streaming) mode.
         with pytest.raises(ValueError, match="does not support --stream-results"):
             _run_streaming_pipeline(
                 iter([{1: _make_audio_media(1)}]),
-                exporter_name="holder",
+                exporter_name="open_url",
                 exporter_field_values={},
                 override_detectors=None,
                 autofind_detectors=[],

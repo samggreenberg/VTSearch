@@ -51,7 +51,7 @@ def _fetch_media_url(url: str) -> bytes | None:
     Used by :meth:`MediaType._resolve_media_bytes` and
     :meth:`MediaType._resolve_media_string` as a last-resort fallback when
     neither ``media_bytes`` nor ``media_path`` are available (e.g. for
-    URL-backed media from PullWrest).
+    URL-backed media).
 
     A ``media_url`` is **not** trusted input.  It rides along on a media dict
     that can arrive from a loaded pickle
@@ -638,7 +638,7 @@ class MediaType(ABC):
            sliced/cropped from the source on demand (see
            :mod:`vtscore.media.lazy_clip`).
         3. ``media_path`` - local file on disk (thin mode).
-        4. ``media_url`` - remote URL (URL-backed media, e.g. PullWrest),
+        4. ``media_url`` - remote URL (URL-backed media),
            fetched only through the SSRF guard in :func:`_fetch_media_url`.
         """
         media_bytes = media.get("media_bytes")
