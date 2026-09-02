@@ -9,6 +9,9 @@ direction down, because a sign error here is invisible in the aggregate metrics
 
 from __future__ import annotations
 
+import importlib.util
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -18,6 +21,7 @@ from vtscore.training.thresholds import (
     ACQUISITION_INCLUSION_OFFSET,
     acquisition_inclusion,
     fit_fold_anchored_cut,
+    inclusion_cost_weights,
 )
 
 from .sweep_cache import memoize_sweep
@@ -28,6 +32,17 @@ from .test_max_patch_style import _planted_dataset
 # and this module is pinned to one worker for the cache to hit.  Rows are
 # shared and must stay read-only.  See sweep_cache.py.
 pytestmark = pytest.mark.xdist_group("acq-inclusion")
+
+_CALIB = Path(__file__).resolve().parents[2] / "scripts" / "experiments" / "calibration"
+
+
+def _load(name: str, path: Path):
+    """The calibration modules are loose scripts, not package members."""
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _base(rows):
@@ -89,7 +104,7 @@ def test_default_is_the_shipped_offset_not_the_coupled_behaviour():
     A default of 0 would silently make every future arm's control the *old*
     behaviour, so a baseline run would stop measuring what users get.
     """
-    assert ACQUISITION_INCLUSION_OFFSET == -3
+    assert ACQUISITION_INCLUSION_OFFSET == -4
     rows = [r for r in _run() if r["threshold_provenance"].startswith("fold_anchored")]
     assert rows, "no fold-anchored steps to check"
     moved = [r for r in rows if r["acq_threshold"] != r["threshold"]]
@@ -108,14 +123,14 @@ def test_offset_zero_is_the_coupled_control():
 def test_the_offset_is_relative_to_the_reporting_inclusion():
     """The shipped reading: the *gap* is what was measured, not an absolute cut.
 
-    Read absolutely, ``-3`` would collapse to a no-op at reporting inclusion -3
+    Read absolutely, ``-4`` would collapse to a no-op at reporting inclusion -4
     and invert below it - the direction the study's falsification arm ruled out.
     Relative, the selector stays above the reporting line wherever the user puts
     the slider.
     """
-    assert acquisition_inclusion(0) == -3
-    assert acquisition_inclusion(-3) == -6
-    assert acquisition_inclusion(4) == 1
+    assert acquisition_inclusion(0) == -4
+    assert acquisition_inclusion(-4) == -8
+    assert acquisition_inclusion(4) == 0
     assert acquisition_inclusion(0, offset=0) == 0
 
     rows = [r for r in _run(inclusion=-1) if r["threshold_provenance"].startswith("fold_anchored")]
@@ -239,3 +254,88 @@ def test_rank_pin_must_disable_the_default_offset_explicitly():
 def test_rank_percentile_is_range_checked(bad):
     with pytest.raises(ValueError, match=r"\[0, 1\]"):
         _run(acq_inclusion_offset=0, acq_rank_percentile=bad)
+
+
+# --- fractional inclusion steps (#3319) -------------------------------------
+# The knob is a log2 scale, so "half a step" is a real operating point, not an
+# interpolation between two settings.  #3319 sweeps them; these pin down that
+# the arithmetic, the shared helper and the harness's parser all carry them.
+def test_one_inclusion_step_is_one_bit_of_evidence():
+    """What a value MEANS: ``k`` thresholds the likelihood ratio at ``2**-k``.
+
+    The loss is a weighted sum of *rates*, each normalised by its own class, so
+    prevalence divides out and what is left is pure weight-of-evidence: every
+    step doubles the evidence demanded, and a half step multiplies it by
+    ``sqrt(2)``.  Asserted here because it is the property the whole offset
+    parameterisation rests on - a *constant shift in bits* is prior-free, which
+    is why an offset transfers across datasets where an absolute cut would not.
+    """
+
+    def ratio(k):
+        fpr_w, fnr_w = inclusion_cost_weights(k)
+        return fpr_w / fnr_w
+
+    assert ratio(0) == pytest.approx(1.0)
+    assert ratio(-3) == pytest.approx(8.0)
+    assert ratio(2) == pytest.approx(0.25)
+    # one step = one bit, at integer and fractional positions alike
+    for k in (-0.5, -1, -2.5, -3, -4.5):
+        assert ratio(k - 1) == pytest.approx(2.0 * ratio(k))
+    # a half step is exactly sqrt(2)
+    assert ratio(-3.5) == pytest.approx(8.0 * 2.0**0.5)
+    assert ratio(-3.5) == pytest.approx(11.3137, rel=1e-4)
+
+
+def test_acquisition_inclusion_carries_a_fractional_offset():
+    """The gap is arithmetic, so a fractional offset stays fractional."""
+    assert acquisition_inclusion(0, offset=-3.5) == pytest.approx(-3.5)
+    assert acquisition_inclusion(-2, offset=-3.5) == pytest.approx(-5.5)
+    assert acquisition_inclusion(4, offset=-0.5) == pytest.approx(3.5)
+
+
+def test_fractional_cuts_land_strictly_between_their_integer_neighbours():
+    """A half step must be a distinct operating point, not a duplicate.
+
+    ``threshold_at`` realises a quantile on the final haystack and then snaps it
+    to that sample (#3166), so it is *a priori* possible for a half step to
+    collapse onto the integer beside it and make the arm a silent duplicate of
+    its neighbour - the failure that would look exactly like "the finer grid
+    found nothing".  On one fitted cut (never across runs: the arms diverge from
+    their first differing vote) the fractional cuts must be ordered with, and
+    somewhere strictly inside, their neighbours.
+    """
+    rng = np.random.default_rng(0)
+    haystacks = [np.sort(rng.beta(2, 5, 400)) for _ in range(2)]
+    orderings = [
+        ([float(x) for x in rng.beta(5, 2, 20)] + [float(x) for x in rng.beta(2, 5, 60)], [1.0] * 20 + [0.0] * 60)
+        for _ in range(2)
+    ]
+    cut = fit_fold_anchored_cut(haystacks, orderings, list(np.concatenate(haystacks)))
+    if cut is None:
+        pytest.skip("no fold-anchored fit on this synthetic draw")
+
+    ks = [-2, -2.5, -3, -3.5, -4, -4.5, -5]
+    thr = [cut.threshold_at(k) for k in ks]
+    assert all(np.isfinite(t) for t in thr), f"non-finite cut among {list(zip(ks, thr))}"
+    # ``ks`` runs DOWNWARD, and a lower inclusion raises the cut, so these ascend.
+    assert thr == sorted(thr), f"fractional steps broke monotonicity: {list(zip(ks, thr))}"
+    strict = [(a, b) for a, b in zip(thr, thr[1:]) if b > a]
+    assert len(strict) >= len(ks) - 2, (
+        f"half steps collapsed onto their neighbours - the finer grid has no resolution here: {list(zip(ks, thr))}"
+    )
+
+
+def test_the_harness_parses_a_fractional_offset(monkeypatch):
+    """``CALIB_ACQ_INCLUSION_OFFSET=-3.5`` must reach the run as -3.5.
+
+    Parsed as an int this raises ``ValueError`` at import and the whole arm dies
+    at cell 0; parsed with a silent truncation it would be far worse - the arm
+    would run, complete, and be a duplicate of ``-3``.
+    """
+    monkeypatch.setenv("CALIB_ACQ_INCLUSION_OFFSET", "-3.5")
+    cfg = _load("_calib_experiment_config_frac", _CALIB / "experiment_config.py")
+    assert cfg.ACQ_INCLUSION_OFFSET == pytest.approx(-3.5)
+
+    monkeypatch.delenv("CALIB_ACQ_INCLUSION_OFFSET")
+    cfg = _load("_calib_experiment_config_unset", _CALIB / "experiment_config.py")
+    assert cfg.ACQ_INCLUSION_OFFSET == ACQUISITION_INCLUSION_OFFSET

@@ -200,3 +200,37 @@ The fit is deliberately plain. Per `(task, cell, step)`:
   slope (noise beating signal on a short step), collapses to the median
   seconds with no slope. A confidently wrong slope extrapolates badly at
   sizes the sweep never visited; a flat median merely stops improving.
+
+### Is the fit any good?
+
+`affine_fit` returns an OLS r² and `StepCoeffs` keeps it, so a profile can
+be read for whether its cost model describes the deployment it was measured
+on. `tune_timing_profile.py`'s coverage report prints it per task:
+
+```
+  dataset_load     3 cells, 16 step-samples
+                   6 affine (median r² 0.98, 2 below 0.90), 3 median-fallback (no credible slope), 6 byte-rate
+```
+
+Read the three counts before the r². **A missing r² is not a bad fit** - it
+means the step was not fitted as a line at all, which happens two ways: a
+byte-scaled step is a per-MB rate by design, and the median fallback above
+declined to draw one. `to_json` omits the key rather than writing a
+misleading zero, and `from_json` restores it as `NaN`.
+
+**A sweep at one dataset size produces no r² anywhere.** One size means one
+`n` per cell, `affine_fit` finds no x-variance and returns `(mean, 0, 0)`,
+and every step lands in the median fallback. Drive several sizes per
+(media type, embedder) - four is comfortable - or the profile is a table of
+averages with no scaling term and nothing to judge it by.
+
+Two cautions from the measurements in
+[#3345](../../../docs/experiments/2026-09-02-timing-r2-3345/REPORT.md):
+
+- **A high r² is not a well-paced step.** r² asks whether the points lie on
+  the line; a bar wants to know how far off the prediction is. They can
+  disagree, and the second is the one that shows.
+- **The rollup cells are much weaker than the exact ones**, which matters
+  because the least-specific cell is the one that always matches. Same
+  sweep, same rows: exact cells fit to r² 1.00 with 3 % prediction error,
+  and the `(device, *, *)` rollup to r² 0.29 with 50 %.

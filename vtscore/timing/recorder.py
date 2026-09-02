@@ -134,20 +134,41 @@ class TaskTimingRecorder:
             return
         self._subscribed = True
 
-    def set_scale(self, n: Optional[float] = None, size_mb: Optional[float] = None) -> None:
+    def set_scale(
+        self,
+        n: Optional[float] = None,
+        size_mb: Optional[float] = None,
+        embedder: Optional[str] = None,
+    ) -> None:
         """Record the job's scale variables once they are known.
 
         Safe to call repeatedly and from any thread; the last value wins.
+
+        *embedder* is here for the same reason *n* is: a task can start without
+        knowing which encoder it will use. An import whose caller named no
+        embedder still runs one — the media-type default, resolved deep in the
+        embed stage — and recording the blank instead files every such run under
+        the media rollup, leaving the exact ``(device, media, embedder)`` cell
+        permanently empty (#3345). An empty string is ignored rather than
+        written, so learning nothing cannot erase what the caller did know.
         """
         with self._lock:
             if n is not None:
                 self._n = float(n)
             if size_mb is not None:
                 self._size_mb = float(size_mb)
+            if embedder:
+                self._embedder = str(embedder)
 
-    def finish(self, n: Optional[float] = None, size_mb: Optional[float] = None, ok: bool = True) -> None:
+    def finish(
+        self,
+        n: Optional[float] = None,
+        size_mb: Optional[float] = None,
+        ok: bool = True,
+        embedder: Optional[str] = None,
+    ) -> None:
         """Unsubscribe and append this run's rows. Idempotent."""
-        self.set_scale(n, size_mb)
+        self.set_scale(n, size_mb, embedder)
         with self._lock:
             self._ok = self._ok and ok
         if self._subscribed:
@@ -259,10 +280,21 @@ class _NullRecorder:
     def start(self) -> None:
         pass
 
-    def set_scale(self, n: Optional[float] = None, size_mb: Optional[float] = None) -> None:
+    def set_scale(
+        self,
+        n: Optional[float] = None,
+        size_mb: Optional[float] = None,
+        embedder: Optional[str] = None,
+    ) -> None:
         pass
 
-    def finish(self, n: Optional[float] = None, size_mb: Optional[float] = None, ok: bool = True) -> None:
+    def finish(
+        self,
+        n: Optional[float] = None,
+        size_mb: Optional[float] = None,
+        ok: bool = True,
+        embedder: Optional[str] = None,
+    ) -> None:
         pass
 
 

@@ -39,8 +39,8 @@ def _clips(rng: np.random.Generator, cids: range) -> dict[int, dict]:
 #: empirical quantile of this haystack (:meth:`FoldAnchoredCut.threshold_at`),
 #: so the haystack's own spacing is the finest gap two cuts can be apart: with
 #: 20 items a quantile has to move a full 5% before the threshold moves at all.
-#: :data:`ACQUISITION_INCLUSION_OFFSET` is a *few* inclusion steps (three, as
-#: shipped), and the tilt of even three of them is routinely smaller than that,
+#: :data:`ACQUISITION_INCLUSION_OFFSET` is a *few* inclusion steps (four, as
+#: shipped), and the tilt of even four of them is routinely smaller than that,
 #: so on a 20-item haystack the acquisition cut lands on the *same* haystack
 #: element as the reporting cut and a strict ``>`` degenerates into an equality.
 #: 100 resolves a single step with room to spare (verified across seeds), which
