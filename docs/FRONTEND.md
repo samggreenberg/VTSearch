@@ -346,7 +346,7 @@ The backend resolves per-dataset and per-detector state from the
 `X-Dataset-Id` / `X-Detector-Id` request headers (see
 [ARCHITECTURE.md § Multi-dataset support](ARCHITECTURE.md#multi-dataset-support)).
 The frontend's job is to make sure those headers name a pair the backend has
-actually loaded. Four pieces cooperate.
+actually loaded. Five pieces cooperate.
 
 ### `ActiveContextService` — two layers, not one
 
@@ -368,6 +368,53 @@ highlights; `active` lags until a load completes and is promoted explicitly.
   prep step captures the id at start and discards its result if the id has
   moved. Cancelling in-flight work is best-effort; this check is the
   correctness guarantee.
+
+### `ActiveDatasetService` / `ActiveDetectorService` — the ids as *entries*
+
+`ActiveContextService` carries **ids**, on an RxJS layer a `computed` can't
+track. Almost every consumer wants the registry *entry* behind the id — its
+name, its media type, its embedder — so each one used to redo the same
+`datasets.find(d => d.id === …)` by hand. That read whatever happened to be
+loaded at call time and never updated when the registry landed a moment later:
+the lifecycle gap that left an export filename detector-less when the modal
+opened first (#2819).
+
+The two services close it, one per half, with the same five members:
+
+```
+activeId      the id the backend has loaded ('' when none)
+intentId      the id the user picked
+datasetId /   activeId || intentId — name the user's pick immediately
+  detectorId  rather than blanking for the duration of a load
+dataset /     the registry entry, or null (nothing selected, or the
+  detector    registry fetch is still in flight)
+datasetName / the entry's name, or ''
+  detectorName
+```
+
+Reach for these from **components**: a `computed`/`effect`/template read
+repopulates on its own once the registry or an in-flight switch settles.
+
+Two places deliberately keep the imperative lookup, and should:
+
+- **Route guards** run once, before activation, and have already awaited the
+  registry — there is nothing left to arrive.
+- **Pre-reactive services** (`ActiveContextWatcherService`) resolve the pair
+  from the arrays their own `combineLatest` emitted; reading a signal instead
+  would resolve against a *different* snapshot than the one being handled.
+
+Both still index rather than scan: `DatasetStateService` exposes `datasetById`
+/ `detectorById`, `computed` Maps over the two registries. They are the shared
+lookup the services are built on, and reading one is signal-tracked exactly
+like reading `datasets` — so swapping a `find` for a `.get` is a readability
+change, never a reactivity one.
+
+Note what these services are *not* for. A lookup that resolves something other
+than the active pair — the Dashboard's multi-select, the id being switched
+*to*, an entry from an HTTP response body — is a different question that
+happens to share the `find(d => d.id === …)` shape. Use the Maps there if the
+predicate is a plain id match; do not route it through the active-context
+services.
 
 ### `ContextSwitchService` — the only way to *change* the pair
 

@@ -49,7 +49,7 @@ export class ActiveDetectorService {
   readonly detector = computed<DetectorRegistryEntry | null>(() => {
     const id = this.detectorId();
     if (!id) return null;
-    return this.datasetState.detectors.find((d) => d.id === id) ?? null;
+    return this.datasetState.detectorById().get(id) ?? null;
   });
 
   /** Display name of the selected detector; `''` when unknown (nothing

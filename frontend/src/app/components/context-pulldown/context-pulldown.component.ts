@@ -343,9 +343,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
       const otherDsId = this.dashSelection.dashboardVisible
         ? singleId(this.dashSelection.datasetIds)
         : this.activeContext.intentDatasetId;
-      const other = otherDsId
-        ? this.datasetState.datasets.find((d) => d.id === otherDsId)
-        : null;
+      const other = otherDsId ? this.datasetState.datasetById().get(otherDsId) : null;
       this.newThingFlows.openNewDetector({
         defaultMediaType: other?.media_type || '',
         datasetEmbedder: other?.embedder || '',
@@ -499,6 +497,8 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
   private rebuildRows(): void {
     const datasets = this.datasetState.datasets;
     const detectors = this.datasetState.detectors;
+    const datasetById = this.datasetState.datasetById();
+    const detectorById = this.datasetState.detectorById();
     // Two sources for what counts as "active":
     //  - On the Dashboard, the highlighted table rows (which can be more
     //    than one — the closed label collapses that to "Multiple").
@@ -519,12 +519,12 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     const selected = new Set(this.selectedIds);
     if (this.isDataset) {
       const activeDetId = singleId(detIds);
-      const activeDetector = activeDetId ? detectors.find((d) => d.id === activeDetId) : null;
+      const activeDetector = activeDetId ? detectorById.get(activeDetId) ?? null : null;
       const sorted = this.applySort(datasets);
       this.rows = sorted.map((d) => this.datasetRow(d, selected, activeDetector));
     } else {
       const activeDsId = singleId(dsIds);
-      const activeDataset = activeDsId ? datasets.find((d) => d.id === activeDsId) : null;
+      const activeDataset = activeDsId ? datasetById.get(activeDsId) ?? null : null;
       const sorted = this.applySort(detectors);
       this.rows = sorted.map((d) => this.detectorRow(d, selected, activeDataset));
     }

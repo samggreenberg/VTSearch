@@ -1191,7 +1191,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   get activeDatasetMediaType(): string {
     if (this.selectedDatasetIds.size === 1) {
       const selId = [...this.selectedDatasetIds][0];
-      const sel = this.datasets.find((d) => d.id === selId);
+      const sel = this.datasetState.datasetById().get(selId);
       if (sel?.media_type) return sel.media_type;
     }
     const loaded = this.datasets.find((d) => d.loaded);
@@ -1209,7 +1209,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   get activeDatasetEmbedder(): string {
     if (this.selectedDatasetIds.size === 1) {
       const selId = [...this.selectedDatasetIds][0];
-      const sel = this.datasets.find((d) => d.id === selId);
+      const sel = this.datasetState.datasetById().get(selId);
       if (sel?.embedder) return sel.embedder;
     }
     const loaded = this.datasets.find((d) => d.loaded);

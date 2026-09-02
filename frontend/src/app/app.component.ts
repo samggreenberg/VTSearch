@@ -1,7 +1,14 @@
-import { ChangeDetectionStrategy, Component, effect, HostListener, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  HostListener,
+  inject,
+  signal,
+} from '@angular/core';
 import { Router, RouterOutlet, NavigationEnd } from '@angular/router';
 import { CommonModule } from '@angular/common';
-import { combineLatest } from 'rxjs';
 import { filter } from 'rxjs/operators';
 import { DialogHostComponent } from './components/dialog-host/dialog-host.component';
 import { ToastContainerComponent } from './components/toast-container/toast-container.component';
@@ -21,7 +28,8 @@ import { DatasetImporterModalComponent } from './components/dashboard/dataset-im
 import { NewDetectorModalComponent } from './components/dashboard/new-detector-modal/new-detector-modal.component';
 import { MediaStateService } from './services/media-state.service';
 import { DatasetStateService } from './services/dataset-state.service';
-import { ActiveContextService } from './services/active-context.service';
+import { ActiveDatasetService } from './services/active-dataset.service';
+import { ActiveDetectorService } from './services/active-detector.service';
 import { RecentSessionsService } from './services/recent-sessions.service';
 import { AuthService } from './services/auth.service';
 import { HuggingFaceAuthService } from './services/huggingface-auth.service';
@@ -66,7 +74,8 @@ export class AppComponent {
   private router = inject(Router);
   private mediaState = inject(MediaStateService);
   private datasetState = inject(DatasetStateService);
-  private activeContext = inject(ActiveContextService);
+  private readonly activeDataset = inject(ActiveDatasetService);
+  private readonly activeDetector = inject(ActiveDetectorService);
   private recent = inject(RecentSessionsService);
   auth = inject(AuthService);
   achievements = inject(AchievementsService);
@@ -90,14 +99,21 @@ export class AppComponent {
   helpClosing = false;
   // Written from the router-events subscribe (async); template-bound.
   readonly isOnLabelView = signal(false);
-  private isOnBrowseView = false;
+  private readonly isOnBrowseView = signal(false);
   settingsViewTab = '';
   /** True when the current route consumes the active pair (label / find)
    *  and the pair is not compatible, so the explainer takes over the
-   *  router-outlet area in that state. Written from `recomputeExplainer()`,
-   *  which runs from the router-events and pair/registry `combineLatest`
-   *  subscribes (async), so a signal so the explainer toggles under zoneless. */
-  readonly showIncompatibleExplainer = signal(false);
+   *  router-outlet area in that state.
+   *
+   *  A `computed` over the route signals and the two active-context
+   *  services, so it has no separate recompute step to forget to run: it
+   *  re-evaluates when the route changes, when the pair changes, and when
+   *  the registry lands (the case that matters on a cold deep-link, where
+   *  the ids resolve to entries only after the fetch returns). */
+  readonly showIncompatibleExplainer = computed(() => {
+    if (!this.isOnLabelView() || this.isOnBrowseView()) return false;
+    return !isPairCompatible(this.activeDataset.dataset(), this.activeDetector.detector());
+  });
 
   // Written from the `newThingFlows.importer$`/`newDetector$` subscribes (async).
   readonly importerFlow = signal<ImporterFlowState>({
@@ -144,20 +160,14 @@ export class AppComponent {
     this.router.events
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
       .subscribe((e) => {
-        this.isOnBrowseView = e.urlAfterRedirects.startsWith('/browse');
+        const onBrowse = e.urlAfterRedirects.startsWith('/browse');
+        this.isOnBrowseView.set(onBrowse);
         this.isOnLabelView.set(
           e.urlAfterRedirects.startsWith('/label') ||
             e.urlAfterRedirects.startsWith('/find') ||
-            this.isOnBrowseView,
+            onBrowse,
         );
-        this.recomputeExplainer();
       });
-
-    combineLatest([
-      this.activeContext.pair$,
-      this.datasetState.datasets$,
-      this.datasetState.detectors$,
-    ]).subscribe(() => this.recomputeExplainer());
 
     this.newThingFlows.importer$.subscribe((state) => {
       this.importerFlow.set(state);
@@ -191,20 +201,6 @@ export class AppComponent {
     const query = params.toString();
     const newUrl = window.location.pathname + (query ? `?${query}` : '') + window.location.hash;
     window.history.replaceState({}, '', newUrl);
-  }
-
-  private recomputeExplainer(): void {
-    if (!this.isOnLabelView() || this.isOnBrowseView) {
-      this.showIncompatibleExplainer.set(false);
-      return;
-    }
-    const ds = this.activeContext.datasetId
-      ? this.datasetState.datasets.find((d) => d.id === this.activeContext.datasetId) ?? null
-      : null;
-    const det = this.activeContext.modelId
-      ? this.datasetState.detectors.find((d) => d.id === this.activeContext.modelId) ?? null
-      : null;
-    this.showIncompatibleExplainer.set(!isPairCompatible(ds, det));
   }
 
   toggleMenu(event: Event): void {

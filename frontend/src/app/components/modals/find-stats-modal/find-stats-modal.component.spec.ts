@@ -195,7 +195,13 @@ describe('FindStatsModalComponent — training-domain overlap', () => {
       imports: [FindStatsModalComponent],
       providers: [
         ...provideHttpTesting(),
-        { provide: DatasetStateService, useValue: { datasets } },
+        {
+          provide: DatasetStateService,
+          useValue: {
+            datasets,
+            datasetById: () => new Map(datasets.map((d) => [d.id, d])),
+          },
+        },
       ],
     }).compileComponents();
 
