@@ -14,8 +14,8 @@ import pytest
 
 from vtscore.eval.timing_benchmark import run_timing_benchmark
 from vtscore.eval.trainers import _as_scores, _parse_trainer_spec, resolve_trainer
+from vtscore.eval.voting_columns import TIMING_COLUMNS
 from vtscore.eval.voting_iterations import (
-    TIMING_COLUMNS,
     _downsample_to_prevalence,
     _prevalence,
     run_voting_iterations_eval,

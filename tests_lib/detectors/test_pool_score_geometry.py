@@ -28,12 +28,14 @@ import pytest
 import torch
 
 from vtscore.eval.patch_styles import resolve_style
-from vtscore.eval.voting_iterations import _score_pool, _StepModel, simulate_voting_iterations
+from vtscore.eval.step_model import StepModel
+from vtscore.eval.step_trainers import _score_pool
+from vtscore.eval.voting_iterations import simulate_voting_iterations
 
 from .test_max_patch_style import DIM, _linear_scorer, _planted_dataset
 
 
-def _step(direction) -> _StepModel:
+def _step(direction) -> StepModel:
     """A hand-built step model - the same module behind both scoring paths.
 
     ``predict`` is the trainer-agnostic whole-image path and ``torch_model`` the
@@ -46,7 +48,7 @@ def _step(direction) -> _StepModel:
         with torch.no_grad():
             return torch.sigmoid(model(torch.tensor(np.asarray(embs, dtype=np.float32)))).squeeze(1).numpy()
 
-    return _StepModel(predict=predict, torch_model=model, backend="torch", device="cpu")
+    return StepModel(predict=predict, torch_model=model, backend="torch", device="cpu")
 
 
 def _step_and_clips(seed=3):

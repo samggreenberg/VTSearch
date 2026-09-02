@@ -79,7 +79,7 @@ def _weighted_gaussian_crossing(
 
     **Not the shipped cut.**  Production cuts at the midpoint between the means
     (:func:`calculate_gmm_threshold`); this solver stays live only as an eval
-    variant (``*_cross`` in :data:`vtscore.eval.voting_iterations._SAFE_GMM_VARIANTS`).
+    variant (``*_cross`` in :data:`vtscore.eval.arms_safe_gmm._SAFE_GMM_VARIANTS`).
     #2798 shipped it on the geometry argument below and #2799 measured it as a
     small net loss (+0.0036 cost at 6-20 votes, +0.0059 at 2-5), so #2833 reverted
     it.  The geometry argument was right in *direction* - the crossing does sit

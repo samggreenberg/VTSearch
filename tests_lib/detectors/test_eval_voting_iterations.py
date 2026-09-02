@@ -10,13 +10,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from vtscore.eval.step_model import StepModel, good_training_vec, inclusion_weights
+from vtscore.eval.step_trainers import _labelset_error_costs
+from vtscore.eval.voting_columns import TIMING_COLUMNS
 from vtscore.eval.voting_iterations import (
-    TIMING_COLUMNS,
-    _good_training_vec,
-    _inclusion_weights,
-    _labelset_error_costs,
     _split_media_ids,
-    _StepModel,
     run_voting_iterations_eval,
     simulate_voting_iterations,
 )
@@ -88,17 +86,17 @@ def _make_three_category_clips(dim=16, n_per_cat=15, seed=0):
 
 class TestInclusionWeights:
     def test_zero_inclusion(self):
-        fpr_w, fnr_w = _inclusion_weights(0)
+        fpr_w, fnr_w = inclusion_weights(0)
         assert fpr_w == 1.0
         assert fnr_w == 1.0
 
     def test_positive_inclusion(self):
-        fpr_w, fnr_w = _inclusion_weights(3)
+        fpr_w, fnr_w = inclusion_weights(3)
         assert fpr_w == 1.0
         assert fnr_w == 8.0
 
     def test_negative_inclusion(self):
-        fpr_w, fnr_w = _inclusion_weights(-2)
+        fpr_w, fnr_w = inclusion_weights(-2)
         assert fpr_w == 4.0
         assert fnr_w == 1.0
 
@@ -144,7 +142,7 @@ class TestLabelsetErrorCosts:
     @staticmethod
     def _model(bias):
         """A ranker whose score is the embedding value plus *bias*."""
-        return _StepModel(
+        return StepModel(
             predict=lambda embs, b=bias: np.asarray(embs, dtype=np.float64).ravel() + b,
             torch_model=None,
             backend="test",
@@ -221,10 +219,10 @@ class TestSimulateVotingIterations:
             dataset_name="test_ds",
             calibrate_count=1,
         )
-        from vtscore.eval.voting_iterations import _VOTING_COLUMNS
+        from vtscore.eval.voting_columns import VOTING_COLUMNS
 
         for row in rows:
-            assert set(row.keys()) == set(_VOTING_COLUMNS)
+            assert set(row.keys()) == set(VOTING_COLUMNS)
             assert row["strategy"] == "autopilot"
             assert row["trainer"] == "mlp"
             assert row["prevalence_arm"] == "natural"
@@ -414,9 +412,9 @@ class TestProductionCalibrationFidelity:
     """
 
     def _spy_calibration(self, monkeypatch):
-        from vtscore.eval import voting_iterations
+        from vtscore.eval import step_trainers
 
-        real = voting_iterations.calibration_folds
+        real = step_trainers.calibration_folds
         captured: list[dict] = []
 
         def spy(X_list, y_list, input_dim, *, rng=None, hidden_dim: int = 0, **kw):
@@ -431,12 +429,12 @@ class TestProductionCalibrationFidelity:
             )
             return real(X_list, y_list, input_dim, rng=rng, hidden_dim=hidden_dim, **kw)
 
-        monkeypatch.setattr(voting_iterations, "calibration_folds", spy)
+        monkeypatch.setattr(step_trainers, "calibration_folds", spy)
         return captured
 
     @pytest.mark.parametrize("head", [None, "mlp"])
     def test_folds_forced_to_full_data_hidden_dim(self, head, monkeypatch):
-        from vtscore.eval.voting_iterations import PRODUCTION_HEAD, _resolve_hidden_dim
+        from vtscore.eval.step_model import PRODUCTION_HEAD, resolve_hidden_dim
 
         captured = self._spy_calibration(monkeypatch)
         medias = _make_separable_clips(n_per_cat=10)
@@ -447,7 +445,7 @@ class TestProductionCalibrationFidelity:
             # The fold models must be sized from the full label count for the
             # step, not auto-sized per fold (hidden_dim=None) - on the default
             # (production) arm and on the legacy MLP arm alike.
-            assert c["hidden_dim"] == _resolve_hidden_dim(head or PRODUCTION_HEAD, c["n"])
+            assert c["hidden_dim"] == resolve_hidden_dim(head or PRODUCTION_HEAD, c["n"])
 
     def test_folds_calibrate_with_fixed_random_state_42(self, monkeypatch):
         captured = self._spy_calibration(monkeypatch)
@@ -497,10 +495,10 @@ class TestRunVotingIterationsEval:
             categories={"ds1": ["alpha"]},
             calibrate_count=1,
         )
-        from vtscore.eval.voting_iterations import _VOTING_COLUMNS
+        from vtscore.eval.voting_columns import VOTING_COLUMNS
 
         assert isinstance(df, pd.DataFrame)
-        assert list(df.columns) == list(_VOTING_COLUMNS)
+        assert list(df.columns) == list(VOTING_COLUMNS)
 
     def test_multiple_seeds(self):
         medias = _make_separable_clips(n_per_cat=6)
@@ -631,7 +629,7 @@ class TestGoodTrainingVec:
         from vtscore.embedding.media_vectors import media_embedding
 
         media = _patch_media(1, positive=True, category="apple")
-        vec = _good_training_vec(media, "apple", region_voting=False)
+        vec = good_training_vec(media, "apple", region_voting=False)
         np.testing.assert_allclose(vec, media_embedding(media))
 
     def test_takes_the_nearest_patch_when_region_voting_on(self):
@@ -641,7 +639,7 @@ class TestGoodTrainingVec:
         from vtscore.media.patch_embed import nearest_patch_to_box
 
         media = _patch_media(1, positive=True, category="apple")
-        vec = _good_training_vec(media, "apple", region_voting=True)
+        vec = good_training_vec(media, "apple", region_voting=True)
         expected = nearest_patch_to_box(np.asarray(media["patch_grid"]), (0.0, 0.0, 2 / 3, 1.0))
         np.testing.assert_allclose(vec, expected)
         # The chosen vector is one of the grid's actual patch vectors, i.e. a
@@ -654,7 +652,7 @@ class TestGoodTrainingVec:
 
         media = _patch_media(1, positive=True, category="apple")
         del media["patch_grid"]
-        vec = _good_training_vec(media, "apple", region_voting=True)
+        vec = good_training_vec(media, "apple", region_voting=True)
         np.testing.assert_allclose(vec, media_embedding(media))
 
     def test_falls_back_without_matching_box(self):
@@ -662,7 +660,7 @@ class TestGoodTrainingVec:
 
         # Positive image but no annotated box for this category.
         media = _patch_media(1, positive=True, category="apple", with_box=False)
-        vec = _good_training_vec(media, "apple", region_voting=True)
+        vec = good_training_vec(media, "apple", region_voting=True)
         np.testing.assert_allclose(vec, media_embedding(media))
 
 
