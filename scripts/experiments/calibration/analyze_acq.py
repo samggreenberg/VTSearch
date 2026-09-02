@@ -51,6 +51,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 
 import common
@@ -68,21 +69,49 @@ except Exception:  # noqa: BLE001
     _wilcoxon = None
 
 #: Arms in sweep order; ``prod`` is the control.
-ARMS: tuple[str, ...] = ("acq_m4", "acq_m3", "acq_m2", "acq_m1", "prod", "acq_p2", "rank_pin")
+#:
+#: #2877's seven are the default so that run still reproduces byte-for-byte.
+#: ``ACQ_ANALYZE_ARMS`` widens it for a grid that swept more of them - #3319 runs
+#: twelve, including half steps.  An override is a *list*, in sweep order, and it
+#: is the study's launcher that decides it; nothing here guesses from the
+#: directory listing, because an arm that failed to produce cells would then
+#: silently drop out of the frontier instead of being reported missing.
+_DEFAULT_ARMS = ("acq_m4", "acq_m3", "acq_m2", "acq_m1", "prod", "acq_p2", "rank_pin")
+ARMS: tuple[str, ...] = tuple(
+    a.strip() for a in os.environ.get("ACQ_ANALYZE_ARMS", ",".join(_DEFAULT_ARMS)).split(",") if a.strip()
+)
 CONTROL = "prod"
 FALSIFIER = "acq_p2"
+
+
+def _arm_k(arm: str) -> float | None:
+    """The nominal acquisition inclusion an arm's NAME declares.
+
+    ``prod`` -> 0, ``acq_m3`` -> -3, ``acq_p2`` -> +2, and (#3319) the ``h``
+    suffix is a HALF step: ``acq_m3h`` -> -3.5.  Derived rather than tabulated so
+    that adding an arm to a launcher cannot leave it off the frontier's x-axis
+    with no complaint - the failure mode a hand-maintained dict has.
+
+    ``None`` means "not on the inclusion scale" (``rank_pin``), which is what
+    keeps it out of the frontier fit and in its own marker.
+    """
+    if arm == CONTROL:
+        return 0.0
+    m = re.fullmatch(r"acq_([mp])(\d+)(h?)", arm)
+    if m is None:
+        return None
+    return (-1.0 if m.group(1) == "m" else 1.0) * (float(m.group(2)) + (0.5 if m.group(3) else 0.0))
+
+
 #: Nominal acquisition inclusion per arm, for the frontier's x-axis. ``rank_pin``
 #: is not on the inclusion scale and is plotted separately.
-ARM_K: dict[str, float] = {"acq_m4": -4, "acq_m3": -3, "acq_m2": -2, "acq_m1": -1, "prod": 0, "acq_p2": 2}
-ARM_LABEL: dict[str, str] = {
+ARM_K: dict[str, float] = {a: k for a in ARMS if (k := _arm_k(a)) is not None}
+_EXPLICIT_LABEL: dict[str, str] = {
     "prod": "prod (k=0, shipped)",
-    "acq_m1": "k=-1",
-    "acq_m2": "k=-2",
-    "acq_m3": "k=-3",
-    "acq_m4": "k=-4",
     "acq_p2": "k=+2 (falsifier)",
     "rank_pin": "rank-pinned 0.959",
 }
+ARM_LABEL: dict[str, str] = {a: _EXPLICIT_LABEL.get(a, f"k={ARM_K[a]:g}" if a in ARM_K else a) for a in ARMS}
 
 #: Ship rule (pre-registered): positives must rise, cost must not regress by more
 #: than this at the 95% upper bound, and deep-spike incidence must not rise.
@@ -390,7 +419,7 @@ def sizing(traj: pd.DataFrame, metric: str = "final_cost") -> dict:
     """
     out: dict = {"metric": metric, "target_half_width": TARGET_HALF_WIDTH, "per_arm": {}}
     sds = []
-    for arm in ("acq_m1", "acq_m2", "acq_m3", "acq_m4"):
+    for arm in [a for a in ARMS if (ARM_K.get(a) or 0.0) < 0.0]:
         keys = [k for k in PAIR_KEYS if k in traj.columns]
         a = traj[traj["arm"] == CONTROL].set_index(keys)[metric]
         b = traj[traj["arm"] == arm].set_index(keys)[metric]

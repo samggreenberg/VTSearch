@@ -221,7 +221,7 @@ def calibration_folds_cached(
     return folds
 
 
-def threshold_from_folds(folds: CalibrationFolds, inclusion_value: int) -> float:
+def threshold_from_folds(folds: CalibrationFolds, inclusion_value: float) -> float:
     """The cross-calibration threshold *folds* implies at *inclusion_value*."""
     if folds.fallback is not None:
         return folds.fallback
@@ -231,7 +231,7 @@ def threshold_from_folds(folds: CalibrationFolds, inclusion_value: int) -> float
 def conformal_threshold(
     scores: list[float],
     labels: list[float],
-    inclusion_value: int = 0,
+    inclusion_value: float = 0,
 ) -> float:
     """Split-conformal quantile threshold over held-out calibration scores.
 
@@ -297,7 +297,9 @@ def conformal_threshold(
             too-tight band.
         labels: True binary labels (1.0 for good, 0.0 for bad),
             corresponding to ``scores``.
-        inclusion_value: Integer in ``[-10, 10]``; higher includes more.
+        inclusion_value: Number in ``[-10, 10]``; higher includes more.  The
+            reporting knob is an integer, but the rule is continuous in ``k``
+            and the acquisition cut sweeps fractional values (issue #3319).
 
     Returns:
         A float threshold, always realizable within the calibration score
@@ -314,7 +316,7 @@ def conformal_threshold(
     if len(pos) == 0 or len(neg) == 0:
         return 0.5
 
-    def _threshold_at(k: int) -> float:
+    def _threshold_at(k: float) -> float:
         fn_cap = float(np.quantile(pos, min(1.0, CONFORMAL_BASE_BUDGET * 2.0**-k)))
         if k > 0:
             # The k=0 floor keeps the seam monotone: q_pos(alpha) can sit
@@ -839,7 +841,7 @@ def compute_fold_orderings(
 
 def threshold_from_fold_orderings(
     fold_orderings: list[tuple[list[float], list[float]]],
-    inclusion_value: int,
+    inclusion_value: float,
 ) -> float:
     """Apply the conformal inclusion rule to the pooled fold orderings.
 
