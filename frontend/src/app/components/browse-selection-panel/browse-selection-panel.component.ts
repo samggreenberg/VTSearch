@@ -13,21 +13,22 @@ import { IconComponent } from '../icon/icon.component';
 import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 import { applyClipWindow, clearClipWindow, clipProgress } from '../../utils/clip-window';
 import type { NowPlaying } from '../browse-hover-preview/browse-hover-preview.component';
+import { ListSortMode, SortableListEntry, sortListEntries } from '../../utils/sort-list-entries';
 
 /** Ordering for the selected-item list. No detector confidence in browse, so
  *  the choices are recency (selection order), name, and id. */
-type SelectionSortMode = 'time-desc' | 'time-asc' | 'name-asc' | 'name-desc' | 'id-asc';
+type SelectionSortMode = Exclude<ListSortMode, 'confidence-desc' | 'confidence-asc'>;
 
 /** How long (ms) the cursor must rest on an audio entry before its clip starts
  *  auditioning, so sweeping down a large multi-select list doesn't fire a burst
  *  of plays. Matches the canvas hover-preview's dwell (`AUDIO_DWELL_MS`). */
 const AUDIO_DWELL_MS = 200;
 
-interface SelectionEntry {
+interface SelectionEntry extends SortableListEntry {
   id: number;
-  name: string;
-  /** Position in the selection's insertion order (recency proxy). */
-  order: number;
+  /** Position in the selection's insertion order — this list's recency proxy,
+   *  standing in for the click timestamp the Find-view lists sort on. */
+  time: number;
 }
 
 /**
@@ -178,38 +179,16 @@ export class BrowseSelectionPanelComponent implements OnInit, OnDestroy {
   }
 
   private buildSortedEntries(): SelectionEntry[] {
-    const entries = this.ids.map((id, order) => ({
+    const entries: SelectionEntry[] = this.ids.map((id, order) => ({
       id,
       name: this.lookupName(id),
-      order,
+      time: order,
     }));
-    return this.sortEntries(entries);
+    return sortListEntries(entries, this.sortMode);
   }
 
   private lookupName(id: number): string {
     return this.metadataCache.get(id)?.filename || `Clip #${id}`;
-  }
-
-  private sortEntries(entries: SelectionEntry[]): SelectionEntry[] {
-    const sorted = [...entries];
-    switch (this.sortMode) {
-      case 'time-desc':
-        sorted.sort((a, b) => b.order - a.order);
-        break;
-      case 'time-asc':
-        sorted.sort((a, b) => a.order - b.order);
-        break;
-      case 'name-asc':
-        sorted.sort((a, b) => a.name.localeCompare(b.name));
-        break;
-      case 'name-desc':
-        sorted.sort((a, b) => b.name.localeCompare(a.name));
-        break;
-      case 'id-asc':
-        sorted.sort((a, b) => a.id - b.id);
-        break;
-    }
-    return sorted;
   }
 
   onSortChange(mode: SelectionSortMode): void {

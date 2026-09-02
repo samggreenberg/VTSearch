@@ -7,6 +7,7 @@ import { ActiveContextService } from '../../../services/active-context.service';
 import { MediaMetadataCacheService } from '../../../services/media-metadata-cache.service';
 import { MediaTypeCapabilityService } from '../../../services/media-type-capability.service';
 import { VoteGridComponent, VoteGridEntry } from '../vote-grid/vote-grid.component';
+import { sortListEntries } from '../../../utils/sort-list-entries';
 
 export interface LabelEntry extends VoteGridEntry {
   id: number;
@@ -71,7 +72,7 @@ export class LabelListComponent {
   readonly sortedEntries = computed<LabelEntry[]>(() => {
     this.cacheVersion();
     const entries = this.ids().map(id => this.buildEntry(id));
-    return this.sortEntries(entries);
+    return sortListEntries(entries, this.sortMode());
   });
 
   constructor() {
@@ -138,35 +139,6 @@ export class LabelListComponent {
     if (media.media_type === 'audio') return '♫';
     if (media.media_type === 'text') return '¶';
     return '□';
-  }
-
-  private sortEntries(entries: LabelEntry[]): LabelEntry[] {
-    const sorted = [...entries];
-    switch (this.sortMode()) {
-      case 'time-desc':
-        sorted.sort((a, b) => b.time - a.time);
-        break;
-      case 'time-asc':
-        sorted.sort((a, b) => a.time - b.time);
-        break;
-      case 'name-asc':
-        sorted.sort((a, b) => a.name.localeCompare(b.name));
-        break;
-      case 'name-desc':
-        sorted.sort((a, b) => b.name.localeCompare(a.name));
-        break;
-      case 'confidence-desc':
-        sorted.sort((a, b) => b.confidence - a.confidence);
-        break;
-      case 'confidence-asc':
-        sorted.sort((a, b) => a.confidence - b.confidence);
-        break;
-      case 'id-asc':
-      default:
-        sorted.sort((a, b) => a.id - b.id);
-        break;
-    }
-    return sorted;
   }
 
   onEntrySelected(entry: VoteGridEntry): void {

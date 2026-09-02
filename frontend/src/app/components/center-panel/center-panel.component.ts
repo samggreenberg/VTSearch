@@ -17,6 +17,7 @@ import { VotingOverlayComponent } from './voting-overlay/voting-overlay.componen
 import { CopyDetailButtonComponent } from '../copy-detail-button/copy-detail-button.component';
 import { IconComponent } from '../icon/icon.component';
 import { prefersReducedMotion } from '../../utils/reduced-motion';
+import { formatMetadataValue as formatMetadataValueUtil } from '../../utils/format-metadata';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -354,17 +355,9 @@ export class CenterPanelComponent implements OnDestroy {
     return media.filename || media.origin_name || `#${media.id}`;
   }
 
+  /** Template-bound metadata cell; see {@link formatMetadataValue}. */
   formatMetadataValue(label: string, value: unknown): string {
-    if (label === 'File Size' && typeof value === 'number') {
-      return (value / 1024).toFixed(1) + ' KB';
-    }
-    if (label === 'Duration' && typeof value === 'number') {
-      return value.toFixed(1) + 's';
-    }
-    if (label === 'Frequency' && typeof value === 'number') {
-      return value + ' Hz';
-    }
-    return String(value);
+    return formatMetadataValueUtil(label, value);
   }
 
   toggleMetadata(): void {

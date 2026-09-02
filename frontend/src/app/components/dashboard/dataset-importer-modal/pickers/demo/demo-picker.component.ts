@@ -9,6 +9,8 @@ import { DemoDatasetEntry } from '../../../../../generated/api-client/models/dem
 import { ColMeta, ManagedColumns } from '../../../../../utils/managed-columns';
 import { ImportDefaultsService } from '../shared/import-defaults.service';
 import { composeEmbedders, getTabLabel, mediaTypeIconsById, mediaTypeLabels } from '../shared/media-type.util';
+import { sortRowsByColumn } from '../../../../../utils/sort-rows';
+import { demoSortValue } from '../shared/demo-sort';
 
 /** Demo-dataset picker view: media-type tab bar + sortable table of
  *  pre-configured, optionally pre-downloaded demo datasets.  Row clicks
@@ -383,24 +385,7 @@ export class DemoPickerComponent {
 
   get filteredDemos(): DemoDatasetEntry[] {
     const items = this.demos().filter((d) => d.media_type === this.activeTab());
-    const statusOrder: Record<string, number> = { ready: 0, needs_embedding: 1, needs_download: 2 };
-    const sortKey = this.demoCols.sortColumn;
-    const asc = this.demoCols.sortAsc;
-    return items.sort((a, b) => {
-      const key = sortKey as keyof DemoDatasetEntry;
-      let va: any = a[key];
-      let vb: any = b[key];
-      if (key === 'status') {
-        va = statusOrder[va as string] ?? 3;
-        vb = statusOrder[vb as string] ?? 3;
-      }
-      if (typeof va === 'number' && typeof vb === 'number') {
-        return asc ? va - vb : vb - va;
-      }
-      va = String(va || '').toLowerCase();
-      vb = String(vb || '').toLowerCase();
-      return asc ? va.localeCompare(vb) : vb.localeCompare(va);
-    });
+    return sortRowsByColumn(items, this.demoCols.sortColumn, this.demoCols.sortAsc, demoSortValue);
   }
 
   selectDemoTab(tab: string): void {

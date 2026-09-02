@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, effect, ElementRef, inject, input, 
 
 import { Media, PayloadVariant } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
+import { armClipWindow, ClipBounds, enforceClipWindow } from '../../../utils/clip-window';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -37,7 +38,7 @@ export class VideoPlayerComponent implements OnDestroy {
   // Active clip window bounds while enforcement is on, else null. Enforcement is
   // driven by the <video> element's (timeupdate) event rather than a polling
   // timer, so it only runs while the clip is actually playing and progressing.
-  private clipBounds: { start: number; end: number } | null = null;
+  private clipBounds: ClipBounds | null = null;
   // See ImageViewerComponent.lastMediaId; guards against metadata-enrichment
   // effect cycles rebuilding videoSrc (and yanking playback) for the
   // same id.
@@ -144,56 +145,22 @@ export class VideoPlayerComponent implements OnDestroy {
     this.syncPlaybackState();
   }
 
-  // Seek into the clip window and (re)start boundary enforcement when the media
+  // Seek into the clip window and (re)arm boundary enforcement when the media
   // carries clip extents; otherwise tear enforcement down. Safe to call both on
   // (loadedmetadata) and on later metadata-enrichment effect cycles.
   private applyClipBounds(): void {
     const video = this.videoRef()?.nativeElement;
     if (!video) return;
-
-    const media = this.media();
-    if (media.clip_start != null) {
-      const clipStart = media.clip_start;
-      const clipEnd = media.clip_end;
-      // Snap into the window only when currently outside it. This handles the
-      // initial seek and the case where the full video already started playing
-      // before clip extents arrived, without yanking a video already looping
-      // correctly within its window.
-      if (video.currentTime < clipStart || (clipEnd != null && video.currentTime >= clipEnd)) {
-        video.currentTime = clipStart;
-      }
-      this.startClipEnforcement();
-    } else {
-      this.stopClipEnforcement();
-    }
-  }
-
-  private startClipEnforcement(): void {
-    const media = this.media();
-    if (media.clip_start == null || media.clip_end == null) {
-      this.clipBounds = null;
-      return;
-    }
-    // Arm enforcement; the actual boundary check runs in (timeupdate), which the
-    // <video> element fires as playback advances (no timer while paused).
-    this.clipBounds = { start: media.clip_start, end: media.clip_end };
+    this.clipBounds = armClipWindow(video, this.media());
   }
 
   private stopClipEnforcement(): void {
     this.clipBounds = null;
   }
 
-  // Enforce the clip window as playback advances: when the current time leaves
-  // [start, end), loop back to the window start. Driven by the element's
-  // (timeupdate) event instead of a 100ms polling interval.
   onTimeUpdate(): void {
-    const bounds = this.clipBounds;
-    if (!bounds) return;
     const video = this.videoRef()?.nativeElement;
-    if (!video || video.paused) return;
-    if (video.currentTime >= bounds.end || video.currentTime < bounds.start) {
-      video.currentTime = bounds.start;
-    }
+    if (video) enforceClipWindow(video, this.clipBounds);
   }
 
   private syncPlaybackState(): void {
