@@ -486,27 +486,38 @@ Prefer delegation whenever it's possible; it's the only fix that can't rot.
 
 ### The drift gate
 
-`scripts/check-eval-app-sync.py` pins a digest of each mirrored app surface — Python symbols by parsing the module, TypeScript blocks by brace-matching an anchor — and `./run-tests.sh` fails when one changes. It parses rather than imports, so it's dependency-free and takes ~0.3s. A failure names the mirror, both sides of it, and what to re-check:
+`scripts/check-eval-app-sync.py` pins a digest of each mirrored surface — Python symbols by parsing the module, TypeScript blocks by brace-matching an anchor — and `./run-tests.sh` fails when one changes. It parses rather than imports, so it's dependency-free and takes ~0.3s. A failure names the mirror, both sides of it, and what to re-check:
 
 ```
-  * autopilot.phase_machine  [ported, changed]
+  * autopilot.phase_machine  [ported, app-changed]
       app:     frontend/src/app/services/autopilot-state.service.ts::checkPhaseTransition(
       harness: vtscore/eval/autopilot_flow.py::next_phase
       The phase ordering and every transition trigger of the simulated Autopilot user. ...
 ```
 
-Reconcile the harness side, then re-pin:
+**Both sides are pinned**, because a copy stays faithful only while neither half moves without the other, and the reason says which half did:
+
+| Reason | What happened | What to do |
+|---|---|---|
+| `app-changed` | The original moved. | Reconcile the harness copy to it. |
+| `harness-changed` | The copy moved while the original stood still. | Re-read the two against each other. A harness edit can silently re-point the default arm with the app untouched — that is exactly what #2923 was, and the gate was green throughout. |
+| `app-unpinned` / `harness-unpinned` | A new mirror, or a `--update` never run. | Run `--update`. |
+| `unresolvable` | One side no longer exists under the name the manifest claims. | Fix the manifest, or restore what was deleted. |
+
+Reconcile, then re-pin:
 
 ```bash
 python scripts/check-eval-app-sync.py --update
 ```
 
-Digests ignore comments, docstrings, and formatting (including the magic trailing comma `ruff format` adds when it wraps a line), so only real logic changes trip the gate. Re-pinning without reading the harness defeats the whole thing — the digest is a prompt to check, not a checkbox.
+Digests ignore comments, docstrings, and formatting (including the magic trailing comma `ruff format` adds when it wraps a line), so only real logic changes trip the gate. Re-pinning without reading the other side defeats the whole thing — the digest is a prompt to check, not a checkbox.
+
+A handful of mirrors name a harness anchor too coarse to digest — one function serving several mirrors and carrying arm knobs that no mirror is about (today only `_safe_threshold_for_step`). Those declare `no_harness_pin=<reason>` and keep the app-side pin alone; the reason prints with the mirror when it trips. A `ported` mirror may never opt out, since the harness side of a hand copy *is* the copy. When a coarse anchor's blind spot starts to matter, the fix is to extract the reproduction into a helper small enough to pin — what `_resolve_production_defaults` is — not to digest a thousand lines.
 
 ### Adding and diverging
 
-A new mirror is a new `Mirror(...)` entry in `MIRRORS`, plus `--update`. Give it a `note` that says what to re-check when the app moves, not just what the code is.
+A new mirror is a new `Mirror(...)` entry in `MIRRORS`, plus `--update`. Give it a `note` that says what to re-check when either side moves, not just what the code is. Name every top-level symbol the reproduction spans — `file.py::GOOD_TARGET,BAD_TARGET` — since watching one of a pair is half a mirror.
 
-When the harness *intentionally* differs from the app at a mirror, record why in `divergence=`. That doesn't exempt it from the digest — you still re-pin — but the text prints whenever the mirror trips, so whoever reconciles it next knows which differences are deliberate. The ported indicators use this: they take their histories as arguments rather than reading a `_ProgressCache`'s `steps`, which is plumbing, not a rule change.
+When the harness *intentionally* differs from the app at a mirror, record why in `divergence=`. That doesn't exempt it from the digest — both sides are still pinned — but the text prints whenever the mirror trips, so whoever reconciles it next knows which differences are deliberate. The ported indicators use this: they take their histories as arguments rather than reading a `_ProgressCache`'s `steps`, which is plumbing, not a rule change.
 
 Named experiment arms (`whole_image`, `max_patch_hac`, `max_patch_pca_hac`) are *supposed* to differ from the app — that's what makes them arms. This gate is about the default arm only.

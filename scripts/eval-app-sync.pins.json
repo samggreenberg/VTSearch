@@ -1,18 +1,63 @@
 {
-  "autopilot.auto_select_next": "6ea3115e16c12d9e370d8475d4b92b12ebafdc870c7513ca1de77faa6fbabb67",
-  "autopilot.phase_machine": "8ad8a0c2a72103a3ca0061201f57977869225a458894d79efd41a18e5e342fc7",
-  "autopilot.phase_sort_select": "f67f2a6f59fba5813aa1f284fefc83520c6675251256cfcd2ed5729a4a1566d6",
-  "autopilot.startup_default": "6b15d45162cc406b8924e37a23286950d5e5dde551cbcd0d9d4c2500cec044f9",
-  "autopilot.vote_targets": "6b15d45162cc406b8924e37a23286950d5e5dde551cbcd0d9d4c2500cec044f9",
-  "progress.smart_status": "28ace75f8b07305a951659721183e9dc7e879778ea427a21242b9690d9549aaf",
-  "progress.span_status": "7da887d32d0559066dd3d51ad1045e5b9322f2e295aa6bc8e5ca62e6f81ba3a3",
-  "progress.stable_status": "08c9182c8030b8ca62ae1ab79cc74f36245ef501f1934e15d8aebb617a67ba98",
-  "thresholds.fold_anchored_fit_then_cut": "ae8504e0b03401743dfcb8912d804fdf3644b23cb710d43f33e4663d680da93a",
-  "thresholds.rate_cut_no_root": "b167612751767183a0416f22e643d9d4a79c67e7d041d9b9a1ae4d20725db084",
-  "thresholds.vote_exclusion_floor": "4832453572322283bf6cc9b70d9a1d2b8b3aa5da1f354e36bb5d771d43b82a5c",
-  "training.blend_schedule_default": "3737e6185aeb219673cbf8126a5306d6e435eba67e73c24cc1975a896bbab7e1",
-  "training.calibration_score_rows": "1110937c8efc4198ff299328966afaa2a150ed856868033d701914995beadae1",
-  "training.fused_threshold": "91f474212fb281e228e2bfa0c1a2adec154e3b12950b61007c1749eeb9ec2dda",
-  "training.split_fraction_default": "fa4b1b9bd042b325086f8e22229e4922ff0b4fe7d862a89c47ec2e70276719a6",
-  "training.train_and_threshold": "33e8c9e139c82d4b0e145bc79e10b30a1ea43265bf8aa8713e55014e1141f710"
+  "autopilot.auto_select_next": {
+    "app": "6ea3115e16c12d9e370d8475d4b92b12ebafdc870c7513ca1de77faa6fbabb67",
+    "harness": "e9bc83e67824b3998c984178f84e2a4d0ee679dbf99483b9a0d20cf6ef44254b"
+  },
+  "autopilot.phase_machine": {
+    "app": "8ad8a0c2a72103a3ca0061201f57977869225a458894d79efd41a18e5e342fc7",
+    "harness": "fd5a2e83ac575d7e87f3e978da9c046f376bbf40a9c2cf46b4ff6baa83c77be5"
+  },
+  "autopilot.phase_sort_select": {
+    "app": "f67f2a6f59fba5813aa1f284fefc83520c6675251256cfcd2ed5729a4a1566d6",
+    "harness": "a233c439b1759886852f5011f198c873727b3dde1e2a8b2a2f6da042f0666e9b"
+  },
+  "autopilot.startup_default": {
+    "app": "6b15d45162cc406b8924e37a23286950d5e5dde551cbcd0d9d4c2500cec044f9",
+    "harness": "5791e133a51f3ed40314f5a083621a283239a8cbcbe4387b63936515d9374239"
+  },
+  "autopilot.vote_targets": {
+    "app": "6b15d45162cc406b8924e37a23286950d5e5dde551cbcd0d9d4c2500cec044f9",
+    "harness": "44b89eef2937825af3f2467d5f3618810719dce2593fe4bdd0f91c1994aed2f6"
+  },
+  "progress.smart_status": {
+    "app": "28ace75f8b07305a951659721183e9dc7e879778ea427a21242b9690d9549aaf",
+    "harness": "cc5030867b4d5c02df6d278dbb76d0264ef7ce4a08daa6b37beb1b9ee20f632a"
+  },
+  "progress.span_status": {
+    "app": "7da887d32d0559066dd3d51ad1045e5b9322f2e295aa6bc8e5ca62e6f81ba3a3",
+    "harness": "5d09d37401c8e3fec28bc32998c5a8f17721bd4105bdc0bf27dcc03103d23af1"
+  },
+  "progress.stable_status": {
+    "app": "08c9182c8030b8ca62ae1ab79cc74f36245ef501f1934e15d8aebb617a67ba98",
+    "harness": "a73e1826402bbed306f0bc21dd56671051cae7db4e0ef64eee42a28e120cec75"
+  },
+  "thresholds.fold_anchored_fit_then_cut": {
+    "app": "ae8504e0b03401743dfcb8912d804fdf3644b23cb710d43f33e4663d680da93a",
+    "harness": "6a3451d7e0f015a6eb54179630dd6e91f6ce3f72c76b5272321574933406e892"
+  },
+  "thresholds.rate_cut_no_root": {
+    "app": "b167612751767183a0416f22e643d9d4a79c67e7d041d9b9a1ae4d20725db084",
+    "harness": "a3d9f1d799352d5409e925b7ac805905de7add2fe27c464d2e4f01dabf2015fb"
+  },
+  "thresholds.vote_exclusion_floor": {
+    "app": "4832453572322283bf6cc9b70d9a1d2b8b3aa5da1f354e36bb5d771d43b82a5c"
+  },
+  "training.blend_schedule_default": {
+    "app": "3737e6185aeb219673cbf8126a5306d6e435eba67e73c24cc1975a896bbab7e1",
+    "harness": "33e0ad5486369bf6646ccacd13b8ba076a12a55f4a92849c4bac36360b5b79ca"
+  },
+  "training.calibration_score_rows": {
+    "app": "1110937c8efc4198ff299328966afaa2a150ed856868033d701914995beadae1"
+  },
+  "training.fused_threshold": {
+    "app": "91f474212fb281e228e2bfa0c1a2adec154e3b12950b61007c1749eeb9ec2dda"
+  },
+  "training.split_fraction_default": {
+    "app": "fa4b1b9bd042b325086f8e22229e4922ff0b4fe7d862a89c47ec2e70276719a6",
+    "harness": "33e0ad5486369bf6646ccacd13b8ba076a12a55f4a92849c4bac36360b5b79ca"
+  },
+  "training.train_and_threshold": {
+    "app": "33e8c9e139c82d4b0e145bc79e10b30a1ea43265bf8aa8713e55014e1141f710",
+    "harness": "0802e5b7860de2c827b6dfa1c83c6242b686f1894d834e95a03fb6f6e8b20305"
+  }
 }

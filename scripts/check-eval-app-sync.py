@@ -20,17 +20,33 @@ covers the parts that can't delegate:
   the app currently defaults to.  When the app's default changes, the harness
   keeps handing out the old one under the name "default".
 
-Each mirror pins a digest of the app-side source.  Changing the app trips the
-gate, which tells you which harness code to reconcile.  Once reconciled (or once
-you have confirmed nothing is owed), re-pin:
+Each mirror pins a digest of **both** sides.  A copy stays faithful only while
+neither half moves without the other, so either half moving is the same event
+and both have to be watched:
+
+* `app-changed` - the original moved.  Reconcile the harness copy to it.
+* `harness-changed` - the copy moved on its own, with the original standing
+  still.  Confirm the copy still says what the app says; a harness edit that
+  quietly re-points the default arm is drift that the app side can never
+  reveal, and it is the direction the Smart-indicator plumbing actually drifted
+  in (#2923).
+
+Either way, once reconciled (or once you have confirmed nothing is owed), re-pin:
 
     python scripts/check-eval-app-sync.py --update
 
 Digests ignore comments, docstrings and formatting, so only real logic changes
 trip the gate.
 
-Adding a mirror: append a `Mirror(...)` to `MIRRORS` and run `--update`.  If the
-harness *intentionally* differs from the app at that point, say so in
+A few harness sides are too coarse to digest - one function serving several
+mirrors and much else besides - and say so in `no_harness_pin=`.  Those keep the
+app-side pin alone; the fix, when the blind spot starts to matter, is to extract
+the reproduction into its own helper (as #3403 did for the two `*_default`
+mirrors) rather than to pin a thousand lines.
+
+Adding a mirror: append a `Mirror(...)` to `MIRRORS` and run `--update`.  The
+harness side is pinned by default, so opting out is a decision you have to write
+down.  If the harness *intentionally* differs from the app, say so in
 `divergence=` - the text is printed whenever the mirror trips, so the next
 person reconciling it knows which differences are deliberate.
 """
@@ -67,14 +83,21 @@ class Mirror:
             ``ts:<repo-relative file>::<anchor>`` for a TypeScript block (the
             anchor is matched literally, then brace-matched from the first
             ``{`` after it).
-        harness: Where the reproduction lives, as ``<repo-relative file>::<symbol>``.
-            Checked for existence, so deleting or renaming the harness side
-            trips the gate too.
+        harness: Where the reproduction lives, as ``<repo-relative file>::<symbol>``,
+            or ``::<symbol>,<symbol>`` when the reproduction is spread over
+            more than one top-level name.  Each is resolved by parsing, so a
+            name surviving only inside a comment does not count as present, and
+            deleting or renaming the harness side trips the gate.
         kind: ``ported`` or ``default`` - see the module docstring.
-        note: What is reproduced, and what to re-check when the app moves.
+        note: What is reproduced, and what to re-check when either side moves.
         divergence: A *declared, intentional* difference from the app.  Not an
             exemption - the digest is still pinned - but it tells whoever
             reconciles this mirror which differences are on purpose.
+        no_harness_pin: Why this mirror's harness side carries no digest of its
+            own.  Absent (the default) means it does: a harness symbol that is
+            this mirror's dedicated counterpart should be pinned, so opting out
+            is a decision that has to be written down rather than defaulted
+            into.  The reason is printed with the mirror whenever it trips.
     """
 
     id: str
@@ -83,6 +106,7 @@ class Mirror:
     kind: str
     note: str
     divergence: str | None = None
+    no_harness_pin: str | None = None
 
 
 MIRRORS: list[Mirror] = [
@@ -101,12 +125,14 @@ MIRRORS: list[Mirror] = [
     Mirror(
         id="autopilot.vote_targets",
         app=f"ts:{AUTOPILOT_TS}::const INITIAL_STATE",
-        harness="vtscore/eval/autopilot_flow.py::GOOD_TARGET",
+        harness="vtscore/eval/autopilot_flow.py::GOOD_TARGET,BAD_TARGET",
         kind="ported",
         note=(
             "goodToStart / badToStart are copied as GOOD_TARGET / BAD_TARGET, which decide how "
             "many votes the simulation spends before its first learned sort. Pinned literally "
-            "by tests_lib/detectors/test_autopilot_flow.py::TestPortedConstants."
+            "by tests_lib/detectors/test_autopilot_flow.py::TestPortedConstants. Both harness "
+            "constants are named here, because the mirror is the pair: watching only GOOD_TARGET "
+            "would leave a change to BAD_TARGET alone as silent as the app-side half used to be."
         ),
     ),
     Mirror(
@@ -255,6 +281,15 @@ MIRRORS: list[Mirror] = [
             "shipped threshold. The harness's reported operating point is only comparable to "
             "the app's if this rule matches."
         ),
+        no_harness_pin=(
+            "The harness side is _safe_threshold_for_step, the whole production-threshold path (150 lines, named "
+            "by three mirrors, and carrying the arm knobs and per-fold timing that no mirror is about). Its "
+            "digest would trip on edits with nothing to do with this mirror, and a pin people re-run --update on "
+            "without reading is worse than no pin. The app-side digest still covers the direction that matters "
+            "here. When this blind spot starts to matter, the fix is to extract the reproduction into its own "
+            "helper - what #3403 did for the two *_default mirrors, giving them a harness side small enough to "
+            "pin - not to digest the whole function."
+        ),
     ),
     Mirror(
         id="training.calibration_score_rows",
@@ -265,6 +300,15 @@ MIRRORS: list[Mirror] = [
             "Calibrating in *inference* geometry: each voted bag collapses over the rows the "
             "scorer will max-pool, not the rows the fold model trained on. Changing which rows "
             "the app calibrates over silently moves every threshold the harness reports."
+        ),
+        no_harness_pin=(
+            "The harness side is _safe_threshold_for_step, the whole production-threshold path (150 lines, named "
+            "by three mirrors, and carrying the arm knobs and per-fold timing that no mirror is about). Its "
+            "digest would trip on edits with nothing to do with this mirror, and a pin people re-run --update on "
+            "without reading is worse than no pin. The app-side digest still covers the direction that matters "
+            "here. When this blind spot starts to matter, the fix is to extract the reproduction into its own "
+            "helper - what #3403 did for the two *_default mirrors, giving them a harness side small enough to "
+            "pin - not to digest the whole function."
         ),
     ),
     Mirror(
@@ -319,6 +363,15 @@ MIRRORS: list[Mirror] = [
             "math.inf = the pre-#3308 behaviour) where the app has no such setting. That is the "
             "#3312 arm axis and is exactly the kind of deliberate deviation the harness exists "
             "to measure; the DEFAULT arm still passes None and so resolves here."
+        ),
+        no_harness_pin=(
+            "The harness side is _safe_threshold_for_step, the whole production-threshold path (150 lines, named "
+            "by three mirrors, and carrying the arm knobs and per-fold timing that no mirror is about). Its "
+            "digest would trip on edits with nothing to do with this mirror, and a pin people re-run --update on "
+            "without reading is worse than no pin. The app-side digest still covers the direction that matters "
+            "here. When this blind spot starts to matter, the fix is to extract the reproduction into its own "
+            "helper - what #3403 did for the two *_default mirrors, giving them a harness side small enough to "
+            "pin - not to digest the whole function."
         ),
     ),
     Mirror(
@@ -387,6 +440,14 @@ class MirrorError(Exception):
 
 
 # --------------------------------------------------------------------- digests
+
+
+def _rel(path: Path) -> str:
+    """*path* as the repo-relative string an error message should show."""
+    try:
+        return str(path.relative_to(REPO_ROOT))
+    except ValueError:  # A path from outside the tree - only reachable from tests.
+        return str(path)
 
 
 def _source_slice(lines: list[str], start: tuple[int, int], end: tuple[int, int]) -> str:
@@ -503,12 +564,12 @@ def _ts_block(path: Path, anchor: str) -> str:
     text = _TS_LINE_COMMENT.sub(" ", text)
     start = text.find(anchor)
     if start < 0:
-        raise MirrorError(f"anchor {anchor!r} not found in {path.relative_to(REPO_ROOT)}")
+        raise MirrorError(f"anchor {anchor!r} not found in {_rel(path)}")
     if text.find(anchor, start + len(anchor)) >= 0:
-        raise MirrorError(f"anchor {anchor!r} is ambiguous in {path.relative_to(REPO_ROOT)} (matches more than once)")
+        raise MirrorError(f"anchor {anchor!r} is ambiguous in {_rel(path)} (matches more than once)")
     open_idx = text.find("{", start)
     if open_idx < 0:
-        raise MirrorError(f"no block follows anchor {anchor!r} in {path.relative_to(REPO_ROOT)}")
+        raise MirrorError(f"no block follows anchor {anchor!r} in {_rel(path)}")
     depth = 0
     for i in range(open_idx, len(text)):
         if text[i] == "{":
@@ -517,7 +578,7 @@ def _ts_block(path: Path, anchor: str) -> str:
             depth -= 1
             if depth == 0:
                 return text[start : i + 1]
-    raise MirrorError(f"unbalanced block for anchor {anchor!r} in {path.relative_to(REPO_ROOT)}")
+    raise MirrorError(f"unbalanced block for anchor {anchor!r} in {_rel(path)}")
 
 
 def _py_symbol_source(path: Path, symbol: str) -> str:
@@ -538,7 +599,7 @@ def _py_symbol_source(path: Path, symbol: str) -> str:
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
             if any(isinstance(t, ast.Name) and t.id == symbol for t in targets):
                 return "\n".join(lines[node.lineno - 1 : node.end_lineno])
-    raise MirrorError(f"{path.relative_to(REPO_ROOT)} has no top-level {symbol!r} - did it move or get renamed?")
+    raise MirrorError(f"{_rel(path)} has no top-level {symbol!r} - did it move or get renamed?")
 
 
 def _app_source(mirror: Mirror) -> str:
@@ -548,7 +609,7 @@ def _app_source(mirror: Mirror) -> str:
         module_path, _, symbol = ref.rpartition(".")
         path = REPO_ROOT / (module_path.replace(".", "/") + ".py")
         if not path.exists():
-            raise MirrorError(f"module {module_path} ({path.relative_to(REPO_ROOT)}) does not exist")
+            raise MirrorError(f"module {module_path} ({_rel(path)}) does not exist")
         return _normalize_python(_py_symbol_source(path, symbol))
     if kind == "ts":
         rel, _, anchor = ref.partition("::")
@@ -559,30 +620,72 @@ def _app_source(mirror: Mirror) -> str:
     raise MirrorError(f"unknown app source kind {kind!r} in {mirror.app!r}")
 
 
-def _digest(mirror: Mirror) -> str:
-    return hashlib.sha256(_app_source(mirror).encode("utf-8")).hexdigest()
+def _harness_source(mirror: Mirror) -> str:
+    """The normalized source of the harness symbol(s) *mirror* names.
 
-
-def _check_harness_side(mirror: Mirror) -> None:
-    """The harness counterpart still exists under the name the manifest claims."""
-    rel, _, symbol = mirror.harness.partition("::")
+    Resolved by parsing rather than by searching the file text.  The existence
+    check used to be ``symbol in path.read_text()``, which a name surviving only
+    inside a comment - or inside the docstring explaining that the reproduction
+    was removed - satisfied just as well as the reproduction itself.
+    """
+    rel, _, symbols = mirror.harness.partition("::")
     path = REPO_ROOT / rel
     if not path.exists():
         raise MirrorError(f"harness file {rel} does not exist")
-    if symbol and symbol not in path.read_text(encoding="utf-8"):
-        raise MirrorError(f"harness symbol {symbol!r} not found in {rel} - was it renamed or removed?")
+    names = [s.strip() for s in symbols.split(",") if s.strip()]
+    if not names:
+        raise MirrorError(f"harness ref {mirror.harness!r} names no symbol")
+    parts: list[str] = []
+    for name in names:
+        try:
+            parts.append(_normalize_python(_py_symbol_source(path, name)))
+        except MirrorError as exc:
+            raise MirrorError(f"harness symbol {name!r} not found in {rel} - was it renamed or removed?") from exc
+    return "\n".join(parts)
+
+
+def _digest(source: str) -> str:
+    return hashlib.sha256(source.encode("utf-8")).hexdigest()
+
+
+def _digests(mirror: Mirror) -> dict[str, str]:
+    """Every side of *mirror* that carries a pin, keyed as the pins file is.
+
+    Resolving the harness side is not conditional on pinning it: a mirror whose
+    reproduction has been deleted is unresolvable whether or not its digest is
+    recorded, and that is the failure the manifest most wants to hear about.
+    """
+    harness = _harness_source(mirror)
+    pins = {"app": _digest(_app_source(mirror))}
+    if mirror.no_harness_pin is None:
+        pins["harness"] = _digest(harness)
+    return pins
 
 
 # ----------------------------------------------------------------------- pins
 
 
-def _load_pins() -> dict[str, str]:
+#: What a pins entry may record.  ``harness`` is absent for a mirror that
+#: declares ``no_harness_pin``.
+PIN_SIDES = ("app", "harness")
+
+
+def _load_pins() -> dict[str, dict[str, str]]:
+    """The recorded digests, as ``{mirror id: {side: digest}}``."""
     if not PINS_PATH.exists():
         return {}
-    return json.loads(PINS_PATH.read_text(encoding="utf-8"))
+    raw = json.loads(PINS_PATH.read_text(encoding="utf-8"))
+    for key, value in raw.items():
+        if not isinstance(value, dict):
+            raise SystemExit(
+                f"{_rel(PINS_PATH)} records {key!r} as a bare digest, which is the "
+                "one-sided format from before the harness side was pinned too. "
+                "Run: python scripts/check-eval-app-sync.py --update"
+            )
+    return raw
 
 
-def _write_pins(pins: dict[str, str]) -> None:
+def _write_pins(pins: dict[str, dict[str, str]]) -> None:
     PINS_PATH.write_text(json.dumps(pins, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
@@ -595,7 +698,12 @@ class Drift:
 
 
 def check() -> list[Drift]:
-    """Every mirror whose app side moved, or whose two sides no longer resolve."""
+    """Every mirror where either side moved, or whose two sides no longer resolve.
+
+    One Drift per mirror, not per side: both halves of a copy moving together is
+    the ordinary shape of a faithful port, and reporting it twice would print
+    the mirror's whole note twice for one reconciliation.
+    """
     pins = _load_pins()
     drifts: list[Drift] = []
     seen: set[str] = set()
@@ -604,16 +712,31 @@ def check() -> list[Drift]:
             raise SystemExit(f"duplicate mirror id {mirror.id!r} in MIRRORS")
         seen.add(mirror.id)
         try:
-            _check_harness_side(mirror)
-            digest = _digest(mirror)
+            digests = _digests(mirror)
         except MirrorError as exc:
             drifts.append(Drift(mirror, "unresolvable", str(exc)))
             continue
-        pinned = pins.get(mirror.id)
-        if pinned is None:
-            drifts.append(Drift(mirror, "unpinned", "no digest recorded yet"))
-        elif pinned != digest:
-            drifts.append(Drift(mirror, "changed", f"pinned {pinned[:12]}, now {digest[:12]}"))
+        pinned = pins.get(mirror.id, {})
+        reasons: list[str] = []
+        details: list[str] = []
+        for side, digest in digests.items():
+            recorded = pinned.get(side)
+            if recorded is None:
+                reasons.append(f"{side}-unpinned")
+                details.append(f"{side}: no digest recorded yet")
+            elif recorded != digest:
+                reasons.append(f"{side}-changed")
+                details.append(f"{side}: pinned {recorded[:12]}, now {digest[:12]}")
+        orphans = sorted(set(pinned) - set(digests))
+        if orphans:
+            reasons.append("side-not-pinned-anymore")
+            details.append(
+                "digests recorded for sides this mirror no longer pins: "
+                + ", ".join(orphans)
+                + " (--update drops them)"
+            )
+        if reasons:
+            drifts.append(Drift(mirror, ", ".join(reasons), "; ".join(details)))
     stale = sorted(set(pins) - {m.id for m in MIRRORS})
     if stale:
         drifts.append(
@@ -628,17 +751,17 @@ def check() -> list[Drift]:
 
 
 def update() -> int:
-    pins: dict[str, str] = {}
-    for mirror in MIRRORS:
-        _check_harness_side(mirror)
-        pins[mirror.id] = _digest(mirror)
+    pins: dict[str, dict[str, str]] = {mirror.id: _digests(mirror) for mirror in MIRRORS}
     _write_pins(pins)
-    print(f"Pinned {len(pins)} eval/app mirrors to {PINS_PATH.relative_to(REPO_ROOT)}")
+    unpinned = [m.id for m in MIRRORS if m.no_harness_pin is not None]
+    print(f"Pinned {len(pins)} eval/app mirrors to {_rel(PINS_PATH)}")
+    if unpinned:
+        print(f"  ({len(unpinned)} app-side only, by declaration: {', '.join(unpinned)})")
     return 0
 
 
 def _report(drifts: list[Drift]) -> None:
-    print("The eval framework mirrors app code that has since changed.")
+    print("The eval framework and the app code it mirrors no longer agree.")
     print("")
     print("The eval default arm has to BE the app's algorithm - that is the only")
     print("thing that makes a deviation arm meaningful. Reconcile each mirror below,")
@@ -656,8 +779,15 @@ def _report(drifts: list[Drift]) -> None:
         print(f"      {mirror.note}")
         if mirror.divergence:
             print(f"      DECLARED DIVERGENCE: {mirror.divergence}")
-        if drift.detail and drift.reason != "changed":
+        if mirror.no_harness_pin:
+            print(f"      HARNESS SIDE NOT PINNED: {mirror.no_harness_pin}")
+        if drift.detail:
             print(f"      {drift.detail}")
+    print("")
+    print("app-changed:     the original moved. Reconcile the harness copy to it, then --update.")
+    print("harness-changed: the copy moved while the original stood still. Re-read the two")
+    print("                 against each other: this is the direction a harness edit can")
+    print("                 silently re-point the default arm, which is what #2923 was.")
     print("")
     print("If the harness already tracks the change (or is unaffected), --update alone")
     print("is the right answer. If the harness now *intentionally* differs, record why")
@@ -669,7 +799,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--update",
         action="store_true",
-        help="re-pin every mirror to the current app source, after reconciling the harness",
+        help="re-pin every mirror to the current source on both sides, after reconciling them",
     )
     args = parser.parse_args(argv)
     if args.update:
