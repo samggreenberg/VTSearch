@@ -1,9 +1,8 @@
 # #3319 — the acquisition-offset frontier past −4, at half-step resolution, and in the deep regime
 
-**Status: the shipped-arm (`bin`) sweep is COMPLETE — 2304/2304 cells, 0
-failures, 12 arms × 192 paired cells.** The 400-click deep wave and the region
-cross-check are still running; their sections are marked and will be filled from
-the same code path.
+**Status: COMPLETE.** Three waves, **4032 cells, 0 failures, 0 header-only
+cells**: the 12-arm shipped-arm sweep (2304), the 400-click deep wave (768) and
+the region cross-check (960).
 
 Issue #3319 · branch `claude/acq-offset-3319` · base dev `faa9fa9ac` · worktree
 `/exp/sgreenberg/projects/vts-acq-3319` · study `/expscratch/sgreenberg/acq-3319`.
@@ -12,8 +11,13 @@ existed, and every rule below is the one it committed to.
 
 ![the plateau and the calibration gap](figures/fig4_3319_plateau_and_calibration.png)
 
-## The result, in three sentences
+## The result, in four sentences
 
+0. **Ship `−4`.** It passes the pre-registered rule in all three environments —
+   +10 positives per 100 clicks and +0.019 AP over the incumbent `−3` for a cost
+   delta indistinguishable from zero — and it is the *only* arm that does. The
+   margin under region voting is thin and is flagged below rather than rounded
+   away.
 1. **The frontier does not turn where anyone was looking.** `final_cost` is
    *statistically flat from −2 to −5* — a three-bit-wide plateau — and only
    degrades resolvably at **−8**. The shipped `−3` sits in the middle of a
@@ -173,6 +177,31 @@ mixture is fitted on a handful of held-out labels, the Gaussian form is an
 approximation to a score distribution that is not Gaussian (#3329 measured that
 misfit), and fold models are trained on half the votes.
 
+### The gap replicates — and it tracks how well the ranking separates
+
+![the deep regime and the replication](figures/fig5_3319_deep_and_replication.png)
+
+Measured the same way on the region environment, the gap is **much smaller**:
+
+| environment | 50% crossing | predicted `k*` | gap | evidence overstated by |
+|---|---:|---:|---:|---:|
+| binary — `siglip × whole_image` | −5.66 | −3.71 | **1.95 bits** | 3.9× |
+| REGION — `pair × max_patch` | −4.24 | −3.71 | **0.53 bits** | 1.4× |
+
+This is the finding that ties the study together. The gap is not a constant of
+the codebase and not an artefact of one dataset — **it measures how much the
+fitted mixture overstates its own evidence, and it shrinks when the ranking
+separates well.** Region voting takes oracle cost 0.382 → 0.218 and AP
+0.517 → 0.762 on identical cells (#3318), so its mixture is more nearly correct
+and its nominal bits are closer to true bits.
+
+That single quantity retro-explains most of this constant's messy history: why
+the optimal offset moved between environments, why #3318 found region voting
+*tolerates* aggression that binary voting does not, and why every attempt to ship
+one global value has needed re-measurement. The arms were never really sweeping
+"aggression" — they were sweeping *nominal* bits against an environment-dependent
+calibration debt.
+
 **Follow-up worth filing:** if the gap is a stable property of the estimator
 rather than of this dataset, then the *right* parameterisation is neither a fixed
 offset nor a pinned rank but **the offset that puts the picks at a target
@@ -221,30 +250,117 @@ plateau arms on cost would need roughly **5400 cells per arm**, since the
 half-step effect on cost is ~0.002. That number is the honest reason the
 half-step grid is retired rather than re-run bigger.
 
-## H3 — the deep regime (400 clicks)
+## H3 — the deep regime: the sign does not flip
 
-*In flight; 4 arms × 192 cells at `CALIB_MAX_STEPS=400`.*
+**768/768 cells, `prod`/`−1`/`−3`/`−4` at `CALIB_MAX_STEPS=400`.** Note the
+column the harness calls `positives_100` is the trajectory's *final* value, so
+here it is **positives at t=400**.
 
-The pre-registered disagreement is worth restating because the two readings
-predict opposite signs. The issue expects the benefit may fade because #2910
-measured it as concentrated where positives are **scarce**, and deep voting is
-where scarcity ends. The likelihood-ratio reading predicts the opposite: the
-selector ranks the **unvoted pool**, whose prevalence *falls* as positives are
-harvested, which moves `k*` deeper. H3 is supported if the 400-click optimum is
-at least as deep as the 100-click one.
+| arm | k | Δ final cost vs prod [95% CI] | Δ positives@400 | Δ AP | deep spikes vs prod |
+|---|---:|---|---:|---:|---|
+| `acq_m1` | −1 | −0.016 [−0.022, −0.011] | +16.8 | +0.063 | 0.5% → 1.6% (p=0.63) |
+| `acq_m3` | −3 | **−0.033** [−0.039, −0.027] | +90.1 | +0.123 | 0.5% → **5.7% (p=0.006)** |
+| `acq_m4` | −4 | −0.032 [−0.039, −0.026] | **+99.9** | **+0.128** | 0.5% → 2.1% (p=0.38) |
 
-**The exhaustion hazard named in the plan does not bind.** The pilot cell found
-57 of ~150 available sim positives by t=400 with the harvest rate *accelerating*
-(14 / 5 / 15 / 18 positives per 100 clicks), so the tail is not flattening for
-want of positives and the arm is interpretable.
+**H3's falsification condition was that the 400-click optimum be *shallower* than
+the 100-click one. It is not.** `−3` and `−4` are statistically tied at both
+horizons (+0.0004 [−0.0029, +0.0037] between them at 400 clicks), and in absolute
+terms the offset is worth *more* at depth, not less: paired cost gain −0.033
+against −0.031, and positives +90 against +17.7.
 
-## Region cross-check
+**So the issue's worry does not materialise.** It expected the benefit to fade
+because #2910 measured it as concentrated where positives are scarce, and deep
+voting is where scarcity ends. The likelihood-ratio reading predicted the
+opposite, on the grounds that the selector ranks the *unvoted pool*, whose
+prevalence falls as positives are harvested. The measurement sides with the
+latter — though weakly, since the deep grid stops at `−4` and cannot locate an
+optimum deeper than its own edge.
 
-*In flight; `prod`, `−3`, `−4`, `−5`, `+2` on `siglip+dinov3_patch × max_patch`.*
+**The genuinely new finding at depth is the guardrail.** Deep-spike incidence was
+0.0% for every arm out to `−5` at 100 clicks. At 400 clicks it is live: `−3` goes
+0.5% → **5.7%, p=0.006** (11 cells spiking that `prod` did not). That is the
+first time this constant has shown a guardrail cost anywhere on the shipped arm.
 
-Only the survivors, as the plan pre-registered — a region cell is 16 min against
-3, so this is most of the study's cost and is owed only on values that passed the
-shipped arm.
+It is **non-monotone** — `−4` is 2.1% (p=0.38), *lower* than `−3` — which is not
+a shape any mechanism predicts and is what a low-rate count (11 vs 4 events in
+192 cells) looks like when it is noisy. **Recorded as a live hazard for whoever
+runs the next deep study, not as evidence about which arm is safer.** The deep
+wave's own sizing is comfortable (binding SD 0.0437, n=74 needed, 192 run).
+
+### The exhaustion hazard DOES bind, and it was mis-called from the pilot
+
+The plan named positive exhaustion as the artefact that would masquerade as "the
+offset stops mattering", and a single pilot cell (`backpack`, seed 0: 57 of ~150
+positives, harvest rate still accelerating) was read as clearing it. **On the
+full wave that reading was wrong**, and the correction matters more than the
+original claim:
+
+| arm | median positives @400 | median harvest of the ~150-positive sim half | cells >90% harvested |
+|---|---:|---:|---:|
+| `prod` | 22 | 14.7% | 0.0% |
+| `acq_m1` | 36 | 24.0% | 0.0% |
+| `acq_m3` | 123 | **82.0%** | **21.9%** |
+| `acq_m4` | 128 | **85.3%** | **29.2%** |
+
+**The aggressive arms run into their positive ceiling at 400 clicks; the control
+never comes near it.** One pilot cell was not a sample — `backpack` is simply a
+hard category, and generalising from it is the mistake this table records.
+
+Two consequences, and they point in opposite directions:
+
+* **It makes the H3 verdict conservative, not inflated.** A ceiling the
+  aggressive arms hit and the control does not can only *compress* their measured
+  advantage in the late tail. They still win by −0.033 in cost and +90 positives,
+  so "the sign does not flip" survives — with margin to spare.
+* **But it weakens H3's positive half.** "Does the optimum *deepen* at depth?"
+  cannot be answered cleanly by arms that are ceiling-limited over the last
+  quarter of their trajectory. The honest statement is the falsifier's: the
+  optimum does not get *shallower*. Anything stronger needs a deeper haystack —
+  a larger sim fraction or a category pool with more positives — not more seeds.
+
+It is also a plausible mechanism for the spike rise: once positives are nearly
+exhausted the remaining pool is almost all negatives, which is exactly the regime
+where a cut fitted on a positive quantile gets unstable. That does not explain the
+non-monotonicity (`−4` harvests *more* and spikes *less*), so both readings stay
+on the table.
+
+## Region cross-check — this is what decides the ship
+
+**960/960 cells**, `prod`/`−3`/`−4`/`−5`/`+2` on `siglip+dinov3_patch`. The pair
+runs both styles in one task, so the region environment is read at
+`style == max_patch` **alone** — never pooled with the pair's `whole_image` rows,
+which is the trap #2877 documented after a per-mode split that still pooled two
+environments.
+
+Falsifier behaved (`+2`: positives −4.9, cost +0.037 [+0.028, +0.046]); the lever
+moved on every arm.
+
+| arm | k | Δ final cost vs prod [95% CI] | Δ positives@100 | Δ AP |
+|---|---:|---|---:|---:|
+| `acq_m3` | −3 | −0.002 [−0.009, +0.005] | +25.7 | +0.026 |
+| `acq_m4` | −4 | +0.001 [−0.007, +0.009] | +35.1 | +0.024 |
+| `acq_m5` | −5 | +0.004 [−0.003, +0.012] | +42.4 | +0.024 |
+
+Against the incumbent `−3`, which is the comparison the ship rule reads:
+
+| arm | k | Δ final cost [95% CI] | Δ positives | Δ AP | deep spikes | passes |
+|---|---:|---|---:|---:|---|---|
+| `acq_m4` | −4 | +0.0031 [−0.0025, **+0.0091**] | +9.4 | −0.002 | 1.6% → 1.6% | **YES** |
+| `acq_m5` | −5 | +0.0064 [+0.0007, **+0.0123**] | +16.7 | −0.002 | 1.6% → 1.0% | no |
+
+**`−4` clears the tolerance under region voting; `−5` does not.** That is the
+constraint #3318 raised, and it is what removes `−5` from consideration despite
+its being free on the shipped arm.
+
+**Stated rather than rounded away: `−4`'s region margin is thin.** Its upper
+bound is +0.0091 against a +0.010 bar. #3318 measured this same contrast at
++0.006 [+0.001, +0.013] and rejected it; this run measures +0.0031 [−0.0025,
++0.0091] and passes. The two CIs overlap heavily, so these are *consistent*
+measurements that happen to straddle the bar — not a reversal, and not
+independent confirmation either. Anyone uncomfortable with a decision that turns
+on 0.0009 of cost should treat `−3` → `−4` as optional; the positives case
+(+9.4 to +9.9 per 100 clicks, three environments) is much stronger than the cost
+case, which is a null in all three.
 
 ## What this changes
 
@@ -255,6 +371,16 @@ shipped arm.
 * **The half-step question is answered and retired.** Not "too fine to matter" —
   measurably half-way on the mechanism, invisible on an endpoint that is flat
   across three bits.
-* **The knob has a Bayesian meaning, and a measurable calibration debt of ~2
-  bits.** That is the most reusable thing here, and it points at a knob shaped
-  like a *target pick precision* rather than a constant offset.
+* **Ship `−4`.** It is the only arm passing the pre-registered rule in all
+  three environments: +9.9 positives / +0.019 AP at 100 clicks, +9.7 / +0.004 at
+  400, +9.4 / −0.002 under region voting, with a cost null everywhere. `−5` is
+  free on the shipped arm and fails region. The region margin is thin and the
+  positives case is much stronger than the cost case.
+* **The deep regime does not flip the sign** — but it does make the spike
+  guardrail live for the first time on this arm (`−3`: 5.7%, p=0.006), which is
+  the thing to watch next.
+* **The knob has a Bayesian meaning and a measurable calibration debt, and the
+  debt is environment-dependent — 1.95 bits binary, 0.53 bits region.** That is
+  the most reusable thing here. It explains the constant's whole history and
+  points at a knob shaped like a *target pick precision*, which would be
+  self-calibrating where a constant offset is not.

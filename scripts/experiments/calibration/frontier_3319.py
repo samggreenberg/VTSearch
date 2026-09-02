@@ -48,6 +48,11 @@ ap.add_argument("--deep", default=None, help="the 400-click wave's analysis dir,
 ap.add_argument("--incumbent", default="acq_m3", help="the arm a ship recommendation is made against")
 ap.add_argument("--prevalence", type=float, default=0.071, help="designed prevalence, for the H4 landmark")
 ap.add_argument("--markdown", default=None)
+# The environment to read. Defaults to the SHIPPED arm; the region cross-check
+# passes the pair. Never pooled: #3318 showed these two disagree, so a mean over
+# them is precisely the number that would hide the disagreement.
+ap.add_argument("--embedder", default="siglip")
+ap.add_argument("--style", default="whole_image")
 args = ap.parse_args()
 
 TOL = A.COST_REGRESSION_TOLERANCE
@@ -56,7 +61,7 @@ traj = pd.read_csv(ANALYSIS / "agg" / "trajectories.csv")
 
 # The shipped arm only.  The region half is a separate wave and pooling it here
 # would average the frontier over two environments that #3318 showed disagree.
-traj = traj[(traj["embedder"] == "siglip") & (traj["style"] == "whole_image")]
+traj = traj[(traj["embedder"] == args.embedder) & (traj["style"] == args.style)]
 arms = [a for a in A.ARMS if a in set(traj["arm"])]
 K = {a: A.ARM_K[a] for a in arms if a in A.ARM_K}
 lines: list[str] = []
@@ -67,7 +72,7 @@ def out(s: str = "") -> None:
     lines.append(s)
 
 
-out(f"# #3319 frontier — {len(traj)} trajectories, {len(arms)} arms\n")
+out(f"# #3319 frontier — `{args.embedder} x {args.style}` — {len(traj)} trajectories, {len(arms)} arms\n")
 out(f"Arms present: {', '.join(arms)}")
 out(f"Cost-regression tolerance: ±{TOL:g}\n")
 
@@ -271,7 +276,7 @@ if args.deep:
     dpath = pathlib.Path(args.deep) / "agg" / "trajectories.csv"
     if dpath.exists():
         dt = pd.read_csv(dpath)
-        dt = dt[(dt["embedder"] == "siglip") & (dt["style"] == "whole_image")]
+        dt = dt[(dt["embedder"] == args.embedder) & (dt["style"] == args.style)]
         out("## H3 — the deep regime (400 clicks)\n")
         out("| arm | k | Δ final cost vs prod [95% CI] | Δ positives | pairs |")
         out("|---|---:|---|---:|---:|")

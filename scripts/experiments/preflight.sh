@@ -993,6 +993,77 @@ PY
   esac
 fi
 
+# --- 16b. A horizon that outruns its own POSITIVES ----------------------------
+# Check 16 asks whether the horizon empties the sim set of MEDIA.  That is the
+# wrong ceiling for any study whose endpoint depends on finding positives: a
+# 400-step run on a 3873-media sim half passes 16 comfortably and can still
+# harvest 85% of the ~150 POSITIVES in it, because an aggressive acquisition arm
+# does not sample uniformly - that is the whole point of it.
+#
+# What that does is not a truncation, it is a CONFOUND, and a one-sided one: the
+# aggressive arms hit the ceiling and the control never comes near it, so the
+# arms are no longer being compared over the same opportunity.  It is also
+# invisible in every summary statistic the analyzer prints.  #3319 measured
+# `acq_m3`/`acq_m4` at 82%/85% median harvest at 400 clicks while `prod` sat at
+# 15%, after a single pilot cell (57 of ~150, rate still rising) was read as
+# clearing the hazard.  One cell is not a sample.
+#
+# The bound is deliberately crude and conservative: if `max_steps` reaches the
+# positives available in the sim half, exhaustion is REACHABLE and the study has
+# to have thought about it.  A note, not a failure - running to exhaustion can be
+# exactly what a study wants, and it is the *unnoticed* case this exists to stop.
+if [[ -n "${CALIB_MAX_STEPS:-}" ]]; then
+  PINFO_P=""
+  for cand in "${REUSE_PREPARE:-}/prepare_info.json" "$EXP/results/prepare_info.json"; do
+    [[ -n "$cand" && -r "$cand" ]] && { PINFO_P="$cand"; break; }
+  done
+  if [[ -n "$PINFO_P" ]]; then
+    POSHZ=$(PINFO="$PINFO_P" python - <<'PY' 2>&1
+import json, os
+steps = int(os.environ["CALIB_MAX_STEPS"])
+frac = float(os.environ.get("CALIB_SIM_FRACTION") or 0.5)
+info = json.loads(open(os.environ["PINFO"]).read())
+worst = None
+for ds, arms in sorted((info.get("datasets") or {}).items()):
+    for emb, rec in sorted((arms or {}).items()):
+        counts = (rec or {}).get("category_counts") or {}
+        sel = (rec or {}).get("selected_categories") or list(counts)
+        vals = [int(counts[c]) for c in sel if c in counts and counts[c]]
+        if not vals:
+            continue
+        # The THINNEST selected category is what binds: it exhausts first.
+        n_pos_sim = max(1, int(min(vals) * frac))
+        if worst is None or n_pos_sim < worst[0]:
+            worst = (n_pos_sim, "%s x %s" % (ds, emb), min(vals))
+if worst is None:
+    print("SKIP\tprepare_info records no category_counts")
+elif steps >= worst[0]:
+    print("REACH\t%s: thinnest category has ~%d positives in the sim half "
+          "(%d total x sim_fraction %g), horizon is %d steps"
+          % (worst[1], worst[0], worst[2], frac, steps))
+else:
+    print("CLEAR\t%s: ~%d sim positives against a %d-step horizon"
+          % (worst[1], worst[0], steps))
+PY
+    )
+    POSHZ=$(printf '%s\n' "$POSHZ" | tail -1)
+    case "$POSHZ" in
+      CLEAR*) say_ok "horizon cannot exhaust the positives - tightest ${POSHZ#CLEAR?}" ;;
+      SKIP*)  say_ok "horizon vs positives not checked (${POSHZ#SKIP?})" ;;
+      REACH*)
+        say_note "the horizon can EXHAUST the positives: ${POSHZ#REACH?}"
+        echo "        -> aggressive acquisition arms do not sample uniformly, so they reach"
+        echo "           this ceiling while the control does not - the arms then stop being"
+        echo "           compared over the same opportunity, one-sidedly"
+        echo "        -> it compresses the aggressive arms' measured advantage, so a WIN"
+        echo "           survives it; a null or a loss past this point is not interpretable"
+        echo "        -> report the realised harvest per arm, and do not size the hazard"
+        echo "           from one pilot cell (#3319 did, and was wrong by 25 points)"
+        ;;
+    esac
+  fi
+fi
+
 # --- 16. A horizon that outruns its own haystack ------------------------------
 # `sim_fraction` sets the simulation set: the pool the user votes out of AND the
 # haystack the threshold's population estimate is fitted on.  `max_steps` is how
