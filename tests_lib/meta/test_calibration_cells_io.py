@@ -152,7 +152,7 @@ def test_shell_cell_counts_exclude_side_frames(script: Path) -> None:
         "these shell lines match every frame in a cells/ directory, not just the "
         "main frames:\n  " + "\n  ".join(bad) + "\n"
         "Exclude side frames on the `__` (`! -name '*__*'`, `case \"$f\" in *__*)`, "
-        "`\"__\" not in p.stem`) or match the digits positively "
+        '`"__" not in p.stem`) or match the digits positively '
         "(`-name 'task_[0-9][0-9][0-9][0-9].csv'`).  Never by listing the side "
         "frames by name — that list is what went stale in #3407."
     )
