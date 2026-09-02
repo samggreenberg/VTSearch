@@ -447,8 +447,8 @@ integer among them, and region removes `−5`:
 | `acq_m6` | −6 | +0.0085 [+0.0008, +0.0158] | +26.8 | +0.030 | 0.0% → 1.0% | no |
 | `acq_m8` | −8 | +0.0212 [+0.0124, +0.0301] | +34.4 | +0.028 | 0.0% → 2.6% | no |
 
-**Ship `−4`** — the only arm passing in all three environments (+9.9 / +9.7 /
-+9.4 positives, cost a null everywhere).
+**`−4` is shipped** (decided 2026-09-02, PR #3454) — the only arm passing in all
+three environments (+9.9 / +9.7 / +9.4 positives, cost a null everywhere).
 
 **But be clear what the case is.** It is *not* quality and it is *not* speed:
 within the plateau, `−4` vs `−3` is a null on final cost, on AUC and on
@@ -482,8 +482,10 @@ n = 74 needed).
   report on it should carry the trajectory.
 * **`−3` is confirmed safe and confirmed arbitrary.** It sits mid-plateau, and
   the plateau is flat on cost, AUC and speed alike.
-* **Ship `−4`**, on the labelling-efficiency case, with a thin region margin
-  stated. `−5` fails region; `−6`/`−8` fail the guardrail.
+* **`−4` is shipped**, on the labelling-efficiency case, with the thin region
+  margin recorded in the constant's own rationale block as the number to
+  re-measure first if the value is ever revisited. `−5` fails region;
+  `−6`/`−8` fail the guardrail.
 * **Stop tuning this constant.** There is no headroom on any decision endpoint,
   and the cost of finding some is bounded at ~5400 cells/arm.
 * **The half-step question is answered and retired** — measurably half-way on
