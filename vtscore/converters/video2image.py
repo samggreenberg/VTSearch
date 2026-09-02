@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import io
+import logging
 from pathlib import Path
 from typing import Any
 
 from vtscore.converters.base import MediaConverter
 from vtscore.media.video import decode
 from vtscore.plugins import PluginField
+
+logger = logging.getLogger(__name__)
 
 
 def _compute_n_frames(frame_count: int, fps: float, n_clips: int, seconds_per_frame: float) -> int:
@@ -127,7 +130,7 @@ class Video2ImageMediaConverter(MediaConverter):
         try:
             from PIL import Image  # noqa: PLC0415
         except ImportError:
-            print("Video2ImageMediaConverter requires Pillow")
+            logger.warning("video2image requires Pillow; producing no images")
             return []
 
         # The decoder needs a seekable file path, not a buffer.

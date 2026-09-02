@@ -11,11 +11,14 @@ in after the importer returns.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any, Callable, Optional
 
 from vtscore.security.path_validation import glob_top_level, rglob_follow_symlinks
 from vtscore.utils.hashing import content_md5
+
+logger = logging.getLogger(__name__)
 
 ProgressCallback = Callable[[str, str, int, int], None]
 
@@ -173,8 +176,8 @@ def _run_converter_on_source(
             return None
     try:
         return converter.convert_normalized(source_media, conv_params)
-    except Exception as exc:
-        print(f"Converter {converter.name} failed on {source_rel}: {exc}")
+    except Exception:
+        logger.error("Converter %s failed on %s", converter.name, source_rel, exc_info=True)
         return None
 
 
