@@ -1,6 +1,6 @@
-import { Injectable, OnDestroy, inject, signal } from '@angular/core';
-import { BehaviorSubject, Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { DestroyRef, Injectable, OnDestroy, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { BehaviorSubject } from 'rxjs';
 import type { MediaBatchResponse } from '../generated/api-client/models/media-batch-response';
 import { ActiveContextService } from './active-context.service';
 import { MediasApiService } from './medias-api.service';
@@ -40,7 +40,7 @@ export class MediaMetadataCacheService implements OnDestroy {
   private readonly cache = new Map<string, MediaBatchResponse>();
   private readonly pendingByDataset = new Map<string, Set<number>>();
   private batchTimer: ReturnType<typeof setTimeout> | null = null;
-  private readonly destroy$ = new Subject<void>();
+  private readonly destroyRef = inject(DestroyRef);
 
   /** Emits the current cache version (increments on every batch arrival). */
   private readonly versionSubject = new BehaviorSubject<number>(0);
@@ -61,8 +61,6 @@ export class MediaMetadataCacheService implements OnDestroy {
   readonly version = this.versionSignal.asReadonly();
 
   ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
     if (this.batchTimer) clearTimeout(this.batchTimer);
   }
 
@@ -172,7 +170,7 @@ export class MediaMetadataCacheService implements OnDestroy {
       const chunk = ids.slice(i, i + BATCH_SIZE);
       this.mediasApi
         .getMediasBatch(chunk)
-        .pipe(takeUntil(this.destroy$))
+        .pipe(takeUntilDestroyed(this.destroyRef))
         .subscribe({
           next: (items) => {
             for (const item of items) {

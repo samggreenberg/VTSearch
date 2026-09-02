@@ -14,7 +14,6 @@ export class LabelsetStateService implements OnDestroy {
   private readonly badSubject = new BehaviorSubject<DetectorLabelView[]>([]);
   private readonly mediaTypeSubject = new BehaviorSubject<string>('');
   private readonly stopPolling$ = new Subject<void>();
-  private readonly destroy$ = new Subject<void>();
   private polling = false;
   private modelName: string | null = null;
 
@@ -24,8 +23,6 @@ export class LabelsetStateService implements OnDestroy {
 
   ngOnDestroy(): void {
     this.stopPolling();
-    this.destroy$.next();
-    this.destroy$.complete();
   }
 
   get good(): DetectorLabelView[] {
