@@ -23,7 +23,10 @@ import { VoteStateService } from '../../services/vote-state.service';
 import { SortStateService, SortedItem } from '../../services/sort-state.service';
 import { SortingApiService } from '../../services/sorting-api.service';
 import { PairScopeService } from '../../services/pair-scope.service';
-import { SettingsStateService } from '../../services/settings-state.service';
+import {
+  SettingsStateService,
+  type PerMediaTypePref,
+} from '../../services/settings-state.service';
 import { BrowseSubsetService } from '../../services/browse-subset.service';
 import { BrowseSubsetPrepService } from '../../services/browse-subset-prep.service';
 import {
@@ -32,6 +35,12 @@ import {
   progressBarState,
 } from '../../utils/format-progress';
 import { iconSizeToGoalWidth, snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
+import {
+  coerceFocusMode,
+  coerceNonEmptyString,
+  coercePx,
+  type FocusMode,
+} from '../../utils/settings-coerce';
 
 /**
  * How long the Inclusion slider has to settle before its `POST /api/inclusion`
@@ -82,20 +91,62 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly layoutRef = viewChild.required<ElementRef<HTMLElement>>('layout');
   readonly centerPanel = viewChild(CenterPanelComponent);
 
-  // Written from non-bound callbacks (HTTP status subscribe, the settings-mirror
-  // effect, the media-type effect) and read in the template, so under zoneless
-  // they must be signals — a plain-field write from those contexts would not
-  // schedule CD and the view would go stale (zoneless-migration.md, Phase 2.5,
-  // Recipe B & F).
-  readonly gridGoalWidthLeft = signal(80);
-  readonly focusModeLeft = signal<'click' | 'hover'>('click');
-  readonly focusModeRight = signal<'click' | 'hover'>('click');
-  private gridIconSizeLeftDict: Record<string, string> = {};
-  private focusModeLeftDict: Record<string, 'click' | 'hover'> = {};
-  private focusModeRightDict: Record<string, 'click' | 'hover'> = {};
-  private panelPxLeftDict: Record<string, number> = {};
-  private panelPxRightDict: Record<string, number> = {};
-  private currentMediaType = '';
+  /** The loaded medias' type, which every per-media panel preference is keyed
+   *  on. Written from the media-state effect and read by the `computed`s below,
+   *  so it has to be a signal for those to re-resolve on a switch. */
+  private readonly currentMediaType = signal('');
+
+  /**
+   * The five per-media-type panel preferences, bound to {@link currentMediaType}
+   * through `SettingsStateService.perMediaType` (issue #3447). Each is a
+   * `computed` over the settings signal, replacing the shadow `Record` + the
+   * effect that mirrored settings into it + the second re-derivation on a
+   * media-type switch that used to be spelled out here.
+   *
+   * Beyond brevity that kills a staleness bug: every shadow dict was hydrated
+   * behind an `if (dict && typeof dict === 'object')` guard, so a key that went
+   * absent server-side left the last-seen copy in place for the life of the
+   * view. A `computed` has no such state.
+   */
+  private readonly gridIconSizeLeftPref = this.settingsState.perMediaType<string>(
+    'grid_icon_size_left',
+    this.currentMediaType,
+    { fallback: 'M', coerce: coerceNonEmptyString },
+  );
+  private readonly focusPref: Record<'left' | 'right', PerMediaTypePref<FocusMode>> = {
+    left: this.settingsState.perMediaType<FocusMode>('focus_mode_left', this.currentMediaType, {
+      fallback: 'click',
+      coerce: coerceFocusMode,
+    }),
+    right: this.settingsState.perMediaType<FocusMode>('focus_mode_right', this.currentMediaType, {
+      fallback: 'click',
+      coerce: coerceFocusMode,
+    }),
+  };
+  private readonly panelPxPref: Record<'left' | 'right', PerMediaTypePref<number | null>> = {
+    left: this.settingsState.perMediaType<number | null>(
+      'panel_pct_left',
+      this.currentMediaType,
+      { fallback: null, coerce: coercePx },
+    ),
+    right: this.settingsState.perMediaType<number | null>(
+      'panel_pct_right',
+      this.currentMediaType,
+      { fallback: null, coerce: coercePx },
+    ),
+  };
+
+  /**
+   * Template-bound, and `computed` rather than mirrored: under zoneless a
+   * binding tracks these directly and repaints on its own (see
+   * `docs/FRONTEND.md` section 5), where the plain-field-plus-effect shape they
+   * replace needed the effect's write to schedule change detection.
+   */
+  readonly gridGoalWidthLeft = computed(() =>
+    iconSizeToGoalWidth(this.gridIconSizeLeftPref.value()),
+  );
+  readonly focusModeLeft = this.focusPref.left.value;
+  readonly focusModeRight = this.focusPref.right.value;
   leftWidth = 260;
   rightWidth = 300;
 
@@ -192,59 +243,22 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
         this.voteState.loadVotes();
       });
 
+    // The icon size and the two focus modes are `computed`s now, so nothing has
+    // to be re-derived here — but the saved panel widths are applied to plain
+    // fields and a CSS variable, so that write still needs a trigger. Reading
+    // the two resolved widths is it: they change when settings land and again
+    // on a media-type switch, which is exactly when the widths must be reapplied.
     effect(() => {
-      const settings = this.settingsState.settingsSignal();
-      if (!settings) return;
-      const sizeDict = settings.grid_icon_size_left;
-      if (sizeDict && typeof sizeDict === 'object') {
-        this.gridIconSizeLeftDict = sizeDict as Record<string, string>;
-        if (this.currentMediaType) {
-          this.gridGoalWidthLeft.set(
-            iconSizeToGoalWidth(this.gridIconSizeLeftDict[this.currentMediaType] ?? 'M'),
-          );
-        }
-      }
-      const fmLeft = settings.focus_mode_left;
-      if (fmLeft && typeof fmLeft === 'object') {
-        this.focusModeLeftDict = fmLeft as Record<string, 'click' | 'hover'>;
-        if (this.currentMediaType) {
-          this.focusModeLeft.set(this.focusModeLeftDict[this.currentMediaType] ?? 'click');
-        }
-      }
-      const fmRight = settings.focus_mode_right;
-      if (fmRight && typeof fmRight === 'object') {
-        this.focusModeRightDict = fmRight as Record<string, 'click' | 'hover'>;
-        if (this.currentMediaType) {
-          this.focusModeRight.set(this.focusModeRightDict[this.currentMediaType] ?? 'click');
-        }
-      }
-      const pplDict = settings.panel_pct_left;
-      if (pplDict && typeof pplDict === 'object') {
-        this.panelPxLeftDict = pplDict as Record<string, number>;
-        if (this.currentMediaType) {
-          this.applyPanelPx(this.currentMediaType);
-        }
-      }
-      const pprDict = settings.panel_pct_right;
-      if (pprDict && typeof pprDict === 'object') {
-        this.panelPxRightDict = pprDict as Record<string, number>;
-        if (this.currentMediaType) {
-          this.applyPanelPx(this.currentMediaType);
-        }
-      }
+      const left = this.panelPxPref.left.value();
+      const right = this.panelPxPref.right.value();
+      if (left == null && right == null) return;
+      this.applyPanelPx();
     });
 
     effect(() => {
       const medias = this.mediaState.mediasSignal();
       if (medias.length > 0) {
-        const newType = medias[0].media_type;
-        if (newType !== this.currentMediaType) {
-          this.currentMediaType = newType;
-          this.gridGoalWidthLeft.set(iconSizeToGoalWidth(this.gridIconSizeLeftDict[newType] ?? 'M'));
-          this.focusModeLeft.set(this.focusModeLeftDict[newType] ?? 'click');
-          this.focusModeRight.set(this.focusModeRightDict[newType] ?? 'click');
-          this.applyPanelPx(newType);
-        }
+        this.currentMediaType.set(medias[0].media_type);
       }
     });
   }
@@ -815,23 +829,19 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   // --- Panel percentage helpers ---
 
   private savePanelPx(side: 'left' | 'right'): void {
-    if (!this.currentMediaType) return;
-    const px = side === 'left' ? this.leftWidth : this.rightWidth;
-    const key = side === 'left' ? 'panel_pct_left' : 'panel_pct_right';
-    const dict = side === 'left' ? this.panelPxLeftDict : this.panelPxRightDict;
-    dict[this.currentMediaType] = px;
-    this.settingsState.update({ [key]: { ...dict } }).subscribe();
+    this.panelPxPref[side].set(side === 'left' ? this.leftWidth : this.rightWidth)?.subscribe();
   }
 
-  private applyPanelPx(mediaType: string): void {
+  /** Apply the widths saved for the active media type, clamped to the layout. */
+  private applyPanelPx(): void {
     const layoutWidth = this.layoutRef().nativeElement.getBoundingClientRect().width || 1200;
-    const leftPx = this.panelPxLeftDict[mediaType];
+    const leftPx = this.panelPxPref.left.value();
     if (leftPx != null) {
       const leftMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.rightWidth;
       this.leftWidth = Math.max(this.LEFT_MIN, Math.min(leftMax, leftPx));
       this.layoutRef().nativeElement.style.setProperty('--left-width', `${this.leftWidth}px`);
     }
-    const rightPx = this.panelPxRightDict[mediaType];
+    const rightPx = this.panelPxPref.right.value();
     if (rightPx != null) {
       const rightMax = layoutWidth - this.DIVIDER_TOTAL - this.CENTER_MIN - this.leftWidth;
       this.rightWidth = Math.max(this.RIGHT_MIN, Math.min(rightMax, rightPx));

@@ -42,8 +42,11 @@ import { snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
 import { formatEta, progressBarState } from '../../utils/format-progress';
 import { shortcutsBlocked } from '../../utils/keyboard-shortcuts';
 import type { AppSettings } from '../../generated/api-client/models/app-settings';
-import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
 import { apiErrorMessage } from '../../utils/api-error';
+
+/** One of the named on-canvas thumbnail sizes (see
+ *  {@link BrowseViewComponent.ICON_SIZES}); the form the size is persisted in. */
+type BrowseIconSize = (typeof BrowseViewComponent.ICON_SIZES)[number];
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -210,8 +213,78 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   readonly thumbnailBorder = signal(DEFAULT_THUMBNAIL_BORDER);
 
   /** Last settings snapshot, kept so per-media browser prefs can be
-   *  re-resolved when the active media type becomes known after load. */
+   *  re-resolved when the active media type becomes known after load, and so a
+   *  refetch's momentary ``null`` can't reset them to defaults. Read-only: the
+   *  per-media dicts below are read through {@link SettingsStateService.perMediaType},
+   *  never out of this object. */
   private lastSettings: AppSettings | null = null;
+
+  /**
+   * The per-media browser preferences, each bound to {@link mediaType} through
+   * `SettingsStateService.perMediaType` so the read, the coerce and the
+   * merge-preserving write all live in one place instead of being spelled out
+   * at every site (issue #3447).
+   *
+   * They are read imperatively from {@link applyBrowsePrefsForMediaType} rather
+   * than bound in the template, because applying one of them is not a pure
+   * repaint: the icon size also re-seeds the canvas's overview granularity.
+   * Keeping that orchestration where it already was leaves the canvas's reframe
+   * timing untouched; only the plumbing underneath moved.
+   */
+  private readonly colormapPref = this.settingsState.perMediaType<BrowseColormapId>(
+    'browse_colormap',
+    this.mediaType,
+    {
+      fallback: 'auto',
+      coerce: (raw) =>
+        (BROWSE_COLORMAP_IDS as readonly unknown[]).includes(raw)
+          ? (raw as BrowseColormapId)
+          : undefined,
+    },
+  );
+  private readonly iconSizePref = this.settingsState.perMediaType<BrowseIconSize>(
+    'browse_icon_size',
+    this.mediaType,
+    {
+      fallback: 'M',
+      coerce: (raw) =>
+        (BrowseViewComponent.ICON_SIZES as readonly unknown[]).includes(raw)
+          ? (raw as BrowseIconSize)
+          : undefined,
+    },
+  );
+  private readonly thumbnailBorderPref = this.settingsState.perMediaType<number>(
+    'browse_thumbnail_border',
+    this.mediaType,
+    {
+      fallback: DEFAULT_THUMBNAIL_BORDER,
+      coerce: (raw) =>
+        typeof raw === 'number' && Number.isFinite(raw)
+          ? Math.max(0, Math.min(MAX_THUMBNAIL_BORDER, raw))
+          : undefined,
+    },
+  );
+  private readonly zoomsPerLevelPref = this.settingsState.perMediaType<number>(
+    'browse_mouse_zooms_per_level',
+    this.mediaType,
+    {
+      fallback: 2,
+      coerce: (raw) =>
+        typeof raw === 'number' && Number.isFinite(raw)
+          ? Math.max(1, Math.min(3, Math.round(raw)))
+          : undefined,
+    },
+  );
+  private readonly signpostsPref = this.settingsState.perMediaType<boolean>(
+    'browse_signposts',
+    this.mediaType,
+    { fallback: true, coerce: (raw) => (typeof raw === 'boolean' ? raw : undefined) },
+  );
+  private readonly binDetailsDockedPref = this.settingsState.perMediaType<boolean>(
+    'bin_details_docked',
+    this.mediaType,
+    { fallback: true, coerce: (raw) => (typeof raw === 'boolean' ? raw : undefined) },
+  );
 
   /**
    * Region-select mode: the GUI parallel to the Shift+drag hotkey. When on, a
@@ -639,7 +712,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     if (next === this.hexScaleIndex()) return;
     this.hexScaleIndex.set(next);
     this.canvas()?.setThumbnailRadius(this.thumbnailRadius, true);
-    this.persistBrowsePref('browse_icon_size', BrowseViewComponent.ICON_SIZES[next]);
+    this.iconSizePref.set(BrowseViewComponent.ICON_SIZES[next])?.subscribe();
   }
 
   /**
@@ -651,27 +724,24 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * by media type and reported by the projection meta.)
    */
   private applyBrowsePrefsForMediaType(): void {
+    // Gate on the sticky snapshot rather than the live settings signal: a
+    // refetch momentarily resets `settingsSignal()` to null, and resolving the
+    // prefs against an empty dict would reset every one of them to its default.
     const s = this.lastSettings;
     if (!s) return;
-    const mt = this.mediaType();
 
     // Thumbnail media (image/video) are pinned to grayscale so the colourful
     // density presets never tint real thumbnails; the saved per-type value is
     // ignored for them (the Settings UI hides the picker to match).
-    if (this.mediaTypeCaps.usesThumbnails(mt)) {
-      this.colormap.set('gray');
-    } else {
-      const cmap = mt ? this.perMediaValue(s.browse_colormap, mt) : '';
-      this.colormap.set(
-        cmap && (BROWSE_COLORMAP_IDS as readonly string[]).includes(cmap)
-          ? (cmap as BrowseColormapId)
-          : 'auto',
-      );
-    }
+    this.colormap.set(
+      this.mediaTypeCaps.usesThumbnails(this.mediaType())
+        ? 'gray'
+        : this.colormapPref.value(),
+    );
 
-    const sizeLabel = mt ? this.perMediaValue(s.browse_icon_size, mt) : '';
-    const sizeIdx = (BrowseViewComponent.ICON_SIZES as readonly string[]).indexOf(sizeLabel);
-    this.hexScaleIndex.set(sizeIdx >= 0 ? sizeIdx : 2);
+    this.hexScaleIndex.set(
+      BrowseViewComponent.ICON_SIZES.indexOf(this.iconSizePref.value()),
+    );
     // Seed the saved size as the overview granularity (no reframe): a settings
     // change re-bins at the current framing rather than zooming the viewport,
     // and on first load the initial fit picks the matching level. The query is
@@ -680,23 +750,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     // which the decorator @ViewChild it replaces never did.
     untracked(this.canvas)?.setThumbnailRadius(this.thumbnailRadius, false);
 
-    const borderMap = s.browse_thumbnail_border as { [key: string]: number } | undefined;
-    const rawBorder = mt && borderMap ? borderMap[mt] : undefined;
-    this.thumbnailBorder.set(
-      rawBorder == null
-        ? DEFAULT_THUMBNAIL_BORDER
-        : Math.max(0, Math.min(MAX_THUMBNAIL_BORDER, rawBorder)),
-    );
-
-    const zoomsMap = s.browse_mouse_zooms_per_level as { [key: string]: number } | undefined;
-    const rawZooms = mt && zoomsMap ? zoomsMap[mt] : undefined;
-    this.zoomsPerLevel.set(
-      rawZooms == null ? 2 : Math.max(1, Math.min(3, Math.round(rawZooms))),
-    );
-
-    const signMap = s.browse_signposts as { [key: string]: boolean } | undefined;
-    const rawSigns = mt && signMap ? signMap[mt] : undefined;
-    this.signposts.set(rawSigns == null ? true : rawSigns);
+    this.thumbnailBorder.set(this.thumbnailBorderPref.value());
+    this.zoomsPerLevel.set(this.zoomsPerLevelPref.value());
+    this.signposts.set(this.signpostsPref.value());
 
     // Global (not per-media): the client's rendering capability.
     const rawGraphics = s.browse_graphics;
@@ -704,32 +760,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       rawGraphics === 'full' || rawGraphics === 'reduced' ? rawGraphics : 'auto',
     );
 
-    const dockMap = s.bin_details_docked as { [key: string]: boolean } | undefined;
-    const dockedValue = mt && dockMap ? dockMap[mt] : undefined;
-    this.detailsDocked.set(dockedValue === undefined ? true : dockedValue);
-  }
-
-  /** Read a ``{media_type: value}`` setting for *mt*, or ``''`` when unset. */
-  private perMediaValue(map: { [key: string]: string } | undefined, mt: string): string {
-    if (!map || !mt) return '';
-    return map[mt] ?? '';
-  }
-
-  /** Persist a per-media browser preference, merging into the current map so
-   *  other media types' choices are preserved, and update the local snapshot
-   *  so subsequent reads stay consistent before the PUT round-trips. */
-  private persistBrowsePref(
-    key: 'browse_colormap' | 'browse_icon_size',
-    value: string,
-  ): void {
-    const mt = this.mediaType();
-    if (!mt) return;
-    const existing = (this.lastSettings?.[key] as { [k: string]: string } | undefined) || {};
-    const next = { ...existing, [mt]: value };
-    if (this.lastSettings) {
-      (this.lastSettings as Record<string, unknown>)[key] = next;
-    }
-    this.settingsState.update({ [key]: next } as SettingsUpdate).subscribe();
+    this.detailsDocked.set(this.binDetailsDockedPref.value());
   }
 
   private clamp(value: number, lo: number, hi: number): number {
@@ -964,15 +995,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   toggleSignposts(): void {
     const next = !this.signposts();
     this.signposts.set(next);
-    const mt = this.mediaType();
-    if (!mt) return;
-    const existing =
-      (this.lastSettings?.browse_signposts as { [k: string]: boolean } | undefined) || {};
-    const map = { ...existing, [mt]: next };
-    if (this.lastSettings) {
-      (this.lastSettings as Record<string, unknown>)['browse_signposts'] = map;
-    }
-    this.settingsState.update({ browse_signposts: map } as SettingsUpdate).subscribe();
+    this.signpostsPref.set(next)?.subscribe();
   }
 
   /**
@@ -1200,16 +1223,13 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   /** Persist the docked/floating choice per media type (``bin_details_docked``)
    *  and apply it locally, keeping the settings snapshot consistent. */
   private persistBinDetailsDocked(value: boolean): void {
-    const mt = this.mediaType();
-    if (!mt) return;
+    // `set` returns null when the media type is unknown, which is also the case
+    // where the local flip is withheld: the docked choice is per media type, so
+    // with nothing to key it on there is no preference to change.
+    const write = this.binDetailsDockedPref.set(value);
+    if (!write) return;
     this.detailsDocked.set(value);
-    const existing =
-      (this.lastSettings?.bin_details_docked as { [k: string]: boolean } | undefined) || {};
-    const map = { ...existing, [mt]: value };
-    if (this.lastSettings) {
-      (this.lastSettings as Record<string, unknown>)['bin_details_docked'] = map;
-    }
-    this.settingsState.update({ bin_details_docked: map } as SettingsUpdate).subscribe();
+    write.subscribe();
   }
 
   /**
