@@ -51,11 +51,20 @@ class TestCancelPrimitives:
     def test_auto_detect_worker_raises_before_scoring(self):
         """The worker polls before its catch-all try: a cancel must propagate
         to the route as CancelledError, not be swallowed as a failed detector."""
+        import numpy as np
+
+        from vtscore.detectors.training import ScoringRows
         from vtsearch.routes.detectors.scoring import _score_detector_for_auto_detect
 
+        empty = ScoringRows(
+            [],
+            np.empty((0, 0), dtype=np.float32),
+            np.empty((0,), dtype=np.int64),
+            np.empty((0,), dtype=np.int64),
+        )
         find_progress.cancel()
         with pytest.raises(CancelledError):
-            _score_detector_for_auto_detect("x", {}, None, "audio", {}, [], None)
+            _score_detector_for_auto_detect("x", {}, None, "audio", {}, empty)
 
 
 class TestFindLabelCancel:
