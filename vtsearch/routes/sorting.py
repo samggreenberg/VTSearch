@@ -638,22 +638,6 @@ def example_sort():
             raise
         logging.getLogger(__name__).exception("example-sort failed")
         abort(500, message=f"Example sort failed: {format_exception_detail(exc)}")
-) -> tuple[list[dict], float]:
-    """Train an MLP on (X, y), then score every media in the active dataset.
-
-    *embedder_name* is the embedder the external labels in *X_list* were
-    embedded with; scoring sources the haystack vectors from the same embedder
-    so the trained MLP and the scored vectors share one space.  ``None`` reads
-    each media's primary vector.  The same name is handed to
-    :func:`train_and_threshold` so the safe-threshold GMM is fitted on exactly
-    the score distribution returned here - including the region max-pool on a
-    patch dataset, where results also gain a ``best_region`` box.
-    """
-    from vtscore.detectors.training import score_media_with_model, train_and_threshold  # noqa: PLC0415
-
-    snap = snapshot_medias()
-    model, threshold = train_and_threshold(X_list, y_list, snap=snap, embedder_name=embedder_name)
-    return score_media_with_model(model, snap, embedder_name), threshold
 
 
 @sorting_bp.route("/api/label-file-sort", methods=["POST"])

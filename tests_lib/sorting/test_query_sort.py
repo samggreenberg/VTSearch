@@ -41,7 +41,8 @@ def _fill_active_medias(dim: int = 8, n: int = 6) -> np.ndarray:
         vec = base + (i * 0.4) * off
         medias[i + 1] = {
             "id": i + 1,
-            "embedding": (vec / np.linalg.norm(vec)).astype(np.float32),
+            "embeddings": {"test_emb": (vec / np.linalg.norm(vec)).astype(np.float32)},
+            "embedder": "test_emb",
             "media_type": "image",
         }
     return base
@@ -100,9 +101,7 @@ class TestEmbedExternalLabels:
             def embed_media(self, media):
                 return None
 
-        X, y, loaded, skipped = embed_external_labels(
-            [{"path": str(real), "label": "good"}], _NullEmb()
-        )
+        X, y, loaded, skipped = embed_external_labels([{"path": str(real), "label": "good"}], _NullEmb())
         assert (X, y, loaded, skipped) == ([], [], 0, 1)
 
 
