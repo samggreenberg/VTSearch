@@ -101,7 +101,9 @@ describe('RightPanelComponent', () => {
   });
 
   function cleanup(): void {
-    // Destroy component to cancel all subscriptions, then flush any outstanding
+    // Stops the two pollers the hook owns. The labelset subscriptions ride on
+    // the component's `DestroyRef` and outlive a bare hook call, so the
+    // discard below is what clears them out of `httpMock`.
     component.ngOnDestroy();
     const voteState = TestBed.inject(VoteStateService);
     voteState.stopPolling();

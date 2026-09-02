@@ -1,7 +1,8 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, NgZone, OnDestroy, OnInit, signal, viewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, inject, NgZone, OnDestroy, OnInit, signal, viewChild } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { EMPTY, Subject, timer } from 'rxjs';
-import { catchError, finalize, switchMap, takeUntil } from 'rxjs/operators';
+import { catchError, finalize, switchMap } from 'rxjs/operators';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
@@ -130,7 +131,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly RIGHT_MIN = 150;
   private readonly CENTER_MIN = 100;
   private readonly DIVIDER_TOTAL = 16; // 2 × 8px dividers
-  private destroy$ = new Subject<void>();
+  private readonly destroyRef = inject(DestroyRef);
   /**
    * Inclusion-slider values awaiting their `POST /api/inclusion`, funnelled
    * through a single debounced `switchMap` pipeline (wired in the constructor).
@@ -180,7 +181,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
             catchError(() => EMPTY),
           ),
         ),
-        takeUntil(this.destroy$),
+        takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((resp) => {
         if (resp.threshold != null && this.sortState.sortOrder) {
@@ -295,7 +296,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // loads + runFindLabel call above).
     let firstPair = true;
     this.activeContext.pair$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
         if (firstPair) {
           firstPair = false;
@@ -322,8 +323,6 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   ngOnDestroy(): void {
     this.sortState.stopFindProgressTracking();
     // `pairScope` is component-provided, so Angular fires its scope on destroy.
-    this.destroy$.next();
-    this.destroy$.complete();
     this.inclusionRequests$.complete();
     this.voteState.setFindMode(false);
     this.voteState.stopPolling();
@@ -656,7 +655,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
         if (!ok) return;
         this.detectorsFindApi
           .addCorrectionsToDetector()
-          .pipe(takeUntil(this.destroy$))
+          .pipe(takeUntilDestroyed(this.destroyRef))
           .subscribe({
             next: (resp) => {
               if (resp.corrections_added === 0) {
@@ -792,7 +791,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
       if (!trimmed) return;
       this.datasetsCrudApi
         .promote(trimmed, ids)
-        .pipe(takeUntil(this.destroy$))
+        .pipe(takeUntilDestroyed(this.destroyRef))
         .subscribe({
           next: (res) => {
             this.loadingTasksSvc.startProgressPolling(res.task_id, () => {
@@ -810,7 +809,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  a cancelled status via its progress channel and the finalize() in
    *  runFindLabel() takes care of clearing sortBusy. */
   onSortCancel(): void {
-    this.detectorsFindApi.cancelFind().pipe(takeUntil(this.destroy$)).subscribe();
+    this.detectorsFindApi.cancelFind().pipe(takeUntilDestroyed(this.destroyRef)).subscribe();
   }
 
   // --- Panel percentage helpers ---
