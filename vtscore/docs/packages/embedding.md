@@ -514,7 +514,9 @@ typing is a total function matching score-routing precedence:
 | `validate_binding(...)` | Reject a slot pointing at an embedder lacking that role's capability |
 | `embedder_of_type(names, target_type)` | The first name of a given type, or `None` |
 | `dataset_supplied_types(names)` / `detector_dataset_compatible(det_type, names)` | Which types a dataset supplies; whether a detector can run on it |
-| `score_marker_embedder(media)` / `..._for_snap(snap)` / `keying_embedder_for_snap(det_ctx, snap)` | Which embedder the score / cache key routes through |
+| `score_marker_embedder(media)` / `..._for_snap(snap)` | Which embedder the score / cache key routes through |
+| `slot_embedders_for_snap(snap)` | The raw `(text, patch, structural)` triple a snapshot's medias bind |
+| `keying_embedder_for_snap(det_ctx, snap)` / `keying_embedder_for_type(type, snap)` | The concrete embedder of a detector's locked type that a snapshot supplies, else the score precedence |
 
 `derive_binding` is how a **pre-v3 dataset** - one `embedder` name and
 nothing else - resolves into the three-slot model on load, by

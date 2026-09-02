@@ -22,6 +22,7 @@ from typing import Any, Callable
 import numpy as np
 
 from vtscore.datasets.labelset import LabeledElement, LabelSet
+from vtscore.embedding.binding import keying_embedder_for_snap
 from vtscore.embedding.media_vectors import media_embedding
 
 
@@ -46,24 +47,6 @@ def _lookups_for_snap(
     from vtscore.state import build_media_lookup
 
     return build_media_lookup(snap)
-
-
-def _detector_embedder(det_ctx, snap: dict[int, dict[str, Any]] | None) -> str:
-    """The embedder a *detector* resolves and embeds its labels in.
-
-    The concrete embedder of the detector's locked type (``det_ctx.embedder_type``)
-    that the active dataset supplies wins; otherwise the dataset's score
-    precedence (the legacy-migration default and the cross-dataset portability
-    fallback - re-embed against whatever space the new dataset uses).  This is
-    :func:`keying_embedder_for_snap`, so it agrees with the model-invalidation
-    and re-embed checks.  Keeping a detector's label cache keyed to its type
-    means switching the active dataset under the detector no longer invalidates
-    the cache as long as the new dataset binds the same concrete embedder of
-    that type.  See ``docs/plans/patch-embedder.md`` → "Per-detector embedder type".
-    """
-    from vtscore.embedding.binding import keying_embedder_for_snap
-
-    return keying_embedder_for_snap(det_ctx, snap)
 
 
 def _patch_output_from_file(
@@ -432,7 +415,12 @@ def populate_label_embeddings(
     """
     from vtscore.detectors.labelset_elements import stable_element_id
 
-    embedder_name = _detector_embedder(det_ctx, snap)
+    # Labels are resolved and embedded in the same space the model-invalidation
+    # and re-embed checks key on, so the label cache stays valid across an
+    # active-dataset switch that keeps binding the same concrete embedder of the
+    # detector's type.  See ``docs/plans/patch-embedder.md`` → "Per-detector
+    # embedder type".
+    embedder_name = keying_embedder_for_snap(det_ctx, snap)
     _maybe_clear_cache_on_embedder_switch(det_ctx, embedder_name)
     cache: dict[str, np.ndarray] = det_ctx.label_embeddings
     region_cache: dict[str, tuple[float, float, float, float] | None] = det_ctx.label_embedding_regions
@@ -756,7 +744,12 @@ def populate_label_local_features(
     """
     from vtscore.detectors.labelset_elements import stable_element_id
 
-    embedder_name = _detector_embedder(det_ctx, snap)
+    # Labels are resolved and embedded in the same space the model-invalidation
+    # and re-embed checks key on, so the label cache stays valid across an
+    # active-dataset switch that keeps binding the same concrete embedder of the
+    # detector's type.  See ``docs/plans/patch-embedder.md`` → "Per-detector
+    # embedder type".
+    embedder_name = keying_embedder_for_snap(det_ctx, snap)
     embedder = None
     if embedder_name:
         from vtscore.media import get_embedder
