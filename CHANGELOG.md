@@ -38,6 +38,18 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Switching between two loaded detectors no longer throws away the labeling
+  indicators' cached work.** The Smart / Stable per-step cache retrains one MLP
+  per label-history step, and it used to be a single slot stamped with whichever
+  `(dataset, detector)` pair last touched it -- so re-selecting a detector you
+  had already been labeling in dropped the other one's cache outright, and the
+  next `/api/labeling-status` poll rebuilt it from step zero. The cache is now
+  keyed by the pair, with the three most recent kept warm, so an A-to-B-and-back
+  switch costs nothing. The stability pool tensor -- the largest thing the cache
+  holds -- is keyed by dataset instead and shared across that dataset's
+  detectors, so keeping several pairs warm does not multiply memory. (Issue
+  #3390.)
+
 - **"Enrich descriptions" is now a per-model choice, and can no longer make
   your search worse.** The setting averages a typed query over several
   phrasings ("the sound of a dog", "a recording of a dog", "a dog", ...)

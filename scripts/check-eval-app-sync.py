@@ -154,8 +154,8 @@ MIRRORS: list[Mirror] = [
             "machine reads. Re-check the per-class minimum and the flatness threshold."
         ),
         divergence=(
-            "The harness takes the error-cost window as an argument instead of reading the "
-            "module-level `_cached_steps` MLP cache, which is built for one interactive "
+            "The harness takes the error-cost window as an argument instead of reading a "
+            "`_ProgressCache`'s `steps` MLP cache, which is built for one interactive "
             "detector advancing a vote at a time. The *rules* are copied; only the input "
             "plumbing differs - and only in where the models come from, not in how they are "
             "scored: the caller (`voting_iterations._labelset_error_costs`) re-scores the "
@@ -175,7 +175,7 @@ MIRRORS: list[Mirror] = [
         ),
         divergence=(
             "Same input plumbing divergence as progress.smart_status: flip counts are passed "
-            "in rather than read from `_cached_steps`."
+            "in rather than read from a `_ProgressCache`'s `steps`."
         ),
     ),
     Mirror(

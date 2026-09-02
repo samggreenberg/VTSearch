@@ -1,12 +1,8 @@
 import app as app_module
 import vtscore.detectors.labeling_progress as labeling_progress
 from vtscore.detectors.labeling_progress import (
-    _cache_good_ids,
-    _cache_bad_ids,
-    _cached_steps,
     _compute_stable_status,
     _ensure_cache,
-    _live_models,
     inject_live_model,
     invalidate_progress_cache_from,
 )
@@ -17,6 +13,16 @@ from vtsearch.state import (
     medias,
     label_history,
 )
+
+
+def _prog_cache():
+    """The progress cache for the active ``(dataset, detector)`` pair.
+
+    All cache state is keyed by that pair, so a test that wants to inspect or
+    seed it resolves the same cache an entry point would.
+    """
+    with labeling_progress._progress_lock:
+        return labeling_progress._active_cache()
 
 
 class TestVoteClip:
@@ -291,28 +297,28 @@ class TestProgressCacheWithLabelChanges:
         client.post("/api/medias/1/vote", json={"target": "good"})
         client.post("/api/medias/2/vote", json={"target": "bad"})
         _ensure_cache(medias, label_history, 0)
-        assert 1 in _cache_good_ids
-        assert 2 in _cache_bad_ids
+        assert 1 in _prog_cache().good_ids
+        assert 2 in _prog_cache().bad_ids
 
         # Un-vote media 1
         client.post("/api/medias/1/vote", json={"target": "none"})
         _ensure_cache(medias, label_history, 0)
-        assert 1 not in _cache_good_ids
-        assert 1 not in _cache_bad_ids
-        assert 2 in _cache_bad_ids
+        assert 1 not in _prog_cache().good_ids
+        assert 1 not in _prog_cache().bad_ids
+        assert 2 in _prog_cache().bad_ids
 
     def test_cache_handles_switch_vote(self, client):
         """Switching good->bad should update cache running sets correctly."""
         client.post("/api/medias/1/vote", json={"target": "good"})
         client.post("/api/medias/2/vote", json={"target": "bad"})
         _ensure_cache(medias, label_history, 0)
-        assert 1 in _cache_good_ids
+        assert 1 in _prog_cache().good_ids
 
         # Switch media 1 from good to bad
         client.post("/api/medias/1/vote", json={"target": "bad"})
         _ensure_cache(medias, label_history, 0)
-        assert 1 not in _cache_good_ids
-        assert 1 in _cache_bad_ids
+        assert 1 not in _prog_cache().good_ids
+        assert 1 in _prog_cache().bad_ids
 
     def test_cache_unvote_then_revote(self, client):
         """Un-vote then re-vote should leave cache in correct state."""
@@ -323,8 +329,8 @@ class TestProgressCacheWithLabelChanges:
         # Revote as bad
         client.post("/api/medias/1/vote", json={"target": "bad"})
         _ensure_cache(medias, label_history, 0)
-        assert 1 in _cache_bad_ids
-        assert 1 not in _cache_good_ids
+        assert 1 in _prog_cache().bad_ids
+        assert 1 not in _prog_cache().good_ids
 
     def test_learned_sort_after_unvote(self, client):
         """Learned sort should work after un-voting a media."""
@@ -386,11 +392,11 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
         client.post("/api/medias/1/vote", json={"target": "good"})
         client.post("/api/medias/2/vote", json={"target": "bad"})
         _ensure_cache(medias, label_history, 0)
-        assert len(_cached_steps) == 4
+        assert len(_prog_cache().steps) == 4
 
         # Switch media 1 from good to bad; steps 0-1 preserved, 2-3 discarded
         client.post("/api/medias/1/vote", json={"target": "bad"})
-        assert len(_cached_steps) == 2, "Steps before media 1's first appearance should be kept"
+        assert len(_prog_cache().steps) == 2, "Steps before media 1's first appearance should be kept"
 
     def test_bad_to_good_truncates_from_first_appearance(self, client):
         """Switching bad→good should keep steps before the media first appeared."""
@@ -399,22 +405,22 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
         client.post("/api/medias/1/vote", json={"target": "bad"})
         client.post("/api/medias/2/vote", json={"target": "good"})
         _ensure_cache(medias, label_history, 0)
-        assert len(_cached_steps) == 4
+        assert len(_prog_cache().steps) == 4
 
         # Switch media 1 from bad to good; steps 0-1 preserved, 2-3 discarded
         client.post("/api/medias/1/vote", json={"target": "good"})
-        assert len(_cached_steps) == 2, "Steps before media 1's first appearance should be kept"
+        assert len(_prog_cache().steps) == 2, "Steps before media 1's first appearance should be kept"
 
     def test_first_vote_switch_clears_entire_cache(self, client):
         """If the switched media was in the very first step, full clear occurs."""
         client.post("/api/medias/1/vote", json={"target": "good"})
         client.post("/api/medias/2/vote", json={"target": "bad"})
         _ensure_cache(medias, label_history, 0)
-        assert len(_cached_steps) == 2
+        assert len(_prog_cache().steps) == 2
 
         # Switch media 1 (present from step 0); full clear
         client.post("/api/medias/1/vote", json={"target": "bad"})
-        assert len(_cached_steps) == 0, "Cache should be fully cleared when media was in step 0"
+        assert len(_prog_cache().steps) == 0, "Cache should be fully cleared when media was in step 0"
 
     def test_unvote_invalidates_cache_from_first_appearance(self, client):
         """Un-voting (X→none) now invalidates the progress cache from the
@@ -427,32 +433,32 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
         client.post("/api/medias/4/vote", json={"target": "bad"})
         client.post("/api/medias/1/vote", json={"target": "good"})
         _ensure_cache(medias, label_history, 0)
-        assert len(_cached_steps) == 3
+        assert len(_prog_cache().steps) == 3
 
         # Un-vote media 1 (first appears at step 2); keep 2 earlier steps.
         client.post("/api/medias/1/vote", json={"target": "none"})
-        assert len(_cached_steps) == 2
+        assert len(_prog_cache().steps) == 2
 
     def test_unvote_clears_cache_when_media_was_in_first_step(self, client):
         """If the un-voted media was in step 0, the full cache is cleared."""
         client.post("/api/medias/1/vote", json={"target": "good"})
         client.post("/api/medias/2/vote", json={"target": "bad"})
         _ensure_cache(medias, label_history, 0)
-        assert len(_cached_steps) == 2
+        assert len(_prog_cache().steps) == 2
 
         client.post("/api/medias/1/vote", json={"target": "none"})
-        assert len(_cached_steps) == 0, "Cache should be fully cleared when media was in step 0"
+        assert len(_prog_cache().steps) == 0, "Cache should be fully cleared when media was in step 0"
 
     def test_new_vote_does_not_clear_cache(self, client):
         """Adding a brand-new vote (no prior label) should NOT clear the cache."""
         client.post("/api/medias/1/vote", json={"target": "good"})
         client.post("/api/medias/2/vote", json={"target": "bad"})
         _ensure_cache(medias, label_history, 0)
-        assert len(_cached_steps) == 2
+        assert len(_prog_cache().steps) == 2
 
         # Add a new good vote on media 3 (no prior label)
         client.post("/api/medias/3/vote", json={"target": "good"})
-        assert len(_cached_steps) == 2, "Cache should not be cleared when adding a new vote"
+        assert len(_prog_cache().steps) == 2, "Cache should not be cleared when adding a new vote"
 
     def test_live_models_cleared_on_switch(self, client):
         """Live models from learned-sort should also be cleared on a vote switch."""
@@ -460,14 +466,14 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
         client.post("/api/medias/2/vote", json={"target": "bad"})
         resp = client.post("/api/learned-sort", json={"wait": True})
         assert resp.status_code == 200
-        assert len(_live_models) > 0
+        assert len(_prog_cache().live_models) > 0
 
         # Switch media 1 from good to bad; live models should be cleared
         client.post("/api/medias/1/vote", json={"target": "bad"})
-        assert len(_live_models) == 0, "Live models should be cleared on vote switch"
+        assert len(_prog_cache().live_models) == 0, "Live models should be cleared on vote switch"
 
     def test_running_ids_restored_after_truncation(self, client):
-        """After partial truncation, _cache_good_ids/_cache_bad_ids match the last kept step."""
+        """After partial truncation, _prog_cache().good_ids/_prog_cache().bad_ids match the last kept step."""
         client.post("/api/medias/3/vote", json={"target": "good"})
         client.post("/api/medias/4/vote", json={"target": "bad"})
         client.post("/api/medias/1/vote", json={"target": "good"})
@@ -476,12 +482,12 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
 
         # Switch media 1; truncates to 2 steps (steps 0-1)
         client.post("/api/medias/1/vote", json={"target": "bad"})
-        assert len(_cached_steps) == 2
+        assert len(_prog_cache().steps) == 2
         # Running ID sets should match step 1's state: good={3}, bad={4}
-        assert 3 in _cache_good_ids
-        assert 4 in _cache_bad_ids
-        assert 1 not in _cache_good_ids
-        assert 1 not in _cache_bad_ids
+        assert 3 in _prog_cache().good_ids
+        assert 4 in _prog_cache().bad_ids
+        assert 1 not in _prog_cache().good_ids
+        assert 1 not in _prog_cache().bad_ids
 
     def test_cache_rebuilds_correctly_after_partial_truncation(self, client):
         """After partial invalidation, _ensure_cache replays from the truncation point."""
@@ -490,18 +496,18 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
         client.post("/api/medias/1/vote", json={"target": "good"})
         client.post("/api/medias/2/vote", json={"target": "bad"})
         _ensure_cache(medias, label_history, 0)
-        assert len(_cached_steps) == 4
+        assert len(_prog_cache().steps) == 4
 
         # Switch media 1 from good to bad; truncates to 2 steps
         client.post("/api/medias/1/vote", json={"target": "bad"})
-        assert len(_cached_steps) == 2
+        assert len(_prog_cache().steps) == 2
 
         # Rebuild cache; should replay from step 2 onward
         _ensure_cache(medias, label_history, 0)
-        assert len(_cached_steps) == len(label_history)
+        assert len(_prog_cache().steps) == len(label_history)
         # After replay, media 1 should be in bad_ids (final state)
-        assert 1 in _cache_bad_ids
-        assert 1 not in _cache_good_ids
+        assert 1 in _prog_cache().bad_ids
+        assert 1 not in _prog_cache().good_ids
 
     def test_labeling_progress_works_after_switch(self, client):
         """The /api/labeling-progress endpoint should work after a vote switch."""
@@ -524,11 +530,11 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
         client.post("/api/medias/1/vote", json={"target": "good"})
         client.post("/api/medias/2/vote", json={"target": "bad"})
         _ensure_cache(medias, label_history, 0)
-        assert len(_cached_steps) == 2
+        assert len(_prog_cache().steps) == 2
 
         # Invalidate a media that never appeared in the cache
         invalidate_progress_cache_from(999)
-        assert len(_cached_steps) == 2, "Cache should not change for unknown media"
+        assert len(_prog_cache().steps) == 2, "Cache should not change for unknown media"
 
 
 class TestProgressAtlasClonesAndSurvivesInvalidate:
@@ -556,7 +562,7 @@ class TestProgressAtlasClonesAndSurvivesInvalidate:
         self._vote(client, [(1, "good"), (2, "bad")])
         _ensure_cache(medias, label_history, 0)
 
-        prog_atlas = labeling_progress._cache_coverage_atlas
+        prog_atlas = _prog_cache().coverage_atlas
         assert prog_atlas is not None
         assert prog_atlas is not ctx_atlas
         # Immutable structure is shared by reference (no re-fit)...
@@ -573,13 +579,13 @@ class TestProgressAtlasClonesAndSurvivesInvalidate:
         # Steps: 0=(3,good), 1=(4,bad), 2=(1,good), 3=(2,bad); media 1 at step 2.
         self._vote(client, [(3, "good"), (4, "bad"), (1, "good"), (2, "bad")])
         _ensure_cache(medias, label_history, 0)
-        atlas_before = labeling_progress._cache_coverage_atlas
+        atlas_before = _prog_cache().coverage_atlas
         assert atlas_before is not None
         assert atlas_before.labeled_ids == {1, 2, 3, 4}
 
         # Switch media 1 (good→bad): steps 2-3 discarded, atlas rewound in place.
         self._vote(client, [(1, "bad")])
-        atlas_after = labeling_progress._cache_coverage_atlas
+        atlas_after = _prog_cache().coverage_atlas
         assert atlas_after is atlas_before, "atlas rebuilt instead of rewound"
         # Overlay rewound to the surviving prefix (steps 0-1): media 3 good, 4 bad.
         assert atlas_after.labeled_ids == {3, 4}
@@ -588,13 +594,13 @@ class TestProgressAtlasClonesAndSurvivesInvalidate:
         build_coverage_atlas()
         self._vote(client, [(1, "good"), (2, "bad")])
         _ensure_cache(medias, label_history, 0)
-        atlas_before = labeling_progress._cache_coverage_atlas
+        atlas_before = _prog_cache().coverage_atlas
         assert atlas_before is not None
 
         # Switch media 1, present from step 0: whole prefix gone, atlas emptied.
         self._vote(client, [(1, "bad")])
-        assert len(_cached_steps) == 0
-        atlas_after = labeling_progress._cache_coverage_atlas
+        assert len(_prog_cache().steps) == 0
+        atlas_after = _prog_cache().coverage_atlas
         assert atlas_after is atlas_before, "atlas rebuilt on step-0 invalidate"
         assert atlas_after.labeled_ids == set()
 
@@ -604,9 +610,10 @@ class TestStableIndicatorThresholds:
 
     def _inject_stability(self, entries):
         """Inject fake stability entries into the progress cache."""
-        _cached_steps.clear()
+        steps = _prog_cache().steps
+        steps.clear()
         for entry in entries:
-            _cached_steps.append({"model": None, "threshold": None, "good_ids": [], "bad_ids": [], "stability": entry})
+            steps.append({"model": None, "threshold": None, "good_ids": [], "bad_ids": [], "stability": entry})
 
     def test_no_model_steps_not_counted(self, client):
         """Steps without a prior model (stability=None) should be excluded.
@@ -625,7 +632,7 @@ class TestStableIndicatorThresholds:
                 {"time_index": 5, "num_labels": 15, "num_flips": 0, "num_unlabeled": 85},
             ]
         )
-        result = _compute_stable_status(good=5, bad=5, total=10)
+        result = _compute_stable_status(_prog_cache(), good=5, bad=5, total=10)
         assert result["status"] == "yellow", "Should be yellow: only 4 real entries (None entries excluded)"
 
     def test_needs_five_real_entries_for_green(self, client):
@@ -640,7 +647,7 @@ class TestStableIndicatorThresholds:
                 {"time_index": 4, "num_labels": 14, "num_flips": 0, "num_unlabeled": 86},
             ]
         )
-        result = _compute_stable_status(good=5, bad=5, total=10)
+        result = _compute_stable_status(_prog_cache(), good=5, bad=5, total=10)
         assert result["status"] == "yellow", "4 real entries is not enough"
 
         # Add one more → 5 usable → green
@@ -654,7 +661,7 @@ class TestStableIndicatorThresholds:
                 {"time_index": 5, "num_labels": 15, "num_flips": 0, "num_unlabeled": 85},
             ]
         )
-        result = _compute_stable_status(good=5, bad=5, total=10)
+        result = _compute_stable_status(_prog_cache(), good=5, bad=5, total=10)
         assert result["status"] == "green", "5 real low-flip entries should be enough"
 
     def test_single_spike_prevents_green(self, client):
@@ -666,7 +673,7 @@ class TestStableIndicatorThresholds:
         entries[-1] = {"time_index": 6, "num_labels": 16, "num_flips": 6, "num_unlabeled": 93}
 
         self._inject_stability(entries)
-        result = _compute_stable_status(good=8, bad=8, total=16)
+        result = _compute_stable_status(_prog_cache(), good=8, bad=8, total=16)
         assert result["status"] == "yellow", "A single >1% spike should prevent green"
 
     def test_low_flip_rate_still_yellow(self, client):
@@ -676,7 +683,7 @@ class TestStableIndicatorThresholds:
             # 3 flips out of ~194 unlabeled → ~1.5% per step
             entries.append({"time_index": i, "num_labels": 10 + i, "num_flips": 3, "num_unlabeled": 200 - i})
         self._inject_stability(entries)
-        result = _compute_stable_status(good=8, bad=8, total=16)
+        result = _compute_stable_status(_prog_cache(), good=8, bad=8, total=16)
         assert result["status"] == "yellow", "~1.5% flip rate should stay yellow (threshold is 0.5% avg / 1% max)"
 
     def test_near_zero_flips_green(self, client):
@@ -687,7 +694,7 @@ class TestStableIndicatorThresholds:
             flips = 1 if i == 3 else 0
             entries.append({"time_index": i, "num_labels": 10 + i, "num_flips": flips, "num_unlabeled": 500 - i})
         self._inject_stability(entries)
-        result = _compute_stable_status(good=8, bad=8, total=16)
+        result = _compute_stable_status(_prog_cache(), good=8, bad=8, total=16)
         assert result["status"] == "green", "Near-zero flips with rare single flip on large dataset should be green"
 
     def test_model_gap_entries_excluded(self, client):
@@ -704,7 +711,7 @@ class TestStableIndicatorThresholds:
                 {"time_index": 7, "num_labels": 17, "num_flips": 0, "num_unlabeled": 83},
             ]
         )
-        result = _compute_stable_status(good=5, bad=5, total=10)
+        result = _compute_stable_status(_prog_cache(), good=5, bad=5, total=10)
         # Only 4 real entries (indices 1, 2, 6, 7) → yellow
         assert result["status"] == "yellow", "Gap entries (None) should be excluded, leaving only 4 real entries"
 
@@ -736,10 +743,10 @@ class TestStabilitySkipsUnchangedModel:
 
         _ensure_cache(clips, history, inclusion_value=0)
 
-        assert len(_cached_steps) == 3
+        assert len(_prog_cache().steps) == 3
         # Steps 0 and 1 change the training data; they should attempt training.
         # Step 2 has the same good/bad IDs as step 1; stability should be None.
-        assert _cached_steps[2]["stability"] is None, (
+        assert _prog_cache().steps[2]["stability"] is None, (
             "Stability should not be recorded when training data didn't change"
         )
 
@@ -767,14 +774,14 @@ class TestStabilitySkipsUnchangedModel:
 
         _ensure_cache(clips, history, inclusion_value=0)
 
-        assert len(_cached_steps) == 5
+        assert len(_prog_cache().steps) == 5
         # Step 0: only good votes, no model → stability None
-        assert _cached_steps[0]["stability"] is None
+        assert _prog_cache().steps[0]["stability"] is None
         # Step 1: first model, no prior predictions → stability None
-        assert _cached_steps[1]["stability"] is None
+        assert _prog_cache().steps[1]["stability"] is None
         # Steps 2-4: new model each time, prior predictions exist → stability recorded
         for i in [2, 3, 4]:
-            assert _cached_steps[i]["stability"] is not None, (
+            assert _prog_cache().steps[i]["stability"] is not None, (
                 f"Step {i} changed training data and should have stability"
             )
 
@@ -820,7 +827,7 @@ class TestLiveModelReuse:
         _ensure_cache(clips, history, inclusion_value=0)
 
         # Step 2 should have used the injected model (same label set)
-        step = _cached_steps[2]
+        step = _prog_cache().steps[2]
         assert step["model"] is live_model, "Should reuse the injected live model"
         assert step["threshold"] == live_threshold, "Should use the injected threshold"
 
@@ -859,7 +866,7 @@ class TestLiveModelReuse:
         _ensure_cache(clips, history, inclusion_value=0)
 
         # Step 1 should NOT use the injected model (different label set)
-        step = _cached_steps[1]
+        step = _prog_cache().steps[1]
         assert step["model"] is not live_model, "Should not use a live model with mismatched labels"
 
     def test_clear_cache_removes_live_models(self, client):
@@ -876,10 +883,10 @@ class TestLiveModelReuse:
         model = train_model(X, y, 8)
 
         inject_live_model({0: None}, {1: None}, model, 0.5)
-        assert len(_live_models) == 1
+        assert len(_prog_cache().live_models) == 1
 
         clear_progress_cache()
-        assert len(_live_models) == 0
+        assert len(_prog_cache().live_models) == 0
 
     def test_learned_sort_injects_model(self, client):
         """The /api/learned-sort endpoint should inject the trained model."""
@@ -895,8 +902,8 @@ class TestLiveModelReuse:
 
         # A live model should have been injected for the current vote set
         key = (frozenset(app_module.good_votes), frozenset(app_module.bad_votes))
-        assert key in _live_models, "learned-sort should inject the live model"
-        model, threshold = _live_models[key]
+        assert key in _prog_cache().live_models, "learned-sort should inject the live model"
+        model, threshold = _prog_cache().live_models[key]
         assert model is not None
         assert isinstance(threshold, float)
 
@@ -936,7 +943,7 @@ class TestLiveModelReuse:
         _ensure_cache(clips, history, inclusion_value=0)
 
         # Step 4 should use the live model
-        step4 = _cached_steps[4]
+        step4 = _prog_cache().steps[4]
         assert step4["model"] is live_model
         # Stability should still be computed (not None) since prior predictions exist
         assert step4["stability"] is not None, "Stability should be computed even with live model"

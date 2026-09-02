@@ -567,22 +567,35 @@ obvious.
   stopping-condition metrics. Used by the labeling-progress UI to
   answer "should I keep voting?" without retraining.
 
-A single `threading.RLock` (`_progress_lock`) protects all module
-state: `_cache_inclusion` (rebuild trigger), `_cached_steps` (one entry
-per label-history step with `model` / `threshold` / `good_ids` /
-`bad_ids` / `stability` / `diversity`), `_cache_good_ids` /
-`_cache_bad_ids` (running label sets), `_cache_prev_predictions`
-(stability baseline), `_cache_coverage_atlas` (the per-step replay of
-coverage evidence), the monitored-pool tensors, and `_live_models`
-(models injected by `train_and_score` during sorting, keyed by
-`(frozenset(good), frozenset(bad))`).
+All cache state lives in `_ProgressCache` instances held in `_caches`, an
+LRU-bounded map keyed by `(dataset_id, detector_id)`. Each cache carries
+`inclusion` (rebuild trigger), `steps` (one entry per label-history step with
+`model` / `threshold` / `good_ids` / `bad_ids` / `stability` / `diversity`),
+`good_ids` / `bad_ids` (running label sets), `prev_predictions` (stability
+baseline), `coverage_atlas` (the per-step replay of coverage evidence),
+`status_snapshot` (the last full `/api/labeling-status` payload), and
+`live_models` (models injected by `train_and_score` during sorting, keyed by
+`(frozenset(good), frozenset(bad))`). The stability pool tensors sit beside
+them in `_monitored_pools`, keyed by `dataset_id` alone and shared by every
+cache over that dataset: the pool is a pure function of `clips_dict`, and its
+tensor is by far the largest thing the module holds, so sharing is what keeps
+several warm pairs from multiplying peak memory.
+
+A single `threading.RLock` (`_progress_lock`) protects both maps and every
+field inside them. Keying by the pair is a correctness requirement, not a
+convenience: the cache's inputs all resolve per-request from the
+`X-Dataset-Id` / `X-Detector-Id` headers, so a single shared slot replays one
+detector's history onto another's label sets and serves one detector's models
+as another's indicators (issue #2914). Every entry point therefore opens with
+`cache = _active_cache()` (or `_ensure_cache`, which returns one) — reaching
+cache state without going through the key is not possible.
 
 ### Public API
 
 | Function                                        | Behaviour                                                              |
 |-------------------------------------------------|------------------------------------------------------------------------|
-| `clear_progress_cache()`                        | Drop everything. Call when votes are cleared, medias change, etc.      |
-| `invalidate_progress_cache_from(media_id)`      | Truncate the cache to just before `media_id` first appeared (vote-flip case) |
+| `clear_progress_cache()`                        | Drop *every* cached pair. Call when votes are cleared, medias change, etc. |
+| `invalidate_progress_cache_from(media_id)`      | Truncate the active pair's cache to just before `media_id` first appeared (vote-flip case) |
 | `inject_live_model(good, bad, model, threshold)`| Register a model produced by `train_and_score` so the cache can reuse it |
 | `recreate_model_at_time(snap, history, t, inclusion)` | Return the model + threshold + good/bad ids for step `t`           |
 | `calculate_error_cost_over_time(...)`           | Per-step FPR/FNR-weighted cost on current votes                        |
