@@ -810,7 +810,21 @@ at live user data.
 
 Either way the script ends by printing a coverage report naming which task
 families got measured and which fell back to the defaults, so a thin sweep is
-visible rather than silently half-effective.
+visible rather than silently half-effective. Each measured family is broken
+down by **cell specificity**, because "5 cells" reads like five measurements
+and may be one measurement plus four fallbacks:
+
+```
+  dataset_load     5 cells, 24 step-samples
+                   exact  (device|media|embedder)  2 cells, 6 affine (median r² 1.00)
+                   rollup (device|media|*)         2 cells, 4 affine (median r² 0.98, 1 below 0.90)
+                   rollup (device|*|*)             1 cell, 2 affine (median r² 0.29, 2 below 0.90)
+```
+
+The levels are listed in the order lookup tries them, so the first one with a
+cell for a given media type and encoder is what will actually pace that job.
+Expect the exact cells to fit far better than the rollups; if a family has
+*only* rollup lines, the sweep never covered the media types you care about.
 
 ### Deploying it
 
@@ -848,6 +862,14 @@ lookup walks from the most specific key to the least:
 
 The fit emits rollup cells (`cuda||`) alongside precise ones, so measuring three
 exemplar datasets still improves pacing for every dataset that host will see.
+A rollup is only reached for a combination the sweep never measured, so it is
+always an extrapolation — and the fit refuses to make one it has already
+contradicted: when the rows behind a rollup disagree about a step by more than
+3x (an image import at 0.014 s/item pooled with an audio one at 0.102, say),
+that step is left out of the cell and falls through to the shipped default
+instead. The coverage report says how many steps were withheld that way. If
+you see a lot of them, the sweep is spanning media types too unlike each other
+for one cell to describe; measure them separately rather than widening it.
 
 Re-run the tuning whenever the hardware, storage, or GPU stack changes. Nothing
 expires a profile automatically; a stale one costs accuracy, never correctness.
