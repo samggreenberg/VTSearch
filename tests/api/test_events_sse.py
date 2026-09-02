@@ -182,7 +182,7 @@ class TestProgressTrackerEta:
 
     def test_eta_field_absent_when_extra_not_declared(self):
         """Trackers created without an ``eta_seconds`` extra get no key;
-        the feature is opt-in via :data:`_PROGRESS_COMMON_EXTRAS`."""
+        the feature is opt-in via :data:`PROGRESS_COMMON_EXTRAS`."""
         tracker = ProgressTracker()
         tracker.update("loading", "", 1, 2)
         assert "eta_seconds" not in tracker.get()

@@ -127,6 +127,13 @@ export interface ProjectionMeta {
    * as a bounded indeterminate zone. Mirrors ``ProgressEvent.overall_step_end``.
    */
   overall_step_end?: number | null;
+  /**
+   * Estimated seconds remaining for the whole build, or `null` until the
+   * backend's tracker has enough signal to extrapolate. Already smoothed and
+   * snapped to a coarse ladder server-side — render it, don't re-round it.
+   * Mirrors ``ProgressEvent.eta_seconds``.
+   */
+  eta_seconds?: number | null;
   error?: string;
 }
 

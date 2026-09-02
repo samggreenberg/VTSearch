@@ -458,6 +458,19 @@ class ProgressTracker:
         """Return ``True`` if cancellation has been requested."""
         return self._cancel_event.is_set()
 
+    @property
+    def cancel_event(self) -> threading.Event:
+        """The cooperative-cancellation flag itself.
+
+        Exposed so a holder that must publish *one* cancel signal (see
+        :class:`~vtscore.concurrency.async_jobs.AsyncJob`, whose ``cancel_event``
+        is this object) can hand out the tracker's event rather than keeping a
+        second one that has to be kept in sync.  Prefer :meth:`cancel` /
+        :meth:`check_cancelled` / :attr:`is_cancelled` for ordinary use; reach
+        for the event only to ``wait()`` on it.
+        """
+        return self._cancel_event
+
     def reset_cancel(self) -> None:
         """Clear the cancellation flag.
 
@@ -541,10 +554,11 @@ def resolve_progress_callback() -> ProgressCallback:
 #: like load→embed→stage), an ``error`` string, and a smoothed ``eta_seconds``
 #: filled in automatically by :meth:`ProgressTracker._compute_eta`. Every
 #: singleton tracker - and every per-task tracker created by
-#: :class:`LoadingTasksTracker` - exposes these so the frontend can render any
-#: progress payload with the same ``ProgressEvent`` interface (see
-#: ``frontend/src/app/models/api.models.ts``).
-_PROGRESS_COMMON_EXTRAS: dict[str, Any] = {
+#: :class:`LoadingTasksTracker`, and every per-job tracker on an
+#: :class:`~vtscore.concurrency.async_jobs.AsyncJob` - exposes these so the
+#: frontend can render any progress payload with the same ``ProgressEvent``
+#: interface (see ``frontend/src/app/models/api.models.ts``).
+PROGRESS_COMMON_EXTRAS: dict[str, Any] = {
     "step": None,
     "total_steps": None,
     "error": None,
@@ -627,7 +641,7 @@ class LoadingTasksTracker:
         shared progress extras. Returns the per-task :class:`ProgressTracker`
         instance.
         """
-        fields = dict(_PROGRESS_COMMON_EXTRAS)
+        fields = dict(PROGRESS_COMMON_EXTRAS)
         if extra_fields:
             fields.update(extra_fields)
         tracker = ProgressTracker(extra_fields=fields)
@@ -818,13 +832,13 @@ detector_loading_tasks = LoadingTasksTracker()
 # ---------------------------------------------------------------------------
 
 #: Sort-specific progress (used by text-sort operations).
-sort_progress = ProgressTracker(extra_fields=dict(_PROGRESS_COMMON_EXTRAS))
+sort_progress = ProgressTracker(extra_fields=dict(PROGRESS_COMMON_EXTRAS))
 
 #: Eval progress (used by train-and-score / voting-iterations analysis).
-eval_progress = ProgressTracker(extra_fields=dict(_PROGRESS_COMMON_EXTRAS))
+eval_progress = ProgressTracker(extra_fields=dict(PROGRESS_COMMON_EXTRAS))
 
 #: Find progress (used by the /api/find multi-dataset×model scoring operation).
-find_progress = ProgressTracker(extra_fields=dict(_PROGRESS_COMMON_EXTRAS))
+find_progress = ProgressTracker(extra_fields=dict(PROGRESS_COMMON_EXTRAS))
 
 
 # ---------------------------------------------------------------------------

@@ -16,7 +16,7 @@ import json
 
 import pytest
 
-from vtscore.concurrency.progress import _PROGRESS_COMMON_EXTRAS, ProgressTracker
+from vtscore.concurrency.progress import PROGRESS_COMMON_EXTRAS, ProgressTracker
 from vtscore.datasets.stages import _load_profiler
 from vtscore.datasets.stages._load_profiler import (
     _NULL_PROFILER,
@@ -45,7 +45,7 @@ def clean_seen_embedders():
 
 def _make_tracker() -> ProgressTracker:
     """A tracker shaped like the real load tracker (exposes ``step``)."""
-    return ProgressTracker(extra_fields=dict(_PROGRESS_COMMON_EXTRAS))
+    return ProgressTracker(extra_fields=dict(PROGRESS_COMMON_EXTRAS))
 
 
 def _drive_phases(tracker: ProgressTracker) -> None:

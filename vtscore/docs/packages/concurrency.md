@@ -70,15 +70,31 @@ returns immediately with a job ID.
 State container for one background job (`async_jobs.py`). Fields:
 `job_id` (UUID4 hex), `signature` (caller-supplied fingerprint),
 `status` (`"pending"` / `"running"` / `"done"` / `"error"` /
-`"cancelled"`), `result`, `error`, `current` / `total` / `message`
-(progress counters), `started_at`, `cancel_event` / `done_event`
+`"cancelled"`), `result`, `error`, `progress` (this job's own
+`ProgressTracker` - see below), `started_at`, `done_event`
 (`threading.Event`), `user` (captured at `start()` for per-user settings
 resolution), `dataset_id` / `detector_id` (captured at `start()`;
 consumed by `list_active_pairs()`).
 
-Methods: `cancel()` sets `cancel_event`; `is_cancelled` reads it;
-`update_progress(current, total, message="")` updates the three progress
-fields (single-writer per job).
+**Progress is the tracker's, not a copy of it.** `current` / `total` /
+`message` / `step` / `total_steps` are read/write properties over
+`job.progress`, so a job automatically gets everything the tracker
+computes and a job-shaped re-implementation would not: a smoothed,
+coarsened `eta_seconds`, the whole-job `overall` / `overall_step_end`
+fractions (optionally weighted per phase via
+`job.progress.set_step_weights(...)`), and `subscribe()` for pushing
+snapshots rather than polling them. Read the whole set at once with
+`job.progress.get()`.
+
+Methods: `update_progress(current, total, message="")` publishes the
+within-phase counts (single-writer per job); `set_phase(step,
+total_steps, message="")` enters a coarse phase and zeroes the counts
+belonging to the one being left.
+
+Cancellation likewise has one flag, not two: `cancel_event` **is**
+`job.progress.cancel_event`, so `cancel()`, `is_cancelled`,
+`job.progress.check_cancelled()` and `check_job_cancelled()` all observe
+the same event and raise the same `CancelledError`.
 
 ### `JobManager`
 
@@ -381,8 +397,11 @@ free: the callbacks the load pipeline binds call `check_cancelled()` on
 their own tracker before recording the tick, so reporting progress *is*
 the cancellation check.
 
-`AsyncJob` cancellation is the analogous pattern but uses the job's own
-event: the target function checks `job.is_cancelled` and returns.
+`AsyncJob` cancellation is the same pattern reached through a job: the
+job's event *is* its tracker's, so a target may check `job.is_cancelled`
+and return, or let `check_job_cancelled()` / `job.progress.check_cancelled()`
+raise `CancelledError` from deep inside a compute loop for `JobManager`
+to catch.
 
 **Cancellation is one-shot per operation.** A tracker that outlives one
 operation needs `reset_cancel()` before the next, so a previous

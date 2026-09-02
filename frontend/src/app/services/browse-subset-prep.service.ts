@@ -149,6 +149,7 @@ export class BrowseSubsetPrepService {
       total_steps: meta.total_steps ?? null,
       overall: meta.overall ?? null,
       overall_step_end: meta.overall_step_end ?? null,
+      eta_seconds: meta.eta_seconds ?? null,
     });
     return 'continue';
   }

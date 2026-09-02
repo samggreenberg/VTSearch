@@ -15,6 +15,17 @@ not list every commit. Use `git log` for the full history.
 
 ## Unreleased
 
+### Fixed
+
+- **The "arranging your items" wait now shows a remaining-time estimate.**
+  Preparing a subset map from Find results renders an ETA chip beside the
+  progress bar, but the projection build's status payload never carried an
+  estimate for it to show, so the chip was always blank. Background jobs are
+  now backed by the same progress tracker the dataset loads use, which derives
+  one from the rate the build is actually sustaining (rebased at each phase
+  boundary, published on a coarse sticky ladder so the figure doesn't twitch),
+  and the projection status payload passes it through as `eta_seconds`.
+
 ### Added
 
 - **New demo dataset: Rico Icons -- screenshots with boxed, labelled icons.**
