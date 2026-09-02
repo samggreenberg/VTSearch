@@ -1137,6 +1137,41 @@ describe('LabelViewComponent', () => {
       expect(textSort[0].request.body).toEqual({ text: 'a query' });
     });
 
+    it('rehydrates the learned sort with Autopilot off, when that is the mode', async () => {
+      const activeContext = seedPair();
+      component.autopilotEnabled.set(false);
+      flushInitialRequests();
+      flushDetectorRegistry();
+      TestBed.inject(AutopilotStateService).clear();
+      component.sortState.setSortMode('learned');
+
+      activeContext.setActivePair('ds2', 'det2');
+      await flushPairReload({ good: [], bad: [], labelset: [1, 1] });
+
+      // The Phase-3 rehydration predates the backstop and does not depend on
+      // Autopilot: a manual user who left the pair in learned mode lands on
+      // learned-sorted content in the new one, with no mode toggle.
+      expect(httpMock.match('/api/learned-sort').length).toBe(1);
+    });
+
+    it('seeds nothing with Autopilot off and no learned sort to rehydrate', async () => {
+      const activeContext = seedPair();
+      component.autopilotEnabled.set(false);
+      flushInitialRequests();
+      flushDetectorRegistry();
+      TestBed.inject(AutopilotStateService).clear();
+      TestBed.inject(LabelSessionService).textQuery = 'a query';
+
+      activeContext.setActivePair('ds2', 'det2');
+      await flushPairReload({ good: [], bad: [] });
+
+      // Entering the window with Autopilot off ranks nothing until the user
+      // sorts, so a switch must not rank either — and must not hijack the sort
+      // mode they chose.
+      httpMock.expectNone('/api/sort');
+      httpMock.expectNone('/api/learned-sort');
+    });
+
     it('stands down when something already ranked the new pair', async () => {
       const activeContext = seedPair();
       flushInitialRequests();
