@@ -18,7 +18,6 @@ in the plan doc.
 """
 
 import gc
-import threading
 import time
 import traceback
 from collections.abc import Callable
@@ -69,6 +68,7 @@ from vtsearch.schemas.datasets import (
     ImporterSuggestedNameResponseSchema,
 )
 from vtsearch.state import get_active_context, snapshot_medias
+from vtsearch.threading import spawn
 from vtscore.security.pickle import peek_pickle_dataset_summary
 
 datasets_staging_bp = Blueprint(
@@ -373,7 +373,14 @@ def _promote_in_background(
             gc.collect()
             loading_tasks.mark_finished(task_id)
 
-    worker = threading.Thread(target=task, daemon=True)
+    # ``spawn`` (not a bare ``threading.Thread``) so the task body inherits the
+    # request's user / dataset / detector thread-locals; ``created_by`` is
+    # re-asserted inside ``task`` because the promote is attributed to whoever
+    # asked for it, not to whichever thread happened to call this helper.
+    # Registered before the thread starts so a cancel arriving in the same
+    # instant can tell "not started yet" from "nothing here"; see
+    # ``LoadingTasksTracker.set_worker``.
+    worker = spawn(task, name=f"ds-promote-{task_id[-8:]}", start=False)
     loading_tasks.set_worker(task_id, worker)
     worker.start()
     return task_id

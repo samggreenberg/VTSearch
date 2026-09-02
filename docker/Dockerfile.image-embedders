@@ -3,6 +3,9 @@
 #
 # For the GPU/CUDA variant see Dockerfile.image-embedders.gpu; same
 # six embedders, baked the same way, but on nvidia/cuda + cu121 wheels.
+# The two share requirements/image-embedders.txt (each passes its own
+# --extra-index-url) and a byte-identical BEGIN/END SHARED BODY region
+# below, checked by tests_lib/core/test_image_embedders_pair.py.
 #
 # Bundles every supported image embedder and bakes their weights into the
 # image at build time so the container is ready to serve immediately on
@@ -86,7 +89,7 @@ RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
 RUN npm run build:prod
 
-FROM python:3.10-slim AS base
+FROM python:3.10-slim
 
 WORKDIR /app
 
@@ -101,10 +104,19 @@ COPY vtscore/ vtscore/
 
 RUN pip install --no-cache-dir --upgrade pip setuptools && \
     pip install --no-cache-dir \
+        --extra-index-url https://download.pytorch.org/whl/cpu \
         --prefer-binary \
         -r requirements/image-embedders.txt && \
     pip install --no-cache-dir --no-deps -e .
 
+# ===== BEGIN SHARED BODY: keep byte-identical with the CPU/GPU twin =====
+# Everything between these two markers is byte-identical in
+# docker/Dockerfile.image-embedders and docker/Dockerfile.image-embedders.gpu.
+# Docker has no include directive, so the copy is enforced instead of avoided:
+# tests_lib/core/test_image_embedders_pair.py fails the suite the moment the two
+# regions diverge. The files differ only OUTSIDE this region -- the base image
+# (plus the apt layer CUDA needs), the PyTorch wheel index passed to pip, and
+# the NVIDIA runtime env. Edit one, paste into the other.
 # ---------- import-only canary -------------------------------------------
 # Fail fast (in seconds) if any transformers class used in the
 # pre-download blocks below would hit ImportError once we call
@@ -244,7 +256,7 @@ RUN mkdir -p /app/data && \
 # Note: model weights live under /opt/vtsearch/models, NOT this volume.
 VOLUME /app/data
 
-# Run as a non-root user. See the CPU Dockerfile for the rationale and
+# Run as a non-root user. See docker/Dockerfile for the rationale and
 # the GID-0 / g=u perm pattern that lets arbitrary OpenShift UIDs write.
 # /opt/vtsearch/models is also opened up so the baked-in HuggingFace
 # snapshots stay readable when the runtime UID is unknown at build time.
@@ -256,6 +268,7 @@ ENV HOME=/home/vtsearch
 USER 1000
 
 EXPOSE 5000
+# ===== END SHARED BODY =====
 
 ENV OMP_NUM_THREADS=1 \
     MKL_NUM_THREADS=1 \

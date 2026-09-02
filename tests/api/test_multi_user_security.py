@@ -884,7 +884,13 @@ class TestExampleMediaPerUserDir:
         assert example_media_dir() != DATA_DIR / "example_media"
 
     def test_upload_then_seed_round_trips(self, multi_user_client, tmp_path):
-        """The regression: an uploaded exemplar must be seedable by the reader."""
+        """The regression: an uploaded exemplar must be seedable by the reader.
+
+        Writer and reader are exercised as two halves of one round trip: the
+        upload route writes into ``example_media/``, and
+        ``seed_good_votes_from_examples`` — the reader the detector-load path
+        runs — must find it there.
+        """
         from vtsearch.state import good_votes, medias
 
         if not medias:
@@ -905,12 +911,13 @@ class TestExampleMediaPerUserDir:
         # still hard-coding the global one would find nothing.
         assert (tmp_path / "alice" / "example_media" / filename).is_file()
 
-        seed = multi_user_client.post(
-            "/api/votes/seed-from-examples",
-            json={"examples": [{"type": "media", "value": filename}]},
-        )
-        assert seed.status_code == 200, seed.get_json()
-        assert seed.get_json() == {"seeded": 1, "skipped": 0}
+        # The reader half, called the way the detector-load path calls it.
+        # (The request context the upload above left behind is what makes
+        # ``g.user`` — and therefore the per-user dir — resolve here.)
+        from vtscore.detectors.media_seeding import seed_good_votes_from_examples
+
+        seeded = seed_good_votes_from_examples([{"type": "media", "value": filename}])
+        assert seeded == 1
         assert first_id in good_votes
 
     def test_created_labels_carry_the_uploaded_exemplars_md5(self, multi_user_client, tmp_path):

@@ -2,47 +2,12 @@
 
 [← Back to API index](../API.md)
 
-Metadata and resource-usage probes for the Dashboard view. For running
-detectors against data (multi-dataset Find, Find Label, Auto-Detect), see
-[Find, Auto-Detect & Scoring](find.md).
+Resource-usage probes for the Dashboard view. Dataset metadata and
+renaming live on the registry endpoints in [Datasets](datasets.md); for
+running detectors against data (multi-dataset Find, Find Label,
+Auto-Detect), see [Find, Auto-Detect & Scoring](find.md).
 
 ---
-
-### Dataset info
-
-```
-GET /api/dashboard/dataset-info
-```
-
-Metadata about the currently loaded dataset.
-
-→
-```json
-{
-  "name": "ESC-50 Animals",
-  "num_medias": 500,
-  "num_dupes": 3,
-  "media_type": "audio",
-  "origin": "demo:esc50",
-  "source": {"importer": "demo", "params": {"name": "esc50"}}
-}
-```
-
-**404** if no dataset is loaded.
-
-### Rename dataset
-
-```
-PUT /api/dashboard/dataset-rename
-```
-
-**Body:** `{"name": "My Custom Name"}`
-
-Sets a custom display name for the currently loaded dataset.
-
-→ `{"success": true, "name": "My Custom Name"}`
-
-**400** if the name is empty after trimming.
 
 ### Disk usage
 

@@ -83,14 +83,14 @@ care.
 
 ## Library tier — dead code & unkept promises
 
-- [ ] #3397 — Keep the resolver extension point but delete its auto-wire dance and import-error mask (Sonnet 5)
+- [x] #3397 — Keep the resolver extension point but delete its auto-wire dance and import-error mask (Sonnet 5)
 - [ ] #3401 — Declare `image_response` on the `MediaType` ABC and document both undeclared hooks (Sonnet 5)
 - [ ] #3402 — Apply the sub-output disambiguators in the converted-demo emitter (Sonnet 5)
 - [ ] #3404 — Small vtscore batch: `JOB_MANAGERS` coverage, registry construction, `SAVED_DATASETS_DIR` (Haiku 4.5)
 
 ## Concurrency & progress
 
-- [ ] #3382 — Route the raw staging thread through `vtsearch.threading.spawn` (Haiku 4.5)
+- [x] #3382 — Route the raw staging thread through `vtsearch.threading.spawn` (Haiku 4.5)
 
 ## Layering & host seams
 

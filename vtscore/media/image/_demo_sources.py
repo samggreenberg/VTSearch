@@ -12,6 +12,8 @@ splitting them out keeps ``media_type.py`` focused on the
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, cast
 
@@ -1278,126 +1280,21 @@ def _load_synthetic_toponymy(clips, embedder, on_progress, demo_origin) -> None:
         png_bytes = _synthetic_tile_png(item)
         thumb = make_image_thumbnail(png_bytes)
         filename = f"{item.category}/tile{i:04d}.png"
-        clips[clip_id] = {
-            "id": clip_id,
-            "media_type": _MEDIA_TYPE_ID,
-            "embedder": emb_name,
-            "duration": 0,
-            "file_size": len(png_bytes),
-            "md5": content_md5(png_bytes),
-            "embeddings": {emb_name: item.embedding},
-            "media_bytes": png_bytes,
-            "media_string": None,
-            "thumbnail_bytes": thumb[0] if thumb is not None else None,
-            "filename": filename,
-            "category": item.category,
-            "width": 96,
-            "height": 96,
-            "origin": demo_origin,
-            "origin_name": filename,
-        }
+        clips[clip_id] = _emit_image_clip(
+            clip_id,
+            embedder_name=emb_name,
+            embeddings={emb_name: item.embedding},
+            image_bytes=png_bytes,
+            filename=filename,
+            category=item.category,
+            width=96,
+            height=96,
+            demo_origin=demo_origin,
+            thumbnail_bytes=thumb[0] if thumb is not None else None,
+        )
         clip_id += 1
         if (i + 1) % 100 == 0:
             on_progress("loading", f"Generating synthetic tiles… ({i + 1}/{total})", i + 1, total)
-
-
-def _embed_file_images(selected, clips, embedder, on_progress, demo_origin, skip_embedding=False) -> None:
-    """Embed a list of (img_path, category) tuples into ``clips``."""
-
-    from vtscore.media.image.decode import upright_size  # noqa: PLC0415
-
-    if not skip_embedding:
-        _ensure_image_embedder_loaded(embedder, on_progress)
-
-    clip_id = max(clips.keys(), default=0) + 1
-    total = len(selected)
-    status = "loading" if skip_embedding else "embedding"
-    verb = "Loading" if skip_embedding else "Embedding"
-    on_progress(status, f"{verb} {total} images...", 0, total)
-
-    from vtscore.media.embedder import media_from_path  # noqa: PLC0415
-
-    for i, (img_path, category) in enumerate(selected):
-        if skip_embedding:
-            on_progress("loading", f"Loading {category}/{img_path.name}", i + 1, total)
-            embedding = None
-        else:
-            on_progress("embedding", f"Embedding {category}/{img_path.name}", i + 1, total)
-            embedding = embedder.embed_media(media_from_path(img_path))
-            if embedding is None:
-                continue
-        with open(img_path, "rb") as f:
-            image_bytes = f.read()
-        try:
-            width, height = upright_size(img_path)
-        except Exception:
-            width, height = None, None
-        clips[clip_id] = {
-            "id": clip_id,
-            "media_type": _MEDIA_TYPE_ID,
-            "embedder": embedder.name,
-            "duration": 0,
-            "file_size": len(image_bytes),
-            "md5": content_md5(image_bytes),
-            "embeddings": {} if skip_embedding else {embedder.name: embedding},
-            "media_bytes": image_bytes,
-            "media_string": None,
-            "filename": f"{category}/{img_path.name}",
-            "category": category,
-            "width": width,
-            "height": height,
-            "origin": demo_origin,
-            "origin_name": f"{category}/{img_path.name}",
-        }
-        clip_id += 1
-
-
-def _embed_cifar_arrays(selected, clips, embedder, on_progress, demo_origin, skip_embedding=False) -> None:
-    """Embed a list of (image_array, category) tuples into ``clips``."""
-    import io as _io  # noqa: PLC0415
-
-    from PIL import Image  # noqa: PLC0415
-
-    if not skip_embedding:
-        _ensure_image_embedder_loaded(embedder, on_progress)
-
-    clip_id = max(clips.keys(), default=0) + 1
-    total = len(selected)
-    status = "loading" if skip_embedding else "embedding"
-    verb = "Loading" if skip_embedding else "Embedding"
-    on_progress(status, f"{verb} {total} images...", 0, total)
-
-    for i, (image_array, category) in enumerate(selected):
-        on_progress(status, f"{verb} {category}", i + 1, total)
-        img = Image.fromarray(image_array.astype("uint8"), "RGB")
-        img_buffer = _io.BytesIO()
-        img.save(img_buffer, format="PNG")
-        image_bytes = img_buffer.getvalue()
-        if skip_embedding:
-            embedding = None
-        else:
-            embedding = cast(Any, embedder).embed_pil_image(img)
-            if embedding is None:
-                continue
-        fname = f"{category}/{category}_{clip_id}.png"
-        clips[clip_id] = {
-            "id": clip_id,
-            "media_type": _MEDIA_TYPE_ID,
-            "embedder": embedder.name,
-            "duration": 0,
-            "file_size": len(image_bytes),
-            "md5": content_md5(image_bytes),
-            "embeddings": {} if skip_embedding else {embedder.name: embedding},
-            "media_bytes": image_bytes,
-            "media_string": None,
-            "filename": fname,
-            "category": category,
-            "width": img.width,
-            "height": img.height,
-            "origin": demo_origin,
-            "origin_name": fname,
-        }
-        clip_id += 1
 
 
 def _normalize_regions(pixel_regions, width, height) -> list:
@@ -1420,18 +1317,100 @@ def _normalize_regions(pixel_regions, width, height) -> list:
     return out
 
 
-def _embed_vg_images(selected, clips, embedder, on_progress, demo_origin, skip_embedding=False) -> None:
-    """Embed Visual Genome images, stamping multi-label categories + regions.
+# ----------------------------------------------------------------------
+# One clip builder, one embed loop, one small renderer per source shape
+# ----------------------------------------------------------------------
 
-    ``selected`` is a list of ``(img_path, positive_categories, pixel_regions)``.
-    Each clip gets a ``categories`` list (the multi-label positives), a
-    ``category`` primary (first positive, for legacy single-label readers), and
-    a store-only ``regions`` list of normalized ground-truth boxes.
+
+@dataclass(frozen=True)
+class _RenderedImage:
+    """One demo image, decoded far enough to embed it and to stamp a clip dict.
+
+    Produced by a per-source *render* callable (see ``_embed_loop``); every
+    field is what the sources actually disagree about.  ``embed`` is a thunk
+    rather than the image itself because the sources reach the embedder by
+    different doors: a file-backed source hands it a path, while CIFAR's
+    in-memory arrays go through ``embed_pil_image``.
     """
 
-    from vtscore.media.embedder import media_from_path  # noqa: PLC0415
-    from vtscore.media.image.decode import upright_size  # noqa: PLC0415
+    image_bytes: bytes
+    filename: str
+    category: str
+    width: int | None
+    height: int | None
+    embed: Callable[[Any], Any]
+    #: What the per-item progress line names.  Usually the filename, but Visual
+    #: Genome files its clips under a bare basename while still reporting the
+    #: primary category, and CIFAR reports only the category.
+    progress_label: str
+    #: Set only by multi-label sources.  ``None`` (not ``[]``) means single-label:
+    #: the key is then omitted from the clip entirely, which is what
+    #: ``vtscore.eval.labels.media_is_positive`` reads to pick its membership
+    #: rule.  An empty list there would read as "positive for nothing".
+    categories: Sequence[str] | None = None
+    regions: Sequence | None = None
 
+
+def _emit_image_clip(
+    clip_id: int,
+    *,
+    embedder_name: str,
+    embeddings: dict,
+    image_bytes: bytes,
+    filename: str,
+    category: str,
+    width: int | None,
+    height: int | None,
+    demo_origin: dict,
+    categories: Sequence[str] | None = None,
+    regions: Sequence | None = None,
+    thumbnail_bytes: bytes | None = None,
+) -> dict:
+    """Build the media dict every image demo source stores into ``clips``.
+
+    The optional keys are *omitted* rather than set to ``None`` when they don't
+    apply, so a single-label source's clips keep the exact shape they have
+    always had; every reader of the three goes through ``dict.get``, so an
+    absent key and a ``None`` one are equivalent to consumers either way.
+    """
+    clip: dict = {
+        "id": clip_id,
+        "media_type": _MEDIA_TYPE_ID,
+        "embedder": embedder_name,
+        "duration": 0,
+        "file_size": len(image_bytes),
+        "md5": content_md5(image_bytes),
+        "embeddings": embeddings,
+        "media_bytes": image_bytes,
+        "media_string": None,
+    }
+    if thumbnail_bytes is not None:
+        clip["thumbnail_bytes"] = thumbnail_bytes
+    clip["filename"] = filename
+    clip["category"] = category
+    if categories is not None:
+        clip["categories"] = list(categories)
+        clip["regions"] = list(regions or [])
+    clip["width"] = width
+    clip["height"] = height
+    clip["origin"] = demo_origin
+    clip["origin_name"] = filename
+    return clip
+
+
+def _embed_loop(selected, clips, embedder, on_progress, demo_origin, skip_embedding, render) -> None:
+    """Embed every record in *selected* into ``clips``, one clip per record.
+
+    *render* maps one entry of *selected* (whatever shape that source's
+    collector emits) plus the id the clip is about to take to a
+    :class:`_RenderedImage`.  Everything the sources share — the embedder-load
+    guard, the clip-id seed, the progress preamble and per-item lines, the
+    skip-embedding branch, and the clip dict itself — lives here.
+
+    The clip id is passed to *render* because CIFAR synthesizes a filename from
+    it; a record whose embedding comes back ``None`` is dropped without
+    consuming the id, so the next record reuses it.
+    """
     if not skip_embedding:
         _ensure_image_embedder_loaded(embedder, on_progress)
 
@@ -1441,110 +1420,167 @@ def _embed_vg_images(selected, clips, embedder, on_progress, demo_origin, skip_e
     verb = "Loading" if skip_embedding else "Embedding"
     on_progress(status, f"{verb} {total} images...", 0, total)
 
-    for i, (img_path, positive_categories, pixel_regions) in enumerate(selected):
-        primary = positive_categories[0]
-        if skip_embedding:
-            on_progress("loading", f"Loading {primary}/{img_path.name}", i + 1, total)
-            embedding = None
-        else:
-            on_progress("embedding", f"Embedding {primary}/{img_path.name}", i + 1, total)
-            embedding = embedder.embed_media(media_from_path(img_path))
-            if embedding is None:
+    for i, entry in enumerate(selected):
+        item = render(entry, clip_id)
+        on_progress(status, f"{verb} {item.progress_label}", i + 1, total)
+        embeddings: dict = {}
+        if not skip_embedding:
+            vector = item.embed(embedder)
+            if vector is None:
                 continue
-        with open(img_path, "rb") as f:
-            image_bytes = f.read()
-        try:
-            width, height = upright_size(img_path)
-        except Exception:
-            width, height = None, None
-        clips[clip_id] = {
-            "id": clip_id,
-            "media_type": _MEDIA_TYPE_ID,
-            "embedder": embedder.name,
-            "duration": 0,
-            "file_size": len(image_bytes),
-            "md5": content_md5(image_bytes),
-            "embeddings": {} if skip_embedding else {embedder.name: embedding},
-            "media_bytes": image_bytes,
-            "media_string": None,
-            "filename": img_path.name,
-            "category": primary,
-            "categories": list(positive_categories),
-            "regions": _normalize_regions(pixel_regions, width, height),
-            "width": width,
-            "height": height,
-            "origin": demo_origin,
-            "origin_name": img_path.name,
-        }
+            embeddings = {embedder.name: vector}
+        clips[clip_id] = _emit_image_clip(
+            clip_id,
+            embedder_name=embedder.name,
+            embeddings=embeddings,
+            image_bytes=item.image_bytes,
+            filename=item.filename,
+            category=item.category,
+            width=item.width,
+            height=item.height,
+            demo_origin=demo_origin,
+            categories=item.categories,
+            regions=item.regions,
+        )
         clip_id += 1
 
 
-def _embed_boxed_multilabel_images(selected, clips, embedder, on_progress, demo_origin, skip_embedding=False) -> None:
-    """Embed ``(img_path, positive_categories, regions)`` records into ``clips``.
+def _read_image_file(img_path) -> tuple[bytes, int | None, int | None]:
+    """Return ``(bytes, width, height)`` for an on-disk demo image.
 
-    Shared by every demo whose records arrive already boxed and multi-label —
-    OpenLogo (brands) and Rico UI semantics (icons) today.  Each clip gets a
+    Dimensions come back ``None`` when the file can't be probed; the callers
+    stamp them onto the clip as-is and ``_normalize_regions`` drops boxes it
+    can't scale.
+    """
+    from vtscore.media.image.decode import upright_size  # noqa: PLC0415
+
+    with open(img_path, "rb") as f:
+        image_bytes = f.read()
+    try:
+        width, height = upright_size(img_path)
+    except Exception:
+        width, height = None, None
+    return image_bytes, width, height
+
+
+def _embed_image_path(img_path) -> Callable[[Any], Any]:
+    """Return an embed thunk that hands *img_path* to the embedder."""
+
+    def _embed(embedder):
+        from vtscore.media.embedder import media_from_path  # noqa: PLC0415
+
+        return embedder.embed_media(media_from_path(img_path))
+
+    return _embed
+
+
+def _render_single_label_image(entry, clip_id) -> _RenderedImage:
+    """``(img_path, category)`` — one category per image, filed under it."""
+    img_path, category = entry
+    image_bytes, width, height = _read_image_file(img_path)
+    name = f"{category}/{img_path.name}"
+    return _RenderedImage(
+        image_bytes=image_bytes,
+        filename=name,
+        category=category,
+        width=width,
+        height=height,
+        embed=_embed_image_path(img_path),
+        progress_label=name,
+    )
+
+
+def _render_boxed_multilabel_image(entry, clip_id) -> _RenderedImage:
+    """``(img_path, positive_categories, regions)`` with boxes already normalized.
+
+    Every demo whose records arrive already boxed and multi-label — OpenLogo
+    (brands) and Rico UI semantics (icons) today.  The clip gets a
     ``categories`` list (all in-vocab labels present), a ``category`` primary
     (the first, for single-label readers), and store-only normalized
     ground-truth ``regions``: the boxed region is the natural template seed for
     a structural detector, and the boxes let the Calibration & Evaluation flow
     score against ground truth.
-
-    Visual Genome has its own variant only because its boxes arrive in source
-    pixel coordinates and must be normalized against each image's decoded size.
     """
-
-    from vtscore.media.embedder import media_from_path  # noqa: PLC0415
-    from vtscore.media.image.decode import upright_size  # noqa: PLC0415
-
-    if not skip_embedding:
-        _ensure_image_embedder_loaded(embedder, on_progress)
-
-    clip_id = max(clips.keys(), default=0) + 1
-    total = len(selected)
-    status = "loading" if skip_embedding else "embedding"
-    verb = "Loading" if skip_embedding else "Embedding"
-    on_progress(status, f"{verb} {total} images...", 0, total)
-
-    for i, (img_path, positive_categories, regions) in enumerate(selected):
-        primary = positive_categories[0]
-        if skip_embedding:
-            on_progress("loading", f"Loading {primary}/{img_path.name}", i + 1, total)
-            embedding = None
-        else:
-            on_progress("embedding", f"Embedding {primary}/{img_path.name}", i + 1, total)
-            embedding = embedder.embed_media(media_from_path(img_path))
-            if embedding is None:
-                continue
-        with open(img_path, "rb") as f:
-            image_bytes = f.read()
-        try:
-            width, height = upright_size(img_path)
-        except Exception:
-            width, height = None, None
-        clips[clip_id] = {
-            "id": clip_id,
-            "media_type": _MEDIA_TYPE_ID,
-            "embedder": embedder.name,
-            "duration": 0,
-            "file_size": len(image_bytes),
-            "md5": content_md5(image_bytes),
-            "embeddings": {} if skip_embedding else {embedder.name: embedding},
-            "media_bytes": image_bytes,
-            "media_string": None,
-            "filename": f"{primary}/{img_path.name}",
-            "category": primary,
-            "categories": list(positive_categories),
-            "regions": list(regions),
-            "width": width,
-            "height": height,
-            "origin": demo_origin,
-            "origin_name": f"{primary}/{img_path.name}",
-        }
-        clip_id += 1
+    img_path, positive_categories, regions = entry
+    primary = positive_categories[0]
+    image_bytes, width, height = _read_image_file(img_path)
+    name = f"{primary}/{img_path.name}"
+    return _RenderedImage(
+        image_bytes=image_bytes,
+        filename=name,
+        category=primary,
+        width=width,
+        height=height,
+        embed=_embed_image_path(img_path),
+        progress_label=name,
+        categories=positive_categories,
+        regions=regions,
+    )
 
 
-def load_demo_source(  # noqa: C901 - flat per-source dispatch; one branch per demo source
+def _render_vg_image(entry, clip_id) -> _RenderedImage:
+    """``(img_path, positive_categories, pixel_regions)`` — Visual Genome.
+
+    Differs from the already-boxed sources on exactly two counts: its boxes
+    arrive in source pixel coordinates and must be normalized against the
+    decoded size, and its clips are filed under a bare basename.
+    """
+    img_path, positive_categories, pixel_regions = entry
+    primary = positive_categories[0]
+    image_bytes, width, height = _read_image_file(img_path)
+    return _RenderedImage(
+        image_bytes=image_bytes,
+        filename=img_path.name,
+        category=primary,
+        width=width,
+        height=height,
+        embed=_embed_image_path(img_path),
+        progress_label=f"{primary}/{img_path.name}",
+        categories=positive_categories,
+        regions=_normalize_regions(pixel_regions, width, height),
+    )
+
+
+def _render_cifar_array(entry, clip_id) -> _RenderedImage:
+    """``(image_array, category)`` — CIFAR's in-memory arrays, PNG-encoded here."""
+    import io as _io  # noqa: PLC0415
+
+    from PIL import Image  # noqa: PLC0415
+
+    image_array, category = entry
+    img = Image.fromarray(image_array.astype("uint8"), "RGB")
+    img_buffer = _io.BytesIO()
+    img.save(img_buffer, format="PNG")
+    return _RenderedImage(
+        image_bytes=img_buffer.getvalue(),
+        filename=f"{category}/{category}_{clip_id}.png",
+        category=category,
+        width=img.width,
+        height=img.height,
+        embed=lambda embedder: cast(Any, embedder).embed_pil_image(img),
+        progress_label=category,
+    )
+
+
+#: ``source id -> (collector, render)``.  The collector turns the requested
+#: categories and slice into a list of per-image records; the render turns one
+#: such record into a :class:`_RenderedImage`.  The ``_FILE_SOURCE_DOWNLOADERS``
+#: members are dispatched separately because their shared collector takes the
+#: source id as an extra argument.
+_DEMO_SOURCE_LOADERS: dict[str, tuple[Callable, Callable]] = {
+    "vggface2": (_collect_vggface2_files, _render_single_label_image),
+    "oxford_flowers_102": (_collect_oxford_flowers_files, _render_single_label_image),
+    "roxford5k": (_collect_roxford_files, _render_single_label_image),
+    "enrico": (_collect_enrico_files, _render_single_label_image),
+    "places365": (_collect_places365_files, _render_single_label_image),
+    "openlogo": (_collect_openlogo_files, _render_boxed_multilabel_image),
+    "rico_icons": (_collect_rico_icons_files, _render_boxed_multilabel_image),
+    "visual_genome": (_collect_visual_genome_files, _render_vg_image),
+    "cifar10_sample": (_collect_cifar10_images, _render_cifar_array),
+}
+
+
+def load_demo_source(
     source,
     categories,
     slice_start,
@@ -1582,114 +1618,18 @@ def load_demo_source(  # noqa: C901 - flat per-source dispatch; one branch per d
         _load_synthetic_toponymy(clips, embedder, on_progress, demo_origin)
         return None
 
+    # The folder-per-class sources share one collector that needs the source id
+    # to pick its downloader; everything else is a straight table lookup.  An
+    # unset source is the CIFAR sample, the historical default.
     if source in _FILE_SOURCE_DOWNLOADERS:
-        _embed_file_images(
-            _collect_simple_folder_files(source, categories, slice_args, on_progress),
-            clips,
-            embedder,
-            on_progress,
-            demo_origin,
-            skip_embedding=skip_embedding,
-        )
-        return None
+        selected = _collect_simple_folder_files(source, categories, slice_args, on_progress)
+        render = _render_single_label_image
+    else:
+        loader = _DEMO_SOURCE_LOADERS.get(source or "cifar10_sample")
+        if loader is None:
+            raise ValueError(f"Unsupported image source: {source!r}")
+        collect, render = loader
+        selected = collect(categories, slice_args, on_progress)
 
-    if source == "vggface2":
-        _embed_file_images(
-            _collect_vggface2_files(categories, slice_args, on_progress),
-            clips,
-            embedder,
-            on_progress,
-            demo_origin,
-            skip_embedding=skip_embedding,
-        )
-        return None
-
-    if source == "oxford_flowers_102":
-        _embed_file_images(
-            _collect_oxford_flowers_files(categories, slice_args, on_progress),
-            clips,
-            embedder,
-            on_progress,
-            demo_origin,
-            skip_embedding=skip_embedding,
-        )
-        return None
-
-    if source == "roxford5k":
-        _embed_file_images(
-            _collect_roxford_files(categories, slice_args, on_progress),
-            clips,
-            embedder,
-            on_progress,
-            demo_origin,
-            skip_embedding=skip_embedding,
-        )
-        return None
-
-    if source == "openlogo":
-        _embed_boxed_multilabel_images(
-            _collect_openlogo_files(categories, slice_args, on_progress),
-            clips,
-            embedder,
-            on_progress,
-            demo_origin,
-            skip_embedding=skip_embedding,
-        )
-        return None
-
-    if source == "rico_icons":
-        _embed_boxed_multilabel_images(
-            _collect_rico_icons_files(categories, slice_args, on_progress),
-            clips,
-            embedder,
-            on_progress,
-            demo_origin,
-            skip_embedding=skip_embedding,
-        )
-        return None
-
-    if source == "enrico":
-        _embed_file_images(
-            _collect_enrico_files(categories, slice_args, on_progress),
-            clips,
-            embedder,
-            on_progress,
-            demo_origin,
-            skip_embedding=skip_embedding,
-        )
-        return None
-
-    if source == "places365":
-        _embed_file_images(
-            _collect_places365_files(categories, slice_args, on_progress),
-            clips,
-            embedder,
-            on_progress,
-            demo_origin,
-            skip_embedding=skip_embedding,
-        )
-        return None
-
-    if source == "visual_genome":
-        _embed_vg_images(
-            _collect_visual_genome_files(categories, slice_args, on_progress),
-            clips,
-            embedder,
-            on_progress,
-            demo_origin,
-            skip_embedding=skip_embedding,
-        )
-        return None
-
-    if source == "cifar10_sample" or not source:
-        _embed_cifar_arrays(
-            _collect_cifar10_images(categories, slice_args, on_progress),
-            clips,
-            embedder,
-            on_progress,
-            demo_origin,
-            skip_embedding=skip_embedding,
-        )
-        return None
-
-    raise ValueError(f"Unsupported image source: {source!r}")
+    _embed_loop(selected, clips, embedder, on_progress, demo_origin, skip_embedding, render)
+    return None

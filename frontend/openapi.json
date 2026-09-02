@@ -1168,70 +1168,6 @@
         ],
         "type": "object"
       },
-      "DashboardDatasetInfoResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "media_type": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "num_dupes": {
-            "type": "integer"
-          },
-          "num_medias": {
-            "type": "integer"
-          },
-          "origin": {
-            "type": "string"
-          },
-          "source": {
-            "additionalProperties": {},
-            "nullable": true,
-            "type": "object"
-          }
-        },
-        "required": [
-          "media_type",
-          "name",
-          "num_dupes",
-          "num_medias",
-          "origin",
-          "source"
-        ],
-        "type": "object"
-      },
-      "DashboardDatasetRenameRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "name": {
-            "maxLength": 128,
-            "minLength": 1,
-            "type": "string"
-          }
-        },
-        "required": [
-          "name"
-        ],
-        "type": "object"
-      },
-      "DashboardDatasetRenameResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "success": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "name",
-          "success"
-        ],
-        "type": "object"
-      },
       "DashboardDiskUsageResponse": {
         "additionalProperties": false,
         "properties": {
@@ -1490,23 +1426,6 @@
         },
         "required": [
           "name"
-        ],
-        "type": "object"
-      },
-      "DatasetLoadFolderRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "media_type": {
-            "default": "audio",
-            "type": "string"
-          },
-          "path": {
-            "minLength": 1,
-            "type": "string"
-          }
-        },
-        "required": [
-          "path"
         ],
         "type": "object"
       },
@@ -5571,38 +5490,6 @@
         ],
         "type": "object"
       },
-      "SeedFromExamplesRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "examples": {
-            "items": {
-              "additionalProperties": {},
-              "type": "object"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "examples"
-        ],
-        "type": "object"
-      },
-      "SeedFromExamplesResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "seeded": {
-            "type": "integer"
-          },
-          "skipped": {
-            "type": "integer"
-          }
-        },
-        "required": [
-          "seeded",
-          "skipped"
-        ],
-        "type": "object"
-      },
       "SeedImporterEntry": {
         "additionalProperties": false,
         "properties": {
@@ -9249,71 +9136,6 @@
         ]
       }
     },
-    "/api/dashboard/dataset-info": {
-      "get": {
-        "description": "Returns a JSON object with ``name``, ``num_medias``, ``media_type``, and\n``origin`` extracted from the first media that has origin info.",
-        "operationId": "dashboard_dataset_info",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DashboardDatasetInfoResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "404": {
-            "description": "No dataset is currently loaded."
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Return metadata about the currently loaded dataset for the dashboard.",
-        "tags": [
-          "datasets_ui"
-        ]
-      }
-    },
-    "/api/dashboard/dataset-rename": {
-      "put": {
-        "operationId": "dashboard_dataset_rename",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DashboardDatasetRenameRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DashboardDatasetRenameResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Set a custom display name for the currently loaded dataset.",
-        "tags": [
-          "datasets_ui"
-        ]
-      }
-    },
     "/api/dashboard/disk-usage": {
       "get": {
         "operationId": "dashboard_disk_usage",
@@ -10306,46 +10128,6 @@
           }
         },
         "summary": "Load a dataset from an uploaded pickle file.",
-        "tags": [
-          "datasets_load"
-        ]
-      }
-    },
-    "/api/dataset/load-folder": {
-      "post": {
-        "operationId": "load_dataset_folder",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DatasetLoadFolderRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DatasetLoadStartedResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "400": {
-            "description": "Invalid or missing folder path."
-          },
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Generate dataset from a folder of media files.",
         "tags": [
           "datasets_load"
         ]
@@ -13537,7 +13319,7 @@
     },
     "/api/find/boundary-next": {
       "get": {
-        "description": "Walks outward from the cutoff, alternating faces, so \"just sit and vote\"\nsamples the marginal positives and marginal negatives rather than only\nmarching up the positive pile.  Computed server-side from the frozen scores +\ncutoff + verified set so it stays correct once the client holds only a\nwindow of the ranking.  Returns ``{\"id\": null, \"side\": null}`` when both\nsides are exhausted (the done state).",
+        "description": "Walks outward from the cutoff, alternating faces, so \"just sit and vote\"\nsamples the marginal positives and marginal negatives rather than only\nmarching up the positive pile.  Computed server-side from the frozen scores +\ncutoff + verified set so it stays correct once the client holds only a\nwindow of the ranking.  Returns ``{\"id\": null, \"side\": null}`` when both\nsides are exhausted (the done state).\n\n**No frontend caller yet, deliberately** \u2014 the same story as\n``/api/find/queue-ids`` above: it awaits the ``find-view`` windowing slice\nthat moves ``advanceToBoundary`` onto it (``docs/plans/scalability.md``\nS3/S17/S19). Not dead code.",
         "operationId": "find_boundary_next_route",
         "parameters": [
           {
@@ -13739,7 +13521,7 @@
     },
     "/api/find/queue-ids": {
       "get": {
-        "description": "The left work queue (Browse / To Dataset / Export) and the right-panel\nactions scope over the *entire* positive set, which the frontend used to\nderive by scanning the whole client-side ranking.  This endpoint computes it\nserver-side from the frozen Find scores + current cutoff + verified set, so a\nwindowed client that no longer holds the full order can still act on every\nmatching item (``docs/plans/scalability.md`` S3/S17/S19).\n\nEmpty outside Find mode or before a scoring pass has run.",
+        "description": "The left work queue (Browse / To Dataset / Export) and the right-panel\nactions scope over the *entire* positive set, which the frontend used to\nderive by scanning the whole client-side ranking.  This endpoint computes it\nserver-side from the frozen Find scores + current cutoff + verified set, so a\nwindowed client that no longer holds the full order can still act on every\nmatching item (``docs/plans/scalability.md`` S3/S17/S19).\n\n**No frontend caller yet, deliberately.** It is built and tested ahead of\nthe ``find-view`` windowing slice that switches ``unverifiedGoodIds`` /\n``goodIds`` onto it; the two must land atomically, so this half shipped\nfirst. Not dead code \u2014 see the plan above before proposing its removal.\n\nEmpty outside Find mode or before a scoring pass has run.",
         "operationId": "find_queue_ids_route",
         "parameters": [
           {
@@ -13915,7 +13697,7 @@
     },
     "/api/jobs/active": {
       "get": {
-        "description": "Used by the top-bar pulldown to render a spinner glyph on rows whose\npair has background work in flight (learned-sort, eval, \u2026). The endpoint\nis intentionally cheap; it walks the in-memory ``JOB_MANAGERS`` map and\nreads each manager's current/pending slot under the manager's own lock,\nnothing else. Safe to poll on a 2\u20133 second interval.",
+        "description": "Used by the top-bar pulldown to render a spinner glyph on rows whose\npair has background work in flight (learned-sort, eval, \u2026). The endpoint\nis intentionally cheap; it walks the in-memory ``JOB_MANAGERS`` map and\nreads each manager's current/pending slot under the manager's own lock,\nnothing else. Safe to poll on a 2\u20133 second interval.\n\n``@state_sync_exempt`` keeps that poll off the global ``_state_lock``:\nthis handler reads no dataset/detector proxy, and queuing a 2-second\npoll behind a long lock-holder is how the worker's threads got\nexhausted in the first place.",
         "operationId": "active_jobs",
         "responses": {
           "200": {
@@ -16313,44 +16095,6 @@
           }
         },
         "summary": "Clear all votes without clearing medias.",
-        "tags": [
-          "sorting"
-        ]
-      }
-    },
-    "/api/votes/seed-from-examples": {
-      "post": {
-        "description": "For each ``type: \"media\"`` example, reads the file from the current\nuser's ``example_media/`` directory, computes its MD5, and either marks\nthe matching loaded media as Good, or (if the example is new) embeds it,\ninserts it into the ``medias`` dict, and votes it Good.\n\nReturns::\n\n    {\"seeded\": 2, \"skipped\": 1}",
-        "operationId": "seed_votes_from_examples",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SeedFromExamplesRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SeedFromExamplesResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Seed good votes from a model's media examples.",
         "tags": [
           "sorting"
         ]

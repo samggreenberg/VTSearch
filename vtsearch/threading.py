@@ -14,6 +14,44 @@ Forgetting one silently writes to the wrong user file or no-ops against
 the empty fallback context.  This helper snapshots the calling thread's
 context at spawn time and re-installs it inside the new thread, so the
 plumbing is invisible to the caller.
+
+Which idiom to reach for
+------------------------
+
+App-tier background work runs under one of exactly two idioms, and they
+are chosen by *how the work is tracked*, not by how long it takes:
+
+``JobManager`` (:mod:`vtscore.concurrency.async_jobs`)
+    For work where only the **latest** request matters and a duplicate
+    request should coalesce rather than run twice: training, sorting,
+    eval.  One job runs at a time per manager, a second ``start()``
+    parks in a single coalescing pending slot, and results are cached by
+    signature so an unchanged re-request is free.  It owns its own
+    context propagation (``JobManager._run`` replays the requester's
+    user + dataset + detector the same way :func:`spawn` does), so code
+    reaching for a manager never calls ``spawn``.
+
+:func:`spawn` (this module)
+    For everything else: work that is genuinely per-invocation and may
+    run concurrently with siblings — loading a dataset, building a
+    coverage atlas, promoting a selection, re-embedding a detector,
+    ingesting a labelset.  ``spawn`` provides context replay and nothing
+    else; whatever progress or cancellation surface the job needs is
+    layered on by the caller.  In practice that is a
+    :class:`~vtscore.concurrency.progress.ProgressTracker` obtained from
+    the ``loading_tasks`` / ``detector_loading_tasks`` registries, whose
+    per-task entries feed the ``loading-tasks`` SSE channel and the
+    dashboard's Cancel button.  Callers that register a task that way
+    must pass ``start=False`` and start the thread themselves, so the
+    worker is registered before it runs — see the ``start`` parameter.
+
+There is no third idiom in the app tier.  A bare ``threading.Thread`` in
+``vtsearch/`` is a bug: it drops all three thread-locals, so the body
+writes to the wrong user's settings file and reads the empty fallback
+dataset.  (The library tier is different: ``vtscore`` cannot import this
+module, so its own background helpers replay context with the
+``vtscore.state.current_user`` / ``vtscore.state.core`` context managers
+directly.)
 """
 
 from __future__ import annotations
@@ -29,6 +67,7 @@ def spawn(
     *args: Any,
     name: str | None = None,
     daemon: bool = True,
+    start: bool = True,
     **kwargs: Any,
 ) -> threading.Thread:
     """Start *target* in a daemon thread with the current context replayed.
@@ -40,15 +79,26 @@ def spawn(
     code that depends on the active context resolving the same way it
     does on the calling thread.
 
-    Returns the started :class:`threading.Thread` so callers can join it
-    if they need to.  The thread is daemon by default so a forgotten
-    join doesn't keep the interpreter alive at shutdown.
+    Returns the :class:`threading.Thread` so callers can join it if they
+    need to.  The thread is daemon by default so a forgotten join
+    doesn't keep the interpreter alive at shutdown.
 
-    Long-running jobs that need cancellation / progress reporting should
-    keep using :class:`~vtscore.concurrency.async_jobs.JobManager`, which
-    already handles context propagation and exposes a richer
-    job-tracking surface; ``spawn`` is for the simpler fire-and-forget
-    cases.
+    Pass ``start=False`` to get the thread back *unstarted*; the
+    snapshot is still taken here, on the calling thread, so the caller
+    may start it later without losing the context.  This exists for the
+    one thing a caller has to do between construction and start:
+    register the worker with a
+    :class:`~vtscore.concurrency.progress.LoadingTasksTracker` via
+    ``set_worker``, which is documented to happen *before* the thread
+    runs so a cancel arriving in the same instant can tell "not started
+    yet" from "nothing here"::
+
+        worker = spawn(task, name="ds-promote-abc123", start=False)
+        loading_tasks.set_worker(task_id, worker)
+        worker.start()
+
+    See the module docstring for when to reach for ``spawn`` at all
+    versus :class:`~vtscore.concurrency.async_jobs.JobManager`.
     """
     user_snapshot = _snapshot_user()
     ds_snapshot, det_snapshot = _snapshot_state_contexts()
@@ -66,7 +116,8 @@ def spawn(
             _install_state_contexts(None, None)
 
     thread = threading.Thread(target=_runner, name=name, daemon=daemon)
-    thread.start()
+    if start:
+        thread.start()
     return thread
 
 

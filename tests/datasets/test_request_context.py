@@ -618,14 +618,6 @@ class TestVoteMutatingEndpointsRequireHeaders:
         assert resp.status_code == 400
         assert "X-Detector-Id" in resp.get_data(as_text=True)
 
-    def test_seed_votes_from_examples_rejects_without_headers(self, client):
-        resp = client.post(
-            "/api/votes/seed-from-examples",
-            json={"examples": []},
-            headers=self.DROP_HEADERS,
-        )
-        assert resp.status_code == 400
-
     def test_import_labels_rejects_without_headers(self, client):
         resp = client.post(
             "/api/labels/import",

@@ -317,25 +317,6 @@ class TestMultiUserFileRestriction:
 
             set_login_provider(original)
 
-    def test_load_folder_rejects_path_outside_user_dir(self, client, tmp_path):
-        """Load folder path outside user data dir is rejected in multi-user mode."""
-        user_dir = tmp_path / "testuser"
-        user_dir.mkdir()
-        original = self._setup_multi_user(client, user_dir)
-        try:
-            resp = client.post(
-                "/api/dataset/load-folder",
-                json={"path": "/etc", "media_type": "audio"},
-            )
-            assert resp.status_code == 400
-            # New error envelope (flask-smorest): human-readable text lives
-            # under ``message`` (the legacy ``error`` key is gone).
-            assert "must be within" in resp.get_json()["message"]
-        finally:
-            from vtsearch.auth import set_login_provider
-
-            set_login_provider(original)
-
     def test_combine_datasets_rejects_path_outside_user_dir(self, client, tmp_path):
         """Combine datasets with paths outside user data dir is rejected in multi-user mode."""
         user_dir = tmp_path / "testuser"
@@ -390,27 +371,6 @@ class TestMultiUserFileRestriction:
 
             set_login_provider(original)
 
-    def test_default_provider_allows_any_path(self, client, tmp_path):
-        """DefaultLoginProvider (single-user) allows any path, even outside CWD."""
-        from vtsearch.auth import DefaultLoginProvider, get_login_provider, set_login_provider
-
-        original = get_login_provider()
-        try:
-            set_login_provider(DefaultLoginProvider())
-            # A path well outside the process CWD must not be rejected on
-            # path-validation grounds (it may 400 for "Invalid folder path"
-            # since the folder doesn't exist, but never "must be within").
-            # ``load-folder`` is on flask-smorest, so the human-readable text
-            # lives under ``message``.
-            resp = client.post(
-                "/api/dataset/load-folder",
-                json={"path": str(tmp_path / "elsewhere" / "some_folder"), "media_type": "audio"},
-            )
-            if resp.status_code == 400:
-                assert "must be within" not in resp.get_json().get("message", "")
-        finally:
-            set_login_provider(original)
-
 
 class TestRelativePathCannotStrayFromTheApprovedAnchor:
     """Issue #2917: a relative path used to be validated against the user's
@@ -454,28 +414,6 @@ class TestRelativePathCannotStrayFromTheApprovedAnchor:
             # Not the raw string: the importer would have resolved that against
             # the CWD, i.e. a directory the check never approved.
             assert out["path"] == str((user_dir / "data" / "alice").resolve())
-        finally:
-            set_login_provider(original)
-
-    def test_load_folder_route_forwards_the_approved_path(self, client, tmp_path, monkeypatch):
-        import vtsearch.routes.datasets.load as load_mod
-        from vtsearch.auth import set_login_provider
-
-        user_dir = tmp_path / "bob"
-        (user_dir / "sounds").mkdir(parents=True)
-
-        captured: dict = {}
-        monkeypatch.setattr(
-            load_mod,
-            "_run_importer_in_background",
-            lambda importer, field_values: captured.update(field_values) or "task",
-        )
-
-        original = self._use_multi_user(user_dir)
-        try:
-            resp = client.post("/api/dataset/load-folder", json={"path": "sounds", "media_type": "audio"})
-            assert resp.status_code == 200, resp.get_json()
-            assert captured["path"] == str((user_dir / "sounds").resolve())
         finally:
             set_login_provider(original)
 
