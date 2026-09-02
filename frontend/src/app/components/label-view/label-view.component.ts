@@ -75,8 +75,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   panelState = inject(LabelViewPanelStateService);
   /** Component-provided. Public: the header binds `pairScope.datasetName()`. */
   readonly pairScope = inject(PairScopeService);
-  /** Component-provided sort orchestration (#3428). Public: the handlers below
-   *  forward the template's events straight to it. */
+  /** Component-provided sort orchestration (#3428): the sorts, and the
+   *  `autoSelectNext` each one ends on. Private — the template's surface is the
+   *  one-line handlers below, which forward to it. */
   private readonly sortRunner = inject(SortRunnerService);
 
   readonly layoutRef = viewChild.required<ElementRef<HTMLElement>>('layout');
