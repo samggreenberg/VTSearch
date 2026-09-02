@@ -47,11 +47,19 @@ describe('FolderBrowserComponent', () => {
   /** Set the required browse input (+ optional others) and run ngOnInit. */
   function init(inputs: Record<string, unknown> = {}): void {
     fixture.componentRef.setInput('browse', browseFn);
-    fixture.componentRef.setInput('autoFocus', false);
     for (const [k, v] of Object.entries(inputs)) {
       fixture.componentRef.setInput(k, v);
     }
     fixture.detectChanges();
+  }
+
+  /** Init at the root, then navigate into `path` the way a user would.
+   *  The component always opens at the browse root, so tests that need a
+   *  non-root starting directory walk there first. */
+  function initAt(path: string): void {
+    init();
+    component.onRowDblClick({ kind: 'dir', name: path, path });
+    requestedPaths = [];
   }
 
   const dir = (name: string, extra: Record<string, unknown> = {}) => ({
@@ -86,8 +94,10 @@ describe('FolderBrowserComponent', () => {
     expect(component.rootPath()).toBe('/srv');
   });
 
-  it('honours a non-empty initialPath input', () => {
-    init({ initialPath: 'music/rock' });
+  it('navigating into a directory loads and records that path', () => {
+    init();
+    requestedPaths = [];
+    component.onRowDblClick({ kind: 'dir', name: 'rock', path: 'music/rock' });
     expect(requestedPaths).toEqual(['music/rock']);
     expect(component.currentPath()).toBe('music/rock');
   });
@@ -100,7 +110,7 @@ describe('FolderBrowserComponent', () => {
 
   it('falls back to the requested path when the listing omits currentPath', () => {
     listings['deep/dir'] = listing({ directories: [] });
-    init({ initialPath: 'deep/dir' });
+    initAt('deep/dir');
     expect(component.currentPath()).toBe('deep/dir');
   });
 
@@ -108,25 +118,15 @@ describe('FolderBrowserComponent', () => {
     defaultListing = listing({ currentPath: 'a', rootPath: '/srv' });
     const events: { path: string; rootPath: string }[] = [];
     fixture.componentRef.setInput('browse', browseFn);
-    fixture.componentRef.setInput('autoFocus', false);
     component.pathChange.subscribe(e => events.push(e));
     fixture.detectChanges();
     expect(events).toEqual([{ path: 'a', rootPath: '/srv' }]);
   });
 
   it('reload() re-requests the current directory', () => {
-    init({ initialPath: 'x' });
-    requestedPaths = [];
+    initAt('x');
     component.reload();
     expect(requestedPaths).toEqual(['x']);
-  });
-
-  it('re-loads when initialPath changes after first render', () => {
-    init({ initialPath: 'a' });
-    requestedPaths = [];
-    fixture.componentRef.setInput('initialPath', 'b');
-    fixture.detectChanges();
-    expect(requestedPaths).toEqual(['b']);
   });
 
   // ------------------------------------------------------------------
@@ -138,12 +138,12 @@ describe('FolderBrowserComponent', () => {
   // drive an *asynchronous* browse and assert on the rendered DOM without a
   // manual `detectChanges()` — the state must repaint on its own, since the
   // only usage-independent trigger (`pathChange`) is not bound by every parent
-  // and `loadError` is bound by none.
+  // (`vt-file-browser` binds only `(confirm)`) and the error path emits
+  // nothing at all.
 
   it('repaints the listing after an async browse resolves (zoneless canary)', async () => {
     const subject = new Subject<FolderBrowserListing>();
     fixture.componentRef.setInput('browse', () => subject.asObservable());
-    fixture.componentRef.setInput('autoFocus', false);
     await fixture.whenStable();
     expect(fixture.nativeElement.textContent).toContain('Loading…');
 
@@ -160,7 +160,6 @@ describe('FolderBrowserComponent', () => {
   it('repaints the inline error after an async browse fails (zoneless canary)', async () => {
     const subject = new Subject<FolderBrowserListing>();
     fixture.componentRef.setInput('browse', () => subject.asObservable());
-    fixture.componentRef.setInput('autoFocus', false);
     await fixture.whenStable();
 
     subject.error({ error: { message: 'boom' } });
@@ -175,18 +174,14 @@ describe('FolderBrowserComponent', () => {
   // Errors
   // ------------------------------------------------------------------
 
-  it('surfaces a browse error, clears rows, and emits loadError', () => {
+  it('surfaces a browse error inline and clears rows', () => {
     const err = { error: { message: 'boom' } };
     fixture.componentRef.setInput('browse', () => throwError(() => err));
-    fixture.componentRef.setInput('autoFocus', false);
-    let emitted: unknown;
-    component.loadError.subscribe(e => (emitted = e));
     fixture.detectChanges();
 
     expect(component.error()).toBe('boom');
     expect(component.rows()).toEqual([]);
     expect(component.loading()).toBe(false);
-    expect(emitted).toBe(err);
   });
 
   it('prefers error.message, then error.error, then a generic fallback', () => {
@@ -198,8 +193,7 @@ describe('FolderBrowserComponent', () => {
     ];
     for (const [err, expected] of cases) {
       fixture.componentRef.setInput('browse', () => throwError(() => err));
-      fixture.componentRef.setInput('autoFocus', false);
-      component.reload();
+        component.reload();
       expect(component.error()).toBe(expected);
     }
   });
@@ -209,7 +203,7 @@ describe('FolderBrowserComponent', () => {
   // ------------------------------------------------------------------
 
   it('derives breadcrumbs from the current path', () => {
-    init({ initialPath: 'a/b/c' });
+    initAt('a/b/c');
     expect(component.breadcrumbs).toEqual(['a', 'b', 'c']);
   });
 
@@ -219,22 +213,19 @@ describe('FolderBrowserComponent', () => {
   });
 
   it('navigateBreadcrumb loads the path up to and including the clicked crumb', () => {
-    init({ initialPath: 'a/b/c' });
-    requestedPaths = [];
+    initAt('a/b/c');
     component.navigateBreadcrumb(1);
     expect(requestedPaths).toEqual(['a/b']);
   });
 
   it('navigateRoot loads the empty path', () => {
-    init({ initialPath: 'a/b' });
-    requestedPaths = [];
+    initAt('a/b');
     component.navigateRoot();
     expect(requestedPaths).toEqual(['']);
   });
 
   it('goUp pops the last path segment', () => {
-    init({ initialPath: 'a/b/c' });
-    requestedPaths = [];
+    initAt('a/b/c');
     component.goUp();
     expect(requestedPaths).toEqual(['a/b']);
   });
@@ -292,7 +283,7 @@ describe('FolderBrowserComponent', () => {
 
   it('absolutePath is empty without a rootPath', () => {
     defaultListing = listing({ currentPath: 'a' });
-    init({ initialPath: 'a' });
+    initAt('a');
     expect(component.absolutePath).toBe('');
   });
 
@@ -304,13 +295,13 @@ describe('FolderBrowserComponent', () => {
 
   it('absolutePath joins rootPath and currentPath', () => {
     defaultListing = listing({ rootPath: '/data', currentPath: 'a/b' });
-    init({ initialPath: 'a/b' });
+    initAt('a/b');
     expect(component.absolutePath).toBe('/data/a/b');
   });
 
   it('absolutePath avoids a double slash when the root is "/"', () => {
     defaultListing = listing({ rootPath: '/', currentPath: 'etc' });
-    init({ initialPath: 'etc' });
+    initAt('etc');
     expect(component.absolutePath).toBe('/etc');
   });
 
@@ -451,8 +442,7 @@ describe('FolderBrowserComponent', () => {
   });
 
   it('Backspace navigates to the parent directory', () => {
-    init({ initialPath: 'a/b' });
-    requestedPaths = [];
+    initAt('a/b');
     press('Backspace');
     expect(requestedPaths).toEqual(['a']);
   });
@@ -517,7 +507,6 @@ describe('FolderBrowserComponent', () => {
   it('unsubscribes from an in-flight browse on destroy', () => {
     const subject = new Subject<FolderBrowserListing>();
     fixture.componentRef.setInput('browse', () => subject.asObservable());
-    fixture.componentRef.setInput('autoFocus', false);
     fixture.detectChanges();
     expect(subject.observed).toBe(true);
     fixture.destroy();

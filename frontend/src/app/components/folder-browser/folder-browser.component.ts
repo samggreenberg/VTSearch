@@ -3,14 +3,13 @@ import {
   AfterViewInit,
   ChangeDetectionStrategy,
   Component,
-  effect,
   ElementRef,
   HostListener,
   input,
   OnDestroy,
+  OnInit,
   output,
   signal,
-  untracked,
   viewChild,
 } from '@angular/core';
 import { Observable, Subscription } from 'rxjs';
@@ -80,16 +79,13 @@ const TYPEAHEAD_RESET_MS = 800;
   templateUrl: './folder-browser.component.html',
   styleUrl: './folder-browser.component.scss',
 })
-export class FolderBrowserComponent implements OnDestroy, AfterViewInit {
+export class FolderBrowserComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Required: returns the listing for a given relative path. */
   readonly browse = input.required<FolderBrowserBrowseFn>();
 
   /** When false, only directories are rendered (the user is picking a
    *  folder, not a file inside it). */
   readonly showFiles = input(true);
-
-  /** Initial relative path to load.  Changes to this re-load the list. */
-  readonly initialPath = input('');
 
   /** Label for the root crumb.  Defaults to "Root". */
   readonly rootLabel = input('Root');
@@ -111,10 +107,6 @@ export class FolderBrowserComponent implements OnDestroy, AfterViewInit {
   /** Empty-state message shown when the listing is empty. */
   readonly emptyMessage = input('');
 
-  /** Whether to auto-focus the list on init so keyboard navigation works
-   *  without an extra click.  Defaults to true. */
-  readonly autoFocus = input(true);
-
   /** Fired whenever the displayed directory changes.  ``path`` is
    *  relative to the browse root; ``rootPath`` is the absolute server
    *  path if the backend exposes one (empty string otherwise). */
@@ -128,17 +120,13 @@ export class FolderBrowserComponent implements OnDestroy, AfterViewInit {
    *  navigate. */
   readonly confirm = output<FolderBrowserFileEntry>();
 
-  /** Fired on browse() errors so the parent can surface them in its own
-   *  way.  The component also shows an inline error message. */
-  readonly loadError = output<unknown>();
-
   // Signals, not plain fields: the app is zoneless and this component is
   // OnPush, so every one of these is written from the async `browse()`
   // subscribe callbacks — nothing else would schedule a repaint. (The success
   // path used to limp along on `pathChange.emit()`, which only marks the view
   // dirty when the parent actually binds that output; `vt-file-browser` binds
   // only `(confirm)`, so it stalled on "Loading…". The error path had no
-  // trigger at all.)
+  // trigger at all until `error` became a signal.)
   readonly rows = signal<Row[]>([]);
   readonly currentPath = signal('');
   readonly rootPath = signal('');
@@ -154,23 +142,15 @@ export class FolderBrowserComponent implements OnDestroy, AfterViewInit {
 
   readonly listEl = viewChild<ElementRef<HTMLDivElement>>('listEl');
 
-  constructor() {
-    // Signal inputs don't fire `ngOnChanges`. This effect does the initial load
-    // and re-loads whenever `initialPath` changes (replacing the old ngOnInit +
-    // ngOnChanges pair). `loadDirectory` runs `untracked` so `initialPath` is
-    // the only dependency — the `browse`/`showFiles` reads inside it must not
-    // turn an unrelated input change into a reload.
-    effect(() => {
-      const path = this.initialPath() || '';
-      untracked(() => this.loadDirectory(path));
-    });
+  ngOnInit(): void {
+    // Not the constructor: `browse` is a required signal input, so it is only
+    // readable once the parent's bindings have been applied.
+    this.loadDirectory('');
   }
 
   ngAfterViewInit(): void {
-    if (this.autoFocus()) {
-      // Defer one tick so the list element is in the DOM.
-      setTimeout(() => this.listEl()?.nativeElement.focus(), 0);
-    }
+    // Defer one tick so the list element is in the DOM.
+    setTimeout(() => this.listEl()?.nativeElement.focus(), 0);
   }
 
   ngOnDestroy(): void {
@@ -215,7 +195,6 @@ export class FolderBrowserComponent implements OnDestroy, AfterViewInit {
         this.error.set(typeof msg === 'string' ? msg : 'Could not browse this folder.');
         this.loading.set(false);
         this.rows.set([]);
-        this.loadError.emit(err);
       },
     });
   }
