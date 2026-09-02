@@ -14,16 +14,20 @@ Work through the steps in order.
 Run:
 
 ```
-vulture vtsearch/ app.py tests/ .vulture-whitelist.py --min-confidence 60 \
-  --exclude '*/vtsearch/schemas/*,*/vtsearch/settings_models.py' \
-  --ignore-decorators '@*.route,@*.before_request,@*.after_request,@*.errorhandler,@*.teardown_request,@*.context_processor,@bp.*,@app.*,@pytest.fixture,@pytest.mark.*,@fixture,@*.fixture' \
-  --ignore-names 'Meta,model_config,_keys_to_ignore_on_load_unexpected,test_*,Test*,setup_method,teardown_method,setup_class,teardown_class,pytest_*,pytestmark,__enter__,__exit__,__package__'
+python scripts/vulture-audit.py
 ```
 
-Vulture is intentionally **not** a CI gate (false positives against the plugin-discovery pattern), so a non-clean exit doesn't block the promotion — but every finding gets triaged:
+The script owns the whole invocation — scan paths, excludes, ignore lists, confidence floor — so there is nothing to copy-paste and nothing to drift. It scans every tier that defines or consumes first-party Python (`vtsearch/`, `app.py`, `tests/`, `vtscore/`, `tests_lib/`, `scripts/`) and applies `.vulture-whitelist.py` itself.
+
+The **findings** are intentionally **not** a CI gate (false positives against the plugin-discovery pattern), so a non-clean exit doesn't block the promotion — but every finding gets triaged:
 
 - **Genuinely unused** → delete the symbol and any imports/references that fall out.
 - **Used reflectively** → add it to `.vulture-whitelist.py` with a one-line comment explaining the indirect use.
+
+Two constraints on that triage:
+
+- **A hit on a public, documented, or entry-point-facing `vtscore` name is not evidence it can be deleted.** Out-of-tree extensions import `vtscore` symbols no in-repo grep can see, so the library tier surfaces public names with no *internal* caller by construction. Those get a whitelist entry with a true reason. Removing one is a deliberate library break: it needs an `[Unreleased]` entry in `vtscore/CHANGELOG.md` and the owner's explicit sign-off. See CLAUDE.md, "Dead code in `vtscore/` is a claim you cannot verify by grepping".
+- **The whitelist entry's reason has to be true.** `python scripts/vulture-audit.py --check-whitelist` (a `run-tests.sh` lane) fails when an entry suppresses nothing, so a fabricated justification does not stay hidden — but it also means whitelisting is no longer free. Whitelist what is genuinely reflective; delete what is genuinely dead.
 
 ## 2. Land the cleanup
 

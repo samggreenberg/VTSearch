@@ -45,7 +45,8 @@
 #      also the frontend failure people hit most, so it is worth failing on
 #      before spending minutes elsewhere.
 #   3. The heavy, mutually independent stages *concurrently*: pyright,
-#      pip-audit, the frontend unit suite, and pytest. Sequentially these were
+#      pip-audit, the vulture whitelist check, the frontend unit suite, and
+#      pytest. Sequentially these were
 #      ~338s on a 4-vCPU box; overlapped they land at ~250s, within a few
 #      percent of what the machine's cores can physically do.
 #
@@ -55,7 +56,8 @@
 #
 # Group runs (`./run-tests.sh <group>`) run stage 1 and their own tests, and
 # skip the stage-3 gates that are not about the code you just changed —
-# pyright, pip-audit, and the frontend suite. That keeps the edit/test loop in
+# pyright, pip-audit, the vulture whitelist check, and the frontend suite. That
+# keeps the edit/test loop in
 # the seconds it should be instead of paying ~105s of whole-repo checks to run
 # a five-second group. The skip is announced on every group run, because the
 # full run is what actually gates a push. Set VTSEARCH_FULL_GATES=1 to force
@@ -571,6 +573,14 @@ _start_lane() {
 # what the `pyright` PyPI wrapper would otherwise pull.
 _lane_pyright() { PYRIGHT_PYTHON_FORCE_VERSION=1.1.408 pyright; }
 _lane_pip_audit() { pip-audit "${PIP_AUDIT_IGNORE[@]}"; }
+# Vulture whitelist hygiene. NOT the dead-code audit itself: a vulture hit on a
+# public vtscore name is not evidence of anything (out-of-tree extensions import
+# names no in-repo grep can see), so the findings stay a human pre-release chore
+# per docs/RELEASE.md step 1. What *is* mechanically checkable is the whitelist:
+# an entry that suppresses no finding is unfalsifiable and will outlive the
+# symbol it was written for. That is how the file rotted before -- 49 of 102
+# entries were asserting nothing. Whole-repo scan (~5s), hence a lane.
+_lane_vulture_whitelist() { python scripts/vulture-audit.py --check-whitelist; }
 # --omit=dev: only audit production deps. Dev-only deps (e.g.
 # @angular-devkit/build-angular → webpack-dev-server) regularly carry
 # advisories with "no fix available" upstream because Angular hasn't
@@ -585,6 +595,7 @@ _lane_frontend_unit() { (cd frontend && npm run test:ci); }
 if $_run_whole_repo_gates; then
     _start_lane "pyright" _lane_pyright
     _start_lane "pip-audit" _lane_pip_audit
+    _start_lane "vulture whitelist" _lane_vulture_whitelist
 fi
 if $_run_frontend_check && [ -d "frontend/node_modules" ]; then
     _start_lane "npm audit" _lane_npm_audit
@@ -605,8 +616,9 @@ if $_is_slides_run; then
     echo "Slides-only run: pytest and every whole-repo gate skipped — nothing"
     echo "outside slides/ changed, and no test or type-check reads a deck."
 elif ! $_run_whole_repo_gates; then
-    echo "Group run: skipping pyright and pip-audit. A full './run-tests.sh' is"
-    echo "the gate before pushing (or set VTSEARCH_FULL_GATES=1 to force them)."
+    echo "Group run: skipping pyright, pip-audit and the vulture whitelist check."
+    echo "A full './run-tests.sh' is the gate before pushing (or set"
+    echo "VTSEARCH_FULL_GATES=1 to force them)."
 fi
 
 # --- pytest, in the foreground ---------------------------------------------

@@ -2,14 +2,39 @@
 
 Vulture finds defined-but-never-referenced names. This file lists symbols
 that VTSearch DOES use, but only reflectively - so static analysis can't
-see the reference. Run vulture with this file as an extra argument:
+see the reference.
 
-    vulture vtsearch/ app.py tests/ .vulture-whitelist.py --min-confidence 60 \\
-      --exclude '*/vtsearch/schemas/*,*/vtsearch/settings_models.py' \\
-      --ignore-decorators '@*.route,@*.before_request,@*.after_request,@*.errorhandler,@*.teardown_request,@*.context_processor,@bp.*,@app.*,@pytest.fixture,@pytest.mark.*,@fixture,@*.fixture' \\
-      --ignore-names 'Meta,model_config,_keys_to_ignore_on_load_unexpected,test_*,Test*,setup_method,teardown_method,setup_class,teardown_class,pytest_*,pytestmark,__enter__,__exit__,__package__'
+**Do not run vulture by hand.** ``scripts/vulture-audit.py`` owns the
+invocation (scan paths, excludes, ignore lists, confidence floor) and
+applies this file:
 
-Why the excludes / ignores:
+    python scripts/vulture-audit.py                    # the pre-release audit
+    python scripts/vulture-audit.py --check-whitelist  # the run-tests.sh gate
+
+The scan covers **every tier that defines or consumes first-party Python**:
+``vtsearch/``, ``app.py``, ``tests/``, ``vtscore/``, ``tests_lib/``, and
+``scripts/``. It used to cover only the first three, which is how this file
+rotted: half its entries were written for symbols living in ``vtscore/`` and
+so could never fire, and another twenty suppressed nothing because the real
+caller lived in a directory nobody was scanning.
+
+**Every entry below must suppress a real finding.** The
+``--check-whitelist`` gate fails the build when one doesn't, because an
+entry that suppresses nothing makes a claim about the codebase that nothing
+can ever check - it will quietly outlive the symbol it was written for. If
+the gate names your entry, the symbol is either gone or has acquired a real
+caller: delete the entry and its comment.
+
+**A vulture hit on a public ``vtscore`` name is not evidence of anything.**
+Out-of-tree extensions import ``vtscore`` symbols no in-repo grep can see,
+so the library tier surfaces many public names with no *internal* caller.
+That is expected output. Such a name gets an entry here with a true reason,
+never a deletion - removing one is a deliberate library break needing an
+``[Unreleased]`` note in ``vtscore/CHANGELOG.md`` and the owner's sign-off.
+See CLAUDE.md, "Dead code in ``vtscore/`` is a claim you cannot verify by
+grepping".
+
+Why the excludes / ignores (all configured in ``scripts/vulture-audit.py``):
 
 * ``vtsearch/schemas/*`` and ``vtsearch/settings_models.py`` are pure
   framework-managed declaration files. Every field assignment in a
@@ -19,6 +44,10 @@ Why the excludes / ignores:
   about that linkage short of listing every field by hand, so we just
   skip the directories. Dead schemas, if any, will surface as unused
   imports in the route files that consume them.
+* ``scripts/experiments/`` is scanned but not *reported on*: the drivers
+  import ``vtscore``, so scanning them resolves ten ``vtscore`` findings
+  that would otherwise read as dead, but an unused constant inside an
+  archival record of a run that already happened is not a liability.
 * ``--ignore-names Meta,model_config`` covers the same metaclass-managed
   inner-class / config-attribute patterns for any stragglers that aren't
   in the excluded paths.
@@ -50,19 +79,11 @@ surface of a module.
 # matching attribute name. Vulture sees the assignment but no reference;
 # discovery happens at import time through ``getattr``.
 # ---------------------------------------------------------------------------
-IMPORTER  # noqa: F821
 EXPORTER  # noqa: F821
 CONVERTER  # noqa: F821
-SOURCE  # noqa: F821
-PROCESSOR  # noqa: F821
-PICKER  # noqa: F821
-MEDIA_TYPE  # noqa: F821
-SETTINGS_IMPORTER  # noqa: F821
-SETTINGS_EXPORTER  # noqa: F821
 SETTINGS_SOURCE  # noqa: F821
-LABEL_IMPORTER  # noqa: F821
 LABELSET_SOURCE  # noqa: F821
-PickerView  # noqa: F821
+DATASOURCE_IMPORTER  # noqa: F821 - vtscore.datasource_importers, sentinel= in its registry
 
 # ---------------------------------------------------------------------------
 # argparse.Action.__call__ requires the ``option_string`` parameter even
@@ -81,11 +102,12 @@ secret_key  # noqa: F821
 # their ``update_<tracker>_progress`` partners. The corresponding
 # trackers (``sort_progress``, ``find_progress``, ``dataset_progress``)
 # are imported and read directly in tests / routes; the helper wrappers
-# stay for API symmetry and are documented in CLAUDE.md.
+# stay for API symmetry and are tabulated in
+# ``vtscore/docs/packages/concurrency.md``.
 # ---------------------------------------------------------------------------
 check_dataset_cancelled  # noqa: F821
 get_sort_progress  # noqa: F821
-get_find_progress  # noqa: F821
+get_eval_progress  # noqa: F821
 
 # ---------------------------------------------------------------------------
 # Public module constants - referenced by callers via ``module.NAME`` or
@@ -94,25 +116,29 @@ get_find_progress  # noqa: F821
 SAVED_DATASETS_DIR  # noqa: F821 - vtscore.datasets.registry default dir
 DETECTORS_DIR  # noqa: F821 - vtscore.detectors.store default dir
 SAMPLE_VIDEOS_DOWNLOAD_SIZE_MB  # noqa: F821 - downloader size budget constant
+BEATS_EMBED_DIM  # noqa: F821 - vtscore.config, the BEATs audio embedder's width
+CUT_FALLBACK_KINDS  # noqa: F821 - vtscore.eval.cut_rules, the enumerated fallback reasons
 
 # ---------------------------------------------------------------------------
-# Hardware-derived defaults imported and called from the excluded
-# ``vtsearch/settings_models.py`` (pydantic ``default_factory`` for the
-# two ``max_concurrent_dataset_*`` keys). The exclude hides those uses
-# from vulture; the functions themselves are real.
+# Public ``vtscore`` API with no *internal* caller. Each is exported from
+# its package ``__init__`` and/or tabulated in ``vtscore/docs/packages/``,
+# which makes it importable by out-of-tree extensions this repo cannot see.
+# Per CLAUDE.md these keep their names; deleting one is a library break.
 # ---------------------------------------------------------------------------
-default_concurrent_downloads  # noqa: F821
-default_concurrent_embeddings  # noqa: F821
-
-# ---------------------------------------------------------------------------
-# Public APIs exposed for external consumers (CLI scripts, future tests,
-# extension authors). Documented in CLAUDE.md but not currently called
-# from within vtsearch/ or tests/.
-# ---------------------------------------------------------------------------
-find_by_pkl_path  # noqa: F821 - vtscore.datasets.registry
 recreate_model_at_time  # noqa: F821 - vtscore.detectors.labeling_progress
-collect_media_origins  # noqa: F821 - vtscore.detectors.training
-train_detector_from_origins  # noqa: F821 - vtscore.detectors.training
+clear_dataset  # noqa: F821 - vtscore.datasets.load_pipeline
+is_request_missing_context  # noqa: F821 - vtscore.state.core; docs/packages/state.md
+build_md5_lookup  # noqa: F821 - vtscore.state.media_lookup; docs/packages/state.md
+get_find_scores  # noqa: F821 - vtscore.state.votes; docs/packages/state.md
+
+# ---------------------------------------------------------------------------
+# ``SplgMatcher`` is the SuperPoint + LightGlue structural backend that the
+# structural-embedder design reserves alongside the shipped SIFT one: a
+# StructuralMatcher-conformant alternative, evaluated in the 2026-07-13
+# iconography study and wired in by choosing it, not by being called from
+# here. A zero-registrant extension point is the shape of a working one.
+# ---------------------------------------------------------------------------
+SplgMatcher  # noqa: F821
 
 # ---------------------------------------------------------------------------
 # Public context managers exported from ``vtsearch.state`` for callers
@@ -133,14 +159,12 @@ with_detector_context  # noqa: F821
 # connect it to the dynamic definition or the runtime callers.
 # ---------------------------------------------------------------------------
 get_audio_playing  # noqa: F821
-get_show_animations  # noqa: F821
 get_hide_autopilot  # noqa: F821
 get_autopilot_resort_interval  # noqa: F821
 get_browse_panel_width  # noqa: F821
 get_browse_colormap  # noqa: F821
 get_browse_icon_size  # noqa: F821
 get_browse_thumbnail_border  # noqa: F821
-set_theme  # noqa: F821
 set_audio_playing  # noqa: F821
 set_show_animations  # noqa: F821
 set_hide_autopilot  # noqa: F821
@@ -155,11 +179,21 @@ set_browse_signposts  # noqa: F821
 get_browse_graphics  # noqa: F821
 set_browse_graphics  # noqa: F821
 set_browse_signpost_captioner  # noqa: F821
-set_browse_signpost_vocab  # noqa: F821
 set_autopilot_resort_interval  # noqa: F821
-set_dataset_max_age_days  # noqa: F821
 set_projection_n_neighbors  # noqa: F821
 set_projection_min_dist  # noqa: F821
+get_bin_details_docked  # noqa: F821
+set_bin_details_docked  # noqa: F821
+get_browse_details_panel_width  # noqa: F821
+set_browse_details_panel_width  # noqa: F821
+get_browse_details_metadata_width  # noqa: F821
+set_browse_details_metadata_width  # noqa: F821
+get_grid_icon_size_popup  # noqa: F821
+set_grid_icon_size_popup  # noqa: F821
+get_popup_metadata_shown  # noqa: F821
+set_popup_metadata_shown  # noqa: F821
+get_popup_preview_size  # noqa: F821
+set_popup_preview_size  # noqa: F821
 
 # ---------------------------------------------------------------------------
 # Per-side setting validators generated by ``_make_per_side_setting`` in
@@ -177,57 +211,34 @@ validate_panel_pct_left  # noqa: F821
 validate_panel_pct_right  # noqa: F821
 
 # ---------------------------------------------------------------------------
-# DetectorContext attributes written in ``vtsearch/routes/detectors/registry.py``
-# and read in ``vtscore/detectors/dataset_sync.py`` /
-# ``vtscore/detectors/label_sync.py``. The reader lives in ``vtscore/``,
-# which the standard vulture command does not scan - so the write sites in
-# ``vtsearch/`` look "unused" even though both attributes are real and
-# heavily used.
+# ``verification_classifier`` is a declared ``DetectorContext`` slot (listed
+# in the context's ``__slots__`` table in ``vtscore/state/core.py``) that the
+# structural-similarity trainer writes. It is an in-memory head cache, so
+# the write is the point and no reader lives in this repo; the slot is part
+# of the context's shape either way.
 # ---------------------------------------------------------------------------
-cached_labelset  # noqa: F821 - DetectorContext labelset cache; reads live in vtscore.detectors.* / vtscore.state.core
-cached_labelset_mtime  # noqa: F821
-votes_dataset_id  # noqa: F821
-find_mode  # noqa: F821 - DetectorContext flag; reads live in vtscore.state.votes / vtscore.detectors.*
+verification_classifier  # noqa: F821
 
 # ---------------------------------------------------------------------------
-# ``tests/helpers.py`` exports test helpers; ``make_wav_file`` and
-# ``wire_mock_progress_scope`` are consumed by ``tests_lib/`` (the
-# library-tier test suite mirrored from ``tests/``), which the default
-# vulture command does not scan. ``tests/helpers.py`` and
-# ``tests_lib/helpers.py`` are required to stay byte-identical, so the
-# tests/-side definition can't be dropped even when only the tests_lib/
-# copy has callers.
+# Third-party protocol members: the framework calls or reads these by name,
+# so the definition here is the whole contract and there is no in-repo
+# caller to find.
 # ---------------------------------------------------------------------------
-make_wav_file  # noqa: F821
-wire_mock_progress_scope  # noqa: F821 - called from tests_lib/{cli,io}/*
-progress_scope  # noqa: F821 - attribute wire_mock_progress_scope pins on a MagicMock embedder
-
-# ---------------------------------------------------------------------------
-# Stub / mock methods defined in test classes that override real abstract
-# methods on ``MediaEmbedder`` (``_load_models_impl``, ``_embed_media_impl``)
-# or mimic third-party API surfaces - ``PaddleOCR`` / ``ocr`` shadow
-# ``paddleocr.PaddleOCR``, ``transcribe`` shadows the Whisper / Faster-Whisper
-# API, ``_detect_speech_intervals`` shadows a VAD helper, ``_processor``
-# shadows a HuggingFace processor attribute. The framework / production
-# code calls them by name; vulture sees the test override but not the
-# caller.
-# ---------------------------------------------------------------------------
-_load_models_impl  # noqa: F821
-_embed_media_impl  # noqa: F821
-_do_peek_version  # noqa: F821 - SyncSource subclass hook called by base class
-PaddleOCR  # noqa: F821
-ocr  # noqa: F821
-transcribe  # noqa: F821
-_detect_speech_intervals  # noqa: F821
-_processor  # noqa: F821
-
-# ---------------------------------------------------------------------------
-# PEP 562 module-level ``__getattr__`` in ``vtsearch/settings.py`` exposes
-# ``_SERVER_DEFAULTS`` / ``_USER_DEFAULTS`` / ``_DEFAULTS`` lazily without
-# eagerly instantiating the pydantic defaults. Python calls it via the
-# attribute-lookup protocol; vulture sees the def but no caller.
-# ---------------------------------------------------------------------------
-__getattr__  # noqa: F821
+objtype  # noqa: F821 - descriptor protocol: __get__(self, obj, objtype=None)
+ir_version  # noqa: F821 - onnx ModelProto field, read by onnx.checker / the runtime
+layerdrop  # noqa: F821 - transformers AutoConfig field, read when building the module graph
+log_logit_scale  # noqa: F821 - torch.nn.Parameter; lives in the checkpoint's state_dict
+padding_side  # noqa: F821 - transformers tokenizer setting, read during batched generation
+show_progress_bar  # noqa: F821 - sentence-transformers ``encode()`` shape that toponymy calls
+supports_system_prompts  # noqa: F821 - toponymy LLMWrapper property, read by the base class
+init_poolmanager  # noqa: F821 - requests HTTPAdapter override, called by requests
+_pool_connections  # noqa: F821 - the three attributes that make a requests adapter picklable
+_pool_maxsize  # noqa: F821
+_pool_block  # noqa: F821
+__getattr__  # noqa: F821 - PEP 562 module-level hook in ``vtsearch/settings.py``
+__wrapped__  # noqa: F821 - functools convention, read by ``inspect.unwrap``
+create_module  # noqa: F821 - importlib Loader protocol, called by the import machinery
+trust_env  # noqa: F821 - requests.Session attribute, read by requests when sending
 
 # ---------------------------------------------------------------------------
 # Flask's ``@after_this_request`` registers the decorated function as a
@@ -236,37 +247,6 @@ __getattr__  # noqa: F821
 # (the blueprint/app form) but not the bare ``@after_this_request`` call.
 # ---------------------------------------------------------------------------
 _cache_tile  # noqa: F821
-
-# ---------------------------------------------------------------------------
-# Mock attributes that mimic the shape of third-party return values:
-# ``conf`` / ``xyxy`` look like an ultralytics YOLO ``Result`` row. The
-# production reader pulls them by name off the mock.
-# ---------------------------------------------------------------------------
-conf  # noqa: F821
-xyxy  # noqa: F821
-
-# ---------------------------------------------------------------------------
-# Test-internal attributes assigned for later access through fixtures or
-# saved-state replay. ``_detector`` holds the unit under test inside
-# clipper / processor tests; ``_extract_dir`` / ``dir_key`` mirror the
-# corresponding production attribute on a fake media source; ``text_sort``
-# / ``learned_sort`` are stub-result dataclass attributes for the eval CLI
-# tests.
-# ---------------------------------------------------------------------------
-_detector  # noqa: F821
-_extract_dir  # noqa: F821
-dir_key  # noqa: F821
-text_sort  # noqa: F821
-learned_sort  # noqa: F821
-
-# ---------------------------------------------------------------------------
-# Duck-typed importer stub methods in test files. ``resolve_display_name``
-# is called reflectively on the importer object by the load pipeline
-# (see ``vtscore.datasets.load_pipeline.load_from_importer``); the fake
-# importer class must define it, but vulture sees the definition without
-# the caller.
-# ---------------------------------------------------------------------------
-resolve_display_name  # noqa: F821
 
 # ---------------------------------------------------------------------------
 # Pytest fixture parameters whose side effects are the point - the body
@@ -280,23 +260,33 @@ stub_extractor_factory  # noqa: F821
 stub_localizer_factory  # noqa: F821
 stubbed_resolver  # noqa: F821
 reset_state  # noqa: F821
-example_media_dir  # noqa: F821 - tests/io/test_datasource_importer_routes.py redirects example_media_dir() to tmp_path
+fake_caps  # noqa: F821 - monkeypatches the embedder capability table
+registered_cleaners  # noqa: F821 - installs media cleaners into the registry
+clean_seen_embedders  # noqa: F821 - clears the load profiler's seen-embedder set
+restore_pil_limit  # noqa: F821 - saves/restores PIL's decompression-bomb ceiling
+restore_provider  # noqa: F821 - saves/restores the active login provider
+as_alice  # noqa: F821 - registers a confining provider and runs as user ``alice``
+single_user  # noqa: F821 - forces single-user (unconfined) file access
+wide_video  # noqa: F821 - stubs a wide video for the frame sampler
+queried  # noqa: F821 - captures the queries a paired embedder issues
+converged_training  # noqa: F821 - pins training hyperparameters to convergence
+degenerate_gmm  # noqa: F821 - forces the GMM to degenerate
 
 # ---------------------------------------------------------------------------
 # Mock function signatures that must match a real API but whose body
 # ignores certain kwargs. Callers pass the kwarg by name, so the parameter
 # must exist in the mock's signature even though the mock discards it.
 # ---------------------------------------------------------------------------
-expected_size  # noqa: F821 - test_detectors.py monkeypatches download_file_with_progress(url, dest_path, expected_size=..., on_progress=...)
-size_mb  # noqa: F821 - test_find_progress_reset mocks TimingRecorder.finish(n=None, size_mb=None, ok=True); production callers pass size_mb by name
+repo_type  # noqa: F821 - huggingface_hub.snapshot_download(repo_id, repo_type=..., ...)
+ignore_patterns  # noqa: F821 - same call's file filter
+pretrained  # noqa: F821 - facenet-pytorch InceptionResnetV1(pretrained=...)
 
 # ---------------------------------------------------------------------------
 # Test-local names that exist only to document the shape of an unpacked
-# tuple, a captured Flask view function, or a fixture-yielded id. They
-# are unused after binding by design.
+# tuple. They are unused after binding by design.
 # ---------------------------------------------------------------------------
-view  # noqa: F821
 first_chunk_medias  # noqa: F821
-demo_id  # noqa: F821
-folder_path_for_origin  # noqa: F821
-output_type  # noqa: F821
+cov_base  # noqa: F821 - the (base, span) pair for the finalize "coverage" slot
+reg_base  # noqa: F821 - ditto for "registry"
+orig_text  # noqa: F821 - vtscore.datasets.importers.combine_datasets binding triple
+cost_k  # noqa: F821 - vtscore.eval.voting_iterations operating-cost triple

@@ -1542,14 +1542,6 @@ def _set_click_counter(value: int) -> None:
     get_active_detector_context().click_counter = value
 
 
-def _get_coverage_atlas() -> Any:
-    return get_active_context().coverage_atlas
-
-
-def _set_coverage_atlas(value: Any) -> None:
-    get_active_context().coverage_atlas = value
-
-
 def _get_dataset_display_name() -> str | None:
     return get_active_context().dataset_display_name
 

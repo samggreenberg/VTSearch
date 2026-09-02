@@ -1352,52 +1352,6 @@ def _embed_file_images(selected, clips, embedder, on_progress, demo_origin, skip
         clip_id += 1
 
 
-def _embed_pil_pages(selected_pages, clips, embedder, on_progress, demo_origin, skip_embedding=False) -> None:
-    """Embed a list of (page_name, PIL.Image, category) tuples into ``clips``."""
-    import io as _io  # noqa: PLC0415
-
-    if not skip_embedding:
-        _ensure_image_embedder_loaded(embedder, on_progress)
-
-    clip_id = max(clips.keys(), default=0) + 1
-    total = len(selected_pages)
-    status = "loading" if skip_embedding else "embedding"
-    verb = "Loading" if skip_embedding else "Embedding"
-    on_progress(status, f"{verb} {total} document pages...", 0, total)
-
-    for i, (page_name, pil_image, category) in enumerate(selected_pages):
-        if skip_embedding:
-            on_progress("loading", f"Loading {page_name}", i + 1, total)
-            embedding = None
-        else:
-            on_progress("embedding", f"Embedding {page_name}", i + 1, total)
-            embedding = cast(Any, embedder).embed_pil_image(pil_image)
-            if embedding is None:
-                continue
-        img_buffer = _io.BytesIO()
-        pil_image.save(img_buffer, format="PNG")
-        image_bytes = img_buffer.getvalue()
-        rel_name = f"{category}/{page_name}"
-        clips[clip_id] = {
-            "id": clip_id,
-            "media_type": _MEDIA_TYPE_ID,
-            "embedder": embedder.name,
-            "duration": 0,
-            "file_size": len(image_bytes),
-            "md5": content_md5(image_bytes),
-            "embeddings": {} if skip_embedding else {embedder.name: embedding},
-            "media_bytes": image_bytes,
-            "media_string": None,
-            "filename": f"{rel_name}.png",
-            "category": category,
-            "width": pil_image.width,
-            "height": pil_image.height,
-            "origin": demo_origin,
-            "origin_name": rel_name,
-        }
-        clip_id += 1
-
-
 def _embed_cifar_arrays(selected, clips, embedder, on_progress, demo_origin, skip_embedding=False) -> None:
     """Embed a list of (image_array, category) tuples into ``clips``."""
     import io as _io  # noqa: PLC0415
