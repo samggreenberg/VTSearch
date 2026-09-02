@@ -9,7 +9,7 @@
   ],
   "extraPaths": ["tests", "tests_lib", "scripts/experiments/pile"],
   // `scripts` stays excluded from checking, but the pile's modules must still
-  // RESOLVE: `tests_lib/core/test_pile_*.py` put that directory on `sys.path`
+  // RESOLVE: `tests_lib/meta/test_pile_*.py` put that directory on `sys.path`
   // and import `pile_config` / `pilebuild` from it, exactly as `build_pile.py`
   // and its sibling scripts do.
   "pythonVersion": "3.10",

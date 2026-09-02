@@ -17,7 +17,7 @@ Stdlib only, on purpose: this runs *before* dependencies are installed, so it
 can't import torch or anything from the project.
 
 The selection logic (:func:`select_cuda_tag`) is pure and unit-tested in
-``tests_lib/core/test_detect_cuda_tag.py``; the ``nvidia-smi`` plumbing around
+``tests_lib/meta/test_detect_cuda_tag.py``; the ``nvidia-smi`` plumbing around
 it is the thin, side-effecting shell.
 """
 

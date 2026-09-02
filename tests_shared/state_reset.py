@@ -75,13 +75,20 @@ def freeze_startup_heap() -> None:
     gc.freeze()
 
 
-def reset_shared_state(medias_map, medias_snapshot) -> None:
+def reset_shared_state(medias_snapshot) -> None:
     """Reset every ``vtscore`` global that leaks between tests.
 
-    *medias_map* is the live medias mapping and *medias_snapshot* the deep copy
-    taken at import time; they are passed in rather than imported so this module
-    stays free of ``vtsearch`` (``tests_lib/`` imports it under the Flask
-    blocker).
+    *medias_snapshot* is the deep copy of the generated test medias taken at
+    each conftest's import time; it is passed in rather than imported because
+    generating them is a tier-specific fixture concern.
+
+    The live mapping to refill is **not** a parameter: it is the ``medias`` dict
+    of the default context this function has just registered, so resolving it
+    here is both simpler and safer than accepting one.  A caller can only pass a
+    mapping it resolved *before* the reset - i.e. the previous test's context -
+    unless it hands over a lazily-resolving proxy, and the only such proxy in the
+    repo is app-tier (``vtsearch.state_proxies``), which ``tests_lib/`` may not
+    import.
     """
     import vtscore.config as config
     import vtscore.state.core as core
@@ -96,7 +103,7 @@ def reset_shared_state(medias_map, medias_snapshot) -> None:
     core.register_detector_context(default_det)
     core.set_thread_detector_context(default_det)
 
-    medias_map.update({k: dict(v) for k, v in medias_snapshot.items()})
+    default_ctx.medias.update({k: dict(v) for k, v in medias_snapshot.items()})
 
     from vtscore.security.hf_auth import clear_credential
 
