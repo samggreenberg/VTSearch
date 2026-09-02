@@ -218,33 +218,41 @@ def _origin_with_disambiguators(
 def _emit_converted_outputs(
     *,
     outputs: list[dict[str, Any]],
-    source_rel: str,
-    source_path: Path,
+    source_name: str,
+    media_path: str,
     target_type: str,
     origin: dict[str, Any],
     medias: dict[int, dict[str, Any]],
     start_id: int,
     category: str,
-    thin: bool = False,
+    lazy_source: str | None = None,
 ) -> int:
     """Append each converter output to *medias*; return next media_id.
+
+    Shared by both emitters - the folder scan
+    (:func:`run_converters_on_folder`) and the demo conversion
+    (:func:`apply_converter_to_demo`).  They differ only in where the source
+    name, path and category come from, so they pass those in rather than
+    keeping two copies of this loop: a copy is exactly how the demo path came
+    to hand one shared origin dict to all N outputs of a source, leaving lazy
+    replay and label re-resolution unable to tell page 3 from page 7.
 
     Outputs leave with ``embedding=None``; the framework embed stage
     embeds them from ``media_bytes`` / ``media_string``.
 
-    In reference (*thin*) mode each output keeps its ``media_bytes`` for the
-    embed stage but is tagged with a ``_lazy_source`` marker carrying the
-    source file path.  ``_relazify_reference_clips_stage`` strips those bytes
-    after embedding so the saved dataset stores only the source path plus the
-    converter recipe (in ``origin.params``); the bytes are reproduced on demand
-    by :mod:`vtscore.media.lazy_clip`.
+    When *lazy_source* is given (reference / *thin* mode) each output keeps
+    its ``media_bytes`` for the embed stage but is tagged with a
+    ``_lazy_source`` marker carrying that path.
+    ``_relazify_reference_clips_stage`` strips those bytes after embedding so
+    the saved dataset stores only the source path plus the converter recipe
+    (in ``origin.params``); the bytes are reproduced on demand by
+    :mod:`vtscore.media.lazy_clip`.
     """
     media_id = start_id
     n_out = len(outputs)
-    resolved_source = str(source_path.resolve())
     for out_index, output in enumerate(outputs):
         output_filename = output.get("filename", f"converted_{media_id}")
-        origin_name = f"{source_rel}\u2192{output_filename}"
+        origin_name = f"{source_name}\u2192{output_filename}"
 
         per_output_origin = _origin_with_disambiguators(origin, out_index, n_out, output)
         media_data = _build_converted_media_dict(
@@ -253,11 +261,11 @@ def _emit_converted_outputs(
             target_type,
             per_output_origin,
             origin_name,
-            resolved_source,
+            media_path,
             category,
         )
-        if thin:
-            media_data["_lazy_source"] = resolved_source
+        if lazy_source is not None:
+            media_data["_lazy_source"] = lazy_source
         medias[media_id] = media_data
         media_id += 1
     return media_id
@@ -359,16 +367,17 @@ def run_converters_on_folder(
                 continue
 
             origin = _build_converter_origin(converter.name, source_rel, source_path, conv_params, base_origin)
+            resolved_source = str(source_path.resolve())
             media_id = _emit_converted_outputs(
                 outputs=outputs,
-                source_rel=source_rel,
-                source_path=source_path,
+                source_name=source_rel,
+                media_path=resolved_source,
                 target_type=target_mt.type_id,
                 origin=origin,
                 medias=medias,
                 start_id=media_id,
                 category="custom",
-                thin=thin,
+                lazy_source=resolved_source if thin else None,
             )
 
 
@@ -436,11 +445,18 @@ def apply_converter_to_demo(
         if not outputs:
             continue
 
+        # ``parent_name`` rather than ``parent_demo``: the parent locator keys
+        # are named for the *parent importer's* own origin param (see
+        # _PARENT_LOCATOR_KEYS), and the demo importer locates its corpus with
+        # ``name``.  Spelling it that way lets the resolver rebuild the parent
+        # origin by stripping the ``parent_`` prefix, with no per-importer
+        # special case, and makes the "Imported Via" line read the same for a
+        # converted demo media as for an unconverted one.
         origin_params: dict[str, Any] = {
             "converter": converter_name,
             "source_file": src_media.get("filename", ""),
             "parent_importer": "demo",
-            "parent_demo": dataset_name,
+            "parent_name": dataset_name,
         }
         # A demo media held purely in memory has no path; record one only when
         # the source actually came off disk, so ``Source`` never points at "".
@@ -449,48 +465,16 @@ def apply_converter_to_demo(
             origin_params["source_path"] = str(source_path)
         origin = {"importer": "converter", "params": origin_params}
         source_name = src_media.get("filename", str(src_media.get("id", "")))
-        new_id = _emit_converted_demo_outputs(
+        new_id = _emit_converted_outputs(
             outputs=outputs,
             source_name=source_name,
-            source_media=src_media,
+            media_path=src_media.get("media_path", ""),
             target_type=converter.target_type,
             origin=origin,
-            converted=converted,
+            medias=converted,
             start_id=new_id,
+            category=src_media.get("category", "custom"),
         )
 
     medias.clear()
     medias.update(converted)
-
-
-def _emit_converted_demo_outputs(
-    *,
-    outputs: list[dict[str, Any]],
-    source_name: str,
-    source_media: dict[str, Any],
-    target_type: str,
-    origin: dict[str, Any],
-    converted: dict[int, dict[str, Any]],
-    start_id: int,
-) -> int:
-    """Append each converter output to *converted*, return next id.
-
-    Outputs leave with ``embedding=None`` for the framework embed stage.
-    """
-    new_id = start_id
-    for output in outputs:
-        output_filename = output.get("filename", f"converted_{new_id}")
-        origin_name = f"{source_name}\u2192{output_filename}"
-
-        media_data = _build_converted_media_dict(
-            new_id,
-            output,
-            target_type,
-            origin,
-            origin_name,
-            source_media.get("media_path", ""),
-            source_media.get("category", "custom"),
-        )
-        converted[new_id] = media_data
-        new_id += 1
-    return new_id

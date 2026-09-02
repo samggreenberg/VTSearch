@@ -155,6 +155,50 @@ class TestResolveConverterOrigin:
         result = resolve_file_from_origin(origin)
         assert result == folder / "clip.mp4"
 
+    def test_resolves_demo_parent(self, tmp_path):
+        """A converted *demo* media resolves back to its source file.
+
+        The parent origin is rebuilt by stripping the ``parent_`` prefix, so
+        the demo importer's own locator key (``name``) arrives intact and its
+        resolve_file can find the file.
+        """
+        import vtscore.datasets.importers.demo as demo_mod
+
+        root = tmp_path / "ucsf_documents"
+        root.mkdir()
+        (root / "doc.pdf").write_bytes(b"%PDF-")
+
+        origin = {
+            "importer": "converter",
+            "params": {
+                "converter": "document2image",
+                "source_file": "doc.pdf",
+                "parent_importer": "demo",
+                "parent_name": "ucsf_documents",
+                "converter_out_index": "2",
+                "converter_n_out": "5",
+            },
+        }
+        old_dirs = demo_mod._SOURCE_DIRS
+        demo_mod._SOURCE_DIRS = {"ucsf_documents": root}
+        try:
+            with patch.dict(
+                "vtscore.datasets.config.DEMO_DATASETS",
+                {"ucsf_documents": {"source": "ucsf_documents", "categories": [], "media_type": "document"}},
+                clear=False,
+            ):
+                result = resolve_file_from_origin(origin)
+        finally:
+            demo_mod._SOURCE_DIRS = old_dirs
+        assert result == root / "doc.pdf"
+
+    def test_returns_none_without_a_parent_importer(self):
+        origin = {
+            "importer": "converter",
+            "params": {"converter": "video2image", "source_file": "clip.mp4"},
+        }
+        assert resolve_file_from_origin(origin) is None
+
 
 class TestResolveDemoOrigin:
     """Verify that resolve_file_from_origin handles demo dataset origins."""

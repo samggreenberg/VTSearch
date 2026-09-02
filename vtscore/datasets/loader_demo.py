@@ -56,11 +56,26 @@ def _stamp_demo_origin(
     """Stamp the demo origin on all medias (fresh dict per media).
 
     Ensures every media has ``origin = {"importer": "demo", "params": {"name": ...}}``.
+
+    A media that already carries a ``converter`` origin is left alone.  That
+    only happens on the cached path: the pickle is written *after*
+    :func:`~vtscore.converters.runner.apply_converter_to_demo` has replaced
+    each source media with its N converted outputs, so the cached medias
+    already record the full converter recipe - which source file, which
+    sub-output, which params.  Overwriting it with the flat demo origin threw
+    all of that away, so a label on page 3 of a converted demo document could
+    not be resolved back to a file at all (its ``origin_name`` is
+    ``"doc.pdf\u2192page_3.png"``, which names nothing on disk), and the
+    labelling UI showed no "Derived Via" row for a cached converted demo while
+    showing one for the same dataset freshly built.
     """
     demo_origin_params: dict[str, str] = {"name": dataset_name}
     if converter_name:
         demo_origin_params["converter"] = converter_name
     for media in medias.values():
+        origin = media.get("origin")
+        if isinstance(origin, dict) and origin.get("importer") == "converter":
+            continue
         media["origin"] = {"importer": "demo", "params": dict(demo_origin_params)}
 
 
