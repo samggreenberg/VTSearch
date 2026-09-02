@@ -450,7 +450,7 @@ Wrapping everything: a wall-clock cap (`VTSEARCH_TEST_TIMEOUT`, default **1800s 
 
 ## Test Groups
 
-Tests are grouped by folder under `tests/` and `tests_lib/`. Each folder is a pytest marker; `./run-tests.sh <group>` runs all tests in `tests[_lib]/<group>/`. New tests inherit their group from the folder they're added to. Not every group lives in both trees — the "Tier" column below says which one has the folder; missing an app-tier folder for `projection` (or a lib-tier folder for `api` / `converters`) is by design, not a gap.
+Tests are grouped by folder under `tests/` and `tests_lib/`. Each folder is a pytest marker; `./run-tests.sh <group>` runs all tests in `tests[_lib]/<group>/`. New tests inherit their group from the folder they're added to. Not every group lives in both trees — the "Tier" column below says which one has the folder; missing an app-tier folder for `projection` / `downloads` / `gpu` (or a lib-tier folder for `api` / `converters`) is by design, not a gap.
 
 | Group | Tier | Description |
 |-------|------|-------------|
@@ -460,7 +460,7 @@ Tests are grouped by folder under `tests/` and `tests_lib/`. Each folder is a py
 | `datasets` | both | Dataset loading, splitting, dedup, parallel/chunked/thin loading, multi-dataset context |
 | `io` | both | Importers, exporters, label I/O, settings I/O, sync sources, PDF/NPZ import |
 | `detectors` | both | Detectors, embedders, clippers, eval, processors, training |
-| `downloads` | both | Demo dataset downloads (AG News, BBC, GTZAN, IMDB, image sources, UCSF, video, generic extract) |
+| `downloads` | lib only | Demo dataset downloads (AG News, BBC, GTZAN, IMDB, image sources, UCSF, video, generic extract) |
 | `integration` | both | End-to-end workflows, thread safety, async jobs |
 | `cli` | both | CLI autodetect, load sort window, progress bars |
 | `converters` | app only | Media converters (document, video, image) |

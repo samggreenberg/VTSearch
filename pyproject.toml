@@ -183,7 +183,7 @@ select = ["E4", "E7", "E9", "F", "S", "C901"]
 # S101 (assert): used for type narrowing where pyright needs help; the
 #   project never runs under `python -O`.
 # S104 (bind 0.0.0.0): intentional for `python app.py --host 0.0.0.0`,
-#   and tests/api/test_ssrf_validation.py uses the literal as a fixture.
+#   and tests_lib/core/test_ssrf_validation.py uses the literal as a fixture.
 # S105 (hardcoded password): false-positive-prone on env-var name strings.
 # S110/S112 (silent except): used as best-effort fallbacks for optional
 #   imports, logging setup, and progress-tracker teardown.
@@ -428,10 +428,9 @@ skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,s
 # names of the removed integration scaffolds, kept because vtscore/CHANGELOG.md
 # records their removal), legitimate code identifiers (numer/denom in
 # slope formulas, medias as the global state proxy, goup as a TS method,
-# ans as a shell read-loop variable in scripts/slurm, repid as the
-# camelCase TS mirror of the projection's rep_id field),
+# repid as the camelCase TS mirror of the projection's rep_id field),
 # and stylistic spellings the project uses consistently (re-use,
 # pre-select, unparseable, invokable). usera = the "userA" persona in
 # design docs; teh = Yee Whye Teh in references. mane/tread are object
 # parts in the VG scale-study exclusion vocabulary (pile_config).
-ignore-words-list = "clap,siglip,xclip,wrest,caller,recaller,medias,numer,denom,goup,ans,repid,invokable,unparseable,copys,re-use,re-used,re-uses,re-using,re-declaring,pre-select,pre-selects,pre-selected,fpr,ths,ot,te,ser,lod,usera,teh,provence,mane,tread,shepard"
+ignore-words-list = "clap,siglip,xclip,wrest,caller,recaller,medias,numer,denom,goup,repid,invokable,unparseable,copys,re-use,re-used,re-uses,re-using,re-declaring,pre-select,pre-selects,pre-selected,fpr,ths,ot,te,lod,usera,teh,provence,mane,tread,shepard"

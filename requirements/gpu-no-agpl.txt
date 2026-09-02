@@ -9,7 +9,7 @@
 # -- then fail with an actionable message instead of working.
 #
 # `requirements/gpu.txt` remains the default; this file is the opt-out.
-# `tests/core/test_requirements.py` enforces that the two stay in sync apart
+# `tests_lib/core/test_agpl_optional_extra.py` enforces that the two stay in sync apart
 # from the requested extras.
 
 -e .[dev]
