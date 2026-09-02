@@ -145,7 +145,7 @@ describe('LabelViewComponent', () => {
   // requests are driven by `timer(0, …)`, which only fires on a real macrotask
   // after the synchronous test body returns, so they are NOT flushed here —
   // they are drained by `afterEach`'s catch-all instead.
-  function flushInitialRequests(): void {
+  function flushInitialRequests(votes?: Record<string, unknown>): void {
     TestBed.tick();
     // The medias and settings reads ride `rxResource`, whose loader runs in a
     // root effect rather than synchronously during `detectChanges()`; tick so
@@ -167,7 +167,7 @@ describe('LabelViewComponent', () => {
     TestBed.tick();
     // /api/votes (label-view loadVotes)
     httpMock.match('/api/votes').forEach(req =>
-      req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
+      req.flush(votes ?? { good: [], bad: [], click_times: {}, learned_scores: {} }),
     );
     // /api/settings. `volume` is a 0-1 fraction: the server clamps it to that
     // range (`settings_models.py`), and the centre panel writes it straight
@@ -618,10 +618,20 @@ describe('LabelViewComponent', () => {
     autopilot.activate();
     TestBed.tick();
 
-    // Transition good → bad
+    // Transition good → bad. The votes above gave the detector a labelset with
+    // both classes, so the panel's first real reading of it turned retrain mode
+    // on (#3535) — and in retrain mode every phase ranks with the model, so
+    // this transition sorts too. Flush it so the one under assertion below is
+    // the `hard` transition's.
     autopilot.checkPhaseTransition(3, 0);
     TestBed.tick();
     expect(autopilot.state.phase).toBe('bad');
+    expect(autopilot.state.retrainMode).toBe(true);
+    httpMock.expectOne('/api/learned-sort').flush({
+      status: 'done',
+      results: [{ id: 1, score: 0.8 }, { id: 2, score: 0.2 }],
+      threshold: 0.5,
+    });
 
     // Transition bad → hard: should trigger learned sort
     autopilot.checkPhaseTransition(3, 4);
@@ -658,6 +668,13 @@ describe('LabelViewComponent', () => {
     TestBed.tick();
     autopilot.checkPhaseTransition(3, 0); // good → bad
     TestBed.tick();
+    // Retrain mode is on (the labelset above has both classes), so the `bad`
+    // phase ranks with the model as well — see #3535.
+    httpMock.expectOne('/api/learned-sort').flush({
+      status: 'done',
+      results: [{ id: 1, score: 0.8 }, { id: 2, score: 0.2 }],
+      threshold: 0.5,
+    });
     autopilot.checkPhaseTransition(3, 4); // bad → hard
     TestBed.tick();
     // Flush learned sort from hard transition
@@ -1200,6 +1217,40 @@ describe('LabelViewComponent', () => {
       TestBed.tick();
       expect(component.voteState.votesLoaded).toBe(true);
       expect(component.autopilotDisabled).toBe(true);
+    });
+
+    // Issue #3535: Autopilot's retrain mode is guessed when the panel mounts,
+    // which on entry is two round trips before `/api/votes` answers — so a
+    // detector that arrives already trained activated as untrained. On a
+    // dataset it has no votes for the phase never moves either, so nothing
+    // corrected it later and the run stayed on the text hint.
+    it('ranks with the model when the labelset lands after Autopilot activated', async () => {
+      seedPair();
+      // A detector carrying labels from another dataset: both classes in the
+      // labelset, no votes on the dataset in front of us.
+      flushInitialRequests({
+        good: [],
+        bad: [],
+        click_times: {},
+        learned_scores: {},
+        labelset_good_count: 3,
+        labelset_bad_count: 2,
+      });
+      flushDetectorRegistry();
+      TestBed.tick();
+      await settleResource();
+
+      const autopilot = TestBed.inject(AutopilotStateService);
+      expect(autopilot.running).toBe(true);
+      // The run's first real reading of the labelset corrects the guess.
+      expect(autopilot.state.retrainMode).toBe(true);
+      // ...and the phase has nowhere to go, so no transition sorts for us.
+      expect(autopilot.state.phase).toBe('good');
+
+      await new Promise<void>((resolve) => setTimeout(resolve, 400));
+      const learned = httpMock.match('/api/learned-sort');
+      expect(learned.length).toBe(1);
+      expect(component.sortState.sortMode).toBe('learned');
     });
   });
 
