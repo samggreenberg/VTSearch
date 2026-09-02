@@ -186,8 +186,7 @@ VTSearch/
 │   │
 │   ├── training/                   Generic learned-sort primitives (no Flask, no state)
 │   │   ├── mlp.py                  build_model, train_model (pure PyTorch)
-│   │   ├── thresholds.py           GMM / cross-calibration / fold-anchored threshold helpers
-│   │   ├── evt_mixture.py          Extreme-value tail model behind the threshold helpers
+│   │   ├── thresholds/             GMM / cross-calibration / fold-anchored threshold helpers
 │   │   ├── blend_schedules.py      Vote-count → blend-weight schedules (production + arms)
 │   │   ├── svm.py                  SVM trainer prototype
 │   │   ├── region_similarity.py    Region-aware cosine similarity scoring
@@ -292,6 +291,7 @@ VTSearch/
 │   │   ├── runner.py               run_eval() orchestrator
 │   │   ├── trainers.py             Per-arm trainer wrappers
 │   │   ├── patch_styles.py         Patch-scoring arms (max_patch default, whole_image, HAC, …)
+│   │   ├── evt_mixture.py          Gumbel/Normal mixture — the research arm behind the gumbel_* cuts
 │   │   ├── autopilot_flow.py       Ported autopilot loop (the app's TypeScript flow, re-implemented)
 │   │   ├── voting_iterations.py    Voting-iteration simulation
 │   │   ├── al_strategies.py        Active-learning acquisition strategies, benchmarked by
