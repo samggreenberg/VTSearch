@@ -14,7 +14,13 @@ exactly like a legacy vote to any later analysis.
 
 from __future__ import annotations
 
+import shutil
+
+import pytest
+
+from tests import load_detector_and_wait
 from vtscore.datasets.vote_provenance import METADATA_KEY
+from vtscore.detectors.store import _detector_path, _read_detector
 from vtsearch.state import bad_votes, good_votes
 
 FULL = {
@@ -213,3 +219,88 @@ class TestDetectorLabelVoteRoute:
             assert resp.status_code == 422
         finally:
             path.unlink(missing_ok=True)
+
+
+class TestPersistenceThroughTheLoadedDetector:
+    """The real write chain: vote -> ``sync_labels_to_loaded_detector`` -> disk.
+
+    The per-route tests above stop at in-memory vote state. This one goes the
+    whole way, because the in-memory half is not the part that can silently
+    fail: the labelset is *rebuilt from live votes on every vote*, so a break
+    anywhere in the compose/restore chain shows up as provenance that looks
+    recorded and is gone by the next click.
+    """
+
+    @pytest.fixture(autouse=True)
+    def clean_detectors_dir(self):
+        """Detectors live on disk, so each test starts and ends with none."""
+        from vtsearch.settings import get_detectors_dir
+
+        def _wipe():
+            d = get_detectors_dir()
+            if d.is_dir():
+                shutil.rmtree(d)
+
+        _wipe()
+        yield
+        _wipe()
+
+    def _loaded_detector(self, client, name: str) -> str:
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": name, "media_type": "audio", "text_query": "t"},
+        )
+        assert res.status_code in (200, 201), res.get_data(as_text=True)
+        detector_id = res.get_json()["detector"]["id"]
+        load_detector_and_wait(client, detector_id)
+        return detector_id
+
+    def _labels(self, name: str) -> list[dict]:
+        data = _read_detector(_detector_path(name))
+        assert data is not None
+        return data["labelset"]["labels"]
+
+    def test_a_vote_writes_its_provenance_into_the_detector_json(self, client):
+        from vtsearch.state import medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+        media_id = next(iter(medias))
+        self._loaded_detector(client, "ProvSync")
+
+        resp = client.post(
+            f"/api/medias/{media_id}/vote",
+            json={"target": "good", "provenance": FULL},
+        )
+        assert resp.status_code == 200
+
+        labels = self._labels("ProvSync")
+        assert len(labels) == 1
+        assert labels[0]["metadata"][METADATA_KEY] == {"v": 1, **FULL}
+
+    def test_a_second_vote_does_not_erase_the_first_ones_record(self, client):
+        """The erasure hazard, end to end.
+
+        Voting media B rewrites the whole labelset from live vote state, so if
+        anything in the chain dropped A's provenance, A's record would vanish
+        on B's click while looking perfectly fine until then.
+        """
+        from vtsearch.state import medias
+
+        if len(medias) < 2:
+            pytest.skip("Need two medias")
+        first, second = list(medias)[:2]
+        self._loaded_detector(client, "ProvSync2")
+
+        client.post(
+            f"/api/medias/{first}/vote",
+            json={"target": "good", "provenance": {"flow": "autopilot", "phase": "hard"}},
+        )
+        client.post(
+            f"/api/medias/{second}/vote",
+            json={"target": "bad", "provenance": {"flow": "list_review", "rank_at_vote": 2}},
+        )
+
+        by_md5 = {el["md5"]: el for el in self._labels("ProvSync2")}
+        assert by_md5[medias[first]["md5"]]["metadata"][METADATA_KEY]["phase"] == "hard"
+        assert by_md5[medias[second]["md5"]]["metadata"][METADATA_KEY]["rank_at_vote"] == 2
