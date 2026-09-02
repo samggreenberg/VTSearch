@@ -318,7 +318,20 @@ this codebase, and it is silent.
   own, instead of relying on some co-located `effect()` to dirty the view), and
   there is no mirror left to go stale when a key disappears server-side. The
   setter **merges**; a setter that replaced the dict would wipe every other
-  media type's preference. `LabelViewPanelStateService` is the reference use.
+  media type's preference. It takes a plain key, or a *signal* of a key where
+  the key itself varies (`vt-view-controls` picks `focus_mode_left` /
+  `_right` / `_popup` from its `side` input). `LabelViewPanelStateService` is
+  the reference use; `find-view`, `browse-view`, `browse-bin-popup` and
+  `view-controls` are the other consumers.
+
+  Two notes on where the seams are. **The Settings modal is deliberately not a
+  consumer**: it edits a *draft* settings signal across *every* media type via
+  a `typeId` loop, not "the current one", so the helper's shape does not fit.
+  And a preference whose control derives its next value from the current one —
+  the `vt-view-controls` size buttons, which also grey out at the ends of the
+  ladder — keeps a **local optimistic signal** written on click, with the
+  preference behind it; binding straight to the preference would make a rapid
+  second click read a pre-round-trip value.
 
 - **Consumers use `effect()`, not `subscribe()`.** A constructor `effect()`
   reading a signal auto-disposes with the component, which is why the
