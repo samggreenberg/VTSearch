@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 import { Subject } from 'rxjs';
 
+import { MediaStateService } from './media-state.service';
 import { PairScopeService } from './pair-scope.service';
 import { SortStateService } from './sort-state.service';
 import { VoteStateService } from './vote-state.service';
@@ -26,6 +27,7 @@ describe('PairScopeService', () => {
   let httpMock: HttpTestingController;
   let sortState: SortStateService;
   let voteState: VoteStateService;
+  let mediaState: MediaStateService;
 
   beforeEach(() => {
     configureZoneless({ imports: [HostComponent], providers: [...provideHttpTesting()] });
@@ -34,6 +36,7 @@ describe('PairScopeService', () => {
     httpMock = TestBed.inject(HttpTestingController);
     sortState = TestBed.inject(SortStateService);
     voteState = TestBed.inject(VoteStateService);
+    mediaState = TestBed.inject(MediaStateService);
   });
 
   afterEach(() => {
@@ -108,6 +111,34 @@ describe('PairScopeService', () => {
     // Reloads for the new pair went out.
     expect(httpMock.match('/api/dataset/status').length).toBe(1);
     expect(httpMock.match('/api/inclusion').length).toBe(1);
+  });
+
+  it('clears the selection too, so the centre viewer cannot outlive the pair', () => {
+    // Media ids are per-dataset, and `ActiveContextService.mediaUrl` stamps the
+    // dataset id into the `<img src>` at build time — so a selection that
+    // survives the switch keeps resolving against the pair we *left* and
+    // renders happily instead of 404-ing (#3489). Nothing else in the reset
+    // touches it: the ranking and the vote cache are cleared, everything
+    // derived from the selection goes with them, and the selection itself is
+    // the one piece of pair-scoped state left behind.
+    mediaState.selectMedia(7);
+    expect(mediaState.selectedId()).toBe(7);
+
+    service.resetForNewPair();
+
+    expect(mediaState.selectedId()).toBeNull();
+  });
+
+  it('clearPairState alone drops the selection, for find-view\'s entry path', () => {
+    // Dashboard -> Find enters against a possibly different dataset while the
+    // singleton `MediaStateService` still holds the previous session's pick.
+    // That entry path calls `clearPairState()` rather than the full reset, so
+    // the selection clear has to live there and not in `resetForNewPair`.
+    mediaState.selectMedia(7);
+
+    service.clearPairState();
+
+    expect(mediaState.selectedId()).toBeNull();
   });
 
   it('seedInclusion pushes the per-detector value into SortStateService', () => {

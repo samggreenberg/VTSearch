@@ -927,6 +927,48 @@ describe('LabelViewComponent', () => {
       expect(component.sortState.sortOrder ?? []).toEqual([]);
     });
 
+    it('clears the centre viewer selection, and repaints, when the pair changes', async () => {
+      const activeContext = seedPair();
+      flushInitialRequests();
+      flushDetectorRegistry();
+      // The stub list rides `rxResource`, so `selectedMedia` cannot resolve id
+      // 1 into a media until the loader's value has landed.
+      await settleResource();
+
+      // The user is looking at an item from pair 1.
+      component.mediaState.selectMedia(1);
+      TestBed.tick();
+      expect(fixture.nativeElement.querySelector('vt-center-panel .center-panel.empty')).toBeNull();
+
+      activeContext.setActivePair('ds2', 'det2');
+      flushDetectorRegistry();
+      // Answer the reset's own media reload with a list that *also* carries id
+      // 1. Ids restart at 1 in every dataset, so this collision is the common
+      // case, not a contrived one — and it is what makes the assertion below
+      // mean something: an uncleared selection resolves against the new list
+      // and keeps the viewer populated, rather than merely surviving the
+      // moment the resource is empty mid-reload.
+      TestBed.tick();
+      httpMock.match('/api/medias/ids').forEach((req) =>
+        req.flush([
+          { id: 1, media_type: 'audio' },
+          { id: 2, media_type: 'audio' },
+        ]),
+      );
+      await settleResource();
+      expect(component.mediaState.mediasSignal().length).toBe(2);
+
+      // Media ids are per-dataset, so the selection is pair-scoped state and
+      // has to go with the ranking (#3489). Asserting through the DOM rather
+      // than only on the signal is the point: the centre viewer stamps the
+      // dataset id into its media URL and only rebuilds it when the media id
+      // changes, so a clear that does not notify under zoneless change
+      // detection would leave the stale pair-1 item painted
+      // (`docs/FRONTEND.md` §5) — which is the bug, not the fix.
+      expect(fixture.nativeElement.querySelector('vt-center-panel .center-panel.empty')).not.toBeNull();
+      expect(component.mediaState.selectedId()).toBeNull();
+    });
+
     it('stops polling a learned-sort job when the active pair changes', async () => {
       const activeContext = seedPair();
       flushInitialRequests();
