@@ -13,10 +13,10 @@ from pathlib import Path
 
 import pytest
 
-import app as app_module
 from tests.helpers import make_dataset_file as _make_dataset_file
 from vtsearch.settings import get_detectors_dir
 from vtscore.media.audio.audio_generator import generate_wav
+from vtsearch.state import medias
 
 
 @pytest.fixture(autouse=True)
@@ -120,7 +120,7 @@ class TestAutofindDetectorsCLI:
         }
         _write_trainable_model("ds-a-detector", labelset)
 
-        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
+        dataset_path = _make_dataset_file(tmp_path, medias)
         settings_path = _settings_file_with_detectors(tmp_path, ["ds-a-detector"])
         out_path = tmp_path / "hits.json"
 
@@ -185,7 +185,7 @@ class TestAutofindDetectorsCLI:
         # its scoring info records the clipper to re-apply.
         from vtscore.cli import _load_and_train_detectors
 
-        snap = dict(app_module.medias)
+        snap = dict(medias)
         trained = _load_and_train_detectors(["spec-mismatch"], "audio", snap)
 
         assert "spec-mismatch" in trained
@@ -232,7 +232,7 @@ class TestAutofindDetectorsCLI:
         # only mutate origin.params here, not the medias themselves.
         original_origins = {}
         try:
-            for mid, media in app_module.medias.items():
+            for mid, media in medias.items():
                 original_origins[mid] = media.get("origin")
                 media["origin"] = {
                     "importer": "test",
@@ -242,7 +242,7 @@ class TestAutofindDetectorsCLI:
                     },
                 }
 
-            dataset_path = _make_dataset_file(tmp_path, app_module.medias)
+            dataset_path = _make_dataset_file(tmp_path, medias)
             settings_path = _settings_file_with_detectors(tmp_path, ["spec-matched"])
             out_path = tmp_path / "hits.json"
 
@@ -258,8 +258,8 @@ class TestAutofindDetectorsCLI:
             assert "spec-matched" in body.get("results", {})
         finally:
             for mid, origin in original_origins.items():
-                if mid in app_module.medias:
-                    app_module.medias[mid]["origin"] = origin
+                if mid in medias:
+                    medias[mid]["origin"] = origin
 
     def test_clear_error_when_origins_unresolvable(self, client, tmp_path, monkeypatch):
         """No origins resolve → ValueError with a CLI-friendly explanation."""
@@ -292,7 +292,7 @@ class TestAutofindDetectorsCLI:
         }
         _write_trainable_model("unreachable-tm", labelset)
 
-        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
+        dataset_path = _make_dataset_file(tmp_path, medias)
         settings_path = _settings_file_with_detectors(tmp_path, ["unreachable-tm"])
 
         from vtscore.cli import _run_pipeline, _load_pickle_whole

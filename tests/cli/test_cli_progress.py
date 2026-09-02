@@ -18,12 +18,12 @@ from pathlib import Path
 
 import pytest
 
-import app as app_module
 from tests.helpers import make_dataset_file as _make_dataset_file
 from vtscore import cli_progress
 
 from vtscore.media.audio.audio_generator import generate_wav
 from vtsearch.settings import get_detectors_dir
+from vtsearch.state import medias
 
 
 # ---------------------------------------------------------------------------
@@ -306,7 +306,7 @@ class TestAutodetectJsonOutput:
         _stub_resolve(monkeypatch, files)
         _write_detector("json-fmt-det", _audio_labelset())
 
-        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
+        dataset_path = _make_dataset_file(tmp_path, medias)
         settings_path = _settings_with_detectors(tmp_path, ["json-fmt-det"])
         out_path = tmp_path / "hits.json"
 
@@ -338,7 +338,7 @@ class TestAutodetectJsonOutput:
         _stub_resolve(monkeypatch, files)
         _write_detector("text-fmt-det", _audio_labelset())
 
-        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
+        dataset_path = _make_dataset_file(tmp_path, medias)
         settings_path = _settings_with_detectors(tmp_path, ["text-fmt-det"])
         out_path = tmp_path / "hits.json"
 

@@ -4,15 +4,13 @@ import unittest.mock
 import numpy as np
 import torch
 
-import app as app_module
-
 
 class TestSortClips:
     def test_returns_all_clips(self, client):
         resp = client.post("/api/sort", json={"text": "high pitched beep"})
         assert resp.status_code == 200
         data = resp.get_json()
-        assert len(data["results"]) == app_module.NUM_MEDIAS
+        assert len(data["results"]) == NUM_MEDIAS
         assert "threshold" in data
 
     def test_result_contains_id_and_similarity(self, client):
@@ -32,7 +30,7 @@ class TestSortClips:
         resp = client.post("/api/sort", json={"text": "sine wave"})
         data = resp.get_json()
         ids = {e["id"] for e in data["results"]}
-        assert ids == set(range(1, app_module.NUM_MEDIAS + 1))
+        assert ids == set(range(1, NUM_MEDIAS + 1))
 
     def test_similarity_values_in_range(self, client):
         resp = client.post("/api/sort", json={"text": "high pitch"})
@@ -59,44 +57,36 @@ class TestSortClips:
 
 class TestTrainAndScore:
     def test_returns_list_of_scored_clips(self):
-        app_module.good_votes.update({k: None for k in [1, 2]})
-        app_module.bad_votes.update({k: None for k in [3, 4]})
-        results, threshold, _model = app_module.train_and_score(
-            app_module.medias, app_module.good_votes, app_module.bad_votes
-        )
-        assert len(results) == app_module.NUM_MEDIAS
+        good_votes.update({k: None for k in [1, 2]})
+        bad_votes.update({k: None for k in [3, 4]})
+        results, threshold, _model = train_and_score(medias, good_votes, bad_votes)
+        assert len(results) == NUM_MEDIAS
         assert isinstance(threshold, float)
         for entry in results:
             assert "id" in entry
             assert "score" in entry
 
     def test_scores_between_zero_and_one(self):
-        app_module.good_votes.update({k: None for k in [1, 2]})
-        app_module.bad_votes.update({k: None for k in [3, 4]})
-        results, threshold, _model = app_module.train_and_score(
-            app_module.medias, app_module.good_votes, app_module.bad_votes
-        )
+        good_votes.update({k: None for k in [1, 2]})
+        bad_votes.update({k: None for k in [3, 4]})
+        results, threshold, _model = train_and_score(medias, good_votes, bad_votes)
         for entry in results:
             assert 0.0 <= entry["score"] <= 1.0
 
     def test_results_sorted_descending(self):
-        app_module.good_votes.update({k: None for k in [1, 2]})
-        app_module.bad_votes.update({k: None for k in [3, 4]})
-        results, threshold, _model = app_module.train_and_score(
-            app_module.medias, app_module.good_votes, app_module.bad_votes
-        )
+        good_votes.update({k: None for k in [1, 2]})
+        bad_votes.update({k: None for k in [3, 4]})
+        results, threshold, _model = train_and_score(medias, good_votes, bad_votes)
         scores = [e["score"] for e in results]
         assert scores == sorted(scores, reverse=True)
 
     def test_good_clips_scored_higher_than_bad(self):
-        app_module.good_votes.update({k: None for k in [1, 2, 3]})
-        app_module.bad_votes.update({k: None for k in [18, 19, 20]})
-        results, threshold, _model = app_module.train_and_score(
-            app_module.medias, app_module.good_votes, app_module.bad_votes
-        )
+        good_votes.update({k: None for k in [1, 2, 3]})
+        bad_votes.update({k: None for k in [18, 19, 20]})
+        results, threshold, _model = train_and_score(medias, good_votes, bad_votes)
         score_map = {e["id"]: e["score"] for e in results}
-        avg_good = np.mean([score_map[i] for i in app_module.good_votes])
-        avg_bad = np.mean([score_map[i] for i in app_module.bad_votes])
+        avg_good = np.mean([score_map[i] for i in good_votes])
+        avg_bad = np.mean([score_map[i] for i in bad_votes])
         assert avg_good > avg_bad
 
     def test_trains_the_linear_head(self):
@@ -105,29 +95,23 @@ class TestTrainAndScore:
         Pins the #2790 swap on the pipeline users actually drive: a revert to
         ``_auto_hidden_dim`` would put back a ReLU and a second Linear here.
         """
-        app_module.good_votes.update({k: None for k in [1, 2, 3]})
-        app_module.bad_votes.update({k: None for k in [18, 19, 20]})
-        _results, _threshold, model = app_module.train_and_score(
-            app_module.medias, app_module.good_votes, app_module.bad_votes
-        )
+        good_votes.update({k: None for k in [1, 2, 3]})
+        bad_votes.update({k: None for k in [18, 19, 20]})
+        _results, _threshold, model = train_and_score(medias, good_votes, bad_votes)
         assert model is not None
         assert [type(layer) for layer in model] == [torch.nn.Linear]
         assert set(model.state_dict()) == {"0.weight", "0.bias"}
 
     def test_order_changes_after_new_vote(self):
         """After adding a vote and retraining, the sort order should change."""
-        app_module.good_votes.update({k: None for k in [1, 2, 3, 4, 5]})
-        app_module.bad_votes.update({k: None for k in [16, 17, 18, 19, 20]})
-        results_before, _, _m = app_module.train_and_score(
-            app_module.medias, app_module.good_votes, app_module.bad_votes
-        )
+        good_votes.update({k: None for k in [1, 2, 3, 4, 5]})
+        bad_votes.update({k: None for k in [16, 17, 18, 19, 20]})
+        results_before, _, _m = train_and_score(medias, good_votes, bad_votes)
         order_before = [e["id"] for e in results_before]
 
         # Add a new good vote on a media that was in the middle
-        app_module.good_votes[10] = None
-        results_after, _, _m = app_module.train_and_score(
-            app_module.medias, app_module.good_votes, app_module.bad_votes
-        )
+        good_votes[10] = None
+        results_after, _, _m = train_and_score(medias, good_votes, bad_votes)
         order_after = [e["id"] for e in results_after]
 
         assert order_before != order_after, "Sort order did not change after adding a new vote"
@@ -339,8 +323,8 @@ class TestCalibrationAtTinyLabelCounts:
         from vtscore.detectors import training as detector_training
         from vtscore.training.thresholds import conformal
 
-        app_module.good_votes.update({k: None for k in [1, 2]})
-        app_module.bad_votes.update({k: None for k in [3, 4, 5]})  # 5 labels < 6
+        good_votes.update({k: None for k in [1, 2]})
+        bad_votes.update({k: None for k in [3, 4, 5]})  # 5 labels < 6
 
         with unittest.mock.patch.object(
             conformal,
@@ -348,9 +332,9 @@ class TestCalibrationAtTinyLabelCounts:
             wraps=conformal.compute_fold_orderings,
         ) as patched:
             _, threshold, _model = detector_training.train_and_score(
-                app_module.medias,
-                app_module.good_votes,
-                app_module.bad_votes,
+                medias,
+                good_votes,
+                bad_votes,
             )
         assert patched.call_count == 1
         assert 0.0 <= threshold <= 1.0
@@ -361,8 +345,8 @@ class TestCalibrationAtTinyLabelCounts:
         from vtscore.detectors import training as detector_training
         from vtscore.training.thresholds import conformal
 
-        app_module.good_votes.update({k: None for k in [1, 2]})
-        app_module.bad_votes.update({k: None for k in [3, 4, 5]})  # 5 labels < 6
+        good_votes.update({k: None for k in [1, 2]})
+        bad_votes.update({k: None for k in [3, 4, 5]})  # 5 labels < 6
 
         with unittest.mock.patch.object(
             conformal,
@@ -370,9 +354,9 @@ class TestCalibrationAtTinyLabelCounts:
             wraps=conformal.compute_fold_orderings,
         ) as patched:
             detector_training.train_and_score(
-                app_module.medias,
-                app_module.good_votes,
-                app_module.bad_votes,
+                medias,
+                good_votes,
+                bad_votes,
             )
         assert patched.call_count == 1
 
@@ -383,8 +367,8 @@ class TestCalibrationAtTinyLabelCounts:
         from vtscore.detectors import training as detector_training
         from vtscore.training.thresholds import conformal
 
-        app_module.good_votes.update({k: None for k in [1, 2, 3]})
-        app_module.bad_votes.update({k: None for k in [18, 19, 20]})  # 6 labels
+        good_votes.update({k: None for k in [1, 2, 3]})
+        bad_votes.update({k: None for k in [18, 19, 20]})  # 6 labels
 
         with unittest.mock.patch.object(
             conformal,
@@ -392,9 +376,9 @@ class TestCalibrationAtTinyLabelCounts:
             wraps=conformal.compute_fold_orderings,
         ) as patched:
             detector_training.train_and_score(
-                app_module.medias,
-                app_module.good_votes,
-                app_module.bad_votes,
+                medias,
+                good_votes,
+                bad_votes,
             )
         assert patched.call_count == 1
 
@@ -404,8 +388,8 @@ class TestCalibrationAtTinyLabelCounts:
         from vtscore.detectors import training as detector_training
         from vtscore.training.thresholds import conformal
 
-        app_module.good_votes.update({k: None for k in [1, 2, 3]})
-        app_module.bad_votes.update({k: None for k in [17, 18, 19, 20]})  # 7 labels
+        good_votes.update({k: None for k in [1, 2, 3]})
+        bad_votes.update({k: None for k in [17, 18, 19, 20]})  # 7 labels
 
         with unittest.mock.patch.object(
             conformal,
@@ -413,9 +397,9 @@ class TestCalibrationAtTinyLabelCounts:
             wraps=conformal.compute_fold_orderings,
         ) as patched:
             detector_training.train_and_score(
-                app_module.medias,
-                app_module.good_votes,
-                app_module.bad_votes,
+                medias,
+                good_votes,
+                bad_votes,
             )
         assert patched.call_count == 1
 
@@ -442,8 +426,8 @@ class TestCalibrationCache:
     def _seed_six_labels(self):
         # Six labels puts us above the ``< 6`` skip floor so calibration
         # actually runs (and can therefore be cached).
-        app_module.good_votes.update({k: None for k in [1, 2, 3]})
-        app_module.bad_votes.update({k: None for k in [18, 19, 20]})
+        good_votes.update({k: None for k in [1, 2, 3]})
+        bad_votes.update({k: None for k in [18, 19, 20]})
 
     def test_second_call_with_same_inputs_skips_calibration(self):
         from vtscore.detectors import training as detector_training
@@ -453,9 +437,9 @@ class TestCalibrationCache:
         det_ctx = self._det_ctx()
 
         detector_training.train_and_score(
-            app_module.medias,
-            app_module.good_votes,
-            app_module.bad_votes,
+            medias,
+            good_votes,
+            bad_votes,
             det_ctx=det_ctx,
         )
         assert det_ctx.calibration_cache is not None
@@ -466,9 +450,9 @@ class TestCalibrationCache:
             side_effect=AssertionError("fold orderings should be cached on repeat call"),
         ) as patched:
             detector_training.train_and_score(
-                app_module.medias,
-                app_module.good_votes,
-                app_module.bad_votes,
+                medias,
+                good_votes,
+                bad_votes,
                 det_ctx=det_ctx,
             )
         patched.assert_not_called()
@@ -480,15 +464,15 @@ class TestCalibrationCache:
         det_ctx = self._det_ctx()
 
         _, t1, _ = detector_training.train_and_score(
-            app_module.medias,
-            app_module.good_votes,
-            app_module.bad_votes,
+            medias,
+            good_votes,
+            bad_votes,
             det_ctx=det_ctx,
         )
         _, t2, _ = detector_training.train_and_score(
-            app_module.medias,
-            app_module.good_votes,
-            app_module.bad_votes,
+            medias,
+            good_votes,
+            bad_votes,
             det_ctx=det_ctx,
         )
         assert t1 == t2
@@ -501,17 +485,17 @@ class TestCalibrationCache:
         det_ctx = self._det_ctx()
 
         detector_training.train_and_score(
-            app_module.medias,
-            app_module.good_votes,
-            app_module.bad_votes,
+            medias,
+            good_votes,
+            bad_votes,
             det_ctx=det_ctx,
         )
         assert det_ctx.calibration_cache is not None
         first_key = det_ctx.calibration_cache[0]
 
         # Flip one media's label; calibration must recompute.
-        app_module.good_votes.pop(3)
-        app_module.bad_votes[3] = None
+        good_votes.pop(3)
+        bad_votes[3] = None
 
         with unittest.mock.patch.object(
             conformal,
@@ -519,9 +503,9 @@ class TestCalibrationCache:
             wraps=conformal.compute_fold_orderings,
         ) as patched:
             detector_training.train_and_score(
-                app_module.medias,
-                app_module.good_votes,
-                app_module.bad_votes,
+                medias,
+                good_votes,
+                bad_votes,
                 det_ctx=det_ctx,
             )
         assert patched.call_count == 1
@@ -539,9 +523,9 @@ class TestCalibrationCache:
         det_ctx = self._det_ctx()
 
         detector_training.train_and_score(
-            app_module.medias,
-            app_module.good_votes,
-            app_module.bad_votes,
+            medias,
+            good_votes,
+            bad_votes,
             inclusion_value=0,
             det_ctx=det_ctx,
         )
@@ -554,9 +538,9 @@ class TestCalibrationCache:
             wraps=conformal.compute_fold_orderings,
         ) as patched:
             detector_training.train_and_score(
-                app_module.medias,
-                app_module.good_votes,
-                app_module.bad_votes,
+                medias,
+                good_votes,
+                bad_votes,
                 inclusion_value=2,
                 det_ctx=det_ctx,
             )
@@ -578,14 +562,14 @@ class TestCalibrationCache:
             wraps=conformal.compute_fold_orderings,
         ) as patched:
             detector_training.train_and_score(
-                app_module.medias,
-                app_module.good_votes,
-                app_module.bad_votes,
+                medias,
+                good_votes,
+                bad_votes,
             )
             detector_training.train_and_score(
-                app_module.medias,
-                app_module.good_votes,
-                app_module.bad_votes,
+                medias,
+                good_votes,
+                bad_votes,
             )
         assert patched.call_count == 2
 
@@ -599,17 +583,17 @@ class TestCalibrationCache:
 
 class TestLearnedSort:
     def test_returns_all_clips(self, client):
-        app_module.good_votes.update({k: None for k in [1, 2]})
-        app_module.bad_votes.update({k: None for k in [3, 4]})
+        good_votes.update({k: None for k in [1, 2]})
+        bad_votes.update({k: None for k in [3, 4]})
         resp = client.post("/api/learned-sort", json={"wait": True})
         assert resp.status_code == 200
         data = resp.get_json()
-        assert len(data["results"]) == app_module.NUM_MEDIAS
+        assert len(data["results"]) == NUM_MEDIAS
         assert "threshold" in data
 
     def test_result_fields(self, client):
-        app_module.good_votes.update({k: None for k in [1, 2]})
-        app_module.bad_votes.update({k: None for k in [3, 4]})
+        good_votes.update({k: None for k in [1, 2]})
+        bad_votes.update({k: None for k in [3, 4]})
         resp = client.post("/api/learned-sort", json={"wait": True})
         data = resp.get_json()
         for entry in data["results"]:
@@ -617,20 +601,20 @@ class TestLearnedSort:
             assert "score" in entry
 
     def test_sorted_descending(self, client):
-        app_module.good_votes.update({k: None for k in [1, 2]})
-        app_module.bad_votes.update({k: None for k in [3, 4]})
+        good_votes.update({k: None for k in [1, 2]})
+        bad_votes.update({k: None for k in [3, 4]})
         resp = client.post("/api/learned-sort", json={"wait": True})
         data = resp.get_json()
         scores = [e["score"] for e in data["results"]]
         assert scores == sorted(scores, reverse=True)
 
     def test_all_media_ids_present(self, client):
-        app_module.good_votes.update({k: None for k in [1, 2]})
-        app_module.bad_votes.update({k: None for k in [3, 4]})
+        good_votes.update({k: None for k in [1, 2]})
+        bad_votes.update({k: None for k in [3, 4]})
         resp = client.post("/api/learned-sort", json={"wait": True})
         data = resp.get_json()
         ids = {e["id"] for e in data["results"]}
-        assert ids == set(range(1, app_module.NUM_MEDIAS + 1))
+        assert ids == set(range(1, NUM_MEDIAS + 1))
 
     def test_publishes_the_acquisition_cut_alongside_the_reporting_one(self, client):
         """Autopilot's Hard / New picks sample around a *different* cut.
@@ -640,8 +624,8 @@ class TestLearnedSort:
         coupled behaviour PR #2876 measured as costing 4.5x the positives - with
         nothing failing.
         """
-        app_module.good_votes.update({k: None for k in [1, 2]})
-        app_module.bad_votes.update({k: None for k in [3, 4]})
+        good_votes.update({k: None for k in [1, 2]})
+        bad_votes.update({k: None for k in [3, 4]})
         resp = client.post("/api/learned-sort", json={"wait": True})
         assert resp.status_code == 200
         data = resp.get_json()
@@ -659,18 +643,18 @@ class TestLearnedSort:
         assert resp.get_json()["acq_threshold"] is None
 
     def test_only_good_votes_returns_400(self, client):
-        app_module.good_votes.update({k: None for k in [1, 2]})
+        good_votes.update({k: None for k in [1, 2]})
         resp = client.post("/api/learned-sort", json={"wait": True})
         assert resp.status_code == 400
 
     def test_only_bad_votes_returns_400(self, client):
-        app_module.bad_votes.update({k: None for k in [3, 4]})
+        bad_votes.update({k: None for k in [3, 4]})
         resp = client.post("/api/learned-sort", json={"wait": True})
         assert resp.status_code == 400
 
     def test_scores_in_valid_range(self, client):
-        app_module.good_votes.update({k: None for k in [1, 2]})
-        app_module.bad_votes.update({k: None for k in [3, 4]})
+        good_votes.update({k: None for k in [1, 2]})
+        bad_votes.update({k: None for k in [3, 4]})
         resp = client.post("/api/learned-sort", json={"wait": True})
         data = resp.get_json()
         for entry in data["results"]:
@@ -685,8 +669,8 @@ class TestLearnedSortAsync:
         from tests.conftest import _wait_for_job
         from vtscore.concurrency.async_jobs import learned_sort_jobs
 
-        app_module.good_votes.update({k: None for k in [1, 2]})
-        app_module.bad_votes.update({k: None for k in [3, 4]})
+        good_votes.update({k: None for k in [1, 2]})
+        bad_votes.update({k: None for k in [3, 4]})
 
         resp = client.post("/api/learned-sort", json={})
         assert resp.status_code == 200
@@ -708,8 +692,8 @@ class TestLearnedSortAsync:
         """The signature cache lets re-sorts skip training entirely."""
         from vtscore.concurrency.async_jobs import learned_sort_jobs
 
-        app_module.good_votes.update({k: None for k in [1, 2]})
-        app_module.bad_votes.update({k: None for k in [3, 4]})
+        good_votes.update({k: None for k in [1, 2]})
+        bad_votes.update({k: None for k in [3, 4]})
 
         first = client.post("/api/learned-sort", json={"wait": True}).get_json()
         assert first["status"] == "done"
@@ -723,7 +707,7 @@ class TestLearnedSortAsync:
         assert second["job_id"] == first_job_id
 
         # Cache invalidates when votes change.
-        app_module.bad_votes.update({5: None})
+        bad_votes.update({5: None})
         third = client.post("/api/learned-sort", json={"wait": True}).get_json()
         assert third["status"] == "done"
         assert third["job_id"] != first_job_id
@@ -760,9 +744,9 @@ class TestEvalTrainAndScoreAsync:
         # A handful of "good" votes are enough to exercise the smart metric.
         for cid, lbl in [(1, "good"), (2, "good"), (3, "bad"), (4, "bad")]:
             if lbl == "good":
-                app_module.good_votes[cid] = None
+                good_votes[cid] = None
             else:
-                app_module.bad_votes[cid] = None
+                bad_votes[cid] = None
             label_history.append((cid, lbl, 0.0))
 
     def test_wait_returns_metric_inline(self, client):
@@ -841,7 +825,7 @@ class TestEvalTrainAndScoreAsync:
 class TestExampleSort:
     def test_sort_with_audio_file(self, client):
         # Create a test WAV file in memory
-        wav_bytes = app_module.generate_wav(440.0, 1.0)
+        wav_bytes = generate_wav(440.0, 1.0)
         data = {"file": (io.BytesIO(wav_bytes), "test.wav")}
 
         resp = client.post("/api/example-sort", data=data, content_type="multipart/form-data")
@@ -849,10 +833,10 @@ class TestExampleSort:
         result_data = resp.get_json()
         assert "results" in result_data
         assert "threshold" in result_data
-        assert len(result_data["results"]) == app_module.NUM_MEDIAS
+        assert len(result_data["results"]) == NUM_MEDIAS
 
     def test_sort_results_sorted_descending(self, client):
-        wav_bytes = app_module.generate_wav(440.0, 1.0)
+        wav_bytes = generate_wav(440.0, 1.0)
         data = {"file": (io.BytesIO(wav_bytes), "test.wav")}
 
         resp = client.post("/api/example-sort", data=data, content_type="multipart/form-data")
@@ -861,7 +845,7 @@ class TestExampleSort:
         assert similarities == sorted(similarities, reverse=True)
 
     def test_sort_similarity_in_valid_range(self, client):
-        wav_bytes = app_module.generate_wav(440.0, 1.0)
+        wav_bytes = generate_wav(440.0, 1.0)
         data = {"file": (io.BytesIO(wav_bytes), "test.wav")}
 
         resp = client.post("/api/example-sort", data=data, content_type="multipart/form-data")
@@ -1021,17 +1005,17 @@ class TestLearnedSortVoteSnapshot:
         from vtscore.detectors import learned_sort as ls_mod
 
         learned_sort_jobs.reset_for_tests()
-        app_module.good_votes.clear()
-        app_module.bad_votes.clear()
-        app_module.good_votes.update({1: None, 2: None})
-        app_module.bad_votes.update({3: None})
+        good_votes.clear()
+        bad_votes.clear()
+        good_votes.update({1: None, 2: None})
+        bad_votes.update({3: None})
 
         captured: dict[str, dict] = {}
 
         def fake_run(*, good, bad, **_kwargs):
             # Simulate a vote landing after the request computed its signature
             # but before/while the job runs: mutate the live proxy.
-            app_module.good_votes[99] = None
+            good_votes[99] = None
             captured["good"] = dict(good)
             captured["bad"] = dict(bad)
             return [], 0.5
@@ -1046,3 +1030,9 @@ class TestLearnedSortVoteSnapshot:
         assert captured["good"] == {1: None, 2: None}
         assert 99 not in captured["good"]
         assert captured["bad"] == {3: None}
+
+
+from tests.fixtures.medias import NUM_MEDIAS
+from vtscore.detectors.training import train_and_score
+from vtscore.media.audio.audio_generator import generate_wav
+from vtsearch.state import bad_votes, good_votes, medias

@@ -5,6 +5,7 @@ import zipfile
 import pytest
 
 import app as app_module
+from vtsearch.state import medias
 
 
 class TestIndex:
@@ -454,14 +455,14 @@ class TestDatasetEndpoints:
             assert resp.status_code == 400
 
     def test_clear_dataset(self, client):
-        saved = dict(app_module.medias)
+        saved = dict(medias)
         try:
             resp = client.post("/api/dataset/clear")
             assert resp.status_code == 200
             # After clearing, medias should be empty
-            assert len(app_module.medias) == 0
+            assert len(medias) == 0
         finally:
-            app_module.medias.update(saved)
+            medias.update(saved)
 
 
 class TestStartupState:
@@ -469,8 +470,8 @@ class TestStartupState:
 
     def test_status_loaded_false_when_clips_empty(self, client):
         """GET /api/dataset/status returns loaded=False when medias is cleared."""
-        saved = dict(app_module.medias)
-        app_module.medias.clear()
+        saved = dict(medias)
+        medias.clear()
         try:
             resp = client.get("/api/dataset/status")
             assert resp.status_code == 200
@@ -478,7 +479,7 @@ class TestStartupState:
             assert data["loaded"] is False
             assert data["num_medias"] == 0
         finally:
-            app_module.medias.update(saved)
+            medias.update(saved)
 
     def test_init_medias_not_called_automatically(self):
         """init_medias() exists for testing but is not called in production startup.
@@ -1615,7 +1616,7 @@ class TestLoadProgressRaceCondition:
         from tests.helpers import current_loading_progress
 
         # Register the current medias as a dataset entry so we can load it
-        saved = dict(app_module.medias)
+        saved = dict(medias)
         try:
             # First, export current medias to a pkl for registration
             from vtscore.datasets.loader import export_dataset_to_file
@@ -1626,7 +1627,7 @@ class TestLoadProgressRaceCondition:
             pkl_path = str(ds_dir / "test_race.pkl")
             from pathlib import Path
 
-            Path(pkl_path).write_bytes(export_dataset_to_file(app_module.medias))
+            Path(pkl_path).write_bytes(export_dataset_to_file(medias))
 
             # Register in the dataset registry
             from vtscore.datasets.registry import register_dataset
@@ -1634,7 +1635,7 @@ class TestLoadProgressRaceCondition:
             entry = register_dataset(
                 name="test_race",
                 media_type="audio",
-                num_items=len(app_module.medias),
+                num_items=len(medias),
                 pkl_path=pkl_path,
             )
             dataset_id = entry["id"]
@@ -1656,8 +1657,8 @@ class TestLoadProgressRaceCondition:
                 if current_loading_progress()["status"] == "idle":
                     break
         finally:
-            app_module.medias.clear()
-            app_module.medias.update(saved)
+            medias.clear()
+            medias.update(saved)
             # Clean up
             Path(pkl_path).unlink(missing_ok=True)
             from vtscore.datasets.registry import unregister_dataset
@@ -1686,18 +1687,18 @@ class TestLoadProgressRaceCondition:
         from vtscore.datasets.registry import register_dataset, unregister_dataset
         from vtsearch.settings import get_saved_datasets_dir
 
-        saved = dict(app_module.medias)
+        saved = dict(medias)
         ds_dir = get_saved_datasets_dir()
         ds_dir.mkdir(parents=True, exist_ok=True)
         pkl_path = str(ds_dir / "test_idle_on_success.pkl")
         dataset_id = None
         try:
-            Path(pkl_path).write_bytes(export_dataset_to_file(app_module.medias))
+            Path(pkl_path).write_bytes(export_dataset_to_file(medias))
 
             entry = register_dataset(
                 name="test_idle_on_success",
                 media_type="audio",
-                num_items=len(app_module.medias),
+                num_items=len(medias),
                 pkl_path=pkl_path,
             )
             dataset_id = entry["id"]
@@ -1720,8 +1721,8 @@ class TestLoadProgressRaceCondition:
                 "load task must reach 'idle' on success instead of lingering at 'loading' until list_tasks() prunes it"
             )
         finally:
-            app_module.medias.clear()
-            app_module.medias.update(saved)
+            medias.clear()
+            medias.update(saved)
             Path(pkl_path).unlink(missing_ok=True)
             if dataset_id:
                 unregister_dataset(dataset_id)
@@ -2017,7 +2018,7 @@ class TestCancelIngest:
         from tests.helpers import current_loading_progress
         from vtscore.concurrency.progress import resolve_progress_callback
 
-        saved = dict(app_module.medias)
+        saved = dict(medias)
         try:
             started = threading.Event()
 
@@ -2061,8 +2062,8 @@ class TestCancelIngest:
             assert progress["status"] == "idle"
             assert progress["error"] == "Cancelled"
         finally:
-            app_module.medias.clear()
-            app_module.medias.update(saved)
+            medias.clear()
+            medias.update(saved)
 
     def test_new_load_is_not_born_cancelled(self, client):
         """A cancelled load must not abort the *next* one.
@@ -2082,7 +2083,7 @@ class TestCancelIngest:
         cancelled.cancel()
         assert cancelled.is_cancelled
 
-        saved = dict(app_module.medias)
+        saved = dict(medias)
         try:
             from vtscore.datasets.load_pipeline import _run_origin_load_in_background
 
@@ -2099,8 +2100,8 @@ class TestCancelIngest:
             # ...and the older cancel is still owed to the task it was aimed at.
             assert cancelled.is_cancelled
         finally:
-            app_module.medias.clear()
-            app_module.medias.update(saved)
+            medias.clear()
+            medias.update(saved)
 
 
 class TestClearDatasetHeaderGuard:
@@ -2110,14 +2111,14 @@ class TestClearDatasetHeaderGuard:
     route now requires ``X-Dataset-Id`` and rejects loudly instead."""
 
     def test_headerless_clear_is_rejected(self, client):
-        saved = dict(app_module.medias)
+        saved = dict(medias)
         try:
             resp = client.post("/api/dataset/clear", headers={"X-Dataset-Id": ""})
             assert resp.status_code == 400
             # Nothing was cleared or unregistered.
-            assert len(app_module.medias) == len(saved)
+            assert len(medias) == len(saved)
         finally:
-            app_module.medias.update(saved)
+            medias.update(saved)
 
 
 class TestDatasetRegistryStats:

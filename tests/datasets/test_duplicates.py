@@ -13,9 +13,8 @@ import copy
 
 import numpy as np
 
-import app as app_module
 from vtscore.datasets.labelset import LabelSet
-from vtsearch.state import collapse_duplicates, get_dupe_count
+from vtsearch.state import collapse_duplicates, get_dupe_count, good_votes, medias
 
 
 def _make_media(cid, md5="unique", origin_importer="test", filename=None, category="cat"):
@@ -197,16 +196,16 @@ class TestGetDupeCount:
         assert get_dupe_count(media_dict) == 1
 
     def test_uses_global_medias_by_default(self):
-        saved = copy.deepcopy(app_module.medias)
-        app_module.medias.clear()
+        saved = copy.deepcopy(medias)
+        medias.clear()
         try:
-            app_module.medias[1] = _make_media(1, md5="same")
-            app_module.medias[2] = _make_media(2, md5="same")
-            collapse_duplicates(app_module.medias)
+            medias[1] = _make_media(1, md5="same")
+            medias[2] = _make_media(2, md5="same")
+            collapse_duplicates(medias)
             assert get_dupe_count() == 1
         finally:
-            app_module.medias.clear()
-            app_module.medias.update(saved)
+            medias.clear()
+            medias.update(saved)
 
 
 class TestDatasetStatusDupes:
@@ -219,19 +218,19 @@ class TestDatasetStatusDupes:
 
     def test_status_reports_dupes_after_collapse(self, client):
         # Temporarily create a dupe (deepcopy because collapse mutates in place)
-        saved = copy.deepcopy(app_module.medias)
-        app_module.medias[999] = copy.deepcopy(app_module.medias[1])
-        app_module.medias[999]["id"] = 999
-        app_module.medias[999]["filename"] = "dupe.wav"
+        saved = copy.deepcopy(medias)
+        medias[999] = copy.deepcopy(medias[1])
+        medias[999]["id"] = 999
+        medias[999]["filename"] = "dupe.wav"
         # Same MD5 => duplicate
-        collapse_duplicates(app_module.medias)
+        collapse_duplicates(medias)
         try:
             resp = client.get("/api/dataset/status")
             data = resp.get_json()
             assert data["num_dupes"] == 1
         finally:
-            app_module.medias.clear()
-            app_module.medias.update(saved)
+            medias.clear()
+            medias.update(saved)
 
 
 class TestDatasetDuplicatesEndpoint:
@@ -301,8 +300,8 @@ class TestLabelExportExpandsDupes:
     def test_export_expands_dupe_set(self, client):
         """Voting on a dupe-set representative exports labels for all members."""
         # Set up a dupe-set representative
-        saved = dict(app_module.medias)
-        rep = copy.deepcopy(app_module.medias[1])
+        saved = dict(medias)
+        rep = copy.deepcopy(medias[1])
         rep["origin"] = {
             "importer": "dupe_set",
             "params": {"name": "a.wav"},
@@ -321,10 +320,10 @@ class TestLabelExportExpandsDupes:
                 },
             ],
         }
-        app_module.medias[1] = rep
+        medias[1] = rep
         try:
             # Vote on the representative
-            app_module.good_votes[1] = None
+            good_votes[1] = None
             resp = client.get("/api/labels/export")
             data = resp.get_json()
             labels = data["labels"]
@@ -336,12 +335,12 @@ class TestLabelExportExpandsDupes:
             # Both have the same label
             assert all(el["label"] == "good" for el in dupe_labels)
         finally:
-            app_module.medias.clear()
-            app_module.medias.update(saved)
+            medias.clear()
+            medias.update(saved)
 
     def test_export_non_dupe_media_unchanged(self, client):
         """Normal (non-dupe) medias still export a single label entry."""
-        app_module.good_votes[1] = None
+        good_votes[1] = None
         resp = client.get("/api/labels/export")
         data = resp.get_json()
         assert len(data["labels"]) == 1
@@ -349,10 +348,10 @@ class TestLabelExportExpandsDupes:
 
     def test_roundtrip_through_dupe_collapse(self, client):
         """Export from dupes, then import back into a dataset with dupes uncollapsed."""
-        saved = dict(app_module.medias)
+        saved = dict(medias)
 
         # Create dupe-set representative
-        rep = copy.deepcopy(app_module.medias[1])
+        rep = copy.deepcopy(medias[1])
         rep["origin"] = {
             "importer": "dupe_set",
             "params": {"name": "a.wav"},
@@ -371,8 +370,8 @@ class TestLabelExportExpandsDupes:
                 },
             ],
         }
-        app_module.medias[1] = rep
-        app_module.good_votes[1] = None
+        medias[1] = rep
+        good_votes[1] = None
 
         resp = client.get("/api/labels/export")
         exported = resp.get_json()
@@ -380,24 +379,24 @@ class TestLabelExportExpandsDupes:
 
         # Clear votes and import back; both entries share the same MD5,
         # so they should match the single representative.
-        app_module.good_votes.clear()
+        good_votes.clear()
         resp = client.post("/api/labels/import", json=exported)
         data = resp.get_json()
         # Both entries resolve to the same media (by MD5), so applied == 2
         assert data["applied"] == 2
-        assert 1 in app_module.good_votes
+        assert 1 in good_votes
 
-        app_module.medias.clear()
-        app_module.medias.update(saved)
+        medias.clear()
+        medias.update(saved)
 
 
 class TestLabelImportWithDupes:
     def test_import_matches_representative_by_md5(self, client):
         """Importing a label for any original dupe MD5 matches the representative."""
-        saved = dict(app_module.medias)
-        md5 = app_module.medias[1]["md5"]
+        saved = dict(medias)
+        md5 = medias[1]["md5"]
 
-        rep = copy.deepcopy(app_module.medias[1])
+        rep = copy.deepcopy(medias[1])
         rep["origin"] = {
             "importer": "dupe_set",
             "params": {"name": "a.wav"},
@@ -416,17 +415,17 @@ class TestLabelImportWithDupes:
                 },
             ],
         }
-        app_module.medias[1] = rep
+        medias[1] = rep
         try:
             # Import using the shared MD5
             labels = [{"md5": md5, "label": "good"}]
             resp = client.post("/api/labels/import", json={"labels": labels})
             data = resp.get_json()
             assert data["applied"] == 1
-            assert 1 in app_module.good_votes
+            assert 1 in good_votes
         finally:
-            app_module.medias.clear()
-            app_module.medias.update(saved)
+            medias.clear()
+            medias.update(saved)
 
 
 class TestCollapseDuplicatesIntegration:

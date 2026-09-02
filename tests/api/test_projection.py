@@ -18,7 +18,6 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-import app as app_module  # noqa: F401
 from vtscore.concurrency.async_jobs import projection_jobs
 from vtscore.projection import Projection, build_pyramid
 from vtscore.state.core import get_active_context

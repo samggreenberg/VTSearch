@@ -22,7 +22,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-import app as app_module  # noqa: F401  (activates the default dataset context)
 from vtscore.cli import _score_direct_all, _score_one_detector
 from vtscore.detectors.training import _score_all_media, scoring_rows_for_snap
 from vtscore.embedding.matrix import media_score_rows

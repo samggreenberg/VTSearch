@@ -19,7 +19,6 @@ assumed.
 
 from __future__ import annotations
 
-import app as app_module  # noqa: F401  (triggers app startup + conftest media init)
 import pytest
 
 from vtsearch import achievements

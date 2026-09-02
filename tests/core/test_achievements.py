@@ -17,7 +17,6 @@ import pathlib
 
 import pytest
 
-import app as app_module  # noqa: F401  (triggers conftest media init)
 from vtsearch import achievements, achievements_catalog
 from vtsearch import settings as settings_mod
 

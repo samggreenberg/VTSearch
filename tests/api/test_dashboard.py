@@ -2,7 +2,6 @@
 
 import pytest
 
-import app as app_module  # noqa: F401  (triggers conftest side effects)
 from vtscore.datasets.registry import register_dataset
 from vtscore.detectors.registry import register_detector
 from vtsearch.state import medias
