@@ -289,3 +289,67 @@ class TestElementVoteFlip:
         assert (changed, action) == (False, "unchanged")
         stored = LabelSet.from_dict(data["labelset"]).elements[0]
         assert read_provenance(stored.metadata) is None
+
+
+class TestRestorationCycle:
+    """The erasure hazard: vote -> compose -> restore -> recompose.
+
+    ``sync_labels_to_loaded_detector`` rebuilds the entire labelset from live
+    vote state on *every* vote.  So if a detector load restores votes without
+    their recorded provenance, the user's very next click rewrites the whole
+    labelset with the context stripped out.  ``region_box`` shipped with
+    exactly this bug; this is the test that says provenance did not.
+    """
+
+    def test_provenance_survives_a_detector_load_and_the_next_resync(self):
+        from vtscore.detectors.label_restoration import restore_labels_from_detector
+
+        det = get_active_detector_context()
+        snap = get_active_context().medias
+        set_vote(1, "good", provenance={"flow": "autopilot", "phase": "hard"})
+        set_vote(2, "bad", provenance={"flow": "list_review", "rank_at_vote": 4})
+
+        # What the detector JSON would hold after the vote-triggered sync.
+        on_disk = LabelSet.from_clips_and_votes(
+            snap,
+            dict(det.good_votes),
+            dict(det.bad_votes),
+            expand_dupes=False,
+            vote_provenance=dict(det.vote_provenance),
+        ).to_dict()
+
+        # Loading the detector afresh (as a dataset switch would).
+        det.good_votes.clear()
+        det.bad_votes.clear()
+        det.vote_provenance.clear()
+        restore_labels_from_detector({"labelset": on_disk})
+
+        assert det.vote_provenance[1]["phase"] == "hard"
+        assert det.vote_provenance[2]["rank_at_vote"] == 4
+
+        # The next vote resyncs the whole labelset from live state; the
+        # restored records must still be in what it writes.
+        resynced = LabelSet.from_clips_and_votes(
+            snap,
+            dict(det.good_votes),
+            dict(det.bad_votes),
+            expand_dupes=False,
+            vote_provenance=dict(det.vote_provenance),
+        )
+        by_md5 = {el.md5: el for el in resynced.elements}
+        assert read_provenance(by_md5[snap[1]["md5"]].metadata)["phase"] == "hard"
+        assert read_provenance(by_md5[snap[2]["md5"]].metadata)["flow"] == "list_review"
+
+    def test_a_legacy_labelset_restores_without_provenance(self):
+        """Elements written before this feature carry none, and must restore
+        cleanly rather than raising or inventing a record."""
+        from vtscore.detectors.label_restoration import restore_labels_from_detector
+
+        snap = get_active_context().medias
+        legacy = LabelSet.from_clips_and_votes(snap, {1: None}, {}, expand_dupes=False)
+        restored = restore_labels_from_detector({"labelset": legacy.to_dict()})
+
+        det = get_active_detector_context()
+        assert restored == 1
+        assert 1 in det.good_votes
+        assert det.vote_provenance == {}

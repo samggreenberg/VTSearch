@@ -53,3 +53,22 @@ export function makeSettingsStateStub(overrides: Partial<SettingsStateService> =
   };
   return { stub, settings };
 }
+
+
+/**
+ * A vote request's body with its ``provenance`` block removed.
+ *
+ * Every vote now carries surfacing provenance assembled by
+ * ``VoteProvenanceService`` from whatever sort/autopilot state is live, so a
+ * spec asserting *which target was sent* would otherwise have to restate that
+ * whole block — and would then be re-edited every time an unrelated default
+ * moved. The provenance itself is asserted on its own, in
+ * ``vote-provenance.service.spec.ts`` and the vote-state provenance tests;
+ * everything else stays as strict as it was, including "no ``region_box`` was
+ * sent".
+ */
+export function voteBodyWithoutProvenance(req: { request: { body: unknown } }): unknown {
+  const body = req.request.body as Record<string, unknown>;
+  const { provenance: _provenance, ...rest } = body;
+  return rest;
+}
