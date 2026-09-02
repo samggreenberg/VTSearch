@@ -73,12 +73,20 @@ surfacing context the study measured as trustworthy.
 
 ## Pre-registered experiment
 
-**Harness:** extend `scripts/experiments/inclusion_knob/run_autopilot_sweep.py`,
-which already drives the repo's own `vtscore.eval.al_strategies` selector, and
-reuse the `toplist` policy from `run_selection_sweep.py` (batches of 8 off the
-current sort, matching page-at-a-time manual review). New knob: a **mixed vote
-stream** that interleaves autopilot-selected votes with toplist bursts at a
-configured fraction, tagging each simulated vote with its provenance.
+**Harness:** `scripts/experiments/inclusion_knob/run_autopilot_sweep.py`, which
+since #3408 is a thin driver over
+`vtscore.eval.voting_iterations.simulate_voting_iterations` rather than a vote
+loop of its own. The mixed stream therefore belongs **in the harness**, not in
+the script: a `toplist` vote source (batches of 8 off the current sort, matching
+page-at-a-time manual review) registered beside `autopilot` in
+`vtscore.eval.al_strategies`, plus a mix fraction that interleaves the two and
+tags each simulated vote with its provenance. Re-adding it script-side would
+recreate exactly the uncovered second copy #3408 removed. (The pre-#3408
+`run_selection_sweep.py` held a hand-rolled `toplist` loop against the retired
+configuration; it was deleted, and its measured behaviour survives in
+`docs/experiments/2026-07-27-inclusion-knob/selection_sweep.csv` and that
+study's `SELECTION-BIAS.md` as the adversarial bound this study's mix
+interpolates towards.)
 
 **Arms.** Vote-stream mix (autopilot : list-review) ∈ {100:0, 85:15, 70:30,
 50:50, 0:100} × calibration policy ∈ {`all-votes` (status quo),
@@ -122,11 +130,12 @@ fraction of cells where the starvation fallback engaged.
 
 <!-- item-sep -->
 
-- **Mixed-flow harness arm + measurement.** The `run_autopilot_sweep.py`
-  vote-stream mix knob, provenance tagging in the simulated stream, the
-  `partitioned` calibration policy behind a harness flag, and the paired
-  analysis per the pre-registered metrics and decision rules above. CPU-cheap
-  (same scale as the selection-bias sweep).
+- **Mixed-flow harness arm + measurement.** The `toplist` vote source and
+  vote-stream mix knob in `vtscore.eval.al_strategies` (not in the driver
+  script — see the harness note above), provenance tagging in the simulated
+  stream, the `partitioned` calibration policy behind a harness flag, and the
+  paired analysis per the pre-registered metrics and decision rules above.
+  CPU-cheap (same scale as the selection-bias sweep).
 
 <!-- item-sep -->
 

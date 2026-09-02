@@ -26,8 +26,17 @@ Selection-bias study (independent of the stages above, same cached embeddings):
 
 ```bash
 python run_autopilot_sweep.py   # canonical Autopilot vote order (~45 min CPU); --quick to smoke-test
-python summarize_autopilot.py   # autopilot_tables.md from autopilot_sweep.csv
+python summarize_autopilot.py   # autopilot_prod_tables.md from the two autopilot_prod_*.csv frames
 ```
+
+`run_autopilot_sweep.py` is a **driver** over
+`vtscore.eval.voting_iterations.simulate_voting_iterations`, not a simulation of
+its own (issue #3408). It therefore measures the shipped detector by
+construction — the `linear_svm` head, the app's Autopilot phase machine, the
+acquisition-inclusion offset, the production Train/Calibrate split — and it does
+**not** reproduce the committed `autopilot_sweep.csv`, which is the 2026-07-30
+run's record from the earlier hand-rolled loop and stays as it is. New runs write
+`autopilot_prod_steps.csv` / `autopilot_prod_budget.csv`.
 
 ## Files
 
@@ -39,7 +48,5 @@ python summarize_autopilot.py   # autopilot_tables.md from autopilot_sweep.csv
 | `knobs.py` | treatments (raw / label-smoothed), temperature fit, the four knob designs, metrics |
 | `run_sweep.py` | Stage 1: the grid; writes `sweep.csv` |
 | `summarize.py` | Stage 2: figures + markdown tables |
-| `run_autopilot_sweep.py` | Selection-bias study: drives the repo's own `vtscore.eval.al_strategies` Autopilot selector over a real `CoverageAtlas`; writes `autopilot_sweep.csv` |
+| `run_autopilot_sweep.py` | Selection-bias study: thin driver over `simulate_voting_iterations`; writes `autopilot_prod_steps.csv` + `autopilot_prod_budget.csv` |
 | `summarize_autopilot.py` | Tables for the selection-bias study |
-| `run_selection_sweep.py` | Superseded adversarial bound: greedy top-of-sort labeling (models manual result-list review, **not** Autopilot); writes `selection_sweep.csv` |
-| `summarize_selection.py` | Tables for the superseded arm |
