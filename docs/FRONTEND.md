@@ -308,6 +308,9 @@ this codebase, and it is silent.
   reading a signal auto-disposes with the component, which is why the
   `takeUntil(destroy$)` / `ngOnDestroy` plumbing has been dropped wherever it
   was the last user.
+- **Where a subscription is still needed, tear it down with
+  `takeUntilDestroyed()`** — see "Subscription teardown vs. cancellation"
+  below for the one distinction that decides it.
 - **Reads go through `rxResource`.** The read path is being migrated onto
   Angular's reactive resource primitives (`SettingsStateService`,
   `MediaStateService`, several picker modals so far). `rxResource({ params,
@@ -495,6 +498,52 @@ rather than a signal, and `ToastService` subscribes to turn each into a toast
 of the matching level. See [`api/events.md`](api/events.md) for the payload
 and [`EXTENDING-plugins.md`](EXTENDING-plugins.md#notifying-the-user-toasts)
 for the producing side.
+
+### Subscription teardown vs. cancellation
+
+Two different jobs get done with the same RxJS machinery, and conflating them
+is how a working poller gets swept into a bug. Name which one you are doing
+before reaching for an idiom.
+
+**Teardown** — "stop this when the component dies." There is exactly one
+sanctioned idiom, and new code must use it:
+
+```ts
+private destroyRef = inject(DestroyRef);
+...
+this.someService.thing$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(...);
+```
+
+Drop the explicit `destroyRef` argument only in an injection context (a field
+initializer or the constructor body); anywhere else — `ngOnInit`,
+`ngAfterViewInit`, an event handler — it must be passed. The point of the
+idiom is that teardown is *declared at the subscription*, so adding a
+subscription can never forget to add a matching `unsubscribe()`. Two older
+idioms survive in the tree and are converted opportunistically, never
+introduced: a hand-rolled `destroy$ = new Subject<void>()` fired from
+`ngOnDestroy`, and a `subs: Subscription[]` array drained in `ngOnDestroy`.
+Both are strictly worse — the bookkeeping is manual and the compiler does not
+check it.
+
+**Cancellation** — "stop the *previous* one because a newer one supersedes
+it." This is not teardown and `takeUntilDestroyed()` cannot express it; the
+component is very much still alive. It legitimately takes one of two shapes,
+and both are correct as written:
+
+- A **scope subject** fired on each reset, for a family of streams that share
+  a lifetime shorter than the component's: `pairScope$` (`find-view`,
+  `label-view`) tears down everything belonging to the dataset/detector pair
+  being left, `findPolling$` (`dashboard`) and `stopPolling$`
+  (`VoteStateService`) cancel a superseded poll. Name it for the scope it
+  bounds, never `destroy$`.
+- A **re-assigned `Subscription` field** that unsubscribes the previous value
+  before storing the next: `text-viewer`'s `sub`, `folder-browser`'s
+  `currentSub`, `browse-bin-popup`'s `scrollSub` (re-keyed to the viewport
+  *instance*), `label-importer-modal`'s `ingestSub`.
+
+A `Subscription` field is only a teardown idiom when it is written once and
+read only by `ngOnDestroy`. If it is re-assigned anywhere, it is cancellation
+— leave it alone.
 
 Where a real poll is still needed, use `adaptivePoll()` from
 `services/adaptive-poll.ts` rather than `timer(0, n)` + `switchMap`. It runs

@@ -1,6 +1,6 @@
-import { ChangeDetectionStrategy, Component, effect, inject, input, OnDestroy, output, signal, untracked, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, input, OnDestroy, output, signal, untracked, viewChild } from '@angular/core';
 import { KeyValuePipe, TitleCasePipe } from '@angular/common';
-import { Subscription } from 'rxjs';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { EmbedderInfo, Media, PayloadVariant } from '../../models/api.models';
 import { MediasApiService } from '../../services/medias-api.service';
 import { KeyboardService } from '../../services/keyboard.service';
@@ -44,6 +44,7 @@ export class CenterPanelComponent implements OnDestroy {
   private settingsState = inject(SettingsStateService);
   private sortState = inject(SortStateService);
   private datasetsListingsApi = inject(DatasetsListingsApiService);
+  private destroyRef = inject(DestroyRef);
 
   readonly media = input<Media | null>(null);
   readonly disabled = input(false);
@@ -104,7 +105,6 @@ export class CenterPanelComponent implements OnDestroy {
   private spinTimer: ReturnType<typeof setTimeout> | null = null;
 
   private _pausedByVisibility = false;
-  private subs: Subscription[] = [];
 
   constructor() {
     effect(() => {
@@ -150,7 +150,6 @@ export class CenterPanelComponent implements OnDestroy {
   ngOnDestroy(): void {
     this.stopPlayback();
     this.keyboard.stop();
-    this.subs.forEach((s) => s.unsubscribe());
     if (this.spinTimer) clearTimeout(this.spinTimer);
     if (this.undoToastTimer) clearTimeout(this.undoToastTimer);
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
@@ -172,52 +171,53 @@ export class CenterPanelComponent implements OnDestroy {
   init(): void {
     this.loadSettings();
     this.keyboard.start();
-    this.subs.push(
-      this.datasetsListingsApi.getEmbedders().subscribe({
+    this.datasetsListingsApi
+      .getEmbedders()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
         next: (embedders) => (this.embedderInfos = embedders),
-      }),
-    );
+      });
     document.addEventListener('visibilitychange', this.onVisibilityChange);
-    this.subs.push(
-      this.keyboard.action$.subscribe((action) => {
-        switch (action.type) {
-          case 'vote':
-            if (this.media() && action.direction && !this.disabled()) {
-              this.castVote(action.direction);
-            }
-            break;
-          case 'volume':
-            this.adjustVolume(action.volumeDelta ?? 0);
-            break;
-          case 'playback':
-            this.togglePlayback();
-            break;
-          case 'zoom': {
-            const imageViewer = this.imageViewer();
-            if (imageViewer && action.zoomDirection) {
-              if (action.zoomDirection === 'in') imageViewer.zoomIn();
-              else imageViewer.zoomOut();
-            }
-            break;
+    this.keyboard.action$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((action) => {
+      switch (action.type) {
+        case 'vote':
+          if (this.media() && action.direction && !this.disabled()) {
+            this.castVote(action.direction);
           }
-          case 'rotate': {
-            const imageViewer = this.imageViewer();
-            if (imageViewer && action.rotateDirection) {
-              if (action.rotateDirection === 'left') imageViewer.rotateLeft();
-              else imageViewer.rotateRight();
-            }
-            break;
+          break;
+        case 'volume':
+          this.adjustVolume(action.volumeDelta ?? 0);
+          break;
+        case 'playback':
+          this.togglePlayback();
+          break;
+        case 'zoom': {
+          const imageViewer = this.imageViewer();
+          if (imageViewer && action.zoomDirection) {
+            if (action.zoomDirection === 'in') imageViewer.zoomIn();
+            else imageViewer.zoomOut();
           }
-          case 'undo':
-            if (!this.disabled() && !this.isVoting()) this.voteState.undo();
-            break;
-          case 'redo':
-            if (!this.disabled() && !this.isVoting()) this.voteState.redo();
-            break;
+          break;
         }
-      }),
-      this.voteState.toast$.subscribe((t) => this.showUndoToast(t.action, t.mediaName)),
-    );
+        case 'rotate': {
+          const imageViewer = this.imageViewer();
+          if (imageViewer && action.rotateDirection) {
+            if (action.rotateDirection === 'left') imageViewer.rotateLeft();
+            else imageViewer.rotateRight();
+          }
+          break;
+        }
+        case 'undo':
+          if (!this.disabled() && !this.isVoting()) this.voteState.undo();
+          break;
+        case 'redo':
+          if (!this.disabled() && !this.isVoting()) this.voteState.redo();
+          break;
+      }
+    });
+    this.voteState.toast$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((t) => this.showUndoToast(t.action, t.mediaName));
   }
 
   /** Persist the first-vote hint as dismissed once the first vote lands. */
