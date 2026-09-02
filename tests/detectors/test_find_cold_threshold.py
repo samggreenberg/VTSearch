@@ -14,17 +14,19 @@ design).  The haystack was in hand the whole time - ``temp_medias`` is the very
 snapshot being scored.
 
 **Each head is scored at the geometry it was trained and calibrated in.**  Both
-scorers used to matmul the image-level embedding matrix, which is right for one
-of them and wrong for the other:
+scorers used to matmul the image-level embedding matrix, and both now read the
+app's max-pooled score rows, because both now score a head the app's own
+labelset training produced:
 
-* the **live** head came from the app's own training - Bad votes flooded as
-  patch negatives, threshold cut on the max-pooled distribution - so scoring its
-  image-level row alone compares a systematically lower quantity against a cut
-  made on a higher one, and the detector under-returns;
-* the **cold** head is re-derived here from image-level label vectors with no
-  flooding, so it is a whole-image head and image-level rows are correct for it
-  (``docs/ML.md``, region flooding).  What was wrong there was the *cut*, which
-  the estimator would otherwise fit on the max-pool.
+* the **live** head is the cached one - Bad votes flooded as patch negatives,
+  threshold cut on the max-pooled distribution - so scoring its image-level row
+  alone compares a systematically lower quantity against a cut made on a higher
+  one, and the detector under-returns;
+* the **cold** head used to be re-derived here from image-level label vectors
+  with no flooding, which made it a *different detector* from the same labels
+  (#3525).  It now comes from ``labelset_train_and_score``, so it is flooded and
+  bag-calibrated like every other head the app builds, and the image-level pin
+  that a whole-image head needed went with it.
 """
 
 from __future__ import annotations
@@ -113,40 +115,37 @@ def _run_find(corpus: dict[int, dict], dc: dict, monkeypatch) -> tuple[list[dict
 
 
 class TestColdFindCutsOnTheCorpusItDecides:
-    def test_cold_threshold_is_not_the_pooled_conformal_cut(self, monkeypatch):
-        """The shipped cut differs from the one a snap-less train would return.
+    def test_the_estimator_is_fitted_on_the_corpus_being_scored(self, monkeypatch):
+        """The haystack the population cut is fitted on *is* the Find snapshot.
 
-        The counterfactual is computable exactly: training is deterministic
-        (seeded fold splits, seeded torch init), so re-training the same X/y
-        with no haystack reproduces the number cold Find used to ship.
+        Before #3516 the cold path called ``train_and_threshold`` with no
+        ``snap``, so - per that function's own contract - the pooled
+        cross-calibration cut shipped alone.  What replaced it is the shared
+        core's own fusion step, so this now watches ``_fused_threshold``: it
+        must be handed the corpus's rows and ids, with the labelled media named
+        so the estimator can drop them from the population it fits (#3308).
         """
-        from vtscore.detectors.training import train_and_threshold
+        import vtscore.detectors.training as training_mod
 
         corpus = _cold_corpus()
-        dc = _cold_config()
+        seen: list[dict] = []
+        real_fused = training_mod._fused_threshold
 
-        captured: list[float] = []
-        real_record = find_mod._record_verdicts
+        def _spy(xcal, folds, rows, scores, inclusion, blend_ctx, schedule, **kwargs):
+            seen.append({"rows": rows, **kwargs})
+            return real_fused(xcal, folds, rows, scores, inclusion, blend_ctx, schedule, **kwargs)
 
-        def _spy(media_results, dc_name, all_ids, scores, threshold, fallback):
-            if scores is not None:
-                captured.append(threshold)
-            return real_record(media_results, dc_name, all_ids, scores, threshold, fallback)
+        monkeypatch.setattr(training_mod, "_fused_threshold", _spy)
+        _run_find(corpus, _cold_config(), monkeypatch)
 
-        monkeypatch.setattr(find_mod, "_record_verdicts", _spy)
-        _run_find(corpus, dc, monkeypatch)
-        assert captured, "the cold path scored nothing, so there is no threshold to check"
-        shipped = captured[0]
-
-        X_list, y_list, voted_ids = find_mod._collect_cold_training_data(dc["detector_data"], corpus, EMB)
-        assert voted_ids == {1, 2, 3, 4, 5, 6}, (
-            "the labelled media must be named so the estimator can drop them from the haystack it fits on (issue #3308)"
+        assert seen, "the cold path never reached the population estimator"
+        call = seen[0]
+        assert call["rows"] is not None and len(call["rows"].ids) == len(corpus), (
+            "the estimator was fitted without the haystack Find already holds (issue #3516)"
         )
-        _model, pooled = train_and_threshold(X_list, y_list, embedder_name=EMB)
-
-        assert shipped != pooled, (
-            "cold Find still ships the pooled cross-calibration cut; the haystack "
-            "it is scoring never reached the population estimator (issue #3516)"
+        assert set(call["final_ids"]) == set(corpus)
+        assert call["voted_ids"] == {1, 2, 3, 4, 5, 6}, (
+            "the labelled media must be named so the estimator can drop them from the haystack it fits on (issue #3308)"
         )
 
     def test_the_two_cuts_move_verdicts(self, monkeypatch):
@@ -154,28 +153,123 @@ class TestColdFindCutsOnTheCorpusItDecides:
 
         Without this the assertion above could pass on a fixture where the two
         cuts differ in the sixth decimal and nothing a user sees changes.  The
-        comparison is paired - the head is identical either way (training is
-        deterministic), so the only thing that moves is the line.
+        counterfactual is the pre-fusion number - ``_fused_threshold``'s own
+        ``xcal_threshold`` argument, which is exactly what used to ship - and
+        the comparison is paired, since the head is identical either way
+        (training is deterministic) and only the line moves.
         """
         import vtscore.detectors.training as training_mod
 
         corpus = _cold_corpus()
         anchored, _neg = _run_find(corpus, _cold_config(), monkeypatch)
 
-        real_train = training_mod.train_and_threshold
-
-        def _snapless(X_list, y_list, snap=None, **kwargs):
-            kwargs.pop("haystack_rows", None)
-            kwargs.pop("voted_ids", None)
-            return real_train(X_list, y_list, **kwargs)
-
-        monkeypatch.setattr(find_mod, "train_and_threshold", _snapless)
+        monkeypatch.setattr(
+            training_mod,
+            "_fused_threshold",
+            lambda xcal, *args, **kwargs: xcal,
+        )
         pooled, _neg2 = _run_find(corpus, _cold_config(), monkeypatch)
 
         assert len(pooled) > len(anchored), (
             f"the pooled cut admitted {len(pooled)} of {len(corpus)} and the anchored cut "
             f"{len(anchored)}; on this fixture the two rules must separate, or the "
             "assertion above is checking a difference nobody can see"
+        )
+
+
+class TestColdFindIsTheAppsLabelsetTraining:
+    """One labelset means one detector, whichever path built the head (#3525)."""
+
+    def test_cold_find_delegates_to_labelset_train_and_score(self, monkeypatch):
+        """The head comes from the app's entry point, not a port living here.
+
+        This is the whole point of #3525: a hand-rolled reimplementation
+        silently trained a *different* detector from the same labels (image-level
+        Good vectors with the ``region_box`` discarded, one negative per Bad vote
+        instead of its flooded patch stack, per-row instead of per-bag
+        calibration).  The guard is structural because that divergence is
+        invisible in the numbers - both versions return plausible scores.
+        """
+        import vtscore.detectors.labelset_training as lt_mod
+
+        calls: list[dict] = []
+        real = lt_mod.labelset_train_and_score
+
+        def _spy(det_ctx, labelset, **kwargs):
+            calls.append({"det_ctx": det_ctx, "labelset": labelset, **kwargs})
+            return real(det_ctx, labelset, **kwargs)
+
+        monkeypatch.setattr(lt_mod, "labelset_train_and_score", _spy)
+        corpus = _cold_corpus(n=20)
+        _run_find(corpus, _cold_config(), monkeypatch)
+
+        assert len(calls) == 1, "the cold path did not go through labelset_train_and_score"
+        call = calls[0]
+        assert call["clips_dict"] is corpus
+        assert {e.label for e in call["labelset"].elements} == {"good", "bad"}
+        assert call["rows"] is not None, (
+            "the route's prebuilt rows were not passed through, so the shared core restacked the corpus"
+        )
+
+    def test_the_live_detector_context_is_not_populated(self, monkeypatch):
+        """A cold Find must not write another dataset's vectors into a loaded detector.
+
+        ``populate_label_embeddings`` caches its resolved vectors on whatever
+        context it is handed and stamps that context's ``embedder``.  Handing it
+        the live one would leave the loaded detector holding label embeddings
+        built against whichever dataset Find happened to be scanning.  It would
+        also persist that foreign space to the detector registry, which is why
+        the throwaway context carries an empty ``detector_id``
+        (``record_detector_embedder`` no-ops on one).
+        """
+        from vtscore.state.core import DetectorContext, register_detector_context, unregister_detector_context
+
+        live = DetectorContext("cold-det", name="cold-det", embedder_type="patch_semantic")
+        register_detector_context(live)
+        try:
+            _run_find(_cold_corpus(n=20), _cold_config(), monkeypatch)
+        finally:
+            unregister_detector_context("cold-det")
+
+        assert not live.label_embeddings, (
+            "cold Find populated the live detector context's label cache with a foreign dataset's vectors"
+        )
+        assert not live.embedder, "cold Find re-stamped the live context's embedder"
+
+    def test_labels_resolve_once_across_every_dataset_in_the_run(self, monkeypatch):
+        """A label that has to be fetched from its origin is fetched once, not per dataset.
+
+        Delegating buys the app's real head at the cost of the app's real
+        resolution: an element absent from the snapshot costs an importer fetch
+        (plus a ``patch_forward`` on a patch detector).  Find scores every
+        detector against every selected dataset, so the throwaway context is kept
+        for the whole run and later datasets read the cache.
+        """
+        import vtscore.detectors.labelset_training as lt_mod
+
+        resolved: list[str] = []
+        monkeypatch.setattr(
+            lt_mod,
+            "_resolve_uncached_embedding",
+            lambda elem, snap, **kw: resolved.append(elem.md5) or _basis(1),
+        )
+        monkeypatch.setattr(lt_mod, "_resolve_score_rows", lambda *a, **kw: None)
+
+        # A corpus that resolves none of the labels, so every element takes the
+        # origin path on the first dataset and the cache on the second.
+        corpus = {cid: _media(cid, _basis(1)) for cid in range(100, 120)}
+        dc = _cold_config()
+        for i, entry in enumerate(dc["detector_data"]["labelset"]["labels"]):
+            entry["label"] = "good" if i < 3 else "bad"
+
+        monkeypatch.setattr(find_mod, "_load_find_dataset_medias", lambda ds: corpus)
+        with app_module.app.test_request_context("/api/find"):
+            for name in ("ds-a", "ds-b"):
+                find_mod._score_dataset({"name": name, "pkl_path": "ignored"}, [dc], 0, 0)
+
+        assert len(resolved) == 6, (
+            f"{len(resolved)} origin resolutions for 6 labels over 2 datasets: the cold "
+            "context is being rebuilt per dataset instead of held for the run"
         )
 
 
@@ -224,13 +318,14 @@ class TestFindScoresAtTheAppsGeometry:
         )
         assert {n["id"] for n in negatives} == {2}
 
-    def test_cold_head_stays_on_image_level_rows(self, monkeypatch):
-        """The cold path does **not** max-pool, and its cut is fitted the same way.
+    def test_cold_head_max_pools_like_every_other_head(self, monkeypatch):
+        """The cold path scores the app's score rows, not one row per media.
 
-        Its head never saw a patch as a negative, so promoting a distractor
-        patch to the media's score would over-fire.  The rows it scores are also
-        the rows the threshold is fitted on, which is the whole point of handing
-        them to ``train_and_threshold`` as ``haystack_rows``.
+        Its head is built by ``labelset_train_and_score``, which floods a Bad
+        label's patch stack as negatives and collapses each calibration bag over
+        the same rows the scorer max-pools - so image-level scoring would now be
+        the mismatch (issue #3525).  The rows it scores are also the rows the
+        threshold is fitted on, because the shared core is handed both.
         """
         grid = np.zeros((1, 2, DIM), dtype=np.float32)
         grid[0, 0] = _basis(0)
@@ -253,9 +348,74 @@ class TestFindScoresAtTheAppsGeometry:
         assert seen, "the cold path built no rows"
         n_media, n_rows = seen[0]
         assert n_media == len(corpus)
-        assert n_rows == n_media, (
-            f"the cold path stacked {n_rows} rows for {n_media} media: it is max-pooling "
-            "patch rows into a head that was trained on image-level vectors alone"
+        # 1 image-level row + 2 patches per media.
+        assert n_rows == n_media * 3, (
+            f"the cold path stacked {n_rows} rows for {n_media} media: it is scoring "
+            "image-level rows under a head that was trained with region flooding"
+        )
+
+    def test_cold_path_builds_the_corpus_rows_once_for_every_detector(self, monkeypatch):
+        """N cold detectors over one dataset stack the corpus once, not N times.
+
+        ``get_region_matrix_for_snap`` caches only against the *active* dataset
+        context, and a Find snapshot never is one, so the route's own
+        ``rows_cache`` is the only thing between this and an O(detectors)
+        restack of a multi-million-row matrix.  Delegating the cold path must
+        pass those rows through rather than let the shared core rebuild them.
+        """
+        grid = np.zeros((1, 2, DIM), dtype=np.float32)
+        grid[0, 0] = _basis(0)
+        grid[0, 1] = _basis(1)
+        corpus = _cold_corpus(n=20)
+        for media in corpus.values():
+            media["patch_grid"] = grid
+
+        builds: list[int] = []
+        real_rows = find_mod.scoring_rows_for_snap
+
+        def _spy(clips_dict, embedder_name=None, *, region_pooling=None):
+            builds.append(len(clips_dict))
+            return real_rows(clips_dict, embedder_name, region_pooling=region_pooling)
+
+        monkeypatch.setattr(find_mod, "scoring_rows_for_snap", _spy)
+        monkeypatch.setattr(find_mod, "_load_find_dataset_medias", lambda ds: corpus)
+
+        configs = []
+        for i in range(3):
+            dc = _cold_config()
+            dc["name"] = f"cold-det-{i}"
+            dc["detector_id"] = f"cold-det-{i}"
+            configs.append(dc)
+
+        with app_module.app.test_request_context("/api/find"):
+            find_mod._score_dataset({"name": "corpus", "pkl_path": "ignored"}, configs, 0, 0)
+
+        assert len(builds) == 1, (
+            f"the corpus was stacked {len(builds)} times for 3 detectors in one space; "
+            "the cold path is rebuilding rows the route already holds"
+        )
+
+    def test_cold_path_does_not_write_the_foreign_embedder_to_the_registry(self, monkeypatch):
+        """The throwaway context must not stamp this dataset's space on the detector.
+
+        ``populate_label_embeddings`` ends by persisting the space it embedded
+        in, so the preload predictor warms the right model next session.  Run
+        against a dataset the detector is not loaded against, that would record
+        a *foreign* dataset's embedder as the detector's own, so the throwaway
+        context carries an empty ``detector_id`` and the write no-ops.
+        """
+        import vtscore.detectors.registry as registry_mod
+
+        recorded: list[tuple[str, str]] = []
+        monkeypatch.setattr(
+            registry_mod,
+            "record_detector_embedder",
+            lambda det_id, emb: recorded.append((det_id, emb)),
+        )
+        _run_find(_cold_corpus(n=20), _cold_config(), monkeypatch)
+
+        assert not [r for r in recorded if r[0]], (
+            f"cold Find persisted an embedder against a real detector id: {recorded}"
         )
 
 

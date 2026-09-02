@@ -931,12 +931,17 @@ def scoring_rows_for_snap(
     above.  ``False`` forces one image-level row per media even on a patch
     dataset - the geometry a whole-image head has to be scored at, because it
     was never shown a patch as a negative and would fire on distractors the
-    max-pool then promotes to the media's score.  Cross-dataset Find's cold
-    path is the case: it re-derives a head from a labelset's image-level
-    vectors with no region flooding (see ``docs/ML.md``, region flooding), so
-    it scores - and calibrates - image-level throughout.  ``True`` is accepted
-    for symmetry and still yields one row per media on a grid-less dataset,
-    which has no patch rows to pool.
+    max-pool then promotes to the media's score (see ``docs/ML.md``, region
+    flooding).  ``True`` is accepted for symmetry and still yields one row per
+    media on a grid-less dataset, which has no patch rows to pool.
+
+    **No shipped caller passes ``False`` today.**  Cross-dataset Find's cold
+    path used to, and was the case this override was written for; #3525 replaced
+    the whole-image head it needed the override for with the app's own
+    region-flooded labelset training, so the pin went with the head.  The knob
+    stays because it is the correct answer for any caller that does build a
+    whole-image head, and because it is the only thing separating "this head
+    is not MaxPatch" from the dataset-level patch gate.
 
     Media that carry no usable vector in that space are **skipped**, not fatal:
     the builders raise on one (no vector, or a row of the wrong width), and this
@@ -1123,6 +1128,7 @@ def _train_and_score_xy(
     groups: list | None = None,
     score_rows: dict | None = None,
     voted_ids: "set[int] | None" = None,
+    rows: ScoringRows | None = None,
 ) -> tuple[list[dict[str, Any]], float, nn.Sequential | None]:
     """Train the detector head on ``(X_list, y_list)`` and score every media in *clips_dict*.
 
@@ -1148,6 +1154,16 @@ def _train_and_score_xy(
     :func:`_fused_threshold`).
     Returns ``([], 0.5, None)`` when the labels don't satisfy ≥2 samples AND
     ≥1 good AND ≥1 bad.
+
+    *rows* lets a caller that has **already** built this snapshot's score rows
+    hand them in instead of having them rebuilt.  It is a pure cache
+    pass-through - the rows must be
+    :func:`scoring_rows_for_snap`'s output for *clips_dict* in the same space
+    this function resolves - and exists for cross-dataset Find, which scores
+    several detectors over one ``temp_medias`` that
+    :func:`~vtscore.embedding.matrix.get_region_matrix_for_snap` will not cache
+    (its cache is keyed to the *active* dataset context).  Without it each
+    detector would restack the corpus.
     """
     import torch  # noqa: PLC0415
 
@@ -1215,8 +1231,11 @@ def _train_and_score_xy(
 
     # One row build for the whole step: the final model's scoring pass and every
     # fold pass inside `_fused_threshold` read the same matrix (only the head
-    # changes between them).
-    rows = scoring_rows_for_snap(clips_dict, score_emb)
+    # changes between them).  A caller that already holds that matrix passes it
+    # in (see *rows* above) so a multi-detector pass over one snapshot builds it
+    # once rather than once per head.
+    if rows is None:
+        rows = scoring_rows_for_snap(clips_dict, score_emb)
     all_ids = rows.ids
     scores, best_region = score_rows_with_model(model, rows)
 

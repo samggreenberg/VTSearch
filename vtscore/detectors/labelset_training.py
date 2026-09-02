@@ -827,6 +827,8 @@ def labelset_train_and_score(
     inclusion_value: int = 0,
     calibrate_count: int = 2,
     calibration_fraction: float | None = None,
+    rows: Any = None,
+    on_progress: ProgressCallback | None = None,
 ) -> tuple[list[dict[str, Any]], float, Any | None]:
     """Train an MLP on the full labelset, then score every media in *clips_dict*.
 
@@ -843,10 +845,22 @@ def labelset_train_and_score(
     the shared core to the per-space production split for the detector's
     embedder (see
     :func:`~vtscore.detectors.training.resolve_calibration_fraction`).
+
+    *rows* is an optional pre-built
+    :class:`~vtscore.detectors.training.ScoringRows` for *clips_dict*, handed
+    straight to the shared core so a caller scoring several detectors over one
+    uncached snapshot (cross-dataset Find) stacks the corpus once - see
+    :func:`~vtscore.detectors.training._train_and_score_xy`.
+
+    *on_progress* is forwarded to :func:`populate_label_embeddings`, which is
+    the expensive half whenever the labelset does not resolve into
+    *clips_dict*: each unresolved element costs one origin fetch (and, on a
+    patch detector, one ``patch_forward``).  A caller driving a progress bar -
+    or wanting a cancellation checkpoint - passes it.
     """
     from vtscore.detectors.training import _train_and_score_xy
 
-    populate_label_embeddings(det_ctx, labelset, media_type=media_type, snap=clips_dict)
+    populate_label_embeddings(det_ctx, labelset, media_type=media_type, snap=clips_dict, on_progress=on_progress)
     X_list, y_list, groups, score_rows = build_xy_from_labelset(det_ctx, labelset)
     results, threshold, model = _train_and_score_xy(
         X_list,
@@ -859,6 +873,7 @@ def labelset_train_and_score(
         groups=groups,
         score_rows=score_rows,
         voted_ids=labeled_media_ids(labelset, clips_dict),
+        rows=rows,
     )
 
     # Stage-2 structural re-rank for a saved structural detector reloaded

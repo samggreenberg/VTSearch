@@ -440,6 +440,18 @@ places:
 > fallback by construction. Pinned by
 > `tests/detectors/test_find_cold_threshold.py`.
 
+> ### ⚠ Follow-up, 2026-09-02 (#3525): the geometry above no longer holds
+>
+> One sentence of the #3516 note has since been superseded. Cold Find no longer
+> re-derives a head at all: `_score_with_cold_detector` delegates to
+> `labelset_train_and_score`, the same entry point the load and learned-sort
+> paths use, so its head is region-flooded and bag-calibrated and the cut is
+> fitted on the **max-pooled** rows it now scores - not the image-level ones.
+> The image-level pin existed only because the head was a whole-image one, and
+> went with it. Everything else in the note stands: the haystack is still
+> `temp_medias`, the labelled ids are still dropped from it, and the estimator
+> is still the fold-anchored one.
+
 That second one is narrower than it reads: it is the library API, not the app's
 reload. On region-voting detectors the pooled rule is currently **0.063 ± 0.008
 worse than what a freshly trained detector gets**, and roughly two-thirds of that gap
