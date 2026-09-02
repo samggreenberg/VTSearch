@@ -1,4 +1,8 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
+import { Subscription } from 'rxjs';
+import { ProgressEventsService } from './progress-events.service';
+import { formatProgressMessage } from '../utils/format-progress';
+import type { ProgressEvent } from '../models/api.models';
 
 export type SortMode = 'text' | 'learned' | 'load';
 export type SelectMode = 'top' | 'hard' | 'new';
@@ -27,6 +31,8 @@ export interface SortedItem {
  */
 @Injectable({ providedIn: 'root' })
 export class SortStateService {
+  private readonly progressEvents = inject(ProgressEventsService);
+
   private readonly _sortMode = signal<SortMode>('text');
   private readonly _selectMode = signal<SelectMode>('top');
   private readonly _sortOrder = signal<SortedItem[] | null>(null);
@@ -230,6 +236,53 @@ export class SortStateService {
     this._sortOverall.set(overall);
     this._sortEtaSeconds.set(etaSeconds);
     this._sortStepEnd.set(stepEnd);
+  }
+
+  // --- detector-scoring progress -------------------------------------------
+
+  private findProgressSub: Subscription | null = null;
+
+  /**
+   * Mirror the `find` SSE channel onto the sort status/progress fields for the
+   * duration of a detector-scoring run, so a view only has to start and stop
+   * the tracking rather than restate what a progress frame means.
+   *
+   * This lives here because every field a frame writes — `sortStatus`,
+   * `sortProgress`, `sortProgressTotal`, `sortOverall`, `sortEtaSeconds`,
+   * `sortStepEnd` — is owned by this service. Find and Label previously carried
+   * byte-identical copies of the subscription; the dashboard's superficially
+   * similar block is *not* one of them (it renders `/api/find` into
+   * `DatasetStateService.progressMessage`, a different surface with a different
+   * default message and no progress counts), so it deliberately stays where it
+   * is.
+   *
+   * Restarting is idempotent: an already-running subscription is torn down
+   * first, so a second scoring run never stacks two writers on the same fields.
+   */
+  startFindProgressTracking(): void {
+    this.stopFindProgressTracking();
+    this.findProgressSub = this.progressEvents.find$.subscribe((prog: ProgressEvent) => {
+      if (prog.status !== 'running') return;
+      this.setSortStatus(formatProgressMessage(prog, 'Scoring with detector…'));
+      this.setSortProgress(
+        prog.current ?? 0,
+        prog.total ?? 0,
+        prog.overall ?? null,
+        prog.eta_seconds ?? null,
+        prog.overall_step_end ?? null,
+      );
+    });
+  }
+
+  /**
+   * Stop mirroring the `find` channel. Callers must reach here on the way out
+   * (run finished, view destroyed): this service is a root singleton, so a
+   * subscription left running would keep writing scoring progress into state
+   * that a later, unrelated sort is displaying.
+   */
+  stopFindProgressTracking(): void {
+    this.findProgressSub?.unsubscribe();
+    this.findProgressSub = null;
   }
 
   setInclusion(value: number): void {

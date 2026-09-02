@@ -3,15 +3,11 @@ import { Router } from '@angular/router';
 import { take } from 'rxjs/operators';
 import { BrowseSubsetService } from './browse-subset.service';
 import { ProjectionApiService } from './projection-api.service';
+import { pollUntil, type PollHandle, type PollStep } from './poll-until';
 import { ToastService } from './toast.service';
 import { formatEta, progressBarState } from '../utils/format-progress';
 import type { ProgressEvent } from '../models/api.models';
 import type { ProjectionMeta } from '../models/projection.models';
-
-/** How often the in-flight subset build is polled for progress. */
-const POLL_MS = 1000;
-/** Consecutive poll failures tolerated before giving up on the build. */
-const MAX_POLL_ERRORS = 5;
 
 /**
  * Orchestrates the Find view's **Browse** buttons: build the ephemeral subset
@@ -77,8 +73,7 @@ export class BrowseSubsetPrepService {
 
   readonly eta = computed(() => formatEta(this.progress()?.eta_seconds));
 
-  private pollTimer: ReturnType<typeof setTimeout> | null = null;
-  private pollErrors = 0;
+  private poll: PollHandle | null = null;
   private datasetId = '';
   private ids: number[] = [];
 
@@ -91,7 +86,6 @@ export class BrowseSubsetPrepService {
     if (this.preparing() || !datasetId || ids.length === 0) return;
     this.datasetId = datasetId;
     this.ids = ids;
-    this.pollErrors = 0;
     this.preparing.set(true);
     this.progress.set({ message: 'Arranging the items…' });
 
@@ -107,7 +101,7 @@ export class BrowseSubsetPrepService {
             this.finish();
             return;
           }
-          this.schedulePoll();
+          this.startPoll();
         },
         // The build POST raises the global error toast on its own, so there's
         // nothing to say here beyond dropping the overlay and staying in Find.
@@ -127,39 +121,25 @@ export class BrowseSubsetPrepService {
 
   // --- polling ------------------------------------------------------------
 
-  private schedulePoll(): void {
-    this.clearTimer();
-    this.pollTimer = setTimeout(() => {
-      if (!this.preparing()) return;
-      this.projectionApi
-        .getMeta(true)
-        .pipe(take(1))
-        .subscribe({
-          next: (meta) => {
-            this.pollErrors = 0;
-            this.handleMeta(meta);
-          },
-          error: () => {
-            this.pollErrors += 1;
-            if (this.pollErrors >= MAX_POLL_ERRORS) {
-              this.fail('Lost contact with the server while building the map.');
-              return;
-            }
-            this.schedulePoll();
-          },
-        });
-    }, POLL_MS);
+  private startPoll(): void {
+    this.stopPoll();
+    this.poll = pollUntil<ProjectionMeta>({
+      fetch: () => this.projectionApi.getMeta(true),
+      apply: (meta) => this.handleMeta(meta),
+      onLostContact: () => this.fail('Lost contact with the server while building the map.'),
+    });
   }
 
-  private handleMeta(meta: ProjectionMeta): void {
-    if (!this.preparing()) return;
+  /** Apply one projection meta, and say whether the build is still running. */
+  private handleMeta(meta: ProjectionMeta): PollStep {
+    if (!this.preparing()) return 'stop';
     if (meta.point_count > 0) {
       this.finish();
-      return;
+      return 'stop';
     }
     if (meta.status === 'error') {
       this.fail(meta.error || 'Failed to build the map');
-      return;
+      return 'stop';
     }
     this.progress.set({
       message: meta.message ?? '',
@@ -170,7 +150,7 @@ export class BrowseSubsetPrepService {
       overall: meta.overall ?? null,
       overall_step_end: meta.overall_step_end ?? null,
     });
-    this.schedulePoll();
+    return 'continue';
   }
 
   /** The map is ready: hand the ids to the browse view and navigate. */
@@ -190,15 +170,13 @@ export class BrowseSubsetPrepService {
   }
 
   private clear(): void {
-    this.clearTimer();
+    this.stopPoll();
     this.preparing.set(false);
     this.progress.set(null);
   }
 
-  private clearTimer(): void {
-    if (this.pollTimer) {
-      clearTimeout(this.pollTimer);
-      this.pollTimer = null;
-    }
+  private stopPoll(): void {
+    this.poll?.stop();
+    this.poll = null;
   }
 }

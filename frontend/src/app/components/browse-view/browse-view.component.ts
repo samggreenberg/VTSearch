@@ -18,6 +18,7 @@ import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { IconComponent } from '../icon/icon.component';
 import { NoFocusStealDirective } from '../../directives/no-focus-steal.directive';
 import { ProjectionApiService } from '../../services/projection-api.service';
+import { pollUntil, type PollHandle, type PollStep } from '../../services/poll-until';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { DatasetsRegistryApiService } from '../../services/datasets-registry-api.service';
@@ -382,10 +383,8 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   contextBounds: DOMRect | null = null;
 
   private destroy$ = new Subject<void>();
-  private polling = false;
-  private pollTimer: ReturnType<typeof setTimeout> | null = null;
-  private pollErrors = 0;
-  private static readonly MAX_POLL_ERRORS = 5;
+  /** The in-flight build poll, or ``null`` when no build is being watched. */
+  private poll: PollHandle | null = null;
 
   /**
    * Gate for the *first* projection load. Held until the per-media display
@@ -516,7 +515,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
-    if (this.pollTimer) clearTimeout(this.pollTimer);
+    this.stopPoll();
     document.removeEventListener('mousemove', this.boundPanelMove);
     document.removeEventListener('mouseup', this.boundPanelUp);
     document.removeEventListener('mousemove', this.boundDetailsMove);
@@ -1462,7 +1461,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
 
   private loadProjection(): void {
     this.status.set('loading');
-    this.polling = false;
+    this.stopPoll();
     this.projectionApi
       .getMeta(this.subset)
       .pipe(takeUntil(this.destroy$))
@@ -1516,55 +1515,47 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.onBuild();
   }
 
+  /**
+   * Watch an in-flight projection build until it lands. Re-entrant callers
+   * (`applyMeta` fires on every status refresh) are absorbed: a poll already
+   * running is left alone rather than restarted.
+   */
   private pollBuildStatus(): void {
-    if (this.polling) return;
-    this.polling = true;
-    this.pollErrors = 0;
-    const poll = (): void => {
-      this.projectionApi
-        .getMeta(this.subset)
-        .pipe(takeUntil(this.destroy$))
-        .subscribe({
-          next: (meta) => {
-            this.pollErrors = 0;
-            this.meta.set(meta);
-            if (meta.media_type) {
-              this.mediaType.set(meta.media_type);
-              this.applyBrowsePrefsForMediaType();
-            }
-            this.tileCache.setProjectionId(meta.projection_id);
-            if (meta.point_count > 0) {
-              this.polling = false;
-              this.syncLabels(meta);
-              this.enterReady();
-              return;
-            }
-            if (meta.status === 'error') {
-              this.polling = false;
-              this.status.set('error');
-              this.errorMessage.set(meta.error || 'Failed to build the map');
-              return;
-            }
-            this.applyBuildProgress(meta);
-            this.pollTimer = setTimeout(poll, 1000);
-          },
-          error: () => {
-            this.pollErrors += 1;
-            // Give up after a run of failures rather than retrying forever.
-            if (this.pollErrors >= BrowseViewComponent.MAX_POLL_ERRORS) {
-              this.polling = false;
-              this.status.set('error');
-              this.errorMessage.set(
-                'Lost contact with the server while building the map.',
-              );
-              return;
-            }
-            // Exponential backoff: 2s, 4s, 8s, … capped at 30s.
-            const delay = Math.min(2000 * 2 ** (this.pollErrors - 1), 30000);
-            this.pollTimer = setTimeout(poll, delay);
-          },
-        });
-    };
-    this.pollTimer = setTimeout(poll, 1000);
+    if (this.poll?.active()) return;
+    this.poll = pollUntil<ProjectionMeta>({
+      fetch: () => this.projectionApi.getMeta(this.subset),
+      apply: (meta) => this.applyBuildMeta(meta),
+      onLostContact: () => {
+        this.status.set('error');
+        this.errorMessage.set('Lost contact with the server while building the map.');
+      },
+    });
+  }
+
+  /** Apply one meta polled during a build, and say whether it is still running. */
+  private applyBuildMeta(meta: ProjectionMeta): PollStep {
+    this.meta.set(meta);
+    if (meta.media_type) {
+      this.mediaType.set(meta.media_type);
+      this.applyBrowsePrefsForMediaType();
+    }
+    this.tileCache.setProjectionId(meta.projection_id);
+    if (meta.point_count > 0) {
+      this.syncLabels(meta);
+      this.enterReady();
+      return 'stop';
+    }
+    if (meta.status === 'error') {
+      this.status.set('error');
+      this.errorMessage.set(meta.error || 'Failed to build the map');
+      return 'stop';
+    }
+    this.applyBuildProgress(meta);
+    return 'continue';
+  }
+
+  private stopPoll(): void {
+    this.poll?.stop();
+    this.poll = null;
   }
 }

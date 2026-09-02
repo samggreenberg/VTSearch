@@ -1,5 +1,4 @@
-import { Injectable, inject } from '@angular/core';
-import { BehaviorSubject } from 'rxjs';
+import { Injectable, inject, signal } from '@angular/core';
 import { take } from 'rxjs/operators';
 import { Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -7,6 +6,7 @@ import { ActiveContextService } from './active-context.service';
 import { ContextSwitchService } from './context-switch.service';
 import { ProgressEventsService } from './progress-events.service';
 import { ProjectionApiService } from './projection-api.service';
+import { pollUntil, type PollHandle, type PollStep } from './poll-until';
 import { LoadingTask } from '../models/api.models';
 import type { ProgressKind } from '../utils/format-progress';
 import type { ProjectionMeta } from '../models/projection.models';
@@ -27,6 +27,10 @@ interface BrowsePrepState {
   step: number | null;
   totalSteps: number | null;
   overall: number | null;
+  /** Whole-job fraction at which the running step's slice ends, so a
+   *  count-less step renders as a bounded sweep instead of a shimmer over the
+   *  parked fill. See ProgressEvent.overall_step_end. */
+  stepEnd: number | null;
   error: string;
 }
 
@@ -34,8 +38,6 @@ interface BrowsePrepState {
  *  can route its Cancel/Dismiss clicks back here instead of to a real
  *  dataset-load task. */
 const SENTINEL_PREFIX = '__browseprep__';
-
-const MAX_POLL_ERRORS = 5;
 
 /**
  * Orchestrates the Dashboard's "Browse" button: load the dataset (if needed)
@@ -58,16 +60,22 @@ export class BrowsePrepService {
   private progressEvents = inject(ProgressEventsService);
   private projectionApi = inject(ProjectionApiService);
 
-  private readonly stateSubject = new BehaviorSubject<BrowsePrepState | null>(null);
-  readonly state$ = this.stateSubject.asObservable();
+  // A signal, not a `BehaviorSubject`: the dashboard reads this state straight
+  // off `displayTask()` / `taskKind()` / `preparing` in its template, with no
+  // `AsyncPipe` or `toSignal` bridge anywhere. Under zoneless a subject read
+  // through those accessors notifies nobody (docs/FRONTEND.md §5), so the
+  // projection row used to repaint only when some *other* signal happened to
+  // dirty the view — in practice the 5s SSE heartbeat, against a 1s poll. A
+  // signal read inside a getter or method during template evaluation is tracked
+  // as a dependency of that view, so every poll now repaints the row.
+  private readonly state = signal<BrowsePrepState | null>(null);
 
-  private pollTimer: ReturnType<typeof setTimeout> | null = null;
-  private pollErrors = 0;
+  private poll: PollHandle | null = null;
 
   /** True while a browse preparation is in flight (not counting the
    *  terminal error state, which waits for the user to dismiss). */
   get preparing(): boolean {
-    const s = this.stateSubject.value;
+    const s = this.state();
     return !!s && s.phase !== 'error';
   }
 
@@ -78,8 +86,8 @@ export class BrowsePrepService {
    */
   prepareAndBrowse(datasetId: string): void {
     if (this.preparing) return;
-    this.clearTimer();
-    this.stateSubject.next({
+    this.stopPoll();
+    this.state.set({
       datasetId,
       phase: 'loading',
       current: 0,
@@ -88,6 +96,7 @@ export class BrowsePrepService {
       step: null,
       totalSteps: null,
       overall: null,
+      stepEnd: null,
       error: '',
     });
 
@@ -115,7 +124,7 @@ export class BrowsePrepService {
           // The switch was superseded/cancelled before emitting (e.g. a
           // competing context switch). Don't leave the prep latched in the
           // loading phase, which would keep the dashboard disabled forever.
-          const s = this.stateSubject.value;
+          const s = this.state();
           if (s && s.datasetId === datasetId && s.phase === 'loading') {
             this.clear();
           }
@@ -140,7 +149,7 @@ export class BrowsePrepService {
 
   /** Which progress vocabulary the dashboard should render the row with. */
   taskKind(datasetId: string): ProgressKind {
-    const s = this.stateSubject.value;
+    const s = this.state();
     return s && s.datasetId === datasetId && s.phase !== 'loading' ? 'projection' : 'dataset';
   }
 
@@ -151,7 +160,7 @@ export class BrowsePrepService {
    * task appears); the load phase is the real task's to render.
    */
   displayTask(datasetId: string): LoadingTask | null {
-    const s = this.stateSubject.value;
+    const s = this.state();
     if (!s || s.datasetId !== datasetId) return null;
 
     if (s.phase === 'loading') {
@@ -171,6 +180,7 @@ export class BrowsePrepService {
       step: s.step,
       total_steps: s.totalSteps,
       overall: s.overall,
+      overall_step_end: s.stepEnd,
     };
   }
 
@@ -185,27 +195,36 @@ export class BrowsePrepService {
       step: null,
       totalSteps: null,
       overall: null,
+      stepEnd: null,
     });
-    this.pollErrors = 0;
     this.projectionApi
       .getMeta()
       .pipe(take(1))
       .subscribe({
-        next: (meta) => this.handleMeta(datasetId, meta),
+        next: (meta) => {
+          // The same verdict the poll acts on: a build already in flight means
+          // start watching it, anything else has settled on its own.
+          if (this.handleMeta(datasetId, meta) === 'continue') this.startPoll(datasetId);
+        },
         error: (err) => this.fail(datasetId, this.errMessage(err, 'Failed to build the map')),
       });
   }
 
-  private handleMeta(datasetId: string, meta: ProjectionMeta): void {
-    if (!this.isCurrent(datasetId)) return;
+  /**
+   * Apply one projection meta, and say whether the build is still running.
+   * Shared by the opening fetch and every poll tick, so both read a build
+   * status exactly the same way.
+   */
+  private handleMeta(datasetId: string, meta: ProjectionMeta): PollStep {
+    if (!this.isCurrent(datasetId)) return 'stop';
 
     if (meta.point_count > 0) {
       this.finish(datasetId);
-      return;
+      return 'stop';
     }
     if (meta.status === 'error') {
       this.fail(datasetId, meta.error || 'Failed to build the map');
-      return;
+      return 'stop';
     }
     if (meta.status === 'building') {
       this.patch({
@@ -215,11 +234,13 @@ export class BrowsePrepService {
         step: meta.step ?? null,
         totalSteps: meta.total_steps ?? null,
         overall: meta.overall ?? null,
+        stepEnd: meta.overall_step_end ?? null,
       });
-      this.schedulePoll(datasetId);
-      return;
+      return 'continue';
     }
-    // status === "idle": nothing built yet. Kick off the build.
+    // status === "idle": nothing built yet. Kick off the build, and stand the
+    // poll down until the POST answers so a still-idle server is never sent a
+    // second build request per tick.
     this.projectionApi
       .build()
       .pipe(take(1))
@@ -230,34 +251,21 @@ export class BrowsePrepService {
             this.finish(datasetId);
             return;
           }
-          this.schedulePoll(datasetId);
+          this.startPoll(datasetId);
         },
         error: (err) => this.fail(datasetId, this.errMessage(err, 'Failed to build the map')),
       });
+    return 'stop';
   }
 
-  private schedulePoll(datasetId: string): void {
-    this.clearTimer();
-    this.pollTimer = setTimeout(() => {
-      if (!this.isCurrent(datasetId)) return;
-      this.projectionApi
-        .getMeta()
-        .pipe(take(1))
-        .subscribe({
-          next: (meta) => {
-            this.pollErrors = 0;
-            this.handleMeta(datasetId, meta);
-          },
-          error: () => {
-            this.pollErrors += 1;
-            if (this.pollErrors >= MAX_POLL_ERRORS) {
-              this.fail(datasetId, 'Lost contact with the server while building the map.');
-              return;
-            }
-            this.schedulePoll(datasetId);
-          },
-        });
-    }, 1000);
+  private startPoll(datasetId: string): void {
+    this.stopPoll();
+    this.poll = pollUntil<ProjectionMeta>({
+      fetch: () => this.projectionApi.getMeta(),
+      apply: (meta) => this.handleMeta(datasetId, meta),
+      onLostContact: () =>
+        this.fail(datasetId, 'Lost contact with the server while building the map.'),
+    });
   }
 
   private finish(datasetId: string): void {
@@ -267,33 +275,31 @@ export class BrowsePrepService {
 
   private fail(datasetId: string, message: string): void {
     if (!this.isCurrent(datasetId)) return;
-    this.clearTimer();
+    this.stopPoll();
     this.patch({ phase: 'error', error: message });
   }
 
   // --- helpers ---
 
   private isCurrent(datasetId: string): boolean {
-    const s = this.stateSubject.value;
+    const s = this.state();
     return !!s && s.datasetId === datasetId && s.phase !== 'error';
   }
 
   private patch(partial: Partial<BrowsePrepState>): void {
-    const s = this.stateSubject.value;
+    const s = this.state();
     if (!s) return;
-    this.stateSubject.next({ ...s, ...partial });
+    this.state.set({ ...s, ...partial });
   }
 
   private clear(): void {
-    this.clearTimer();
-    this.stateSubject.next(null);
+    this.stopPoll();
+    this.state.set(null);
   }
 
-  private clearTimer(): void {
-    if (this.pollTimer) {
-      clearTimeout(this.pollTimer);
-      this.pollTimer = null;
-    }
+  private stopPoll(): void {
+    this.poll?.stop();
+    this.poll = null;
   }
 
   private synthTask(

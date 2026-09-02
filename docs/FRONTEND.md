@@ -618,13 +618,27 @@ A `Subscription` field is only a teardown idiom when it is written once and
 read only by `ngOnDestroy`. If it is re-assigned anywhere, it is cancellation
 — leave it alone.
 
-Where a real poll is still needed, use `adaptivePoll()` from
-`services/adaptive-poll.ts` rather than `timer(0, n)` + `switchMap`. It runs
-each request to completion before scheduling the next (a `switchMap` timer
-cancels in-flight requests, so a backend slower than the interval froze the
-panel permanently), eases from `fastMs` to `slowMs` after N unchanged
-responses, and suspends entirely while the tab is hidden. Callers own teardown
-via `takeUntil(stop$)`.
+Where a real poll is still needed, reach for one of the two primitives rather
+than `timer(0, n)` + `switchMap`. Both run each request to completion before
+scheduling the next — a `switchMap` timer cancels in-flight requests, so a
+backend slower than the interval froze the panel permanently (#2572) — and
+which one you want is decided by whether the thing being polled *ends*:
+
+- **`adaptivePoll()`** (`services/adaptive-poll.ts`) for open-ended background
+  polling. Eases from `fastMs` to `slowMs` after N unchanged responses, and
+  suspends entirely while the tab is hidden. Callers own teardown via
+  `takeUntil(stop$)`.
+- **`pollUntil()`** (`services/poll-until.ts`) for a job the user is waiting on:
+  a projection build, anything with a terminal state. The caller's `apply`
+  returns `'continue'` or `'stop'`, and the loop tears itself down when it
+  settles. A failed request is absorbed and retried with exponential backoff
+  (2s → 30s); only five consecutive failures give up, via `onLostContact`.
+  Teardown is the returned handle's `stop()`.
+
+`adaptivePoll`'s cadence easing and pause-while-hidden are precisely wrong for
+the second case — progress is never stale while a build runs, and pausing in a
+background tab would strand the user behind a bar that stopped moving — which
+is why they are two helpers rather than one with a flag.
 
 ---
 
