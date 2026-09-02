@@ -312,6 +312,101 @@ class TestFitting:
         assert noisy.b > 0
         assert noisy.r2 < 0.9
 
+    def test_a_two_point_line_reports_no_r2(self):
+        # Two points define a line exactly, so ss_res is 0 and r2 is 1.0
+        # whatever the points are -- a goodness score that is arithmetic rather
+        # than evidence (#3345). The slope is still the best line available and
+        # is kept; only the claim about it is withheld.
+        two = _fit(
+            [
+                {"n": 100.0, "size_mb": 0.0, "seconds": 3.0},
+                {"n": 200.0, "size_mb": 0.0, "seconds": 5.0},
+            ],
+            byte_scaled=False,
+        )
+        assert two.a > 0, "this fixture is chosen NOT to clamp"
+        assert two.b > 0, "the coefficients are still the best line available"
+        assert math.isnan(two.r2)
+        assert "r2" not in two.to_json()
+
+    def test_a_clamped_two_point_line_still_reports_its_real_r2(self):
+        # The two guards meet here, and the clamp wins on purpose. Once the
+        # intercept is clamped the stored model is no longer the interpolant, so
+        # its residuals are real and worth reporting however few points there
+        # were. This is the `cuda+cuml|*|*` model-load cell from #3345: it used
+        # to advertise r2 1.000 while mispredicting its own two samples by
+        # 4290%, and the honest score is heavily negative.
+        clamped = _fit(
+            [
+                {"n": 245.0, "size_mb": 0.0, "seconds": 1.8},
+                {"n": 412.0, "size_mb": 0.0, "seconds": 54.9},
+            ],
+            byte_scaled=False,
+        )
+        assert clamped.a == 0.0
+        assert clamped.r2 < 0, "worse than predicting the mean, and it should say so"
+
+        # A third distinct size is enough to say something, so the r2 returns.
+        three = _fit(
+            [{"n": float(x), "size_mb": 0.0, "seconds": 1.0 + 0.01 * x} for x in (100, 200, 300)],
+            byte_scaled=False,
+        )
+        assert three.r2 == pytest.approx(1.0)
+
+    def test_repeats_at_two_sizes_still_report_no_r2(self):
+        # Four samples, two sizes: the count looks comfortable and the fit is
+        # still a two-point line with repeats. It is the number of *distinct*
+        # sizes that decides whether an r2 means anything.
+        coeffs = _fit(
+            [
+                {"n": n, "size_mb": 0.0, "seconds": secs}
+                for n, secs in ((100.0, 2.0), (100.0, 2.4), (200.0, 4.1), (200.0, 3.7))
+            ],
+            byte_scaled=False,
+        )
+        assert coeffs.b > 0
+        assert math.isnan(coeffs.r2)
+
+    def test_a_clamped_intercept_is_rescored_against_what_is_stored(self):
+        # `seconds()` must never hand the bar a negative slice, so a negative
+        # OLS intercept is clamped to zero. That makes the stored model a
+        # DIFFERENT line from the one `affine_fit` scored, and #3345 measured 58
+        # of 195 affine cells in exactly that state -- one carrying r2 0.98 on
+        # coefficients 52% out. The r2 has to describe the coefficients that
+        # ship, not the line they were derived from.
+        samples = [
+            {"n": 245.0, "size_mb": 0.0, "seconds": 1.8},
+            {"n": 412.0, "size_mb": 0.0, "seconds": 54.9},
+            {"n": 600.0, "size_mb": 0.0, "seconds": 120.0},
+        ]
+        coeffs = _fit(samples, byte_scaled=False)
+        assert coeffs.a == 0.0, "this fixture is chosen to land a negative intercept"
+        assert coeffs.b > 0
+
+        raw_r2 = affine_fit([s["n"] for s in samples], [s["seconds"] for s in samples])[2]
+        # The unclamped line fits well; the clamped one does not, and the
+        # reported number must be the second.
+        assert raw_r2 > 0.95
+        assert coeffs.r2 < raw_r2
+
+        # And it must equal the goodness of the shipped model, computed the same
+        # way `seconds()` evaluates it.
+        expected = 1.0 - (
+            sum((s["seconds"] - coeffs.seconds(n=s["n"])) ** 2 for s in samples)
+            / sum((s["seconds"] - sum(x["seconds"] for x in samples) / 3) ** 2 for s in samples)
+        )
+        assert coeffs.r2 == pytest.approx(expected)
+
+    def test_an_unclamped_fit_keeps_the_ols_r2(self):
+        # The rescoring must not disturb the ordinary case: a non-negative
+        # intercept means the stored line IS the fitted line.
+        coeffs = _fit(
+            [{"n": float(x), "size_mb": 0.0, "seconds": 5.0 + 0.01 * x} for x in (100, 200, 300, 400)],
+            byte_scaled=False,
+        )
+        assert coeffs.a > 0
+        assert coeffs.r2 == pytest.approx(1.0)
+
     def test_a_step_that_was_not_fitted_as_a_line_has_no_r2(self):
         # NaN here means "not fitted this way", which is a different statement
         # from a bad fit: the median fallback and the byte-scaled path never
@@ -452,3 +547,73 @@ class TestRoundTrip:
         assert "find" in lines
         assert "NOT MEASURED" in lines
         assert "text_sort" in lines
+
+    def test_coverage_report_reads_the_r2_it_fitted(self):
+        # #3345: the r2 was persisted by #3334 and read by nothing, including
+        # the one report an admin sees after a sweep. A cell count cannot say
+        # whether the coefficients describe the data, so the report has to.
+        rows = [
+            {
+                "task": "find",
+                "device": "cpu",
+                "media_type": "image",
+                "embedder": "siglip",
+                "n": n,
+                "size_mb": 0,
+                "step": "score",
+                "seconds": 2.0 * n,  # exactly linear -> r2 == 1
+                "ok": True,
+                "complete": True,
+            }
+            for n in (10, 20, 30)
+        ]
+        lines = "\n".join(coverage_report(rows, fit_profile(rows, min_samples=2)))
+        assert "affine" in lines
+        assert "median r² 1.00" in lines
+
+    def test_coverage_report_counts_the_fits_below_the_bar(self):
+        # A median hides the tail, and the tail is where a bar drifts. Two
+        # clean cells and one noisy one must report the noisy one, not average
+        # it away.
+        rows = []
+        for embedder, secs in (("clean", lambda n: 2.0 * n), ("noisy", lambda n: 5.0 if n < 25 else 1.0)):
+            rows += [
+                {
+                    "task": "find",
+                    "device": "cpu",
+                    "media_type": "image",
+                    "embedder": embedder,
+                    "n": n,
+                    "size_mb": 0,
+                    "step": "score",
+                    "seconds": secs(n),
+                    "ok": True,
+                    "complete": True,
+                }
+                for n in (10, 20, 30, 40)
+            ]
+        lines = "\n".join(coverage_report(rows, fit_profile(rows, min_samples=2)))
+        assert "below 0.90" in lines
+
+    def test_coverage_report_does_not_score_a_step_it_did_not_fit_as_a_line(self):
+        # A byte-scaled step and a median fallback carry no r2 at all. Counting
+        # either as a bad fit would be the exact confusion #3345 set out to
+        # separate, so they are named as their own outcomes.
+        rows = [
+            {
+                "device": "cpu",
+                "media_type": "image",
+                "embedder": "siglip",
+                "dataset_id": "caltech101_s",
+                "n": 400,  # one size only: no spread for OLS to use
+                "download_size_mb": 131.0,
+                "phase": phase,
+                "seconds": 3.0,
+            }
+            for phase in ("download", "embed")
+            for _ in range(2)
+        ]
+        lines = "\n".join(coverage_report(rows, fit_profile(rows, min_samples=2)))
+        assert "byte-rate" in lines
+        assert "median-fallback" in lines
+        assert "affine" not in lines

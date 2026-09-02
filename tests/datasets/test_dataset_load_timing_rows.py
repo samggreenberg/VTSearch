@@ -38,7 +38,7 @@ def _sync_thread_factory():
     return fake_thread
 
 
-def _fake_load(target_medias):
+def _fake_load(target_medias, embedder: str = ""):
     """Minimal importer: one already-embedded media, so no model is needed."""
     target_medias[1] = {
         "id": 1,
@@ -46,7 +46,7 @@ def _fake_load(target_medias):
         "duration": 1.0,
         "file_size": 100,
         "md5": "timing-row-md5",
-        "embedder": "",
+        "embedder": embedder,
         "embedding": np.zeros(8, dtype=np.float32),
         "filename": "fake.wav",
         "category": "unknown",
@@ -110,6 +110,42 @@ class TestDatasetLoadRecordsTimingRows:
         assert all(r["complete"] for r in rows), "a load that reached finalize must be marked complete"
         assert all(r["media_type"] == "audio" and r["embedder"] == "clap" for r in rows)
         assert all(normalize_row(r) is not None for r in rows), "the fitter must accept every emitted row"
+
+    def test_an_import_that_named_no_embedder_records_the_one_it_used(self, isolated_settings, tmp_path, monkeypatch):
+        """#3345: the resolved encoder must reach the row, not the caller's blank.
+
+        The profile is keyed on ``(device, media_type, embedder)``. An import
+        that let the media-type default stand recorded ``embedder: ""``, so it
+        could only ever populate the media rollup — and the tuning script's own
+        ``--drive`` flow names no embedder, which meant the documented way to
+        build a profile could never fill an exact ``dataset_load`` cell.
+        """
+        sink = tmp_path / "timings.jsonl"
+        monkeypatch.setenv(RECORD_ENV_VAR, str(sink))
+
+        from vtsearch import settings as settings_mod
+        from vtscore.datasets.load_pipeline import _run_origin_load_in_background
+        from vtscore.datasets.registry import list_datasets, unregister_dataset
+
+        settings_mod.set_saved_datasets_dir(str(tmp_path / "saved"))
+        with mock.patch(
+            "vtscore.datasets.load_pipeline.threading.Thread",
+            side_effect=_sync_thread_factory(),
+        ):
+            _run_origin_load_in_background(
+                lambda medias: _fake_load(medias, embedder="clap_general"),
+                {"importer": "test_timing", "params": {}},
+                media_type="audio",
+                embedder="",  # the caller names none; the default is resolved later
+            )
+        for entry in list_datasets():
+            unregister_dataset(entry["id"])
+
+        rows = load_rows([str(sink)])
+        assert rows
+        assert all(r["embedder"] == "clap_general" for r in rows), (
+            "the row must name the encoder the load actually used (#3345)"
+        )
 
     def test_download_size_hint_rides_along_for_byte_scaled_steps(self, isolated_settings, tmp_path, monkeypatch):
         """``download``/``extract`` are fit as a per-MB rate, so a load that knows

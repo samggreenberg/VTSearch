@@ -55,6 +55,10 @@ _LEGACY_PHASE_TO_STEP = {
 #: rather than transfer, so it makes a poor per-MB rate sample.
 _MIN_BYTE_STEP_SECONDS = 0.1
 
+#: Distinct ``n`` values a fit needs before its r2 means anything. Two points
+#: define a line exactly, so r2 is 1.0 whatever they are.
+_MIN_R2_POINTS = 3
+
 
 def load_rows(paths: Iterable[str]) -> list[dict]:
     """Read JSONL from every path, skipping blank and unparseable lines.
@@ -169,6 +173,25 @@ def affine_fit(xs: list[float], ys: list[float]) -> tuple[float, float, float]:
     return intercept, slope, r2
 
 
+def _r2_of(xs: list[float], ys: list[float], a: float, b: float) -> float:
+    """Goodness of the *given* coefficients against the data, not of a best fit.
+
+    :func:`affine_fit` scores the line it computed. When the coefficients that
+    get stored differ from that line — the intercept is clamped at zero below —
+    that score describes a model the profile does not contain, so it has to be
+    recomputed against the one it does.
+    """
+    count = len(ys)
+    if count == 0:
+        return float("nan")
+    mean_y = sum(ys) / count
+    ss_tot = sum((y - mean_y) ** 2 for y in ys)
+    if ss_tot <= 1e-9:
+        return 1.0
+    ss_res = sum((y - max(0.0, a + b * x)) ** 2 for x, y in zip(xs, ys))
+    return 1.0 - ss_res / ss_tot
+
+
 def fit_step(samples: list[dict], byte_scaled: bool) -> Optional[StepCoeffs]:
     """Fit one step's coefficients from its samples, or ``None`` if unusable."""
     if not samples:
@@ -186,6 +209,13 @@ def fit_step(samples: list[dict], byte_scaled: bool) -> Optional[StepCoeffs]:
     xs = [s["n"] for s in samples]
     ys = [s["seconds"] for s in samples]
     intercept, slope, r2 = affine_fit(xs, ys)
+    if len({round(x, 6) for x in xs}) < _MIN_R2_POINTS:
+        # A line through two points has ss_res == 0, so its r2 is 1.0 by
+        # construction and says nothing (#3345). The coefficients are still the
+        # best line available and are kept; only the goodness claim is withheld.
+        # The clamp below deliberately overrides this: once the stored model is
+        # no longer the interpolant, its residuals are real at any point count.
+        r2 = float("nan")
     if slope <= 0:
         # No credible scaling signal (a flat step, or noise swamping a short
         # one). Report the typical cost and claim nothing about growth. The r2
@@ -193,7 +223,18 @@ def fit_step(samples: list[dict], byte_scaled: bool) -> Optional[StepCoeffs]:
         # just declined to use, so reporting it would attach a goodness score to
         # coefficients that are a median.
         return StepCoeffs(a=max(0.0, statistics.median(ys)))
-    return StepCoeffs(a=max(0.0, intercept), b=slope, r2=r2)
+
+    a = max(0.0, intercept)
+    if a != intercept:
+        # A steep slope through a short step lands a negative intercept, and
+        # `seconds()` would hand the bar a negative slice, so it is clamped. The
+        # r2 above then scores a line nobody stores: #3345 measured 58 of 195
+        # affine cells in this state, one of them annotating coefficients 52%
+        # out with an r2 of 0.98. Rescore against what is actually kept -- which
+        # can come back negative, meaning "worse than a constant", and that is
+        # a true statement worth persisting rather than hiding.
+        r2 = _r2_of(xs, ys, a, slope)
+    return StepCoeffs(a=a, b=slope, r2=r2)
 
 
 def _cell_variants(row: dict) -> tuple[tuple[str, str, str], ...]:
@@ -323,6 +364,49 @@ def _fit_slots(step_slots: dict[str, dict[str, list[float]]]) -> dict[str, dict[
     return out
 
 
+#: An affine fit at or above this describes its own samples well enough that a
+#: reader need not look further. Below it, the line is worth a second look.
+_GOOD_R2 = 0.90
+
+
+def _fit_quality(spec, cells: dict[str, Any]) -> str:
+    """One line describing *how* a task's cells were fitted, and how well.
+
+    Three outcomes, and the difference between them is the thing readers get
+    wrong. A step with **no r²** is not a badly fitted line — it is not a line:
+    either the step is byte-scaled (a per-MB rate, never regressed against
+    ``n``) or ``fit_step`` found no credible slope and reported a median. Only
+    the affine count has a goodness attached, so only it gets one here.
+
+    A count of the affine fits *below* :data:`_GOOD_R2` is what makes the line
+    actionable: a median of 0.99 over a hundred cells hides the six that the
+    line does not describe, and those six are where a progress bar drifts.
+    """
+    affine: list[float] = []
+    fallback = 0
+    byte_rate = 0
+    for cell in cells.values():
+        for step, coeffs in cell.get("steps", {}).items():
+            if step in spec.byte_scaled:
+                byte_rate += 1
+            elif "r2" in coeffs:
+                affine.append(float(coeffs["r2"]))
+            else:
+                fallback += 1
+    parts: list[str] = []
+    if affine:
+        poor = sum(1 for r2 in affine if r2 < _GOOD_R2)
+        detail = f"median r² {statistics.median(affine):.2f}"
+        if poor:
+            detail += f", {poor} below {_GOOD_R2:.2f}"
+        parts.append(f"{len(affine)} affine ({detail})")
+    if fallback:
+        parts.append(f"{fallback} median-fallback (no credible slope)")
+    if byte_rate:
+        parts.append(f"{byte_rate} byte-rate")
+    return ", ".join(parts)
+
+
 def coverage_report(rows: Iterable[dict], profile: dict[str, Any]) -> list[str]:
     """Human-readable lines describing what the sweep did and did not cover.
 
@@ -330,6 +414,12 @@ def coverage_report(rows: Iterable[dict], profile: dict[str, Any]) -> list[str]:
     quietly shipping a profile that improves two cells and leaves the rest to
     the defaults. Silent partial coverage is how a tuning run gets mistaken for
     a tuned system.
+
+    Cell counts alone cannot say that, though: a task can be measured in fifty
+    cells and still have every one of them fall back to a median, which reads
+    as full coverage and paces like none. So each measured task also reports
+    :func:`_fit_quality` — the r² ``StepCoeffs`` has carried since #3334 and
+    which, until #3345, nothing in the tree ever read.
     """
     normalized = [n for n in (normalize_row(r) for r in rows) if n is not None]
     seen_tasks = {n["task"] for n in normalized}
@@ -339,6 +429,9 @@ def coverage_report(rows: Iterable[dict], profile: dict[str, Any]) -> list[str]:
         if cells:
             samples = sum(int(c.get("samples", 0)) for c in cells.values())
             lines.append(f"  {task:<16} {len(cells)} cells, {samples} step-samples")
+            quality = _fit_quality(TASKS[task], cells)
+            if quality:
+                lines.append(f"  {'':<16} {quality}")
         elif task in seen_tasks:
             lines.append(f"  {task:<16} measured but too few runs to fit — using built-in defaults")
         else:
