@@ -1,8 +1,8 @@
-import { AfterViewChecked, ChangeDetectionStrategy, ChangeDetectorRef, Component, computed, effect, ElementRef, inject, input, NgZone, OnDestroy, OnInit, output, untracked, viewChild } from '@angular/core';
+import { AfterViewChecked, ChangeDetectionStrategy, ChangeDetectorRef, Component, computed, DestroyRef, effect, ElementRef, inject, input, NgZone, OnDestroy, OnInit, output, untracked, viewChild } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { ScrollingModule, CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
-import { Subject, Subscription } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { Subscription } from 'rxjs';
 import { MediaItemComponent } from '../media-item/media-item.component';
 import { Media } from '../../../models/api.models';
 import { MediaMetadataCacheService } from '../../../services/media-metadata-cache.service';
@@ -115,7 +115,7 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnDestroy {
   private selectedIdSeen = false;
   /** Previous ``gridGoalWidth`` value; ``null`` until the rebuild effect's first run. */
   private prevGridGoalWidth: number | null = null;
-  private readonly destroy$ = new Subject<void>();
+  private readonly destroyRef = inject(DestroyRef);
   /** The viewport instance whose ``scrolledIndexChange`` is currently subscribed. */
   private scrollSubscribedViewport?: CdkVirtualScrollViewport;
   private scrollSub?: Subscription;
@@ -193,7 +193,7 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnDestroy {
     // When the cache hydrates new items, re-enrich the displayed rows so
     // visible items show their filename / score / metadata.
     this.metadataCache.version$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => this.rebuildOrderedItems());
   }
 
@@ -203,8 +203,6 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnDestroy {
 
   ngOnDestroy(): void {
     this.resizeObserver?.disconnect();
-    this.destroy$.next();
-    this.destroy$.complete();
   }
 
   /**
@@ -395,7 +393,7 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnDestroy {
       this.scrollSubscribedViewport = virtualViewport;
       this.scrollSub?.unsubscribe();
       this.scrollSub = virtualViewport.scrolledIndexChange
-        .pipe(takeUntil(this.destroy$))
+        .pipe(takeUntilDestroyed(this.destroyRef))
         .subscribe(() => {
           this.prefetchVisibleMetadata();
           this.maybeAutoLoadMore();

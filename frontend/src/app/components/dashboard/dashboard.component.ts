@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, effect, HostListener, inject, OnDestroy, OnInit, Signal, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, effect, HostListener, inject, OnDestroy, OnInit, Signal, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { NavigationCancel, NavigationEnd, NavigationError, Router } from '@angular/router';
 import { EMPTY, Subject, timer } from 'rxjs';
@@ -212,7 +213,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
   }
 
-  private destroy$ = new Subject<void>();
+  private readonly destroyRef = inject(DestroyRef);
   private findPolling$ = new Subject<void>();
   /** Registry ids this mount has already seen, so `reconcileSelection` can
    *  tell "just appeared" from "was here when we arrived". Component state on
@@ -253,20 +254,20 @@ export class DashboardComponent implements OnInit, OnDestroy {
     // itself already lives in the service, so there is nothing to push.
     this.dashSelection.setDashboardVisible(true);
     this.authService.status$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((status) => {
         this.currentUser.set(status?.user || '');
         this.isDefaultLogin.set(status?.provider === 'default');
       });
     // Auto-select newly added items whenever the dataset/model lists change
     this.datasetState.datasets$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((datasets) => {
         this.reconcileSelection('dataset', datasets.map((d) => d.id));
         this.preloadSelectedEmbedders();
       });
     this.datasetState.detectors$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((models) => {
         this.reconcileSelection('detector', models.map((m) => m.id));
       });
@@ -284,7 +285,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     // guard, or errored). Without this, a guard redirect to /dashboard
     // would leave the icon waggling forever.
     this.router.events
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((e) => {
         if (
           e instanceof NavigationEnd ||
@@ -304,13 +305,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
    *  `AppComponent`; this component just reacts to their outcomes. */
   private subscribeNewThingFlows(): void {
     this.newThingFlows.importStarted$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => this.handleImportStarted());
     this.newThingFlows.demoSelected$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(({ demo }) => this.handleDemoSelected(demo));
     this.newThingFlows.created$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(({ kind, id }) => {
         if (kind === 'detector') this.handleDetectorCreated(id);
         else this.datasetState.refresh();
@@ -318,14 +319,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
     // Trigger the close-animation when the modal flips from open → closed.
     let importerWasOpen = false;
     this.newThingFlows.importer$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((state) => {
         if (importerWasOpen && !state.open) this.importerClosing.set(true);
         importerWasOpen = state.open;
       });
     let detectorWasOpen = false;
     this.newThingFlows.newDetector$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((state) => {
         if (detectorWasOpen && !state.open) {
           this.newDetectorClosing.set(true);
@@ -348,7 +349,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         .pipe(
           filter((models) => models.some((m) => m.id === modelId)),
           take(1),
-          takeUntil(this.destroy$),
+          takeUntilDestroyed(this.destroyRef),
         )
         .subscribe(() => this.onLabel());
     }
@@ -357,7 +358,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private startDiskUsagePolling(): void {
     timer(0, 10000)
       .pipe(
-        takeUntil(this.destroy$),
+        takeUntilDestroyed(this.destroyRef),
         switchMap(() => this.datasetsUiApi.getDiskUsage().pipe(catchError(() => EMPTY))),
       )
       .subscribe((usage) => {
@@ -368,7 +369,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private startRamUsagePolling(): void {
     timer(0, 10000)
       .pipe(
-        takeUntil(this.destroy$),
+        takeUntilDestroyed(this.destroyRef),
         switchMap(() => this.datasetsUiApi.getRamUsage().pipe(catchError(() => EMPTY))),
       )
       .subscribe((usage) => {
@@ -399,8 +400,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     // Off the Dashboard there are no tables to mirror; the pulldown reverts
     // to showing the active/loaded context.
     this.dashSelection.setDashboardVisible(false);
-    this.destroy$.next();
-    this.destroy$.complete();
     this.findPolling$.next();
     this.findPolling$.complete();
   }
@@ -944,7 +943,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
               return (!!t && (t.status === 'idle' || !!t.error)) || (!t && seenRunning);
             }),
             take(1),
-            takeUntil(this.destroy$),
+            takeUntilDestroyed(this.destroyRef),
           )
           .subscribe(() => {
             const failed = this.progressEvents.detectorLoadingTasks().some(
@@ -1356,7 +1355,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private startFindProgressPolling(): void {
     this.findPolling$.next(); // cancel previous
     this.progressEvents.find$
-      .pipe(takeUntil(this.findPolling$), takeUntil(this.destroy$))
+      .pipe(takeUntil(this.findPolling$), takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (progress: ProgressEvent) => {
           if (!progress || progress.status === 'idle') return;

@@ -103,7 +103,7 @@ export class ExportModalComponent implements OnInit {
   // labels read is input-derived, so it waits for `ngOnInit` to set
   // `serverFilter` and flip `labelsReady`. All three wrap the generated-client
   // methods so the interceptor chain still applies, replacing the old
-  // `ngOnInit` subscribes + `destroy$` plumbing.
+  // `ngOnInit` subscribes + teardown plumbing.
   private readonly statusResource = rxResource({
     stream: () => this.datasetsRegistryApi.getStatus(),
   });

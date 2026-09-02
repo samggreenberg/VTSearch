@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, effect, ElementRef, HostListener, inject, input, OnDestroy, OnInit, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, effect, ElementRef, HostListener, inject, input, OnInit, viewChild } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { TitleCasePipe } from '@angular/common';
 import { NavigationEnd, Router } from '@angular/router';
 
-import { Observable, Subject } from 'rxjs';
-import { filter, takeUntil } from 'rxjs/operators';
+import { Observable } from 'rxjs';
+import { filter } from 'rxjs/operators';
 import { DatasetStateService } from '../../services/dataset-state.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { ContextSwitchService } from '../../services/context-switch.service';
@@ -66,7 +67,7 @@ interface PulldownRow {
   templateUrl: './context-pulldown.component.html',
   styleUrl: './context-pulldown.component.scss',
 })
-export class ContextPulldownComponent implements OnInit, OnDestroy {
+export class ContextPulldownComponent implements OnInit {
   private host = inject<ElementRef<HTMLElement>>(ElementRef);
   private router = inject(Router);
   private datasetState = inject(DatasetStateService);
@@ -118,7 +119,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
   private prevImporterOpen = false;
   private prevDetectorOpen = false;
 
-  private destroy$ = new Subject<void>();
+  private readonly destroyRef = inject(DestroyRef);
 
   /** Live mirror of the Dashboard's sort for this pulldown's table. Kept
    *  in sync via a subscription in `ngOnInit`. */
@@ -146,32 +147,32 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.datasetState.datasets$.pipe(takeUntil(this.destroy$)).subscribe(() => {
+    this.datasetState.datasets$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
       this.rebuildRows();
       this.maybeAutoSelectNewDataset();
     });
-    this.datasetState.detectors$.pipe(takeUntil(this.destroy$)).subscribe(() => this.rebuildRows());
+    this.datasetState.detectors$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.rebuildRows());
     // Read intent (not active) so the pulldown highlight updates the
     // moment the user picks a row, rather than waiting for any
     // dataset/detector load to finish.
     this.activeContext.intentPair$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => this.rebuildRows());
-    this.datasetState.error$.pipe(takeUntil(this.destroy$)).subscribe((err) => {
+    this.datasetState.error$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((err) => {
       this.registryError = err;
       // Written from an async subscribe; notify the scheduler so the error row
       // repaints under zoneless.
       this.cdr.markForCheck();
     });
 
-    this.newThingFlows.created$.pipe(takeUntil(this.destroy$)).subscribe(({ kind, id }) => {
+    this.newThingFlows.created$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(({ kind, id }) => {
       if (kind !== this.kind() || !id || !this.awaitingNew) return;
       this.sawSuccessSignal = true;
       this.awaitingNew = false;
       this.switchToNewItem(id);
     });
     if (this.isDataset) {
-      this.newThingFlows.importStarted$.pipe(takeUntil(this.destroy$)).subscribe(() => {
+      this.newThingFlows.importStarted$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
         if (!this.awaitingNew) return;
         this.sawSuccessSignal = true;
         this.knownIdsAtAddStart = new Set(this.datasetState.datasets.map((d) => d.id));
@@ -180,13 +181,13 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     // Cancel the await if the user dismisses the underlying modal
     // without submitting. Without this, a later registry refresh from
     // an unrelated source would auto-select an unrelated dataset.
-    this.newThingFlows.importer$.pipe(takeUntil(this.destroy$)).subscribe((state) => {
+    this.newThingFlows.importer$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((state) => {
       const closing = this.prevImporterOpen && !state.open;
       this.prevImporterOpen = state.open;
       if (!closing || !this.isDataset) return;
       if (this.awaitingNew && !this.sawSuccessSignal) this.awaitingNew = false;
     });
-    this.newThingFlows.newDetector$.pipe(takeUntil(this.destroy$)).subscribe((state) => {
+    this.newThingFlows.newDetector$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((state) => {
       const closing = this.prevDetectorOpen && !state.open;
       this.prevDetectorOpen = state.open;
       if (!closing || this.isDataset) return;
@@ -195,7 +196,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
 
     this.pulldownControl
       .openSignal$(this.kind())
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => this.openMenu());
 
     // Mirror of the Dashboard table's sort. Read through
@@ -203,7 +204,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     // so this eager component doesn't pull the column-management code onto
     // the initial bundle.
     const sortState$: Observable<SortState> = this.dashboardSort.sort$(this.kind());
-    sortState$.pipe(takeUntil(this.destroy$)).subscribe((state) => {
+    sortState$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((state) => {
       this.sortState = state;
       this.rebuildRows();
     });
@@ -212,7 +213,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     // pair lights up the spinner glyph here. The service polls lazily;
     // it only fires HTTP traffic while at least one component is
     // subscribed.
-    this.runningJobs.busyPairs$.pipe(takeUntil(this.destroy$)).subscribe((pairs) => {
+    this.runningJobs.busyPairs$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((pairs) => {
       this.busyPairs = pairs;
       this.rebuildRows();
     });
@@ -224,7 +225,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     this.router.events
       .pipe(
         filter((e): e is NavigationEnd => e instanceof NavigationEnd),
-        takeUntil(this.destroy$),
+        takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((e) => this.updateLocked(e.urlAfterRedirects));
 
@@ -242,11 +243,6 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     // Written from the router-events subscribe (async callback), so notify the
     // scheduler to repaint the trigger's disabled state under zoneless.
     this.cdr.markForCheck();
-  }
-
-  ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
   }
 
   get isDataset(): boolean {

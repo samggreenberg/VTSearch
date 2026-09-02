@@ -1,14 +1,14 @@
-import { Injectable, OnDestroy, Signal, computed, inject, signal } from '@angular/core';
-import { toObservable } from '@angular/core/rxjs-interop';
+import { DestroyRef, Injectable, Signal, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { Subject, forkJoin, of } from 'rxjs';
-import { catchError, switchMap, takeUntil } from 'rxjs/operators';
+import { catchError, switchMap } from 'rxjs/operators';
 import { DatasetRegistryEntry } from '../models/api.models';
 import { DetectorRegistryEntry } from '../generated/api-client/models/detector-registry-entry';
 import { DatasetsRegistryApiService } from './datasets-registry-api.service';
 import { DetectorsRegistryApiService } from './detectors-registry-api.service';
 
 @Injectable({ providedIn: 'root' })
-export class DatasetStateService implements OnDestroy {
+export class DatasetStateService {
   private datasetsRegistryApi = inject(DatasetsRegistryApiService);
   private detectorsRegistryApi = inject(DetectorsRegistryApiService);
 
@@ -33,7 +33,7 @@ export class DatasetStateService implements OnDestroy {
    *  registry; on a deep-link cold start, the guard may run before the
    *  initial fetch lands. */
   private readonly _loaded = signal(false);
-  private readonly destroy$ = new Subject<void>();
+  private readonly destroyRef = inject(DestroyRef);
   /** Emits whenever a refresh is requested; switchMap ensures only the latest response is used. */
   private readonly refreshTrigger$ = new Subject<void>();
 
@@ -57,7 +57,7 @@ export class DatasetStateService implements OnDestroy {
             detectors: this.detectorsRegistryApi.getRegistry(),
           }).pipe(catchError(() => of(null))),
         ),
-        takeUntil(this.destroy$),
+        takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
         next: (res) => {
@@ -74,11 +74,6 @@ export class DatasetStateService implements OnDestroy {
           if (!this._loaded()) this._loaded.set(true);
         },
       });
-  }
-
-  ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
   }
 
   get datasets(): DatasetRegistryEntry[] {

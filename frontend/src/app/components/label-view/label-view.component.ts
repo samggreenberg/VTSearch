@@ -1,8 +1,9 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, effect, ElementRef, inject, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, Component, DestroyRef, effect, ElementRef, inject, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { HttpErrorResponse } from '@angular/common/http';
-import { Subject, Subscription, of, pairwise, throwError } from 'rxjs';
-import { takeUntil, catchError, filter, take, tap } from 'rxjs/operators';
+import { Subscription, of, pairwise, throwError } from 'rxjs';
+import { catchError, filter, take, tap } from 'rxjs/operators';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
@@ -153,10 +154,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly RIGHT_MIN = 150;
   readonly CENTER_MIN = 100;
   readonly DIVIDER_TOTAL = 16; // 2 × 8px dividers
-  private destroy$ = new Subject<void>();
+  private readonly destroyRef = inject(DestroyRef);
   // NOTE: a subscription started from `modelId$` (which emits *before*
-  // `pair$`) must stay on `destroy$`, or `reloadForNewPair`'s teardown would
-  // kill the request it just issued for the new pair.
+  // `pair$`) must stay on component teardown — `takeUntilDestroyed` — rather
+  // than the pair scope, or `reloadForNewPair`'s teardown would kill the
+  // request it just issued for the new pair.
   private statusPolling$: Subscription | null = null;
   private learnedSortPending = false;
   /** Active learned-sort job id while a training run is in flight. Set in
@@ -295,7 +297,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.pairScope.loadDatasetName();
 
     this.activeContext.modelId$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((modelId) => this.refreshTrainableModelName(modelId));
     this.refreshTrainableModelName(this.activeContext.modelId);
     this.pairScope.seedInclusion();
@@ -305,7 +307,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // initial loads.
     let firstPair = true;
     this.activeContext.pair$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
         if (firstPair) {
           firstPair = false;
@@ -315,7 +317,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       });
 
     this.autopilotStateService.state$
-      .pipe(pairwise(), takeUntil(this.destroy$))
+      .pipe(pairwise(), takeUntilDestroyed(this.destroyRef))
       .subscribe(([prev, curr]) => {
         if (prev.phase === curr.phase) return;
         this.autopilotExhausted.set(curr.phase === 'exhausted');
@@ -409,8 +411,6 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.cancelSnapOnLoad();
     if (this.animatePopTimer) clearTimeout(this.animatePopTimer);
     // `pairScope` is component-provided, so Angular fires its scope on destroy.
-    this.destroy$.next();
-    this.destroy$.complete();
     this.voteState.stopPolling();
   }
 
@@ -607,7 +607,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       fastMs: 2000,
       slowMs: 10000,
     })
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (status) => {
           this.labelingStatus.set(status);
@@ -819,11 +819,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.currentLearnedSortJobId) {
       const jobId = this.currentLearnedSortJobId;
       this.currentLearnedSortJobId = null;
-      this.sortingApi.cancelLearnedSort(jobId).pipe(takeUntil(this.destroy$)).subscribe();
+      this.sortingApi.cancelLearnedSort(jobId).pipe(takeUntilDestroyed(this.destroyRef)).subscribe();
       return;
     }
     if (this.sortState.sortMode === 'load') {
-      this.detectorsFindApi.cancelFind().pipe(takeUntil(this.destroy$)).subscribe();
+      this.detectorsFindApi.cancelFind().pipe(takeUntilDestroyed(this.destroyRef)).subscribe();
     }
   }
 
@@ -1065,7 +1065,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       this.trainableModelName.set(null);
       return;
     }
-    this.detectorsRegistryApi.getRegistry().pipe(takeUntil(this.destroy$)).subscribe({
+    this.detectorsRegistryApi.getRegistry().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (resp) => {
         const entry = resp.detectors.find((m: DetectorRegistryEntry) => m.id === modelId);
         this.trainableModelName.set(entry?.name || null);

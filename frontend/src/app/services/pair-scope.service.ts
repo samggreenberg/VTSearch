@@ -17,8 +17,9 @@ import { VoteStateService } from './vote-state.service';
  *
  * Every request whose response writes *pair-scoped* state — the ranking, the
  * threshold, the inclusion slider, the dataset name, the vote cache — must be
- * piped through {@link scoped} rather than a `destroy$`, so the work started
- * for the pair we are leaving is torn down the instant the pair switches.
+ * piped through {@link scoped} rather than component teardown, so the work
+ * started for the pair we are leaving is torn down the instant the pair
+ * switches.
  *
  * Without it a scoring run — minutes long on a large dataset — outlives the
  * switch: whichever response lands last wins, so the *old* pair's ranking and
@@ -38,9 +39,9 @@ import { VoteStateService } from './vote-state.service';
  * need not) fire the scope by hand.
  *
  * NOTE for callers: a subscription started from `ActiveContextService.modelId$`
- * — which emits *before* `pair$` — must stay on the component's `destroy$`, or
- * {@link resetForNewPair}'s teardown would kill the request it just issued for
- * the *new* pair.
+ * — which emits *before* `pair$` — must stay on component teardown
+ * (`takeUntilDestroyed`), or {@link resetForNewPair}'s teardown would kill the
+ * request it just issued for the *new* pair.
  */
 @Injectable()
 export class PairScopeService implements OnDestroy {

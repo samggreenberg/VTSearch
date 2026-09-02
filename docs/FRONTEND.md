@@ -322,8 +322,7 @@ this codebase, and it is silent.
 
 - **Consumers use `effect()`, not `subscribe()`.** A constructor `effect()`
   reading a signal auto-disposes with the component, which is why the
-  `takeUntil(destroy$)` / `ngOnDestroy` plumbing has been dropped wherever it
-  was the last user.
+  teardown plumbing has been dropped wherever it was the last user.
 - **Where a subscription is still needed, tear it down with
   `takeUntilDestroyed()`** — see "Subscription teardown vs. cancellation"
   below for the one distinction that decides it.
@@ -581,12 +580,19 @@ Drop the explicit `destroyRef` argument only in an injection context (a field
 initializer or the constructor body); anywhere else — `ngOnInit`,
 `ngAfterViewInit`, an event handler — it must be passed. The point of the
 idiom is that teardown is *declared at the subscription*, so adding a
-subscription can never forget to add a matching `unsubscribe()`. Two older
-idioms survive in the tree and are converted opportunistically, never
-introduced: a hand-rolled `destroy$ = new Subject<void>()` fired from
-`ngOnDestroy`, and a `subs: Subscription[]` array drained in `ngOnDestroy`.
-Both are strictly worse — the bookkeeping is manual and the compiler does not
-check it.
+subscription can never forget to add a matching `unsubscribe()`. It is now the
+**only** teardown idiom in the SPA: the hand-rolled `destroy$ = new
+Subject<void>()` fired from `ngOnDestroy` and the `subs: Subscription[]` array
+drained in `ngOnDestroy` are both gone, and neither may be reintroduced. Both
+were strictly worse — the bookkeeping was manual and the compiler did not check
+it — and the subject form had a hazard the sanctioned idiom does not: RxJS
+`takeUntil` never fires on a pre-completed notifier, so a subscription armed
+*after* `ngOnDestroy` ran was never torn down at all. `takeUntilDestroyed`
+completes such a subscription immediately.
+
+Because teardown rides on the `DestroyRef`, a **spec drives it with
+`fixture.destroy()`**, never by calling `ngOnDestroy()` by hand — a bare hook
+call runs only what the hook itself still does.
 
 **Cancellation** — "stop the *previous* one because a newer one supersedes
 it." This is not teardown and `takeUntilDestroyed()` cannot express it; the

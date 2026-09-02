@@ -1,8 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, HostListener, inject, NgZone, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, HostListener, inject, NgZone, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
 import {
   BrowseCanvasComponent,
   BrowseContextMenuEvent,
@@ -397,7 +396,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    *  than spilling onto the side panel or past the canvas edges. */
   contextBounds: DOMRect | null = null;
 
-  private destroy$ = new Subject<void>();
+  private readonly destroyRef = inject(DestroyRef);
   /** The in-flight build poll, or ``null`` when no build is being watched. */
   private poll: PollHandle | null = null;
 
@@ -493,7 +492,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
 
     this.datasetsRegistryApi
       .getStatus()
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (status) => {
           this.mediaType.set(status.media_type || '');
@@ -516,7 +515,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     // load; genuine later changes reload directly.
     if (!this.subset) {
       this.activeContext.pair$
-        .pipe(takeUntil(this.destroy$))
+        .pipe(takeUntilDestroyed(this.destroyRef))
         .subscribe(() => {
           if (this.initialLoadStarted) {
             this.loadProjection();
@@ -528,8 +527,6 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
     this.stopPoll();
     document.removeEventListener('mousemove', this.boundPanelMove);
     document.removeEventListener('mouseup', this.boundPanelUp);
@@ -993,7 +990,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     if (!meta.has_labels) return;
     this.projectionApi
       .getLabels(this.subset)
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (resp) => {
           // Guard against a stale response landing after the projection moved on.
@@ -1237,7 +1234,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     }
     this.enterBuilding();
     this.buildRequest()
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (resp) => {
           if (resp.status === 'ready') {
@@ -1276,7 +1273,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     const request$ = this.subset
       ? this.projectionApi.reprojectSubset(this.subsetIds)
       : this.projectionApi.reproject();
-    request$.pipe(takeUntil(this.destroy$)).subscribe({
+    request$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (resp) => {
         if (resp.status === 'ready') {
           // Defensive: a forced build always re-fits, but re-read meta anyway.
@@ -1320,7 +1317,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     if (ids.length === 0) return;
     this.mediasApi
       .voteBulk(ids, target)
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => this.dropFromBrowse(ids, target),
         error: () =>
@@ -1357,7 +1354,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     }
     this.projectionApi
       .subsetRemove(removedIds)
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (meta) => {
           // Leave the viewport where the user had it; don't yank the camera to
@@ -1480,7 +1477,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.stopPoll();
     this.projectionApi
       .getMeta(this.subset)
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (meta) => this.applyMeta(meta),
         error: (err) => {
