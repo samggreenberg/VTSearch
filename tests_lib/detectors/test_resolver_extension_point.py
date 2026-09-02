@@ -70,9 +70,7 @@ class TestResolverRegistration:
 
         assert calls == [("thing.txt", "")]
 
-    def test_registered_source_resolver_may_defer_to_importer_dispatch(
-        self, tmp_path, restore_resolvers
-    ):
+    def test_registered_source_resolver_may_defer_to_importer_dispatch(self, tmp_path, restore_resolvers):
         """Returning ``None`` falls through to the importer resolver."""
         folder = tmp_path / "media"
         folder.mkdir()

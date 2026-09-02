@@ -92,6 +92,7 @@ class ImporterResolver(Protocol):
 # Pluggable resolver registry
 # ---------------------------------------------------------------------------
 
+
 def _default_source_resolver(
     stack: ExitStack,
     origin: dict[str, Any],

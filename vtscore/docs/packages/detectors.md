@@ -375,10 +375,10 @@ with resolve_file_context(origin, origin_name, filename) as path:
 
 | Function                                                             | Behaviour                                                          |
 |----------------------------------------------------------------------|--------------------------------------------------------------------|
-| `resolve_file_context(origin, origin_name, filename)` (line 169)     | **Context manager** - must wrap any code that reads the file. Some sources (`http_archive` cache misses) materialise files in a tempdir they own; the `ExitStack` keeps that tempdir alive until the `with` block exits. |
-| `resolve_file_from_origin(origin, origin_name, filename)` (line 196) | One-shot convenience. Safe for `path.exists()` checks; unsafe for any call that may garbage-collect the source. |
-| `embed_file(file_path, media_type, embedder_name="")` (line 376)     | Pick the embedder for the media type (named, else first registered) and call `embedder.embed_media(media_from_path(...))`. |
-| `resolve_label_embeddings(labels, media_type, progress_callback=None)` (line 793) | Batch entry point. Returns `ResolvedLabels`.            |
+| `resolve_file_context(origin, origin_name, filename)` (line 170)     | **Context manager** - must wrap any code that reads the file. Some sources (`http_archive` cache misses) materialise files in a tempdir they own; the `ExitStack` keeps that tempdir alive until the `with` block exits. |
+| `resolve_file_from_origin(origin, origin_name, filename)` (line 197) | One-shot convenience. Safe for `path.exists()` checks; unsafe for any call that may garbage-collect the source. |
+| `embed_file(file_path, media_type, embedder_name="")` (line 377)     | Pick the embedder for the media type (named, else first registered) and call `embedder.embed_media(media_from_path(...))`. |
+| `resolve_label_embeddings(labels, media_type, progress_callback=None)` (line 794) | Batch entry point. Returns `ResolvedLabels`.            |
 
 `ResolvedLabels` is a dataclass with `embeddings`, `labels`,
 `resolved_count`, `total_count`, `missing_entries` plus the
