@@ -1,34 +1,28 @@
-import { afterNextRender, AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, effect, ElementRef, HostListener, inject, Injector, input, OnDestroy, output, untracked, viewChild } from '@angular/core';
+import { afterNextRender, AfterViewInit, ChangeDetectionStrategy, Component, effect, ElementRef, HostListener, inject, Injector, input, OnDestroy, output, signal, untracked, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { ScrollingModule, CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
-import { Subscription } from 'rxjs';
 import { BrowseSelectionService } from '../../services/browse-selection.service';
 import { MediaMetadataCacheService } from '../../services/media-metadata-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
-import { ViewControlsComponent } from '../view-controls/view-controls.component';
 import { IconComponent } from '../icon/icon.component';
 import { CopyDetailButtonComponent } from '../copy-detail-button/copy-detail-button.component';
+import { BrowseBinMemberGridComponent } from '../browse-bin-member-grid/browse-bin-member-grid.component';
 import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
+import {
+  COUNT_LABEL_HEIGHT,
+  GRID_COLUMN_WIDTH,
+  GRID_CONTENT_WIDTH,
+  GRID_GAP,
+  binGridColumns,
+  binGridRowSize,
+} from '../../utils/bin-grid-metrics';
 import { applyClipWindow, clearClipWindow, clipProgress } from '../../utils/clip-window';
 import { shortcutsBlocked } from '../../utils/keyboard-shortcuts';
 import type { NowPlaying } from '../browse-hover-preview/browse-hover-preview.component';
 import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
 import type { MediaBatchResponse } from '../../generated/api-client/models/media-batch-response';
 
-/** Vertical padding (px) inside every grid cell (``.bin-popup-entry`` 2px top +
- *  2px bottom), always present regardless of icon size. Reserved in {@link
- *  rowSize} so the cell's real rendered height never exceeds its virtual slot. */
-const GRID_CELL_PADDING = 4;
-/** Gap (px) between grid cells (and grid rows); matches ``--space-2xs``-ish. */
-const GRID_GAP = 4;
-/** Width (px) available to lay out cells inside the popup's scroll column (≈ its
- *  width minus padding and the scrollbar). Columns are derived from this. */
-const GRID_CONTENT_WIDTH = 256;
-/** Width (px) of the scrolling grid column; mirrors the historic popup width. */
-const GRID_COLUMN_WIDTH = 280;
 /** Width (px) of the optional metadata column shown left of the preview pane. */
 const METADATA_COLUMN_WIDTH = 200;
 /** Tallest the scrolling body grows before it caps and scrolls internally. */
@@ -36,8 +30,6 @@ const MAX_BODY_PX = 400;
 /** Shortest the scrolling body is ever squeezed to when the visible region is
  *  too short to fit the full popup; below this it just scrolls internally. */
 const MIN_BODY_PX = 80;
-/** Extra rows of metadata prefetched beyond the visible window. */
-const PREFETCH_BUFFER = 50;
 /** Gap (px) kept between the popup and the visible edge when clamping. */
 const EDGE_MARGIN = 8;
 /** Gap (px) between the body's columns (metadata / preview / grid). Mirrors the
@@ -77,8 +69,6 @@ const PREVIEW_OVERSIZE = 2.0;
  * {@link PREVIEW_OVERSIZE}.
  */
 const HOVER_EXTENT_PER_RADIUS = 3;
-/** Vertical room (px) the member-count label takes above the scrolling grid. */
-const COUNT_LABEL_HEIGHT = 22;
 /** Vertical padding (px) inside ``.bin-popup-body`` ({@link BODY_PADDING} on the
  *  top + bottom). The body's bound ``height`` is a *border-box* height (the app
  *  sets ``box-sizing: border-box`` globally), so this padding must be added on
@@ -144,10 +134,18 @@ const DOCKED_MAIN_MIN = 60;
  *   document-level keyboard shortcuts) is disabled; the canvas keeps its own
  *   shortcuts.
  *
- * The members render as a virtualized thumbnail grid (always grid; there is no
- * list mode). Hovering a grid thumbnail paints that item's *full-resolution*
- * original (not its grid thumbnail) into the preview pane, so the user can pull
- * detail out of any pile member in turn. The pane opens showing the bin's
+ * The members themselves render in {@link BrowseBinMemberGridComponent}, which
+ * owns everything below the detail row: the virtualized thumbnail grid (always
+ * grid; there is no list mode), its select-all header, and all of the virtual
+ * viewport's mechanics — scroll-driven metadata prefetch, centring a row,
+ * moving DOM focus onto an entry that has not virtualized in yet. This shell
+ * keeps only what the grid can't own: what to show (it chunks {@link ids} into
+ * {@link rows} because the same chunking feeds its clamp) and what is being
+ * viewed ({@link previewId}), reaching into the grid through the three methods
+ * on that component when the keyboard or a resize needs to move it. Hovering a
+ * grid thumbnail paints that item's *full-resolution* original (not its grid
+ * thumbnail) into the preview pane, so the user can pull detail out of any pile
+ * member in turn. The pane opens showing the bin's
  * representative, so even a singleton bin lands on a large high-res view without
  * any hover. The pane is sized to {@link PREVIEW_OVERSIZE} (50%) larger than the
  * item's on-canvas mouse-over break-out at the current main-canvas thumbnail
@@ -156,9 +154,10 @@ const DOCKED_MAIN_MIN = 60;
  * The thumbnail size of the grid is remembered per media type under the
  * ``grid_icon_size_popup`` setting (independent of the left/right panels), so
  * tuning the popup while browsing one bin becomes the default for every future
- * popup of that media type. The top-right {@link ViewControlsComponent} writes
+ * popup of that media type. The view controls on the grid's header row write
  * that setting and this component re-reads it from {@link SettingsStateService},
- * keyed by the active dataset's media type.
+ * keyed by the active dataset's media type — it needs the size itself, since the
+ * column chunking and the popup's clamped height both derive from it.
  *
  * A second, top-left pair of size buttons controls the *detail canvas* (the
  * large preview pane) rather than the grid thumbnails. Because the popup's
@@ -180,7 +179,7 @@ const DOCKED_MAIN_MIN = 60;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-browse-bin-popup',
   standalone: true,
-  imports: [CommonModule, ScrollingModule, ViewControlsComponent, IconComponent, CopyDetailButtonComponent],
+  imports: [CommonModule, IconComponent, CopyDetailButtonComponent, BrowseBinMemberGridComponent],
   templateUrl: './browse-bin-popup.component.html',
   styleUrl: './browse-bin-popup.component.scss',
 })
@@ -191,9 +190,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   private activeContext = inject(ActiveContextService);
   private settingsState = inject(SettingsStateService);
   private mediaTypeCaps = inject(MediaTypeCapabilityService);
-  private cdr = inject(ChangeDetectorRef);
   private injector = inject(Injector);
-  private destroyRef = inject(DestroyRef);
 
   /** Member media ids of the bin the popup was summoned over. */
   readonly memberIds = input<number[]>([]);
@@ -254,12 +251,29 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
 
   private readonly panelRef = viewChild<ElementRef<HTMLElement>>('panel');
   private readonly headerRef = viewChild<ElementRef<HTMLElement>>('header');
-  private readonly viewport = viewChild(CdkVirtualScrollViewport);
+  private readonly grid = viewChild(BrowseBinMemberGridComponent);
   private readonly audioRef = viewChild<ElementRef<HTMLAudioElement>>('audioEl');
 
-  /** Clamped on-screen position; starts at the anchor and is nudged inward. */
-  left = 0;
-  top = 0;
+  /**
+   * Clamped on-screen position; starts at the anchor and is nudged inward.
+   *
+   * Signal-backed, read through a plain getter — the shape ``docs/FRONTEND.md``
+   * §5 sanctions for exactly this case. Every write happens outside change
+   * detection (a bare ``setTimeout`` in {@link place}, the ``afterNextRender``
+   * in {@link nudgeOnScreen}, a document-level pointer move), so a plain field
+   * notified nobody and each write site had to remember its own
+   * ``markForCheck()``. Writing the signal schedules the render itself, and a
+   * read inside a template expression registers as that view's dependency, so
+   * the bindings can't go stale however the value was set.
+   */
+  private readonly _left = signal(0);
+  private readonly _top = signal(0);
+  get left(): number {
+    return this._left();
+  }
+  get top(): number {
+    return this._top();
+  }
   /** False until the popup has been clamped *and* measured at its on-screen spot;
    *  the panel is kept ``visibility: hidden`` until then so the user never sees it
    *  flash at the raw summon point (which may be half off-screen) or at a computed
@@ -268,15 +282,24 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
    *  has been measured and any residual overflow removed, and only once settings
    *  have loaded so the size is final. Reset on every genuine re-summon so the
    *  move to a new bin also stays hidden until re-placed. */
-  placed = false;
+  private readonly _placed = signal(false);
+  get placed(): boolean {
+    return this._placed();
+  }
   /** Max width (px) the popup may take; shrunk to fit a narrow visible region. */
-  maxWidthPx = GRID_COLUMN_WIDTH;
+  private readonly _maxWidthPx = signal(GRID_COLUMN_WIDTH);
+  get maxWidthPx(): number {
+    return this._maxWidthPx();
+  }
   /** True once the user has dragged the popup by its header. While set, the
    *  popup keeps the user's chosen spot (re-clamped to stay on-screen) instead
    *  of re-anchoring to the summon point on content changes. Reset per bin. */
   dragged = false;
   /** True only mid-drag (pointer down on the header, not yet released). */
-  dragging = false;
+  private readonly _dragging = signal(false);
+  get dragging(): boolean {
+    return this._dragging();
+  }
   private dragStart = { x: 0, y: 0, left: 0, top: 0 };
   /** Bounded re-measure counter for {@link nudgeOnScreen}: when a correction
    *  actually moves the popup the pre-measurement clamp had under-modelled the
@@ -286,34 +309,58 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
 
   /** Body height cap (px) for the current visible region; the body never grows
    *  past this, so a short region can't push the popup off the bottom edge. */
-  bodyCapPx = MAX_BODY_PX;
+  private readonly _bodyCapPx = signal(MAX_BODY_PX);
+  get bodyCapPx(): number {
+    return this._bodyCapPx();
+  }
 
   /** Preview-pane height cap (px) for the current visible region. The preview is
    *  allowed to grow taller than {@link bodyCapPx} (which only governs the
    *  scrolling grid), so a large zoom-in view isn't truncated to the grid's cap;
    *  it is still kept within the visible region so the popup stays on-screen. */
-  previewCapPx = MAX_PREVIEW_PX;
+  private readonly _previewCapPx = signal(MAX_PREVIEW_PX);
+  get previewCapPx(): number {
+    return this._previewCapPx();
+  }
 
   /** The bin's member ids, in bin order — a locality-preserving 1-D (Hilbert)
    *  traversal of the layout, so spatially/semantically similar items sit
    *  together in the list (the server orders them; see ``tile_member_ids``). */
-  ids: number[] = [];
+  private readonly _ids = signal<number[]>([]);
+  get ids(): number[] {
+    return this._ids();
+  }
 
   /** Grid thumbnail target width (px), mirrored from settings per media type. */
-  gridGoalWidth = 80;
+  private readonly _gridGoalWidth = signal(80);
+  get gridGoalWidth(): number {
+    return this._gridGoalWidth();
+  }
 
   /** Number of columns the grid lays out. */
-  columns = 1;
+  private readonly _columns = signal(1);
+  get columns(): number {
+    return this._columns();
+  }
   /** Member ids chunked into rows of {@link columns}; the virtual list's data. */
-  rows: number[][] = [];
+  private readonly _rows = signal<number[][]>([]);
+  get rows(): number[][] {
+    return this._rows();
+  }
 
   /** Id whose full-res original is painted into the preview pane. Defaults to
    *  the bin's representative (first member) so the pane is never blank, and
    *  follows the grid thumbnail under the cursor while hovering. */
-  previewId: number | null = null;
+  private readonly _previewId = signal<number | null>(null);
+  get previewId(): number | null {
+    return this._previewId();
+  }
 
   /** Currently-playing hover audio source, so re-entering the same row is a no-op. */
-  audioSrc = '';
+  private readonly _audioSrc = signal('');
+  get audioSrc(): string {
+    return this._audioSrc();
+  }
   /** Media id of the clip currently auditioning, so the buffering listeners can
    *  re-emit its now-playing state; ``null`` when silent. */
   private nowPlayingId: number | null = null;
@@ -326,13 +373,12 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   /** Whether the one-shot buffering listeners are wired onto the audio element. */
   private audioListenersAttached = false;
 
-  private readonly failedThumbs = new Set<string>();
   /** Ids whose full-res ``/image`` failed; the preview falls back to the
-   *  thumbnail for these so it still shows something. */
+   *  thumbnail for these so it still shows something. Paired with a version
+   *  signal because the set is mutated in place: {@link previewUrl} reads the
+   *  version first, so adding an id repaints the pane onto the fallback. */
   private readonly failedPreviews = new Set<number>();
-  private scrollSub: Subscription | null = null;
-  /** The viewport instance whose ``scrolledIndexChange`` is currently subscribed. */
-  private scrollSubscribedViewport: CdkVirtualScrollViewport | null = null;
+  private readonly failedPreviewsVersion = signal(0);
 
   constructor() {
     // Keep the hover-to-hear preview element in step with the Browse toolbar's
@@ -361,17 +407,16 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
         // repaint doesn't restart the audition, throw away the viewed item, or
         // scroll the grid back to the representative.
         if (this.isInPlaceCull(next)) {
-          this.ids = next;
+          this._ids.set(next);
           this.rebuildRows();
-          this.cdr.markForCheck();
           return;
         }
-        this.ids = next;
+        this._ids.set(next);
         this.stopAudio();
         // Open on the bin's representative (the centroid whose thumbnail the user
         // right-clicked) so the pane is never blank and the detail view starts on
         // the same image — not the 1-D list's first item, which differs.
-        this.previewId = this.representativeId();
+        this._previewId.set(this.representativeId());
         // Auto-play the representative's clip on open (audio) so the detail window
         // is an "intense hover": opening it hears the rep, just like resting on the
         // bin on the canvas. This is the only way to hear a singleton audio bin,
@@ -385,8 +430,8 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
         // the window around it. Deferred so the virtual viewport has the new rows
         // (and, on first open, exists at all — it's created after this effect).
         setTimeout(() => {
-          this.scrollToRep();
-          this.prefetchVisible();
+          this.grid()?.centreOn(this.repIndex());
+          this.prefetchMembers();
         });
       });
     });
@@ -411,11 +456,11 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
       this.memberIds();
       untracked(() => {
         if (!this.dragged) {
-          this.left = x;
-          this.top = y;
+          this._left.set(x);
+          this._top.set(y);
           // Hide the popup until it's re-clamped at the new anchor, so it doesn't
           // flash at the raw summon point (which may be half off-screen) first.
-          this.placed = false;
+          this._placed.set(false);
         }
         // Measure + clamp after the new content lays out.
         setTimeout(() => this.place());
@@ -435,10 +480,9 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
         if (!this.docked() || width <= 0) return;
         this.rebuildRows();
         setTimeout(() => {
-          this.viewport()?.checkViewportSize();
-          this.prefetchVisible();
+          this.grid()?.remeasure();
+          this.prefetchMembers();
         });
-        this.cdr.markForCheck();
       });
     });
     // Docked audio: the detail pane + metadata column track the auditioning
@@ -450,111 +494,78 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
         this.metadataCache.ensureLoaded([np.mediaId]);
       });
     });
-    // (Re-)subscribe the member grid's scroll-driven prefetch whenever the
-    // virtual viewport instance changes — it lives behind the template's
-    // ``@if (!previewOnly)``, and the popup is reused across summons while
-    // open (right-clicking another bin only swaps inputs), so a singleton→
-    // multi transition creates a brand-new viewport. Tracking the view query
-    // re-runs this the moment that instance appears; a one-shot
-    // ``ngAfterViewInit`` wiring would strand it (mirrors media-list's
-    // viewport re-wire pattern).
-    effect(() => {
-      this.viewport();
-      untracked(() => this.ensureScrollSubscription());
-    });
     // Re-read the popup's thumbnail size whenever settings change (this is how
     // the in-header size buttons take effect, and how a change on one popup
     // becomes the default for every future popup of this media type).
     effect(() => {
       const settings = this.settingsState.settingsSignal();
-      if (!settings) return;
-      this.gridSizeDict = (settings.grid_icon_size_popup as Record<string, string>) ?? {};
-      this.previewSizeDict = (settings.popup_preview_size as Record<string, number>) ?? {};
-      this.metadataShownDict = (settings.popup_metadata_shown as Record<string, boolean>) ?? {};
-      // Mirror the docked metadata-column width (global). Skip mid-drag so a
-      // settings round-trip can't reset the column while the user is dragging it.
-      if (!this.draggingMeta && typeof settings.browse_details_metadata_width === 'number') {
-        this.metadataWidthPx = settings.browse_details_metadata_width;
-      }
-      this.applyViewPrefs();
-      // A detail-canvas size change (the top-left buttons) resizes the preview
-      // pane, hence the whole popup, so re-clamp it back fully on-screen. Showing
-      // or hiding the metadata column likewise changes the popup's width, so it
-      // re-clamps too.
-      const override = this.previewOverride;
-      const metaShown = this.showMetadataColumn;
-      // Re-place when the settings-driven size actually changed, OR when the popup
-      // has mounted but not yet revealed (`placed` still false). The `!this.placed`
-      // clause fixes the "first right-click shows nothing, second opens it" bug:
-      // {@link ngAfterViewInit} calls `settingsState.load()`, which bumps the
-      // settings resource's request and so momentarily resets `settingsSignal()` to
-      // null while it refetches. If `nudgeOnScreen`'s reveal gate (`settingsReady`)
-      // runs during that null window it holds `placed` false, and nothing else
-      // re-runs `place()` when settings land (the size didn't change) — so the popup
-      // strands hidden until the next summon. Re-placing on settings-arrival reveals
-      // it then, keeping the "wait for the real sizes" behaviour (no default-size
-      // flash) while dropping the spurious second click.
-      if (override !== this.lastPreviewOverride || metaShown !== this.lastMetadataShown || !this.placed) {
-        this.lastPreviewOverride = override;
-        this.lastMetadataShown = metaShown;
-        setTimeout(() => this.place());
-      }
-    });
-    // A selection change anywhere (here, the canvas, the panel) re-highlights.
-    // An effect on the signal (rather than a `changed$` subscription) schedules
-    // the repaint under zoneless from any mutation context.
-    effect(() => {
-      this.selection.version();
-      this.cdr.markForCheck();
+      // Track the two genuine triggers explicitly, then run the body untracked.
+      // The body now both reads and writes the view-pref signals (and `placed`),
+      // so a tracked body would re-arm itself on its own writes and spin; naming
+      // the triggers keeps the media-type re-place that the old implicit
+      // `mediaType()` read through `previewOverride` used to give us.
+      this.mediaType();
+      untracked(() => {
+        if (!settings) return;
+        this.gridSizeDict.set((settings.grid_icon_size_popup as Record<string, string>) ?? {});
+        this.previewSizeDict.set((settings.popup_preview_size as Record<string, number>) ?? {});
+        this.metadataShownDict.set((settings.popup_metadata_shown as Record<string, boolean>) ?? {});
+        // Mirror the docked metadata-column width (global). Skip mid-drag so a
+        // settings round-trip can't reset the column while the user is dragging it.
+        if (!this.draggingMeta && typeof settings.browse_details_metadata_width === 'number') {
+          this.metadataWidthPx.set(settings.browse_details_metadata_width);
+        }
+        this.applyViewPrefs();
+        // A detail-canvas size change (the top-left buttons) resizes the preview
+        // pane, hence the whole popup, so re-clamp it back fully on-screen. Showing
+        // or hiding the metadata column likewise changes the popup's width, so it
+        // re-clamps too.
+        const override = this.previewOverride;
+        const metaShown = this.showMetadataColumn;
+        // Re-place when the settings-driven size actually changed, OR when the popup
+        // has mounted but not yet revealed (`placed` still false). The `!this.placed`
+        // clause fixes the "first right-click shows nothing, second opens it" bug:
+        // {@link ngAfterViewInit} calls `settingsState.load()`, which bumps the
+        // settings resource's request and so momentarily resets `settingsSignal()` to
+        // null while it refetches. If `nudgeOnScreen`'s reveal gate (`settingsReady`)
+        // runs during that null window it holds `placed` false, and nothing else
+        // re-runs `place()` when settings land (the size didn't change) — so the popup
+        // strands hidden until the next summon. Re-placing on settings-arrival reveals
+        // it then, keeping the "wait for the real sizes" behaviour (no default-size
+        // flash) while dropping the spurious second click.
+        if (override !== this.lastPreviewOverride || metaShown !== this.lastMetadataShown || !this.placed) {
+          this.lastPreviewOverride = override;
+          this.lastMetadataShown = metaShown;
+          setTimeout(() => this.place());
+        }
+      });
     });
   }
 
   ngAfterViewInit(): void {
-    // Names/thumbnails arrive asynchronously; repaint the visible rows.
-    this.metadataCache.version$
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => this.cdr.markForCheck());
     this.settingsState.load();
-    this.prefetchVisible();
+    this.prefetchMembers();
     setTimeout(() => this.place());
   }
 
-  /**
-   * (Re-)subscribe the member grid's scroll-driven thumbnail prefetch, keyed
-   * to the viewport *instance*. Driven by the constructor effect tracking the
-   * ``viewport`` view query, so a singleton→multi transition (which creates a
-   * brand-new viewport behind ``@if (!previewOnly)``) re-wires immediately —
-   * a one-shot subscription would leave everything beyond the
-   * initially-prefetched window as ``□`` placeholders with no recovery.
-   */
-  private ensureScrollSubscription(): void {
-    const vp = this.viewport() ?? null;
-    if (!vp || this.scrollSubscribedViewport === vp) return;
-    this.scrollSubscribedViewport = vp;
-    this.scrollSub?.unsubscribe();
-    this.scrollSub = vp.scrolledIndexChange.subscribe(() => this.prefetchVisible());
-    this.prefetchVisible();
-  }
-
   ngOnDestroy(): void {
-    this.scrollSub?.unsubscribe();
     // Drop any in-flight metadata-divider drag listeners (destroyed mid-drag).
     document.removeEventListener('pointermove', this.boundMetaMove);
     document.removeEventListener('pointerup', this.boundMetaUp);
     this.stopAudio();
   }
 
-  private gridSizeDict: Record<string, string> = {};
+  private readonly gridSizeDict = signal<Record<string, string>>({});
   /** Per-media-type detail-canvas size (px) the user has chosen via the popup's
    *  top-left buttons; absent entries fall back to the radius-derived default. */
-  private previewSizeDict: Record<string, number> = {};
+  private readonly previewSizeDict = signal<Record<string, number>>({});
   /** Last applied preview override, so the settings effect only re-clamps the
    *  popup when the detail-canvas size actually changed. */
   private lastPreviewOverride: number | null = null;
   /** Per-media-type memory of whether the metadata column is shown, mirrored
    *  from the ``popup_metadata_shown`` setting. Absent entries default to hidden
    *  (mirroring the Train/Find center panel's metadata default). */
-  private metadataShownDict: Record<string, boolean> = {};
+  private readonly metadataShownDict = signal<Record<string, boolean>>({});
   /** Last applied column visibility, so the settings effect only re-clamps the
    *  popup when it actually toggled. */
   private lastMetadataShown: boolean | null = null;
@@ -562,7 +573,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
    *  ``browse_details_metadata_width`` setting and driven by the divider between
    *  the metadata column and the large item. Read through {@link
    *  dockedMetadataWidth}, which clamps it against the live panel width. */
-  private metadataWidthPx = 150;
+  private readonly metadataWidthPx = signal(150);
 
   /** True for media types that carry real visual thumbnails (image / video):
    *  the ones that magnify on the main canvas and are worth a large preview. */
@@ -599,7 +610,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
    *  rather than its notes. */
   get metadataShown(): boolean {
     const mediaType = this.mediaType();
-    const value = mediaType ? this.metadataShownDict[mediaType] : undefined;
+    const value = mediaType ? this.metadataShownDict()[mediaType] : undefined;
     return value === true;
   }
 
@@ -621,7 +632,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   toggleMetadata(): void {
     const mediaType = this.mediaType();
     if (!mediaType) return;
-    const dict = { ...this.metadataShownDict, [mediaType]: !this.metadataShown };
+    const dict = { ...this.metadataShownDict(), [mediaType]: !this.metadataShown };
     this.settingsState.update({ popup_metadata_shown: dict } as SettingsUpdate).subscribe();
   }
 
@@ -629,6 +640,9 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
    *  it has loaded. Everything the column shows reads through this. In docked
    *  audio mode the displayed item follows the auditioning clip. */
   private focusedMedia(): MediaBatchResponse | undefined {
+    // Track the cache version so a batch arrival repaints the metadata column;
+    // the cache itself has no per-item signal. See ``docs/FRONTEND.md`` §5.
+    this.metadataCache.version();
     const id = this.displayedId;
     return id == null ? undefined : this.metadataCache.get(id);
   }
@@ -677,9 +691,9 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   private applyViewPrefs(): void {
     const prevGoal = this.gridGoalWidth;
     const mediaType = this.mediaType();
-    this.gridGoalWidth = iconSizeToGoalWidth(
-      (mediaType && this.gridSizeDict[mediaType]) || 'M',
-    );
+    this._gridGoalWidth.set(iconSizeToGoalWidth(
+      (mediaType && this.gridSizeDict()[mediaType]) || 'M',
+    ));
     if (this.gridGoalWidth !== prevGoal) {
       this.rebuildRows();
       // The row stride changed, so the old scroll offset now points at a
@@ -687,12 +701,10 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
       // being viewed (the representative until the user hovers/arrows elsewhere)
       // so it stays in view across the size change, then clamp.
       setTimeout(() => {
-        this.viewport()?.checkViewportSize();
-        this.centreRowFor(this.focusIndex());
+        this.grid()?.centreOn(this.focusIndex());
         this.place();
       });
     }
-    this.cdr.markForCheck();
   }
 
   /**
@@ -726,41 +738,6 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     return idx >= 0 ? idx : 0;
   }
 
-  /** Scroll the member grid so the representative's row sits roughly centred, so
-   *  the popup opens looking at the same item whose pile thumbnail was clicked
-   *  rather than the 1-D list's first item. */
-  private scrollToRep(): void {
-    this.centreRowFor(this.repIndex());
-  }
-
-  /** Scroll the member grid so the row holding ``index`` sits roughly centred.
-   *  No-op for a singleton bin (no grid) or before the viewport exists.
-   *
-   *  The virtual viewport may not have applied its scrollable content size yet
-   *  (on open, or right after a thumbnail-size change re-chunks the rows), so the
-   *  browser clamps this scroll back to 0 and a large bin is left sitting at the
-   *  top with the target off-screen. When we meant to scroll down but the offset
-   *  didn't take, retry on the next frame (bounded) until the viewport is
-   *  scrollable and the target sticks. */
-  private centreRowFor(index: number, attempt = 0): void {
-    const vp = this.viewport();
-    if (!vp) return;
-    const row = Math.floor(index / Math.max(1, this.columns));
-    const viewportH = vp.elementRef.nativeElement.clientHeight || this.gridHeight;
-    // The most we can scroll: content height (all rows) minus the visible window.
-    const maxOffset = Math.max(0, this.rows.length * this.rowSize - viewportH);
-    // Centre the row in the visible window, clamped to [0, maxOffset] so we never
-    // scroll past either end.
-    const target = Math.min(
-      maxOffset,
-      Math.max(0, row * this.rowSize - Math.max(0, viewportH - this.rowSize) / 2),
-    );
-    vp.scrollToOffset(target);
-    if (target > 0 && vp.measureScrollOffset('top') < target - 1 && attempt < 5) {
-      requestAnimationFrame(() => this.centreRowFor(index, attempt + 1));
-    }
-  }
-
   /** Width (px) the member grid lays its cells out in: the historic fixed
    *  column width when floating, or the live panel width (minus the body
    *  padding + scrollbar chrome) when docked, so the docked grid re-chunks as
@@ -790,26 +767,20 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
 
   /** Recompute the column count + row chunking for the current thumbnail size. */
   private rebuildRows(): void {
-    this.columns = Math.max(
-      1,
-      Math.floor((this.gridContentWidth() + GRID_GAP) / (this.gridGoalWidth + GRID_GAP)),
-    );
+    this._columns.set(binGridColumns(this.gridContentWidth(), this.gridGoalWidth));
     const cols = this.columns;
     const rows: number[][] = [];
     for (let i = 0; i < this.ids.length; i += cols) {
       rows.push(this.ids.slice(i, i + cols));
     }
-    this.rows = rows;
+    this._rows.set(rows);
   }
 
-  /** Pixel stride of one virtual grid row: the thumbnail plus its always-present
-   *  vertical cell padding and an inter-row gap. The grid no longer prints a name
-   *  under each thumbnail, so only the thumbnail and padding contribute; accounting
-   *  for the cell padding keeps the row's rendered content from overflowing its
-   *  virtual slot by a sub-pixel, which would otherwise force a stray scrollbar on
-   *  even a single row. */
+  /** Pixel stride of one virtual grid row. Shared with the grid component that
+   *  actually renders the rows, so this clamp can't model a row height the grid
+   *  doesn't use — see ``utils/bin-grid-metrics``. */
   get rowSize(): number {
-    return this.gridGoalWidth + GRID_CELL_PADDING + GRID_GAP;
+    return binGridRowSize(this.gridGoalWidth);
   }
 
   /** Height (px) the grid takes: just enough for its rows, capped (to the room
@@ -822,7 +793,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
    *  ``null`` when they haven't set one (and the radius-derived default is used). */
   get previewOverride(): number | null {
     const mediaType = this.mediaType();
-    const value = mediaType ? this.previewSizeDict[mediaType] : undefined;
+    const value = mediaType ? this.previewSizeDict()[mediaType] : undefined;
     return typeof value === 'number' ? value : null;
   }
 
@@ -861,7 +832,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
         ? (PREVIEW_SIZE_STEPS.find((s) => s > current) ?? PREVIEW_SIZE_STEPS[PREVIEW_SIZE_STEPS.length - 1])
         : ([...PREVIEW_SIZE_STEPS].reverse().find((s) => s < current) ?? PREVIEW_SIZE_STEPS[0]);
     if (next === this.previewOverride) return;
-    const dict = { ...this.previewSizeDict, [mediaType]: next };
+    const dict = { ...this.previewSizeDict(), [mediaType]: next };
     this.settingsState.update({ popup_preview_size: dict } as SettingsUpdate).subscribe();
   }
 
@@ -961,7 +932,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   get dockedMetadataWidth(): number {
     const content = this.dockedContentWidth();
     const maxWidth = Math.max(DOCKED_META_MIN, content - META_DIVIDER_WIDTH - DOCKED_MAIN_MIN);
-    return Math.round(Math.max(DOCKED_META_MIN, Math.min(this.metadataWidthPx, maxWidth)));
+    return Math.round(Math.max(DOCKED_META_MIN, Math.min(this.metadataWidthPx(), maxWidth)));
   }
 
   /** Side (px) of the square docked detail pane. The large item takes whatever
@@ -982,7 +953,10 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   // ``browse_details_metadata_width`` (metadata fields are media-agnostic).
 
   /** True only mid-drag of the metadata/item divider (template drag cue). */
-  draggingMeta = false;
+  private readonly _draggingMeta = signal(false);
+  get draggingMeta(): boolean {
+    return this._draggingMeta();
+  }
   private metaDragStartX = 0;
   private metaDragStartWidth = 0;
   private readonly boundMetaMove = this.onMetaDividerMove.bind(this);
@@ -992,7 +966,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   onMetaDividerPointerDown(event: PointerEvent): void {
     if (!this.docked() || event.button !== 0) return;
     event.preventDefault();
-    this.draggingMeta = true;
+    this._draggingMeta.set(true);
     this.metaDragStartX = event.clientX;
     this.metaDragStartWidth = this.dockedMetadataWidth;
     document.addEventListener('pointermove', this.boundMetaMove);
@@ -1006,15 +980,14 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     const dx = event.clientX - this.metaDragStartX;
     const content = this.dockedContentWidth();
     const maxWidth = Math.max(DOCKED_META_MIN, content - META_DIVIDER_WIDTH - DOCKED_MAIN_MIN);
-    this.metadataWidthPx = Math.round(
-      Math.max(DOCKED_META_MIN, Math.min(this.metaDragStartWidth - dx, maxWidth)),
+    this.metadataWidthPx.set(
+      Math.round(Math.max(DOCKED_META_MIN, Math.min(this.metaDragStartWidth - dx, maxWidth))),
     );
-    this.cdr.markForCheck();
   }
 
   private onMetaDividerUp(): void {
     if (!this.draggingMeta) return;
-    this.draggingMeta = false;
+    this._draggingMeta.set(false);
     document.removeEventListener('pointermove', this.boundMetaMove);
     document.removeEventListener('pointerup', this.boundMetaUp);
     // Persist the settled (clamped) width; the settings round-trip returns the
@@ -1166,32 +1139,8 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     const cur = this.focusIndex();
     const next = Math.max(0, Math.min(this.ids.length - 1, cur + dCol + dRow * this.columns));
     if (next === cur) return;
-    this.previewId = this.ids[next];
-    this.scrollRowIntoView(next);
-    this.focusEntry(next);
-    this.cdr.markForCheck();
-  }
-
-  /**
-   * Move DOM focus onto the grid entry at ``index`` so keyboard activation
-   * (Enter / Space) targets the arrow-walked item. The entry may not be in the
-   * DOM yet — the row was just scrolled into view and the virtual viewport
-   * renders it on a subsequent frame — so query for it after a frame and retry
-   * (bounded) until it exists. ``preventScroll`` keeps the native focus scroll
-   * from fighting {@link scrollRowIntoView}, which already positioned the row.
-   */
-  private focusEntry(index: number, attempt = 0): void {
-    const panel = this.panelRef()?.nativeElement;
-    const id = this.ids[index];
-    if (!panel || id == null) return;
-    requestAnimationFrame(() => {
-      const el = panel.querySelector<HTMLElement>(`.bin-popup-entry[data-entry-id="${id}"]`);
-      if (el) {
-        el.focus({ preventScroll: true });
-      } else if (attempt < 5) {
-        this.focusEntry(index, attempt + 1);
-      }
-    });
+    this._previewId.set(this.ids[next]);
+    this.grid()?.revealAndFocus(next);
   }
 
   /** Index of the viewed item within {@link ids}, falling back to the
@@ -1199,29 +1148,6 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   private focusIndex(): number {
     const idx = this.previewId == null ? -1 : this.ids.indexOf(this.previewId);
     return idx >= 0 ? idx : this.repIndex();
-  }
-
-  /** True for the viewed item — the one shown in the preview pane and ringed in
-   *  the grid as arrow keys walk through it. */
-  isFocused(id: number): boolean {
-    return this.previewId != null && id === this.previewId;
-  }
-
-  /** Scroll the grid the minimum amount so the row holding ``index`` is fully
-   *  visible (no-op when it already is). */
-  private scrollRowIntoView(index: number): void {
-    const vp = this.viewport();
-    if (!vp) return;
-    const row = Math.floor(index / Math.max(1, this.columns));
-    const rowTop = row * this.rowSize;
-    const rowBottom = rowTop + this.rowSize;
-    const top = vp.measureScrollOffset('top');
-    const viewportH = vp.elementRef.nativeElement.clientHeight || this.gridHeight;
-    if (rowTop < top) {
-      vp.scrollToOffset(rowTop);
-    } else if (rowBottom > top + viewportH) {
-      vp.scrollToOffset(rowBottom - viewportH);
-    }
   }
 
   // --- Dragging (move the popup by its header) ------------------------------
@@ -1233,7 +1159,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     if (event.button !== 0) return;
     if ((event.target as HTMLElement).closest('button, vt-view-controls')) return;
     event.preventDefault();
-    this.dragging = true;
+    this._dragging.set(true);
     this.dragged = true;
     this.dragStart = { x: event.clientX, y: event.clientY, left: this.left, top: this.top };
     // Keep receiving moves even if the pointer outruns the header.
@@ -1251,35 +1177,10 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
 
   @HostListener('document:pointerup')
   onPointerUp(): void {
-    this.dragging = false;
+    this._dragging.set(false);
   }
 
   // --- Selection (click stays open so the user can scroll + multi-select) ---
-
-  isSelected(id: number): boolean {
-    return this.selection.has(id);
-  }
-
-  /** Tri-state of the select-all control: how many members are selected, as
-   *  none / some / all — mirroring the dashboard's master-checkbox states. */
-  get selectionState(): 'none' | 'some' | 'all' {
-    const total = this.ids.length;
-    if (total === 0) return 'none';
-    const sel = this.selection.selectedCountIn(this.ids);
-    if (sel === 0) return 'none';
-    if (sel >= total) return 'all';
-    return 'some';
-  }
-
-  /** Select every member, or — when all are already selected — clear them.
-   *  Matches the dashboard's toggle-all semantics. */
-  toggleAll(): void {
-    if (this.selectionState === 'all') {
-      this.selection.removeAll(this.ids);
-    } else {
-      this.selection.addAll(this.ids);
-    }
-  }
 
   onEntryClick(id: number): void {
     if (this.selection.has(id)) {
@@ -1289,31 +1190,21 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  onEntryKeydown(event: KeyboardEvent, id: number): void {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      // Stop the bubble so the document-level handler's Space fallback (which
-      // acts on {@link previewId}) doesn't also fire and double-toggle. The
-      // focused entry owns its own activation; the fallback is only for when
-      // nothing in the grid holds focus.
-      event.stopPropagation();
-      this.onEntryClick(id);
-    }
-  }
-
   /** DOM focus landed on an entry (arrow-walk, Tab, or click). Keep
    *  {@link previewId} — hence the preview pane, metadata column, and focus
    *  ring — in step with it so the highlighted item is always the one Enter /
    *  Space will act on, regardless of how focus arrived. */
   onEntryFocus(id: number): void {
     if (this.previewId === id) return;
-    this.previewId = id;
-    this.cdr.markForCheck();
+    this._previewId.set(id);
   }
 
   /** True when the item currently shown in the preview pane is selected, so the
    *  large detail image can render the same highlight ring as a grid entry. */
   isPreviewSelected(): boolean {
+    // Track the selection version, so a selection change anywhere (here, the
+    // canvas, the selection panel) re-rings the pane. See ``docs/FRONTEND.md`` §5.
+    this.selection.version();
     const id = this.displayedId;
     return id != null && this.selection.has(id);
   }
@@ -1346,7 +1237,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     // (thumbnail media) and drive the metadata column + focus ring to it (every
     // media type, so audio/text/document read metadata for the item under the
     // cursor even without a preview pane).
-    this.previewId = id;
+    this._previewId.set(id);
     this.playAudio(id);
   }
 
@@ -1360,7 +1251,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     if (this.mediaType() !== 'audio') return;
     const src = this.activeContext.mediaUrl(`/api/medias/${id}/audio`);
     if (this.audioSrc === src) return;
-    this.audioSrc = src;
+    this._audioSrc.set(src);
     this.nowPlayingId = id;
     // The autoplay-on-open path may fire before prefetchVisible has hydrated the
     // representative's metadata, so make sure its clip extents are loading (the
@@ -1439,8 +1330,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     this.stopAudio();
     // Fall the focus back to the bin's representative so the pane and metadata
     // column stay populated (every media type, matching the hover-follow above).
-    this.previewId = this.representativeId();
-    this.cdr.markForCheck();
+    this._previewId.set(this.representativeId());
   }
 
   private stopAudio(): void {
@@ -1452,7 +1342,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
       el.pause();
       el.currentTime = 0;
     }
-    this.audioSrc = '';
+    this._audioSrc.set('');
     this.nowPlayingId = null;
     if (wasPlaying) this.nowPlaying.emit(null);
   }
@@ -1460,28 +1350,21 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   // --- Names + thumbnails (mirrors the selection panel's treatment) ---------
 
   name(id: number): string {
+    this.metadataCache.version();
     return this.metadataCache.get(id)?.filename || `Clip #${id}`;
-  }
-
-  hasThumbnailUrl(id: number): boolean {
-    const url = this.thumbnailUrl(id);
-    if (this.failedThumbs.has(url)) return false;
-    const media = this.metadataCache.get(id);
-    return !!media && this.mediaTypeCaps.usesThumbnails(media.media_type);
   }
 
   thumbnailUrl(id: number): string {
     return this.activeContext.mediaUrl(`/api/medias/${id}/thumbnail`);
   }
 
-  onThumbnailError(url: string): void {
-    if (url) this.failedThumbs.add(url);
-  }
-
   /** Full-res source for the preview pane: the original ``/image`` unless it has
    *  failed for this id, in which case fall back to the thumbnail. Empty when
    *  there is nothing to preview. */
   previewUrl(): string {
+    // Track the in-place-mutated failure set, so a failed load repaints onto
+    // the thumbnail fallback (see the field's note).
+    this.failedPreviewsVersion();
     const id = this.previewId;
     if (id == null) return '';
     if (this.failedPreviews.has(id)) return this.thumbnailUrl(id);
@@ -1492,25 +1375,8 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     const id = this.previewId;
     if (id != null && !this.failedPreviews.has(id)) {
       this.failedPreviews.add(id);
-      this.cdr.markForCheck();
+      this.failedPreviewsVersion.update((v) => v + 1);
     }
-  }
-
-  placeholderIcon(id: number): string {
-    if (this.hasThumbnailUrl(id)) return '';
-    const media = this.metadataCache.get(id);
-    if (!media) return '□';
-    if (media.media_type === 'audio') return '♫';
-    if (media.media_type === 'text') return '¶';
-    return '□';
-  }
-
-  trackById(_index: number, id: number): number {
-    return id;
-  }
-
-  trackByRow(index: number): number {
-    return index;
   }
 
   // --- Positioning ---------------------------------------------------------
@@ -1533,18 +1399,15 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     // call (e.g. from ngAfterViewInit) will run once it's in the DOM. Staying
     // unplaced keeps the popup hidden until then rather than showing it unclamped.
     if (!this.panelRef()?.nativeElement) return;
-    this.clampInto(this.left, this.top);
-    // Flush the freshly-clamped position and the size caps clampInto just set
-    // (bodyCapPx/previewCapPx/maxWidthPx) to the DOM. This runs in a bare
-    // setTimeout, so under zoneless change detection nothing else schedules a
-    // render; without this markForCheck the clamp would never reach the DOM
-    // until some unrelated event happened to tick CD. The popup stays hidden
+    // The clamp writes signals (position + the bodyCapPx/previewCapPx/maxWidthPx
+    // size caps), so it schedules its own render even though this runs from a
+    // bare setTimeout with no change detection attached. The popup stays hidden
     // (``placed`` is still false) — the actual reveal happens in nudgeOnScreen,
     // on the next frame, once the *rendered* panel has been measured and any
     // residual overflow corrected. Revealing here, before that measurement, was
     // what let the popup flash at the computed clamp and then jump to the
     // corrected spot.
-    this.cdr.markForCheck();
+    this.clampInto(this.left, this.top);
     this.nudgeSettleAttempts = 0;
     this.scheduleNudge();
   }
@@ -1597,8 +1460,8 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     l = Math.max(regionLeft + EDGE_MARGIN, l);
     t = Math.max(regionTop + EDGE_MARGIN, t);
     const moved = l !== this.left || t !== this.top;
-    this.left = l;
-    this.top = t;
+    this._left.set(l);
+    this._top.set(t);
     // Reveal now that the panel is measured and corrected, so the first painted
     // frame is already at the final on-screen spot. Gate the first reveal on the
     // settings being loaded: the popup's size (grid thumbnail size, whether the
@@ -1608,14 +1471,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     // once settings resolve, which reveals then. Browse only ever mounts with
     // settings present, so this never strands the popup permanently hidden.
     const settingsReady = this.settingsState.settingsSignal() != null;
-    if (!this.placed) {
-      if (settingsReady) {
-        this.placed = true;
-        this.cdr.markForCheck();
-      }
-    } else if (moved) {
-      this.cdr.markForCheck();
-    }
+    if (!this.placed && settingsReady) this._placed.set(true);
     // A correction that actually moved the popup means this pass measured a
     // panel larger than the pre-measurement clamp modelled (e.g. the header or
     // the view-controls settled a hair taller a frame after layout). Moving
@@ -1665,12 +1521,12 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     // The grid column also carries the member-count label above the scroll, so
     // its cap leaves that label room; the scroll then fills what's left.
     const gridRoom = regionRoom - COUNT_LABEL_HEIGHT;
-    this.bodyCapPx = Math.max(MIN_BODY_PX, Math.min(MAX_BODY_PX, gridRoom));
+    this._bodyCapPx.set(Math.max(MIN_BODY_PX, Math.min(MAX_BODY_PX, gridRoom)));
     // The preview gets its own, larger cap: it may grow past the grid's body cap,
     // bounded only by the visible region and the absolute MAX_PREVIEW_PX.
-    this.previewCapPx = Math.max(MIN_PREVIEW_PX, Math.min(MAX_PREVIEW_PX, regionRoom));
+    this._previewCapPx.set(Math.max(MIN_PREVIEW_PX, Math.min(MAX_PREVIEW_PX, regionRoom)));
     // Likewise shrink the overall width to fit a narrow region.
-    this.maxWidthPx = Math.max(0, regionRight - regionLeft - 2 * EDGE_MARGIN);
+    this._maxWidthPx.set(Math.max(0, regionRight - regionLeft - 2 * EDGE_MARGIN));
     // A singleton bin drops the grid column and shows only the preview pane.
     const gridW = this.previewOnly ? 0 : GRID_COLUMN_WIDTH;
     const paneW = this.previewPaneSize;
@@ -1700,27 +1556,26 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
       t = regionBottom - height - EDGE_MARGIN;
     }
     // Never push the top-left off the opposite edge (popup larger than region).
-    this.left = Math.max(regionLeft + EDGE_MARGIN, l);
-    this.top = Math.max(regionTop + EDGE_MARGIN, t);
-    this.cdr.markForCheck();
+    this._left.set(Math.max(regionLeft + EDGE_MARGIN, l));
+    this._top.set(Math.max(regionTop + EDGE_MARGIN, t));
   }
 
-  /** Prefetch metadata for the items around the visible window of the grid. */
-  private prefetchVisible(): void {
-    if (this.ids.length === 0) return;
-    const cols = this.columns;
-    const vp = this.viewport();
-    if (!vp) {
-      const window = Math.ceil(MAX_BODY_PX / this.rowSize) * cols + PREFETCH_BUFFER;
-      this.metadataCache.ensureLoaded(this.ids.slice(0, window));
+  /**
+   * Keep metadata loading for whatever is on show.
+   *
+   * The member grid prefetches its own visible window (and re-prefetches as it
+   * scrolls), so normally this just nudges it. When no grid is rendered at all —
+   * a floating singleton bin, which drops the grid column for the detail pane
+   * alone — there is exactly one item on show, and the pane plus the metadata
+   * column both read it, so load that one directly.
+   */
+  private prefetchMembers(): void {
+    const grid = this.grid();
+    if (grid) {
+      grid.prefetchVisible();
       return;
     }
-    const startRow = Math.floor(vp.measureScrollOffset('top') / this.rowSize);
-    const visibleRows = Math.ceil(
-      (vp.elementRef.nativeElement.clientHeight || this.gridHeight) / this.rowSize,
-    );
-    const from = Math.max(0, (startRow - Math.ceil(PREFETCH_BUFFER / cols)) * cols);
-    const to = Math.min(this.ids.length, (startRow + visibleRows) * cols + PREFETCH_BUFFER);
-    this.metadataCache.ensureLoaded(this.ids.slice(from, to));
+    const id = this.displayedId;
+    if (id != null) this.metadataCache.ensureLoaded([id]);
   }
 }

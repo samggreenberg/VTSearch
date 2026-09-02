@@ -202,92 +202,18 @@
     }
 
     @if (docked() || !previewOnly) {
-      <div class="bin-popup-grid-col">
-        @if (ids.length > 0) {
-          <div class="bin-popup-grid-header">
-            @if (ids.length > 1) {
-              <button
-                type="button"
-                class="bin-popup-select-all"
-                role="checkbox"
-                (click)="toggleAll()"
-                [title]="selectionState === 'all' ? 'Deselect all' : 'Select all'"
-                [attr.aria-label]="selectionState === 'all' ? 'Deselect all' : 'Select all'"
-                [attr.aria-checked]="selectionState === 'all' ? 'true' : selectionState === 'some' ? 'mixed' : 'false'">
-                @switch (selectionState) {
-                  @case ('all') { <vt-icon type="checkbox-checked" [size]="15"></vt-icon> }
-                  @case ('some') { <vt-icon type="checkbox-some" [size]="15"></vt-icon> }
-                  @default { <vt-icon type="checkbox-blank" [size]="15"></vt-icon> }
-                }
-              </button>
-            }
-            <span
-              class="bin-popup-count"
-              [title]="'Items in this bin (' + ids.length + ')'">
-              {{ ids.length | number }} item{{ ids.length === 1 ? '' : 's' }}
-            </span>
-            <!-- Thumbnail smaller/larger sits on the select-all row (it controls
-                 this grid), rather than in the header beside the detail-image
-                 size buttons. -->
-            <vt-view-controls
-              side="popup"
-              [currentMediaType]="mediaType()"
-              [showFocus]="false"
-              class="bin-popup-grid-view-controls" />
-          </div>
-          <cdk-virtual-scroll-viewport
-            [itemSize]="rowSize"
-            class="bin-popup-scroll"
-            (mouseleave)="onGridLeave()">
-          <div
-            *cdkVirtualFor="let row of displayRows; trackBy: trackByRow"
-            class="bin-popup-row"
-            [style.height.px]="rowSize"
-            [style.--popup-cols]="columns"
-            [style.--popup-cell]="gridGoalWidth + 'px'">
-            @for (id of row; track trackById($index, id)) {
-              <div
-                class="bin-popup-entry"
-                [attr.data-entry-id]="id"
-                [class.selected]="isSelected(id)"
-                [class.focused]="isFocused(id)"
-                role="button"
-                tabindex="0"
-                [attr.aria-pressed]="isSelected(id)"
-                [attr.aria-label]="name(id) + (isSelected(id) ? ' (selected; click to deselect)' : ' (click to select)')"
-                [title]="name(id)"
-                (click)="onEntryClick(id)"
-                (keydown)="onEntryKeydown($event, id)"
-                (focus)="onEntryFocus(id)"
-                (mouseenter)="onEntryEnter(id)">
-                @if (hasThumbnailUrl(id)) {
-                  <span class="bin-popup-thumb-wrap">
-                    @if (isAudioWaveform) {
-                      <!-- Audio waveform alpha mask tinted to the accent (issue #2369). -->
-                      <span
-                        class="bin-popup-thumb-wave waveform-mask"
-                        [style.-webkit-mask-image]="'url(' + thumbnailUrl(id) + ')'"
-                        [style.mask-image]="'url(' + thumbnailUrl(id) + ')'"></span>
-                    } @else {
-                      <img
-                        class="bin-popup-thumb"
-                        [src]="thumbnailUrl(id)"
-                        [alt]="name(id)"
-                        loading="lazy"
-                        (error)="onThumbnailError(thumbnailUrl(id))" />
-                    }
-                  </span>
-                } @else {
-                  <span class="bin-popup-placeholder">{{ placeholderIcon(id) }}</span>
-                }
-              </div>
-            }
-          </div>
-          </cdk-virtual-scroll-viewport>
-        } @else if (docked()) {
-          <p class="bin-popup-empty-hint">Right-click a bin on the canvas to show it here.</p>
-        }
-      </div>
+      <vt-browse-bin-member-grid
+        [ids]="ids"
+        [rows]="displayRows"
+        [columns]="columns"
+        [cellWidth]="gridGoalWidth"
+        [mediaType]="mediaType()"
+        [docked]="docked()"
+        [focusedId]="previewId"
+        (entryClick)="onEntryClick($event)"
+        (entryFocus)="onEntryFocus($event)"
+        (entryEnter)="onEntryEnter($event)"
+        (gridLeave)="onGridLeave()" />
     }
   </div>
 
