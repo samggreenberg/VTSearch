@@ -17,10 +17,9 @@ import {
   binGridColumns,
   binGridRowSize,
 } from '../../utils/bin-grid-metrics';
-import { applyClipWindow, clearClipWindow, clipProgress } from '../../utils/clip-window';
 import { shortcutsBlocked } from '../../utils/keyboard-shortcuts';
 import { formatMetadataValue as formatMetadataValueUtil } from '../../utils/format-metadata';
-import type { NowPlaying } from '../browse-hover-preview/browse-hover-preview.component';
+import { BrowseAudioAudition, type NowPlaying } from '../../utils/browse-audio-audition';
 import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
 import type { MediaBatchResponse } from '../../generated/api-client/models/media-batch-response';
 
@@ -253,7 +252,6 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   private readonly panelRef = viewChild<ElementRef<HTMLElement>>('panel');
   private readonly headerRef = viewChild<ElementRef<HTMLElement>>('header');
   private readonly grid = viewChild(BrowseBinMemberGridComponent);
-  private readonly audioRef = viewChild<ElementRef<HTMLAudioElement>>('audioEl');
 
   /**
    * Clamped on-screen position; starts at the anchor and is nudged inward.
@@ -357,22 +355,20 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     return this._previewId();
   }
 
-  /** Currently-playing hover audio source, so re-entering the same row is a no-op. */
-  private readonly _audioSrc = signal('');
-  get audioSrc(): string {
-    return this._audioSrc();
-  }
-  /** Media id of the clip currently auditioning, so the buffering listeners can
-   *  re-emit its now-playing state; ``null`` when silent. */
-  private nowPlayingId: number | null = null;
-  /** Last ``loading`` flag emitted, so the playhead sweep re-emits with the live
-   *  buffering state rather than forcing it back to ``false``. */
-  private nowPlayingLoading = false;
-  /** Handle of the in-flight requestAnimationFrame playhead sweep, or ``null``
-   *  when the loop is stopped. */
-  private sweepRaf: number | null = null;
-  /** Whether the one-shot buffering listeners are wired onto the audio element. */
-  private audioListenersAttached = false;
+  /** The audition state machine shared with the canvas hover preview and the
+   *  selection panel, so every Browse surface drives the one now-playing
+   *  indicator identically.
+   *
+   *  ``dwellMs: 0`` is this surface's only divergence: opening a bin (or moving
+   *  onto a row of its member grid) is already a settled, deliberate gesture, so
+   *  there is no sweep of near-misses to debounce the way the canvas has. */
+  private readonly audition = new BrowseAudioAudition({
+    mediaUrl: (path) => this.activeContext.mediaUrl(path),
+    lookup: (id) => this.metadataCache.get(id),
+    ensureLoaded: (id) => this.metadataCache.ensureLoaded([id]),
+    emit: (state) => this.nowPlaying.emit(state),
+    dwellMs: 0,
+  });
 
   /** Ids whose full-res ``/image`` failed; the preview falls back to the
    *  thumbnail for these so it still shows something. Paired with a version
@@ -383,11 +379,9 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
 
   constructor() {
     // Keep the hover-to-hear preview element in step with the Browse toolbar's
-    // volume slider mid-playback; ``onEntryEnter`` also seeds it when a clip
-    // starts. Tracking the view query also re-seeds when the element mounts.
+    // volume slider mid-playback; starting a clip also seeds it.
     effect(() => {
-      const el = this.audioRef()?.nativeElement;
-      if (el) el.volume = this.volume();
+      this.audition.setVolume(this.volume());
     });
     // The input→state dispatch that used to live in ngOnChanges (signal inputs
     // don't fire it). Each effect tracks exactly the inputs its old ngOnChanges
@@ -413,7 +407,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
           return;
         }
         this._ids.set(next);
-        this.stopAudio();
+        this.audition.stop();
         // Open on the bin's representative (the centroid whose thumbnail the user
         // right-clicked) so the pane is never blank and the detail view starts on
         // the same image — not the 1-D list's first item, which differs.
@@ -553,7 +547,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     // Drop any in-flight metadata-divider drag listeners (destroyed mid-drag).
     document.removeEventListener('pointermove', this.boundMetaMove);
     document.removeEventListener('pointerup', this.boundMetaUp);
-    this.stopAudio();
+    this.audition.destroy();
   }
 
   private readonly gridSizeDict = signal<Record<string, string>>({});
@@ -1234,110 +1228,25 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   }
 
   /**
-   * Audition ``id`` in the popup's audio element (audio media only), updating
-   * the shared now-playing indicator. Shared by the open-time autoplay and the
-   * grid-row hover; a no-op when the same clip is already playing so re-entering
-   * a row (or a redundant re-summon) doesn't restart it.
+   * Audition ``id`` on the shared now-playing indicator (audio media only).
+   * Shared by the open-time autoplay and the grid-row hover; a no-op when the
+   * same clip is already playing, so re-entering a row (or a redundant
+   * re-summon) doesn't restart it.
    */
   private playAudio(id: number): void {
     if (this.mediaType() !== 'audio') return;
-    const src = this.activeContext.mediaUrl(`/api/medias/${id}/audio`);
-    if (this.audioSrc === src) return;
-    this._audioSrc.set(src);
-    this.nowPlayingId = id;
-    // The autoplay-on-open path may fire before prefetchVisible has hydrated the
-    // representative's metadata, so make sure its clip extents are loading (the
-    // clip-window handlers read them lazily as they land).
-    this.metadataCache.ensureLoaded([id]);
-    // Starts loading: show the spinner on the now-playing widget until a
-    // ``playing``/``canplay`` event clears it.
-    this.nowPlaying.emit({ mediaId: id, waveUrl: this.thumbnailUrl(id), loading: true, progress: null });
-    setTimeout(() => {
-      const el = this.audioRef()?.nativeElement;
-      if (!el) return;
-      this.attachBufferingListeners(el);
-      el.volume = this.volume();
-      // Windowed archive-member clips serve the whole file: seek to clip_start
-      // and loop within [clip_start, clip_end]. Metadata is read lazily inside
-      // the handlers regardless.
-      applyClipWindow(el, () => this.metadataCache.get(id));
-      el.load();
-      el.play().catch(() => {});
-      // Advance the playhead sweep while it sounds; self-cancels on pause/stop.
-      this.startSweep();
-    });
-  }
-
-  /** Wire the buffering listeners onto the popup's audio element once (it lives
-   *  for the popup's lifetime, reused across summons). They flip the now-playing
-   *  widget's spinner on while the clip fetches/decodes or stalls to rebuffer,
-   *  and off once it's actually sounding. */
-  private attachBufferingListeners(el: HTMLAudioElement): void {
-    if (this.audioListenersAttached) return;
-    this.audioListenersAttached = true;
-    el.addEventListener('waiting', () => this.emitNowPlaying(true));
-    el.addEventListener('playing', () => this.emitNowPlaying(false));
-    el.addEventListener('canplay', () => this.emitNowPlaying(false));
-  }
-
-  /** Re-emit the now-playing state with a fresh ``loading`` flag and the current
-   *  playhead position. A no-op once nothing is auditioning, so events that fire
-   *  after a stop don't resurrect the widget. */
-  private emitNowPlaying(loading: boolean): void {
-    const id = this.nowPlayingId;
-    if (this.audioSrc === '' || id == null) return;
-    this.nowPlayingLoading = loading;
-    const el = this.audioRef()?.nativeElement;
-    const progress = el ? clipProgress(el, () => this.metadataCache.get(id)) : null;
-    this.nowPlaying.emit({ mediaId: id, waveUrl: this.thumbnailUrl(id), loading, progress });
-  }
-
-  // Re-emit the now-playing state ~60×/sec so the playhead sweeps smoothly:
-  // (timeupdate) fires only ~4×/sec, too coarse for a fluid line. Self-cancels
-  // when the clip pauses or stops; idempotent while a loop is already live.
-  private startSweep(): void {
-    if (this.sweepRaf !== null || typeof requestAnimationFrame !== 'function') return;
-    const tick = (): void => {
-      const el = this.audioRef()?.nativeElement;
-      if (this.nowPlayingId == null || !el || el.paused) {
-        this.sweepRaf = null;
-        return;
-      }
-      this.emitNowPlaying(this.nowPlayingLoading);
-      this.sweepRaf = requestAnimationFrame(tick);
-    };
-    this.sweepRaf = requestAnimationFrame(tick);
-  }
-
-  private stopSweep(): void {
-    if (this.sweepRaf !== null) {
-      cancelAnimationFrame(this.sweepRaf);
-      this.sweepRaf = null;
-    }
+    this.audition.hover(id);
   }
 
   /** Cursor left the grid: stop any hover audio and fall the preview back to the
    *  bin's representative so the pane stays populated. */
   onGridLeave(): void {
-    this.stopAudio();
+    this.audition.stop();
     // Fall the focus back to the bin's representative so the pane and metadata
     // column stay populated (every media type, matching the hover-follow above).
     this._previewId.set(this.representativeId());
   }
 
-  private stopAudio(): void {
-    const wasPlaying = this.audioSrc !== '';
-    this.stopSweep();
-    const el = this.audioRef()?.nativeElement;
-    if (el) {
-      clearClipWindow(el);
-      el.pause();
-      el.currentTime = 0;
-    }
-    this._audioSrc.set('');
-    this.nowPlayingId = null;
-    if (wasPlaying) this.nowPlaying.emit(null);
-  }
 
   // --- Names + thumbnails (mirrors the selection panel's treatment) ---------
 

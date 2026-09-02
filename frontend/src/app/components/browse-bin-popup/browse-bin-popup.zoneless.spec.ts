@@ -4,7 +4,7 @@ import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BrowseBinPopupComponent } from './browse-bin-popup.component';
-import type { NowPlaying } from '../browse-hover-preview/browse-hover-preview.component';
+import type { BrowseAudioAudition, NowPlaying } from '../../utils/browse-audio-audition';
 import { BrowseSelectionService } from '../../services/browse-selection.service';
 import { MediaMetadataCacheService } from '../../services/media-metadata-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
@@ -289,8 +289,11 @@ describe('BrowseBinPopupComponent (zoneless positioning)', () => {
     expect(played.at(-1)).toEqual({ mediaId: 8, waveUrl: '/api/medias/8/thumbnail', loading: true, progress: null });
 
     // The clip's audio element drives the buffering spinner: `playing` clears
-    // the loading flag, a `waiting` stall re-sets it.
-    const audioEl = fixture.nativeElement.querySelector('audio') as HTMLAudioElement;
+    // the loading flag, a `waiting` stall re-sets it. The element is owned by the
+    // shared audition machine and deliberately never mounted (browse audio is
+    // heard, not shown), so reach it there rather than through the DOM.
+    const audioEl = (fixture.componentInstance as unknown as { audition: BrowseAudioAudition })
+      .audition.element;
     audioEl.dispatchEvent(new Event('playing'));
     await settlePasses(fixture);
     expect(played.at(-1)).toEqual({ mediaId: 8, waveUrl: '/api/medias/8/thumbnail', loading: false, progress: null });

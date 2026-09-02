@@ -1,7 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
 
-import { BrowseHoverPreviewComponent, NowPlaying } from './browse-hover-preview.component';
+import { BrowseHoverPreviewComponent } from './browse-hover-preview.component';
+import type { NowPlaying, BrowseAudioAudition } from '../../utils/browse-audio-audition';
 import { ActiveContextService } from '../../services/active-context.service';
 import { MediaMetadataCacheService } from '../../services/media-metadata-cache.service';
 import type { HexHoverEvent } from '../browse-canvas/browse-canvas.component';
@@ -144,7 +145,8 @@ describe('BrowseHoverPreviewComponent (zoneless canary)', () => {
     expect(emitted).toEqual({ mediaId: 9, waveUrl: '/api/medias/9/thumbnail', loading: true, progress: null });
 
     // The reused (never-mounted) audio element drives the buffering listeners.
-    const audioEl = (fixture.componentInstance as unknown as { audioEl: HTMLAudioElement }).audioEl;
+    const audioEl = (fixture.componentInstance as unknown as { audition: BrowseAudioAudition }).audition
+      .element;
 
     // The element reports it's now playing → spinner clears.
     audioEl.dispatchEvent(new Event('playing'));
