@@ -32,6 +32,13 @@ def _recorded(media_id: int) -> dict | None:
     return get_active_detector_context().vote_provenance.get(media_id)
 
 
+def _must_record(media_id: int) -> dict:
+    """:func:`_recorded` narrowed to a non-``None`` result."""
+    out = _recorded(media_id)
+    assert out is not None, f"no provenance recorded for media {media_id}"
+    return out
+
+
 class TestSingleVoteRoute:
     """``POST /api/medias/<id>/vote``."""
 
@@ -81,7 +88,7 @@ class TestSingleVoteRoute:
             json={"target": "good", "provenance": {"flow": "list_review"}},
         )
         assert resp.status_code == 200
-        assert _recorded(1)["flow"] == "autopilot"
+        assert _must_record(1)["flow"] == "autopilot"
 
     def test_a_flip_records_the_new_context(self, client):
         client.post(
@@ -93,7 +100,7 @@ class TestSingleVoteRoute:
             json={"target": "bad", "provenance": {"flow": "list_review"}},
         )
         assert 1 in bad_votes
-        assert _recorded(1)["flow"] == "list_review"
+        assert _must_record(1)["flow"] == "list_review"
 
     def test_unvote_clears_the_record(self, client):
         client.post("/api/medias/1/vote", json={"target": "good", "provenance": FULL})
@@ -118,8 +125,8 @@ class TestBulkVoteRoute:
         and the client never has to say so."""
         resp = client.post("/api/medias/vote-bulk", json={"ids": [1, 2], "target": "good"})
         assert resp.status_code == 200
-        assert _recorded(1)["flow"] == "bulk"
-        assert _recorded(2)["flow"] == "bulk"
+        assert _must_record(1)["flow"] == "bulk"
+        assert _must_record(2)["flow"] == "bulk"
 
     def test_explicit_provenance_overrides_the_default(self, client):
         resp = client.post(
@@ -127,7 +134,7 @@ class TestBulkVoteRoute:
             json={"ids": [1], "target": "good", "provenance": {"flow": "bulk", "sort_kind": "learned"}},
         )
         assert resp.status_code == 200
-        assert _recorded(1)["sort_kind"] == "learned"
+        assert _must_record(1)["sort_kind"] == "learned"
 
     def test_unknown_value_is_rejected(self, client):
         resp = client.post(
@@ -172,8 +179,11 @@ class TestDetectorLabelVoteRoute:
             assert resp.status_code == 200
             assert resp.get_json()["action"] == "flipped"
 
-            stored = LabelSet.from_dict(_read_detector(path)["labelset"]).elements[0]
+            payload = _read_detector(path)
+            assert payload is not None
+            stored = LabelSet.from_dict(payload["labelset"]).elements[0]
             assert stored.label == "bad"
+            assert stored.metadata is not None
             assert stored.metadata[METADATA_KEY]["flow"] == "labelset_review"
         finally:
             path.unlink(missing_ok=True)
@@ -186,7 +196,9 @@ class TestDetectorLabelVoteRoute:
         try:
             resp = client.post(f"/api/detectors/{name}/labels/{element_id}/vote", json={"target": "good"})
             assert resp.get_json()["action"] == "unchanged"
-            stored = LabelSet.from_dict(_read_detector(path)["labelset"]).elements[0]
+            payload = _read_detector(path)
+            assert payload is not None
+            stored = LabelSet.from_dict(payload["labelset"]).elements[0]
             assert stored.metadata is None
         finally:
             path.unlink(missing_ok=True)

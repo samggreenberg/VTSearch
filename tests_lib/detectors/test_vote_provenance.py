@@ -41,6 +41,26 @@ FULL = {
 }
 
 
+def _norm(raw) -> dict:
+    """:func:`normalize_provenance` narrowed to a non-``None`` result."""
+    out = normalize_provenance(raw)
+    assert out is not None
+    return out
+
+
+def _read(metadata) -> dict:
+    """:func:`read_provenance` narrowed to a non-``None`` result."""
+    out = read_provenance(metadata)
+    assert out is not None
+    return out
+
+
+def _meta(element) -> dict:
+    """An element's metadata, narrowed to a non-``None`` dict."""
+    assert element is not None and element.metadata is not None
+    return element.metadata
+
+
 def _media(cid: int) -> dict:
     return {"md5": f"md5-{cid}", "filename": f"m{cid}.wav", "origin_name": f"m{cid}.wav"}
 
@@ -71,7 +91,7 @@ class TestVocabulary:
         manual_hard = normalize_provenance({"flow": "list_review", "select_mode": "hard"})
         assert manual_hard == {"v": 1, "flow": "list_review", "select_mode": "hard"}
 
-        autopilot_top = normalize_provenance({"flow": "autopilot", "phase": "good", "select_mode": "top"})
+        autopilot_top = _norm({"flow": "autopilot", "phase": "good", "select_mode": "top"})
         assert autopilot_top["phase"] == "good"
         assert autopilot_top["select_mode"] == "top"
 
@@ -80,7 +100,7 @@ class TestVocabulary:
             assert normalize_provenance(raw) is None
 
     def test_phase_is_dropped_off_a_non_autopilot_flow(self):
-        out = normalize_provenance({"flow": "list_review", "phase": "hard"})
+        out = _norm({"flow": "list_review", "phase": "hard"})
         assert "phase" not in out
 
     def test_absent_fields_are_omitted_not_stored_as_null(self):
@@ -117,6 +137,7 @@ class TestVocabulary:
 
     def test_attach_preserves_importer_metadata(self):
         merged = attach_provenance({"contentID": "x"}, {"flow": "autopilot", "phase": "new"})
+        assert merged is not None
         assert merged["contentID"] == "x"
         assert merged[METADATA_KEY]["phase"] == "new"
 
@@ -220,8 +241,8 @@ class TestLabelsetRoundTrip:
             vote_provenance={1: {"v": 1, "flow": "autopilot", "phase": "hard"}, 2: {"v": 1, "flow": "bulk"}},
         )
         by_label = {el.label: el for el in ls.elements}
-        assert by_label["good"].metadata[METADATA_KEY]["phase"] == "hard"
-        assert by_label["bad"].metadata[METADATA_KEY]["flow"] == "bulk"
+        assert _meta(by_label["good"])[METADATA_KEY]["phase"] == "hard"
+        assert _meta(by_label["bad"])[METADATA_KEY]["flow"] == "bulk"
 
     def test_votes_without_provenance_get_no_metadata_key(self):
         ls = LabelSet.from_clips_and_votes({1: _media(1)}, {1: None}, {})
@@ -230,7 +251,7 @@ class TestLabelsetRoundTrip:
     def test_survives_json_round_trip(self):
         ls = LabelSet.from_clips_and_votes({1: _media(1)}, {1: None}, {}, vote_provenance={1: {"v": 1, **FULL}})
         restored = LabelSet.from_dict(ls.to_dict())
-        assert read_provenance(restored.elements[0].metadata) == {"v": SCHEMA_VERSION, **FULL}
+        assert _read(restored.elements[0].metadata) == {"v": SCHEMA_VERSION, **FULL}
 
     def test_dupe_set_members_share_the_representatives_record(self):
         """Same rule as ``region_box``: the representative is what the user was
@@ -250,12 +271,12 @@ class TestLabelsetRoundTrip:
             {1: rep}, {1: None}, {}, vote_provenance={1: {"v": 1, "flow": "autopilot", "phase": "new"}}
         )
         assert len(ls.elements) == 2
-        assert all(read_provenance(el.metadata)["phase"] == "new" for el in ls.elements)
+        assert all(_read(el.metadata)["phase"] == "new" for el in ls.elements)
 
     def test_provenance_does_not_displace_importer_custom_metadata(self):
         media = {**_media(1), "custom_metadata": {"contentID": "abc"}}
         ls = LabelSet.from_clips_and_votes({1: media}, {1: None}, {}, vote_provenance={1: {"v": 1, "flow": "bulk"}})
-        meta = ls.elements[0].metadata
+        meta = _meta(ls.elements[0])
         assert meta["contentID"] == "abc"
         assert meta[METADATA_KEY]["flow"] == "bulk"
 
@@ -263,7 +284,7 @@ class TestLabelsetRoundTrip:
 class TestElementVoteFlip:
     """``apply_element_vote_in_data`` (the dashboard's labelset review)."""
 
-    def _data(self, label: str = "good") -> dict:
+    def _data(self, label: str = "good") -> tuple[dict, str]:
         from vtscore.detectors.labelset_elements import stable_element_id
 
         el = LabeledElement(md5="abc", label=label, origin_name="a.wav", filename="a.wav")
@@ -277,7 +298,8 @@ class TestElementVoteFlip:
             data, eid, "bad", provenance={"v": 1, "flow": "labelset_review"}
         )
         assert (changed, action) == (True, "flipped")
-        assert read_provenance(updated.metadata)["flow"] == "labelset_review"
+        assert updated is not None
+        assert _read(updated.metadata)["flow"] == "labelset_review"
 
     def test_an_idempotent_reassert_leaves_the_record_alone(self):
         from vtscore.detectors.labelset_elements import apply_element_vote_in_data
@@ -337,8 +359,8 @@ class TestRestorationCycle:
             vote_provenance=dict(det.vote_provenance),
         )
         by_md5 = {el.md5: el for el in resynced.elements}
-        assert read_provenance(by_md5[snap[1]["md5"]].metadata)["phase"] == "hard"
-        assert read_provenance(by_md5[snap[2]["md5"]].metadata)["flow"] == "list_review"
+        assert _read(by_md5[snap[1]["md5"]].metadata)["phase"] == "hard"
+        assert _read(by_md5[snap[2]["md5"]].metadata)["flow"] == "list_review"
 
     def test_a_legacy_labelset_restores_without_provenance(self):
         """Elements written before this feature carry none, and must restore
