@@ -441,7 +441,7 @@ Wrapping everything: a wall-clock cap (`VTSEARCH_TEST_TIMEOUT`, default **1800s 
 |------|-----------------|------|-------|
 | Types | `pyright` (pinned via `PYRIGHT_PYTHON_FORCE_VERSION`) | Full run only | Scope is `pyrightconfig.json`. |
 | Known CVEs | `pip-audit` | Full run only | Audits the resolved venv, not the requirements files. `PIP_AUDIT_IGNORE` in the script lists advisories with no upstream fix; re-audit and remove an entry once a patched release exists. |
-| Frontend audit | `cd frontend && npm audit --omit=dev` | Full run, `core`, `frontend` | Prod deps only — dev-only advisories don't ship. |
+| Frontend audit | `cd frontend && npm audit` | Full run, `core`, `frontend` | Whole tree, dev deps included. |
 | Vulture whitelist | `scripts/vulture-audit.py --check-whitelist` | Full run only | Whitelist hygiene, **not** the dead-code audit: fails when an entry in `.vulture-whitelist.py` suppresses no finding. The findings themselves stay a manual pre-release chore, because a hit on a public `vtscore` name is not evidence of anything. Whole-repo scan, ~5s. |
 | Frontend unit tests | `cd frontend && npm run test:ci` | Full run or `frontend` **only** — deliberately off the fast `core` path | Headless Vitest. |
 | Python tests | `pytest tests/ tests_lib/ -n auto --dist loadgroup` | Every run except a `frontend`-only group | |

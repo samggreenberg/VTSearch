@@ -767,8 +767,9 @@ the output alongside them (favicons, logo); `docs-assets/` is a
 symlink to `docs/user/`, so the in-app user guide (rendered with `marked` in
 the keyboard-help modal) is the same file the repo ships.
 
-`angular.json` pins the canonical `@angular/build:*` builders (not the
-`@angular-devkit/build-angular:*` aliases) and gives the test target its own
+`angular.json` pins the canonical `@angular/build:*` builders (`@angular/build`
+is a direct devDependency; the `@angular-devkit/build-angular` alias package is
+deliberately not installed) and gives the test target its own
 `build:test` configuration, so spec polyfills stay decoupled from production.
 Both polyfill arrays are empty and must stay that way — reintroducing
 `zone.js` would invalidate every rule in [§5](#5-reactivity-the-zoneless-change-detection-model).
