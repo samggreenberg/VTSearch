@@ -10,6 +10,16 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **All four `autodetect_*_main` entry points accept `stream_results` and
+  `keep_negatives`** (issue #3432). The two keyword-only flags used to exist
+  only on the chunked pair, so a whole-dataset run had no way to hand a
+  streaming-capable exporter a lazy record iterator even though the pipeline
+  underneath supported it. Purely additive: the four names, their positional
+  parameters and their defaults are unchanged, and the flags default to
+  `False` (the previous behaviour). Internally the four are now thin shims
+  over one private `_autodetect(spec, ...)` driven by a `_SourceSpec`, which
+  is what let the matrix drift in the first place.
+
 - **`AsyncJob` is backed by a `ProgressTracker`** (issue #3380). Every job now
   owns one (`job.progress`) instead of carrying its own copy of the tracker's
   field set, so background jobs get the parts a hand-rolled copy never had: a

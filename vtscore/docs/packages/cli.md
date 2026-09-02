@@ -43,8 +43,10 @@ are accessible piece-by-piece from `vtscore.datasets`,
 
 ## `vtscore.cli` - autodetect entry points
 
-Four public entry points, all sharing the same internal `_run_pipeline`
-helper. Each variant differs only in how it produces media chunks:
+Four public entry points, all thin shims over one private
+`_autodetect(spec, ...)` (which in turn drives the shared
+`_run_pipeline`). Each variant differs only in the `_SourceSpec` it
+builds - i.e. in how it produces media chunks:
 
 | Function                              | Source         | Streaming?      |
 |---------------------------------------|----------------|-----------------|
@@ -54,7 +56,8 @@ helper. Each variant differs only in how it produces media chunks:
 | `autodetect_importer_main_chunked`    | Named importer | Chunked         |
 
 All four take optional `settings_path`, `exporter_name`,
-`exporter_field_values`, and the keyword-only `dry_run=False`. They
+`exporter_field_values`, and the keyword-only `dry_run=False`,
+`stream_results=False` and `keep_negatives=False`. They
 print errors via `cli_progress.emit_error()` and `sys.exit(1)` on
 failure - i.e. they're meant to be called from a `__main__`-style
 wrapper, not as well-behaved library functions. If you want the
@@ -68,7 +71,10 @@ def autodetect_main(
     settings_path: str | None = None,
     exporter_name: str | None = None,
     exporter_field_values: dict[str, Any] | None = None,
-    *, dry_run: bool = False,
+    *,
+    dry_run: bool = False,
+    stream_results: bool = False,
+    keep_negatives: bool = False,
 ) -> None: ...                                                # vtscore/cli.py
 
 def autodetect_main_chunked(
@@ -77,7 +83,10 @@ def autodetect_main_chunked(
     settings_path: str | None = None,
     exporter_name: str | None = None,
     exporter_field_values: dict[str, Any] | None = None,
-    *, dry_run: bool = False,
+    *,
+    dry_run: bool = False,
+    stream_results: bool = False,
+    keep_negatives: bool = False,
 ) -> None: ...                                                # vtscore/cli.py
 
 def autodetect_importer_main(
@@ -86,7 +95,10 @@ def autodetect_importer_main(
     settings_path: str | None = None,
     exporter_name: str | None = None,
     exporter_field_values: dict[str, Any] | None = None,
-    *, dry_run: bool = False,
+    *,
+    dry_run: bool = False,
+    stream_results: bool = False,
+    keep_negatives: bool = False,
 ) -> None: ...                                                # vtscore/cli.py
 
 def autodetect_importer_main_chunked(
@@ -96,7 +108,10 @@ def autodetect_importer_main_chunked(
     settings_path: str | None = None,
     exporter_name: str | None = None,
     exporter_field_values: dict[str, Any] | None = None,
-    *, dry_run: bool = False,
+    *,
+    dry_run: bool = False,
+    stream_results: bool = False,
+    keep_negatives: bool = False,
 ) -> None: ...                                                # vtscore/cli.py
 ```
 
@@ -114,6 +129,15 @@ def autodetect_importer_main_chunked(
   exporter sees a single merged results dict at the end.
 - **Default exporter** is `"gui"` (prints to stdout) when
   `exporter_name` is `None`.
+- **`stream_results=True`** hands the (streaming-capable) exporter a
+  lazy record iterator instead of accumulating a merged results dict,
+  so nothing proportional to the hit count is held in RAM;
+  `keep_negatives=True` additionally streams below-threshold hits
+  (labelled `"bad"`). Both are accepted by all four entry points -
+  they pair naturally with the chunked variants, but a whole-dataset
+  run also benefits, since the hits need not accumulate even when the
+  medias already have. The `--stream-results` **CLI flag** is narrower:
+  it requires `--chunk-size N`.
 
 ```python
 from vtscore.cli import autodetect_main, autodetect_importer_main
