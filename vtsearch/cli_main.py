@@ -17,6 +17,8 @@ import argparse
 import logging
 import os
 import sys
+from collections.abc import Callable
+from typing import Any
 
 from vtscore.media import set_progress_callback
 
@@ -733,64 +735,40 @@ def _dispatch_autodetect(
     keep_negatives,
 ) -> None:
     """Run the autodetect workflow via the importer- or pickle-file code path."""
+    from vtscore.cli import (
+        autodetect_importer_main,
+        autodetect_importer_main_chunked,
+        autodetect_main,
+        autodetect_main_chunked,
+    )
+
+    # Pick the entry point and its source-specific leading arguments; every
+    # other argument is identical across the four, so the call is written once.
+    entry_point: Callable[..., None]
+    source_args: tuple[Any, ...]
     if args.importer:
-        # Importer-based path
         field_values = {f.key: getattr(args, f.key, f.default) for f in importer.fields}
-
         if chunk_size:
-            from vtscore.cli import autodetect_importer_main_chunked
-
-            autodetect_importer_main_chunked(
-                args.importer,
-                field_values,
-                chunk_size,
-                settings_path,
-                args.exporter,
-                exporter_field_values,
-                dry_run=dry_run,
-                stream_results=stream_results,
-                keep_negatives=keep_negatives,
-            )
+            entry_point, source_args = autodetect_importer_main_chunked, (args.importer, field_values, chunk_size)
         else:
-            from vtscore.cli import autodetect_importer_main
-
-            autodetect_importer_main(
-                args.importer,
-                field_values,
-                settings_path,
-                args.exporter,
-                exporter_field_values,
-                dry_run=dry_run,
-            )
-
+            entry_point, source_args = autodetect_importer_main, (args.importer, field_values)
     elif args.dataset:
-        # Pickle-file path
         if chunk_size:
-            from vtscore.cli import autodetect_main_chunked
-
-            autodetect_main_chunked(
-                args.dataset,
-                chunk_size,
-                settings_path,
-                args.exporter,
-                exporter_field_values,
-                dry_run=dry_run,
-                stream_results=stream_results,
-                keep_negatives=keep_negatives,
-            )
+            entry_point, source_args = autodetect_main_chunked, (args.dataset, chunk_size)
         else:
-            from vtscore.cli import autodetect_main
-
-            autodetect_main(
-                args.dataset,
-                settings_path,
-                args.exporter,
-                exporter_field_values,
-                dry_run=dry_run,
-            )
-
+            entry_point, source_args = autodetect_main, (args.dataset,)
     else:
         parser.error("--autodetect requires either --dataset <file.pkl> or --importer <name>")
+
+    entry_point(
+        *source_args,
+        settings_path,
+        args.exporter,
+        exporter_field_values,
+        dry_run=dry_run,
+        stream_results=stream_results,
+        keep_negatives=keep_negatives,
+    )
 
 
 def _run_autodetect(args, parser, importer, exporter) -> None:
