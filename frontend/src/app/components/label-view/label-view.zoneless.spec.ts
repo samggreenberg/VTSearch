@@ -927,6 +927,31 @@ describe('LabelViewComponent', () => {
       expect(component.sortState.sortOrder ?? []).toEqual([]);
     });
 
+    it('clears the centre viewer selection, and repaints, when the pair changes', () => {
+      const activeContext = seedPair();
+      flushInitialRequests();
+      flushDetectorRegistry();
+
+      // The user is looking at an item from pair 1.
+      component.mediaState.selectMedia(1);
+      TestBed.tick();
+      expect(fixture.nativeElement.querySelector('vt-center-panel .center-panel.empty')).toBeNull();
+
+      activeContext.setActivePair('ds2', 'det2');
+      flushDetectorRegistry();
+      TestBed.tick();
+
+      // Media ids are per-dataset, so the selection is pair-scoped state and
+      // has to go with the ranking (#3489). Asserting through the DOM rather
+      // than only on the signal is the point: the centre viewer stamps the
+      // dataset id into its `<img src>` and only rebuilds it when the media id
+      // changes, so a clear that does not notify under zoneless change
+      // detection would leave the stale pair-1 item painted (`docs/FRONTEND.md`
+      // §5) — which is the bug, not the fix.
+      expect(component.mediaState.selectedId()).toBeNull();
+      expect(fixture.nativeElement.querySelector('vt-center-panel .center-panel.empty')).not.toBeNull();
+    });
+
     it('stops polling a learned-sort job when the active pair changes', async () => {
       const activeContext = seedPair();
       flushInitialRequests();

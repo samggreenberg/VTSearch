@@ -104,12 +104,24 @@ export class PairScopeService implements OnDestroy {
    * applies the same clear on a fresh navigation (Find and Train share
    * singleton sub-view state, so a Dashboard → Find entry would otherwise
    * render the previous session's ranking against a possibly smaller dataset).
+   *
+   * The **selection** is part of that state, for the same reason the ranking
+   * is: media ids are per-dataset, so an id the old pair installed means
+   * nothing under the new one. Leaving it behind is the quiet half of the
+   * failure this service's header describes — the ranking and the vote cache
+   * get cleared, everything *derived* from the selection goes with them, and
+   * the selection itself survives, stranding the centre viewer on an item from
+   * the pair we just left (#3489). The viewer is then blank exactly as it is on
+   * a fresh entry, until whichever re-select the caller's tail owns lands: the
+   * boundary seed in find-view's `runFindLabel`, or `autoSelectNext` /
+   * `pendingSnapOnLoad` in label-view.
    */
   clearPairState(): void {
     this.sortState.setSortResults([], 0);
     this.sortState.setSortStatus('');
     this.sortState.setSortProgress(0, 0);
     this.voteState.clear();
+    this.mediaState.clearSelection();
   }
 
   /**
