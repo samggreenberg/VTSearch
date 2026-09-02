@@ -36,10 +36,23 @@ _CALIB = Path(__file__).resolve().parents[2] / "scripts" / "experiments" / "cali
 
 
 def _load(name: str, path: Path):
+    """Import one calibration script by path, without importing the package.
+
+    The scripts import each other by bare name (``from _cells_paths import ...``)
+    because they run as ``python analyze_foo.py`` from their own directory, so
+    that directory has to be on ``sys.path`` while the module body executes.
+    Added and removed around the load rather than left in place: those names are
+    generic enough (``common``, ``curves``, ``viewer``) that leaving the
+    directory importable would shadow real modules for the rest of the session.
+    """
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    sys.path.insert(0, str(path.parent))
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path.remove(str(path.parent))
     return module
 
 
