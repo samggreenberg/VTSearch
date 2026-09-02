@@ -152,6 +152,7 @@ care.
 - [ ] #3436 — The audio-audition state machine is triplicated across three Browse components (Opus 4.8)
 - [ ] #3441 — Verified dead frontend code: two services, five orphan inputs/outputs, three `.sr-only` copies (Haiku 4.5)
 - [ ] #3443 — Frontend utilities exist but are bypassed; helpers reimplemented per component (Sonnet 5)
+- [ ] #3499 — `BrowseMinimapComponent`'s floating mode looks entirely unreachable (Sonnet 5). Found while doing #3441, not by the audit sweep: `resized` was only the visible half of it.
 
 ## Frontend — state & idiom consistency
 
