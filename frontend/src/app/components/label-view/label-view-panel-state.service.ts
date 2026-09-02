@@ -4,18 +4,7 @@ import {
   type PerMediaTypePref,
 } from '../../services/settings-state.service';
 import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
-
-type FocusMode = 'click' | 'hover';
-
-/** Accept only the two real focus modes; anything else falls back. */
-function coerceFocusMode(raw: unknown): FocusMode | undefined {
-  return raw === 'click' || raw === 'hover' ? raw : undefined;
-}
-
-/** Accept only a finite number of pixels; anything else falls back to "unset". */
-function coercePx(raw: unknown): number | undefined {
-  return typeof raw === 'number' && Number.isFinite(raw) ? raw : undefined;
-}
+import { coerceFocusMode, coercePx, type FocusMode } from '../../utils/settings-coerce';
 
 /**
  * Per-media-type panel display preferences for `vt-label-view`.

@@ -695,36 +695,8 @@ class DetectMediaTypeResponseSchema(Schema):
 
 
 # ---------------------------------------------------------------------------
-# /api/dashboard/dataset-info, /api/dashboard/dataset-rename, /api/dashboard/disk-usage
+# /api/dashboard/disk-usage
 # ---------------------------------------------------------------------------
-
-
-class DashboardDatasetInfoResponseSchema(Schema):
-    """Response for ``GET /api/dashboard/dataset-info``.
-
-    ``source`` is the raw origin dict from the first media that has one;
-    it can be ``null`` when no medias carry origin info.
-    """
-
-    name = fields.String(required=True)
-    num_medias = fields.Integer(required=True)
-    num_dupes = fields.Integer(required=True)
-    media_type = fields.String(required=True)
-    origin = fields.String(required=True)
-    source = fields.Dict(allow_none=True, required=True)
-
-
-class DashboardDatasetRenameRequestSchema(Schema):
-    """Body for ``PUT /api/dashboard/dataset-rename``."""
-
-    name = fields.String(required=True, validate=validate.Length(min=1, max=MAX_NAME_LENGTH))
-
-
-class DashboardDatasetRenameResponseSchema(Schema):
-    """Response for ``PUT /api/dashboard/dataset-rename``."""
-
-    success = fields.Boolean(required=True)
-    name = fields.String(required=True)
 
 
 class DashboardDiskUsageResponseSchema(Schema):
@@ -802,13 +774,6 @@ class DatasetLoadDemoRequestSchema(Schema):
     )
 
 
-class DatasetLoadFolderRequestSchema(Schema):
-    """Body for ``POST /api/dataset/load-folder``."""
-
-    path = fields.String(required=True, validate=validate.Length(min=1))
-    media_type = fields.String(load_default="audio")
-
-
 class DatasetLoadSourceRequestSchema(Schema):
     """Body for ``POST /api/dataset/load-source``.
 
@@ -825,7 +790,7 @@ class DatasetLoadSourceRequestSchema(Schema):
 
 class DatasetLoadStartedResponseSchema(Schema):
     """Response for ``POST /api/dataset/load-demo`` / ``load-file`` /
-    ``load-folder`` / ``load-source`` / ``import-local-folder`` and for
+    ``load-source`` / ``import-local-folder`` and for
     ``POST /api/dataset/combine`` / ``promote`` in ``staging.py``.
 
     ``task_id`` is the background-task tracker id (string) used by the
@@ -1280,9 +1245,6 @@ __all__ = [
     "ClippersListResponseSchema",
     "ConvertersListQuerySchema",
     "ConvertersListResponseSchema",
-    "DashboardDatasetInfoResponseSchema",
-    "DashboardDatasetRenameRequestSchema",
-    "DashboardDatasetRenameResponseSchema",
     "DashboardDiskUsageResponseSchema",
     "DashboardRamUsageResponseSchema",
     "DatasetAllImportersListResponseSchema",
@@ -1293,7 +1255,6 @@ __all__ = [
     "DatasetDomainShiftResponseSchema",
     "DatasetImportersListResponseSchema",
     "DatasetLoadDemoRequestSchema",
-    "DatasetLoadFolderRequestSchema",
     "DatasetLoadSourceRequestSchema",
     "DatasetLoadStartedResponseSchema",
     "DatasetRegistryDuplicatesResponseSchema",

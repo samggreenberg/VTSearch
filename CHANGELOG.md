@@ -17,6 +17,35 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **Find now calibrates each detector against the corpus it is searching, and
+  scores each head the way that head was trained.** Two independent faults met
+  in the cross-dataset Find route. A detector that is not loaded against the
+  dataset being searched is retrained on the fly, and that retrain was handed no
+  haystack -- so its Good/Bad line came from the pooled cross-calibration rule,
+  which caps false negatives and only floors false positives, i.e. sits below
+  the cut the data supports and returns more matches than the detector actually
+  makes (on a synthetic 2k-media patch corpus it called all 2000 a match, where
+  the population-fitted cut called 728). The corpus was in memory the whole
+  time; it is now what the threshold is fitted on. Separately, both scorers read
+  one image-level vector per media, which is right for the on-the-fly head
+  (trained on image-level label vectors) but wrong for an already-loaded one,
+  whose threshold was calibrated on max-pooled patch scores -- so on a patch
+  dataset a loaded detector was compared against a line drawn for a higher
+  quantity and under-returned. Each path now scores at the geometry its own head
+  was trained and calibrated in. A media with no usable vector in the scored
+  space is also reported as `N/A` instead of falling out of both result tables.
+
+- **Switching dataset or detector no longer leaves the previous pair's item in
+  the centre viewer.** Media ids are per-dataset, so the pair switch cleared the
+  ranking, the threshold and the vote cache but left the *selection* pointing at
+  an item that only existed under the pair you just left. Because the viewer
+  stamps the dataset id into the media URL when it builds it, the stranded item
+  kept loading from its own dataset and rendered normally -- so the grid showed
+  the new pair while the centre showed the old one, with nothing on screen
+  saying so. The selection is now dropped with the rest of the pair's state; the
+  centre reads "Select a media item to view" until the new pair's first pick
+  lands, exactly as it does on a fresh entry.
+
 - **The "arranging your items" wait now shows a remaining-time estimate.**
   Preparing a subset map from Find results renders an ETA chip beside the
   progress bar, but the projection build's status payload never carried an
@@ -46,6 +75,20 @@ not list every commit. Use `git log` for the full history.
   first, slices it, and then pulls only the shard folders that slice actually
   lands in -- an (S) load costs two folders, not sixty-seven. Re-loading, or
   moving from (S) to (M), pays only for the shards it adds.
+
+### Removed
+
+- **Four REST endpoints with no consumer are gone.** `GET /api/dashboard/dataset-info`,
+  `PUT /api/dashboard/dataset-rename`, `POST /api/dataset/load-folder` and
+  `POST /api/votes/seed-from-examples` had no caller anywhere in the app -- the
+  SPA reads dataset metadata and renames through `/api/datasets/registry`,
+  loads folders through the generic importer flow, and seeds examples as part
+  of loading a detector. Nothing in the UI changes. An out-of-repo script
+  calling one of them directly will now get a 404; the same work is available
+  through `GET /api/datasets/registry`,
+  `PUT /api/datasets/registry/{id}/rename`,
+  `POST /api/dataset/import/server_folder`, and detector load respectively.
+  (Issue #3438.)
 
 ### Changed
 

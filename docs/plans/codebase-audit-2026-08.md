@@ -264,11 +264,13 @@ ship on its own.
 
 <!-- item-sep -->
 
-- **Find-view duplicates label-view's per-media-type panel-preference machinery by hand** — `frontend/src/app/components/find-view/find-view.component.ts:87` (medium impact)
+- **Find-view duplicates label-view's panel drag/snap machinery by hand** — `frontend/src/app/components/find-view/find-view.component.ts` (medium impact)
 
-  Label-view extracted its per-media-type panel bookkeeping into LabelViewPanelStateService (grid-size dicts, focus-mode dicts, panel_pct_left/right persistence, applyPanelPx clamping) and uses PanelResizeDirective for divider drags, but find-view still carries a parallel hand-rolled copy: gridIconSizeLeftDict / focusModeLeftDict / focusModeRightDict / panelPxLeftDict / panelPxRightDict fields (lines 87-91), a near-identical settings-mirror effect (lines 137-177), applyPanelPx (line 821), savePanelPx (line 812), and duplicated divider-drag + grid-snap logic (lines 407-483). The two implementations have already drifted — find-view lacks the icon-size auto-pop and snap-on-load behaviors label-view gained — and every future panel fix must be made twice. Since the settings keys are shared between the views, drift produces user-visible inconsistency (e.g. a width saved and snapped in Label restores un-snapped in Find).
+  Label-view uses PanelResizeDirective for its divider drags and has icon-size auto-pop plus snap-on-load; find-view still carries its own divider-drag and grid-snap code and neither of those behaviours. Every future panel fix has to be made twice, and because the two views share the same settings keys the drift is user-visible — a width saved and snapped in Label restores un-snapped in Find.
 
-  *Direction:* Provide LabelViewPanelStateService (renamed to a view-agnostic PanelStateService) in find-view too, and reuse PanelResizeDirective for its dividers, deleting the duplicated dict/effect/drag code.
+  *Direction:* Reuse PanelResizeDirective for find-view's dividers and lift the auto-pop / snap-on-load behaviour alongside it, deleting the duplicated drag code.
+
+  *Background:* the settings half of this item is done — both views now resolve their per-media-type panel preferences through `SettingsStateService.perMediaType` (#3447), so the shadow dicts and the mirror effects are gone from find-view. What remains is the drag/snap duplication.
 
 <!-- item-sep -->
 

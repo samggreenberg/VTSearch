@@ -12,6 +12,7 @@ from __future__ import annotations
 from flask_smorest import Blueprint
 
 from vtscore.concurrency.async_jobs import list_active_pairs
+from vtsearch.hooks import state_sync_exempt
 from vtsearch.schemas.jobs import ActiveJobsResponseSchema
 
 jobs_bp = Blueprint(
@@ -22,6 +23,7 @@ jobs_bp = Blueprint(
 
 
 @jobs_bp.route("/api/jobs/active", methods=["GET"])
+@state_sync_exempt
 @jobs_bp.response(200, ActiveJobsResponseSchema)
 def active_jobs():
     """Return every ``(dataset, detector)`` pair with a running or pending job.
@@ -31,6 +33,11 @@ def active_jobs():
     is intentionally cheap; it walks the in-memory ``JOB_MANAGERS`` map and
     reads each manager's current/pending slot under the manager's own lock,
     nothing else. Safe to poll on a 2–3 second interval.
+
+    ``@state_sync_exempt`` keeps that poll off the global ``_state_lock``:
+    this handler reads no dataset/detector proxy, and queuing a 2-second
+    poll behind a long lock-holder is how the worker's threads got
+    exhausted in the first place.
     """
     return {"busy_pairs": list_active_pairs()}
 

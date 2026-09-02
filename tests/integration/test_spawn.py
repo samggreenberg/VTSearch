@@ -136,3 +136,46 @@ class TestSpawnDatasetContext:
         _wait(done)
         thread.join(timeout=5)
         assert seen == [(1, "two", "extra")]
+
+
+class TestSpawnStartControl:
+    def teardown_method(self):
+        set_thread_user(None)
+
+    def test_start_false_returns_unstarted_thread(self):
+        # The ``loading_tasks.set_worker`` contract wants the thread in hand
+        # *before* it runs, so ``start=False`` must hand back a live-but-idle
+        # Thread rather than a started one.
+        ran = threading.Event()
+
+        def body():
+            ran.set()
+
+        thread = spawn(body, name="test-spawn-unstarted", start=False)
+        try:
+            assert not thread.is_alive()
+            assert not ran.is_set()
+        finally:
+            thread.start()
+        _wait(ran)
+        thread.join(timeout=5)
+
+    def test_start_false_snapshots_context_at_call_time(self):
+        # The snapshot is taken in ``spawn``, not in the thread body, so a
+        # caller that starts the thread later still gets the context that was
+        # active when it asked for the thread — not whatever the calling
+        # thread drifted to in between.
+        set_thread_user("alice")
+        captured: list[str] = []
+        done = threading.Event()
+
+        def body():
+            captured.append(get_current_user())
+            done.set()
+
+        thread = spawn(body, name="test-spawn-unstarted-ctx", start=False)
+        set_thread_user("bob")
+        thread.start()
+        _wait(done)
+        thread.join(timeout=5)
+        assert captured == ["alice"]

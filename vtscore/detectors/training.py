@@ -5,8 +5,10 @@ by detector route handlers and test helpers.
 
 This module also holds the vote-aware detector training entry points -
 :func:`train_and_score` (online, called every time the user toggles a
-vote) and :func:`train_detector_from_origins` (load-time, called when
-re-deriving an MLP from a saved labelset). Both build on the generic
+vote) and :func:`train_detector_from_origins` (the **library-tier**
+re-derivation of an MLP from a saved labelset, for embedders driving
+``vtscore`` directly; the app does not call it - see that function's
+"Who calls this" note). Both build on the generic
 :mod:`vtscore.training` primitives but layer in the patch-region max-
 pool and origin-based file resolution that are detector-specific.
 """
@@ -179,8 +181,7 @@ def _blend_schedule_for_snap(snap: dict | None) -> str:
 def _fused_threshold(
     xcal_threshold: float,
     folds: Any,
-    clips_dict: dict[int, dict[str, Any]],
-    score_emb: str | None,
+    rows: "ScoringRows | None",
     final_scores: list[float],
     inclusion_value: int,
     blend_ctx: Any,
@@ -191,7 +192,9 @@ def _fused_threshold(
 ) -> float:
     """The shipped threshold: the fold-anchored cut, schedule blend as fallback.
 
-    Scores the haystack (*clips_dict*) through each calibration fold model, so
+    Scores the haystack (*rows*, the ``(media, score row)`` matrix
+    :func:`scoring_rows_for_snap` built for the snapshot) through each
+    calibration fold model, so
     each fold's anchored mixture is fitted on that fold model's own score scale
     with that fold's *held-out* votes as anchors, then carries the per-fold cuts
     to the final model in quantile space
@@ -225,7 +228,15 @@ def _fused_threshold(
 
     The extra scoring passes (one per fold) are the estimator's whole marginal
     cost.  Production trains the *linear* head, so a pass is a matrix multiply
-    and the cost is trivial; a heavier head would want measuring first.
+    and the cost is trivial; a heavier head would want measuring first.  Only
+    the head changes between passes, never the rows, so *rows* is built once by
+    the caller and reused by every fold **and** by the final model's own pass -
+    which is what keeps the marginal cost a matmul rather than a restack.  On
+    the active dataset the builders cache anyway; on a cross-dataset snapshot
+    (Find, the CLI's importer chunks) they do not, and re-deriving per fold
+    would have restacked the whole corpus ``calibrate_count + 1`` times - a
+    multi-gigabyte float16 rebuild on a patch dataset, where the row stack is
+    ~197 rows per media.
 
     Falls back to the schedule blend
     (:func:`~vtscore.training.thresholds.calculate_safe_threshold`) when there
@@ -281,12 +292,12 @@ def _fused_threshold(
     exclude: set[int] | None = voted_ids if (excluding and voted_ids) else None
 
     cut = None
-    if folds.fallback is None:
+    if folds.fallback is None and rows is not None:
         n_folds = min(len(folds.models), len(folds.orderings))
         fold_haystacks = []
         for model in folds.models[:n_folds]:
-            ids, scores, _best = _score_all_media(model, clips_dict, score_emb)
-            fold_haystacks.append(drop_voted(scores, ids, exclude) if exclude else np.asarray(scores, np.float64))
+            scores, _best = score_rows_with_model(model, rows)
+            fold_haystacks.append(drop_voted(scores, rows.ids, exclude) if exclude else np.asarray(scores, np.float64))
         cut = fit_fold_anchored_cut(fold_haystacks, folds.orderings[:n_folds], fit_final)
 
     if det_ctx is not None:
@@ -390,6 +401,7 @@ def train_and_threshold(
     groups: list | None = None,
     score_rows: dict | None = None,
     voted_ids: "set[int] | None" = None,
+    haystack_rows: "ScoringRows | None" = None,
 ) -> tuple[Any, float]:
     """Train the detector head and compute a calibrated threshold.
 
@@ -440,6 +452,16 @@ def train_and_threshold(
             shifted (issue #3308; see :func:`_fused_threshold`).  ``None`` (the
             callers with no way to name their labels' media) keeps the full
             haystack.
+        haystack_rows: *snap*'s already-built
+            :func:`scoring_rows_for_snap` matrix, when the caller has one in
+            hand.  Purely an optimisation - it must be the rows this call would
+            have built itself, i.e. ``scoring_rows_for_snap(snap,
+            embedder_name)``.  A caller that scores the same snapshot for its
+            own purposes (cross-dataset Find, which scores every media it just
+            loaded) passes its copy so the corpus is stacked once for the whole
+            operation rather than once here and once there; on a patch dataset
+            that stack is ~197 float16 rows per media, so the saving is memory
+            as much as time.  ``None`` builds it here.
 
     Returns:
         ``(model, threshold)``
@@ -525,35 +547,38 @@ def train_and_threshold(
         model = train_model(X, y, input_dim, hidden_dim=hidden_dim)
 
     # Fit the population estimator on the *inference* score distribution.
-    # `_score_all_media` is the same call scoring makes
-    # (`score_media_with_model`), so on a patch dataset the mixture sees the
-    # region max-pooled per-media scores the threshold will actually cut.
-    # Scoring the image-level embedding matrix instead fitted it on a
-    # systematically lower distribution (the region max is ≥ the single
+    # `scoring_rows_for_snap` + `score_rows_with_model` is `_score_all_media`,
+    # the same call scoring makes (`score_media_with_model`), split so the rows
+    # are built once and reused by the fold passes below: on a patch dataset the
+    # mixture sees the region max-pooled per-media scores the threshold will
+    # actually cut.  Scoring the image-level embedding matrix instead fitted it
+    # on a systematically lower distribution (the region max is ≥ the single
     # image-level row), biasing the cut low → over-inclusion on
     # region-voting detectors.  Plain single-vector datasets take
-    # `_score_all_media`'s embedding-matrix fallback, so their behaviour is
+    # `scoring_rows_for_snap`'s embedding-matrix fallback, so their behaviour is
     # unchanged.  *embedder_name* is forwarded as-is (not pre-resolved) so
     # the region-vs-plain gating matches inference exactly.
     # Mirrors `_train_and_score_xy` and
     # `eval.voting_iterations._safe_threshold_for_step`.
     #
-    # `_score_all_media` skips media it cannot score, so an empty score list
+    # The row builder skips media it cannot score, so an empty score list
     # means the haystack contributed nothing to fit on - either there was no
     # snap at all, or none of its media carry a usable vector in this space
     # (the CLI importer path, where the chunk is embedded later, per detector
     # group, by `route_and_embed`).  Both take the no-haystack branch rather
     # than fitting the estimator on an empty distribution.
+    rows: ScoringRows | None = None
     all_ids: list[int] = []
     all_scores: list[float] = []
     if snap:
-        all_ids, all_scores, _best_region = _score_all_media(model, snap, embedder_name)
-    if snap and all_scores:
+        rows = haystack_rows if haystack_rows is not None else scoring_rows_for_snap(snap, embedder_name)
+        all_ids = rows.ids
+        all_scores, _best_region = score_rows_with_model(model, rows)
+    if rows is not None and all_scores:
         threshold = _fused_threshold(
             threshold,
             folds,
-            snap,
-            embedder_name,
+            rows,
             all_scores,
             inclusion,
             blend_ctx,
@@ -877,6 +902,8 @@ class ScoringRows(NamedTuple):
 def scoring_rows_for_snap(
     clips_dict: dict[int, dict[str, Any]],
     embedder_name: str | None = None,
+    *,
+    region_pooling: bool | None = None,
 ) -> ScoringRows:
     """Build the rows every media in *clips_dict* is scored over.
 
@@ -898,6 +925,18 @@ def scoring_rows_for_snap(
     one snapshot - the CLI's per-group detector scoring - builds the rows once,
     and so no caller has to re-derive the patch gate (or the skip policy below)
     for itself.
+
+    *region_pooling* overrides that gate for a caller whose **head** is not a
+    MaxPatch head.  ``None`` (every ordinary caller) resolves it as described
+    above.  ``False`` forces one image-level row per media even on a patch
+    dataset - the geometry a whole-image head has to be scored at, because it
+    was never shown a patch as a negative and would fire on distractors the
+    max-pool then promotes to the media's score.  Cross-dataset Find's cold
+    path is the case: it re-derives a head from a labelset's image-level
+    vectors with no region flooding (see ``docs/ML.md``, region flooding), so
+    it scores - and calibrates - image-level throughout.  ``True`` is accepted
+    for symmetry and still yields one row per media on a grid-less dataset,
+    which has no patch rows to pool.
 
     Media that carry no usable vector in that space are **skipped**, not fatal:
     the builders raise on one (no vector, or a row of the wrong width), and this
@@ -932,6 +971,8 @@ def scoring_rows_for_snap(
     has_regions = any(clips_dict[cid].get("patch_grid") is not None for cid in clips_dict) and _scores_in_patch_space(
         clips_dict, embedder_name
     )
+    if region_pooling is not None:
+        has_regions = has_regions and region_pooling
 
     def _build(snapshot: dict[int, dict[str, Any]]) -> ScoringRows:
         if has_regions:
@@ -1172,15 +1213,19 @@ def _train_and_score_xy(
     else:
         model = train_model(X, y, input_dim, hidden_dim=hidden_dim)
 
-    all_ids, scores, best_region = _score_all_media(model, clips_dict, score_emb)
+    # One row build for the whole step: the final model's scoring pass and every
+    # fold pass inside `_fused_threshold` read the same matrix (only the head
+    # changes between them).
+    rows = scoring_rows_for_snap(clips_dict, score_emb)
+    all_ids = rows.ids
+    scores, best_region = score_rows_with_model(model, rows)
 
     # The label counts feeding the fallback blend are votes, not flooded rows,
     # so its small-count ramp is unmoved by region flooding.
     threshold = _fused_threshold(
         threshold,
         folds,
-        clips_dict,
-        score_emb,
+        rows,
         scores,
         inclusion_value,
         blend_ctx,
@@ -1326,6 +1371,18 @@ def train_detector_from_origins(
     This is the load-time counterpart of file-based detector export: given
     the origin lists that were saved to disk, it re-derives the head weights
     by resolving the original media files, embedding them, and training.
+
+    **Who calls this: library consumers, not the app.**  Nothing in
+    ``vtsearch`` reaches here.  The app re-derives a saved detector through
+    ``POST /api/detectors/registry/load`` ->
+    :func:`vtscore.detectors.labelset_training.train_from_labelset` ->
+    :func:`train_and_threshold`, which is handed the active dataset's medias
+    as a haystack and therefore ships the **fold-anchored** cut, exactly as a
+    freshly trained detector does (pinned by
+    ``tests/detectors/test_load_time_threshold_provenance.py``).  So the plain
+    cross-calibration cut below is what a *library* caller with no haystack
+    gets - it is not the threshold a resumed VTSearch session starts on
+    (issue #3257, evaluated and closed unrun).
 
     Args:
         good_origins: Origin dicts for media labelled Good.

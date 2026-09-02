@@ -395,9 +395,54 @@ places:
   re-derives a detector from saved origins, where there is no haystack to fuse
   against and *"the conformal cut ships alone"*.
 
-That second one is ordinary: every saved detector a user re-opens is thresholded
-this way. On region-voting detectors it is currently **0.063 ± 0.008 worse than
-what a freshly trained detector gets**, and roughly two-thirds of that gap
+> ### ⚠ Correction, 2026-09-02 (from #3257's pre-launch evaluation): the second site is not the app's reload
+>
+> `train_detector_from_origins` is the **library-tier** re-derivation entry
+> point and has **no in-app caller** — true on this run's tree
+> (`c39ce22e8`) as well as on today's `dev`. The app reloads a saved detector
+> through `POST /api/detectors/registry/load` → `train_from_labelset(...,
+> snap=snap)` → `train_and_threshold`, which gets the active dataset's medias
+> as a haystack and therefore fits the **fold-anchored** cut — measured
+> directly, not read off the source: after a real registry load the context
+> carries a fitted `FoldAnchoredCut` and ships `0.49600` where the pooled
+> conformal cut over the same fold orderings is `0.48519`. Pinned by
+> `tests/detectors/test_load_time_threshold_provenance.py`.
+>
+> **So "every saved detector a user re-opens is thresholded this way" is
+> false, and the −0.063 gap below does not apply to a reload.** The pooled
+> rule's real user-facing sites are the Inclusion re-cut named above and
+> **`vtsearch/routes/detectors/find.py:481`** — cold Find, which trains a
+> detector on the fly for a dataset it is not loaded against and calls
+> `train_and_threshold` *without* a snap, so its Good/Bad verdicts are cut by
+> the pooled conformal rule even though a haystack (`temp_medias`) is in hand.
+> That path, not the reload, is where this study's numbers land.
+>
+> → #3257 was closed unrun; the trajectory it wanted to measure does not exist.
+
+> ### ⚠ Follow-up, 2026-09-02 (#3516): cold Find is fused now too
+>
+> The site the correction above hands this study's numbers to has since been
+> given its haystack: `_score_with_cold_detector` passes `temp_medias` (and the
+> labelled ids) to `train_and_threshold`, so a cold Find is cut by the
+> fold-anchored population estimator like every other training pass in the app.
+> The cut is fitted on the **image-level** rows that path scores, not the
+> max-pool - its head is re-derived from image-level label vectors with no
+> region flooding, so image-level is the distribution the cut will actually be
+> applied to (`docs/ML.md`, region flooding).
+>
+> The direction the study predicted held on a synthetic 2k-media patch corpus:
+> the pooled cut admitted **2000/2000** media, the anchored cut 728. The
+> estimator's marginal cost is bounded at **~2 s per (detector, dataset) pair**
+> and flat beyond ~50k media, because the fit samples the haystack.
+>
+> **The pooled conformal rule now has one user-facing site left**: the
+> Inclusion slider's re-cut for a detector with no anchored cut, which is a
+> fallback by construction. Pinned by
+> `tests/detectors/test_find_cold_threshold.py`.
+
+That second one is narrower than it reads: it is the library API, not the app's
+reload. On region-voting detectors the pooled rule is currently **0.063 ± 0.008
+worse than what a freshly trained detector gets**, and roughly two-thirds of that gap
 (−0.048 ± 0.007) is recoverable by changing nothing but the combine rule.
 
 ### The acquisition caveat does **not** apply here — measured, not assumed
@@ -478,12 +523,13 @@ Still: `vg_scale_any` inherits whatever `vg_scale` holds, and `build_pile.py
   The gate should be read as *"resolve above margin **and** the swept rule
   reaches the acquisition path"* — the second clause was implicit and should not
   have been.
-- **#3257 — the trajectory that *is* worth measuring: load-then-continue.** The conformal
-  cut is the **load-time** threshold, so a user who opens a saved detector and
-  then keeps voting starts the session on it, and that first threshold steers
-  everything after. This harness always trains fresh, so it never exercises that
-  path. That is a different experiment from an A/B of the rule, and it is the one
-  with real acquisition feedback in it.
+- **#3257 — load-then-continue. ~~The trajectory that *is* worth
+  measuring.~~ CLOSED UNRUN 2026-09-02: the premise is false.** This bullet
+  claimed that opening a saved detector starts the session on the conformal cut,
+  so that first threshold steers everything after. It does not: the app's reload
+  path fuses against the haystack like any other training pass and starts on the
+  fold-anchored cut (see the correction above). The conformal cut still never
+  reaches acquisition; what it does reach is cold Find's verdicts.
 - **#3258 — a mode-dependent combine for the conformal path.** The evidence points at
   quantile space for region and score space for binary. `threshold_from_fold_orderings`
   takes no voting-mode argument today, so this is a signature change, not a

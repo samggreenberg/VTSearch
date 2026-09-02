@@ -851,3 +851,170 @@ class TestPlaces365CategoriesList:
         assert cats[326] == "swimming_pool_outdoor"
         assert cats[0] == "airfield"
         assert cats[364] == "zen_garden"
+
+
+# ---------------------------------------------------------------------------
+# The shared clip builder every image demo source stamps its media through
+# ---------------------------------------------------------------------------
+
+
+class TestEmitImageClip:
+    """``_emit_image_clip`` is the one media-dict builder for image demos.
+
+    Every source's clip shape now depends on this function, so the keys it
+    omits matter as much as the ones it sets: a single-label demo that grew a
+    ``categories`` key would silently change how the eval harness decides
+    ground-truth membership.
+    """
+
+    _BASE = {
+        "embedder_name": "fake",
+        "embeddings": {"fake": [0.0, 1.0]},
+        "image_bytes": b"pretend-png",
+        "filename": "cat/a.png",
+        "category": "cat",
+        "width": 10,
+        "height": 20,
+        "demo_origin": {"importer": "demo", "params": {}},
+    }
+
+    def _emit(self, **overrides):
+        from vtscore.media.image._demo_sources import _emit_image_clip
+
+        return _emit_image_clip(7, **{**self._BASE, **overrides})
+
+    def test_single_label_clip_omits_the_multilabel_keys(self):
+        """No ``categories`` key at all — not an empty list.
+
+        ``vtscore.eval.labels.media_is_positive`` switches on the *presence* of
+        ``categories``: an empty list there would read as "positive for
+        nothing" and score every single-label demo as all-negative.
+        """
+        clip = self._emit()
+
+        assert "categories" not in clip
+        assert "regions" not in clip
+        assert "thumbnail_bytes" not in clip
+        assert clip["category"] == "cat"
+
+    def test_multilabel_clip_copies_categories_and_regions(self):
+        cats = ["man", "dog"]
+        regions = [{"box": [0.1, 0.2, 0.3, 0.4], "label": "man"}]
+        clip = self._emit(category="man", categories=cats, regions=regions)
+
+        assert clip["categories"] == ["man", "dog"]
+        assert clip["regions"] == regions
+        # Copied, not aliased: mutating the clip must not reach the collector's
+        # records (several sources hand the same list to more than one image).
+        clip["categories"].append("cat")
+        assert cats == ["man", "dog"]
+        assert clip["regions"] is not regions
+
+    def test_multilabel_without_boxes_still_gets_a_regions_list(self):
+        clip = self._emit(categories=["man"], regions=None)
+
+        assert clip["regions"] == []
+
+    def test_origin_name_mirrors_the_filename(self):
+        clip = self._emit(filename="dog/b.png")
+
+        assert clip["origin_name"] == "dog/b.png"
+
+    def test_thumbnail_rides_along_only_when_present(self):
+        clip = self._emit(thumbnail_bytes=b"thumb")
+
+        assert clip["thumbnail_bytes"] == b"thumb"
+
+    def test_stamps_the_identity_and_payload_fields(self):
+        clip = self._emit()
+
+        assert clip["id"] == 7
+        assert clip["media_type"] == "image"
+        assert clip["embedder"] == "fake"
+        assert clip["duration"] == 0
+        assert clip["file_size"] == len(b"pretend-png")
+        assert clip["media_bytes"] == b"pretend-png"
+        assert clip["media_string"] is None
+        assert clip["width"] == 10
+        assert clip["height"] == 20
+        assert clip["origin"] == {"importer": "demo", "params": {}}
+
+
+class TestEmbedLoop:
+    """``_embed_loop`` drives every source; the per-source render is the only variable."""
+
+    class _Embedder:
+        """Embeds every other image, so ids get dropped mid-run."""
+
+        name = "fake"
+        _model = object()  # pre-"loaded", so the load guard is a no-op
+
+        def __init__(self, fail_every_other=False):
+            self.fail_every_other = fail_every_other
+            self.calls = 0
+
+        def embed_media(self, media):
+            self.calls += 1
+            if self.fail_every_other and self.calls % 2 == 0:
+                return None
+            return np.arange(3, dtype=np.float32)
+
+    @staticmethod
+    def _images(tmp_path: Path, n: int) -> list:
+        from PIL import Image  # noqa: PLC0415
+
+        out = []
+        for i in range(n):
+            p = tmp_path / f"img{i}.png"
+            Image.new("RGB", (8, 12), (i * 10, 0, 0)).save(p)
+            out.append((p, "cat"))
+        return out
+
+    def _run(self, tmp_path, n=3, clips=None, **kw):
+        from vtscore.media.image._demo_sources import _embed_loop, _render_single_label_image
+
+        clips = {} if clips is None else clips
+        _embed_loop(
+            self._images(tmp_path, n),
+            clips,
+            kw.pop("embedder", self._Embedder()),
+            kw.pop("on_progress", lambda *a: None),
+            {"importer": "demo", "params": {}},
+            kw.pop("skip_embedding", False),
+            _render_single_label_image,
+        )
+        return clips
+
+    def test_seeds_clip_ids_after_whatever_is_already_there(self, tmp_path):
+        """Sources are loaded into a shared dict, so ids continue, never restart."""
+        clips = {4: {"id": 4}}
+
+        self._run(tmp_path, n=2, clips=clips)
+
+        assert sorted(clips) == [4, 5, 6]
+
+    def test_a_dropped_embedding_does_not_consume_its_clip_id(self, tmp_path):
+        clips = self._run(tmp_path, n=4, embedder=self._Embedder(fail_every_other=True))
+
+        assert sorted(clips) == [1, 2]
+        assert [c["filename"] for c in clips.values()] == ["cat/img0.png", "cat/img2.png"]
+
+    def test_skip_embedding_stores_no_vectors_and_calls_no_embedder(self, tmp_path):
+        emb = self._Embedder()
+
+        clips = self._run(tmp_path, n=2, embedder=emb, skip_embedding=True)
+
+        assert emb.calls == 0
+        assert all(c["embeddings"] == {} for c in clips.values())
+        # The media itself is still fully stamped, so the clipper that will
+        # re-embed the crops has real bytes and dimensions to work from.
+        assert all(c["media_bytes"] and c["width"] == 8 for c in clips.values())
+
+    def test_progress_reports_the_right_phase_for_each_mode(self, tmp_path):
+        for skip, status, verb in [(False, "embedding", "Embedding"), (True, "loading", "Loading")]:
+            seen: list = []
+            self._run(tmp_path, n=2, skip_embedding=skip, on_progress=lambda *a: seen.append(a))
+
+            assert seen[0] == (status, f"{verb} 2 images...", 0, 2)
+            assert seen[1] == (status, f"{verb} cat/img0.png", 1, 2)
+            assert seen[-1] == (status, f"{verb} cat/img1.png", 2, 2)
