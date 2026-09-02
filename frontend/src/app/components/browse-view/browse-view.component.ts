@@ -1336,7 +1336,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     const ids = this.selection.ids();
     if (ids.length === 0) return;
     this.mediasApi
-      .voteBulk(ids, target)
+      .voteBulk(ids, target, { flow: 'bulk' })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => this.dropFromBrowse(ids, target),
