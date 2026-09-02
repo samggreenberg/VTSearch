@@ -25,15 +25,17 @@ of them.  Expressing that as an OpenAPI ``oneOf`` would mean hand-writing
 component ``$ref`` strings in field metadata, which silently rots the moment
 a schema class is renamed; the single client-side cast is the cheaper trade.
 
-The two train-and-score endpoints share a single response schema with
-``unknown = "include"``: the metric-specific data key
-(``error_cost`` / ``stability`` / ``diversity``) is computed at runtime
-and flows through without per-key declarations.
+The two train-and-score endpoints share a single response schema that
+declares every metric-specific data key (``error_cost`` / ``stability`` /
+``diversity``) and fills in whichever one the requested metric produced;
+its ``unknown = "include"`` only widens what the schema accepts on load.
 """
 
 from __future__ import annotations
 
-from marshmallow import Schema, fields, post_dump, validate
+from marshmallow import Schema, fields, validate
+
+from vtsearch.schemas.common import PluginExtrasSchema
 
 
 _METRIC_VALIDATOR = validate.OneOf(["smart", "stable", "diverse"])
@@ -104,31 +106,18 @@ class LabelingProgressResponseSchema(Schema):
 # ---------------------------------------------------------------------------
 
 
-class StatusIndicatorSchema(Schema):
+class StatusIndicatorSchema(PluginExtrasSchema):
     """One ``smart`` / ``stable`` / ``span`` indicator in the labeling-status
     response.  ``status`` is the red/yellow/green flag every indicator emits;
     ``reason`` is the human-readable explanation.  Metric-specific keys
     (``cost``, ``flips``, ``diversity_level``, ``avg_flip_rate``, …) flow
-    through unchanged via ``unknown = "include"`` plus :meth:`_include_extras`
-    the :mod:`vtscore.detectors.labeling_progress` analyzer remains the
+    through unchanged via
+    :class:`~vtsearch.schemas.common.PluginExtrasSchema`; the
+    :mod:`vtscore.detectors.labeling_progress` analyzer remains the
     source of truth for that shape."""
 
     status = fields.String(required=True)
     reason = fields.String()
-
-    class Meta:
-        unknown = "include"
-
-    @post_dump(pass_original=True)
-    def _include_extras(self, data: dict, original: dict, **_: object) -> dict:
-        # ``unknown = "include"`` only affects ``load``; declared schemas drop
-        # unknown keys on ``dump``.  Re-merge the original dict's metric-
-        # specific keys so callers receive the full indicator payload.
-        if isinstance(original, dict):
-            for k, v in original.items():
-                if k not in data:
-                    data[k] = v
-        return data
 
 
 class LabelingStatusResponseSchema(Schema):
@@ -234,8 +223,12 @@ class EvalTrainAndScoreResponseSchema(Schema):
     error = fields.String()
 
     class Meta:
-        # Future metrics may add new data keys; let them pass through
-        # without per-key declarations.
+        # A future metric's data key is tolerated on ``load`` rather than
+        # raising.  Load-only: ``dump`` emits the declared fields and
+        # nothing else, so a new metric still needs a field declared here
+        # (or this schema needs
+        # :class:`~vtsearch.schemas.common.PluginExtrasSchema`) before its
+        # data reaches the client.
         unknown = "include"
 
 

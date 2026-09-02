@@ -68,8 +68,9 @@ The labelset-element shape is shared with :mod:`vtsearch.schemas.labels`.
 
 from __future__ import annotations
 
-from marshmallow import INCLUDE, Schema, ValidationError, fields, post_dump, validate
+from marshmallow import Schema, fields, validate
 
+from vtsearch.schemas.common import PluginExtrasSchema, list_of_strings
 from vtsearch.schemas.labels import LabeledElementSchema
 from vtsearch.schemas.media import MediaEntrySchema, OriginSchema
 
@@ -81,16 +82,6 @@ from vtsearch.schemas.media import MediaEntrySchema, OriginSchema
 #: ``_slug`` truncation in ``vtscore.detectors.store`` is the filesystem-level
 #: backstop for names that reach the store by other paths.
 MAX_NAME_LENGTH = 128
-
-
-def _list_of_strings(value):
-    """Validator: *value* must be a ``list`` whose every entry is a ``str``.
-
-    Mirrors the dataset readers validator so non-string items are rejected at
-    the schema layer (422) rather than coerced.
-    """
-    if not isinstance(value, list) or not all(isinstance(r, str) for r in value):
-        raise ValidationError("Must be a list of strings.")
 
 
 class _ExampleSchema(Schema):
@@ -159,8 +150,11 @@ class DetectorDetailSchema(Schema):
     combined_from = fields.List(fields.String())
 
     class Meta:
-        # Detector files may carry transitional / extension fields; let
-        # them flow through on dump rather than silently dropping them.
+        # Detector files may carry transitional / extension fields; tolerate
+        # them on ``load`` instead of raising.  This is load-only: ``dump``
+        # emits the declared fields and nothing else, here and everywhere
+        # else a schema does not inherit
+        # :class:`~vtsearch.schemas.common.PluginExtrasSchema`.
         unknown = "include"
 
 
@@ -321,7 +315,8 @@ class DetectorRegistryEntrySchema(Schema):
 
     class Meta:
         # Registry entries may carry extension keys (e.g. future per-row
-        # status flags); let them flow through on dump.
+        # status flags); tolerate them on ``load`` rather than raising.
+        # Load-only — ``dump`` still emits only the declared fields.
         unknown = "include"
 
 
@@ -463,7 +458,7 @@ class DetectorRegistryReadersRequestSchema(Schema):
 
     readers = fields.Raw(
         required=True,
-        validate=_list_of_strings,
+        validate=list_of_strings,
         metadata={
             "description": 'List of usernames; ``["*"]`` makes the detector public.',
             "type": "array",
@@ -678,7 +673,7 @@ class _AutoDetectResultSchema(Schema):
     negative_hits = fields.List(fields.Nested(_HitSchema), required=True)
 
 
-class _AutoFindExportStatusSchema(Schema):
+class _AutoFindExportStatusSchema(PluginExtrasSchema):
     """Outcome of auto-exporting an Auto-Find run's results.
 
     Built by ``_run_autofind_export``: a fixed ``{exporter, success}`` base
@@ -702,21 +697,6 @@ class _AutoFindExportStatusSchema(Schema):
             )
         }
     )
-
-    class Meta:
-        unknown = INCLUDE
-
-    @post_dump(pass_original=True)
-    def _include_exporter_extras(self, data: dict, original: dict, **_: object) -> dict:
-        # ``unknown = INCLUDE`` only affects ``load``; a declared schema drops
-        # undeclared keys on ``dump``.  Safe to re-merge here: the values come
-        # from an exporter's own JSON-serialisable outcome dict, not a media
-        # dict, so there are no vectors or raw bytes to leak.
-        if isinstance(original, dict):
-            for k, v in original.items():
-                if k not in data:
-                    data[k] = v
-        return data
 
 
 class AutoDetectRequestSchema(Schema):
