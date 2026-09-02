@@ -300,7 +300,10 @@ def list_cells() -> None:
     log(f"pile: {pc.PILE}")
     for ds, emb in pc.cells():
         path = pc.cell_path(ds, emb)
-        mark = "present" if path.exists() else "MISSING"
+        # An `on_request` cell that is absent is absent BY DESIGN, and reading
+        # it as MISSING is how a foot-gun gets "fixed" by building it.
+        on_request = pc.DATASETS.get(ds, {}).get("on_request")
+        mark = "present" if path.exists() else ("on-request" if on_request else "MISSING")
         size = f"{path.stat().st_size / 1e6:8.0f} MB" if path.exists() else " " * 11
         region = " region-voting" if pc.region_capable(ds, emb) else ""
         log(f"  {ds:18s} x {emb:14s} {mark:8s} {size}{region}")

@@ -103,6 +103,31 @@ DATASETS: dict[str, dict] = {
     # that rebuilds its parent, and `--verify` compares the parent-label digest
     # stamped on each derived media against the parent's live one.
     "vg_scale_any": {"boxed": True, "kind": "vg_scale_any"},
+    # `vg_scale_any`'s construction with the BAND DROPPED FROM SELECTION rather
+    # than from the key, and sized for a long labelling session (#3547).
+    #
+    # `vg_scale_any` collapses `class@band` after the fact, so it inherits
+    # `vg_scale`'s per-band designation and is capped by the THINNEST band:
+    # `bus@small` has 138 candidates, which is why 100/band was the ceiling and
+    # 300 positives per class the result.  A study that never asks about box
+    # size does not need that cap.  Designating band-free off the same
+    # COCO-anchored labels takes the binding class from 414 candidates to 1006
+    # (`stop sign`), which is what makes a 400-click horizon measurable at all:
+    # #3319's deep wave harvested 82-85% of its ~150 sim positives.
+    #
+    # Prevalence is held at `vg_scale`'s designed 7.14% BY CONSTRUCTION rather
+    # than inherited by accident -- `SCALE_DEEP_N_NEG` is derived from
+    # `SCALE_DEEP_N_POS`, not set beside it.  That is the whole point: the
+    # optimum this dataset exists to locate is `k* = -log2((1-pi)/pi)`, so
+    # adding positives against a FIXED negative pool would move the answer
+    # (300->900 against 3900 shifts pi to 18.8% and k* by a full bit) while
+    # appearing to be nothing but "a deeper haystack".
+    #
+    # `on_request`: this one is 3x `vg_scale`'s media count, so it stays OUT of
+    # the default sweep. A bare `build_pile.py` would otherwise quietly add five
+    # cells nobody asked for, one of them a ~7 GB `dinov3_patch` grid. Name it
+    # to build it: `--datasets vg_scale_deep --embedders siglip`.
+    "vg_scale_deep": {"boxed": True, "kind": "vg_scale_deep", "on_request": True},
 }
 
 #: Box-size bands, as a fraction of image area, anchored to the patch
@@ -308,6 +333,27 @@ SCALE_N_NEG = int(os.environ.get("VTS_SCALE_N_NEG", "3900"))
 #: is a relabel, while drawing a fresh one would mean re-embedding every cell.
 SCALE_N_NEG_SPARE = int(os.environ.get("VTS_SCALE_N_NEG_SPARE", "300"))
 
+#: The designed prevalence of a `vg_scale` cell: 100 positives per band x 3
+#: bands against 3900 shared negatives. Named because `vg_scale_deep` has to
+#: REPRODUCE it rather than re-derive it, and because every k* this family of
+#: studies quotes is computed from it (`-log2((1-pi)/pi) = -3.71`).
+SCALE_PREVALENCE = (3 * SCALE_N_POS) / (3 * SCALE_N_POS + SCALE_N_NEG)
+
+#: `vg_scale_deep`'s positives per class (#3547). 900 is the deepest value all
+#: twelve classes support band-free -- `stop sign`, the thinnest, has 1006
+#: candidates (`measure_supply.py`) -- and it is chosen against `preflight.sh`
+#: check 16b, which clears only when the sim half holds MORE positives than the
+#: horizon has steps: at `SIM_FRACTION` 0.5 that is 450 against 400.
+#:
+#: Going deeper costs classes, not money: 1200 drops `kite` and `stop sign`,
+#: and a class list that differs from #3319's would confound the horizon axis
+#: with a vocabulary axis in the one comparison this dataset exists to make.
+SCALE_DEEP_N_POS = int(os.environ.get("VTS_SCALE_DEEP_N_POS", "900"))
+#: DERIVED, never set: see the `vg_scale_deep` note in DATASETS. A negative pool
+#: written as a literal beside a positive count is how prevalence drifts.
+SCALE_DEEP_N_NEG = round(SCALE_DEEP_N_POS * (1 - SCALE_PREVALENCE) / SCALE_PREVALENCE)
+SCALE_DEEP_N_NEG_SPARE = int(os.environ.get("VTS_SCALE_DEEP_N_NEG_SPARE", "300"))
+
 
 #: How far a VG copy's aspect ratio may drift from the COCO original before its
 #: boxes are considered untransferable. Normalised coordinates survive a rescale
@@ -352,6 +398,12 @@ MAX_CORNER_RATE = float(os.environ.get("VTS_MAX_CORNER_RATE", "0.05"))
 #: across the corrections that are the whole point of the review, since a review
 #: is only worth what it still covers after the next rebuild.
 ROSTER = Path(os.environ.get("VTS_SCALE_ROSTER", str(PILE / "vg_scale_roster.json")))
+
+#: `vg_scale_deep`'s own roster. Separate from `ROSTER` on purpose: the two
+#: datasets designate different cells from the same candidates, and one file
+#: holding both would let a `vg_scale_deep` rebuild retire images `vg_scale`'s
+#: review is pinned to.
+DEEP_ROSTER = Path(os.environ.get("VTS_SCALE_DEEP_ROSTER", str(PILE / "vg_scale_deep_roster.json")))
 
 
 def scale_cell(category: str, band: str) -> str:

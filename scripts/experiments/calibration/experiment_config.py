@@ -176,6 +176,12 @@ EXPERIMENT_QUERIES: dict[str, dict[str, str]] = {
     # is what it silently did until #3278 paired its region arm and the pair's
     # own guard refused to run, since a pair exists FOR the text sort.
     "vg_scale_any": dict(_VG_SCALE_TEXTS),
+    # `vg_scale_deep` (#3547) is `vg_scale_any`'s construction designated
+    # band-free and 3x deeper, on the SAME twelve class names -- so it takes the
+    # same texts. Sharing `_VG_SCALE_TEXTS` rather than copying it is the point:
+    # a query that drifted between the two would confound the pile axis with a
+    # seeding axis in the one comparison the deep study exists to make.
+    "vg_scale_deep": dict(_VG_SCALE_TEXTS),
     # The box-size bands are built from the FULL Visual Genome vocabulary, so
     # their categories are VG's, not COCO's.  A band is a property of the cell -
     # someone hunting a small bus and someone hunting a large one both type
@@ -260,6 +266,12 @@ DATASET_EMBEDDERS: dict[str, list[str]] = {
     # bare `dinov3_patch` cannot open on a text sort, and `EXPERIMENT_QUERIES`
     # gives this dataset a query for every category precisely so it can.
     "vg_scale_any": os.environ.get("CALIB_VGSCALE_EMBEDDERS", "siglip,siglip+dinov3_patch").split(","),
+    # #3547's deep pile. Its own env var, defaulting to `siglip` ALONE, because
+    # only the binary half was built: the deep question is about the shipped arm
+    # (`siglip x whole_image`) and a `dinov3_patch` cell at 22k medias is ~7 GB.
+    # Defaulting to the pair here would enumerate cells whose pickle does not
+    # exist, which fails late and per-cell rather than at prepare.
+    "vg_scale_deep": os.environ.get("CALIB_VGSCALE_DEEP_EMBEDDERS", "siglip").split(","),
     # The same-class-across-bands set (#3156): one class list at three box
     # scales, so a small-vs-large difference is about size rather than about
     # which words happen to live at which size. Its categories are
@@ -322,6 +334,10 @@ BOXED_BY_DATASET: dict[str, bool] = {
     # `pile_config.DATASETS`.
     "vg_scale": True,
     "vg_scale_any": True,
+    # Boxed like its sibling -- the boxes are `vg_scale`'s, carried through the
+    # same passes. Necessary but not sufficient: no patch cell is built, so in
+    # practice every `vg_scale_deep` arm binary-votes (see the note above).
+    "vg_scale_deep": True,
 }
 
 
