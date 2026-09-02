@@ -112,6 +112,26 @@ def _get_embedder_for_medias(media_dict: dict):
     return embedder_for_medias(media_dict)
 
 
+def _recorded_embedder_name(media_dict: dict, requested: str) -> str:
+    """The embedder name a timing row should carry for this load.
+
+    The caller's pick wins when there is one. When there is not, the load still
+    *used* an encoder — the media type's default, resolved deep inside the embed
+    stage and stamped onto every media — and recording the blank instead files
+    the run under the media rollup, so the exact ``(device, media, embedder)``
+    cell the profile is keyed on can never be populated by an import that did
+    not name one (#3345). Reads the name off the medias rather than resolving an
+    embedder object, because by this point they carry it and the object is not
+    needed.
+    """
+    if requested:
+        return requested
+    if not media_dict:
+        return ""
+    first = next(iter(media_dict.values()), None) or {}
+    return str(first.get("embedder", "") or "")
+
+
 def _parse_bool(value: Any) -> bool:
     """Coerce a request-supplied flag to ``bool``.
 
@@ -617,7 +637,11 @@ def _run_origin_load_in_background(
             # rows carry it and can resolve the archive size via
             # ``download_size_mb_for`` — otherwise app-recorded rows land with
             # ``dataset_id: ""`` and can't feed fit_load_weights.py (see #2614).
-            profiler.finish(len(ctx.medias), dataset_id)  # writes JSONL + unbinds (no-op when off)
+            # Both recorders learn the resolved embedder here rather than at
+            # construction: it is only known once the medias exist (#3345).
+            recorded_embedder = _recorded_embedder_name(ctx.medias, embedder)
+            # writes JSONL + unbinds (no-op when off)
+            profiler.finish(len(ctx.medias), dataset_id, embedder=recorded_embedder)
             # A load that failed measured an abort, not a cost: ``ok=False`` tells
             # the fitter to drop the run rather than fit a slope to it. The
             # tracker is authoritative here because every failure path funnels
@@ -625,7 +649,12 @@ def _run_origin_load_in_background(
             size_mb = download_size_mb_hint
             if size_mb is None:
                 size_mb = resolve_download_size_mb(dataset_id)
-            timing_recorder.finish(n=len(ctx.medias), size_mb=size_mb, ok=not tracker.get().get("error"))
+            timing_recorder.finish(
+                n=len(ctx.medias),
+                size_mb=size_mb,
+                ok=not tracker.get().get("error"),
+                embedder=recorded_embedder,
+            )
             _park_load_terminal(tracker, len(ctx.medias))
             loading_tasks.mark_finished(task_id)
 
@@ -877,7 +906,12 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
                 first = next(iter(temp_medias.values()))
                 media_type = first.get("media_type", "audio")
                 count = len(temp_medias)
-                timing_recorder.set_scale(n=count)
+                # Same late resolution as the import path: staging that named no
+                # embedder still ran the media type's default (#3345).
+                timing_recorder.set_scale(
+                    n=count,
+                    embedder=_recorded_embedder_name(temp_medias, staged_embedder),
+                )
                 name = label or importer.resolve_display_name(field_values)
 
                 tracker.update("loading", "Writing staged file…", 0, 0, step=3, total_steps=_TOTAL_STAGE_STEPS)

@@ -37,7 +37,13 @@ _STEP_PHASE = {1: "download", 2: "model_load", 3: "embed", 4: "finalize"}
 # given embedder pays the cold model-load cost; later loads reuse the resident
 # model (warm). Self-detecting this is more robust than a caller-supplied flag,
 # and lets the driver measure cold+warm in one process.
-_seen_embedders: set[str] = set()
+#
+# Keyed by ``(media_type, embedder)``, not by embedder alone, because the name
+# can be blank: an import whose caller named no embedder used to record ``""``,
+# so an image load claimed the empty key and the genuinely cold CLAP load that
+# followed was stamped ``cold_model: false`` (#3345). Pairing the media type in
+# keeps two blanks from ever colliding, and costs nothing when both are named.
+_seen_embedders: set[tuple[str, str]] = set()
 _seen_lock = threading.Lock()
 
 # Active profiler for the current worker thread, so ``FinalizeProgress.begin``
@@ -176,9 +182,22 @@ class LoadProfiler:
             _active.profiler = None
 
     # -- emit ---------------------------------------------------------------
-    def finish(self, n: int, dataset_id: str = "") -> None:
+    def set_embedder(self, embedder: str) -> None:
+        """Name the encoder this load actually used, once it is known.
+
+        The constructor takes the *requested* embedder, which is blank whenever
+        the caller let the media type's default stand. The row has to carry the
+        resolved name or it lands in the media rollup and its cold/warm flag is
+        decided by whatever else claimed the blank (#3345). Empty is ignored,
+        so this can never unset a name the caller did supply.
+        """
+        if embedder:
+            self._embedder = str(embedder)
+
+    def finish(self, n: int, dataset_id: str = "", embedder: str = "") -> None:
         """Write one JSONL row per phase (and per finalize sub-slot), then
         release the thread binding."""
+        self.set_embedder(embedder)
         try:
             self._emit(n, dataset_id)
         finally:
@@ -203,9 +222,10 @@ class LoadProfiler:
             t_end = starts[order[i + 1]] if i + 1 < len(order) else end
             durations[phase] = max(0.0, t_end - t_start)
 
+        seen_key = (self._media_type, self._embedder)
         with _seen_lock:
-            cold_model = self._embedder not in _seen_embedders
-            _seen_embedders.add(self._embedder)
+            cold_model = seen_key not in _seen_embedders
+            _seen_embedders.add(seen_key)
         # A download slice that actually ran (not a cached/absent archive).
         cold_download = durations.get("download", 0.0) > 1.0
 
@@ -247,7 +267,10 @@ class _NullProfiler:
     def bind_thread(self) -> None:  # noqa: D401
         pass
 
-    def finish(self, n: int, dataset_id: str = "") -> None:
+    def set_embedder(self, embedder: str) -> None:
+        pass
+
+    def finish(self, n: int, dataset_id: str = "", embedder: str = "") -> None:
         pass
 
 

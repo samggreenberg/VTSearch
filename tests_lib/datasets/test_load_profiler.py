@@ -202,6 +202,67 @@ def test_cold_model_flips_to_warm_on_second_load(monkeypatch, tmp_path, clean_se
     assert all(r["cold_model"] is False for r in second_load)
 
 
+def test_two_blank_embedders_of_different_media_are_both_cold(monkeypatch, tmp_path, clean_seen_embedders):
+    """#3345: an unnamed embedder must not make the next media type look warm.
+
+    ``cold_model`` was keyed on the embedder name alone. An import whose caller
+    named no embedder recorded ``""``, so the first such load claimed the empty
+    key and every later one — a different media type, a different encoder,
+    genuinely cold — was stamped warm. #3339's fitter drops warm rows from the
+    model-load fit and keeps them for embed/finalize, so a mislabelled row does
+    not just annotate wrongly: it lands in the wrong regression.
+    """
+    out = tmp_path / "prof.jsonl"
+    monkeypatch.setenv("VTSEARCH_PROFILE_LOAD", str(out))
+
+    for media_type in ("image", "audio"):
+        tracker = _make_tracker()
+        prof = start_profiler(tracker, media_type, "")
+        _drive_phases(tracker)
+        prof.finish(8, "ds")
+
+    rows = _read_rows(out)
+    by_media = {}
+    for row in rows:
+        by_media.setdefault(row["media_type"], []).append(row["cold_model"])
+    assert all(by_media["image"]), "the first load is cold"
+    assert all(by_media["audio"]), "a different media type's first load is also cold"
+
+
+def test_set_embedder_names_the_encoder_the_load_actually_used(monkeypatch, tmp_path, clean_seen_embedders):
+    """#3345: the resolved name has to reach the row, or the exact cell stays empty.
+
+    The profiler is constructed before the medias exist, so a load that let the
+    media-type default stand has nothing to record at that point. Learning the
+    name at ``finish`` is what puts the run in the ``(device, media, embedder)``
+    cell the profile is keyed on instead of the media rollup.
+    """
+    out = tmp_path / "prof.jsonl"
+    monkeypatch.setenv("VTSEARCH_PROFILE_LOAD", str(out))
+    tracker = _make_tracker()
+
+    prof = start_profiler(tracker, "audio", "")
+    _drive_phases(tracker)
+    prof.finish(8, "ds", embedder="clap_general")
+
+    rows = _read_rows(out)
+    assert rows and all(r["embedder"] == "clap_general" for r in rows)
+
+
+def test_a_named_embedder_is_never_overwritten_by_a_blank(monkeypatch, tmp_path, clean_seen_embedders):
+    """Learning nothing must not erase what the caller did know."""
+    out = tmp_path / "prof.jsonl"
+    monkeypatch.setenv("VTSEARCH_PROFILE_LOAD", str(out))
+    tracker = _make_tracker()
+
+    prof = start_profiler(tracker, "audio", "clap")
+    _drive_phases(tracker)
+    prof.finish(8, "ds", embedder="")
+
+    rows = _read_rows(out)
+    assert rows and all(r["embedder"] == "clap" for r in rows)
+
+
 def test_download_size_and_dataset_id_read_from_env(monkeypatch, tmp_path, clean_seen_embedders):
     out = tmp_path / "prof.jsonl"
     monkeypatch.setenv("VTSEARCH_PROFILE_LOAD", str(out))
