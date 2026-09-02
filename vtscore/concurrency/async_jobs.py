@@ -274,9 +274,7 @@ class JobManager:
     result instead of re-running.
     """
 
-    def __init__(
-        self, name: str, max_history: int = 8, *, user_visible: bool = True
-    ) -> None:
+    def __init__(self, name: str, max_history: int = 8, *, user_visible: bool = True) -> None:
         self._name = name
         #: Whether this manager's jobs are surfaced in ``/api/jobs/active``.
         #: Internal refreshes and warm-ups set this ``False``: they are not

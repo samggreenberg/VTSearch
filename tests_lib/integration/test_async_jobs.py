@@ -751,9 +751,7 @@ class TestSingletonRegistry:
 
         registered = set(map(id, async_jobs.JOB_MANAGERS.values()))
         missing = sorted(
-            name
-            for name, obj in vars(async_jobs).items()
-            if isinstance(obj, JobManager) and id(obj) not in registered
+            name for name, obj in vars(async_jobs).items() if isinstance(obj, JobManager) and id(obj) not in registered
         )
         assert not missing, (
             f"module-level JobManager singletons absent from JOB_MANAGERS: {missing}. "
@@ -801,9 +799,7 @@ class TestSingletonRegistry:
                 check_job_cancelled()
                 time.sleep(0.01)
 
-        job = labeling_status_jobs.start(
-            "sig", _target, dataset_id="ds1", detector_id="det1"
-        )
+        job = labeling_status_jobs.start("sig", _target, dataset_id="ds1", detector_id="det1")
         try:
             assert started.wait(timeout=5)
             assert list_active_pairs() == []
