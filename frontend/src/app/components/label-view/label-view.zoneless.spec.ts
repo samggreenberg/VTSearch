@@ -78,7 +78,7 @@ describe('LabelViewComponent (zoneless dataset-name canary)', () => {
       httpMock.match('/api/votes').forEach((req) =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
-      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 80 }));
+      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8 }));
       httpMock.match('/api/inclusion').forEach((req) => req.flush({ inclusion: 0 }));
       httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
       httpMock.match('/api/embedders').forEach((req) => req.flush([]));
@@ -167,9 +167,11 @@ describe('LabelViewComponent', () => {
     httpMock.match('/api/votes').forEach(req =>
       req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
     );
-    // /api/settings
+    // /api/settings. `volume` is a 0-1 fraction: the server clamps it to that
+    // range (`settings_models.py`), and the centre panel writes it straight
+    // onto `HTMLMediaElement.volume`, which throws on anything outside it.
     httpMock.match('/api/settings').forEach(req =>
-      req.flush({ volume: 80 }),
+      req.flush({ volume: 0.8 }),
     );
     // /api/dataset/status
     httpMock.match('/api/dataset/status').forEach(req =>
@@ -501,7 +503,7 @@ describe('LabelViewComponent', () => {
       req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
     );
     httpMock.match('/api/settings').forEach(req =>
-      req.flush({ volume: 80 }),
+      req.flush({ volume: 0.8 }),
     );
     httpMock.match('/api/dataset/status').forEach(req =>
       req.flush({ display_name: 'Test dataset' }),
@@ -552,7 +554,7 @@ describe('LabelViewComponent', () => {
       httpMock.match('/api/votes').forEach(req =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
-      httpMock.match('/api/settings').forEach(req => req.flush({ volume: 80 }));
+      httpMock.match('/api/settings').forEach(req => req.flush({ volume: 0.8 }));
       httpMock.match('/api/dataset/status').forEach(req =>
         req.flush({ display_name: 'DINOv3 dataset' }),
       );
