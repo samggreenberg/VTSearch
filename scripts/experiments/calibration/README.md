@@ -87,12 +87,23 @@ files here are how it was produced.
 | Dataset | Embedder | Style(s) | Calibration |
 |---|---|---|---|
 | `visual_genome_m` | `siglip`, `siglip_l` | `whole_image` | row-wise |
-| `visual_genome_m` | `dinov3_patch` | `max_patch`, `max_patch_pca_hac` | grouped (bag max-pool) |
+| `visual_genome_m` | `dinov3_patch` | `max_patch` | grouped (bag max-pool) |
 | `caltech101_m` | `siglip`, `siglip_l` | `whole_image` | row-wise |
 
-The `max_patch_pca_hac` arm additionally emits two **remedial re-pools** of its
-own per-node scores (`topk` k=4, `pnorm` extreme-value normalisation), each with
-its own recalibrated threshold, tagged in the `pool_variant` column.
+Two #2781 arms are **off by default** now that their questions are closed, and a
+study that wants either adds it back explicitly (and declares the divergence to
+`preflight.sh`):
+
+- `max_patch_pca_hac` (`CALIB_PATCH_STYLES`) — the raw-patch tree geometry. It
+  lost the Max-Patch study at the operating point (PR #2749) and #2886 removed
+  the tree it delegates to from ingest, so carrying it doubled the GPU cost of
+  every patch cell to measure a geometry production does not have.
+- `topk` / `pnorm` (`CALIB_REPOOL_VARIANTS`) — the **remedial re-pools** of that
+  arm's own per-node scores (`topk` k=4, `pnorm` extreme-value normalisation),
+  each with its own recalibrated threshold, tagged in the `pool_variant` column.
+  Both failed (`docs/plans/set-scorer-experiment.md`), and every analyzer filters
+  `pool_variant` back down to the base rows, so the arms produced rows nothing
+  reads.
 
 ## Stages
 
@@ -108,9 +119,11 @@ its own recalibrated threshold, tagged in the `pool_variant` column.
    deliverables, writes `results/summary.json`, `results/agg/*.csv`,
    `results/figures/*.png`, and a `results/REPORT.md` draft.
 
-Under `CALIB_SAFE_THRESHOLDS=1` each step also emits one row per **cut variant**
-(`gmm_variant`; `_SAFE_GMM_VARIANTS`) and a per-(step, geometry) **cut
-decomposition** frame (`CUT_DIAGNOSTIC_COLUMNS`) to `task_<idx>__cutdiag.csv`.
+On the fused threshold path (`CALIB_SAFE_THRESHOLDS`, **on by default** since
+#3400 because the app has had no switch since #2799) each step also emits one row
+per **cut variant** (`gmm_variant`; `_SAFE_GMM_VARIANTS`) and a per-(step,
+geometry) **cut decomposition** frame (`CUT_DIAGNOSTIC_COLUMNS`) to
+`task_<idx>__cutdiag.csv`.
 Two alternative analyzers read those: `analyze_safe.py` (the #2799 safe-on/off
 question) and `analyze_cut.py` (the #2836 question of *which* cut and *why*).
 
@@ -152,8 +165,14 @@ alongside them harmlessly), and writes all study output under
 ## Fixed config (pre-registered)
 
 `inclusion=0` (cost = FPR + FNR), `sim_fraction=0.5`, `calibrate_count=2`,
-`calibration_fraction=0.5`, `safe_thresholds=False`, MLP trainer, 150 votes,
-4 seeds. Env knobs mirror the `MAXPATCH_*` set under the `CALIB_*` prefix.
+`calibration_fraction=0.5`, MLP trainer, 150 votes, 4 seeds. Env knobs mirror
+the `MAXPATCH_*` set under the `CALIB_*` prefix.
+
+`safe_thresholds` was pre-registered `False` here and is **`True` now** (#3400):
+#2781 pre-registered the unfused control while it was still a shipped path, and
+#2799 removed the switch from the app. A default is only "what a user gets" for
+as long as the app agrees, so this one follows the app and a study wanting the
+control sets `CALIB_SAFE_THRESHOLDS=0` and declares the divergence.
 
 ## Safe-threshold GMM study (issue #2799)
 
@@ -162,7 +181,8 @@ cd /exp/$USER/projects/vts-calib/scripts/experiments/calibration
 bash launch_safe.sh      # safe_thresholds ON, VG only, 30 votes, 8 seeds
 ```
 
-`launch_safe.sh` re-drives the same pipeline with `CALIB_SAFE_THRESHOLDS=1`:
+`launch_safe.sh` re-drives the same pipeline on the fused path (pinned with
+`CALIB_SAFE_THRESHOLDS=1`, which is also the default since #3400):
 every step then emits one extra row per safe-threshold GMM variant
 (`gmm_variant` column — fit geometry x cut rule x fit space, plus an
 `xcal_only` control), and the analyze stage runs `analyze_safe.py` instead of
