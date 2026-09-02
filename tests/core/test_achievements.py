@@ -18,7 +18,7 @@ import pathlib
 import pytest
 
 import app as app_module  # noqa: F401  (triggers conftest media init)
-from vtsearch import achievements
+from vtsearch import achievements, achievements_catalog
 from vtsearch import settings as settings_mod
 
 
@@ -448,7 +448,7 @@ class TestReadmeReader:
 
     def _phrase_for(self, doc_id: str) -> str:
         """Lookup the canonical phrase for *doc_id* from the private list."""
-        for d in achievements._DOCS_RAW:
+        for d in achievements_catalog._DOCS_RAW:
             if d["id"] == doc_id:
                 return d["phrase"]
         raise KeyError(doc_id)
@@ -519,16 +519,18 @@ class TestReadmeReaderDocsDriftGuard:
 
     def test_each_doc_contains_its_phrase(self):
         repo_root = pathlib.Path(__file__).resolve().parents[2]
-        for doc in achievements._DOCS_RAW:
+        for doc in achievements_catalog._DOCS_RAW:
             text = (repo_root / doc["path"]).read_text(encoding="utf-8")
-            assert achievements._normalize_phrase(doc["phrase"]) in achievements._normalize_phrase(text), (
+            assert achievements_catalog._normalize_phrase(doc["phrase"]) in achievements_catalog._normalize_phrase(
+                text
+            ), (
                 f"Doc {doc['path']} is missing its Readme Reader phrase "
                 f"{doc['phrase']!r}; update either the doc footer or "
-                f"_DOCS_RAW in vtsearch/achievements.py."
+                f"_DOCS_RAW in vtsearch/achievements_catalog.py."
             )
 
     def test_no_two_docs_share_a_phrase(self):
-        phrases = [achievements._normalize_phrase(d["phrase"]) for d in achievements._DOCS_RAW]
+        phrases = [achievements_catalog._normalize_phrase(d["phrase"]) for d in achievements_catalog._DOCS_RAW]
         assert len(phrases) == len(set(phrases))
 
 
@@ -539,7 +541,7 @@ class TestReadmeReaderDocsDriftGuard:
 
 class TestReadmeReaderApi:
     def _phrase_for(self, doc_id: str) -> str:
-        for d in achievements._DOCS_RAW:
+        for d in achievements_catalog._DOCS_RAW:
             if d["id"] == doc_id:
                 return d["phrase"]
         raise KeyError(doc_id)
@@ -973,6 +975,27 @@ class TestDisableAchievements:
             assert a["tier_idx"] == -1
         assert state["pending_announcements"] == []
         assert all(d["read"] is False for d in state["docs"])
+
+    def test_disabled_payload_is_identical_to_a_fresh_enabled_one(self):
+        """The opted-out shell and a zero-progress real user agree exactly.
+
+        Both branches of ``get_full_state`` used to hand-build the response
+        dict, and the disabled one hardcoded ``next_threshold`` instead of
+        computing it. They happened to agree, but nothing held them there.
+        This pins the invariant: a user with no progress and a user who opted
+        out see byte-identical payloads.
+        """
+        fresh = achievements.get_full_state()
+        settings_mod.set_enable_achievements(False)
+        disabled = achievements.get_full_state()
+        assert disabled == fresh
+
+    def test_disabled_payload_reports_the_real_first_threshold(self):
+        settings_mod.set_enable_achievements(False)
+        state = achievements.get_full_state()
+        by_id = {a["id"]: a for a in state["achievements"]}
+        for a in achievements.ACHIEVEMENTS:
+            assert by_id[a["id"]]["next_threshold"] == a["tiers"][0]
 
     def test_get_full_state_zeroes_existing_counters_when_disabled(self):
         # Accrue real progress first.

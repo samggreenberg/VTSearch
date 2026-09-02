@@ -30,181 +30,51 @@ the toast is a fire-once affair independent of whether they ever open it.
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from vtsearch.achievements_catalog import (
+    ACHIEVEMENTS,
+    DOCS,
+    EXCLUDED_DATASET_IMPORTERS,
+    HOURS_OF_DAY,
+    MEDIA_TYPES,
+    STREAK_GAP_SECONDS,
+    TIER_NAMES,
+    _ACH_BY_ID,
+    _DOC_BY_ID,
+    _DOC_HASHES,
+    _hash_phrase,
+)
 from vtsearch.auth import get_current_user
-from vtsearch.settings import _ensure_user_loaded, _settings_lock, mutate_user
+from vtsearch.settings import mutate_user, snapshot_user
 
+
+#: The static catalog is re-exported so callers — routes, tests, the shim —
+#: keep reaching these names through ``vtsearch.achievements``; the split into
+#: :mod:`vtsearch.achievements_catalog` is internal.
+__all__ = [
+    "ACHIEVEMENTS",
+    "DOCS",
+    "EXCLUDED_DATASET_IMPORTERS",
+    "HOURS_OF_DAY",
+    "MEDIA_TYPES",
+    "STREAK_GAP_SECONDS",
+    "TIER_NAMES",
+    "acknowledge",
+    "get_full_state",
+    "mark_toasted",
+    "record_dataset_load",
+    "record_detector_import",
+    "record_doc_phrase",
+    "record_find",
+    "record_vote",
+    "wipe_state",
+]
 
 logger = logging.getLogger(__name__)
-
-#: Tier display names, indexed 0..3.
-TIER_NAMES: tuple[str, ...] = ("Bronze", "Silver", "Gold", "Platinum")
-
-#: Achievement category definitions.  Each tier list MUST be ascending and
-#: aligned with :data:`TIER_NAMES`.
-ACHIEVEMENTS: list[dict[str, Any]] = [
-    {
-        "id": "datasets_loaded",
-        "name": "Data: Set",
-        "description": "Load datasets you imported. Demos and synthetic don't count.",
-        "icon": "cubes",
-        "tiers": [1, 10, 100, 1000],
-    },
-    {
-        "id": "votes_cast",
-        "name": "Get Out the Vote",
-        "description": "Every Good or Bad you cast on a media item.",
-        "icon": "checkbox-checked",
-        "tiers": [100, 1000, 10000, 100000],
-    },
-    {
-        "id": "detectors_trained",
-        "name": "Teacher's Pet",
-        "description": "Each detector you trained, counted on its first vote.",
-        "icon": "graduation",
-        "tiers": [2, 20, 200, 2000],
-    },
-    {
-        "id": "detectors_imported",
-        "name": "Detector Collector",
-        "description": "Detectors built up from imported labels.",
-        "icon": "robot",
-        "tiers": [1, 10, 100, 1000],
-    },
-    {
-        "id": "find_media",
-        "name": "Finders Keepers",
-        "description": "Media items scored by Find (GUI and CLI combined).",
-        "icon": "search",
-        "tiers": [2000, 20000, 200000, 2000000],
-    },
-    {
-        "id": "days_active",
-        "name": "Your Days are Numbered",
-        "description": "Distinct calendar days on which you cast at least one vote.",
-        "icon": "calendar",
-        "tiers": [2, 20, 200, 2000],
-    },
-    {
-        "id": "media_types_touched",
-        "name": "Multi Media",
-        "description": "Distinct media types you've voted on (audio, image, text, video, document).",
-        "icon": "palette",
-        "tiers": [2, 3, 4, 5],
-    },
-    {
-        "id": "vote_streak",
-        "name": "Marathoner",
-        "description": "Longest run of consecutive votes with at most a 10-minute gap.",
-        "icon": "running",
-        "tiers": [200, 400, 600, 1000],
-    },
-    {
-        "id": "hours_voted",
-        "name": "Around the Clock",
-        "description": "Distinct hours of the day (0-23) in which you've cast at least one vote.",
-        "icon": "clock",
-        "tiers": [6, 12, 20, 24],
-    },
-    {
-        "id": "docs_read",
-        "name": "Readme Reader",
-        "description": (
-            "Find the code phrase at the bottom of each documentation page and "
-            "paste it in to claim credit. Four docs hide a phrase; Platinum is "
-            "all four."
-        ),
-        "icon": "file-text",
-        "tiers": [1, 2, 3, 4],
-    },
-]
-
-_ACH_BY_ID: dict[str, dict[str, Any]] = {a["id"]: a for a in ACHIEVEMENTS}
-
-#: Importer names whose successful dataset loads do NOT count toward
-#: ``datasets_loaded``.  These are the demo/synthetic data paths users
-#: don't have ownership over.
-EXCLUDED_DATASET_IMPORTERS: frozenset[str] = frozenset({"demo", "synthetic"})
-
-#: Maximum gap (in seconds) between two consecutive votes that still keeps the
-#: Marathoner streak alive.  Anything strictly greater than this resets the
-#: streak counter to 1 on the next vote.
-STREAK_GAP_SECONDS: float = 10 * 60
-
-#: Canonical media types tracked by the "Multi Media" achievement, in display
-#: order, paired with their human-readable labels.  The achievement's tiers
-#: (max 5) assume exactly these five types; :func:`get_full_state` reports a
-#: per-type ticked flag so the UI can show which ones the user has voted on.
-MEDIA_TYPES: list[dict[str, str]] = [
-    {"id": "audio", "name": "Audio"},
-    {"id": "image", "name": "Image"},
-    {"id": "text", "name": "Text"},
-    {"id": "video", "name": "Video"},
-    {"id": "document", "name": "Document"},
-]
-
-#: Hours of the day tracked by the "Around the Clock" achievement, bucketed
-#: in the voter's local wall-clock time (see :func:`_user_tz_offset_minutes`).
-HOURS_OF_DAY: tuple[int, ...] = tuple(range(24))
-
-#: Readme Reader docs.  Each entry pairs a doc with the code phrase printed at
-#: the bottom of it.  The phrase is matched server-side: the user pastes their
-#: guess and we compare it to ``_DOC_HASHES`` (SHA-256 of the normalised
-#: phrase).  Phrases are kept in source so the test suite can verify each doc's
-#: footer is in sync, but :func:`get_full_state` never returns them to the
-#: client; it returns only the per-doc read state.
-#:
-#: ``path`` is repo-relative so the docs route can stream the raw markdown.
-_DOCS_RAW: list[dict[str, str]] = [
-    {
-        "id": "readme",
-        "name": "README",
-        "path": "README.md",
-        "phrase": "all aboard the embedding express",
-    },
-    {
-        "id": "user_guide",
-        "name": "User Guide",
-        "path": "docs/user/USER_GUIDE.md",
-        "phrase": "label like nobody's watching",
-    },
-    {
-        "id": "cli",
-        "name": "CLI",
-        "path": "docs/CLI.md",
-        "phrase": "command palette unlocked",
-    },
-    {
-        "id": "api",
-        "name": "HTTP API",
-        "path": "docs/API.md",
-        "phrase": "json all the way down",
-    },
-]
-
-
-def _normalize_phrase(phrase: str) -> str:
-    """Lower-case + collapse internal whitespace + strip; the canonical form
-    used for hashing and matching.  Tolerant to copy-paste artefacts (extra
-    spaces, trailing newline, accidental capitalisation)."""
-    return " ".join(phrase.lower().split())
-
-
-def _hash_phrase(phrase: str) -> str:
-    return hashlib.sha256(_normalize_phrase(phrase).encode("utf-8")).hexdigest()
-
-
-#: ``doc_id → sha256(normalised phrase)``.  Precomputed at import time.
-_DOC_HASHES: dict[str, str] = {d["id"]: _hash_phrase(d["phrase"]) for d in _DOCS_RAW}
-
-#: Public, phrase-free copy of the doc list for serialisation.
-DOCS: list[dict[str, str]] = [{"id": d["id"], "name": d["name"], "path": d["path"]} for d in _DOCS_RAW]
-_DOC_BY_ID: dict[str, dict[str, str]] = {d["id"]: d for d in DOCS}
 
 
 def _ensure_state(settings: dict[str, Any]) -> dict[str, Any]:
@@ -571,90 +441,72 @@ def get_full_state() -> dict[str, Any]:
     "Around the Clock" expandable panels: each entry's ``seen`` flag says
     whether the user has cast a vote in that media type / hour-of-day bucket.
     """
+    # A user who opted out gets the same payload built from an empty state:
+    # ``_ensure_state`` fills a fresh dict with zeroed counters and -1
+    # watermarks, which :func:`_state_payload` renders as every category
+    # locked, nothing pending, and nothing seen. Building the shell through
+    # the same code path is what keeps the two branches from drifting.
     if _is_disabled():
-        zeroed: list[dict[str, Any]] = []
-        for a in ACHIEVEMENTS:
-            zeroed.append(
-                {
-                    "id": a["id"],
-                    "name": a["name"],
-                    "description": a["description"],
-                    "icon": a["icon"],
-                    "tiers": list(a["tiers"]),
-                    "counter": 0,
-                    "tier_idx": -1,
-                    "next_threshold": a["tiers"][0],
-                }
-            )
-        return {
-            "tier_names": list(TIER_NAMES),
-            "achievements": zeroed,
-            "pending_announcements": [],
-            "pending_toasts": [],
-            "docs": [{"id": d["id"], "name": d["name"], "path": d["path"], "read": False} for d in DOCS],
-            "media_types": [{"id": m["id"], "name": m["name"], "seen": False} for m in MEDIA_TYPES],
-            "hours": [{"hour": h, "seen": False} for h in HOURS_OF_DAY],
-        }
-    username = get_current_user()
-    _ensure_user_loaded(username)
-    with _settings_lock:
-        # Snapshot the cache once so the read-side view is consistent
-        # while we walk the achievement table. We don't mutate here, so
-        # there's no need to take the cross-process file lock.
-        from vtsearch.settings import _user_caches
+        return _state_payload(_ensure_state({}))
+    return _state_payload(_ensure_state(snapshot_user(get_current_user())))
 
-        s = dict(_user_caches.get(username, {}))
-        state = _ensure_state(s)
-        achievements: list[dict[str, Any]] = []
-        pending: list[dict[str, Any]] = []
-        toasts: list[dict[str, Any]] = []
-        for a in ACHIEVEMENTS:
-            cid = a["id"]
-            counter = int(state["counters"].get(cid, 0))
-            tier_idx = _current_tier_idx(cid, counter)
-            announced_idx = int(state["announced"].get(cid, -1))
-            toasted_idx = int(state["toasted"].get(cid, -1))
-            next_threshold: int | None = a["tiers"][tier_idx + 1] if tier_idx + 1 < len(a["tiers"]) else None
-            achievements.append(
-                {
-                    "id": cid,
-                    "name": a["name"],
-                    "description": a["description"],
-                    "icon": a["icon"],
-                    "tiers": list(a["tiers"]),
-                    "counter": counter,
-                    "tier_idx": tier_idx,
-                    "next_threshold": next_threshold,
-                }
-            )
 
-            def _milestone(i: int, _a: dict[str, Any] = a, _cid: str = cid) -> dict[str, Any]:
-                return {
-                    "id": _cid,
-                    "name": _a["name"],
-                    "icon": _a["icon"],
-                    "tier_idx": i,
-                    "tier_name": TIER_NAMES[i],
-                    "threshold": _a["tiers"][i],
-                }
+def _state_payload(state: dict[str, Any]) -> dict[str, Any]:
+    """Render an ``achievement_state`` dict into the frontend payload.
 
-            pending.extend(_milestone(i) for i in range(announced_idx + 1, tier_idx + 1))
-            toasts.extend(_milestone(i) for i in range(toasted_idx + 1, tier_idx + 1))
-        read_ids = set(state.get("docs_read_ids", []))
-        docs = [{"id": d["id"], "name": d["name"], "path": d["path"], "read": d["id"] in read_ids} for d in DOCS]
-        seen_types = set(state.get("media_types_seen", []))
-        media_types = [{"id": m["id"], "name": m["name"], "seen": m["id"] in seen_types} for m in MEDIA_TYPES]
-        seen_hours = set(state.get("hours_seen", []))
-        hours = [{"hour": h, "seen": h in seen_hours} for h in HOURS_OF_DAY]
-        return {
-            "tier_names": list(TIER_NAMES),
-            "achievements": achievements,
-            "pending_announcements": pending,
-            "pending_toasts": toasts,
-            "docs": docs,
-            "media_types": media_types,
-            "hours": hours,
-        }
+    Pure: takes the state, walks the static catalog, and returns the shape
+    documented on :func:`get_full_state`. Both the enabled and the opted-out
+    branches go through here, so there is exactly one definition of the
+    response shape.
+    """
+    achievements: list[dict[str, Any]] = []
+    pending: list[dict[str, Any]] = []
+    toasts: list[dict[str, Any]] = []
+    for a in ACHIEVEMENTS:
+        cid = a["id"]
+        counter = int(state["counters"].get(cid, 0))
+        tier_idx = _current_tier_idx(cid, counter)
+        announced_idx = int(state["announced"].get(cid, -1))
+        toasted_idx = int(state["toasted"].get(cid, -1))
+        next_threshold: int | None = a["tiers"][tier_idx + 1] if tier_idx + 1 < len(a["tiers"]) else None
+        achievements.append(
+            {
+                "id": cid,
+                "name": a["name"],
+                "description": a["description"],
+                "icon": a["icon"],
+                "tiers": list(a["tiers"]),
+                "counter": counter,
+                "tier_idx": tier_idx,
+                "next_threshold": next_threshold,
+            }
+        )
+
+        def _milestone(i: int, _a: dict[str, Any] = a, _cid: str = cid) -> dict[str, Any]:
+            return {
+                "id": _cid,
+                "name": _a["name"],
+                "icon": _a["icon"],
+                "tier_idx": i,
+                "tier_name": TIER_NAMES[i],
+                "threshold": _a["tiers"][i],
+            }
+
+        pending.extend(_milestone(i) for i in range(announced_idx + 1, tier_idx + 1))
+        toasts.extend(_milestone(i) for i in range(toasted_idx + 1, tier_idx + 1))
+
+    read_ids = set(state.get("docs_read_ids", []))
+    seen_types = set(state.get("media_types_seen", []))
+    seen_hours = set(state.get("hours_seen", []))
+    return {
+        "tier_names": list(TIER_NAMES),
+        "achievements": achievements,
+        "pending_announcements": pending,
+        "pending_toasts": toasts,
+        "docs": [{"id": d["id"], "name": d["name"], "path": d["path"], "read": d["id"] in read_ids} for d in DOCS],
+        "media_types": [{"id": m["id"], "name": m["name"], "seen": m["id"] in seen_types} for m in MEDIA_TYPES],
+        "hours": [{"hour": h, "seen": h in seen_hours} for h in HOURS_OF_DAY],
+    }
 
 
 def acknowledge(category_id: str, tier_idx: int) -> bool:
