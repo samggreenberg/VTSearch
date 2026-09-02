@@ -29,7 +29,7 @@ from vtscore.eval.cut_rules import (
     tail_alpha_rule,
     tail_cuts,
 )
-from vtscore.training.evt_mixture import GumbelNormalFit1D
+from vtscore.eval.evt_mixture import GumbelNormalFit1D
 from vtscore.training.thresholds import GmmFit1D, _weighted_gaussian_crossing
 
 
