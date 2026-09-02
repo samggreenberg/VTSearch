@@ -19,7 +19,7 @@ import torch
 import torch.nn as nn
 
 from tests_lib.helpers import wire_mock_progress_scope
-from vtscore.media.embedder import (
+from vtscore.media.load_progress import (
     _hub_metadata_preflight,
     hf_token,
     intercept_weight_loading_progress,
