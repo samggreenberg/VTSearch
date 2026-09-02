@@ -9,6 +9,7 @@ import { IconComponent } from '../icon/icon.component';
 import { CopyDetailButtonComponent } from '../copy-detail-button/copy-detail-button.component';
 import { BrowseBinMemberGridComponent } from '../browse-bin-member-grid/browse-bin-member-grid.component';
 import { iconSizeToGoalWidth } from '../../utils/grid-icon-size';
+import { coerceNonEmptyString, coercePx } from '../../utils/settings-coerce';
 import {
   COUNT_LABEL_HEIGHT,
   GRID_COLUMN_WIDTH,
@@ -20,7 +21,6 @@ import {
 import { shortcutsBlocked } from '../../utils/keyboard-shortcuts';
 import { formatMetadataValue as formatMetadataValueUtil } from '../../utils/format-metadata';
 import { BrowseAudioAudition, type NowPlaying } from '../../utils/browse-audio-audition';
-import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
 import type { MediaBatchResponse } from '../../generated/api-client/models/media-batch-response';
 
 /** Width (px) of the optional metadata column shown left of the preview pane. */
@@ -495,16 +495,14 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     effect(() => {
       const settings = this.settingsState.settingsSignal();
       // Track the two genuine triggers explicitly, then run the body untracked.
-      // The body now both reads and writes the view-pref signals (and `placed`),
-      // so a tracked body would re-arm itself on its own writes and spin; naming
-      // the triggers keeps the media-type re-place that the old implicit
-      // `mediaType()` read through `previewOverride` used to give us.
+      // The body both reads and writes view state (`_gridGoalWidth`,
+      // `metadataWidthPx`, `placed`), so a tracked body would re-arm itself on
+      // its own writes and spin. Settings and media type are between them every
+      // input the per-media preferences below resolve from, so naming the two
+      // still covers every case where a preference can change.
       this.mediaType();
       untracked(() => {
         if (!settings) return;
-        this.gridSizeDict.set((settings.grid_icon_size_popup as Record<string, string>) ?? {});
-        this.previewSizeDict.set((settings.popup_preview_size as Record<string, number>) ?? {});
-        this.metadataShownDict.set((settings.popup_metadata_shown as Record<string, boolean>) ?? {});
         // Mirror the docked metadata-column width (global). Skip mid-drag so a
         // settings round-trip can't reset the column while the user is dragging it.
         if (!this.draggingMeta && typeof settings.browse_details_metadata_width === 'number') {
@@ -520,14 +518,16 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
         // Re-place when the settings-driven size actually changed, OR when the popup
         // has mounted but not yet revealed (`placed` still false). The `!this.placed`
         // clause fixes the "first right-click shows nothing, second opens it" bug:
-        // {@link ngAfterViewInit} calls `settingsState.load()`, which bumps the
-        // settings resource's request and so momentarily resets `settingsSignal()` to
-        // null while it refetches. If `nudgeOnScreen`'s reveal gate (`settingsReady`)
-        // runs during that null window it holds `placed` false, and nothing else
-        // re-runs `place()` when settings land (the size didn't change) — so the popup
-        // strands hidden until the next summon. Re-placing on settings-arrival reveals
-        // it then, keeping the "wait for the real sizes" behaviour (no default-size
-        // flash) while dropping the spurious second click.
+        // {@link ngAfterViewInit} calls `settingsState.load()`, and until the very
+        // first response lands `settingsSignal()` is null. If `nudgeOnScreen`'s
+        // reveal gate (`settingsReady`) runs in that window it holds `placed`
+        // false, and nothing else re-runs `place()` when settings land (the size
+        // didn't change) — so the popup strands hidden until the next summon.
+        // Re-placing on settings-arrival reveals it then, keeping the "wait for the
+        // real sizes" behaviour (no default-size flash) while dropping the spurious
+        // second click. (A *re*fetch no longer opens that window at all —
+        // `SettingsStateService.load` reloads in place — but the first load still
+        // does.)
         if (override !== this.lastPreviewOverride || metaShown !== this.lastMetadataShown || !this.placed) {
           this.lastPreviewOverride = override;
           this.lastMetadataShown = metaShown;
@@ -550,17 +550,36 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     this.audition.destroy();
   }
 
-  private readonly gridSizeDict = signal<Record<string, string>>({});
+  /**
+   * The three per-media-type popup preferences, keyed on {@link mediaType}
+   * through `SettingsStateService.perMediaType` (issue #3447): the member
+   * grid's thumbnail size, the detail-canvas size, and whether the metadata
+   * column is shown. `computed`s over the settings signal — the shadow dicts
+   * they replace were mirrored in by the settings effect, which meant every
+   * read below was one effect run behind the value it reported.
+   */
+  private readonly gridSizePref = this.settingsState.perMediaType<string>(
+    'grid_icon_size_popup',
+    this.mediaType,
+    { fallback: 'M', coerce: coerceNonEmptyString },
+  );
   /** Per-media-type detail-canvas size (px) the user has chosen via the popup's
    *  top-left buttons; absent entries fall back to the radius-derived default. */
-  private readonly previewSizeDict = signal<Record<string, number>>({});
+  private readonly previewSizePref = this.settingsState.perMediaType<number | null>(
+    'popup_preview_size',
+    this.mediaType,
+    { fallback: null, coerce: coercePx },
+  );
+  /** Whether the metadata column is shown for this media type. Absent entries
+   *  default to hidden, mirroring the Train/Find center panel's metadata tray. */
+  private readonly metadataShownPref = this.settingsState.perMediaType<boolean>(
+    'popup_metadata_shown',
+    this.mediaType,
+    { fallback: false, coerce: (raw) => (typeof raw === 'boolean' ? raw : undefined) },
+  );
   /** Last applied preview override, so the settings effect only re-clamps the
    *  popup when the detail-canvas size actually changed. */
   private lastPreviewOverride: number | null = null;
-  /** Per-media-type memory of whether the metadata column is shown, mirrored
-   *  from the ``popup_metadata_shown`` setting. Absent entries default to hidden
-   *  (mirroring the Train/Find center panel's metadata default). */
-  private readonly metadataShownDict = signal<Record<string, boolean>>({});
   /** Last applied column visibility, so the settings effect only re-clamps the
    *  popup when it actually toggled. */
   private lastMetadataShown: boolean | null = null;
@@ -604,9 +623,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
    *  tray, which is collapsed by default so users judge the item itself
    *  rather than its notes. */
   get metadataShown(): boolean {
-    const mediaType = this.mediaType();
-    const value = mediaType ? this.metadataShownDict()[mediaType] : undefined;
-    return value === true;
+    return this.metadataShownPref.value();
   }
 
   /** Whether the metadata column actually renders: the metadata feature is
@@ -625,10 +642,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
    *  future popups of this type — mirroring how the size buttons persist. The
    *  settings effect re-clamps the popup, since the width changed. */
   toggleMetadata(): void {
-    const mediaType = this.mediaType();
-    if (!mediaType) return;
-    const dict = { ...this.metadataShownDict(), [mediaType]: !this.metadataShown };
-    this.settingsState.update({ popup_metadata_shown: dict } as SettingsUpdate).subscribe();
+    this.metadataShownPref.set(!this.metadataShown)?.subscribe();
   }
 
   /** Cached metadata for the focused (displayed) item, or ``undefined`` before
@@ -677,9 +691,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   private applyViewPrefs(): void {
     const prevGoal = this.gridGoalWidth;
     const mediaType = this.mediaType();
-    this._gridGoalWidth.set(iconSizeToGoalWidth(
-      (mediaType && this.gridSizeDict()[mediaType]) || 'M',
-    ));
+    this._gridGoalWidth.set(iconSizeToGoalWidth(this.gridSizePref.value()));
     if (this.gridGoalWidth !== prevGoal) {
       this.rebuildRows();
       // The row stride changed, so the old scroll offset now points at a
@@ -778,9 +790,7 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
   /** The user's chosen detail-canvas size (px) for the active media type, or
    *  ``null`` when they haven't set one (and the radius-derived default is used). */
   get previewOverride(): number | null {
-    const mediaType = this.mediaType();
-    const value = mediaType ? this.previewSizeDict()[mediaType] : undefined;
-    return typeof value === 'number' ? value : null;
+    return this.previewSizePref.value();
   }
 
   /** Detail-canvas side (px) the popup opens at before any user override:
@@ -810,16 +820,14 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
    *  type — mirroring how the grid thumbnail-size buttons persist. The settings
    *  effect re-clamps the popup so growing the canvas can't push it off-screen. */
   bumpPreview(delta: 1 | -1): void {
-    const mediaType = this.mediaType();
-    if (!this.hasPane || !mediaType) return;
+    if (!this.hasPane) return;
     const current = this.previewOverride ?? Math.round(this.previewDefault());
     const next =
       delta > 0
         ? (PREVIEW_SIZE_STEPS.find((s) => s > current) ?? PREVIEW_SIZE_STEPS[PREVIEW_SIZE_STEPS.length - 1])
         : ([...PREVIEW_SIZE_STEPS].reverse().find((s) => s < current) ?? PREVIEW_SIZE_STEPS[0]);
     if (next === this.previewOverride) return;
-    const dict = { ...this.previewSizeDict(), [mediaType]: next };
-    this.settingsState.update({ popup_preview_size: dict } as SettingsUpdate).subscribe();
+    this.previewSizePref.set(next)?.subscribe();
   }
 
   /** True when the detail canvas is already at the smallest ladder rung. */

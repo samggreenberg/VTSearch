@@ -1,4 +1,4 @@
-import { Injectable, Signal, computed, effect, inject, signal } from '@angular/core';
+import { Injectable, Signal, computed, effect, inject, isSignal, signal } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
@@ -43,6 +43,9 @@ export interface PerMediaTypePref<T> {
    */
   set(next: T): Observable<AppSettings> | null;
 }
+
+/** A writable `AppSettings` key. */
+export type SettingsKey = keyof AppSettings & string;
 
 /** Options for {@link SettingsStateService.perMediaType}. */
 export interface PerMediaTypeOptions<T> {
@@ -156,19 +159,24 @@ export class SettingsStateService {
    *   went absent server-side left the last-seen copy in place forever. Reading
    *   through a `computed` has no such state.
    *
-   * @param key       the `AppSettings` key holding the dict.
+   * @param key       the `AppSettings` key holding the dict, or a signal of one
+   *                  where the key itself varies (`view-controls` picks
+   *                  `focus_mode_left` / `_right` / `_popup` from its `side`
+   *                  input).
    * @param mediaType signal carrying the active media type (`''` when unknown).
    * @param options   `fallback`, plus an optional `coerce` that rejects an
    *                  out-of-range or unrecognized stored value by returning
    *                  `undefined`.
    */
   perMediaType<T>(
-    key: keyof AppSettings & string,
+    key: SettingsKey | Signal<SettingsKey>,
     mediaType: Signal<string>,
     options: PerMediaTypeOptions<T>,
   ): PerMediaTypePref<T> {
+    const keySignal: Signal<SettingsKey> = isSignal(key) ? key : computed(() => key);
+
     const dict = computed<Record<string, T>>(() => {
-      const raw = this.settingsSignal()?.[key];
+      const raw = this.settingsSignal()?.[keySignal()];
       return raw && typeof raw === 'object' && !Array.isArray(raw)
         ? (raw as Record<string, T>)
         : {};
@@ -193,7 +201,7 @@ export class SettingsStateService {
         // Merge, never replace: dropping the other media types' entries here is
         // the one way this helper could silently destroy user data.
         const merged = { ...dict(), [mt]: next };
-        return this.update({ [key]: merged } as unknown as SettingsUpdate);
+        return this.update({ [keySignal()]: merged } as unknown as SettingsUpdate);
       },
     };
   }
