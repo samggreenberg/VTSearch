@@ -236,26 +236,6 @@ ship on its own.
 
 <!-- item-sep -->
 
-### Frontend — browse surface
-
-<!-- item-sep -->
-
-- **Idle thumbnail preloader fetches full-resolution originals once the full-res tier engages, unbounded in bytes** — `frontend/src/app/components/browse-canvas/browse-canvas.component.ts:1950` (medium impact)
-
-  `useFullResThumbs` (line 668) flips `startThumbLoad` to the uncapped `/image` endpoint (line 1950), justified by the comment "Only a handful of such giant cells fit on screen at once, so the LRU still bounds memory". But the idle preloader (`runThumbPrefetch` → `warmThumbsForTiles` → `startThumbLoad(cell.rep_id, true)`, line 2165) shares the same tier and the same 2048-entry `MAX_THUMBS` cap: at a large thumbnail size (4XL/5XL crosses the 384px threshold at dpr 1), every idle pass warms up to 64 OFF-SCREEN cells — the pan ring plus the finer level's cells — with full-resolution originals, up to 2048 of them. For a photo dataset that is potentially gigabytes of image data fetched and retained for cells the user may never see; the cache bound is a count, not bytes, so the stated memory reasoning doesn't hold for the preload path. The benefit of fixing this is bounded memory/network at high zoom, where the app is otherwise most responsive.
-
-  *Direction:* Have preload (`preload === true`) always fetch the capped `/thumbnail` regardless of tier (a later on-screen paint upgrades it), or shrink the LRU cap sharply while `thumbsAreFullRes` is active.
-
-<!-- item-sep -->
-
-- **A transient thumbnail load failure permanently blanks that cell until the projection changes** — `frontend/src/app/components/browse-canvas/browse-canvas.component.ts:1939` (low impact)
-
-  `img.onerror` (line 1939-1942) adds the rep id to `thumbFailed`, and every subsequent `getThumb`/preload skips it forever — `thumbFailed` is only cleared on a projection switch or a resolution-tier crossing. A single transient failure (server restart, brief network blip, one 502 during a burst of 64 preload fetches) therefore leaves that bin rendered as flat density shading among thumbnails for the rest of the session, with no retry path and no user-visible way to recover short of leaving the view. The `onerror` also fires no redraw, relying on the 12s first-view backstop timer for the opening view.
-
-  *Direction:* Treat failures as retryable: store a failure timestamp and retry after a backoff (or cap retries per id), and/or clear `thumbFailed` on `zoomToFit`/manual refresh actions.
-
-<!-- item-sep -->
-
 ### Frontend — dashboard & modals
 
 <!-- item-sep -->
