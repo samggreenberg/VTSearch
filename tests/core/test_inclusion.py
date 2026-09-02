@@ -85,15 +85,13 @@ class TestInclusionClampHasOneOwner:
             post = client.post("/api/inclusion", json={"inclusion": value})
             assert post.status_code == 200, f"POST /api/inclusion rejected {value!r}"
             assert post.get_json()["inclusion"] == expected, (
-                f"POST /api/inclusion clamped {value!r} to "
-                f"{post.get_json()['inclusion']!r}, not {expected!r}"
+                f"POST /api/inclusion clamped {value!r} to {post.get_json()['inclusion']!r}, not {expected!r}"
             )
 
             put = client.put("/api/settings", json={"inclusion": value})
             assert put.status_code == 200, f"PUT /api/settings rejected {value!r}"
             assert put.get_json()["inclusion"] == expected, (
-                f"PUT /api/settings clamped {value!r} to "
-                f"{put.get_json()['inclusion']!r}, not {expected!r}"
+                f"PUT /api/settings clamped {value!r} to {put.get_json()['inclusion']!r}, not {expected!r}"
             )
 
     def test_inclusion_is_dispatched_like_its_training_siblings(self):
