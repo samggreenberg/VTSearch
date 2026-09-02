@@ -227,6 +227,14 @@ def make_plugin_route_schema(
     ``schema.load()`` round trip.  The class name is namespaced by
     *route_id* so two routes that target the same plugin don't collide
     as OpenAPI components.
+
+    Public library surface with **no in-tree caller**: VTSearch's own
+    plugin-field routes stay parameterized (one dynamic rule per family,
+    validated once via ``validate_plugin_args``) and describe their body
+    shape through the ``fields`` array on each family's list endpoint
+    rather than through a static per-plugin OpenAPI component.  This is
+    kept for out-of-tree app tiers that do mint a route per plugin; the
+    zero-caller state is by design, not rot.
     """
     attrs: dict = {}
     for pf in plugin.fields:
