@@ -63,3 +63,12 @@ scratch/
 # belongs in history.
 slides/_build/
 slides/_out/
+
+# GRID editable-install shadow shim, created by `source gridenv.sh` (#2846).
+# A no-op `__editable___vtsearch_0_1_0_finder.py` that neutralises the venv's
+# editable-install finder, which would otherwise resolve `import vtscore` to the
+# MAIN checkout while PYTHONPATH looks correct. It is per-worktree venv glue,
+# named after one editable install's version -- generated, never committed. It
+# must stay untracked so gridenv.sh's creation block is the live mechanism:
+# tracking it made that block dead code (#3437).
+.shadow/
