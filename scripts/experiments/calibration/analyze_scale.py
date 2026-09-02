@@ -24,12 +24,13 @@ Usage::
 from __future__ import annotations
 
 import argparse
-import glob
 import json
 import math
 import os
 from collections import defaultdict
 from pathlib import Path
+
+from _cells_io import main_frame_files
 
 BANDS = ("small", "medium", "large")
 
@@ -44,7 +45,7 @@ def freshness_report(cells_dir: Path, expected: int) -> tuple[int, list[str]]:
     """
     import time
 
-    files = [f for f in sorted(cells_dir.glob("task_*.csv")) if "__" not in f.name]
+    files = main_frame_files(cells_dir)
     if not files:
         return 0, []
     newest = max(f.stat().st_mtime for f in files)
@@ -67,12 +68,13 @@ def load_rows(cells_dir: Path) -> list[dict]:
 
     rows = []
     dropped = 0
-    files = sorted(glob.glob(str(cells_dir / "task_*.csv")))
+    files = main_frame_files(cells_dir)
     for f in files:
-        if "__" in Path(f).name:  # sweep/cutdiag sidecars, not the main rows
+        if f.stat().st_size == 0:
+            dropped += 1
             continue
         try:
-            with open(f, newline="") as fh:
+            with f.open(newline="") as fh:
                 rows.extend(list(csv.DictReader(fh)))
         except Exception:
             dropped += 1

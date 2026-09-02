@@ -48,7 +48,8 @@ common.setup_env()
 
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
-from _cells_io import assert_one_opening, main_frame_files  # noqa: E402
+from _cells_io import describe_load  # noqa: E402
+from _cells_io import load_cells as _load_cells  # noqa: E402
 
 import experiment_config as cfg  # noqa: E402
 
@@ -87,19 +88,9 @@ def _md(df: pd.DataFrame, floatfmt: str = ".4f") -> str:
 
 
 def load_cells(cells_dir: Path) -> pd.DataFrame:
-    files = main_frame_files(cells_dir)
-    frames = []
-    for p in files:
-        if p.stat().st_size == 0:
-            continue
-        try:
-            frames.append(pd.read_csv(p))
-        except Exception as e:  # noqa: BLE001 - one truncated cell must not lose the run
-            common.log(f"  skipping unreadable {p.name}: {e}")
-    if not frames:
-        return pd.DataFrame()
-    df = pd.concat(frames, ignore_index=True)
-    assert_one_opening(df, "analyze_rate.py")
+    df, prov = _load_cells(cells_dir, where="analyze_rate.py")
+    if df.empty:
+        return df
     df["gmm_variant"] = df["gmm_variant"].fillna("")
     df["schedule"] = df["schedule"].fillna("")
     # A schedule row is the shipped blend under an alternative mix-in curve; it
@@ -108,7 +99,7 @@ def load_cells(cells_dir: Path) -> pd.DataFrame:
     df.loc[sched, "gmm_variant"] = "sched:" + df.loc[sched, "schedule"]
     df["env"] = df["dataset"] + "/" + df["embedder"] + "/" + df["style"]
     df["n_votes"] = df["n_good"] + df["n_bad"]
-    common.log(f"loaded {len(df):,} rows from {len(frames)} cells ({len(files) - len(frames)} unreadable/empty)")
+    common.log(f"loaded {describe_load(prov)}")
     return df
 
 

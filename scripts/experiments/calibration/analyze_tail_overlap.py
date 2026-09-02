@@ -38,11 +38,11 @@ from __future__ import annotations
 
 import argparse
 import csv
-import glob
 import os
 from collections import defaultdict
 from pathlib import Path
 
+from _cells_paths import main_frame_files
 from figures_overview import band_of, class_of
 
 #: For each metric, whether a LARGE value is the bad end.
@@ -52,9 +52,7 @@ BAD_IS_HIGH = {"cost": True, "regret": True, "average_precision": False, "auroc"
 def final_values(exp: str, metric: str, step: int) -> dict[str, dict[tuple[str, str], float]]:
     """``mode -> {(category, seed): value at the deepest row <= step}``."""
     best: dict[str, dict[tuple[str, str], tuple[int, float]]] = defaultdict(dict)
-    for path in sorted(glob.glob(str(Path(exp) / "results" / "cells" / "task_*.csv"))):
-        if "__" in Path(path).name:
-            continue
+    for path in main_frame_files(Path(exp) / "results" / "cells"):
         try:
             with open(path, newline="") as fh:
                 for r in csv.DictReader(fh):

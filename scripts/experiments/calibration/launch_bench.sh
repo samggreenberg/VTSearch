@@ -181,9 +181,11 @@ status)
   echo "=== queue ==="
   squeue -u "$USER" -o "%.10i %.16j %.9T %.11M %.6D %R"
   echo "=== cells written ==="
-  ls "$CALIB_RESULTS/cells" 2>/dev/null | grep -c 'task_.*\.csv$' || echo 0
+  # `! -name '*__*'`: run_cells.py writes five side frames beside each cell's
+  # main frame, so an unfiltered count reports six times the cells that exist.
+  find "$CALIB_RESULTS/cells" -maxdepth 1 -name 'task_*.csv' ! -name '*__*' 2>/dev/null | wc -l
   echo "=== zero-byte cells (resume would SKIP these) ==="
-  find "$CALIB_RESULTS/cells" -name 'task_*.csv' -size 0 2>/dev/null | wc -l
+  find "$CALIB_RESULTS/cells" -maxdepth 1 -name 'task_*.csv' ! -name '*__*' -size 0 2>/dev/null | wc -l
   ;;
 
 *)

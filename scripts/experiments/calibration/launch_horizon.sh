@@ -164,11 +164,14 @@ status)
     # find, not `ls "$d"/task_*.csv`: past ~25k cells the expanded glob exceeds
     # ARG_MAX, ls dies with "Argument list too long", and `grep -vc` turns that
     # into a count of 0 - a finished grid reporting as "0 cell files".
-    files=$(find "$d" -maxdepth 1 -name 'task_*.csv' \
-              ! -name '*sweep*' ! -name '*cutdiag*' ! -name '*cutincl*' 2>/dev/null | wc -l)
+    # `! -name '*__*'`, not a list of the side frames by name: the by-name form
+    # this used to have listed three of the five run_cells.py writes, so every
+    # count here was inflated by the __picks and __fitq frames.  The `__` is the
+    # convention (`_cells_paths.main_frame_files` filters on the same thing).
+    files=$(find "$d" -maxdepth 1 -name 'task_*.csv' ! -name '*__*' 2>/dev/null | wc -l)
     rows=0
     for f in "$d"/task_*.csv; do
-      case "$f" in *sweep*|*cutdiag*|*cutincl*) continue;; esac
+      case "$f" in *__*) continue;; esac
       [ -f "$f" ] || continue
       [ "$(wc -l < "$f")" -gt 1 ] && rows=$((rows+1))
     done

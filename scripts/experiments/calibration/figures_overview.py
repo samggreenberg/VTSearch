@@ -26,10 +26,11 @@ from __future__ import annotations
 
 import argparse
 import csv
-import glob
 import os
 from collections import defaultdict
 from pathlib import Path
+
+from _cells_paths import main_frame_files
 
 BANDS = ("small", "medium", "large")
 BAND_COLORS = {"small": "#c2410c", "medium": "#0f766e", "large": "#3730a3"}
@@ -121,9 +122,7 @@ def mean_se(xs):
 def load(exp: str):
     cells = Path(exp) / "results" / "cells"
     rows = []
-    for path in sorted(glob.glob(str(cells / "task_*.csv"))):
-        if "__" in Path(path).name:
-            continue
+    for path in main_frame_files(cells):
         try:
             with open(path, newline="") as fh:
                 rows.extend(list(csv.DictReader(fh)))
