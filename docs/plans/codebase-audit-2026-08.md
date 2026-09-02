@@ -160,14 +160,6 @@ ship on its own.
 
 <!-- item-sep -->
 
-- **Staging imports bypass the download/embed concurrency gates** — `vtscore/datasets/load_pipeline.py:837` (medium impact)
-
-  `_stage_importer_in_background` runs `importer.run(...)` and `embed_missing(...)` directly on its daemon thread without acquiring `_download_gate` or `_embed_gate`, unlike `_run_origin_load_in_background` which carefully sequences both. The combine flow can stage several datasets at once, so N stagings download and embed fully in parallel with each other *and* with gated regular loads — defeating the user-configurable `max_concurrent_dataset_downloads` / `max_concurrent_dataset_embeddings` limits whose whole purpose is bounding bandwidth/RAM/GPU pressure (and, per the embedder-singleton finding, making the `_on_progress` race reachable even when the embed gate is 1). Concrete benefit: staging a handful of image datasets on a RAM-constrained host would no longer multiply resident model weights and working sets past the configured budget.
-
-  *Direction:* Reuse `_LoadGateController` in `stage_task`: acquire the download gate before `importer.run`, swap to the embed gate before `embed_missing`, release in the finally block.
-
-<!-- item-sep -->
-
 - **sync_from_labelset_source applies labels with an O(labels × medias) scan** — `vtscore/labels/sync.py:343` (low impact)
 
   For every imported label entry, the apply loop does a linear scan `for mid, media in ds_medias.items(): if media.get("md5") == md5` — O(L × N) while holding `_sync_lock` (which blocks every concurrent debounced push). With a 100k-item dataset and a few thousand imported labels this is hundreds of millions of dict lookups on the sync path that runs at detector load. Concrete benefit: building a one-pass `{md5: mid}` index before the loop makes the apply O(L + N) and shrinks the window during which `_sync_lock` starves `_push_to_labelset_source`.
