@@ -18,16 +18,12 @@ from vtscore.config import DATA_DIR, EMBEDDINGS_DIR
 from vtscore.datasets import DEMO_DATASETS
 from vtscore.datasets.demo_counts import exact_demo_count
 from vtscore.datasets.loader import read_pkl_clipper, read_pkl_embedder
-from vtscore.datasets.stages._common import _origin_to_str
 from vtsearch.routes._shared import format_mtime
 from vtsearch.schemas.datasets import (
     BrowseMediaFilesQuerySchema,
     BrowseMediaFilesResponseSchema,
     BrowseMediaFilesSelectRequestSchema,
     BrowseMediaFilesSelectResponseSchema,
-    DashboardDatasetInfoResponseSchema,
-    DashboardDatasetRenameRequestSchema,
-    DashboardDatasetRenameResponseSchema,
     DashboardDiskUsageResponseSchema,
     DashboardRamUsageResponseSchema,
     DemoCategoriesResponseSchema,
@@ -35,12 +31,6 @@ from vtsearch.schemas.datasets import (
     DemoDatasetListResponseSchema,
     DetectMediaTypeQuerySchema,
     DetectMediaTypeResponseSchema,
-)
-from vtsearch.state import (
-    get_dataset_display_name,
-    get_dupe_count,
-    set_dataset_display_name,
-    snapshot_medias,
 )
 
 datasets_ui_bp = Blueprint(
@@ -477,71 +467,6 @@ def select_browsed_file(body: dict):
 # ---------------------------------------------------------------------------
 # Dashboard
 # ---------------------------------------------------------------------------
-
-
-@datasets_ui_bp.route("/api/dashboard/dataset-info")
-@datasets_ui_bp.response(200, DashboardDatasetInfoResponseSchema)
-@datasets_ui_bp.alt_response(404, description="No dataset is currently loaded.")
-def dashboard_dataset_info():
-    """Return metadata about the currently loaded dataset for the dashboard.
-
-    Returns a JSON object with ``name``, ``num_medias``, ``media_type``, and
-    ``origin`` extracted from the first media that has origin info.
-    """
-    snap = snapshot_medias()
-    if not snap:
-        abort(404, message="No dataset loaded")
-
-    first = next(iter(snap.values()))
-    media_type = first.get("media_type", "audio")
-    num_medias = len(snap)
-
-    # Determine origin from the first media that has one
-    origin = None
-    for m in snap.values():
-        o = m.get("origin")
-        if o:
-            origin = _origin_to_str(o)
-            break
-
-    # Use display name override if set, otherwise derive from origin
-    display_name = get_dataset_display_name()
-    if display_name:
-        name = display_name
-    else:
-        name = origin or "Untitled"
-        if origin and ":" in origin:
-            name = origin.split(":", 1)[1] or origin
-
-    # Build a source dict that can be used to reload the dataset later
-    source = None
-    for m in snap.values():
-        o = m.get("origin")
-        if isinstance(o, dict):
-            source = o
-            break
-
-    return {
-        "name": name,
-        "num_medias": num_medias,
-        "num_dupes": get_dupe_count(),
-        "media_type": media_type,
-        "origin": origin or "unknown",
-        "source": source,
-    }
-
-
-@datasets_ui_bp.route("/api/dashboard/dataset-rename", methods=["PUT"])
-@datasets_ui_bp.arguments(DashboardDatasetRenameRequestSchema)
-@datasets_ui_bp.response(200, DashboardDatasetRenameResponseSchema)
-def dashboard_dataset_rename(body: dict):
-    """Set a custom display name for the currently loaded dataset."""
-    new_name = body["name"].strip()
-    if not new_name:
-        abort(400, message="name is required")
-
-    set_dataset_display_name(new_name)
-    return {"success": True, "name": new_name}
 
 
 @datasets_ui_bp.route("/api/dashboard/disk-usage")

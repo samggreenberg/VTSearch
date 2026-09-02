@@ -336,16 +336,6 @@ POST /api/dataset/load-file
 
 → `{"ok": true, "message": "Loading started"}`
 
-**From folder:**
-
-```
-POST /api/dataset/load-folder
-```
-
-**Body:** `{"path": "/data/sounds", "media_type": "audio"}`
-
-→ `{"ok": true, "message": "Loading started"}`
-
 **From demo:**
 
 ```

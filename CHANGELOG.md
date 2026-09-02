@@ -58,6 +58,20 @@ not list every commit. Use `git log` for the full history.
   lands in -- an (S) load costs two folders, not sixty-seven. Re-loading, or
   moving from (S) to (M), pays only for the shards it adds.
 
+### Removed
+
+- **Four REST endpoints with no consumer are gone.** `GET /api/dashboard/dataset-info`,
+  `PUT /api/dashboard/dataset-rename`, `POST /api/dataset/load-folder` and
+  `POST /api/votes/seed-from-examples` had no caller anywhere in the app -- the
+  SPA reads dataset metadata and renames through `/api/datasets/registry`,
+  loads folders through the generic importer flow, and seeds examples as part
+  of loading a detector. Nothing in the UI changes. An out-of-repo script
+  calling one of them directly will now get a 404; the same work is available
+  through `GET /api/datasets/registry`,
+  `PUT /api/datasets/registry/{id}/rename`,
+  `POST /api/dataset/import/server_folder`, and detector load respectively.
+  (Issue #3438.)
+
 ### Changed
 
 - **Your Dashboard selection now survives leaving the Dashboard.** Going to

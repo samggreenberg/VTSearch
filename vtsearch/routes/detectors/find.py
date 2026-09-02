@@ -766,6 +766,11 @@ def find_queue_ids_route(query: dict):
     windowed client that no longer holds the full order can still act on every
     matching item (``docs/plans/scalability.md`` S3/S17/S19).
 
+    **No frontend caller yet, deliberately.** It is built and tested ahead of
+    the ``find-view`` windowing slice that switches ``unverifiedGoodIds`` /
+    ``goodIds`` onto it; the two must land atomically, so this half shipped
+    first. Not dead code — see the plan above before proposing its removal.
+
     Empty outside Find mode or before a scoring pass has run.
     """
     from vtsearch.state import find_queue_ids  # noqa: PLC0415
@@ -787,6 +792,11 @@ def find_boundary_next_route(query: dict):
     cutoff + verified set so it stays correct once the client holds only a
     window of the ranking.  Returns ``{"id": null, "side": null}`` when both
     sides are exhausted (the done state).
+
+    **No frontend caller yet, deliberately** — the same story as
+    ``/api/find/queue-ids`` above: it awaits the ``find-view`` windowing slice
+    that moves ``advanceToBoundary`` onto it (``docs/plans/scalability.md``
+    S3/S17/S19). Not dead code.
     """
     from vtsearch.state import find_boundary_next  # noqa: PLC0415
 
