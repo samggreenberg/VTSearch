@@ -2159,6 +2159,15 @@ def simulate_voting_iterations(  # noqa: C901
             "n_haystack": len(sim_ids),
             "n_remainder": 0,
             "phase": "",
+            # A skyline belongs to no step, so no phase ran and no indicator
+            # was ever read for it (#3560).  Blank / -1 is the "not measured"
+            # spelling every other unphased row uses; a `red` here would say
+            # the rules had looked and refused, which they never did.
+            "smart": "",
+            "stable": "",
+            "span": "",
+            "span_level": -1,
+            "span_depth": -1,
             "app_trained": 0,
             "startup_schedule": startup_schedule or "",
             "acq_threshold": float("nan"),
