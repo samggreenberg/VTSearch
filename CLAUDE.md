@@ -596,7 +596,7 @@ A `for i in range(100): sleep(0.05)` loop finishes in 5 seconds — but on a loa
 def slow_load():
     started.set()
     while True:                            # exits ONLY via CancelledError
-        dataset_progress.check_cancelled()
+        tracker.check_cancelled()
         time.sleep(0.05)
 ```
 
@@ -605,7 +605,7 @@ def slow_load():
 def slow_load():
     started.set()
     for i in range(100):                   # FLAKY; can finish before cancel arrives
-        dataset_progress.check_cancelled()
+        tracker.check_cancelled()
         time.sleep(0.05)
 ```
 

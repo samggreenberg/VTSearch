@@ -305,7 +305,7 @@ def _stub_embedding_models():
 
 import vtscore.state.core as _core
 from vtscore.concurrency.progress import (
-    dataset_progress as _dataset_progress,
+    clear_thread_progress as _clear_thread_progress,
     eval_progress as _eval_progress,
     find_progress as _find_progress,
     loading_tasks as _loading_tasks,
@@ -376,7 +376,10 @@ def reset_state():
     # fully seeded threshold fixture order-dependent (issue #3101).
     config.TRAIN_EPOCHS = TEST_TRAIN_EPOCHS
 
-    _dataset_progress.reset_cancel()
+    # A test that bound a per-thread progress sink must not leak it into the
+    # next one: with the global fallback gone, resolve_progress_callback() reads
+    # this and nothing else.
+    _clear_thread_progress()
     _find_progress.update("idle", "", 0, 0, step=None, total_steps=None, error=None)
     _sort_progress.update("idle", "", 0, 0, step=None, total_steps=None, error=None)
     _eval_progress.update("idle", "", 0, 0, step=None, total_steps=None, error=None)

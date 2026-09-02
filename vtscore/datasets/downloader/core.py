@@ -2,9 +2,11 @@
 
 All public functions accept an optional ``on_progress`` callback with the
 signature ``(status: str, message: str, current: int, total: int) -> None``.
-When omitted the functions fall back to the application-wide
-:func:`~vtscore.concurrency.progress.update_progress` reporter; pass an explicit callback
-to use these functions outside the Flask app (scripts, notebooks, tests).
+When omitted the functions resolve one with
+:func:`~vtscore.concurrency.progress.resolve_progress_callback`: the callback
+the calling thread bound, or a no-op when it bound none.  Pass an explicit
+callback to use these functions outside the Flask app (scripts, notebooks,
+tests).
 """
 
 import os
@@ -19,6 +21,7 @@ from urllib.parse import urlparse
 
 import requests
 
+from vtscore.concurrency.progress import ProgressCallback, resolve_progress_callback
 from vtscore.config import DATA_DIR
 from vtscore.security.archive import safe_tar_extract
 from vtscore.security.hf_auth import GatedResourceError, auth_header_for_url
@@ -368,20 +371,6 @@ HMDB51_DOWNLOAD_SIZE_MB = 2000
 UCF101_FULL_DOWNLOAD_SIZE_MB = 6960
 KTH_DOWNLOAD_SIZE_MB = 1150
 
-ProgressCallback = Callable[[str, str, int, int], None]
-
-
-def _default_progress() -> ProgressCallback:
-    """Lazily resolve the progress callback for the current thread."""
-    from vtscore.concurrency.progress import get_thread_progress
-
-    cb = get_thread_progress()
-    if cb is not None:
-        return cb
-    from vtscore.concurrency.progress import update_progress
-
-    return update_progress
-
 
 def _request_headers(url: str, headers: Optional[dict]) -> dict:
     """Merge caller *headers* with a HuggingFace bearer token when *url* is a Hub
@@ -595,7 +584,7 @@ def download_file_with_progress(  # noqa: C901
             server does not supply a ``Content-Length`` header. Pass 0 (default)
             if the size is unknown.
         on_progress: Optional progress callback. Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Raises:
         requests.HTTPError: If the server returns a non-retryable error status.
@@ -605,7 +594,7 @@ def download_file_with_progress(  # noqa: C901
             its ``__cause__``.
     """
     if on_progress is None:
-        on_progress = _default_progress()
+        on_progress = resolve_progress_callback()
 
     session = guarded_session()
     downloaded = 0  # bytes already on disk at dest_path
@@ -693,7 +682,7 @@ def fetch_text_with_retry(url: str, label: str = "", on_progress: Optional[Progr
         label: Short human-readable name for the fetch, used in the retry
             progress message.  Defaults to the URL's last path segment.
         on_progress: Optional progress callback.  Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Raises:
         requests.HTTPError: If the server returns a non-retryable error status.
@@ -701,7 +690,7 @@ def fetch_text_with_retry(url: str, label: str = "", on_progress: Optional[Progr
             keeps returning a retryable status, after the final retry attempt.
     """
     if on_progress is None:
-        on_progress = _default_progress()
+        on_progress = resolve_progress_callback()
     label = label or urlparse(url).path.rsplit("/", 1)[-1] or url
 
     session = guarded_session()

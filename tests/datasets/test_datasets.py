@@ -1612,7 +1612,7 @@ class TestLoadProgressRaceCondition:
         """After POST to load a registered dataset, progress must not be 'idle'."""
         import time
 
-        from vtscore.concurrency.progress import get_progress
+        from tests.helpers import current_loading_progress
 
         # Register the current medias as a dataset entry so we can load it
         saved = dict(app_module.medias)
@@ -1639,17 +1639,12 @@ class TestLoadProgressRaceCondition:
             )
             dataset_id = entry["id"]
 
-            # Set progress to idle (simulating a previous completed load)
-            from vtscore.concurrency.progress import update_progress
-
-            update_progress("idle", "Ready")
-
             # POST to load the dataset
             resp = client.post(f"/api/datasets/registry/{dataset_id}/load")
             assert resp.status_code == 200
 
             # Immediately check progress; it must NOT be 'idle'
-            progress = get_progress()
+            progress = current_loading_progress()
             assert progress["status"] != "idle", (
                 "Progress must be set to 'loading' before the thread starts "
                 "to prevent the frontend from seeing a stale 'idle' state"
@@ -1658,7 +1653,7 @@ class TestLoadProgressRaceCondition:
             # Wait for the background thread to finish (up to 12s for slow CI)
             for _ in range(120):
                 time.sleep(0.1)
-                if get_progress()["status"] == "idle":
+                if current_loading_progress()["status"] == "idle":
                     break
         finally:
             app_module.medias.clear()
@@ -1731,15 +1726,24 @@ class TestLoadProgressRaceCondition:
             if dataset_id:
                 unregister_dataset(dataset_id)
 
-    def test_origin_load_clears_stale_error(self):
-        """_run_origin_load_in_background must clear old error on new load."""
+    def test_origin_load_starts_clean_after_a_failed_load(self):
+        """A new load must not inherit the previous load's error.
+
+        Each load owns a fresh per-task tracker, so a failure can no longer
+        bleed into the next import the way it did when every load shared one
+        global tracker.  ``current_loading_progress()`` prefers the *active*
+        task, so the new load is what a watching client sees.
+        """
         from unittest.mock import patch
 
-        from vtscore.concurrency.progress import get_progress, update_progress
+        from tests.helpers import current_loading_progress
+        from vtscore.concurrency.progress import loading_tasks
 
-        # Simulate a previous load that left a stale error
-        update_progress("idle", "", error="Previous load failed", step=None, total_steps=None)
-        assert get_progress()["error"] == "Previous load failed"
+        # Simulate a previous load that failed and left its error behind.
+        stale = loading_tasks.create_task("_stale_load", "Previous load")
+        stale.update("idle", "", 0, 0, error="Previous load failed")
+        loading_tasks.mark_finished("_stale_load")
+        assert current_loading_progress()["error"] == "Previous load failed"
 
         # Start a new load (mock the thread so it doesn't actually run)
         from vtscore.datasets.load_pipeline import _run_origin_load_in_background
@@ -1750,8 +1754,8 @@ class TestLoadProgressRaceCondition:
                 {"importer": "test", "params": {}},
             )
 
-        progress = get_progress()
-        assert progress["error"] is None, "Starting a new load must clear the stale error from a previous load"
+        progress = current_loading_progress()
+        assert progress["error"] is None, "a new load must not inherit the previous load's error"
         assert progress["status"] == "loading"
 
     def test_origin_load_records_last_embedder_per_media_type(self, isolated_settings):
@@ -1946,7 +1950,7 @@ class TestEmptyLoadBackstop:
         an error and must not register a dataset."""
         from unittest import mock
 
-        from vtscore.concurrency.progress import get_progress
+        from tests.helpers import current_loading_progress
         from vtscore.datasets.load_pipeline import _run_origin_load_in_background
         from vtscore.datasets.registry import list_datasets
 
@@ -1967,7 +1971,7 @@ class TestEmptyLoadBackstop:
         assert list_datasets() == [], (
             "an empty load must not register a dataset; the dashboard would otherwise show a green row with 0 items"
         )
-        progress = get_progress()
+        progress = current_loading_progress()
         assert progress["error"] == "Import produced no medias.", (
             f"empty load should report the standard 'no medias' error, got {progress['error']!r}"
         )
@@ -1990,39 +1994,46 @@ class TestCancelIngest:
         assert data["targets"] == []
         assert "nothing to cancel" in data["message"].lower()
 
-    def test_cancel_sets_event(self, client):
-        """POST /api/dataset/cancel should set the cancellation event."""
-        from vtscore.concurrency.progress import dataset_progress
+    def test_cancel_sets_event_on_every_running_task(self, client):
+        """POST /api/dataset/cancel sets the flag on each live loading task.
 
-        dataset_progress.reset_cancel()
-        assert not dataset_progress.is_cancelled
+        There is no global tracker to cancel any more: cancellation is per
+        task, so the endpoint has to reach every one of them.
+        """
+        from vtscore.concurrency.progress import loading_tasks
+
+        tracker = loading_tasks.create_task("_cancel_probe", "Probe")
+        tracker.update("loading", "working", 0, 10)
+        assert not tracker.is_cancelled
 
         client.post("/api/dataset/cancel")
-        assert dataset_progress.is_cancelled
-
-        # Clean up
-        dataset_progress.reset_cancel()
+        assert tracker.is_cancelled
 
     def test_cancel_clears_medias_on_background_load(self, client):
         """Cancelling during a background load should clean up medias."""
         import threading
         import time
 
-        from vtscore.concurrency.progress import dataset_progress, get_progress
+        from tests.helpers import current_loading_progress
+        from vtscore.concurrency.progress import resolve_progress_callback
 
         saved = dict(app_module.medias)
         try:
             started = threading.Event()
 
-            # Simulate a slow importer that checks cancellation via progress.
+            # Simulate a slow importer that reports progress the way any
+            # importer does — through the thread-bound sink the load installed.
+            # That sink is what raises ``CancelledError``, so this exercises the
+            # real cancellation path rather than a global flag nothing reads.
             # Use ``while True`` so the function can only exit via
             # CancelledError; a bounded loop (e.g. ``range(100)``) can
             # finish before the cancel is processed on a loaded machine,
             # making the test flaky.
             def slow_load():
                 started.set()
+                on_progress = resolve_progress_callback()
                 while True:
-                    dataset_progress.check_cancelled()
+                    on_progress("loading", "working", 0, 0)
                     time.sleep(0.05)
 
             from vtscore.datasets.load_pipeline import _run_origin_load_in_background
@@ -2042,44 +2053,52 @@ class TestCancelIngest:
             # Wait for the thread to notice the cancellation
             for _ in range(80):
                 time.sleep(0.1)
-                progress = get_progress()
+                progress = current_loading_progress()
                 if progress["status"] == "idle":
                     break
 
-            progress = get_progress()
+            progress = current_loading_progress()
             assert progress["status"] == "idle"
             assert progress["error"] == "Cancelled"
         finally:
-            dataset_progress.reset_cancel()
             app_module.medias.clear()
             app_module.medias.update(saved)
 
-    def test_new_load_resets_cancel_flag(self, client):
-        """Starting a new load should clear any previous cancellation."""
+    def test_new_load_is_not_born_cancelled(self, client):
+        """A cancelled load must not abort the *next* one.
+
+        This used to need an explicit ``reset_cancel()`` on the shared global
+        tracker, guarded by "unless other loads are running" so the reset did
+        not steal a cancel still owed to an in-flight load.  A per-task tracker
+        makes it structural: the new load's flag is its own and starts clear.
+        """
         from unittest.mock import patch
 
-        from vtscore.concurrency.progress import dataset_progress
+        from vtscore.concurrency.progress import loading_tasks
 
-        # Set cancel from a previous operation
-        dataset_progress.cancel()
-        assert dataset_progress.is_cancelled
+        # A previous operation that was cancelled.
+        cancelled = loading_tasks.create_task("_cancelled_load", "Cancelled")
+        cancelled.update("loading", "", 0, 0)
+        cancelled.cancel()
+        assert cancelled.is_cancelled
 
         saved = dict(app_module.medias)
         try:
-            # Start a new load; should reset the flag
             from vtscore.datasets.load_pipeline import _run_origin_load_in_background
 
             with patch("vtscore.datasets.load_pipeline._warmup_embedder_async"):
-                _run_origin_load_in_background(
+                task_id = _run_origin_load_in_background(
                     lambda: None,
                     {"importer": "test", "params": {}},
                     created_by="test",
                 )
 
-            # Cancel flag should have been cleared
-            assert not dataset_progress.is_cancelled
+            fresh = loading_tasks.get_tracker(task_id)
+            assert fresh is not None
+            assert not fresh.is_cancelled
+            # ...and the older cancel is still owed to the task it was aimed at.
+            assert cancelled.is_cancelled
         finally:
-            dataset_progress.reset_cancel()
             app_module.medias.clear()
             app_module.medias.update(saved)
 

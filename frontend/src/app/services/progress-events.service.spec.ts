@@ -101,7 +101,7 @@ describe('ProgressEventsService liveness wiring', () => {
   it('treats a real progress frame as proof of life too', () => {
     const es = connectedSource();
     recordSuccess.mockClear();
-    es.emit('dataset', { status: 'loading', current: 5, total: 10 });
+    es.emit('sort', { status: 'loading', current: 5, total: 10 });
     expect(recordSuccess).toHaveBeenCalledTimes(1);
   });
 
@@ -238,7 +238,7 @@ describe('ProgressEventsService liveness wiring', () => {
  * Zoneless staleness canary. The six SSE channels are signals, so a frame
  * arriving on the EventSource (which fires *outside* Angular's NgZone)
  * schedules change detection via the signal write — no `zone.run` re-entry.
- * This component reads the `dataset` channel signal in its template; driving
+ * This component reads the `sort` channel signal in its template; driving
  * a frame through the fake EventSource and asserting the rendered DOM after
  * `settleZoneless()`, with no manual `detectChanges()`, proves the SSE pump
  * repaints bound views under zoneless.
@@ -246,7 +246,7 @@ describe('ProgressEventsService liveness wiring', () => {
 @Component({
   selector: 'app-progress-canary',
   standalone: true,
-  template: `<span class="status">{{ progress.dataset().status ?? 'none' }}</span>`,
+  template: `<span class="status">{{ progress.sort().status ?? 'none' }}</span>`,
 })
 class ProgressCanaryComponent {
   readonly progress = inject(ProgressEventsService);
@@ -300,11 +300,11 @@ describe('ProgressEventsService (zoneless view canary)', () => {
 
   it('repaints when an SSE frame lands, with no manual detectChanges', async () => {
     const es = FakeEventSource.instances[0];
-    es.emit('dataset', { status: 'loading', current: 5, total: 10 });
+    es.emit('sort', { status: 'loading', current: 5, total: 10 });
     await settleZoneless(fixture);
     expect(statusText()).toBe('loading');
 
-    es.emit('dataset', { status: 'idle' });
+    es.emit('sort', { status: 'idle' });
     await settleZoneless(fixture);
     expect(statusText()).toBe('idle');
   });

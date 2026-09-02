@@ -32,10 +32,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from vtscore.concurrency.progress import ProgressCallback
 from vtscore.config import PROJECTION_COMPACT_DEFAULT, PROJECTION_MIN_DIST, PROJECTION_N_NEIGHBORS
-
-# Matches the ingest progress-callback shape (status, message, current, total).
-ProgressCallback = Callable[[str, str, int, int], None]
 
 # How often the UMAP fit emits a "still working" heartbeat.  UMAP's
 # ``fit_transform`` is one opaque blocking call (the epoch loop runs inside

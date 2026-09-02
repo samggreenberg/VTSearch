@@ -797,9 +797,9 @@ def _run_autodetect(args, parser, importer, exporter) -> None:
     """Drive the ``--autodetect`` flow: progress wiring, auth, optional label
     import, then dispatch to the importer/pickle code path."""
     # Wire the CLI progress format (text/json) before any pipeline call
-    # produces output. In JSON mode we also re-route the global media
-    # progress callback from update_progress (which writes to a tracker
-    # nothing reads in CLI mode) to an NDJSON emitter on stdout.
+    # produces output. In JSON mode we also re-route the process-wide media
+    # progress callback from update_progress (which resolves per-thread, so
+    # headless it reaches nothing) to an NDJSON emitter on stdout.
     from vtscore import cli_progress
     from vtscore.concurrency.notifications import notifications
 

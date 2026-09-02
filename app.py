@@ -112,6 +112,11 @@ from vtscore.concurrency.progress import update_progress
 # Wire media types into the Flask app's progress reporting system.
 # Without this call, media types use a silent no-op callback and can run
 # standalone (e.g. in a CLI tool or notebook) without Flask.
+#
+# ``update_progress`` is itself a per-thread resolution, so this installs a
+# *router* rather than a destination: a media type reporting from inside a
+# load lands on that load's own tracker, and one reporting from a thread that
+# bound nothing is dropped rather than published to a channel with no owner.
 set_progress_callback(update_progress)
 
 app = Flask(__name__)

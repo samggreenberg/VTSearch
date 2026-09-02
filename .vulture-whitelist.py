@@ -100,12 +100,10 @@ secret_key  # noqa: F821
 # ---------------------------------------------------------------------------
 # Public-API forwarders in ``vtscore.concurrency.progress`` that mirror
 # their ``update_<tracker>_progress`` partners. The corresponding
-# trackers (``sort_progress``, ``find_progress``, ``dataset_progress``)
-# are imported and read directly in tests / routes; the helper wrappers
-# stay for API symmetry and are tabulated in
-# ``vtscore/docs/packages/concurrency.md``.
+# trackers (``sort_progress``, ``find_progress``) are imported and read
+# directly in tests / routes; the helper wrappers stay for API symmetry
+# and are tabulated in ``vtscore/docs/packages/concurrency.md``.
 # ---------------------------------------------------------------------------
-check_dataset_cancelled  # noqa: F821
 get_sort_progress  # noqa: F821
 get_eval_progress  # noqa: F821
 

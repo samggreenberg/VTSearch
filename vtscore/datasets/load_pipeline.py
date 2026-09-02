@@ -26,7 +26,6 @@ from vtscore.concurrency.gate import ConcurrencyGate
 from vtscore.concurrency.progress import (
     CancelledError,
     clear_thread_progress,
-    dataset_progress,
     loading_tasks,
     set_thread_progress,
 )
@@ -396,24 +395,6 @@ def _park_load_terminal(tracker, n_items: int) -> None:
     )
 
 
-def _park_global_progress_if_orphaned() -> None:
-    """Park the legacy global tracker when nothing is left to keep it moving.
-
-    ``dataset_progress`` is the SSE ``dataset`` channel and is written by any
-    library path that reports progress without a per-thread callback.  Those
-    callers each terminate their own work now, but the channel is the one
-    surface a user reads as "is this server busy?", so the last load out of the
-    door also checks it: a non-idle channel with no loading task behind it is a
-    phantom by definition, and leaving it up is what made a finished import
-    indistinguishable from a wedged one (#3167).
-    """
-    if loading_tasks.has_active_tasks():
-        return
-    if dataset_progress.get().get("status") == "idle":
-        return
-    dataset_progress.update("idle", "", 0, 0)
-
-
 def _run_origin_load_in_background(
     load_fn,
     origin: dict,
@@ -452,13 +433,6 @@ def _run_origin_load_in_background(
 
     Returns the task_id that can be used to poll progress or cancel.
     """
-    # Reset the legacy cancellation flag so a previous cancel does not
-    # immediately abort this new operation; but only when no other parallel
-    # loads are running (otherwise we would clear cancellation that might
-    # still be intended for those in-flight tasks).
-    if not loading_tasks.has_active_tasks():
-        dataset_progress.reset_cancel()
-
     # Remember the user's embedder pick per media type so the next dataset
     # importer modal can pre-select it even when no loaded dataset is
     # around to supply the same hint via ``guessedMediaEmbedder``.
@@ -654,7 +628,6 @@ def _run_origin_load_in_background(
             timing_recorder.finish(n=len(ctx.medias), size_mb=size_mb, ok=not tracker.get().get("error"))
             _park_load_terminal(tracker, len(ctx.medias))
             loading_tasks.mark_finished(task_id)
-            _park_global_progress_if_orphaned()
 
     # Registered before the thread starts so a cancel arriving in the same
     # instant can tell "not started yet" from "nothing here"; see
@@ -845,11 +818,9 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
 
     Each call gets a dedicated :class:`ProgressTracker` (via ``loading_tasks``),
     keyed by the returned ``task_id``, mirroring
-    :func:`_run_origin_load_in_background`.  Previously every staging import
-    reported through the single global ``dataset_progress`` tracker, so two
-    concurrent stagings interleaved one channel and the terminal
-    ``staging_result`` was last-writer-wins - orphaning the loser's staged pkl.
-    With a per-task tracker the results no longer collide.
+    :func:`_run_origin_load_in_background`, so two concurrent stagings never
+    interleave one channel and their terminal ``staging_result``s cannot
+    collide.
 
     Returns the ``task_id`` a caller can poll (via the ``loading-tasks`` SSE
     channel) for progress and the final ``staging_result``.

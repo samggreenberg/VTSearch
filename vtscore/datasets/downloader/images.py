@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Optional
 
 from vtscore.datasets.downloader import core as _core
+from vtscore.concurrency.progress import resolve_progress_callback
 from vtscore.datasets.downloader.core import ProgressCallback
 from vtscore.security.archive import safe_tar_extract
 
@@ -24,14 +25,14 @@ def download_cifar10(on_progress: Optional[ProgressCallback] = None) -> Path:
 
     Args:
         on_progress: Optional progress callback. Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         Path to the ``cifar-10-batches-py/`` directory containing the raw pickle
         batch files (e.g. ``data/cifar-10-batches-py``).
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     extract_dir = _core.DATA_DIR / "cifar-10-batches-py"
     _core._download_and_extract(
@@ -58,14 +59,14 @@ def download_vggface2(on_progress: Optional[ProgressCallback] = None) -> Path:
 
     Args:
         on_progress: Optional progress callback. Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         Path to the ``test/`` directory holding the per-identity subfolders
         (e.g. ``data/vggface2/test``).
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     extract_dir = _core.DATA_DIR / "vggface2"
     test_dir = extract_dir / "test"
@@ -113,7 +114,7 @@ def download_caltech101(on_progress: Optional[ProgressCallback] = None) -> Path:
 
     Args:
         on_progress: Optional progress callback. Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         Path to the ``101_ObjectCategories/`` directory containing category
@@ -121,7 +122,7 @@ def download_caltech101(on_progress: Optional[ProgressCallback] = None) -> Path:
         ``data/caltech-101/101_ObjectCategories``).
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     extract_dir = _core.DATA_DIR / "caltech-101"
     categories_dir = extract_dir / "101_ObjectCategories"
@@ -202,7 +203,7 @@ def download_caltech256(on_progress: Optional[ProgressCallback] = None) -> Path:
 
     Args:
         on_progress: Optional progress callback. Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         Path to the ``256_ObjectCategories/`` directory containing category
@@ -210,7 +211,7 @@ def download_caltech256(on_progress: Optional[ProgressCallback] = None) -> Path:
         ``data/caltech-256/256_ObjectCategories``).
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
 
@@ -240,14 +241,14 @@ def download_oxford_flowers(on_progress: Optional[ProgressCallback] = None) -> P
 
     Args:
         on_progress: Optional progress callback.  Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         Path to the ``oxford_flowers/`` directory containing ``jpg/`` and
         ``imagelabels.mat`` (e.g. ``data/oxford_flowers``).
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
 
@@ -285,14 +286,14 @@ def download_food101(on_progress: Optional[ProgressCallback] = None) -> Path:
 
     Args:
         on_progress: Optional progress callback.  Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         Path to the ``food-101/images/`` directory containing category
         subdirectories with JPEG images (e.g. ``data/food-101/images``).
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
 
@@ -321,14 +322,14 @@ def download_eurosat(on_progress: Optional[ProgressCallback] = None) -> Path:
 
     Args:
         on_progress: Optional progress callback.  Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         Path to the ``EuroSAT_RGB/`` directory containing class
         subdirectories with JPEG images (e.g. ``data/EuroSAT_RGB``).
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
 
@@ -361,14 +362,14 @@ def download_roxford5k(on_progress: Optional[ProgressCallback] = None) -> Path:
 
     Args:
         on_progress: Optional progress callback. Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         Path to the ``roxford5k/`` directory containing ``jpg/`` (the flat image
         folder) and ``gnd_roxford5k.pkl`` (the ground-truth file).
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
 
@@ -415,14 +416,14 @@ def download_openlogo(on_progress: Optional[ProgressCallback] = None) -> Path:
 
     Args:
         on_progress: Optional progress callback. Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         Path to the ``openlogo/`` directory containing ``data/`` (the flat image
         folder) and ``samples.json`` (the per-image detection annotations).
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
 
@@ -543,13 +544,13 @@ def download_rico_icons_manifest(on_progress: Optional[ProgressCallback] = None)
 
     Args:
         on_progress: Optional progress callback. Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         Path to the ``rico_icons/`` directory containing ``samples.json``.
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
     extract_dir = _core.DATA_DIR / "rico_icons"
@@ -573,13 +574,13 @@ def download_rico_icons_shards(
     Args:
         shard_dirs: Repo-relative shard folder paths.
         on_progress: Optional progress callback. Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         Path to the ``rico_icons/`` directory containing the ``data/`` tree.
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     extract_dir = _core.DATA_DIR / "rico_icons"
     # A shard folder is "present" only if it holds at least one decoded JPEG; an
@@ -610,14 +611,14 @@ def download_enrico(on_progress: Optional[ProgressCallback] = None) -> Path:
 
     Args:
         on_progress: Optional progress callback. Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         Path to the ``enrico/`` directory containing the extracted screenshots
         and ``design_topics.csv``.
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
     extract_dir = _core.DATA_DIR / "enrico"
@@ -669,7 +670,7 @@ def download_rico_screen2words(on_progress: Optional[ProgressCallback] = None) -
         Path to the ``screenshots/`` directory (the folder-per-category root).
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     from vtscore.datasets.downloader._hf_parquet import (  # noqa: PLC0415
         download_parquet_shards,
@@ -739,7 +740,7 @@ def download_rvl_cdip(on_progress: Optional[ProgressCallback] = None) -> Path:
         Path to the ``images/`` directory (the folder-per-class root).
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     from vtscore.datasets.downloader._hf_parquet import (  # noqa: PLC0415
         download_parquet_shards,
@@ -811,7 +812,7 @@ def download_places365(on_progress: Optional[ProgressCallback] = None) -> Path:
 
     Args:
         on_progress: Optional progress callback.  Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         Path to the ``places365/`` directory containing ``val_256/`` (the
@@ -819,7 +820,7 @@ def download_places365(on_progress: Optional[ProgressCallback] = None) -> Path:
         file).
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
 
@@ -891,14 +892,14 @@ def download_visual_genome(on_progress: Optional[ProgressCallback] = None) -> Pa
 
     Args:
         on_progress: Optional progress callback.  Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         Path to the ``visual_genome/`` directory containing ``VG_100K/`` and
         ``VG_100K_2/`` (the flat image folders) plus ``objects.json``.
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     _core.IMAGE_DIR.mkdir(exist_ok=True, parents=True)
     vg_dir = _core.DATA_DIR / "visual_genome"

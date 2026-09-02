@@ -22,7 +22,6 @@ tracker, so clients do not need a separate REST bootstrap call.
 
 | Event name | Payload | Source |
 |---|---|---|
-| `dataset` | progress object | singleton `dataset_progress` tracker (legacy single-op fallback) |
 | `loading-tasks` | array of task objects | `loading_tasks` (parallel dataset loads and staging imports; a staging task carries `staging_result`) |
 | `detector-loading-tasks` | array of task objects | `detector_loading_tasks` |
 | `sort` | progress object | `sort_progress` (text sort) |
@@ -126,7 +125,7 @@ tab — there is no per-session routing.
 ## Frame format
 
 ```
-event: dataset
+event: sort
 data: {"status":"loading",...}
 
 ```
@@ -140,7 +139,7 @@ comments are invisible to the browser's `EventSource` API. Each heartbeat tick
 also re-emits **every** channel's current snapshot. For `loading-tasks` and
 `detector-loading-tasks` that is what makes finished tasks vanish from the UI
 once they pass their stale-prune window, without a server-side timer. For the
-single-tracker channels (`dataset`, `sort`, `find`, `eval`) it is a self-heal:
+single-tracker channels (`sort`, `find`, `eval`) it is a self-heal:
 each client's queue is bounded and drops frames when the client stalls, so a
 channel's single terminal `idle`/`error` frame can be lost and would otherwise
 leave a progress bar stuck at its last percentage until the next operation
@@ -158,7 +157,7 @@ instead of a full heartbeat period.
 
 ```ts
 const es = new EventSource('/api/events');
-es.addEventListener('dataset', (e) => {
+es.addEventListener('sort', (e) => {
   const { current, total, message } = JSON.parse(e.data);
   setProgress(current / total, message);
 });
