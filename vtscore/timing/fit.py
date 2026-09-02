@@ -24,6 +24,10 @@ The fit itself is deliberately plain. Per ``(task, cell, step)``:
   (noise beating signal on a short step), collapses to ``median seconds`` with
   no slope. A confidently wrong slope extrapolates badly at sizes the sweep
   never visited, and "we only know the average" is the honest answer there.
+- **Cold runs are held out** when the warm ones can carry the regression alone.
+  A cold run pays once-per-process costs no later run repeats, and it always
+  lands at whichever ``n`` happened to go first, so it has enormous leverage on
+  the slope. See :func:`fit_step`.
 
 Cells are emitted at three specificities — exact ``(device, media, embedder)``,
 then ``(device, media, *)``, then ``(device, *, *)``. The rollups are what make a
@@ -163,6 +167,11 @@ def normalize_row(raw: dict) -> Optional[dict]:
         "step": str(step),
         "slot": slot,
         "seconds": max(0.0, seconds),
+        # Both recorders spell this ``cold_model``. Absent means warm, which is
+        # what a row recorded before the marker existed — or one from a task
+        # that loads no encoder — should be treated as: it keeps every such
+        # sample in a single population and fits exactly as it did before.
+        "cold": bool(raw.get("cold_model", False)),
     }
 
 
@@ -208,6 +217,36 @@ def _r2_of(xs: list[float], ys: list[float], a: float, b: float) -> float:
     return 1.0 - ss_res / ss_tot
 
 
+#: Seconds a step keeps when its warm runs measured it as free but a cold run in
+#: the same cell measured it as real. Mirrors ``_WARM_MODEL_FLOOR_S`` in
+#: ``scripts/profiling/fit_load_weights.py``, whose warm model load gets the same
+#: value for the same reason; the two fitters have to agree, and ``vtscore``
+#: cannot import from ``scripts/``.
+_ONCE_PER_PROCESS_FLOOR_S = 0.5
+
+
+def _deferred_cost_floor(median_seconds: float, cold: list[dict]) -> float:
+    """Keep a skipped-because-warm step visible on the bar rather than free.
+
+    The generic recorder writes an explicit ``0.0`` for a step a run skipped, so
+    a cost paid once per process fits to a warm median of exactly zero — a true
+    statement about 47 of 48 text sorts and a useless one about the 48th, which
+    is the run somebody is watching. When a cold run in the same cell measured
+    the step as real, the step is not free here, it is *deferred*, and the bar
+    should keep a slice for it.
+
+    Deliberately a floor and not the cold cost. Pacing every run at the cold
+    price is as wrong as pacing it at zero, just in the other direction, and
+    most runs are warm — which is why ``fit_load_weights.py`` floors its warm
+    model load at the same value and carries the cold figure as a note. The
+    floor is a guard against a confident zero, not a cost model; measuring the
+    cold branch properly is the tuning driver's job (#3521).
+    """
+    if median_seconds > 0 or not any(s["seconds"] > 0 for s in cold):
+        return max(0.0, median_seconds)
+    return _ONCE_PER_PROCESS_FLOOR_S
+
+
 def fit_step(samples: list[dict], byte_scaled: bool) -> Optional[StepCoeffs]:
     """Fit one step's coefficients from its samples, or ``None`` if unusable."""
     if not samples:
@@ -222,8 +261,26 @@ def fit_step(samples: list[dict], byte_scaled: bool) -> Optional[StepCoeffs]:
             return StepCoeffs()
         return StepCoeffs(per_mb=statistics.median(rates))
 
-    xs = [s["n"] for s in samples]
-    ys = [s["seconds"] for s in samples]
+    # Fit the warm population. A cold run folds in costs paid once per *process*
+    # rather than once per job — the encoder download, the CUDA context, the
+    # first forward pass — and it always lands at whichever ``n`` ran first, so
+    # it has enormous leverage on the slope. #3062 measured a single cold row
+    # pulling a load's finalize slope to 0.0018 s/item from the warm 0.0040 and
+    # collapsing its r² from 0.999 to 0.08.
+    #
+    # The holdout stops short of costing a cell its only line. Below two
+    # distinct sizes no slope is estimable at all, and a minimal sweep is
+    # exactly that shape — its first run is always the cold one — so a strict
+    # holdout would turn every two-run sweep into a table of flat medians. There
+    # (and in a cell that only ever ran cold, which is all the legacy profiler
+    # ever writes for a model load) the cold rows stay in the regression and the
+    # floor below does what it can.
+    cold = [s for s in samples if s.get("cold")]
+    warm = [s for s in samples if not s.get("cold")]
+    fittable = warm if len({s["n"] for s in warm}) >= 2 else samples
+
+    xs = [s["n"] for s in fittable]
+    ys = [s["seconds"] for s in fittable]
     intercept, slope, r2 = affine_fit(xs, ys)
     if len({round(x, 6) for x in xs}) < _MIN_R2_POINTS:
         # A line through two points has ss_res == 0, so its r2 is 1.0 by
@@ -238,7 +295,7 @@ def fit_step(samples: list[dict], byte_scaled: bool) -> Optional[StepCoeffs]:
         # is deliberately NOT carried here: it describes a line this branch has
         # just declined to use, so reporting it would attach a goodness score to
         # coefficients that are a median.
-        return StepCoeffs(a=max(0.0, statistics.median(ys)))
+        return StepCoeffs(a=_deferred_cost_floor(statistics.median(ys), cold))
 
     a = max(0.0, intercept)
     if a != intercept:
