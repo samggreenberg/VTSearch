@@ -119,12 +119,6 @@ export class BrowseMinimapComponent implements AfterViewInit, OnDestroy {
   });
   /** Hide request from the close button (floating mode only). */
   readonly closed = output<void>();
-  /** Final size after a resize drag, for persistence (floating mode only). */
-  readonly resized = output<{
-    width: number;
-    height: number;
-}>();
-
   private resizeObserver: ResizeObserver | null = null;
   // Teardown for the devicePixelRatio-change listener. A pure density change
   // (monitor-to-monitor drag) leaves the element box untouched, so neither the
@@ -538,7 +532,6 @@ export class BrowseMinimapComponent implements AfterViewInit, OnDestroy {
     if (!this.resizing) return;
     this.resizing = false;
     this.detachResizeListeners();
-    this.resized.emit({ width: this.width(), height: this.height() });
   }
 
   private detachResizeListeners(): void {
