@@ -740,7 +740,7 @@ def find_corrections_to_detector():
     from vtscore.datasets.labelset import LabelSet, element_identity_keys
     from vtscore.detectors.dataset_sync import _detector_file_mtime, validated_vote_snapshot
     from vtscore.detectors.input_spec import extract_input_spec_from_medias
-    from vtscore.detectors.label_sync import _label_sync_write_lock
+    from vtscore.detectors.labelset_ops import label_sync_write_lock
     from vtscore.detectors.registry import get_detector as reg_get_detector
     from vtscore.detectors.registry import update_detector
     from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
@@ -756,7 +756,7 @@ def find_corrections_to_detector():
     # read→merge→write races the loaded-detector label sync (and the other
     # detector-JSON writers), so it runs under the same lock — acquired
     # before ``_state_lock``, matching label_sync's ordering.
-    with _label_sync_write_lock:
+    with label_sync_write_lock:
         path = _detector_path(name)
         data = _read_detector(path)
         if data is None:

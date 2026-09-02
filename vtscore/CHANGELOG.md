@@ -212,6 +212,22 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **The detector-JSON write lock and the cross-dataset labelset merge are now
+  public, and re-exported from the `labelset_ops` façade** (issue #3398).
+  `vtscore.detectors.label_sync._label_sync_write_lock` and
+  `_merge_labelsets_across_datasets` are now
+  `label_sync_write_lock` and `merge_labelsets_across_datasets`, exported from
+  `vtscore.detectors.labelset_ops` alongside the rest of the detector-labelset
+  surface. Neither is new behaviour — the lock's contract has always bound
+  out-of-module writers (any caller doing its own read-modify-write of a
+  detector JSON file must hold it for the whole pass, acquired *before*
+  `_state_lock`), and `sync_labels_to_loaded_detector` and the app's four route
+  writers all merge with the same function. The private names simply said
+  otherwise, which made the seam unenforceable and the symbols un-renameable.
+  Both old names are gone rather than aliased, per this repo's rule that
+  `_`-prefixed symbols carry no compatibility promise; an out-of-tree writer
+  that was reaching for them should import from `labelset_ops`.
+
 - **`vtscore.utils.hits.hit_custom_metadata(media)`** — the `custom_metadata`
   sanitiser `build_media_hit` already applied is now a public export (issue
   #3368). It returns a fresh copy of a media's importer metadata with the

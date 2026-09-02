@@ -220,7 +220,7 @@ merge the double-walk (populate then build_xy) into a single pass.
 `labels/sync.py` has `_DEBOUNCE_DELAY = 0.2` and a timer-based `_PendingSync`.
 
 **Still open:** `label_sync.sync_labels_to_loaded_detector` still does a full
-read-merge-write of the detector JSON per vote (under `_label_sync_write_lock`).
+read-merge-write of the detector JSON per vote (under `label_sync_write_lock`).
 At 100 k labels the serialised labelset is ~50–100 MB; writing it on every vote
 stalls the handler for seconds.
 
