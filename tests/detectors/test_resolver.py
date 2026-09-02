@@ -1189,7 +1189,6 @@ class TestResolveFileContextLifetime:
             return src.resolve_path(origin_name, filename)
 
         monkeypatch.setattr(resolver_mod, "_source_resolver", _custom_source_resolver)
-        monkeypatch.setattr(resolver_mod, "_auto_wired", True)
 
         origin = {"importer": "fake", "params": {}}
         with resolver_mod.resolve_file_context(origin, origin_name="thing.txt") as path:
@@ -1233,7 +1232,6 @@ class TestResolveFileContextLifetime:
             return src.resolve_path(origin_name, filename)
 
         monkeypatch.setattr(resolver_mod, "_source_resolver", _custom_source_resolver)
-        monkeypatch.setattr(resolver_mod, "_auto_wired", True)
 
         _ = resolver_mod.resolve_file_from_origin({"importer": "fake"}, "x.txt")
         assert cleaned == [True], "wrapper exits its context immediately"

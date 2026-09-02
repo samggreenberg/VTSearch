@@ -77,6 +77,24 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **A broken `vtscore.datasets` install now fails loudly instead of silently
+  disabling origin resolution** (issue #3397).
+  `vtscore.detectors.resolver` used to defer its imports of
+  `vtscore.datasets.sources` / `vtscore.datasets.importers` into a first-use
+  auto-wire step wrapped in `except ImportError: pass`. Because both packages
+  ship in this same distribution, that `except` could only ever fire on a
+  genuinely broken install - and when it did, the module carried on with *no*
+  resolvers registered, so every label silently failed to resolve and the only
+  symptom was an "N of M labels resolved" warning. Both imports are now
+  module-level, and the defaults are bound at import time rather than on first
+  use, so the underlying `ImportError` reaches the caller with its real
+  traceback.
+
+  **For library consumers:** `register_source_resolver`,
+  `register_importer_resolver`, `SourceResolver` and `ImporterResolver` are
+  unchanged, and a registered resolver still replaces the default. The only
+  visible difference is *when* an already-fatal misconfiguration surfaces.
+
 - **`vtscore.config` is now a package, not a single module** (issue #3375). The
   933-line file is split into `paths`, `runtime`, `models`, `device`,
   `processor_backend` and `core_config`, layered so each reads only from the ones

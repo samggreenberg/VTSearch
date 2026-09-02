@@ -164,7 +164,7 @@ requirements/base.txt                # `--extra-index-url <cpu wheel index>` + `
 requirements/gpu.txt                 # `-e .[dev,agpl]` (install.sh / Dockerfile.gpu set --extra-index-url)
 requirements/*-no-agpl.txt           # The same two files without the `agpl` extra (VTSEARCH_NO_AGPL=1)
 requirements/labbench.txt            # Standalone curated list for Dockerfile.labbench (image+SigLIP only)
-requirements/image-embedders*.txt    # Standalone curated lists for Dockerfile.image-embedders[.gpu]
+requirements/image-embedders.txt     # Standalone curated list shared by Dockerfile.image-embedders[.gpu]
 ```
 
 The labbench / image-embedders requirements files are deliberately
