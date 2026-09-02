@@ -13,6 +13,7 @@ describes the general pattern in less code than `vtsearch` does.
 
 1. [What you need to install](#what-you-need-to-install)
 2. [The three integration hooks](#the-three-integration-hooks)
+   - [Putting the seams back in tests](#putting-the-seams-back-in-tests)
 3. [Minimal integration: a script](#minimal-integration-a-script)
 4. [Multi-request integration: a web app](#multi-request-integration-a-web-app)
 5. [Multi-thread integration: a worker pool](#multi-thread-integration-a-worker-pool)
@@ -153,12 +154,37 @@ register_setting_persister("calibrate_count", _persist_calibrate_count)
 ```
 
 The recognised keys are `inclusion`, `calibrate_count`, and
-`calibration_fraction`; a persister for anything else is stored but never
-fired.
+`calibration_fraction` (`vtscore.state.KNOWN_SETTING_KEYS`); any other key
+raises `ValueError`. Only the setters listed above ever fire a persister, so
+an unrecognised key could only be a typo in your wiring - one that would
+otherwise sit there silently never firing.
 
 If you don't install persisters, library code can still call
 `set_inclusion(5)` - the value just won't survive a process restart.
 That's a fine choice for many apps.
+
+### Putting the seams back in tests
+
+Every seam above is a process global, so a test that installs one leaks it
+into every test that follows in the same process. `vtscore.host_seams`
+snapshots the whole set so your test harness doesn't have to know which
+private module global backs each one:
+
+```python
+from vtscore.host_seams import capture_host_seams, restore_host_seams
+
+# Once, after your app has finished installing its seams.
+_STARTUP_SEAMS = capture_host_seams()
+
+# In a per-test fixture.
+restore_host_seams(_STARTUP_SEAMS)
+```
+
+It is deliberately snapshot-and-restore rather than reset-to-default: an
+integration whose tests run *against* its real wiring would lose the very
+seams under test if the slots were cleared. `capture_host_seams()` copies
+the two keyed registries, so a later registration can't reach back into a
+snapshot already taken.
 
 ## Minimal integration: a script
 

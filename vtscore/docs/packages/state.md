@@ -566,9 +566,12 @@ consumers see purely in-memory mutation.
 
 ```python
 # vtscore/state/__init__.py
+KNOWN_SETTING_KEYS = frozenset({"inclusion", "calibrate_count",
+                                "calibration_fraction"})
+
 def register_setting_persister(key: str, fn: Callable[[Any], None]) -> None:
-    """Recognised keys: inclusion, calibrate_count,
-    calibration_fraction."""
+    """Install the persister for *key*, which must be in
+    KNOWN_SETTING_KEYS; anything else raises ValueError."""
 ```
 
 The app side (`vtsearch/shim/`) wires this at startup:

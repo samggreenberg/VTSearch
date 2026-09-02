@@ -8,6 +8,7 @@ from tests_shared.embedding_stubs import fake_embed_audio as _fake_embed_audio, 
 from tests_shared.pytest_plumbing import add_group_markers, print_summary_and_exit
 from tests_shared.state_reset import (
     allow_test_tmp_paths as _allow_test_tmp_paths,  # noqa: F401  (autouse fixture)
+    capture_startup_host_seams,
     freeze_startup_heap,
     install_startup_contexts,
     pin_training_budget,
@@ -52,6 +53,10 @@ init_medias()
 
 # Save the test medias so we can replay them into each test's fresh context.
 _test_medias_snapshot = {k: dict(v) for k, v in medias.items()}
+
+# Record the host seams this conftest has just wired, so the per-test reset can
+# put them back after a test installs its own (see :mod:`vtscore.host_seams`).
+capture_startup_host_seams()
 
 freeze_startup_heap()
 
