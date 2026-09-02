@@ -1,7 +1,7 @@
 """Direct unit tests for :mod:`vtsearch.settings_store` primitives.
 
 The settings routes exercise the store end-to-end, but its low-level file
-I/O and cross-worker sync-marker helpers are worth pinning directly: they are
+I/O and cross-process sync-marker helpers are worth pinning directly: they are
 pure, path-keyed functions with several error-swallowing branches (unreadable
 file, malformed JSON, non-serialisable token) that route-level tests don't
 reliably hit.

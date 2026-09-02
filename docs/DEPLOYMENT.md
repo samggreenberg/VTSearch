@@ -172,7 +172,7 @@ These are read by the installer, not the running app.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `VTSEARCH_SERVER_INIT` | unset | Set to `1` when running under gunicorn. Triggers model init / autoload / settings-source sync at import time (the Flask `__main__` block is skipped under WSGI). Set automatically in the Dockerfiles. |
+| `VTSEARCH_SERVER_INIT` | unset | Set to `1` when running under gunicorn. Triggers model init / embedder preload at import time (the Flask `__main__` block is skipped under WSGI). Settings-source sync is *not* part of it — that is per-user and lazy, on each user's first settings access. Set automatically in the Dockerfiles. |
 | `VTSEARCH_BIND` | `0.0.0.0:5000` | Gunicorn bind address (`host:port`) |
 | `VTSEARCH_THREADS` | `8` | Threads per gunicorn worker |
 | `VTSEARCH_TIMEOUT` | `0` | Worker request timeout in seconds; `0` (default) disables. Long imports, training, and evaluation runs routinely exceed any short timeout; overriding to anything below ~1800 risks SIGKILL mid-operation. |
@@ -214,8 +214,8 @@ outside Docker.
 
 ### Why `VTSEARCH_SERVER_INIT=1`?
 
-`app.py` runs its startup sequence (model init, embedder preload,
-settings-source sync) from its `if __name__ == "__main__":` block.
+`app.py` runs its startup sequence (model init, embedder preload) from
+its `if __name__ == "__main__":` block.
 Gunicorn **imports** `app.py` rather than executing it, so that block
 never runs. Setting `VTSEARCH_SERVER_INIT=1` tells `app.py` to also run
 `initialize_server()` at import time. The Dockerfiles set this env var

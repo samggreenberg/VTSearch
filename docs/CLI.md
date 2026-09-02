@@ -460,7 +460,7 @@ VTSEARCH_SERVER_INIT=1 gunicorn -c gunicorn.conf.py app:app
 ```
 
 `VTSEARCH_SERVER_INIT=1` runs the same startup sequence (model
-initialization, autoload preloading, settings-source sync) that `python
+initialization, embedder preloading) that `python
 app.py` runs; gunicorn imports `app.py` rather than executing its
 `__main__` block, so the env var is what triggers initialization. The
 bundled Docker images already run gunicorn this way. See

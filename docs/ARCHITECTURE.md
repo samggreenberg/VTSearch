@@ -543,7 +543,9 @@ modules on the right.
   for detector labels) both inherit from the generic
   `SyncSource[LoadT, SaveT]` in `vtscore/sync/`, which captures the
   shared `load()`/`save()` shape; each concrete source plugin is still
-  pure I/O.
+  pure I/O.  The *engine* driving settings sources is not — it lives in
+  `vtsearch/settings_store.py` and is documented in
+  [EXTENDING-plugins.md § How the sync engine works](EXTENDING-plugins.md#how-the-sync-engine-works).
 - **datasets/ functions accept an optional `on_progress` callback.**
   When `None`, they lazily resolve the app's `update_progress`; when
   provided, they use the caller's callback.
