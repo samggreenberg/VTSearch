@@ -123,8 +123,9 @@ def admit_classes(
         if not kinds & set(QUERYABLE_KINDS):
             rejected[class_id] = f"kind {sorted(kinds)} is not queryable"
             continue
-        if len(refs) < min_instances:
-            note = f"{len(refs)} instance(s) < min_instances={min_instances}"
+        bar = min_instances if min_instances is not None else cfg.min_instances_for(class_id.split("/", 1)[0])
+        if len(refs) < bar:
+            note = f"{len(refs)} instance(s) < min_instances={bar}"
             if not on_roster:
                 rejected[class_id] = note
                 continue
@@ -227,6 +228,14 @@ def assign_tiers(
     positive_pages: set[str] = set()
     for meta in admitted.values():
         positive_pages.update(meta["page_ids"])
+
+    # Anchor pages are in every tier whatever the budget says.  They are the
+    # corpus's known negatives -- same scanner, same paper, same era, checked --
+    # and README calls them the hardest negative a class can be scored against.
+    # The 2026-09-01 build dropped 129 of them over the tier budget to make room
+    # for UCSF distractors, which spends the hardest negatives to buy the
+    # easiest.  There are only ~2,650, so they fit even in `s`.
+    positive_pages.update(p.page_id for p in pages if p.source in cfg.ANCHOR_SOURCES)
 
     ranked = sorted(
         ((_common.stable_rank(p.page_id, salt), p.page_id) for p in pages if p.page_id not in positive_pages),
@@ -590,10 +599,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
         default=None,
         help="roster.json naming the hand-picked classes; without it every class clearing the bars is a candidate",
     )
-    ap.add_argument("--min-instances", type=int, default=cfg.MIN_INSTANCES)
+    ap.add_argument("--min-instances", type=int, default=None, help="override the per-source bar for every source")
     ap.add_argument("--min-mark-px", type=int, default=cfg.MIN_MARK_PX)
     ap.add_argument("--cluster-backend", default=cfg.CLUSTER_BACKEND, choices=("phash", "siglip"))
-    ap.add_argument("--cluster-threshold", type=float, default=cfg.CLUSTER_THRESHOLD)
+    ap.add_argument(
+        "--cluster-threshold", type=float, default=None, help="override the per-source threshold for every source"
+    )
     ap.add_argument("--ucsf-distractors", type=int, default=0, help="total UCSF distractor pages to pull")
     ap.add_argument(
         "--ucsf-letterhead-per-author",
@@ -652,9 +663,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
         print(f"ucsf: {len(ucsf_pages)} page(s)")
 
     # Identity clustering, for every source that ships location without
-    # identity.  UCSF is in this list on purpose: its `author` metadata is a
-    # candidate pool, not a class, so its letterhead bands are adjudicated by
-    # the same path as SPODS's and StaVer's marks rather than being trusted.
+    # identity AND whose marks a descriptor can actually tell apart.
+    #
+    # UCSF was in this list and is not any more (#3343).  The intent was right --
+    # its `author` metadata is a candidate pool, not a class, so the bands should
+    # be adjudicated rather than trusted -- but clustering a fixed top-of-page
+    # strip proposes noise for a human to adjudicate, not candidates.  See
+    # cfg.CLUSTERED_SOURCES for the sweep that says so.  Its pages stay as
+    # distractors and its bands keep `class_id=None` for the `letterhead` pass.
     #
     # Tobacco800 is in it for a subtler reason (#3343).  It ships identity for
     # its SIGNATURES -- GEDI carries an author id on those zones -- and none at
@@ -674,14 +690,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
         print(f"\nhonouring {len(same)} hand-merged and {len(different)} hand-separated pair(s)")
 
     summaries = []
-    for source in ("spods", "staver", "tobacco800", "ucsf"):
+    for source in cfg.CLUSTERED_SOURCES:
         if source not in selected:
             continue
         summary = cluster_source(
             pages,
             source,
             backend=args.cluster_backend,
-            threshold=args.cluster_threshold,
+            # Per source, not per corpus: a sweep over everything is dominated
+            # by whichever source has the most marks and reports its optimum as
+            # the corpus's.  0.10 suited SPODS, chained StaVer at 22%, and cost
+            # Tobacco800 two thirds of its usable classes.
+            threshold=(
+                args.cluster_threshold if args.cluster_threshold is not None else cfg.cluster_threshold_for(source)
+            ),
             same=same,
             different=different,
             provenance="clustered_band" if source == "ucsf" else "clustered",

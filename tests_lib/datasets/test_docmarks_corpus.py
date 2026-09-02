@@ -1539,10 +1539,15 @@ class TestTobacco800LogosAreClustered:
         assert len(refs) == 3
         assert {r.kind for r in refs} == {"logo"}
 
-    def test_builder_clusters_tobacco800(self):
-        """The loop must name the source; a comment saying it should is not enough."""
-        src = (_DOCMARKS / "build_corpus.py").read_text()
-        assert 'for source in ("spods", "staver", "tobacco800", "ucsf"):' in src
+    def test_builder_clusters_tobacco800(self, mods):
+        """The source must be in the clustered set; a comment is not enough.
+
+        This asserted the literal loop line until #3343 moved the list into
+        `cfg.CLUSTERED_SOURCES` and it broke on a refactor that changed nothing
+        it cared about. Pinning source *text* pins the spelling; pinning the
+        value pins the behaviour, and only one of those is the thing at risk.
+        """
+        assert "tobacco800" in mods["cfg"].CLUSTERED_SOURCES
 
 
 # -------------------------------------------------------------------- probe
@@ -1904,3 +1909,112 @@ class TestResumeSkipsRendering:
         monkeypatch.setattr(pdfmod, "render_pdf_pages", lambda *a, **k: called.append(a) or [])
         mods["ucsf"]._render_to_disk(str(tmp_path / "x.pdf"), str(out), "def67890", 150, 1)
         assert called, "a page with no PNG on disk must be rendered"
+
+
+class TestPerSourceClusteringKnobs:
+    """One threshold and one instance bar for four sources served only one.
+
+    `CLUSTER_THRESHOLD`'s own docstring ends "this number is a property of the
+    data, and it does not travel".  It does not travel between SOURCES either,
+    which a single global value quietly assumed.  Swept per source on the 200k
+    build: SPODS percolates just above 0.10, StaVer is already 5.8% merged at
+    0.02 and 22% by 0.10, and Tobacco800's usable classes PEAK at 0.18 with only
+    14.7% merged -- three times what 0.10 gave it.
+
+    The same applies to the instance bar.  A `>=10` that is right for SPODS's
+    174 candidate classes empties StaVer, which has exactly one class that deep.
+    """
+
+    def test_each_source_gets_its_own_swept_threshold(self, mods):
+        cfg = mods["cfg"]
+        assert cfg.cluster_threshold_for("spods") == 0.10
+        assert cfg.cluster_threshold_for("staver") == 0.04
+        assert cfg.cluster_threshold_for("tobacco800") == 0.18
+
+    def test_tobacco800_is_looser_than_spods_and_staver_is_tighter(self, mods):
+        cfg = mods["cfg"]
+        # The ordering is the finding; the exact numbers will move when the
+        # descriptor or the sources change, and this should move with them.
+        assert (
+            cfg.cluster_threshold_for("staver")
+            < cfg.cluster_threshold_for("spods")
+            < cfg.cluster_threshold_for("tobacco800")
+        )
+
+    def test_an_unknown_source_falls_back_to_the_global(self, mods):
+        assert mods["cfg"].cluster_threshold_for("synth") == mods["cfg"].CLUSTER_THRESHOLD
+
+    def test_an_env_override_still_wins_for_every_source(self, mods, monkeypatch):
+        monkeypatch.setenv("VTS_DOCMARKS_CLUSTER_THRESHOLD", "0.5")
+        for src in ("spods", "staver", "tobacco800", "ucsf"):
+            assert mods["cfg"].cluster_threshold_for(src) == mods["cfg"].CLUSTER_THRESHOLD
+
+    def test_the_sparse_sources_get_a_lower_instance_bar(self, mods):
+        cfg = mods["cfg"]
+        assert cfg.min_instances_for("spods") == cfg.MIN_INSTANCES
+        assert cfg.min_instances_for("staver") < cfg.MIN_INSTANCES
+        assert cfg.min_instances_for("tobacco800") < cfg.MIN_INSTANCES
+
+
+class TestAnchorPagesAreInEveryTier:
+    """The known negatives must not be evicted by a distractor budget.
+
+    README: a page from a source exhaustively checked for a class is "the
+    hardest possible negative" -- same scanner, same paper, same era.  The
+    2026-09-01 build dropped 129 of them over the tier budget to make room for
+    UCSF pages, which spends the hardest negatives to buy the easiest.  There
+    are only ~2,650 anchor pages; they fit in every tier including `s`.
+    """
+
+    def test_an_anchor_page_survives_a_budget_far_below_the_corpus(self, mods):
+        pages = [_page(mods, f"spods/p{i}", "spods", path=f"/nonexistent/s{i}.png") for i in range(5)] + [
+            _page(mods, f"ucsf/p{i}", "ucsf", path=f"/nonexistent/u{i}.png") for i in range(200)
+        ]
+
+        tiers, _cut = mods["build"].assign_tiers(pages, {}, tiers={"s": 10, "l": 100}, tier_order=("s", "l"), salt="t")
+        anchors = [pid for pid in tiers if pid.startswith("spods/")]
+        assert len(anchors) == 5, "an anchor page was dropped over budget"
+        assert all(tiers[pid] == "s" for pid in anchors), "anchors must be in the smallest tier"
+
+    def test_ucsf_distractors_are_still_budgeted(self, mods):
+        pages = [_page(mods, f"ucsf/p{i}", "ucsf", path=f"/nonexistent/u{i}.png") for i in range(200)]
+        tiers, _cut = mods["build"].assign_tiers(pages, {}, tiers={"s": 10, "l": 100}, tier_order=("s", "l"), salt="t")
+        # The budget still binds on the population it is meant to bind on.
+        assert sum(1 for t in tiers.values() if t == "s") == 10
+
+
+class TestUcsfBandsAreNotClustered:
+    """UCSF letterhead bands propose noise, not candidates.
+
+    The band is a fixed-geometry crop -- the top 22% of every page -- so a
+    perceptual hash of it describes page layout rather than the logo inside it,
+    and two unrelated companies' letterheads at the same position hash alike.
+
+    Swept on 3,000 marks there is no flat region at any threshold: largest
+    component 12.4% at 0.02 (the lowest on the grid), 36% at 0.04, 81% at 0.10,
+    99% at 0.22, with 85% of marks singletons throughout.  SPODS sits at 1.5%
+    across the same range.  It is percolated from the start, so there is no
+    threshold to pick -- which is why this is a source list and not a number.
+
+    At 0.10 it produced one 12,706-instance "class"; being admitted-class pages,
+    those pinned 13,874 pages into tier `s` against a 5,000 budget.
+    """
+
+    def test_ucsf_is_not_clustered(self, mods):
+        assert "ucsf" not in mods["cfg"].CLUSTERED_SOURCES
+
+    def test_the_anchor_sources_still_are(self, mods):
+        assert set(mods["cfg"].CLUSTERED_SOURCES) == {"spods", "staver", "tobacco800"}
+
+    def test_every_clustered_source_has_a_swept_threshold(self, mods):
+        # A source we cluster without a swept number is one running on an
+        # inherited default, which is how UCSF got a 12,706-instance class.
+        cfg = mods["cfg"]
+        for src in cfg.CLUSTERED_SOURCES:
+            assert src in cfg.CLUSTER_THRESHOLD_BY_SOURCE
+
+    def test_ucsf_pages_are_still_in_the_corpus(self, mods):
+        # Dropping the CLASSES must not drop the PAGES: UCSF is 197k distractors
+        # and that was always 92% of what it was for.
+        assert "ucsf" not in mods["cfg"].ANCHOR_SOURCES
+        assert mods["cfg"].eligible_distractor("spods", "ucsf", "Opioids") is True
