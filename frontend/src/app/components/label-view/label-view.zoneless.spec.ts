@@ -9,6 +9,8 @@ import { LabelSessionService } from '../../services/label-session.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { SortStateService } from '../../services/sort-state.service';
 import { AutopilotStateService } from '../../services/autopilot-state.service';
+import { EmbedderCapabilityService } from '../../services/embedder-capability.service';
+import type { EmbedderInfo } from '../../models/api.models';
 import { ActiveContextService } from '../../services/active-context.service';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleResource, settleZoneless } from '../../testing/settle-resource';
@@ -1014,6 +1016,190 @@ describe('LabelViewComponent', () => {
       await new Promise<void>((resolve) => setTimeout(resolve, 800));
       httpMock.expectNone((req) => req.url.startsWith('/api/learned-sort/result'));
       expect(component.sortState.sortBusy).toBe(false);
+    });
+  });
+
+  // Issue #3510: a pair switch reloads medias and votes but re-ran no sort, so
+  // the pair it landed on kept the empty ranking the reset left behind — an
+  // empty work queue and a placeholder in the centre, where a fresh entry to
+  // that same pair produces a ranking and an item. `reseedForNewPair` is the
+  // backstop that ranks it.
+  describe('pair-switch re-ranking', () => {
+    /** Seed an active pair *before* ngOnInit so the `pair$` replay is the
+     *  subscription's skipped first emission rather than a spurious reload. */
+    function seedPair(): ActiveContextService {
+      const activeContext = TestBed.inject(ActiveContextService);
+      activeContext.setActivePair('ds1', 'det1');
+      return activeContext;
+    }
+
+    /** The detector-registry read the switch fires off `modelId$` needs its
+     *  real shape; the catch-all `[]` drain elsewhere would break its handler. */
+    function flushDetectorRegistry(): void {
+      httpMock
+        .match((req) => req.url.startsWith('/api/detectors'))
+        .forEach((req) => req.flush({ detectors: [] }));
+    }
+
+    /** Answer the reload the pair switch fires: medias, the find hand-off, and
+     *  the votes read whose landing is what arms the reseed.
+     *  @param labelset good/bad label counts the new pair's votes report. */
+    async function flushPairReload(
+      labelset: { good: number[]; bad: number[]; labelset?: [number, number] },
+    ): Promise<void> {
+      flushDetectorRegistry();
+      TestBed.tick();
+      await settleResource();
+      httpMock.match('/api/medias/ids').forEach((req) =>
+        req.flush([
+          { id: 1, media_type: 'audio' },
+          { id: 2, media_type: 'audio' },
+        ]),
+      );
+      httpMock.match('/api/find/end-session').forEach((req) => req.flush({ ok: true, ended: false }));
+      TestBed.tick();
+      httpMock.match('/api/votes').forEach((req) =>
+        req.flush({
+          good: labelset.good,
+          bad: labelset.bad,
+          click_times: {},
+          learned_scores: {},
+          labelset_good_count: labelset.labelset?.[0] ?? labelset.good.length,
+          labelset_bad_count: labelset.labelset?.[1] ?? labelset.bad.length,
+        }),
+      );
+      TestBed.tick();
+      // The reseed is deferred a beat so a re-rank riding the same vote load
+      // gets there first; wait it out.
+      await new Promise<void>((resolve) => setTimeout(resolve, 400));
+    }
+
+    it('re-runs the learned sort for a pair whose labelset has both classes', async () => {
+      const activeContext = seedPair();
+      flushInitialRequests();
+      flushDetectorRegistry();
+      component.sortState.setSortMode('learned');
+
+      activeContext.setActivePair('ds2', 'det2');
+      // The reset drops the old pair's ranking; nothing re-ranked it before.
+      expect(component.sortState.sortOrder ?? []).toEqual([]);
+
+      // Labelset counts without dataset votes: the detector carries labels from
+      // another dataset, so learned sort is available and both medias here are
+      // still unvoted (and so still selectable).
+      await flushPairReload({ good: [], bad: [], labelset: [1, 1] });
+
+      const rerank = httpMock.match('/api/learned-sort');
+      expect(rerank.length).toBe(1);
+      rerank[0].flush({
+        status: 'done',
+        results: [{ id: 2, score: 0.9 }, { id: 1, score: 0.1 }],
+        threshold: 0.5,
+      });
+      TestBed.tick();
+      expect(component.sortState.sortOrder?.length).toBe(2);
+      // The ranking the switch produced seeds the centre the reset emptied.
+      expect(component.mediaState.selectedId()).toBe(2);
+    });
+
+    it('re-runs Autopilot\'s text seed sort when the new pair has no labelset', async () => {
+      const activeContext = seedPair();
+      flushInitialRequests();
+      flushDetectorRegistry();
+      TestBed.inject(LabelSessionService).textQuery = 'a query';
+      TestBed.inject(AutopilotStateService).activate(false);
+
+      activeContext.setActivePair('ds2', 'det2');
+      await flushPairReload({ good: [], bad: [] });
+
+      // No labelset for the new pair, so learned sort is impossible: the switch
+      // falls back to the same text sort Autopilot's activation fires on entry.
+      httpMock.expectNone('/api/learned-sort');
+      const textSort = httpMock.match('/api/sort');
+      expect(textSort.length).toBe(1);
+      expect(textSort[0].request.body).toEqual({ text: 'a query' });
+    });
+
+    it('stands down when something already ranked the new pair', async () => {
+      const activeContext = seedPair();
+      flushInitialRequests();
+      flushDetectorRegistry();
+      component.sortState.setSortMode('learned');
+      TestBed.inject(LabelSessionService).textQuery = 'a query';
+
+      activeContext.setActivePair('ds2', 'det2');
+      flushDetectorRegistry();
+      TestBed.tick();
+      await settleResource();
+      httpMock.match('/api/medias/ids').forEach((req) =>
+        req.flush([{ id: 1, media_type: 'audio' }, { id: 2, media_type: 'audio' }]),
+      );
+      httpMock.match('/api/find/end-session').forEach((req) => req.flush({ ok: true, ended: false }));
+      TestBed.tick();
+      httpMock.match('/api/votes').forEach((req) =>
+        req.flush({
+          good: [1],
+          bad: [2],
+          click_times: {},
+          learned_scores: {},
+          labelset_good_count: 1,
+          labelset_bad_count: 1,
+        }),
+      );
+      // A re-rank riding the same vote load (an Autopilot phase change) lands
+      // its ranking first. The backstop must not train the same model again.
+      component.sortState.setSortWindow({
+        items: [{ id: 1, score: 0.9 }],
+        threshold: 0.5,
+        acqThreshold: null,
+        total: 1,
+        hasMore: false,
+        token: null,
+        aboveThreshold: 1,
+      });
+      TestBed.tick();
+      await new Promise<void>((resolve) => setTimeout(resolve, 400));
+
+      httpMock.expectNone('/api/learned-sort');
+      httpMock.expectNone('/api/sort');
+    });
+
+    it('keeps Autopilot available while the new pair\'s votes are still loading', async () => {
+      seedPair();
+      flushInitialRequests();
+      // A dataset whose embedder cannot embed text: Autopilot then has only the
+      // labelset to seed from — and mid-switch that labelset is not loaded, so
+      // its zeroed counts must not be read as "this detector has no labels".
+      // They were, which stopped Autopilot for good on every switch onto a
+      // no-text dataset, leaving the new pair unranked with no way back short
+      // of re-entering the window (#3510).
+      TestBed.inject(EmbedderCapabilityService).infos.set([
+        { name: 'dinov2_patch', supports_text: false } as EmbedderInfo,
+      ]);
+      component.mediaState.loadMedias();
+      TestBed.tick();
+      await settleResource();
+      httpMock.match('/api/medias/ids').forEach((req) =>
+        req.flush([{ id: 1, media_type: 'image', embedders: ['dinov2_patch'] }]),
+      );
+      TestBed.tick();
+      await settleResource();
+      expect(component.textSupported).toBe(false);
+
+      component.voteState.clear();
+      expect(component.voteState.votesLoaded).toBe(false);
+      expect(component.autopilotDisabled).toBe(false);
+
+      // Once the votes land, an empty labelset really does mean Autopilot has
+      // nothing to seed from.
+      component.voteState.loadVotes();
+      TestBed.tick();
+      httpMock.match('/api/votes').forEach((req) =>
+        req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
+      );
+      TestBed.tick();
+      expect(component.voteState.votesLoaded).toBe(true);
+      expect(component.autopilotDisabled).toBe(true);
     });
   });
 

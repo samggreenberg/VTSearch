@@ -163,7 +163,12 @@ export class SortRunnerService {
       });
   }
 
-  onTextSort(text: string): void {
+  /**
+   * @param autoSelect Whether the finished ranking may move the centre viewer.
+   *                   False on the pair-switch path, where the selection is the
+   *                   view's pair-change seed effect to place (#3510).
+   */
+  onTextSort(text: string, autoSelect = true): void {
     this.sortState.setTextQuery(text);
     this.sortState.setSortBusy(true);
     this.sortState.setSortStatus('Sorting…');
@@ -172,7 +177,7 @@ export class SortRunnerService {
         this.applySortWindow(response);
         this.sortState.setSortBusy(false);
         this.sortState.setSortStatus('');
-        this.autoSelectNext();
+        if (autoSelect) this.autoSelectNext();
       },
       error: () => {
         this.sortState.setSortBusy(false);
@@ -394,7 +399,7 @@ export class SortRunnerService {
    * their embeddings, so the phase surfaces items resembling what the examples
    * have in common.
    */
-  exampleSortByFilenames(filenames: string[]): void {
+  exampleSortByFilenames(filenames: string[], autoSelect = true): void {
     if (filenames.length === 0) return;
     this.sortState.setSortBusy(true);
     this.sortState.setSortStatus(filenames.length > 1 ? 'Sorting by examples…' : 'Sorting by example…');
@@ -404,7 +409,7 @@ export class SortRunnerService {
         this.sortState.setSortBusy(false);
         this.sortState.setSortStatus('');
         this.sortState.setSortMode('load');
-        this.autoSelectNext();
+        if (autoSelect) this.autoSelectNext();
       },
       error: () => {
         this.sortState.setSortBusy(false);
