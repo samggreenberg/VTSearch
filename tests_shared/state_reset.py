@@ -169,6 +169,13 @@ def reset_shared_state(medias_map, medias_snapshot) -> None:
 
     reset_mtime_cache_for_tests()
 
+    # Forget which encoders the timing recorder has seen loaded: the ledger is
+    # process-global and decides whether a recorded run is written cold or warm,
+    # so one test's run would otherwise label the next test's.
+    from vtscore.timing.recorder import reset_seen_models_for_tests
+
+    reset_seen_models_for_tests()
+
     # Reset CLI progress format so a test that flips it to "json" can't leak the
     # choice into the next test.
     from vtscore import cli_progress

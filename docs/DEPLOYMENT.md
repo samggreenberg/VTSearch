@@ -125,7 +125,7 @@ documented workarounds; this section describes the code as it stands.
 |----------|---------|-------------|
 | `VTSEARCH_TIMING_PROFILE` | unset | Path to a timing-profile JSON measured on this environment's hardware. Tells every instance how long each step of each long-running task takes here, so progress bars pace and predict against reality instead of the shipped defaults. See [Progress-bar timing profile](#progress-bar-timing-profile). |
 | `VTSEARCH_TIMING_RECORD` | unset | Path to a JSONL sink. When set, every long-running task — dataset imports included — appends one row per step as it finishes. This is how you gather the measurements the profile is fit from; leave it unset in steady state. |
-| `VTSEARCH_PROFILE_LOAD` | unset | Path to a second JSONL sink, written only by dataset imports and in more detail: it additionally splits cold from warm model loads, cold from cached downloads, and the finalize step into its sub-slots. Optional — imports already feed `VTSEARCH_TIMING_RECORD` above. Arm it as well when you are calibrating the load pipeline specifically; the fitter reads both files and both row shapes. |
+| `VTSEARCH_PROFILE_LOAD` | unset | Path to a second JSONL sink, written only by dataset imports and in more detail: it additionally splits cold from cached downloads and the finalize step into its sub-slots. (Both recorders mark cold vs warm model loads.) Optional — imports already feed `VTSEARCH_TIMING_RECORD` above. Arm it as well when you are calibrating the load pipeline specifically; the fitter reads both files and both row shapes. |
 
 ### Dataset-ingest concurrency
 

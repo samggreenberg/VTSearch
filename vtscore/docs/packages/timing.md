@@ -150,8 +150,18 @@ Each task wrapped in `record_task` then appends one row per step:
 ```json
 {"task": "text_sort", "device": "cuda", "cuml": true, "media_type": "image",
  "embedder": "siglip", "n": 12403, "size_mb": 0.0, "step": "score",
- "seconds": 1.83, "ok": true}
+ "seconds": 1.83, "ok": true, "cold_model": false}
 ```
+
+`cold_model` says whether this run was the first in the process to need
+its `(media_type, embedder)` encoder, and so the one that paid to
+download and instantiate it. Without it a once-per-process cost is
+unfittable: a text sort's model load measures 15 s once and 0 s on the
+next 47, and a fitter that cannot separate the two populations medians
+them into "free". Only tasks whose `TaskSpec` declares `loads_encoder`
+take part - a `dataset_open` reads a pkl and touches no encoder, so it
+neither carries the field nor claims a key that the genuinely cold sort
+behind it needs.
 
 Because the recorder sits behind an env var, an admin has two ways to
 gather data and both produce the same file:
@@ -170,12 +180,11 @@ of no-op method calls: no tracker subscription, no file handle.
 
 The dataset-load pipeline carries an older, richer recorder
 (`vtscore/datasets/stages/_load_profiler.py`) that additionally
-distinguishes cold from warm model loads, cold from cached downloads,
-and the sub-slots inside finalize. Both run on the same load. They
-answer different questions, are armed by different env vars, and write
-different files - and the fitter reads both row shapes, so a
-pre-existing dataset-load calibration sweep folds into a new profile
-rather than being re-measured.
+distinguishes cold from cached downloads and splits finalize into its
+sub-slots. Both run on the same load. They answer different questions,
+are armed by different env vars, and write different files - and the
+fitter reads both row shapes, so a pre-existing dataset-load calibration
+sweep folds into a new profile rather than being re-measured.
 
 ---
 
@@ -196,6 +205,16 @@ The fit is deliberately plain. Per `(task, cell, step)`:
 - **Everything else** gets ordinary least squares against `n`: the
   intercept is what the step costs at all (loading an encoder, opening a
   file) and the slope is what each additional item adds.
+- **Cold runs are held out** when the warm ones can carry the regression
+  alone. A cold run pays once-per-process costs no later run repeats -
+  the encoder download, the CUDA context, the first forward pass - and it
+  always lands at whichever `n` ran first, so it has enormous leverage on
+  the slope. The holdout stops short of costing a cell its only line:
+  below two distinct warm sizes no slope is estimable, and a two-run
+  sweep's first run is always the cold one. When the warm runs then
+  measure a step as *exactly* free while a cold one measured it as real,
+  the step is not free here but deferred, and it keeps a small floor
+  rather than 0 so the bar still shows a slice for it.
 - A fit with no spread in `n`, or one that comes back with a **negative**
   slope (noise beating signal on a short step), collapses to the median
   seconds with no slope. A confidently wrong slope extrapolates badly at
