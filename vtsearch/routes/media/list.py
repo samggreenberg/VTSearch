@@ -791,8 +791,12 @@ def _resolve_display_image(media_id: int) -> tuple[bytes, str, str]:
         except KeyError:
             mt = None
         resp = mt.image_response(c) if mt else None
-        if resp is not None:
-            return resp.data, resp.mimetype, resp.download_name
+        # ``MediaResponse.data`` is ``bytes | dict`` (text types serve JSON),
+        # but an image is always bytes.  A hook handing back a dict is a
+        # broken plugin, not an image: treat it as "no picture" rather than
+        # letting it reach ``send_file``.
+        if resp is not None and isinstance(resp.data, (bytes, bytearray)):
+            return bytes(resp.data), resp.mimetype, resp.download_name
         abort(400, message="no image available")
 
     media_bytes = _resolve_bytes(c)

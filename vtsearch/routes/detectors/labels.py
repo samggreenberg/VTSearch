@@ -521,10 +521,11 @@ def _in_memory_thumbnail_response(media: dict, media_type: str, crop=None):
         return image_thumbnail_response(bytes(resp.data), resp.mimetype, resp.download_name, crop=crop)
 
     resp = mt.image_response(media)
-    if resp is None:
+    # ``bytes | dict``, as in the image branch above: only bytes are paintable.
+    if resp is None or not isinstance(resp.data, (bytes, bytearray)):
         return None
     return send_file(
-        io.BytesIO(resp.data),
+        io.BytesIO(bytes(resp.data)),
         mimetype=resp.mimetype,
         download_name=resp.download_name,
     )
