@@ -419,6 +419,27 @@ places:
 >
 > → #3257 was closed unrun; the trajectory it wanted to measure does not exist.
 
+> ### ⚠ Follow-up, 2026-09-02 (#3516): cold Find is fused now too
+>
+> The site the correction above hands this study's numbers to has since been
+> given its haystack: `_score_with_cold_detector` passes `temp_medias` (and the
+> labelled ids) to `train_and_threshold`, so a cold Find is cut by the
+> fold-anchored population estimator like every other training pass in the app.
+> The cut is fitted on the **image-level** rows that path scores, not the
+> max-pool - its head is re-derived from image-level label vectors with no
+> region flooding, so image-level is the distribution the cut will actually be
+> applied to (`docs/ML.md`, region flooding).
+>
+> The direction the study predicted held on a synthetic 2k-media patch corpus:
+> the pooled cut admitted **2000/2000** media, the anchored cut 728. The
+> estimator's marginal cost is bounded at **~2 s per (detector, dataset) pair**
+> and flat beyond ~50k media, because the fit samples the haystack.
+>
+> **The pooled conformal rule now has one user-facing site left**: the
+> Inclusion slider's re-cut for a detector with no anchored cut, which is a
+> fallback by construction. Pinned by
+> `tests/detectors/test_find_cold_threshold.py`.
+
 That second one is narrower than it reads: it is the library API, not the app's
 reload. On region-voting detectors the pooled rule is currently **0.063 ± 0.008
 worse than what a freshly trained detector gets**, and roughly two-thirds of that gap
