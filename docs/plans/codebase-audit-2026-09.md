@@ -117,10 +117,6 @@ care.
 - [ ] #3411 — `common.py` forked seven ways; `_cells_io.py` forked twice (Haiku 4.5)
 - [ ] #3414 — The Smart-indicator FP/FN cost loop is a mirror that doesn't need to be one (Opus 4.8)
 
-## Frontend — god components & extraction seams
-
-- [ ] #3428 — Promote `SortStateService` from anemic store to orchestrator (Opus 4.8)
-
 ## Frontend — duplication & dead code
 
 - [ ] #3499 — `BrowseMinimapComponent`'s floating mode looks entirely unreachable (Sonnet 5). Found while doing #3441, not by the audit sweep: `resized` was only the visible half of it.
