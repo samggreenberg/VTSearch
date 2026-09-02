@@ -6,7 +6,7 @@ import { BrowseSelectionService } from '../../services/browse-selection.service'
 import { MediaMetadataCacheService } from '../../services/media-metadata-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { SettingsStateService } from '../../services/settings-state.service';
-import type { NowPlaying } from '../browse-hover-preview/browse-hover-preview.component';
+import type { NowPlaying } from '../../utils/browse-audio-audition';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { makeActiveContextStub, makeSettingsStateStub } from '../../testing/mocks';
 import { settleZoneless } from '../../testing/settle-resource';

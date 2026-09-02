@@ -9,7 +9,8 @@ import {
   HexHoverEvent,
 } from '../browse-canvas/browse-canvas.component';
 import type { BrowseGraphicsMode } from '../browse-canvas/render-perf';
-import { BrowseHoverPreviewComponent, NowPlaying } from '../browse-hover-preview/browse-hover-preview.component';
+import { BrowseHoverPreviewComponent } from '../browse-hover-preview/browse-hover-preview.component';
+import type { NowPlaying } from '../../utils/browse-audio-audition';
 import { BrowseBinPopupComponent } from '../browse-bin-popup/browse-bin-popup.component';
 import { BrowseLegendComponent } from '../browse-legend/browse-legend.component';
 import { BrowseSelectionPanelComponent } from '../browse-selection-panel/browse-selection-panel.component';
