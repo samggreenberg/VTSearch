@@ -25,11 +25,11 @@ if TYPE_CHECKING:
 
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.eval.labels import region_box_for_category
+from vtscore.eval.calibration_metrics import inclusion_weights
 from vtscore.eval.step_model import (
     PRODUCTION_HEAD,
     StepModel,
     good_training_vec,
-    inclusion_weights,
     resolve_hidden_dim,
     score_sim_set_with_model,
 )
@@ -113,8 +113,10 @@ def _labelset_error_costs(
 ) -> list[float]:
     """Weighted FPR/FNR of **every** recent model on the current labelled set.
 
-    Feeds the Smart indicator.  Mirrors ``labeling_progress._eval_cached_models``
-    /``_score_step``: every model in the window is re-scored against the
+    Feeds the Smart indicator.  Reproduces ``labeling_progress._eval_cached_models``
+    /``_score_step`` - and shares their arithmetic, via
+    :func:`~vtscore.training.thresholds.weighted_error_cost`, so only the input
+    plumbing differs: every model in the window is re-scored against the
     *current* labelset — the only ground truth the app has — with its own cached
     threshold, so all points of the slope regression share one eval set and the
     trend isolates model improvement.  Scoring each model against the labelset
@@ -129,11 +131,11 @@ def _labelset_error_costs(
     """
     import numpy as np  # noqa: PLC0415
 
+    from vtscore.training.thresholds import weighted_error_cost  # noqa: PLC0415
+
     ids = list(good_votes) + list(bad_votes)
     labels = [1.0] * len(good_votes) + [0.0] * len(bad_votes)
-    total_pos = len(good_votes)
-    total_neg = len(bad_votes)
-    if not model_steps or not ids or total_pos == 0 or total_neg == 0:
+    if not model_steps or not ids or not good_votes or not bad_votes:
         return []
 
     fpr_weight, fnr_weight = inclusion_weights(inclusion)
@@ -144,16 +146,7 @@ def _labelset_error_costs(
     costs: list[float] = []
     for step, threshold in model_steps:
         scores = np.asarray(step.predict(embs)).ravel()
-        fp = fn = 0
-        for score, true_label in zip(scores.tolist(), labels, strict=True):
-            predicted = 1 if score >= threshold else 0
-            if predicted == 1 and true_label == 0.0:
-                fp += 1
-            elif predicted == 0 and true_label == 1.0:
-                fn += 1
-        fpr = fp / total_neg
-        fnr = fn / total_pos
-        costs.append(fpr_weight * fpr + fnr_weight * fnr)
+        costs.append(weighted_error_cost(scores, labels, threshold, fpr_weight, fnr_weight)[0])
     return costs
 
 

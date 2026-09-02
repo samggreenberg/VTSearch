@@ -6,11 +6,14 @@ float threshold. Detector-specific glue (sourcing ``X_list`` / ``y_list``
 from votes, caching on ``DetectorContext``) lives in
 :mod:`vtscore.detectors`.
 
-The implementation is split across five submodules, layered so that each one
+The implementation is split across six submodules, layered so that each one
 only reads from those above it:
 
 * :mod:`~vtscore.training.thresholds.knobs` - what an Inclusion value, a
   Train/Calibrate split and the sentinels *mean*.  Depends on nothing.
+* :mod:`~vtscore.training.thresholds.costs` - what a cut *costs* on a labelled
+  sample, under the weights the knob names.  Numpy only; the one definition the
+  shipped Smart indicator and the eval harness both score through.
 * :mod:`~vtscore.training.thresholds.gmm` - the 1-D two-component mixture, its
   anchored variant, and the rules that read a cut off a fit.  Self-contained.
 * :mod:`~vtscore.training.thresholds.anchored` - the shipped path: per-fold
@@ -111,6 +114,7 @@ from vtscore.training.thresholds.gmm import (
     scored_ordering,
     snap_cut_to_sample,
 )
+from vtscore.training.thresholds.costs import weighted_error_cost
 from vtscore.training.thresholds.knobs import (
     ACQUISITION_INCLUSION_OFFSET,
     INCLUSION_MAX,
@@ -135,6 +139,7 @@ __all__ = [
     "classify_threshold_provenance",
     "inclusion_cost_weights",
     "production_split_for",
+    "weighted_error_cost",
     "ANCHOR_WEIGHT_DEFAULT",
     "CUT_KIND_CONTINUED",
     "CUT_KIND_DEGENERATE_MIDPOINT",
