@@ -287,3 +287,48 @@ cov_base  # noqa: F821 - the (base, span) pair for the finalize "coverage" slot
 reg_base  # noqa: F821 - ditto for "registry"
 orig_text  # noqa: F821 - vtscore.datasets.importers.combine_datasets binding triple
 cost_k  # noqa: F821 - vtscore.eval.voting_iterations operating-cost triple
+
+# ---------------------------------------------------------------------------
+# Autouse fixture imported for side effects in both conftests (the ``import``
+# is what registers it with pytest). The local alias goes through ``as
+# _allow_test_tmp_paths`` so a reader immediately sees ``F401`` and knows the
+# import is deliberate; the ``noqa: F401`` at the import site silences ruff,
+# and this entry silences vulture.
+# ---------------------------------------------------------------------------
+_allow_test_tmp_paths  # noqa: F821
+
+# ---------------------------------------------------------------------------
+# ``reset_all_async_jobs_for_tests`` is called from
+# ``tests_shared/state_reset.py``, which is not in vulture's SCAN_PATHS (the
+# shared helpers package sits outside both test trees). It is also part of
+# ``vtscore.concurrency``'s public surface, tabulated in
+# ``vtscore/docs/packages/concurrency.md``.
+# ---------------------------------------------------------------------------
+reset_all_async_jobs_for_tests  # noqa: F821
+
+# ---------------------------------------------------------------------------
+# ``StreamProgress.readable`` overrides ``io.IOBase.readable`` on a stream
+# wrapper the container reader hands to ``pickle.load``. Python's io / pickle
+# machinery queries ``.readable()`` reflectively before pulling bytes; there
+# is no in-repo caller by design.
+# ---------------------------------------------------------------------------
+readable  # noqa: F821 - vtscore.datasets.container.StreamProgress, io.IOBase override
+
+# ---------------------------------------------------------------------------
+# ``ErrorSchema.error_code`` is a marshmallow field on the flask-smorest error
+# schema that documents the ``error_code`` slug we surface (``dataset_not_loaded``,
+# ``auth_required``, …). Marshmallow collects fields via metaclass at class-
+# creation time, so vulture cannot see the linkage. The blanket ``vtsearch/schemas/*``
+# exclude does not cover this file — the schema lives in ``vtsearch/errors.py``
+# alongside the handlers that populate the field.
+# ---------------------------------------------------------------------------
+error_code  # noqa: F821
+
+# ---------------------------------------------------------------------------
+# ``VTSearchApi.ERROR_SCHEMA`` overrides flask-smorest's ``Api.ERROR_SCHEMA``
+# so ``/api/openapi.json`` documents *our* error envelope, not the library's.
+# flask-smorest reads ``self.ERROR_SCHEMA`` reflectively in
+# ``flask_smorest/spec/__init__.py`` when building the default-error response;
+# there is no in-repo caller.
+# ---------------------------------------------------------------------------
+ERROR_SCHEMA  # noqa: F821
