@@ -3,6 +3,7 @@
 #
 #   bash launch_docmarks.sh probe          # can I reach every source?
 #   bash launch_docmarks.sh build          # stage 1: sources + clustering (CPU)
+#   bash launch_docmarks.sh slate          # stage 2: the human audit bundle (CPU)
 #   bash launch_docmarks.sh status         # queue + the real signal on disk
 #   bash launch_docmarks.sh embed s        # stage 5: cells for one tier (GPU)
 #
@@ -108,6 +109,43 @@ RUNNER_EOF
     --wrap="bash $RUNNER"
   ;;
 
+slate)
+  # The human pass, as one bundle to take away.  Both sheet sets in one job
+  # because they are one sitting: the merge slate fixes the *partition* (which
+  # proposals are one mark) and membership fixes the *instances* (which crops
+  # really are that mark), and doing them a week apart means re-deriving the
+  # same context twice.  Neither touches a GPU and neither refetches a source --
+  # this reads the built corpus and writes PNGs -- so it is minutes, not hours.
+  #
+  # MEM is 32G: rendering opens full-resolution scans (SPODS is A4 at 300 dpi,
+  # ~2,476x3,480) one at a time, but membership walks every instance of every
+  # class, so the page cache is the cost rather than any one image.
+  RUNNER="/exp/$USER/.docmarks-slate.$$.sh"
+  cat > "$RUNNER" <<RUNNER_EOF
+#!/usr/bin/env bash
+set -uo pipefail
+source "$WT/gridenv.sh"
+source "$WT/scripts/experiments/pile/pile_env.sh"
+export VTS_REPO="$WT"
+export VTS_DOCMARKS_OUT="$VTS_DOCMARKS_OUT"
+export CUDA_VISIBLE_DEVICES=
+cd "$HERE"
+echo "node=\$(hostname) job=\$SLURM_JOB_ID start=\$(date -Is)"
+python -u make_audit_slate.py --task merge      --corpus "$VTS_DOCMARKS_OUT" || exit 1
+python -u make_audit_slate.py --task membership --corpus "$VTS_DOCMARKS_OUT" || exit 1
+cd "$VTS_DOCMARKS_OUT" && tar czf "audit/docmarks-audit-\$(date +%Y%m%d).tar.gz" audit/merge audit/membership
+echo "bundle: $VTS_DOCMARKS_OUT/audit/docmarks-audit-\$(date +%Y%m%d).tar.gz"
+echo "exit=\$? end=\$(date -Is)"
+RUNNER_EOF
+  chmod +x "$RUNNER"
+
+  sbatch --job-name="docmarks-slate" --partition="$PARTITION" \
+    --mem="${VTS_DOCMARKS_SLATE_MEM:-32G}" --cpus-per-task=2 \
+    --time="${VTS_DOCMARKS_SLATE_TIME:-02:00:00}" \
+    --output="$LOGS/slate-%j.out" --error="$LOGS/slate-%j.out" \
+    --wrap="bash $RUNNER"
+  ;;
+
 status)
   squeue -u "$USER" -n "$JOB_NAME" -o "%.10i %.16j %.8T %.12M %.12l %R"
   echo
@@ -116,6 +154,7 @@ status)
   echo "pdfs:   $(find "$VTS_DOCMARKS_RAW/ucsf/pdf" -name "*.pdf" 2>/dev/null | wc -l) fetched"
   echo "pages:  $(find "$VTS_DOCMARKS_OUT/images" -type f 2>/dev/null | wc -l) rendered"
   echo "free:   $(df -h "$VTS_DOCMARKS_OUT" | tail -1 | awk "{print \$4}")"
+  echo "slate:  $(ls "$VTS_DOCMARKS_OUT"/audit/merge/slate_*.png 2>/dev/null | wc -l) sheet(s), $(ls "$VTS_DOCMARKS_OUT"/audit/merge/pairs_*.png 2>/dev/null | wc -l) pair sheet(s)"
   tail -5 "$(ls -t "$LOGS"/build-*.out 2>/dev/null | head -1)" 2>/dev/null
   ;;
 
@@ -154,5 +193,5 @@ RUNNER_EOF
   ;;
 
 *)
-  echo "usage: $0 {probe|build|status|embed <tier>}" >&2; exit 2 ;;
+  echo "usage: $0 {probe|build|slate|status|embed <tier>}" >&2; exit 2 ;;
 esac

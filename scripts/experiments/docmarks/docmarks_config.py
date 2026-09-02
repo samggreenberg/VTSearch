@@ -332,3 +332,41 @@ def eligible_distractor(class_source: str, page_source: str, page_industry: str 
     if page_source == "ucsf" and page_industry and f"ucsf:{page_industry}" in banned:
         return False
     return True
+
+
+# --------------------------------------------------------------------------
+# The merge slate (human pass)
+# --------------------------------------------------------------------------
+#
+# The `confusable` pass adjudicates one pair per sheet, which is correct and
+# unusable at scale: 60 admitted classes is 1,770 pairs, so the reviewer is
+# handed 1,770 PNGs to open.  The `merge` slate asks the same question in the
+# shape a person can actually answer -- every class on a few contact sheets,
+# similarity-ordered and numbered, answered as a list of index sets -- and
+# compiles that answer back into exactly the same same/different verdicts.
+
+#: Instances shown per class cell on the slate.  One exemplar is denser and
+#: fits every class on a single page, but a merge call then rests entirely on
+#: one crop being representative of its class -- which is the assumption the
+#: membership pass exists because we do not trust.  Three is the smallest
+#: number that shows within-class variation.
+MERGE_SLATE_INSTANCES = int(os.environ.get("VTS_DOCMARKS_MERGE_INSTANCES", "3"))
+
+#: Cells per slate sheet.  4x6 at a 3-up cell is ~1,500x1,400 px: legible at
+#: 100% on a desktop, which is the only place these are ever looked at.
+MERGE_SLATE_COLS = 4
+MERGE_SLATE_ROWS = 6
+
+#: How many of the nearest class pairs get their own explicit side-by-side
+#: sheet, and thereby become eligible to be recorded as adjudicated.
+#:
+#: This number is the honesty budget for the closed-world rule.  A reviewer who
+#: works a whole slate has genuinely compared the pairs that sit next to each
+#: other and the pairs on the appendix; they have *not* compared all 1,770, and
+#: recording the far ones as adjudicated would assert a decision nobody made.
+#: So only these pairs are separated on a `REVIEWED-ALL` slate.  Raise it to
+#: buy more of the matrix at the cost of more sheets to work through.
+MERGE_SLATE_NEAR_PAIRS = int(os.environ.get("VTS_DOCMARKS_MERGE_NEAR_PAIRS", "120"))
+
+#: Pairs per appendix sheet.
+MERGE_PAIRS_PER_SHEET = 12
