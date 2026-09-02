@@ -149,7 +149,11 @@ GET /api/medias/{media_id}/image
 
 → Image binary stream (`image/jpeg`, `image/png`, `image/gif`, `image/webp`, or
 `image/bmp` based on filename extension).
-400 if not an image. 404 if not found.
+For a non-image media type the route delegates to that type's
+`image_response` hook, so audio serves its waveform PNG, video its
+mid-frame, and a PDF document its first page.
+400 if the media is not an image and its `image_response` hook yielded
+nothing. 404 if not found.
 
 ### Get text content
 
@@ -260,7 +264,8 @@ Streams a downscaled thumbnail bounded to a fixed longest-side length, the
 same regardless of zoom level (an `ETag` lets the browser reuse it across
 scrolls/zoom). Grid and list tiles use this instead of `/image` so a gallery
 of high-resolution items doesn't decode every full-size bitmap at once.
-400 if the media is not an image and has no `image_response` delegate. 404 if
+400 if the media is not an image and its `image_response` hook yielded
+nothing. 404 if
 not found or bytes unavailable.
 
 ---

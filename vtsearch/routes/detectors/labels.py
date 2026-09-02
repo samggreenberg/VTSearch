@@ -499,8 +499,9 @@ def _in_memory_thumbnail_response(media: dict, media_type: str, crop=None):
     when ``media_bytes`` is not held in memory (thin-loaded datasets, e.g. a
     local folder import). This mirrors the center viewer's
     ``/api/medias/<id>/image`` byte resolution so a thumbnail never 404s for an
-    item the center can display. Audio/video/document: defer to the media
-    type's ``image_response`` (cached waveform / midframe PNG). Returns
+    item the center can display. Every other type: defer to the media type's
+    ``image_response`` (cached waveform / midframe PNG / first PDF page),
+    which returns ``None`` for a type with no paintable form. Returns
     ``None`` if no thumbnail can be produced.
 
     ``crop`` (a normalised region box) restricts an image thumbnail to the
@@ -519,10 +520,7 @@ def _in_memory_thumbnail_response(media: dict, media_type: str, crop=None):
             return None
         return image_thumbnail_response(bytes(resp.data), resp.mimetype, resp.download_name, crop=crop)
 
-    image_response_fn = getattr(mt, "image_response", None)
-    if image_response_fn is None:
-        return None
-    resp = image_response_fn(media)
+    resp = mt.image_response(media)
     if resp is None:
         return None
     return send_file(
