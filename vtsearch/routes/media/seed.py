@@ -32,7 +32,6 @@ from vtscore.seed_importers import get_seed_importer, list_seed_importers
 from vtsearch.routes._shared import (
     get_plugin_or_404,
     plugin_field_options,
-    register_plugin_typed_routes,
     validate_plugin_args,
 )
 from vtsearch.schemas.datasets import (
@@ -147,16 +146,3 @@ def seed_importer_field_options(body: dict, importer_name: str):
 
     return plugin_field_options(importer, body)
 
-
-# Per-plugin typed routes for /api/seed-import/<name>, so each registered
-# importer gets a static URL whose body schema is described in
-# /api/openapi.json with real per-field types.  Unknown names fall through
-# to the parameterized route above; plugins with file fields stay on the
-# multipart fallback.
-register_plugin_typed_routes(
-    seed_importers_bp,
-    list_plugins=list_seed_importers,
-    path_template="/api/seed-import/{plugin_name}",
-    endpoint_prefix="seed_import",
-    delegate=run_seed_import,
-)

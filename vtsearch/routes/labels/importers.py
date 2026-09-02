@@ -70,7 +70,6 @@ from vtsearch.errors import error_response
 from vtsearch.routes._shared import (
     get_plugin_or_404,
     plugin_field_options,
-    register_plugin_typed_routes,
     require_dataset_header,
     require_detector_header,
     run_plugin_or_error,
@@ -268,7 +267,11 @@ def label_importer_field_options(body: dict, importer_name: str):
 def run_label_import(importer_name: str):  # noqa: C901
     """Run the named label importer and apply the resulting labels.
 
-    Plugin-dependent body shape: not described in the OpenAPI spec.
+    Plugin-dependent body shape: the accepted keys are the named
+    plugin's declared ``fields``, so they cannot be enumerated in a
+    static OpenAPI schema.  Fetch them at runtime from
+    ``GET /api/label-importers``, whose ``fields`` array carries each key's
+    ``field_type``, ``required`` flag, and any ``options`` / bounds.
     """
     importer, err = get_plugin_or_404(get_label_importer, list_label_importers, importer_name, "label importer")
     if err:
@@ -374,21 +377,3 @@ def ingest_missing(body: dict):
         "message": message,
     }
 
-
-# ---------------------------------------------------------------------------
-# Per-plugin typed routes for /api/label-importers/import/<name>.
-# Registered at module-import time by iterating the label-importer
-# registry, so each known importer gets a static URL whose body schema
-# is described in /api/openapi.json with real per-field types.  Unknown
-# importer names fall through to the parameterized route above.
-# Plugins with file fields stay on the parameterized fallback.
-# ---------------------------------------------------------------------------
-
-register_plugin_typed_routes(
-    label_importers_bp,
-    list_plugins=list_label_importers,
-    path_template="/api/label-importers/import/{plugin_name}",
-    endpoint_prefix="run_label_import",
-    delegate=run_label_import,
-    extra_decorators=(require_detector_header, require_dataset_header),
-)
