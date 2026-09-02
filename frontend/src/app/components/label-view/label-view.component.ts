@@ -160,14 +160,23 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   // than the pair scope, or `reloadForNewPair`'s teardown would kill the
   // request it just issued for the new pair.
   private statusPolling$: Subscription | null = null;
-  /** Set by `reloadForNewPair` when the user was in `learned` sort mode at the
-   *  time of a pair switch: a constructor effect watches the labelset counts and
-   *  re-fires `onLearnedSort` once, after the reloaded votes make both classes
-   *  available. Replaces the old one-shot `labelsetGoodCount$` subscription now
-   *  that VoteStateService is signal-backed. */
-  private pendingRehydrateLearned = false;
+  /** Armed by `reloadForNewPair`, consumed once the new pair's votes land: the
+   *  backstop that ranks a freshly-switched pair when nothing else did. See
+   *  {@link seedRankingIfUnranked}. */
+  private pendingSeedOnPairReload = false;
+  /** Live {@link scheduleSeedRanking} timer, so a later switch (or the view
+   *  closing) supersedes the seed an earlier one armed. */
+  private seedTimer: ReturnType<typeof setTimeout> | null = null;
+  /** How long a scheduled seed waits. Long enough for an Autopilot phase change
+   *  riding the same vote load to fire its own sort first — the seed then sees
+   *  that ranking and stands down, instead of both training the same model. */
+  private readonly SEED_DELAY_MS = 300;
   private autopilotTextSortPending = false;
   private autopilotMediaSortPending = false;
+  /** `autoSelect` for whichever of the two pending seed sorts above is armed:
+   *  a seeded re-rank defers its selection to the seed effect below, and the
+   *  deferral must survive the wait for medias. */
+  private pendingSeedAutoSelect = true;
   /** Armed on entry and on each pair reload; consumed once medias first render
    *  to snap both panels tight to the grid (see ``snapPanelsOnLoad``). */
   private pendingSnapOnLoad = false;
@@ -247,11 +256,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         }
         if (this.autopilotTextSortPending && medias.length > 0 && infos !== null) {
           this.autopilotTextSortPending = false;
-          this.triggerAutopilotTextSort();
+          this.triggerAutopilotTextSort(this.pendingSeedAutoSelect);
         }
         if (this.autopilotMediaSortPending && medias.length > 0) {
           this.autopilotMediaSortPending = false;
-          this.triggerAutopilotMediaSort();
+          this.triggerAutopilotMediaSort(this.pendingSeedAutoSelect);
         }
       });
     });
@@ -261,20 +270,18 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     //
     // The pair change clears the selection, because a media id from the pair we
     // left means nothing under the new one (`PairScopeService.clearPairState`,
-    // #3489). Something has to put an item back, and on this path nothing did:
-    // *entry* seeds the centre through Autopilot's activation sort
-    // (`triggerAutopilotTextSort` -> `onTextSort` -> `autoSelectNext`), which a
-    // switch never re-runs, and every re-rank a switch *does* fire passes
-    // `autoSelect: false` — correctly, since those same calls also run
-    // underneath a user who is mid-labelling, where moving them off the item
+    // #3489). Something has to put an item back, and every re-rank a switch
+    // fires passes `autoSelect: false` — correctly, since those same calls also
+    // run underneath a user who is mid-labelling, where moving them off the item
     // they are looking at is the bug. So the seed is armed by the pair change
-    // itself and consumed here, once, by whichever re-rank happens to land
-    // first (the learned-sort rehydration below, an Autopilot phase change, a
-    // text sort).
+    // itself and consumed here, once, by whichever re-rank lands first (an
+    // Autopilot phase change, or `seedRankingIfUnranked` when nothing else
+    // ranked the pair at all).
     //
-    // Deliberately silent when no ranking ever arrives: switching to a pair the
-    // detector has no labelset for leaves the centre on its placeholder, which
-    // is exactly where a fresh entry to that same pair leaves it.
+    // Deliberately silent when no ranking ever arrives: switching to a pair
+    // nothing can rank — no labelset for learned sort, no Autopilot to seed a
+    // text sort — leaves the centre on its placeholder, which is exactly where
+    // a fresh entry to that same pair leaves it.
     effect(() => {
       const order = this.sortState.sortOrder;
       untracked(() => {
@@ -287,21 +294,19 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       });
     });
 
-    // Phase-3 learned-sort rehydration after a pair switch. `reloadForNewPair`
-    // clears votes (counts → 0) then reloads them; when the reloaded counts make
-    // both classes available again and the user was in `learned` mode, fire one
-    // `onLearnedSort`. Tracking both labelset counts re-runs this effect when
-    // `loadVotes` lands; the body runs `untracked` so reading
-    // `learnedSortAvailable` (which also reads the counts) can't loop it.
+    // Rank the new pair once its votes land (#3510). `votesLoaded` is the
+    // trigger rather than the labelset counts: the reset flips it false and the
+    // reload flips it back, whereas the counts are per-*detector* and so come
+    // back identical on a dataset-only switch. It is also the moment the counts
+    // stop being zeroed defaults and become facts about the pair on screen,
+    // which is what `seedRankingIfUnranked` has to read. The body runs `untracked`
+    // so reading the rest of the vote state here can't loop the effect.
     effect(() => {
-      this.voteState.labelsetGoodCount;
-      this.voteState.labelsetBadCount;
+      const votesLoaded = this.voteState.votesLoaded;
       untracked(() => {
-        if (!this.pendingRehydrateLearned) return;
-        if (this.sortState.sortMode === 'learned' && this.voteState.learnedSortAvailable) {
-          this.pendingRehydrateLearned = false;
-          this.sortRunner.onLearnedSort(false);
-        }
+        if (!this.pendingSeedOnPairReload || !votesLoaded) return;
+        this.pendingSeedOnPairReload = false;
+        this.scheduleSeedRanking();
       });
     });
   }
@@ -342,6 +347,13 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.autopilotStateService.state$
       .pipe(pairwise(), takeUntilDestroyed(this.destroyRef))
       .subscribe(([prev, curr]) => {
+        // Autopilot's retrain mode is settled *after* activation, from the run's
+        // first real reading of the labelset (#3535) — so this flip means "the
+        // detector was already trained" arriving late, and the ranking has to
+        // follow it even though the phase did not move. Scheduled rather than
+        // fired: the same vote load usually moves the phase as well, and that
+        // branch below sorts on its own.
+        if (!prev.retrainMode && curr.retrainMode) this.scheduleSeedRanking();
         if (prev.phase === curr.phase) return;
         this.autopilotExhausted.set(curr.phase === 'exhausted');
         if (curr.phase === 'good') {
@@ -376,12 +388,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  state (sort results, votes cache) and re-runs the same loads that
    *  ngOnInit fires on first entry.
    *
-   *  Phase 3 rehydration: if the user's sort mode is `learned` and the
-   *  reloaded labelset has both classes, fire one `onLearnedSort` call
-   *  after votes land. The server's signature cache short-circuits the
-   *  re-fire when the pair has been trained recently (free re-entry),
-   *  and starts a fresh job otherwise; either way the user lands on
-   *  learned-sorted content without a manual mode toggle. */
+   *  Re-ranking the new pair is {@link seedRankingIfUnranked}'s job, armed here
+   *  and run once the reloaded votes land. */
   private reloadForNewPair(): void {
     // Supersede → quiesce → clear → reload, in that order and enforced there;
     // see `PairScopeService.resetForNewPair`.
@@ -390,17 +398,76 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       // the busy flag, the job id and the progress feed they own are reset here
       // — after the supersede, so nothing can re-set them.
       this.sortRunner.quiesce();
-      this.pendingRehydrateLearned = false;
+      this.cancelSeedRanking();
+      // Read by the votes effect when the reload below lands.
+      this.pendingSeedOnPairReload = true;
       // Read by the medias effect when the reload below lands.
       this.pendingSnapOnLoad = true;
       // Read by the seed effect when the new pair's first ranking lands.
       this.pendingSelectOnPairChange = true;
     });
     this.loadTrainingVotes();
+  }
 
-    // Arm the rehydrate effect: it fires `onLearnedSort` once the reloaded
-    // votes land (counts go 0 → available) if the user is still in learned mode.
-    this.pendingRehydrateLearned = this.sortState.sortMode === 'learned';
+  /**
+   * Rank the pair on screen the way a fresh entry would, if nothing else has.
+   *
+   * Two callers, one rule. A **pair switch** re-runs none of what entry does —
+   * it only reloads medias and votes — so the pair it lands on can end up with
+   * an empty ranking, an empty work queue and a placeholder in the centre,
+   * where a fresh entry to that same pair produces all three (#3510). And
+   * Autopilot's **retrain mode** only becomes true once the labelset stops
+   * being a zeroed default, which is after its activation sort has already
+   * gone out on the text hint (#3535); the ranking has to follow the
+   * correction.
+   *
+   * This is deliberately a **backstop**, not a competing trigger: a re-rank
+   * that an Autopilot phase change fires off the same vote load gets there
+   * first (hence {@link SEED_DELAY_MS}), and this then stands down. It stands
+   * down on a sort already in flight, and on a ranking the *model itself*
+   * produced — but not on a text ranking, which is exactly what a late retrain
+   * correction has to replace. What is left for it is what the phase machinery
+   * cannot cover, because that only ever sorts on a phase *change*: a pair
+   * whose phase is the one we left it in, or which never transitions at all.
+   *
+   * The sort it picks is the one a fresh entry would land on — learned when the
+   * detector has both label classes, else Autopilot's text / example seed sort.
+   * Autopilot being off narrows that to the learned rehydration only: a manual
+   * entry ranks nothing until the user sorts, and hijacking their chosen sort
+   * mode is not this method's business.
+   *
+   * Every sort runs with `autoSelect: false`. The centre is seeded by the
+   * pair-change effect above, which declines to override a selection the user
+   * has already made — a re-rank must not move someone who has started
+   * labelling.
+   */
+  private seedRankingIfUnranked(): void {
+    this.seedTimer = null;
+    if (this.sortState.sortBusy) return;
+    if (this.sortState.sortMode === 'learned' && (this.sortState.sortOrder?.length ?? 0) > 0) return;
+    const autopilotRunning = this.autopilotStateService.running;
+    if (this.voteState.learnedSortAvailable
+        && (autopilotRunning || this.sortState.sortMode === 'learned')) {
+      this.sortState.setSortMode('learned');
+      this.sortRunner.onLearnedSort(false);
+      return;
+    }
+    if (autopilotRunning) this.onAutopilotStart(false);
+  }
+
+  /** Run {@link seedRankingIfUnranked} after {@link SEED_DELAY_MS}. A second
+   *  call supersedes the first, so the seed runs once however many triggers
+   *  ride the same vote load. */
+  private scheduleSeedRanking(): void {
+    this.cancelSeedRanking();
+    this.seedTimer = setTimeout(() => this.seedRankingIfUnranked(), this.SEED_DELAY_MS);
+  }
+
+  /** Drop a scheduled seed (a further pair switch, or the view closing). */
+  private cancelSeedRanking(): void {
+    if (this.seedTimer) clearTimeout(this.seedTimer);
+    this.seedTimer = null;
+    this.pendingSeedOnPairReload = false;
   }
 
   /**
@@ -429,6 +496,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.sortState.stopFindProgressTracking();
+    this.cancelSeedRanking();
     this.cancelAutoPop('left');
     this.cancelAutoPop('right');
     this.cancelSnapOnLoad();
@@ -894,10 +962,27 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   get autopilotDisabled(): boolean {
     if (this.textSupported) return false;
     if (this.labelSession.mediaExampleFilenames.length > 0) return false;
+    // The labelset only means anything once `/api/votes` has answered for the
+    // pair on screen; until then its zeroed counts read as "no labels" when
+    // they mean "not loaded yet". A pair switch spends a window in exactly that
+    // state, and on a no-text dataset that window used to *stop* Autopilot mid
+    // switch (left-panel falls back to Manual and emits `autopilotStop`) — for
+    // good, since nothing re-enters Autopilot when the counts come back. That
+    // left the new pair with no ranking at all and no way back short of a
+    // re-entry, which is the visible half of #3510.
+    if (!this.voteState.votesLoaded) return false;
     return !this.voteState.learnedSortAvailable;
   }
 
-  onAutopilotStart(): void {
+  /**
+   * Autopilot just activated (on entry, on the tab switch, or on a seeded
+   * re-rank): set the Select mode its phase calls for and fire the seed sort.
+   *
+   * @param autoSelect Whether the seed sort may move the centre viewer. False on
+   *                   the pair-switch path, where the selection is the seed
+   *                   effect's to place (see {@link seedRankingIfUnranked}).
+   */
+  onAutopilotStart(autoSelect = true): void {
     // Initialize re-sort tracking
     this.resortVoteCount = 0;
     this.resortNextThreshold = this.resortInterval;
@@ -924,28 +1009,29 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (phase === 'good' || phase === 'bad') {
       const textQuery = this.labelSession.textQuery;
       const hasMediaExamples = this.labelSession.mediaExampleFilenames.length > 0;
+      this.pendingSeedAutoSelect = autoSelect;
       if (textQuery) {
         // Defer until both medias and the embedder registry are loaded so the
         // no-text check in `triggerAutopilotTextSort` is reliable.
         if (this.mediaState.mediasSignal().length > 0 && this.embedderCaps.infos() !== null) {
-          this.triggerAutopilotTextSort();
+          this.triggerAutopilotTextSort(autoSelect);
         } else {
           this.autopilotTextSortPending = true;
         }
       } else if (hasMediaExamples) {
         if (this.mediaState.mediasSignal().length > 0) {
-          this.triggerAutopilotMediaSort();
+          this.triggerAutopilotMediaSort(autoSelect);
         } else {
           this.autopilotMediaSortPending = true;
         }
-      } else {
+      } else if (autoSelect) {
         // No sort query configured; try to select from existing sort results.
         this.sortRunner.autoSelectNext();
       }
     }
   }
 
-  private triggerAutopilotTextSort(): void {
+  private triggerAutopilotTextSort(autoSelect = true): void {
     const textQuery = this.labelSession.textQuery;
     if (!textQuery) return;
     // No-text dataset, text-hint-only detector: the dataset's embedder can't
@@ -953,11 +1039,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // left-panel disables the Autopilot tab (see `autopilotDisabled`) and the
     // user labels manually until Learn sort re-enables Autopilot.
     if (!this.textSupported) return;
-    this.sortRunner.onTextSort(textQuery);
+    this.sortRunner.onTextSort(textQuery, autoSelect);
   }
 
-  private triggerAutopilotMediaSort(): void {
-    this.sortRunner.exampleSortByFilenames(this.labelSession.mediaExampleFilenames);
+  private triggerAutopilotMediaSort(autoSelect = true): void {
+    this.sortRunner.exampleSortByFilenames(this.labelSession.mediaExampleFilenames, autoSelect);
   }
 
   // --- Re-sort prompt ---

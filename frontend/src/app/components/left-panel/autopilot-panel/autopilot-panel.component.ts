@@ -121,7 +121,7 @@ export class AutopilotPanelComponent implements OnInit {
       // service ignores every call after the first, so later votes — which of
       // course push these counts above zero — can't rewrite the answer.
       if (votesLoaded) {
-        this.autopilotState.noteInitialLabelset(labelsetGoodCount > 0 || labelsetBadCount > 0);
+        this.autopilotState.noteInitialLabelset(labelsetGoodCount, labelsetBadCount);
       } else {
         // Labelset un-loaded: either we have not started yet, or the active
         // pair just changed under a running autopilot. Either way any reading
@@ -261,6 +261,12 @@ export class AutopilotPanelComponent implements OnInit {
     // Retrain mode: the detector already has good+bad labels (carried over
     // from a previous dataset), so learned sort is available immediately and
     // autopilot should skip the initial text-mode phase.
+    //
+    // This is the *guess*, not the answer: on entry to the Train window the
+    // counts below are still the zeroed defaults (the panel mounts before
+    // `/api/votes` answers), and only the tab-switch path reaches here with
+    // real ones. `noteInitialLabelset` corrects it from the run's first real
+    // reading of the labelset — see #3535.
     const retrainMode = this.labelsetGoodCount() > 0 && this.labelsetBadCount() > 0;
     this.autopilotState.activate(retrainMode);
     // Immediately check whether existing votes already satisfy early phases
