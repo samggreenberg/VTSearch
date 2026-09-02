@@ -72,6 +72,7 @@ correct union of the two branches with no judgement involved.
 
 | Date | Lesson | Issue |
 |---|---|---|
+| 2026-09-02 | [one pilot cell cleared a hazard the full wave then hit](lessons/2026-09-02-one-pilot-cell-cleared-a-hazard-the-full-wave-hit.md) | #3319 |
 | 2026-09-01 | [a caution in a runbook was read as a measured limit](lessons/2026-09-01-a-caution-in-a-runbook-was-read-as-a-measured-limit.md) | #3343 |
 | 2026-09-01 | ["resume is free" was true of downloads and false of rendering](lessons/2026-09-01-resume-was-free-except-for-ten-hours-of-rendering.md) | #3343 |
 | 2026-08-30 | [an instrument check called a healthy run broken](lessons/2026-08-30-an-instrument-check-gated-on-the-wrong-invariant.md) | #3196 |

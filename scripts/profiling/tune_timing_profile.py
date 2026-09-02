@@ -313,11 +313,16 @@ def drive_dataset_promote(client, datasets: list[dict], reps: int) -> None:
         if not _open_dataset(client, entry["id"], reopen=False):
             continue
         headers = {"X-Dataset-Id": entry["id"]}
-        listing = client.get("/api/medias", headers=headers)
+        # ``GET /api/medias`` was replaced by ``GET /api/medias/ids`` + a batch
+        # fetch; the old route is gone, so this driver 404'd and silently
+        # skipped the whole family on every run (#3345). Promote only needs the
+        # ids, which is exactly what the lightweight listing returns — as a bare
+        # JSON array, not the ``{"medias": [...]}`` envelope the old one used.
+        listing = client.get("/api/medias/ids", headers=headers)
         if listing.status_code != 200:
-            _log(f"SKIPPED dataset_promote on {entry.get('name')}: cannot list medias")
+            _log(f"SKIPPED dataset_promote on {entry.get('name')}: cannot list medias ({listing.status_code})")
             continue
-        media_ids = [m["id"] for m in (listing.get_json() or {}).get("medias", [])]
+        media_ids = [m["id"] for m in (listing.get_json() or [])]
         if not media_ids:
             _log(f"SKIPPED dataset_promote on {entry.get('name')}: no medias")
             continue

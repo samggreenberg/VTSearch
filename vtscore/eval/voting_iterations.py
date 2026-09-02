@@ -1031,7 +1031,7 @@ def _resolve_run_knobs(
     strategy: str,
     skyline_arms: Optional[list[str]],
     emit_calibration_metrics: bool,
-    acq_inclusion_offset: int,
+    acq_inclusion_offset: float,
     acq_rank_percentile: Optional[float],
     head: Optional[str],
     trainer: str,
@@ -1200,7 +1200,7 @@ def simulate_voting_iterations(  # noqa: C901
     cut_inclusion_ks: Optional[list[int]] = None,
     cut_inclusion_sink: Optional[list[dict[str, Any]]] = None,
     cut_inclusion_qtilt_steps: Optional[list[float]] = None,
-    acq_inclusion_offset: int = ACQUISITION_INCLUSION_OFFSET,
+    acq_inclusion_offset: float = ACQUISITION_INCLUSION_OFFSET,
     acq_rank_percentile: Optional[float] = None,
     startup_schedule: Optional[str] = None,
     pick_sink: Optional[list[dict[str, Any]]] = None,
@@ -1333,7 +1333,7 @@ def simulate_voting_iterations(  # noqa: C901
             ``inclusion + acq_inclusion_offset``, leaving reporting and every
             metric at *inclusion* so arms stay comparable.  Defaults to
             :data:`~vtscore.training.thresholds.ACQUISITION_INCLUSION_OFFSET`
-            (-3), **the shipped app behaviour** - the harness matches production
+            (-4), **the shipped app behaviour** - the harness matches production
             here as it does everywhere else, so a baseline arm measures what
             users get.  Pass ``0`` for the pre-#2876 control, where one threshold
             did both jobs.
