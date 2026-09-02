@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import pytest
 
-from vtscore.plugins import _PLUGIN_NAME_SUFFIXES, _default_plugin_name, _snake_case
+from vtscore.plugins import _LEGACY_PLUGIN_NAME_SUFFIXES, _default_plugin_name, _snake_case
 
 #: ``(class name, derived plugin name)``.
 SUFFIX_CORPUS: tuple[tuple[str, str], ...] = (
@@ -97,36 +97,68 @@ class TestThirdPartyNameDerivation:
         assert len(names) == len(set(names))
 
 
-class TestSuffixTableIsOrderIndependent:
-    """The suffix scan's list order is not load-bearing.
+class TestLegacySuffixTableIsFrozen:
+    """The historical suffix tuple is a compatibility contract.
 
-    ``_default_plugin_name`` walks :data:`_PLUGIN_NAME_SUFFIXES` in order and
-    strips the *first* match, so the table carries an implicit "longer /
-    more-specific first" rule enforced only by a comment.  These tests prove
-    that rule holds structurally, which in turn proves the ordered scan is
-    equivalent to picking the **longest** matching suffix — the property any
-    refactor of this table has to preserve.
+    Every literal in it has, at some point, been stripped off a plugin class
+    name to produce a registry key.  Removing or editing one renames every
+    out-of-tree plugin whose class name ends in it, silently, on somebody
+    else's install.  Adding one is safe (a name that derived nothing before
+    starts deriving something); these tests only guard against loss.
     """
 
-    def test_no_earlier_suffix_is_a_proper_suffix_of_a_later_one(self):
-        """Two suffixes can both match a class name only when one is a
-        suffix of the other; when that happens the longer one must come
-        first, or the ordered scan would strip too little."""
-        for i, earlier in enumerate(_PLUGIN_NAME_SUFFIXES):
-            for later in _PLUGIN_NAME_SUFFIXES[i + 1 :]:
-                assert not later.endswith(earlier), (
-                    f"{earlier!r} precedes {later!r} but is a suffix of it: "
-                    f"a class named ...{later} would be stripped to ...{later[: -len(earlier)]}"
-                )
+    #: The sixteen suffixes as of the family-base refactor.  Extend this
+    #: list when a suffix is added; never shorten it.
+    HISTORICAL = frozenset(
+        {
+            "DataSourceImporter",
+            "DatasetImporter",
+            "LabelsetExporter",
+            "ResultsExporter",
+            "LabelImporter",
+            "LabelsetSource",
+            "SeedImporter",
+            "SettingsImporter",
+            "SettingsExporter",
+            "SettingsSource",
+            "MediaConverter",
+            "MediaSource",
+            "Importer",
+            "Exporter",
+            "Source",
+            "Converter",
+        }
+    )
 
-    def test_ordered_scan_equals_longest_match(self):
-        """Exhaustive over the table itself: for every suffix, a class name
-        built from it derives the same value under both rules."""
-        for suffix in _PLUGIN_NAME_SUFFIXES:
-            raw = "Acme" + suffix
-            matches = [s for s in _PLUGIN_NAME_SUFFIXES if raw.endswith(s) and raw != s]
-            longest = max(matches, key=len)
-            assert _default_plugin_name(type(raw, (), {})) == _snake_case(raw[: -len(longest)])
+    def test_no_historical_suffix_was_dropped(self):
+        assert self.HISTORICAL - set(_LEGACY_PLUGIN_NAME_SUFFIXES) == set()
 
     def test_no_duplicate_entries(self):
-        assert len(_PLUGIN_NAME_SUFFIXES) == len(set(_PLUGIN_NAME_SUFFIXES))
+        assert len(_LEGACY_PLUGIN_NAME_SUFFIXES) == len(set(_LEGACY_PLUGIN_NAME_SUFFIXES))
+
+    def test_declaration_order_agrees_with_longest_match(self):
+        """The tuple's order is inert, and this is why.
+
+        ``_default_plugin_name`` used to strip the *first* entry the class
+        name ended in, which made the declaration order load-bearing and
+        enforced only by a comment; it now strips the *longest* match.  The
+        two rules can disagree only when one suffix is a proper suffix of
+        another and the shorter one is declared first — so asserting that
+        never happens is what proves the change was behaviour-preserving for
+        class names this repo has never seen.
+        """
+        for i, earlier in enumerate(_LEGACY_PLUGIN_NAME_SUFFIXES):
+            for later in _LEGACY_PLUGIN_NAME_SUFFIXES[i + 1 :]:
+                assert not later.endswith(earlier), (
+                    f"{earlier!r} precedes {later!r} but is a suffix of it: under the old "
+                    f"first-match rule a class named ...{later} was stripped to "
+                    f"...{later[: -len(earlier)]}, and longest-match would now strip all of it"
+                )
+
+    def test_longest_match_is_what_the_derivation_does(self):
+        """Exhaustive over the table: one class name built from each entry."""
+        for suffix in _LEGACY_PLUGIN_NAME_SUFFIXES:
+            raw = "Acme" + suffix
+            matches = [s for s in _LEGACY_PLUGIN_NAME_SUFFIXES if raw.endswith(s) and raw != s]
+            longest = max(matches, key=len)
+            assert _default_plugin_name(type(raw, (), {})) == _snake_case(raw[: -len(longest)])

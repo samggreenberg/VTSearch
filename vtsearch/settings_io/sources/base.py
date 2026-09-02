@@ -40,3 +40,7 @@ class SettingsSource(SyncSource[dict[str, Any], dict[str, Any]]):
     to apply.  ``save(settings_data, field_values)`` persists the full
     settings dict.
     """
+
+    #: Abstract family base: no auto-derived metadata, and concrete
+    #: subclasses strip ``SettingsSource`` from their class names.
+    _is_plugin_family_base = True
