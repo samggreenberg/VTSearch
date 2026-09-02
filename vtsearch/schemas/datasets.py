@@ -18,18 +18,19 @@ plugin family can add keys of its own:
   key is a bug, and dropping it on dump is the correct signal.
 * **Clippers and cleaners** genuinely vary — concrete clippers append their
   own keys (``duration``, ``top_db``, ``box``, …) on top of the fixed base.
-  Their schemas enumerate the base and set ``unknown = INCLUDE`` plus a
-  :func:`~marshmallow.post_dump` passthrough, so the fixed fields get real
-  types while the plugin extras still reach the client verbatim.  The
-  generated model picks up an index signature from
+  Their schemas enumerate the base and inherit
+  :class:`~vtsearch.schemas.common.PluginExtrasSchema`, so the fixed fields
+  get real types while the plugin extras still reach the client verbatim.
+  The generated model picks up an index signature from
   ``additionalProperties: true``, which is exactly the shape the frontend
   used to hand-maintain.
 """
 
 from __future__ import annotations
 
-from marshmallow import INCLUDE, Schema, ValidationError, fields, post_dump, validate
+from marshmallow import Schema, fields, validate
 
+from vtsearch.schemas.common import PluginExtrasSchema, list_of_strings
 from vtsearch.schemas.file_browser import BrowseDirectoryEntrySchema, BrowseFileEntrySchema
 
 #: Upper bound on user-supplied dataset names, mirroring
@@ -38,17 +39,6 @@ from vtsearch.schemas.file_browser import BrowseDirectoryEntrySchema, BrowseFile
 #: ever reaching a filesystem path (and the uncaught ``OSError`` /
 #: absolute-path leak that would follow).
 MAX_NAME_LENGTH = 128
-
-
-def _list_of_strings(value):
-    """Validator: value must be a ``list`` whose every entry is a ``str``.
-
-    Used by the readers ACL endpoint so that numeric or other non-string
-    items are rejected at the schema layer (422) rather than silently
-    coerced to strings by ``fields.String``'s deserializer.
-    """
-    if not isinstance(value, list) or not all(isinstance(r, str) for r in value):
-        raise ValidationError("Must be a list of strings.")
 
 
 # ---------------------------------------------------------------------------
@@ -355,7 +345,7 @@ class ClipperParameterSchema(Schema):
     step = fields.Float()
 
 
-class ClipperInfoSchema(Schema):
+class ClipperInfoSchema(PluginExtrasSchema):
     """One ``MediaClipper.to_dict()`` payload (see ``vtscore/media/clipper.py``).
 
     The base key set is fixed, but concrete clippers append their own
@@ -364,9 +354,6 @@ class ClipperInfoSchema(Schema):
     module docstring for why that beats either an opaque ``fields.Dict()`` or
     a strict schema that would silently drop those keys.
     """
-
-    class Meta:
-        unknown = INCLUDE
 
     name = fields.String(required=True)
     media_type = fields.String(required=True)
@@ -390,17 +377,6 @@ class ClipperInfoSchema(Schema):
             )
         },
     )
-
-    @post_dump(pass_original=True)
-    def _include_plugin_extras(self, data: dict, original: dict, **_: object) -> dict:
-        # ``unknown = INCLUDE`` only affects ``load``; a declared schema drops
-        # undeclared keys on ``dump``.  Re-merge the concrete clipper's own
-        # keys so clients receive the full descriptor.
-        if isinstance(original, dict):
-            for k, v in original.items():
-                if k not in data:
-                    data[k] = v
-        return data
 
 
 class CleanerInfoSchema(ClipperInfoSchema):
@@ -1192,7 +1168,7 @@ class DatasetRegistryReadersRequestSchema(Schema):
 
     readers = fields.Raw(
         required=True,
-        validate=_list_of_strings,
+        validate=list_of_strings,
         metadata={
             "description": 'List of usernames; ``["*"]`` makes the dataset public.',
             "type": "array",
