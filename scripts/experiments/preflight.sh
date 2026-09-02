@@ -567,6 +567,14 @@ sys.path.insert(0, str(pathlib.Path(repo) / "scripts" / "experiments" / "calibra
 import common  # noqa: E402
 
 common.setup_env()
+# Imported with the RUN'S OWN ENVIRONMENT, so every knob below reads the value
+# this run will actually use - the env var if it set one, else the harness
+# default.  Re-deriving the defaults here as literals is what let #3400's three
+# stale ones sit unnoticed: the check compared a launcher's pin against the app
+# and never noticed that *not pinning* resolved to a study-era value.  An unset
+# knob is only "the shipped arm" if the harness resolves it there, so that is
+# what gets compared.
+import experiment_config as C  # noqa: E402
 from vtscore.eval.voting_iterations import PRODUCTION_HEAD, PRODUCTION_PATCH_STYLE  # noqa: E402
 from vtscore.training import thresholds as T  # noqa: E402
 
@@ -586,12 +594,20 @@ def pinned(knob, var, shipped):
         rows.append((knob, v, str(shipped)))
 
 
-def must_contain(knob, var, shipped, default):
-    """A set-valued knob: the shipped value has to be IN it, or the run has no
-    arm to compare its challengers against."""
-    v = env(var) or default
-    if str(shipped) not in [p.strip() for p in v.split(",")]:
-        rows.append((knob, v, "a set containing " + str(shipped)))
+def must_contain(knob, var, shipped, effective):
+    """A set-valued knob: the shipped value has to be IN what the run resolves
+    it to, or the run has no arm to compare its challengers against.
+
+    *effective* is the resolved list off ``experiment_config``, so this catches a
+    stale harness default exactly as it catches a stale launcher pin - and says
+    which of the two it is, because the remedy differs (drop the pin vs. fix the
+    default).
+    """
+    got = [str(x).strip() for x in effective]
+    if str(shipped) in got:
+        return
+    source = "pinned in %s" % var if env(var) else "harness default; %s is unset" % var
+    rows.append((knob, "%s (%s)" % (",".join(got), source), "a set containing " + str(shipped)))
 
 
 pinned("head", "CALIB_HEAD", PRODUCTION_HEAD)
@@ -609,9 +625,11 @@ if v is not None:
     rows.append(("calibration_fraction", v, "<unset> = the app's per-space default (%s)" % per_space))
 
 # The app has no safe-thresholds switch any more (#2799): fusion is always on.
-v = env("CALIB_SAFE_THRESHOLDS")
-if v is not None and v != "1":
-    rows.append(("safe_thresholds", v, "1 (the app has no switch)"))
+# Read off the resolved config rather than the env var, because until #3400 the
+# harness default was 0: an unset var passed this check while the run measured
+# the unfused control - the one arm the app can no longer produce.
+if not C.SAFE_THRESHOLDS:
+    rows.append(("safe_thresholds", env("CALIB_SAFE_THRESHOLDS") or "<unset> = 0", "1 (the app has no switch)"))
 
 # An explicit schedule overrides the app's per-mode default (#2841).
 v = env("CALIB_BLEND_SCHEDULE")
@@ -650,12 +668,14 @@ if v is not None and v.strip().lower() not in ("", "default", "app"):
 # reader cannot tell the real ones from the noise.  Check them when the family is
 # actually on; say plainly that they were skipped when it is not.
 if os.environ.get("CALIB_ANCHORED") == "1":
-    must_contain("cut_rule", "CALIB_ANCHORED_RULES", T.FOLD_ANCHOR_CUT_RULE, "mid,rate")
-    must_contain("fold_combine", "CALIB_ANCHORED_FOLD_COMBINES", T.FOLD_ANCHOR_COMBINE, "qmean,qmedian")
-    must_contain("anchor_weight", "CALIB_ANCHORED_WEIGHTS", "%g" % T.FOLD_ANCHOR_WEIGHT, "1,3,10,30,100")
+    must_contain("cut_rule", "CALIB_ANCHORED_RULES", T.FOLD_ANCHOR_CUT_RULE, C.ANCHORED_RULES)
+    must_contain("fold_combine", "CALIB_ANCHORED_FOLD_COMBINES", T.FOLD_ANCHOR_COMBINE, C.ANCHORED_FOLD_COMBINES)
+    must_contain(
+        "anchor_weight", "CALIB_ANCHORED_WEIGHTS", "%g" % T.FOLD_ANCHOR_WEIGHT, ["%g" % w for w in C.ANCHORED_WEIGHTS]
+    )
 else:
     print("SKIPPED\tanchored grid (CALIB_ANCHORED is not 1, so no anchored row is emitted)")
-must_contain("patch_style", "CALIB_PATCH_STYLES", PRODUCTION_PATCH_STYLE, "max_patch,max_patch_pca_hac")
+must_contain("patch_style", "CALIB_PATCH_STYLES", PRODUCTION_PATCH_STYLE, C.PATCH_STYLES)
 
 if not rows:
     print("MATCHES")

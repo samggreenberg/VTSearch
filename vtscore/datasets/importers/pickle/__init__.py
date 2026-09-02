@@ -10,25 +10,10 @@ import tempfile
 from pathlib import Path
 from typing import Any, Iterator
 
+from vtscore.concurrency.progress import resolve_progress_callback
 from vtscore.config import DATA_DIR
 from vtscore.datasets.importers.base import ImporterBase, PluginField
 from vtscore.datasets.loader import load_dataset_from_pickle, load_dataset_from_pickle_chunked
-
-
-def _get_progress():
-    """Resolve the progress sink, preferring the per-task thread callback.
-
-    ``_run_importer`` installs the load's own stepped tracker as the thread
-    progress before calling ``run()``, so preferring it routes this importer's
-    messages to the dashboard row for *this* import.  Reporting straight to the
-    global ``update_progress`` singleton (the previous behaviour) published on
-    the ``dataset`` channel instead, where the row never reads it.  Mirrors
-    ``vtscore.datasets.loader_common._default_progress``.
-    """
-    from vtscore.concurrency.progress import get_thread_progress, update_progress
-
-    cb = get_thread_progress()
-    return cb if cb is not None else update_progress
 
 
 class PickleDatasetImporter(ImporterBase):
@@ -57,7 +42,7 @@ class PickleDatasetImporter(ImporterBase):
 
     def run(self, field_values: dict, medias: dict, thin: bool = False) -> None:
         file_obj = field_values["file"]  # UploadedFile (FileStorage / CliUploadedFile / BytesIOUploadedFile)
-        progress = _get_progress()
+        progress = resolve_progress_callback()
         progress("loading", "Loading dataset from file...", 0, 0)
         DATA_DIR.mkdir(exist_ok=True)
         fd, tmp_name = tempfile.mkstemp(suffix=".pkl", dir=DATA_DIR)
@@ -75,7 +60,7 @@ class PickleDatasetImporter(ImporterBase):
             load_dataset_from_pickle(temp_path, medias, thin=thin, on_progress=progress)
         finally:
             temp_path.unlink(missing_ok=True)
-        progress("idle", f"Loaded {len(medias)} medias from file")
+        progress("idle", f"Loaded {len(medias)} medias from file", 0, 0)
 
     @property
     def supports_chunked(self) -> bool:

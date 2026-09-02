@@ -57,7 +57,7 @@ Keeping the model inclusion-independent is what lets the calibration cache reuse
 
 ### Label Smoothing (BCE arms only)
 
-The BCE gradient loop label-smooths its targets with ε = 0.05 (`MLP_LABEL_SMOOTHING` in `vtscore/config.py`): Good examples train toward 0.95, Bad toward 0.05, with class weights still derived from the hard labels. This is **not** a knob-mover — it exists as tie insurance for the conformal threshold rule below, which takes quantiles of the calibration scores and therefore needs distinct score values. Smoothing bounds the optimal logit (≈ ±2.9 at ε = 0.05), so a strongly-fit model cannot saturate every score to exact 0.0/1.0 sigmoids, where all quantiles would collapse to the same cut.
+The BCE gradient loop label-smooths its targets with ε = 0.05 (`MLP_LABEL_SMOOTHING` in `vtscore/config/runtime.py`): Good examples train toward 0.95, Bad toward 0.05, with class weights still derived from the hard labels. This is **not** a knob-mover — it exists as tie insurance for the conformal threshold rule below, which takes quantiles of the calibration scores and therefore needs distinct score values. Smoothing bounds the optimal logit (≈ ±2.9 at ε = 0.05), so a strongly-fit model cannot saturate every score to exact 0.0/1.0 sigmoids, where all quantiles would collapse to the same cut.
 
 The SVM head needs no such insurance and does not use it: the margin objective has no incentive to run the decision function off to infinity, so its scores stay in a narrow band around the boundary and quantiles over them are naturally distinct.
 
@@ -72,7 +72,7 @@ A decision threshold separating "good" from "bad" predictions is computed via **
 
 The `calibration_fraction` setting is the Calibrate share of each split, and its default is **per-embedder** (issue #3287): with no explicit user setting, a detector that learns in a single-vector space splits 70% Train / 30% Calibrate (`0.3`), while a patch-grid embedder keeps `0.5` — in *both* its voting styles, including the boxless whole-image fallback, because the measured optimum follows the embedder's capability rather than the voting mode. The table lives in `PRODUCTION_SPLIT_BY_SPACE` (`vtscore/training/thresholds/knobs.py`), resolved with an unknown-space fallback of `0.5` by `resolve_calibration_fraction` (`vtscore/detectors/training.py`); an explicit `calibration_fraction` user setting always wins, and clearing it returns to the automatic per-embedder default. Evidence: [`docs/experiments/2026-08-27-calibration-fraction-3287/REPORT.md`](experiments/2026-08-27-calibration-fraction-3287/REPORT.md).
 
-The `calibrate_count` setting defaults to `2` (`DEFAULT_CALIBRATE_COUNT` in `vtscore/config.py`) and can be raised or lowered (`VTSEARCH_CALIBRATE_COUNT`) to trade calibration quality (and Inclusion-knob resolution — more folds means more pooled calibration scores) for latency. (The eval runner uses its own default of `2` for a separate, non-interactive path — see [`docs/EVAL.md`](EVAL.md).) The folds are trained at every label count: the fold *models* are an input to the fold-anchored estimator below — it anchors on their held-out scores — so there is nothing to skip. (Before the population-anchored adoption, the calibration was skipped wherever the mix-in schedule gave the cross-cal cut zero weight, at 6 labels or fewer; the schedule is no longer what combines the two estimators, so that skip is gone.) Every training entry point (vote-driven Train, labelset re-derivation, Find, and detector-load-from-origins) cross-calibrates below 6 labels rather than falling back to 0.5.
+The `calibrate_count` setting defaults to `2` (`DEFAULT_CALIBRATE_COUNT` in `vtscore/config/runtime.py`) and can be raised or lowered (`VTSEARCH_CALIBRATE_COUNT`) to trade calibration quality (and Inclusion-knob resolution — more folds means more pooled calibration scores) for latency. (The eval runner uses its own default of `2` for a separate, non-interactive path — see [`docs/EVAL.md`](EVAL.md).) The folds are trained at every label count: the fold *models* are an input to the fold-anchored estimator below — it anchors on their held-out scores — so there is nothing to skip. (Before the population-anchored adoption, the calibration was skipped wherever the mix-in schedule gave the cross-cal cut zero weight, at 6 labels or fewer; the schedule is no longer what combines the two estimators, so that skip is gone.) Every training entry point (vote-driven Train, labelset re-derivation, Find, and detector-load-from-origins) cross-calibrates below 6 labels rather than falling back to 0.5.
 
 **Every trained threshold fuses the haystack into the cut.** There is no setting for this. It used to be the `safe_thresholds` per-user toggle, on by default since the #2799 A/B; the population-anchored adoption made the fused estimator uniformly better than the alternative at every label count, so the toggle was deleted rather than left as a way to opt into a worse threshold. The historical A/B is still worth reading for *why* the population distribution belongs in the cut: [`docs/experiments/2026-08-03-safe-thresholds/REPORT.md`](experiments/2026-08-03-safe-thresholds/REPORT.md).
 
@@ -132,6 +132,27 @@ Because the fold models are inclusion-independent, the pooled held-out scores ca
 For semantic (text/example) sorts, a **GMM-based threshold** is used instead: a 2-component Gaussian Mixture Model is fitted to the score distribution and the cut is placed at the **midpoint between the two fitted component means**. The same cut is the GMM half of the safe-threshold blend, which is now only the fallback for label sets too small to form calibration folds.
 
 **Why not the equal-density crossing?** Issue #2798 replaced the midpoint with the crossing of the two weighted components — solving `w_lo·N(x; μ_lo, σ²_lo) = w_hi·N(x; μ_hi, σ²_hi)`, the Bayes boundary between them — on the argument that under **region voting** (a media's score is the max over ~24 region-node scores) the Bad mode is an extreme-value statistic: right-skewed, wider and much heavier than the Good mode, which puts the crossing *above* the midpoint and means the midpoint cuts inside Bad mass. The #2799 study measured the two rules as paired within-step variants (each re-cutting the same model on the same votes) and the crossing lost on cost in every max-pooled window: +0.0036 at 6–20 votes, +0.0059 at 2–5 (`docs/experiments/2026-08-03-safe-thresholds/REPORT.md`). The geometry argument holds in *direction* — the crossing does cut higher and does buy FPR — but the exchange rate is ~1.3 FNR per 1 FPR, and for a needle-finding tool the missed match is the worse error. So issue #2833 reverted production to the midpoint. The crossing solver stays in the tree as an eval variant, and issue #2836 is the open question of why the midpoint wins (leading hypothesis: the crossing is the count-optimal cut while we score a *rate* loss, so its prior-odds term is a bias, and the right cut is a third point rather than either of these two).
+
+### "All my Goods rank above all my Bads" — is the head over-training?
+
+No, and the symptom cannot tell you either way. Embeddings are 512–768-dimensional, so a few hundred labeled points are almost always linearly separable for **any** labeling — including a pure coin flip. A head that fits its own training labels perfectly is therefore doing what a correctly-specified model does on separable data, not memorizing; shrinking the head would not change the symptom, because the symptom is a property of the geometry rather than of the model's capacity.
+
+Over-training is only visible on items the head did **not** train on. The shuffled-label control makes that concrete: run the same dataset, the same train/held-out split, and the same head twice, changing only the labels.
+
+- **REAL** — label each item by its true category (a signal that exists).
+- **NOISE** — label each item by a fixed coin flip (a signal that does not).
+
+Both arms reach ≈1.0 training AUC. That is the whole point: perfect training separation happens even for pure noise, so it proves nothing. The held-out numbers are what separate them:
+
+| Arm | Train AUC | Held-out AUC | Reading |
+|---|---|---|---|
+| REAL | ≈ 1.0 | well above 0.5 | The head is genuinely learning; the perfect training separation is *good behavior*. |
+| NOISE | ≈ 1.0 | ≈ 0.5 | The head correctly fails to generalize noise — it is not a memorizer faking held-out signal. |
+
+A high held-out AUC on the NOISE arm would be the real alarm: that is label leakage or a broken split, not over-training.
+
+The same control answers the neighbouring question — "is the capacity right?" — by sweeping the hidden width (or the head sentinel) with the split, votes and seeds held fixed, and reading held-out AUC per width. Note that production ships the **linear SVM head**, which has no width to sweep: capacity questions apply to the BCE eval arms in [The three heads](#the-three-heads-which-one-is-shipped-and-why) above.
+
 
 ## PyTorch Environment Settings
 
@@ -415,4 +436,4 @@ Build is the same order as the embedding-matrix work a dataset load already does
 - `vtscore/detectors/labeling_progress.py`: Cached per-step training and stability analysis
 - `vtscore/embedding/loader.py`: Model initialization and thread configuration
 - `vtscore/eval/voting_iterations.py`: Voting simulation evaluation
-- `vtscore/config.py`: `TRAIN_EPOCHS` and model IDs
+- `vtscore/config/runtime.py`: `TRAIN_EPOCHS`; `vtscore/config/models.py`: the model IDs

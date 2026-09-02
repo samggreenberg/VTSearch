@@ -9,35 +9,22 @@ way to make that work was to push the façade's own imports to the bottom of
 the file behind ``# noqa: E402``.
 
 Nothing here performs I/O or touches the media registry; the module-level
-imports are deliberately limited to numpy so importing it can never pull in a
-cycle.
+imports are deliberately limited to numpy and
+:mod:`vtscore.concurrency.progress` (itself a stdlib-only leaf) so importing it
+can never pull in a cycle.
 """
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 
 #: Signature of the progress reporter every public loader accepts:
-#: ``(status, message, current, total) -> None``.
-ProgressCallback = Callable[[str, str, int, int], None]
-
-
-def _default_progress() -> ProgressCallback:
-    """Lazily resolve the progress callback for the current thread.
-
-    Checks for a per-thread callback first (set during parallel dataset
-    loading) and falls back to the global singleton.
-    """
-    from vtscore.concurrency.progress import get_thread_progress
-
-    cb = get_thread_progress()
-    if cb is not None:
-        return cb
-    from vtscore.concurrency.progress import update_progress
-
-    return update_progress
+#: ``(status, message, current, total) -> None``.  Defined once in
+#: :mod:`vtscore.concurrency.progress` and re-exported here so the loaders keep
+#: importing it from their own leaf.
+from vtscore.concurrency.progress import ProgressCallback  # noqa: F401 - re-exported for consumers
 
 
 def _pop_md5_key(d: dict[str, Any]) -> str:

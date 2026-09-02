@@ -160,9 +160,13 @@ the component —
 - `DashboardLoadingTasksService` — per-task loading rows, and the
   poll-until-settled-then-refresh bookkeeping.
 - `DashboardSelectionService` — the highlighted table rows (which drive
-  Train / Find / Combine / Delete), bridged to the top-bar pulldowns so they
-  show what is *selected* while the Dashboard is on screen, not merely what is
-  loaded.
+  Train / Find / Combine / Delete), *owned* here rather than mirrored from the
+  component, so the top-bar pulldowns show what is *selected* while the
+  Dashboard is on screen (not merely what is loaded) by reading signals
+  directly, and the selection survives a round trip to another view. Both
+  grids share one `toggle(kind, id, additive)` ladder, and the ids the top bar
+  reads are `computed` over the selection and the registry — the pulldown
+  needs no push, and there is no per-mutation mirror call to forget.
 
 The Add-Dataset and New-Detector flows are *not* owned by the Dashboard at
 all: `NewThingFlowsService` is a singleton opener, and the modals are rendered
@@ -267,6 +271,7 @@ The ones worth knowing before changing anything:
 | `VtDialogService` | `confirm()` / `prompt()` as promises, rendered by `dialog-host` |
 | `NewThingFlowsService` | Singleton openers for the Add-Dataset / New-Detector flows |
 | `MediaMetadataCacheService` | Lazy batched fetch of full metadata for whatever is in the viewport |
+| `PairScopeService` | **Component-provided** (`find-view`, `label-view`): the active pair's lifetime, the `scoped()` teardown operator, and the pair-change reset in its one correct order |
 | `KeyboardService`, `ThemeService`, `AchievementsService`, `AuthService` | App-wide concerns wired in `AppComponent` |
 
 `adaptive-poll.ts` is not a service but a shared operator; see
@@ -304,6 +309,17 @@ this codebase, and it is silent.
   becoming reactive. A signal read through a getter during template evaluation
   *is* tracked as a dependency of that view —
   `testing/getter-signal-zoneless.spec.ts` pins this.
+- **Per-media-type settings prefs go through `SettingsStateService.perMediaType`.**
+  A `{media_type: value}` settings key bound to a media-type signal returns a
+  `computed` value plus a merge-preserving setter, replacing the shadow
+  `Record` field + settings-mirror `effect()` + media-switch `effect()` +
+  hand-spread write that used to be repeated at every consumer. Two things it
+  buys: the value is a real signal (so a template binding on it repaints on its
+  own, instead of relying on some co-located `effect()` to dirty the view), and
+  there is no mirror left to go stale when a key disappears server-side. The
+  setter **merges**; a setter that replaced the dict would wipe every other
+  media type's preference. `LabelViewPanelStateService` is the reference use.
+
 - **Consumers use `effect()`, not `subscribe()`.** A constructor `effect()`
   reading a signal auto-disposes with the component, which is why the
   `takeUntil(destroy$)` / `ngOnDestroy` plumbing has been dropped wherever it
@@ -346,7 +362,7 @@ The backend resolves per-dataset and per-detector state from the
 `X-Dataset-Id` / `X-Detector-Id` request headers (see
 [ARCHITECTURE.md § Multi-dataset support](ARCHITECTURE.md#multi-dataset-support)).
 The frontend's job is to make sure those headers name a pair the backend has
-actually loaded. Four pieces cooperate.
+actually loaded. Five pieces cooperate.
 
 ### `ActiveContextService` — two layers, not one
 
@@ -368,6 +384,53 @@ highlights; `active` lags until a load completes and is promoted explicitly.
   prep step captures the id at start and discards its result if the id has
   moved. Cancelling in-flight work is best-effort; this check is the
   correctness guarantee.
+
+### `ActiveDatasetService` / `ActiveDetectorService` — the ids as *entries*
+
+`ActiveContextService` carries **ids**, on an RxJS layer a `computed` can't
+track. Almost every consumer wants the registry *entry* behind the id — its
+name, its media type, its embedder — so each one used to redo the same
+`datasets.find(d => d.id === …)` by hand. That read whatever happened to be
+loaded at call time and never updated when the registry landed a moment later:
+the lifecycle gap that left an export filename detector-less when the modal
+opened first (#2819).
+
+The two services close it, one per half, with the same five members:
+
+```
+activeId      the id the backend has loaded ('' when none)
+intentId      the id the user picked
+datasetId /   activeId || intentId — name the user's pick immediately
+  detectorId  rather than blanking for the duration of a load
+dataset /     the registry entry, or null (nothing selected, or the
+  detector    registry fetch is still in flight)
+datasetName / the entry's name, or ''
+  detectorName
+```
+
+Reach for these from **components**: a `computed`/`effect`/template read
+repopulates on its own once the registry or an in-flight switch settles.
+
+Two places deliberately keep the imperative lookup, and should:
+
+- **Route guards** run once, before activation, and have already awaited the
+  registry — there is nothing left to arrive.
+- **Pre-reactive services** (`ActiveContextWatcherService`) resolve the pair
+  from the arrays their own `combineLatest` emitted; reading a signal instead
+  would resolve against a *different* snapshot than the one being handled.
+
+Both still index rather than scan: `DatasetStateService` exposes `datasetById`
+/ `detectorById`, `computed` Maps over the two registries. They are the shared
+lookup the services are built on, and reading one is signal-tracked exactly
+like reading `datasets` — so swapping a `find` for a `.get` is a readability
+change, never a reactivity one.
+
+Note what these services are *not* for. A lookup that resolves something other
+than the active pair — the Dashboard's multi-select, the id being switched
+*to*, an entry from an HTTP response body — is a different question that
+happens to share the `find(d => d.id === …)` shape. Use the Maps there if the
+predicate is a plain id match; do not route it through the active-context
+services.
 
 ### `ContextSwitchService` — the only way to *change* the pair
 
@@ -531,15 +594,25 @@ component is very much still alive. It legitimately takes one of two shapes,
 and both are correct as written:
 
 - A **scope subject** fired on each reset, for a family of streams that share
-  a lifetime shorter than the component's: `pairScope$` (`find-view`,
-  `label-view`) tears down everything belonging to the dataset/detector pair
-  being left, `findPolling$` (`dashboard`) and `stopPolling$`
-  (`VoteStateService`) cancel a superseded poll. Name it for the scope it
-  bounds, never `destroy$`.
+  a lifetime shorter than the component's: `findPolling$` (`dashboard`) and
+  `stopPolling$` (`VoteStateService`) cancel a superseded poll. Name it for the
+  scope it bounds, never `destroy$`.
+
+  The dataset/detector pair's scope is the one case where the subject is not a
+  component field: `PairScopeService` (component-provided on `find-view` and
+  `label-view`) keeps it private and exposes `pairScope.scoped()` as the pipe
+  operator, because the *ordering* around firing it is load-bearing. A pair
+  switch must supersede **before** any of the new pair's state is installed, or
+  a late response repaints the old pair's ranking over the new one's — a silent
+  wrong-results bug, not a crash. Both views used to spell that sequence out in
+  a comment and enforce nothing; `resetForNewPair()` is now the only caller that
+  can fire the scope, so the order is not a caller's to get wrong. The service's
+  own `ngOnDestroy` covers destroy-time teardown, so a view must not (and need
+  not) fire the scope by hand.
 - A **re-assigned `Subscription` field** that unsubscribes the previous value
   before storing the next: `text-viewer`'s `sub`, `folder-browser`'s
-  `currentSub`, `browse-bin-popup`'s `scrollSub` (re-keyed to the viewport
-  *instance*), `label-importer-modal`'s `ingestSub`.
+  `currentSub`, `browse-bin-member-grid`'s `scrollSub` (re-keyed to the
+  viewport *instance*), `label-importer-modal`'s `ingestSub`.
 
 A `Subscription` field is only a teardown idiom when it is written once and
 read only by `ngOnDestroy`. If it is re-assigned anywhere, it is cancellation
@@ -734,8 +807,9 @@ the output alongside them (favicons, logo); `docs-assets/` is a
 symlink to `docs/user/`, so the in-app user guide (rendered with `marked` in
 the keyboard-help modal) is the same file the repo ships.
 
-`angular.json` pins the canonical `@angular/build:*` builders (not the
-`@angular-devkit/build-angular:*` aliases) and gives the test target its own
+`angular.json` pins the canonical `@angular/build:*` builders (`@angular/build`
+is a direct devDependency; the `@angular-devkit/build-angular` alias package is
+deliberately not installed) and gives the test target its own
 `build:test` configuration, so spec polyfills stay decoupled from production.
 Both polyfill arrays are empty and must stay that way — reintroducing
 `zone.js` would invalidate every rule in [§5](#5-reactivity-the-zoneless-change-detection-model).

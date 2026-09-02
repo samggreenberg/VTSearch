@@ -6,14 +6,48 @@ here: module-level constants resolved from environment variables at
 import time (filesystem roots, thread caps, model IDs), and the
 `CoreConfig` dataclass that bundles the per-call configuration that
 would otherwise force the library to import `vtsearch.settings`. The
-file is import-clean - it never reaches into the app - and is the only
+package is import-clean - it never reaches into the app - and is the only
 place library code is allowed to read environment variables directly.
 
-**Source:** `vtscore/config.py` - a single module, no sub-package.
+**Source:** `vtscore/config/` - a package of six submodules, listed under
+[Package layout](#package-layout) below. Everything public is re-exported
+from `vtscore/config/__init__.py`, so `vtscore.config.X` and
+`from vtscore.config import X` are the import paths for all of it; the
+submodules are an internal organisation, not a second public surface.
 **Related:** [`cli.md`](cli.md) for the CLI entry points that build a
 `CoreConfig` before running, and
 [`architecture.md`](../architecture.md#the-coreconfig-bridge) for why the
 seam exists at all.
+
+## Package layout
+
+The submodules are layered: each reads only from ones above it.
+
+| Submodule | Holds | Reads |
+|---|---|---|
+| `paths` | `DATA_DIR`, `EMBEDDINGS_DIR`, `MODELS_CACHE_DIR` | - |
+| `runtime` | thread and decode-worker sizing, the upload/decode caps, the training/MLP/SVM knobs, the UMAP projection defaults | - |
+| `models` | every embedder's Hugging Face id and per-checkpoint constants | - |
+| `device` | `DEVICE` / `resolve_device()` (with the CUDA smoke-test), `EMBED_PRECISION` / `embed_precision()` and the dtype resolvers | - |
+| `processor_backend` | which `transformers` image-processor implementation runs, and on what device | `device` |
+| `core_config` | `CoreConfig` and `register_core_config_builder()` | `runtime` |
+
+Two consequences matter to test authors, and only to test authors:
+
+- **Stubs go where the reader is.** A caller *outside* the package resolves
+  `vtscore.config.X`, so patching the package reaches it. A function *inside*
+  a submodule resolves its own module global, of which the package attribute
+  is only a copy - so stubbing `resolve_device` for `embed_precision()`, or
+  `allocated_cpus` for `resolve_decode_workers()`, means patching
+  `vtscore.config.device` / `vtscore.config.runtime`. Private names
+  (`_cuda_can_run`, `_core_config_builder`, ...) are deliberately not
+  re-exported, so an attempt to stub one on the package fails loudly instead
+  of being ignored.
+- **Re-reading the environment needs `config._reload_all()`.**
+  `importlib.reload(vtscore.config)` only re-runs the re-exports; the
+  submodules are already in `sys.modules` and do not re-execute, so the env
+  vars are not re-read. `_reload_all()` reloads them in dependency order and
+  then the package.
 
 ## Why `CoreConfig` exists
 
@@ -37,7 +71,7 @@ thread cannot be mutated underneath it.
 
 ## The `CoreConfig` dataclass
 
-Defined in `vtscore/config.py`. The twelve fields below are **required** -
+Defined in `vtscore/config/core_config.py`. The twelve fields below are **required** -
 they have no defaults, so a consumer can never accidentally inherit stale
 state from a previous run. (The handful of newer optional fields listed
 after the table do have defaults, precisely so a library-only
@@ -289,11 +323,18 @@ Every env var consulted by `vtscore.config`, in one place:
 | `VTSEARCH_TRAIN_EPOCHS`     | Set `TRAIN_EPOCHS` (head training upper bound).                                                 |
 | `VTSEARCH_TRAIN_PATIENCE`   | Set `TRAIN_PATIENCE` (early-stop patience). `0` disables.                                       |
 | `VTSEARCH_CALIBRATE_COUNT`  | Set `DEFAULT_CALIBRATE_COUNT` (first-run default; later writes go to per-user settings).        |
+| `VTSEARCH_MAX_DECODE_PIXELS`| Set `MAX_DECODE_PIXELS`, the bitmap budget for a single image decode. `0` disables bounding.    |
+| `VTSEARCH_SVM_HEAD_C`       | Set `SVM_HEAD_C`, the production linear SVM head's inverse regularisation strength.             |
+| `VTSEARCH_EMBED_PRECISION`  | Set `EMBED_PRECISION`: `fp32` (default), `fp16`, `bf16`, `autocast_fp16`, `autocast_bf16`, `auto`. Compute only - stored vectors stay fp32. |
+| `VTSEARCH_IMAGE_PROCESSOR_BACKEND` | Pin the `transformers` image-processor implementation: `torchvision` (default), `pil`, or `auto`. |
+| `VTSEARCH_IMAGE_PROCESSOR_DEVICE`  | Where the torchvision processor resizes/normalises: `auto` (default), `cpu`, `cuda`.      |
 
 All of these are read at import time except `VTSEARCH_DECODE_WORKERS`,
 which `resolve_decode_workers()` reads per call. Setting any of the
 others after `vtscore.config` has loaded has no effect; do the export
-before `python -m vtscore` / `python app.py` runs.
+before `python -m vtscore` / `python app.py` runs. (Tests that need a
+different value re-read the whole package with `config._reload_all()` -
+see [Package layout](#package-layout).)
 
 ## Typical flow
 

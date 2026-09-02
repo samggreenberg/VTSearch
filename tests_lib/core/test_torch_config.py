@@ -7,11 +7,19 @@ Covers:
 - ``get_torch_device()`` selection delegates to
   :func:`vtscore.config.resolve_device`, honouring ``VTSEARCH_DEVICE``.
 - ``train_model`` returning a model on the selected device.
+
+``vtscore.config`` is a package, so the env vars are re-read with
+``config._reload_all()`` rather than ``importlib.reload`` (which would only
+re-run the package's re-exports, leaving the cached submodules untouched), and a
+stub for something a *config* function calls - ``allocated_cpus``,
+``_cuda_can_run`` - goes on the submodule that owns it, because the package
+attribute is only a copy.  See the :mod:`vtscore.config` docstring.
 """
 
 from __future__ import annotations
 
 import importlib
+import sys
 from unittest import mock
 
 import numpy as np
@@ -42,11 +50,17 @@ def restore_reloaded_modules():
 
     Declared first so it tears down *last*, after the narrower fixtures below
     have cleared the caches they own on the reloaded module.
+
+    The snapshot covers every ``vtscore.config`` submodule as well as the
+    package: ``_reload_all`` re-executes all of them, so restoring the package's
+    ``__dict__`` alone would leave a test's env var live in the submodule that
+    actually holds it.
     """
     import vtscore.config as config
     import vtscore.embedding.loader as loader
 
-    snapshots = [(module, dict(module.__dict__)) for module in (config, loader)]
+    modules = [config, *(sys.modules[f"vtscore.config.{name}"] for name in config._RELOAD_ORDER), loader]
+    snapshots = [(module, dict(module.__dict__)) for module in modules]
     yield
     for module, snapshot in snapshots:
         module.__dict__.clear()
@@ -66,11 +80,11 @@ def reset_torch_configured_flag():
 @pytest.fixture(autouse=True)
 def reset_cuda_probe_cache():
     """Clear the per-process CUDA smoke-test cache so each test re-probes."""
-    import vtscore.config as config
+    from vtscore.config import device as device_mod
 
-    config._cuda_runnable.clear()
+    device_mod._cuda_runnable.clear()
     yield
-    config._cuda_runnable.clear()
+    device_mod._cuda_runnable.clear()
 
 
 def test_torch_threads_constant_default(monkeypatch):
@@ -78,7 +92,7 @@ def test_torch_threads_constant_default(monkeypatch):
     monkeypatch.delenv("VTSEARCH_TORCH_THREADS", raising=False)
     import vtscore.config as config
 
-    config = importlib.reload(config)
+    config = config._reload_all()
     assert config.TORCH_THREADS == 1
 
 
@@ -86,7 +100,7 @@ def test_torch_threads_constant_honours_env(monkeypatch):
     monkeypatch.setenv("VTSEARCH_TORCH_THREADS", "4")
     import vtscore.config as config
 
-    config = importlib.reload(config)
+    config = config._reload_all()
     assert config.TORCH_THREADS == 4
 
 
@@ -94,13 +108,13 @@ def test_torch_threads_constant_clamps_to_one(monkeypatch):
     monkeypatch.setenv("VTSEARCH_TORCH_THREADS", "0")
     import vtscore.config as config
 
-    config = importlib.reload(config)
+    config = config._reload_all()
     assert config.TORCH_THREADS == 1
 
 
 def test_decode_workers_sized_from_allocation(monkeypatch):
     """The pool leaves one CPU for the calling thread."""
-    import vtscore.config as config
+    from vtscore.config import runtime as config
 
     monkeypatch.delenv("VTSEARCH_DECODE_WORKERS", raising=False)
     monkeypatch.setattr(config, "allocated_cpus", lambda: 8)
@@ -109,7 +123,7 @@ def test_decode_workers_sized_from_allocation(monkeypatch):
 
 def test_decode_workers_capped(monkeypatch):
     """A fat node does not get a proportionally fat pool."""
-    import vtscore.config as config
+    from vtscore.config import runtime as config
 
     monkeypatch.delenv("VTSEARCH_DECODE_WORKERS", raising=False)
     monkeypatch.setattr(config, "allocated_cpus", lambda: 96)
@@ -118,7 +132,7 @@ def test_decode_workers_capped(monkeypatch):
 
 def test_decode_workers_floor_of_one_on_a_single_cpu(monkeypatch):
     """One CPU still gets one worker: it overlaps decode with the forward."""
-    import vtscore.config as config
+    from vtscore.config import runtime as config
 
     monkeypatch.delenv("VTSEARCH_DECODE_WORKERS", raising=False)
     monkeypatch.setattr(config, "allocated_cpus", lambda: 1)
@@ -126,7 +140,7 @@ def test_decode_workers_floor_of_one_on_a_single_cpu(monkeypatch):
 
 
 def test_decode_workers_env_override(monkeypatch):
-    import vtscore.config as config
+    from vtscore.config import runtime as config
 
     monkeypatch.setattr(config, "allocated_cpus", lambda: 8)
     monkeypatch.setenv("VTSEARCH_DECODE_WORKERS", "3")
@@ -134,7 +148,7 @@ def test_decode_workers_env_override(monkeypatch):
 
 
 def test_decode_workers_zero_disables_the_pool(monkeypatch):
-    import vtscore.config as config
+    from vtscore.config import runtime as config
 
     monkeypatch.setattr(config, "allocated_cpus", lambda: 8)
     monkeypatch.setenv("VTSEARCH_DECODE_WORKERS", "0")
@@ -142,7 +156,7 @@ def test_decode_workers_zero_disables_the_pool(monkeypatch):
 
 
 def test_decode_workers_invalid_env_falls_back(monkeypatch):
-    import vtscore.config as config
+    from vtscore.config import runtime as config
 
     monkeypatch.setattr(config, "allocated_cpus", lambda: 4)
     monkeypatch.setenv("VTSEARCH_DECODE_WORKERS", "lots")
@@ -161,7 +175,7 @@ def test_max_upload_mb_default(monkeypatch):
     monkeypatch.delenv("VTSEARCH_MAX_UPLOAD_MB", raising=False)
     import vtscore.config as config
 
-    config = importlib.reload(config)
+    config = config._reload_all()
     assert config.MAX_UPLOAD_MB == 2048
 
 
@@ -169,7 +183,7 @@ def test_max_upload_mb_honours_env(monkeypatch):
     monkeypatch.setenv("VTSEARCH_MAX_UPLOAD_MB", "512")
     import vtscore.config as config
 
-    config = importlib.reload(config)
+    config = config._reload_all()
     assert config.MAX_UPLOAD_MB == 512
 
 
@@ -178,7 +192,7 @@ def test_max_upload_mb_zero_disables_cap(monkeypatch):
     monkeypatch.setenv("VTSEARCH_MAX_UPLOAD_MB", "0")
     import vtscore.config as config
 
-    config = importlib.reload(config)
+    config = config._reload_all()
     assert config.MAX_UPLOAD_MB == 0
 
 
@@ -186,7 +200,7 @@ def test_max_upload_mb_negative_clamps_to_zero(monkeypatch):
     monkeypatch.setenv("VTSEARCH_MAX_UPLOAD_MB", "-5")
     import vtscore.config as config
 
-    config = importlib.reload(config)
+    config = config._reload_all()
     assert config.MAX_UPLOAD_MB == 0
 
 
@@ -208,7 +222,7 @@ def test_get_torch_device_falls_back_to_cpu_without_cuda(monkeypatch):
     monkeypatch.setenv("VTSEARCH_DEVICE", "auto")
     import vtscore.config as config
 
-    importlib.reload(config)
+    config._reload_all()
     importlib.reload(loader)
     with mock.patch.object(torch.cuda, "is_available", return_value=False):
         dev = loader.get_torch_device()
@@ -222,7 +236,7 @@ def test_get_torch_device_honours_explicit_cpu(monkeypatch):
     import vtscore.config as config
     import vtscore.embedding.loader as loader
 
-    importlib.reload(config)
+    config._reload_all()
     importlib.reload(loader)
     with mock.patch.object(torch.cuda, "is_available", return_value=True):
         dev = loader.get_torch_device()
@@ -234,13 +248,14 @@ def test_get_torch_device_returns_cuda_when_available(monkeypatch):
     """``auto`` resolves to cuda when CUDA is available AND a kernel can run."""
     monkeypatch.setenv("VTSEARCH_DEVICE", "auto")
     import vtscore.config as config
+    from vtscore.config import device as device_mod
     import vtscore.embedding.loader as loader
 
-    importlib.reload(config)
+    config._reload_all()
     importlib.reload(loader)
     with (
         mock.patch.object(torch.cuda, "is_available", return_value=True),
-        mock.patch.object(config, "_cuda_can_run", return_value=True),
+        mock.patch.object(device_mod, "_cuda_can_run", return_value=True),
     ):
         dev = loader.get_torch_device()
 
@@ -256,13 +271,14 @@ def test_auto_falls_back_to_cpu_when_kernel_cannot_run(monkeypatch):
     """
     monkeypatch.setenv("VTSEARCH_DEVICE", "auto")
     import vtscore.config as config
+    from vtscore.config import device as device_mod
     import vtscore.embedding.loader as loader
 
-    importlib.reload(config)
+    config._reload_all()
     importlib.reload(loader)
     with (
         mock.patch.object(torch.cuda, "is_available", return_value=True),
-        mock.patch.object(config, "_cuda_can_run", return_value=False),
+        mock.patch.object(device_mod, "_cuda_can_run", return_value=False),
     ):
         dev = loader.get_torch_device()
 
@@ -273,11 +289,12 @@ def test_explicit_cuda_pin_falls_back_when_kernel_cannot_run(monkeypatch):
     """Even an explicit ``VTSEARCH_DEVICE=cuda`` pin degrades to CPU if unusable."""
     monkeypatch.setenv("VTSEARCH_DEVICE", "cuda")
     import vtscore.config as config
+    from vtscore.config import device as device_mod
     import vtscore.embedding.loader as loader
 
-    importlib.reload(config)
+    config._reload_all()
     importlib.reload(loader)
-    with mock.patch.object(config, "_cuda_can_run", return_value=False):
+    with mock.patch.object(device_mod, "_cuda_can_run", return_value=False):
         dev = loader.get_torch_device()
 
     assert dev.type == "cpu"
@@ -286,8 +303,9 @@ def test_explicit_cuda_pin_falls_back_when_kernel_cannot_run(monkeypatch):
 def test_cuda_can_run_returns_false_when_launch_raises(monkeypatch):
     """``_cuda_can_run`` swallows a kernel-launch error and caches False."""
     import vtscore.config as config
+    from vtscore.config import device as device_mod
 
-    importlib.reload(config)
+    config._reload_all()
 
     def _boom(*_args, **_kwargs):
         raise RuntimeError("no kernel image is available for execution on the device")
@@ -296,11 +314,11 @@ def test_cuda_can_run_returns_false_when_launch_raises(monkeypatch):
         mock.patch.object(torch.cuda, "is_available", return_value=True),
         mock.patch.object(torch, "zeros", side_effect=_boom),
     ):
-        assert config._cuda_can_run("cuda") is False
+        assert device_mod._cuda_can_run("cuda") is False
         # Cached: a second call doesn't re-probe (would raise if it did, but
         # the cache short-circuits before touching torch).
-        assert config._cuda_can_run("cuda") is False
-    assert config._cuda_runnable["cuda"] is False
+        assert device_mod._cuda_can_run("cuda") is False
+    assert device_mod._cuda_runnable["cuda"] is False
 
 
 def test_cuda_can_run_warning_reports_device_and_arch_mismatch(monkeypatch, caplog):
@@ -310,8 +328,9 @@ def test_cuda_can_run_warning_reports_device_and_arch_mismatch(monkeypatch, capl
     import logging
 
     import vtscore.config as config
+    from vtscore.config import device as device_mod
 
-    importlib.reload(config)
+    config._reload_all()
 
     def _boom(*_args, **_kwargs):
         raise RuntimeError("no kernel image is available for execution on the device")
@@ -324,7 +343,7 @@ def test_cuda_can_run_warning_reports_device_and_arch_mismatch(monkeypatch, capl
         mock.patch.object(torch.cuda, "get_arch_list", return_value=["sm_75", "sm_80", "sm_90"]),
         caplog.at_level(logging.WARNING, logger="vtscore.config"),
     ):
-        assert config._cuda_can_run("cuda") is False
+        assert device_mod._cuda_can_run("cuda") is False
 
     msg = caplog.text
     assert "Tesla V100S-PCIE-32GB" in msg
@@ -338,19 +357,21 @@ def test_cuda_can_run_warning_reports_device_and_arch_mismatch(monkeypatch, capl
 def test_describe_cuda_mismatch_returns_empty_when_torch_unqueryable(monkeypatch):
     """The diagnostic suffix degrades to an empty string if torch raises."""
     import vtscore.config as config
+    from vtscore.config import device as device_mod
 
-    importlib.reload(config)
+    config._reload_all()
     with mock.patch.object(torch.cuda, "get_device_name", side_effect=RuntimeError("boom")):
-        assert config._describe_cuda_mismatch("cuda") == ""
+        assert device_mod._describe_cuda_mismatch("cuda") == ""
 
 
 def test_cuda_can_run_false_without_cuda(monkeypatch):
     """No CUDA at all -> ``_cuda_can_run`` is False without launching anything."""
     import vtscore.config as config
+    from vtscore.config import device as device_mod
 
-    importlib.reload(config)
+    config._reload_all()
     with mock.patch.object(torch.cuda, "is_available", return_value=False):
-        assert config._cuda_can_run("cuda") is False
+        assert device_mod._cuda_can_run("cuda") is False
 
 
 def test_train_model_places_model_on_selected_device(monkeypatch):

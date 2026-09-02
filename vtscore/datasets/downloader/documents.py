@@ -6,6 +6,7 @@ from typing import Optional
 import requests
 
 from vtscore.datasets.downloader import core as _core
+from vtscore.concurrency.progress import resolve_progress_callback
 from vtscore.datasets.downloader.core import ProgressCallback
 
 
@@ -30,14 +31,14 @@ def download_ucsf_documents(  # noqa: C901
             (e.g. ``["Tobacco", "Food", "Drug"]``).
         docs_per_category: Maximum number of PDFs to download per category.
         on_progress: Optional progress callback.  Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         Path to the ``ucsf_documents/`` directory containing category
         subdirectories with ``.pdf`` files (e.g. ``data/ucsf_documents``).
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     extract_dir = _core.DATA_DIR / "ucsf_documents"
     _core.DATA_DIR.mkdir(exist_ok=True)

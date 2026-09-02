@@ -69,10 +69,13 @@ esac
 
 # --- science knobs -----------------------------------------------------------
 # The SHIPPED threshold path.  `docs/ML.md`: "Every trained threshold fuses the
-# haystack into the cut.  There is no setting for this."  The harness default
-# for `CALIB_SAFE_THRESHOLDS` is 0 - the #2781-era unfused control - so leaving
-# it alone would have swept this knob on a threshold nobody ships.  This is
-# exactly what preflight check 12 exists to catch.
+# haystack into the cut.  There is no setting for this."  Named rather than left
+# unset: the fraction this study sweeps splits a fold INSIDE the fused path, so
+# the path is the premise of the sweep, not incidental.  (The harness default
+# was 0 - the #2781-era unfused control - until #3400; the pin is what kept this
+# study off it, and is also what keeps it right when submitted into an older
+# worktree.  Preflight check 12 now reads the resolved value, so an unset knob
+# can no longer pass while the run measures the control.)
 export CALIB_SAFE_THRESHOLDS=1
 # Anchored / fold-count / cut-inclusion arms all stay OFF (their defaults).
 # None of them is on the axis this study sweeps, and the region cell's cost is

@@ -336,7 +336,7 @@ VTSearch/
 │   │   │                           publishes on the `notification` SSE channel and is what
 │   │   │                           `PluginBase.notify()` calls when a plugin wants to surface a
 │   │   │                           user-visible message without failing the run
-│   │   └── progress.py             ProgressTracker, update_progress, cancel_dataset_progress
+│   │   └── progress.py             ProgressTracker, loading_tasks, cancel_dataset_progress
 │   │
 │   ├── state/                      Multi-dataset / multi-detector global state (library tier)
 │   │   ├── core.py                 DatasetContext, DetectorContext, _state_lock, context registries,
@@ -578,7 +578,7 @@ modules on the right.
 | `vtscore/concurrency/progress.py` | No | No | **Yes**: threading only |
 | `vtscore/projection/` | No | No (params) | **Yes**: numpy + UMAP over an (N, d) matrix |
 | `vtscore/state/` | No | N/A (IS the state) | **Yes**: plain Python dicts |
-| `vtscore/config.py` | No | No | **Yes**: just constants |
+| `vtscore/config/` | No | No | **Yes**: just constants |
 | `vtscore/io.py` + `gpu_backends.py` | No | No | **Yes**: file I/O / backend selection |
 | `vtscore/security/login.py` | No | No | **Yes**: `LoginProvider` ABC + `DefaultLoginProvider` |
 | `vtsearch/auth/` | Lazy (`session`, `g`) | No | Partially: the Flask-session providers need Flask |
@@ -591,7 +591,7 @@ modules on the right.
 
 ### The ML training pipeline
 
-**Files:** `vtscore/training/mlp.py` / `vtscore/training/thresholds/`, `vtscore/config.py` (for `TRAIN_EPOCHS`)
+**Files:** `vtscore/training/mlp.py` / `vtscore/training/thresholds/`, `vtscore/config/runtime.py` (for `TRAIN_EPOCHS`)
 
 **Dependencies:** `torch`, `sklearn`, `numpy`
 
@@ -660,15 +660,20 @@ dataset loads share one embedder without their trackers crossing — a mis-route
 callback would not merely mis-draw a bar, since trackers call `check_cancelled()`
 and would abort the wrong load.
 
-That process-wide default is the app's *dataset* progress channel, which nothing
-else terminates: a sink cannot see when the work it is narrating ends.  So
-`load_models()` terminates it itself — an unscoped load reports as usual and
-then sends one `idle` tick on the way out (`MediaEmbedder._orphan_progress`).
-Background warm-ups that should not appear on any channel say so explicitly with
-`with emb.silent_progress():` (the smart-preload threads, the post-import
-embedder warm-up).  Skipping either is how a *finished* import came to look
-identical to a wedged one, with the dataset channel parked on "Loading SigLIP
-processor…" and no loader thread anywhere in the process (#3167).
+That process-wide default is `update_progress`, which resolves *per thread* in
+turn: an unscoped load on a thread that bound no tracker reaches a no-op, and
+one inside a load reaches that load's own tracker.  It used to be a global
+`dataset_progress` singleton instead — a channel nothing else terminates, since
+a sink cannot see when the work it is narrating ends — and `load_models()` had
+to append a synthetic `idle` tick on the way out to compensate.  Both the
+singleton and the compensating tick are gone (#3376); what remains is that
+background warm-ups which should not appear on *any* channel say so explicitly
+with `with emb.silent_progress():` (the smart-preload threads, the post-import
+embedder warm-up), so a warm-up running at the tail of an import does not
+narrate itself onto that import's row after it has finished.  Skipping that is
+how a *finished* import came to look identical to a wedged one, with the
+dataset channel parked on "Loading SigLIP processor…" and no loader thread
+anywhere in the process (#3167).
 
 ### The plugin systems
 

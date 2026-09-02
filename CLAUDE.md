@@ -441,7 +441,7 @@ Wrapping everything: a wall-clock cap (`VTSEARCH_TEST_TIMEOUT`, default **1800s 
 |------|-----------------|------|-------|
 | Types | `pyright` (pinned via `PYRIGHT_PYTHON_FORCE_VERSION`) | Full run only | Scope is `pyrightconfig.json`. |
 | Known CVEs | `pip-audit` | Full run only | Audits the resolved venv, not the requirements files. `PIP_AUDIT_IGNORE` in the script lists advisories with no upstream fix; re-audit and remove an entry once a patched release exists. |
-| Frontend audit | `cd frontend && npm audit --omit=dev` | Full run, `core`, `frontend` | Prod deps only — dev-only advisories don't ship. |
+| Frontend audit | `cd frontend && npm audit` | Full run, `core`, `frontend` | Whole tree, dev deps included. |
 | Vulture whitelist | `scripts/vulture-audit.py --check-whitelist` | Full run only | Whitelist hygiene, **not** the dead-code audit: fails when an entry in `.vulture-whitelist.py` suppresses no finding. The findings themselves stay a manual pre-release chore, because a hit on a public `vtscore` name is not evidence of anything. Whole-repo scan, ~5s. |
 | Frontend unit tests | `cd frontend && npm run test:ci` | Full run or `frontend` **only** — deliberately off the fast `core` path | Headless Vitest. |
 | Python tests | `pytest tests/ tests_lib/ -n auto --dist loadgroup` | Every run except a `frontend`-only group | |
@@ -450,7 +450,7 @@ Wrapping everything: a wall-clock cap (`VTSEARCH_TEST_TIMEOUT`, default **1800s 
 
 ## Test Groups
 
-Tests are grouped by folder under `tests/` and `tests_lib/`. Each folder is a pytest marker; `./run-tests.sh <group>` runs all tests in `tests[_lib]/<group>/`. New tests inherit their group from the folder they're added to. Not every group lives in both trees — the "Tier" column below says which one has the folder; missing an app-tier folder for `projection` (or a lib-tier folder for `api` / `converters`) is by design, not a gap.
+Tests are grouped by folder under `tests/` and `tests_lib/`. Each folder is a pytest marker; `./run-tests.sh <group>` runs all tests in `tests[_lib]/<group>/`. New tests inherit their group from the folder they're added to. Not every group lives in both trees — the "Tier" column below says which one has the folder; missing an app-tier folder for `projection` / `downloads` / `gpu` (or a lib-tier folder for `api` / `converters`) is by design, not a gap.
 
 | Group | Tier | Description |
 |-------|------|-------------|
@@ -460,7 +460,7 @@ Tests are grouped by folder under `tests/` and `tests_lib/`. Each folder is a py
 | `datasets` | both | Dataset loading, splitting, dedup, parallel/chunked/thin loading, multi-dataset context |
 | `io` | both | Importers, exporters, label I/O, settings I/O, sync sources, PDF/NPZ import |
 | `detectors` | both | Detectors, embedders, clippers, eval, processors, training |
-| `downloads` | both | Demo dataset downloads (AG News, BBC, GTZAN, IMDB, image sources, UCSF, video, generic extract) |
+| `downloads` | lib only | Demo dataset downloads (AG News, BBC, GTZAN, IMDB, image sources, UCSF, video, generic extract) |
 | `integration` | both | End-to-end workflows, thread safety, async jobs |
 | `cli` | both | CLI autodetect, load sort window, progress bars |
 | `converters` | app only | Media converters (document, video, image) |
@@ -596,7 +596,7 @@ A `for i in range(100): sleep(0.05)` loop finishes in 5 seconds — but on a loa
 def slow_load():
     started.set()
     while True:                            # exits ONLY via CancelledError
-        dataset_progress.check_cancelled()
+        tracker.check_cancelled()
         time.sleep(0.05)
 ```
 
@@ -605,7 +605,7 @@ def slow_load():
 def slow_load():
     started.set()
     for i in range(100):                   # FLAKY; can finish before cancel arrives
-        dataset_progress.check_cancelled()
+        tracker.check_cancelled()
         time.sleep(0.05)
 ```
 

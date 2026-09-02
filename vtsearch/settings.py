@@ -340,14 +340,16 @@ _EXCLUDE_FROM_SOURCE_EXPORT = {
 # Caches
 # ---------------------------------------------------------------------------
 
-# The mutable engine state below lives here (not on the store) because
-# other modules import these containers by name: ``vtsearch.achievements``
-# reads ``_user_caches`` / ``_settings_lock``, and the sync-source tests
-# poke ``_sync_state``. The :class:`~vtsearch.settings_store.UserSettingsStore`
-# instance (created at the bottom of this module) is handed these same
-# objects by reference, so both views mutate one set of containers. The
-# reassignable scalars (``server_cache``, ``legacy_migrated``) and the
-# per-user sync locks live solely on the store.
+# The mutable engine state below lives here (not on the store) because the
+# test suite imports these containers by name: the sync-source tests poke
+# ``_sync_state`` and ``_user_caches``, and the thread-safety test asserts on
+# ``_settings_lock``. No *production* module reads them any more - app code
+# that wants a multi-key read of a user's tier calls :func:`snapshot_user`.
+# The :class:`~vtsearch.settings_store.UserSettingsStore` instance (created at
+# the bottom of this module) is handed these same objects by reference, so
+# both views mutate one set of containers. The reassignable scalars
+# (``server_cache``, ``legacy_migrated``) and the per-user sync locks live
+# solely on the store.
 
 # Per-user caches keyed by username.
 _user_caches: dict[str, dict[str, Any]] = {}
@@ -574,6 +576,30 @@ def get_defaults() -> dict[str, Any]:
     return result
 
 
+def snapshot_user(username: str) -> dict[str, Any]:
+    """Return a consistent copy of *username*'s raw per-user settings cache.
+
+    This is the public read counterpart to :func:`mutate_user`: it loads the
+    user's tier if cold, then copies the cache under ``_settings_lock`` so the
+    caller walks a view that no concurrent writer can tear.  Callers that need
+    to read several related keys at once (rather than one key via an accessor)
+    should use this instead of reaching for ``_user_caches`` directly.
+
+    The returned dict holds only what is *stored* for the user - no defaults
+    are filled in, and no server-tier read-through is applied.  Use
+    :func:`get_user_settings` when you want the defaults merged in.
+
+    ``_ensure_user_loaded`` runs outside ``_settings_lock`` because a cold
+    cache takes the cross-process file lock (and, via a due sync,
+    ``_apply_settings``'s setters take it again); the canonical order is
+    file_lock -> settings_lock, so holding the settings lock across it would
+    deadlock against a concurrent writer.
+    """
+    _ensure_user_loaded(username)
+    with _settings_lock:
+        return dict(_user_caches.get(username, {}))
+
+
 def get_user_settings() -> dict[str, Any]:
     """Return the current user's per-user settings (with defaults filled in).
 
@@ -584,15 +610,7 @@ def get_user_settings() -> dict[str, Any]:
     """
     from vtsearch.auth import get_current_user
 
-    username = get_current_user()
-    # ``_ensure_user_loaded`` may trigger sync-from-source which calls
-    # setters that acquire ``_file_lock``. Calling it outside
-    # ``_settings_lock`` keeps the canonical lock order
-    # (file_lock → settings_lock) and avoids an AB-BA deadlock with
-    # concurrent writers.
-    _ensure_user_loaded(username)
-    with _settings_lock:
-        user_copy = dict(_user_caches.get(username, {}))
+    user_copy = snapshot_user(get_current_user())
     result = dict(_user_defaults())
     result.update(user_copy)
     # Same legacy migration as ``get_all`` so settings exports carry a value

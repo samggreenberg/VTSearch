@@ -1,4 +1,4 @@
-import { Injectable, OnDestroy, inject } from '@angular/core';
+import { Injectable, OnDestroy, inject, signal } from '@angular/core';
 import { BehaviorSubject, Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import type { MediaBatchResponse } from '../generated/api-client/models/media-batch-response';
@@ -46,6 +46,20 @@ export class MediaMetadataCacheService implements OnDestroy {
   private readonly versionSubject = new BehaviorSubject<number>(0);
   readonly version$ = this.versionSubject.asObservable();
 
+  /**
+   * The same cache version as a signal.
+   *
+   * A component that renders cached values reads this inside the expression
+   * that reads the cache (``version(); return get(id)?.filename``), which makes
+   * the batch arrival a tracked dependency of that view — so it repaints itself
+   * under zoneless change detection with no ``markForCheck()`` bridge. Prefer it
+   * over subscribing to {@link version$}, which notifies nobody on its own; see
+   * ``docs/FRONTEND.md`` §5. The observable stays for the consumers that still
+   * bridge it manually.
+   */
+  private readonly versionSignal = signal(0);
+  readonly version = this.versionSignal.asReadonly();
+
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
@@ -71,7 +85,7 @@ export class MediaMetadataCacheService implements OnDestroy {
   clear(): void {
     this.cache.clear();
     this.pendingByDataset.clear();
-    this.versionSubject.next(0);
+    this.bumpVersion(0);
   }
 
   /**
@@ -108,6 +122,13 @@ export class MediaMetadataCacheService implements OnDestroy {
   // ---------------------------------------------------------------------------
   // Internal
   // ---------------------------------------------------------------------------
+
+  /** Publish a new cache version on both channels, so the observable bridges
+   *  and the signal readers stay in lockstep. */
+  private bumpVersion(next: number): void {
+    this.versionSubject.next(next);
+    this.versionSignal.set(next);
+  }
 
   private keyFor(datasetId: string, id: number): string {
     return `${datasetId}:${id}`;
@@ -157,7 +178,7 @@ export class MediaMetadataCacheService implements OnDestroy {
             for (const item of items) {
               this.cache.set(this.keyFor(datasetId, item.id), item);
             }
-            this.versionSubject.next(this.versionSubject.value + 1);
+            this.bumpVersion(this.versionSubject.value + 1);
           },
           error: () => {
             // Re-queue failed IDs under the dataset that issued the

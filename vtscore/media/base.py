@@ -24,16 +24,19 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 import numpy as np
 
 from vtscore.security.path_validation import resolve_media_file_path
 
-# Type alias for progress callbacks.  Modules that accept an ``on_progress``
-# parameter use this signature so callers can report status without depending
-# on ``vtscore.concurrency.progress``.
-ProgressCallback = Callable[[str, str, int, int], None]
+# Progress callbacks.  Re-exported from ``vtscore.concurrency.progress`` (which
+# imports nothing from vtscore, so there is no cycle) rather than redeclared,
+# so the one signature every sink implements has exactly one definition.
+from vtscore.concurrency.progress import (  # noqa: E402
+    ProgressCallback,
+    noop_progress as _noop_progress,
+)
 
 __all__ = [
     "DemoDataset",
@@ -104,10 +107,6 @@ def _resolve_archive_member_bytes(media: dict) -> bytes | None:
     except (ArchiveMemberError, OSError):
         logging.getLogger(__name__).warning("Failed to read archive member %s::%s", ref[0], ref[1], exc_info=True)
         return None
-
-
-def _noop_progress(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
-    """Default no-op progress callback used when no real reporter is set."""
 
 
 @dataclass

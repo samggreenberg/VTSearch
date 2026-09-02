@@ -5,6 +5,7 @@ import { DetectorsFindApiService } from '../../../services/detectors-find-api.se
 import { DatasetsRegistryApiService } from '../../../services/datasets-registry-api.service';
 import { DatasetStateService } from '../../../services/dataset-state.service';
 import { ActiveContextService } from '../../../services/active-context.service';
+import { ActiveDatasetService } from '../../../services/active-dataset.service';
 import type { FindStatsResponse } from '../../../generated/api-client/models/find-stats-response';
 import type { FindEvidenceCoverageResponse } from '../../../generated/api-client/models/find-evidence-coverage-response';
 import type { DatasetDomainShiftResponse } from '../../../generated/api-client/models/dataset-domain-shift-response';
@@ -38,6 +39,7 @@ export class FindStatsModalComponent implements OnInit {
   private registryApi = inject(DatasetsRegistryApiService);
   private datasetState = inject(DatasetStateService);
   private activeCtx = inject(ActiveContextService);
+  private activeDataset = inject(ActiveDatasetService);
 
   readonly closed = output<void>();
 
@@ -103,7 +105,7 @@ export class FindStatsModalComponent implements OnInit {
   private initDomainOverlap(): void {
     const activeId = this.activeCtx.datasetId;
     const datasets = this.datasetState.datasets;
-    const activeEmbedder = datasets.find((d) => d.id === activeId)?.embedder ?? '';
+    const activeEmbedder = this.activeDataset.dataset()?.embedder ?? '';
     const candidates = datasets.filter(
       (d) => d.loaded && d.id !== activeId && (d.embedder ?? '') === activeEmbedder,
     );

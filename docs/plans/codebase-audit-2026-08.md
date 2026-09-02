@@ -76,12 +76,6 @@ ship on its own.
 
 <!-- item-sep -->
 
-- **State proxies silently fall back to the empty built-in dict/list for unforwarded methods** — `vtsearch/state_proxies.py:53` (low impact)
-
-  `_ProxyDict` / `_ProxyList` forward a hand-enumerated method list to the active context's container, but any method not on the list executes against the proxy's own permanently-empty built-in storage and returns confidently wrong results instead of failing. Today's gaps: `dict.popitem()` always raises KeyError('dictionary is empty') even when the target has entries; `plain | proxy` reflected `__or__` and `dict.__ror__` are unforwarded; `_ProxyList` lacks `__mul__`, `__radd__`, and the ordering comparisons (`__lt__`/`__gt__`), so e.g. `label_history < other` compares an empty list. Nothing in the repo currently calls these on a proxy (verified via grep for `popitem`), so this is latent rather than live — but the failure mode when someone does is a silent wrong answer, the worst kind for a facade that intentionally passes `isinstance(x, dict)` checks. Code evidence: the class body at state_proxies.py:51-122 enumerates forwards; `super().__init__()` at line 43 guarantees the own storage stays empty.
-
-  *Direction:* Forward the remaining dunder/mutator methods (popitem, __ror__, list comparisons, __mul__), or add a test that asserts every public dict/list method name is either forwarded or explicitly blacklisted with a raising stub, so a new Python dict/list method can't regress silently.
-
 <!-- item-sep -->
 
 - **Achievements persist a full settings-file RMW plus a source push on every single vote** — `vtsearch/achievements.py:371` (medium impact)
@@ -233,26 +227,6 @@ ship on its own.
   `_level_membership` calls `perm = _hilbert_order(coords)` inside the per-level cache-miss path. The Hilbert permutation depends only on the frozen coords — it is identical for every level — yet each level's first tile fetch pays a fresh O(N) quantize + 16-iteration bit-twiddle + O(N log N) stable argsort. On a large dataset with a deep pyramid (up to 14 levels), the browse canvas re-derives the exact same permutation up to 14 times as the user zooms through levels, each time on the request thread serving the first tile of that level.
 
   *Direction:* Memoize the permutation once per Pyramid (e.g. a `_hilbert_perm` field alongside `_member_index`, or key the member-index cache computation to compute the perm once and reuse across levels).
-
-<!-- item-sep -->
-
-### Frontend — browse surface
-
-<!-- item-sep -->
-
-- **Idle thumbnail preloader fetches full-resolution originals once the full-res tier engages, unbounded in bytes** — `frontend/src/app/components/browse-canvas/browse-canvas.component.ts:1950` (medium impact)
-
-  `useFullResThumbs` (line 668) flips `startThumbLoad` to the uncapped `/image` endpoint (line 1950), justified by the comment "Only a handful of such giant cells fit on screen at once, so the LRU still bounds memory". But the idle preloader (`runThumbPrefetch` → `warmThumbsForTiles` → `startThumbLoad(cell.rep_id, true)`, line 2165) shares the same tier and the same 2048-entry `MAX_THUMBS` cap: at a large thumbnail size (4XL/5XL crosses the 384px threshold at dpr 1), every idle pass warms up to 64 OFF-SCREEN cells — the pan ring plus the finer level's cells — with full-resolution originals, up to 2048 of them. For a photo dataset that is potentially gigabytes of image data fetched and retained for cells the user may never see; the cache bound is a count, not bytes, so the stated memory reasoning doesn't hold for the preload path. The benefit of fixing this is bounded memory/network at high zoom, where the app is otherwise most responsive.
-
-  *Direction:* Have preload (`preload === true`) always fetch the capped `/thumbnail` regardless of tier (a later on-screen paint upgrades it), or shrink the LRU cap sharply while `thumbsAreFullRes` is active.
-
-<!-- item-sep -->
-
-- **A transient thumbnail load failure permanently blanks that cell until the projection changes** — `frontend/src/app/components/browse-canvas/browse-canvas.component.ts:1939` (low impact)
-
-  `img.onerror` (line 1939-1942) adds the rep id to `thumbFailed`, and every subsequent `getThumb`/preload skips it forever — `thumbFailed` is only cleared on a projection switch or a resolution-tier crossing. A single transient failure (server restart, brief network blip, one 502 during a burst of 64 preload fetches) therefore leaves that bin rendered as flat density shading among thumbnails for the rest of the session, with no retry path and no user-visible way to recover short of leaving the view. The `onerror` also fires no redraw, relying on the 12s first-view backstop timer for the opening view.
-
-  *Direction:* Treat failures as retryable: store a failure timestamp and retry after a backoff (or cap retries per id), and/or clear `thumbFailed` on `zoomToFit`/manual refresh actions.
 
 <!-- item-sep -->
 

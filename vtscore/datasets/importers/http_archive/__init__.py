@@ -23,27 +23,15 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
-from typing import Any, Callable, Iterator
+from typing import Any, Iterator
 from uuid import uuid4
 
+from vtscore.concurrency.progress import resolve_progress_callback
 from vtscore.config import DATA_DIR
 from vtscore.datasets.archive import extract_archive, is_archive_path, load_archive_into
 from vtscore.datasets.downloader import download_file_with_progress
 from vtscore.datasets.importers.base import DatasetImporter, PluginField, SourceSpec
 from vtscore.datasets.loader import load_dataset_from_folder
-
-ProgressCallback = Callable[[str, str, int, int], None]
-
-
-def _default_progress() -> ProgressCallback:
-    from vtscore.concurrency.progress import get_thread_progress
-
-    cb = get_thread_progress()
-    if cb is not None:
-        return cb
-    from vtscore.concurrency.progress import update_progress
-
-    return update_progress
 
 
 def _is_url(value: str) -> bool:
@@ -174,7 +162,7 @@ class HttpArchiveDatasetImporter(DatasetImporter):
 
         DATA_DIR.mkdir(exist_ok=True)
 
-        progress = _default_progress()
+        progress = resolve_progress_callback()
 
         # Derive a local filename from the URL so we preserve the extension
         url_path = url.split("?")[0].rstrip("/")
@@ -230,7 +218,7 @@ class HttpArchiveDatasetImporter(DatasetImporter):
         url = field_values["url"]
 
         DATA_DIR.mkdir(exist_ok=True)
-        progress = _default_progress()
+        progress = resolve_progress_callback()
 
         url_path = url.split("?")[0].rstrip("/")
         url_filename = url_path.split("/")[-1] or "archive"

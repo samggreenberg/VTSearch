@@ -13,14 +13,13 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
+from vtscore.concurrency.progress import ProgressCallback, resolve_progress_callback
 from vtscore.security.path_validation import glob_top_level, rglob_follow_symlinks
 from vtscore.utils.hashing import content_md5
 
 logger = logging.getLogger(__name__)
-
-ProgressCallback = Callable[[str, str, int, int], None]
 
 
 def _normalise_converter_specs(
@@ -54,17 +53,6 @@ def _normalise_converter_specs(
             continue
         result.append((c, params))
     return result
-
-
-def _default_progress() -> ProgressCallback:
-    from vtscore.concurrency.progress import get_thread_progress
-
-    cb = get_thread_progress()
-    if cb is not None:
-        return cb
-    from vtscore.concurrency.progress import update_progress
-
-    return update_progress
 
 
 _OPTIONAL_OUTPUT_FIELDS = ("media_bytes", "media_string", "width", "height", "word_count", "character_count")
@@ -329,7 +317,7 @@ def run_converters_on_folder(
         return
 
     if on_progress is None:
-        on_progress = _default_progress()
+        on_progress = resolve_progress_callback()
 
     from vtscore.media import get as media_get, get_by_folder_name  # noqa: PLC0415
 
@@ -424,7 +412,7 @@ def apply_converter_to_demo(
         raise ValueError(f"Unknown converter: {converter_name}")
 
     if on_progress is None:
-        on_progress = _default_progress()
+        on_progress = resolve_progress_callback()
 
     source_items = list(medias.items())
     converted: dict[int, dict[str, Any]] = {}

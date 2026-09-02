@@ -122,7 +122,7 @@ plugins must be importable in a Flask-free environment - the
 `tests_lib/` test tier is verified by `./run-tests.sh vtscore-clean`,
 which installs a meta-path import hook that refuses `flask`,
 `werkzeug`, and `flask_smorest`. Read configuration through
-`CoreConfig` ([`vtscore/config.py`](../../config.py)); construct
+`CoreConfig` ([`vtscore/config/core_config.py`](../../config/core_config.py)); construct
 one directly when running outside an app context, or call
 `CoreConfig.from_settings()` when an app shim has been registered.
 

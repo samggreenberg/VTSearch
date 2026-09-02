@@ -221,6 +221,20 @@ update_progress("downloading", "Downloading file 3/10", 3, 10)
 update_progress("embedding", "Embedding 7/10", 7, 10)
 ```
 
+`update_progress()` resolves the progress sink the **calling thread**
+bound, which for an importer's `run()` is the tracker behind this
+import's own dashboard row. If you would rather hold the callback than
+call the free function, `resolve_progress_callback()` from the same
+module returns it; both come from the same per-thread lookup, and both
+are inert when no load is in flight (a unit test calling your importer
+directly, say).
+
+There is no process-wide progress sink to fall back to. Reporting from a
+thread that bound nothing discards the tick rather than publishing it
+somewhere nobody is watching — a channel with no owner cannot say when
+its work ended, which is what made a finished import indistinguishable
+from a wedged one (#3167).
+
 Status strings are conventional, not enforced: `"downloading"`,
 `"embedding"`, `"importing"`. The dataset-loading pipeline keys on the
 first `"embedding"` status to swap between the download

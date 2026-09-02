@@ -16,6 +16,9 @@ import numpy as np
 from vtscore.eval.row_metrics import operating_metrics, round6
 from vtscore.training.thresholds import (
     CUT_KIND_INTERIOR,
+    FOLD_ANCHOR_COMBINE,
+    FOLD_ANCHOR_CUT_RULE,
+    FOLD_ANCHOR_WEIGHT,
     anchored_gmm_fit,
     fold_anchored_gmm_threshold,
     gmm_cut_from_fit,
@@ -27,13 +30,22 @@ from vtscore.training.thresholds import (
 #: within-step variant; the GRID run overrides these via
 #: ``simulate_voting_iterations``'s ``anchored_*`` parameters to exhaust the
 #: grid registered in ``docs/plans/population-anchored-calibration.md``.
-_ANCHORED_WEIGHTS: tuple[float, ...] = (1.0, 10.0, 100.0)
+#:
+#: **Every grid leads with the shipped value** (:data:`FOLD_ANCHOR_WEIGHT`,
+#: :data:`FOLD_ANCHOR_CUT_RULE`, :data:`FOLD_ANCHOR_COMBINE`).  A sweep whose
+#: default grid omits the operating point the app ships has no arm to pair its
+#: challengers against, which is what these grids had become: they were
+#: registered when #2852 was placing the knob, #2861 read that sweep, and the
+#: values it settled on (0.3, ``mid_tilt``) then shipped from *underneath* the
+#: grid.  Same failure family as
+#: ``scripts/experiments/lessons/2026-08-12-a-study-default-is-not-a-shipped-default.md``.
+_ANCHORED_WEIGHTS: tuple[float, ...] = (FOLD_ANCHOR_WEIGHT, 1.0, 10.0, 100.0)
 
 
-_ANCHORED_RULES: tuple[str, ...] = ("mid", "rate")
+_ANCHORED_RULES: tuple[str, ...] = (FOLD_ANCHOR_CUT_RULE, "mid", "rate")
 
 
-_ANCHORED_FOLD_COMBINES: tuple[str, ...] = ("qmean",)
+_ANCHORED_FOLD_COMBINES: tuple[str, ...] = (FOLD_ANCHOR_COMBINE,)
 
 
 def _anchored_variant_rows(

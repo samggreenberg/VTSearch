@@ -60,7 +60,7 @@ A genuine removal is a deliberate library break: raise it with the user first.
   importable from its old path via a package `__init__` re-export or a shim.
 
 **Suggested first wave** (high value, low risk): #3441 and #3434 (verified-dead
-frontend code and repo hygiene), #3389/#3392/#3399 (mechanical vtscore dedup and
+frontend code and repo hygiene), #3389/#3399 (mechanical vtscore dedup and
 converter logging), #3400 (eval defaults that no longer match the shipped
 algorithm), #3382/#3402/#3404. The god-module splits (#3381, #3377, #3405, #3417)
 and the settings rework (#3412) are the highest-payoff items but need Opus-tier
@@ -70,7 +70,7 @@ care.
 
 ## Library tier — god modules & misplaced code
 
-- [ ] #3375 — Split `vtscore/config.py` into a package along its five seams (Sonnet 5)
+- [x] #3375 — Split `vtscore/config.py` into a package along its five seams (Sonnet 5)
 - [ ] #3377 — Split `vtscore/state/core.py` and centralize `DatasetContext` cache invalidation (Opus 4.8)
 - [x] #3381 — Split the thresholds module into the `vtscore/training/thresholds/` package along its five seams (Opus 4.8)
 - [ ] #3384 — Extract the load-progress and torch-ops subsystems out of `vtscore/media/embedder.py` (Sonnet 5)
@@ -87,7 +87,6 @@ care.
 - [ ] #3383 — Deduplicate the clipper family: tiling math, segment emission, six no-op clippers (Sonnet 5)
 - [ ] #3386 — Collapse the near-synonymous embedder-resolution wrappers (Sonnet 5)
 - [ ] #3389 — Deduplicate the media registries, the atomic-write ritual, and JSON label extraction (Haiku 4.5)
-- [ ] #3392 — Centralize `_default_progress()` and the `ProgressCallback` alias (Haiku 4.5)
 - [ ] #3394 — Extract one background-import harness shared by both import pipelines (Sonnet 5)
 
 ## Library tier — dead code & unkept promises
@@ -102,7 +101,6 @@ care.
 
 ## Concurrency & progress
 
-- [ ] #3376 — Delete the legacy global dataset-progress system in favour of the per-task registry (Opus 4.8)
 - [ ] #3380 — Back `AsyncJob` with a `ProgressTracker` instead of re-implementing it (Opus 4.8)
 - [ ] #3382 — Route the raw staging thread through `vtsearch.threading.spawn` (Haiku 4.5)
 
@@ -128,7 +126,6 @@ care.
 - [ ] #3427 — Register one dynamic plugin route and generate its bodies at spec-build time (Opus 4.8)
 - [ ] #3430 — `achievements.py`: build the response shape once, stop reaching into settings privates (Sonnet 5)
 - [ ] #3432 — Collapse the CLI autodetect 2×2 matrix, keeping all four public names as shims (Sonnet 5)
-- [ ] #3435 — Delete `state_proxies.py`: 375 lines of facade for one production call site (Sonnet 5)
 - [ ] #3438 — Small app-tier batch: exempt prefixes as a route attribute, plus the orphan-endpoint decision (Sonnet 5)
 
 ## Eval harness & experiments
@@ -147,7 +144,7 @@ care.
 
 - [ ] #3417 — Extract browse-canvas's thumbnail store and animation controller (Opus 4.8)
 - [ ] #3423 — browse-bin-popup: split the member grid, then signalize (Sonnet 5 → Opus 4.8, staged)
-- [ ] #3428 — Promote `SortStateService` from anemic store to orchestrator; extract `autoSelectNext` (Opus 4.8)
+- [ ] #3428 — Promote `SortStateService` from anemic store to orchestrator (Opus 4.8)
 - [ ] #3433 — Promote `PanelResizeDirective` out of `label-view/` and document which drag shapes it covers (Sonnet 5)
 
 ## Frontend — duplication & dead code
@@ -174,7 +171,6 @@ care.
 - [ ] #3431 — `Dockerfile.image-embedders` and its GPU twin are a 90% copy (Sonnet 5)
 - [ ] #3434 — Repo-hygiene batch: stale allowlists, three unreferenced scripts, `slides/Makefile` hardening (Haiku 4.5)
 - [ ] #3437 — `gridenv.sh` contradicts itself: the "untracked" shim is tracked (Sonnet 5)
-- [ ] #3439 — `@angular-devkit/build-angular` is an unused devDependency narrowing the audit gate (Sonnet 5)
 - [ ] #3440 — The ensure-test-deps `PreToolUse` hook reads `$TOOL_INPUT` only (Sonnet 5)
 
 ## Documentation
@@ -199,7 +195,7 @@ What remains is one genuine design fork:
 
 <!-- item-sep -->
 
-- **What is `CoreConfig` for?** — `vtscore/config.py:793`
+- **What is `CoreConfig` for?** — `vtscore/config/core_config.py`
 
   All 14 call sites call `CoreConfig.from_settings()` ad hoc, each invoking ~18 settings getters through the app shim, so the frozen-value-object abstraction buys nothing while costing a full settings snapshot per lookup. The design comment at `config.py:793-816` still says "Until those land this class is unused at runtime" — stale for a while now.
 

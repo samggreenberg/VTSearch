@@ -5,6 +5,7 @@ import { LabelSortMode } from '../label-sort/label-sort.component';
 import { DetectorsCrudApiService } from '../../../services/detectors-crud-api.service';
 import { MediaTypeCapabilityService } from '../../../services/media-type-capability.service';
 import { VoteGridComponent, VoteGridEntry } from '../vote-grid/vote-grid.component';
+import { sortListEntries } from '../../../utils/sort-list-entries';
 
 interface SortedElement extends DetectorLabelView, VoteGridEntry {
   confidence: number;
@@ -50,7 +51,7 @@ export class LabelsetListComponent {
       // so vote-grid tints them via a CSS mask instead of a plain <img>.
       isAudio: e.media_type === 'audio',
     }));
-    return this.sortEntries(entries);
+    return sortListEntries(entries, this.sortMode());
   }
 
   private buildThumbnailUrl(entry: DetectorLabelView): string {
@@ -66,35 +67,6 @@ export class LabelsetListComponent {
       url += `${sep}region=${box.map((v) => v.toFixed(4)).join(',')}`;
     }
     return url;
-  }
-
-  private sortEntries(entries: SortedElement[]): SortedElement[] {
-    const sorted = [...entries];
-    switch (this.sortMode()) {
-      case 'time-desc':
-        sorted.sort((a, b) => b.time - a.time);
-        break;
-      case 'time-asc':
-        sorted.sort((a, b) => a.time - b.time);
-        break;
-      case 'name-asc':
-        sorted.sort((a, b) => a.name.localeCompare(b.name));
-        break;
-      case 'name-desc':
-        sorted.sort((a, b) => b.name.localeCompare(a.name));
-        break;
-      case 'confidence-desc':
-        sorted.sort((a, b) => b.confidence - a.confidence);
-        break;
-      case 'confidence-asc':
-        sorted.sort((a, b) => a.confidence - b.confidence);
-        break;
-      case 'id-asc':
-      default:
-        sorted.sort((a, b) => a.id.localeCompare(b.id));
-        break;
-    }
-    return sorted;
   }
 
   onEntrySelected(entry: VoteGridEntry): void {

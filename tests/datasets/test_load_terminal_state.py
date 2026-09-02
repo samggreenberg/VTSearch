@@ -7,8 +7,14 @@ channel — kept whatever an unscoped model load had written into it.  Nothing
 cleared either, because only the failure paths wrote a terminal state.  The
 only way to learn the truth was to attach a profiler to the process.
 
+Half of that is now structural: the global tracker is gone, so an unscoped
+model load resolves to a no-op instead of parking a channel nobody could
+clear.  What is left to test is the half that still has to be got right —
+the load's own per-task tracker reaching a terminal state — plus a guard
+that no new process-wide sink has appeared to take the old one's place.
+
 These drive a real load through ``_run_origin_load_in_background`` on the
-calling thread and assert both channels come to rest.
+calling thread and assert it comes to rest.
 """
 
 from __future__ import annotations
@@ -17,7 +23,7 @@ from unittest import mock
 
 import numpy as np
 
-from vtscore.concurrency.progress import dataset_progress, loading_tasks
+from vtscore.concurrency.progress import loading_tasks
 
 
 def _sync_thread_factory():
@@ -98,20 +104,34 @@ class TestSuccessfulLoadParksItsChannels:
         finally:
             loading_tasks.remove_task(task_id)
 
-    def test_global_dataset_channel_is_left_idle(self, isolated_settings, tmp_path):
-        """The SSE ``dataset`` channel must not keep narrating a finished import.
+    def test_a_finished_load_leaves_no_channel_narrating(self, isolated_settings, tmp_path):
+        """No SSE channel may outlive the load it was describing.
 
-        Anything that reports progress without a per-thread callback lands on
-        this singleton — the observed symptom was it stuck on "Loading SigLIP
-        processor…" for forty minutes with no loader thread in the process.
+        The observed symptom was the ``dataset`` channel stuck on "Loading
+        SigLIP processor…" for forty minutes with no loader thread in the
+        process, because anything reporting progress without a per-thread
+        callback landed on a singleton that had no idea when the work ended.
+        There is no such singleton now, so the guarantee is checked at the
+        stream: once the load is over, every snapshot frame is terminal.
         """
-        dataset_progress.update("loading", "Loading SigLIP processor…", 0, 0)
+        import json
+
+        from vtscore.concurrency.events import initial_snapshot
 
         task_id = _run_load(tmp_path)
         try:
-            snapshot = dataset_progress.get()
-            assert snapshot["status"] == "idle", (
-                f"the last load out of the door parks an orphaned dataset channel; got {snapshot!r}"
-            )
+            for frame in initial_snapshot():
+                assert not frame.startswith("event: dataset\n"), (
+                    "the legacy dataset channel is back; it is a sink nothing terminates"
+                )
+                lines = frame.splitlines()
+                channel = lines[0].removeprefix("event: ")
+                payload = json.loads([ln for ln in lines if ln.startswith("data: ")][0].removeprefix("data: "))
+                if channel in ("loading-tasks", "detector-loading-tasks"):
+                    assert all(t.get("status") == "idle" for t in payload), (
+                        f"{channel} still claims work after the load finished: {payload!r}"
+                    )
+                elif isinstance(payload, dict) and "status" in payload:
+                    assert payload["status"] == "idle", f"{channel} is still narrating: {payload!r}"
         finally:
             loading_tasks.remove_task(task_id)
