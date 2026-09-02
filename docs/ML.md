@@ -133,6 +133,27 @@ For semantic (text/example) sorts, a **GMM-based threshold** is used instead: a 
 
 **Why not the equal-density crossing?** Issue #2798 replaced the midpoint with the crossing of the two weighted components — solving `w_lo·N(x; μ_lo, σ²_lo) = w_hi·N(x; μ_hi, σ²_hi)`, the Bayes boundary between them — on the argument that under **region voting** (a media's score is the max over ~24 region-node scores) the Bad mode is an extreme-value statistic: right-skewed, wider and much heavier than the Good mode, which puts the crossing *above* the midpoint and means the midpoint cuts inside Bad mass. The #2799 study measured the two rules as paired within-step variants (each re-cutting the same model on the same votes) and the crossing lost on cost in every max-pooled window: +0.0036 at 6–20 votes, +0.0059 at 2–5 (`docs/experiments/2026-08-03-safe-thresholds/REPORT.md`). The geometry argument holds in *direction* — the crossing does cut higher and does buy FPR — but the exchange rate is ~1.3 FNR per 1 FPR, and for a needle-finding tool the missed match is the worse error. So issue #2833 reverted production to the midpoint. The crossing solver stays in the tree as an eval variant, and issue #2836 is the open question of why the midpoint wins (leading hypothesis: the crossing is the count-optimal cut while we score a *rate* loss, so its prior-odds term is a bias, and the right cut is a third point rather than either of these two).
 
+### "All my Goods rank above all my Bads" — is the head over-training?
+
+No, and the symptom cannot tell you either way. Embeddings are 512–768-dimensional, so a few hundred labeled points are almost always linearly separable for **any** labeling — including a pure coin flip. A head that fits its own training labels perfectly is therefore doing what a correctly-specified model does on separable data, not memorizing; shrinking the head would not change the symptom, because the symptom is a property of the geometry rather than of the model's capacity.
+
+Over-training is only visible on items the head did **not** train on. The shuffled-label control makes that concrete: run the same dataset, the same train/held-out split, and the same head twice, changing only the labels.
+
+- **REAL** — label each item by its true category (a signal that exists).
+- **NOISE** — label each item by a fixed coin flip (a signal that does not).
+
+Both arms reach ≈1.0 training AUC. That is the whole point: perfect training separation happens even for pure noise, so it proves nothing. The held-out numbers are what separate them:
+
+| Arm | Train AUC | Held-out AUC | Reading |
+|---|---|---|---|
+| REAL | ≈ 1.0 | well above 0.5 | The head is genuinely learning; the perfect training separation is *good behavior*. |
+| NOISE | ≈ 1.0 | ≈ 0.5 | The head correctly fails to generalize noise — it is not a memorizer faking held-out signal. |
+
+A high held-out AUC on the NOISE arm would be the real alarm: that is label leakage or a broken split, not over-training.
+
+The same control answers the neighbouring question — "is the capacity right?" — by sweeping the hidden width (or the head sentinel) with the split, votes and seeds held fixed, and reading held-out AUC per width. Note that production ships the **linear SVM head**, which has no width to sweep: capacity questions apply to the BCE eval arms in [The three heads](#the-three-heads-which-one-is-shipped-and-why) above.
+
+
 ## PyTorch Environment Settings
 
 | Setting | Where | Value |
