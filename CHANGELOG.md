@@ -17,6 +17,22 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **Staging a dataset for the combine flow now queues behind the same
+  concurrency limits a regular import does, and a cancelled staging no longer
+  reports itself as a failure.** Staging ran its importer and its embed pass on
+  a bare background thread that acquired neither the download nor the embed
+  gate, so N stagings fetched and embedded fully in parallel with each other
+  *and* with gated imports -- exactly the pressure the
+  `max_concurrent_dataset_downloads` / `max_concurrent_dataset_embeddings`
+  settings exist to bound. On a RAM-constrained host, staging a handful of
+  image datasets at once multiplied resident model weights past the configured
+  budget with nothing to stop it. Staging now makes the same download -> embed
+  gate handoff as an import, and shows the same "Waiting for other datasets..."
+  message while queued. Separately, staging's error handling had no branch for
+  a user-requested cancel, so stopping one surfaced the raw exception text and
+  the dashboard and toasts read it as a red failure; both import paths now
+  share one exception taxonomy and a cancel reads as `Cancelled` either side.
+
 - **Find now calibrates each detector against the corpus it is searching, and
   scores each head the way that head was trained.** Two independent faults met
   in the cross-dataset Find route. A detector that is not loaded against the

@@ -967,6 +967,204 @@ class TestLoadingGates:
         finally:
             settings_mod.set_max_concurrent_dataset_downloads(original)
 
+    # -- Staging imports run under the same gates -------------------------
+    #
+    # A staging import (the combine flow) downloads and embeds exactly like a
+    # regular load, so it has to queue behind the same limits.  It used to run
+    # ungated: N stagings downloaded and embedded fully in parallel with each
+    # other *and* with gated loads, defeating the configured caps (#3394).
+
+    def test_staging_import_swaps_download_gate_for_embed_gate(self):
+        """A staging import holds the download gate through the importer and
+        the embed gate through embedding, then releases both."""
+        from vtscore.datasets.load_pipeline import (
+            _download_gate,
+            _embed_gate,
+            _stage_importer_in_background,
+        )
+
+        in_run = threading.Event()
+        run_proceed = threading.Event()
+        during_run: list[tuple[int, int]] = []
+        during_embed: list[tuple[int, int]] = []
+
+        class _BlockingImporter:
+            name = "gated_stage"
+            fields: list = []
+
+            def resolve_display_name(self, field_values):
+                return "Gated"
+
+            def run(self, field_values, temp_medias, thin=False):
+                during_run.append((_download_gate.active, _embed_gate.active))
+                in_run.set()
+                run_proceed.wait(timeout=10)
+                # Produce nothing: the staging body then parks at "Import
+                # produced no medias." without writing a pkl to the shared
+                # staging dir.
+
+        def _fake_embed(*args, **kwargs):
+            during_embed.append((_download_gate.active, _embed_gate.active))
+
+        with mock.patch("vtscore.datasets.load_pipeline.embed_missing", _fake_embed):
+            task_id = _stage_importer_in_background(_BlockingImporter(), {})
+            assert in_run.wait(timeout=10), "staging importer never started"
+            run_proceed.set()
+
+            deadline = time.time() + 10
+            while not loading_tasks.is_finished(task_id) and time.time() < deadline:
+                time.sleep(0.05)
+            assert loading_tasks.is_finished(task_id), "staging task never finished"
+
+        assert during_run == [(1, 0)], "staging must run its importer under the download gate"
+        assert during_embed == [(0, 1)], "staging must swap to the embed gate before embedding"
+        assert _download_gate.active == 0
+        assert _embed_gate.active == 0
+        loading_tasks.remove_task(task_id)
+
+    def test_staging_queues_behind_a_running_load(self):
+        """With the download limit at 1, a staging import parks on the gate
+        while a regular load holds it, and reports the same waiting message."""
+        from vtsearch import settings as settings_mod
+        from vtscore.datasets.load_pipeline import (
+            _download_gate,
+            _run_origin_load_in_background,
+            _stage_importer_in_background,
+        )
+
+        original = settings_mod.get_max_concurrent_dataset_downloads()
+        settings_mod.set_max_concurrent_dataset_downloads(1)
+        try:
+            load_started = threading.Event()
+            load_proceed = threading.Event()
+            stage_started = threading.Event()
+
+            def blocking_load(medias):
+                load_started.set()
+                load_proceed.wait(timeout=10)
+
+            class _StubImporter:
+                name = "queued_stage"
+                fields: list = []
+
+                def resolve_display_name(self, field_values):
+                    return "Queued"
+
+                def run(self, field_values, temp_medias, thin=False):
+                    stage_started.set()
+
+            load_id = _run_origin_load_in_background(blocking_load, {"importer": "first", "params": {}}, name="First")
+            assert load_started.wait(timeout=10)
+
+            _download_gate.waiter_parked.clear()
+            with mock.patch("vtscore.datasets.load_pipeline.embed_missing", lambda *a, **k: None):
+                stage_id = _stage_importer_in_background(_StubImporter(), {})
+                assert _download_gate.waiter_parked.wait(timeout=10), (
+                    "staging import never blocked on the download gate"
+                )
+                assert not stage_started.is_set(), "staging importer ran while the gate was full"
+
+                tracker = loading_tasks.get_tracker(stage_id)
+                assert tracker is not None
+                status = tracker.get()
+                assert "Waiting" in status.get("message", "")
+                # The wait message must carry the staging step structure, not
+                # the load pipeline's, or the whole-job bar rescales on queueing.
+                assert status.get("total_steps") == 3
+
+                load_proceed.set()
+                assert stage_started.wait(timeout=10), "staging never ran after the load released the gate"
+
+                deadline = time.time() + 10
+                while loading_tasks.has_active_tasks() and time.time() < deadline:
+                    time.sleep(0.05)
+
+            loading_tasks.remove_task(load_id)
+            loading_tasks.remove_task(stage_id)
+            assert _download_gate.active == 0
+        finally:
+            settings_mod.set_max_concurrent_dataset_downloads(original)
+
+    def test_cancelled_staging_reports_cancelled_not_a_raw_error(self):
+        """Cancelling a queued staging import must surface ``error="Cancelled"``.
+
+        The dashboard and the toast service both test for that exact string to
+        tell a user-requested stop from a genuine failure, so staging's own
+        except-taxonomy (which had no ``CancelledError`` branch) popped a red
+        "failed" toast for a cancel the user asked for.
+        """
+        from vtsearch import settings as settings_mod
+        from vtscore.datasets.load_pipeline import (
+            _download_gate,
+            _run_origin_load_in_background,
+            _stage_importer_in_background,
+        )
+
+        original = settings_mod.get_max_concurrent_dataset_downloads()
+        settings_mod.set_max_concurrent_dataset_downloads(1)
+        try:
+            load_started = threading.Event()
+            load_proceed = threading.Event()
+
+            def blocking_load(medias):
+                load_started.set()
+                load_proceed.wait(timeout=10)
+
+            class _NeverRunsImporter:
+                name = "cancelled_stage"
+                fields: list = []
+
+                def resolve_display_name(self, field_values):
+                    return "Cancelled"
+
+                def run(self, field_values, temp_medias, thin=False):
+                    raise AssertionError("importer must not run: the staging was cancelled while queued")
+
+            load_id = _run_origin_load_in_background(blocking_load, {"importer": "first", "params": {}}, name="First")
+            assert load_started.wait(timeout=10)
+
+            _download_gate.waiter_parked.clear()
+            stage_id = _stage_importer_in_background(_NeverRunsImporter(), {})
+            assert _download_gate.waiter_parked.wait(timeout=10)
+
+            loading_tasks.cancel_task(stage_id)
+            deadline = time.time() + 10
+            while not loading_tasks.is_finished(stage_id) and time.time() < deadline:
+                time.sleep(0.05)
+            assert loading_tasks.is_finished(stage_id), "cancelled staging never finished"
+
+            tracker = loading_tasks.get_tracker(stage_id)
+            assert tracker is not None
+            assert tracker.get().get("error") == "Cancelled"
+            # The cancel must not release a gate it never acquired.
+            assert _download_gate.active == 1
+
+            load_proceed.set()
+            deadline = time.time() + 10
+            while loading_tasks.has_active_tasks() and time.time() < deadline:
+                time.sleep(0.05)
+            loading_tasks.remove_task(load_id)
+            loading_tasks.remove_task(stage_id)
+            assert _download_gate.active == 0
+        finally:
+            settings_mod.set_max_concurrent_dataset_downloads(original)
+
+
+class TestImportFailureMessages:
+    """The two import pipelines share one exception taxonomy (#3394)."""
+
+    def test_cancel_import_and_oom_read_the_same_either_side(self):
+        from vtscore.concurrency.progress import CancelledError as _Cancelled
+        from vtscore.datasets.load_pipeline import _failure_message
+
+        assert _failure_message(_Cancelled("Operation cancelled by user"), "fallback") == "Cancelled"
+        assert _failure_message(ImportError("no torch"), "fallback").startswith("Missing dependency: no torch.")
+        assert "Out of memory" in _failure_message(MemoryError(), "fallback")
+        assert _failure_message(ValueError("boom"), "fallback") == "boom"
+        # An exception with no message still says *something*: repr first, and
+        # only a blank repr falls through to the caller's family-specific text.
+        assert _failure_message(ValueError(), "fallback") == "ValueError()"
+
 
 class TestConcurrencyGate:
     """Unit tests for the dynamic-limit ConcurrencyGate."""

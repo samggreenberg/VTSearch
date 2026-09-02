@@ -78,7 +78,7 @@ care.
 - [ ] #3383 — Deduplicate the clipper family: tiling math, segment emission, six no-op clippers (Sonnet 5)
 - [ ] #3386 — Collapse the near-synonymous embedder-resolution wrappers (Sonnet 5)
 - [ ] #3389 — Deduplicate the media registries, the atomic-write ritual, and JSON label extraction (Haiku 4.5)
-- [ ] #3394 — Extract one background-import harness shared by both import pipelines (Sonnet 5)
+- [x] #3394 — Extract one background-import harness shared by both import pipelines (Sonnet 5)
 
 ## Library tier — dead code & unkept promises
 
