@@ -65,6 +65,7 @@ from flask_smorest import Blueprint
 
 logger = logging.getLogger(__name__)
 
+from vtscore.datasets.vote_provenance import read_provenance
 from vtscore.labels.importers import get_label_importer, list_label_importers
 from vtsearch.errors import error_response
 from vtsearch.routes._shared import (
@@ -130,7 +131,11 @@ def _apply_labels(
 
         try:
             for cid in cids:
-                apply_label(cid, label)
+                apply_label(
+                    cid,
+                    label,
+                    provenance=read_provenance(entry.get("metadata")) or {"flow": "import"},
+                )
         except Exception as exc:
             logger.exception("Failed to apply label for entry %r", entry)
             failed.append({"entry": entry, "error": str(exc) or exc.__class__.__name__})

@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Iterator, Mapping
 
 from vtscore.datasets.labelset import LabeledElement, LabelSet, element_key
+from vtscore.datasets.vote_provenance import attach_provenance
 from vtscore.utils.hashing import content_sha1
 
 
@@ -193,6 +194,8 @@ def apply_element_vote_in_data(
     detector_data: dict[str, Any],
     target_id: str,
     target: str,
+    *,
+    provenance: dict[str, Any] | None = None,
 ) -> tuple[bool, LabeledElement | None, str]:
     """Set the label on the element with stable id *target_id* to *target*.
 
@@ -213,6 +216,10 @@ def apply_element_vote_in_data(
     already-good element is an ``"unchanged"`` no-op rather than a removal.
     A stale-view tab can no longer flip an element off the labelset by
     re-asserting its current label (logical-bug-audit H1).
+
+    *provenance* replaces the element's recorded surfacing context, but only
+    on an actual flip - an idempotent re-assert returns before it is read, so
+    a stale tab cannot rewrite the context of a decision it did not make.
     """
     if target not in ("good", "bad", "remove"):
         return False, None, "unchanged"
@@ -232,5 +239,6 @@ def apply_element_vote_in_data(
         return False, el, "unchanged"
 
     el.label = target
+    el.metadata = attach_provenance(el.metadata, provenance)
     detector_data["labelset"] = labelset.to_dict()
     return True, el, "flipped"

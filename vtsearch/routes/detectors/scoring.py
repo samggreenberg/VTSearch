@@ -794,6 +794,7 @@ def find_corrections_to_detector():
             corr_bad,
             expand_dupes=False,
             vote_region_boxes=snap.vote_region_boxes,
+            vote_provenance=snap.vote_provenance,
         )
 
         # Merge: a correction supersedes any prior entry for the same source media
