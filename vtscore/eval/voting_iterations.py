@@ -1031,7 +1031,7 @@ def _resolve_run_knobs(
     strategy: str,
     skyline_arms: Optional[list[str]],
     emit_calibration_metrics: bool,
-    acq_inclusion_offset: int,
+    acq_inclusion_offset: float,
     acq_rank_percentile: Optional[float],
     head: Optional[str],
     trainer: str,

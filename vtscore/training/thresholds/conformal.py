@@ -841,7 +841,7 @@ def compute_fold_orderings(
 
 def threshold_from_fold_orderings(
     fold_orderings: list[tuple[list[float], list[float]]],
-    inclusion_value: int,
+    inclusion_value: float,
 ) -> float:
     """Apply the conformal inclusion rule to the pooled fold orderings.
 
