@@ -1,18 +1,31 @@
-# VTSearch: All image embedders (CPU)
+# VTSearch: All image embedders
 #
 # Image-only deployment that ships every supported image embedder:
 #   * SigLIP   (google/siglip-base-patch16-224)         - default, text-capable, ungated
 #   * SigLIP 2 (google/siglip2-base-patch16-224)        - text-capable, ungated
 #   * SigLIP2-L (google/siglip2-so400m-patch14-384)     - text-capable, ungated, 1152-d
 #   * SigLIP-L (open_clip ViT-SO400M-14-SigLIP-384)     - text-capable, ungated, 1152-d
-
 #   * CLIP     (openai/clip-vit-base-patch32)           - text-capable, ungated
 #   * DINOv2   (facebook/dinov2-base)                   - image-only, ungated
 #   * DINOv3   (facebook/dinov3-vitb16-pretrain-lvd1689m) - image-only, gated
-#   * EUPE     (facebook/PE-Core-B16-224)               - image-only, gated
+#   * EUPE     (facebookresearch/EUPE, ViT-B/16)        - image-only, ungated
 #
-# Used by docker/Dockerfile.image-embedders. Skips audio / video / text / document
-# stacks so we still produce a slim image (only image-side deps are pulled in).
+# Used by BOTH docker/Dockerfile.image-embedders (CPU) and
+# docker/Dockerfile.image-embedders.gpu (CUDA). There is deliberately no
+# `-gpu` twin of this file: the CPU and GPU dependency sets are identical
+# package-for-package, and the *only* thing that differed was which PyTorch
+# wheel index to resolve `torch` / `torchvision` from. That is an install-time
+# concern, so each Dockerfile passes its own `--extra-index-url` (the same
+# split requirements/gpu.txt already uses), and this list stays index-agnostic.
+#
+# Installing it by hand therefore resolves torch from PyPI (the CUDA build).
+# For a CPU-only environment, spell the index the CPU image uses:
+#
+#   pip install --extra-index-url https://download.pytorch.org/whl/cpu \
+#               --prefer-binary -r requirements/image-embedders.txt
+#
+# Skips audio / video / text / document stacks so we still produce a slim
+# image (only image-side deps are pulled in).
 
 # ── Core framework ───────────────────────────────────────────────────
 flask
@@ -51,16 +64,18 @@ scipy
 # .umap_fit_transform, imported lazily). Needed by every deployment
 # regardless of media type: nothing else pulls umap-learn in transitively,
 # so omitting it leaves Browse broken at runtime rather than at build time.
+# Neither image ships cuML, so the CPU umap-learn path is the only one.
 umap-learn
 
-# ── PyTorch (CPU) ────────────────────────────────────────────────────
---extra-index-url https://download.pytorch.org/whl/cpu
+# ── PyTorch (index chosen by the caller; see the header) ─────────────
 torch>=2.0.0
 # Every image embedder now asks for the torchvision image-processor
 # backend by name rather than inheriting a default (#3173), so torchvision
 # is a hard requirement of the preprocessing path and not just of DINOv2 /
 # DINOv3's `AutoImageProcessor`. Without it the processor import raises
-# ImportError at build time, so install the matching CPU wheel.
+# ImportError at build time. Listed here rather than installed separately
+# so it resolves from the same wheel index as `torch` above and the two
+# builds always match.
 torchvision
 
 # ── Image media type ─────────────────────────────────────────────────
