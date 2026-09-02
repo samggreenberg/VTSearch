@@ -14,6 +14,7 @@ import json
 
 import pytest
 
+from vtsearch import admin_overrides
 from vtsearch import settings as settings_mod
 
 
@@ -37,10 +38,10 @@ def _first_audio_embedder() -> str:
 
 @pytest.fixture(autouse=True)
 def _reset_cli_solo_embedders():
-    """The CLI fallback is process-global; clear it around each test."""
-    settings_mod._cli_solo_embedders.clear()
+    """The startup fallback is process-global; clear it around each test."""
+    admin_overrides.set_override("solo_embedders", None)
     yield
-    settings_mod._cli_solo_embedders.clear()
+    admin_overrides.set_override("solo_embedders", None)
 
 
 class TestSoloEmbedderSettings:

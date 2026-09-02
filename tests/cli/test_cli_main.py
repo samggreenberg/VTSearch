@@ -631,7 +631,7 @@ class TestApplyOverrides:
     def test_hide_plugin_valid_is_stashed(self, monkeypatch):
         monkeypatch.setattr(cli_main, "_run_server", lambda *a: None)
         _run_main(monkeypatch, ["--hide-plugin", "importers:server_folder"])
-        assert "server_folder" in settings_mod._cli_hidden_plugins.get("importers", set())
+        assert "server_folder" in settings_mod.get_cli_hidden_plugins().get("importers", set())
 
     def test_hide_plugin_empty_half_errors(self, monkeypatch, capsys):
         with pytest.raises(SystemExit) as exc:
