@@ -149,6 +149,6 @@ the rework below exists.
 
 | Knob | Current value | Location |
 |------|---------------|----------|
-| Audio | `loop=true`, hard-cut on move | `playAudio` |
+| Audio | `loop=true`, hard-cut on move; `200` ms hover dwell | `BrowseAudioAudition` (`frontend/src/app/utils/browse-audio-audition.ts`) |
 | Text truncation | `300` chars | `loadText` |
 | Popup offset | `+16 / -8` px from cursor | `show` |
