@@ -428,6 +428,7 @@ Wrapping everything: a wall-clock cap (`VTSEARCH_TEST_TIMEOUT`, default **1800s 
 | User-docs screenshot wiring | `scripts/screenshots/wiring-check.py` | Browser-free; the pixel-diff (`check.sh`) stays a manual chore. Also what makes the reshoot queue un-rottable. |
 | vtscore package docs | `scripts/check-vtscore-docs.py` | |
 | Extension docs | `scripts/check-extension-docs.py` | Holds `docs/EXTENDING-*.md` and `vtscore/docs/extending/` to the plugin ABCs they both document: every member named in a contract table must exist, and neither set may present a public wrapper as the override point when the class defines an `_impl` hook behind it. AST sweep, imports nothing. Register a new contract section in `SECTIONS` — an unregistered one fails the gate rather than going unchecked. |
+| Calibration script index | `scripts/check-calibration-index.py` | Every `.py`/`.sh` in `scripts/experiments/calibration/` is filed under exactly one study (or the shared layer) in that directory's `README.md`, and every file the index names exists. That directory is flat by decision (#3409), so the table *is* the navigation; unchecked, it decays back into 120 unclassified files. |
 | Slide decks | `slides/build.py --check` | Preflights every deck manifest: fragments exist, figures resolve. Marp only warns on a missing figure and exits 0, so a rotted deck is otherwise silent. |
 | Eval/app sync | `scripts/check-eval-app-sync.py` | Re-pin with `--update` **after** reconciling the harness. |
 

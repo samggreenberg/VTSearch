@@ -60,11 +60,11 @@ def load(results: Path) -> pd.DataFrame:
     entirely plausible.  Importing ``load_arm`` makes that class of drift
     impossible rather than merely unlikely.
     """
-    import analyze_spikes as A  # noqa: PLC0415 - needs the study env set up first
+    import _cells_io  # noqa: PLC0415 - needs the study env set up first
 
     frames = []
     for arm in ARMS:
-        d, prov = A.load_arm(results / arm)
+        d, prov = _cells_io.load_arm(results / arm)
         if d.empty:
             print(f"  {arm}: NO ROWS")
             continue
