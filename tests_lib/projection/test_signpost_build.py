@@ -9,6 +9,10 @@ real library is exercised by the ``slow``-marked smoke test.
 
 from __future__ import annotations
 
+import logging
+import warnings
+from collections import Counter
+
 import numpy as np
 import pytest
 
@@ -337,3 +341,93 @@ class TestAvailability:
 
         monkeypatch.setattr(sb.metadata, "version", raise_missing)
         assert sb.toponymy_version() == ""
+
+
+class TestSuppressedWarningAccounting:
+    """The fit's warning bookkeeping (issue #3512).
+
+    Toponymy's warnings must stay off the CLI (issue #2558) *and* stay
+    countable, so a library bump that re-breaks the ``KeyphraseNamer`` prompt
+    parse (issue #2567) shows up as a number rather than as an unexplained
+    slow build.  No toponymy import here: ``warn_explicit`` lets a warning be
+    attributed to a fabricated module/filename, which is exactly the pair the
+    filter and the ``showwarning`` shim match on.
+    """
+
+    @staticmethod
+    def _warn_as_toponymy(message: str, category: type[Warning] = UserWarning, lineno: int = 42) -> None:
+        warnings.warn_explicit(
+            message,
+            category,
+            "/usr/lib/python3/dist-packages/toponymy/naming.py",
+            lineno,
+            module="toponymy.naming",
+            registry={},
+        )
+
+    def test_counts_toponymy_warnings_by_message_and_drops_them(self):
+        with warnings.catch_warnings(record=True) as leaked:
+            warnings.simplefilter("always")
+            with sb._counted_toponymy_warnings() as counts:
+                self._warn_as_toponymy("naming failed")
+                self._warn_as_toponymy("naming failed")
+                self._warn_as_toponymy("retrying", RuntimeWarning)
+
+        assert dict(counts) == {"UserWarning: naming failed": 2, "RuntimeWarning: retrying": 1}
+        assert not leaked, "a suppressed toponymy warning reached the CLI"
+
+    def test_repeat_warnings_are_not_deduplicated_away(self):
+        # The ambient `default` filter would collapse the flood to one record
+        # (same message/category/module/lineno); a flood must count as a flood.
+        with warnings.catch_warnings():
+            warnings.simplefilter("default")
+            with sb._counted_toponymy_warnings() as counts:
+                for _ in range(5):
+                    self._warn_as_toponymy("disambiguation retry")
+        assert sum(counts.values()) == 5
+
+    def test_other_modules_warnings_still_surface(self):
+        with warnings.catch_warnings(record=True) as seen:
+            warnings.simplefilter("always")
+            with sb._counted_toponymy_warnings() as counts:
+                warnings.warn("from somewhere else", UserWarning)
+
+        assert not counts
+        assert [str(w.message) for w in seen] == ["from somewhere else"]
+
+    def test_showwarning_is_restored(self):
+        before = warnings.showwarning
+        with sb._counted_toponymy_warnings():
+            assert warnings.showwarning is not before
+        assert warnings.showwarning is before
+
+    def test_clean_fit_logs_the_counts_at_debug(self, caplog):
+        with caplog.at_level(logging.DEBUG, logger=sb.logger.name):
+            sb._log_fit_diagnostics(Counter(), Counter({"named": 12, "disambiguation": 1}))
+
+        (record,) = caplog.records
+        assert record.levelno == logging.DEBUG
+        assert getattr(record, "toponymy_suppressed_warnings") == 0
+        assert getattr(record, "toponymy_named_topics") == 12
+        assert getattr(record, "toponymy_unnamed_topics") == 0
+        assert getattr(record, "toponymy_disambiguations") == 1
+
+    def test_suppressed_warnings_log_at_warning_with_a_breakdown(self, caplog):
+        suppressed = Counter({"UserWarning: naming failed": 7, "UserWarning: retrying": 2})
+        with caplog.at_level(logging.DEBUG, logger=sb.logger.name):
+            sb._log_fit_diagnostics(suppressed, Counter({"named": 9}))
+
+        (record,) = caplog.records
+        assert record.levelno == logging.WARNING
+        assert getattr(record, "toponymy_suppressed_warnings") == 9
+        assert "7x UserWarning: naming failed" in record.getMessage()
+
+    def test_unnamed_topics_alone_are_enough_to_log_at_warning(self, caplog):
+        # A regex miss in `_keyphrase_topic_name` emits no warning at all — it
+        # just letters the canvas "unnamed" — so it has to raise the level itself.
+        with caplog.at_level(logging.DEBUG, logger=sb.logger.name):
+            sb._log_fit_diagnostics(Counter(), Counter({"named": 9, "unnamed": 3}))
+
+        (record,) = caplog.records
+        assert record.levelno == logging.WARNING
+        assert getattr(record, "toponymy_unnamed_topics") == 3

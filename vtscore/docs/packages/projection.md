@@ -232,6 +232,24 @@ absence means a broken environment. Build paths therefore gate on
 and signature paths use the quiet `signposting_available()` probe, since
 `None` there is expected on every poll.
 
+### What the fit swallows, and where it says so
+
+Toponymy narrates naming hiccups through `warnings.warn`, one per topic,
+which floods a CLI run. `_fit_topic_layers` therefore suppresses
+toponymy-origin warnings for the duration of the fit - but **counts**
+them rather than discarding them, and logs one line when the fit
+returns: the suppressed count with a per-message breakdown, how many
+topics fell back to the literal name `"unnamed"`, and how many
+duplicate-name disambiguation passes ran. The line is `debug` on a clean
+fit and `warning` as soon as either count is non-zero.
+
+The count is the only signal a broken prompt parse would ever give.
+`KeyphraseNamer` reads Toponymy's own prompt layouts with two regexes, so
+a library bump can invalidate them silently; when it does, the naming
+retry path burns three `wait_random_exponential(4, 10)` sleeps per
+colliding cluster and says nothing. Warnings from other modules are
+forwarded untouched.
+
 ### Demo signposts
 
 `demo_signposts` is the deliberate cheat: instead of clustering,
