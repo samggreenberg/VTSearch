@@ -94,7 +94,7 @@ describe('SettingsExporterModalComponent', () => {
 
     component.submit();
     httpMock.expectOne('/api/settings-exporters/export').flush(
-      { error: 'cannot write' },
+      { message: 'cannot write' },
       { status: 500, statusText: 'Server Error' },
     );
     await settleZoneless(fixture);

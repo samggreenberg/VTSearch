@@ -7,10 +7,10 @@ Schema-level validation failures (missing required ``name`` on rename,
 missing or wrong-typed ``readers`` on the readers endpoint) surface as
 422 with the standard ``errors`` envelope; handler-level rejects (not
 loaded, not the creator) keep their HTTP codes (400 / 403 / 404 / 500)
-with the standard ``message`` envelope. 404s are intercepted by the
-app-level ``NotFound`` errorhandler in ``app.py`` and keep the legacy
-``{"error": "Not Found", "request_id": ...}`` shape regardless of the
-``message=`` kwarg passed to ``abort()``.
+with the standard ``message`` envelope. 404s pass through the app-level
+``NotFound`` errorhandler (which renders JSON for ``/api/`` paths rather
+than werkzeug's HTML page) and keep their ``abort(404, message=...)``
+text.
 
 Endpoints
 ---------

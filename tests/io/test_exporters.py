@@ -969,10 +969,10 @@ class TestExportEndpoint:
             json={"exporter_name": "unicorn", "results": SAMPLE_RESULTS},
         )
         assert res.status_code == 404
-        # The app-level ``NotFound`` errorhandler reformats 404s to
-        # ``{"error": "Not Found", ...}`` regardless of the
-        # ``message=`` passed to ``abort()``.
-        assert "error" in res.get_json()
+        # The app-level ``NotFound`` errorhandler renders JSON for /api/
+        # paths but hands the rendering back to flask-smorest, so the
+        # ``message=`` passed to ``abort()`` reaches the client.
+        assert "unicorn" in res.get_json()["message"]
 
     def test_gui_exporter_returns_success(self, client):
         res = client.post(

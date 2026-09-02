@@ -564,7 +564,7 @@ describe('DatasetImporterModalComponent', () => {
     component.genericFormPicker().submit();
 
     httpMock.expectOne('/api/dataset/import/generic_form').flush(
-      { error: 'Not found' },
+      { message: 'Not found' },
       { status: 404, statusText: 'Not Found' },
     );
 
@@ -760,7 +760,7 @@ describe('DatasetImporterModalComponent', () => {
 
     httpMock.expectOne('/api/media-types').flush({ media_types: mockMediaTypes });
     httpMock.expectOne('/api/dataset/demo-list').flush(
-      { error: 'Server error' },
+      { message: 'Server error' },
       { status: 500, statusText: 'Internal Server Error' },
     );
 

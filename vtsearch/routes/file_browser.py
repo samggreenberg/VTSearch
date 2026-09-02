@@ -9,9 +9,9 @@ Migrated to ``flask_smorest`` so the route is described in
 failures (e.g. unparseable query params) surface as 422 with the
 standard ``errors`` envelope; handler-level rejects (path traversal,
 permission denied) keep their HTTP codes (400 / 403) with the standard
-``message`` envelope. 404s are intercepted by the app-level
-``NotFound`` errorhandler in ``app.py`` and keep the legacy
-``{"error": "Not Found", "request_id": ...}`` shape.
+``message`` envelope, as do 404s -- the app-level ``NotFound``
+errorhandler renders JSON for ``/api/`` paths rather than werkzeug's HTML
+page, but hands the rendering back to flask-smorest.
 
 Endpoints
 ---------

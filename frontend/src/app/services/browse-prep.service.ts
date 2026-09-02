@@ -8,6 +8,7 @@ import { ProgressEventsService } from './progress-events.service';
 import { ProjectionApiService } from './projection-api.service';
 import { pollUntil, type PollHandle, type PollStep } from './poll-until';
 import { LoadingTask } from '../models/api.models';
+import { apiErrorMessage } from '../utils/api-error';
 import type { ProgressKind } from '../utils/format-progress';
 import type { ProjectionMeta } from '../models/projection.models';
 
@@ -325,8 +326,7 @@ export class BrowsePrepService {
 
   private errMessage(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {
-      const body = err.error as { message?: string; error?: string } | undefined;
-      return body?.message || body?.error || fallback;
+      return apiErrorMessage(err, fallback);
     }
     return fallback;
   }

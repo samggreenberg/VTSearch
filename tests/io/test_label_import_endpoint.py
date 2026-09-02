@@ -28,7 +28,7 @@ class TestLabelImportEndpoint:
     def test_unknown_importer_returns_404(self, client):
         res = client.post("/api/label-importers/import/no_such_importer")
         assert res.status_code == 404
-        assert "no_such_importer" in res.get_json()["error"]
+        assert "no_such_importer" in res.get_json()["message"]
 
     def test_json_importer_applies_good_label(self, client, tmp_path):
         md5 = app_module.medias[1]["md5"]

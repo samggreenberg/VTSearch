@@ -184,10 +184,10 @@ describe('FolderBrowserComponent', () => {
     expect(component.loading()).toBe(false);
   });
 
-  it('prefers error.message, then error.error, then a generic fallback', () => {
+  it('reads the envelope message, else a generic fallback', () => {
     const cases: [unknown, string][] = [
       [{ error: { message: 'from-message' } }, 'from-message'],
-      [{ error: { error: 'from-error' } }, 'from-error'],
+      [{ error: { code: 404, status: 'Not Found', message: 'gone' } }, 'gone'],
       [{ error: {} }, 'Could not browse this folder.'],
       [{ error: { message: 123 } }, 'Could not browse this folder.'],
     ];

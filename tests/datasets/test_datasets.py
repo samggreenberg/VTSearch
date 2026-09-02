@@ -90,11 +90,7 @@ class TestDatasetEndpoints:
         resp = client.get("/api/dataset/demo-categories/nonexistent_dataset_xyz")
         assert resp.status_code == 404
         data = resp.get_json()
-        # 404s are intercepted by the app-level ``NotFound`` errorhandler
-        # in ``app.py`` (it matches a more specific exception subclass
-        # than flask-smorest's ``HTTPException`` handler), so the
-        # response carries ``error`` not ``message``.
-        assert "error" in data
+        assert "nonexistent_dataset_xyz" in data["message"]
 
     def test_load_demo_accepts_merge_near_duplicates(self, client):
         """POST /api/dataset/load-demo accepts the ``merge_near_duplicates`` flag.
@@ -195,8 +191,7 @@ class TestDatasetEndpoints:
         resp = client.get("/api/browse-media-files?source=demo:nonexistent_xyz&path=")
         assert resp.status_code == 404
         data = resp.get_json()
-        # 404 → app-level NotFound handler wins; see above.
-        assert "error" in data
+        assert data["message"] == "Source not found or not available on disk"
 
     def test_browse_media_files_path_traversal_blocked(self, client):
         """GET /api/browse-media-files rejects path traversal."""
