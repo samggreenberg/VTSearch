@@ -34,6 +34,10 @@ from __future__ import annotations
 import json
 import logging
 import re
+import warnings
+from collections import Counter
+from collections.abc import Iterator
+from contextlib import contextmanager
 from importlib import metadata, util
 from typing import TYPE_CHECKING, Any, Callable
 
@@ -152,11 +156,17 @@ class EmbedderTextEncoder:
 _DISAMBIGUATION_HEADER_RE = re.compile(r'^"(\d+)\.\s(.+?)":\s*$', re.MULTILINE)
 
 
+#: What :func:`_keyphrase_topic_name` falls back to when the naming prompt has
+#: no keyword line to read — a user-visible sign on the browse canvas, so its
+#: rate is counted and logged alongside the suppressed-warning count.
+_UNNAMED = "unnamed"
+
+
 def _keyphrase_topic_name(prompt: str) -> str:
     """The top keyphrase for a single-topic naming prompt (or ``"unnamed"``)."""
     match = re.search(r"Keywords for this group include:\s*([^\n]+)", prompt)
     name = match.group(1).split(",")[0].strip() if match else ""
-    return name or "unnamed"
+    return name or _UNNAMED
 
 
 def _keyphrase_disambiguation(prompt: str) -> dict[str, Any]:
@@ -177,7 +187,7 @@ def _keyphrase_disambiguation(prompt: str) -> dict[str, Any]:
     return {"new_topic_name_mapping": mapping, "topic_specificities": [0.5] * len(mapping)}
 
 
-def make_keyphrase_namer(on_name: Callable[[], None] | None = None) -> Any:
+def make_keyphrase_namer(on_name: Callable[[], None] | None = None, counts: Counter[str] | None = None) -> Any:
     """The no-LLM namer: answer every naming prompt with the top keyphrase.
 
     A trivial in-process ``LLMWrapper`` whose "LLM calls" parse the prompt
@@ -190,8 +200,19 @@ def make_keyphrase_namer(on_name: Callable[[], None] | None = None) -> Any:
     ``on_name`` fires once per *topic-naming* call (not the batched
     disambiguation passes), which is how :func:`_fit_topic_layers` drives a
     determinate naming progress bar: one topic named ≈ one tick.
+
+    ``counts`` is an optional tally the namer writes its own accounting into:
+    ``"named"`` (topic-naming calls), ``"unnamed"`` (of those, the ones whose
+    keyword line the prompt regex missed, so the canvas gets a literal
+    ``"unnamed"`` sign) and ``"disambiguation"`` (duplicate-name passes).  It
+    is an out-parameter rather than an attribute on the returned wrapper so
+    nothing here has to reach into Toponymy's ``LLMWrapper`` layout; the
+    ``"unnamed"`` rate is what :func:`_fit_topic_layers` logs beside the
+    suppressed-warning count.
     """
     from toponymy.llm_wrappers import LLMWrapper  # noqa: PLC0415
+
+    tally = counts if counts is not None else Counter()
 
     class KeyphraseNamer(LLMWrapper):  # type: ignore[misc]
         @property
@@ -200,10 +221,15 @@ def make_keyphrase_namer(on_name: Callable[[], None] | None = None) -> Any:
 
         def _respond(self, prompt: str) -> str:
             if "new_topic_name_mapping" in prompt:
+                tally["disambiguation"] += 1
                 return json.dumps(_keyphrase_disambiguation(prompt))
             if on_name is not None:
                 on_name()
-            return json.dumps({"topic_name": _keyphrase_topic_name(prompt), "topic_specificity": 0.5})
+            name = _keyphrase_topic_name(prompt)
+            tally["named"] += 1
+            if name == _UNNAMED:
+                tally["unnamed"] += 1
+            return json.dumps({"topic_name": name, "topic_specificity": 0.5})
 
         def _call_llm(self, prompt: str, temperature: float, max_tokens: int) -> str:
             return self._respond(prompt)
@@ -214,6 +240,99 @@ def make_keyphrase_namer(on_name: Callable[[], None] | None = None) -> Any:
             return self._respond(user_prompt)
 
     return KeyphraseNamer()
+
+
+#: Matches the *filename* a warning was raised from when it came out of the
+#: ``toponymy`` package (``.../site-packages/toponymy/naming.py``, or the
+#: package ``__init__`` itself).  ``showwarning`` is handed a filename, not a
+#: module name, so this is how the shim in
+#: :func:`_counted_toponymy_warnings` tells a library warning apart from one
+#: it must pass through untouched.
+_TOPONYMY_WARNING_FILE_RE = re.compile(r"(^|/)toponymy(/|\.py$)")
+
+
+@contextmanager
+def _counted_toponymy_warnings() -> Iterator[Counter[str]]:
+    """Swallow Toponymy's warnings for the duration, tallying them by message.
+
+    Toponymy narrates naming hiccups through ``warnings.warn`` (naming
+    fallbacks, disambiguation retries).  Those must stay off the CLI — a
+    per-topic flood was the actual complaint in issue #2558 — but *discarding*
+    them, as a blind ``filterwarnings("ignore")`` did, leaves nothing anywhere
+    able to tell zero warnings from a flood.  Since the flood's root cause
+    (the ``KeyphraseNamer`` prompt parse, issue #2567) is fixed by code that
+    a library bump could silently invalidate, the count is the only signal a
+    regression would ever produce: the retry path costs three
+    ``wait_random_exponential(4, 10)`` sleeps per colliding cluster and says
+    nothing while it burns them.
+
+    So: promote toponymy-origin warnings to ``"always"`` (defeating any
+    ambient dedup, so a flood counts as a flood) and route them into a
+    ``showwarning`` shim that tallies and drops them.  Every *other* module's
+    warnings keep the ambient filters and are forwarded to the real
+    ``showwarning`` untouched — the one guarantee a blanket
+    ``catch_warnings(record=True)`` could not make.
+
+    Yields the tally, keyed ``"{Category}: {message}"``; it is filled in by
+    the time the block exits.  Like any ``catch_warnings`` use this mutates
+    process-global state for the duration (the caller is the build thread).
+    """
+    counts: Counter[str] = Counter()
+    with warnings.catch_warnings():
+        forward = warnings.showwarning
+
+        def _tally(
+            message: Any,
+            category: type[Warning],
+            filename: str,
+            lineno: int,
+            file: Any = None,
+            line: str | None = None,
+        ) -> None:
+            if _TOPONYMY_WARNING_FILE_RE.search(str(filename).replace("\\", "/")):
+                counts[f"{getattr(category, '__name__', category)}: {message}"] += 1
+                return
+            forward(message, category, filename, lineno, file, line)
+
+        warnings.filterwarnings("always", module=r"toponymy(\..*)?")
+        warnings.showwarning = _tally
+        yield counts
+
+
+def _log_fit_diagnostics(suppressed: Counter[str], naming: Counter[str]) -> None:
+    """Put one line in the record for what the fit swallowed.
+
+    ``warning`` level when anything is off-nominal (a suppressed warning, or a
+    topic the prompt regex could not name), ``debug`` when the fit was clean —
+    so the healthy case stays silent on the CLI while a regression announces
+    itself instead of only showing up as an unexplained slow build.  The
+    counts also ride on the record as attributes, which is what the slow smoke
+    test asserts against.
+
+    The disambiguation-pass count is there to keep a zero warning count
+    honest: the collision path is the one #2567 fixed, so "no warnings" only
+    means "the parse still works" on a fit that actually took it.
+    """
+    total = int(sum(suppressed.values()))
+    named, unnamed = int(naming["named"]), int(naming["unnamed"])
+    disambiguations = int(naming["disambiguation"])
+    breakdown = "; ".join(f"{count}x {message}" for message, count in suppressed.most_common(5)) or "none"
+    logger.log(
+        logging.WARNING if (total or unnamed) else logging.DEBUG,
+        "toponymy fit: %d suppressed warning(s) [%s]; %d/%d topics fell back to %r; %d disambiguation pass(es)",
+        total,
+        breakdown,
+        unnamed,
+        named,
+        _UNNAMED,
+        disambiguations,
+        extra={
+            "toponymy_suppressed_warnings": total,
+            "toponymy_named_topics": named,
+            "toponymy_unnamed_topics": unnamed,
+            "toponymy_disambiguations": disambiguations,
+        },
+    )
 
 
 def _base_min_cluster_size(n: int) -> int:
@@ -254,8 +373,6 @@ def _fit_topic_layers(
     ``Layer 0 / Layer 1 / …`` breakdown the library used to dump to stdout,
     now surfaced through the UI instead.
     """
-    import warnings  # noqa: PLC0415
-
     from toponymy import Toponymy  # noqa: PLC0415
     from toponymy.clustering import ToponymyClusterer  # noqa: PLC0415
 
@@ -263,6 +380,9 @@ def _fit_topic_layers(
     # topic-count boundary per layer (filled in once clustering completes), so
     # ``searchsorted`` maps the current tick to the layer being named.
     naming = {"named": 0, "total": 0, "cumulative": np.empty(0, dtype=np.int64)}
+    # The namer's own accounting ("named" / "unnamed" / "disambiguation"),
+    # logged beside the suppressed-warning count when the fit returns.
+    namer_counts: Counter[str] = Counter()
 
     def _on_layers(cluster_labels: list[np.ndarray]) -> None:
         sizes = [int(labels.max()) + 1 if labels.size else 0 for labels in cluster_labels]
@@ -293,7 +413,7 @@ def _fit_topic_layers(
             return layers, tree
 
     model = Toponymy(
-        llm_wrapper=make_keyphrase_namer(_on_name),
+        llm_wrapper=make_keyphrase_namer(_on_name, namer_counts),
         text_embedding_model=text_encoder,
         clusterer=_ProgressClusterer(
             min_clusters=4,
@@ -312,19 +432,18 @@ def _fit_topic_layers(
         # warnings the legacy flags would emit.
         verbose=False,
     )
-    # Toponymy narrates naming hiccups through ``warnings.warn`` (naming
-    # fallbacks, disambiguation retries). The KeyphraseNamer above keeps those
-    # from firing, but the library is a moving target and its per-topic
-    # warnings would flood the CLI (issue #2558) if any slipped through; they
-    # are advisory noise we can't act on, so suppress toponymy-origin warnings
-    # for the duration of the fit (other libraries' warnings still surface).
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", module=r"toponymy(\..*)?")
+    # The KeyphraseNamer above keeps Toponymy's naming warnings from firing at
+    # all, but the library is a moving target, so they are suppressed rather
+    # than trusted to stay absent (issue #2558) — and counted rather than
+    # discarded, so a library bump that re-breaks the prompt parse shows up as
+    # a number instead of an unexplained slow build.
+    with _counted_toponymy_warnings() as suppressed:
         model.fit(
             texts,
             embedding_vectors.astype(np.float32),
             clusterable_vectors.astype(np.float32),
         )
+    _log_fit_diagnostics(suppressed, namer_counts)
     return [
         (list(names), np.asarray(layer.cluster_labels))
         for names, layer in zip(model.topic_names_, model.cluster_layers_)

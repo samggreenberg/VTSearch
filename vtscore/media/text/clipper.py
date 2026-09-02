@@ -5,30 +5,32 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from vtscore.media.clipper import MediaClipper
+from vtscore.media.clipper import DefaultClipper, MediaClipper
 
 
-class TextDefaultClipper(MediaClipper):
+def _emit_text_pieces(media: dict[str, Any], pieces: list[str]) -> list[dict[str, Any]]:
+    """Turn each string in *pieces* into a clip dict derived from *media*.
+
+    Shared by the paragraph and sentence clippers: each piece becomes the
+    new ``media_string`` with ``word_count`` / ``character_count`` recomputed
+    and the running ``clip_index`` stamped on.
+    """
+    results: list[dict[str, Any]] = []
+    for idx, piece in enumerate(pieces):
+        tile = dict(media)
+        tile["media_string"] = piece
+        tile["word_count"] = len(piece.split())
+        tile["character_count"] = len(piece)
+        tile["clip_index"] = idx
+        results.append(tile)
+    return results
+
+
+class TextDefaultClipper(DefaultClipper):
     """Returns the text media unchanged."""
 
-    @property
-    def name(self) -> str:
-        return "text_default"
-
-    @property
-    def display_name(self) -> str:
-        return "None"
-
-    @property
-    def media_type(self) -> str:
-        return "text"
-
-    @property
-    def description(self) -> str:
-        return "Import each text entry as-is, without splitting."
-
-    def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
-        return [media]
+    def __init__(self) -> None:
+        super().__init__("text_default", "text", "Import each text entry as-is, without splitting.")
 
 
 class TextParagraphClipper(MediaClipper):
@@ -66,15 +68,7 @@ class TextParagraphClipper(MediaClipper):
         if len(paragraphs) <= 1:
             return [media]
 
-        results: list[dict[str, Any]] = []
-        for idx, para in enumerate(paragraphs):
-            tile = dict(media)
-            tile["media_string"] = para
-            tile["word_count"] = len(para.split())
-            tile["character_count"] = len(para)
-            tile["clip_index"] = idx
-            results.append(tile)
-        return results
+        return _emit_text_pieces(media, paragraphs)
 
 
 class TextSentenceClipper(MediaClipper):
@@ -110,12 +104,4 @@ class TextSentenceClipper(MediaClipper):
         if len(sentences) <= 1:
             return [media]
 
-        results: list[dict[str, Any]] = []
-        for idx, sentence in enumerate(sentences):
-            tile = dict(media)
-            tile["media_string"] = sentence
-            tile["word_count"] = len(sentence.split())
-            tile["character_count"] = len(sentence)
-            tile["clip_index"] = idx
-            results.append(tile)
-        return results
+        return _emit_text_pieces(media, sentences)
