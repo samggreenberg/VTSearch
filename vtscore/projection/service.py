@@ -118,25 +118,26 @@ def build_progress(job) -> dict:
     (the fraction at which the running phase's slice ends) is published
     alongside so the client can shade the parked-to-slice-end span as a bounded
     indeterminate zone: "somewhere in here" is all the fit can honestly say.
+
+    Every field is read straight off the job's
+    :class:`~vtscore.concurrency.progress.ProgressTracker` snapshot rather than
+    recomputed here.  That is what earns the build an ``eta_seconds``: the
+    tracker derives one from the rate the job is actually sustaining, rebasing
+    at each phase boundary and publishing it on a coarse sticky ladder, none of
+    which a payload builder that only sees the current counts could do.
     """
-    total_steps = job.total_steps or 0
-    step = job.step or 0
-    within = job.current / job.total if job.total > 0 else 0.0
-    overall = None
-    overall_step_end = None
-    if total_steps > 0 and step > 0:
-        overall = min(1.0, max(0.0, (step - 1 + within) / total_steps))
-        overall_step_end = max(min(1.0, step / total_steps), overall)
+    snap = job.progress.get()
     return {
         "status": "building",
         "job_id": job.job_id,
-        "current": job.current,
-        "total": job.total,
-        "message": job.message,
-        "step": step or None,
-        "total_steps": total_steps or None,
-        "overall": overall,
-        "overall_step_end": overall_step_end,
+        "current": snap.get("current") or 0,
+        "total": snap.get("total") or 0,
+        "message": snap.get("message") or "",
+        "step": snap.get("step") or None,
+        "total_steps": snap.get("total_steps") or None,
+        "overall": snap.get("overall"),
+        "overall_step_end": snap.get("overall_step_end"),
+        "eta_seconds": snap.get("eta_seconds"),
     }
 
 

@@ -10,6 +10,41 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`AsyncJob` is backed by a `ProgressTracker`** (issue #3380). Every job now
+  owns one (`job.progress`) instead of carrying its own copy of the tracker's
+  field set, so background jobs get the parts a hand-rolled copy never had: a
+  smoothed, coarsened `eta_seconds`, the whole-job `overall` /
+  `overall_step_end` fractions with optional per-phase weights
+  (`job.progress.set_step_weights(...)`), and `subscribe()` for pushing
+  snapshots rather than polling them. `job.progress.get()` returns the whole
+  set at once.
+
+  Cancellation collapses to one flag in the same motion: `AsyncJob.cancel_event`
+  **is** the tracker's event, so `job.cancel()`, `job.progress.cancel()`,
+  `job.is_cancelled`, `check_job_cancelled()` and
+  `job.progress.check_cancelled()` all act on a single
+  `threading.Event` and raise a single `CancelledError`.
+
+  **For library consumers:** additive at every documented surface.
+  `current` / `total` / `message` / `step` / `total_steps` and `cancel_event`
+  remain readable and writable under their old names — they are now properties
+  over the tracker rather than dataclass fields, which changes only two things:
+  they can no longer be passed to the `AsyncJob(...)` constructor (nothing in
+  the tree did), and a write publishes a snapshot to subscribers instead of
+  mutating an attribute in place.
+
+- **`ProgressTracker.cancel_event`** — the tracker's cancellation flag, exposed
+  so a holder that must publish exactly one cancel signal can hand out the
+  tracker's event rather than keeping a second one in sync. Prefer `cancel()` /
+  `check_cancelled()` / `is_cancelled` for ordinary use.
+
+- **`PROGRESS_COMMON_EXTRAS`** — the extras every long-running operation
+  declares (`step`, `total_steps`, `error`, `eta_seconds`, `overall`,
+  `overall_step_end`), promoted from the private `_PROGRESS_COMMON_EXTRAS` so a
+  caller constructing its own `ProgressTracker` can opt into the same payload
+  shape the frontend already renders. The private name is gone; it was never
+  contract.
+
 - **`MediaEmbedder.loaded_backbone()` - a supported way to reach an embedder's
   raw model** (issue #3395). Returns `(model, processor)`, loading the model
   first if needed; the second element is `None` for backbones that need no

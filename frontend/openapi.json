@@ -5240,6 +5240,12 @@
             "nullable": true,
             "type": "string"
           },
+          "eta_seconds": {
+            "default": null,
+            "description": "Estimated seconds remaining for the whole build, smoothed and snapped to a coarse ladder so the displayed figure does not twitch. ``null`` until the build has run long enough to extrapolate from.",
+            "nullable": true,
+            "type": "number"
+          },
           "has_labels": {
             "default": null,
             "description": "Whether region signpost labels exist for this projection (see GET /api/projection/labels). False until a labeler has run for the current layout.",

@@ -19,7 +19,8 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-from vtscore.concurrency.async_jobs import projection_jobs
+from vtscore.concurrency import progress as progress_mod
+from vtscore.concurrency.async_jobs import AsyncJob, projection_jobs
 from vtscore.projection import Projection, build_pyramid
 from vtscore.projection import service as svc
 from vtscore.state.core import DatasetContext
@@ -333,33 +334,64 @@ class TestLayoutMeta:
 
 
 class TestBuildProgress:
-    class _Job:
-        job_id = "j"
-        message = "arranging items"
-        error = None
-        status = "running"
+    """The build payload is a read of the job's tracker, not a second derivation.
 
-        def __init__(self, step, total_steps, current, total):
-            self.step, self.total_steps = step, total_steps
-            self.current, self.total = current, total
+    Every field here — including the ``overall`` pair this used to stitch by
+    hand — is computed once inside
+    :class:`~vtscore.concurrency.progress.ProgressTracker`, so the payload
+    builder cannot drift from the bar the dataset loads draw.
+    """
+
+    @staticmethod
+    def _job(step, total_steps, current, total, message="arranging items"):
+        job = AsyncJob(job_id="j", status="running")
+        if step:
+            job.set_phase(step, total_steps, message)
+        job.update_progress(current, total, message)
+        return job
 
     def test_stitches_within_phase_counts_into_a_whole_job_fraction(self):
-        body = svc.build_progress(self._Job(2, 3, 1, 4))
+        body = svc.build_progress(self._job(2, 3, 1, 4))
         # Phase 2 of 3, a quarter of the way in: (2 - 1 + 0.25) / 3.
         assert body["overall"] == pytest.approx(1.25 / 3)
         assert body["overall_step_end"] == pytest.approx(2 / 3)
+        assert (body["step"], body["total_steps"]) == (2, 3)
+        assert (body["current"], body["total"]) == (1, 4)
+        assert body["message"] == "arranging items"
 
     def test_an_uncountable_phase_parks_at_its_slice_start(self):
         """The UMAP fit reports no fraction, so the bar must not invent one."""
-        body = svc.build_progress(self._Job(1, 3, 0, 0))
+        body = svc.build_progress(self._job(1, 3, 0, 0))
         assert body["overall"] == pytest.approx(0.0)
         assert body["overall_step_end"] == pytest.approx(1 / 3)
 
     def test_a_phaseless_job_reports_no_overall(self):
-        body = svc.build_progress(self._Job(0, 0, 3, 10))
+        body = svc.build_progress(self._job(0, 0, 3, 10))
         assert body["overall"] is None
         assert body["overall_step_end"] is None
         assert (body["step"], body["total_steps"]) == (None, None)
+
+    def test_eta_is_absent_until_the_build_has_run_long_enough(self):
+        """An estimate from two samples milliseconds apart is noise, not signal."""
+        assert svc.build_progress(self._job(2, 3, 1, 4))["eta_seconds"] is None
+
+    def test_a_sustained_build_publishes_a_remaining_time_estimate(self, monkeypatch):
+        """The estimate the tracker earns reaches the client.
+
+        This is what the hand-rolled payload could not do: an ETA needs the
+        rate history the tracker keeps across updates, which a builder that
+        only sees the current counts has no way to reconstruct.
+        """
+        clock = {"t": 1000.0}
+        monkeypatch.setattr(progress_mod.time, "monotonic", lambda: clock["t"])
+
+        job = AsyncJob(job_id="j", status="running")
+        job.set_phase(1, 2, "arranging items")
+        clock["t"] += 60.0  # a minute of real work...
+        job.update_progress(1, 4, "arranging items")  # ...bought an eighth of the job
+
+        # An eighth in 60 s extrapolates to ~7 min left, snapped to the ladder.
+        assert svc.build_progress(job)["eta_seconds"] == pytest.approx(450.0)
 
 
 class TestTilePayload:
