@@ -357,18 +357,28 @@ def _resolve_example_media(params: dict[str, Any]) -> Path | None:
 
 
 def _resolve_converter(stack: ExitStack, params: dict[str, str]) -> Path | None:
-    """Resolve a converter origin by rebuilding its parent origin."""
+    """Resolve a converter origin by rebuilding its parent origin.
+
+    Every ``parent_<key>`` the converter runner copied over is a locator param
+    of the *parent* importer's own origin, stored under its own key with a
+    ``parent_`` prefix (see ``_PARENT_LOCATOR_KEYS`` in
+    :mod:`vtscore.converters.runner`).  Rebuilding the parent origin is
+    therefore just stripping that prefix - deliberately generic rather than an
+    allow-list of ``path`` / ``url``, because an allow-list silently drops the
+    locators of every other importer (``paths_file`` for Manifest, ``manifest``
+    for an archive, ``name`` for a demo dataset), leaving their converted
+    outputs unresolvable with no signal that anything was missing.
+    """
     source_file = params.get("source_file", "")
     parent_importer = params.get("parent_importer", "")
     if not source_file or not parent_importer:
         return None
 
-    # Reconstruct a parent origin dict from the converter's stored params
-    parent_params: dict[str, str] = {}
-    if params.get("parent_path"):
-        parent_params["path"] = params["parent_path"]
-    if params.get("parent_url"):
-        parent_params["url"] = params["parent_url"]
+    parent_params: dict[str, str] = {
+        key[len("parent_") :]: value
+        for key, value in params.items()
+        if key.startswith("parent_") and key != "parent_importer" and value
+    }
 
     parent_origin = {"importer": parent_importer, "params": parent_params}
     return _resolve_with_stack(stack, parent_origin, origin_name=source_file)

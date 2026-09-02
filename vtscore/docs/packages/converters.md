@@ -353,7 +353,7 @@ Vectors"). The recorded `params` are:
 | `converter_out_index` / `converter_n_out` | This output's position in the converter's returned list, and the list's length at import time |
 | `converter_content_hash` | Short md5 of the output bytes - the authoritative replay disambiguator |
 | `parent_importer` | The importer that supplied the source corpus |
-| `parent_path` / `parent_url` / `parent_paths_file` / `parent_manifest` | That importer's locator, so the corpus itself is recoverable, not just the file inside it |
+| `parent_<key>` (`parent_path`, `parent_url`, `parent_paths_file`, `parent_manifest`, `parent_name` for a demo dataset) | That importer's own locator param, prefixed - so the corpus itself is recoverable, not just the file inside it.  The resolver rebuilds the parent origin by stripping the prefix, so a new importer's locator needs no resolver change |
 
 `source_file` and `source_path` differ whenever the scanned folder is a
 staging area of symlinks: the `server_files` (Manifest) importer links every

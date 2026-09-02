@@ -1130,8 +1130,14 @@ recoverable long after the import job ended:
   of the real source file**), `converter_param_<key>`, the replay
   disambiguators `converter_out_index` / `converter_n_out` /
   `converter_content_hash`, and `parent_importer` plus the parent importer's
-  locator (`parent_path` / `parent_url` / `parent_paths_file` /
-  `parent_manifest`).  `source_file` and `source_path` diverge whenever the
+  own locator param under a `parent_` prefix (`parent_path` / `parent_url` /
+  `parent_paths_file` / `parent_manifest`, or `parent_name` for a demo
+  dataset).  The resolver rebuilds the parent origin by stripping that prefix,
+  so a new importer's locator resolves with no resolver change.  The same
+  keys are stamped whether the source corpus was a scanned folder or a demo
+  dataset, and every one of a source's N outputs gets its own origin dict —
+  sharing one would leave page 3 and page 7 indistinguishable on replay.
+  `source_file` and `source_path` diverge whenever the
   scanned folder is a staging area of symlinks — the `server_files`
   (Manifest) importer links listed paths into a temp dir under their
   basenames, disambiguating collisions as `name__1.ext` — so `source_path` is
