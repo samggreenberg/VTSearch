@@ -145,8 +145,11 @@ VTSearch/
 │   ├── media/                      Media type, embedder, clipper + processor ABCs
 │   │   ├── base.py                 MediaType ABC, MediaResponse, DemoDataset, _resolve_media_bytes
 │   │   ├── processors.py           Processor, Detector, Localizer, Extractor ABCs
-│   │   ├── embedder.py             MediaEmbedder ABC + shared helpers (media_from_path,
-│   │   │                           progress_scope, bulk embedding)
+│   │   ├── embedder.py             MediaEmbedder ABC (progress_scope, bulk embedding,
+│   │   │                           media_from_path); re-exports the two modules below
+│   │   ├── load_progress.py       Model-load progress interception (tqdm bars, weight
+│   │   │                           tensors) + resilient HuggingFace fetching
+│   │   ├── torch_ops.py           Torch tensor/device adapters shared by every embedder
 │   │   ├── clipper.py              MediaClipper ABC + shared clipper logic
 │   │   ├── cleaner.py              MediaCleaner (a MediaClipper subclass; 1→1 cleanup gates)
 │   │   ├── patch_embed.py          Patch-semantic embedding: per-region vectors on one media
