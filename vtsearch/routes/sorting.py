@@ -610,7 +610,23 @@ def set_inclusion_route(body: dict):
     mode, re-splits the unverified items over the frozen scores.  The new
     cutoff is returned so the Find slider can move the green/red line.
     """
-    new_inclusion = int(max(-10, min(10, body["inclusion"])))
+    # The clamp is not spelled out here: ``settings.validate_inclusion`` is
+    # generated from the ``[-10, 10]`` bound declared once on
+    # ``UserSettings.inclusion``, so this endpoint and ``PUT /api/settings``
+    # cannot drift apart (issue #3416). The schema admits any number
+    # (``fields.Raw`` plus a numeric check), so truncate toward zero first --
+    # the pydantic field is an ``int`` and rejects a fractional value, and
+    # truncate-then-clamp is what this route has always done.
+    #
+    # This note stays a comment rather than joining the docstring above:
+    # flask-smorest publishes the docstring as the endpoint's OpenAPI
+    # ``description``, and internal wiring is not part of the contract.
+    from vtsearch import settings  # noqa: PLC0415
+
+    try:
+        new_inclusion = settings.validate_inclusion(int(body["inclusion"]))
+    except (TypeError, ValueError) as exc:
+        abort(400, message=str(exc))
     set_inclusion(new_inclusion)
     return {"inclusion": get_inclusion(), "threshold": _active_detector_threshold()}
 
