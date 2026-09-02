@@ -16,14 +16,14 @@ from vtscore.converters.document2text import Document2TextMediaConverter
 from vtscore.converters.image2text import Image2TextMediaConverter
 from vtscore.converters.video2audio import Video2AudioMediaConverter
 from vtscore.converters.video2image import Video2ImageMediaConverter
-from vtscore.plugins import PluginRegistry
+from vtscore.plugins import make_plugin_registry
 
 # ---------------------------------------------------------------------------
 # Converter registry (auto-discovered via CONVERTER sentinel)
 # ---------------------------------------------------------------------------
 
-_registry: PluginRegistry[MediaConverter] = PluginRegistry(
-    package="vtscore.converters",
+get_converter, list_converters = make_plugin_registry(
+    package=__name__,
     sentinel="CONVERTER",
     label="media converter",
     discover_modules=True,
@@ -31,24 +31,14 @@ _registry: PluginRegistry[MediaConverter] = PluginRegistry(
 )
 
 
-def list_converters() -> list[MediaConverter]:
-    """Return all registered converters."""
-    return _registry.list()
-
-
-def get_converter(name: str) -> MediaConverter | None:
-    """Return the converter with *name*, or ``None``."""
-    return _registry.get(name)
-
-
 def list_converters_for_target(target_type: str) -> list[MediaConverter]:
     """Return converters that produce *target_type* (a ``type_id``)."""
-    return [c for c in _registry.list() if c.target_type == target_type]
+    return [c for c in list_converters() if c.target_type == target_type]
 
 
 def list_converters_for_source(source_type: str) -> list[MediaConverter]:
     """Return converters that consume *source_type* (a ``type_id``)."""
-    return [c for c in _registry.list() if c.source_type == source_type]
+    return [c for c in list_converters() if c.source_type == source_type]
 
 
 __all__ = [

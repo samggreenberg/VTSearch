@@ -187,12 +187,16 @@ are skipped.
 
 ### Public accessors
 
-| Function (`vtscore/converters/__init__.py`)                | Purpose                                       |
-|------------------------------------------------------------|-----------------------------------------------|
-| `list_converters()` (`:34`)                                | Every registered converter.                   |
-| `get_converter(name)` (`:39`)                              | Look up by `name`; returns `None` on miss.    |
-| `list_converters_for_target(target_type)` (`:44`)          | All converters producing `target_type`.       |
-| `list_converters_for_source(source_type)` (`:49`)          | All converters consuming `source_type`.       |
+| Function (`vtscore/converters/__init__.py`)     | Purpose                                    |
+|--------------------------------------------------|--------------------------------------------|
+| `list_converters()`                              | Every registered converter.                |
+| `get_converter(name)`                            | Look up by `name`; returns `None` on miss. |
+| `list_converters_for_target(target_type)`        | All converters producing `target_type`.    |
+| `list_converters_for_source(source_type)`        | All converters consuming `source_type`.    |
+
+`get_converter` / `list_converters` are the registry's own accessors,
+returned by `make_plugin_registry` — the same construction every other
+plugin family uses.
 
 `list_converters_for_target("image")` is the typical query for "give
 me every way to produce an image, regardless of source". This is
