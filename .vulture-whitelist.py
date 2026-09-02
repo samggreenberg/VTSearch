@@ -114,7 +114,6 @@ get_eval_progress  # noqa: F821
 SAVED_DATASETS_DIR  # noqa: F821 - vtscore.datasets.registry default dir
 DETECTORS_DIR  # noqa: F821 - vtscore.detectors.store default dir
 SAMPLE_VIDEOS_DOWNLOAD_SIZE_MB  # noqa: F821 - downloader size budget constant
-BEATS_EMBED_DIM  # noqa: F821 - vtscore.config, the BEATs audio embedder's width
 CUT_FALLBACK_KINDS  # noqa: F821 - vtscore.eval.cut_rules, the enumerated fallback reasons
 
 # ---------------------------------------------------------------------------

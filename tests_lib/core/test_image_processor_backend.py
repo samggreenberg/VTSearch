@@ -27,12 +27,15 @@ So the tests that matter most here are the ones about *defaults* and *silence*:
   class, not assumed — it warns and falls back rather than raising, so the
   default outcome of an impossible request is a mislabelled processor.
 
-Every test reloads ``vtscore.config`` because the modes are read at import time.
+Every test re-reads ``vtscore.config`` because the modes are read at import time.
+The modes and their resolvers live in :mod:`vtscore.config.processor_backend`, so
+that is what :func:`_config_with` returns and where a stub goes; a rebind on the
+``vtscore.config`` package would only touch a copy.
 """
 
 from __future__ import annotations
 
-import importlib
+import sys
 from unittest import mock
 
 import pytest
@@ -40,23 +43,31 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def restore_reloaded_modules():
-    """Undo the ``importlib.reload`` of ``vtscore.config`` for the rest of the session."""
+    """Undo the reload of the ``vtscore.config`` package for the rest of the session."""
     import vtscore.config as config
 
-    snapshot = dict(config.__dict__)
+    modules = [config, *(sys.modules[f"vtscore.config.{name}"] for name in config._RELOAD_ORDER)]
+    snapshots = [(module, dict(module.__dict__)) for module in modules]
     yield
-    config.__dict__.clear()
-    config.__dict__.update(snapshot)
+    for module, snapshot in snapshots:
+        module.__dict__.clear()
+        module.__dict__.update(snapshot)
 
 
 def _config_with(env: dict[str, str], device: str = "cuda"):
-    """Reload ``vtscore.config`` under *env*, with ``resolve_device`` pinned to *device*."""
+    """Re-read the modes under *env*, with ``resolve_device`` pinned to *device*.
+
+    The pin goes on :mod:`vtscore.config.device`, which is where
+    :mod:`~vtscore.config.processor_backend` looks the resolver up.
+    """
     import vtscore.config as config
+    from vtscore.config import device as device_mod
+    from vtscore.config import processor_backend
 
     with mock.patch.dict("os.environ", env, clear=False):
-        config = importlib.reload(config)
-    config.resolve_device = lambda: device  # type: ignore[assignment]
-    return config
+        config._reload_all()
+    device_mod.resolve_device = lambda: device  # type: ignore[assignment]
+    return processor_backend
 
 
 class TestTheDefaultNamesTheBackend:

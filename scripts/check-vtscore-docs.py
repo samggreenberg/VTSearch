@@ -43,7 +43,7 @@ DOC_FOR: dict[str, str] = {
     "cli_pipeline.py": "cli.md",
     "cli_progress.py": "cli.md",
     "concurrency": "concurrency.md",
-    "config.py": "config.md",
+    "config": "config.md",
     "converters": "converters.md",
     "coverage": "coverage.md",
     "datasets": "datasets.md",

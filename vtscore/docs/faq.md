@@ -229,7 +229,7 @@ that media type. If your dataset uses a non-default embedder
 `CoreConfig.data_dir / "models"` by default (which resolves to
 `./data/models/` unless `$VTSEARCH_DATA_DIR` is set). The cache uses the
 standard HuggingFace layout; you can pre-warm it offline by downloading
-the relevant model IDs (see `vtscore/config.py` for the constants like
+the relevant model IDs (see `vtscore/config/models.py` for the constants like
 `CLAP_MODEL_ID`).
 
 ### Can I disable model downloads?

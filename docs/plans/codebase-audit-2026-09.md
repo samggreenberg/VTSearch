@@ -70,7 +70,7 @@ care.
 
 ## Library tier — god modules & misplaced code
 
-- [ ] #3375 — Split `vtscore/config.py` into a package along its five seams (Sonnet 5)
+- [x] #3375 — Split `vtscore/config.py` into a package along its five seams (Sonnet 5)
 - [ ] #3377 — Split `vtscore/state/core.py` and centralize `DatasetContext` cache invalidation (Opus 4.8)
 - [x] #3381 — Split the thresholds module into the `vtscore/training/thresholds/` package along its five seams (Opus 4.8)
 - [ ] #3384 — Extract the load-progress and torch-ops subsystems out of `vtscore/media/embedder.py` (Sonnet 5)
@@ -195,7 +195,7 @@ What remains is one genuine design fork:
 
 <!-- item-sep -->
 
-- **What is `CoreConfig` for?** — `vtscore/config.py:793`
+- **What is `CoreConfig` for?** — `vtscore/config/core_config.py`
 
   All 14 call sites call `CoreConfig.from_settings()` ad hoc, each invoking ~18 settings getters through the app shim, so the frozen-value-object abstraction buys nothing while costing a full settings snapshot per lookup. The design comment at `config.py:793-816` still says "Until those land this class is unused at runtime" — stale for a while now.
 

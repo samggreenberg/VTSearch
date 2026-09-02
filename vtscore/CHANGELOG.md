@@ -32,6 +32,24 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **`vtscore.config` is now a package, not a single module** (issue #3375). The
+  933-line file is split into `paths`, `runtime`, `models`, `device`,
+  `processor_backend` and `core_config`, layered so each reads only from the ones
+  before it. **Nothing about the import surface changes:** every public name is
+  re-exported from `vtscore/config/__init__.py` and listed in its `__all__`, so
+  `vtscore.config.X` and `from vtscore.config import X` resolve exactly as before,
+  and the old file path was never a documented import path anyway.
+
+  **For plugin authors:** the one behaviour that moved is *reloading*.
+  `importlib.reload(vtscore.config)` now only re-runs the re-exports - the
+  submodules are already in `sys.modules`, so the environment variables are not
+  re-read. Call `vtscore.config._reload_all()` for the old whole-module reload.
+  Likewise, stubbing a name on the package reaches callers outside the package
+  but not the package's own functions, which resolve their module globals: patch
+  `vtscore.config.device` / `vtscore.config.runtime` for those. Private names are
+  deliberately not re-exported, so an attempt to stub one on the package raises
+  instead of being silently ignored.
+
 - **`MediaClipper.resolve_for_durations` is documented as reserved and inert**
   (issue #3395). The method is unchanged and still part of the ABC - removing
   it would turn a third-party clipper's silently-inert override into a hard
