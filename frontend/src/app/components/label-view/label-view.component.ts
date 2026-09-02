@@ -31,14 +31,11 @@ import { SettingsStateService } from '../../services/settings-state.service';
 import { AutopilotStateService } from '../../services/autopilot-state.service';
 import { EmbedderCapabilityService } from '../../services/embedder-capability.service';
 import { ActiveContextService } from '../../services/active-context.service';
-import { ProgressEventsService } from '../../services/progress-events.service';
-import { ProgressEvent } from '../../models/api.models';
 import { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
 import { ProgressModalComponent, ProgressMetric } from '../modals/progress-modal/progress-modal.component';
 import { ResortPromptModalComponent, ResortResult } from '../modals/resort-prompt-modal/resort-prompt-modal.component';
 import type { LabelingStatusResponse } from '../../generated/api-client/models/labeling-status-response';
 import type { LearnedSortResponse } from '../../generated/api-client/models/learned-sort-response';
-import { formatProgressMessage } from '../../utils/format-progress';
 import { snapPanelWidthToGridColumns, iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 import { PanelResizeDirective } from '../../directives/panel-resize.directive';
 import { LabelViewPanelStateService } from './label-view-panel-state.service';
@@ -77,7 +74,6 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private autopilotStateService = inject(AutopilotStateService);
   private embedderCaps = inject(EmbedderCapabilityService);
   private activeContext = inject(ActiveContextService);
-  private progressEvents = inject(ProgressEventsService);
   private newThingFlows = inject(NewThingFlowsService);
   private toast = inject(ToastService);
   panelState = inject(LabelViewPanelStateService);
@@ -176,7 +172,6 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   private pairScope$ = new Subject<void>();
   private statusPolling$: Subscription | null = null;
-  private scoringProgressPoll$: Subscription | null = null;
   private learnedSortPending = false;
   /** Active learned-sort job id while a training run is in flight. Set in
    *  ``onLearnedSort`` once the backend returns a job id, cleared in
@@ -383,7 +378,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // context. Those subscriptions carry no `finalize`, so the busy flag and
     // the scoring progress feed they own are reset explicitly below.
     this.pairScope$.next();
-    this.stopScoringProgressPoll();
+    this.sortState.stopFindProgressTracking();
     this.currentLearnedSortJobId = null;
     this.sortState.setSortBusy(false);
     this.pendingRehydrateLearned = false;
@@ -430,7 +425,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.stopScoringProgressPoll();
+    this.sortState.stopFindProgressTracking();
     this.cancelAutoPop('left');
     this.cancelAutoPop('right');
     this.cancelSnapOnLoad();
@@ -855,31 +850,6 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // Re-sort using existing load sort results when switching back to load mode
   }
 
-  private startScoringProgressPoll(): void {
-    this.stopScoringProgressPoll();
-    this.scoringProgressPoll$ = this.progressEvents.find$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((prog: ProgressEvent) => {
-        if (prog.status === 'running') {
-          this.sortState.setSortStatus(formatProgressMessage(prog, 'Scoring with detector…'));
-          this.sortState.setSortProgress(
-            prog.current ?? 0,
-            prog.total ?? 0,
-            prog.overall ?? null,
-            prog.eta_seconds ?? null,
-            prog.overall_step_end ?? null,
-          );
-        }
-      });
-  }
-
-  private stopScoringProgressPoll(): void {
-    if (this.scoringProgressPoll$) {
-      this.scoringProgressPoll$.unsubscribe();
-      this.scoringProgressPoll$ = null;
-    }
-  }
-
   onModelSelected(modelId: string): void {
     if (!modelId) return;
     this.sortState.setSortMode('load');
@@ -887,7 +857,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sortState.setSortStatus('Scoring with detector…');
     this.sortState.setSortProgress(0, 0);
 
-    this.startScoringProgressPoll();
+    this.sortState.startFindProgressTracking();
 
     // Pair-scoped: scoring runs for minutes on a large dataset, so a pair switch
     // mid-run must kill this before it ranks the new pair with old scores.
@@ -898,7 +868,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
           threshold: number;
           detector_name?: string;
         };
-        this.stopScoringProgressPoll();
+        this.sortState.stopFindProgressTracking();
         this.applySortWindow(response);
         this.sortState.setLoadSortLabel(response.detector_name || 'Detector');
         this.sortState.setSortBusy(false);
@@ -907,7 +877,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         this.autoSelectNext();
       },
       error: () => {
-        this.stopScoringProgressPoll();
+        this.sortState.stopFindProgressTracking();
         this.sortState.setSortBusy(false);
         this.sortState.setSortStatus('Detector sort failed');
         this.sortState.setSortProgress(0, 0);

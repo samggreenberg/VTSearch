@@ -1,6 +1,6 @@
 import { AfterViewInit, ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, NgZone, OnDestroy, OnInit, signal, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { EMPTY, Subject, Subscription, timer } from 'rxjs';
+import { EMPTY, Subject, timer } from 'rxjs';
 import { catchError, finalize, switchMap, takeUntil } from 'rxjs/operators';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
@@ -23,14 +23,11 @@ import { VoteStateService } from '../../services/vote-state.service';
 import { SortStateService, SortedItem } from '../../services/sort-state.service';
 import { SortingApiService } from '../../services/sorting-api.service';
 import { SettingsStateService } from '../../services/settings-state.service';
-import { ProgressEventsService } from '../../services/progress-events.service';
 import { BrowseSubsetService } from '../../services/browse-subset.service';
 import { BrowseSubsetPrepService } from '../../services/browse-subset-prep.service';
-import { ProgressEvent } from '../../models/api.models';
 import {
   ProgressBarState,
   formatEta,
-  formatProgressMessage,
   progressBarState,
 } from '../../utils/format-progress';
 import { iconSizeToGoalWidth, snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
@@ -75,7 +72,6 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   sortState = inject(SortStateService);
   private sortingApi = inject(SortingApiService);
   private settingsState = inject(SettingsStateService);
-  private progressEvents = inject(ProgressEventsService);
   private browseSubset = inject(BrowseSubsetService);
   /** Public: the wait overlay binds this service's progress signals directly. */
   browsePrep = inject(BrowseSubsetPrepService);
@@ -368,7 +364,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.stopProgressPolling();
+    this.sortState.stopFindProgressTracking();
     this.pairScope$.next();
     this.pairScope$.complete();
     this.destroy$.next();
@@ -388,8 +384,6 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   // --- Find-label scoring ---
-
-  private progressPollSub: Subscription | null = null;
 
   /**
    * Whether Find is parked behind a wait overlay — either the detector scoring
@@ -416,31 +410,6 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     return formatEta(this.sortState.sortEtaSeconds);
   }
 
-  private startProgressPolling(): void {
-    this.stopProgressPolling();
-    this.progressPollSub = this.progressEvents.find$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((prog: ProgressEvent) => {
-        if (prog.status === 'running') {
-          this.sortState.setSortStatus(formatProgressMessage(prog, 'Scoring with detector…'));
-          this.sortState.setSortProgress(
-            prog.current ?? 0,
-            prog.total ?? 0,
-            prog.overall ?? null,
-            prog.eta_seconds ?? null,
-            prog.overall_step_end ?? null,
-          );
-        }
-      });
-  }
-
-  private stopProgressPolling(): void {
-    if (this.progressPollSub) {
-      this.progressPollSub.unsubscribe();
-      this.progressPollSub = null;
-    }
-  }
-
   private runFindLabel(): void {
     const modelId = this.activeContext.modelId;
     if (!modelId) return;
@@ -450,7 +419,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sortState.setSortProgress(0, 0);
 
     // Start polling for progress concurrently
-    this.startProgressPolling();
+    this.sortState.startFindProgressTracking();
 
     const modelName = this.activeDetector.detectorName() || 'Detector';
     this.detectorsFindApi.findLabel({ detector_id: modelId })
@@ -460,7 +429,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
         // rank the new pair with the old pair's scores (see `pairScope$`).
         takeUntil(this.pairScope$),
         finalize(() => {
-          this.stopProgressPolling();
+          this.sortState.stopFindProgressTracking();
           this.sortState.setSortBusy(false);
         }),
       )
