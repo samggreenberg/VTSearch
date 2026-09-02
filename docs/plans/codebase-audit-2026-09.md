@@ -128,7 +128,6 @@ care.
 - [ ] #3427 — Register one dynamic plugin route and generate its bodies at spec-build time (Opus 4.8)
 - [ ] #3430 — `achievements.py`: build the response shape once, stop reaching into settings privates (Sonnet 5)
 - [ ] #3432 — Collapse the CLI autodetect 2×2 matrix, keeping all four public names as shims (Sonnet 5)
-- [ ] #3435 — Delete `state_proxies.py`: 375 lines of facade for one production call site (Sonnet 5)
 - [ ] #3438 — Small app-tier batch: exempt prefixes as a route attribute, plus the orphan-endpoint decision (Sonnet 5)
 
 ## Eval harness & experiments

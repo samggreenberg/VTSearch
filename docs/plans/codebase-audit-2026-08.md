@@ -76,12 +76,6 @@ ship on its own.
 
 <!-- item-sep -->
 
-- **State proxies silently fall back to the empty built-in dict/list for unforwarded methods** — `vtsearch/state_proxies.py:53` (low impact)
-
-  `_ProxyDict` / `_ProxyList` forward a hand-enumerated method list to the active context's container, but any method not on the list executes against the proxy's own permanently-empty built-in storage and returns confidently wrong results instead of failing. Today's gaps: `dict.popitem()` always raises KeyError('dictionary is empty') even when the target has entries; `plain | proxy` reflected `__or__` and `dict.__ror__` are unforwarded; `_ProxyList` lacks `__mul__`, `__radd__`, and the ordering comparisons (`__lt__`/`__gt__`), so e.g. `label_history < other` compares an empty list. Nothing in the repo currently calls these on a proxy (verified via grep for `popitem`), so this is latent rather than live — but the failure mode when someone does is a silent wrong answer, the worst kind for a facade that intentionally passes `isinstance(x, dict)` checks. Code evidence: the class body at state_proxies.py:51-122 enumerates forwards; `super().__init__()` at line 43 guarantees the own storage stays empty.
-
-  *Direction:* Forward the remaining dunder/mutator methods (popitem, __ror__, list comparisons, __mul__), or add a test that asserts every public dict/list method name is either forwarded or explicitly blacklisted with a raising stub, so a new Python dict/list method can't regress silently.
-
 <!-- item-sep -->
 
 - **Achievements persist a full settings-file RMW plus a source push on every single vote** — `vtsearch/achievements.py:371` (medium impact)
