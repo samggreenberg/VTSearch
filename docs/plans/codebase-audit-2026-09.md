@@ -99,7 +99,6 @@ care.
 ## App tier — settings
 
 - [ ] #3413 — Delete the settings migration shims for old persisted formats (Sonnet 5)
-- [ ] #3415 — Collapse the six CLI-override knobs into one declarative `AdminOverride` descriptor (Sonnet 5)
 - [ ] #3416 — Give `inclusion` one owner and one clamp (Sonnet 5)
 
 ## App tier — routes, schemas, facades

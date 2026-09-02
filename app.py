@@ -192,6 +192,7 @@ api.spec.to_dict = _to_dict_with_operation_ids
 # module exposes a ``register_*`` function that wires its handlers on in the
 # original order.
 
+from vtsearch import admin_overrides  # noqa: E402
 from vtsearch.errors import register_error_handlers  # noqa: E402
 from vtsearch.hooks import register_hooks  # noqa: E402
 
@@ -257,76 +258,67 @@ app.register_blueprint(hf_auth_bp)
 # ---------------------------------------------------------------------------
 
 
-def _apply_env_dataset_max_age() -> None:
-    """Honour ``VTSEARCH_DATASET_MAX_AGE_DAYS`` when no CLI flag was passed.
+def _report_admin_overrides() -> None:
+    """Print every process-level admin restriction actually in force.
 
-    The gunicorn-launched images never parse ``--dataset-max-age-days`` (the
-    argparse path only runs under ``python app.py``), so the same override is
-    reachable from the environment. An explicit CLI flag always wins. Like the
-    flag, this applies to every user for the lifetime of the process and is not
-    editable via the settings API.
+    Walks :data:`vtsearch.admin_overrides.OVERRIDES` and reports each knob
+    whose effective value is an actual restriction, naming where it came from
+    -- the flag, the env var, or (when neither was given and the persisted
+    setting is doing the work) the settings key. An operator can then confirm
+    from the startup log that the restriction they configured is live, however
+    they configured it.
+
+    A knob still sitting at its shipped default is *not* reported: the banner
+    is a list of what makes this deployment unusual, so printing the built-in
+    support address on every boot would be noise.
     """
-    from vtsearch.settings import get_cli_dataset_max_age_days, set_cli_dataset_max_age_days
+    from vtsearch import settings as _settings
+    from vtsearch.settings_models import ServerSettings, UserSettings
 
-    if get_cli_dataset_max_age_days() is not None:
-        return
-    raw = os.environ.get("VTSEARCH_DATASET_MAX_AGE_DAYS")
-    if not raw:
-        return
-    try:
-        days = int(raw)
-    except ValueError:
-        days = 0
-    if days >= 1:
-        set_cli_dataset_max_age_days(days)
-        print(f"\U0001f5d3️  Dataset max age: {days}d (from VTSEARCH_DATASET_MAX_AGE_DAYS)", flush=True)
-    else:
+    defaults = {**UserSettings().model_dump(), **ServerSettings().model_dump()}
+    for override in admin_overrides.OVERRIDES.values():
+        effective = _settings.get_effective_override(override.name)
+        if not effective or effective == defaults.get(override.persisted_getter.removeprefix("get_")):
+            continue
+        source = admin_overrides.override_source(override.name) or f"the {override.name} setting"
         print(
-            f"⚠️  Ignoring VTSEARCH_DATASET_MAX_AGE_DAYS={raw!r} (want a positive integer number of days)",
+            f"{_OVERRIDE_ICONS.get(override.name, '⚙️')}  "
+            f"{_OVERRIDE_LABELS.get(override.name, override.name)}: "
+            f"{_format_override(effective)} (from {source})",
             flush=True,
         )
 
 
-def _apply_env_support_email() -> None:
-    """Honour ``VTSEARCH_SUPPORT_EMAIL`` when no CLI flag was passed.
+#: Startup-banner icon and label per override, purely cosmetic.
+_OVERRIDE_ICONS = {
+    "solo_media_type": "\U0001f3af",
+    "solo_embedders": "\U0001f3af",
+    "hidden_plugins": "\U0001f648",
+    "dataset_max_age_days": "\U0001f5d3️",
+    "support_email": "\U0001f4e7",
+    "semantic_only": "\U0001f512",
+}
 
-    Same rationale as :func:`_apply_env_dataset_max_age`: the gunicorn images
-    never parse ``--support-email``. An explicit CLI flag always wins.
-    """
-    from vtsearch.settings import get_cli_support_email, set_cli_support_email
-
-    if get_cli_support_email() is not None:
-        return
-    email = (os.environ.get("VTSEARCH_SUPPORT_EMAIL") or "").strip()
-    if email:
-        set_cli_support_email(email)
-        print(f"\U0001f4e7 Support email: {email} (from VTSEARCH_SUPPORT_EMAIL)", flush=True)
+_OVERRIDE_LABELS = {
+    "solo_media_type": "Solo mediaType",
+    "solo_embedders": "Solo mediaEmbedders",
+    "hidden_plugins": "Hidden plugins",
+    "dataset_max_age_days": "Dataset max age",
+    "support_email": "Support email",
+    "semantic_only": "Semantic embedders only",
+}
 
 
-def _apply_env_semantic_only() -> None:
-    """Honour ``VTSEARCH_SEMANTIC_ONLY`` when no CLI flag was passed.
-
-    Same rationale as the two helpers above (gunicorn never parses
-    ``--semantic-only``); any of ``1``/``true``/``yes``/``on`` enables the
-    lock. Reports the lock however it arrived - flag, env var, or the persisted
-    ``semantic_only`` setting - so an operator can confirm from the startup log
-    that the prototype embedder types are off.
-    """
-    from vtsearch.settings import (
-        get_cli_semantic_only,
-        get_effective_semantic_only,
-        set_cli_semantic_only,
-    )
-
-    source = "--semantic-only"
-    if get_cli_semantic_only() is None:
-        if (os.environ.get("VTSEARCH_SEMANTIC_ONLY") or "").strip().lower() in ("1", "true", "yes", "on"):
-            set_cli_semantic_only(True)
-            source = "VTSEARCH_SEMANTIC_ONLY"
-        else:
-            source = "the semantic_only server setting"
-    if get_effective_semantic_only():
-        print(f"\U0001f512 Semantic embedders only (from {source})", flush=True)
+def _format_override(value) -> str:
+    """Render an override value for the startup banner."""
+    if isinstance(value, dict):
+        return ", ".join(
+            f"{key}={','.join(sorted(item))}" if isinstance(item, (set, frozenset)) else f"{key}={item}"
+            for key, item in sorted(value.items())
+        )
+    if value is True:
+        return "on"
+    return str(value)
 
 
 def initialize_server(mode_label: str = "PRODUCTION") -> None:
@@ -344,30 +336,23 @@ def initialize_server(mode_label: str = "PRODUCTION") -> None:
     """
     print(f"\U0001f680 Running in {mode_label} mode", flush=True)
 
-    # Deployment-level overrides that the gunicorn-launched images can only
-    # reach through the environment (they never parse argv).
-    _apply_env_dataset_max_age()
-    _apply_env_support_email()
-    _apply_env_semantic_only()
+    # Deployment-level overrides the gunicorn-launched images can only reach
+    # through the environment (they never parse argv). An explicit flag wins.
+    admin_overrides.apply_env_overrides()
+    _report_admin_overrides()
 
     print("\U0001f4da Loading ML libraries...", flush=True)
     initialize_models(on_progress=lambda *a, **k: None)
-    # The solo-mediaType restriction (``--solo-media-type`` or the persisted
+    # The solo-mediaType restriction (the flag, the env var, or the persisted
     # server setting) tells us which mediaType's default embedder to warm even
     # if no datasets or detectors are registered yet. It is server-tier, so it
     # resolves without a current user at startup.
-    from vtsearch.settings import get_cli_solo_embedders, get_cli_solo_media_type, get_effective_solo_media_type
+    from vtsearch.settings import get_cli_solo_embedders, get_effective_solo_media_type
 
     solo = get_effective_solo_media_type()
     extra_types = [solo] if solo else None
-    if solo:
-        origin = "--solo-media-type" if get_cli_solo_media_type() else "the solo_media_type setting"
-        print(f"\U0001f3af Solo mediaType: {solo} (from {origin})", flush=True)
     cli_solo_embedders = get_cli_solo_embedders()
     extra_embedders = list(cli_solo_embedders.values()) if cli_solo_embedders else None
-    if cli_solo_embedders:
-        pretty = ", ".join(f"{mt}={emb}" for mt, emb in cli_solo_embedders.items())
-        print(f"\U0001f3af Solo mediaEmbedders: {pretty} (from --solo-embedder)", flush=True)
     preloaded = preload_predicted_embedders(
         extra_media_types=extra_types,
         extra_embedders=extra_embedders,

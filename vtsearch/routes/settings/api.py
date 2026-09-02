@@ -25,7 +25,7 @@ from typing import Any, Callable, NamedTuple
 from flask_smorest import Blueprint, abort
 from marshmallow import fields
 
-from vtsearch import settings
+from vtsearch import admin_overrides, settings
 from vtsearch.schemas.settings import AppSettingsSchema, SettingsUpdateSchema
 from vtsearch.state import (
     set_calibrate_count as _state_set_calibrate_count,
@@ -187,38 +187,23 @@ def _coerce_dict_fields(data: dict) -> dict:
 def _with_effective(data: dict) -> dict:
     """Overlay the resolver-computed (read-only) views onto *data*.
 
-    Centralises the augmentation shared by the GET and PUT responses:
+    Every process-level **admin override** -- the solo mediaType lock, the
+    per-mediaType solo-embedder locks, the plugin hide list, the dataset
+    retention window, the support email, the Semantic-only lock -- publishes
+    the value *actually in force* here, so the frontend never has to know
+    whether a restriction came from a CLI flag, an env var, or the settings
+    file. The set is not spelled out: each knob declares its own
+    ``effective_key`` (and any JSON coercion) in
+    :mod:`vtsearch.admin_overrides`, and this loops the registry, so a new
+    override is surfaced without touching this route.
 
-    * ``effective_solo_embedder_per_media_type`` - the per-user embedder
-      locks layered over their CLI fallbacks; the frontend reads this to
-      decide whether to hide the embedder picker for a given mediaType.
-    * ``hidden_plugins`` - the persisted server setting unioned with any
-      ``--hide-plugin`` CLI flags, normalised to sorted lists so the
-      "Server" settings tab can render what's actually in force.
-
-    Stale dict fields are coerced to ``{}`` first so a corrupt persisted
-    value can't 500 the endpoint (see :func:`_coerce_dict_fields`).
+    Shared by the GET and PUT responses. Stale dict fields are coerced to
+    ``{}`` first so a corrupt persisted value can't 500 the endpoint (see
+    :func:`_coerce_dict_fields`).
     """
     _coerce_dict_fields(data)
-    data["effective_solo_embedder_per_media_type"] = settings.get_effective_solo_embedders()
-    data["hidden_plugins"] = {
-        family: sorted(names) for family, names in settings.get_effective_hidden_plugins().items()
-    }
-    # Surface the CLI-overridable retention policy as the value actually in
-    # force (``--dataset-max-age-days`` wins over the persisted file), so the
-    # dashboard's Age-Off column reflects what new datasets are stamped with.
-    data["dataset_max_age_days"] = settings.get_effective_dataset_max_age_days()
-    # Surface the CLI/env-overridable "Email us" recipient as the value
-    # actually in force, so the Help modal's mailto link is pre-addressed.
-    data["support_email"] = settings.get_effective_support_email()
-    # Surface the CLI/env-overridable Semantic-only lock as the value actually
-    # in force, so the New-detector modal can drop its embedder-type picker and
-    # the Server settings tab can report the restriction.
-    data["semantic_only"] = settings.get_effective_semantic_only()
-    # Surface the CLI-overridable solo-mediaType restriction as the value
-    # actually in force, so the importer / new-detector / import-defaults
-    # surfaces lock their mediaType pickers to what the admin allowed.
-    data["solo_media_type"] = settings.get_effective_solo_media_type()
+    for override in admin_overrides.OVERRIDES.values():
+        data[override.effective_key] = override.dump(settings.get_effective_override(override.name))
     return data
 
 
