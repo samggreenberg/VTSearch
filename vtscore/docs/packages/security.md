@@ -371,8 +371,8 @@ def validate_browser_url(url: str) -> str:
 ```
 
 Used for the `open_url` an exporter can return so the frontend opens a
-third-party page in a new tab (see
-[`exporters`](exporters.md#open_url-handing-the-user-off-to-another-site)).
+third-party page in a new tab (see [Opening a URL in the
+browser](../extending/results-exporters.md#opening-a-url-in-the-browser)).
 
 This is deliberately **not** the SSRF guard. The fetch is made by the
 user's browser, not by us, so no server-side request exists to forge:
