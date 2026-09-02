@@ -118,6 +118,9 @@ documented workarounds; this section describes the code as it stands.
 | `VTSEARCH_SUPPORT_EMAIL` | built-in project address | Recipient for the Help modal's "Email us" link. Overrides the persisted `support_email` setting for the process lifetime (all users; not editable via the API). Equivalent to the `--support-email` CLI flag, for the gunicorn images that never parse `argv`; an explicit flag wins. |
 | `VTSEARCH_SEMANTIC_ONLY` | unset | Set to `1`/`true`/`yes`/`on` to lock the deployment to **Semantic** embedders, hiding the prototype Patch Semantic and Structural types from every picker and rejecting them at the dataset-load / detector-create routes. Env-var equivalent of `--semantic-only`, for the gunicorn images; an explicit flag wins, and either beats the persisted `semantic_only` server setting. |
 | `VTSEARCH_DATASET_MAX_AGE_DAYS` | unset (datasets never expire) | Stamps every newly created dataset with an expiry this many days out. Positive integers only; anything else is ignored with a warning on stdout. Env-var equivalent of `--dataset-max-age-days`, for the gunicorn images; an explicit flag wins. |
+| `VTSEARCH_SOLO_MEDIA_TYPE` | unset | Lock the whole instance to one mediaType: the importer and new-detector flows hide their mediaType pickers, converter offerings are filtered to converters that output this type, and that type's default embedder is preloaded at startup. Must be a registered media-type id (`audio`, `image`, `video`, `text`, `document`). Env-var equivalent of `--solo-media-type`, for the gunicorn images; an explicit flag wins, and either beats the persisted `solo_media_type` server setting. |
+| `VTSEARCH_SOLO_EMBEDDERS` | unset | Comma-separated `TYPE=EMBEDDER` pairs (e.g. `image=siglip,audio=clap`) locking the embedder for those mediaTypes, so the importer modal hides its embedder picker for each. A per-process *fallback*: any user who picks their own embedder in the settings UI overrides it for themselves. Env-var equivalent of the repeatable `--solo-embedder`; an explicit flag wins. |
+| `VTSEARCH_HIDE_PLUGINS` | unset | Comma-separated `FAMILY:NAME` pairs (e.g. `embedders:e5,importers:synthetic`) hidden from picker and listing API responses. Hidden plugins stay importable and callable by name — this declutters the UI, it is not a security boundary. Env-var equivalent of the repeatable `--hide-plugin`; an explicit flag wins, and the result is *unioned* with the persisted `hidden_plugins` setting (either source can add a hide; neither can un-hide). |
 
 ### Progress-bar timing
 
@@ -625,8 +628,10 @@ working.
   (`"converters"`, `"embedders"`, `"importers"`, … — the keys used by
   `vtscore.plugins.inventory`) to a list of plugin names to omit from picker
   and listing responses. Merged at read time with any `--hide-plugin
-  family:name` CLI flags. This is a UI-declutter setting, **not a security
-  boundary**: hidden plugins remain importable and callable by name.
+  family:name` flags / `VTSEARCH_HIDE_PLUGINS` entries — the merge is a union,
+  so either source can add a hide and neither can un-hide. This is a
+  UI-declutter setting, **not a security boundary**: hidden plugins remain
+  importable and callable by name.
 - `dataset_max_age_days`: stamps new datasets with an expiry this many days
   out. `null` (the default) means datasets never expire. Also settable with
   `--dataset-max-age-days` / `VTSEARCH_DATASET_MAX_AGE_DAYS`, either of which
@@ -645,7 +650,8 @@ working.
   and new-detector flows hide their media-type pickers and lock to it, the
   converter picker filters to converters that output it, and media-type steps
   in tabbed UIs are skipped. `null` shows everything. Users cannot change it;
-  also settable with `--solo-media-type`.
+  also settable with `--solo-media-type` / `VTSEARCH_SOLO_MEDIA_TYPE`, either of
+  which wins for the process lifetime.
 - `projection_n_neighbors`, `projection_min_dist`: UMAP knobs for the VTSBrowse
   map. The persisted projection is keyed on these, so changing one forces a
   recompute rather than serving a layout fit under the old params. Clamped to

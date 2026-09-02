@@ -22,6 +22,7 @@ from typing import Any
 
 from vtscore.media import set_progress_callback
 
+from vtsearch import admin_overrides
 from vtsearch.logging_config import setup_logging
 from vtsearch.port_preflight import _acquire_single_instance_lock, _preflight_port
 
@@ -238,110 +239,6 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--hide-plugin",
-        action="append",
-        default=[],
-        dest="hide_plugin",
-        metavar="FAMILY:NAME",
-        help=(
-            "Hide a plugin from picker / listing API responses for this "
-            "process (declutter the UI without editing the codebase). "
-            "Repeatable. FAMILY is a plugin-family id (importers, exporters, "
-            "label_importers, labelset_sources, converters, media_sources, "
-            "media_types, embedders, clippers, settings_importers, "
-            "settings_exporters, settings_sources); NAME is the plugin's "
-            "registered name. Hidden plugins remain importable and callable "
-            "by name via execution endpoints (e.g. autodetect, label "
-            "import). This is a UI flag, not a security boundary. Merges "
-            "with the persisted ``hidden_plugins`` key in the server "
-            "settings file. Use ``--list-plugins --format names`` to see "
-            "the available family:name pairs."
-        ),
-    )
-    parser.add_argument(
-        "--solo-media-type",
-        type=str,
-        default=None,
-        dest="solo_media_type",
-        help=(
-            "Streamline the UI for a single mediaType. Hides mediaType pickers "
-            "in the dataset-importer and new-detector flows, locks them to the "
-            "given type, filters converter offerings to converters whose output "
-            "is this type, and preloads that type's default embedder at startup. "
-            "This is an admin-set restriction: it applies to every user, and "
-            "users cannot change or opt out of it from the settings UI. "
-            "Overrides the persisted ``solo_media_type`` key in the server "
-            "settings file for the lifetime of the process. Valid values are "
-            "the registered media-type ids (e.g. audio, image, video, text, "
-            "document)."
-        ),
-    )
-    parser.add_argument(
-        "--solo-embedder",
-        action="append",
-        default=None,
-        dest="solo_embedders",
-        metavar="TYPE=EMBEDDER",
-        help=(
-            "Lock a single embedder for a mediaType so the dataset-importer "
-            "modal hides its embedder picker for that type and silently uses "
-            "the named embedder. Repeatable, one --solo-embedder per mediaType "
-            "(e.g. --solo-embedder image=siglip --solo-embedder audio=clap). "
-            "Format is TYPE=EMBEDDER, where TYPE is a registered media-type id "
-            "and EMBEDDER is a registered embedder name for that type. Acts as "
-            "a per-process fallback. Any user who sets their own value via "
-            "the settings UI overrides this flag per-mediaType for themselves. "
-            "Other mediaTypes still show the normal embedder picker."
-        ),
-    )
-    parser.add_argument(
-        "--dataset-max-age-days",
-        type=int,
-        default=None,
-        dest="dataset_max_age_days",
-        metavar="DAYS",
-        help=(
-            "Stamp every dataset created by this server process with an "
-            "expiry DAYS days after creation; expired datasets are aged off "
-            "from the registry. Applies to all users and overrides any "
-            "persisted dataset_max_age_days in the settings file for the "
-            "lifetime of the process; the value is not editable via the "
-            "settings API. Must be a positive integer. Omit to use the "
-            "persisted value (no expiry if none is set)."
-        ),
-    )
-    parser.add_argument(
-        "--support-email",
-        type=str,
-        default=None,
-        dest="support_email",
-        metavar="ADDRESS",
-        help=(
-            "Recipient address for the Help modal's 'Email us' contact link. "
-            "Applies to all users and overrides any persisted support_email in "
-            "the settings file for the lifetime of the process; the value is "
-            "not editable via the settings API. Omit to use the persisted value "
-            "(defaults to the built-in project address)."
-        ),
-    )
-    parser.add_argument(
-        "--semantic-only",
-        action="store_true",
-        default=False,
-        dest="semantic_only",
-        help=(
-            "Lock this instance to Semantic embedders. The prototype Patch "
-            "Semantic and Structural embedder types are dropped from "
-            "/api/embedders (so no Region / Instance embedder picker appears "
-            "under Add Dataset > Advanced), the New-detector modal offers no "
-            "embedder-type choice, and any request that asks for a "
-            "patch/structural embedder is rejected with 400. Applies to all "
-            "users and overrides any persisted semantic_only in the settings "
-            "file for the lifetime of the process; the value is not editable "
-            "via the settings API."
-        ),
-    )
-    parser.add_argument(
         "--progress-format",
         type=str,
         default="text",
@@ -354,6 +251,11 @@ def _build_parser() -> argparse.ArgumentParser:
             "for the event schema. Applies to --autodetect."
         ),
     )
+    # The process-level admin overrides (--solo-media-type, --solo-embedder,
+    # --hide-plugin, --dataset-max-age-days, --support-email, --semantic-only)
+    # are declared once in vtsearch.admin_overrides, which owns their flag
+    # spellings, help text, env-var equivalents and validators together.
+    admin_overrides.register_override_flags(parser)
     return parser
 
 
@@ -503,127 +405,25 @@ def _apply_verbosity(args) -> None:
         setup_logging(level=logging.getLevelName(effective))
 
 
-def _apply_solo_media_type(args, parser) -> None:
-    """Validate and stash ``--solo-media-type`` as a process-level override."""
-    # --solo-media-type applies to both the autodetect CLI path and the
-    # server path: validate and stash before any code reads the resolver.
-    if getattr(args, "solo_media_type", None) is not None:
-        from vtscore.media import all_type_ids
-        from vtsearch.settings import set_cli_solo_media_type
+def _apply_admin_overrides(args, parser) -> None:
+    """Validate and stash every process-level admin override the flags carried.
 
-        valid = set(all_type_ids())
-        if args.solo_media_type not in valid:
-            parser.error(f"Unknown --solo-media-type: {args.solo_media_type!r}. Valid values: {sorted(valid)}")
-        set_cli_solo_media_type(args.solo_media_type)
+    One loop over :data:`vtsearch.admin_overrides.OVERRIDES` replaces what used
+    to be six near-identical ``_apply_X`` helpers. Each descriptor owns its own
+    validator, so ``--solo-media-type`` still checks the media-type registry
+    and ``--solo-embedder`` still checks that the embedder is registered *for
+    that type* -- but the same validator now runs for the env-var form, so the
+    two entry paths can no longer disagree.
 
-
-def _apply_hidden_plugins(args, parser) -> None:
-    """Validate and stash repeatable ``--hide-plugin FAMILY:NAME`` specs."""
-    # --hide-plugin family:name (repeatable): stash before any listing
-    # endpoint is served so hidden plugins are filtered from API responses.
-    # ``register_app_plugin_families`` ran at module load (top of app.py),
-    # so the settings_io families are already in ``FAMILIES``.
-    hide_specs = getattr(args, "hide_plugin", None) or []
-    if hide_specs:
-        from vtscore.plugins.inventory import FAMILIES
-        from vtsearch.settings import add_cli_hidden_plugin
-
-        valid_families = set(FAMILIES)
-        for spec in hide_specs:
-            if ":" not in spec:
-                parser.error(
-                    f"--hide-plugin expects FAMILY:NAME, got {spec!r}. Valid families: {sorted(valid_families)}"
-                )
-            family, _, plugin_name = spec.partition(":")
-            family = family.strip()
-            plugin_name = plugin_name.strip()
-            if not family or not plugin_name:
-                parser.error(f"--hide-plugin {spec!r} has an empty family or name")
-            if family not in valid_families:
-                parser.error(f"Unknown --hide-plugin family {family!r}. Valid: {sorted(valid_families)}")
-            add_cli_hidden_plugin(family, plugin_name)
-
-
-def _apply_solo_embedders(args, parser) -> None:
-    """Validate and stash repeatable ``--solo-embedder TYPE=EMBEDDER`` locks."""
-    # --solo-embedder is repeatable; each value is TYPE=EMBEDDER. Validate
-    # both halves against the live registry before stashing; a typo here
-    # would silently no-op the lock and the user would only notice when
-    # the picker reappeared.
-    raw_solo_embedders = getattr(args, "solo_embedders", None) or []
-    if raw_solo_embedders:
-        from vtscore.media import all_embedders, all_type_ids, embedders_for_type
-        from vtsearch.settings import set_cli_solo_embedder
-
-        valid_types = set(all_type_ids())
-        valid_embedder_names = {e.name for e in all_embedders()}
-        for raw in raw_solo_embedders:
-            if "=" not in raw:
-                parser.error(f"Invalid --solo-embedder value: {raw!r}. Expected TYPE=EMBEDDER (e.g. image=siglip).")
-            mt, _, emb = raw.partition("=")
-            mt = mt.strip()
-            emb = emb.strip()
-            if not mt or not emb:
-                parser.error(f"Invalid --solo-embedder value: {raw!r}. Both TYPE and EMBEDDER must be non-empty.")
-            if mt not in valid_types:
-                parser.error(
-                    f"Unknown mediaType in --solo-embedder {raw!r}: {mt!r}. Valid values: {sorted(valid_types)}"
-                )
-            if emb not in valid_embedder_names:
-                parser.error(
-                    f"Unknown embedder in --solo-embedder {raw!r}: {emb!r}. "
-                    f"Valid embedder names: {sorted(valid_embedder_names)}"
-                )
-            valid_for_type = {e.name for e in embedders_for_type(mt)}
-            if emb not in valid_for_type:
-                parser.error(
-                    f"Embedder {emb!r} is not registered for media type {mt!r}. "
-                    f"Valid embedders for {mt}: {sorted(valid_for_type)}"
-                )
-            set_cli_solo_embedder(mt, emb)
-
-
-def _apply_dataset_max_age(args, parser) -> None:
-    """Validate and stash the process-level ``--dataset-max-age-days`` override."""
-    # --dataset-max-age-days: process-level server retention override applied
-    # to every user for the lifetime of the process (not user-editable via
-    # the API). Validate before any dataset is created so a bad value fails
-    # fast rather than silently never expiring.
-    if getattr(args, "dataset_max_age_days", None) is not None:
-        if args.dataset_max_age_days < 1:
-            parser.error("--dataset-max-age-days must be a positive integer (number of days)")
-        from vtsearch.settings import set_cli_dataset_max_age_days
-
-        set_cli_dataset_max_age_days(args.dataset_max_age_days)
-
-
-def _apply_support_email(args, parser) -> None:
-    """Validate and stash the process-level ``--support-email`` override."""
-    # --support-email: process-level override for the Help modal's contact
-    # address, applied to every user for the lifetime of the process (not
-    # user-editable via the API). Require a non-empty value so an accidental
-    # blank flag doesn't ship an empty mailto: recipient.
-    if getattr(args, "support_email", None) is not None:
-        email = args.support_email.strip()
-        if not email:
-            parser.error("--support-email must be a non-empty address")
-        from vtsearch.settings import set_cli_support_email
-
-        set_cli_support_email(email)
-
-
-def _apply_semantic_only(args, parser) -> None:
-    """Stash the process-level ``--semantic-only`` lock."""
-    # --semantic-only is a one-way switch: passing it locks the process to
-    # Semantic embedders, omitting it leaves the persisted server setting in
-    # charge (so a deployment can enable the lock from settings.json without
-    # the flag). There is no --no-semantic-only counterpart for the same
-    # reason --hide-plugin can only add hides: a flag should not silently
-    # loosen a restriction the settings file asked for.
-    if getattr(args, "semantic_only", False):
-        from vtsearch.settings import set_cli_semantic_only
-
-        set_cli_semantic_only(True)
+    Runs for both the autodetect CLI path and the server path, before any
+    media is loaded or any listing endpoint is served: a typo here would
+    otherwise silently no-op the restriction and the user would only notice
+    when the picker reappeared.
+    """
+    try:
+        admin_overrides.apply_flag_values(args)
+    except admin_overrides.OverrideValueError as exc:
+        parser.error(str(exc))
 
 
 def _authenticate_cli_user(args, parser) -> None:
@@ -886,12 +686,7 @@ def main(app, initialize_server) -> None:
     args, importer, exporter = _resolve_plugins(args, parser, remaining)
 
     _apply_verbosity(args)
-    _apply_solo_media_type(args, parser)
-    _apply_hidden_plugins(args, parser)
-    _apply_solo_embedders(args, parser)
-    _apply_dataset_max_age(args, parser)
-    _apply_support_email(args, parser)
-    _apply_semantic_only(args, parser)
+    _apply_admin_overrides(args, parser)
 
     if args.autodetect:
         _run_autodetect(args, parser, importer, exporter)

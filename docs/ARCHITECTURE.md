@@ -380,6 +380,11 @@ VTSearch/
 │   ├── settings_store.py           Two-tier persistence engine (file locking, caches) for settings.py
 │   ├── settings_models.py          Pydantic ServerSettings / UserSettings models; the source of
 │   │                               truth for setting types, defaults, ranges, and enums
+│   ├── admin_overrides.py          Declarative registry of the process-level admin overrides
+│   │                               (solo mediaType / embedder locks, plugin hides, dataset
+│   │                               retention, support email, Semantic-only): one descriptor
+│   │                               per knob carrying its CLI flag, env var, shared validator,
+│   │                               resolution rule, and /api/settings key
 │   ├── threading.py                Context-carrying thread helper (user + dataset + detector locals)
 │   ├── achievements.py             Achievement state management
 │   ├── autorun_processors.py       autorun_extractors / autorun_localizers CRUD
@@ -882,6 +887,18 @@ field lists — this document names the tiers and the shape, not every key.
   `panel_pct_*`, `autopilot_*`, `settings_source`, `achievement_state`, and the
   **Auto-Find** keys `autofind_detectors`, `autofind_exporter`,
   `autofind_exporter_field_values`.
+
+Six of those server-tier keys double as **admin overrides**: an operator can
+pin `solo_media_type`, `solo_embedder_per_media_type`, `hidden_plugins`,
+`dataset_max_age_days`, `support_email` and `semantic_only` at startup, for
+every user and for the life of the process, without the settings file. Each is
+declared once in `vtsearch/admin_overrides.py` — a descriptor carrying its CLI
+flag, its env-var equivalent (so the gunicorn images, which never parse `argv`,
+can set it too), the validator both entry paths share, how it combines with the
+persisted value, and the key `/api/settings` publishes the result under. The
+argparse arguments, the env fallbacks, the `get_effective_*` resolvers in
+`settings.py` and the response overlay all derive from that registry rather
+than being re-plumbed per knob.
 
 Both models set `extra = "allow"`, so free-form sub-objects
 (`achievement_state`, `settings_source`) round-trip alongside the typed keys.

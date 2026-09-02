@@ -18,40 +18,23 @@ import sys
 
 import pytest
 
+from vtsearch import admin_overrides
 from vtsearch import cli_main
 from vtsearch import settings as settings_mod
 
 
 @pytest.fixture(autouse=True)
 def _restore_cli_overrides():
-    """Snapshot and restore the process-level CLI override globals.
+    """Snapshot and restore the process-level admin-override store.
 
     ``settings.reset()`` (run by ``isolated_settings`` around each test)
     does *not* clear these, so a test that applies a valid
     ``--solo-media-type`` / ``--hide-plugin`` / etc. would otherwise leak
     the value into later tests.
     """
-    saved = (
-        settings_mod._cli_solo_media_type,
-        dict(settings_mod._cli_hidden_plugins),
-        dict(settings_mod._cli_solo_embedders),
-        settings_mod._cli_dataset_max_age_days,
-        settings_mod._cli_support_email,
-        settings_mod._cli_semantic_only,
-    )
+    saved = admin_overrides.snapshot()
     yield
-    (
-        settings_mod._cli_solo_media_type,
-        hidden,
-        solo_emb,
-        settings_mod._cli_dataset_max_age_days,
-        settings_mod._cli_support_email,
-        settings_mod._cli_semantic_only,
-    ) = saved
-    settings_mod._cli_hidden_plugins.clear()
-    settings_mod._cli_hidden_plugins.update(hidden)
-    settings_mod._cli_solo_embedders.clear()
-    settings_mod._cli_solo_embedders.update(solo_emb)
+    admin_overrides.restore(saved)
 
 
 def _run_main(monkeypatch, argv, app=None, initialize_server=None):
@@ -98,8 +81,8 @@ class TestBuildParser:
         assert args.progress_format == "text"
         assert args.output_format == "plain"
         assert args.label_importer == "server_json_file"
-        assert args.hide_plugin == []
-        assert args.solo_embedders is None
+        assert args.hidden_plugins == []
+        assert args.solo_embedders == []
         assert args.dry_run is False
         assert args.list_plugins is False
 
@@ -137,7 +120,7 @@ class TestBuildParser:
         args = parser.parse_args(
             ["--hide-plugin", "importers:a", "--hide-plugin", "exporters:b", "--solo-embedder", "image=x"]
         )
-        assert args.hide_plugin == ["importers:a", "exporters:b"]
+        assert args.hidden_plugins == ["importers:a", "exporters:b"]
         assert args.solo_embedders == ["image=x"]
 
 

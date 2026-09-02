@@ -504,7 +504,10 @@ shows it read-only), and `PUT /api/settings` refuses to touch it. The
 flag is a process-level override of the server-tier `solo_media_type`
 key, so an operator can also set it persistently by writing
 `"solo_media_type": "image"` into `data/settings.json`; the flag wins
-for the lifetime of the process.
+for the lifetime of the process. The gunicorn-launched Docker images
+never parse `argv`, so the same restriction is settable there as
+`VTSEARCH_SOLO_MEDIA_TYPE=image` — an explicit flag wins over the
+variable, and both run the same validation.
 
 **Solo mediaEmbedder** (`--solo-embedder`): lock the embedding model
 for one or more mediaTypes so the dataset-importer modal hides its
@@ -521,7 +524,9 @@ each locked embedder at startup even when no datasets or detectors are
 registered yet. Unlike `--solo-media-type`, this one is a per-process
 **fallback** over a per-user setting: any user can override it
 per-mediaType via the Settings dialog ("Ask each time" is the opt-out),
-and their choice persists across restarts.
+and their choice persists across restarts. Under Docker, set the same
+locks as a comma-separated `VTSEARCH_SOLO_EMBEDDERS=image=siglip,audio=clap`;
+an explicit flag wins.
 
 **Hidden plugins** (`--hide-plugin family:name`, repeatable): drop a
 plugin from picker / listing API responses for this deployment without
@@ -545,8 +550,12 @@ not a security boundary. The CLI flag merges with the persisted
 `hidden_plugins` key in the server settings file (`data/settings.json`
 or whatever path `--settings` points at), where a deployment can set
 `{"hidden_plugins": {"converters": ["audio2image"]}}` and pick it up on
-every restart. Use `--list-plugins --format names` to discover the
-available `family:name` pairs.
+every restart. The merge is a **union**: either source can add a hide,
+and neither can un-hide what the other hid. Under Docker, pass the same
+pairs comma-separated as
+`VTSEARCH_HIDE_PLUGINS=converters:audio2image,embedders:e5`; an explicit
+flag wins. Use `--list-plugins --format names` to discover the available
+`family:name` pairs.
 
 **Dataset retention** (`--dataset-max-age-days DAYS`): stamp every
 dataset created by this server process with an expiry `DAYS` days after
