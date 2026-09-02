@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, effect, ElementRef, inject, input, 
 import { Media, PayloadVariant } from '../../../models/api.models';
 import { ActiveContextService } from '../../../services/active-context.service';
 import { decodeAudioBuffer } from '../../../utils/decode-audio';
+import { armClipWindow, ClipBounds, enforceClipWindow } from '../../../utils/clip-window';
 
 /** Downsampled per-column waveform extrema for one clip at one canvas width. */
 interface WaveformPeaks {
@@ -126,7 +127,7 @@ export class AudioPlayerComponent implements OnDestroy {
   // Active clip window bounds while enforcement is on, else null. Enforcement is
   // driven by the <audio> element's (timeupdate) event rather than a polling
   // timer, so it only runs while the clip is actually playing and progressing.
-  private clipBounds: { start: number; end: number } | null = null;
+  private clipBounds: ClipBounds | null = null;
   // Whether (loadedmetadata) has fired for the current audioSrc. Clip bounds
   // (clip_start/clip_end) often arrive via batch hydration *after* the audio
   // has already loaded, on a later media change with the same media id; in that
@@ -205,46 +206,19 @@ export class AudioPlayerComponent implements OnDestroy {
     if (!audio.paused) this.startSweep();
   }
 
-  // Seek into the clip window and (re)start boundary enforcement when the media
+  // Seek into the clip window and (re)arm boundary enforcement when the media
   // carries clip extents; otherwise tear enforcement down. Safe to call both on
   // (loadedmetadata) and on later metadata-enrichment effect cycles.
   private applyClipBounds(): void {
     const audio = this.audioRef()?.nativeElement;
     if (!audio) return;
-
-    const media = this.media();
-    if (media.clip_start != null) {
-      const clipStart = media.clip_start;
-      const clipEnd = media.clip_end;
-      // Snap into the window only when currently outside it, so we don't yank
-      // audio already looping correctly within its window.
-      if (audio.currentTime < clipStart || (clipEnd != null && audio.currentTime >= clipEnd)) {
-        audio.currentTime = clipStart;
-      }
-      this.startClipEnforcement();
-    } else {
-      this.stopClipEnforcement();
-    }
-  }
-
-  private startClipEnforcement(): void {
-    const media = this.media();
-    if (media.clip_start == null || media.clip_end == null) {
-      this.clipBounds = null;
-      return;
-    }
-    // Arm enforcement; the actual boundary check runs in (timeupdate), which the
-    // <audio> element fires as playback advances (no timer while paused).
-    this.clipBounds = { start: media.clip_start, end: media.clip_end };
+    this.clipBounds = armClipWindow(audio, this.media());
   }
 
   private stopClipEnforcement(): void {
     this.clipBounds = null;
   }
 
-  // Enforce the clip window as playback advances: when the current time leaves
-  // [start, end), loop back to the window start. Driven by the element's
-  // (timeupdate) event instead of a 100ms polling interval.
   onTimeUpdate(): void {
     // Refresh the playhead first, unconditionally: (timeupdate) is the coarse
     // (~4x/sec) fallback that keeps the line moving when the rAF sweep isn't
@@ -252,13 +226,8 @@ export class AudioPlayerComponent implements OnDestroy {
     // must run whether or not this clip has a window to enforce.
     this.updatePlayhead();
 
-    const bounds = this.clipBounds;
-    if (!bounds) return;
     const audio = this.audioRef()?.nativeElement;
-    if (!audio || audio.paused) return;
-    if (audio.currentTime >= bounds.end || audio.currentTime < bounds.start) {
-      audio.currentTime = bounds.start;
-    }
+    if (audio) enforceClipWindow(audio, this.clipBounds);
   }
 
   onVolumeChange(): void {
