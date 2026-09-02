@@ -110,13 +110,24 @@ class TestRestore:
         assert achievements_hooks._recorders is live_recorders
 
     def test_a_snapshot_is_not_a_view_of_the_live_registry(self, restore_afterwards):
-        """Capturing copies, so a later mutation cannot reach back into it."""
+        """Capturing copies, so a later mutation cannot reach back into it.
+
+        Asserted by identity rather than by the key's absence: when both trees
+        collect in one process the app tier's ``app.py`` has already installed
+        a persister under every known key, so the snapshot legitimately starts
+        non-empty.  What must hold in either tier is that the snapshot still
+        holds whatever was registered *at capture time*.
+        """
         import vtscore.state as state
 
-        snapshot = capture_host_seams()
-        state.register_setting_persister("calibrate_count", lambda v: None)
+        def _sentinel(value):
+            return None
 
-        assert "calibrate_count" not in snapshot.setting_persisters
+        snapshot = capture_host_seams()
+        state.register_setting_persister("calibrate_count", _sentinel)
+
+        assert snapshot.setting_persisters.get("calibrate_count") is not _sentinel
+        assert state._setting_persisters["calibrate_count"] is _sentinel
 
 
 class TestKnownSettingKeys:
