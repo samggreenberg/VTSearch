@@ -173,12 +173,10 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  spinning on 'Training…'. Terminal statuses (404/500) end the run at once
    *  and never consume this budget. */
   private readonly POLL_ERROR_LIMIT = 20;
-  /** Set by `reloadForNewPair` when the user was in `learned` sort mode at the
-   *  time of a pair switch: a constructor effect watches the labelset counts and
-   *  re-fires `onLearnedSort` once, after the reloaded votes make both classes
-   *  available. Replaces the old one-shot `labelsetGoodCount$` subscription now
-   *  that VoteStateService is signal-backed. */
-  private pendingRehydrateLearned = false;
+  /** Armed on each pair reload; consumed by the first `/api/votes` read that
+   *  answers for the new pair, which re-seeds its ranking. See the effect in
+   *  the constructor. */
+  private pendingReseedForNewPair = false;
   private autopilotTextSortPending = false;
   private autopilotMediaSortPending = false;
   /** Armed on entry and on each pair reload; consumed once medias first render
@@ -300,20 +298,44 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       });
     });
 
-    // Phase-3 learned-sort rehydration after a pair switch. `reloadForNewPair`
-    // clears votes (counts → 0) then reloads them; when the reloaded counts make
-    // both classes available again and the user was in `learned` mode, fire one
-    // `onLearnedSort`. Tracking both labelset counts re-runs this effect when
-    // `loadVotes` lands; the body runs `untracked` so reading
-    // `learnedSortAvailable` (which also reads the counts) can't loop it.
+    // Re-seed the new pair's ranking, once its reloaded votes have landed.
+    //
+    // `reloadForNewPair` clears the ranking but re-runs no sort, and nothing
+    // else does either: Autopilot's activation seed fires from the left panel's
+    // `ngOnInit`, which a switch never re-runs, and the phase-transition
+    // subscription only sorts on a phase *change*, which a switch need not
+    // produce. So without this the new pair lands with an empty work queue and
+    // a blank centre where a fresh entry to that same pair produces both
+    // (#3510). Armed by the pair change and consumed here, once: the phase, the
+    // labelset and the sort mode are only facts about the new pair after its
+    // `/api/votes` read has answered (`VoteStateService.votesLoaded`).
+    //
+    // The two branches are the two things entry does, in the order entry does
+    // them — they are mutually exclusive, so exactly one sort goes out:
+    //
+    //  - **Learned sort**, when the user was in `learned` mode and the reloaded
+    //    labelset still has both classes. This is the Phase-3 rehydration; the
+    //    server's signature cache makes a re-entry to a recently trained pair
+    //    free, and starts a fresh job otherwise.
+    //  - **Autopilot's activation seed** for the current phase otherwise, which
+    //    is where the text / media-example sort lives. Only while Autopilot is
+    //    running: entering Train with it switched off seeds nothing either, and
+    //    a switch must not be more eager than an entry.
+    //
+    // Reading the phase here is safe despite this effect running before the
+    // Autopilot panel's own recompute: `onAutopilotStart` acts only on the
+    // `good`/`bad` phases, and those are exactly the phases a labelset without
+    // both classes can be in — so the recompute cannot move us across the
+    // branch that was taken.
     effect(() => {
-      this.voteState.labelsetGoodCount;
-      this.voteState.labelsetBadCount;
+      const votesLoaded = this.voteState.votesLoaded;
       untracked(() => {
-        if (!this.pendingRehydrateLearned) return;
+        if (!this.pendingReseedForNewPair || !votesLoaded) return;
+        this.pendingReseedForNewPair = false;
         if (this.sortState.sortMode === 'learned' && this.voteState.learnedSortAvailable) {
-          this.pendingRehydrateLearned = false;
           this.onLearnedSort(false);
+        } else if (this.autopilotStateService.running) {
+          this.onAutopilotStart();
         }
       });
     });
@@ -389,12 +411,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  state (sort results, votes cache) and re-runs the same loads that
    *  ngOnInit fires on first entry.
    *
-   *  Phase 3 rehydration: if the user's sort mode is `learned` and the
-   *  reloaded labelset has both classes, fire one `onLearnedSort` call
-   *  after votes land. The server's signature cache short-circuits the
-   *  re-fire when the pair has been trained recently (free re-entry),
-   *  and starts a fresh job otherwise; either way the user lands on
-   *  learned-sorted content without a manual mode toggle. */
+   *  The ranking the new pair lands on is re-seeded by the constructor's
+   *  re-seed effect once the reloaded votes answer for it; see there for why
+   *  the switch cannot just sort inline. */
   private reloadForNewPair(): void {
     // Supersede → quiesce → clear → reload, in that order and enforced there;
     // see `PairScopeService.resetForNewPair`.
@@ -405,17 +424,14 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       this.sortState.stopFindProgressTracking();
       this.currentLearnedSortJobId = null;
       this.sortState.setSortBusy(false);
-      this.pendingRehydrateLearned = false;
       // Read by the medias effect when the reload below lands.
       this.pendingSnapOnLoad = true;
       // Read by the seed effect when the new pair's first ranking lands.
       this.pendingSelectOnPairChange = true;
+      // Read by the re-seed effect once the reloaded votes land.
+      this.pendingReseedForNewPair = true;
     });
     this.loadTrainingVotes();
-
-    // Arm the rehydrate effect: it fires `onLearnedSort` once the reloaded
-    // votes land (counts go 0 → available) if the user is still in learned mode.
-    this.pendingRehydrateLearned = this.sortState.sortMode === 'learned';
   }
 
   /**
@@ -1192,6 +1208,16 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   get autopilotDisabled(): boolean {
     if (this.textSupported) return false;
     if (this.labelSession.mediaExampleFilenames.length > 0) return false;
+    // "This detector has no labels" and "the labels have not arrived yet" are
+    // the same 0/0 on the wire, and only the first means Autopilot has nothing
+    // to seed from — see `VoteStateService.votesLoaded`. Every pair change
+    // passes through the second (`clearPairState` zeroes the counts, the
+    // reloaded `/api/votes` fills them back in), and reading it as the first
+    // drops the user out of the Autopilot tab *for good*: the left panel's
+    // fallback is one-way by design, and the `autopilotStop` it emits rewrites
+    // `sortMode` back to text, which also disarms the learned-sort re-seed
+    // below. That is the whole of #3510's "a switch issues no sort at all".
+    if (!this.voteState.votesLoaded) return false;
     return !this.voteState.learnedSortAvailable;
   }
 

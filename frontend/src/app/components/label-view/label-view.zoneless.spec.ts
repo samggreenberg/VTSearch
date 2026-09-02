@@ -587,6 +587,34 @@ describe('LabelViewComponent', () => {
       httpMock.expectNone('/api/sort');
     });
 
+    it('keeps autopilot available while the reloaded votes are still in flight', async () => {
+      const session = TestBed.inject(LabelSessionService);
+      session.textQuery = 'a red car';
+      session.mediaExample = '';
+      loadNoTextDataset();
+      await settleResource();
+
+      // Baseline: a text-hint-only detector on a no-text dataset with no labels
+      // genuinely has nothing to seed from.
+      expect(component.autopilotDisabled).toBe(true);
+
+      // A pair change clears the vote cache and reloads it (`clearPairState`),
+      // so the labelset reads 0/0 for the width of the reload. That is "not
+      // known yet", not "no labels": reading it as the second is what dropped
+      // the user out of the Autopilot tab on every switch — one-way, so nothing
+      // put them back — and took the pair's re-seed down with it (#3510).
+      component.voteState.clear();
+      expect(component.voteState.votesLoaded).toBe(false);
+      expect(component.autopilotDisabled).toBe(false);
+
+      // Once the read answers, the verdict is a fact again.
+      component.voteState.loadVotes();
+      httpMock
+        .expectOne('/api/votes')
+        .flush({ good: [], bad: [], click_times: {}, learned_scores: {} });
+      expect(component.autopilotDisabled).toBe(true);
+    });
+
     it('keeps autopilot available when the detector carries a media-example seed', async () => {
       const session = TestBed.inject(LabelSessionService);
       session.textQuery = '';
@@ -1014,6 +1042,125 @@ describe('LabelViewComponent', () => {
       await new Promise<void>((resolve) => setTimeout(resolve, 800));
       httpMock.expectNone((req) => req.url.startsWith('/api/learned-sort/result'));
       expect(component.sortState.sortBusy).toBe(false);
+    });
+  });
+
+  // Issue #3510: `reloadForNewPair` clears the ranking and re-runs no sort.
+  // Autopilot's activation seed fires from the left panel's `ngOnInit`, which a
+  // switch never re-runs, and the phase-transition subscription only sorts on a
+  // phase *change*, which a switch need not produce — so the new pair used to
+  // land with an empty work queue and a blank centre where a fresh entry to the
+  // same pair produces both.
+  describe('pair-change re-seed', () => {
+    function seedPair(): ActiveContextService {
+      const activeContext = TestBed.inject(ActiveContextService);
+      activeContext.setActivePair('ds1', 'det1');
+      return activeContext;
+    }
+
+    function flushDetectorRegistry(): void {
+      httpMock
+        .match((req) => req.url.startsWith('/api/detectors'))
+        .forEach((req) => req.flush({ detectors: [] }));
+    }
+
+    /** Answer the reload the pair change fires, up to (but not including) the
+     *  `/api/votes` read whose landing is what consumes the re-seed. */
+    function flushReloadExceptVotes(): void {
+      flushDetectorRegistry();
+      TestBed.tick();
+      httpMock.match('/api/medias/ids').forEach((req) =>
+        req.flush([{ id: 1, media_type: 'audio' }, { id: 2, media_type: 'audio' }]),
+      );
+      httpMock.match('/api/find/end-session').forEach((req) => req.flush({ ok: true, ended: false }));
+      httpMock.match('/api/dataset/status').forEach((req) => req.flush({ display_name: 'Pair 2' }));
+      httpMock.match('/api/inclusion').forEach((req) => req.flush({ inclusion: 0 }));
+      TestBed.tick();
+    }
+
+    it('re-runs the learned sort for the new pair when the user is in learned mode', async () => {
+      const activeContext = seedPair();
+      flushInitialRequests();
+      flushDetectorRegistry();
+      await settleResource();
+
+      // A detector that carries both label classes, in learned sort mode.
+      component.voteState.loadVotes();
+      httpMock
+        .expectOne('/api/votes')
+        .flush({ good: [1], bad: [2], click_times: {}, learned_scores: {} });
+      component.sortState.setSortMode('learned');
+
+      activeContext.setActivePair('ds2', 'det1');
+      flushReloadExceptVotes();
+
+      // Nothing has re-ranked yet: the labelset is still the zeroed reload
+      // default, so there is no fact to decide on.
+      httpMock.expectNone('/api/learned-sort');
+
+      httpMock.match('/api/votes').forEach((req) =>
+        req.flush({ good: [1], bad: [2], click_times: {}, learned_scores: {} }),
+      );
+      TestBed.tick();
+
+      // The read that answers for the new pair is what fires the re-seed.
+      expect(httpMock.match('/api/learned-sort').length).toBe(1);
+    });
+
+    it("re-runs Autopilot's text seed for the new pair when learned sort is unavailable", async () => {
+      const session = TestBed.inject(LabelSessionService);
+      session.textQuery = 'dog barking';
+      session.mediaExample = '';
+      const activeContext = seedPair();
+      flushInitialRequests();
+      flushDetectorRegistry();
+      await settleResource();
+
+      // Drain the entry seed so the request under assertion is the switch's.
+      httpMock.match('/api/sort').forEach((req) =>
+        req.flush({ results: [{ id: 1, similarity: 0.9 }], threshold: 0.5 }),
+      );
+      expect(TestBed.inject(AutopilotStateService).running).toBe(true);
+
+      activeContext.setActivePair('ds2', 'det1');
+      flushReloadExceptVotes();
+      httpMock.expectNone('/api/sort');
+
+      httpMock.match('/api/votes').forEach((req) =>
+        req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
+      );
+      await settleResource();
+
+      // An untrained, text-seeded detector has no learned sort to rehydrate;
+      // the seed the *entry* to this pair would have run is the text sort.
+      const sorts = httpMock.match('/api/sort');
+      expect(sorts.length).toBe(1);
+      expect(sorts[0].request.body).toEqual({ text: 'dog barking' });
+      sorts[0].flush({ results: [{ id: 1, similarity: 0.9 }], threshold: 0.5 });
+    });
+
+    it('seeds nothing when Autopilot is off and there is no learned sort to rehydrate', async () => {
+      const session = TestBed.inject(LabelSessionService);
+      session.textQuery = 'dog barking';
+      session.mediaExample = '';
+      component.autopilotEnabled.set(false);
+      const activeContext = seedPair();
+      flushInitialRequests();
+      flushDetectorRegistry();
+      await settleResource();
+      TestBed.inject(AutopilotStateService).clear();
+
+      activeContext.setActivePair('ds2', 'det1');
+      flushReloadExceptVotes();
+      httpMock.match('/api/votes').forEach((req) =>
+        req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
+      );
+      await settleResource();
+
+      // Entering Train with Autopilot switched off seeds nothing either, and a
+      // switch must not be more eager than an entry.
+      httpMock.expectNone('/api/sort');
+      httpMock.expectNone('/api/learned-sort');
     });
   });
 

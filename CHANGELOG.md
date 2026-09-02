@@ -17,6 +17,21 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **Switching dataset or detector in the Train window now re-ranks the new
+  pair, instead of landing on an empty work queue.** A pair switch cleared the
+  ranking but re-ran no sort of any kind, so the window settled with nothing to
+  label and a blank centre -- where a fresh entry to that same pair produces a
+  full ranking and an item to look at. Two things caused it. The reload zeroes
+  the vote cache before refilling it, and Autopilot read that gap as "this
+  detector has no labels" rather than "the labels have not arrived yet",
+  dropping you out of the Autopilot tab permanently and resetting the sort mode
+  on the way. And nothing re-ran Autopilot's seed for the new pair: it fires
+  when the Train window opens, which a switch does not do. Autopilot now waits
+  for the vote read before deciding it has nothing to work with, and the pair
+  change re-seeds the new pair's ranking as soon as its votes land -- learned
+  sort when you were in learned mode, otherwise the text or media-example seed
+  Autopilot would have used on entry.
+
 - **Switching dataset or detector no longer leaves the previous pair's item in
   the centre viewer.** Media ids are per-dataset, so the pair switch cleared the
   ranking, the threshold and the vote cache but left the *selection* pointing at
