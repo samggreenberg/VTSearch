@@ -318,7 +318,11 @@ def import_labels_into_detector(name: str, importer_name: str):
     a fresh MLP is trained with a cross-validated threshold, all inside the
     loaded detector context.
 
-    Plugin-dependent body shape: not described in the OpenAPI spec.
+    Plugin-dependent body shape: the accepted keys are the named
+    plugin's declared ``fields``, so they cannot be enumerated in a
+    static OpenAPI schema.  Fetch them at runtime from
+    ``GET /api/label-importers``, whose ``fields`` array carries each key's
+    ``field_type``, ``required`` flag, and any ``options`` / bounds.
     """
     path = _detector_path(name)
     data = _read_detector(path)
@@ -703,24 +707,3 @@ def vote_detector_label(body: dict, name: str, element_id: str):
         update_detector(reg_entry["id"], num_training=new_count, last_trained_at=time.time())
 
     return {"ok": True, "action": action}
-
-
-# ---------------------------------------------------------------------------
-# Per-plugin typed routes for /api/detectors/<name>/import-labels/<importer>.
-# The detector ``<name>`` stays dynamic; only the importer segment is
-# specialized per plugin so its body schema appears in /api/openapi.json
-# with real per-field types.  Unknown importer names fall through to the
-# parameterized route above (preserving the legacy 404 message).
-# Plugins with file fields stay on the parameterized fallback.
-# ---------------------------------------------------------------------------
-
-from vtscore.labels.importers import list_label_importers as _list_label_importers  # noqa: E402
-from vtsearch.routes._shared import register_plugin_typed_routes as _register_plugin_typed_routes  # noqa: E402
-
-_register_plugin_typed_routes(
-    detectors_labels_bp,
-    list_plugins=_list_label_importers,
-    path_template="/api/detectors/<name>/import-labels/{plugin_name}",
-    endpoint_prefix="import_labels_into_detector",
-    delegate=import_labels_into_detector,
-)

@@ -132,7 +132,6 @@ class TestFallbackBlendParity:
                 hidden_dim=resolve_hidden_dim("mlp", len(good_votes) + len(bad_votes)),
                 rng=np.random.RandomState(42),
             ),
-            {},
             None,
             sim_scores,
             0,

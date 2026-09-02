@@ -993,8 +993,8 @@ requirements/gpu.txt                 ← `-e .[dev,agpl]` (install.sh / Dockerfi
 requirements/base-no-agpl.txt        ← base.txt without the `agpl` extra (see below)
 requirements/gpu-no-agpl.txt         ← gpu.txt without the `agpl` extra (see below)
 requirements/labbench.txt            ← LabBench (SigLIP-only) image deps (standalone)
-requirements/image-embedders.txt     ← All-image-embedders image deps (CPU, standalone)
-requirements/image-embedders-gpu.txt ← All-image-embedders image deps (GPU, standalone)
+requirements/image-embedders.txt     ← All-image-embedders image deps (standalone; shared by the CPU
+                                       and GPU Dockerfiles, which each pass their own --extra-index-url)
 ```
 
 Install commands:

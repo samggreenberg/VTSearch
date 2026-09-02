@@ -10,8 +10,6 @@ Covers the routes in ``vtsearch/routes/sorting.py``:
                                                 :class:`LearnedSortResponseSchema`
 * ``GET  /api/votes``                         -> :class:`VotesResponseSchema`
 * ``POST /api/votes/clear``                   -> :class:`OkResponseSchema`
-* ``POST /api/votes/seed-from-examples``      -> :class:`SeedFromExamplesRequestSchema` ->
-                                                :class:`SeedFromExamplesResponseSchema`
 * ``GET  /api/textsort-suggestions``          -> :class:`TextsortSuggestionsResponseSchema`
 * ``POST /api/textsort-suggestions``          -> :class:`TextsortSuggestionRequestSchema` ->
                                                 :class:`OkResponseSchema`
@@ -183,7 +181,7 @@ class LearnedSortCancelResponseSchema(Schema):
 
 
 # ---------------------------------------------------------------------------
-# /api/votes (+ clear, seed-from-examples)
+# /api/votes (+ clear)
 # ---------------------------------------------------------------------------
 
 
@@ -209,19 +207,6 @@ class VotesResponseSchema(Schema):
         values=fields.List(fields.Float()),
         required=True,
     )
-
-
-class SeedFromExamplesRequestSchema(Schema):
-    """Body for ``POST /api/votes/seed-from-examples``."""
-
-    examples = fields.List(fields.Dict(), required=True)
-
-
-class SeedFromExamplesResponseSchema(Schema):
-    """Response for ``POST /api/votes/seed-from-examples``."""
-
-    seeded = fields.Integer(required=True)
-    skipped = fields.Integer(required=True)
 
 
 # ---------------------------------------------------------------------------
@@ -332,8 +317,6 @@ __all__ = [
     "LearnedSortResponseSchema",
     "LearnedSortResultQuerySchema",
     "OkResponseSchema",
-    "SeedFromExamplesRequestSchema",
-    "SeedFromExamplesResponseSchema",
     "SortPageQuerySchema",
     "SortPageResponseSchema",
     "SortRequestSchema",

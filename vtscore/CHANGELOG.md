@@ -10,6 +10,23 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **The Toponymy signpost fit counts the library warnings it suppresses**
+  (issue #3512). `signpost_build` keeps Toponymy's per-topic naming warnings
+  off the CLI (issue #2558), but it used to `filterwarnings("ignore")` them,
+  which discarded the count along with the output — nothing anywhere could
+  tell zero warnings from a flood, so a library bump that re-broke the
+  `KeyphraseNamer` prompt parse (fixed in issue #2567) would have surfaced
+  only as an unexplained slow build. The fit now tallies them and logs one
+  line when it returns (`warning` level when the count is non-zero or a topic
+  fell back to the literal name `"unnamed"`, `debug` otherwise), with the
+  per-message breakdown and the disambiguation-pass count. Other modules'
+  warnings still reach `showwarning` untouched, exactly as before.
+
+  `make_keyphrase_namer(on_name=None, counts=None)` gained the optional
+  second parameter — a `Counter` the namer tallies its `"named"` /
+  `"unnamed"` / `"disambiguation"` calls into. Purely additive; existing
+  callers are unaffected.
+
 - **All four `autodetect_*_main` entry points accept `stream_results` and
   `keep_negatives`** (issue #3432). The two keyword-only flags used to exist
   only on the chunked pair, so a whole-dataset run had no way to hand a
@@ -76,6 +93,43 @@ instead, since every commit on `dev` is effectively a new app release.)
   `loaded_backbone()` instead.
 
 ### Changed
+
+- **`vtscore.training.evt_mixture` moved to `vtscore.eval.evt_mixture`** (issue
+  #3396). The Gumbel/Normal score mixture is a research arm from the #2836 /
+  #2846 cut studies, not a shipped threshold rule: nothing in the app or the
+  library's production path fits a Gumbel, and its only consumers are the eval
+  harness's cut families and the calibration studies under
+  `scripts/experiments/calibration/`. Sitting in `vtscore/training/` put it
+  beside the `thresholds/` package that *is* offered to library consumers, with
+  nothing to tell the two apart.
+
+  **For library consumers:** this is a breaking move of a module path, taken
+  deliberately rather than shimmed. `GumbelNormalFit1D`,
+  `fit_gumbel_normal_mixture_state`, `gaussian_mixture_mean_loglik`,
+  `CROSSING_REASONS` and the rest are unchanged and keep their names; only the
+  module they live in changed, so an importer updates one line. There is no
+  re-export at the old path on purpose: `vtscore.training` importing from
+  `vtscore.eval` would invert the package layering and drag the eval package's
+  matplotlib import into the training tier. The Gaussian threshold rules that
+  production actually ships (`vtscore.training.thresholds`) are untouched.
+
+- **A broken `vtscore.datasets` install now fails loudly instead of silently
+  disabling origin resolution** (issue #3397).
+  `vtscore.detectors.resolver` used to defer its imports of
+  `vtscore.datasets.sources` / `vtscore.datasets.importers` into a first-use
+  auto-wire step wrapped in `except ImportError: pass`. Because both packages
+  ship in this same distribution, that `except` could only ever fire on a
+  genuinely broken install - and when it did, the module carried on with *no*
+  resolvers registered, so every label silently failed to resolve and the only
+  symptom was an "N of M labels resolved" warning. Both imports are now
+  module-level, and the defaults are bound at import time rather than on first
+  use, so the underlying `ImportError` reaches the caller with its real
+  traceback.
+
+  **For library consumers:** `register_source_resolver`,
+  `register_importer_resolver`, `SourceResolver` and `ImporterResolver` are
+  unchanged, and a registered resolver still replaces the default. The only
+  visible difference is *when* an already-fatal misconfiguration surfaces.
 
 - **`vtscore.config` is now a package, not a single module** (issue #3375). The
   933-line file is split into `paths`, `runtime`, `models`, `device`,

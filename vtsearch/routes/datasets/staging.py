@@ -18,7 +18,6 @@ in the plan doc.
 """
 
 import gc
-import threading
 import time
 import traceback
 from collections.abc import Callable
@@ -50,7 +49,6 @@ from vtsearch.routes._shared import (
     abort_if_semantic_only_embedders,
     get_plugin_or_404,
     plugin_field_options,
-    register_plugin_typed_routes,
     validate_plugin_args,
 )
 from vtsearch.routes.datasets._helpers import _extract_clipper_params
@@ -69,6 +67,7 @@ from vtsearch.schemas.datasets import (
     ImporterSuggestedNameResponseSchema,
 )
 from vtsearch.state import get_active_context, snapshot_medias
+from vtsearch.threading import spawn
 from vtscore.security.pickle import peek_pickle_dataset_summary
 
 datasets_staging_bp = Blueprint(
@@ -373,7 +372,14 @@ def _promote_in_background(
             gc.collect()
             loading_tasks.mark_finished(task_id)
 
-    worker = threading.Thread(target=task, daemon=True)
+    # ``spawn`` (not a bare ``threading.Thread``) so the task body inherits the
+    # request's user / dataset / detector thread-locals; ``created_by`` is
+    # re-asserted inside ``task`` because the promote is attributed to whoever
+    # asked for it, not to whichever thread happened to call this helper.
+    # Registered before the thread starts so a cancel arriving in the same
+    # instant can tell "not started yet" from "nothing here"; see
+    # ``LoadingTasksTracker.set_worker``.
+    worker = spawn(task, name=f"ds-promote-{task_id[-8:]}", start=False)
     loading_tasks.set_worker(task_id, worker)
     worker.start()
     return task_id
@@ -543,7 +549,11 @@ def stage_file():
 def stage_import(importer_name: str):
     """Run a registered importer in staging mode.
 
-    Plugin-dependent body shape: not described in the OpenAPI spec.
+    Plugin-dependent body shape: the accepted keys are the named
+    plugin's declared ``fields``, so they cannot be enumerated in a
+    static OpenAPI schema.  Fetch them at runtime from
+    ``GET /api/dataset/importers``, whose ``fields`` array carries each key's
+    ``field_type``, ``required`` flag, and any ``options`` / bounds.
     """
     importer, err = get_plugin_or_404(get_importer, list_importers, importer_name, "importer")
     if err:
@@ -676,7 +686,11 @@ def importer_suggested_name(body: dict, importer_name: str):
 def import_dataset(importer_name: str):
     """Run a registered importer by name in a background thread.
 
-    Plugin-dependent body shape: not described in the OpenAPI spec.
+    Plugin-dependent body shape: the accepted keys are the named
+    plugin's declared ``fields``, so they cannot be enumerated in a
+    static OpenAPI schema.  Fetch them at runtime from
+    ``GET /api/dataset/importers``, whose ``fields`` array carries each key's
+    ``field_type``, ``required`` flag, and any ``options`` / bounds.
     """
     importer, err = get_plugin_or_404(get_importer, list_importers, importer_name, "importer")
     if err:
@@ -715,42 +729,3 @@ def import_dataset(importer_name: str):
 
     task_id = _run_importer_in_background(importer, field_values)
     return jsonify({"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""})
-
-
-# ---------------------------------------------------------------------------
-# Per-plugin typed routes for /api/dataset/import/<name> and /api/dataset/
-# stage-import/<name>.  Registered at module-import time by iterating the
-# importer registry, so each known importer gets a static URL whose body
-# schema is described in /api/openapi.json with real per-field types.
-# Unknown importer names fall through to the parameterized routes above
-# (preserving the legacy 404 message that names the unknown importer).
-# Plugins with file fields stay on the parameterized fallback (multipart
-# bodies aren't usefully described by the generic plugin schema).
-# ---------------------------------------------------------------------------
-
-register_plugin_typed_routes(
-    datasets_staging_bp,
-    list_plugins=list_importers,
-    path_template="/api/dataset/import/{plugin_name}",
-    endpoint_prefix="import_dataset",
-    delegate=import_dataset,
-    extra_keys=(
-        "source_specs",
-        "clipper",
-        "cleaners",
-        "embedder",
-        "embedders",
-        "dataset_name",
-        "clipper_params",
-        "build_projection",
-        "merge_near_duplicates",
-    ),
-)
-register_plugin_typed_routes(
-    datasets_staging_bp,
-    list_plugins=list_importers,
-    path_template="/api/dataset/stage-import/{plugin_name}",
-    endpoint_prefix="stage_import",
-    delegate=stage_import,
-    extra_keys=("source_specs", "dataset_name"),
-)

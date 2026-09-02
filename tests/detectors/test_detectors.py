@@ -2109,7 +2109,21 @@ class TestSeedVotesFromExamples:
         dest.write_bytes(media_bytes)
         return filename
 
-    # ---- POST /api/votes/seed-from-examples ----
+    def _seed(self, client, examples) -> int:
+        """Seed *examples*, returning how many became good votes.
+
+        Calls the seeding entry point directly, the way the detector-load
+        path does. ``seed_good_votes_from_examples`` resolves the per-user
+        ``example_media/`` directory from the request context, so a cheap
+        request is made first to leave one on the stack (the Flask test
+        client preserves it after the response).
+        """
+        from vtscore.detectors.media_seeding import seed_good_votes_from_examples
+
+        client.get("/api/auth/status")
+        return seed_good_votes_from_examples(examples)
+
+    # ---- vtscore.detectors.media_seeding.seed_good_votes_from_examples ----
 
     def test_seed_endpoint_adds_good_votes(self, client):
         """Media examples whose MD5 matches a loaded media should become good votes."""
@@ -2124,67 +2138,16 @@ class TestSeedVotesFromExamples:
 
         fname = self._create_example_file(media_bytes, "seed_test.wav")
 
-        res = client.post(
-            "/api/votes/seed-from-examples",
-            json={"examples": [{"type": "media", "value": fname}]},
-        )
-        assert res.status_code == 200
-        data = res.get_json()
-        assert data["seeded"] == 1
-        assert data["skipped"] == 0
+        assert self._seed(client, [{"type": "media", "value": fname}]) == 1
         assert first_id in good_votes
 
     def test_seed_skips_text_examples(self, client):
         """Text examples should be skipped (only media examples are seeded)."""
-        res = client.post(
-            "/api/votes/seed-from-examples",
-            json={"examples": [{"type": "text", "value": "dog barking"}]},
-        )
-        assert res.status_code == 200
-        data = res.get_json()
-        assert data["seeded"] == 0
-        assert data["skipped"] == 1
+        assert self._seed(client, [{"type": "text", "value": "dog barking"}]) == 0
 
     def test_seed_skips_nonexistent_file(self, client):
         """A media example whose file doesn't exist should be skipped."""
-        res = client.post(
-            "/api/votes/seed-from-examples",
-            json={"examples": [{"type": "media", "value": "no_such_file.wav"}]},
-        )
-        assert res.status_code == 200
-        data = res.get_json()
-        assert data["seeded"] == 0
-        assert data["skipped"] == 1
-
-    def test_seed_disk_sync_failure_surfaces_as_500(self, client, monkeypatch):
-        """H30 regression: ``os.replace`` failures inside the detector store
-        write must surface as a clear 500 instead of bubbling as a generic
-        unhandled exception.  Mirrors the C11 guard in
-        ``fill_labels_from_sort``.
-        """
-        import json as _json
-
-        if not medias:
-            pytest.skip("No medias loaded")
-
-        first_id = next(iter(medias))
-        media = medias[first_id]
-        fname = self._create_example_file(media["media_bytes"], "seed_h30.wav")
-
-        from vtscore.detectors import label_sync
-
-        def _boom() -> None:
-            raise OSError("disk full")
-
-        monkeypatch.setattr(label_sync, "sync_labels_to_loaded_detector", _boom)
-
-        res = client.post(
-            "/api/votes/seed-from-examples",
-            json={"examples": [{"type": "media", "value": fname}]},
-        )
-        assert res.status_code == 500
-        body = _json.dumps(res.get_json() or {})
-        assert "disk full" in body or "persist seeded votes" in body
+        assert self._seed(client, [{"type": "media", "value": "no_such_file.wav"}]) == 0
 
     def test_seed_unmatched_inserts_new_media(self, client):
         """A media example not in the dataset should be embedded and inserted as a new media."""
@@ -2195,13 +2158,7 @@ class TestSeedVotesFromExamples:
         # Create a file whose content differs from all loaded medias
         fname = self._create_example_file(b"novel-example-content", "novel.wav")
 
-        res = client.post(
-            "/api/votes/seed-from-examples",
-            json={"examples": [{"type": "media", "value": fname}]},
-        )
-        assert res.status_code == 200
-        data = res.get_json()
-        assert data["seeded"] == 1
+        assert self._seed(client, [{"type": "media", "value": fname}]) == 1
 
         # A new media should have been inserted
         assert len(medias) == original_count + 1
@@ -2228,10 +2185,7 @@ class TestSeedVotesFromExamples:
         original_origin_name = media.get("origin_name", "")
 
         fname = self._create_example_file(media["media_bytes"], "origin_test.wav")
-        client.post(
-            "/api/votes/seed-from-examples",
-            json={"examples": [{"type": "media", "value": fname}]},
-        )
+        self._seed(client, [{"type": "media", "value": fname}])
 
         # Origin should be unchanged
         assert medias[first_id].get("origin") == original_origin
@@ -2246,10 +2200,7 @@ class TestSeedVotesFromExamples:
         media = medias[first_id]
         fname = self._create_example_file(media["media_bytes"], "export_test.wav")
 
-        client.post(
-            "/api/votes/seed-from-examples",
-            json={"examples": [{"type": "media", "value": fname}]},
-        )
+        self._seed(client, [{"type": "media", "value": fname}])
 
         res = client.get("/api/labels/export")
         assert res.status_code == 200
@@ -2261,10 +2212,7 @@ class TestSeedVotesFromExamples:
         """A non-dataset example inserted by seeding should appear in label export."""
         fname = self._create_example_file(b"export-novel-bytes", "export_novel.wav")
 
-        client.post(
-            "/api/votes/seed-from-examples",
-            json={"examples": [{"type": "media", "value": fname}]},
-        )
+        self._seed(client, [{"type": "media", "value": fname}])
 
         res = client.get("/api/labels/export")
         assert res.status_code == 200
@@ -2290,12 +2238,7 @@ class TestSeedVotesFromExamples:
         fname = self._create_example_file(src.read_bytes(), "origin_novel.wav")
         origin = {"importer": "server_file", "params": {"path": str(src)}}
 
-        res = client.post(
-            "/api/votes/seed-from-examples",
-            json={"examples": [{"type": "media", "value": fname, "origin": origin}]},
-        )
-        assert res.status_code == 200
-        assert res.get_json()["seeded"] == 1
+        assert self._seed(client, [{"type": "media", "value": fname, "origin": origin}]) == 1
 
         new_id = max(medias.keys())
         assert new_id in good_votes
@@ -2315,11 +2258,7 @@ class TestSeedVotesFromExamples:
         fname = self._create_example_file(src.read_bytes(), "resolvable_cache.wav")
         origin = {"importer": "server_file", "params": {"path": str(src)}}
 
-        res = client.post(
-            "/api/votes/seed-from-examples",
-            json={"examples": [{"type": "media", "value": fname, "origin": origin}]},
-        )
-        assert res.get_json()["seeded"] == 1
+        assert self._seed(client, [{"type": "media", "value": fname, "origin": origin}]) == 1
 
         (example_media_dir() / fname).unlink()
         new_media = medias[max(medias.keys())]
@@ -2336,12 +2275,7 @@ class TestSeedVotesFromExamples:
         fname = "never_cached.wav"  # deliberately not written to example_media/
         origin = {"importer": "server_file", "params": {"path": str(src)}}
 
-        res = client.post(
-            "/api/votes/seed-from-examples",
-            json={"examples": [{"type": "media", "value": fname, "origin": origin}]},
-        )
-        assert res.status_code == 200
-        assert res.get_json()["seeded"] == 1
+        assert self._seed(client, [{"type": "media", "value": fname, "origin": origin}]) == 1
 
         new_id = max(medias.keys())
         assert new_id in good_votes
@@ -2354,11 +2288,7 @@ class TestSeedVotesFromExamples:
         fname = self._create_example_file(b"url-novel-bytes", "url_novel.wav")
         origin = {"importer": "url_download", "params": {"url": "https://x.test/bark.wav"}}
 
-        res = client.post(
-            "/api/votes/seed-from-examples",
-            json={"examples": [{"type": "media", "value": fname, "origin": origin}]},
-        )
-        assert res.get_json()["seeded"] == 1
+        assert self._seed(client, [{"type": "media", "value": fname, "origin": origin}]) == 1
         new_media = medias[max(medias.keys())]
         assert new_media["origin"] == origin
         assert new_media["origin_name"] == "https://x.test/bark.wav"
@@ -2373,11 +2303,7 @@ class TestSeedVotesFromExamples:
         fname = self._create_example_file(b"confined-novel-bytes", "confined_novel.wav")
         origin = {"importer": "server_file", "params": {"path": "/etc/passwd"}}
 
-        res = client.post(
-            "/api/votes/seed-from-examples",
-            json={"examples": [{"type": "media", "value": fname, "origin": origin}]},
-        )
-        assert res.get_json()["seeded"] == 1
+        assert self._seed(client, [{"type": "media", "value": fname, "origin": origin}]) == 1
         new_media = medias[max(medias.keys())]
         assert new_media["origin"] == {"importer": "example_media", "params": {"filename": fname}}
 
@@ -2447,10 +2373,7 @@ class TestSeedVotesFromExamples:
 
         # Seed a novel example as good
         fname = self._create_example_file(b"training-novel-bytes", "train_novel.wav")
-        client.post(
-            "/api/votes/seed-from-examples",
-            json={"examples": [{"type": "media", "value": fname}]},
-        )
+        self._seed(client, [{"type": "media", "value": fname}])
         assert len(good_votes) >= 1
 
         # Add a bad vote on the first dataset media so we have both good+bad
@@ -2586,14 +2509,7 @@ class TestSeedVotesFromExamples:
 
     def test_seed_directory_traversal_blocked(self, client):
         """Path traversal attempts in example filenames should be rejected."""
-        res = client.post(
-            "/api/votes/seed-from-examples",
-            json={"examples": [{"type": "media", "value": "../../etc/passwd"}]},
-        )
-        assert res.status_code == 200
-        data = res.get_json()
-        assert data["seeded"] == 0
-        assert data["skipped"] == 1
+        assert self._seed(client, [{"type": "media", "value": "../../etc/passwd"}]) == 0
 
 
 class TestLoadModelCrossDatasetResolution:

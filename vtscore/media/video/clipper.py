@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
-import math
 from typing import TYPE_CHECKING, Any
 
-from vtscore.media.clipper import MediaClipper
+from vtscore.media.clipper import (
+    DefaultClipper,
+    MediaClipper,
+    clip_with_bounds,
+    tile_starts,
+    tiling_parameters,
+    validate_tiling_params,
+)
 from vtscore.media.video import decode
 
 if TYPE_CHECKING:
@@ -19,27 +25,11 @@ _SCENE_SAMPLE_WIDTH = 320
 _SCENE_HIST_BINS = (50, 60)
 
 
-class VideoDefaultClipper(MediaClipper):
+class VideoDefaultClipper(DefaultClipper):
     """Returns the video media unchanged."""
 
-    @property
-    def name(self) -> str:
-        return "video_default"
-
-    @property
-    def display_name(self) -> str:
-        return "None"
-
-    @property
-    def media_type(self) -> str:
-        return "video"
-
-    @property
-    def description(self) -> str:
-        return "Import each video as-is, without splitting."
-
-    def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
-        return [media]
+    def __init__(self) -> None:
+        super().__init__("video_default", "video", "Import each video as-is, without splitting.")
 
 
 class VideoTilingClipper(MediaClipper):
@@ -64,12 +54,7 @@ class VideoTilingClipper(MediaClipper):
     """
 
     def __init__(self, duration: float, min_overlap: float = 0.0) -> None:
-        if duration <= 0:
-            raise ValueError("duration must be positive")
-        if min_overlap < 0:
-            raise ValueError("min_overlap must be non-negative")
-        if min_overlap >= duration:
-            raise ValueError("min_overlap must be less than duration")
+        validate_tiling_params(duration, min_overlap)
         self._duration = duration
         self._min_overlap = min_overlap
 
@@ -104,48 +89,12 @@ class VideoTilingClipper(MediaClipper):
         if total <= seg:
             return [media]
 
-        max_stride = seg - self._min_overlap
-        n_tiles = max(1, math.ceil((total - seg) / max_stride) + 1)
-        if n_tiles == 1:
-            starts = [0.0]
-        else:
-            starts = [i * (total - seg) / (n_tiles - 1) for i in range(n_tiles)]
-
-        results: list[dict[str, Any]] = []
-        for idx, t0 in enumerate(starts):
-            t1 = t0 + seg
-            tile = dict(media)
-            tile["duration"] = round(t1 - t0, 6)
-            tile["clip_index"] = idx
-            tile["clip_start"] = round(t0, 6)
-            tile["clip_end"] = round(t1, 6)
-            results.append(tile)
-        return results
+        starts = tile_starts(total, seg, self._min_overlap)
+        return [clip_with_bounds(media, idx, t0, t0 + seg) for idx, t0 in enumerate(starts)]
 
     @property
     def parameters(self) -> list[dict[str, Any]]:
-        return [
-            {
-                "key": "duration",
-                "label": "Clip length (seconds)",
-                "description": "Duration of each video segment in seconds.",
-                "type": "number",
-                "default": self._duration,
-                "min": 0.1,
-                "max": 300,
-                "step": 0.1,
-            },
-            {
-                "key": "min_overlap",
-                "label": "Minimum overlap (seconds)",
-                "description": "Minimum overlap between consecutive segments. Higher values produce more tiles.",
-                "type": "number",
-                "default": self._min_overlap,
-                "min": 0,
-                "max": 299.9,
-                "step": 0.1,
-            },
-        ]
+        return tiling_parameters(self._duration, self._min_overlap, item_label="video segment")
 
     def with_params(self, params: dict[str, Any]) -> "VideoTilingClipper":
         duration = float(params.get("duration", self._duration))
@@ -445,12 +394,8 @@ class VideoSceneClipper(MediaClipper):
 
             results: list[dict[str, Any]] = []
             for idx, (t0, t1) in enumerate(zip(starts, ends)):
-                scene = dict(media)
-                scene["duration"] = round(t1 - t0, 6)
-                scene["clip_index"] = idx
+                scene = clip_with_bounds(media, idx, t0, t1)
                 scene["scene_index"] = idx
-                scene["clip_start"] = round(t0, 6)
-                scene["clip_end"] = round(t1, 6)
                 results.append(scene)
             return results
         finally:
