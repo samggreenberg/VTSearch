@@ -9,7 +9,7 @@ from vtscore.config import DATA_DIR
 NUM_MEDIAS = 20
 from vtscore.embedding import embed_audio_file
 from vtscore.media import embedders_for_type
-from vtsearch.state import medias
+from vtscore.state.core import get_active_context
 from vtscore.utils.hashing import content_md5
 
 #: The audio media type's default embedder, resolved from the registry rather
@@ -57,6 +57,12 @@ def init_medias():
     DATA_DIR.mkdir(exist_ok=True)
     temp_path = DATA_DIR / f"temp_embed{_worker_suffix()}.wav"
     thumbnail = _fake_waveform_thumbnail()
+
+    # Resolved here rather than imported as a module-level name: the app tier's
+    # ``vtsearch.state.medias`` is a lazily-resolving proxy, and importing it
+    # would make this file (which both tiers share byte-for-byte) reach across
+    # the tier boundary that ``tests_lib/`` exists to keep clean.
+    medias = get_active_context().medias
 
     for i in range(1, NUM_MEDIAS + 1):
         freq = 200 + (i - 1) * 50  # 200 Hz .. 1150 Hz

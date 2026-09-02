@@ -34,14 +34,14 @@ rebuild canary checked `COCO_IMAGES` while the builder opened `val2017.zip`
 inline, and reported `coco_val` REBUILD-BROKEN against a staging area that was
 entirely intact. A new dataset kind therefore adds one module carrying both, and
 a kind with no module fails at dispatch instead of falling through to the demo
-loader. `tests_lib/core/test_pile_loaders.py` pins that.
+loader. `tests_lib/meta/test_pile_loaders.py` pins that.
 
 The `vg_scale` build is six named passes rather than one long function, because
 two of them are where this pile's expensive bugs have lived — `apply_corrections`
 (the single normalised→pixel crossing, #3281) and `designate_cells` (whether a
 rebuild keeps the images a human reviewed). Both are ordinary functions taking
 what they read and returning what they produce, so
-`tests_lib/core/test_pile_vg_scale.py` exercises them without the VG source.
+`tests_lib/meta/test_pile_vg_scale.py` exercises them without the VG source.
 
 ## Why this exists
 

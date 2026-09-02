@@ -364,7 +364,7 @@ class TestInitializeModelsProgress:
         """Without an ``on_progress`` callback (tests/eval CLI), nothing prints."""
         with (
             patch("vtscore.embedding.loader._warm_threadpool_controller"),
-            patch("vtsearch.logging_config.install_transformers_logging_bridge"),
+            patch("vtscore.embedding.loader._install_transformers_logging_bridge"),
         ):
             initialize_models()
 
@@ -379,7 +379,7 @@ class TestInitializeModelsProgress:
 
         with (
             patch("vtscore.embedding.loader._warm_threadpool_controller"),
-            patch("vtsearch.logging_config.install_transformers_logging_bridge"),
+            patch("vtscore.embedding.loader._install_transformers_logging_bridge"),
         ):
             initialize_models(on_progress=cb)
 
@@ -391,7 +391,7 @@ class TestInitializeModelsProgress:
         """With a callback, both import steps render completed console bars."""
         with (
             patch("vtscore.embedding.loader._warm_threadpool_controller"),
-            patch("vtsearch.logging_config.install_transformers_logging_bridge"),
+            patch("vtscore.embedding.loader._install_transformers_logging_bridge"),
         ):
             initialize_models(on_progress=lambda *a, **kw: None)
 

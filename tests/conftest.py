@@ -146,7 +146,7 @@ def reset_state():
 
     clear_all_autorun()
 
-    reset_shared_state(medias, _test_medias_snapshot)
+    reset_shared_state(_test_medias_snapshot)
 
     _set_login_provider(_DefaultLoginProvider())
 

@@ -7,7 +7,7 @@
 # GPU at inference time.
 # The two share requirements/image-embedders.txt (each passes its own
 # --extra-index-url) and a byte-identical BEGIN/END SHARED BODY region
-# below, checked by tests_lib/core/test_image_embedders_pair.py.
+# below, checked by tests_lib/meta/test_image_embedders_pair.py.
 #
 # Embedders bundled (identical to the CPU image):
 #
@@ -111,7 +111,7 @@ RUN pip install --no-cache-dir --upgrade pip setuptools && \
 # Everything between these two markers is byte-identical in
 # docker/Dockerfile.image-embedders and docker/Dockerfile.image-embedders.gpu.
 # Docker has no include directive, so the copy is enforced instead of avoided:
-# tests_lib/core/test_image_embedders_pair.py fails the suite the moment the two
+# tests_lib/meta/test_image_embedders_pair.py fails the suite the moment the two
 # regions diverge. The files differ only OUTSIDE this region -- the base image
 # (plus the apt layer CUDA needs), the PyTorch wheel index passed to pip, and
 # the NVIDIA runtime env. Edit one, paste into the other.
