@@ -27,7 +27,6 @@ from flask_smorest import Blueprint, abort
 from vtsearch.routes._shared import (
     format_exception_detail,
     get_embedder_for_medias,
-    require_dataset_header,
     require_detector_header,
     windowed_sort_response,
 )
@@ -45,8 +44,6 @@ from vtsearch.schemas.sorting import (
     LearnedSortResponseSchema,
     LearnedSortResultQuerySchema,
     OkResponseSchema,
-    SeedFromExamplesRequestSchema,
-    SeedFromExamplesResponseSchema,
     SortPageQuerySchema,
     SortPageResponseSchema,
     SortRequestSchema,
@@ -573,55 +570,6 @@ def clear_votes_route():
 
     clear_votes()
     return {"ok": True}
-
-
-@sorting_bp.route("/api/votes/seed-from-examples", methods=["POST"])
-@sorting_bp.arguments(SeedFromExamplesRequestSchema)
-@sorting_bp.response(200, SeedFromExamplesResponseSchema)
-@require_dataset_header
-@require_detector_header
-def seed_votes_from_examples(body: dict):
-    """Seed good votes from a model's media examples.
-
-    For each ``type: "media"`` example, reads the file from the current
-    user's ``example_media/`` directory, computes its MD5, and either marks
-    the matching loaded media as Good, or (if the example is new) embeds it,
-    inserts it into the ``medias`` dict, and votes it Good.
-
-    Returns::
-
-        {"seeded": 2, "skipped": 1}
-    """
-    from vtscore.detectors.media_seeding import seed_good_votes_from_examples
-
-    examples = body["examples"]
-
-    seeded = seed_good_votes_from_examples(examples)
-    skipped = len(examples) - seeded
-
-    if seeded > 0:
-        # Surface persistence failures explicitly instead of letting them
-        # bubble as an uncaught 500; same C11/H30 pattern as
-        # ``fill_labels_from_sort`` and ``vote_media``.  Without this, an
-        # ``os.replace`` failure inside ``_write_detector`` would leave the
-        # in-memory good votes committed while the on-disk labelset stayed
-        # untouched, with no signal to the client beyond a generic 500.
-        from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
-
-        try:
-            sync_labels_to_loaded_detector()
-        except Exception as exc:
-            logging.getLogger(__name__).exception("seed_votes_from_examples: detector label sync failed")
-            abort(500, message=f"Failed to persist seeded votes to detector store: {exc}")
-
-        from vtscore.labels.sync import sync_to_labelset_source
-
-        try:
-            sync_to_labelset_source()
-        except Exception:
-            logging.getLogger(__name__).exception("seed_votes_from_examples: labelset source scheduling failed")
-
-    return {"seeded": seeded, "skipped": skipped}
 
 
 @sorting_bp.route("/api/textsort-suggestions", methods=["GET"])

@@ -19,22 +19,50 @@ from flask import g
 
 from vtsearch.logging_config import new_request_id
 
-# Endpoints whose handlers never read the dataset/detector proxies do not
-# need the lock-taking state-sync in `_set_request_context` below. Keeping
-# them off `_state_lock` stops a high-frequency poll (e.g. the jobs/active
-# spinner feed) from piling up behind a long lock-holder and exhausting
-# the worker's threads (2026-06-19: one stuck job parked 23 threads on
-# the futex and froze the whole UI).
-#
-# `/api/events` is the SSE progress stream: a long-lived, read-only request
-# that only subscribes to the *global* progress trackers and yields their
-# snapshots. It needs no per-request vote rehydration, and gating it on
-# `_state_lock` is self-defeating — while a long Find/load holds the worker
-# busy, the EventSource's reconnect would block in this hook on the very
-# lock the long job contends, so progress events never reach the client and
-# the bar sits indeterminate. Exempting it keeps progress flowing during
-# exactly the long operations the bar exists to report.
-_STATE_SYNC_EXEMPT_PREFIXES = ("/api/jobs/active", "/api/events")
+#: Attribute stamped on a view function by :func:`state_sync_exempt`.
+_STATE_SYNC_EXEMPT_ATTR = "_vts_state_sync_exempt"
+
+
+def state_sync_exempt(view):
+    """Mark ``view`` as not needing the lock-taking per-request state sync.
+
+    A view whose handler never reads the dataset/detector proxies does not
+    need the rehydration :func:`_set_request_context` performs, and keeping
+    it off ``_state_lock`` stops a high-frequency poll (e.g. the jobs/active
+    spinner feed) from piling up behind a long lock-holder and exhausting the
+    worker's threads (2026-06-19: one stuck job parked 23 threads on the
+    futex and froze the whole UI).
+
+    The marker lives on the **view function** rather than in a URL-prefix
+    list next to the hook, so renaming a route cannot silently drop its
+    exemption — which would reintroduce exactly the hang the exemption
+    exists to prevent, with no test or type error to catch it.
+
+    Apply it directly beneath the ``@bp.route`` decorator so it stamps the
+    fully-wrapped view that gets registered::
+
+        @bp.route("/api/jobs/active")
+        @state_sync_exempt
+        @bp.response(200, Schema)
+        def active_jobs(): ...
+
+    (Both orderings work in practice — ``functools.wraps`` copies
+    ``__dict__`` — but stamping the outermost wrapper does not depend on
+    every intervening decorator being well-behaved.)
+    """
+    setattr(view, _STATE_SYNC_EXEMPT_ATTR, True)
+    return view
+
+
+def _is_state_sync_exempt() -> bool:
+    """Whether the matched view opted out of the lock-taking state sync."""
+    from flask import current_app, request
+
+    endpoint = request.endpoint
+    if not endpoint:
+        # No URL rule matched (404s, static misses): nothing to exempt.
+        return False
+    return getattr(current_app.view_functions.get(endpoint), _STATE_SYNC_EXEMPT_ATTR, False)
 
 
 def _set_request_id():
@@ -206,8 +234,9 @@ def _set_request_context():
     # logical-bug-audit H5.
     # Skip the lock-taking state-sync for endpoints whose handlers never
     # read the proxies (e.g. the jobs/active spinner poll), so a frequent
-    # poll cannot queue on `_state_lock` behind a long-running job.
-    if not request.path.startswith(_STATE_SYNC_EXEMPT_PREFIXES):
+    # poll cannot queue on `_state_lock` behind a long-running job. The
+    # opt-out is a `@state_sync_exempt` marker on the view itself.
+    if not _is_state_sync_exempt():
         try:
             from vtscore.detectors.dataset_sync import (
                 ensure_detector_model_matches_active_embedder,

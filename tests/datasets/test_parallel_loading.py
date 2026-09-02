@@ -394,20 +394,6 @@ class TestImportEndpointsReturnTaskId:
         assert data["ok"] is True
         assert data["task_id"] == "test_task_123"
 
-    def test_load_folder_returns_task_id(self, client, tmp_path):
-        folder = tmp_path / "test_folder"
-        folder.mkdir()
-        (folder / "test.wav").write_bytes(b"fake")
-
-        with mock.patch("vtsearch.routes.datasets.load._run_importer_in_background", return_value="folder_task"):
-            resp = client.post(
-                "/api/dataset/load-folder",
-                json={"path": str(folder), "media_type": "audio"},
-            )
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert data["task_id"] == "folder_task"
-
 
 # ---------------------------------------------------------------------------
 # Parallel load integration test

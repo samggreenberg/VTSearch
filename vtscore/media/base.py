@@ -247,8 +247,8 @@ class MediaType(ABC):
     * Which demo datasets are available (:attr:`demo_datasets`).
     * How to serve a media over HTTP (:meth:`media_response`).
     * How to load media-specific media fields from a file (:meth:`load_media_data`).
-    * An optional folder-import alias (:attr:`folder_import_name`) for the
-      ``/api/dataset/load-folder`` endpoint.
+    * An optional folder-import alias (:attr:`folder_import_name`) naming
+      this type in a folder import.
 
     Embedding is handled by :class:`~vtscore.media.embedder.MediaEmbedder`
     objects, which are registered separately.  A media type may have zero,
@@ -353,8 +353,10 @@ class MediaType(ABC):
 
     @property
     def folder_import_name(self) -> str:
-        """Alias used by the ``/api/dataset/load-folder`` endpoint.
+        """Alias naming this media type in a folder import.
 
+        This is the ``media_type`` value the ``server_folder`` / ``server_files``
+        importers accept and :func:`~vtscore.media.get_by_folder_name` resolves.
         Defaults to :attr:`type_id`.  Legacy plural names (e.g. ``"sounds"``,
         ``"videos"``) are accepted via the alias map in ``vtscore.media``.
         """
