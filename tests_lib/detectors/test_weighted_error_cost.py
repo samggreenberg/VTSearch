@@ -7,7 +7,7 @@ harness's window scorer
 independent hand copies of the same FP/FN counting loop, with nothing in
 ``scripts/check-eval-app-sync.py`` pinning them together.  Both now delegate to
 :func:`vtscore.training.thresholds.weighted_error_cost`, so the parity test
-below is a check on the *plumbing* rather than on two arithmetics staying in
+below is a check on the *plumbing* rather than on two copies of the arithmetic staying in
 step - which is the point: a delegation cannot drift.
 """
 
@@ -65,9 +65,7 @@ class TestWeightedErrorCost:
         for k in (-3, 0, 1, 5):
             wf, wn = inclusion_cost_weights(k)
             for thr in (0.0, 0.25, 0.5, 0.9, 1.5):
-                assert operating_cost(scores, labels, thr, wf, wn) == weighted_error_cost(
-                    scores, labels, thr, wf, wn
-                )
+                assert operating_cost(scores, labels, thr, wf, wn) == weighted_error_cost(scores, labels, thr, wf, wn)
 
 
 class TestAppAndHarnessScoreAlike:
@@ -105,7 +103,9 @@ class TestAppAndHarnessScoreAlike:
         clips = self._clips(values)
         threshold = 0.5
 
-        harness = _labelset_error_costs([(StepModel(predict, net, "test", "cpu"), threshold)], good, bad, clips, inclusion)
+        harness = _labelset_error_costs(
+            [(StepModel(predict, net, "test", "cpu"), threshold)], good, bad, clips, inclusion
+        )
 
         eval_set = _build_eval_set(clips, good, bad)
         assert eval_set is not None
