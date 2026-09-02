@@ -5,8 +5,10 @@ by detector route handlers and test helpers.
 
 This module also holds the vote-aware detector training entry points -
 :func:`train_and_score` (online, called every time the user toggles a
-vote) and :func:`train_detector_from_origins` (load-time, called when
-re-deriving an MLP from a saved labelset). Both build on the generic
+vote) and :func:`train_detector_from_origins` (the **library-tier**
+re-derivation of an MLP from a saved labelset, for embedders driving
+``vtscore`` directly; the app does not call it - see that function's
+"Who calls this" note). Both build on the generic
 :mod:`vtscore.training` primitives but layer in the patch-region max-
 pool and origin-based file resolution that are detector-specific.
 """
@@ -1326,6 +1328,18 @@ def train_detector_from_origins(
     This is the load-time counterpart of file-based detector export: given
     the origin lists that were saved to disk, it re-derives the head weights
     by resolving the original media files, embedding them, and training.
+
+    **Who calls this: library consumers, not the app.**  Nothing in
+    ``vtsearch`` reaches here.  The app re-derives a saved detector through
+    ``POST /api/detectors/registry/load`` ->
+    :func:`vtscore.detectors.labelset_training.train_from_labelset` ->
+    :func:`train_and_threshold`, which is handed the active dataset's medias
+    as a haystack and therefore ships the **fold-anchored** cut, exactly as a
+    freshly trained detector does (pinned by
+    ``tests/detectors/test_load_time_threshold_provenance.py``).  So the plain
+    cross-calibration cut below is what a *library* caller with no haystack
+    gets - it is not the threshold a resumed VTSearch session starts on
+    (issue #3257, evaluated and closed unrun).
 
     Args:
         good_origins: Origin dicts for media labelled Good.
