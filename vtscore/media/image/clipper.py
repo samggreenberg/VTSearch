@@ -6,31 +6,15 @@ import io
 import math
 from typing import Any, Optional
 
-from vtscore.media.clipper import MediaClipper
+from vtscore.media.clipper import DefaultClipper, MediaClipper
 from vtscore.utils.optional_deps import agpl_import_error
 
 
-class ImageDefaultClipper(MediaClipper):
+class ImageDefaultClipper(DefaultClipper):
     """Returns the image media unchanged."""
 
-    @property
-    def name(self) -> str:
-        return "image_default"
-
-    @property
-    def display_name(self) -> str:
-        return "None"
-
-    @property
-    def media_type(self) -> str:
-        return "image"
-
-    @property
-    def description(self) -> str:
-        return "Import each image as-is, without splitting."
-
-    def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
-        return [media]
+    def __init__(self) -> None:
+        super().__init__("image_default", "image", "Import each image as-is, without splitting.")
 
 
 class ImageTilingClipper(MediaClipper):
@@ -78,24 +62,18 @@ class ImageTilingClipper(MediaClipper):
         # bitmap would slice along the wrong axis.
         img = open_upright(io.BytesIO(media_bytes))
 
-        if width >= height:
-            # Landscape: tile along the x-axis.
-            long_axis = width
-            n_tiles = max(1, math.ceil(long_axis / tile_size))
-            if n_tiles == 1:
-                offsets = [0]
-            else:
-                offsets = [round(i * (long_axis - tile_size) / (n_tiles - 1)) for i in range(n_tiles)]
-            boxes = [(x, 0, x + tile_size, tile_size) for x in offsets]
+        # Tile along the longer axis: x for landscape, y for portrait.
+        landscape = width >= height
+        long_axis = width if landscape else height
+        n_tiles = max(1, math.ceil(long_axis / tile_size))
+        if n_tiles == 1:
+            offsets = [0]
         else:
-            # Portrait: tile along the y-axis.
-            long_axis = height
-            n_tiles = max(1, math.ceil(long_axis / tile_size))
-            if n_tiles == 1:
-                offsets = [0]
-            else:
-                offsets = [round(i * (long_axis - tile_size) / (n_tiles - 1)) for i in range(n_tiles)]
-            boxes = [(0, y, tile_size, y + tile_size) for y in offsets]
+            offsets = [round(i * (long_axis - tile_size) / (n_tiles - 1)) for i in range(n_tiles)]
+        if landscape:
+            boxes = [(d, 0, d + tile_size, tile_size) for d in offsets]
+        else:
+            boxes = [(0, d, tile_size, d + tile_size) for d in offsets]
 
         results: list[dict[str, Any]] = []
         fmt = img.format or "PNG"
