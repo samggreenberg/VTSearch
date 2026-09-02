@@ -262,17 +262,23 @@ def _report_admin_overrides() -> None:
     """Print every process-level admin restriction actually in force.
 
     Walks :data:`vtsearch.admin_overrides.OVERRIDES` and reports each knob
-    whose effective value is not the "nothing set" one, naming where it came
-    from -- the flag, the env var, or (when neither was given and the persisted
+    whose effective value is an actual restriction, naming where it came from
+    -- the flag, the env var, or (when neither was given and the persisted
     setting is doing the work) the settings key. An operator can then confirm
     from the startup log that the restriction they configured is live, however
     they configured it.
+
+    A knob still sitting at its shipped default is *not* reported: the banner
+    is a list of what makes this deployment unusual, so printing the built-in
+    support address on every boot would be noise.
     """
     from vtsearch import settings as _settings
+    from vtsearch.settings_models import ServerSettings, UserSettings
 
+    defaults = {**UserSettings().model_dump(), **ServerSettings().model_dump()}
     for override in admin_overrides.OVERRIDES.values():
         effective = _settings.get_effective_override(override.name)
-        if not effective:
+        if not effective or effective == defaults.get(override.persisted_getter.removeprefix("get_")):
             continue
         source = admin_overrides.override_source(override.name) or f"the {override.name} setting"
         print(
