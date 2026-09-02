@@ -45,13 +45,16 @@ describe('LabelViewComponent (zoneless dataset-name canary)', () => {
   });
 
   afterEach(() => {
-    fixture.componentInstance.ngOnDestroy();
-    // Drain the timer-driven pollers (labeling-status / votes) and any
-    // child-panel reads still in flight; cancelled requests can't be flushed.
+    // Destroy first: `fixture.destroy()` runs the component's own `ngOnDestroy`
+    // *and* destroys the component-provided `PairScopeService`, which is what
+    // cancels the in-flight pair-scoped requests (a bare `ngOnDestroy()` call no
+    // longer does). Then drain the timer-driven pollers (labeling-status /
+    // votes) and any child-panel reads still in flight; cancelled requests
+    // can't be flushed.
+    fixture.destroy();
     httpMock.match(() => true).forEach((req) => {
       if (!req.cancelled) req.flush([]);
     });
-    fixture.destroy();
   });
 
   // Drain label-view's init loads, holding back only the dataset-status
@@ -187,7 +190,12 @@ describe('LabelViewComponent', () => {
   }
 
   afterEach(async () => {
-    component.ngOnDestroy();
+    // Destroy first. This runs `ngOnDestroy`, tears down the component view +
+    // its child views (no template can be re-checked), disposes the component
+    // injector — with the medias/settings rxResource loaders bound to it — and
+    // destroys the component-provided `PairScopeService`, whose teardown is
+    // what cancels the in-flight pair-scoped requests.
+    fixture.destroy();
     // Kill the shared VoteStateService poll explicitly. Under zoneless (no
     // zone.js patching test timers) a leftover `timer(0, N)` poll keeps firing
     // real macrotasks across spec boundaries; once the TestBed injector is reset
@@ -196,17 +204,13 @@ describe('LabelViewComponent', () => {
     // Drain any outstanding polling requests from right-panel or label-view
     // (the timer-driven /api/votes and /api/labeling-status pollers, the
     // metadata-batch fetch from selectMedia, plus anything a test left in
-    // flight). ngOnDestroy unsubscribes the component's own streams,
+    // flight). The destroy above unsubscribed the component's own streams,
     // which cancels their in-flight requests; cancelled requests can't be
     // flushed, so skip them. Flush an empty array so the metadata-batch
     // handler (which iterates the body) doesn't choke on a non-iterable.
     httpMock.match(() => true).forEach(req => {
       if (!req.cancelled) req.flush([]);
     });
-    // Destroy the fixture so the component view + its child views are gone (no
-    // template can be re-checked) and the component injector — with the
-    // medias/settings rxResource loaders bound to it — is disposed.
-    fixture.destroy();
     // Drain one macrotask while the TestBed injector is still alive. Without
     // zone.js the framework no longer tracks the app's timers/microtasks, so the
     // SSE pollers' `timer(0, N)` first emissions and root-singleton rxResource
