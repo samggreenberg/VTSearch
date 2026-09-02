@@ -327,7 +327,10 @@ detector lifecycle (load labelset → re-derive embeddings → train) lives
 in `vtscore.detectors.training.train_detector_from_origins`; the caller
 must pass `embedder_name` so re-derivation uses the same embedder the
 detector was trained with, not whatever the media type's current default
-happens to be.
+happens to be. That helper has **no haystack**, so its threshold is the
+plain cross-calibration cut; pass the population through
+`train_and_threshold` when you have one, which is what the VTSearch app
+does on its own detector-load path.
 
 ## 7. Context
 
