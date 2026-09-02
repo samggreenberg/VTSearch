@@ -65,6 +65,7 @@ class TestResolverRegistration:
 
         origin = {"importer": "server_folder", "params": {"path": str(folder)}}
         with resolver_mod.resolve_file_context(origin, origin_name="thing.txt") as path:
+            assert path is not None
             assert path == fake_file, "registered resolver must win over the default"
             assert path.read_bytes() == b"fake"
 
