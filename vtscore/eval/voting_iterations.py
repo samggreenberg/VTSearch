@@ -3886,7 +3886,7 @@ def simulate_voting_iterations(  # noqa: C901
             ``inclusion + acq_inclusion_offset``, leaving reporting and every
             metric at *inclusion* so arms stay comparable.  Defaults to
             :data:`~vtscore.training.thresholds.ACQUISITION_INCLUSION_OFFSET`
-            (-3), **the shipped app behaviour** - the harness matches production
+            (-4), **the shipped app behaviour** - the harness matches production
             here as it does everywhere else, so a baseline arm measures what
             users get.  Pass ``0`` for the pre-#2876 control, where one threshold
             did both jobs.

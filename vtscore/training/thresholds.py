@@ -161,8 +161,8 @@ def inclusion_cost_weights(inclusion_value: float) -> tuple[float, float]:
 
     So ``k = 0`` is the neutral-evidence point (LR > 1: admit whatever the Good
     class explains better than the Bad class), and **each step of the knob is one
-    bit of evidence** - Good's *weight of evidence*, in base 2.  ``k = -3`` asks
-    for 8:1 evidence, ``k = +2`` accepts 4:1 against.  That is what makes the
+    bit of evidence** - Good's *weight of evidence*, in base 2.  ``k = -4`` asks
+    for 16:1 evidence, ``k = +2`` accepts 4:1 against.  That is what makes the
     knob portable across datasets and what makes the acquisition *offset* the
     right parameterisation: a constant shift in evidence-bits is prior-free,
     while the rank position it lands on is not.
@@ -188,10 +188,10 @@ def inclusion_cost_weights(inclusion_value: float) -> tuple[float, float]:
 #: weights: a *negative* offset prices false alarms higher, *raises* the cut,
 #: moves it *up* the ranking, and so returns *more* positives.
 #:
-#: ``-1`` is the only value that passes the pre-registered ship rule in **all
-#: **four** environments measured, and this constant is deliberately **not**
-#: gated by voting mode.  The history is worth keeping, because the value moved
-#: twice before it settled:
+#: ``-4`` is the value that passes the pre-registered ship rule in **every**
+#: environment measured on clean labels, and this constant is deliberately
+#: **not** gated by voting mode.  The history is worth keeping, because the
+#: value moved three times before it settled:
 #:
 #: * ``coco_val x siglip2`` (binary, PR #2876) found an interior optimum at
 #:   ``-3``: positives per 100 votes 4 -> 18, final cost 0.137 -> 0.129 (95% CI
@@ -202,15 +202,47 @@ def inclusion_cost_weights(inclusion_value: float) -> tuple[float, float]:
 #:   #2943 - see ``REPORT_REGION_VOTING.md``'s banner.
 #: * ``vg_scale_any`` (PR #3318, #2877 on the pile) measured three environments
 #:   at once, on **verified labels at 7.1% prevalence in every cell**, and
-#:   restores ``-3``.
+#:   restored ``-3`` - noting ``-4`` was at least as good on every endpoint but
+#:   sat at the edge of the grid with the trend unbroken.
+#: * **#3319 (PR #3454) extended the grid and shipped ``-4``**: 12 arms x 192
+#:   paired cells past ``-4`` and at half-step resolution, plus a 400-click wave
+#:   and a region cross-check.  4032 cells, 0 failures.
 #:
-#: **Why ``-3`` and not ``-1``.**  Against the shipped ``-1``, paired on the same
-#: cells, ``-3`` improves *every* endpoint at once on the shipped default arm
-#: (``siglip x whole_image``, 192 pairs): final cost **-0.020** (95% CI
-#: [-0.029, -0.011]), positives per 100 votes **11 -> 20**, AP **+0.045**, oracle
-#: cost -0.011, and deep-spike incidence unchanged at 0.0%.  It is not a trade.
-#: On ``siglip+dinov3_patch x max_patch`` (real region voting) ``-3`` is free:
-#: +12 positives, cost CI [-0.001, +0.010], no spike rise.
+#: **What this knob is worth is SPEED, and an endpoint cannot say so.**  Against
+#: no offset at all, the shipped cut reaches the answer ``k = 0`` ends its
+#: session with in **half the clicks** over a 100-click session (23.5 vs 47.5
+#: median) and **3.2x fewer** over a 400-click one (65.5 vs 210.5) - and the
+#: advantage *compounds* with session length: paired, running with no offset
+#: costs +17.1 clicks [+12.0, +21.8] at 100 and +101.1 [+82.7, +119.5] at 400.
+#: Every report on this constant before #3319 read it through ``final_cost``
+#: alone, which understated it.  Report a trajectory knob by its trajectory.
+#:
+#: **Why ``-4`` and not ``-3``, and how weak that case is.**  The decision
+#: endpoint is a **plateau**, not a peak: final cost, area under the cost curve
+#: and clicks-to-target are all flat from ``-2`` to ``-5``, on both horizons, and
+#: ``-3`` vs ``-4`` is a null on all three (cost -0.0015 [-0.0081, +0.0050];
+#: AUC -0.0044 [-0.0108, +0.0021]; clicks -1.2 [-4.8, +2.4]).  So the case for
+#: ``-4`` is **labelling efficiency alone** - hard-pick precision 24% -> 35%, and
+#: ~28 matches surfaced per 100 clicks instead of ~20 - and it is a product
+#: judgement about how much matches-surfaced-during-a-session are worth, not a
+#: quality or speed result.  ``-3`` was a defensible choice and remains one.
+#:
+#: **What bounds the value from below.**  Positives and AP never saturate across
+#: the grid (7 -> 64 positives, AP 0.568 -> 0.722 out to ``-8``), so nothing in
+#: the *mechanism* stops the sweep.  The **guardrail** does: deep-spike incidence
+#: is 0-0.5% out to ``-5``, then 1.0% at ``-6`` and 2.6% at ``-8``, and ``-6``
+#: also regresses cost (+0.0085 [+0.0008, +0.0158] against ``-3``).  Threshold
+#: stability is the binding criterion, exactly as #3318 found.
+#:
+#: **Region voting is what rules out going deeper, and ``-4``'s margin there is
+#: thin.**  On ``siglip+dinov3_patch x max_patch``, against ``-3``: ``-4`` is
+#: +0.0031 [-0.0025, **+0.0091**] and passes; ``-5`` is +0.0064 [+0.0007,
+#: **+0.0123**] and fails the +0.010 bar despite being free on the shipped arm.
+#: #3318 measured this same ``-4`` contrast at +0.006 [+0.001, +0.013] and
+#: rejected it; #3319 measures +0.0031 and passes.  The CIs overlap heavily, so
+#: those are *consistent* measurements straddling the bar - not a reversal, and
+#: not independent confirmation either.  **If this value is ever revisited, that
+#: is the number to re-measure first.**
 #:
 #: **Why #2891's rejection does not block it.**  That environment is
 #: ``visual_genome_m``, whose free-text labels have measured recall **0.76** over
@@ -218,10 +250,10 @@ def inclusion_cost_weights(inclusion_value: float) -> tuple[float, float]:
 #: quarter of true positives are labelled negative there, so an arm that finds
 #: *more* true positives is charged for them as false alarms - a bias against
 #: precisely the aggressive arms under test.  ``vg_scale_any`` exists to remove
-#: it (COCO-exhaustive labels plus a human review pass), and on it ``-3`` passes.
-#: The pattern fits: every clean-label environment adopts ``-3``; the one noisy
-#: one rejects it.  This is a well-supported explanation, not a proven cause -
-#: #2877's cells are archived and the counterfactual was not re-run.
+#: it (COCO-exhaustive labels plus a human review pass).  The pattern fits: every
+#: clean-label environment adopts the aggressive arm; the one noisy one rejects
+#: it.  This is a well-supported explanation, not a proven cause - #2877's cells
+#: are archived and the counterfactual was not re-run.
 #:
 #: **The one environment that wants ``-1`` is not a mode.**  A patch embedder
 #: with no box supervision (``siglip+dinov3_patch x whole_image`` - a DINOv3
@@ -236,26 +268,38 @@ def inclusion_cost_weights(inclusion_value: float) -> tuple[float, float]:
 #:
 #: **The mechanism is threshold stability, not cost.**  Measured within one
 #: embedder on the same 264 cells, region voting takes oracle cost 0.382 -> 0.218
-#: and AP 0.517 -> 0.762, and the 8x spike rise that rejects ``-3`` under
-#: whole-image scoring does not happen at all (2.7% -> 1.5%, p=0.51).  Aggressive
-#: acquisition destabilises the cut when the ranking is poorly separated; it is
-#: safe when the ranking separates well.
+#: and AP 0.517 -> 0.762, and the 8x spike rise that rejects the aggressive arm
+#: under whole-image scoring does not happen at all (2.7% -> 1.5%, p=0.51).
+#: Aggressive acquisition destabilises the cut when the ranking is poorly
+#: separated; it is safe when the ranking separates well.
 #:
-#: **Not measured past ``-4``.**  On the shipped default ``-4`` is at least as
-#: good as ``-3`` on every endpoint (+18 positives, AP +0.057, cost -0.017) and
-#: the trend has not turned - so ``-4`` is the edge of the grid, not an optimum.
-#: It is not shipped because it costs a small but resolvable regression under
-#: region voting (+0.006, CI [+0.001, +0.013]) where ``-3`` is free.  Extending
-#: the grid to ``-5``/``-6`` on the shipped arm is filed as #3319.
+#: **The knob under-delivers its own steps, by an environment-dependent amount.**
+#: Measured on the pick log, ``k = 0`` returns 4.7% hard-pick precision - *below*
+#: the 7.1% base rate, which is the cleanest statement of why this offset exists
+#: at all - and precision crosses 50% at ``k ~ -5.66`` where the evidence
+#: semantics above predict -3.71.  Regressing log2-odds of pick precision on
+#: ``k`` gives intercept -3.79 / slope **-0.65** on binary and -3.32 / **-0.78**
+#: under region, against a calibrated -3.71 / -1.00: the *origin* is right and
+#: the *steps* are short, and the shortfall shrinks when the ranking separates.
+#: It is not a constant gain (the residuals curve, and ``k = +2`` does not sit on
+#: the fitted line) - "approximately calibrated near 0, increasingly compressed
+#: with depth" is what the data supports.  This reaches the **user-facing
+#: Inclusion slider**, which drives the same :meth:`FoldAnchoredCut.threshold_at`.
+#: It also explains the history above: the arms were never sweeping "aggression",
+#: they were sweeping *nominal* bits against an environment-dependent debt.
 #:
-#: Everything here is measured at a **100-click horizon**, as every prior
-#: environment was.  Nothing says what this value does in the deep regime.
+#: **The deep regime does not flip the sign, but it does wake the guardrail.**
+#: At 400 clicks the offset is worth *more*, not less (cost -0.033 vs prod,
+#: +90 positives, and the speed gain above) - but deep-spike incidence, 0.0% for
+#: every arm at 100 clicks, goes 0.5% -> 5.7% (p=0.006) at ``-3`` and 2.1%
+#: (p=0.38) at ``-4``.  Non-monotone, so a hazard to watch rather than evidence
+#: about which arm is safer.  Long sessions remain the least-measured regime.
 #:
-#: See ``docs/experiments/2026-08-07-acquisition-inclusion/REPORT_PILE_2877.md`` (the three
-#: environments this value rests on), ``REPORT.md`` (COCO), and
-#: ``REPORT_SECOND_ENVIRONMENT.md`` / ``REPORT_REGION_VOTING.md`` for the two
-#: superseded readings.
-ACQUISITION_INCLUSION_OFFSET = -3
+#: See ``docs/experiments/2026-08-07-acquisition-inclusion/REPORT_3319.md`` (the
+#: study this value rests on), ``REPORT_PILE_2877.md`` (the three environments
+#: before it), ``REPORT.md`` (COCO), and ``REPORT_SECOND_ENVIRONMENT.md`` /
+#: ``REPORT_REGION_VOTING.md`` for the two superseded readings.
+ACQUISITION_INCLUSION_OFFSET = -4
 
 
 def acquisition_inclusion(inclusion_value: float, offset: float = ACQUISITION_INCLUSION_OFFSET) -> float:

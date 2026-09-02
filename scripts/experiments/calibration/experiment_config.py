@@ -609,9 +609,10 @@ def _opt_float(name: str) -> float | None:
 #: the cut, moves it *up* the ranking, and returns *more* positives.
 #:
 #: Unset = whatever ``vtscore.training.thresholds`` currently ships, so an
-#: unconfigured run measures what users actually get.  Do not restate the value
-#: here: PR #2876 shipped -3, and it is **-1** today.  A number written into
-#: this comment goes stale silently and a study then mis-states its own
+#: unconfigured run measures what users actually get.  **Do not restate the
+#: value here** - read it from the constant.  This comment previously named it,
+#: went stale across two moves of the value, and was still claiming "-1 today"
+#: three ships later; that is exactly how a study comes to mis-state its own
 #: baseline.  ``0`` is the pre-#2876 control, one threshold doing both jobs.
 #: **Fractional offsets are meaningful and are read as such** (issue #3319).
 #: Inclusion is a log2 scale - one step doubles the price of a false alarm
