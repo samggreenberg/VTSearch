@@ -90,7 +90,7 @@ care.
 
 ## Concurrency & progress
 
-- [ ] #3382 — Route the raw staging thread through `vtsearch.threading.spawn` (Haiku 4.5)
+- [x] #3382 — Route the raw staging thread through `vtsearch.threading.spawn` (Haiku 4.5)
 
 ## Layering & host seams
 
