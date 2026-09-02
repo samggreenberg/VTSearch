@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -214,3 +215,150 @@ class MediaClipper(ABC):
         if cq:
             d["creation_questions"] = cq
         return d
+
+
+# ----------------------------------------------------------------------
+# Shared helpers for concrete clippers
+# ----------------------------------------------------------------------
+
+
+def clip_with_bounds(
+    media: dict[str, Any],
+    index: int,
+    start: float,
+    end: float,
+) -> dict[str, Any]:
+    """Return a shallow copy of *media* stamped with one clip's time bounds.
+
+    Single-sources the ``duration`` / ``clip_index`` / ``clip_start`` /
+    ``clip_end`` convention (including the 6-decimal rounding) that every
+    time-based clipper - audio tiling/silence/speech/crop, video
+    tiling/scene - writes onto each emitted clip.  Callers add their own
+    type-specific fields (``media_bytes``, ``file_size``, ``scene_index``,
+    ...) to the returned dict.
+    """
+    clip = dict(media)
+    clip["duration"] = round(end - start, 6)
+    clip["clip_index"] = index
+    clip["clip_start"] = round(start, 6)
+    clip["clip_end"] = round(end, 6)
+    return clip
+
+
+def validate_tiling_params(duration: float, min_overlap: float) -> None:
+    """Raise :class:`ValueError` if a tiling clipper's constructor args are invalid.
+
+    Shared by every fixed-length tiling clipper so the three rules -
+    positive tile length, non-negative overlap, overlap strictly smaller
+    than the tile - are stated once.
+    """
+    if duration <= 0:
+        raise ValueError("duration must be positive")
+    if min_overlap < 0:
+        raise ValueError("min_overlap must be non-negative")
+    if min_overlap >= duration:
+        raise ValueError("min_overlap must be less than duration")
+
+
+def tile_starts(total: float, duration: float, min_overlap: float = 0.0) -> list[float]:
+    """Return the start times of equally-spaced tiles covering ``[0, total]``.
+
+    Tiles are *duration* seconds long, the first starts at 0 and the last
+    ends at *total*, and consecutive tiles overlap by at least *min_overlap*
+    seconds (more tiles are emitted when the arithmetic requires it).  When
+    *total* does not exceed *duration* a single tile at 0 covers everything.
+
+    Callers that want to leave a short media untouched should test
+    ``total <= duration`` themselves and return the original media rather
+    than the one-element list this returns.
+    """
+    if total <= duration:
+        return [0.0]
+    max_stride = duration - min_overlap
+    n_tiles = max(1, math.ceil((total - duration) / max_stride) + 1)
+    if n_tiles == 1:
+        return [0.0]
+    return [i * (total - duration) / (n_tiles - 1) for i in range(n_tiles)]
+
+
+def tiling_parameters(
+    duration: float,
+    min_overlap: float,
+    *,
+    item_label: str,
+) -> list[dict[str, Any]]:
+    """Return the standard ``duration`` / ``min_overlap`` parameter descriptors.
+
+    *item_label* names the unit in the ``duration`` descriptor's help text
+    (e.g. ``"audio segment"`` -> "Duration of each audio segment in
+    seconds.").  *duration* and *min_overlap* become the descriptors'
+    current defaults.
+    """
+    return [
+        {
+            "key": "duration",
+            "label": "Clip length (seconds)",
+            "description": f"Duration of each {item_label} in seconds.",
+            "type": "number",
+            "default": duration,
+            "min": 0.1,
+            "max": 300,
+            "step": 0.1,
+        },
+        {
+            "key": "min_overlap",
+            "label": "Minimum overlap (seconds)",
+            "description": "Minimum overlap between consecutive segments. Higher values produce more tiles.",
+            "type": "number",
+            "default": min_overlap,
+            "min": 0,
+            "max": 299.9,
+            "step": 0.1,
+        },
+    ]
+
+
+class DefaultClipper(MediaClipper):
+    """Concrete no-op clipper: :meth:`clip` returns ``[media]`` unchanged.
+
+    Every embeddable media type registers exactly one of these so the
+    clipper chooser is never empty and "don't split anything" is an
+    ordinary chain step rather than a special case.  Subclass it with a
+    zero-argument constructor rather than instantiating it directly, so the
+    type keeps a named class the registry, the docs and out-of-tree code
+    can refer to::
+
+        class SoundDefaultClipper(DefaultClipper):
+            def __init__(self) -> None:
+                super().__init__(
+                    "sound_default", "audio", "Import each audio file as-is, without splitting."
+                )
+
+    The conventions this base fixes are the ``<type>_default`` name, the
+    ``"None"`` display label used by the chooser, and the pass-through
+    :meth:`clip`.
+    """
+
+    def __init__(self, name: str, media_type: str, description: str) -> None:
+        self._name = name
+        self._media_type = media_type
+        self._description = description
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def media_type(self) -> str:
+        return self._media_type
+
+    @property
+    def display_name(self) -> str:
+        return "None"
+
+    @property
+    def description(self) -> str:
+        return self._description
+
+    def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
+        return [media]

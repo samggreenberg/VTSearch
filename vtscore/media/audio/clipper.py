@@ -9,36 +9,48 @@ module for callers that were already catching it here.
 
 from __future__ import annotations
 
-import math
 import os
 from pathlib import Path
 from typing import Any
 
 from vtscore.media.audio.wav import AudioDecodeError, wav_duration, wav_slice
-from vtscore.media.clipper import MediaClipper
+from vtscore.media.clipper import (
+    DefaultClipper,
+    MediaClipper,
+    clip_with_bounds,
+    tile_starts,
+    tiling_parameters,
+    validate_tiling_params,
+)
 
 
-class SoundDefaultClipper(MediaClipper):
+def _emit_wav_segments(
+    media: dict[str, Any],
+    wav_bytes: bytes,
+    segments: list[tuple[float, float]],
+) -> list[dict[str, Any]]:
+    """Slice *wav_bytes* at each ``(start, end)`` in *segments* into clip dicts.
+
+    Shared by every audio clipper that emits real audio (tiling, silence,
+    speech activity, single-range crop): each clip carries the sliced bytes,
+    the refreshed ``file_size``, and the standard clip-bound fields stamped
+    by :func:`~vtscore.media.clipper.clip_with_bounds`.
+    """
+    results: list[dict[str, Any]] = []
+    for idx, (t0, t1) in enumerate(segments):
+        sliced = wav_slice(wav_bytes, t0, t1)
+        clip = clip_with_bounds(media, idx, t0, t1)
+        clip["media_bytes"] = sliced
+        clip["file_size"] = len(sliced)
+        results.append(clip)
+    return results
+
+
+class SoundDefaultClipper(DefaultClipper):
     """Returns the audio media unchanged."""
 
-    @property
-    def name(self) -> str:
-        return "sound_default"
-
-    @property
-    def display_name(self) -> str:
-        return "None"
-
-    @property
-    def media_type(self) -> str:
-        return "audio"
-
-    @property
-    def description(self) -> str:
-        return "Import each audio file as-is, without splitting."
-
-    def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
-        return [media]
+    def __init__(self) -> None:
+        super().__init__("sound_default", "audio", "Import each audio file as-is, without splitting.")
 
 
 class SoundTilingClipper(MediaClipper):
@@ -57,12 +69,7 @@ class SoundTilingClipper(MediaClipper):
     """
 
     def __init__(self, duration: float, min_overlap: float = 0.0) -> None:
-        if duration <= 0:
-            raise ValueError("duration must be positive")
-        if min_overlap < 0:
-            raise ValueError("min_overlap must be non-negative")
-        if min_overlap >= duration:
-            raise ValueError("min_overlap must be less than duration")
+        validate_tiling_params(duration, min_overlap)
         self._duration = duration
         self._min_overlap = min_overlap
 
@@ -104,53 +111,12 @@ class SoundTilingClipper(MediaClipper):
         if total <= seg:
             return [media]
 
-        max_stride = seg - self._min_overlap
-        n_tiles = max(1, math.ceil((total - seg) / max_stride) + 1)
-        # Space n_tiles segments so that the first starts at 0 and the last
-        # ends at *total*.  When n_tiles == 1 this degenerates to [0, seg).
-        if n_tiles == 1:
-            starts = [0.0]
-        else:
-            starts = [i * (total - seg) / (n_tiles - 1) for i in range(n_tiles)]
-
-        results: list[dict[str, Any]] = []
-        for idx, t0 in enumerate(starts):
-            t1 = t0 + seg
-            sliced = wav_slice(wav_bytes, t0, t1)
-            tile = dict(media)
-            tile["media_bytes"] = sliced
-            tile["duration"] = round(t1 - t0, 6)
-            tile["file_size"] = len(sliced)
-            tile["clip_index"] = idx
-            tile["clip_start"] = round(t0, 6)
-            tile["clip_end"] = round(t1, 6)
-            results.append(tile)
-        return results
+        starts = tile_starts(total, seg, self._min_overlap)
+        return _emit_wav_segments(media, wav_bytes, [(t0, t0 + seg) for t0 in starts])
 
     @property
     def parameters(self) -> list[dict[str, Any]]:
-        return [
-            {
-                "key": "duration",
-                "label": "Clip length (seconds)",
-                "description": "Duration of each audio segment in seconds.",
-                "type": "number",
-                "default": self._duration,
-                "min": 0.1,
-                "max": 300,
-                "step": 0.1,
-            },
-            {
-                "key": "min_overlap",
-                "label": "Minimum overlap (seconds)",
-                "description": "Minimum overlap between consecutive segments. Higher values produce more tiles.",
-                "type": "number",
-                "default": self._min_overlap,
-                "min": 0,
-                "max": 299.9,
-                "step": 0.1,
-            },
-        ]
+        return tiling_parameters(self._duration, self._min_overlap, item_label="audio segment")
 
     def with_params(self, params: dict[str, Any]) -> "SoundTilingClipper":
         duration = float(params.get("duration", self._duration))
@@ -264,18 +230,7 @@ class SoundSilenceClipper(MediaClipper):
             return [media]
 
         try:
-            results: list[dict[str, Any]] = []
-            for idx, (t0, t1) in enumerate(segments):
-                sliced = wav_slice(media_bytes, t0, t1)
-                clip = dict(media)
-                clip["media_bytes"] = sliced
-                clip["duration"] = round(t1 - t0, 6)
-                clip["file_size"] = len(sliced)
-                clip["clip_index"] = idx
-                clip["clip_start"] = round(t0, 6)
-                clip["clip_end"] = round(t1, 6)
-                results.append(clip)
-            return results
+            return _emit_wav_segments(media, media_bytes, segments)
         except Exception:
             return [media]
 
@@ -391,15 +346,7 @@ class SoundClipClipper(MediaClipper):
         if t1 <= t0:
             return [media]
 
-        sliced = wav_slice(wav_bytes, t0, t1)
-        clip = dict(media)
-        clip["media_bytes"] = sliced
-        clip["duration"] = round(t1 - t0, 6)
-        clip["file_size"] = len(sliced)
-        clip["clip_index"] = 0
-        clip["clip_start"] = round(t0, 6)
-        clip["clip_end"] = round(t1, 6)
-        return [clip]
+        return _emit_wav_segments(media, wav_bytes, [(t0, t1)])
 
     @property
     def parameters(self) -> list[dict[str, Any]]:
@@ -603,18 +550,7 @@ class SoundSpeechActivityClipper(MediaClipper):
             return [media]
 
         try:
-            results: list[dict[str, Any]] = []
-            for idx, (t0, t1) in enumerate(segments):
-                sliced = wav_slice(media_bytes, t0, t1)
-                clip = dict(media)
-                clip["media_bytes"] = sliced
-                clip["duration"] = round(t1 - t0, 6)
-                clip["file_size"] = len(sliced)
-                clip["clip_index"] = idx
-                clip["clip_start"] = round(t0, 6)
-                clip["clip_end"] = round(t1, 6)
-                results.append(clip)
-            return results
+            return _emit_wav_segments(media, media_bytes, segments)
         except Exception:
             return [media]
 

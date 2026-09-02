@@ -741,6 +741,26 @@ class SoundOverlapClipper(MediaClipper):
         return [media]  # placeholder
 ```
 
+### Shared helpers
+
+Don't hand-roll what `vtscore/media/clipper.py` already exports.
+`clip_with_bounds(media, index, start, end)` returns a copy of *media*
+stamped with the standard `duration` / `clip_index` / `clip_start` /
+`clip_end` fields (add your own on top); `tile_starts(total, duration,
+min_overlap)`, `validate_tiling_params(...)` and
+`tiling_parameters(..., item_label=...)` are the tiling arithmetic,
+constructor validation and parameter descriptors shared by the audio and
+video tiling clippers. A **default** (no-op) clipper subclasses the
+concrete `DefaultClipper` base instead of `MediaClipper`, passing its
+name, media type and description to `super().__init__()` — see
+[`vtscore/docs/extending/clippers.md § Shared
+helpers`](../vtscore/docs/extending/clippers.md#shared-helpers).
+
+For audio specifically, `_emit_wav_segments` in
+`vtscore/media/audio/clipper.py` turns a list of `(start, end)` ranges
+into clip dicts with the WAV bytes sliced and `file_size` refreshed, so a
+new audio clipper only has to produce the ranges.
+
 ### Register the clipper
 
 Add the clipper to the `CLIPPERS` sentinel list in your media type's
