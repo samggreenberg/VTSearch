@@ -123,8 +123,9 @@ def admit_classes(
         if not kinds & set(QUERYABLE_KINDS):
             rejected[class_id] = f"kind {sorted(kinds)} is not queryable"
             continue
-        if len(refs) < min_instances:
-            note = f"{len(refs)} instance(s) < min_instances={min_instances}"
+        bar = min_instances if min_instances is not None else cfg.min_instances_for(class_id.split("/", 1)[0])
+        if len(refs) < bar:
+            note = f"{len(refs)} instance(s) < min_instances={bar}"
             if not on_roster:
                 rejected[class_id] = note
                 continue
@@ -227,6 +228,14 @@ def assign_tiers(
     positive_pages: set[str] = set()
     for meta in admitted.values():
         positive_pages.update(meta["page_ids"])
+
+    # Anchor pages are in every tier whatever the budget says.  They are the
+    # corpus's known negatives -- same scanner, same paper, same era, checked --
+    # and README calls them the hardest negative a class can be scored against.
+    # The 2026-09-01 build dropped 129 of them over the tier budget to make room
+    # for UCSF distractors, which spends the hardest negatives to buy the
+    # easiest.  There are only ~2,650, so they fit even in `s`.
+    positive_pages.update(p.page_id for p in pages if p.source in cfg.ANCHOR_SOURCES)
 
     ranked = sorted(
         ((_common.stable_rank(p.page_id, salt), p.page_id) for p in pages if p.page_id not in positive_pages),
@@ -356,6 +365,38 @@ def load_anchor_sources(
     return pages
 
 
+#: Live 1-page document counts per industry, measured 2026-09-01.  Used only to
+#: ORDER and SIZE the pull; the real counts still come from Solr, and a shortfall
+#: is reported rather than assumed away.
+UCSF_INDUSTRY_CAPACITY: dict[str, int] = {
+    "Tobacco": 9_410_129,
+    "Opioids": 4_070_287,
+    "Food": 71_673,
+    "Chemical": 3_657,
+    "Drug": 1_064,
+    "Fossil Fuel": 311,
+}
+
+
+def _plan_distractor_pull(budget: int) -> list[tuple[str, int]]:
+    """How many distractors to ask each industry for, in pull order.
+
+    Small industries are drained first because they cannot absorb a large share
+    anyway, then Opioids and Food, and Tobacco LAST -- it is the only industry
+    whose pages cost something, being the same archive as Tobacco800.
+    """
+    order = ["Fossil Fuel", "Drug", "Chemical", "Food", "Opioids", "Tobacco"]
+    plan: list[tuple[str, int]] = []
+    left = budget
+    for industry in order:
+        if left <= 0:
+            break
+        take = min(left, UCSF_INDUSTRY_CAPACITY.get(industry, 0))
+        plan.append((industry, take))
+        left -= take
+    return plan
+
+
 def load_ucsf(
     raw: Path,
     out_images: Path,
@@ -371,8 +412,12 @@ def load_ucsf(
     to carry a company letterhead, carrying a coarse top-of-page band so the
     mark can be clustered and adjudicated like any other.
     """
+    import time
+
     from sources import ucsf
 
+    started = time.monotonic()
+    cpu_started = time.process_time()
     failures: list[str] = []
 
     def note(doc_id: str, exc: Exception) -> None:
@@ -396,17 +441,55 @@ def load_ucsf(
                 letterhead_author=author,
                 band_frac=band_frac,
                 on_error=note,
+                # Every name in UCSF_LETTERHEAD_AUTHORS is a tobacco company, so
+                # a page pulled for one is a Tobacco page even though it was
+                # found by an author query rather than an industry one.  Saying
+                # so keeps these 15k pages inside the Tobacco800 exclusion.
+                industry="Tobacco",
             )
         )
 
-    per_industry = max(1, distractor_budget // max(1, len(cfg.UCSF_INDUSTRIES)))
-    for industry in cfg.UCSF_INDUSTRIES:
+    # WATER-FILL, not an even split.  The six industries are wildly unequal --
+    # measured live 2026-09-01: Tobacco 9,410,129 and Opioids 4,070,287 against
+    # Fossil Fuel 311, Drug 1,064, Chemical 3,657 -- so an even share of
+    # `budget/6` asks three of them for ~30k pages that do not exist.  At a 200k
+    # budget the even split can only ever deliver 105,031, and the 2026-08-31
+    # build duly stopped at 119,806 pages looking like a job that had finished.
+    #
+    # The order matters as much as the filling.  An industry is not a property
+    # of the eval -- "find this logo" does not care whether the page it is not
+    # on came from a tobacco firm or a drug firm -- so the mix is free to be
+    # whatever fills the budget, with ONE exception: UCSF's Tobacco industry is
+    # the same archive as Tobacco800, so every Tobacco page added is a page
+    # subtracted from what Tobacco800's classes can safely be scored against.
+    # Draw from the cheap industries first and Tobacco only if the budget still
+    # needs it.
+    per_industry = _plan_distractor_pull(distractor_budget)
+    for industry, want in per_industry:
+        if want <= 0:
+            continue
         query = ucsf.build_query(industry=industry, doc_type=None, max_pages=1)
-        docs = list(ucsf.solr_docs(query, limit=per_industry))
-        pages.extend(ucsf.fetch_and_render(docs, raw, out_images / "ucsf", on_error=note))
+        docs = list(ucsf.solr_docs(query, limit=want))
+        if len(docs) < want:
+            warnings.append(f"ucsf: industry {industry!r} yielded {len(docs):,} of {want:,} requested")
+        pages.extend(ucsf.fetch_and_render(docs, raw, out_images / "ucsf", on_error=note, industry=industry))
 
     if failures:
         warnings.append(f"ucsf: skipped {len(failures)} document(s) that failed to download or render")
+
+    # SAY HOW FAST THIS WENT.  A pull that is 2.5x slower than it needs to be
+    # raises no error and fails no cell -- it produces a correct corpus, later --
+    # so the only symptom is an ETA, and an ETA reads as the cost of the work
+    # rather than as a number with a cause.  #3343 ran two days at a third of the
+    # achievable rate on exactly that basis.  Printing the rate and the CPU share
+    # makes "we are waiting on the network with idle cores" a line in the log.
+    elapsed = time.monotonic() - started
+    if elapsed > 0 and pages:
+        cpu = time.process_time() - cpu_started
+        print(
+            f"  ucsf pull: {len(pages):,} page(s) in {elapsed / 3600:.2f} h "
+            f"= {len(pages) / elapsed:.2f} pages/s, {100 * cpu / elapsed:.0f}% CPU"
+        )
     return pages
 
 
@@ -516,10 +599,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
         default=None,
         help="roster.json naming the hand-picked classes; without it every class clearing the bars is a candidate",
     )
-    ap.add_argument("--min-instances", type=int, default=cfg.MIN_INSTANCES)
+    ap.add_argument("--min-instances", type=int, default=None, help="override the per-source bar for every source")
     ap.add_argument("--min-mark-px", type=int, default=cfg.MIN_MARK_PX)
     ap.add_argument("--cluster-backend", default=cfg.CLUSTER_BACKEND, choices=("phash", "siglip"))
-    ap.add_argument("--cluster-threshold", type=float, default=cfg.CLUSTER_THRESHOLD)
+    ap.add_argument(
+        "--cluster-threshold", type=float, default=None, help="override the per-source threshold for every source"
+    )
     ap.add_argument("--ucsf-distractors", type=int, default=0, help="total UCSF distractor pages to pull")
     ap.add_argument(
         "--ucsf-letterhead-per-author",
@@ -578,9 +663,26 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
         print(f"ucsf: {len(ucsf_pages)} page(s)")
 
     # Identity clustering, for every source that ships location without
-    # identity.  UCSF is in this list on purpose: its `author` metadata is a
-    # candidate pool, not a class, so its letterhead bands are adjudicated by
-    # the same path as SPODS's and StaVer's marks rather than being trusted.
+    # identity AND whose marks a descriptor can actually tell apart.
+    #
+    # UCSF was in this list and is not any more (#3343).  The intent was right --
+    # its `author` metadata is a candidate pool, not a class, so the bands should
+    # be adjudicated rather than trusted -- but clustering a fixed top-of-page
+    # strip proposes noise for a human to adjudicate, not candidates.  See
+    # cfg.CLUSTERED_SOURCES for the sweep that says so.  Its pages stay as
+    # distractors and its bands keep `class_id=None` for the `letterhead` pass.
+    #
+    # Tobacco800 is in it for a subtler reason (#3343).  It ships identity for
+    # its SIGNATURES -- GEDI carries an author id on those zones -- and none at
+    # all for its LOGOS, which is the half of the source this corpus exists to
+    # use.  Reading "Tobacco800 has ground-truth identities" as a fact about the
+    # whole source left its 432 logo marks unclustered and therefore classless,
+    # so the one source with a published logo protocol contributed 1,290 pages
+    # of distractors and zero eval classes, while its 130 signature classes were
+    # rejected as unqueryable.  Nothing warned: an absent class is not an error.
+    # `collect_refs` already takes only `class_id is None` marks of the queryable
+    # kinds, so listing the source here clusters the logos and cannot disturb a
+    # signature identity.
     from cluster_marks import cluster_source, load_adjudications, write_cluster_report
 
     same, different = load_adjudications(args.out / "adjudications.json")
@@ -588,14 +690,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
         print(f"\nhonouring {len(same)} hand-merged and {len(different)} hand-separated pair(s)")
 
     summaries = []
-    for source in ("spods", "staver", "ucsf"):
+    for source in cfg.CLUSTERED_SOURCES:
         if source not in selected:
             continue
         summary = cluster_source(
             pages,
             source,
             backend=args.cluster_backend,
-            threshold=args.cluster_threshold,
+            # Per source, not per corpus: a sweep over everything is dominated
+            # by whichever source has the most marks and reports its optimum as
+            # the corpus's.  0.10 suited SPODS, chained StaVer at 22%, and cost
+            # Tobacco800 two thirds of its usable classes.
+            threshold=(
+                args.cluster_threshold if args.cluster_threshold is not None else cfg.cluster_threshold_for(source)
+            ),
             same=same,
             different=different,
             provenance="clustered_band" if source == "ucsf" else "clustered",

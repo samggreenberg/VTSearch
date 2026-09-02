@@ -159,7 +159,16 @@ def build_pages(unpacked: Path, *, limit: int | None = None) -> tuple[list[Page]
         with Image.open(img) as im:
             width, height = im.size
         marks = xml_marks.get(stem, [])
-        if marks:
+        # Matched means "this GT entry found its image", which is a question
+        # about the image, not about whether the entry annotated anything.
+        # ``parse_gedi`` does ``out.setdefault(stem, [])`` for every DL_PAGE, so
+        # a page whose GEDI file carries no zones -- and 430 of the 1,290 do,
+        # they are the dataset's own in-domain negatives, kept on purpose --
+        # lands in ``xml_marks`` with an empty list.  Gating on ``if marks``
+        # then reported every one of them as "no matching image", which is a
+        # sentence about missing data that was measured on data that was all
+        # present.  A warning nobody can act on is worse than no warning.
+        if stem in xml_marks:
             matched_stems.add(stem)
         meta: dict[str, Any] = {"stem": stem}
         pages.append(

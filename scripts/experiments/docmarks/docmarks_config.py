@@ -71,6 +71,33 @@ TIER_SALT = os.environ.get("VTS_DOCMARKS_TIER_SALT", "docmarks-v1")
 #: every threshold so this can be set from data rather than taste.
 MIN_INSTANCES = int(os.environ.get("VTS_DOCMARKS_MIN_INSTANCES", "10"))
 
+#: Per-source instance bar.  10 is right where a source has classes that deep;
+#: applied to one that does not, it does not raise quality, it just empties the
+#: source.  Measured on the 200k build, queryable classes surviving each bar:
+#:
+#:            >=2   >=5   >=8  >=10
+#:   spods     174    70    49    44
+#:   staver     12     1     1     1     <- 10 admits ONE class
+#:   tobacco800 28     5     3     3
+#:
+#: A roster drawn under a flat 10 is ~85% SPODS, so the eval measures SPODS and
+#: reports a number about documents.  StaVer and Tobacco800 drop to 5: still
+#: enough instances to both query and retrieve, and every one of them is
+#: hand-adjudicated in the membership pass, which is what actually makes a class
+#: trustworthy -- the instance count is a proxy for that, not a substitute.
+MIN_INSTANCES_BY_SOURCE: dict[str, int] = {
+    "staver": 5,
+    "tobacco800": 5,
+}
+
+
+def min_instances_for(source: str) -> int:
+    """Instance bar for *source*.  An explicit env override wins for all."""
+    if os.environ.get("VTS_DOCMARKS_MIN_INSTANCES"):
+        return MIN_INSTANCES
+    return MIN_INSTANCES_BY_SOURCE.get(source, MIN_INSTANCES)
+
+
 #: Marks smaller than this (longest side, px, at the page's native scan
 #: resolution) are recorded but never promoted to a query class.  The
 #: 2026-07-13 study found a hard floor around 32 px below which no structural
@@ -196,6 +223,80 @@ CLUSTER_BACKEND = os.environ.get("VTS_DOCMARKS_CLUSTER_BACKEND", "phash")
 #: the one chunkiest fragment of each, so 0.16 chained 653 marks (31.8%) into a
 #: single class while still reporting a plausible-looking 310.
 CLUSTER_THRESHOLD = float(os.environ.get("VTS_DOCMARKS_CLUSTER_THRESHOLD", "0.10"))
+
+#: Per-source override, because the paragraph above ends "this number is a
+#: property of the data, and it does not travel" -- and it does not travel
+#: between SOURCES either, which the single global value quietly assumed.
+#:
+#: Swept per source on the 200k build (2026-09-02).  The three disagree sharply,
+#: and 0.10 was serving SPODS while damaging the others:
+#:
+#:   spods       0.10  largest component flat at 1.5% to 0.10, 8.1% at 0.12.
+#:   staver      0.04  already 5.8% at 0.02 and 22% by 0.10 -- StaVer's stamps
+#:                     are near-duplicates of each other, so it chains early.
+#:   tobacco800  0.18  the opposite problem: only 14.7% at 0.18, and usable
+#:                     classes PEAK there at 9 against 3 at 0.10.  Its logos are
+#:                     printed artwork rather than inked impressions, so the
+#:                     within-class distances are wider.
+#: UCSF is absent on purpose -- see CLUSTERED_SOURCES.  It has no usable
+#: threshold, which the sweep says plainly rather than by omission.
+#:
+#: Re-run `tune_clustering.py --source <s>` per source, not once for the corpus:
+#: a sweep over everything is dominated by whichever source has the most marks
+#: and reports its optimum as the corpus's.
+CLUSTER_THRESHOLD_BY_SOURCE: dict[str, float] = {
+    "spods": 0.10,
+    "staver": 0.04,
+    "tobacco800": 0.18,
+}
+
+
+#: Sources whose marks are clustered into candidate classes.
+#:
+#: **UCSF is not one, and the reason is the descriptor rather than the knob.**
+#: Its letterhead "mark" is a fixed-geometry crop -- the top 22% of every page --
+#: so a perceptual hash of it is dominated by page layout, not by the logo
+#: inside it, and two unrelated companies' letterheads at the same position hash
+#: alike.  Swept on 3,000 marks (2026-09-02) there is no flat region anywhere:
+#: the largest component is already **12.4% at 0.02**, the lowest threshold on
+#: the grid, and climbs monotonically -- 36% at 0.04, 81% at 0.10, 99% at 0.22 --
+#: while 85% of marks stay singletons.  SPODS sits pinned at 1.5% across that
+#: same range.  There is no percolation *transition* because it is percolated
+#: from the start, so no threshold exists to choose.
+#:
+#: At 0.10 this produced a single 12,706-instance "class" which, being made of
+#: admitted-class pages, pinned 13,874 pages into tier `s` (budget 5,000) and
+#: measured nothing.
+#:
+#: README's own audit list already gates this: the `letterhead` pass exists to
+#: "sample bands per candidate author and count how many carry a printed mark at
+#: all -- decides whether that pool is worth clustering", and it has never been
+#: run.  Auto-admitting band classes did the thing that pass is there to gate.
+#:
+#: So UCSF's 197k pages stay in the corpus as distractors, which is what 92% of
+#: them were for anyway, and its letterhead candidates keep their band marks with
+#: `class_id=None` so the human pass can still use them.  Making bands usable
+#: needs a descriptor that looks at the mark rather than the strip -- the
+#: `siglip` backend is the obvious candidate and wants its own sweep.
+CLUSTERED_SOURCES: tuple[str, ...] = ("spods", "staver", "tobacco800")
+
+
+def cluster_threshold_for(source: str) -> float:
+    """Merge threshold for *source*.  An explicit env override wins for all."""
+    if os.environ.get("VTS_DOCMARKS_CLUSTER_THRESHOLD"):
+        return CLUSTER_THRESHOLD
+    return CLUSTER_THRESHOLD_BY_SOURCE.get(source, CLUSTER_THRESHOLD)
+
+
+#: Sources whose pages are ALWAYS in every tier, whatever the budget.
+#:
+#: These carry the corpus's known negatives -- "same scanner, same paper, same
+#: era, known clean", per README, and the hardest negatives a class can be
+#: scored against.  The 2026-09-01 build dropped 129 of them over the tier
+#: budget to make room for UCSF distractors, which trades the hardest negatives
+#: for the easiest ones and is exactly backwards.  There are only ~2,650 of
+#: them; they fit in every tier including `s`.
+ANCHOR_SOURCES: frozenset[str] = frozenset({"spods", "staver", "tobacco800"})
 
 # --------------------------------------------------------------------------
 # Synthesis (layer 3)

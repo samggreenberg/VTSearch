@@ -1302,6 +1302,14 @@ class TestReportWholePageFigure:
         # Same contract as the provenance glosses: a kind with no swatch falls
         # back to grey and reads as "some other mark", which is the one thing
         # this figure is supposed to stop doing.
+        # `LOCALISED_CONTEXT_CATEGORIES` since #3366: this assertion was written
+        # against `CONTEXT_CATEGORIES` in #3364, and #3366 renamed the constant
+        # in the same week -- both merged green on their own branches and dev
+        # was left red, because neither ran against the other.  The name here is
+        # deliberately the localised one: #3366 dropped `text` from the marks
+        # entirely (it was the page body, a property of the page rather than a
+        # thing on it), so a kind that is no longer emitted must not be required
+        # to carry a swatch.
         emitted = set(mods["spods"].MARK_CATEGORIES) | set(mods["spods"].LOCALISED_CONTEXT_CATEGORIES)
         assert emitted <= set(mods["report"]._KIND_COLOURS)
         assert emitted <= set(mods["report"]._KIND_MEANING)
@@ -1360,6 +1368,186 @@ class TestEmbedCells:
         forward = mods["embed"].load_medias(pages, {}, "siglip")
         reverse = mods["embed"].load_medias(list(reversed(pages)), {}, "siglip")
         assert {i: m["origin_name"] for i, m in forward.items()} == {i: m["origin_name"] for i, m in reverse.items()}
+
+
+class TestKaggleCredentialGate:
+    """The gate in ``kaggle_download`` must not reject a credential that works.
+
+    It exists to turn a mid-job 403 into an up-front error message, which is
+    worth having -- but that makes a *false* BLOCKED the one failure mode worse
+    than no gate at all: the run never starts, and the message sends you to
+    look for a token you already have.  That is exactly what happened on the
+    GRID in #3343.  Kaggle's "Create New Token" wrote ``~/.kaggle/access_token``
+    and ``kagglesdk`` read it happily -- ``kaggle datasets download`` pulled the
+    32.8 MB Tobacco800 archive from the same shell -- while the probe reported
+    both Kaggle sources unreachable, because the gate looked only for
+    ``kaggle.json``.
+
+    So each accepted form is pinned here by name.  A future Kaggle rename is
+    fine; silently narrowing the set is not.
+    """
+
+    @pytest.fixture
+    def _no_env(self, monkeypatch):
+        monkeypatch.delenv("KAGGLE_USERNAME", raising=False)
+        monkeypatch.delenv("KAGGLE_KEY", raising=False)
+
+    @pytest.mark.parametrize("filename", ["kaggle.json", "access_token"])
+    def test_credential_file_is_accepted(self, mods, monkeypatch, tmp_path, _no_env, filename):
+        kaggle_dir = tmp_path / ".kaggle"
+        kaggle_dir.mkdir()
+        (kaggle_dir / filename).write_text("token-contents")
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+
+        dest = tmp_path / "dest"
+        calls = []
+        monkeypatch.setattr(
+            mods["common"].subprocess,
+            "run",
+            lambda cmd, **kw: calls.append(cmd) or _CompletedStub(),
+        )
+        mods["common"].kaggle_download("owner/name", dest)
+        # It got as far as shelling out, which is all this gate governs.
+        assert calls and calls[0][:3] == ["kaggle", "datasets", "download"]
+
+    def test_env_pair_is_accepted(self, mods, monkeypatch, tmp_path):
+        monkeypatch.setenv("KAGGLE_USERNAME", "someone")
+        monkeypatch.setenv("KAGGLE_KEY", "somekey")
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+
+        calls = []
+        monkeypatch.setattr(
+            mods["common"].subprocess,
+            "run",
+            lambda cmd, **kw: calls.append(cmd) or _CompletedStub(),
+        )
+        mods["common"].kaggle_download("owner/name", tmp_path / "dest")
+        assert calls
+
+    def test_no_credential_still_fails_fast(self, mods, monkeypatch, tmp_path, _no_env):
+        (tmp_path / ".kaggle").mkdir()
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+
+        def _explode(*a, **kw):  # pragma: no cover - the point is it is unreached
+            raise AssertionError("shelled out to the CLI with no credential")
+
+        monkeypatch.setattr(mods["common"].subprocess, "run", _explode)
+        with pytest.raises(mods["common"].FetchError) as exc:
+            mods["common"].kaggle_download("owner/name", tmp_path / "dest")
+        # The message has to name every place a token is accepted, or it sends
+        # the reader off to create a second one they do not need.
+        assert "kaggle.json" in str(exc.value)
+        assert "access_token" in str(exc.value)
+
+
+class _CompletedStub:
+    returncode = 0
+    stdout = ""
+    stderr = ""
+
+
+class TestRealMirrorLayouts:
+    """Layout facts measured on the real archives, not on the documented ones.
+
+    #3343 pulled both Kaggle sources for the first time and each was parsed
+    wrongly by a `--probe`-clean, 107-test-green builder.  Neither failure
+    raised: one produced warnings and an empty source, the other produced a
+    warning about data that was entirely present.  Fixtures could not have
+    caught either, because a fixture is built from the layout the docs
+    describe, and both bugs live in the gap between that and the mirror.
+
+    So these pin the *mirror's* conventions by name.
+    """
+
+    @pytest.mark.parametrize(
+        "gt_name,scan_stem",
+        [
+            ("stampDS-00001-px", "stampds-00001"),  # pixel-accurate masks
+            ("stampDS-00001-gt", "stampds-00001"),  # binary maps
+            ("stampDS-00001_px", "stampds-00001"),
+            ("stampDS-00001", "stampds-00001"),  # no suffix: unchanged
+        ],
+    )
+    def test_staver_gt_stem_maps_to_its_scan(self, mods, gt_name, scan_stem):
+        """StaVer GT filenames carry a suffix the scan does not.
+
+        The scan is ``scans/stampDS-00001.png``; the mask is
+        ``ground-truth-pixel/stampDS-00001-px.png``.  Indexing masks by raw stem
+        matched nothing on the real archive: 427 "no ground-truth mask"
+        warnings and zero StaVer pages in the corpus, a source that looked
+        skipped rather than broken.
+        """
+        assert mods["staver"].gt_stem_key(gt_name) == scan_stem
+
+    def test_tobacco800_zoneless_page_is_not_reported_unmatched(self, mods):
+        """A GEDI file with no zones is a negative, not a missing image.
+
+        430 of Tobacco800's 1,290 pages have an empty ``DL_PAGE``.  They are
+        kept on purpose as in-domain negatives, so counting them as GT that
+        "had no matching image" describes absent data using data that is
+        present -- and buries any real mismatch in the noise.
+        """
+        zoneless = (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<GEDI xmlns="http://lamp.cfar.umd.edu/GEDI" version="1.0">'
+            '<DL_DOCUMENT src="aao54e00_1.tif" NrOfPages="1" docTag="xml">'
+            '<DL_PAGE gedi_type="DL_PAGE" src="aao54e00_1.tif" pageID="1" width="2592" height="3300">'
+            "</DL_PAGE></DL_DOCUMENT></GEDI>"
+        )
+        parsed = mods["tobacco800"].parse_gedi(zoneless)
+        # The key exists with an empty list -- that is what made `if marks:`
+        # the wrong test, and it is the behaviour the fix depends on.
+        assert parsed == {"aao54e00_1": []}
+
+
+class TestTobacco800LogosAreClustered:
+    """Tobacco800 ships identity for signatures and none for logos.
+
+    The distinction is invisible at source level -- "Tobacco800 has GEDI ground
+    truth" is true, and taking it as a fact about the whole source is what left
+    the logos out of the clustering loop in #3343.  The result was a silent
+    one: 432 logo marks with no class_id, so the only source with a published
+    logo protocol contributed 1,290 distractor pages and zero eval classes,
+    while its 130 signature classes were rejected as unqueryable.  An absent
+    class raises nothing, and the survival curve counted the signature classes
+    it would never admit, so even the printed numbers looked plausible.
+    """
+
+    def _pages(self, mods):
+        signature = mods["common"].Mark(
+            kind="signature", box=(10, 10, 40, 20), class_id="tobacco800/signature_rjr", provenance="gt"
+        )
+        logo = mods["common"].Mark(kind="logo", box=(10, 200, 80, 60), class_id=None, provenance="gt")
+        return [
+            mods["common"].Page(
+                page_id=f"tobacco800/p{i}",
+                source="tobacco800",
+                path=f"/nonexistent/p{i}.tif",
+                width=600,
+                height=800,
+                marks=[signature, logo],
+                meta={},
+            )
+            for i in range(3)
+        ]
+
+    def test_collect_refs_takes_the_logos_and_leaves_the_signatures(self, mods):
+        refs = mods["cluster"].collect_refs(self._pages(mods), kinds=("logo", "stamp"), source="tobacco800")
+        # One per page, and every one a logo: signatures are out by kind, and an
+        # already-identified mark is out by class_id.  This is what makes adding
+        # the source to the loop safe rather than destructive.
+        assert len(refs) == 3
+        assert {r.kind for r in refs} == {"logo"}
+
+    def test_builder_clusters_tobacco800(self, mods):
+        """The source must be in the clustered set; a comment is not enough.
+
+        This asserted the literal loop line until #3343 moved the list into
+        `cfg.CLUSTERED_SOURCES` and it broke on a refactor that changed nothing
+        it cared about. Pinning source *text* pins the spelling; pinning the
+        value pins the behaviour, and only one of those is the thing at risk.
+        """
+        assert "tobacco800" in mods["cfg"].CLUSTERED_SOURCES
 
 
 # -------------------------------------------------------------------- probe
@@ -1470,3 +1658,363 @@ class TestReclaimProbeDirs:
 
     def test_a_missing_raw_root_is_not_an_error(self, mods, tmp_path):
         assert mods["build"]._reclaim_probe_dirs(tmp_path / "never-created") == (0, 0)
+
+
+class TestKaggleProbeParsesRealCliOutput:
+    """The probe must read what the CLI actually prints, not an idealised CSV.
+
+    Kaggle CLI 2.2.4 emits a pagination preamble before the listing and uses
+    CRLF inside it::
+
+        Next Page Token = CfDJ8ImuQD4OY2pEnVW2WQ-kgndQdHqu9wY-...
+        name,size,creationDate\r
+        ground-truth-maps/.../stampDS-00001-gt.png,9151,2018-04-11 ...\r
+
+    Reading row 0 as the header made every reachable dataset report unreachable.
+    The failure is the expensive direction for this function: it exists so that
+    a missing token is caught before a queue slot is burned, so a false BLOCKED
+    costs precisely what the probe was written to save, and it does it while
+    looking like a correctly-working guard.
+
+    Captured verbatim from the GRID rather than imagined, which is the only
+    reason the preamble is in here at all.
+    """
+
+    _REAL = (
+        "Next Page Token = CfDJ8ImuQD4OY2pEnVW2WQ-kgnf0jam8ELDf3ktjyVw0Ztjp\n"
+        "name,size,creationDate\r\n"
+        "Tobacc800_Groundtruth_v2.0/Overview.txt,1634,2023-01-09 09:10:46.734000\r\n"
+        "Tobacc800_Groundtruth_v2.0/aah97e00-page02_1.xml,502,2023-01-09 09:10:46.711000\r\n"
+    )
+
+    def _run(self, mods, monkeypatch, stdout):
+        monkeypatch.setenv("KAGGLE_USERNAME", "someone")
+        monkeypatch.setenv("KAGGLE_KEY", "somekey")
+
+        class _Proc:
+            returncode = 0
+            stderr = ""
+
+            def __init__(self, out):
+                self.stdout = out
+
+        monkeypatch.setattr(mods["common"].subprocess, "run", lambda *a, **k: _Proc(stdout))
+        mods["common"].kaggle_probe("owner/name")
+
+    def test_preamble_and_crlf_are_tolerated(self, mods, monkeypatch):
+        self._run(mods, monkeypatch, self._REAL)  # must not raise
+
+    def test_a_plain_csv_still_passes(self, mods, monkeypatch):
+        self._run(mods, monkeypatch, "name,size\nfoo.png,10\n")
+
+    def test_a_listing_with_no_rows_still_fails(self, mods, monkeypatch):
+        with pytest.raises(mods["common"].FetchError):
+            self._run(mods, monkeypatch, "Next Page Token = abc\nname,size,creationDate\r\n")
+
+    def test_an_error_message_still_fails(self, mods, monkeypatch):
+        with pytest.raises(mods["common"].FetchError):
+            self._run(mods, monkeypatch, "403 - Forbidden - Permission denied\n")
+
+
+class TestUcsfIndustryIsRecorded:
+    """The Tobacco800 contamination rule needs an industry on the page.
+
+    `industry` is INDEXED BUT NOT STORED in UCSF's Solr: `industry:Tobacco`
+    filters correctly, and `fl=industry` returns nothing at all.  So
+    `first_value(doc, "industry")` was always None, every page in the
+    2026-08-31 build recorded `industry: null`, and
+    `eligible_distractor("tobacco800", "ucsf", None)` could never fire.
+
+    That is the single contamination rule that costs something.  Tobacco800 and
+    UCSF's Tobacco industry are both IIT-CDIP, so an American Tobacco letterhead
+    in a Tobacco800 class genuinely appears on UCSF Tobacco pages -- unlabelled
+    positives, where retrieving one is CORRECT and the metric records a false
+    positive.  The corpus looked fine: 117,028 pages, no warning, a null in a
+    metadata field nobody reads.
+    """
+
+    def test_the_queried_industry_is_stamped_on_the_page(self, mods):
+        page = mods["ucsf"].doc_to_page(
+            {"id": "ffbb0002", "title": "x"}, "/nonexistent/p.png", 1240, 1680, industry="Tobacco"
+        )
+        assert page.meta["industry"] == "Tobacco"
+
+    def test_a_tobacco_page_is_not_eligible_for_a_tobacco800_class(self, mods):
+        assert mods["cfg"].eligible_distractor("tobacco800", "ucsf", "Tobacco") is False
+        # ...and the non-tobacco industries still are: they are different
+        # companies, not the same archive under another name.
+        assert mods["cfg"].eligible_distractor("tobacco800", "ucsf", "Opioids") is True
+
+    def test_a_null_industry_is_what_used_to_slip_through(self, mods):
+        # Pinned as the regression itself: this returning True is precisely the
+        # bug, and it is why the industry must be stamped at pull time.
+        assert mods["cfg"].eligible_distractor("tobacco800", "ucsf", None) is True
+
+
+class TestDistractorPullPlan:
+    """Fill the budget, and spend Tobacco last.
+
+    The six industries are wildly unequal -- measured live: Tobacco 9.4M and
+    Opioids 4.07M against Fossil Fuel 311, Drug 1,064, Chemical 3,657 -- so
+    `budget // 6` asks three of them for ~30k pages that do not exist.  At 200k
+    the even split tops out at 105,031, which is why the 2026-08-31 build
+    stopped at 119,806 pages looking like a job that had run to completion.
+    """
+
+    def test_the_budget_is_actually_filled(self, mods):
+        plan = mods["build"]._plan_distractor_pull(200_000)
+        assert sum(want for _, want in plan) == 200_000
+
+    def test_the_production_budget_draws_no_tobacco_at_all(self, mods):
+        """The 200k case, and the reason the ordering exists.
+
+        Not a style preference: UCSF Tobacco is the same archive as Tobacco800,
+        so every Tobacco page in the haystack is a page Tobacco800's classes
+        cannot safely be scored against -- and worse, a place an unlabelled
+        positive can hide, where a correct retrieval is recorded as a false
+        positive.  Opioids alone has 4.07M single-page documents, so at 200k the
+        budget is filled without touching Tobacco.
+        """
+        plan = dict(mods["build"]._plan_distractor_pull(200_000))
+        assert plan.get("Tobacco", 0) == 0
+        assert sum(plan.values()) == 200_000
+
+    def test_tobacco_is_drawn_only_once_everything_else_is_exhausted(self, mods):
+        cap = mods["build"].UCSF_INDUSTRY_CAPACITY
+        others = sum(v for k, v in cap.items() if k != "Tobacco")
+        plan = mods["build"]._plan_distractor_pull(others + 50_000)
+        drawn = [industry for industry, want in plan if want > 0]
+        assert drawn[-1] == "Tobacco"
+        assert dict(plan)["Tobacco"] == 50_000
+        # ...and only after every other industry was taken to capacity.
+        for industry, want in plan:
+            if industry != "Tobacco":
+                assert want == cap[industry]
+
+    def test_a_small_budget_never_reaches_tobacco(self, mods):
+        plan = dict(mods["build"]._plan_distractor_pull(5_000))
+        assert plan.get("Tobacco", 0) == 0
+
+    def test_no_industry_is_asked_for_more_than_it_has(self, mods):
+        plan = mods["build"]._plan_distractor_pull(200_000)
+        cap = mods["build"].UCSF_INDUSTRY_CAPACITY
+        assert all(want <= cap[industry] for industry, want in plan)
+
+
+class TestFetchThrottle:
+    """Concurrency is only defensible because it gives ground.
+
+    UCSF is a shared public archive and README/GRID-RUNBOOK both warn against
+    widening the pull.  The measurement that justifies 3 concurrent fetches --
+    ~120k requests at ~3/s with zero 429/503/509, and 4,003 failures that were
+    all per-document 403s -- shows we are *below* their limit, not where it is.
+    So the pool has to detect the limit rather than assume it, and these pin the
+    behaviour that makes that true.
+    """
+
+    def test_a_rate_limit_costs_a_worker_and_buys_delay(self, mods):
+        t = mods["ucsf"]._Throttle(3)
+        assert (t.workers, t.penalties) == (3, 0)
+        t.penalise()
+        assert t.workers == 2
+        assert t.penalties == 1
+        assert t._delay >= 1.0
+
+    def test_sustained_pushback_converges_on_serial(self, mods):
+        t = mods["ucsf"]._Throttle(3)
+        for _ in range(10):
+            t.penalise()
+        # It gives up workers until it is doing exactly what it did before the
+        # change -- one request at a time -- rather than hammering through.
+        assert t.workers == 1
+        assert t._delay <= 60.0
+
+    def test_success_recovers_slowly(self, mods):
+        t = mods["ucsf"]._Throttle(2)
+        t.penalise()
+        hot = t._delay
+        for _ in range(5):
+            t.reward()
+        assert t._delay < hot
+        # One 429 must not cost the rest of a 200k run, but recovery is gradual
+        # rather than instant or the pool would oscillate against the limit.
+        assert t._delay > 0
+
+    def test_rate_limited_is_distinct_from_a_dead_document(self, mods):
+        # The whole point of the separate class: a 403 is permanent and the
+        # document must be skipped; a 429 means the document is still there and
+        # we asked too fast.  Retrying a 403 wastes the run; skipping a 429
+        # silently shrinks the corpus.
+        assert issubclass(mods["common"].RateLimited, mods["common"].FetchError)
+        assert not issubclass(mods["common"].FetchError, mods["common"].RateLimited)
+
+    def test_default_pool_is_three(self, mods, monkeypatch):
+        monkeypatch.delenv("VTS_DOCMARKS_FETCH_WORKERS", raising=False)
+        assert mods["ucsf"]._fetch_workers() == 3
+        monkeypatch.setenv("VTS_DOCMARKS_FETCH_WORKERS", "1")
+        assert mods["ucsf"]._fetch_workers() == 1
+
+
+class TestResumeSkipsRendering:
+    """A resumed pull must not re-render pages it already has.
+
+    GRID-RUNBOOK promises "Resume is free.  Downloads are atomic, rendered pages
+    are skipped when present".  Two thirds of that was true.  The skip guarded
+    the *save*::
+
+        if not image_path.exists():
+            image.save(image_path)
+
+    while `render_pdf_pages` above it ran unconditionally -- so a resumed job
+    re-rendered every page it already had, at 0.188 s each, and discarded the
+    result.  At 200k pages that is ~10 h per restart, in a builder whose whole
+    design premise is that restarting is cheap.  It mattered four times in two
+    days: a promise that resume is cheap is what makes a long unattended run
+    *correctable* rather than merely endurable.
+
+    So the fast path is pinned as behaviour, not left as an optimisation
+    somebody could reasonably tidy away.  The rendering call is made to explode;
+    if the guard regresses, this test does too.
+    """
+
+    def _fake_png(self, path):
+        from PIL import Image
+
+        Image.new("RGB", (120, 160), "white").save(path)
+
+    def test_all_pages_present_means_no_render_call(self, mods, tmp_path, monkeypatch):
+        out = tmp_path / "images"
+        out.mkdir()
+        self._fake_png(out / "abc12345_0.png")
+
+        import vtscore.datasets.pdf as pdfmod
+
+        def _explode(*a, **kw):  # pragma: no cover - the point is it is unreached
+            raise AssertionError("re-rendered a page that was already on disk")
+
+        monkeypatch.setattr(pdfmod, "render_pdf_pages", _explode)
+
+        got = mods["ucsf"]._render_to_disk(str(tmp_path / "nonexistent.pdf"), str(out), "abc12345", 150, 1)
+        # Dimensions come off the PNG that is already there.
+        assert got == [(0, str(out / "abc12345_0.png"), 120, 160)]
+
+    def test_a_missing_page_still_renders(self, mods, tmp_path, monkeypatch):
+        out = tmp_path / "images"
+        out.mkdir()
+        # Nothing on disk, so the fast path must NOT engage -- otherwise a fresh
+        # pull would quietly produce no images at all.
+        import vtscore.datasets.pdf as pdfmod
+
+        called = []
+        monkeypatch.setattr(pdfmod, "render_pdf_pages", lambda *a, **k: called.append(a) or [])
+        mods["ucsf"]._render_to_disk(str(tmp_path / "x.pdf"), str(out), "def67890", 150, 1)
+        assert called, "a page with no PNG on disk must be rendered"
+
+
+class TestPerSourceClusteringKnobs:
+    """One threshold and one instance bar for four sources served only one.
+
+    `CLUSTER_THRESHOLD`'s own docstring ends "this number is a property of the
+    data, and it does not travel".  It does not travel between SOURCES either,
+    which a single global value quietly assumed.  Swept per source on the 200k
+    build: SPODS percolates just above 0.10, StaVer is already 5.8% merged at
+    0.02 and 22% by 0.10, and Tobacco800's usable classes PEAK at 0.18 with only
+    14.7% merged -- three times what 0.10 gave it.
+
+    The same applies to the instance bar.  A `>=10` that is right for SPODS's
+    174 candidate classes empties StaVer, which has exactly one class that deep.
+    """
+
+    def test_each_source_gets_its_own_swept_threshold(self, mods):
+        cfg = mods["cfg"]
+        assert cfg.cluster_threshold_for("spods") == 0.10
+        assert cfg.cluster_threshold_for("staver") == 0.04
+        assert cfg.cluster_threshold_for("tobacco800") == 0.18
+
+    def test_tobacco800_is_looser_than_spods_and_staver_is_tighter(self, mods):
+        cfg = mods["cfg"]
+        # The ordering is the finding; the exact numbers will move when the
+        # descriptor or the sources change, and this should move with them.
+        assert (
+            cfg.cluster_threshold_for("staver")
+            < cfg.cluster_threshold_for("spods")
+            < cfg.cluster_threshold_for("tobacco800")
+        )
+
+    def test_an_unknown_source_falls_back_to_the_global(self, mods):
+        assert mods["cfg"].cluster_threshold_for("synth") == mods["cfg"].CLUSTER_THRESHOLD
+
+    def test_an_env_override_still_wins_for_every_source(self, mods, monkeypatch):
+        monkeypatch.setenv("VTS_DOCMARKS_CLUSTER_THRESHOLD", "0.5")
+        for src in ("spods", "staver", "tobacco800", "ucsf"):
+            assert mods["cfg"].cluster_threshold_for(src) == mods["cfg"].CLUSTER_THRESHOLD
+
+    def test_the_sparse_sources_get_a_lower_instance_bar(self, mods):
+        cfg = mods["cfg"]
+        assert cfg.min_instances_for("spods") == cfg.MIN_INSTANCES
+        assert cfg.min_instances_for("staver") < cfg.MIN_INSTANCES
+        assert cfg.min_instances_for("tobacco800") < cfg.MIN_INSTANCES
+
+
+class TestAnchorPagesAreInEveryTier:
+    """The known negatives must not be evicted by a distractor budget.
+
+    README: a page from a source exhaustively checked for a class is "the
+    hardest possible negative" -- same scanner, same paper, same era.  The
+    2026-09-01 build dropped 129 of them over the tier budget to make room for
+    UCSF pages, which spends the hardest negatives to buy the easiest.  There
+    are only ~2,650 anchor pages; they fit in every tier including `s`.
+    """
+
+    def test_an_anchor_page_survives_a_budget_far_below_the_corpus(self, mods):
+        pages = [_page(mods, f"spods/p{i}", "spods", path=f"/nonexistent/s{i}.png") for i in range(5)] + [
+            _page(mods, f"ucsf/p{i}", "ucsf", path=f"/nonexistent/u{i}.png") for i in range(200)
+        ]
+
+        tiers, _cut = mods["build"].assign_tiers(pages, {}, tiers={"s": 10, "l": 100}, tier_order=("s", "l"), salt="t")
+        anchors = [pid for pid in tiers if pid.startswith("spods/")]
+        assert len(anchors) == 5, "an anchor page was dropped over budget"
+        assert all(tiers[pid] == "s" for pid in anchors), "anchors must be in the smallest tier"
+
+    def test_ucsf_distractors_are_still_budgeted(self, mods):
+        pages = [_page(mods, f"ucsf/p{i}", "ucsf", path=f"/nonexistent/u{i}.png") for i in range(200)]
+        tiers, _cut = mods["build"].assign_tiers(pages, {}, tiers={"s": 10, "l": 100}, tier_order=("s", "l"), salt="t")
+        # The budget still binds on the population it is meant to bind on.
+        assert sum(1 for t in tiers.values() if t == "s") == 10
+
+
+class TestUcsfBandsAreNotClustered:
+    """UCSF letterhead bands propose noise, not candidates.
+
+    The band is a fixed-geometry crop -- the top 22% of every page -- so a
+    perceptual hash of it describes page layout rather than the logo inside it,
+    and two unrelated companies' letterheads at the same position hash alike.
+
+    Swept on 3,000 marks there is no flat region at any threshold: largest
+    component 12.4% at 0.02 (the lowest on the grid), 36% at 0.04, 81% at 0.10,
+    99% at 0.22, with 85% of marks singletons throughout.  SPODS sits at 1.5%
+    across the same range.  It is percolated from the start, so there is no
+    threshold to pick -- which is why this is a source list and not a number.
+
+    At 0.10 it produced one 12,706-instance "class"; being admitted-class pages,
+    those pinned 13,874 pages into tier `s` against a 5,000 budget.
+    """
+
+    def test_ucsf_is_not_clustered(self, mods):
+        assert "ucsf" not in mods["cfg"].CLUSTERED_SOURCES
+
+    def test_the_anchor_sources_still_are(self, mods):
+        assert set(mods["cfg"].CLUSTERED_SOURCES) == {"spods", "staver", "tobacco800"}
+
+    def test_every_clustered_source_has_a_swept_threshold(self, mods):
+        # A source we cluster without a swept number is one running on an
+        # inherited default, which is how UCSF got a 12,706-instance class.
+        cfg = mods["cfg"]
+        for src in cfg.CLUSTERED_SOURCES:
+            assert src in cfg.CLUSTER_THRESHOLD_BY_SOURCE
+
+    def test_ucsf_pages_are_still_in_the_corpus(self, mods):
+        # Dropping the CLASSES must not drop the PAGES: UCSF is 197k distractors
+        # and that was always 92% of what it was for.
+        assert "ucsf" not in mods["cfg"].ANCHOR_SOURCES
+        assert mods["cfg"].eligible_distractor("spods", "ucsf", "Opioids") is True
