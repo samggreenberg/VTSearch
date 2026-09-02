@@ -10,6 +10,7 @@ import pytest
 
 from vtscore.io import (
     atomic_write_json,
+    atomic_write_stream,
     atomic_write_text,
     desanitize_csv_cell,
     read_server_json,
@@ -56,6 +57,93 @@ class TestReadServerJson:
         p.write_bytes(b"\xff\xfe not valid utf-8")
         with pytest.raises(ValueError, match="Invalid JSON"):
             read_server_json(p)
+
+
+class TestAtomicWriteStream:
+    def test_basic_write(self, tmp_path):
+        p = tmp_path / "out.txt"
+        with atomic_write_stream(p) as f:
+            f.write("hello ")
+            f.write("world")
+        assert p.read_text() == "hello world"
+
+    def test_creates_parents(self, tmp_path):
+        p = tmp_path / "nested" / "dir" / "out.txt"
+        with atomic_write_stream(p) as f:
+            f.write("ok")
+        assert p.read_text() == "ok"
+
+    def test_no_tmp_left_behind_on_success(self, tmp_path):
+        p = tmp_path / "out.txt"
+        with atomic_write_stream(p) as f:
+            f.write("data")
+        assert [entry.name for entry in tmp_path.iterdir()] == ["out.txt"]
+
+    def test_destination_untouched_until_commit(self, tmp_path):
+        """A reader mid-stream sees the *previous* content, never a partial write."""
+        p = tmp_path / "out.txt"
+        p.write_text("old")
+        with atomic_write_stream(p) as f:
+            f.write("new")
+            f.flush()
+            assert p.read_text() == "old"
+        assert p.read_text() == "new"
+
+    def test_raising_block_leaves_destination_and_removes_tmp(self, tmp_path):
+        """The failure mode this helper exists for: a records iterator dying mid-export."""
+        p = tmp_path / "out.txt"
+        p.write_text("old")
+        with pytest.raises(RuntimeError, match="records blew up"):
+            with atomic_write_stream(p) as f:
+                f.write("partial")
+                raise RuntimeError("records blew up")
+        assert p.read_text() == "old"
+        assert [entry.name for entry in tmp_path.iterdir()] == ["out.txt"]
+
+    def test_tmp_removed_when_destination_did_not_exist(self, tmp_path):
+        p = tmp_path / "out.txt"
+        with pytest.raises(RuntimeError):
+            with atomic_write_stream(p) as f:
+                f.write("partial")
+                raise RuntimeError("boom")
+        assert not p.exists()
+        assert list(tmp_path.iterdir()) == []
+
+    def test_tmp_cleaned_up_when_rename_fails(self, tmp_path, monkeypatch):
+        from vtscore import io as vtio
+
+        p = tmp_path / "out.txt"
+
+        def boom(*_args, **_kwargs):
+            raise OSError("disk full")
+
+        monkeypatch.setattr(vtio.os, "replace", boom)
+        with pytest.raises(OSError, match="disk full"):
+            with atomic_write_stream(p) as f:
+                f.write("data")
+        assert list(tmp_path.iterdir()) == []
+
+    def test_preserves_csv_crlf(self, tmp_path):
+        """``newline=""`` keeps a ``csv`` writer's CRLF endings from being doubled."""
+        import csv
+
+        p = tmp_path / "out.csv"
+        with atomic_write_stream(p) as f:
+            writer = csv.writer(f)
+            writer.writerow(["a", "b"])
+            writer.writerow([1, 2])
+        assert p.read_bytes() == b"a,b\r\n1,2\r\n"
+
+    def test_tmp_name_is_per_writer_unique(self, tmp_path):
+        """Two writers racing on one destination must not share a tmp path."""
+        p = tmp_path / "out.txt"
+        seen = []
+        with atomic_write_stream(p):
+            seen.append(next(e.name for e in tmp_path.iterdir()))
+            with atomic_write_stream(p):
+                names = sorted(e.name for e in tmp_path.iterdir())
+        assert len(names) == 2, names
+        assert names[0] != names[1]
 
 
 class TestAtomicWriteText:
