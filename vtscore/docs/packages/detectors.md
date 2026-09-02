@@ -341,15 +341,24 @@ class ImporterResolver(Protocol):
                  filename: str) -> Path | None: ...
 ```
 
-`register_source_resolver(fn)` and `register_importer_resolver(fn)`
-replace the default implementations. Library callers that want to
-extend resolution (e.g. fetch from a private CDN before falling
-through to importers) plug in here. On first use,
-`_auto_wire_resolvers` installs defaults that delegate to
+Both resolvers are bound to a default implementation at import time:
+`_default_source_resolver` delegates to
 `vtscore.datasets.sources.get_source_for_origin` (registering
-`source.cleanup` on the caller's `ExitStack`) and
-`vtscore.datasets.importers.get_importer` +
-`importer.resolve_file`.
+`source.cleanup` on the caller's `ExitStack`), and
+`_default_importer_resolver` delegates to
+`vtscore.datasets.importers.get_importer` + `importer.resolve_file`.
+Those two packages are imported directly at the top of the module, so a
+broken install fails loudly at import rather than degrading into "every
+label fails to resolve".
+
+`register_source_resolver(fn)` and `register_importer_resolver(fn)`
+replace those defaults, and may be called at any point — the dispatch
+reads the module global on every resolution. Library callers that want
+to extend resolution (e.g. fetch from a private CDN before falling
+through to importers) plug in here; returning `None` from a source
+resolver falls through to the importer resolver, and then to the
+generic `params["path"]` fallback. There is no `unregister_*`
+counterpart: a replacement is permanent for the life of the process.
 
 ### Public surface
 
@@ -366,10 +375,10 @@ with resolve_file_context(origin, origin_name, filename) as path:
 
 | Function                                                             | Behaviour                                                          |
 |----------------------------------------------------------------------|--------------------------------------------------------------------|
-| `resolve_file_context(origin, origin_name, filename)` (line 195)     | **Context manager** - must wrap any code that reads the file. Some sources (`http_archive` cache misses) materialise files in a tempdir they own; the `ExitStack` keeps that tempdir alive until the `with` block exits. |
-| `resolve_file_from_origin(origin, origin_name, filename)` (line 223) | One-shot convenience. Safe for `path.exists()` checks; unsafe for any call that may garbage-collect the source. |
+| `resolve_file_context(origin, origin_name, filename)` (line 169)     | **Context manager** - must wrap any code that reads the file. Some sources (`http_archive` cache misses) materialise files in a tempdir they own; the `ExitStack` keeps that tempdir alive until the `with` block exits. |
+| `resolve_file_from_origin(origin, origin_name, filename)` (line 196) | One-shot convenience. Safe for `path.exists()` checks; unsafe for any call that may garbage-collect the source. |
 | `embed_file(file_path, media_type, embedder_name="")` (line 376)     | Pick the embedder for the media type (named, else first registered) and call `embedder.embed_media(media_from_path(...))`. |
-| `resolve_label_embeddings(labels, media_type, progress_callback=None)` (line 691) | Batch entry point. Returns `ResolvedLabels`.            |
+| `resolve_label_embeddings(labels, media_type, progress_callback=None)` (line 793) | Batch entry point. Returns `ResolvedLabels`.            |
 
 `ResolvedLabels` is a dataclass with `embeddings`, `labels`,
 `resolved_count`, `total_count`, `missing_entries` plus the
