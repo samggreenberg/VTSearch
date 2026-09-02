@@ -16,6 +16,7 @@ import { Observable, Subscription } from 'rxjs';
 
 import { IconComponent } from '../icon/icon.component';
 import { formatBytes } from '../../utils/format-metadata';
+import { apiErrorMessage } from '../../utils/api-error';
 
 export interface FolderBrowserDirEntry {
   name: string;
@@ -191,8 +192,7 @@ export class FolderBrowserComponent implements OnInit, OnDestroy, AfterViewInit 
         this.pathChange.emit({ path: this.currentPath(), rootPath: this.rootPath() });
       },
       error: (err) => {
-        const msg = (err && err.error && err.error.message) || (err && err.error && err.error.error) || 'Could not browse this folder.';
-        this.error.set(typeof msg === 'string' ? msg : 'Could not browse this folder.');
+        this.error.set(apiErrorMessage(err, 'Could not browse this folder.'));
         this.loading.set(false);
         this.rows.set([]);
       },

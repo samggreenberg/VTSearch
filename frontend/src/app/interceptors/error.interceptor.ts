@@ -142,16 +142,16 @@ function parseErrorBody(err: HttpErrorResponse): ParsedBody {
   }
   if (body && typeof body === 'object') {
     const obj = body as Record<string, unknown>;
-    // Standard {error, detail, request_id} shape from the backend.
-    const message =
-      pickString(obj, 'error') ||
-      pickString(obj, 'message') ||
-      undefined;
+    // The one backend error envelope (see vtsearch/errors.py):
+    // {code, status, message, request_id, errors?, detail?, ...extra}.
+    const message = pickString(obj, 'message');
     const detail = pickString(obj, 'detail');
     const requestId = pickString(obj, 'request_id');
-    // Surface any other top-level fields (e.g. missing_fields, available)
-    // so they show up in the "extra" section.
-    const known = new Set(['error', 'message', 'detail', 'request_id']);
+    // Surface any other top-level fields (e.g. missing_fields, available,
+    // error_code, errors) so they show up in the "extra" section. `code`
+    // and `status` are the numeric HTTP status and its name, which the
+    // toast already renders from the HttpErrorResponse itself.
+    const known = new Set(['code', 'status', 'message', 'detail', 'request_id']);
     const extra: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(obj)) {
       if (!known.has(k)) extra[k] = v;

@@ -62,14 +62,9 @@ root.
 absolute paths — `"path": "/data/labels/labels.csv"`,
 `"current_path": "/data/labels"`.)
 
-400 if the path escapes the browse root (path traversal prevention) and
-403 if permission is denied reading the directory; both use the standard
-`{"message": "..."}` envelope.
-
-404 if the directory does not exist. This one is intercepted by the
-app-level `NotFound` handler, so it keeps the legacy shape
-`{"error": "Not Found", "request_id": "..."}` rather than the `message`
-envelope.
+400 if the path escapes the browse root (path traversal prevention), 403 if
+permission is denied reading the directory, and 404 if the directory does not
+exist; all three use the [standard error envelope](../API.md#conventions).
 
 422 if a query parameter fails schema validation, with the standard
 per-field `errors` envelope:

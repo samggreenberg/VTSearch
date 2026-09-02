@@ -3108,11 +3108,19 @@
         "type": "object"
       },
       "Error": {
-        "additionalProperties": false,
+        "additionalProperties": true,
         "properties": {
           "code": {
             "description": "Error code",
             "type": "integer"
+          },
+          "detail": {
+            "description": "Exception type and first line, on 500s",
+            "type": "string"
+          },
+          "error_code": {
+            "description": "Machine-readable slug, e.g. 'dataset_not_loaded'",
+            "type": "string"
           },
           "errors": {
             "additionalProperties": {},
@@ -3121,6 +3129,10 @@
           },
           "message": {
             "description": "Error message",
+            "type": "string"
+          },
+          "request_id": {
+            "description": "Correlates the error with the server logs",
             "type": "string"
           },
           "status": {
@@ -9653,7 +9665,7 @@
     },
     "/api/dataset/detect-media-type": {
       "get": {
-        "description": "Powers the auto-detect hint in the import modal: rather than making\nthe user pick ``media_type`` blindly, the modal calls this after the\nuser selects a folder and pre-fills the dropdown with whichever type\nhas the most matching files in the first ``limit`` files of the tree.\n\nThe 404 returned when the source is unavailable on disk is\nintercepted by the app-level ``NotFound`` errorhandler and keeps the\nlegacy ``{\"error\": \"Not Found\", \"request_id\": ...}`` envelope.",
+        "description": "Powers the auto-detect hint in the import modal: rather than making\nthe user pick ``media_type`` blindly, the modal calls this after the\nuser selects a folder and pre-fills the dropdown with whichever type\nhas the most matching files in the first ``limit`` files of the tree.\n\nThe 404 returned when the source is unavailable on disk passes through\nthe app-level ``NotFound`` errorhandler (JSON rather than werkzeug's\nHTML page) with its ``message`` intact.",
         "operationId": "detect_media_type",
         "parameters": [
           {

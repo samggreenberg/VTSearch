@@ -54,6 +54,7 @@ from vtscore.detectors.store import (
     _write_detector,
 )
 from vtscore.detectors.workflow import apply_and_retrain as _apply_and_retrain
+from vtsearch.errors import error_response
 from vtsearch.routes._shared import image_thumbnail_response, require_dataset_header, require_detector_header
 from vtsearch.schemas.detectors import (
     DetectorLabelsDetailResponseSchema,
@@ -322,7 +323,7 @@ def import_labels_into_detector(name: str, importer_name: str):
     path = _detector_path(name)
     data = _read_detector(path)
     if data is None:
-        return jsonify({"error": f"Detector '{name}' not found"}), 404
+        return error_response(f"Detector '{name}' not found", 404)
 
     from vtscore.labels.importers import get_label_importer, list_label_importers
     from vtsearch.routes._shared import (
@@ -342,14 +343,14 @@ def import_labels_into_detector(name: str, importer_name: str):
     if err:
         return err
     if not isinstance(label_entries, list):
-        return jsonify({"error": "Importer did not return a list of label dicts."}), 500
+        return error_response("Importer did not return a list of label dicts.", 500)
 
     # ------------------------------------------------------------------
     # 1) Merge into the persisted labelset (always, whether loaded or not)
     # ------------------------------------------------------------------
     merged = _merge_labels_into_detector_file(path, label_entries)
     if merged is None:
-        return jsonify({"error": f"Detector '{name}' not found"}), 404
+        return error_response(f"Detector '{name}' not found", 404)
     existing_ls, applied, skipped, new_entries = merged
 
     # Update the detector registry entry

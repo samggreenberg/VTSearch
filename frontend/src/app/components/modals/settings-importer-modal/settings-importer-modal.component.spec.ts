@@ -92,7 +92,7 @@ describe('SettingsImporterModalComponent', () => {
 
     component.submit();
     httpMock.expectOne('/api/settings-importers/import/server_json_file').flush(
-      { error: 'bad file' },
+      { message: 'bad file' },
       { status: 400, statusText: 'Bad Request' },
     );
     await settleZoneless(fixture);

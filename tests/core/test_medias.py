@@ -671,15 +671,14 @@ class TestMediaAudio:
             assert wf.getsampwidth() == 2
 
     def test_returns_404_for_invalid_id(self, client):
-        # The global 404 handler in ``app.py`` normalises NotFound
-        # exceptions on ``/api/`` paths to ``error_response(exc.name, 404)``
-        # (the JSON-for-SPA hook that overrides werkzeug's HTML 404).
-        # The flask-smorest message passed to ``abort()`` is dropped
-        # in favour of the canonical reason phrase.
+        # The global 404 handler renders JSON for ``/api/`` paths (the
+        # JSON-for-SPA hook that overrides werkzeug's HTML 404) but hands
+        # the rendering back to flask-smorest, so the route's own
+        # ``abort(404, message=...)`` text reaches the client.
         resp = client.get("/api/medias/9999/audio")
         assert resp.status_code == 404
         data = resp.get_json()
-        assert data["error"] == "Not Found"
+        assert data["message"] == "not found"
 
     def test_returns_404_for_zero_id(self, client):
         resp = client.get("/api/medias/0/audio")

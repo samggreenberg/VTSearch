@@ -28,7 +28,7 @@ the "Improvement proposals" section below.
 
 ---
 
-## Improvement proposals (40)
+## Improvement proposals (39)
 
 Design and architecture directions surfaced by the same review. These are
 deliberately **not** issues: each is a judgement call about direction rather than
@@ -39,12 +39,6 @@ ship on its own.
 ### Flask API layer
 
 <!-- item-sep -->
-
-- **Global NotFound handler discards every abort(404, message=...) body on /api/ routes** — `vtsearch/errors.py:43` (medium impact)
-
-  _handle_404 renders `error_response(exc.name, 404)`, i.e. always the literal 'Not Found', for every NotFound raised under /api/ — including flask-smorest `abort(404, message=...)` calls, whose message/extra kwargs ride on exc.data and are simply dropped. Routes across the codebase craft specific 404 messages that no client can ever see: `_abort_find(404, f"Dataset file missing for '{name}'")` (routes/detectors/find.py:183), 'Detector not found', 'File not found: <name>' (media/server.py:253), 'Job not found', etc. The learned-sort docstring (routes/sorting.py:486-492) even documents the message loss as a known quirk. The result is that any 404 with actionable detail (which dataset's pkl vanished, which of several filenames was missing) degrades to a generic banner. Benefit: one small change restores meaningful diagnostics to dozens of endpoints without touching them.
-
-  *Direction:* In _handle_404 (and _handle_405), prefer the smorest payload when present: `msg = (getattr(exc, 'data', None) or {}).get('message') or exc.description or exc.name; return error_response(msg, 404)`.
 
 <!-- item-sep -->
 

@@ -142,7 +142,7 @@ describe('CombineDatasetsModalComponent', () => {
 
     component.submit();
     const req = httpMock.expectOne('/api/dataset/combine');
-    req.flush({ error: 'boom' }, { status: 500, statusText: 'Server Error' });
+    req.flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
 
     expect(started).toBe(false);
     expect(component.error()).toBe('boom');

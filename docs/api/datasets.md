@@ -222,7 +222,7 @@ POST /api/dataset/cancel/{task_id}
 Cancels a specific loading task, with the same response shape and the same
 `409` contract when the task was not running or its worker is gone.
 
-→ `200 {"ok": true, ...}`, `409 {"ok": false, ...}`, or `{"error": "Task not found"}` (404)
+→ `200 {"ok": true, ...}`, `409 {"ok": false, ...}`, or `404 {"message": "Task not found", ...}`
 
 ---
 

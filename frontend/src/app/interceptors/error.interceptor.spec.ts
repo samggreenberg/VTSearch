@@ -50,7 +50,7 @@ describe('errorInterceptor', () => {
     httpMock
       .expectOne('/api/foo')
       .flush(
-        { error: 'Boom', detail: 'more detail', request_id: 'req-1' },
+        { code: 500, status: 'Internal Server Error', message: 'Boom', detail: 'more detail', request_id: 'req-1' },
         { status: 500, statusText: 'Server Error' },
       );
 
@@ -72,7 +72,7 @@ describe('errorInterceptor', () => {
   it('enriches the error context with the active dataset/detector ids', () => {
     ctx.setActive('ds-9', 'mdl-3');
     http.get('/api/foo').subscribe({ error: () => {} });
-    httpMock.expectOne('/api/foo').flush({ error: 'x' }, { status: 400, statusText: 'Bad Request' });
+    httpMock.expectOne('/api/foo').flush({ message: 'x' }, { status: 400, statusText: 'Bad Request' });
 
     const arg = toast.error.mock.calls[0][0];
     expect(arg.errorContext.datasetId).toBe('ds-9');
@@ -84,7 +84,7 @@ describe('errorInterceptor', () => {
     httpMock
       .expectOne('/api/foo')
       .flush(
-        { error: 'x' },
+        { message: 'x' },
         { status: 500, statusText: 'err', headers: { 'X-Request-Id': 'hdr-1' } },
       );
 
@@ -95,8 +95,13 @@ describe('errorInterceptor', () => {
     http.get('/api/foo').subscribe({ error: () => {} });
     httpMock
       .expectOne('/api/foo')
-      .flush({ error: 'x', missing_fields: ['a', 'b'] }, { status: 422, statusText: 'err' });
+      .flush(
+        { code: 422, status: 'Unprocessable Content', message: 'x', missing_fields: ['a', 'b'] },
+        { status: 422, statusText: 'err' },
+      );
 
+    // ``code`` and ``status`` are envelope furniture the toast already
+    // renders from the HttpErrorResponse, so they stay out of ``extra``.
     expect(toast.error.mock.calls[0][0].errorContext.extra).toEqual({
       missing_fields: ['a', 'b'],
     });
@@ -118,7 +123,7 @@ describe('errorInterceptor', () => {
     http
       .get('/api/foo', { context: new HttpContext().set(SKIP_ERROR_TOAST, true) })
       .subscribe({ error: (e: HttpErrorResponse) => (caught = e) });
-    httpMock.expectOne('/api/foo').flush({ error: 'x' }, { status: 500, statusText: 'err' });
+    httpMock.expectOne('/api/foo').flush({ message: 'x' }, { status: 500, statusText: 'err' });
 
     expect(toast.error).not.toHaveBeenCalled();
     expect(caught?.status).toBe(500);

@@ -1377,7 +1377,7 @@ class TestLoadModelEndpoint:
             headers={"X-Dataset-Id": "not_a_loaded_dataset"},
         )
         assert res.status_code == 409
-        assert res.get_json().get("code") == "dataset_not_loaded"
+        assert res.get_json().get("error_code") == "dataset_not_loaded"
         # No task row was created, so the dashboard shows no stuck spinner.
         assert detector_loading_tasks.get_tracker(f"_detload_{detector_id}") is None
 
@@ -2875,7 +2875,7 @@ class TestRegisterModelFromLabelset:
             json={"name": "NoOrigin", "filepath": str(labels_path)},
         )
         assert res.status_code == 400
-        assert "media type" in res.get_json()["error"].lower()
+        assert "media type" in res.get_json()["message"].lower()
 
     def test_mixed_media_types_returns_400(self, client, tmp_path):
         """Labels with conflicting origin media types are rejected."""
@@ -2896,7 +2896,7 @@ class TestRegisterModelFromLabelset:
             json={"name": "Mixed", "filepath": str(labels_path)},
         )
         assert res.status_code == 400
-        err = res.get_json()["error"]
+        err = res.get_json()["message"]
         assert "audio" in err and "image" in err
 
     def test_unknown_importer_returns_404(self, client):
@@ -2905,7 +2905,7 @@ class TestRegisterModelFromLabelset:
             json={"name": "X"},
         )
         assert res.status_code == 404
-        assert "no_such_importer" in res.get_json()["error"]
+        assert "no_such_importer" in res.get_json()["message"]
 
     def test_duplicate_name_returns_409(self, client, tmp_path):
         """Name collision with an existing detector file."""

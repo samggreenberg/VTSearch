@@ -97,7 +97,7 @@ describe('FindStatsModalComponent', () => {
   it('repaints the error text on a failed load (zoneless canary)', async () => {
     await fixture.whenStable();
     httpMock.expectOne('/api/find/stats').flush(
-      { error: 'no find run' },
+      { message: 'no find run' },
       { status: 404, statusText: 'Not Found' },
     );
     httpMock.expectOne('/api/find/evidence-coverage').flush(mockEvidenceUnavailable);

@@ -104,7 +104,7 @@ describe('AchievementsService', () => {
     service.state.subscribe();
     httpMock
       .expectOne('/api/achievements')
-      .flush({ error: 'boom' }, { status: 500, statusText: 'Server Error' });
+      .flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
     expect(service.snapshot.achievements).toEqual([]);
   });
 
@@ -213,7 +213,7 @@ describe('AchievementsService', () => {
     service.checkPhrase('???').subscribe((r) => (result = r));
     httpMock
       .expectOne('/api/achievements/check-phrase')
-      .flush({ error: 'boom' }, { status: 500, statusText: 'Server Error' });
+      .flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
     expect(result).toEqual({ matched: false, doc_id: null, doc_name: null, already_read: false });
   });
 

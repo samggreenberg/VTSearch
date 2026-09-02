@@ -153,15 +153,14 @@ app.config["OPENAPI_JSON_PATH"] = "openapi.json"
 app.config["OPENAPI_SWAGGER_UI_PATH"] = "/docs"
 app.config["OPENAPI_SWAGGER_UI_URL"] = "https://cdn.jsdelivr.net/npm/swagger-ui-dist/"
 
-from flask_smorest import Api  # noqa: E402
-
+from vtsearch.errors import VTSearchApi  # noqa: E402
 from vtsearch.openapi_postprocess import (  # noqa: E402
     assign_operation_ids,
     collapse_nullable_refs,
     normalize_unprocessable_response,
 )
 
-api = Api(app)
+api = VTSearchApi(app)
 
 
 # flask-smorest / apispec doesn't populate ``operationId`` on its own, so

@@ -66,6 +66,7 @@ from flask_smorest import Blueprint
 logger = logging.getLogger(__name__)
 
 from vtscore.labels.importers import get_label_importer, list_label_importers
+from vtsearch.errors import error_response
 from vtsearch.routes._shared import (
     get_plugin_or_404,
     plugin_field_options,
@@ -281,7 +282,7 @@ def run_label_import(importer_name: str):  # noqa: C901
         return err
 
     if not isinstance(label_entries, list):
-        return jsonify({"error": "Importer did not return a list of label dicts."}), 500
+        return error_response("Importer did not return a list of label dicts.", 500)
 
     # Apply labels to global vote state
     origin_lookup, md5_lookup, name_lookup = cached_media_lookups()

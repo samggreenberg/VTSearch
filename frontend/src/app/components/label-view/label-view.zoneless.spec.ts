@@ -1058,7 +1058,7 @@ describe('LabelViewComponent', () => {
       startRunningJob();
       // 404 means the job was evicted or never existed; polling it forever
       // would just spin the panel.
-      resultPolls()[0].flush({ error: 'Not Found' }, { status: 404, statusText: 'Not Found' });
+      resultPolls()[0].flush({ message: 'Not Found' }, { status: 404, statusText: 'Not Found' });
 
       expect(component.sortState.sortBusy).toBe(false);
       expect(component.sortState.sortStatus).toBe('Training job expired');
