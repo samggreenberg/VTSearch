@@ -155,6 +155,58 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     expect(errEl!.textContent).toContain('projection exploded');
   });
 
+  // Issue #3500: the full-dataset build is the app's longest wait, so its
+  // status line must surface the server's remaining-time estimate the way the
+  // subset prep screen already does. The estimate is withheld for the first
+  // few seconds of a build and throughout the count-less UMAP fit, so the
+  // no-estimate opening state is normal and must render nothing rather than a
+  // placeholder.
+  it('renders the build ETA beside the count once the server offers one', async () => {
+    await settleZoneless(fixture);
+
+    const building = (extra: Partial<ProjectionMeta>): ProjectionMeta =>
+      ({
+        projection_id: 'p1',
+        bounds: [0, 0, 1, 1],
+        base_radius: 1,
+        tile_span: 1,
+        point_count: 0,
+        levels: [],
+        status: 'building',
+        current: 40,
+        total: 100,
+        message: 'binning',
+        step: 2,
+        total_steps: 3,
+        overall: 0.4,
+        ...extra,
+      }) as ProjectionMeta;
+
+    // Opening state: the tracker has not yet earned an estimate.
+    metaSubject.next(building({ eta_seconds: null }));
+    await settleZoneless(fixture);
+
+    const count = fixture.nativeElement.querySelector('.browse-status-count') as HTMLElement;
+    expect(count).not.toBeNull();
+    expect(count.textContent).toContain('40 / 100');
+    expect(count.querySelector('.browse-status-eta')).toBeNull();
+
+    // The estimate arrives on a later poll and joins the same line, rendered
+    // through the shared `formatEta` (no client-side re-rounding).
+    metaSubject.next(building({ current: 55, eta_seconds: 90 }));
+    await settleZoneless(fixture);
+
+    expect(fixture.nativeElement.querySelector('.browse-status-eta')!.textContent).toContain(
+      'About 1.5 min left',
+    );
+
+    // A phase that reports no estimate clears it rather than leaving the stale
+    // figure up.
+    metaSubject.next(building({ current: 70, eta_seconds: null }));
+    await settleZoneless(fixture);
+    expect(fixture.nativeElement.querySelector('.browse-status-eta')).toBeNull();
+  });
+
   it('covers the canvas until it reports its opening view is painted', async () => {
     await settleZoneless(fixture);
     const component = fixture.componentInstance;

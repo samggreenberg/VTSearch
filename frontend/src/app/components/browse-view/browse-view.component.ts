@@ -39,7 +39,7 @@ import {
 } from '../browse-canvas/hex-render.util';
 import type { ProjectionMeta, RegionLabelPayload } from '../../models/projection.models';
 import { snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
-import { progressBarState } from '../../utils/format-progress';
+import { formatEta, progressBarState } from '../../utils/format-progress';
 import { shortcutsBlocked } from '../../utils/keyboard-shortcuts';
 import type { AppSettings } from '../../generated/api-client/models/app-settings';
 import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
@@ -142,6 +142,11 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    *  parked at the slice floor during the count-less UMAP fit, the pair bounds
    *  the bar's shimmer zone. See ProgressEvent.overall_step_end. */
   readonly buildStepEnd = signal<number | null>(null);
+  /** Seconds the server estimates are left in the whole build, or ``null``
+   *  while it declines to guess. The tracker withholds one for the first few
+   *  seconds and throughout a count-less phase, so empty is the normal opening
+   *  state rather than a failure; see {@link buildEtaText}. */
+  readonly buildEta = signal<number | null>(null);
 
   /** `<vt-progress-bar>` inputs for the build state, preferring the whole-job
    *  ``overall`` fraction so the bar fills once across the build rather than
@@ -154,6 +159,15 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       overall_step_end: this.buildStepEnd(),
     }),
   );
+
+  /**
+   * The remaining-time estimate for the line beside the count, e.g.
+   * ``"About 10 min left"``. Rendered through the shared `formatEta` and never
+   * re-rounded here: the server already snaps the figure to a coarse sticky
+   * ladder so every consumer displays the same one. Empty string when there is
+   * no estimate, which the template drops.
+   */
+  readonly buildEtaText = computed(() => formatEta(this.buildEta()));
 
   /** Phase line under the bar: `"Step 2 of 3 · building pyramid"`. */
   readonly buildDetail = computed(() => {
@@ -1457,6 +1471,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.buildTotalSteps.set(meta?.total_steps ?? null);
     this.buildOverall.set(meta?.overall ?? null);
     this.buildStepEnd.set(meta?.overall_step_end ?? null);
+    this.buildEta.set(meta?.eta_seconds ?? null);
   }
 
   private loadProjection(): void {
