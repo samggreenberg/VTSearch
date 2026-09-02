@@ -20,7 +20,6 @@ from vtscore.concurrency.notifications import notifications, notify
 from vtscore.concurrency.progress import (
     LoadingTasksTracker,
     ProgressTracker,
-    dataset_progress,
     loading_tasks,
     sort_progress,
 )
@@ -183,7 +182,7 @@ class TestProgressTrackerEta:
 
     def test_eta_field_absent_when_extra_not_declared(self):
         """Trackers created without an ``eta_seconds`` extra get no key;
-        the feature is opt-in via :data:`_PROGRESS_COMMON_EXTRAS`."""
+        the feature is opt-in via :data:`PROGRESS_COMMON_EXTRAS`."""
         tracker = ProgressTracker()
         tracker.update("loading", "", 1, 2)
         assert "eta_seconds" not in tracker.get()
@@ -403,17 +402,26 @@ class TestEventsRoute:
         finally:
             gen.close()
 
-    def test_initial_dataset_snapshot_reflects_current_state(self):
-        dataset_progress.update("loading", "snap", 7, 8)
+    def test_initial_tracker_snapshot_reflects_current_state(self):
+        sort_progress.update("loading", "snap", 7, 8)
         try:
             frames = initial_snapshot()
-            ds_frame = next(f for f in frames if f.startswith("event: dataset\n"))
-            data_line = [ln for ln in ds_frame.splitlines() if ln.startswith("data: ")][0]
+            frame = next(f for f in frames if f.startswith("event: sort\n"))
+            data_line = [ln for ln in frame.splitlines() if ln.startswith("data: ")][0]
             payload = json.loads(data_line.removeprefix("data: "))
             assert payload["current"] == 7
             assert payload["total"] == 8
         finally:
-            dataset_progress.update("idle", "", 0, 0)
+            sort_progress.update("idle", "", 0, 0)
+
+    def test_no_legacy_dataset_channel(self):
+        """The global dataset tracker is gone; so is the channel it backed.
+
+        Per-task progress rides ``loading-tasks``.  A stray ``dataset`` frame
+        would be a tracker nothing terminates, which is the phantom-progress
+        bug class #3167 named.
+        """
+        assert not any(f.startswith("event: dataset\n") for f in initial_snapshot())
 
     def test_heartbeat_reemits_tracker_channels(self):
         """A client whose bounded queue overflowed can lose a tracker

@@ -13,7 +13,7 @@ This stage mirrors the production simulation loop in
 :func:`vtscore.eval.voting_iterations.simulate_voting_iterations` and picks
 every vote with the repo's own selector
 (:func:`vtscore.eval.al_strategies.select_next`, strategy ``autopilot``) over a
-real :class:`~vtscore.state.coverage_atlas.CoverageAtlas`, so the vote order is
+real :class:`~vtscore.coverage.atlas.CoverageAtlas`, so the vote order is
 the app's by construction rather than by imitation.
 
 Policies compared:
@@ -192,7 +192,7 @@ def _votes_autopilot(
     import torch
 
     from vtscore.eval.al_strategies import ALContext, select_next
-    from vtscore.eval.voting_iterations import _build_eval_atlas
+    from vtscore.eval.step_trainers import _build_eval_atlas
     from vtscore.training.mlp import _auto_hidden_dim, train_model
     from vtscore.utils.scores import sigmoid_to_finite_array
 

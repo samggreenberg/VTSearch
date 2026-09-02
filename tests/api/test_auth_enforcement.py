@@ -65,8 +65,8 @@ class TestApiKeyEnforcement:
         resp = client.get("/api/medias/ids")
         assert resp.status_code == 401
         data = resp.get_json()
-        assert data["error"] == "Authentication required"
-        assert data["code"] == "auth_required"
+        assert data["message"] == "Authentication required"
+        assert data["error_code"] == "auth_required"
         assert resp.headers["WWW-Authenticate"] == "Bearer"
 
     def test_invalid_token_is_401(self, client, tmp_path):

@@ -16,9 +16,9 @@ from pathlib import Path
 
 import pytest
 
-import app as app_module
 from tests.helpers import make_dataset_file as _make_dataset_file
 from vtsearch.settings import get_detectors_dir
+from vtsearch.state import medias
 
 
 @pytest.fixture(autouse=True)
@@ -81,7 +81,7 @@ def _make_labelset_with_two_audio_labels() -> dict:
 class TestDryRunPickle:
     def test_dry_run_pickle_prints_plan_and_writes_nothing(self, client, tmp_path, capsys):
         _write_trainable_model("dry-tm", _make_labelset_with_two_audio_labels())
-        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
+        dataset_path = _make_dataset_file(tmp_path, medias)
         settings_path = _settings_file_with_detectors(tmp_path, ["dry-tm"])
         out_path = tmp_path / "results.json"
 
@@ -111,7 +111,7 @@ class TestDryRunPickle:
 
     def test_dry_run_pickle_reports_chunk_size(self, client, tmp_path, capsys):
         _write_trainable_model("dry-tm", _make_labelset_with_two_audio_labels())
-        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
+        dataset_path = _make_dataset_file(tmp_path, medias)
         settings_path = _settings_file_with_detectors(tmp_path, ["dry-tm"])
 
         from vtscore.cli import autodetect_main_chunked
@@ -128,7 +128,7 @@ class TestDryRunPickle:
 
     def test_dry_run_reports_streaming(self, client, tmp_path, capsys):
         _write_trainable_model("dry-tm", _make_labelset_with_two_audio_labels())
-        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
+        dataset_path = _make_dataset_file(tmp_path, medias)
         settings_path = _settings_file_with_detectors(tmp_path, ["dry-tm"])
 
         from vtscore.cli import autodetect_main_chunked
@@ -149,7 +149,7 @@ class TestDryRunPickle:
 
     def test_dry_run_streaming_without_stream_results_has_no_streaming_line(self, client, tmp_path, capsys):
         _write_trainable_model("dry-tm", _make_labelset_with_two_audio_labels())
-        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
+        dataset_path = _make_dataset_file(tmp_path, medias)
         settings_path = _settings_file_with_detectors(tmp_path, ["dry-tm"])
 
         from vtscore.cli import autodetect_main_chunked
@@ -179,7 +179,7 @@ class TestDryRunPickle:
 
     def test_dry_run_missing_detector_flagged(self, client, tmp_path, capsys):
         # No detector JSON written for "ghost-tm".
-        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
+        dataset_path = _make_dataset_file(tmp_path, medias)
         settings_path = _settings_file_with_detectors(tmp_path, ["ghost-tm"])
 
         from vtscore.cli import autodetect_main
@@ -191,7 +191,7 @@ class TestDryRunPickle:
         assert "MISSING" in out
 
     def test_dry_run_empty_autofind_list_calls_it_out(self, client, tmp_path, capsys):
-        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
+        dataset_path = _make_dataset_file(tmp_path, medias)
         settings_path = _settings_file_with_detectors(tmp_path, [])
 
         from vtscore.cli import autodetect_main
@@ -260,7 +260,7 @@ class TestDryRunImporter:
 class TestDryRunExporterValidation:
     def test_dry_run_unknown_exporter_errors(self, client, tmp_path, capsys):
         _write_trainable_model("dry-tm", _make_labelset_with_two_audio_labels())
-        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
+        dataset_path = _make_dataset_file(tmp_path, medias)
         settings_path = _settings_file_with_detectors(tmp_path, ["dry-tm"])
 
         from vtscore.cli import autodetect_main
@@ -279,7 +279,7 @@ class TestDryRunExporterValidation:
 
     def test_dry_run_missing_required_exporter_field_errors(self, client, tmp_path, capsys):
         _write_trainable_model("dry-tm", _make_labelset_with_two_audio_labels())
-        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
+        dataset_path = _make_dataset_file(tmp_path, medias)
         settings_path = _settings_file_with_detectors(tmp_path, ["dry-tm"])
 
         from vtscore.cli import autodetect_main

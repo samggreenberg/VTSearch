@@ -1,15 +1,14 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BehaviorSubject } from 'rxjs';
-import { signal } from '@angular/core';
 
 import { BrowseSelectionPanelComponent } from './browse-selection-panel.component';
 import { BrowseSelectionService } from '../../services/browse-selection.service';
 import { MediaMetadataCacheService } from '../../services/media-metadata-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { SettingsStateService } from '../../services/settings-state.service';
-import type { NowPlaying } from '../browse-hover-preview/browse-hover-preview.component';
+import type { NowPlaying } from '../../utils/browse-audio-audition';
 import { configureZoneless } from '../../testing/zoneless-testbed';
-import { makeActiveContextStub } from '../../testing/mocks';
+import { makeActiveContextStub, makeSettingsStateStub } from '../../testing/mocks';
 import { settleZoneless } from '../../testing/settle-resource';
 
 /**
@@ -50,10 +49,7 @@ describe('BrowseSelectionPanelComponent (zoneless canary)', () => {
     vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {});
 
     const activeContextStub = makeActiveContextStub();
-    const settingsStub: Partial<SettingsStateService> = {
-      settingsSignal: signal(null) as SettingsStateService['settingsSignal'],
-      load: () => {},
-    };
+    const { stub: settingsStub } = makeSettingsStateStub();
 
     await configureZoneless({
       imports: [BrowseSelectionPanelComponent],

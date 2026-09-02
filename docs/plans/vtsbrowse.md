@@ -98,7 +98,7 @@ pyramid on real datasets and looking at the output. The design leaves them as
 tunable parameters, not baked-in constants:
 
 - **UMAP knobs:** `n_neighbors` and `min_dist` are **settled** — per-embedder
-  constants in `vtscore/config.py:PROJECTION_DEFAULTS_BY_EMBEDDER`, with
+  constants in `vtscore/config/runtime.py` (`PROJECTION_DEFAULTS_BY_EMBEDDER`), with
   compaction off. Still unset: the small-N fallback threshold. (Metric is
   settled: Euclidean on ingest-normalized vectors.)
 - **Pyramid parameters:** `Zmax`, base hex size at level 0, tile size

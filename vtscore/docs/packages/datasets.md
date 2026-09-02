@@ -28,7 +28,8 @@ The largest package in the library. Every module, grouped by role.
 
 | Module | Concern |
 |--------|---------|
-| `vtscore/datasets/loader.py` | `export_dataset_to_file` and the shared loader surface |
+| `vtscore/datasets/loader.py` | `export_dataset_to_file` and the loader re-export façade |
+| `vtscore/datasets/loader_common.py` | Helpers shared by the three loader modules (leaf; no cycles) |
 | `vtscore/datasets/loader_folder.py` | Folder loaders (whole and chunked) |
 | `vtscore/datasets/loader_pickle.py` | Pickle loaders (whole and chunked) |
 | `vtscore/datasets/loader_demo.py` | Demo-dataset loader |
@@ -145,8 +146,8 @@ Origin.from_dict(o.to_dict()) == o      # True
 `vtscore/datasets/labelset.py`: one `(md5, label, origin, …)` tuple,
 the unit of a labelset. The optional `metadata` field is a free-form
 `dict[str, Any]` that round-trips through `to_dict()` / `from_dict()`,
-so importers (notably `holder`) can attach external system identifiers
-that survive re-export.
+so an importer can attach external system identifiers that survive
+re-export.
 
 | Field         | Type                                          | Notes                                                              |
 |---------------|-----------------------------------------------|--------------------------------------------------------------------|
@@ -198,7 +199,14 @@ disagreeing labels across inputs are silently removed. See
 ## Loaders and exporter
 
 The public surface in `vtscore/datasets/loader.py` is a re-export façade
-over three sibling modules:
+over three sibling modules. It re-exports **loaders only** — the demo
+metadata parsers live in `vtscore/datasets/metadata.py` and the
+pickle-safety names in `vtscore/security/pickle.py`; import those from
+their own modules rather than through the façade. Helpers the three
+siblings share (`ProgressCallback`, `_default_progress`, the MD5 and
+embedding coercion helpers) live in `vtscore/datasets/loader_common.py`,
+a dependency-free leaf, so the façade can import its siblings at the top
+of the file instead of at the bottom to dodge a cycle.
 
 | Function                        | Module                    | Populates / returns                                  |
 |---------------------------------|---------------------------|------------------------------------------------------|
@@ -338,7 +346,6 @@ entry-point group; built-ins win on name clashes. See
 | `demo`             | Downloaded Media       | Wraps `load_demo_dataset`.                                                        |
 | `synthetic`        | Synthetic Media        | Generates deterministic media via `vtscore.utils.synthetic`.                      |
 | `combine_datasets` | Combined Datasets      | Hidden. Internal: merges two loaded datasets.                                     |
-| `recaller`         | ReCaller Query         | Hidden. Scaffold for the ReCaller external API.                                   |
 
 **Multi-media imports.** Every importer accepts a `source_specs` form
 value: a list of `SourceSpec(source_type, converter, params)` rows
@@ -414,7 +421,6 @@ each `get_source_for_origin` call returns a fresh instance; call
 |-----------------------|-------------------------------------------------|-------------------------------------------|
 | `server_folder`       | `vtscore/datasets/sources/local_folder.py`      | Local filesystem folder.                  |
 | `http_archive`        | `vtscore/datasets/sources/http_archive.py`      | Downloaded zip / tar; unpacks on demand.  |
-| `pullwrest` (scaffold) | `vtscore/datasets/sources/pullwrest.py`        | External "PullWrest" service (not wired). |
 
 ---
 

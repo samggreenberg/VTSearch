@@ -13,6 +13,7 @@ import logging
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, Callable
 
+from vtscore.concurrency.progress import noop_progress
 from vtscore.embedding.binding import expected_dim_for_embedder
 from vtscore.embedding.matrix import invalidate_embedding_matrix
 from vtscore.embedding.media_vectors import (
@@ -142,20 +143,15 @@ def _stamp_requested_embedder(medias: dict[int, dict[str, Any]], embedder_name: 
         m["embedder"] = embedder_name
 
 
-def _noop_progress(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
-    """Progress sink used when no ``on_progress`` callback was supplied."""
-    return None
-
-
 def _ensure_model_loaded(emb, on_progress: Callable[[str, str, int, int], None]) -> None:
     """Load the embedder's models if not already loaded, announcing progress.
 
     The load runs inside :meth:`~vtscore.media.embedder.MediaEmbedder.progress_scope`
     so the model's own "Loading … processor…" ticks land on *this* load's
     tracker, next to every other phase of the import.  Unscoped they fall
-    through to the embedder's process-wide default sink — the global
-    ``dataset_progress`` singleton — which belongs to no particular import and
-    so shows the right message on the wrong channel (#3167).
+    through to the embedder's process-wide default sink, which resolves
+    per-thread — so on a worker that bound no tracker of its own they would be
+    dropped entirely rather than surfacing next to the import they belong to.
     """
     if getattr(emb, "_model", None) is None:
         on_progress("loading", "Loading embedding model…", 0, 0)
@@ -355,7 +351,7 @@ def embed_missing(
         return
 
     if on_progress is None:
-        on_progress = _noop_progress
+        on_progress = noop_progress
 
     _ensure_model_loaded(emb, on_progress)
 

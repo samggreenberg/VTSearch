@@ -1,145 +1,50 @@
 from pathlib import Path
 from unittest.mock import patch
 
-import numpy as np
-import os
-
 import pytest
 
 import vtscore.config as config
-from vtscore.utils.hashing import content_md5
+from tests_shared.embedding_stubs import fake_embed_audio as _fake_embed_audio, make_stub_embedding_models_fixture
+from tests_shared.pytest_plumbing import add_group_markers, print_summary_and_exit
+from tests_shared.state_reset import (
+    allow_test_tmp_paths as _allow_test_tmp_paths,  # noqa: F401  (autouse fixture)
+    freeze_startup_heap,
+    install_startup_contexts,
+    pin_training_budget,
+    reset_shared_state,
+)
 
-# ---------------------------------------------------------------------------
-# Auto-assign test group markers based on the test file's parent directory,
-# so tests can be run by area: pytest -m core, pytest -m sorting, etc.
-#
-# Layout: tests/<group>/test_*.py; the folder name IS the group. New test
-# files automatically inherit their group from where they live, so the old
-# registry-drift bug class (a file added without an entry in _TEST_GROUPS
-# was silently excluded from `./run-tests.sh <group>`) is gone.
-# ---------------------------------------------------------------------------
-
-# Folders that are not test groups (no marker should be added for items in them).
-_NON_GROUP_DIRS = {"tests", "fixtures", "__pycache__"}
+# Everything below that the two suites share — the group-marker hook, the fake
+# embedders, the tmp-path widener, the embedder stub fixture, the bulk of the
+# reset fixture and the end-of-run summary printer — lives in ``tests_shared``.
+# What stays here is app-tier only: the Flask ``client``, settings isolation,
+# the Angular bundle fixture and the autorun-processor reset.
 
 
 def pytest_collection_modifyitems(items, config):
     """Auto-assign group markers based on the test file's parent directory."""
-    for item in items:
-        parent = item.fspath.dirpath().basename
-        if parent and parent not in _NON_GROUP_DIRS and not parent.startswith("_"):
-            item.add_marker(getattr(pytest.mark, parent))
+    add_group_markers(items, root_dir_name="tests")
 
 
-# Reduce training epochs for faster tests (default is 200; 30 is sufficient
-# for the tiny MLP to converge on the small test dataset).  Named rather than
-# inlined because it is re-asserted per test in ``reset_state`` below: the two
-# trees share a worker process in a full run, and
-# ``tests_lib/core/test_torch_config.py`` reloads ``vtscore.config``, which
-# resets every module-level constant to its import-time value (issue #3101).
-TEST_TRAIN_EPOCHS = 30
-
-config.TRAIN_EPOCHS = TEST_TRAIN_EPOCHS
-
-# ---------------------------------------------------------------------------
-# Stub out heavy embedding models BEFORE importing the app.
-#
-# Tests don't need semantically meaningful embeddings; they just need
-# deterministic vectors of the correct dimension (512 for CLAP audio).
-# By patching embed_audio_file and the AudioMediaType's embed_text, we
-# avoid loading the ~600 MB CLAP model, the ~100-200 MB librosa/numba
-# stack, and the CLAP processor.  This cuts ~700-800 MB of RSS.
-# ---------------------------------------------------------------------------
-
-_EMBEDDING_DIM = 512
-
-
-def _fake_embed_audio(arg):
-    """Deterministic fake audio embedding derived from the file contents.
-
-    Accepts either a path (from the legacy ``embed_audio_file`` wrapper) or a
-    media dict (from ``MediaEmbedder.embed_media``).  Uses the first 1000
-    bytes of the resolved file as a seed so that different audio files
-    (even when written to the same temp path) produce distinct vectors.
-
-    In-memory medias (e.g. clipper output) carry ``media_bytes`` but no
-    ``media_path``; seed off those bytes so distinct clips still get distinct
-    vectors, falling back to the media id only when neither is present.
-    """
-
-    data = None
-    if isinstance(arg, dict):
-        path = arg.get("media_path")
-        if path:
-            try:
-                with open(path, "rb") as f:
-                    data = f.read(1000)
-            except Exception:
-                data = None
-        if data is None:
-            raw = arg.get("media_bytes")
-            data = bytes(raw[:1000]) if isinstance(raw, (bytes, bytearray)) else str(arg.get("id", arg)).encode()
-    else:
-        try:
-            with open(arg, "rb") as f:
-                data = f.read(1000)
-        except Exception:
-            data = str(arg).encode()
-    seed = int(content_md5(data), 16) % 2**31
-    rng = np.random.RandomState(seed)
-    vec = rng.randn(_EMBEDDING_DIM).astype(np.float32)
-    # Real embedders now L2-normalize at ingest, so the fakes must too:
-    # region_similarity scores by dot product on the unit-norm assumption.
-    return vec / np.linalg.norm(vec)
-
-
-def _fake_embed_text(text):
-    """Deterministic fake text embedding derived from the query string."""
-    import hashlib as _hl
-
-    seed = int(_hl.md5(text.encode()).hexdigest(), 16) % 2**31
-    rng = np.random.RandomState(seed)
-    vec = rng.randn(_EMBEDDING_DIM).astype(np.float32)
-    return vec / np.linalg.norm(vec)
-
+pin_training_budget()
 
 # Patch embed_audio_file so init_medias() never triggers CLAP model loading.
-_patch_embed_audio = patch("tests.fixtures.medias.embed_audio_file", side_effect=_fake_embed_audio)
+_EMBED_AUDIO_FILE_TARGET = "tests.fixtures.medias.embed_audio_file"
+_patch_embed_audio = patch(_EMBED_AUDIO_FILE_TARGET, side_effect=_fake_embed_audio)
 _patch_embed_audio.start()
 
-# Create a default dataset context so init_medias() has somewhere to write,
-# and a default detector context so vote proxies have somewhere to delegate.
-import vtscore.state.core as _state_core
+install_startup_contexts()
 
-_startup_ctx = _state_core.DatasetContext("_startup")
-_state_core.register_context(_startup_ctx)
-_state_core.set_thread_dataset_context(_startup_ctx)
-_startup_det = _state_core.DetectorContext("_startup_det")
-_state_core.register_detector_context(_startup_det)
-_state_core.set_thread_detector_context(_startup_det)
-
+# Importing ``app`` registers the Flask routes and builds the module-level
+# ``app_module.app`` the ``client`` fixture below serves.  Test modules do NOT
+# need to repeat this import: conftest is imported first, so ``app`` is already
+# in ``sys.modules`` (and its import side effects have already run) by the time
+# any test module is collected.
 import app as app_module
 
-# Import refactored modules and make them accessible through app_module
-from tests.fixtures.medias import NUM_MEDIAS, init_medias
-from vtscore.media.audio.audio_generator import generate_wav
+from tests.fixtures.medias import init_medias
 from vtscore.embedding import initialize_models
-from vtscore.detectors.training import train_and_score
-from vtscore.detectors.labeling_progress import clear_progress_cache
-from vtsearch.state import (
-    bad_votes,
-    medias,
-    good_votes,
-)
-
-# Attach to app_module for backward compatibility with existing tests
-app_module.NUM_MEDIAS = NUM_MEDIAS
-app_module.generate_wav = generate_wav
-app_module.train_and_score = train_and_score
-app_module.medias = medias
-app_module.good_votes = good_votes
-app_module.bad_votes = bad_votes
-app_module.init_medias = init_medias  # legacy attribute used by some tests
+from vtsearch.state import medias
 
 # Initialize models and medias
 initialize_models()
@@ -148,41 +53,15 @@ init_medias()
 # Save the test medias so we can replay them into each test's fresh context.
 _test_medias_snapshot = {k: dict(v) for k, v in medias.items()}
 
-# Freeze the startup heap (torch, Flask app, test medias — all of it lives for
-# the whole session anyway) so it is excluded from garbage-collection scans.
-# Production code sprinkles ``gc.collect()`` through the dataset-load pipeline
-# for memory hygiene on huge datasets; with the multi-hundred-MB startup heap
-# unfrozen, each of those calls costs ~0.3s of pure scan time in tests that
-# load several tiny datasets (combine, staging, promote).
-import gc
-
-gc.collect()
-gc.freeze()
+freeze_startup_heap()
 
 # Stop the module-level patch (init_medias is done); the per-test autouse
 # fixture below re-applies the patches for every test so that /api/sort and
 # other routes that call embed_text don't trigger CLAP loading either.
 _patch_embed_audio.stop()
 
-# Grab the audio media-type singleton and the audio embedder so the per-test
-# fixture can patch embed_text/embed_media/load_models on both, preventing
-# CLAP from loading during /api/sort and similar calls.
-from vtscore.media import (
-    all_embedders as _all_embedders,
-    all_types as _all_types,
-    get as _media_get,
-    embedders_for_type as _embedders_for_type,
-)
-
-_audio_mt = _media_get("audio")
-_audio_emb = _embedders_for_type("audio")[0]
-
-# Every registered media type and embedder gets stubbed below, not just
-# audio.  Tests that accidentally touch image/video/text/document embedders
-# (e.g. via ``/api/sort`` on an image dataset) would otherwise try to
-# download real CLIP / X-CLIP / E5 / SigLIP weights.
-_ALL_EMBEDDERS = _all_embedders()
-_ALL_MEDIA_TYPES = _all_types()
+# Stub every registered media type and embedder for the whole session.
+_stub_embedding_models = make_stub_embedding_models_fixture(_EMBED_AUDIO_FILE_TARGET)
 
 
 # ---------------------------------------------------------------------------
@@ -250,169 +129,26 @@ def angular_bundle() -> None:
         pytest.skip("Angular build completed but static/main.js or static/index.html still missing")
 
 
-@pytest.fixture(autouse=True)
-def _allow_test_tmp_paths(monkeypatch):
-    """Allow tests to use system temp dirs with server file-path validation.
-
-    With ``base_dir=None`` (single-user / no-auth mode) ``validate_server_filepath``
-    is already unrestricted, so system temp paths pass unchanged.  This wrapper
-    only matters for the ``base_dir=None`` path historically; when a specific
-    ``base_dir`` is given (e.g. multi-user mode) the restriction is honoured.
-    """
-    import tempfile
-    from pathlib import Path
-
-    import vtscore.security.path_validation as paths_mod
-
-    _original = paths_mod.validate_server_filepath
-
-    def _permissive(filepath_str, base_dir=None):
-        try:
-            return _original(filepath_str, base_dir)
-        except ValueError:
-            # When a specific base_dir is given (multi-user mode) we must honour
-            # that restriction; only widen for the unrestricted default case.
-            if base_dir is not None:
-                raise
-            return _original(filepath_str, Path(tempfile.gettempdir()))
-
-    monkeypatch.setattr(paths_mod, "validate_server_filepath", _permissive)
-
-
-@pytest.fixture(scope="session", autouse=True)
-def _stub_embedding_models():
-    """Prevent any embedder from loading real model weights during tests.
-
-    Session-scoped: the 40 patches are applied once and held for the entire
-    run instead of being torn down and re-applied for each of the ~2900 tests.
-    Tests that need different stub behavior can layer their own ``patch.object``
-    on top; it will override the session-level patch and restore it on exit.
-    """
-    from contextlib import ExitStack
-
-    stack = ExitStack()
-    stack.enter_context(patch("tests.fixtures.medias.embed_audio_file", side_effect=_fake_embed_audio))
-    for mt in _ALL_MEDIA_TYPES:
-        stack.enter_context(patch.object(mt, "embed_text", side_effect=_fake_embed_text))
-        stack.enter_context(patch.object(mt, "load_models"))
-    for emb in _ALL_EMBEDDERS:
-        stack.enter_context(patch.object(emb, "embed_media", side_effect=_fake_embed_audio))
-        stack.enter_context(patch.object(emb, "embed_text", side_effect=_fake_embed_text))
-        stack.enter_context(patch.object(emb, "load_models"))
-    yield
-    stack.close()
-
-
 import vtscore.state.core as _core
-from vtscore.concurrency.progress import (
-    dataset_progress as _dataset_progress,
-    eval_progress as _eval_progress,
-    find_progress as _find_progress,
-    loading_tasks as _loading_tasks,
-    detector_loading_tasks as _model_loading_tasks,
-    sort_progress as _sort_progress,
-)
 from vtsearch.auth import DefaultLoginProvider as _DefaultLoginProvider, set_login_provider as _set_login_provider
-from vtscore.datasets.registry import reset_for_tests as _reset_ds_reg
-from vtscore.detectors.registry import reset_for_tests as _reset_model_reg
 
 
 @pytest.fixture(autouse=True)
 def reset_state():
-    """Reset all mutable global state before each test."""
-    _core.clear_all_contexts()
-    default_ctx = _core.DatasetContext("_test_default")
-    _core.register_context(default_ctx)
-    _core.set_thread_dataset_context(default_ctx)
+    """Reset all mutable global state before each test.
 
-    _core.clear_all_detector_contexts()
-    default_det = _core.DetectorContext("_test_default_det")
-    _core.register_detector_context(default_det)
-    _core.set_thread_detector_context(default_det)
-
-    medias.update({k: dict(v) for k, v in _test_medias_snapshot.items()})
-
+    The library-tier half (contexts, medias replay, progress trackers,
+    registries, the lru_cache and TTL-cache clears) lives in
+    :func:`tests_shared.state_reset.reset_shared_state`, which the library
+    suite calls too.  Only the app-tier extras are spelled out here.
+    """
     from vtsearch.autorun_processors import clear_all_autorun
 
     clear_all_autorun()
 
-    from vtscore.security.hf_auth import clear_credential as _clear_hf_credential
-
-    _clear_hf_credential()
-
-    # Drain background jobs (joining any live worker) BEFORE clearing the
-    # progress cache: a labeling-status refresh from the previous test writes
-    # the status snapshot at the end of its run, so it must be stopped first or
-    # its late write would survive the clear and leak into this test.
-    from vtscore.concurrency.async_jobs import reset_all_async_jobs_for_tests
-
-    reset_all_async_jobs_for_tests()
-
-    from vtscore.state.sort_results_cache import sort_results_cache
-
-    sort_results_cache.reset_for_tests()
-
-    clear_progress_cache()
-
-    from vtscore.embedding.helpers import clear_text_query_cache as _clear_query_cache
-
-    _clear_query_cache()
-
-    # ``resolve_device`` is lru_cached for the life of the process.  A test
-    # that resolves it under mocked CUDA (e.g. tests_lib/core/
-    # test_torch_config.py, which shares the worker process) would otherwise
-    # leak a cached "cuda" into every later ``train_model`` on a CPU-only box.
-    # ``vtscore.embedding.loader`` binds the function at import, and the
-    # ``importlib.reload`` in those tests can leave it holding a *different*
-    # function object than the current module attribute — clear both.
-    import vtscore.embedding.loader as _emb_loader
-
-    config.resolve_device.cache_clear()
-    _emb_loader.resolve_device.cache_clear()
-
-    # Same reload hazard, for a value that doesn't crash when it leaks: a wiped
-    # ``TRAIN_EPOCHS`` falls back to the production 200 and silently retrains
-    # every later detector fixture on a different budget, which is what made a
-    # fully seeded threshold fixture order-dependent (issue #3101).
-    config.TRAIN_EPOCHS = TEST_TRAIN_EPOCHS
-
-    _dataset_progress.reset_cancel()
-    _find_progress.update("idle", "", 0, 0, step=None, total_steps=None, error=None)
-    _sort_progress.update("idle", "", 0, 0, step=None, total_steps=None, error=None)
-    _eval_progress.update("idle", "", 0, 0, step=None, total_steps=None, error=None)
-    _loading_tasks.reset_for_tests()
-    _model_loading_tasks.reset_for_tests()
-
-    # Cancel any debounced labelset-source push left over from the
-    # previous test so its captured contexts don't fire after this
-    # test's reset_state has dropped them.
-    from vtscore.labels.sync import reset_label_sync_for_tests
-
-    reset_label_sync_for_tests()
-
-    # Drop the TTL-cached detector-file mtimes so a stale entry from a prior
-    # test can't suppress a rehydrate in the next one.
-    from vtscore.detectors.dataset_sync import reset_mtime_cache_for_tests
-
-    reset_mtime_cache_for_tests()
-
-    # Reset CLI progress format so a test that flips it to "json" can't
-    # leak the choice into the next test.
-    from vtscore import cli_progress
-
-    cli_progress.set_format("text")
-
-    # Drop notification subscribers: they are process-global, so a test that
-    # subscribes a collector (or drives the CLI, which subscribes a printer)
-    # would otherwise keep receiving every later test's notifications.
-    from vtscore.concurrency.notifications import notifications as _notifications
-
-    _notifications.clear_subscribers()
+    reset_shared_state(medias, _test_medias_snapshot)
 
     _set_login_provider(_DefaultLoginProvider())
-
-    _reset_ds_reg()
-    _reset_model_reg()
 
     # ``test_torch_config.py`` reloads ``vtscore.config`` to test env-var
     # behaviour, which wipes the module-level ``_core_config_builder``
@@ -680,56 +416,8 @@ def _wait_for_job(job_manager, *, timeout: float = 30.0) -> None:
 
 @pytest.hookimpl(trylast=True)
 def pytest_unconfigure(config):
-    """Force-exit to avoid SIGABRT (exit code 134) from native library cleanup.
-
-    PyTorch, OpenMP, numba (via librosa), and other native libraries spin up
-    C++ thread pools that sometimes call ``std::terminate()`` during Python
-    interpreter shutdown.  This produces "terminate called without an active
-    exception" and exit code 134, even though all tests passed.
-
-    ``os._exit()`` skips the normal interpreter teardown (atexit handlers,
-    C++ static destructors) so the problematic cleanup never runs.
-
-    We use ``pytest_unconfigure`` (the very last hook) instead of
-    ``pytest_sessionfinish`` so that ``pytest_terminal_summary`` still runs
-    first so that failure tracebacks and the short test summary are fully
-    printed before we force-exit.
-
-    Prints an additional PASS/FAIL summary right before exiting for clarity.
-    """
-    import sys
-
-    exitstatus = getattr(config, "_vtsearch_exitstatus", 0)
-
-    reporter = config.pluginmanager.getplugin("terminalreporter")
-    print("", flush=True)
-    print("=" * 60, flush=True)
-    if reporter:
-        passed = len(reporter.stats.get("passed", []))
-        failed = len(reporter.stats.get("failed", []))
-        errors = len(reporter.stats.get("error", []))
-        skipped = len(reporter.stats.get("skipped", []))
-        xfailed = len(reporter.stats.get("xfailed", []))
-        total = passed + failed + errors + skipped
-
-        if failed or errors:
-            parts = [f"{failed} failed", f"{errors} errors", f"{passed} passed", f"{skipped} skipped"]
-            if xfailed:
-                parts.append(f"{xfailed} xfailed")
-            print(f"TESTS FAILED: {', '.join(parts)} (total: {total})", flush=True)
-        else:
-            extra = f"{skipped} skipped"
-            if xfailed:
-                extra += f", {xfailed} xfailed"
-            print(f"ALL {passed} TESTS PASSED ({extra}, total: {total})", flush=True)
-    else:
-        status = "PASSED" if exitstatus == 0 else "FAILED"
-        print(f"TESTS {status} (exit code {exitstatus}; reporter unavailable)", flush=True)
-    print("=" * 60, flush=True)
-
-    sys.stdout.flush()
-    sys.stderr.flush()
-    os._exit(exitstatus)
+    """Print the run summary and force-exit (see ``tests_shared``)."""
+    print_summary_and_exit(config, getattr(config, "_vtsearch_exitstatus", 0))
 
 
 def pytest_sessionfinish(session, exitstatus):

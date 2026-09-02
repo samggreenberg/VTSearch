@@ -16,8 +16,8 @@ import wave
 import numpy as np
 import pytest
 
-import app as app_module
 from vtsearch.state import medias
+from tests.fixtures.medias import NUM_MEDIAS
 
 
 class TestExampleSort:
@@ -54,7 +54,7 @@ class TestExampleSort:
         data = resp.get_json()
         assert "results" in data
         assert "threshold" in data
-        assert len(data["results"]) == app_module.NUM_MEDIAS
+        assert len(data["results"]) == NUM_MEDIAS
 
     def test_results_sorted_descending(self, client):
         wav_buf = self._make_wav_bytes()
@@ -94,7 +94,7 @@ class TestExampleSort:
         )
         assert resp.status_code == 200
         data = resp.get_json()
-        assert len(data["results"]) == app_module.NUM_MEDIAS
+        assert len(data["results"]) == NUM_MEDIAS
 
     def test_with_invalid_crop_params_falls_back_to_full(self, client):
         wav_buf = self._make_wav_bytes()
@@ -268,7 +268,7 @@ class TestExampleSortServer:
         data = resp.get_json()
         assert "results" in data
         assert "threshold" in data
-        assert len(data["results"]) == app_module.NUM_MEDIAS
+        assert len(data["results"]) == NUM_MEDIAS
 
     def test_multi_example_sort_returns_results(self, client):
         # Two examples rank the haystack against their embedding centroid.
@@ -280,7 +280,7 @@ class TestExampleSortServer:
         )
         assert resp.status_code == 200
         data = resp.get_json()
-        assert len(data["results"]) == app_module.NUM_MEDIAS
+        assert len(data["results"]) == NUM_MEDIAS
         assert "threshold" in data
 
     def test_multi_example_missing_one_returns_404(self, client):
@@ -330,7 +330,7 @@ class TestExampleSortServer:
         )
         assert resp.status_code == 200
         data = resp.get_json()
-        assert len(data["results"]) == app_module.NUM_MEDIAS
+        assert len(data["results"]) == NUM_MEDIAS
 
     def test_upload_with_crop_params_persists_cropped_bytes(self, client):
         # Upload a 1s WAV with crop_params; the saved file should be the
@@ -448,4 +448,4 @@ class TestExampleSortOrigin:
         data = resp.get_json()
         assert "results" in data
         assert "threshold" in data
-        assert len(data["results"]) == app_module.NUM_MEDIAS
+        assert len(data["results"]) == NUM_MEDIAS

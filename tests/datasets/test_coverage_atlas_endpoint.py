@@ -116,7 +116,7 @@ class TestCoverageAtlasEndpoint:
 class TestDomainShiftEndpoint:
     def _reference_with_atlas(self, client, n: int = 120):
         """Register + load a reference dataset and build its atlas synchronously."""
-        from vtscore.state.coverage_atlas import CoverageAtlas
+        from vtscore.coverage.atlas import CoverageAtlas
 
         entry, ctx = _loaded_dataset(n, name="Reference", seed_offset=0)
         vectors = {cid: m["embeddings"]["clap"] for cid, m in ctx.medias.items()}
@@ -209,7 +209,7 @@ class TestDomainShiftEndpoint:
         reference's own held-out data against 93% cross-corpus, a separation
         of 0.13.  See ``docs/experiments/2026-08-30-fit-quality-3329/`` (B4-B6).
         """
-        from vtscore.state.coverage_atlas import CoverageAtlas
+        from vtscore.coverage.atlas import CoverageAtlas
 
         ref_entry, ref_ctx = _loaded_dataset(120, name="RefPatch", seed_offset=7000, embedder="dinov3_patch")
         ref_ctx.coverage_atlas = CoverageAtlas({cid: m["embeddings"]["clap"] for cid, m in ref_ctx.medias.items()}, k=3)
@@ -229,7 +229,7 @@ class TestDomainShiftEndpoint:
         ``dinov3_patch`` and must not be caught by the gate: what fails is the
         patch *space*, not the architecture.
         """
-        from vtscore.state.coverage_atlas import CoverageAtlas
+        from vtscore.coverage.atlas import CoverageAtlas
 
         ref_entry, ref_ctx = _loaded_dataset(120, name="RefSingle", seed_offset=9000, embedder="dinov3_single")
         ref_ctx.coverage_atlas = CoverageAtlas({cid: m["embeddings"]["clap"] for cid, m in ref_ctx.medias.items()}, k=3)

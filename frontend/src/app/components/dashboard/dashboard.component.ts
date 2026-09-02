@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, effect, HostListener, inject, OnDestroy, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, effect, HostListener, inject, OnDestroy, OnInit, Signal, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { NavigationCancel, NavigationEnd, NavigationError, Router } from '@angular/router';
 import { EMPTY, Subject, timer } from 'rxjs';
@@ -16,7 +17,7 @@ import { ActiveContextService } from '../../services/active-context.service';
 import { ContextSwitchService } from '../../services/context-switch.service';
 import { AuthService } from '../../services/auth.service';
 import { HuggingFaceAuthService } from '../../services/huggingface-auth.service';
-import { DashboardSelectionService } from '../../services/dashboard-selection.service';
+import { DashboardSelectionService, DetectorTab, SelectionKind, SelectionState } from '../../services/dashboard-selection.service';
 import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { DashboardModalsService } from '../../services/dashboard-modals.service';
 import { DashboardLoadingTasksService } from '../../services/dashboard-loading-tasks.service';
@@ -101,13 +102,25 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private progressEvents = inject(ProgressEventsService);
   private settingsState = inject(SettingsStateService);
 
-  selectedDatasetIds: Set<string> = new Set();
-  selectedDetectorIds: Set<string> = new Set();
+  /** The highlighted rows, owned by `DashboardSelectionService` (a root
+   *  singleton, so the top bar reads them without this component and they
+   *  survive a round trip to another view). Exposed as read-only getters
+   *  over the service's signals: a read during template evaluation is
+   *  tracked, so a selection change repaints under zoneless OnPush. Writes
+   *  go through the service's `toggle` / `selectOnly` / … ladder. */
+  get selectedDatasetIds(): ReadonlySet<string> {
+    return this.dashSelection.ids('dataset');
+  }
 
-  /** Which detector-grid tab is showing: Drafts (editable, `!autofind`) or
-   *  AutoRun (frozen, `autofind` — auto-run against each dataset on import).
-   *  A detector lives in exactly one tab; the ⋯ menu moves it between them. */
-  readonly detectorTab = signal<'drafts' | 'autorun'>('drafts');
+  get selectedDetectorIds(): ReadonlySet<string> {
+    return this.dashSelection.ids('detector');
+  }
+
+  /** Which detector-grid tab is showing. Lives in the selection service
+   *  alongside the selection it scopes; see {@link setDetectorTab}. */
+  get detectorTab(): Signal<DetectorTab> {
+    return this.dashSelection.detectorTab;
+  }
 
   // Confirm flags hold the trash icon at 90° while the confirm dialog is up,
   // and play a reverse animation back to 0° once the dialog resolves. Written
@@ -200,8 +213,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
   }
 
-  private destroy$ = new Subject<void>();
+  private readonly destroyRef = inject(DestroyRef);
   private findPolling$ = new Subject<void>();
+  /** Registry ids this mount has already seen, so `reconcileSelection` can
+   *  tell "just appeared" from "was here when we arrived". Component state on
+   *  purpose: a fresh mount has seen nothing, so a returning user's existing
+   *  rows are not mistaken for new arrivals and do not steal the selection. */
   private knownDatasetIds = new Set<string>();
   private knownDetectorIds = new Set<string>();
   /** Dataset IDs we've already asked the backend to preload an embedder
@@ -232,72 +249,27 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    // While the Dashboard is on screen the top-bar pulldowns mirror the
-    // table selection (rather than the loaded context); flag that here and
-    // push the current selection so the bar is correct on first paint.
+    // While the Dashboard is on screen the top-bar pulldowns show the table
+    // selection rather than the loaded context; flag that here. The selection
+    // itself already lives in the service, so there is nothing to push.
     this.dashSelection.setDashboardVisible(true);
-    this.pushTopBarLabels();
-    // Pulldown → table: a pick inside the top-bar pulldown selects the
-    // matching row exactly as a plain (non-additive) table click would.
-    this.dashSelection.selectRequest$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(({ kind, id }) => {
-        if (kind === 'dataset') this.applyDatasetSelection(id, false);
-        else this.applyDetectorSelection(id, false);
-      });
     this.authService.status$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((status) => {
         this.currentUser.set(status?.user || '');
         this.isDefaultLogin.set(status?.provider === 'default');
       });
     // Auto-select newly added items whenever the dataset/model lists change
     this.datasetState.datasets$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((datasets) => {
-        const currentIds = new Set(datasets.map((d) => d.id));
-        // Prune selections that no longer exist in the registry
-        for (const id of this.selectedDatasetIds) {
-          if (!currentIds.has(id)) this.selectedDatasetIds.delete(id);
-        }
-        const newIds = [...currentIds].filter((id) => !this.knownDatasetIds.has(id));
-        if (newIds.length > 0 && this.knownDatasetIds.size > 0) {
-          // Items were added after initial load; select only the new ones
-          this.selectedDatasetIds.clear();
-          for (const id of newIds) {
-            this.selectedDatasetIds.add(id);
-          }
-        } else if (datasets.length === 1 && this.selectedDatasetIds.size === 0) {
-          // First load with exactly one item; auto-select it
-          this.selectedDatasetIds.add(datasets[0].id);
-        }
-        this.knownDatasetIds = currentIds;
-        this.pushTopBarLabels();
+        this.reconcileSelection('dataset', datasets.map((d) => d.id));
         this.preloadSelectedEmbedders();
       });
     this.datasetState.detectors$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((models) => {
-        const currentIds = new Set(models.map((m) => m.id));
-        // Prune selections that no longer exist in the registry
-        for (const id of this.selectedDetectorIds) {
-          if (!currentIds.has(id)) this.selectedDetectorIds.delete(id);
-        }
-        const newIds = [...currentIds].filter((id) => !this.knownDetectorIds.has(id));
-        if (newIds.length > 0 && this.knownDetectorIds.size > 0) {
-          // Items were added after initial load; select only the new ones.
-          // New detectors are always drafts, so surface the tab they land on.
-          this.selectedDetectorIds.clear();
-          for (const id of newIds) {
-            this.selectedDetectorIds.add(id);
-          }
-          this.detectorTab.set('drafts');
-        } else if (models.length === 1 && this.selectedDetectorIds.size === 0) {
-          // First load with exactly one item; auto-select it
-          this.selectedDetectorIds.add(models[0].id);
-        }
-        this.knownDetectorIds = currentIds;
-        this.pushTopBarLabels();
+        this.reconcileSelection('detector', models.map((m) => m.id));
       });
     this.refresh();
     this.startDiskUsagePolling();
@@ -313,7 +285,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     // guard, or errored). Without this, a guard redirect to /dashboard
     // would leave the icon waggling forever.
     this.router.events
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((e) => {
         if (
           e instanceof NavigationEnd ||
@@ -333,13 +305,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
    *  `AppComponent`; this component just reacts to their outcomes. */
   private subscribeNewThingFlows(): void {
     this.newThingFlows.importStarted$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => this.handleImportStarted());
     this.newThingFlows.demoSelected$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(({ demo }) => this.handleDemoSelected(demo));
     this.newThingFlows.created$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(({ kind, id }) => {
         if (kind === 'detector') this.handleDetectorCreated(id);
         else this.datasetState.refresh();
@@ -347,14 +319,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
     // Trigger the close-animation when the modal flips from open → closed.
     let importerWasOpen = false;
     this.newThingFlows.importer$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((state) => {
         if (importerWasOpen && !state.open) this.importerClosing.set(true);
         importerWasOpen = state.open;
       });
     let detectorWasOpen = false;
     this.newThingFlows.newDetector$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((state) => {
         if (detectorWasOpen && !state.open) {
           this.newDetectorClosing.set(true);
@@ -371,14 +343,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.datasetState.refresh();
     if (this.trainAfterModelCreation && modelId) {
       this.trainAfterModelCreation = false;
-      this.selectedDetectorIds.clear();
-      this.selectedDetectorIds.add(modelId);
+      this.dashSelection.selectOnly('detector', [modelId]);
       this.knownDetectorIds.add(modelId);
       this.datasetState.detectors$
         .pipe(
           filter((models) => models.some((m) => m.id === modelId)),
           take(1),
-          takeUntil(this.destroy$),
+          takeUntilDestroyed(this.destroyRef),
         )
         .subscribe(() => this.onLabel());
     }
@@ -387,7 +358,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private startDiskUsagePolling(): void {
     timer(0, 10000)
       .pipe(
-        takeUntil(this.destroy$),
+        takeUntilDestroyed(this.destroyRef),
         switchMap(() => this.datasetsUiApi.getDiskUsage().pipe(catchError(() => EMPTY))),
       )
       .subscribe((usage) => {
@@ -398,7 +369,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private startRamUsagePolling(): void {
     timer(0, 10000)
       .pipe(
-        takeUntil(this.destroy$),
+        takeUntilDestroyed(this.destroyRef),
         switchMap(() => this.datasetsUiApi.getRamUsage().pipe(catchError(() => EMPTY))),
       )
       .subscribe((usage) => {
@@ -429,8 +400,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     // Off the Dashboard there are no tables to mirror; the pulldown reverts
     // to showing the active/loaded context.
     this.dashSelection.setDashboardVisible(false);
-    this.destroy$.next();
-    this.destroy$.complete();
     this.findPolling$.next();
     this.findPolling$.complete();
   }
@@ -459,14 +428,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.detectorTab() === 'autorun' ? this.autorunDetectors : this.draftDetectors;
   }
 
-  /** Switch detector-grid tabs. Selection is per-tab: a hidden selection
-   *  would silently feed the section actions and the Train/Find buttons, so
-   *  it's cleared on every switch. */
-  setDetectorTab(tab: 'drafts' | 'autorun'): void {
-    if (this.detectorTab() === tab) return;
-    this.detectorTab.set(tab);
-    this.selectedDetectorIds.clear();
-    this.pushTopBarLabels();
+  /** Switch detector-grid tabs. The service owns the tab and clears the
+   *  per-tab selection; see `DashboardSelectionService.setDetectorTab`. */
+  setDetectorTab(tab: DetectorTab): void {
+    this.dashSelection.setDetectorTab(tab);
   }
 
   get loading(): boolean {
@@ -492,74 +457,41 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // --- Dataset selection ---
 
-  /** Mirror the current table selection to the top-bar pulldowns. Called
-   *  after every selection mutation; the pulldowns resolve names/counts
-   *  from these id lists (filtered to ids still in the registry so a
-   *  pruned-away id can't inflate the "Multiple" count). */
-  private pushTopBarLabels(): void {
-    const datasetIds = this.datasets
-      .filter((d) => this.selectedDatasetIds.has(d.id))
-      .map((d) => d.id);
-    const detectorIds = this.detectors
-      .filter((d) => this.selectedDetectorIds.has(d.id))
-      .map((d) => d.id);
-    this.dashSelection.setDatasetIds(datasetIds);
-    this.dashSelection.setDetectorIds(detectorIds);
-    // While the Dashboard is on screen the pulldowns read the mirrored table
-    // selection above; the moment it unmounts they fall back to the
-    // active-context *intent*. Without also mirroring a lone pick into that
-    // intent, a freshly imported/created (implicitly selected) item is
-    // forgotten by the pulldowns as soon as you leave the Dashboard by any
-    // route that doesn't load a context — the picker snaps back to "Select
-    // a …". Mirror only an unambiguous single selection; a 0- or
-    // multi-selection leaves intent untouched so we never blank out the
-    // intent of an already-loaded pair. Intent-only (never `setActive`), so
-    // the HTTP interceptor keeps tagging the still-loaded pair, per the H25
-    // intent/active split.
-    const soleDataset = datasetIds.length === 1 ? datasetIds[0] : this.activeContext.intentDatasetId;
-    const soleDetector =
-      detectorIds.length === 1 ? detectorIds[0] : this.activeContext.intentModelId;
-    this.activeContext.setIntent(soleDataset, soleDetector);
+  /**
+   * Reconcile one grid's selection against a fresh registry listing: prune
+   * ids that no longer exist, then auto-select whatever just appeared (or
+   * the lone row on a first load). Shared by both grids — the only
+   * asymmetry is that a new detector is always a draft, so its tab is
+   * surfaced before the new rows are selected.
+   */
+  private reconcileSelection(kind: SelectionKind, ids: string[]): void {
+    const currentIds = new Set(ids);
+    const known = kind === 'dataset' ? this.knownDatasetIds : this.knownDetectorIds;
+    this.dashSelection.retain(kind, currentIds);
+    const newIds = [...currentIds].filter((id) => !known.has(id));
+    if (newIds.length > 0 && known.size > 0) {
+      // Items were added after initial load; select only the new ones.
+      if (kind === 'detector') this.dashSelection.setDetectorTab('drafts');
+      this.dashSelection.selectOnly(kind, newIds);
+    } else if (currentIds.size === 1 && this.dashSelection.count(kind) === 0) {
+      // First load with exactly one item; auto-select it.
+      this.dashSelection.selectOnly(kind, currentIds);
+    }
+    if (kind === 'dataset') this.knownDatasetIds = currentIds;
+    else this.knownDetectorIds = currentIds;
   }
 
   toggleDatasetSelection(id: string, event: MouseEvent): void {
-    this.applyDatasetSelection(id, event.ctrlKey || event.metaKey);
-  }
-
-  /** Core dataset-selection logic shared by the table row handler and the
-   *  top-bar pulldown's pick request. `additive` (Ctrl/Cmd) toggles a
-   *  single id in/out of a multi-selection; otherwise it's a plain
-   *  single-select that toggles off when it's already the sole pick. */
-  private applyDatasetSelection(id: string, additive: boolean): void {
-    if (additive) {
-      if (this.selectedDatasetIds.has(id)) {
-        this.selectedDatasetIds.delete(id);
-      } else {
-        this.selectedDatasetIds.add(id);
-      }
-    } else {
-      if (this.selectedDatasetIds.has(id) && this.selectedDatasetIds.size === 1) {
-        this.selectedDatasetIds.clear();
-      } else {
-        this.selectedDatasetIds.clear();
-        this.selectedDatasetIds.add(id);
-      }
-    }
-    this.pushTopBarLabels();
+    this.dashSelection.toggle('dataset', id, event.ctrlKey || event.metaKey);
     this.preloadSelectedEmbedders();
   }
 
   isDatasetSelected(id: string): boolean {
-    return this.selectedDatasetIds.has(id);
+    return this.dashSelection.has('dataset', id);
   }
 
   toggleDatasetCheckbox(id: string): void {
-    if (this.selectedDatasetIds.has(id)) {
-      this.selectedDatasetIds.delete(id);
-    } else {
-      this.selectedDatasetIds.add(id);
-    }
-    this.pushTopBarLabels();
+    this.dashSelection.toggle('dataset', id, true);
     this.preloadSelectedEmbedders();
   }
 
@@ -578,22 +510,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
   }
 
-  get datasetSelectionState(): 'none' | 'some' | 'all' {
-    const sel = this.selectedDatasetIds.size;
-    if (sel === 0) return 'none';
-    if (sel >= this.datasets.length) return 'all';
-    return 'some';
+  get datasetSelectionState(): SelectionState {
+    return this.dashSelection.selectionState('dataset', this.datasets.length);
   }
 
   toggleAllDatasets(): void {
-    if (this.datasetSelectionState === 'all') {
-      this.selectedDatasetIds.clear();
-    } else {
-      for (const d of this.datasets) {
-        this.selectedDatasetIds.add(d.id);
-      }
-    }
-    this.pushTopBarLabels();
+    this.dashSelection.toggleAll('dataset', this.datasets.map((d) => d.id));
     this.preloadSelectedEmbedders();
   }
 
@@ -688,7 +610,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     for (const dataset of targets) {
       this.datasetsRegistryApi.deleteRegistered(dataset.id).subscribe({
         next: () => {
-          this.selectedDatasetIds.delete(dataset.id);
+          this.dashSelection.deselect('dataset', dataset.id);
           if (this.activeContext.datasetId === dataset.id || this.activeContext.intentDatasetId === dataset.id) {
             this.activeContext.setActivePair('', '');
           }
@@ -707,57 +629,23 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // --- Model selection ---
 
   toggleDetectorSelection(id: string, event: MouseEvent): void {
-    this.applyDetectorSelection(id, event.ctrlKey || event.metaKey);
-  }
-
-  /** Detector counterpart to `applyDatasetSelection`; see that method. */
-  private applyDetectorSelection(id: string, additive: boolean): void {
-    if (additive) {
-      if (this.selectedDetectorIds.has(id)) {
-        this.selectedDetectorIds.delete(id);
-      } else {
-        this.selectedDetectorIds.add(id);
-      }
-    } else {
-      if (this.selectedDetectorIds.has(id) && this.selectedDetectorIds.size === 1) {
-        this.selectedDetectorIds.clear();
-      } else {
-        this.selectedDetectorIds.clear();
-        this.selectedDetectorIds.add(id);
-      }
-    }
-    this.pushTopBarLabels();
+    this.dashSelection.toggle('detector', id, event.ctrlKey || event.metaKey);
   }
 
   isDetectorSelected(id: string): boolean {
-    return this.selectedDetectorIds.has(id);
+    return this.dashSelection.has('detector', id);
   }
 
   toggleDetectorCheckbox(id: string): void {
-    if (this.selectedDetectorIds.has(id)) {
-      this.selectedDetectorIds.delete(id);
-    } else {
-      this.selectedDetectorIds.add(id);
-    }
-    this.pushTopBarLabels();
+    this.dashSelection.toggle('detector', id, true);
   }
 
-  get detectorSelectionState(): 'none' | 'some' | 'all' {
-    const sel = this.selectedDetectorIds.size;
-    if (sel === 0) return 'none';
-    if (sel >= this.visibleDetectors.length) return 'all';
-    return 'some';
+  get detectorSelectionState(): SelectionState {
+    return this.dashSelection.selectionState('detector', this.visibleDetectors.length);
   }
 
   toggleAllDetectors(): void {
-    if (this.detectorSelectionState === 'all') {
-      this.selectedDetectorIds.clear();
-    } else {
-      for (const m of this.visibleDetectors) {
-        this.selectedDetectorIds.add(m.id);
-      }
-    }
-    this.pushTopBarLabels();
+    this.dashSelection.toggleAll('detector', this.visibleDetectors.map((m) => m.id));
   }
 
   async deleteSelectedDetectors(): Promise<void> {
@@ -783,7 +671,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     for (const model of targets) {
       this.detectorsRegistryApi.deleteFromRegistry(model.id).subscribe({
         next: () => {
-          this.selectedDetectorIds.delete(model.id);
+          this.dashSelection.deselect('detector', model.id);
           if (this.activeContext.modelId === model.id || this.activeContext.intentModelId === model.id) {
             this.activeContext.setActivePair(this.activeContext.datasetId, '');
           }
@@ -865,7 +753,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (!ok) return;
     this.datasetsRegistryApi.deleteRegistered(dataset.id).subscribe({
       next: () => {
-        this.selectedDatasetIds.delete(dataset.id);
+        this.dashSelection.deselect('dataset', dataset.id);
         if (this.activeContext.datasetId === dataset.id || this.activeContext.intentDatasetId === dataset.id) {
           this.activeContext.setActivePair('', '');
         }
@@ -931,8 +819,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   setDetectorAutorun(model: DetectorRegistryEntry, autorun: boolean): void {
     this.detectorsRegistryApi.setAutofind(model.id, autorun).subscribe({
       next: () => {
-        this.selectedDetectorIds.delete(model.id);
-        this.pushTopBarLabels();
+        this.dashSelection.deselect('detector', model.id);
         this.datasetState.refresh();
       },
       error: () => {
@@ -953,7 +840,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (!ok) return;
     this.detectorsRegistryApi.deleteFromRegistry(model.id).subscribe({
       next: () => {
-        this.selectedDetectorIds.delete(model.id);
+        this.dashSelection.deselect('detector', model.id);
         if (this.activeContext.modelId === model.id || this.activeContext.intentModelId === model.id) {
           this.activeContext.setActivePair(this.activeContext.datasetId, '');
         }
@@ -1056,7 +943,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
               return (!!t && (t.status === 'idle' || !!t.error)) || (!t && seenRunning);
             }),
             take(1),
-            takeUntil(this.destroy$),
+            takeUntilDestroyed(this.destroyRef),
           )
           .subscribe(() => {
             const failed = this.progressEvents.detectorLoadingTasks().some(
@@ -1191,7 +1078,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   get activeDatasetMediaType(): string {
     if (this.selectedDatasetIds.size === 1) {
       const selId = [...this.selectedDatasetIds][0];
-      const sel = this.datasets.find((d) => d.id === selId);
+      const sel = this.datasetState.datasetById().get(selId);
       if (sel?.media_type) return sel.media_type;
     }
     const loaded = this.datasets.find((d) => d.loaded);
@@ -1209,7 +1096,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   get activeDatasetEmbedder(): string {
     if (this.selectedDatasetIds.size === 1) {
       const selId = [...this.selectedDatasetIds][0];
-      const sel = this.datasets.find((d) => d.id === selId);
+      const sel = this.datasetState.datasetById().get(selId);
       if (sel?.embedder) return sel.embedder;
     }
     const loaded = this.datasets.find((d) => d.loaded);
@@ -1468,7 +1355,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private startFindProgressPolling(): void {
     this.findPolling$.next(); // cancel previous
     this.progressEvents.find$
-      .pipe(takeUntil(this.findPolling$), takeUntil(this.destroy$))
+      .pipe(takeUntil(this.findPolling$), takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (progress: ProgressEvent) => {
           if (!progress || progress.status === 'idle') return;

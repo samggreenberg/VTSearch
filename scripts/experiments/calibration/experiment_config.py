@@ -9,8 +9,10 @@ which opens on one space's text sort and learns in another's:
 
 * ``visual_genome_m`` (boxed; ground-truth regions):
   ``siglip`` / ``siglip_l`` × ``whole_image`` (row-wise conformal), and
-  ``dinov3_patch`` × {``max_patch``, ``max_patch_pca_hac``} (grouped bag
-  calibration).
+  ``dinov3_patch`` × ``max_patch`` (grouped bag calibration).  The raw-patch
+  tree geometry ``max_patch_pca_hac`` and its ``topk`` / ``pnorm`` re-pools were
+  #2781 arms and are off by default now that both questions are closed; see
+  :data:`PATCH_STYLES` and :data:`REPOOL_VARIANTS`.
 
   **Only the ``dinov3_patch`` arms actually region-vote.** Region voting needs a
   stored ``patch_grid`` to pool the dragged box and ``patch_regions`` to
@@ -18,8 +20,7 @@ which opens on one space's text sort and learns in another's:
   :data:`REGION_VOTING_BY_DATASET` degrades to whole-image training *and*
   whole-image scoring for them, and they blend under the **binary** schedule.
   This docstring previously called the whole set "region voting", which is how
-  #2877 came to report a binary-voting environment as a region-voting one.  The raw-patch tree arm additionally re-pools its own per-node
-  scores under ``topk`` and ``pnorm`` (remedial variants, emitted as extra rows).
+  #2877 came to report a binary-voting environment as a region-voting one.
 * ``caltech101_m`` (binary voting; boxless): ``siglip`` / ``siglip_l`` ×
   ``whole_image`` only — the ordinary row-wise conformal path most users hit.
 
@@ -336,12 +337,32 @@ def region_voting_for(dataset: str, embedder: str) -> bool:
 
 
 # --- Styles per embedder kind ---
-PATCH_STYLES = os.environ.get("CALIB_PATCH_STYLES", "max_patch,max_patch_pca_hac").split(",")
+#: Patch geometries every patch-capable arm runs.  **The shipped one, alone**
+#: (kept a literal rather than importing ``PRODUCTION_PATCH_STYLE``, because
+#: this module is imported by tooling that has no vtscore tree; preflight
+#: check 12 is what holds the two together).
+#:
+#: This default used to be ``max_patch,max_patch_pca_hac``, because the #2781
+#: study wanted that contrast - and a study default is not a shipped default
+#: (``lessons/2026-08-12-a-study-default-is-not-a-shipped-default.md``).
+#: ``max_patch_pca_hac`` lost the Max-Patch study at the operating point
+#: (PR #2749) and #2886 removed the HAC tree it delegates to from ingest, so
+#: carrying it here doubled the GPU cost of every patch cell to measure a
+#: geometry production does not have.  A study that wants the tree arm back
+#: adds it explicitly and declares the divergence.
+PATCH_STYLES = os.environ.get("CALIB_PATCH_STYLES", "max_patch").split(",")
 SINGLE_STYLES = ["whole_image"]
 
 #: The style whose per-node scores get re-pooled into the remedial arms.
 REPOOL_STYLE = "max_patch_pca_hac"
-REPOOL_VARIANTS = [v for v in os.environ.get("CALIB_REPOOL_VARIANTS", "topk,pnorm").split(",") if v]
+#: The #2781 re-pool arms, **off by default: the question is closed.**  Both
+#: pre-registered fixed re-pools failed (``docs/plans/set-scorer-experiment.md``:
+#: ``topk`` made regret worse, sign-corrected ``pnorm`` closed ~21% of the gap),
+#: and every analyzer filters ``pool_variant`` back down to the base rows
+#: (``_cells_io.BASE_POOL_VARIANTS``), so the arms cost a re-calibration and a
+#: re-pool per step per cell to produce rows nothing reads.  The live version of
+#: the question is learned set-pooling, not another fixed rule.
+REPOOL_VARIANTS = [v for v in os.environ.get("CALIB_REPOOL_VARIANTS", "").split(",") if v]
 REPOOL_TOPK = int(os.environ.get("CALIB_REPOOL_TOPK", "4"))
 
 #: Inclusion values the fold orderings are re-thresholded at for the budget sweep.
@@ -454,9 +475,24 @@ def exclusion_arm_name() -> str:
     return f"f{EXCLUSION_MIN_REMAINDER:g}"
 
 
-#: The #2781 study pre-registered safe_thresholds OFF (conformal path only);
-#: the #2799 safe-threshold GMM study flips this on via CALIB_SAFE_THRESHOLDS=1.
-SAFE_THRESHOLDS = os.environ.get("CALIB_SAFE_THRESHOLDS", "0") == "1"
+#: The **shipped** threshold path: fuse the haystack into the cut.  `docs/ML.md`:
+#: "Every trained threshold fuses the haystack into the cut.  There is no
+#: setting for this."  The app has had no switch since #2799, so an unset knob
+#: has to resolve to the fused path or the harness measures a detector nobody
+#: has.
+#:
+#: This defaulted to ``"0"`` until #3400 - the #2781-era pre-registered control,
+#: which was a shipped default when #2781 ran and stopped being one when #2799
+#: shipped.  Twenty-one launchers papered over it with an explicit
+#: ``CALIB_SAFE_THRESHOLDS=1``; the ones that (correctly) set no behavioural knob
+#: at all - ``launch_bench.sh`` and ``launch_scale.sh`` among them, both of which
+#: say in their own headers that they ride shipped defaults on purpose - silently
+#: measured the unfused control.  Same failure family as
+#: ``lessons/2026-08-12-a-study-default-is-not-a-shipped-default.md``.
+#:
+#: A study that wants the unfused control sets ``=0`` and declares the
+#: divergence to preflight (``--diverges safe_thresholds``).
+SAFE_THRESHOLDS = os.environ.get("CALIB_SAFE_THRESHOLDS", "1") == "1"
 MEDIA_TYPE = "image"
 
 #: The #2852 anchored-mixture study (design + pre-registered decision rules:
@@ -468,7 +504,12 @@ ANCHORED = os.environ.get("CALIB_ANCHORED", "0") == "1"
 #: Anchor-weight grid: each labelled score counts as this many haystack scores
 #: in the anchored EM.  Log-spaced from "one label = one haystack point" to
 #: "labels dominate the fit" - the fusion knob the sweep exists to place.
-ANCHORED_WEIGHTS = [float(w) for w in os.environ.get("CALIB_ANCHORED_WEIGHTS", "1,3,10,30,100").split(",") if w]
+#:
+#: **The shipped weight comes first.**  The grid was ``1,3,10,30,100`` when the
+#: #2852 sweep placed the knob; #2861 read it, and ``FOLD_ANCHOR_WEIGHT`` shipped
+#: at 0.3 - below the whole grid, so a re-run swept challengers with no shipped
+#: arm to pair them against.  Log-spaced from the shipped value upward.
+ANCHORED_WEIGHTS = [float(w) for w in os.environ.get("CALIB_ANCHORED_WEIGHTS", "0.3,1,3,10,30").split(",") if w]
 #: #3329: emit the goodness-of-fit side frame (``__fitq.csv``).  Off by default
 #: - it costs one extra unanchored EM fit per emitted step per geometry, which
 #: is pure overhead for every study that is not asking whether the mixture fits.
@@ -478,10 +519,14 @@ FIT_QUALITY = os.environ.get("CALIB_FIT_QUALITY", "0") == "1"
 #: trajectory at a fifth of the fit cost of every step.
 FIT_QUALITY_STRIDE = int(os.environ.get("CALIB_FIT_QUALITY_STRIDE", "5"))
 
-#: Cut rules re-cutting each anchored fit: production midpoint, and the
-#: rate-optimal crossing (well-founded on an anchored fit, where the
+#: Cut rules re-cutting each anchored fit: the **shipped** rule first
+#: (``FOLD_ANCHOR_CUT_RULE``, today ``mid_tilt``), then the plain midpoint and
+#: the rate-optimal crossing (well-founded on an anchored fit, where the
 #: components *are* the classes - the #2836 identification term is gone).
-ANCHORED_RULES = [r for r in os.environ.get("CALIB_ANCHORED_RULES", "mid,rate").split(",") if r]
+#: ``mid`` was the shipped rule when #2852 registered this grid and stopped
+#: being one when ``mid_tilt`` shipped, which left the default grid with no
+#: production arm in it - preflight check 12 has flagged it ever since.
+ANCHORED_RULES = [r for r in os.environ.get("CALIB_ANCHORED_RULES", "mid_tilt,mid,rate").split(",") if r]
 #: Fold-anchored + rank-transfer arms cost one sim-set scoring pass per
 #: calibration fold per step; disable to keep only the cheap final-model arms.
 ANCHORED_FOLD_ARMS = os.environ.get("CALIB_ANCHORED_FOLD_ARMS", "1") == "1"

@@ -54,6 +54,7 @@ from vtscore.detectors.store import (
     _write_detector,
 )
 from vtscore.detectors.workflow import apply_and_retrain as _apply_and_retrain
+from vtsearch.errors import error_response
 from vtsearch.routes._shared import image_thumbnail_response, require_dataset_header, require_detector_header
 from vtsearch.schemas.detectors import (
     DetectorLabelsDetailResponseSchema,
@@ -134,11 +135,11 @@ def save_detector_labels(name: str):
     from vtscore.datasets.labelset import LabelSet
     from vtscore.detectors.dataset_sync import validated_vote_snapshot
     from vtscore.detectors.input_spec import extract_input_spec_from_medias
-    from vtscore.detectors.label_sync import _label_sync_write_lock, _merge_labelsets_across_datasets
+    from vtscore.detectors.labelset_ops import label_sync_write_lock, merge_labelsets_across_datasets
 
     # The read→compose→write below races the loaded-detector label sync (and
     # the other detector-JSON writers), so it runs under the same lock.
-    with _label_sync_write_lock:
+    with label_sync_write_lock:
         path = _detector_path(name)
         data = _read_detector(path)
         if data is None:
@@ -165,7 +166,7 @@ def save_detector_labels(name: str):
         # that resolve to nothing were accumulated under other datasets and are
         # preserved verbatim by the merge.
         existing_ls = LabelSet.from_dict(data.get("labelset") or {})
-        labelset = _merge_labelsets_across_datasets(existing_ls, current_ls, medias_snap)
+        labelset = merge_labelsets_across_datasets(existing_ls, current_ls, medias_snap)
         data["labelset"] = labelset.to_dict()
 
         # Capture the active dataset's clipper into the detector's input_spec
@@ -280,15 +281,15 @@ def _merge_labels_into_detector_file(path: Path, label_entries: list[dict]):
     """Merge *label_entries* into the detector JSON at *path* under the sync lock.
 
     The read→merge→write races the loaded-detector label sync (and the other
-    detector-JSON writers), so it runs under ``_label_sync_write_lock``.  The
+    detector-JSON writers), so it runs under ``label_sync_write_lock``.  The
     file is re-read inside the lock (the route's earlier read only served its
     404 check).  Returns ``(existing_ls, applied, skipped, new_entries)``, or
     ``None`` if the detector file vanished.
     """
     from vtscore.datasets.labelset import LabelSet
-    from vtscore.detectors.label_sync import _label_sync_write_lock
+    from vtscore.detectors.labelset_ops import label_sync_write_lock
 
-    with _label_sync_write_lock:
+    with label_sync_write_lock:
         data = _read_detector(path)
         if data is None:
             return None
@@ -322,7 +323,7 @@ def import_labels_into_detector(name: str, importer_name: str):
     path = _detector_path(name)
     data = _read_detector(path)
     if data is None:
-        return jsonify({"error": f"Detector '{name}' not found"}), 404
+        return error_response(f"Detector '{name}' not found", 404)
 
     from vtscore.labels.importers import get_label_importer, list_label_importers
     from vtsearch.routes._shared import (
@@ -342,14 +343,14 @@ def import_labels_into_detector(name: str, importer_name: str):
     if err:
         return err
     if not isinstance(label_entries, list):
-        return jsonify({"error": "Importer did not return a list of label dicts."}), 500
+        return error_response("Importer did not return a list of label dicts.", 500)
 
     # ------------------------------------------------------------------
     # 1) Merge into the persisted labelset (always, whether loaded or not)
     # ------------------------------------------------------------------
     merged = _merge_labels_into_detector_file(path, label_entries)
     if merged is None:
-        return jsonify({"error": f"Detector '{name}' not found"}), 404
+        return error_response(f"Detector '{name}' not found", 404)
     existing_ls, applied, skipped, new_entries = merged
 
     # Update the detector registry entry
@@ -660,12 +661,12 @@ def vote_detector_label(body: dict, name: str, element_id: str):
     target = body["target"]
 
     from vtscore.datasets.labelset import LabelSet
-    from vtscore.detectors.label_sync import _label_sync_write_lock
     from vtscore.detectors.labelset_elements import find_element_by_id
+    from vtscore.detectors.labelset_ops import label_sync_write_lock
 
     # read→apply→write races the loaded-detector label sync (and the other
     # detector-JSON writers), so it runs under the same lock.
-    with _label_sync_write_lock:
+    with label_sync_write_lock:
         path = _detector_path(name)
         data = _read_detector(path)
         if data is None:

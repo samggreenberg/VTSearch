@@ -106,7 +106,7 @@ def _count_via_collection(dataset_id: str) -> int:
         # The loader resolves EMBEDDINGS_DIR through the parent module at call
         # time; point it at a throwaway dir so we never read a stale real pkl
         # (forcing a fresh collection) nor write a stub-embedded one to the cache.
-        stack.enter_context(patch("vtscore.datasets.loader.EMBEDDINGS_DIR", tmp_dir))
+        stack.enter_context(patch("vtscore.datasets.loader_demo.EMBEDDINGS_DIR", tmp_dir))
         _stub_embedders(stack)
         medias: dict[int, dict] = {}
         load_demo_dataset(dataset_id, medias, on_progress=lambda *a, **k: None)

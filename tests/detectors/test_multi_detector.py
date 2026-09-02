@@ -108,25 +108,35 @@ class TestDetectorContextStore:
         clear_all_detector_contexts()
         assert list_loaded_detector_ids() == []
 
+    @staticmethod
+    def _seed_progress_cache() -> None:
+        """Give the active pair a cache with one fake step in it."""
+        import vtscore.detectors.labeling_progress as lp
+
+        with lp._progress_lock:
+            lp._active_cache().steps.append(
+                {"model": None, "threshold": 0.5, "good_ids": set(), "bad_ids": set(), "stability": None}
+            )
+            assert len(lp._caches) == 1
+
     def test_register_clears_progress_cache(self):
         """Registering a new detector must clear the progress cache so stale
         training indicators from a previous detector don't carry over."""
-        from vtscore.detectors.labeling_progress import _cached_steps, clear_progress_cache
+        import vtscore.detectors.labeling_progress as lp
         from vtscore.state.core import DetectorContext, register_detector_context
 
         # Seed the cache with a fake entry (simulating a previous detector's training)
-        clear_progress_cache()
-        _cached_steps.append({"model": None, "threshold": 0.5, "good_ids": set(), "bad_ids": set(), "stability": None})
-        assert len(_cached_steps) == 1
+        lp.clear_progress_cache()
+        self._seed_progress_cache()
 
-        # Registering a new detector should clear the stale cache
+        # Registering a new detector should clear every cached pair
         register_detector_context(DetectorContext("det_progress_clear"))
-        assert len(_cached_steps) == 0
+        assert lp._caches == {}
 
     def test_unregister_clears_progress_cache(self):
         """Unregistering a detector must clear the progress cache so stale
         training indicators don't leak to the next detector."""
-        from vtscore.detectors.labeling_progress import _cached_steps
+        import vtscore.detectors.labeling_progress as lp
         from vtscore.state.core import (
             DetectorContext,
             register_detector_context,
@@ -135,12 +145,11 @@ class TestDetectorContextStore:
 
         ctx = DetectorContext("det_progress_unreg")
         register_detector_context(ctx)
-        # clear after register (since register also clears)
-        _cached_steps.append({"model": None, "threshold": 0.5, "good_ids": set(), "bad_ids": set(), "stability": None})
-        assert len(_cached_steps) == 1
+        # seed after register (since register also clears)
+        self._seed_progress_cache()
 
         unregister_detector_context("det_progress_unreg")
-        assert len(_cached_steps) == 0
+        assert lp._caches == {}
 
 
 # ---------------------------------------------------------------------------
@@ -447,16 +456,17 @@ class TestLabelingStatusResetOnDetectorSwitch:
     """Regression: deleting a detector and loading a new one must not
     inherit stale training indicators from the old detector.
 
-    The progress cache is module-level, not per-detector.  Without
-    clearing it on detector switch, _ensure_cache sees
-    len(_cached_steps) >= len(new_label_history) and returns stale
-    all-green indicators, causing autopilot to skip to 'Done'.
+    ``unregister_detector_context`` drops every cached pair.  Without that
+    clear, ``_ensure_cache`` would see a cache whose step count already covers
+    the new detector's (empty) label history and return stale all-green
+    indicators, causing autopilot to skip to 'Done'.
     """
 
     def test_labeling_status_not_green_after_detector_switch(self, client):
         """After building up cached progress on detector A, switching to
         a fresh detector B must NOT return green smart/stable status."""
-        from vtscore.detectors.labeling_progress import _cached_steps, _progress_lock
+        import vtscore.detectors.labeling_progress as lp
+        from vtscore.detectors.labeling_progress import _progress_lock
         from vtsearch.state import (
             good_votes,
             bad_votes,
@@ -499,15 +509,14 @@ class TestLabelingStatusResetOnDetectorSwitch:
                 job.done_event.wait(timeout=1.0)
 
         with _progress_lock:
-            cached_before = len(_cached_steps)
+            cached_before = len(lp._active_cache().steps)
         assert cached_before > 0, "Progress cache should be populated after labeling-status call"
 
         # --- Delete detector A and create detector B ---
         unregister_detector_context("det_a_status")
 
         with _progress_lock:
-            cached_after_unreg = len(_cached_steps)
-        assert cached_after_unreg == 0, "Progress cache must be cleared on unregister"
+            assert lp._caches == {}, "Progress cache must be cleared on unregister"
 
         det_b = DetectorContext("det_b_status", name="Detector B", media_type="audio")
         register_detector_context(det_b)
@@ -534,15 +543,15 @@ class TestLabelingStatusResetOnDetectorSwitch:
 
 
 class TestProgressCacheKeyedByDetector:
-    """The per-step progress cache is a single module-global slot, but every
-    input it is built from resolves per-(dataset, detector).
+    """The per-step progress cache is keyed by ``(dataset, detector)``, because
+    every input it is built from resolves per-(dataset, detector).
 
     Switching the UI between two detectors that are *both already loaded* goes
     through neither ``register_detector_context`` nor
     ``unregister_detector_context``, so those clears do not cover it.  Without
-    an identity stamp the length-only freshness gates replay one detector's
-    history on top of another's accumulated label sets, or serve one detector's
-    models as another's Smart / Stable indicators.
+    the keying the length-only freshness gates replay one detector's history on
+    top of another's accumulated label sets, or serve one detector's models as
+    another's Smart / Stable indicators.
     """
 
     @staticmethod
@@ -567,16 +576,10 @@ class TestProgressCacheKeyedByDetector:
         set_thread_detector_context(ctx)
 
     def test_switch_between_loaded_detectors_does_not_merge_label_sets(self, client):
-        """Re-selecting an already-loaded detector must rebuild its own cache,
-        not append its remaining history onto the other detector's ID sets."""
+        """Re-selecting an already-loaded detector must read its own cache, not
+        append its remaining history onto the other detector's ID sets."""
         from vtsearch.state import apply_label, label_history, medias
-        from vtscore.detectors.labeling_progress import (
-            _cache_bad_ids,
-            _cache_good_ids,
-            _cached_steps,
-            _ensure_cache,
-            _progress_lock,
-        )
+        from vtscore.detectors.labeling_progress import _ensure_cache, _progress_lock
 
         a_good, a_bad = [1, 2, 3, 4, 5], [16, 17, 18, 19, 20]
         b_good, b_bad = [6, 7], [14, 15]
@@ -590,31 +593,33 @@ class TestProgressCacheKeyedByDetector:
         for mid in a_bad:
             apply_label(mid, "bad")
         with _progress_lock:
-            _ensure_cache(medias, label_history, 0)
-            assert len(_cached_steps) == 10
+            cache_a = _ensure_cache(medias, label_history, 0)
+            assert len(cache_a.steps) == 10
 
         # --- Detector B: 4 votes.  Its shorter history must not be read as
-        # "the cache is ahead"; the cache belongs to A and has to be dropped. ---
+        # "the cache is ahead"; A's cache is a different entry entirely. ---
         self._activate("det_key_b")
         for mid in b_good:
             apply_label(mid, "good")
         for mid in b_bad:
             apply_label(mid, "bad")
         with _progress_lock:
-            _ensure_cache(medias, label_history, 0)
-            assert len(_cached_steps) == 4, "cache must be rebuilt for B, not reused from A"
-            assert _cache_good_ids == set(b_good)
-            assert _cache_bad_ids == set(b_bad)
+            cache_b = _ensure_cache(medias, label_history, 0)
+            assert cache_b is not cache_a, "B must get its own cache, not A's"
+            assert len(cache_b.steps) == 4
+            assert cache_b.good_ids == set(b_good)
+            assert cache_b.bad_ids == set(b_bad)
 
         # --- Back to A: replaying steps 4..9 on top of B's ID sets would train
         # the appended steps on a merged A+B labelset. ---
         self._activate("det_key_a")
         with _progress_lock:
-            _ensure_cache(medias, label_history, 0)
-            assert len(_cached_steps) == 10
-            assert _cache_good_ids == set(a_good), "A's cache must not carry B's good votes"
-            assert _cache_bad_ids == set(a_bad), "A's cache must not carry B's bad votes"
-            for step in _cached_steps:
+            back_to_a = _ensure_cache(medias, label_history, 0)
+            assert back_to_a is cache_a, "A's cache must survive the round trip, not be rebuilt"
+            assert len(back_to_a.steps) == 10
+            assert back_to_a.good_ids == set(a_good), "A's cache must not carry B's good votes"
+            assert back_to_a.bad_ids == set(a_bad), "A's cache must not carry B's bad votes"
+            for step in back_to_a.steps:
                 assert not (set(step["good_ids"]) & set(b_good)), "B's votes leaked into A's steps"
                 assert not (set(step["bad_ids"]) & set(b_bad)), "B's votes leaked into A's steps"
 

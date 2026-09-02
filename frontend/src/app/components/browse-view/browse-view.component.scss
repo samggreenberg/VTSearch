@@ -30,14 +30,20 @@
   color: var(--color-good);
 }
 
-// Reserve the lines even when empty so toggling the count/detail never
-// re-centers the column and shifts the bar above.
+// Reserve the lines even when empty so toggling the count/ETA/detail never
+// re-centers the column and shifts the bar above. Both children sit on one
+// line, so the height is a single line whether or not the estimate is showing.
+// `.browse-status-eta` deliberately carries no rule of its own: it is a
+// template/spec hook whose colour is the muted one it inherits from here.
 .browse-status-count {
   font-size: var(--font-sm);
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
   line-height: 1.4;
   min-height: 1.4em;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
 }
 
 .browse-status-detail {

@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import io
+import logging
 from pathlib import Path
 from typing import Any
 
 from vtscore.converters.base import MediaConverter, resolve_media_bytes
 from vtscore.plugins import PluginField
+
+logger = logging.getLogger(__name__)
 
 
 def _load_audio_array(media_bytes: bytes, filename: str, duration: float | None) -> tuple[Any, int] | None:
@@ -16,8 +19,8 @@ def _load_audio_array(media_bytes: bytes, filename: str, duration: float | None)
 
     try:
         audio_data, sr = decode_audio(media_bytes, sr=None, mono=True, duration=duration)
-    except Exception as e:
-        print(f"Audio2ImageMediaConverter: failed to load {filename}: {e}")
+    except Exception:
+        logger.error("Failed to decode audio %s", filename, exc_info=True)
         return None
 
     if audio_data is None or len(audio_data) == 0:
@@ -35,8 +38,8 @@ def _compute_spectrogram(
             return librosa.amplitude_to_db(cqt, ref=np.max), "cqt_note"
         mel = librosa.feature.melspectrogram(y=audio_data, sr=sr, n_mels=n_mels)
         return librosa.power_to_db(mel, ref=np.max), "mel"
-    except Exception as e:
-        print(f"Audio2ImageMediaConverter: failed to compute {spec_type} for {filename}: {e}")
+    except Exception:
+        logger.error("Failed to compute %s spectrogram for %s", spec_type, filename, exc_info=True)
         return None
 
 
@@ -62,8 +65,8 @@ def _render_spectrogram_png(spec_db, sr: int, y_axis: str, colormap: str, filena
         fig.savefig(buf, format="png", bbox_inches="tight", pad_inches=0)
         plt.close(fig)
         return buf.getvalue()
-    except Exception as e:
-        print(f"Audio2ImageMediaConverter: failed to render {filename}: {e}")
+    except Exception:
+        logger.error("Failed to render spectrogram for %s", filename, exc_info=True)
         return None
 
 
@@ -216,7 +219,7 @@ class Audio2ImageMediaConverter(MediaConverter):
             import numpy as np  # noqa: PLC0415
             from PIL import Image  # noqa: PLC0415
         except ImportError:
-            print("Audio2ImageMediaConverter requires librosa, matplotlib, and Pillow")
+            logger.warning("audio2image requires librosa, matplotlib, and Pillow; producing no images")
             return []
 
         duration = time_window_s if time_window_s > 0 else None

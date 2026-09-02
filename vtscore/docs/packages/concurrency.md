@@ -70,15 +70,31 @@ returns immediately with a job ID.
 State container for one background job (`async_jobs.py`). Fields:
 `job_id` (UUID4 hex), `signature` (caller-supplied fingerprint),
 `status` (`"pending"` / `"running"` / `"done"` / `"error"` /
-`"cancelled"`), `result`, `error`, `current` / `total` / `message`
-(progress counters), `started_at`, `cancel_event` / `done_event`
+`"cancelled"`), `result`, `error`, `progress` (this job's own
+`ProgressTracker` - see below), `started_at`, `done_event`
 (`threading.Event`), `user` (captured at `start()` for per-user settings
 resolution), `dataset_id` / `detector_id` (captured at `start()`;
 consumed by `list_active_pairs()`).
 
-Methods: `cancel()` sets `cancel_event`; `is_cancelled` reads it;
-`update_progress(current, total, message="")` updates the three progress
-fields (single-writer per job).
+**Progress is the tracker's, not a copy of it.** `current` / `total` /
+`message` / `step` / `total_steps` are read/write properties over
+`job.progress`, so a job automatically gets everything the tracker
+computes and a job-shaped re-implementation would not: a smoothed,
+coarsened `eta_seconds`, the whole-job `overall` / `overall_step_end`
+fractions (optionally weighted per phase via
+`job.progress.set_step_weights(...)`), and `subscribe()` for pushing
+snapshots rather than polling them. Read the whole set at once with
+`job.progress.get()`.
+
+Methods: `update_progress(current, total, message="")` publishes the
+within-phase counts (single-writer per job); `set_phase(step,
+total_steps, message="")` enters a coarse phase and zeroes the counts
+belonging to the one being left.
+
+Cancellation likewise has one flag, not two: `cancel_event` **is**
+`job.progress.cancel_event`, so `cancel()`, `is_cancelled`,
+`job.progress.check_cancelled()` and `check_job_cancelled()` all observe
+the same event and raise the same `CancelledError`.
 
 ### `JobManager`
 
@@ -198,11 +214,10 @@ _PROGRESS_COMMON_EXTRAS = {
 }
 ```
 
-`dataset_progress` still declares `"staging_result"` (retained for the
-legacy free-function API and its test), but the staging flow itself now
-runs through per-task trackers created via
+The staging flow declares one extra of its own, on the staging task's
+tracker rather than anywhere global:
 `LoadingTasksTracker.create_task(..., extra_fields={"staging_result": None})`,
-so two concurrent staging imports no longer collide on one channel.
+so two concurrent staging imports cannot collide on one channel.
 
 **ETA:** when `extra_fields` includes `"eta_seconds"`, every `update()`
 recomputes a smoothed ETA. The tracker keeps a phase key
@@ -255,7 +270,6 @@ the polling frontend can display them. The prune runs lazily inside
 
 ```python
 # vtscore/concurrency/progress.py
-dataset_progress = ProgressTracker(extra_fields={**_PROGRESS_COMMON_EXTRAS, "staging_result": None})
 sort_progress    = ProgressTracker(extra_fields=dict(_PROGRESS_COMMON_EXTRAS))
 eval_progress    = ProgressTracker(extra_fields=dict(_PROGRESS_COMMON_EXTRAS))
 find_progress    = ProgressTracker(extra_fields=dict(_PROGRESS_COMMON_EXTRAS))
@@ -269,30 +283,43 @@ callers don't have to import the tracker itself:
 
 | Tracker | Update | Get | Cancel |
 |---------|--------|-----|--------|
-| `dataset_progress` | `update_progress(...)` | `get_progress()` | `cancel_dataset_progress()` |
 | `sort_progress` | `update_sort_progress(...)` | `get_sort_progress()` | - |
 | `eval_progress` | `update_eval_progress(...)` | `get_eval_progress()` | - |
 | `find_progress` | `update_find_progress(...)` | `get_find_progress()` | - |
 
+**There is deliberately no `dataset_progress` singleton.** Dataset and
+import progress lives entirely in `loading_tasks`, one tracker per
+operation. The global one that used to sit alongside it - reachable as
+`dataset_progress` / `update_progress()` / `get_progress()`, and streamed
+on an SSE `dataset` channel - was removed because a process-wide sink has
+no owner: nothing could say when the work it was narrating had ended, so a
+finished import and a wedged one produced the same output (#3167). Cancel
+it and no worker was reading the flag; leave it and it sat on its last
+message forever. `cancel_dataset_progress()` survives the removal and now
+cancels exactly the active tasks in `loading_tasks` (staging imports
+included).
+
+`update_progress()` also survives, with a new meaning: it is the free-
+function spelling of `resolve_progress_callback()` (below), for plugin
+authors who would rather report progress with a call than by accepting an
+`on_progress` argument. It reports into whatever tracker the calling
+thread bound and is a no-op when nothing is bound.
+
 ```python
-from vtscore.concurrency.progress import update_progress, get_progress, check_dataset_cancelled
+from vtscore.concurrency.progress import update_progress
 
+# Inside an importer's run(): lands on *this* import's dashboard row.
 update_progress("loading", "Starting", 0, 100, step=1, total_steps=3)
-check_dataset_cancelled()   # raises CancelledError if cancel was requested
-update_progress("loading", "Halfway", 50, 100)
-update_progress("done", "Finished", 100, 100)
+update_progress("embedding", "Halfway", 50, 100)
 ```
-
-`get_progress()` is asymmetric: it checks the per-task `loading_tasks`
-first (used by parallel dataset loading) and only falls back to
-`dataset_progress` when no per-task entry is active. A caller that wants
-progress shown on the dashboard should prefer `loading_tasks.create_task()`
-over the singleton when parallel loads are possible.
 
 The free functions honour a sentinel default (`_UNSET = object()`) for
 optional extras: only fields explicitly supplied by the caller are
 forwarded, so omitted fields are left unchanged - true update/merge
-semantics rather than "every call clobbers every field".
+semantics rather than "every call clobbers every field". `update_progress()`
+forwards its extras only when the bound sink's signature accepts them; the
+plain four-argument callbacks the load pipeline installs get the four
+positional arguments alone.
 
 ---
 
@@ -300,15 +327,33 @@ semantics rather than "every call clobbers every field".
 
 Background loading threads inside `vtscore.datasets` and
 `vtscore.embedding.loader` write progress through a per-thread callback,
-not directly to a tracker. Module-level helpers check the thread-local
-first and fall back to a global default when nothing is set.
+not directly to a tracker. This is the **only** resolution there is: a
+thread that bound nothing reports into a no-op, not into a shared sink.
 
 ```python
 # vtscore/concurrency/progress.py
+ProgressCallback = Callable[[str, str, int, int], None]
+
 def set_thread_progress(callback) -> None: ...
 def get_thread_progress(): ...
 def clear_thread_progress() -> None: ...
+def noop_progress(status, message="", current=0, total=0) -> None: ...
+def resolve_progress_callback() -> ProgressCallback: ...
 ```
+
+`resolve_progress_callback()` returns the thread's callback, or
+`noop_progress` when there isn't one. Every library module that takes an
+optional `on_progress` uses it to fill in the `None` case:
+
+```python
+def load_something(path, on_progress=None):
+    if on_progress is None:
+        on_progress = resolve_progress_callback()
+```
+
+`ProgressCallback` and `noop_progress` are defined here and imported
+everywhere else (`vtscore.media.base` re-exports them); `progress.py`
+imports nothing from `vtscore`, so there is no cycle to work around.
 
 This mirrors `vtscore.media.set_thread_progress_callback` (a separate
 channel for the media-registry's callback). Both exist so multi-threaded
@@ -338,25 +383,36 @@ running thread; the thread must check periodically and return early.
 `CancelledError`. The canonical pattern inside a loop:
 
 ```python
-from vtscore.concurrency.progress import check_dataset_cancelled, update_progress
+from vtscore.concurrency.progress import loading_tasks
 
+tracker = loading_tasks.get_tracker(task_id)
 for i, item in enumerate(items):
-    check_dataset_cancelled()           # raises CancelledError if cancelled
-    update_progress("loading", f"item {i}", i, len(items))
+    tracker.check_cancelled()           # raises CancelledError if cancelled
+    tracker.update("loading", f"item {i}", i, len(items))
     # ... do work ...
 ```
 
-`AsyncJob` cancellation is the analogous pattern but uses the job's own
-event: the target function checks `job.is_cancelled` and returns.
+Library code that only has the thread's sink gets the same effect for
+free: the callbacks the load pipeline binds call `check_cancelled()` on
+their own tracker before recording the tick, so reporting progress *is*
+the cancellation check.
 
-**Cancellation is one-shot per operation.** Call `reset_cancel()` at the
-start of each new operation so a previous cancellation doesn't
-immediately abort the next run.
+`AsyncJob` cancellation is the same pattern reached through a job: the
+job's event *is* its tracker's, so a target may check `job.is_cancelled`
+and return, or let `check_job_cancelled()` / `job.progress.check_cancelled()`
+raise `CancelledError` from deep inside a compute loop for `JobManager`
+to catch.
 
-`cancel_dataset_progress()` is a convenience that cancels every active
-task in `loading_tasks` (which now includes staging imports) **and** the
-legacy `dataset_progress` singleton, so a clean abort touches both
-surfaces regardless of which one a given operation reports through.
+**Cancellation is one-shot per operation.** A tracker that outlives one
+operation needs `reset_cancel()` before the next, so a previous
+cancellation doesn't immediately abort the next run. Dataset loads don't
+need it: each load creates its own tracker, so its flag starts clear and
+a cancel aimed at an earlier load stays with that load.
+
+`cancel_dataset_progress()` cancels every active task in `loading_tasks`
+(staging imports included) and reports what each one did - see
+`_cancel_report` for the acknowledged / pending / unresponsive
+classification.
 
 ---
 

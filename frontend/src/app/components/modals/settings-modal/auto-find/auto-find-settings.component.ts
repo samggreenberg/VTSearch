@@ -1,8 +1,7 @@
-import { ChangeDetectionStrategy, Component, effect, inject, input, OnDestroy, OnInit, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, input, OnInit, output, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { FormsModule } from '@angular/forms';
-import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
 
 import { IconComponent } from '../../../icon/icon.component';
 import { ImporterField } from '../../../../models/api.models';
@@ -40,7 +39,7 @@ export interface AutoFindExporterChange {
   templateUrl: './auto-find-settings.component.html',
   styleUrl: './auto-find-settings.component.scss',
 })
-export class AutoFindSettingsComponent implements OnInit, OnDestroy {
+export class AutoFindSettingsComponent implements OnInit {
   private exportersApi = inject(ExportersApiService);
 
   constructor() {
@@ -101,12 +100,12 @@ export class AutoFindSettingsComponent implements OnInit, OnDestroy {
    *  and the parent read) is re-derived from it on every commit. */
   private workingValues: Record<string, string> = {};
 
-  private destroy$ = new Subject<void>();
+  private readonly destroyRef = inject(DestroyRef);
 
   ngOnInit(): void {
     this.exportersApi
       .getExporters()
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (list) => {
           // Auto-Find runs its export on a scored run, so only exporters that
@@ -122,11 +121,6 @@ export class AutoFindSettingsComponent implements OnInit, OnDestroy {
           this.loadingExporters.set(false);
         },
       });
-  }
-
-  ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
   }
 
   // --- Results Exporter ----------------------------------------------------

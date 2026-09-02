@@ -42,11 +42,15 @@ describe('FindViewComponent (zoneless canary)', () => {
   });
 
   afterEach(() => {
-    fixture.componentInstance.ngOnDestroy();
+    // `fixture.destroy()` runs the component's own `ngOnDestroy` *and*
+    // destroys the component-provided `PairScopeService`, which is what
+    // cancels the in-flight pair-scoped requests (a bare `ngOnDestroy()` call
+    // no longer does — the view stopped firing the scope by hand). Destroy
+    // first, then drain; a cancelled request cannot be flushed.
+    fixture.destroy();
     httpMock.match(() => true).forEach((req) => {
       if (!req.cancelled) req.flush([]);
     });
-    fixture.destroy();
   });
 
   // Drain find-view's init loads, holding back only the dataset-status response
@@ -64,7 +68,7 @@ describe('FindViewComponent (zoneless canary)', () => {
       httpMock.match('/api/votes').forEach((req) =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
-      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 80 }));
+      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8 }));
       httpMock.match('/api/inclusion').forEach((req) => req.flush({ inclusion: 0 }));
       httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
       httpMock.match('/api/embedders').forEach((req) => req.flush([]));
@@ -179,7 +183,7 @@ describe('FindViewComponent (zoneless canary)', () => {
  * context, and `advanceToBoundary()` then selected a media id that need not
  * exist in the new dataset. Even the old response landing first was harmful —
  * its `finalize()` dropped the wait overlay while the new run was still going.
- * The run is now scoped to the pair (`pairScope$`), so a switch tears it down.
+ * The run is now scoped to the pair (`PairScopeService`), so a switch tears it down.
  */
 describe('FindViewComponent (pair-switch supersession)', () => {
   let fixture: ComponentFixture<FindViewComponent>;
@@ -203,11 +207,15 @@ describe('FindViewComponent (pair-switch supersession)', () => {
   });
 
   afterEach(() => {
-    fixture.componentInstance.ngOnDestroy();
+    // `fixture.destroy()` runs the component's own `ngOnDestroy` *and*
+    // destroys the component-provided `PairScopeService`, which is what
+    // cancels the in-flight pair-scoped requests (a bare `ngOnDestroy()` call
+    // no longer does — the view stopped firing the scope by hand). Destroy
+    // first, then drain; a cancelled request cannot be flushed.
+    fixture.destroy();
     httpMock.match(() => true).forEach((req) => {
       if (!req.cancelled) req.flush([]);
     });
-    fixture.destroy();
   });
 
   // Same drain as the canary above, plus the dataset-status read (no assertion
@@ -225,7 +233,7 @@ describe('FindViewComponent (pair-switch supersession)', () => {
       httpMock.match('/api/votes').forEach((req) =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
-      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 80 }));
+      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8 }));
       httpMock.match('/api/inclusion').forEach((req) => req.flush({ inclusion: 0 }));
       httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
       httpMock.match('/api/embedders').forEach((req) => req.flush([]));
@@ -318,11 +326,15 @@ describe('FindViewComponent (inclusion supersession)', () => {
 
   afterEach(() => {
     vi.useRealTimers();
-    fixture.componentInstance.ngOnDestroy();
+    // `fixture.destroy()` runs the component's own `ngOnDestroy` *and*
+    // destroys the component-provided `PairScopeService`, which is what
+    // cancels the in-flight pair-scoped requests (a bare `ngOnDestroy()` call
+    // no longer does — the view stopped firing the scope by hand). Destroy
+    // first, then drain; a cancelled request cannot be flushed.
+    fixture.destroy();
     httpMock.match(() => true).forEach((req) => {
       if (!req.cancelled) req.flush([]);
     });
-    fixture.destroy();
   });
 
   // Same drain as the canary above; no pair is active, so `runFindLabel` no-ops
@@ -337,7 +349,7 @@ describe('FindViewComponent (inclusion supersession)', () => {
       httpMock.match('/api/votes').forEach((req) =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
-      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 80 }));
+      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8 }));
       httpMock.match('/api/inclusion').forEach((req) => req.flush({ inclusion: 0 }));
       httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
       httpMock.match('/api/embedders').forEach((req) => req.flush([]));

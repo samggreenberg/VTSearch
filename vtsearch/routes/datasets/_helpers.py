@@ -9,8 +9,9 @@ import json
 from pathlib import PurePosixPath
 from typing import Any
 
-from flask import jsonify, request
+from flask import request
 
+from vtsearch.errors import error_response
 from vtsearch.routes._shared import get_json_safe
 
 
@@ -42,14 +43,14 @@ def _extract_clipper_params(has_file_fields: bool) -> tuple[dict | None, Any]:
         try:
             parsed = json.loads(raw)
         except (ValueError, TypeError) as exc:
-            return None, (jsonify({"error": f"Invalid clipper_params: {exc}"}), 400)
+            return None, error_response(f"Invalid clipper_params: {exc}", 400)
     else:
         parsed = get_json_safe().get("clipper_params")
         if parsed is None or parsed == "":
             return None, None
 
     if not isinstance(parsed, dict):
-        return None, (jsonify({"error": "clipper_params must be a JSON object"}), 400)
+        return None, error_response("clipper_params must be a JSON object", 400)
     return parsed, None
 
 

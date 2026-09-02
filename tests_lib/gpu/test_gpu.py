@@ -169,7 +169,7 @@ class TestCuMLBackends:
         assert np.isfinite(proj.coords).all()
 
     def test_coverage_atlas_builds_on_gpu(self):
-        from vtscore.state.coverage_atlas import CoverageAtlas
+        from vtscore.coverage.atlas import CoverageAtlas
 
         rng = np.random.default_rng(3)
         vectors = {i: rng.standard_normal(8).astype(np.float32) for i in range(60)}

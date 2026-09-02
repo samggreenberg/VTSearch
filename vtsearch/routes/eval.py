@@ -340,7 +340,10 @@ def eval_train_and_score_result(query: dict):
 
     job = eval_jobs.get(job_id)
     if job is None:
-        abort(404, message="Job not found", job_id=job_id, status="missing")
+        # ``job_status``, not ``status``: the error envelope's own ``status``
+        # is the HTTP status name, and an extra kwarg never overwrites an
+        # envelope field (see ``VTSearchApi.handle_http_exception``).
+        abort(404, message="Job not found", job_id=job_id, job_status="missing")
 
     if job.status in ("running", "pending"):
         # Read progress from the job itself (not the global ``eval_progress``

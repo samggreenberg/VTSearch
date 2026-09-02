@@ -59,7 +59,7 @@ it needs the refusal written into the builder.
   from the provenance on disk rather than from the launcher's intent.
 - `pixel_drift.py` records `backend_honoured` per row, so a fallback appears in
   the CSV as a column rather than as a surprising zero.
-- `vtscore/config.py` gains `VTSEARCH_IMAGE_PROCESSOR_BACKEND`, so the backend
+- `vtscore/config/` gains `VTSEARCH_IMAGE_PROCESSOR_BACKEND`, so the backend
   can be *named* rather than resolved, and `embedder_siglip.py` stops naming a
   concrete processor class — a concrete class both pins the code to whatever
   that identifier currently means and cannot honour a backend request at all.

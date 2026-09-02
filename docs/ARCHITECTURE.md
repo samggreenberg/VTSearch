@@ -154,6 +154,8 @@ VTSearch/
 │   │   │   structural_geometry.py  the geometric consistency check and
 │   │   │   structural_splg.py      the SPLG local-feature backend
 │   │   ├── lazy_clip.py            Replays converter/clipper recipes to rebuild bytes on demand
+│   │   ├── clip_recipe.py          One parser for the origin.params clip dialects, shared by
+│   │   │                           lazy_clip and the detector resolver's replay path
 │   │   ├── provenance.py           Human-readable Source / Derived Via / Imported Via lines
 │   │   ├── torch_setup.py          Process-wide torch thread + device configuration
 │   │   ├── audio/                  Audio media type, embedders (CLAP, CLAP-Music, CLAP-General,
@@ -260,12 +262,12 @@ VTSearch/
 │   │   ├── registry.py             Persistent dataset registry (data/dataset_registry.json)
 │   │   ├── downloader/             Demo dataset downloaders (audio, image, video, text, docs)
 │   │   ├── sources/                MediaSource abstraction (local_folder, local_archive,
-│   │   │                           local_archive_member, http_archive, server_files, pullwrest,
+│   │   │                           local_archive_member, http_archive, server_files,
 │   │   │                           url_download); all fetch/resolve ops return FetchedItem (path +
 │   │   │                           optional embedding, embedder_name, extra metadata)
 │   │   └── importers/              Plugin importers (server_folder, server_files, local_folder,
 │   │                               local_files, local_archive_member, pickle, http_archive,
-│   │                               combine_datasets, demo, synthetic, recaller)
+│   │                               combine_datasets, demo, synthetic)
 │   │
 │   ├── datasource_importers/       Datasource importers: fetch *one* file on demand (server_file,
 │   │                               url_download) rather than ingesting a whole corpus
@@ -275,10 +277,10 @@ VTSearch/
 │   │                               point only; no built-ins ship in-tree
 │   │
 │   ├── exporters/                  Results exporters (server_json_file, server_csv_file,
-│   │                               email_smtp, webhook, open_url, portable_detector, gui, holder)
+│   │                               email_smtp, webhook, open_url, portable_detector, gui)
 │   │
 │   ├── labels/                     Label importers, sync sources, sync utilities
-│   │   ├── importers/              server_json_file, server_csv_file, holder
+│   │   ├── importers/              server_json_file, server_csv_file
 │   │   ├── sources/                server_json_file (bidirectional label sync)
 │   │   └── sync.py                 sync_to/from_labelset_source utilities
 │   │
@@ -315,11 +317,14 @@ VTSearch/
 │   │   ├── pyramid.py              Stage 2: hex/square-tile zoom pyramid
 │   │   ├── params.py               Projection knobs (n_neighbors, min_dist, …) + their identity
 │   │   ├── persistence.py          Projection (de)serialization (npz <-> meta)
+│   │   ├── store.py                Where a layout lives on disk + the params-freshness guard
+│   │   ├── service.py              The layout lifecycle: build / re-bin / reset / subset, and the meta + tile payloads
 │   │   ├── labels.py               Signposts — RegionLabelSet + the labeler signature a stale set is checked on
 │   │   ├── signpost_prep.py        Signposts — region selection + sampling ahead of captioning
 │   │   ├── signpost_captioners.py  Signposts — pluggable captioners (zero-shot tags, toponymy, …)
 │   │   ├── signpost_texts.py       Signposts — per-media-type tag vocabularies (browse_signpost_vocab override)
 │   │   ├── signpost_build.py       Signposts — builds the RegionLabelSet for a frozen layout
+│   │   ├── signpost_serve.py       Signposts — resolving which set to serve over a layout (and self-healing a stale one)
 │   │   └── demo_signposts.py       Signposts — pre-baked signposts shipped with the demo datasets
 │   │
 │   ├── concurrency/                Async jobs, memory budgeting, progress tracking
@@ -331,7 +336,7 @@ VTSearch/
 │   │   │                           publishes on the `notification` SSE channel and is what
 │   │   │                           `PluginBase.notify()` calls when a plugin wants to surface a
 │   │   │                           user-visible message without failing the run
-│   │   └── progress.py             ProgressTracker, update_progress, cancel_dataset_progress
+│   │   └── progress.py             ProgressTracker, loading_tasks, cancel_dataset_progress
 │   │
 │   ├── state/                      Multi-dataset / multi-detector global state (library tier)
 │   │   ├── core.py                 DatasetContext, DetectorContext, _state_lock, context registries,
@@ -421,7 +426,7 @@ VTSearch/
 │       ├── jobs.py                 Job management (/api/jobs/*)
 │       ├── sessions.py             Session management (/api/sessions/*)
 │       ├── achievements.py         Achievement routes (/api/achievements/*)
-│       ├── projection.py           VTSBrowse projection routes (/api/projection/*)
+│       ├── projection.py           VTSBrowse projection routes (/api/projection/*); the lifecycle is vtscore/projection/service.py
 │       ├── datasets/               Dataset routes; listings, load, staging, registry, status, ui
 │       ├── detectors/              Detector routes; crud, labels, registry, scoring, find, export
 │       ├── processors/             Processor routes; crud, scoring (extractors/localizers)
@@ -434,7 +439,8 @@ VTSearch/
 ├── frontend/                       Angular SPA source (components, services, SCSS)
 │                                   -> see docs/FRONTEND.md for the SPA architecture
 ├── tests/                          App-tier test suite (uses Flask client, vtsearch.*)
-└── tests_lib/                      Library-tier test suite (Flask-import-clean, vtscore.*)
+├── tests_lib/                      Library-tier test suite (Flask-import-clean, vtscore.*)
+└── tests_shared/                   Conftest machinery both suites import (no test modules)
 ```
 
 **The library tier is entirely Flask-free, and that is enforced, not
@@ -538,7 +544,9 @@ modules on the right.
   for detector labels) both inherit from the generic
   `SyncSource[LoadT, SaveT]` in `vtscore/sync/`, which captures the
   shared `load()`/`save()` shape; each concrete source plugin is still
-  pure I/O.
+  pure I/O.  The *engine* driving settings sources is not — it lives in
+  `vtsearch/settings_store.py` and is documented in
+  [EXTENDING-plugins.md § How the sync engine works](EXTENDING-plugins.md#how-the-sync-engine-works).
 - **datasets/ functions accept an optional `on_progress` callback.**
   When `None`, they lazily resolve the app's `update_progress`; when
   provided, they use the caller's callback.
@@ -571,7 +579,7 @@ modules on the right.
 | `vtscore/concurrency/progress.py` | No | No | **Yes**: threading only |
 | `vtscore/projection/` | No | No (params) | **Yes**: numpy + UMAP over an (N, d) matrix |
 | `vtscore/state/` | No | N/A (IS the state) | **Yes**: plain Python dicts |
-| `vtscore/config.py` | No | No | **Yes**: just constants |
+| `vtscore/config/` | No | No | **Yes**: just constants |
 | `vtscore/io.py` + `gpu_backends.py` | No | No | **Yes**: file I/O / backend selection |
 | `vtscore/security/login.py` | No | No | **Yes**: `LoginProvider` ABC + `DefaultLoginProvider` |
 | `vtsearch/auth/` | Lazy (`session`, `g`) | No | Partially: the Flask-session providers need Flask |
@@ -584,7 +592,7 @@ modules on the right.
 
 ### The ML training pipeline
 
-**Files:** `vtscore/training/mlp.py` / `vtscore/training/thresholds.py`, `vtscore/config.py` (for `TRAIN_EPOCHS`)
+**Files:** `vtscore/training/mlp.py` / `vtscore/training/thresholds/`, `vtscore/config/runtime.py` (for `TRAIN_EPOCHS`)
 
 **Dependencies:** `torch`, `sklearn`, `numpy`
 
@@ -653,15 +661,20 @@ dataset loads share one embedder without their trackers crossing — a mis-route
 callback would not merely mis-draw a bar, since trackers call `check_cancelled()`
 and would abort the wrong load.
 
-That process-wide default is the app's *dataset* progress channel, which nothing
-else terminates: a sink cannot see when the work it is narrating ends.  So
-`load_models()` terminates it itself — an unscoped load reports as usual and
-then sends one `idle` tick on the way out (`MediaEmbedder._orphan_progress`).
-Background warm-ups that should not appear on any channel say so explicitly with
-`with emb.silent_progress():` (the smart-preload threads, the post-import
-embedder warm-up).  Skipping either is how a *finished* import came to look
-identical to a wedged one, with the dataset channel parked on "Loading SigLIP
-processor…" and no loader thread anywhere in the process (#3167).
+That process-wide default is `update_progress`, which resolves *per thread* in
+turn: an unscoped load on a thread that bound no tracker reaches a no-op, and
+one inside a load reaches that load's own tracker.  It used to be a global
+`dataset_progress` singleton instead — a channel nothing else terminates, since
+a sink cannot see when the work it is narrating ends — and `load_models()` had
+to append a synthetic `idle` tick on the way out to compensate.  Both the
+singleton and the compensating tick are gone (#3376); what remains is that
+background warm-ups which should not appear on *any* channel say so explicitly
+with `with emb.silent_progress():` (the smart-preload threads, the post-import
+embedder warm-up), so a warm-up running at the tail of an import does not
+narrate itself onto that import's row after it has finished.  Skipping that is
+how a *finished* import came to look identical to a wedged one, with the
+dataset channel parked on "Loading SigLIP processor…" and no loader thread
+anywhere in the process (#3167).
 
 ### The plugin systems
 
@@ -742,14 +755,14 @@ A **plugin family** is a registry enumerated by `vtscore.plugins.inventory` (`py
 
 | Family | Tier | Registry | Built-in plugins |
 |---|---|---|---|
-| `importers` | library | Dataset importers | 11 |
+| `importers` | library | Dataset importers | 10 |
 | `datasource_importers` | library | Datasource importers | 2 |
-| `exporters` | library | Results exporters | 8 |
-| `label_importers` | library | Label importers | 3 |
+| `exporters` | library | Results exporters | 7 |
+| `label_importers` | library | Label importers | 2 |
 | `seed_importers` | library | Seed importers | 0 |
 | `labelset_sources` | library | Labelset sources | 1 |
 | `converters` | library | Media converters | 8 |
-| `media_sources` | library | Media sources | 7 |
+| `media_sources` | library | Media sources | 6 |
 | `media_types` | library | Media types | 6 |
 | `embedders` | library | Media embedders | 26 |
 | `clippers` | library | Media clippers | 16 |
@@ -1065,7 +1078,7 @@ Each clip dict includes two provenance fields:
 |-------|------|-------------|
 | `origin` | `dict \| None` | Serialised `Origin` (e.g. `{"importer": "server_folder", "params": {"path": "/data"}}`) |
 | `origin_name` | `str` | Unique name within the origin (typically the filename) |
-| `media_url` | `str \| None` | Remote URL for lazy-fetching media bytes (e.g. PullWrest URL). Used as fallback when `media_bytes` and `media_path` are both absent. Fetched only through the SSRF guard (`fetch_validated_url`): publicly routable `http(s)` only, every redirect hop re-checked |
+| `media_url` | `str \| None` | Remote URL for lazy-fetching media bytes. Used as fallback when `media_bytes` and `media_path` are both absent. Fetched only through the SSRF guard (`fetch_validated_url`): publicly routable `http(s)` only, every redirect hop re-checked |
 
 ### Origin class (`vtscore/datasets/origin.py`)
 

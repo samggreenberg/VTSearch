@@ -1,6 +1,9 @@
 import { computed } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { Subject } from 'rxjs';
 import { SortStateService, SortedItem } from './sort-state.service';
+import { ProgressEventsService } from './progress-events.service';
+import type { ProgressEvent } from '../models/api.models';
 
 describe('SortStateService', () => {
   let service: SortStateService;
@@ -219,5 +222,78 @@ describe('SortStateService', () => {
 
     service.setSortMode('load');
     expect(derived()).toBe('load');
+  });
+});
+
+/**
+ * The `find` SSE channel used to be mirrored onto these fields by two
+ * byte-identical subscriptions living in `find-view` and `label-view` (#3446).
+ * It lives here now, because every field a frame writes is owned by this
+ * service. The dashboard's superficially similar block is deliberately *not*
+ * folded in: it renders `/api/find` into `DatasetStateService.progressMessage`,
+ * a different surface with a different default message and no progress counts.
+ */
+describe('SortStateService: find-progress tracking', () => {
+  let service: SortStateService;
+  let find$: Subject<ProgressEvent>;
+
+  beforeEach(() => {
+    find$ = new Subject<ProgressEvent>();
+    TestBed.configureTestingModule({
+      providers: [{ provide: ProgressEventsService, useValue: { find$ } }],
+    });
+    service = TestBed.inject(SortStateService);
+  });
+
+  it('mirrors a running frame onto the sort status and every progress field', () => {
+    service.startFindProgressTracking();
+    find$.next({
+      status: 'running',
+      message: 'Scoring…',
+      current: 7,
+      total: 20,
+      overall: 0.3,
+      eta_seconds: 12,
+      overall_step_end: 0.5,
+    });
+
+    expect(service.sortStatus).toContain('Scoring…');
+    expect(service.sortProgress).toBe(7);
+    expect(service.sortProgressTotal).toBe(20);
+    expect(service.sortOverall).toBe(0.3);
+    expect(service.sortEtaSeconds).toBe(12);
+    // The bounded-pulse field: dropped, a count-less step shimmers its parked
+    // fill instead of sweeping the step's own slice.
+    expect(service.sortStepEnd).toBe(0.5);
+  });
+
+  it('ignores frames that are not running, so a stale idle frame never clears the bar', () => {
+    service.startFindProgressTracking();
+    find$.next({ status: 'running', message: 'Scoring…', current: 5, total: 20 });
+    find$.next({ status: 'idle', message: '', current: 0, total: 0 });
+
+    expect(service.sortProgress).toBe(5);
+  });
+
+  it('stops writing once tracking is stopped', () => {
+    service.startFindProgressTracking();
+    find$.next({ status: 'running', current: 5, total: 20 });
+    service.stopFindProgressTracking();
+    find$.next({ status: 'running', current: 19, total: 20 });
+
+    expect(service.sortProgress).toBe(5);
+    expect(find$.observed).toBe(false);
+  });
+
+  it('restarting is idempotent: a second run never stacks two writers', () => {
+    service.startFindProgressTracking();
+    service.startFindProgressTracking();
+
+    // Both views call start on every scoring run without stopping first, so a
+    // missing teardown here would silently double up on a shared singleton.
+    expect(find$.observers.length).toBe(1);
+
+    service.stopFindProgressTracking();
+    expect(find$.observed).toBe(false);
   });
 });

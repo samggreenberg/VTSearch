@@ -15,6 +15,28 @@ not list every commit. Use `git log` for the full history.
 
 ## Unreleased
 
+### Fixed
+
+- **Switching dataset or detector no longer leaves the previous pair's item in
+  the centre viewer.** Media ids are per-dataset, so the pair switch cleared the
+  ranking, the threshold and the vote cache but left the *selection* pointing at
+  an item that only existed under the pair you just left. Because the viewer
+  stamps the dataset id into the media URL when it builds it, the stranded item
+  kept loading from its own dataset and rendered normally -- so the grid showed
+  the new pair while the centre showed the old one, with nothing on screen
+  saying so. The selection is now dropped with the rest of the pair's state; the
+  centre reads "Select a media item to view" until the new pair's first pick
+  lands, exactly as it does on a fresh entry.
+
+- **The "arranging your items" wait now shows a remaining-time estimate.**
+  Preparing a subset map from Find results renders an ETA chip beside the
+  progress bar, but the projection build's status payload never carried an
+  estimate for it to show, so the chip was always blank. Background jobs are
+  now backed by the same progress tracker the dataset loads use, which derives
+  one from the rate the build is actually sustaining (rebased at each phase
+  boundary, published on a coarse sticky ladder so the figure doesn't twitch),
+  and the projection status payload passes it through as `eta_seconds`.
+
 ### Added
 
 - **New demo dataset: Rico Icons -- screenshots with boxed, labelled icons.**
@@ -37,6 +59,27 @@ not list every commit. Use `git log` for the full history.
   moving from (S) to (M), pays only for the shards it adds.
 
 ### Changed
+
+- **Your Dashboard selection now survives leaving the Dashboard.** Going to
+  Train and back used to drop the highlighted rows and blank the top bar to
+  "Select a dataset" -- even though the pair you had just opened was still
+  loaded -- because the selection lived on the Dashboard component and died
+  with it. It now lives in `DashboardSelectionService`, so the rows come back
+  highlighted and the top bar keeps naming them. The detector grid's
+  Drafts/AutoRun tab travels with the selection it scopes, so returning can no
+  longer leave a hidden AutoRun row feeding the section actions. (Issue #3445.)
+
+- **Switching between two loaded detectors no longer throws away the labeling
+  indicators' cached work.** The Smart / Stable per-step cache retrains one MLP
+  per label-history step, and it used to be a single slot stamped with whichever
+  `(dataset, detector)` pair last touched it -- so re-selecting a detector you
+  had already been labeling in dropped the other one's cache outright, and the
+  next `/api/labeling-status` poll rebuilt it from step zero. The cache is now
+  keyed by the pair, with the three most recent kept warm, so an A-to-B-and-back
+  switch costs nothing. The stability pool tensor -- the largest thing the cache
+  holds -- is keyed by dataset instead and shared across that dataset's
+  detectors, so keeping several pairs warm does not multiply memory. (Issue
+  #3390.)
 
 - **"Enrich descriptions" is now a per-model choice, and can no longer make
   your search worse.** The setting averages a typed query over several

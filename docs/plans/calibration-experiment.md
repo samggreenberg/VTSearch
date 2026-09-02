@@ -8,7 +8,7 @@ outcomes are in
 the harness lives
 in `vtscore/eval/calibration_metrics.py` + the `emit_calibration_metrics` path of
 `vtscore/eval/voting_iterations.py` (+ the provenance/node-score surface in
-`vtscore/training/thresholds.py`), and the runner in
+`vtscore/training/thresholds/`), and the runner in
 `scripts/experiments/calibration/`.
 
 Headline: the #2781 runaway-threshold bug was **not** the `NO_GOOD_THRESHOLD`
@@ -40,7 +40,10 @@ strategy.
   2 seeds (4-GPU QOS cap) and only measured the sign-corrected `pnorm` on the
   post-#2784 pass. A 4-seed replication would tighten the tree regret Wilcoxon
   (currently p = 0.013 at 2 seeds) and give `pnorm` a clean, non-inverted read
-  from t = 0.
+  from t = 0. Both the tree geometry and the re-pools are **opt-in** since #3400
+  (they were defaults, and every analyzer discards their rows), so this re-run
+  sets `CALIB_PATCH_STYLES=max_patch,max_patch_pca_hac
+  CALIB_REPOOL_VARIANTS=topk,pnorm` and declares `patch_style` to preflight.
 
 <!-- item-sep -->
 

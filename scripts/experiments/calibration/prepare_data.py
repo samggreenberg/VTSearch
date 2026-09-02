@@ -120,7 +120,7 @@ def _category_counts(medias: dict) -> dict[str, int]:
 
 
 def _prepare_pair(ds: str, emb_name: str, info: dict) -> None:
-    from vtscore.datasets import loader as _loader
+    from vtscore.config import EMBEDDINGS_DIR
     from vtscore.embedding.media_vectors import media_embedding
 
     from _cells_io import dump_medias, load_medias  # noqa: PLC0415
@@ -131,7 +131,7 @@ def _prepare_pair(ds: str, emb_name: str, info: dict) -> None:
     # it does need to EXIST, and to cover the same medias, or every cell will
     # die one at a time deep inside the array instead of here, once.
     learn_name = cfg.learn_embedder(emb_name)
-    pkl = _loader.EMBEDDINGS_DIR / cfg.pickle_name(ds, emb_name)
+    pkl = EMBEDDINGS_DIR / cfg.pickle_name(ds, emb_name)
     crops_np = common.RESULTS / "crops" / f"{cfg.crops_basename(ds, emb_name)}.npz"
     crops_js = crops_np.with_suffix(".json")
 
@@ -162,7 +162,7 @@ def _prepare_pair(ds: str, emb_name: str, info: dict) -> None:
 
     text_pickle = None
     if cfg.is_paired(emb_name):
-        text_pkl = _loader.EMBEDDINGS_DIR / cfg.text_pickle_name(ds, emb_name)
+        text_pkl = EMBEDDINGS_DIR / cfg.text_pickle_name(ds, emb_name)
         if not text_pkl.exists():
             raise FileNotFoundError(f"{emb_name}: text half's pickle {text_pkl.name} does not exist")
         text_medias = load_medias(text_pkl)

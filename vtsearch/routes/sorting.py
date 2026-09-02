@@ -484,12 +484,6 @@ def learned_sort_result(query: dict):
 
     job = learned_sort_jobs.get(job_id)
     if job is None:
-        # 404s are intercepted by the app-level ``NotFound`` errorhandler
-        # in ``app.py`` and rendered with the legacy
-        # ``{"error": "Not Found", "request_id": "..."}`` envelope; the
-        # ``message`` kwarg and any extras (e.g. ``status="missing"``)
-        # are dropped. Frontends rely on the HTTP status code for the
-        # missing-job branch rather than a body field.
         abort(404, message="Job not found")
 
     if job.status in ("running", "pending"):

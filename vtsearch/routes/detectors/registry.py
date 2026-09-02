@@ -33,6 +33,7 @@ from pathlib import Path
 from flask import jsonify
 from flask_smorest import Blueprint, abort
 
+from vtsearch.errors import error_response
 from vtsearch.auth import get_current_user
 from vtscore.detectors.embedder_type import detector_embedder_type_from_data
 from vtscore.detectors.store import (
@@ -369,7 +370,7 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
     if err:
         return err
     if not isinstance(label_entries, list):
-        return jsonify({"error": "Importer did not return a list of label dicts."}), 500
+        return error_response("Importer did not return a list of label dicts.", 500)
 
     elements: list[LabeledElement] = []
     detected_types: set[str] = set()
@@ -389,25 +390,19 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
         applied += 1
 
     if not detected_types:
-        return jsonify(
-            {
-                "error": (
-                    "Could not infer media type from the imported labels; none of "
-                    "the entries carry origin information with a detectable type. "
-                    "Re-export the labels with origin metadata, or use a different "
-                    "importer."
-                ),
-            }
-        ), 400
+        return error_response(
+            "Could not infer media type from the imported labels; none of "
+            "the entries carry origin information with a detectable type. "
+            "Re-export the labels with origin metadata, or use a different "
+            "importer.",
+            400,
+        )
     if len(detected_types) > 1:
-        return jsonify(
-            {
-                "error": (
-                    f"Imported labels span multiple media types: {sorted(detected_types)}. "
-                    "A detector must be for a single media type."
-                ),
-            }
-        ), 400
+        return error_response(
+            f"Imported labels span multiple media types: {sorted(detected_types)}. "
+            "A detector must be for a single media type.",
+            400,
+        )
 
     media_type = next(iter(detected_types))
     labelset = LabelSet(elements)

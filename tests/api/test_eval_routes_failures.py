@@ -113,7 +113,8 @@ class TestIndicatorScoreHistoryIsReadOnly:
         body = resp.get_json()
         assert body["complete"] is False
         assert body["history"] == []
-        assert lp._cached_steps == []
+        with lp._progress_lock:
+            assert lp._active_cache().steps == []
 
     def test_warm_cache_returns_the_series(self, client):
         import vtscore.detectors.labeling_progress as lp

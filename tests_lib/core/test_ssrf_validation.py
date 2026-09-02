@@ -600,7 +600,7 @@ class TestMediaUrlSSRF:
             return_value=[(2, 1, 0, "", ("93.184.216.34", 0))],
         ):
             with mock.patch("vtscore.security.url_validation.guarded_session", return_value=session):
-                assert _fetch_media_url("https://pullwrest.example/media/123") == b"remote-media"
+                assert _fetch_media_url("https://media.example/media/123") == b"remote-media"
 
     def test_resolve_media_bytes_refuses_a_file_url(self, tmp_path):
         """End-to-end: a pickled ``file://`` media_url must not read the disk."""

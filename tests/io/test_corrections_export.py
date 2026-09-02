@@ -9,11 +9,7 @@ Covers:
 
 from __future__ import annotations
 
-import app as app_module
-from vtsearch.state import (
-    get_find_initial_labels,
-    set_find_initial_labels,
-)
+from vtsearch.state import bad_votes, get_find_initial_labels, good_votes, medias, set_find_initial_labels
 
 
 class TestFindInitialLabelsState:
@@ -55,7 +51,7 @@ class TestIsCorrectionAnnotation:
 
     def test_no_corrections_without_find_labels(self, client):
         """When no find-label has run, is_correction should not be present."""
-        app_module.good_votes[1] = None
+        good_votes[1] = None
         resp = client.get("/api/labels/export")
         data = resp.get_json()
         assert len(data["labels"]) == 1
@@ -64,8 +60,8 @@ class TestIsCorrectionAnnotation:
 
     def test_is_correction_false_when_unchanged(self, client):
         """Items that match the detector's original label are not corrections."""
-        app_module.good_votes.update({1: None, 2: None})
-        app_module.bad_votes.update({3: None})
+        good_votes.update({1: None, 2: None})
+        bad_votes.update({3: None})
         set_find_initial_labels({1: "good", 2: "good", 3: "bad"})
 
         resp = client.get("/api/labels/export")
@@ -78,8 +74,8 @@ class TestIsCorrectionAnnotation:
         # Detector initially said: 1=good, 2=bad
         set_find_initial_labels({1: "good", 2: "bad"})
         # User flipped both
-        app_module.bad_votes[1] = None  # was good, now bad
-        app_module.good_votes[2] = None  # was bad, now good
+        bad_votes[1] = None  # was good, now bad
+        good_votes[2] = None  # was bad, now good
 
         resp = client.get("/api/labels/export")
         data = resp.get_json()
@@ -92,15 +88,15 @@ class TestIsCorrectionAnnotation:
         set_find_initial_labels({1: "good", 2: "bad", 3: "good"})
         # 1 stays good (no correction), 2 flipped to good (correction),
         # 3 flipped to bad (correction)
-        app_module.good_votes.update({1: None, 2: None})
-        app_module.bad_votes[3] = None
+        good_votes.update({1: None, 2: None})
+        bad_votes[3] = None
 
         resp = client.get("/api/labels/export")
         data = resp.get_json()
         corrections = {e["md5"]: e["is_correction"] for e in data["labels"]}
-        md5_1 = app_module.medias[1]["md5"]
-        md5_2 = app_module.medias[2]["md5"]
-        md5_3 = app_module.medias[3]["md5"]
+        md5_1 = medias[1]["md5"]
+        md5_2 = medias[2]["md5"]
+        md5_3 = medias[3]["md5"]
         assert corrections[md5_1] is False
         assert corrections[md5_2] is True
         assert corrections[md5_3] is True
@@ -112,22 +108,22 @@ class TestCorrectionsFilter:
     def test_corrections_filter_returns_only_changed(self, client):
         """label_filter=corrections returns only items the user changed."""
         set_find_initial_labels({1: "good", 2: "bad", 3: "good"})
-        app_module.good_votes.update({1: None, 2: None})  # 2 was bad -> correction
-        app_module.bad_votes[3] = None  # 3 was good -> correction
+        good_votes.update({1: None, 2: None})  # 2 was bad -> correction
+        bad_votes[3] = None  # 3 was good -> correction
 
         resp = client.get("/api/labels/export?label_filter=corrections")
         data = resp.get_json()
         assert len(data["labels"]) == 2
         md5s = {e["md5"] for e in data["labels"]}
-        assert app_module.medias[2]["md5"] in md5s
-        assert app_module.medias[3]["md5"] in md5s
+        assert medias[2]["md5"] in md5s
+        assert medias[3]["md5"] in md5s
         assert all(e["is_correction"] is True for e in data["labels"])
 
     def test_corrections_filter_empty_when_no_changes(self, client):
         """label_filter=corrections returns nothing if user didn't change any labels."""
         set_find_initial_labels({1: "good", 2: "bad"})
-        app_module.good_votes[1] = None
-        app_module.bad_votes[2] = None
+        good_votes[1] = None
+        bad_votes[2] = None
 
         resp = client.get("/api/labels/export?label_filter=corrections")
         data = resp.get_json()
@@ -135,8 +131,8 @@ class TestCorrectionsFilter:
 
     def test_corrections_filter_empty_without_find_labels(self, client):
         """label_filter=corrections returns all labels when no find-label has run."""
-        app_module.good_votes[1] = None
-        app_module.bad_votes[2] = None
+        good_votes[1] = None
+        bad_votes[2] = None
 
         resp = client.get("/api/labels/export?label_filter=corrections")
         data = resp.get_json()
@@ -147,8 +143,8 @@ class TestCorrectionsFilter:
     def test_other_filters_still_work(self, client):
         """Existing good/bad/both filters are unaffected by corrections feature."""
         set_find_initial_labels({1: "good", 2: "bad"})
-        app_module.good_votes[1] = None
-        app_module.bad_votes[2] = None
+        good_votes[1] = None
+        bad_votes[2] = None
 
         resp = client.get("/api/labels/export?label_filter=good")
         data = resp.get_json()

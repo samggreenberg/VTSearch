@@ -20,7 +20,7 @@ from vtscore.state.coverage import (
     COVERAGE_ATLAS_AUTO_THRESHOLD,
     should_auto_build_coverage_atlas,
 )
-from vtscore.state.coverage_atlas import (
+from vtscore.coverage.atlas import (
     COVERAGE_ATLAS_MAX_DEPTH,
     CoverageAtlas,
     _MAX_LEAVES,

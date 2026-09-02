@@ -13,7 +13,6 @@ import json
 
 import pytest
 
-import app as app_module  # noqa: F401  (triggers conftest media init)
 from vtsearch import settings as settings_mod
 
 
@@ -749,6 +748,33 @@ class TestConcurrentWrites:
         final = json.loads(user_path.read_text())
         assert final["theme"] == "dark"
         assert final["achievement_state"]["counters"]["votes_cast"] == 101
+
+    def test_snapshot_user_returns_stored_keys_only(self, isolated_settings):
+        """``snapshot_user`` is the public multi-key read counterpart to
+        ``mutate_user``: a detached copy of what is *stored*, with no defaults
+        merged in and no server-tier read-through."""
+        from vtsearch.auth import get_current_user
+        from vtsearch.settings import mutate_user, snapshot_user
+
+        username = get_current_user()
+        mutate_user(lambda c: c.update({"theme": "light", "achievement_state": {"counters": {"votes_cast": 7}}}))
+
+        snap = snapshot_user(username)
+        assert snap["theme"] == "light"
+        assert snap["achievement_state"]["counters"]["votes_cast"] == 7
+        # No defaults merged in (unlike ``get_user_settings``): the snapshot
+        # carries exactly what is on disk for this user.
+        assert snap == json.loads(isolated_settings._user.read_text())
+        assert set(snap) < set(settings_mod.get_user_settings())
+
+        # The top-level dict is a copy: mutating it must not touch the cache.
+        snap["theme"] = "dark"
+        assert snapshot_user(username)["theme"] == "light"
+
+    def test_snapshot_user_is_empty_for_an_unknown_user(self):
+        from vtsearch.settings import snapshot_user
+
+        assert snapshot_user("nobody-here") == {}
 
     def test_add_autofind_detector_rmw(self, isolated_settings):
         """Concurrent ``add_autofind_detector`` calls must not lose entries.

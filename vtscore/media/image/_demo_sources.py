@@ -18,7 +18,7 @@ from typing import Any, cast
 from vtscore.config import DATA_DIR
 from vtscore.media._toponymy_demo import SOURCE_ID as _TOPONYMY_SOURCE_ID
 from vtscore.media._toponymy_demo import TAXONOMY as _TOPONYMY_TAXONOMY
-from vtscore.media.base import DemoDataset, demo_slice
+from vtscore.media.base import DemoDataset, demo_slice, demo_slice_by_category
 from vtscore.media.image._demo_categories import (
     DEMO_CATEGORIES_CALTECH101,
     DEMO_CATEGORIES_CALTECH256,
@@ -740,17 +740,10 @@ _FILE_SOURCE_DOWNLOADERS: dict[str, str] = {
 }
 
 
-def _slice_by_category(by_cat: dict, categories, slice_start, slice_end, slice_frac_start, slice_frac_end) -> list:
-    out: list = []
-    for cat in categories:
-        out.extend(demo_slice(by_cat.get(cat, []), slice_start, slice_end, slice_frac_start, slice_frac_end))
-    return out
-
-
 def _collect_simple_folder_files(source, categories, slice_args, on_progress) -> list:
     """Sources that just download → load_image_metadata_from_folders → group by category."""
     from vtscore.datasets import downloader  # noqa: PLC0415
-    from vtscore.datasets.loader import load_image_metadata_from_folders  # noqa: PLC0415
+    from vtscore.datasets.metadata import load_image_metadata_from_folders  # noqa: PLC0415
 
     download_fn = getattr(downloader, _FILE_SOURCE_DOWNLOADERS[source])
     img_dir = download_fn(on_progress=on_progress)
@@ -758,7 +751,7 @@ def _collect_simple_folder_files(source, categories, slice_args, on_progress) ->
     by_cat: dict = {}
     for _fname, meta in sorted(metadata.items()):
         by_cat.setdefault(meta["category"], []).append((meta["path"], meta["category"]))
-    return _slice_by_category(by_cat, categories, *slice_args)
+    return demo_slice_by_category(by_cat, categories, *slice_args)
 
 
 def _collect_vggface2_files(categories, slice_args, on_progress) -> list:
@@ -783,12 +776,12 @@ def _collect_vggface2_files(categories, slice_args, on_progress) -> list:
             continue
         for img_path in sorted(person_dir.glob("*.jpg")):
             by_cat.setdefault(name, []).append((img_path, name))
-    return _slice_by_category(by_cat, categories, *slice_args)
+    return demo_slice_by_category(by_cat, categories, *slice_args)
 
 
 def _collect_oxford_flowers_files(categories, slice_args, on_progress) -> list:
     from vtscore.datasets.downloader import download_oxford_flowers  # noqa: PLC0415
-    from vtscore.datasets.loader import load_oxford_flowers_metadata  # noqa: PLC0415
+    from vtscore.datasets.metadata import load_oxford_flowers_metadata  # noqa: PLC0415
 
     flowers_dir = download_oxford_flowers(on_progress=on_progress)
     metadata = load_oxford_flowers_metadata(flowers_dir, OXFORD_FLOWERS_CATEGORIES)
@@ -797,7 +790,7 @@ def _collect_oxford_flowers_files(categories, slice_args, on_progress) -> list:
     for _fname, meta in sorted(metadata.items()):
         if meta["category"] in categories:
             by_cat.setdefault(meta["category"], []).append((meta["path"], meta["category"]))
-    return _slice_by_category(by_cat, categories, *slice_args)
+    return demo_slice_by_category(by_cat, categories, *slice_args)
 
 
 def _roxford_category_for(stem: str, landmark_set: frozenset[str]) -> str:
@@ -827,7 +820,7 @@ def _collect_roxford_files(categories, slice_args, on_progress) -> list:
             cat = _roxford_category_for(img_path.stem, landmark_set)
             if cat in categories:
                 by_cat.setdefault(cat, []).append((img_path, cat))
-    return _slice_by_category(by_cat, categories, *slice_args)
+    return demo_slice_by_category(by_cat, categories, *slice_args)
 
 
 def _collect_enrico_files(categories, slice_args, on_progress) -> list:
@@ -866,12 +859,12 @@ def _collect_enrico_files(categories, slice_args, on_progress) -> list:
         cat = id_to_cat.get(sid)
         if cat in categories:
             by_cat.setdefault(cat, []).append((img_path, cat))
-    return _slice_by_category(by_cat, categories, *slice_args)
+    return demo_slice_by_category(by_cat, categories, *slice_args)
 
 
 def _collect_places365_files(categories, slice_args, on_progress) -> list:
     from vtscore.datasets.downloader import download_places365  # noqa: PLC0415
-    from vtscore.datasets.loader import load_places365_metadata  # noqa: PLC0415
+    from vtscore.datasets.metadata import load_places365_metadata  # noqa: PLC0415
 
     places_dir = download_places365(on_progress=on_progress)
     metadata = load_places365_metadata(places_dir, PLACES365_CATEGORIES)
@@ -880,13 +873,13 @@ def _collect_places365_files(categories, slice_args, on_progress) -> list:
     for _fname, meta in sorted(metadata.items()):
         if meta["category"] in categories:
             by_cat.setdefault(meta["category"], []).append((meta["path"], meta["category"]))
-    return _slice_by_category(by_cat, categories, *slice_args)
+    return demo_slice_by_category(by_cat, categories, *slice_args)
 
 
 def _collect_cifar10_images(categories, slice_args, on_progress) -> list:
     """Returns a list of (image_array, category) tuples."""
     from vtscore.datasets.downloader import download_cifar10  # noqa: PLC0415
-    from vtscore.datasets.loader import load_cifar10_batch  # noqa: PLC0415
+    from vtscore.datasets.metadata import load_cifar10_batch  # noqa: PLC0415
 
     cifar_dir = download_cifar10(on_progress=on_progress)
     images, labels, label_names = load_cifar10_batch(cifar_dir / "data_batch_1")
@@ -1359,52 +1352,6 @@ def _embed_file_images(selected, clips, embedder, on_progress, demo_origin, skip
         clip_id += 1
 
 
-def _embed_pil_pages(selected_pages, clips, embedder, on_progress, demo_origin, skip_embedding=False) -> None:
-    """Embed a list of (page_name, PIL.Image, category) tuples into ``clips``."""
-    import io as _io  # noqa: PLC0415
-
-    if not skip_embedding:
-        _ensure_image_embedder_loaded(embedder, on_progress)
-
-    clip_id = max(clips.keys(), default=0) + 1
-    total = len(selected_pages)
-    status = "loading" if skip_embedding else "embedding"
-    verb = "Loading" if skip_embedding else "Embedding"
-    on_progress(status, f"{verb} {total} document pages...", 0, total)
-
-    for i, (page_name, pil_image, category) in enumerate(selected_pages):
-        if skip_embedding:
-            on_progress("loading", f"Loading {page_name}", i + 1, total)
-            embedding = None
-        else:
-            on_progress("embedding", f"Embedding {page_name}", i + 1, total)
-            embedding = cast(Any, embedder).embed_pil_image(pil_image)
-            if embedding is None:
-                continue
-        img_buffer = _io.BytesIO()
-        pil_image.save(img_buffer, format="PNG")
-        image_bytes = img_buffer.getvalue()
-        rel_name = f"{category}/{page_name}"
-        clips[clip_id] = {
-            "id": clip_id,
-            "media_type": _MEDIA_TYPE_ID,
-            "embedder": embedder.name,
-            "duration": 0,
-            "file_size": len(image_bytes),
-            "md5": content_md5(image_bytes),
-            "embeddings": {} if skip_embedding else {embedder.name: embedding},
-            "media_bytes": image_bytes,
-            "media_string": None,
-            "filename": f"{rel_name}.png",
-            "category": category,
-            "width": pil_image.width,
-            "height": pil_image.height,
-            "origin": demo_origin,
-            "origin_name": rel_name,
-        }
-        clip_id += 1
-
-
 def _embed_cifar_arrays(selected, clips, embedder, on_progress, demo_origin, skip_embedding=False) -> None:
     """Embed a list of (image_array, category) tuples into ``clips``."""
     import io as _io  # noqa: PLC0415
@@ -1610,9 +1557,9 @@ def load_demo_source(  # noqa: C901 - flat per-source dispatch; one branch per d
     **kwargs,
 ):
     if on_progress is None:
-        from vtscore.concurrency.progress import update_progress
+        from vtscore.concurrency.progress import resolve_progress_callback
 
-        on_progress = update_progress
+        on_progress = resolve_progress_callback()
 
     if embedder is None:
         from vtscore.media import embedders_for_type

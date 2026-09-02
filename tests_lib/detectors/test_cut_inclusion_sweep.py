@@ -21,7 +21,8 @@ import numpy as np
 import pytest
 
 from vtscore.eval.calibration_metrics import inclusion_weights, operating_cost
-from vtscore.eval.voting_iterations import _CUT_INCLUSION_COLUMNS, simulate_voting_iterations
+from vtscore.eval.voting_columns import CUT_INCLUSION_COLUMNS
+from vtscore.eval.voting_iterations import simulate_voting_iterations
 
 # Reuse the synthetic planted-patch dataset builders from the Max-Patch tests.
 from .sweep_cache import memoize_sweep
@@ -89,7 +90,7 @@ class TestCutInclusionFrame:
     def test_columns_and_ranges(self):
         sink = _run()
         for r in sink:
-            assert set(_CUT_INCLUSION_COLUMNS).issubset(r.keys())
+            assert set(CUT_INCLUSION_COLUMNS).issubset(r.keys())
             assert np.isfinite(r["cut_threshold"])
             assert 0.0 <= r["admitted_frac"] <= 1.0
             assert r["n_admitted"] == pytest.approx(r["admitted_frac"] * r["n_test"], abs=1.0)

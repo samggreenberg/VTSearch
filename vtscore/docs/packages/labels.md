@@ -17,7 +17,6 @@ votes change. Both produce / consume the same
 | `vtscore/labels/importers/__init__.py` | Label-importer registry with auto-discovery |
 | `vtscore/labels/importers/server_json_file/` | Read labels from a `.json` file on the server |
 | `vtscore/labels/importers/server_csv_file/` | Read labels from a `.csv` file on the server |
-| `vtscore/labels/importers/holder/` | Read labels from a Holder package |
 | `vtscore/labels/sources/base.py` | The `LabelsetSource` ABC (a `SyncSource`) |
 | `vtscore/labels/sources/__init__.py` | Labelset-source registry with auto-discovery |
 | `vtscore/labels/sources/server_json_file/` | Bidirectional sync with a JSON file on the server |
@@ -47,8 +46,7 @@ each dict's `md5` against `medias[*]["md5"]` to apply the vote - the
 importer itself doesn't touch dataset state.
 
 `list_label_importers()` skips importers with `hidden_from_picker =
-True` (the `holder` scaffold). They remain reachable via
-`get_label_importer(name)`.
+True`. They remain reachable via `get_label_importer(name)`.
 
 Third-party importers can register via the
 `vtscore.label_importers` entry-point group; built-ins win on name
@@ -60,7 +58,6 @@ collisions.
 |--------------------|-------------------|--------------------------------------------------------------------------------|
 | `server_json_file` | Server JSON File  | Reads a `LabelSet`-format JSON file on the server filesystem.                  |
 | `server_csv_file`  | Server CSV File   | Reads a CSV with `md5,label` columns from the server filesystem.              |
-| `holder`           | Holder Package    | Scaffold for the external Holder API; `hidden_from_picker=True` until wired.  |
 
 ### Custom-importer skeleton
 

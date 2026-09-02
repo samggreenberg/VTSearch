@@ -1,15 +1,15 @@
-import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, HostListener, inject, NgZone, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, HostListener, inject, NgZone, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
 import {
   BrowseCanvasComponent,
   BrowseContextMenuEvent,
   HexHoverEvent,
 } from '../browse-canvas/browse-canvas.component';
 import type { BrowseGraphicsMode } from '../browse-canvas/render-perf';
-import { BrowseHoverPreviewComponent, NowPlaying } from '../browse-hover-preview/browse-hover-preview.component';
+import { BrowseHoverPreviewComponent } from '../browse-hover-preview/browse-hover-preview.component';
+import type { NowPlaying } from '../../utils/browse-audio-audition';
 import { BrowseBinPopupComponent } from '../browse-bin-popup/browse-bin-popup.component';
 import { BrowseLegendComponent } from '../browse-legend/browse-legend.component';
 import { BrowseSelectionPanelComponent } from '../browse-selection-panel/browse-selection-panel.component';
@@ -18,6 +18,7 @@ import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { IconComponent } from '../icon/icon.component';
 import { NoFocusStealDirective } from '../../directives/no-focus-steal.directive';
 import { ProjectionApiService } from '../../services/projection-api.service';
+import { pollUntil, type PollHandle, type PollStep } from '../../services/poll-until';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { DatasetsRegistryApiService } from '../../services/datasets-registry-api.service';
@@ -38,11 +39,14 @@ import {
 } from '../browse-canvas/hex-render.util';
 import type { ProjectionMeta, RegionLabelPayload } from '../../models/projection.models';
 import { snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
-import { progressBarState } from '../../utils/format-progress';
+import { formatEta, progressBarState } from '../../utils/format-progress';
 import { shortcutsBlocked } from '../../utils/keyboard-shortcuts';
 import type { AppSettings } from '../../generated/api-client/models/app-settings';
-import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
 import { apiErrorMessage } from '../../utils/api-error';
+
+/** One of the named on-canvas thumbnail sizes (see
+ *  {@link BrowseViewComponent.ICON_SIZES}); the form the size is persisted in. */
+type BrowseIconSize = (typeof BrowseViewComponent.ICON_SIZES)[number];
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -141,6 +145,11 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    *  parked at the slice floor during the count-less UMAP fit, the pair bounds
    *  the bar's shimmer zone. See ProgressEvent.overall_step_end. */
   readonly buildStepEnd = signal<number | null>(null);
+  /** Seconds the server estimates are left in the whole build, or ``null``
+   *  while it declines to guess. The tracker withholds one for the first few
+   *  seconds and throughout a count-less phase, so empty is the normal opening
+   *  state rather than a failure; see {@link buildEtaText}. */
+  readonly buildEta = signal<number | null>(null);
 
   /** `<vt-progress-bar>` inputs for the build state, preferring the whole-job
    *  ``overall`` fraction so the bar fills once across the build rather than
@@ -153,6 +162,15 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       overall_step_end: this.buildStepEnd(),
     }),
   );
+
+  /**
+   * The remaining-time estimate for the line beside the count, e.g.
+   * ``"About 10 min left"``. Rendered through the shared `formatEta` and never
+   * re-rounded here: the server already snaps the figure to a coarse sticky
+   * ladder so every consumer displays the same one. Empty string when there is
+   * no estimate, which the template drops.
+   */
+  readonly buildEtaText = computed(() => formatEta(this.buildEta()));
 
   /** Phase line under the bar: `"Step 2 of 3 · building pyramid"`. */
   readonly buildDetail = computed(() => {
@@ -195,8 +213,78 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   readonly thumbnailBorder = signal(DEFAULT_THUMBNAIL_BORDER);
 
   /** Last settings snapshot, kept so per-media browser prefs can be
-   *  re-resolved when the active media type becomes known after load. */
+   *  re-resolved when the active media type becomes known after load, and so a
+   *  refetch's momentary ``null`` can't reset them to defaults. Read-only: the
+   *  per-media dicts below are read through {@link SettingsStateService.perMediaType},
+   *  never out of this object. */
   private lastSettings: AppSettings | null = null;
+
+  /**
+   * The per-media browser preferences, each bound to {@link mediaType} through
+   * `SettingsStateService.perMediaType` so the read, the coerce and the
+   * merge-preserving write all live in one place instead of being spelled out
+   * at every site (issue #3447).
+   *
+   * They are read imperatively from {@link applyBrowsePrefsForMediaType} rather
+   * than bound in the template, because applying one of them is not a pure
+   * repaint: the icon size also re-seeds the canvas's overview granularity.
+   * Keeping that orchestration where it already was leaves the canvas's reframe
+   * timing untouched; only the plumbing underneath moved.
+   */
+  private readonly colormapPref = this.settingsState.perMediaType<BrowseColormapId>(
+    'browse_colormap',
+    this.mediaType,
+    {
+      fallback: 'auto',
+      coerce: (raw) =>
+        (BROWSE_COLORMAP_IDS as readonly unknown[]).includes(raw)
+          ? (raw as BrowseColormapId)
+          : undefined,
+    },
+  );
+  private readonly iconSizePref = this.settingsState.perMediaType<BrowseIconSize>(
+    'browse_icon_size',
+    this.mediaType,
+    {
+      fallback: 'M',
+      coerce: (raw) =>
+        (BrowseViewComponent.ICON_SIZES as readonly unknown[]).includes(raw)
+          ? (raw as BrowseIconSize)
+          : undefined,
+    },
+  );
+  private readonly thumbnailBorderPref = this.settingsState.perMediaType<number>(
+    'browse_thumbnail_border',
+    this.mediaType,
+    {
+      fallback: DEFAULT_THUMBNAIL_BORDER,
+      coerce: (raw) =>
+        typeof raw === 'number' && Number.isFinite(raw)
+          ? Math.max(0, Math.min(MAX_THUMBNAIL_BORDER, raw))
+          : undefined,
+    },
+  );
+  private readonly zoomsPerLevelPref = this.settingsState.perMediaType<number>(
+    'browse_mouse_zooms_per_level',
+    this.mediaType,
+    {
+      fallback: 2,
+      coerce: (raw) =>
+        typeof raw === 'number' && Number.isFinite(raw)
+          ? Math.max(1, Math.min(3, Math.round(raw)))
+          : undefined,
+    },
+  );
+  private readonly signpostsPref = this.settingsState.perMediaType<boolean>(
+    'browse_signposts',
+    this.mediaType,
+    { fallback: true, coerce: (raw) => (typeof raw === 'boolean' ? raw : undefined) },
+  );
+  private readonly binDetailsDockedPref = this.settingsState.perMediaType<boolean>(
+    'bin_details_docked',
+    this.mediaType,
+    { fallback: true, coerce: (raw) => (typeof raw === 'boolean' ? raw : undefined) },
+  );
 
   /**
    * Region-select mode: the GUI parallel to the Shift+drag hotkey. When on, a
@@ -381,11 +469,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    *  than spilling onto the side panel or past the canvas edges. */
   contextBounds: DOMRect | null = null;
 
-  private destroy$ = new Subject<void>();
-  private polling = false;
-  private pollTimer: ReturnType<typeof setTimeout> | null = null;
-  private pollErrors = 0;
-  private static readonly MAX_POLL_ERRORS = 5;
+  private readonly destroyRef = inject(DestroyRef);
+  /** The in-flight build poll, or ``null`` when no build is being watched. */
+  private poll: PollHandle | null = null;
 
   /**
    * Gate for the *first* projection load. Held until the per-media display
@@ -479,7 +565,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
 
     this.datasetsRegistryApi
       .getStatus()
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (status) => {
           this.mediaType.set(status.media_type || '');
@@ -502,7 +588,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     // load; genuine later changes reload directly.
     if (!this.subset) {
       this.activeContext.pair$
-        .pipe(takeUntil(this.destroy$))
+        .pipe(takeUntilDestroyed(this.destroyRef))
         .subscribe(() => {
           if (this.initialLoadStarted) {
             this.loadProjection();
@@ -514,9 +600,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
-    if (this.pollTimer) clearTimeout(this.pollTimer);
+    this.stopPoll();
     document.removeEventListener('mousemove', this.boundPanelMove);
     document.removeEventListener('mouseup', this.boundPanelUp);
     document.removeEventListener('mousemove', this.boundDetailsMove);
@@ -628,7 +712,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     if (next === this.hexScaleIndex()) return;
     this.hexScaleIndex.set(next);
     this.canvas()?.setThumbnailRadius(this.thumbnailRadius, true);
-    this.persistBrowsePref('browse_icon_size', BrowseViewComponent.ICON_SIZES[next]);
+    this.iconSizePref.set(BrowseViewComponent.ICON_SIZES[next])?.subscribe();
   }
 
   /**
@@ -640,27 +724,24 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * by media type and reported by the projection meta.)
    */
   private applyBrowsePrefsForMediaType(): void {
+    // Gate on the sticky snapshot rather than the live settings signal: a
+    // refetch momentarily resets `settingsSignal()` to null, and resolving the
+    // prefs against an empty dict would reset every one of them to its default.
     const s = this.lastSettings;
     if (!s) return;
-    const mt = this.mediaType();
 
     // Thumbnail media (image/video) are pinned to grayscale so the colourful
     // density presets never tint real thumbnails; the saved per-type value is
     // ignored for them (the Settings UI hides the picker to match).
-    if (this.mediaTypeCaps.usesThumbnails(mt)) {
-      this.colormap.set('gray');
-    } else {
-      const cmap = mt ? this.perMediaValue(s.browse_colormap, mt) : '';
-      this.colormap.set(
-        cmap && (BROWSE_COLORMAP_IDS as readonly string[]).includes(cmap)
-          ? (cmap as BrowseColormapId)
-          : 'auto',
-      );
-    }
+    this.colormap.set(
+      this.mediaTypeCaps.usesThumbnails(this.mediaType())
+        ? 'gray'
+        : this.colormapPref.value(),
+    );
 
-    const sizeLabel = mt ? this.perMediaValue(s.browse_icon_size, mt) : '';
-    const sizeIdx = (BrowseViewComponent.ICON_SIZES as readonly string[]).indexOf(sizeLabel);
-    this.hexScaleIndex.set(sizeIdx >= 0 ? sizeIdx : 2);
+    this.hexScaleIndex.set(
+      BrowseViewComponent.ICON_SIZES.indexOf(this.iconSizePref.value()),
+    );
     // Seed the saved size as the overview granularity (no reframe): a settings
     // change re-bins at the current framing rather than zooming the viewport,
     // and on first load the initial fit picks the matching level. The query is
@@ -669,23 +750,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     // which the decorator @ViewChild it replaces never did.
     untracked(this.canvas)?.setThumbnailRadius(this.thumbnailRadius, false);
 
-    const borderMap = s.browse_thumbnail_border as { [key: string]: number } | undefined;
-    const rawBorder = mt && borderMap ? borderMap[mt] : undefined;
-    this.thumbnailBorder.set(
-      rawBorder == null
-        ? DEFAULT_THUMBNAIL_BORDER
-        : Math.max(0, Math.min(MAX_THUMBNAIL_BORDER, rawBorder)),
-    );
-
-    const zoomsMap = s.browse_mouse_zooms_per_level as { [key: string]: number } | undefined;
-    const rawZooms = mt && zoomsMap ? zoomsMap[mt] : undefined;
-    this.zoomsPerLevel.set(
-      rawZooms == null ? 2 : Math.max(1, Math.min(3, Math.round(rawZooms))),
-    );
-
-    const signMap = s.browse_signposts as { [key: string]: boolean } | undefined;
-    const rawSigns = mt && signMap ? signMap[mt] : undefined;
-    this.signposts.set(rawSigns == null ? true : rawSigns);
+    this.thumbnailBorder.set(this.thumbnailBorderPref.value());
+    this.zoomsPerLevel.set(this.zoomsPerLevelPref.value());
+    this.signposts.set(this.signpostsPref.value());
 
     // Global (not per-media): the client's rendering capability.
     const rawGraphics = s.browse_graphics;
@@ -693,32 +760,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       rawGraphics === 'full' || rawGraphics === 'reduced' ? rawGraphics : 'auto',
     );
 
-    const dockMap = s.bin_details_docked as { [key: string]: boolean } | undefined;
-    const dockedValue = mt && dockMap ? dockMap[mt] : undefined;
-    this.detailsDocked.set(dockedValue === undefined ? true : dockedValue);
-  }
-
-  /** Read a ``{media_type: value}`` setting for *mt*, or ``''`` when unset. */
-  private perMediaValue(map: { [key: string]: string } | undefined, mt: string): string {
-    if (!map || !mt) return '';
-    return map[mt] ?? '';
-  }
-
-  /** Persist a per-media browser preference, merging into the current map so
-   *  other media types' choices are preserved, and update the local snapshot
-   *  so subsequent reads stay consistent before the PUT round-trips. */
-  private persistBrowsePref(
-    key: 'browse_colormap' | 'browse_icon_size',
-    value: string,
-  ): void {
-    const mt = this.mediaType();
-    if (!mt) return;
-    const existing = (this.lastSettings?.[key] as { [k: string]: string } | undefined) || {};
-    const next = { ...existing, [mt]: value };
-    if (this.lastSettings) {
-      (this.lastSettings as Record<string, unknown>)[key] = next;
-    }
-    this.settingsState.update({ [key]: next } as SettingsUpdate).subscribe();
+    this.detailsDocked.set(this.binDetailsDockedPref.value());
   }
 
   private clamp(value: number, lo: number, hi: number): number {
@@ -953,15 +995,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   toggleSignposts(): void {
     const next = !this.signposts();
     this.signposts.set(next);
-    const mt = this.mediaType();
-    if (!mt) return;
-    const existing =
-      (this.lastSettings?.browse_signposts as { [k: string]: boolean } | undefined) || {};
-    const map = { ...existing, [mt]: next };
-    if (this.lastSettings) {
-      (this.lastSettings as Record<string, unknown>)['browse_signposts'] = map;
-    }
-    this.settingsState.update({ browse_signposts: map } as SettingsUpdate).subscribe();
+    this.signpostsPref.set(next)?.subscribe();
   }
 
   /**
@@ -979,7 +1013,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     if (!meta.has_labels) return;
     this.projectionApi
       .getLabels(this.subset)
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (resp) => {
           // Guard against a stale response landing after the projection moved on.
@@ -1189,16 +1223,13 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   /** Persist the docked/floating choice per media type (``bin_details_docked``)
    *  and apply it locally, keeping the settings snapshot consistent. */
   private persistBinDetailsDocked(value: boolean): void {
-    const mt = this.mediaType();
-    if (!mt) return;
+    // `set` returns null when the media type is unknown, which is also the case
+    // where the local flip is withheld: the docked choice is per media type, so
+    // with nothing to key it on there is no preference to change.
+    const write = this.binDetailsDockedPref.set(value);
+    if (!write) return;
     this.detailsDocked.set(value);
-    const existing =
-      (this.lastSettings?.bin_details_docked as { [k: string]: boolean } | undefined) || {};
-    const map = { ...existing, [mt]: value };
-    if (this.lastSettings) {
-      (this.lastSettings as Record<string, unknown>)['bin_details_docked'] = map;
-    }
-    this.settingsState.update({ bin_details_docked: map } as SettingsUpdate).subscribe();
+    write.subscribe();
   }
 
   /**
@@ -1223,7 +1254,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     }
     this.enterBuilding();
     this.buildRequest()
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (resp) => {
           if (resp.status === 'ready') {
@@ -1262,7 +1293,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     const request$ = this.subset
       ? this.projectionApi.reprojectSubset(this.subsetIds)
       : this.projectionApi.reproject();
-    request$.pipe(takeUntil(this.destroy$)).subscribe({
+    request$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (resp) => {
         if (resp.status === 'ready') {
           // Defensive: a forced build always re-fits, but re-read meta anyway.
@@ -1306,7 +1337,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     if (ids.length === 0) return;
     this.mediasApi
       .voteBulk(ids, target)
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => this.dropFromBrowse(ids, target),
         error: () =>
@@ -1343,7 +1374,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     }
     this.projectionApi
       .subsetRemove(removedIds)
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (meta) => {
           // Leave the viewport where the user had it; don't yank the camera to
@@ -1458,14 +1489,15 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.buildTotalSteps.set(meta?.total_steps ?? null);
     this.buildOverall.set(meta?.overall ?? null);
     this.buildStepEnd.set(meta?.overall_step_end ?? null);
+    this.buildEta.set(meta?.eta_seconds ?? null);
   }
 
   private loadProjection(): void {
     this.status.set('loading');
-    this.polling = false;
+    this.stopPoll();
     this.projectionApi
       .getMeta(this.subset)
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (meta) => this.applyMeta(meta),
         error: (err) => {
@@ -1516,55 +1548,47 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.onBuild();
   }
 
+  /**
+   * Watch an in-flight projection build until it lands. Re-entrant callers
+   * (`applyMeta` fires on every status refresh) are absorbed: a poll already
+   * running is left alone rather than restarted.
+   */
   private pollBuildStatus(): void {
-    if (this.polling) return;
-    this.polling = true;
-    this.pollErrors = 0;
-    const poll = (): void => {
-      this.projectionApi
-        .getMeta(this.subset)
-        .pipe(takeUntil(this.destroy$))
-        .subscribe({
-          next: (meta) => {
-            this.pollErrors = 0;
-            this.meta.set(meta);
-            if (meta.media_type) {
-              this.mediaType.set(meta.media_type);
-              this.applyBrowsePrefsForMediaType();
-            }
-            this.tileCache.setProjectionId(meta.projection_id);
-            if (meta.point_count > 0) {
-              this.polling = false;
-              this.syncLabels(meta);
-              this.enterReady();
-              return;
-            }
-            if (meta.status === 'error') {
-              this.polling = false;
-              this.status.set('error');
-              this.errorMessage.set(meta.error || 'Failed to build the map');
-              return;
-            }
-            this.applyBuildProgress(meta);
-            this.pollTimer = setTimeout(poll, 1000);
-          },
-          error: () => {
-            this.pollErrors += 1;
-            // Give up after a run of failures rather than retrying forever.
-            if (this.pollErrors >= BrowseViewComponent.MAX_POLL_ERRORS) {
-              this.polling = false;
-              this.status.set('error');
-              this.errorMessage.set(
-                'Lost contact with the server while building the map.',
-              );
-              return;
-            }
-            // Exponential backoff: 2s, 4s, 8s, … capped at 30s.
-            const delay = Math.min(2000 * 2 ** (this.pollErrors - 1), 30000);
-            this.pollTimer = setTimeout(poll, delay);
-          },
-        });
-    };
-    this.pollTimer = setTimeout(poll, 1000);
+    if (this.poll?.active()) return;
+    this.poll = pollUntil<ProjectionMeta>({
+      fetch: () => this.projectionApi.getMeta(this.subset),
+      apply: (meta) => this.applyBuildMeta(meta),
+      onLostContact: () => {
+        this.status.set('error');
+        this.errorMessage.set('Lost contact with the server while building the map.');
+      },
+    });
+  }
+
+  /** Apply one meta polled during a build, and say whether it is still running. */
+  private applyBuildMeta(meta: ProjectionMeta): PollStep {
+    this.meta.set(meta);
+    if (meta.media_type) {
+      this.mediaType.set(meta.media_type);
+      this.applyBrowsePrefsForMediaType();
+    }
+    this.tileCache.setProjectionId(meta.projection_id);
+    if (meta.point_count > 0) {
+      this.syncLabels(meta);
+      this.enterReady();
+      return 'stop';
+    }
+    if (meta.status === 'error') {
+      this.status.set('error');
+      this.errorMessage.set(meta.error || 'Failed to build the map');
+      return 'stop';
+    }
+    this.applyBuildProgress(meta);
+    return 'continue';
+  }
+
+  private stopPoll(): void {
+    this.poll?.stop();
+    this.poll = null;
   }
 }

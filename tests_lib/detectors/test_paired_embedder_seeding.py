@@ -165,9 +165,9 @@ def test_pair_ranks_in_the_text_space_over_the_learn_ids(cfg, run_cells, queried
     learn = {cid: _media({"dinov3_patch": v}, "dinov3_patch") for cid, v in _DINOV3.items()}
     text = {cid: _media({"siglip": v}, "siglip") for cid, v in _SIGLIP.items()}
 
-    from vtscore.datasets import loader as _loader
+    from vtscore import config as _vtconfig
 
-    monkeypatch.setattr(_loader, "EMBEDDINGS_DIR", tmp_path)
+    monkeypatch.setattr(_vtconfig, "EMBEDDINGS_DIR", tmp_path)
     (tmp_path / "_paired_fixture__siglip.pkl").write_bytes(b"")  # existence only
     monkeypatch.setitem(sys.modules, "_cells_io", _cells_io_stub(text))
 
@@ -187,9 +187,9 @@ def test_pair_prefers_vectors_already_on_the_media(run_cells, queried, text_towe
     """A multi-vector media needs no second pickle — the production shape."""
     both = {cid: _media({"dinov3_patch": _DINOV3[cid], "siglip": _SIGLIP[cid]}, "dinov3_patch") for cid in _DINOV3}
 
-    from vtscore.datasets import loader as _loader
+    from vtscore import config as _vtconfig
 
-    monkeypatch.setattr(_loader, "EMBEDDINGS_DIR", tmp_path)  # empty: no side pickle exists
+    monkeypatch.setattr(_vtconfig, "EMBEDDINGS_DIR", tmp_path)  # empty: no side pickle exists
     monkeypatch.setitem(sys.modules, "_cells_io", _cells_io_stub(None))
 
     vectors, provenance = run_cells._text_seed_vectors(_DS, PAIR, both)
@@ -205,9 +205,9 @@ def test_pair_refuses_a_text_side_that_misses_medias(run_cells, monkeypatch, tmp
     learn = {cid: _media({"dinov3_patch": v}, "dinov3_patch") for cid, v in _DINOV3.items()}
     partial = {1: _media({"siglip": _SIGLIP[1]}, "siglip")}
 
-    from vtscore.datasets import loader as _loader
+    from vtscore import config as _vtconfig
 
-    monkeypatch.setattr(_loader, "EMBEDDINGS_DIR", tmp_path)
+    monkeypatch.setattr(_vtconfig, "EMBEDDINGS_DIR", tmp_path)
     (tmp_path / "_paired_fixture__siglip.pkl").write_bytes(b"")
     monkeypatch.setitem(sys.modules, "_cells_io", _cells_io_stub(partial))
 
@@ -218,9 +218,9 @@ def test_pair_refuses_a_text_side_that_misses_medias(run_cells, monkeypatch, tmp
 def test_pair_reports_a_missing_text_pickle_by_name(run_cells, monkeypatch, tmp_path):
     learn = {cid: _media({"dinov3_patch": v}, "dinov3_patch") for cid, v in _DINOV3.items()}
 
-    from vtscore.datasets import loader as _loader
+    from vtscore import config as _vtconfig
 
-    monkeypatch.setattr(_loader, "EMBEDDINGS_DIR", tmp_path)
+    monkeypatch.setattr(_vtconfig, "EMBEDDINGS_DIR", tmp_path)
     monkeypatch.setitem(sys.modules, "_cells_io", _cells_io_stub(None))
 
     with pytest.raises(FileNotFoundError, match="_paired_fixture__siglip.pkl"):

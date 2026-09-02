@@ -76,11 +76,14 @@ export CALIB_N_SEEDS="${CALIB_N_SEEDS:-8}"
 export CALIB_MAX_STEPS="${CALIB_MAX_STEPS:-100}"
 export CALIB_CELL_ORDER="${CALIB_CELL_ORDER:-seed}"
 
-# THE SHIPPED PATH, NOT THE HARNESS DEFAULT.  `CALIB_SAFE_THRESHOLDS` defaults
-# to 0, which runs pure cross-calibration - a threshold the app can no longer
-# produce.  This study's whole fold scope reads `FoldAnchoredCut.fits`, which
-# only exists on the fused path, so leaving this at its default would silently
-# emit no fold rows at all and measure the unanchored fit twice.
+# THE SHIPPED PATH, NAMED RATHER THAN INHERITED.  This study's whole fold scope
+# reads `FoldAnchoredCut.fits`, which only exists on the fused path: without it
+# the run silently emits no fold rows at all and measures the unanchored fit
+# twice.  That is the premise of the study, so it is stated here rather than
+# inherited.  (`CALIB_SAFE_THRESHOLDS` defaulted to 0 - pure cross-calibration,
+# a threshold the app can no longer produce - until #3400; the pin is what kept
+# this study off it, and is also what keeps it right when submitted into an
+# older worktree.)
 export CALIB_SAFE_THRESHOLDS=1
 
 # The #3329 frame itself.

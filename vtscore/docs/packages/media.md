@@ -25,10 +25,12 @@ and is the foundation every other `vtscore` subsystem builds on.
 | `vtscore/media/cropping.py` | Shared normalised-box cropping helpers |
 | `vtscore/media/patch_embed.py` | Raw patch grids for image embedders (the MaxPatch region geometry) |
 | `vtscore/media/lazy_clip.py` | Derive a clip's bytes from its source on demand |
+| `vtscore/media/clip_recipe.py` | Parse the `origin.params` clip dialects, shared by both replay paths |
 | `vtscore/media/provenance.py` | Human-readable provenance for converter- and clipper-derived media |
 | `vtscore/media/structural.py` | Structural (instance-matching) features and geometric verification |
 | `vtscore/media/structural_geometry.py` | Parametrised geometric verification models |
 | `vtscore/media/structural_splg.py` | SuperPoint + LightGlue structural backend |
+| `vtscore/media/near_dupes.py` | Near-duplicate detection (image pHash, text SimHash) and collapsing |
 | `vtscore/media/torch_setup.py` | Runtime torch configuration for embedder code |
 
 **Media types** - one self-registering sub-package each. Every one holds a
@@ -37,7 +39,7 @@ and is the foundation every other `vtscore` subsystem builds on.
 
 | Sub-package | Embedders | Also holds |
 |-------------|-----------|------------|
-| `vtscore/media/audio/` | CLAP (general / music), AST, BEATs, ParaSpeechCLAP, Whisper | clipper, cleaner, ffmpeg + decode helpers, silence detection, speech extractor, synthetic audio generator |
+| `vtscore/media/audio/` | CLAP (general / music), AST, BEATs, ParaSpeechCLAP, Whisper | clipper, cleaner, ffmpeg + decode helpers, WAV byte slicing (`wav.py`), silence detection, speech extractor, synthetic audio generator |
 | `vtscore/media/image/` | SigLIP, SigLIP-L, SigLIP 2, SigLIP2-L, CLIP, DINOv2 (patch / single), DINOv3 (patch / single), EUPE (patch / single), SIFT-VLAD | clipper, cleaner, decode, edge trim, thumbnail, YOLO extractor, OCR extractor, face localizer, demo sources |
 | `vtscore/media/text/` | E5, BGE | clipper (paragraph / sentence), cleaner |
 | `vtscore/media/video/` | X-CLIP, LanguageBind, VideoMAE v2 | clipper (tile / scene-detect), cleaner, ffmpeg decode, frame sampling, `clip_box` crop |
@@ -126,6 +128,7 @@ embedders. Subclasses implement four things:
 | `embed_text(text)`                            | optional | Embed a query into the same space    |
 | `_embed_media_bulk_impl(medias)`              | optional | Batched forward; default loops       |
 | `description_wrappers`                        | optional | Prompts used by `embed_text_enriched`; `[]` (the default, and the measured answer for most models) makes it plain `embed_text` |
+| `loaded_backbone()`                           | optional | Return `(model, processor)` for the raw backbone. The default reads the `_model` / `_processor` convention; override only if your backbone lives elsewhere |
 
 Threading and lock contract:
 
@@ -190,14 +193,19 @@ class MediaClipper(ABC):
     def clip(self, media: dict) -> list[dict]: ...
 ```
 
-Two optional hooks let the dataset-load pipeline tune a clipper at
+One optional hook lets the dataset-load pipeline tune a clipper at
 load time:
 
-- `resolve_for_durations(durations)` (`vtscore/media/clipper.py`) -
-  dataset-level: decide once, given every item's duration.
 - `resolve_for_media(media)` (`vtscore/media/clipper.py`) - per-item:
   auto-route to a different concrete clipper based on each item
-  (e.g. pass-through for short audio, tiling for long).
+  (e.g. pass-through for short audio, tiling for long). Called from
+  `_run_clipper_step` (`vtscore/datasets/clipper_chain.py`).
+
+The ABC also carries `resolve_for_durations(durations)`, a **reserved**
+dataset-level hook that nothing calls: routing used to be decided once
+from the whole duration list and is now decided per item. The name stays
+because it is published contract, but an out-of-tree override of it is
+inert - write the logic in `resolve_for_media` instead.
 
 Clippers may declare `parameters` (UI-tunable knobs) and override
 `with_params()` to return a copy with overridden values. The **resolved**
@@ -462,6 +470,32 @@ out-of-tree implementations.
   `torch.set_num_threads` the first time torch is imported. Every
   code path that touches torch (embedders, head training, scoring)
   must call this first. `embedder_load_setup` does it for you.
+
+---
+
+## Near-duplicate collapsing
+
+`vtscore.state.collapse_duplicates` matches on **exact** MD5 (see [`state.md`](state.md#media-lookup)). `vtscore/media/near_dupes.py`
+catches the rest: a re-encoded JPEG and a reformatted copy of the same
+article are not byte-identical but are the same item for labeling
+purposes, and leaving both in inflates the dataset and wastes votes.
+
+| Function | Description |
+|----------|-------------|
+| `phash_image(thumbnail_bytes)` | 64-bit DCT perceptual hash, or `None` for missing / undecodable bytes |
+| `simhash_text(text)` | 64-bit SimHash over word 4-shingles, or `None` for empty text |
+| `collapse_near_duplicates(media_dict, on_progress=None)` | Group by Hamming distance and collapse each group; returns the group count |
+
+Only `image` and `text` media are considered; every other type is left
+untouched, and any item whose hash comes back `None` is simply left
+ungrouped. Grouping is banded LSH over the 64-bit hashes plus a
+union-find, so it does not pay the O(N²) pairwise comparison.
+
+This runs *after* the exact-MD5 pass, so some group members are already
+`dupe_set` representatives; their members are merged into the near-dup
+group rather than nested. The representative keeps a `dupe_set` origin
+listing every member's provenance, exactly as in the exact case. It is
+opt-in per dataset via `DatasetContext.merge_near_duplicates`.
 
 ---
 

@@ -1,4 +1,5 @@
-import { Injectable, OnDestroy, inject, signal } from '@angular/core';
+import { DestroyRef, Injectable, OnDestroy, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Observable, Subject } from 'rxjs';
 import { map, takeUntil, tap } from 'rxjs/operators';
 import type { MediaVoteResponse } from '../generated/api-client/models/media-vote-response';
@@ -72,7 +73,7 @@ export class VoteStateService implements OnDestroy {
   private readonly _labelsetBadCount = signal(0);
   private readonly _votesLoaded = signal(false);
   private readonly _goodRegionBoxes = signal<Record<string, number[]>>({});
-  private readonly destroy$ = new Subject<void>();
+  private readonly destroyRef = inject(DestroyRef);
   private readonly stopPolling$ = new Subject<void>();
   private polling = false;
   /**
@@ -139,8 +140,6 @@ export class VoteStateService implements OnDestroy {
   readonly toast$ = this.toastSubject.asObservable();
 
   ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
     this.stopPolling$.next();
     this.stopPolling$.complete();
   }
@@ -467,7 +466,7 @@ export class VoteStateService implements OnDestroy {
     const seq = ++this.votesSeq;
     this.sortingApi
       .getVotes()
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((votes) => this.applyVotesFresh(votes, seq));
   }
 
@@ -494,7 +493,7 @@ export class VoteStateService implements OnDestroy {
         signature: ({ votes }) => JSON.stringify(votes),
       },
     )
-      .pipe(takeUntil(this.stopPolling$), takeUntil(this.destroy$))
+      .pipe(takeUntil(this.stopPolling$), takeUntilDestroyed(this.destroyRef))
       .subscribe(({ votes, seq }) => this.applyVotesFresh(votes, seq));
   }
 

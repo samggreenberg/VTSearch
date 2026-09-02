@@ -314,15 +314,69 @@ class TestProgressTrackerUpdate:
         assert snap["staging_result"] == {"path": "/tmp/x"}
         assert snap["error"] is None  # was never set, stays at default
 
-    def test_free_function_preserves_extra_fields(self):
-        """The update_progress() wrapper should also preserve unspecified extras."""
-        from vtscore.concurrency.progress import dataset_progress, get_progress, update_progress
+    def test_free_function_forwards_extras_to_the_bound_tracker(self):
+        """``update_progress`` reports into whatever the thread bound.
 
-        # Set error via the free function
-        update_progress("loading", error="whoops")
-        # Update without mentioning error
-        update_progress("loading", message="progress")
-        snap = get_progress()
+        It is the public spelling of ``resolve_progress_callback()`` for plugin
+        authors, so an importer that calls it from inside a load lands on that
+        load's tracker — and the tracker's merge semantics (an omitted extra
+        keeps its previous value) survive the hop.
+        """
+        from vtscore.concurrency.progress import (
+            ProgressTracker,
+            clear_thread_progress,
+            set_thread_progress,
+            update_progress,
+        )
+
+        tracker = ProgressTracker(extra_fields={"error": None})
+        set_thread_progress(tracker.update)
+        try:
+            update_progress("loading", error="whoops")
+            update_progress("loading", message="progress")
+        finally:
+            clear_thread_progress()
+
+        snap = tracker.get()
         assert snap["error"] == "whoops"
-        # Clean up for other tests
-        dataset_progress.update("idle", error=None, staging_result=None)
+        assert snap["message"] == "progress"
+
+    def test_free_function_is_a_noop_with_nothing_bound(self):
+        """No thread callback means no sink: the call must be inert, not fatal."""
+        from vtscore.concurrency.progress import clear_thread_progress, update_progress
+
+        clear_thread_progress()
+        update_progress("loading", "nobody is watching", 1, 2, error="ignored")
+
+    def test_free_function_drops_extras_a_plain_callback_cannot_take(self):
+        """The pipeline binds four-argument callbacks; extras must not crash them."""
+        from vtscore.concurrency.progress import clear_thread_progress, set_thread_progress, update_progress
+
+        seen: list[tuple] = []
+
+        def four_arg(status, message="", current=0, total=0):
+            seen.append((status, message, current, total))
+
+        set_thread_progress(four_arg)
+        try:
+            update_progress("loading", "hi", 1, 2, step=3, total_steps=4)
+        finally:
+            clear_thread_progress()
+
+        assert seen == [("loading", "hi", 1, 2)]
+
+    def test_free_function_propagates_a_typeerror_from_inside_the_sink(self):
+        """Arity probing must not swallow a real bug in the callback."""
+        import pytest
+
+        from vtscore.concurrency.progress import clear_thread_progress, set_thread_progress, update_progress
+
+        def exploding(status, message="", current=0, total=0, **kwargs):
+            raise TypeError("boom from inside")
+
+        set_thread_progress(exploding)
+        try:
+            with pytest.raises(TypeError, match="boom from inside"):
+                update_progress("loading", "hi", 1, 2, step=3)
+        finally:
+            clear_thread_progress()

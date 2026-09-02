@@ -45,13 +45,16 @@ describe('LabelViewComponent (zoneless dataset-name canary)', () => {
   });
 
   afterEach(() => {
-    fixture.componentInstance.ngOnDestroy();
-    // Drain the timer-driven pollers (labeling-status / votes) and any
-    // child-panel reads still in flight; cancelled requests can't be flushed.
+    // Destroy first: `fixture.destroy()` runs the component's own `ngOnDestroy`
+    // *and* destroys the component-provided `PairScopeService`, which is what
+    // cancels the in-flight pair-scoped requests (a bare `ngOnDestroy()` call no
+    // longer does). Then drain the timer-driven pollers (labeling-status /
+    // votes) and any child-panel reads still in flight; cancelled requests
+    // can't be flushed.
+    fixture.destroy();
     httpMock.match(() => true).forEach((req) => {
       if (!req.cancelled) req.flush([]);
     });
-    fixture.destroy();
   });
 
   // Drain label-view's init loads, holding back only the dataset-status
@@ -75,7 +78,7 @@ describe('LabelViewComponent (zoneless dataset-name canary)', () => {
       httpMock.match('/api/votes').forEach((req) =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
-      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 80 }));
+      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8 }));
       httpMock.match('/api/inclusion').forEach((req) => req.flush({ inclusion: 0 }));
       httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
       httpMock.match('/api/embedders').forEach((req) => req.flush([]));
@@ -164,9 +167,11 @@ describe('LabelViewComponent', () => {
     httpMock.match('/api/votes').forEach(req =>
       req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
     );
-    // /api/settings
+    // /api/settings. `volume` is a 0-1 fraction: the server clamps it to that
+    // range (`settings_models.py`), and the centre panel writes it straight
+    // onto `HTMLMediaElement.volume`, which throws on anything outside it.
     httpMock.match('/api/settings').forEach(req =>
-      req.flush({ volume: 80 }),
+      req.flush({ volume: 0.8 }),
     );
     // /api/dataset/status
     httpMock.match('/api/dataset/status').forEach(req =>
@@ -187,7 +192,12 @@ describe('LabelViewComponent', () => {
   }
 
   afterEach(async () => {
-    component.ngOnDestroy();
+    // Destroy first. This runs `ngOnDestroy`, tears down the component view +
+    // its child views (no template can be re-checked), disposes the component
+    // injector — with the medias/settings rxResource loaders bound to it — and
+    // destroys the component-provided `PairScopeService`, whose teardown is
+    // what cancels the in-flight pair-scoped requests.
+    fixture.destroy();
     // Kill the shared VoteStateService poll explicitly. Under zoneless (no
     // zone.js patching test timers) a leftover `timer(0, N)` poll keeps firing
     // real macrotasks across spec boundaries; once the TestBed injector is reset
@@ -196,17 +206,13 @@ describe('LabelViewComponent', () => {
     // Drain any outstanding polling requests from right-panel or label-view
     // (the timer-driven /api/votes and /api/labeling-status pollers, the
     // metadata-batch fetch from selectMedia, plus anything a test left in
-    // flight). ngOnDestroy unsubscribes the component's own streams,
+    // flight). The destroy above unsubscribed the component's own streams,
     // which cancels their in-flight requests; cancelled requests can't be
     // flushed, so skip them. Flush an empty array so the metadata-batch
     // handler (which iterates the body) doesn't choke on a non-iterable.
     httpMock.match(() => true).forEach(req => {
       if (!req.cancelled) req.flush([]);
     });
-    // Destroy the fixture so the component view + its child views are gone (no
-    // template can be re-checked) and the component injector — with the
-    // medias/settings rxResource loaders bound to it — is disposed.
-    fixture.destroy();
     // Drain one macrotask while the TestBed injector is still alive. Without
     // zone.js the framework no longer tracks the app's timers/microtasks, so the
     // SSE pollers' `timer(0, N)` first emissions and root-singleton rxResource
@@ -497,7 +503,7 @@ describe('LabelViewComponent', () => {
       req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
     );
     httpMock.match('/api/settings').forEach(req =>
-      req.flush({ volume: 80 }),
+      req.flush({ volume: 0.8 }),
     );
     httpMock.match('/api/dataset/status').forEach(req =>
       req.flush({ display_name: 'Test dataset' }),
@@ -548,7 +554,7 @@ describe('LabelViewComponent', () => {
       httpMock.match('/api/votes').forEach(req =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
-      httpMock.match('/api/settings').forEach(req => req.flush({ volume: 80 }));
+      httpMock.match('/api/settings').forEach(req => req.flush({ volume: 0.8 }));
       httpMock.match('/api/dataset/status').forEach(req =>
         req.flush({ display_name: 'DINOv3 dataset' }),
       );
@@ -923,6 +929,48 @@ describe('LabelViewComponent', () => {
       expect(component.sortState.sortOrder ?? []).toEqual([]);
     });
 
+    it('clears the centre viewer selection, and repaints, when the pair changes', async () => {
+      const activeContext = seedPair();
+      flushInitialRequests();
+      flushDetectorRegistry();
+      // The stub list rides `rxResource`, so `selectedMedia` cannot resolve id
+      // 1 into a media until the loader's value has landed.
+      await settleResource();
+
+      // The user is looking at an item from pair 1.
+      component.mediaState.selectMedia(1);
+      TestBed.tick();
+      expect(fixture.nativeElement.querySelector('vt-center-panel .center-panel.empty')).toBeNull();
+
+      activeContext.setActivePair('ds2', 'det2');
+      flushDetectorRegistry();
+      // Answer the reset's own media reload with a list that *also* carries id
+      // 1. Ids restart at 1 in every dataset, so this collision is the common
+      // case, not a contrived one — and it is what makes the assertion below
+      // mean something: an uncleared selection resolves against the new list
+      // and keeps the viewer populated, rather than merely surviving the
+      // moment the resource is empty mid-reload.
+      TestBed.tick();
+      httpMock.match('/api/medias/ids').forEach((req) =>
+        req.flush([
+          { id: 1, media_type: 'audio' },
+          { id: 2, media_type: 'audio' },
+        ]),
+      );
+      await settleResource();
+      expect(component.mediaState.mediasSignal().length).toBe(2);
+
+      // Media ids are per-dataset, so the selection is pair-scoped state and
+      // has to go with the ranking (#3489). Asserting through the DOM rather
+      // than only on the signal is the point: the centre viewer stamps the
+      // dataset id into its media URL and only rebuilds it when the media id
+      // changes, so a clear that does not notify under zoneless change
+      // detection would leave the stale pair-1 item painted
+      // (`docs/FRONTEND.md` §5) — which is the bug, not the fix.
+      expect(fixture.nativeElement.querySelector('vt-center-panel .center-panel.empty')).not.toBeNull();
+      expect(component.mediaState.selectedId()).toBeNull();
+    });
+
     it('stops polling a learned-sort job when the active pair changes', async () => {
       const activeContext = seedPair();
       flushInitialRequests();
@@ -1054,7 +1102,7 @@ describe('LabelViewComponent', () => {
       startRunningJob();
       // 404 means the job was evicted or never existed; polling it forever
       // would just spin the panel.
-      resultPolls()[0].flush({ error: 'Not Found' }, { status: 404, statusText: 'Not Found' });
+      resultPolls()[0].flush({ message: 'Not Found' }, { status: 404, statusText: 'Not Found' });
 
       expect(component.sortState.sortBusy).toBe(false);
       expect(component.sortState.sortStatus).toBe('Training job expired');

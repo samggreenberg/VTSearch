@@ -399,9 +399,9 @@ def detect_media_type(query: dict):
     user selects a folder and pre-fills the dropdown with whichever type
     has the most matching files in the first ``limit`` files of the tree.
 
-    The 404 returned when the source is unavailable on disk is
-    intercepted by the app-level ``NotFound`` errorhandler and keeps the
-    legacy ``{"error": "Not Found", "request_id": ...}`` envelope.
+    The 404 returned when the source is unavailable on disk passes through
+    the app-level ``NotFound`` errorhandler (JSON rather than werkzeug's
+    HTML page) with its ``message`` intact.
     """
     from vtscore.datasets.media_type_detection import detect_media_types_in_folder
 

@@ -36,7 +36,7 @@ export const browseContextGuard: CanActivateFn = (route) => {
     filter((loaded) => loaded),
     take(1),
     switchMap((): Observable<true | UrlTree> => {
-      const dataset = datasetState.datasets.find((d) => d.id === datasetId);
+      const dataset = datasetState.datasetById().get(datasetId);
 
       if (!dataset) {
         toast.error({

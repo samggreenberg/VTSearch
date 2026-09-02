@@ -2,8 +2,6 @@
 
 from unittest.mock import patch
 
-import app as app_module  # noqa: F401  (triggers conftest side effects)
-
 
 class TestLiveness:
     """``GET /healthz`` is always 200 while the process is up."""

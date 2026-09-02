@@ -14,9 +14,9 @@ import json
 from unittest.mock import patch
 
 
-import app as app_module
 from tests import wait_for_detector_task
 from vtscore.utils.hashing import content_md5
+from vtsearch.state import bad_votes, good_votes, medias
 
 
 # ---------------------------------------------------------------------------
@@ -28,10 +28,10 @@ class TestLabelImportEndpoint:
     def test_unknown_importer_returns_404(self, client):
         res = client.post("/api/label-importers/import/no_such_importer")
         assert res.status_code == 404
-        assert "no_such_importer" in res.get_json()["error"]
+        assert "no_such_importer" in res.get_json()["message"]
 
     def test_json_importer_applies_good_label(self, client, tmp_path):
-        md5 = app_module.medias[1]["md5"]
+        md5 = medias[1]["md5"]
         payload = json.dumps({"labels": [{"md5": md5, "label": "good"}]})
         p = tmp_path / "labels.json"
         p.write_text(payload)
@@ -44,10 +44,10 @@ class TestLabelImportEndpoint:
         assert result["applied"] == 1
         assert result["skipped"] == 0
         assert result["missing_count"] == 0
-        assert 1 in app_module.good_votes
+        assert 1 in good_votes
 
     def test_json_importer_applies_bad_label(self, client, tmp_path):
-        md5 = app_module.medias[2]["md5"]
+        md5 = medias[2]["md5"]
         payload = json.dumps({"labels": [{"md5": md5, "label": "bad"}]})
         p = tmp_path / "labels.json"
         p.write_text(payload)
@@ -56,7 +56,7 @@ class TestLabelImportEndpoint:
             json={"filepath": str(p)},
         )
         assert res.status_code == 200
-        assert 2 in app_module.bad_votes
+        assert 2 in bad_votes
 
     def test_json_importer_reports_unknown_md5_as_missing(self, client, tmp_path):
         payload = json.dumps({"labels": [{"md5": "no_such_md5", "label": "good"}]})
@@ -75,7 +75,7 @@ class TestLabelImportEndpoint:
         assert snapshot["ingest_result"]["unresolved"] == 1
 
     def test_json_importer_skips_invalid_label_value(self, client, tmp_path):
-        md5 = app_module.medias[1]["md5"]
+        md5 = medias[1]["md5"]
         payload = json.dumps({"labels": [{"md5": md5, "label": "meh"}]})
         p = tmp_path / "labels.json"
         p.write_text(payload)
@@ -89,8 +89,8 @@ class TestLabelImportEndpoint:
         assert result["skipped"] == 1
 
     def test_csv_importer_applies_labels(self, client, tmp_path):
-        md5_1 = app_module.medias[1]["md5"]
-        md5_2 = app_module.medias[2]["md5"]
+        md5_1 = medias[1]["md5"]
+        md5_2 = medias[2]["md5"]
         csv_text = f"md5,label\n{md5_1},good\n{md5_2},bad\n"
         p = tmp_path / "labels.csv"
         p.write_text(csv_text)
@@ -101,8 +101,8 @@ class TestLabelImportEndpoint:
         assert res.status_code == 200
         result = res.get_json()
         assert result["applied"] == 2
-        assert 1 in app_module.good_votes
-        assert 2 in app_module.bad_votes
+        assert 1 in good_votes
+        assert 2 in bad_votes
 
     def test_csv_importer_reports_unknown_md5_as_missing(self, client, tmp_path):
         csv_text = "md5,label\nunknown_hash,good\n"
@@ -120,8 +120,8 @@ class TestLabelImportEndpoint:
         assert snapshot["ingest_result"]["unresolved"] == 1
 
     def test_import_overrides_existing_label(self, client, tmp_path):
-        app_module.good_votes[1] = None
-        md5 = app_module.medias[1]["md5"]
+        good_votes[1] = None
+        md5 = medias[1]["md5"]
         payload = json.dumps({"labels": [{"md5": md5, "label": "bad"}]})
         p = tmp_path / "labels.json"
         p.write_text(payload)
@@ -129,8 +129,8 @@ class TestLabelImportEndpoint:
             "/api/label-importers/import/server_json_file",
             json={"filepath": str(p)},
         )
-        assert 1 not in app_module.good_votes
-        assert 1 in app_module.bad_votes
+        assert 1 not in good_votes
+        assert 1 in bad_votes
 
     def test_import_response_has_message(self, client, tmp_path):
         payload = json.dumps({"labels": []})
@@ -145,14 +145,14 @@ class TestLabelImportEndpoint:
 
     def test_json_roundtrip_via_importer(self, client, tmp_path):
         """Export labels via the old route and re-import via label importer endpoint."""
-        app_module.good_votes.update({k: None for k in [1, 3, 5]})
-        app_module.bad_votes.update({k: None for k in [2, 4]})
+        good_votes.update({k: None for k in [1, 3, 5]})
+        bad_votes.update({k: None for k in [2, 4]})
 
         export_res = client.get("/api/labels/export")
         exported = export_res.get_json()
 
-        app_module.good_votes.clear()
-        app_module.bad_votes.clear()
+        good_votes.clear()
+        bad_votes.clear()
 
         p = tmp_path / "labels.json"
         p.write_text(json.dumps(exported))
@@ -162,17 +162,17 @@ class TestLabelImportEndpoint:
         )
         result = res.get_json()
         assert result["applied"] == 5
-        assert set(app_module.good_votes) == {1, 3, 5}
-        assert set(app_module.bad_votes) == {2, 4}
+        assert set(good_votes) == {1, 3, 5}
+        assert set(bad_votes) == {2, 4}
 
     def test_multiple_clips_via_csv(self, client, tmp_path):
         lines = ["md5,label"]
         good_ids = [1, 2, 3]
         bad_ids = [4, 5]
         for cid in good_ids:
-            lines.append(f"{app_module.medias[cid]['md5']},good")
+            lines.append(f"{medias[cid]['md5']},good")
         for cid in bad_ids:
-            lines.append(f"{app_module.medias[cid]['md5']},bad")
+            lines.append(f"{medias[cid]['md5']},bad")
         csv_text = "\n".join(lines)
         p = tmp_path / "labels.csv"
         p.write_text(csv_text)
@@ -182,8 +182,8 @@ class TestLabelImportEndpoint:
         )
         result = res.get_json()
         assert result["applied"] == 5
-        assert set(app_module.good_votes) == {1, 2, 3}
-        assert set(app_module.bad_votes) == {4, 5}
+        assert set(good_votes) == {1, 2, 3}
+        assert set(bad_votes) == {4, 5}
 
     def test_import_syncs_model_registry_num_training(self, client, tmp_path):
         """Importing labels should update the loaded model's num_training in the registry."""
@@ -223,7 +223,7 @@ class TestLabelImportEndpoint:
         set_thread_detector_context(det_ctx)
 
         # Import a label
-        md5 = app_module.medias[1]["md5"]
+        md5 = medias[1]["md5"]
         payload = json.dumps({"labels": [{"md5": md5, "label": "good"}]})
         p = tmp_path / "labels.json"
         p.write_text(payload)
@@ -271,8 +271,8 @@ class TestResolveClipIdsUnion:
         )
 
         # Entry with only md5, no origin; should match by md5
-        md5 = app_module.medias[1]["md5"]
-        origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
+        md5 = medias[1]["md5"]
+        origin_lookup, md5_lookup, _ = build_media_lookup(medias)
         entry = {"md5": md5, "label": "good"}
         cids = resolve_media_ids(entry, origin_lookup, md5_lookup)
         assert 1 in cids
@@ -283,8 +283,8 @@ class TestResolveClipIdsUnion:
             resolve_media_ids,
         )
 
-        origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
-        media = app_module.medias[1]
+        origin_lookup, md5_lookup, _ = build_media_lookup(medias)
+        media = medias[1]
         entry = {"origin": media["origin"], "origin_name": media["origin_name"], "label": "good"}
         cids = resolve_media_ids(entry, origin_lookup, md5_lookup)
         assert 1 in cids
@@ -297,11 +297,11 @@ class TestResolveClipIdsUnion:
         )
 
         # Give media 2 the same md5 as media 1 (simulate content-duplicate under different origin)
-        orig_md5 = app_module.medias[2]["md5"]
-        app_module.medias[2]["md5"] = app_module.medias[1]["md5"]
+        orig_md5 = medias[2]["md5"]
+        medias[2]["md5"] = medias[1]["md5"]
         try:
-            origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
-            clip1 = app_module.medias[1]
+            origin_lookup, md5_lookup, _ = build_media_lookup(medias)
+            clip1 = medias[1]
             # Entry: origin matches media 1, md5 also matches media 1 AND media 2
             entry = {
                 "md5": clip1["md5"],
@@ -313,7 +313,7 @@ class TestResolveClipIdsUnion:
             assert 1 in cids
             assert 2 in cids
         finally:
-            app_module.medias[2]["md5"] = orig_md5
+            medias[2]["md5"] = orig_md5
 
     def test_no_match_returns_empty(self):
         from vtsearch.state import (
@@ -321,7 +321,7 @@ class TestResolveClipIdsUnion:
             resolve_media_ids,
         )
 
-        origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
+        origin_lookup, md5_lookup, _ = build_media_lookup(medias)
         entry = {
             "md5": "nonexistent",
             "origin": {"importer": "nope", "params": {}},
@@ -338,8 +338,8 @@ class TestResolveClipIdsUnion:
             resolve_media_ids,
         )
 
-        origin_lookup, md5_lookup, name_lookup = build_media_lookup(app_module.medias)
-        origin_name = app_module.medias[1].get("origin_name", "")
+        origin_lookup, md5_lookup, name_lookup = build_media_lookup(medias)
+        origin_name = medias[1].get("origin_name", "")
         assert origin_name, "Test media 1 must have origin_name"
         entry = {"origin_name": origin_name, "label": "good"}
         # Without name_lookup; no match
@@ -356,8 +356,8 @@ class TestResolveClipIdsUnion:
             resolve_media_ids,
         )
 
-        origin_lookup, md5_lookup, name_lookup = build_media_lookup(app_module.medias)
-        origin_name = app_module.medias[1].get("origin_name", "")
+        origin_lookup, md5_lookup, name_lookup = build_media_lookup(medias)
+        origin_name = medias[1].get("origin_name", "")
         assert origin_name
         entry = {"filename": origin_name, "label": "good"}
         cids = resolve_media_ids(entry, origin_lookup, md5_lookup, name_lookup)
@@ -370,8 +370,8 @@ class TestResolveClipIdsUnion:
             resolve_media_ids,
         )
 
-        origin_lookup, md5_lookup, name_lookup = build_media_lookup(app_module.medias)
-        md5 = app_module.medias[1]["md5"]
+        origin_lookup, md5_lookup, name_lookup = build_media_lookup(medias)
+        md5 = medias[1]["md5"]
         entry = {"md5": md5, "origin_name": "some_other_name", "label": "good"}
         cids = resolve_media_ids(entry, origin_lookup, md5_lookup, name_lookup)
         assert 1 in cids
@@ -388,8 +388,8 @@ class TestResolveClipIdsUnion:
             resolve_media_ids,
         )
 
-        origin_lookup, md5_lookup, name_lookup = build_media_lookup(app_module.medias)
-        origin_name = app_module.medias[1].get("origin_name", "")
+        origin_lookup, md5_lookup, name_lookup = build_media_lookup(medias)
+        origin_name = medias[1].get("origin_name", "")
         assert origin_name
         # md5 is present but doesn't match anything in this dataset (the
         # detector's labelset was built on a different dataset).  origin_name
@@ -408,8 +408,8 @@ class TestResolveClipIdsUnion:
             resolve_media_ids,
         )
 
-        origin_lookup, md5_lookup, name_lookup = build_media_lookup(app_module.medias)
-        origin_name = app_module.medias[1].get("origin_name", "")
+        origin_lookup, md5_lookup, name_lookup = build_media_lookup(medias)
+        origin_name = medias[1].get("origin_name", "")
         assert origin_name
         entry = {
             "origin": {"importer": "server_folder", "params": {"path": "/different/dataset"}},
@@ -432,8 +432,8 @@ class TestFindMissingEntries:
             find_missing_entries,
         )
 
-        origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
-        entries = [{"md5": app_module.medias[i]["md5"], "label": "good"} for i in [1, 2, 3]]
+        origin_lookup, md5_lookup, _ = build_media_lookup(medias)
+        entries = [{"md5": medias[i]["md5"], "label": "good"} for i in [1, 2, 3]]
         missing = find_missing_entries(entries, origin_lookup, md5_lookup)
         assert missing == []
 
@@ -443,9 +443,9 @@ class TestFindMissingEntries:
             find_missing_entries,
         )
 
-        origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
+        origin_lookup, md5_lookup, _ = build_media_lookup(medias)
         entries = [
-            {"md5": app_module.medias[1]["md5"], "label": "good"},
+            {"md5": medias[1]["md5"], "label": "good"},
             {"md5": "totally_unknown", "label": "bad"},
         ]
         missing = find_missing_entries(entries, origin_lookup, md5_lookup)
@@ -458,7 +458,7 @@ class TestFindMissingEntries:
             find_missing_entries,
         )
 
-        origin_lookup, md5_lookup, _ = build_media_lookup(app_module.medias)
+        origin_lookup, md5_lookup, _ = build_media_lookup(medias)
         entries = [
             {"md5": "unknown1", "label": "good"},
             {"md5": "unknown2", "label": "meh"},  # invalid label; excluded
@@ -481,7 +481,7 @@ class TestNextClipId:
     def test_returns_max_plus_one(self):
         from vtsearch.state import next_media_id
 
-        assert next_media_id(app_module.medias) == max(app_module.medias) + 1
+        assert next_media_id(medias) == max(medias) + 1
 
 
 # ---------------------------------------------------------------------------
@@ -492,7 +492,7 @@ class TestNextClipId:
 class TestLabelImportMissingElements:
     def test_response_includes_missing_entries(self, client, tmp_path):
         """Labels referencing unknown elements should appear in 'missing'."""
-        known_md5 = app_module.medias[1]["md5"]
+        known_md5 = medias[1]["md5"]
         payload = json.dumps(
             {
                 "labels": [
@@ -525,7 +525,7 @@ class TestLabelImportMissingElements:
         assert snapshot["ingest_result"]["unresolved"] == 1
 
     def test_no_missing_when_all_match(self, client, tmp_path):
-        md5 = app_module.medias[1]["md5"]
+        md5 = medias[1]["md5"]
         payload = json.dumps({"labels": [{"md5": md5, "label": "good"}]})
         p = tmp_path / "labels.json"
         p.write_text(payload)
@@ -541,7 +541,7 @@ class TestLabelImportMissingElements:
         """Missing elements are auto-resolved from their origin during import."""
 
         # Save/restore medias since auto-resolve adds new entries
-        saved = dict(app_module.medias)
+        saved = dict(medias)
         try:
             # Create a text file that can be ingested
             text_dir = tmp_path / "texts"
@@ -552,7 +552,7 @@ class TestLabelImportMissingElements:
 
             origin = {"importer": "server_folder", "params": {"path": str(text_dir), "media_type": "text"}}
 
-            known_md5 = app_module.medias[1]["md5"]
+            known_md5 = medias[1]["md5"]
             payload = json.dumps(
                 {
                     "labels": [
@@ -585,16 +585,16 @@ class TestLabelImportMissingElements:
             snapshot = wait_for_detector_task(result["ingest_task_id"])
             assert snapshot["ingest_result"] == {"ingested": 1, "applied": 1, "unresolved": 0, "failed": 0}
             # The new media should be in the dataset and labeled
-            new_ids = [cid for cid, m in app_module.medias.items() if m.get("md5") == md5]
+            new_ids = [cid for cid, m in medias.items() if m.get("md5") == md5]
             assert len(new_ids) == 1
-            assert new_ids[0] in app_module.bad_votes
+            assert new_ids[0] in bad_votes
         finally:
-            app_module.medias.clear()
-            app_module.medias.update(saved)
+            medias.clear()
+            medias.update(saved)
 
     def test_auto_resolve_reports_unresolvable(self, client, tmp_path):
         """Elements that can't be resolved are reported in the response."""
-        known_md5 = app_module.medias[1]["md5"]
+        known_md5 = medias[1]["md5"]
         payload = json.dumps(
             {
                 "labels": [
@@ -642,15 +642,15 @@ class TestPartialFailure:
         importer should still apply the other labels and report the
         failed entry in ``failed``.
         """
-        md5_1 = app_module.medias[1]["md5"]
-        md5_2 = app_module.medias[2]["md5"]
-        md5_3 = app_module.medias[3]["md5"]
+        md5_1 = medias[1]["md5"]
+        md5_2 = medias[2]["md5"]
+        md5_3 = medias[3]["md5"]
 
         # Save & clear vote state so we can assert it precisely.
-        saved_good = dict(app_module.good_votes)
-        saved_bad = dict(app_module.bad_votes)
-        app_module.good_votes.clear()
-        app_module.bad_votes.clear()
+        saved_good = dict(good_votes)
+        saved_bad = dict(bad_votes)
+        good_votes.clear()
+        bad_votes.clear()
         try:
             payload = json.dumps(
                 {
@@ -690,22 +690,22 @@ class TestPartialFailure:
             assert result["failed"][0]["entry"]["md5"] == md5_2
             assert "simulated downstream failure" in result["failed"][0]["error"]
             # The successful entries' votes actually landed.
-            assert 1 in app_module.good_votes
-            assert 3 in app_module.good_votes
-            assert 2 not in app_module.good_votes
+            assert 1 in good_votes
+            assert 3 in good_votes
+            assert 2 not in good_votes
             # Message advertises the failure.
             assert "failed to apply" in result["message"]
         finally:
-            app_module.good_votes.clear()
-            app_module.bad_votes.clear()
-            app_module.good_votes.update(saved_good)
-            app_module.bad_votes.update(saved_bad)
+            good_votes.clear()
+            bad_votes.clear()
+            good_votes.update(saved_good)
+            bad_votes.update(saved_bad)
 
     def test_clean_import_reports_zero_failed(self, client, tmp_path):
         """The new ``failed``/``failed_count`` fields are always present in the response,
         and read as 0 / [] on a clean import.
         """
-        md5 = app_module.medias[1]["md5"]
+        md5 = medias[1]["md5"]
         payload = json.dumps({"labels": [{"md5": md5, "label": "good"}]})
         p = tmp_path / "labels.json"
         p.write_text(payload)
@@ -741,13 +741,13 @@ class TestPartialFailure:
         def spy():
             sync_calls["count"] += 1
 
-        md5_1 = app_module.medias[1]["md5"]
-        md5_2 = app_module.medias[2]["md5"]
+        md5_1 = medias[1]["md5"]
+        md5_2 = medias[2]["md5"]
 
-        saved_good = dict(app_module.good_votes)
-        saved_bad = dict(app_module.bad_votes)
-        app_module.good_votes.clear()
-        app_module.bad_votes.clear()
+        saved_good = dict(good_votes)
+        saved_bad = dict(bad_votes)
+        good_votes.clear()
+        bad_votes.clear()
         try:
             payload = json.dumps(
                 {
@@ -783,7 +783,7 @@ class TestPartialFailure:
             # Sync ran exactly once even though one entry failed mid-loop.
             assert sync_calls["count"] == 1
         finally:
-            app_module.good_votes.clear()
-            app_module.bad_votes.clear()
-            app_module.good_votes.update(saved_good)
-            app_module.bad_votes.update(saved_bad)
+            good_votes.clear()
+            bad_votes.clear()
+            good_votes.update(saved_good)
+            bad_votes.update(saved_bad)

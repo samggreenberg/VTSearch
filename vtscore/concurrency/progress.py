@@ -1,5 +1,6 @@
 """Progress tracking for long-running operations."""
 
+import inspect
 import math
 import time
 import threading
@@ -457,6 +458,19 @@ class ProgressTracker:
         """Return ``True`` if cancellation has been requested."""
         return self._cancel_event.is_set()
 
+    @property
+    def cancel_event(self) -> threading.Event:
+        """The cooperative-cancellation flag itself.
+
+        Exposed so a holder that must publish *one* cancel signal (see
+        :class:`~vtscore.concurrency.async_jobs.AsyncJob`, whose ``cancel_event``
+        is this object) can hand out the tracker's event rather than keeping a
+        second one that has to be kept in sync.  Prefer :meth:`cancel` /
+        :meth:`check_cancelled` / :attr:`is_cancelled` for ordinary use; reach
+        for the event only to ``wait()`` on it.
+        """
+        return self._cancel_event
+
     def reset_cancel(self) -> None:
         """Clear the cancellation flag.
 
@@ -479,13 +493,29 @@ class ProgressTracker:
 # Thread-local progress callback
 # ---------------------------------------------------------------------------
 # Background loading threads set a per-thread progress callback via
-# set_thread_progress().  The _default_progress() functions in loader.py,
-# downloader.py, etc. check this first, falling back to the global
-# update_progress() when no per-thread callback is set.  This avoids
-# monkey-patching module-level defaults and allows parallel loads to each
-# report to their own ProgressTracker.
+# set_thread_progress(); every library module that reports progress without an
+# explicit callback resolves one through resolve_progress_callback().  This
+# avoids monkey-patching module-level defaults and allows parallel loads to
+# each report to their own ProgressTracker.
+#
+# There is deliberately no process-wide fallback sink.  One used to exist (the
+# ``dataset_progress`` singleton behind the SSE ``dataset`` channel), and it
+# was a standing source of phantom progress bars: work that finished, died, or
+# never had a watcher still left the channel parked on its last message, and
+# nothing downstream could tell that apart from a wedged import (#3167).  Work
+# that wants to be seen binds a tracker for its thread; work that binds nothing
+# is, by construction, work nobody is watching, so it reports into a no-op.
+
+#: The shape every progress sink in the library implements:
+#: ``(status, message, current, total) -> None``.
+ProgressCallback = Callable[[str, str, int, int], None]
 
 _thread_progress = threading.local()
+
+
+def noop_progress(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
+    """Progress sink that discards everything.  The default when none is bound."""
+    return None
 
 
 def set_thread_progress(callback) -> None:
@@ -503,6 +533,19 @@ def clear_thread_progress() -> None:
     _thread_progress.callback = None
 
 
+def resolve_progress_callback() -> ProgressCallback:
+    """Return the progress sink the calling thread should report into.
+
+    The per-thread callback installed by :func:`set_thread_progress` when one
+    is bound, else :func:`noop_progress`.  Library code that takes an optional
+    ``on_progress`` argument calls this to fill in the ``None`` case, so a
+    caller that supplied nothing still reaches whichever tracker the enclosing
+    load bound for its thread.
+    """
+    cb = get_thread_progress()
+    return cb if cb is not None else noop_progress
+
+
 # ---------------------------------------------------------------------------
 # Shared progress extras
 # ---------------------------------------------------------------------------
@@ -511,10 +554,11 @@ def clear_thread_progress() -> None:
 #: like load→embed→stage), an ``error`` string, and a smoothed ``eta_seconds``
 #: filled in automatically by :meth:`ProgressTracker._compute_eta`. Every
 #: singleton tracker - and every per-task tracker created by
-#: :class:`LoadingTasksTracker` - exposes these so the frontend can render any
-#: progress payload with the same ``ProgressEvent`` interface (see
-#: ``frontend/src/app/models/api.models.ts``).
-_PROGRESS_COMMON_EXTRAS: dict[str, Any] = {
+#: :class:`LoadingTasksTracker`, and every per-job tracker on an
+#: :class:`~vtscore.concurrency.async_jobs.AsyncJob` - exposes these so the
+#: frontend can render any progress payload with the same ``ProgressEvent``
+#: interface (see ``frontend/src/app/models/api.models.ts``).
+PROGRESS_COMMON_EXTRAS: dict[str, Any] = {
     "step": None,
     "total_steps": None,
     "error": None,
@@ -597,7 +641,7 @@ class LoadingTasksTracker:
         shared progress extras. Returns the per-task :class:`ProgressTracker`
         instance.
         """
-        fields = dict(_PROGRESS_COMMON_EXTRAS)
+        fields = dict(PROGRESS_COMMON_EXTRAS)
         if extra_fields:
             fields.update(extra_fields)
         tracker = ProgressTracker(extra_fields=fields)
@@ -690,12 +734,6 @@ class LoadingTasksTracker:
             entry = self._tasks.get(task_id)
         worker = entry.get("worker") if entry else None
         return bool(worker is not None and worker.is_alive())
-
-    def any_worker_alive(self) -> bool:
-        """Return ``True`` if any registered worker thread is still running."""
-        with self._lock:
-            entries = list(self._tasks.values())
-        return any(e.get("worker") is not None and e["worker"].is_alive() for e in entries)
 
     def active_task_ids(self) -> list[str]:
         """Return the ids of tasks whose tracker still claims to be working.
@@ -793,19 +831,14 @@ detector_loading_tasks = LoadingTasksTracker()
 # Application-wide singleton trackers
 # ---------------------------------------------------------------------------
 
-#: Dataset / import progress (used by dataset loading, downloading, embedding).
-#: Adds ``staging_result`` on top of the common extras for the combine-datasets
-#: staging flow.
-dataset_progress = ProgressTracker(extra_fields={**_PROGRESS_COMMON_EXTRAS, "staging_result": None})
-
 #: Sort-specific progress (used by text-sort operations).
-sort_progress = ProgressTracker(extra_fields=dict(_PROGRESS_COMMON_EXTRAS))
+sort_progress = ProgressTracker(extra_fields=dict(PROGRESS_COMMON_EXTRAS))
 
 #: Eval progress (used by train-and-score / voting-iterations analysis).
-eval_progress = ProgressTracker(extra_fields=dict(_PROGRESS_COMMON_EXTRAS))
+eval_progress = ProgressTracker(extra_fields=dict(PROGRESS_COMMON_EXTRAS))
 
 #: Find progress (used by the /api/find multi-dataset×model scoring operation).
-find_progress = ProgressTracker(extra_fields=dict(_PROGRESS_COMMON_EXTRAS))
+find_progress = ProgressTracker(extra_fields=dict(PROGRESS_COMMON_EXTRAS))
 
 
 # ---------------------------------------------------------------------------
@@ -833,51 +866,56 @@ def _common_extras_kwargs(
     return kwargs
 
 
+def _accepts_extras(cb: Callable[..., None], kwargs: dict[str, Any]) -> bool:
+    """Return ``True`` when *cb* can be called with every key in *kwargs*.
+
+    A sink that declares ``**kwargs`` takes anything; otherwise every key must
+    name a real keyword parameter.  A callable whose signature cannot be read
+    (a C builtin, an exotic wrapper) is assumed not to accept them, so the
+    four-argument call is what runs.
+    """
+    try:
+        params = inspect.signature(cb).parameters
+    except (TypeError, ValueError):
+        return False
+    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()):
+        return True
+    return all(key in params and params[key].kind is not inspect.Parameter.POSITIONAL_ONLY for key in kwargs)
+
+
 def update_progress(
     status: str,
     message: str = "",
     current: int = 0,
     total: int = 0,
     error: Any = _UNSET,
-    staging_result: Any = _UNSET,
     step: Any = _UNSET,
     total_steps: Any = _UNSET,
 ) -> None:
-    """Update the global dataset progress tracker.
+    """Report dataset/import progress into the calling thread's sink.
 
-    All write access is serialised internally so that background threads
-    can safely report progress while the Flask request thread polls
-    :func:`get_progress`.
+    The public free-function spelling of :func:`resolve_progress_callback` for
+    plugin authors (see ``vtscore/docs/extending/dataset-importers.md``): an
+    importer that calls this from inside a running load reports onto that
+    load's own :class:`ProgressTracker`, exactly as if it had accepted an
+    ``on_progress`` argument.  Called with no tracker bound to the thread it is
+    a no-op.
 
-    Only extra fields explicitly supplied by the caller are forwarded;
-    omitted fields are left unchanged (true update/merge semantics).
+    ``error``, ``step`` and ``total_steps`` are forwarded only when supplied,
+    and only when the bound sink accepts them (a :class:`ProgressTracker`'s
+    ``update`` does; the plain four-argument callbacks the load pipeline
+    installs do not, and would raise on them).  Acceptance is decided by
+    inspecting the sink's signature rather than by catching :class:`TypeError`
+    from the call, so a ``TypeError`` raised *inside* a sink still propagates
+    instead of being retried as an arity mismatch.
     """
+    cb = resolve_progress_callback()
     kwargs = _common_extras_kwargs(step, total_steps, error)
-    if staging_result is not _UNSET:
-        kwargs["staging_result"] = staging_result
-    dataset_progress.update(status, message, current, total, **kwargs)
+    if kwargs and _accepts_extras(cb, kwargs):
+        cb(status, message, current, total, **kwargs)  # type: ignore[call-arg]
+        return
+    cb(status, message, current, total)
 
-
-def get_progress() -> dict[str, Any]:
-    """Return a snapshot of the current dataset progress data.
-
-    Checks per-task loading trackers first (used by parallel dataset
-    loading) and falls back to the legacy global singleton.
-    """
-    tasks = loading_tasks.list_tasks()
-    active = [t for t in tasks if t.get("status") != "idle"]
-    if active:
-        return active[0]
-    # Check if any just-finished task has an error to report
-    errored = [t for t in tasks if t.get("error")]
-    if errored:
-        return errored[0]
-    return dataset_progress.get()
-
-
-#: Name used for the legacy global :data:`dataset_progress` singleton in a
-#: cancellation report, where every other entry is a loading-task id.
-LEGACY_PROGRESS_TARGET = "dataset_progress"
 
 #: How long :func:`cancel_dataset_progress` waits for a worker to act on the
 #: flag before reporting what it saw. Cooperative cancellation normally lands
@@ -893,8 +931,6 @@ _CANCEL_POLL_SECONDS = 0.02
 
 def _cancel_acknowledged(target: str) -> bool:
     """Return ``True`` once *target* has reached a terminal state."""
-    if target == LEGACY_PROGRESS_TARGET:
-        return dataset_progress.get()["status"] == "idle"
     if loading_tasks.is_finished(target):
         return True
     tracker = loading_tasks.get_tracker(target)
@@ -910,9 +946,6 @@ def _park_unresponsive(target: str) -> None:
     tomorrow. Nothing is going to clear it — that is what "no worker" means —
     so the request that proved it stale clears it.
     """
-    if target == LEGACY_PROGRESS_TARGET:
-        dataset_progress.update("idle", "", 0, 0)
-        return
     tracker = loading_tasks.get_tracker(target)
     if tracker is not None:
         tracker.update(
@@ -949,9 +982,8 @@ def _cancel_report(targets: list[str], grace_seconds: float) -> dict[str, Any]:
 
     still = set(outstanding)
     report["acknowledged"] = [t for t in targets if t not in still]
-    any_alive = loading_tasks.any_worker_alive()
     for target in outstanding:
-        alive = any_alive if target == LEGACY_PROGRESS_TARGET else loading_tasks.worker_alive(target)
+        alive = loading_tasks.worker_alive(target)
         report["pending" if alive else "unresponsive"].append(target)
     for target in report["unresponsive"]:
         _park_unresponsive(target)
@@ -981,9 +1013,8 @@ def _cancel_report(targets: list[str], grace_seconds: float) -> dict[str, Any]:
 def cancel_dataset_progress(grace_seconds: float = CANCEL_ACK_GRACE_SECONDS) -> dict[str, Any]:
     """Signal the current dataset operation(s) to cancel, and report the outcome.
 
-    Cancels all active per-task loading trackers as well as the legacy global
-    singleton (used by staging operations), then waits up to *grace_seconds*
-    for someone to act on the flag.
+    Cancels every active per-task loading tracker, then waits up to
+    *grace_seconds* for someone to act on the flag.
 
     Cancellation is cooperative — :meth:`ProgressTracker.cancel` sets an event
     and :meth:`ProgressTracker.check_cancelled` has to be *reached* by a
@@ -995,8 +1026,7 @@ def cancel_dataset_progress(grace_seconds: float = CANCEL_ACK_GRACE_SECONDS) -> 
     Returns a report with:
 
     ``targets``
-        every id that claimed to be working when the cancel arrived, using
-        :data:`LEGACY_PROGRESS_TARGET` for the global singleton.
+        every task id that claimed to be working when the cancel arrived.
     ``acknowledged``
         targets that reached a terminal state within the grace period.
     ``pending``
@@ -1011,12 +1041,7 @@ def cancel_dataset_progress(grace_seconds: float = CANCEL_ACK_GRACE_SECONDS) -> 
         when the cancel actually reached something.
     """
     targets = loading_tasks.active_task_ids()
-    if dataset_progress.get()["status"] != "idle":
-        targets.append(LEGACY_PROGRESS_TARGET)
-
     loading_tasks.cancel_all()
-    dataset_progress.cancel()
-
     return _cancel_report(targets, grace_seconds)
 
 
@@ -1033,11 +1058,6 @@ def cancel_dataset_task(task_id: str, grace_seconds: float = CANCEL_ACK_GRACE_SE
     targets = [task_id] if tracker.get()["status"] != "idle" else []
     tracker.cancel()
     return _cancel_report(targets, grace_seconds)
-
-
-def check_dataset_cancelled() -> None:
-    """Raise :class:`CancelledError` if the dataset operation was cancelled."""
-    dataset_progress.check_cancelled()
 
 
 def update_sort_progress(

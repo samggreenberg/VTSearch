@@ -15,7 +15,6 @@ Covers:
 import numpy as np
 import pytest
 
-import app as app_module
 from vtscore.detectors.training import train_and_score
 from vtscore.training.thresholds import (
     NO_GOOD_THRESHOLD,
@@ -23,6 +22,7 @@ from vtscore.training.thresholds import (
     calculate_gmm_threshold,
     calculate_safe_threshold,
 )
+from vtsearch.state import bad_votes, good_votes, medias
 
 
 class TestCalculateSafeThreshold:
@@ -126,19 +126,19 @@ class TestTrainAndScoreFusesUnconditionally:
         assert "safe_thresholds" not in inspect.signature(train_and_score).parameters
 
     def test_returns_a_valid_threshold(self):
-        app_module.good_votes.update({k: None for k in [1, 2, 3]})
-        app_module.bad_votes.update({k: None for k in [18, 19, 20]})
-        results, threshold, _model = train_and_score(app_module.medias, app_module.good_votes, app_module.bad_votes)
+        good_votes.update({k: None for k in [1, 2, 3]})
+        bad_votes.update({k: None for k in [18, 19, 20]})
+        results, threshold, _model = train_and_score(medias, good_votes, bad_votes)
         assert 0.0 <= threshold <= 1.0
-        assert len(results) == len(app_module.medias)
+        assert len(results) == len(medias)
 
     def test_threshold_is_realizable_on_the_haystack_distribution(self):
         """The shipped cut is realized as a quantile of the scores it will be
         compared against, so it always lands inside their range - which the raw
         conformal quantile, measured on fold-model scores, need not."""
-        app_module.good_votes.update({k: None for k in [1, 2, 3]})
-        app_module.bad_votes.update({k: None for k in [18, 19, 20]})
-        results, threshold, _model = train_and_score(app_module.medias, app_module.good_votes, app_module.bad_votes)
+        good_votes.update({k: None for k in [1, 2, 3]})
+        bad_votes.update({k: None for k in [18, 19, 20]})
+        results, threshold, _model = train_and_score(medias, good_votes, bad_votes)
         scores = [r["score"] for r in results]
         assert min(scores) <= threshold <= max(scores)
 
@@ -293,15 +293,15 @@ class TestCalibrationFractionTrainAndScore:
         assert default is None
 
     def test_custom_fraction_returns_valid_results(self):
-        app_module.good_votes.update({k: None for k in [1, 2, 3]})
-        app_module.bad_votes.update({k: None for k in [18, 19, 20]})
+        good_votes.update({k: None for k in [1, 2, 3]})
+        bad_votes.update({k: None for k in [18, 19, 20]})
         results, threshold, _model = train_and_score(
-            app_module.medias,
-            app_module.good_votes,
-            app_module.bad_votes,
+            medias,
+            good_votes,
+            bad_votes,
             calibration_fraction=0.2,
         )
-        assert len(results) == len(app_module.medias)
+        assert len(results) == len(medias)
         # threshold can be inf if the split is too extreme for 6 labels
         assert isinstance(threshold, float)
 

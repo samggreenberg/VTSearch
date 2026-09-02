@@ -24,16 +24,19 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 import numpy as np
 
 from vtscore.security.path_validation import resolve_media_file_path
 
-# Type alias for progress callbacks.  Modules that accept an ``on_progress``
-# parameter use this signature so callers can report status without depending
-# on ``vtscore.concurrency.progress``.
-ProgressCallback = Callable[[str, str, int, int], None]
+# Progress callbacks.  Re-exported from ``vtscore.concurrency.progress`` (which
+# imports nothing from vtscore, so there is no cycle) rather than redeclared,
+# so the one signature every sink implements has exactly one definition.
+from vtscore.concurrency.progress import (  # noqa: E402
+    ProgressCallback,
+    noop_progress as _noop_progress,
+)
 
 __all__ = [
     "DemoDataset",
@@ -41,6 +44,7 @@ __all__ = [
     "MediaType",
     "ProgressCallback",
     "demo_slice",
+    "demo_slice_by_category",
 ]
 
 
@@ -50,7 +54,7 @@ def _fetch_media_url(url: str) -> bytes | None:
     Used by :meth:`MediaType._resolve_media_bytes` and
     :meth:`MediaType._resolve_media_string` as a last-resort fallback when
     neither ``media_bytes`` nor ``media_path`` are available (e.g. for
-    URL-backed media from PullWrest).
+    URL-backed media).
 
     A ``media_url`` is **not** trusted input.  It rides along on a media dict
     that can arrive from a loaded pickle
@@ -103,10 +107,6 @@ def _resolve_archive_member_bytes(media: dict) -> bytes | None:
     except (ArchiveMemberError, OSError):
         logging.getLogger(__name__).warning("Failed to read archive member %s::%s", ref[0], ref[1], exc_info=True)
         return None
-
-
-def _noop_progress(status: str, message: str = "", current: int = 0, total: int = 0) -> None:
-    """Default no-op progress callback used when no real reporter is set."""
 
 
 @dataclass
@@ -210,6 +210,29 @@ def demo_slice(items, slice_start, slice_end, slice_frac_start=None, slice_frac_
         end = int(n * slice_frac_end) if slice_frac_end is not None else n
         return items[start:end]
     return items[slice_start:slice_end]
+
+
+def demo_slice_by_category(
+    by_cat: dict,
+    categories,
+    slice_start,
+    slice_end,
+    slice_frac_start=None,
+    slice_frac_end=None,
+) -> list:
+    """Flatten a ``{category: items}`` map into one list, slicing each category.
+
+    The per-category loop every media type's demo loader runs after grouping a
+    downloaded folder's metadata by label: walk *categories* in the caller's
+    order (so the requested subset, and its ordering, is what comes back), and
+    take the same :func:`demo_slice` window out of each bucket.  A category the
+    map doesn't have contributes nothing rather than raising, since the
+    downloaded source may legitimately be missing a requested label.
+    """
+    out: list = []
+    for cat in categories:
+        out.extend(demo_slice(by_cat.get(cat, []), slice_start, slice_end, slice_frac_start, slice_frac_end))
+    return out
 
 
 class MediaType(ABC):
@@ -614,7 +637,7 @@ class MediaType(ABC):
            sliced/cropped from the source on demand (see
            :mod:`vtscore.media.lazy_clip`).
         3. ``media_path`` - local file on disk (thin mode).
-        4. ``media_url`` - remote URL (URL-backed media, e.g. PullWrest),
+        4. ``media_url`` - remote URL (URL-backed media),
            fetched only through the SSRF guard in :func:`_fetch_media_url`.
         """
         media_bytes = media.get("media_bytes")

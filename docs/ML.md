@@ -57,7 +57,7 @@ Keeping the model inclusion-independent is what lets the calibration cache reuse
 
 ### Label Smoothing (BCE arms only)
 
-The BCE gradient loop label-smooths its targets with ε = 0.05 (`MLP_LABEL_SMOOTHING` in `vtscore/config.py`): Good examples train toward 0.95, Bad toward 0.05, with class weights still derived from the hard labels. This is **not** a knob-mover — it exists as tie insurance for the conformal threshold rule below, which takes quantiles of the calibration scores and therefore needs distinct score values. Smoothing bounds the optimal logit (≈ ±2.9 at ε = 0.05), so a strongly-fit model cannot saturate every score to exact 0.0/1.0 sigmoids, where all quantiles would collapse to the same cut.
+The BCE gradient loop label-smooths its targets with ε = 0.05 (`MLP_LABEL_SMOOTHING` in `vtscore/config/runtime.py`): Good examples train toward 0.95, Bad toward 0.05, with class weights still derived from the hard labels. This is **not** a knob-mover — it exists as tie insurance for the conformal threshold rule below, which takes quantiles of the calibration scores and therefore needs distinct score values. Smoothing bounds the optimal logit (≈ ±2.9 at ε = 0.05), so a strongly-fit model cannot saturate every score to exact 0.0/1.0 sigmoids, where all quantiles would collapse to the same cut.
 
 The SVM head needs no such insurance and does not use it: the margin objective has no incentive to run the decision function off to infinity, so its scores stay in a narrow band around the boundary and quantiles over them are naturally distinct.
 
@@ -70,9 +70,9 @@ A decision threshold separating "good" from "bad" predictions is computed via **
 3. Repeat for `calibrate_count` independent random splits.
 4. Pool every fold's held-out (score, label) pairs and apply the **conformal inclusion rule** (`conformal_threshold`) once. Pooling — rather than averaging per-fold thresholds — is deliberate: the knob's resolution is bounded by how many calibration scores the quantiles are taken over.
 
-The `calibration_fraction` setting is the Calibrate share of each split, and its default is **per-embedder** (issue #3287): with no explicit user setting, a detector that learns in a single-vector space splits 70% Train / 30% Calibrate (`0.3`), while a patch-grid embedder keeps `0.5` — in *both* its voting styles, including the boxless whole-image fallback, because the measured optimum follows the embedder's capability rather than the voting mode. The table lives in `PRODUCTION_SPLIT_BY_SPACE` (`vtscore/training/thresholds.py`), resolved with an unknown-space fallback of `0.5` by `resolve_calibration_fraction` (`vtscore/detectors/training.py`); an explicit `calibration_fraction` user setting always wins, and clearing it returns to the automatic per-embedder default. Evidence: [`docs/experiments/2026-08-27-calibration-fraction-3287/REPORT.md`](experiments/2026-08-27-calibration-fraction-3287/REPORT.md).
+The `calibration_fraction` setting is the Calibrate share of each split, and its default is **per-embedder** (issue #3287): with no explicit user setting, a detector that learns in a single-vector space splits 70% Train / 30% Calibrate (`0.3`), while a patch-grid embedder keeps `0.5` — in *both* its voting styles, including the boxless whole-image fallback, because the measured optimum follows the embedder's capability rather than the voting mode. The table lives in `PRODUCTION_SPLIT_BY_SPACE` (`vtscore/training/thresholds/knobs.py`), resolved with an unknown-space fallback of `0.5` by `resolve_calibration_fraction` (`vtscore/detectors/training.py`); an explicit `calibration_fraction` user setting always wins, and clearing it returns to the automatic per-embedder default. Evidence: [`docs/experiments/2026-08-27-calibration-fraction-3287/REPORT.md`](experiments/2026-08-27-calibration-fraction-3287/REPORT.md).
 
-The `calibrate_count` setting defaults to `2` (`DEFAULT_CALIBRATE_COUNT` in `vtscore/config.py`) and can be raised or lowered (`VTSEARCH_CALIBRATE_COUNT`) to trade calibration quality (and Inclusion-knob resolution — more folds means more pooled calibration scores) for latency. (The eval runner uses its own default of `2` for a separate, non-interactive path — see [`docs/EVAL.md`](EVAL.md).) The folds are trained at every label count: the fold *models* are an input to the fold-anchored estimator below — it anchors on their held-out scores — so there is nothing to skip. (Before the population-anchored adoption, the calibration was skipped wherever the mix-in schedule gave the cross-cal cut zero weight, at 6 labels or fewer; the schedule is no longer what combines the two estimators, so that skip is gone.) Every training entry point (vote-driven Train, labelset re-derivation, Find, and detector-load-from-origins) cross-calibrates below 6 labels rather than falling back to 0.5.
+The `calibrate_count` setting defaults to `2` (`DEFAULT_CALIBRATE_COUNT` in `vtscore/config/runtime.py`) and can be raised or lowered (`VTSEARCH_CALIBRATE_COUNT`) to trade calibration quality (and Inclusion-knob resolution — more folds means more pooled calibration scores) for latency. (The eval runner uses its own default of `2` for a separate, non-interactive path — see [`docs/EVAL.md`](EVAL.md).) The folds are trained at every label count: the fold *models* are an input to the fold-anchored estimator below — it anchors on their held-out scores — so there is nothing to skip. (Before the population-anchored adoption, the calibration was skipped wherever the mix-in schedule gave the cross-cal cut zero weight, at 6 labels or fewer; the schedule is no longer what combines the two estimators, so that skip is gone.) Every training entry point (vote-driven Train, labelset re-derivation, Find, and detector-load-from-origins) cross-calibrates below 6 labels rather than falling back to 0.5.
 
 **Every trained threshold fuses the haystack into the cut.** There is no setting for this. It used to be the `safe_thresholds` per-user toggle, on by default since the #2799 A/B; the population-anchored adoption made the fused estimator uniformly better than the alternative at every label count, so the toggle was deleted rather than left as a way to opt into a worse threshold. The historical A/B is still worth reading for *why* the population distribution belongs in the cut: [`docs/experiments/2026-08-03-safe-thresholds/REPORT.md`](experiments/2026-08-03-safe-thresholds/REPORT.md).
 
@@ -102,7 +102,7 @@ The fitted mixtures are cached on the detector context and **re-cut** when the u
 
 **The acquisition cut is not the decision line (`ACQUISITION_INCLUSION_OFFSET`, PR #2876; re-tuned #2905, #2909, #3318; now −4 by #3319/PR #3454).** The threshold does two unrelated jobs and they want opposite things from it. *Reporting* is the line the user sees, what Find calls a match, and what `cost = FPR + FNR` is scored at. *Acquisition* is what Autopilot's **Hard** and **New** picks consume — and those don't use it as a decision boundary at all: Hard ranks every item descending, finds the first rank position at or below the threshold, and takes the nearest unlabeled item **in rank space**, while New steers the atlas probe by a node's median score. A threshold is a *sampling position* to them.
 
-That inverts the direction relative to the cost weights: a **negative** inclusion prices false alarms higher, *raises* the cut, moves it *up* the ranking, and so returns *more* positives. Production therefore re-cuts the same fitted estimator at `inclusion − 4` for the selector and leaves reporting where it is (`acquisition_inclusion` in `vtscore/training/thresholds.py`; `detector_acquisition_threshold` in `vtscore/state/core.py` derives it per request from the cached mixtures, so it costs a re-cut and no refit).
+That inverts the direction relative to the cost weights: a **negative** inclusion prices false alarms higher, *raises* the cut, moves it *up* the ranking, and so returns *more* positives. Production therefore re-cuts the same fitted estimator at `inclusion − 4` for the selector and leaves reporting where it is (`acquisition_inclusion` in `vtscore/training/thresholds/knobs.py`; `detector_acquisition_threshold` in `vtscore/state/core.py` derives it per request from the cached mixtures, so it costs a re-cut and no refit).
 
 **The offset is −4, and it is deliberately not gated by voting mode.** The value has moved three times: shipped at −3 off one environment (#2876/#2878), cut to −1 when a second disagreed (#2891/#2909), restored to −3 by #2877's pile run (#3318), and set to −4 by **#3319** (PR #3454), which extended the grid past −4, added half-step resolution, a 400-click horizon and a region cross-check — 4032 cells, 0 failures.
 
@@ -130,7 +130,7 @@ Everything else still reads the reporting cut: the green/red line, the above-thr
 
 The **Calibration Fraction** setting (0–1, default 0.5) controls how much data is reserved for threshold calibration vs. model training in each split. For example, a value of 0.2 means 80% Train / 20% Calibrate. If the fraction is so extreme that a valid Train/Calibrate split cannot be formed (fewer than 2 training examples or fewer than 1 calibration example), the system returns a maximum threshold so that nothing is predicted as Good.
 
-The threshold is a **split-conformal quantile rule** over the pooled held-out scores, governed by the `inclusion_value` parameter (integer in range [-10, +10]). This is where inclusion biases the result toward recall or precision — at calibration/threshold time, **not** at training time. For `k = inclusion_value` (with `BASE = 0.25`, `QPOS_MAX = 0.75` — `CONFORMAL_BASE_BUDGET` / `CONFORMAL_QPOS_MAX` in `vtscore/training/thresholds.py`):
+The threshold is a **split-conformal quantile rule** over the pooled held-out scores, governed by the `inclusion_value` parameter (integer in range [-10, +10]). This is where inclusion biases the result toward recall or precision — at calibration/threshold time, **not** at training time. For `k = inclusion_value` (with `BASE = 0.25`, `QPOS_MAX = 0.75` — `CONFORMAL_BASE_BUDGET` / `CONFORMAL_QPOS_MAX` in `vtscore/training/thresholds/conformal.py`):
 
 - A **false-negative cap** `α(k) = min(1, BASE·2⁻ᵏ)`: the threshold never exceeds the α-quantile of the held-out *positive* scores, so an estimated at-most-`α` fraction of true matches falls below the cut. `+k` therefore has a portable meaning — "the fraction of true matches I'm willing to miss, halving per step" — independent of dataset or detector (e.g. `+3` ≈ miss at most ~3%, `+10` ≈ miss at most ~0.02%). The cap is an upper bound, not a target: when the classes separate cleanly the cut drops into the gap below the calibration positives and the budget goes unspent.
 - A **false-positive guard** for `k ≤ 0`: the threshold stays at or above the `1 − BASE·2ᵏ` quantile of the held-out *negative* scores (so overlap-heavy tasks keep FPR control) and above a walk *up* toward the positive score distribution. The walk interpolates linearly in score space from the **gap midpoint** at `k = 0` to the `QPOS_MAX` quantile of positives at `k = −10` ("just the surest matches").
@@ -144,6 +144,27 @@ Because the fold models are inclusion-independent, the pooled held-out scores ca
 For semantic (text/example) sorts, a **GMM-based threshold** is used instead: a 2-component Gaussian Mixture Model is fitted to the score distribution and the cut is placed at the **midpoint between the two fitted component means**. The same cut is the GMM half of the safe-threshold blend, which is now only the fallback for label sets too small to form calibration folds.
 
 **Why not the equal-density crossing?** Issue #2798 replaced the midpoint with the crossing of the two weighted components — solving `w_lo·N(x; μ_lo, σ²_lo) = w_hi·N(x; μ_hi, σ²_hi)`, the Bayes boundary between them — on the argument that under **region voting** (a media's score is the max over ~24 region-node scores) the Bad mode is an extreme-value statistic: right-skewed, wider and much heavier than the Good mode, which puts the crossing *above* the midpoint and means the midpoint cuts inside Bad mass. The #2799 study measured the two rules as paired within-step variants (each re-cutting the same model on the same votes) and the crossing lost on cost in every max-pooled window: +0.0036 at 6–20 votes, +0.0059 at 2–5 (`docs/experiments/2026-08-03-safe-thresholds/REPORT.md`). The geometry argument holds in *direction* — the crossing does cut higher and does buy FPR — but the exchange rate is ~1.3 FNR per 1 FPR, and for a needle-finding tool the missed match is the worse error. So issue #2833 reverted production to the midpoint. The crossing solver stays in the tree as an eval variant, and issue #2836 is the open question of why the midpoint wins (leading hypothesis: the crossing is the count-optimal cut while we score a *rate* loss, so its prior-odds term is a bias, and the right cut is a third point rather than either of these two).
+
+### "All my Goods rank above all my Bads" — is the head over-training?
+
+No, and the symptom cannot tell you either way. Embeddings are 512–768-dimensional, so a few hundred labeled points are almost always linearly separable for **any** labeling — including a pure coin flip. A head that fits its own training labels perfectly is therefore doing what a correctly-specified model does on separable data, not memorizing; shrinking the head would not change the symptom, because the symptom is a property of the geometry rather than of the model's capacity.
+
+Over-training is only visible on items the head did **not** train on. The shuffled-label control makes that concrete: run the same dataset, the same train/held-out split, and the same head twice, changing only the labels.
+
+- **REAL** — label each item by its true category (a signal that exists).
+- **NOISE** — label each item by a fixed coin flip (a signal that does not).
+
+Both arms reach ≈1.0 training AUC. That is the whole point: perfect training separation happens even for pure noise, so it proves nothing. The held-out numbers are what separate them:
+
+| Arm | Train AUC | Held-out AUC | Reading |
+|---|---|---|---|
+| REAL | ≈ 1.0 | well above 0.5 | The head is genuinely learning; the perfect training separation is *good behavior*. |
+| NOISE | ≈ 1.0 | ≈ 0.5 | The head correctly fails to generalize noise — it is not a memorizer faking held-out signal. |
+
+A high held-out AUC on the NOISE arm would be the real alarm: that is label leakage or a broken split, not over-training.
+
+The same control answers the neighbouring question — "is the capacity right?" — by sweeping the hidden width (or the head sentinel) with the split, votes and seeds held fixed, and reading held-out AUC per width. Note that production ships the **linear SVM head**, which has no width to sweep: capacity questions apply to the BCE eval arms in [The three heads](#the-three-heads-which-one-is-shipped-and-why) above.
+
 
 ## PyTorch Environment Settings
 
@@ -275,7 +296,7 @@ Flooding applies only where scoring is region-aware max-pool: the Learned-sort v
 
 ## Coverage Atlas
 
-The Coverage Atlas (`vtscore/state/coverage_atlas.py`, class `CoverageAtlas`) is a hierarchical k-means partition of a dataset's embedding space that remembers, per region, how much labeled evidence of each class the user has provided. It serves two jobs:
+The Coverage Atlas (`vtscore/coverage/atlas.py`, class `CoverageAtlas`) is a hierarchical k-means partition of a dataset's embedding space that remembers, per region, how much labeled evidence of each class the user has provided. It serves two jobs:
 
 1. **Diversity sampling** — the Training autopilot's "Explore Diversity" phase asks it for the next item to label, so a handful of clicks covers the whole collection and stress-tests the model where it is most likely to be wrong.
 2. **Domain-shift detection** — it answers "how typical is this item of the data this atlas was built on?" with a calibrated p-value, so a detector trained on dataset A can be sanity-checked against dataset B before anyone trusts its scores there.
@@ -402,7 +423,7 @@ The same machinery is available in the library tier:
 
 ```python
 import numpy as np
-from vtscore.state.coverage_atlas import CoverageAtlas, domain_shift_report
+from vtscore.coverage.atlas import CoverageAtlas, domain_shift_report
 
 atlas = CoverageAtlas({mid: vec for mid, vec in train_vectors.items()}, k=3)
 
@@ -420,11 +441,11 @@ Build is the same order as the embedding-matrix work a dataset load already does
 ## Key Files
 
 - `vtscore/training/mlp.py`: `build_model`, `train_model`, `build_model_from_weights`
-- `vtscore/state/coverage_atlas.py`: `CoverageAtlas`, `domain_shift_report`
+- `vtscore/coverage/atlas.py`: `CoverageAtlas`, `domain_shift_report`
 - `vtscore/state/coverage.py`: atlas build/restore/resync helpers, vote wiring
-- `vtscore/training/thresholds.py`: `calculate_cross_calibration_threshold`, `fold_anchored_gmm_threshold`, `calculate_safe_threshold`, `calculate_gmm_threshold`, `conformal_threshold`
+- `vtscore/training/thresholds/`: `calculate_cross_calibration_threshold`, `fold_anchored_gmm_threshold` (`anchored.py`), `calculate_safe_threshold` (`blend.py`), `calculate_gmm_threshold` (`gmm.py`), `conformal_threshold` (`conformal.py`)
 - `vtscore/detectors/training.py`: `train_and_score`, `train_and_threshold`, origin-based detector training
 - `vtscore/detectors/labeling_progress.py`: Cached per-step training and stability analysis
 - `vtscore/embedding/loader.py`: Model initialization and thread configuration
 - `vtscore/eval/voting_iterations.py`: Voting simulation evaluation
-- `vtscore/config.py`: `TRAIN_EPOCHS` and model IDs
+- `vtscore/config/runtime.py`: `TRAIN_EPOCHS`; `vtscore/config/models.py`: the model IDs

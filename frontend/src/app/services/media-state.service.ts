@@ -89,6 +89,26 @@ export class MediaStateService {
     this.loadCount.update((n) => n + 1);
   }
 
+  /**
+   * Drop the selection without touching the stub list or the metadata cache.
+   *
+   * Media ids are *per-dataset*, so a selection is pair-scoped state: it is
+   * only meaningful against the pair that installed it. Carrying it across a
+   * pair change strands the centre viewer on an item from the pair we left —
+   * silently, because `ActiveContextService.mediaUrl` stamps the dataset id
+   * into the `<img src>` at build time and the viewers only rebuild that src
+   * when the media *id* changes (see `ImageViewerComponent.lastMediaId` and
+   * its four siblings). The stale item therefore keeps resolving against its
+   * own dataset and renders happily instead of 404-ing. See #3489.
+   *
+   * Separate from {@link clear} because the pair-change reset wants only this
+   * half: it re-fetches the stub list (rather than blanking it, which would
+   * flash the grid empty) and the metadata cache is already dataset-keyed.
+   */
+  clearSelection(): void {
+    this.selectedIdSignal.set(null);
+  }
+
   clear(): void {
     this.resource.set([]);
     this.selectedIdSignal.set(null);

@@ -100,7 +100,7 @@ conversions.
   kept — migrate caller and callee together (repo "no shims" rule).
 - **Consumer migration.** Every `x$.subscribe(v => …)` becomes a **constructor
   `effect()`** that reads the signal; effects auto-dispose with the component, so
-  the matching `takeUntil(destroy$)` / `destroy$` / `OnDestroy` plumbing is
+  the matching `takeUntilDestroyed()` / `DestroyRef` / `OnDestroy` plumbing is
   dropped where it was the last user. Synchronous getter reads become signal
   calls, including in templates.
 - **`inject()` over constructor params.** Resource field initializers reference

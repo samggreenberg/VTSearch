@@ -201,5 +201,7 @@ pick it up.
 - [`labels.md`](labels.md) - the `LabelsetSource` subclass and the
   auto-sync helpers in `vtscore/labels/sync.py`.
 - `vtsearch.settings_io.sources` (app tier) - the `SettingsSource`
-  subclass with per-user template variables (`{username}`) and
-  startup-time auto-import.
+  subclass with per-user template variables (`{username}`) and lazy,
+  per-user auto-import. Its engine (freshness probing, the dirty-key
+  contract, lock ordering) is documented in
+  [EXTENDING-plugins.md § How the sync engine works](../../../docs/EXTENDING-plugins.md#how-the-sync-engine-works).

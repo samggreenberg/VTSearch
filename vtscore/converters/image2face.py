@@ -16,10 +16,13 @@ degrades gracefully to producing no faces.
 from __future__ import annotations
 
 import io
+import logging
 from typing import Any, Optional
 
 from vtscore.converters.base import MediaConverter, resolve_media_bytes
 from vtscore.plugins import PluginField
+
+logger = logging.getLogger(__name__)
 
 
 class Image2FaceMediaConverter(MediaConverter):
@@ -101,7 +104,7 @@ class Image2FaceMediaConverter(MediaConverter):
         try:
             from facenet_pytorch import MTCNN  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
         except ImportError:
-            print("Image2FaceMediaConverter requires facenet-pytorch; producing no faces")
+            logger.warning("image2face requires facenet-pytorch; producing no faces")
             return None
         from vtscore.config import resolve_device  # noqa: PLC0415
 

@@ -193,8 +193,8 @@ is the current snapshot; no separate bootstrap call is needed.
 POST /api/dataset/cancel
 ```
 
-Cancels all active loading tasks and the legacy global tracker, then waits
-briefly (~2 s) for one of them to act on the flag.
+Cancels every active loading task, then waits briefly (~2 s) for one of them
+to act on the flag.
 
 Cancellation is **cooperative**: the endpoint sets an event that a running
 worker has to observe. `ok` therefore reports whether the cancel actually
@@ -205,7 +205,7 @@ worker left to see it stops nothing.
 
 | Field | Meaning |
 |---|---|
-| `targets` | Everything that claimed to be working when the cancel arrived (loading-task ids, plus `"dataset_progress"` for the global tracker). |
+| `targets` | The loading-task ids that claimed to be working when the cancel arrived. |
 | `acknowledged` | Targets that reached a terminal state within the grace period. |
 | `pending` | Targets still running, whose live worker will observe the flag. |
 | `unresponsive` | Targets whose progress claimed work no live thread was doing — stale trackers, now cleared. Not operations that were stopped. |
@@ -222,7 +222,7 @@ POST /api/dataset/cancel/{task_id}
 Cancels a specific loading task, with the same response shape and the same
 `409` contract when the task was not running or its worker is gone.
 
-→ `200 {"ok": true, ...}`, `409 {"ok": false, ...}`, or `{"error": "Task not found"}` (404)
+→ `200 {"ok": true, ...}`, `409 {"ok": false, ...}`, or `404 {"message": "Task not found", ...}`
 
 ---
 

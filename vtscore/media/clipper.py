@@ -156,21 +156,29 @@ class MediaClipper(ABC):
     # ------------------------------------------------------------------
 
     def resolve_for_durations(self, durations: list[float]) -> "MediaClipper":
-        """Return a concrete clipper for the dataset given its media durations.
+        """Reserved dataset-level resolution hook.  **Not currently called.**
 
-        Called by the load pipeline once per dataset, before any
-        :meth:`clip` calls.  Most clippers ignore *durations* and return
-        ``self``.  Reserved for clippers that need a dataset-level
-        decision; auto-routing now happens per-item via
-        :meth:`resolve_for_media`.
+        The load pipeline once resolved auto-routing per *dataset* from the
+        full duration list; it now does so per *item* via
+        :meth:`resolve_for_media`, and no code path invokes this method any
+        more.  The name is kept because it is part of the published
+        :class:`MediaClipper` contract and an out-of-tree clipper may
+        already override it - but such an override is **inert**, so put the
+        logic in :meth:`resolve_for_media` instead.
+
+        If a dataset-level decision is ever needed again, wire the call site
+        in ``vtscore/datasets/clipper_chain.py`` next to
+        :meth:`resolve_for_media` and update this docstring, the three
+        clipper guides, and ``tests/detectors/test_clippers.py``.
         """
         return self
 
     def resolve_for_media(self, media: dict[str, Any]) -> "MediaClipper":
         """Return a concrete clipper for a single media item.
 
-        Called by the load pipeline once per media, after
-        :meth:`resolve_for_durations` and before :meth:`clip`.  Most
+        Called by the load pipeline once per media, before :meth:`clip`.
+        This is the only resolution hook the pipeline invokes
+        (:meth:`resolve_for_durations` is reserved and inert).  Most
         clippers ignore *media* and return ``self``.  Auto-selecting
         clippers (e.g. ``VideoAutoClipper``) override this to pick a
         different concrete clipper based on the item's own duration -

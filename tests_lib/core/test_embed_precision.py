@@ -8,14 +8,20 @@ mode that silently turned itself on would invalidate results months later.
 These tests pin that default, pin the degradations (no CUDA, no bf16, a typo),
 and pin the contract that only *compute* is half while stored vectors stay fp32.
 
-Every test reloads ``vtscore.config`` because the mode is read at import time;
+Every test re-reads ``vtscore.config`` because the mode is read at import time;
 ``restore_reloaded_modules`` puts the session's module state back afterwards
 (see :mod:`tests_lib.core.test_torch_config` for why that matters).
+
+The mode and its resolvers live in :mod:`vtscore.config.device`, so that is what
+:func:`_config_with` reloads and returns: a stub installed on the ``vtscore.config``
+package would be a copy the resolvers never read.  Tests that stub for a
+*consumer* (``vtscore.media.embedder``) still patch the package, because a
+consumer outside the package does resolve the name there.
 """
 
 from __future__ import annotations
 
-import importlib
+import sys
 from unittest import mock
 
 import numpy as np
@@ -25,23 +31,30 @@ import torch
 
 @pytest.fixture(autouse=True)
 def restore_reloaded_modules():
-    """Undo the ``importlib.reload`` of ``vtscore.config`` for the rest of the session."""
+    """Undo the reload of the ``vtscore.config`` package for the rest of the session."""
     import vtscore.config as config
 
-    snapshot = dict(config.__dict__)
+    modules = [config, *(sys.modules[f"vtscore.config.{name}"] for name in config._RELOAD_ORDER)]
+    snapshots = [(module, dict(module.__dict__)) for module in modules]
     yield
-    config.__dict__.clear()
-    config.__dict__.update(snapshot)
+    for module, snapshot in snapshots:
+        module.__dict__.clear()
+        module.__dict__.update(snapshot)
 
 
 def _config_with(env: dict[str, str], device: str = "cuda"):
-    """Reload ``vtscore.config`` under *env*, with ``resolve_device`` pinned to *device*."""
+    """Re-read the precision mode under *env*, with ``resolve_device`` pinned to *device*.
+
+    Returns :mod:`vtscore.config.device` rather than the package: the resolvers
+    under test read their own module globals, so that is where the pin has to go.
+    """
     import vtscore.config as config
+    from vtscore.config import device as device_mod
 
     with mock.patch.dict("os.environ", env, clear=False):
-        config = importlib.reload(config)
-    config.resolve_device = lambda: device  # type: ignore[assignment]
-    return config
+        config._reload_all()
+    device_mod.resolve_device = lambda: device  # type: ignore[assignment]
+    return device_mod
 
 
 class TestDefaultIsFp32:

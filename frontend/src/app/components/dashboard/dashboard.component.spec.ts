@@ -7,6 +7,7 @@ import { LoadingTask } from '../../models/api.models';
 import { LabelSessionService } from '../../services/label-session.service';
 import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { ActiveContextService } from '../../services/active-context.service';
+import { DashboardSelectionService } from '../../services/dashboard-selection.service';
 import { provideZoneless } from '../../testing/zoneless-testbed';
 import { provideHttpTesting } from '../../testing/test-providers';
 
@@ -14,6 +15,7 @@ describe('DashboardComponent', () => {
   let component: DashboardComponent;
   let fixture: ComponentFixture<DashboardComponent>;
   let httpMock: HttpTestingController;
+  let selection: DashboardSelectionService;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -24,6 +26,7 @@ describe('DashboardComponent', () => {
     fixture = TestBed.createComponent(DashboardComponent);
     component = fixture.componentInstance;
     httpMock = TestBed.inject(HttpTestingController);
+    selection = TestBed.inject(DashboardSelectionService);
   });
 
   afterEach(() => {
@@ -295,6 +298,41 @@ describe('DashboardComponent', () => {
     expect(activeContext.intentModelId).toBe('m0');
   });
 
+  it('keeps the selection across a Dashboard round trip', () => {
+    // The selection lives in `DashboardSelectionService`, not in the
+    // component, so leaving for the label view and coming back leaves the
+    // same rows highlighted (and the same name in the top bar) instead of
+    // resetting to whatever the registry auto-select would pick.
+    const datasets = [
+      { id: 'd1', name: 'First' },
+      { id: 'd2', name: 'Second' },
+    ];
+    const detectors = [
+      { id: 'm1', name: 'Draft', media_type: 'audio' },
+      { id: 'm2', name: 'Frozen', media_type: 'audio', autofind: true },
+    ];
+    flushInitialRequests(datasets, detectors);
+    selection.selectOnly('dataset', ['d2']);
+    component.setDetectorTab('autorun');
+    selection.selectOnly('detector', ['m2']);
+
+    fixture.destroy();
+    expect(selection.dashboardVisible()).toBe(false);
+    // The pulldown keeps reading the service off the Dashboard, so the ids
+    // survive the unmount rather than being reset by it.
+    expect(selection.datasetIds()).toEqual(['d2']);
+
+    fixture = TestBed.createComponent(DashboardComponent);
+    component = fixture.componentInstance;
+    flushInitialRequests(datasets, detectors);
+
+    expect(component.selectedDatasetIds.has('d2')).toBe(true);
+    // The tab travels with the selection it scopes: a returning user must not
+    // land on Drafts with a hidden AutoRun row still feeding the actions.
+    expect(component.detectorTab()).toBe('autorun');
+    expect(component.selectedDetectorIds.has('m2')).toBe(true);
+  });
+
   it('should toggle dataset selection on click', () => {
     flushInitialRequests();
     const event = new MouseEvent('click');
@@ -367,8 +405,8 @@ describe('DashboardComponent', () => {
   describe('button state', () => {
     it('should disable Label when nothing selected', () => {
       flushInitialRequests();
-      component.selectedDatasetIds.clear();
-      component.selectedDetectorIds.clear();
+      selection.clear('dataset');
+      selection.clear('detector');
       expect(component.labelEnabled).toBe(false);
     });
 
@@ -396,8 +434,8 @@ describe('DashboardComponent', () => {
 
     it('should disable Find with no selections', () => {
       flushInitialRequests();
-      component.selectedDatasetIds.clear();
-      component.selectedDetectorIds.clear();
+      selection.clear('dataset');
+      selection.clear('detector');
       expect(component.findEnabled).toBe(false);
     });
 
@@ -423,7 +461,7 @@ describe('DashboardComponent', () => {
       ];
       const models = [{ id: 'm1', name: 'M', media_type: 'audio' }];
       flushInitialRequests(datasets, models);
-      component.selectedDatasetIds.add('d2');
+      selection.toggle('dataset', 'd2', true);
       expect(component.findEnabled).toBe(false);
     });
 
@@ -437,8 +475,8 @@ describe('DashboardComponent', () => {
         { id: 'm2', name: 'M2', media_type: 'image', num_training: 5 },
       ];
       flushInitialRequests(datasets, models);
-      component.selectedDatasetIds.add('d2');
-      component.selectedDetectorIds.add('m2');
+      selection.toggle('dataset', 'd2', true);
+      selection.toggle('detector', 'm2', true);
       expect(component.findEnabled).toBe(true);
     });
 
@@ -503,7 +541,7 @@ describe('DashboardComponent', () => {
   describe('label hints', () => {
     it('should hint about missing dataset', () => {
       flushInitialRequests();
-      component.selectedDatasetIds.clear();
+      selection.clear('dataset');
       expect(component.labelHint).toBe('Select a dataset in the table above.');
     });
 
@@ -511,7 +549,7 @@ describe('DashboardComponent', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
       flushInitialRequests(datasets);
       // Single dataset is auto-selected; no detector selected.
-      component.selectedDetectorIds.clear();
+      selection.clear('detector');
       expect(component.labelHint).toBe('Create a new detector and start training');
     });
 
@@ -521,8 +559,8 @@ describe('DashboardComponent', () => {
         { id: 'd2', name: 'DS2', media_type: 'audio' },
       ];
       flushInitialRequests(datasets);
-      component.selectedDatasetIds.add('d1');
-      component.selectedDatasetIds.add('d2');
+      selection.toggle('dataset', 'd1', true);
+      selection.toggle('dataset', 'd2', true);
       expect(component.labelHint).toBe('Select exactly 1 dataset');
     });
 
@@ -533,9 +571,8 @@ describe('DashboardComponent', () => {
         { id: 'm2', name: 'M2', media_type: 'audio' },
       ];
       flushInitialRequests(datasets, models);
-      component.selectedDatasetIds.add('d1');
-      component.selectedDetectorIds.add('m1');
-      component.selectedDetectorIds.add('m2');
+      selection.selectOnly('dataset', ['d1']);
+      selection.selectOnly('detector', ['m1', 'm2']);
       expect(component.labelHint).toBe('Select exactly 1 detector');
     });
 
@@ -557,8 +594,8 @@ describe('DashboardComponent', () => {
   describe('find hints', () => {
     it('should hint about missing dataset and model', () => {
       flushInitialRequests();
-      component.selectedDatasetIds.clear();
-      component.selectedDetectorIds.clear();
+      selection.clear('dataset');
+      selection.clear('detector');
       expect(component.findHint).toBe('Select a dataset and detector above.');
     });
 
@@ -566,7 +603,7 @@ describe('DashboardComponent', () => {
       const models = [{ id: 'm1', name: 'M', media_type: 'audio' }];
       flushInitialRequests([], models);
       // Single detector is auto-selected; no dataset selected.
-      component.selectedDatasetIds.clear();
+      selection.clear('dataset');
       expect(component.findHint).toBe('Select a dataset in the table above.');
     });
 
@@ -574,7 +611,7 @@ describe('DashboardComponent', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
       flushInitialRequests(datasets);
       // Single dataset is auto-selected; no detector selected.
-      component.selectedDetectorIds.clear();
+      selection.clear('detector');
       expect(component.findHint).toBe('Select a detector in the table above.');
     });
 
@@ -618,7 +655,7 @@ describe('DashboardComponent', () => {
   it('should delete a dataset after confirmation', async () => {
     const datasets = [{ id: 'd1', name: 'ToDelete', media_type: 'audio' }];
     flushInitialRequests(datasets);
-    component.selectedDatasetIds.add('d1');
+    selection.selectOnly('dataset', ['d1']);
 
     // Mock dialog confirmation
     vi.spyOn(component['dialog'], 'confirmDestructive').mockReturnValue(Promise.resolve(true));
@@ -646,8 +683,7 @@ describe('DashboardComponent', () => {
 
     const activeCtx = TestBed.inject(ActiveContextService);
     activeCtx.setActivePair('d1', '');
-    component.selectedDatasetIds.add('d1');
-    component.selectedDatasetIds.add('d2');
+    selection.selectOnly('dataset', ['d1', 'd2']);
 
     vi.spyOn(component['dialog'], 'confirmDestructive').mockReturnValue(Promise.resolve(true));
 
@@ -680,8 +716,8 @@ describe('DashboardComponent', () => {
 
     const activeCtx = TestBed.inject(ActiveContextService);
     activeCtx.setActivePair('d1', 'm1');
-    component.selectedDatasetIds.clear();
-    component.selectedDatasetIds.add('d2');
+    selection.clear('dataset');
+    selection.toggle('dataset', 'd2', true);
 
     vi.spyOn(component['dialog'], 'confirmDestructive').mockReturnValue(Promise.resolve(true));
 
@@ -761,7 +797,7 @@ describe('DashboardComponent', () => {
 
     it('does nothing when no dataset is selected', () => {
       flushInitialRequests();
-      component.selectedDatasetIds.clear();
+      selection.clear('dataset');
       const routerSpy = vi.spyOn(component['router'], 'navigate').mockResolvedValue(true);
       component.onLabel();
       expect(routerSpy).not.toHaveBeenCalled();
@@ -770,7 +806,7 @@ describe('DashboardComponent', () => {
     it('opens the new-detector modal (no navigation) when no model is selected', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio', loaded: true }];
       flushInitialRequests(datasets, []);
-      component.selectedDetectorIds.clear();
+      selection.clear('detector');
       const routerSpy = vi.spyOn(component['router'], 'navigate').mockResolvedValue(true);
 
       component.onLabel();

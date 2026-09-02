@@ -6,38 +6,41 @@ import numpy as np
 import app as app_module
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.utils.hashing import content_md5
+from tests.fixtures.medias import NUM_MEDIAS
+from vtscore.media.audio.audio_generator import generate_wav
+from vtsearch.state import bad_votes, good_votes, medias
 
 
 class TestInitMedias:
     def test_creates_correct_number_of_medias(self):
-        assert len(app_module.medias) == app_module.NUM_MEDIAS
+        assert len(medias) == NUM_MEDIAS
 
     def test_media_ids_are_1_to_num_medias(self):
-        assert set(app_module.medias.keys()) == set(range(1, app_module.NUM_MEDIAS + 1))
+        assert set(medias.keys()) == set(range(1, NUM_MEDIAS + 1))
 
     def test_media_frequencies(self):
-        for i in range(1, app_module.NUM_MEDIAS + 1):
+        for i in range(1, NUM_MEDIAS + 1):
             expected_freq = 200 + (i - 1) * 50
-            assert app_module.medias[i]["frequency"] == expected_freq
+            assert medias[i]["frequency"] == expected_freq
 
     def test_media_durations(self):
-        for i in range(1, app_module.NUM_MEDIAS + 1):
+        for i in range(1, NUM_MEDIAS + 1):
             expected_dur = round(1.0 + (i % 5) * 0.5, 1)
-            assert app_module.medias[i]["duration"] == expected_dur
+            assert medias[i]["duration"] == expected_dur
 
     def test_media_has_embedding(self):
-        for media in app_module.medias.values():
+        for media in medias.values():
             emb = media_embedding(media)
             assert isinstance(emb, np.ndarray)
             assert len(emb) > 0
 
     def test_media_has_media_bytes(self):
-        for media in app_module.medias.values():
+        for media in medias.values():
             assert isinstance(media["media_bytes"], bytes)
             assert len(media["media_bytes"]) > 0
 
     def test_file_size_matches_media_bytes_length(self):
-        for media in app_module.medias.values():
+        for media in medias.values():
             assert media["file_size"] == len(media["media_bytes"])
 
     def test_deterministic_embeddings(self):
@@ -45,7 +48,7 @@ class TestInitMedias:
         from vtscore.config import DATA_DIR
         from vtscore.embedding import embed_audio_file
 
-        media = app_module.medias[1]
+        media = medias[1]
         # Re-embed the same WAV and verify the result matches
         temp_path = DATA_DIR / "temp_determ_test.wav"
         temp_path.write_bytes(media["media_bytes"])
@@ -57,21 +60,21 @@ class TestInitMedias:
 
 class TestMediaMD5:
     def test_media_has_md5(self):
-        for media in app_module.medias.values():
+        for media in medias.values():
             assert "md5" in media
             assert isinstance(media["md5"], str)
             assert len(media["md5"]) == 32  # MD5 hex string
 
     def test_md5_matches_media_bytes(self):
-        for media in app_module.medias.values():
+        for media in medias.values():
             expected_md5 = content_md5(media["media_bytes"])
             assert media["md5"] == expected_md5
 
     def test_md5_deterministic(self):
         """MD5 should be the same for the same media across re-generation."""
-        media = app_module.medias[1]
+        media = medias[1]
         # Regenerate the WAV with the same parameters and verify MD5
-        wav_bytes = app_module.generate_wav(media["frequency"], media["duration"])
+        wav_bytes = generate_wav(media["frequency"], media["duration"])
         assert content_md5(wav_bytes) == media["md5"]
 
 
@@ -310,7 +313,7 @@ class TestListMediaIds:
         resp = client.get("/api/medias/ids")
         assert resp.status_code == 200
         data = resp.get_json()
-        assert len(data) == app_module.NUM_MEDIAS
+        assert len(data) == NUM_MEDIAS
 
     def test_stub_fields_only(self, client):
         """Each stub carries id + media_type and (optionally) embedder(s); nothing else."""
@@ -400,7 +403,7 @@ class TestBatchMediasProvenance:
 
     @staticmethod
     def _set_origin(media_id, origin):
-        media = app_module.medias[media_id]
+        media = medias[media_id]
         saved = media.get("origin")
         media["origin"] = origin
         return saved
@@ -429,7 +432,7 @@ class TestBatchMediasProvenance:
         try:
             meta = self._metadata_for(client, 1)
         finally:
-            app_module.medias[1]["origin"] = saved
+            medias[1]["origin"] = saved
 
         assert meta["Source"] == "/data/videos/movie.mp4"
         assert meta["Derived Via"] == "Video → Images (n_clips=2)"
@@ -444,14 +447,14 @@ class TestBatchMediasProvenance:
         try:
             meta = self._metadata_for(client, 1)
         finally:
-            app_module.medias[1]["origin"] = saved
+            medias[1]["origin"] = saved
 
         assert meta["Imported Via"] == "Folder (path=/data/sounds)"
         assert "Source" not in meta
         assert "Derived Via" not in meta
 
     def test_importer_custom_metadata_wins_over_display_fields(self, client):
-        media = app_module.medias[1]
+        media = medias[1]
         saved_origin = self._set_origin(1, {"importer": "server_folder", "params": {"path": "/from-origin"}})
         media["custom_metadata"] = {"Imported Via": "hand-curated"}
         try:
@@ -467,19 +470,19 @@ class TestMediaThumbnailBytes:
     """Test medias have waveform thumbnail_bytes generated at init."""
 
     def test_all_medias_have_thumbnail_bytes(self):
-        for media in app_module.medias.values():
+        for media in medias.values():
             assert "thumbnail_bytes" in media
             assert isinstance(media["thumbnail_bytes"], bytes)
             assert len(media["thumbnail_bytes"]) > 0
 
     def test_thumbnail_bytes_is_valid_png(self):
-        media = app_module.medias[1]
+        media = medias[1]
         thumb = media["thumbnail_bytes"]
         # PNG magic number
         assert thumb[:8] == b"\x89PNG\r\n\x1a\n"
 
     def test_thumbnail_bytes_not_exposed_in_api(self, client):
-        resp = client.post("/api/medias/batch", json={"ids": list(range(1, app_module.NUM_MEDIAS + 1))})
+        resp = client.post("/api/medias/batch", json={"ids": list(range(1, NUM_MEDIAS + 1))})
         data = resp.get_json()
         for media in data:
             assert "thumbnail_bytes" not in media
@@ -511,7 +514,7 @@ class TestMediaImage:
 
     def test_fallback_generates_thumbnail_on_the_fly(self, client):
         """When thumbnail_bytes is missing, the endpoint generates it on the fly."""
-        media = app_module.medias[1]
+        media = medias[1]
         saved_thumb = media.pop("thumbnail_bytes", None)
         try:
             resp = client.get("/api/medias/1/image")
@@ -668,15 +671,14 @@ class TestMediaAudio:
             assert wf.getsampwidth() == 2
 
     def test_returns_404_for_invalid_id(self, client):
-        # The global 404 handler in ``app.py`` normalises NotFound
-        # exceptions on ``/api/`` paths to ``error_response(exc.name, 404)``
-        # (the JSON-for-SPA hook that overrides werkzeug's HTML 404).
-        # The flask-smorest message passed to ``abort()`` is dropped
-        # in favour of the canonical reason phrase.
+        # The global 404 handler renders JSON for ``/api/`` paths (the
+        # JSON-for-SPA hook that overrides werkzeug's HTML 404) but hands
+        # the rendering back to flask-smorest, so the route's own
+        # ``abort(404, message=...)`` text reaches the client.
         resp = client.get("/api/medias/9999/audio")
         assert resp.status_code == 404
         data = resp.get_json()
-        assert data["error"] == "Not Found"
+        assert data["message"] == "not found"
 
     def test_returns_404_for_zero_id(self, client):
         resp = client.get("/api/medias/0/audio")
@@ -702,7 +704,7 @@ class TestAddToPile:
 
     def test_add_existing_media_to_good(self, client):
         """Uploading a file whose MD5 matches an existing media votes it good."""
-        media = app_module.medias[1]
+        media = medias[1]
         data = {"label": "good"}
         resp = client.post(
             "/api/medias/add-to-pile",
@@ -714,11 +716,11 @@ class TestAddToPile:
         assert result["ok"] is True
         assert result["is_new"] is False
         assert result["media_id"] == 1
-        assert 1 in app_module.good_votes
+        assert 1 in good_votes
 
     def test_add_existing_media_to_bad(self, client):
         """Uploading a file whose MD5 matches an existing media votes it bad."""
-        media = app_module.medias[2]
+        media = medias[2]
         data = {"label": "bad"}
         resp = client.post(
             "/api/medias/add-to-pile",
@@ -730,13 +732,13 @@ class TestAddToPile:
         assert result["ok"] is True
         assert result["is_new"] is False
         assert result["media_id"] == 2
-        assert 2 in app_module.bad_votes
+        assert 2 in bad_votes
 
     def test_add_new_media_to_good(self, client):
         """Uploading a file with new MD5 embeds it, inserts it, and votes good."""
         # Generate a unique WAV that doesn't match any existing media
-        wav_bytes = app_module.generate_wav(12345, 0.3)
-        initial_count = len(app_module.medias)
+        wav_bytes = generate_wav(12345, 0.3)
+        initial_count = len(medias)
         resp = client.post(
             "/api/medias/add-to-pile",
             data={"label": "good", "file": (io.BytesIO(wav_bytes), "new_sound.wav")},
@@ -747,11 +749,11 @@ class TestAddToPile:
         assert result["ok"] is True
         assert result["is_new"] is True
         new_id = result["media_id"]
-        assert new_id in app_module.medias
-        assert len(app_module.medias) == initial_count + 1
-        assert new_id in app_module.good_votes
+        assert new_id in medias
+        assert len(medias) == initial_count + 1
+        assert new_id in good_votes
         # Verify the new media has proper fields
-        new_media = app_module.medias[new_id]
+        new_media = medias[new_id]
         assert new_media["md5"] == content_md5(wav_bytes)
         assert new_media["filename"] == "new_sound.wav"
         assert new_media["origin"]["importer"] == "add_to_pile"
@@ -759,7 +761,7 @@ class TestAddToPile:
 
     def test_add_new_media_to_bad(self, client):
         """Uploading a new file and voting it bad."""
-        wav_bytes = app_module.generate_wav(54321, 0.2)
+        wav_bytes = generate_wav(54321, 0.2)
         resp = client.post(
             "/api/medias/add-to-pile",
             data={"label": "bad", "file": (io.BytesIO(wav_bytes), "bad_sound.wav")},
@@ -769,7 +771,7 @@ class TestAddToPile:
         result = resp.get_json()
         assert result["ok"] is True
         assert result["is_new"] is True
-        assert result["media_id"] in app_module.bad_votes
+        assert result["media_id"] in bad_votes
 
     def test_missing_file(self, client):
         resp = client.post(
@@ -784,7 +786,7 @@ class TestAddToPile:
         assert "No file" in resp.get_json()["message"]
 
     def test_missing_label(self, client):
-        wav_bytes = app_module.generate_wav(999, 0.1)
+        wav_bytes = generate_wav(999, 0.1)
         resp = client.post(
             "/api/medias/add-to-pile",
             data={"file": (io.BytesIO(wav_bytes), "test.wav")},
@@ -794,7 +796,7 @@ class TestAddToPile:
         assert "label" in resp.get_json()["message"]
 
     def test_invalid_label(self, client):
-        wav_bytes = app_module.generate_wav(999, 0.1)
+        wav_bytes = generate_wav(999, 0.1)
         resp = client.post(
             "/api/medias/add-to-pile",
             data={"label": "maybe", "file": (io.BytesIO(wav_bytes), "test.wav")},
@@ -814,10 +816,10 @@ class TestAddToPile:
 
     def test_no_dataset_loaded(self, client):
         """When no dataset is loaded, adding new media fails gracefully."""
-        saved = dict(app_module.medias)
-        app_module.medias.clear()
+        saved = dict(medias)
+        medias.clear()
         try:
-            wav_bytes = app_module.generate_wav(999, 0.1)
+            wav_bytes = generate_wav(999, 0.1)
             resp = client.post(
                 "/api/medias/add-to-pile",
                 data={"label": "good", "file": (io.BytesIO(wav_bytes), "test.wav")},
@@ -826,7 +828,7 @@ class TestAddToPile:
             assert resp.status_code == 400
             assert "No dataset" in resp.get_json()["message"]
         finally:
-            app_module.medias.update(saved)
+            medias.update(saved)
 
     def test_concurrent_uploads_same_md5_no_duplicate(self):
         """H32 regression: two concurrent uploads of identical bytes must
@@ -853,8 +855,8 @@ class TestAddToPile:
 
         audio_embedder = embedders_for_type("audio")[0]
 
-        wav_bytes = app_module.generate_wav(77777, 0.25)
-        initial_count = len(app_module.medias)
+        wav_bytes = generate_wav(77777, 0.25)
+        initial_count = len(medias)
 
         # Capture the test thread's contexts so the worker threads resolve
         # the same DatasetContext/DetectorContext when ``before_request``
@@ -917,8 +919,8 @@ class TestAddToPile:
         assert len(results) == 2
 
         # Exactly one new media inserted (the regression: was 2 before fix).
-        assert len(app_module.medias) == initial_count + 1, (
-            f"H32: duplicate insert; medias grew by {len(app_module.medias) - initial_count}, expected 1"
+        assert len(medias) == initial_count + 1, (
+            f"H32: duplicate insert; medias grew by {len(medias) - initial_count}, expected 1"
         )
 
         # Both requests succeed and report the same media id.
@@ -933,8 +935,8 @@ class TestAddToPile:
 
         # The single inserted media carries the uploaded bytes' md5.
         inserted_id = next(iter(media_ids))
-        assert app_module.medias[inserted_id]["md5"] == content_md5(wav_bytes)
-        assert inserted_id in app_module.good_votes
+        assert medias[inserted_id]["md5"] == content_md5(wav_bytes)
+        assert inserted_id in good_votes
 
     def _setup_loaded_detector(self, client, name="H33Detector"):
         """Register a detector, load it, and return its registry id."""
@@ -960,7 +962,7 @@ class TestAddToPile:
         from vtscore.datasets.labelset import LabelSet, element_key, media_element_key
         from vtscore.detectors.store import _detector_path, _read_detector
 
-        media = app_module.medias[1]
+        media = medias[1]
         _, name = self._setup_loaded_detector(client)
 
         resp = client.post(
@@ -989,7 +991,7 @@ class TestAddToPile:
         from vtscore.datasets.labelset import LabelSet
         from vtscore.detectors.store import _detector_path, _read_detector
 
-        wav_bytes = app_module.generate_wav(33333, 0.2)
+        wav_bytes = generate_wav(33333, 0.2)
         _, name = self._setup_loaded_detector(client)
 
         resp = client.post(
@@ -1026,7 +1028,7 @@ class TestAddToPile:
         from vtscore.detectors.dataset_sync import ensure_votes_match_active_dataset
         from vtscore.state.core import get_active_detector_context
 
-        media = app_module.medias[2]
+        media = medias[2]
         self._setup_loaded_detector(client)
 
         resp = client.post(
@@ -1035,7 +1037,7 @@ class TestAddToPile:
             content_type="multipart/form-data",
         )
         assert resp.status_code == 200
-        assert 2 in app_module.good_votes
+        assert 2 in good_votes
 
         # Invalidate the detector context's caches and drop the in-memory
         # votes so the rehydrate hook must round-trip through the file.
@@ -1047,4 +1049,4 @@ class TestAddToPile:
         det_ctx.votes_dataset_id = ""
 
         ensure_votes_match_active_dataset()
-        assert 2 in app_module.good_votes, "label vanished on rehydration; H33 regressed"
+        assert 2 in good_votes, "label vanished on rehydration; H33 regressed"

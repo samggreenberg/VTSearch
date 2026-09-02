@@ -11,14 +11,21 @@ Covers:
 
 from __future__ import annotations
 
-import app as app_module
 from tests.helpers import setup_trainable_model_in_registry
 from tests import load_detector_and_wait
 from vtscore.detectors.dataset_sync import reset_mtime_cache_for_tests
 from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
 from vtscore.state.core import get_active_detector_context
 from vtscore.state.votes import rethreshold_unverified_find_items
-from vtsearch.state import set_find_initial_labels, set_find_scores, set_vote, snapshot_medias
+from vtsearch.state import (
+    bad_votes,
+    good_votes,
+    medias,
+    set_find_initial_labels,
+    set_find_scores,
+    set_vote,
+    snapshot_medias,
+)
 
 
 class TestMarkVerified:
@@ -68,7 +75,7 @@ class TestVotesVerifiedField:
         ctx = get_active_detector_context()
         ctx.find_mode = False
         ctx.verified_ids.clear()
-        app_module.good_votes[1] = None
+        good_votes[1] = None
         resp = client.get("/api/votes")
         assert resp.get_json()["verified"] == []
 
@@ -79,8 +86,8 @@ class TestUnverifiedExport:
     def _setup(self):
         ctx = get_active_detector_context()
         # 1,2 unverified good; 3 verified good; 4 verified bad
-        app_module.good_votes.update({1: None, 2: None, 3: None})
-        app_module.bad_votes.update({4: None})
+        good_votes.update({1: None, 2: None, 3: None})
+        bad_votes.update({4: None})
         ctx.verified_ids.clear()
         ctx.verified_ids.update({3: None, 4: None})
 
@@ -88,7 +95,7 @@ class TestUnverifiedExport:
         self._setup()
         resp = client.get("/api/labels/export?label_filter=unverified")
         md5s = {e["md5"] for e in resp.get_json()["labels"]}
-        assert md5s == {app_module.medias[1]["md5"], app_module.medias[2]["md5"]}
+        assert md5s == {medias[1]["md5"], medias[2]["md5"]}
 
     def test_verified_filter(self, client):
         self._setup()
@@ -96,8 +103,8 @@ class TestUnverifiedExport:
         labels = resp.get_json()["labels"]
         by_md5 = {e["md5"]: e["label"] for e in labels}
         assert by_md5 == {
-            app_module.medias[3]["md5"]: "good",
-            app_module.medias[4]["md5"]: "bad",
+            medias[3]["md5"]: "good",
+            medias[4]["md5"]: "bad",
         }
 
 
@@ -110,10 +117,10 @@ class TestRethresholdUnverified:
         ctx.threshold = 0.5
         set_find_scores({1: 0.9, 2: 0.8, 3: 0.2, 4: 0.1})
         # Initial split at 0.5: 1,2 good; 3,4 bad.  Human verified id1 (good).
-        app_module.good_votes.clear()
-        app_module.bad_votes.clear()
-        app_module.good_votes.update({1: None, 2: None})
-        app_module.bad_votes.update({3: None, 4: None})
+        good_votes.clear()
+        bad_votes.clear()
+        good_votes.update({1: None, 2: None})
+        bad_votes.update({3: None, 4: None})
         ctx.verified_ids.clear()
         ctx.verified_ids.update({1: None})
         return ctx
@@ -124,10 +131,10 @@ class TestRethresholdUnverified:
         rethreshold_unverified_find_items()
         # id1 verified-good stays good even though... it still clears 0.85 anyway;
         # id2 (0.8) is unverified and now below the line -> bad.
-        assert 1 in app_module.good_votes
-        assert 2 in app_module.bad_votes
-        assert 3 in app_module.bad_votes
-        assert 4 in app_module.bad_votes
+        assert 1 in good_votes
+        assert 2 in bad_votes
+        assert 3 in bad_votes
+        assert 4 in bad_votes
 
     def test_verified_item_holds_against_cutoff(self):
         ctx = self._setup()
@@ -136,15 +143,15 @@ class TestRethresholdUnverified:
         ctx.threshold = 0.85
         rethreshold_unverified_find_items()
         # id2 is verified-good; the cutoff must not demote it.
-        assert 2 in app_module.good_votes
-        assert 2 not in app_module.bad_votes
+        assert 2 in good_votes
+        assert 2 not in bad_votes
 
     def test_lower_cutoff_promotes_unverified(self):
         ctx = self._setup()
         ctx.threshold = 0.05  # everything clears it
         rethreshold_unverified_find_items()
         for cid in (1, 2, 3, 4):
-            assert cid in app_module.good_votes
+            assert cid in good_votes
 
     def test_noop_outside_find_mode(self):
         ctx = self._setup()
@@ -152,7 +159,7 @@ class TestRethresholdUnverified:
         ctx.threshold = 0.85
         rethreshold_unverified_find_items()
         # No re-split: the initial 0.5 assignment stands.
-        assert 2 in app_module.good_votes
+        assert 2 in good_votes
 
     def test_inclusion_post_returns_threshold(self, client):
         resp = client.post("/api/inclusion", json={"inclusion": 0})
@@ -173,8 +180,8 @@ class TestFindStats:
         set_find_initial_labels({1: "good", 2: "good", 3: "bad", 4: "bad"})
         # Human: confirm 1 good; cull 2 (false positive) to bad; rescue 4 to
         # good; leave 3 untouched (unverified bad).  Final adopted label set:
-        app_module.good_votes.update({1: None, 4: None})
-        app_module.bad_votes.update({2: None, 3: None})
+        good_votes.update({1: None, 4: None})
+        bad_votes.update({2: None, 3: None})
         ctx.verified_ids.clear()
         ctx.verified_ids.update({1: None, 2: None, 4: None})
 
@@ -209,8 +216,8 @@ class TestFindStats:
     def test_empty_when_no_votes(self, client):
         ctx = get_active_detector_context()
         ctx.verified_ids.clear()
-        app_module.good_votes.clear()
-        app_module.bad_votes.clear()
+        good_votes.clear()
+        bad_votes.clear()
         data = client.get("/api/find/stats").get_json()
         assert data["total_good"] == 0
         assert data["total_bad"] == 0
@@ -293,8 +300,8 @@ class TestCorrectionsToDetector:
 
         labels = self._labelset_labels("corrections-model")
         by_md5 = {el["md5"]: el["label"] for el in labels}
-        assert by_md5[app_module.medias[good_item]["md5"]] == "bad"
-        assert by_md5[app_module.medias[bad_item]["md5"]] == "good"
+        assert by_md5[medias[good_item]["md5"]] == "bad"
+        assert by_md5[medias[bad_item]["md5"]] == "good"
         assert data["num_labels"] == len(labels)
 
     def test_session_frozen_and_marked_stale(self, client):
@@ -358,8 +365,8 @@ class TestCorrectionsToDetector:
 
         # Replace one media's entry with a stale, md5-only record of the same
         # bytes: same file, different provenance, so ``element_key`` differs.
-        stale_id = next(iter(app_module.medias))
-        stale_md5 = app_module.medias[stale_id]["md5"]
+        stale_id = next(iter(medias))
+        stale_md5 = medias[stale_id]["md5"]
         path = _detector_path("corrections-model")
         data = _read_detector(path)
         assert data is not None

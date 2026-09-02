@@ -2,15 +2,14 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
+  DestroyRef,
   effect,
   inject,
-  OnDestroy,
   OnInit,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { FormsModule } from '@angular/forms';
-import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
 import { AchievementBadgeComponent } from '../achievement-badge/achievement-badge.component';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { IconComponent } from '../icon/icon.component';
@@ -43,7 +42,7 @@ interface AchievementRow extends AchievementEntry {
   templateUrl: './achievements-tab.component.html',
   styleUrl: './achievements-tab.component.scss',
 })
-export class AchievementsTabComponent implements OnInit, OnDestroy {
+export class AchievementsTabComponent implements OnInit {
   private achievements = inject(AchievementsService);
   private settingsState = inject(SettingsStateService);
   private cdr = inject(ChangeDetectorRef);
@@ -64,7 +63,7 @@ export class AchievementsTabComponent implements OnInit, OnDestroy {
   };
   submitting = false;
 
-  private destroy$ = new Subject<void>();
+  private readonly destroyRef = inject(DestroyRef);
   private disableAchievements = false;
   private lastState: AchievementState | null = null;
 
@@ -77,16 +76,11 @@ export class AchievementsTabComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.achievements.state.pipe(takeUntil(this.destroy$)).subscribe((state) => {
+    this.achievements.state.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((state) => {
       this.lastState = state;
       this.applyState(state);
     });
     this.achievements.refresh();
-  }
-
-  ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
   }
 
   /** Whether *id*'s row supports an expandable detail panel. */

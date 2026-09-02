@@ -7,7 +7,7 @@ the first cell lands; the report records the measurement against them.
 
 PR #3198 made `LINEAR_SVM_HEAD` the head a live detector trains. The shipped
 fold-anchored cut rule is
-[`FOLD_ANCHOR_CUT_RULE`](../../../vtscore/training/thresholds.py) `= "mid_tilt"`,
+[`FOLD_ANCHOR_CUT_RULE`](../../../vtscore/training/thresholds/anchored.py) `= "mid_tilt"`,
 composed as `q_mid + (q_rate(weights) - q_rate(equal weights))`. `rate`'s root
 is **invariant to the cost weights while it stays inside the inter-mean
 interval** — the prior-odds factor in its `lam` cancels the `w_lo`/`w_hi` in

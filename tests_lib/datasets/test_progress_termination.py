@@ -3,16 +3,19 @@
 A ``server_folder`` import that had *succeeded* was indistinguishable from a
 wedged one: the SSE ``dataset`` channel sat on ``"Loading SigLIP processor…"``
 indefinitely, with no loader thread anywhere in the process.  Two mechanisms
-produced that, and both are covered here.
+produced that.
 
-* **An unscoped model load narrates itself on a channel nobody terminates.**
+* **An unscoped model load narrated itself on a channel nobody terminates.**
   A thread that installs no ``progress_scope`` reports through the embedder's
-  process-wide default sink, which the app wires to the global
-  ``dataset_progress`` tracker.  The sink cannot see when the work it is
-  narrating ends, so ``load_models`` says so itself.
+  process-wide default sink, which the app used to wire to a global
+  ``dataset_progress`` tracker that could not see when the work ended.  That
+  is now closed at the root rather than patched at the load: the default sink
+  the app installs resolves *per thread*, so an unscoped load on a thread that
+  bound no tracker reaches a no-op and there is no channel left parked.
 * **The load task's success path wrote no terminal state.**  Only the failure
   paths parked the tracker; a clean finish left it on its last "loading …"
-  message until the finished entry aged out.
+  message until the finished entry aged out.  Still a live requirement, and
+  still tested below.
 """
 
 from __future__ import annotations
@@ -67,41 +70,59 @@ def _fresh_embedder(default_sink) -> _NoisyEmbedder:
 
 
 class TestUnscopedModelLoad:
-    """``load_models`` terminates the sink it borrowed."""
+    """An unscoped load cannot leave a channel parked, because it has none."""
 
-    def test_unscoped_load_ends_on_idle(self):
+    def test_unscoped_load_reaches_the_default_sink_verbatim(self):
+        """No synthetic terminal tick is appended any more.
+
+        ``load_models`` used to send one because the sink it borrowed was a
+        process-wide tracker that nothing else would ever clear.  Now the sink
+        resolves per thread, so the load has nothing to clean up and reports
+        exactly what it did.
+        """
         sink = _RecordingSink()
         emb = _fresh_embedder(sink)
 
         emb.load_models()
 
-        assert sink.ticks[0] == ("loading", "Loading Noisy processor…"), (
-            f"the load should still narrate itself on the default sink, got {sink.ticks!r}"
-        )
-        assert sink.statuses[-1] == "idle", (
-            "an unscoped model load must park the sink it borrowed; leaving it on "
-            f"'loading' is the #3167 phantom, got {sink.ticks!r}"
+        assert sink.ticks == [("loading", "Loading Noisy processor…")], (
+            f"the load should narrate itself on the default sink and nothing more, got {sink.ticks!r}"
         )
 
-    def test_terminal_tick_fires_even_when_the_load_raises(self):
+    def test_app_default_sink_drops_ticks_from_an_unwatched_thread(self):
+        """The sink the app installs is ``update_progress``, itself per-thread.
+
+        With no tracker bound this is where an unscoped model load lands, and
+        it has to be a no-op: a process-wide destination is exactly the #3167
+        phantom, whoever writes to it.
+        """
+        from vtscore.concurrency.progress import clear_thread_progress, update_progress
+
+        clear_thread_progress()
+        emb = _fresh_embedder(update_progress)
+
+        emb.load_models()  # must not raise, and must reach nothing
+
+        assert emb._model is True
+
+    def test_app_default_sink_reaches_a_bound_tracker(self):
+        """Bound a tracker, and the same unscoped load lands on it."""
+        from vtscore.concurrency.progress import (
+            clear_thread_progress,
+            set_thread_progress,
+            update_progress,
+        )
+
         sink = _RecordingSink()
-        emb = _fresh_embedder(sink)
-
-        def _boom() -> None:
-            emb._on_progress("loading", "Loading Noisy processor…", 0, 0)
-            raise RuntimeError("model download failed")
-
-        emb._load_models_impl = _boom  # type: ignore[method-assign]
-
+        emb = _fresh_embedder(update_progress)
+        set_thread_progress(sink)
         try:
             emb.load_models()
-        except RuntimeError:
-            pass
-        else:  # pragma: no cover - the stub always raises
-            raise AssertionError("the failing load should have propagated")
+        finally:
+            clear_thread_progress()
 
-        assert sink.statuses[-1] == "idle", (
-            f"a failed load leaves the same phantom as a successful one, got {sink.ticks!r}"
+        assert sink.ticks == [("loading", "Loading Noisy processor…")], (
+            f"a thread that bound a tracker must see the load it started, got {sink.ticks!r}"
         )
 
     def test_scoped_load_leaves_the_default_sink_alone(self):

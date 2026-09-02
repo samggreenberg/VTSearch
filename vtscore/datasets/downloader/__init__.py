@@ -130,7 +130,6 @@ from vtscore.datasets.downloader.core import (
     VISUAL_GENOME_OBJECTS_URL,
     ProgressCallback,
     RemoteUnreachableError,
-    _default_progress,
     _download_and_extract,
     _move_tree_contents,
     _validate_archive,
@@ -210,7 +209,6 @@ __all__ = [
     "text",
     "video",
     # Core (private helpers re-exported for tests)
-    "_default_progress",
     "_download_and_extract",
     "_move_tree_contents",
     "_validate_archive",

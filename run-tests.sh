@@ -45,7 +45,8 @@
 #      also the frontend failure people hit most, so it is worth failing on
 #      before spending minutes elsewhere.
 #   3. The heavy, mutually independent stages *concurrently*: pyright,
-#      pip-audit, the frontend unit suite, and pytest. Sequentially these were
+#      pip-audit, the vulture whitelist check, the frontend unit suite, and
+#      pytest. Sequentially these were
 #      ~338s on a 4-vCPU box; overlapped they land at ~250s, within a few
 #      percent of what the machine's cores can physically do.
 #
@@ -55,7 +56,8 @@
 #
 # Group runs (`./run-tests.sh <group>`) run stage 1 and their own tests, and
 # skip the stage-3 gates that are not about the code you just changed —
-# pyright, pip-audit, and the frontend suite. That keeps the edit/test loop in
+# pyright, pip-audit, the vulture whitelist check, and the frontend suite. That
+# keeps the edit/test loop in
 # the seconds it should be instead of paying ~105s of whole-repo checks to run
 # a five-second group. The skip is announced on every group run, because the
 # full run is what actually gates a push. Set VTSEARCH_FULL_GATES=1 to force
@@ -422,6 +424,29 @@ if ! $_is_slides_run; then
         _blocked "vtscore package docs check failed"
         exit 1
     fi
+
+    # Extension docs: docs/EXTENDING-*.md and vtscore/docs/extending/ state the
+    # contract for the same plugin ABCs in their own words, so each can drift
+    # from the code and from the other. This holds both to the class: every
+    # member named in a contract table exists, and neither presents a public
+    # wrapper as the override point when an _impl hook sits behind it. AST
+    # sweep, imports nothing, ~1s. See scripts/check-extension-docs.py.
+    echo "Checking extension docs..."
+    if ! python scripts/check-extension-docs.py ; then
+        _blocked "extension docs check failed"
+        exit 1
+    fi
+
+    # Calibration script index: every .py/.sh in scripts/experiments/calibration/
+    # is filed under exactly one study (or the shared layer) in that directory's
+    # README, and every file the index names exists. The directory is flat by
+    # decision (#3409), so the table IS the navigation - and an unchecked table
+    # decays back into 120 unclassified files. Pure stdlib, ~20ms.
+    echo "Checking calibration script index..."
+    if ! python scripts/check-calibration-index.py ; then
+        _blocked "calibration script index is out of date"
+        exit 1
+    fi
 fi
 
 # Slide decks: every deck manifest names fragments that exist and figures that
@@ -548,13 +573,24 @@ _start_lane() {
 # what the `pyright` PyPI wrapper would otherwise pull.
 _lane_pyright() { PYRIGHT_PYTHON_FORCE_VERSION=1.1.408 pyright; }
 _lane_pip_audit() { pip-audit "${PIP_AUDIT_IGNORE[@]}"; }
-# --omit=dev: only audit production deps. Dev-only deps (e.g.
-# @angular-devkit/build-angular → webpack-dev-server) regularly carry
-# advisories with "no fix available" upstream because Angular hasn't
-# cut a release yet. Those affect `ng serve` on a developer's machine,
-# not anything that ships to users. Auditing prod deps is the actual
-# security gate worth blocking tests on.
-_lane_npm_audit() { (cd frontend && npm audit --omit=dev); }
+# Vulture whitelist hygiene. NOT the dead-code audit itself: a vulture hit on a
+# public vtscore name is not evidence of anything (out-of-tree extensions import
+# names no in-repo grep can see), so the findings stay a human pre-release chore
+# per docs/RELEASE.md step 1. What *is* mechanically checkable is the whitelist:
+# an entry that suppresses no finding is unfalsifiable and will outlive the
+# symbol it was written for. That is how the file rotted before -- 49 of 102
+# entries were asserting nothing. Whole-repo scan (~5s), hence a lane.
+_lane_vulture_whitelist() { python scripts/vulture-audit.py --check-whitelist; }
+# Audits the whole tree, dev deps included. This used to be `--omit=dev`
+# because `@angular-devkit/build-angular` dragged in the webpack toolchain
+# (webpack-dev-server → sockjs/express/launch-editor), which regularly carried
+# advisories with no upstream fix. That package was never used -- angular.json
+# names only `@angular/build:*` builders -- so it was swapped for a direct
+# `@angular/build` devDependency (#3439), taking ~400 packages and every
+# unfixable advisory with it. Keep the gate wide: if a dev-only advisory ever
+# has genuinely no fix, pin it in `overrides` or carve it out here explicitly,
+# rather than re-blinding the audit to the entire dev tree.
+_lane_npm_audit() { (cd frontend && npm audit); }
 # `npm run test:ci` regenerates the API client (pretest:ci) then runs
 # `ng test --no-watch`, which exits non-zero on any spec failure.
 _lane_frontend_unit() { (cd frontend && npm run test:ci); }
@@ -562,6 +598,7 @@ _lane_frontend_unit() { (cd frontend && npm run test:ci); }
 if $_run_whole_repo_gates; then
     _start_lane "pyright" _lane_pyright
     _start_lane "pip-audit" _lane_pip_audit
+    _start_lane "vulture whitelist" _lane_vulture_whitelist
 fi
 if $_run_frontend_check && [ -d "frontend/node_modules" ]; then
     _start_lane "npm audit" _lane_npm_audit
@@ -582,8 +619,9 @@ if $_is_slides_run; then
     echo "Slides-only run: pytest and every whole-repo gate skipped — nothing"
     echo "outside slides/ changed, and no test or type-check reads a deck."
 elif ! $_run_whole_repo_gates; then
-    echo "Group run: skipping pyright and pip-audit. A full './run-tests.sh' is"
-    echo "the gate before pushing (or set VTSEARCH_FULL_GATES=1 to force them)."
+    echo "Group run: skipping pyright, pip-audit and the vulture whitelist check."
+    echo "A full './run-tests.sh' is the gate before pushing (or set"
+    echo "VTSEARCH_FULL_GATES=1 to force them)."
 fi
 
 # --- pytest, in the foreground ---------------------------------------------

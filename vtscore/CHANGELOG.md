@@ -8,9 +8,209 @@ only when a release is cut - there is no auto-bump on commit. (The companion
 [`vtsearch`](../README.md) application uses a git-derived timestamp version
 instead, since every commit on `dev` is effectively a new app release.)
 
-## [Unreleased]
+### Added
+
+- **All four `autodetect_*_main` entry points accept `stream_results` and
+  `keep_negatives`** (issue #3432). The two keyword-only flags used to exist
+  only on the chunked pair, so a whole-dataset run had no way to hand a
+  streaming-capable exporter a lazy record iterator even though the pipeline
+  underneath supported it. Purely additive: the four names, their positional
+  parameters and their defaults are unchanged, and the flags default to
+  `False` (the previous behaviour). Internally the four are now thin shims
+  over one private `_autodetect(spec, ...)` driven by a `_SourceSpec`, which
+  is what let the matrix drift in the first place.
+
+- **`AsyncJob` is backed by a `ProgressTracker`** (issue #3380). Every job now
+  owns one (`job.progress`) instead of carrying its own copy of the tracker's
+  field set, so background jobs get the parts a hand-rolled copy never had: a
+  smoothed, coarsened `eta_seconds`, the whole-job `overall` /
+  `overall_step_end` fractions with optional per-phase weights
+  (`job.progress.set_step_weights(...)`), and `subscribe()` for pushing
+  snapshots rather than polling them. `job.progress.get()` returns the whole
+  set at once.
+
+  Cancellation collapses to one flag in the same motion: `AsyncJob.cancel_event`
+  **is** the tracker's event, so `job.cancel()`, `job.progress.cancel()`,
+  `job.is_cancelled`, `check_job_cancelled()` and
+  `job.progress.check_cancelled()` all act on a single
+  `threading.Event` and raise a single `CancelledError`.
+
+  **For library consumers:** additive at every documented surface.
+  `current` / `total` / `message` / `step` / `total_steps` and `cancel_event`
+  remain readable and writable under their old names — they are now properties
+  over the tracker rather than dataclass fields, which changes only two things:
+  they can no longer be passed to the `AsyncJob(...)` constructor (nothing in
+  the tree did), and a write publishes a snapshot to subscribers instead of
+  mutating an attribute in place.
+
+- **`ProgressTracker.cancel_event`** — the tracker's cancellation flag, exposed
+  so a holder that must publish exactly one cancel signal can hand out the
+  tracker's event rather than keeping a second one in sync. Prefer `cancel()` /
+  `check_cancelled()` / `is_cancelled` for ordinary use.
+
+- **`PROGRESS_COMMON_EXTRAS`** — the extras every long-running operation
+  declares (`step`, `total_steps`, `error`, `eta_seconds`, `overall`,
+  `overall_step_end`), promoted from the private `_PROGRESS_COMMON_EXTRAS` so a
+  caller constructing its own `ProgressTracker` can opt into the same payload
+  shape the frontend already renders. The private name is gone; it was never
+  contract.
+
+- **`MediaEmbedder.loaded_backbone()` - a supported way to reach an embedder's
+  raw model** (issue #3395). Returns `(model, processor)`, loading the model
+  first if needed; the second element is `None` for backbones that need no
+  separate processor. The default implementation reads the `_model` /
+  `_processor` attribute convention that `load_models()` itself relies on, so
+  every embedder built the usual way gets it for free, and an embedder that
+  holds its backbone elsewhere overrides this one documented method. It raises
+  `RuntimeError` rather than returning `None` when no backbone is resident
+  after loading.
+
+  **For plugin authors:** purely additive - nothing is required of an existing
+  embedder. The change worth knowing about is on the *consumer* side: the
+  `vtscore.embedding.loader` getters `get_clap_model`, `get_xclip_model` and
+  `get_e5_model` keep their names, signatures and return shapes, but now go
+  through `loaded_backbone()` instead of reaching into each subclass's private
+  `_get_model_and_processor()` / `_get_model()` via `cast(Any, emb)`. Those six
+  private helpers are gone; nothing outside the getters called them, and a
+  private name was never contract. If you were calling one anyway, call
+  `loaded_backbone()` instead.
 
 ### Changed
+
+- **`vtscore.config` is now a package, not a single module** (issue #3375). The
+  933-line file is split into `paths`, `runtime`, `models`, `device`,
+  `processor_backend` and `core_config`, layered so each reads only from the ones
+  before it. **Nothing about the import surface changes:** every public name is
+  re-exported from `vtscore/config/__init__.py` and listed in its `__all__`, so
+  `vtscore.config.X` and `from vtscore.config import X` resolve exactly as before,
+  and the old file path was never a documented import path anyway.
+
+  **For plugin authors:** the one behaviour that moved is *reloading*.
+  `importlib.reload(vtscore.config)` now only re-runs the re-exports - the
+  submodules are already in `sys.modules`, so the environment variables are not
+  re-read. Call `vtscore.config._reload_all()` for the old whole-module reload.
+  Likewise, stubbing a name on the package reaches callers outside the package
+  but not the package's own functions, which resolve their module globals: patch
+  `vtscore.config.device` / `vtscore.config.runtime` for those. Private names are
+  deliberately not re-exported, so an attempt to stub one on the package raises
+  instead of being silently ignored.
+
+- **`MediaClipper.resolve_for_durations` is documented as reserved and inert**
+  (issue #3395). The method is unchanged and still part of the ABC - removing
+  it would turn a third-party clipper's silently-inert override into a hard
+  error - but the docstring and all three clipper guides claimed it was "called
+  once per dataset at load time", which stopped being true when auto-routing
+  moved to the per-item `resolve_for_media`. Nothing invokes it. **If you
+  override it, your override never runs**; move the logic to
+  `resolve_for_media`.
+
+- **`apply_converter_to_demo`'s `embedder_name` is documented as accepted and
+  ignored** (issue #3395). Conversion changes the media type, so an embedder
+  chosen for the source type does not apply to the outputs - the framework
+  embed stage resolves the target type's embedder itself. The parameter is
+  kept, since out-of-tree callers may still pass it.
+
+- **`vtscore.timing.profile_covers` keeps its export; its docstring no longer
+  claims callers it does not have** (issue #3395). It named the tuning script's
+  coverage report and the dataset-load path, neither of which calls it. It is
+  public API with no in-repo caller, and is documented as such.
+
+### Deprecated
+
+- **`vtscore.state.coverage_atlas` and `vtscore.state.near_dupes` have moved**
+  (issue #3391). Both were pure algorithms filed under `state/`: neither
+  references `DatasetContext` or `_state_lock`, and the Coverage Atlas sat
+  beside its own wiring module (`state/coverage.py`) as a near-homograph pair
+  in which only one of the two was actually state.
+
+  - `vtscore.state.coverage_atlas` → **`vtscore.coverage`** (a new package;
+    the module itself is `vtscore.coverage.atlas`). Exports `CoverageAtlas`,
+    `auto_max_depth`, `domain_shift_report` and the `COVERAGE_ATLAS_*`
+    partition defaults.
+  - `vtscore.state.near_dupes` → **`vtscore.media.near_dupes`**, beside the
+    media types whose bytes it hashes.
+
+  **Nothing breaks yet.** Both old module paths remain as aliases that
+  re-export the new location and raise a `DeprecationWarning` on import;
+  attribute access falls through to the new module, so even private names
+  keep resolving. They will be removed in a future release — update imports
+  to the new paths.
+
+  The `vtscore.state` re-exports are **unchanged**: `build_coverage_atlas*`,
+  `coverage_atlas_*`, `collapse_near_duplicates`, `phash_image` and
+  `simhash_text` all still import from `vtscore.state` exactly as before, as
+  do their `vtsearch.state` counterparts. `vtscore.state.sort_results_cache`
+  has **not** moved: it exports a process-global mutable singleton with its
+  own lock, which is state by any reading.
+
+### Removed
+
+- **The global dataset-progress system: `dataset_progress`, `get_progress()`
+  and `check_dataset_cancelled()`** (issue #3376). Dataset and import progress
+  now lives entirely in the per-task `loading_tasks` registry, one
+  `ProgressTracker` per operation. The SSE `dataset` channel these fed is gone
+  with them; per-task progress rides `loading-tasks`, which the dashboard has
+  read for some time.
+
+  A process-wide progress sink has no owner, and that turned out to be the
+  whole bug class: nothing could say when the work it was narrating had ended,
+  so a finished import and a wedged one produced identical output (#3167). The
+  workarounds it needed were the tell — a `_park_global_progress_if_orphaned()`
+  sweep on the last load out of the door, a synthetic terminal tick appended to
+  every unscoped `load_models()`, and a `LEGACY_PROGRESS_TARGET` special case
+  threaded through cancellation. All are deleted rather than fixed. Removed
+  alongside them: `MediaEmbedder._orphan_progress` (the terminal-tick wrapper),
+  `LoadingTasksTracker.any_worker_alive()`, and `LEGACY_PROGRESS_TARGET`.
+
+  `cancel_dataset_progress()` keeps its name and contract and now cancels
+  exactly the active loading tasks. Its `targets` list no longer contains the
+  string `"dataset_progress"` — every entry is a real task id — so a client
+  that special-cased that value can drop the branch. Cancellation also stopped
+  needing a `reset_cancel()` guard on each new load: a per-task flag starts
+  clear, and a cancel aimed at an earlier load stays with it.
+
+  **For plugin authors:** if you read `dataset_progress` directly or called
+  `get_progress()`, switch to `loading_tasks` — `list_tasks()` for a snapshot
+  of every operation, `get_tracker(task_id)` for one. If you polled
+  `check_dataset_cancelled()`, call `check_cancelled()` on the tracker your
+  operation owns; reporting progress through the thread's sink usually does it
+  for you, since the callbacks the load pipeline binds check cancellation
+  before recording each tick.
+
+### Added
+
+- **`ProgressCallback`, `noop_progress()` and `resolve_progress_callback()` are
+  exported from `vtscore.concurrency.progress`** (issue #3392). The
+  `(status, message, current, total)` type alias had been redeclared in ten
+  modules and the "use the thread's callback, else a default" resolution copied
+  byte-identically into eight; both now have one definition.
+  `resolve_progress_callback()` returns the calling thread's progress callback,
+  or `noop_progress` when none is bound. `vtscore.media.base` re-exports the
+  alias and the no-op, so existing imports from there keep working.
+
+### Changed
+
+- **`update_progress()` reports into the calling thread's tracker instead of a
+  global one** (issue #3376). It stays public and stays the documented way for
+  an importer to report progress without accepting an `on_progress` argument —
+  it is now the free-function spelling of `resolve_progress_callback()`.
+
+  This **fixes** out-of-tree importers that followed
+  `docs/extending/dataset-importers.md`. Writing straight to the global meant
+  their ticks landed on a channel the dashboard does not render, so the row for
+  their import never moved, and the `"embedding"` status that swaps the
+  download concurrency-gate for the embed gate never reached the pipeline.
+  Both work now with no change to the calling code. Two in-tree importers
+  (`recaller`, and `DatasetImporter`'s default record loop) had the same bug.
+
+  Two narrower changes to its signature: the `staging_result=` parameter is
+  gone (that field belongs to the staging task's own tracker, declared via
+  `create_task(..., extra_fields={"staging_result": None})`), and the remaining
+  extras (`error`, `step`, `total_steps`) are forwarded only when the bound
+  sink's signature accepts them — the four-argument callbacks the load pipeline
+  installs get the four positional arguments alone. Acceptance is decided by
+  inspecting the signature, not by catching `TypeError` from the call, so a
+  `TypeError` raised *inside* a sink still propagates.
 
 - **`description_wrappers` is now a per-embedder, measured choice, and four
   built-in embedders return `[]`** (issue #3341, following #3127). Issue
@@ -142,6 +342,22 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **The detector-JSON write lock and the cross-dataset labelset merge are now
+  public, and re-exported from the `labelset_ops` façade** (issue #3398).
+  `vtscore.detectors.label_sync._label_sync_write_lock` and
+  `_merge_labelsets_across_datasets` are now
+  `label_sync_write_lock` and `merge_labelsets_across_datasets`, exported from
+  `vtscore.detectors.labelset_ops` alongside the rest of the detector-labelset
+  surface. Neither is new behaviour — the lock's contract has always bound
+  out-of-module writers (any caller doing its own read-modify-write of a
+  detector JSON file must hold it for the whole pass, acquired *before*
+  `_state_lock`), and `sync_labels_to_loaded_detector` and the app's four route
+  writers all merge with the same function. The private names simply said
+  otherwise, which made the seam unenforceable and the symbols un-renameable.
+  Both old names are gone rather than aliased, per this repo's rule that
+  `_`-prefixed symbols carry no compatibility promise; an out-of-tree writer
+  that was reaching for them should import from `labelset_ops`.
+
 - **`vtscore.utils.hits.hit_custom_metadata(media)`** — the `custom_metadata`
   sanitiser `build_media_hit` already applied is now a public export (issue
   #3368). It returns a fresh copy of a media's importer metadata with the
@@ -200,6 +416,30 @@ instead, since every commit on `dev` is effectively a new app release.)
   is loaded onto it. Its Kaldi `compute-fbank-feats` front-end is ported from
   torchaudio's pure-PyTorch implementation rather than taken as a dependency,
   since torchaudio's wheels are built against a pinned torch.
+
+### Removed
+
+- **The four never-implemented integration plugins** (issue #3451): the
+  `holder` results exporter (`vtscore.exporters.holder`), the `holder` label
+  importer (`vtscore.labels.importers.holder`), the `recaller` dataset
+  importer (`vtscore.datasets.importers.recaller`), and the `pullwrest` media
+  source (`vtscore.datasets.sources.pullwrest`). Every I/O entry point in all
+  four raised `NotImplementedError("TODO: implement ...")`, so no code path
+  through them had ever executed; they were registered but
+  `hidden_from_picker`. **Breaking:** `get_exporter("holder")`,
+  `get_label_importer("holder")` and `get_importer("recaller")` now return
+  `None`, `get_source_for_origin({"importer": "recaller", ...})` returns
+  `None`, and the modules no longer import. Their API routes
+  (`/api/dataset/import/recaller`, `/api/dataset/stage-import/recaller`,
+  `/api/label-importers/import/holder`,
+  `/api/detectors/{name}/import-labels/holder`,
+  `/api/detectors/registry/from-labelset/holder`) are gone with them. If you
+  copied one as a starting point, the shapes they demonstrated are now
+  documented directly: service-style dataset importers and the bulk-fetch
+  hook in `docs/EXTENDING-plugins.md` and
+  [`extending/dataset-importers.md`](docs/extending/dataset-importers.md),
+  labelset-only exporters in
+  [`extending/results-exporters.md`](docs/extending/results-exporters.md).
 
 ### Fixed
 

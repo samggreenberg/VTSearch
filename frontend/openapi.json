@@ -3108,11 +3108,19 @@
         "type": "object"
       },
       "Error": {
-        "additionalProperties": false,
+        "additionalProperties": true,
         "properties": {
           "code": {
             "description": "Error code",
             "type": "integer"
+          },
+          "detail": {
+            "description": "Exception type and first line, on 500s",
+            "type": "string"
+          },
+          "error_code": {
+            "description": "Machine-readable slug, e.g. 'dataset_not_loaded'",
+            "type": "string"
           },
           "errors": {
             "additionalProperties": {},
@@ -3121,6 +3129,10 @@
           },
           "message": {
             "description": "Error message",
+            "type": "string"
+          },
+          "request_id": {
+            "description": "Correlates the error with the server logs",
             "type": "string"
           },
           "status": {
@@ -5239,6 +5251,12 @@
             "default": null,
             "nullable": true,
             "type": "string"
+          },
+          "eta_seconds": {
+            "default": null,
+            "description": "Estimated seconds remaining for the whole build, smoothed and snapped to a coarse ladder so the displayed figure does not twitch. ``null`` until the build has run long enough to extrapolate from.",
+            "nullable": true,
+            "type": "number"
           },
           "has_labels": {
             "default": null,
@@ -7526,67 +7544,6 @@
         },
         "type": "object"
       },
-      "import_dataset_ReCallerDatasetImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "build_projection": {
-            "default": null,
-            "nullable": true
-          },
-          "cleaners": {
-            "default": null,
-            "nullable": true
-          },
-          "clipper": {
-            "default": null,
-            "nullable": true
-          },
-          "clipper_params": {
-            "default": null,
-            "nullable": true
-          },
-          "dataset_name": {
-            "default": null,
-            "nullable": true
-          },
-          "embedder": {
-            "default": null,
-            "nullable": true
-          },
-          "embedders": {
-            "default": null,
-            "nullable": true
-          },
-          "media_type": {
-            "default": "audio",
-            "enum": [
-              "audio",
-              "document",
-              "face",
-              "image",
-              "text",
-              "video",
-              ""
-            ],
-            "type": "string"
-          },
-          "merge_near_duplicates": {
-            "default": null,
-            "nullable": true
-          },
-          "query_id": {
-            "type": "string"
-          },
-          "source_specs": {
-            "default": null,
-            "nullable": true
-          }
-        },
-        "required": [
-          "query_id"
-        ],
-        "type": "object"
-      },
       "import_dataset_ServerFilesDatasetImporter_Args": {
         "additionalProperties": true,
         "properties": {
@@ -7778,18 +7735,6 @@
         },
         "type": "object"
       },
-      "import_labels_into_detector_HolderLabelImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "holder_id": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "holder_id"
-        ],
-        "type": "object"
-      },
       "import_labels_into_detector_ServerCsvLabelImporter_Args": {
         "additionalProperties": true,
         "properties": {
@@ -7811,22 +7756,6 @@
         },
         "required": [
           "filepath"
-        ],
-        "type": "object"
-      },
-      "register_detector_from_labelset_HolderLabelImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "holder_id": {
-            "type": "string"
-          },
-          "name": {
-            "default": null,
-            "nullable": true
-          }
-        },
-        "required": [
-          "holder_id"
         ],
         "type": "object"
       },
@@ -7859,18 +7788,6 @@
         },
         "required": [
           "filepath"
-        ],
-        "type": "object"
-      },
-      "run_label_import_HolderLabelImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "holder_id": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "holder_id"
         ],
         "type": "object"
       },
@@ -8183,39 +8100,6 @@
             "nullable": true
           }
         },
-        "type": "object"
-      },
-      "stage_import_ReCallerDatasetImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "dataset_name": {
-            "default": null,
-            "nullable": true
-          },
-          "media_type": {
-            "default": "audio",
-            "enum": [
-              "audio",
-              "document",
-              "face",
-              "image",
-              "text",
-              "video",
-              ""
-            ],
-            "type": "string"
-          },
-          "query_id": {
-            "type": "string"
-          },
-          "source_specs": {
-            "default": null,
-            "nullable": true
-          }
-        },
-        "required": [
-          "query_id"
-        ],
         "type": "object"
       },
       "stage_import_ServerFilesDatasetImporter_Args": {
@@ -9781,7 +9665,7 @@
     },
     "/api/dataset/detect-media-type": {
       "get": {
-        "description": "Powers the auto-detect hint in the import modal: rather than making\nthe user pick ``media_type`` blindly, the modal calls this after the\nuser selects a folder and pre-fills the dropdown with whichever type\nhas the most matching files in the first ``limit`` files of the tree.\n\nThe 404 returned when the source is unavailable on disk is\nintercepted by the app-level ``NotFound`` errorhandler and keeps the\nlegacy ``{\"error\": \"Not Found\", \"request_id\": ...}`` envelope.",
+        "description": "Powers the auto-detect hint in the import modal: rather than making\nthe user pick ``media_type`` blindly, the modal calls this after the\nuser selects a folder and pre-fills the dropdown with whichever type\nhas the most matching files in the first ``limit`` files of the tree.\n\nThe 404 returned when the source is unavailable on disk passes through\nthe app-level ``NotFound`` errorhandler (JSON rather than werkzeug's\nHTML page) with its ``message`` intact.",
         "operationId": "detect_media_type",
         "parameters": [
           {
@@ -10084,34 +9968,6 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/import_dataset_LocalFolderDatasetImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run a registered importer by name in a background thread.",
-        "tags": [
-          "datasets_staging"
-        ]
-      }
-    },
-    "/api/dataset/import/recaller": {
-      "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "import_dataset__recaller",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/import_dataset_ReCallerDatasetImporter_Args"
               }
             }
           },
@@ -10806,34 +10662,6 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/stage_import_LocalFolderDatasetImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run a registered importer in staging mode.",
-        "tags": [
-          "datasets_staging"
-        ]
-      }
-    },
-    "/api/dataset/stage-import/recaller": {
-      "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "stage_import__recaller",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/stage_import_ReCallerDatasetImporter_Args"
               }
             }
           },
@@ -11873,34 +11701,6 @@
         ]
       }
     },
-    "/api/detectors/registry/from-labelset/holder": {
-      "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "register_detector_from_labelset__holder",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/register_detector_from_labelset_HolderLabelImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Create a detector seeded with labels from a label importer.",
-        "tags": [
-          "detectors_registry"
-        ]
-      }
-    },
     "/api/detectors/registry/from-labelset/server_csv_file": {
       "post": {
         "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
@@ -12718,45 +12518,6 @@
         "summary": "Set/replace the examples for a detector.",
         "tags": [
           "detectors_crud"
-        ]
-      }
-    },
-    "/api/detectors/{name}/import-labels/holder": {
-      "parameters": [
-        {
-          "in": "path",
-          "name": "name",
-          "required": true,
-          "schema": {
-            "minLength": 1,
-            "type": "string"
-          }
-        }
-      ],
-      "post": {
-        "description": "Unlike the regular ``/api/label-importers/import/`` route, this does\n**not** require a dataset to be loaded.  The imported label entries are\nmerged directly into the detector's persisted labelset, and the\ndetector-registry entry is updated so the dashboard reflects the new\ncount.\n\nWhen the detector is loaded into memory, the new labels are also resolved\nagainst the loaded dataset's medias, applied to the detector's votes, and\na fresh MLP is trained with a cross-validated threshold, all inside the\nloaded detector context.\n\nPlugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "import_labels_into_detector__holder",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/import_labels_into_detector_HolderLabelImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run a label importer and merge results into this detector's labelset.",
-        "tags": [
-          "detectors_labels"
         ]
       }
     },
@@ -14298,34 +14059,6 @@
         ]
       }
     },
-    "/api/label-importers/import/holder": {
-      "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "run_label_import__holder",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/run_label_import_HolderLabelImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run the named label importer and apply the resulting labels.",
-        "tags": [
-          "label_importers"
-        ]
-      }
-    },
     "/api/label-importers/import/server_csv_file": {
       "post": {
         "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
@@ -15510,7 +15243,7 @@
     },
     "/api/projection/build": {
       "post": {
-        "description": "Body: ``{\"ids\": [...]?, \"force\": bool?}``.  The bin shape is not a request\nparameter \u2014 it is derived from the dataset's media type (see\n:func:`_shape_for`).\n\nReturns immediately.  If the pyramid is already cached or persisted, returns\n``\"ready\"``.  Only the first build of a dataset, where no layout exists yet,\nruns UMAP in the background and returns a ``job_id`` for polling via\n``GET /api/projection/meta``.\n\n``force`` overrides every short-circuit: it discards the existing layout\n(cached + persisted for a full build, or the in-memory subset layout for an\n``ids`` build) and runs a fresh UMAP fit over the current items, returning a\nnew ``projection_id``.  This is the Browser's \"Re-project\" action.",
+        "description": "Body: ``{\"ids\": [...]?, \"force\": bool?}``.  The bin shape is not a request\nparameter \u2014 it is derived from the dataset's media type.\n\nReturns immediately.  If the pyramid is already cached or persisted, returns\n``\"ready\"``.  Only the first build of a dataset, where no layout exists yet,\nruns UMAP in the background and returns a ``job_id`` for polling via\n``GET /api/projection/meta``.\n\n``ids`` projects only the supplied media (e.g. the positive results of a\nFind run), fitting UMAP on just their high-d vectors into an ephemeral\nsubset layout held alongside the full-dataset one.\n\n``force`` overrides every short-circuit: it discards the existing layout\n(cached + persisted for a full build, or the in-memory subset layout for an\n``ids`` build) and runs a fresh UMAP fit over the current items, returning a\nnew ``projection_id``.  This is the Browser's \"Re-project\" action.",
         "operationId": "build_projection",
         "responses": {
           "200": {
@@ -15563,7 +15296,7 @@
     },
     "/api/projection/meta": {
       "get": {
-        "description": "The bin shape is derived from the dataset's media type (see\n:func:`_shape_for`), not a query parameter.  When the pyramid is ready,\nincludes bounds, zoom levels, cell sizing, point count, the dataset's media\ntype, and the ``bin_shape`` the canvas should render.",
+        "description": "The bin shape is derived from the dataset's media type, not a query\nparameter.  When the pyramid is ready, includes bounds, zoom levels, cell\nsizing, point count, the dataset's media type, and the ``bin_shape`` the\ncanvas should render.",
         "operationId": "projection_meta",
         "responses": {
           "200": {
@@ -15588,7 +15321,7 @@
     },
     "/api/projection/subset/remove": {
       "post": {
-        "description": "Re-bins the frozen subset layout onto its existing grid minus the removed\npoints: the remaining points keep their exact 2-D positions and bins, only\ncounts/representatives change.  The ``projection_id`` (layout identity) is\npreserved and a bumped ``content_version`` busts the otherwise-immutable\ntile cache.  The served ``bounds`` shrink to the survivors' extent so the\nclient re-frames to what's left (zoom-to-fit, minimap) instead of keeping\ndead space where the culled points were \u2014 safe because bin assignment is\norigin-independent; bounds only drive client framing.  Returns the updated\nsubset meta for the dataset's shape.\n\nPowers the Browser's \"Remove from Good\" cull, which marks the items Bad via\n``/api/medias/vote-bulk`` and then calls this to make them disappear.",
+        "description": "The remaining points keep their exact 2-D positions and bins; only counts\nand representatives change.  The ``projection_id`` (layout identity) is\npreserved and a bumped ``content_version`` busts the otherwise-immutable\ntile cache.  The served ``bounds`` shrink to the survivors' extent so the\nclient re-frames to what's left (zoom-to-fit, minimap) instead of keeping\ndead space where the culled points were.  Returns the updated subset meta\nfor the dataset's shape.\n\nPowers the Browser's \"Remove from Good\" cull, which marks the items Bad via\n``/api/medias/vote-bulk`` and then calls this to make them disappear.",
         "operationId": "remove_from_subset",
         "requestBody": {
           "content": {
@@ -15629,7 +15362,7 @@
     },
     "/api/projection/tiles/{level}/{tx}/{ty}": {
       "get": {
-        "description": "The bin shape is derived from the dataset's media type (see\n:func:`_shape_for`).  Because the projection is frozen at ingest, tiles are\nimmutable for the life of the dataset and can be cached aggressively by the\nclient.",
+        "description": "The bin shape is derived from the dataset's media type.  Because the\nprojection is frozen at ingest, tiles are immutable for the life of the\ndataset and can be cached aggressively by the client.",
         "operationId": "get_tile",
         "responses": {
           "200": {

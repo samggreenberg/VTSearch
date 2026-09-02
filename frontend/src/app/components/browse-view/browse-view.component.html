@@ -17,11 +17,15 @@
           [value]="buildBar().value"
           [max]="buildBar().max"
         />
-        <!-- Reserved-height lines so the count/detail appearing or disappearing
-             doesn't re-center the column and shift the bar above it. -->
+        <!-- Reserved-height lines so the count/ETA/detail appearing or
+             disappearing doesn't re-center the column and shift the bar above
+             it. -->
         <span class="browse-status-count">
           @if (buildTotal() > 0) {
             {{ buildProgress() }} / {{ buildTotal() }}
+          }
+          @if (buildEtaText()) {
+            <span class="browse-status-eta">{{ buildEtaText() }}</span>
           }
         </span>
         <span class="browse-status-detail">{{ buildDetail() }}</span>

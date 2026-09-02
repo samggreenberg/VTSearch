@@ -251,10 +251,21 @@ def get_e5_model():     # SentenceTransformer for the "e5" embedder
 ```
 
 (`vtscore/embedding/loader.py`.) Each calls
-`get_embedder(name).load_models()` and returns the private
-`_get_model_and_processor()` / `_get_model()` accessor. Prefer the
-public `embed_media` / `embed_text` API for new code - these helpers
-exist because parts of the legacy app reach into the backbone.
+`get_embedder(name).loaded_backbone()`, the public accessor on
+`MediaEmbedder` - which loads the model if it is not already resident
+and returns `(model, processor)`. `get_e5_model` returns just the
+first element, since a `SentenceTransformer` needs no processor.
+Prefer the public `embed_media` / `embed_text` API for new code -
+these helpers exist because parts of the legacy app reach into the
+backbone.
+
+`loaded_backbone()` is the supported way to reach any embedder's raw
+model, not just these three. Its default implementation reads the
+`_model` / `_processor` attribute convention that `load_models()` itself
+relies on, so it works for embedders built the usual way; an embedder
+holding its backbone elsewhere overrides it (as `languagebind` does, to
+return its tokenizer). It raises `RuntimeError` rather than returning
+`None` when no backbone is resident after loading.
 
 ---
 
@@ -555,10 +566,13 @@ These are *defaults*. The actual limits read through
   `embedders_for_type(t)[0]` sorts `is_default=True` first. If two
   embedders both claim default, the second-registered wins by
   insertion order - fix by setting `is_default=False` on the loser.
-- **`_get_model_and_processor()` and `_get_model()` are private.** The
-  three backbone accessors (`get_clap_model`, etc.) reach in via
-  `typing.cast(Any, emb)` because those methods are subclass-private
-  and not on the ABC. New code should prefer the public surface.
+- **Reach the backbone through `loaded_backbone()`, not attributes.**
+  The three getters (`get_clap_model`, etc.) used to reach into each
+  subclass's private `_get_model_and_processor()` via
+  `typing.cast(Any, emb)`, which broke silently if an embedder was
+  reimplemented. They now go through the ABC method, so a custom
+  embedder either works via the default or overrides one documented
+  hook. New code should still prefer `embed_media` / `embed_text`.
 - **Matrix invalidation is implicit, but explicit is faster.** If you
   mutate `ctx.medias`, calling `invalidate_embedding_matrix(ctx)`
   costs nothing and avoids the next `get_embedding_matrix` doing a
