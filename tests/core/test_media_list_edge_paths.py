@@ -22,9 +22,9 @@ import numpy as np
 import pytest
 from PIL import Image
 
-import app as app_module
 from vtsearch.routes.media import list as media_list
 from vtsearch.state import medias
+from vtscore.media.audio.audio_generator import generate_wav
 
 # ---------------------------------------------------------------------------
 # Injection helpers
@@ -656,7 +656,7 @@ class TestAddToPileEdgePaths:
         # picks the first embedder registered for the media type.
         saved = self._single_audio_dataset("")
         try:
-            wav = app_module.generate_wav(4321, 0.2)
+            wav = generate_wav(4321, 0.2)
             resp = client.post(
                 "/api/medias/add-to-pile",
                 data={"label": "good", "file": (io.BytesIO(wav), "fresh.wav")},
@@ -673,7 +673,7 @@ class TestAddToPileEdgePaths:
         # handler still recovers via the media-type default embedder.
         saved = self._single_audio_dataset("no_such_embedder")
         try:
-            wav = app_module.generate_wav(4322, 0.2)
+            wav = generate_wav(4322, 0.2)
             resp = client.post(
                 "/api/medias/add-to-pile",
                 data={"label": "good", "file": (io.BytesIO(wav), "fresh2.wav")},
@@ -718,7 +718,7 @@ class TestAddToPileEdgePaths:
 
         audio_embedder = embedders_for_type("audio")[0]
         monkeypatch.setattr(audio_embedder, "embed_media", lambda *_a, **_k: None)
-        wav = app_module.generate_wav(4323, 0.2)
+        wav = generate_wav(4323, 0.2)
         resp = client.post(
             "/api/medias/add-to-pile",
             data={"label": "good", "file": (io.BytesIO(wav), "fresh3.wav")},
@@ -740,7 +740,7 @@ class TestAddToPileEdgePaths:
         # When the thumbnail generator yields nothing, the media is still
         # inserted -- just without thumbnail_bytes (the thumb-None branch).
         monkeypatch.setattr(media_list, "_make_pile_thumbnail", lambda *_a, **_k: None)
-        wav = app_module.generate_wav(4324, 0.2)
+        wav = generate_wav(4324, 0.2)
         resp = client.post(
             "/api/medias/add-to-pile",
             data={"label": "good", "file": (io.BytesIO(wav), "nothumb.wav")},

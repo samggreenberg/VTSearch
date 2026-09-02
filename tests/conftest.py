@@ -35,27 +35,16 @@ _patch_embed_audio.start()
 
 install_startup_contexts()
 
+# Importing ``app`` registers the Flask routes and builds the module-level
+# ``app_module.app`` the ``client`` fixture below serves.  Test modules do NOT
+# need to repeat this import: conftest is imported first, so ``app`` is already
+# in ``sys.modules`` (and its import side effects have already run) by the time
+# any test module is collected.
 import app as app_module
 
-# Import refactored modules and make them accessible through app_module
-from tests.fixtures.medias import NUM_MEDIAS, init_medias
-from vtscore.media.audio.audio_generator import generate_wav
+from tests.fixtures.medias import init_medias
 from vtscore.embedding import initialize_models
-from vtscore.detectors.training import train_and_score
-from vtsearch.state import (
-    bad_votes,
-    medias,
-    good_votes,
-)
-
-# Attach to app_module for backward compatibility with existing tests
-app_module.NUM_MEDIAS = NUM_MEDIAS
-app_module.generate_wav = generate_wav
-app_module.train_and_score = train_and_score
-app_module.medias = medias
-app_module.good_votes = good_votes
-app_module.bad_votes = bad_votes
-app_module.init_medias = init_medias  # legacy attribute used by some tests
+from vtsearch.state import medias
 
 # Initialize models and medias
 initialize_models()

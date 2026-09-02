@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import pytest
 
-import app as app_module  # noqa: F401  (triggers conftest media init)
 from vtscore.media import (
     all_embedders,
     all_embedders_dict,

@@ -7,7 +7,6 @@ from unittest import mock
 
 import pytest
 
-import app as app_module  # noqa: F401
 from vtscore.cli import _run_exporter
 
 

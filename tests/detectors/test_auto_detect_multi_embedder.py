@@ -18,7 +18,6 @@ import shutil
 import numpy as np
 import pytest
 
-import app as app_module  # noqa: F401  (ensures routes are registered)
 from vtsearch.settings import get_detectors_dir
 
 DIM = 4

@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import pytest
 
-import app as app_module  # noqa: F401  (triggers conftest media init)
 from vtsearch import settings as settings_mod
 from vtsearch.schemas.settings import AppSettingsSchema, SettingsUpdateSchema
 

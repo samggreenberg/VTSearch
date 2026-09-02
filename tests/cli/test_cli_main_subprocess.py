@@ -22,8 +22,8 @@ from pathlib import Path
 
 import pytest
 
-import app as app_module
 from tests.helpers import make_dataset_file as _make_dataset_file
+from vtsearch.state import medias
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -42,7 +42,7 @@ def _run_app(*args: str) -> subprocess.CompletedProcess:
 def test_app_autodetect_dry_run_via_subprocess(tmp_path):
     """``python app.py --autodetect --dataset ... --dry-run`` prints the plan
     and exits cleanly, with no exporter side effects."""
-    dataset_path = _make_dataset_file(tmp_path, app_module.medias)
+    dataset_path = _make_dataset_file(tmp_path, medias)
     settings_path = tmp_path / "settings.json"
     settings_path.write_text(json.dumps({"autofind_detectors": [], "detectors_dir": str(tmp_path / "det")}))
     out_path = tmp_path / "results.json"

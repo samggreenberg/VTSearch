@@ -1,4 +1,3 @@
-import app as app_module
 import vtscore.detectors.labeling_progress as labeling_progress
 from vtscore.detectors.labeling_progress import (
     _compute_stable_status,
@@ -7,12 +6,7 @@ from vtscore.detectors.labeling_progress import (
     invalidate_progress_cache_from,
 )
 from vtscore.embedding.media_vectors import media_embedding
-from vtsearch.state import (
-    build_coverage_atlas,
-    get_coverage_atlas,
-    medias,
-    label_history,
-)
+from vtsearch.state import bad_votes, build_coverage_atlas, get_coverage_atlas, good_votes, label_history, medias
 
 
 def _prog_cache():
@@ -30,26 +24,26 @@ class TestVoteClip:
         resp = client.post("/api/medias/1/vote", json={"target": "good"})
         assert resp.status_code == 200
         assert resp.get_json()["ok"] is True
-        assert 1 in app_module.good_votes
+        assert 1 in good_votes
 
     def test_vote_bad(self, client):
         resp = client.post("/api/medias/1/vote", json={"target": "bad"})
         assert resp.status_code == 200
-        assert 1 in app_module.bad_votes
+        assert 1 in bad_votes
 
     def test_unvote_good(self, client):
         """target=none removes a good vote."""
         client.post("/api/medias/1/vote", json={"target": "good"})
-        assert 1 in app_module.good_votes
+        assert 1 in good_votes
         client.post("/api/medias/1/vote", json={"target": "none"})
-        assert 1 not in app_module.good_votes
+        assert 1 not in good_votes
 
     def test_unvote_bad(self, client):
         """target=none removes a bad vote."""
         client.post("/api/medias/1/vote", json={"target": "bad"})
-        assert 1 in app_module.bad_votes
+        assert 1 in bad_votes
         client.post("/api/medias/1/vote", json={"target": "none"})
-        assert 1 not in app_module.bad_votes
+        assert 1 not in bad_votes
 
     def test_idempotent_re_vote_good(self, client):
         """Re-sending target=good on a good media is a no-op (H1 fix).
@@ -61,9 +55,8 @@ class TestVoteClip:
         assert r1.status_code == 200
         r2 = client.post("/api/medias/1/vote", json={"target": "good"})
         assert r2.status_code == 200
-        assert 1 in app_module.good_votes
+        assert 1 in good_votes
         # Idempotent: a single label_history entry, not two.
-        from vtsearch.state import label_history
 
         assert sum(1 for entry in label_history if entry[0] == 1) == 1
 
@@ -72,22 +65,21 @@ class TestVoteClip:
         assert r1.status_code == 200
         r2 = client.post("/api/medias/1/vote", json={"target": "bad"})
         assert r2.status_code == 200
-        assert 1 in app_module.bad_votes
-        from vtsearch.state import label_history
+        assert 1 in bad_votes
 
         assert sum(1 for entry in label_history if entry[0] == 1) == 1
 
     def test_switch_from_good_to_bad(self, client):
         client.post("/api/medias/1/vote", json={"target": "good"})
         client.post("/api/medias/1/vote", json={"target": "bad"})
-        assert 1 not in app_module.good_votes
-        assert 1 in app_module.bad_votes
+        assert 1 not in good_votes
+        assert 1 in bad_votes
 
     def test_switch_from_bad_to_good(self, client):
         client.post("/api/medias/1/vote", json={"target": "bad"})
         client.post("/api/medias/1/vote", json={"target": "good"})
-        assert 1 not in app_module.bad_votes
-        assert 1 in app_module.good_votes
+        assert 1 not in bad_votes
+        assert 1 in good_votes
 
     def test_invalid_target_value(self, client):
         # Marshmallow OneOf validator on ``target`` rejects non-{good,bad,none}
@@ -116,10 +108,10 @@ class TestVoteClip:
     def test_multiple_clips_independent_votes(self, client):
         client.post("/api/medias/1/vote", json={"target": "good"})
         client.post("/api/medias/2/vote", json={"target": "bad"})
-        assert 1 in app_module.good_votes
-        assert 2 in app_module.bad_votes
-        assert 1 not in app_module.bad_votes
-        assert 2 not in app_module.good_votes
+        assert 1 in good_votes
+        assert 2 in bad_votes
+        assert 1 not in bad_votes
+        assert 2 not in good_votes
 
 
 class TestVoteBulk:
@@ -138,25 +130,25 @@ class TestVoteBulk:
         assert data["ok"] is True
         assert data["changed"] == 2
         assert data["missing"] == []
-        assert 1 in app_module.bad_votes
-        assert 2 in app_module.bad_votes
-        assert 1 not in app_module.good_votes
-        assert 2 not in app_module.good_votes
+        assert 1 in bad_votes
+        assert 2 in bad_votes
+        assert 1 not in good_votes
+        assert 2 not in good_votes
 
     def test_bulk_idempotent_not_counted(self, client):
         client.post("/api/medias/1/vote", json={"target": "bad"})
         # 1 is already bad → no change; 2 transitions none→bad → one change.
         resp = client.post("/api/medias/vote-bulk", json={"ids": [1, 2], "target": "bad"})
         assert resp.get_json()["changed"] == 1
-        assert 1 in app_module.bad_votes
-        assert 2 in app_module.bad_votes
+        assert 1 in bad_votes
+        assert 2 in bad_votes
 
     def test_bulk_reports_missing_ids(self, client):
         resp = client.post("/api/medias/vote-bulk", json={"ids": [1, 9999], "target": "bad"})
         data = resp.get_json()
         assert data["missing"] == [9999]
         assert data["changed"] == 1
-        assert 1 in app_module.bad_votes
+        assert 1 in bad_votes
 
     def test_bulk_empty_ids_rejected(self, client):
         resp = client.post("/api/medias/vote-bulk", json={"ids": [], "target": "bad"})
@@ -179,20 +171,20 @@ class TestGetVotes:
         assert data["learned_scores"] == {}
 
     def test_returns_good_votes(self, client):
-        app_module.good_votes.update({k: None for k in [5, 1, 3]})
+        good_votes.update({k: None for k in [5, 1, 3]})
         resp = client.get("/api/votes")
         data = resp.get_json()
         assert data["good"] == [1, 3, 5]  # sorted regardless of insertion order
 
     def test_returns_bad_votes(self, client):
-        app_module.bad_votes.update({k: None for k in [4, 2]})
+        bad_votes.update({k: None for k in [4, 2]})
         resp = client.get("/api/votes")
         data = resp.get_json()
         assert data["bad"] == [2, 4]  # sorted regardless of insertion order
 
     def test_returns_both(self, client):
-        app_module.good_votes[1] = None
-        app_module.bad_votes[2] = None
+        good_votes[1] = None
+        bad_votes[2] = None
         resp = client.get("/api/votes")
         data = resp.get_json()
         assert data["good"] == [1]
@@ -212,14 +204,14 @@ class TestClearVotes:
         """POST /api/votes/clear should remove all votes."""
         client.post("/api/medias/1/vote", json={"target": "good"})
         client.post("/api/medias/2/vote", json={"target": "bad"})
-        assert 1 in app_module.good_votes
-        assert 2 in app_module.bad_votes
+        assert 1 in good_votes
+        assert 2 in bad_votes
 
         resp = client.post("/api/votes/clear")
         assert resp.status_code == 200
         assert resp.get_json()["ok"] is True
-        assert len(app_module.good_votes) == 0
-        assert len(app_module.bad_votes) == 0
+        assert len(good_votes) == 0
+        assert len(bad_votes) == 0
 
     def test_clear_votes_preserves_medias(self, client):
         """Clearing votes should not affect loaded medias."""
@@ -285,8 +277,8 @@ class TestLabelHistory:
         assert label_history[0][1] == "good"
         assert label_history[1][1] == "unlabel"
         assert label_history[2][1] == "bad"
-        assert 1 in app_module.bad_votes
-        assert 1 not in app_module.good_votes
+        assert 1 in bad_votes
+        assert 1 not in good_votes
 
 
 class TestProgressCacheWithLabelChanges:
@@ -894,14 +886,14 @@ class TestLiveModelReuse:
 
         clear_progress_cache()
 
-        app_module.good_votes.update({k: None for k in [1, 2, 3]})
-        app_module.bad_votes.update({k: None for k in [18, 19, 20]})
+        good_votes.update({k: None for k in [1, 2, 3]})
+        bad_votes.update({k: None for k in [18, 19, 20]})
 
         resp = client.post("/api/learned-sort", json={"wait": True})
         assert resp.status_code == 200
 
         # A live model should have been injected for the current vote set
-        key = (frozenset(app_module.good_votes), frozenset(app_module.bad_votes))
+        key = (frozenset(good_votes), frozenset(bad_votes))
         assert key in _prog_cache().live_models, "learned-sort should inject the live model"
         model, threshold = _prog_cache().live_models[key]
         assert model is not None

@@ -16,7 +16,7 @@ from tests.helpers import setup_trainable_model_in_registry
 from vtscore.concurrency.progress import CancelledError, find_progress, get_find_progress
 from vtsearch.state import snapshot_medias
 
-import app as app_module  # noqa: F401  (ensures routes are registered)
+import app as app_module
 
 
 @pytest.fixture(autouse=True)

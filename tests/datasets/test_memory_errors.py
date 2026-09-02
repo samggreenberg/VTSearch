@@ -6,11 +6,11 @@ from unittest import mock
 import numpy as np
 import pytest
 
-import app as app_module
 from vtscore.datasets.config import DEMO_DATASETS
 from vtsearch.state import medias
 from tests.helpers import current_loading_progress
 from vtsearch.state import clear_medias
+from tests.fixtures.medias import init_medias
 
 
 class TestClearClipsGarbageCollection:
@@ -26,7 +26,7 @@ class TestClearClipsGarbageCollection:
         clear_medias()
         assert len(medias) == 0
         # Restore test medias
-        app_module.init_medias()
+        init_medias()
 
 
 class TestPickleMemoryError:
@@ -241,7 +241,7 @@ class TestBackgroundImportMemoryError:
         assert progress["status"] == "idle"
 
         # Reinitialise medias for subsequent tests
-        app_module.init_medias()
+        init_medias()
 
     def test_demo_load_oom_reports_error(self, client):
         """When loading a demo dataset OOMs, the progress shows the error."""
@@ -272,4 +272,4 @@ class TestBackgroundImportMemoryError:
             assert "Out of memory" in progress["error"]
 
         # Reinitialise medias for subsequent tests
-        app_module.init_medias()
+        init_medias()

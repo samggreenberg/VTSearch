@@ -10,11 +10,11 @@ entry; these tests pin what that does.
 
 from __future__ import annotations
 
-import app as app_module
 from tests import load_detector_and_wait
 from tests.helpers import setup_trainable_model_in_registry
 from vtscore.state.core import get_active_detector_context
 from vtsearch.state import snapshot_medias
+from tests.fixtures.medias import NUM_MEDIAS
 
 
 def _detector_with_votes(client):
@@ -38,7 +38,7 @@ class TestEndFindSession:
         assert resp.status_code == 200, resp.get_json()
         after_find = client.get("/api/votes").get_json()
         # Every media carries a presumption, and they are not the training votes.
-        assert len(after_find["good"]) + len(after_find["bad"]) == app_module.NUM_MEDIAS
+        assert len(after_find["good"]) + len(after_find["bad"]) == NUM_MEDIAS
         assert get_active_detector_context().find_mode is True
 
         ended = client.post("/api/find/end-session")

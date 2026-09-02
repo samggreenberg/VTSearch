@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
-import app as app_module
 from vtscore.embedding.media_vectors import media_embedding
+from vtsearch.state import bad_votes, good_votes
 
 SAMPLE_RESULTS = {
     "media_type": "audio",
@@ -104,8 +104,8 @@ class TestFillFromSortDryRun:
 
     def test_dry_run_excludes_already_voted(self, client):
         """Clips that already have votes should not be counted."""
-        app_module.good_votes.update({1: None, 2: None})
-        app_module.bad_votes.update({3: None})
+        good_votes.update({1: None, 2: None})
+        bad_votes.update({3: None})
         results = self._sort_results()
         resp = client.post(
             "/api/labels/fill-from-sort",
@@ -185,8 +185,8 @@ class TestFillFromSortConfirm:
         from vtsearch.state import medias
 
         assert total_applied == len(medias)  # all were unlabeled
-        assert len(app_module.good_votes) == data["good_applied"]
-        assert len(app_module.bad_votes) == data["bad_applied"]
+        assert len(good_votes) == data["good_applied"]
+        assert len(bad_votes) == data["bad_applied"]
 
     def test_confirm_returns_exporter_compatible_results(self, client):
         results = self._sort_results()
@@ -211,8 +211,8 @@ class TestFillFromSortConfirm:
 
     def test_confirm_does_not_relabel_already_voted(self, client):
         # Pre-label some medias
-        app_module.good_votes.update({1: None})
-        app_module.bad_votes.update({2: None})
+        good_votes.update({1: None})
+        bad_votes.update({2: None})
 
         results = self._sort_results()
         resp = client.post(
@@ -243,7 +243,7 @@ class TestFillFromSortConfirm:
         )
         data = resp.get_json()
         assert data["bad_applied"] == 0
-        assert len(app_module.bad_votes) == 0
+        assert len(bad_votes) == 0
 
     def test_confirm_bad_only(self, client):
         results = self._sort_results()
@@ -258,7 +258,7 @@ class TestFillFromSortConfirm:
         )
         data = resp.get_json()
         assert data["good_applied"] == 0
-        assert len(app_module.good_votes) == 0
+        assert len(good_votes) == 0
 
     def test_disk_sync_failure_surfaces_as_500(self, client, monkeypatch):
         """C11 regression: a sync failure must not be silently swallowed.
@@ -689,7 +689,7 @@ class TestAvailableColumnsNoDuplicates:
 
     def test_no_duplicate_category_column(self, client):
         """Category appears once in available_columns, not twice (lowercase + capitalized)."""
-        app_module.good_votes[1] = None
+        good_votes[1] = None
         resp = client.get("/api/labels/export?enrich=true")
         assert resp.status_code == 200
         data = resp.get_json()
