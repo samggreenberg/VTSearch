@@ -70,7 +70,6 @@ care.
 
 ## Library tier — god modules & misplaced code
 
-- [ ] #3384 — Extract the load-progress and torch-ops subsystems out of `vtscore/media/embedder.py` (Sonnet 5)
 - [ ] #3396 — Move `evt_mixture.py` out of the shipped `vtscore/training/` surface (Haiku 4.5)
 
 ## Library tier — duplication
