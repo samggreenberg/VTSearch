@@ -98,7 +98,7 @@ class BlendSchedule:
 
         Combiners that are not weighted averages still define this, because the
         harness's schedule-variant screen reports it per step
-        (:func:`vtscore.eval.voting_iterations._schedule_variant_rows`) and
+        (:func:`vtscore.eval.arms_schedule._schedule_variant_rows`) and
         because it is what makes a schedule's shape legible at all.
         """
         raise NotImplementedError

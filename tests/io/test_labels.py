@@ -2,8 +2,8 @@ import json
 
 import pytest
 
-import app as app_module
 from tests import load_detector_and_wait as _load_detector_and_wait
+from vtsearch.state import bad_votes, good_votes, medias
 
 
 def _read_ndjson(resp):
@@ -20,38 +20,38 @@ class TestExportLabels:
         assert data == {"labels": []}
 
     def test_export_good_labels(self, client):
-        app_module.good_votes.update({k: None for k in [1, 2]})
+        good_votes.update({k: None for k in [1, 2]})
         resp = client.get("/api/labels/export")
         data = resp.get_json()
         assert len(data["labels"]) == 2
         assert all(e["label"] == "good" for e in data["labels"])
 
     def test_export_bad_labels(self, client):
-        app_module.bad_votes.update({k: None for k in [3, 4]})
+        bad_votes.update({k: None for k in [3, 4]})
         resp = client.get("/api/labels/export")
         data = resp.get_json()
         assert len(data["labels"]) == 2
         assert all(e["label"] == "bad" for e in data["labels"])
 
     def test_export_mixed_labels(self, client):
-        app_module.good_votes.update({k: None for k in [1, 2]})
-        app_module.bad_votes.update({k: None for k in [3, 4]})
+        good_votes.update({k: None for k in [1, 2]})
+        bad_votes.update({k: None for k in [3, 4]})
         resp = client.get("/api/labels/export")
         data = resp.get_json()
         assert len(data["labels"]) == 4
 
     def test_export_contains_md5_and_label(self, client):
-        app_module.good_votes[1] = None
+        good_votes[1] = None
         resp = client.get("/api/labels/export")
         data = resp.get_json()
         entry = data["labels"][0]
         assert "md5" in entry
         assert "label" in entry
-        assert entry["md5"] == app_module.medias[1]["md5"]
+        assert entry["md5"] == medias[1]["md5"]
         assert entry["label"] == "good"
 
     def test_export_does_not_include_creation_info(self, client):
-        app_module.good_votes[1] = None
+        good_votes[1] = None
         resp = client.get("/api/labels/export")
         data = resp.get_json()
         assert "dataset_creation_info" not in data
@@ -67,8 +67,8 @@ class TestExportLabelsNdjson:
         assert _read_ndjson(resp) == []
 
     def test_streams_one_line_per_label(self, client):
-        app_module.good_votes.update({k: None for k in [1, 2]})
-        app_module.bad_votes.update({k: None for k in [3, 4]})
+        good_votes.update({k: None for k in [1, 2]})
+        bad_votes.update({k: None for k in [3, 4]})
         resp = client.get("/api/labels/export?format=ndjson")
         assert resp.mimetype == "application/x-ndjson"
         rows = _read_ndjson(resp)
@@ -77,16 +77,16 @@ class TestExportLabelsNdjson:
 
     def test_ndjson_matches_buffered_labels(self, client):
         """The streamed rows equal the buffered ``labels`` list, entry for entry."""
-        app_module.good_votes.update({k: None for k in [1, 3, 5]})
-        app_module.bad_votes.update({k: None for k in [2, 4]})
+        good_votes.update({k: None for k in [1, 3, 5]})
+        bad_votes.update({k: None for k in [2, 4]})
 
         buffered = client.get("/api/labels/export").get_json()["labels"]
         streamed = _read_ndjson(client.get("/api/labels/export?format=ndjson"))
         assert streamed == buffered
 
     def test_goods_only_filter(self, client):
-        app_module.good_votes.update({k: None for k in [1, 2]})
-        app_module.bad_votes.update({k: None for k in [3, 4]})
+        good_votes.update({k: None for k in [1, 2]})
+        bad_votes.update({k: None for k in [3, 4]})
         resp = client.get("/api/labels/export?format=ndjson&goods_only=true")
         rows = _read_ndjson(resp)
         assert len(rows) == 2
@@ -96,25 +96,25 @@ class TestExportLabelsNdjson:
         from vtsearch.state import set_find_initial_labels
 
         set_find_initial_labels({1: "good", 2: "bad", 3: "good"})
-        app_module.good_votes.update({1: None, 2: None})  # 2 was bad -> correction
-        app_module.bad_votes[3] = None  # 3 was good -> correction
+        good_votes.update({1: None, 2: None})  # 2 was bad -> correction
+        bad_votes[3] = None  # 3 was good -> correction
 
         resp = client.get("/api/labels/export?format=ndjson&label_filter=corrections")
         rows = _read_ndjson(resp)
         assert len(rows) == 2
         assert all(r["is_correction"] is True for r in rows)
         md5s = {r["md5"] for r in rows}
-        assert app_module.medias[2]["md5"] in md5s
-        assert app_module.medias[3]["md5"] in md5s
+        assert medias[2]["md5"] in md5s
+        assert medias[3]["md5"] in md5s
 
     def test_corrections_filter_empty_without_find_labels(self, client):
-        app_module.good_votes[1] = None
-        app_module.bad_votes[2] = None
+        good_votes[1] = None
+        bad_votes[2] = None
         resp = client.get("/api/labels/export?format=ndjson&label_filter=corrections")
         assert _read_ndjson(resp) == []
 
     def test_enrich_attaches_custom_metadata_but_no_available_columns(self, client):
-        app_module.good_votes[1] = None
+        good_votes[1] = None
         resp = client.get("/api/labels/export?format=ndjson&enrich=true")
         rows = _read_ndjson(resp)
         assert len(rows) == 1
@@ -129,19 +129,19 @@ class TestExportLabelsNdjson:
 
 class TestImportLabels:
     def test_import_good_label(self, client):
-        labels = [{"md5": app_module.medias[1]["md5"], "label": "good"}]
+        labels = [{"md5": medias[1]["md5"], "label": "good"}]
         resp = client.post("/api/labels/import", json={"labels": labels})
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["applied"] == 1
         assert data["skipped"] == 0
-        assert 1 in app_module.good_votes
+        assert 1 in good_votes
 
     def test_import_bad_label(self, client):
-        labels = [{"md5": app_module.medias[1]["md5"], "label": "bad"}]
+        labels = [{"md5": medias[1]["md5"], "label": "bad"}]
         resp = client.post("/api/labels/import", json={"labels": labels})
         assert resp.status_code == 200
-        assert 1 in app_module.bad_votes
+        assert 1 in bad_votes
 
     def test_import_skips_unknown_md5(self, client):
         labels = [{"md5": "nonexistent_md5", "label": "good"}]
@@ -151,15 +151,15 @@ class TestImportLabels:
         assert data["skipped"] == 1
 
     def test_import_overrides_existing_label(self, client):
-        app_module.good_votes[1] = None
-        labels = [{"md5": app_module.medias[1]["md5"], "label": "bad"}]
+        good_votes[1] = None
+        labels = [{"md5": medias[1]["md5"], "label": "bad"}]
         client.post("/api/labels/import", json={"labels": labels})
-        assert 1 not in app_module.good_votes
-        assert 1 in app_module.bad_votes
+        assert 1 not in good_votes
+        assert 1 in bad_votes
 
     def test_import_mixed_known_and_unknown(self, client):
         labels = [
-            {"md5": app_module.medias[1]["md5"], "label": "good"},
+            {"md5": medias[1]["md5"], "label": "good"},
             {"md5": "unknown_md5", "label": "good"},
         ]
         resp = client.post("/api/labels/import", json={"labels": labels})
@@ -168,7 +168,7 @@ class TestImportLabels:
         assert data["skipped"] == 1
 
     def test_import_invalid_label_value(self, client):
-        labels = [{"md5": app_module.medias[1]["md5"], "label": "meh"}]
+        labels = [{"md5": medias[1]["md5"], "label": "meh"}]
         resp = client.post("/api/labels/import", json={"labels": labels})
         data = resp.get_json()
         assert data["applied"] == 0
@@ -186,35 +186,35 @@ class TestImportLabels:
     def test_import_multiple_labels(self, client):
         labels = []
         for cid in [1, 2, 3]:
-            labels.append({"md5": app_module.medias[cid]["md5"], "label": "good"})
+            labels.append({"md5": medias[cid]["md5"], "label": "good"})
         for cid in [4, 5]:
-            labels.append({"md5": app_module.medias[cid]["md5"], "label": "bad"})
+            labels.append({"md5": medias[cid]["md5"], "label": "bad"})
         resp = client.post("/api/labels/import", json={"labels": labels})
         data = resp.get_json()
         assert data["applied"] == 5
         assert data["skipped"] == 0
-        assert set(app_module.good_votes) == {1, 2, 3}
-        assert set(app_module.bad_votes) == {4, 5}
+        assert set(good_votes) == {1, 2, 3}
+        assert set(bad_votes) == {4, 5}
 
     def test_roundtrip_export_import(self, client):
         """Export labels, clear votes, import, and verify same state."""
-        app_module.good_votes.update({k: None for k in [1, 3, 5]})
-        app_module.bad_votes.update({k: None for k in [2, 4]})
+        good_votes.update({k: None for k in [1, 3, 5]})
+        bad_votes.update({k: None for k in [2, 4]})
         resp = client.get("/api/labels/export")
         exported = resp.get_json()
 
-        app_module.good_votes.clear()
-        app_module.bad_votes.clear()
+        good_votes.clear()
+        bad_votes.clear()
 
         resp = client.post("/api/labels/import", json=exported)
         data = resp.get_json()
         assert data["applied"] == 5
-        assert set(app_module.good_votes) == {1, 3, 5}
-        assert set(app_module.bad_votes) == {2, 4}
+        assert set(good_votes) == {1, 3, 5}
+        assert set(bad_votes) == {2, 4}
 
     def test_import_matches_by_origin(self, client):
         """Labels with origin+origin_name match the correct media."""
-        media = app_module.medias[1]
+        media = medias[1]
         labels = [
             {
                 "md5": "wrong_md5_on_purpose",
@@ -226,24 +226,24 @@ class TestImportLabels:
         resp = client.post("/api/labels/import", json={"labels": labels})
         data = resp.get_json()
         assert data["applied"] == 1
-        assert 1 in app_module.good_votes
+        assert 1 in good_votes
 
     def test_import_duplicate_md5_labels_both_clips(self, client):
         """Two medias sharing the same MD5 should both receive the label."""
         # Temporarily give media 2 the same MD5 as media 1
-        original_md5 = app_module.medias[2]["md5"]
-        app_module.medias[2]["md5"] = app_module.medias[1]["md5"]
+        original_md5 = medias[2]["md5"]
+        medias[2]["md5"] = medias[1]["md5"]
         try:
-            shared_md5 = app_module.medias[1]["md5"]
+            shared_md5 = medias[1]["md5"]
             labels = [{"md5": shared_md5, "label": "good"}]
             resp = client.post("/api/labels/import", json={"labels": labels})
             data = resp.get_json()
             assert data["applied"] == 1
             # Both medias with the same MD5 should receive the label
-            assert 1 in app_module.good_votes
-            assert 2 in app_module.good_votes
+            assert 1 in good_votes
+            assert 2 in good_votes
         finally:
-            app_module.medias[2]["md5"] = original_md5
+            medias[2]["md5"] = original_md5
 
 
 class TestExportOriginOnlyFallback:
@@ -279,8 +279,6 @@ class TestExportOriginOnlyFallback:
 
         Returns ``(detector_id, good_cid, bad_cid)``.
         """
-        from vtsearch.state import medias
-
         if len(medias) < 2:
             pytest.skip("Need at least 2 medias")
         ids = list(medias.keys())
@@ -379,7 +377,6 @@ class TestExportOriginOnlyFallback:
         from vtscore.detectors.registry import get_detector
         from vtscore.detectors.store import _detector_path
         from vtscore.state.core import get_active_detector_context
-        from vtsearch.state import medias
 
         detector_id, good_cid, bad_cid = self._setup_detector(client)
         good_media = medias[good_cid]

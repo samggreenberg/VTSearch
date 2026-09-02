@@ -2,9 +2,11 @@
 
 All public functions accept an optional ``on_progress`` callback with the
 signature ``(status: str, message: str, current: int, total: int) -> None``.
-When omitted the functions fall back to the application-wide
-:func:`~vtscore.concurrency.progress.update_progress` reporter; pass an explicit callback
-to use these functions outside the Flask app (scripts, notebooks, tests).
+When omitted the functions resolve one with
+:func:`~vtscore.concurrency.progress.resolve_progress_callback`: the callback
+the calling thread bound, or a no-op when it bound none.  Pass an explicit
+callback to use these functions outside the Flask app (scripts, notebooks,
+tests).
 """
 
 import os
@@ -19,6 +21,7 @@ from urllib.parse import urlparse
 
 import requests
 
+from vtscore.concurrency.progress import ProgressCallback, resolve_progress_callback
 from vtscore.config import DATA_DIR
 from vtscore.security.archive import safe_tar_extract
 from vtscore.security.hf_auth import GatedResourceError, auth_header_for_url
@@ -253,6 +256,39 @@ ENRICO_TOPICS_URL = "https://raw.githubusercontent.com/luileito/enrico/master/de
 RICO_SCREEN2WORDS_REPO_ID = "bevaya/RICO-Screen2Words"
 RICO_SCREEN2WORDS_SHARDS = [f"data/train-{i:05d}-of-00008.parquet" for i in range(8)]
 
+# Rico UI semantics ("Voxel51/rico"): the same Rico screenshot corpus as
+# RICO-Screen2Words, but carrying the *element-level* annotations rather than a
+# whole-screen label — 66,261 Android screens whose ``detections`` list one entry
+# per visible UI element with a normalized ``[x, y, w, h]`` box, a 25-way
+# component ``label`` (Icon, Text, Text Button, List Item, …) and, for icons, a
+# ``content_or_function`` naming the icon's semantics ("search", "arrow_backward",
+# "notifications", …).  CC BY 4.0.  This is VTSearch's only *boxed screenshot*
+# demo: every other born-digital source labels the screen as a whole, so nothing
+# else can answer "box this search icon, find every other search icon".
+#
+# Same FiftyOne-export layout as OpenLogo (``samples.json`` + a ``data/`` media
+# tree), so it reuses the same stdlib parse — no ``fiftyone`` dependency.  Two
+# differences drive the download strategy below:
+#   * ``filepath`` is nested (``data/data_<k>/<screen_id>.jpg``) across 67 shard
+#     folders of 1,000 screenshots each, not one flat folder.
+#   * the media is ~7.7 GB, far too much to pull for a small variant.  So the
+#     manifest is fetched first, sliced, and only the shard folders the slice
+#     actually lands in are fetched — an (S) load pulls ~2 shards, not all 67.
+RICO_ICONS_REPO_ID = "Voxel51/rico"
+#: One shard folder holds 1,000 screenshots; the last is partial (66,261 total).
+RICO_ICONS_SHARD_SIZE = 1000
+RICO_ICONS_SHARD_COUNT = 67
+#: Measured from the HF file tree (2026-09-01): ~115.6 MB per full shard folder.
+RICO_ICONS_SHARD_MB = 116
+#: ``samples.json`` is one 535 MB document and is fetched for *every* variant,
+#: so it dominates the (S) download. Parsed a sample at a time — see
+#: ``_iter_fiftyone_samples`` — so the peak cost is the file text, not a full
+#: object tree.
+RICO_ICONS_MANIFEST_MB = 535
+#: Parallel workers for the image shards: 1,000 small JPEGs per folder makes this
+#: latency-bound on per-file round trips, exactly like OpenLogo.
+RICO_ICONS_DOWNLOAD_WORKERS = 16
+
 # RVL-CDIP: 16-class document-image classification.  The canonical
 # ``aharley/rvl_cdip`` is a 38 GB tarball (impractical as a demo); instead we
 # pull a demo-sized, class-balanced 100-images-per-class parquet mirror whose
@@ -320,6 +356,10 @@ ENRICO_DOWNLOAD_SIZE_MB = 110
 RICO_SCREEN2WORDS_DOWNLOAD_SIZE_MB = 1720
 RVL_CDIP_DOWNLOAD_SIZE_MB = 180
 OPENLOGO_DOWNLOAD_SIZE_MB = 4640
+#: Whole-corpus figure (manifest + all 67 image shards). Each Rico-icons demo
+#: variant advertises its own smaller total, since it fetches only the shards
+#: its slice lands in — see ``_rico_icons_size_mb`` in the image demo sources.
+RICO_ICONS_DOWNLOAD_SIZE_MB = RICO_ICONS_MANIFEST_MB + RICO_ICONS_SHARD_COUNT * RICO_ICONS_SHARD_MB
 # Verified against the servers' Content-Length (2026-07-14): images.zip is
 # 9,730,308,001 B (9280 MiB), images2.zip 5,471,658,058 B (5218 MiB), and
 # objects.json.zip 55,323,929 B (53 MiB).  These only seed the "Downloading
@@ -330,20 +370,6 @@ VISUAL_GENOME_OBJECTS_DOWNLOAD_SIZE_MB = 53
 HMDB51_DOWNLOAD_SIZE_MB = 2000
 UCF101_FULL_DOWNLOAD_SIZE_MB = 6960
 KTH_DOWNLOAD_SIZE_MB = 1150
-
-ProgressCallback = Callable[[str, str, int, int], None]
-
-
-def _default_progress() -> ProgressCallback:
-    """Lazily resolve the progress callback for the current thread."""
-    from vtscore.concurrency.progress import get_thread_progress
-
-    cb = get_thread_progress()
-    if cb is not None:
-        return cb
-    from vtscore.concurrency.progress import update_progress
-
-    return update_progress
 
 
 def _request_headers(url: str, headers: Optional[dict]) -> dict:
@@ -558,7 +584,7 @@ def download_file_with_progress(  # noqa: C901
             server does not supply a ``Content-Length`` header. Pass 0 (default)
             if the size is unknown.
         on_progress: Optional progress callback. Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Raises:
         requests.HTTPError: If the server returns a non-retryable error status.
@@ -568,7 +594,7 @@ def download_file_with_progress(  # noqa: C901
             its ``__cause__``.
     """
     if on_progress is None:
-        on_progress = _default_progress()
+        on_progress = resolve_progress_callback()
 
     session = guarded_session()
     downloaded = 0  # bytes already on disk at dest_path
@@ -656,7 +682,7 @@ def fetch_text_with_retry(url: str, label: str = "", on_progress: Optional[Progr
         label: Short human-readable name for the fetch, used in the retry
             progress message.  Defaults to the URL's last path segment.
         on_progress: Optional progress callback.  Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Raises:
         requests.HTTPError: If the server returns a non-retryable error status.
@@ -664,7 +690,7 @@ def fetch_text_with_retry(url: str, label: str = "", on_progress: Optional[Progr
             keeps returning a retryable status, after the final retry attempt.
     """
     if on_progress is None:
-        on_progress = _default_progress()
+        on_progress = resolve_progress_callback()
     label = label or urlparse(url).path.rsplit("/", 1)[-1] or url
 
     session = guarded_session()

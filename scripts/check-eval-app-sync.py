@@ -54,6 +54,7 @@ PINS_PATH = REPO_ROOT / "scripts" / "eval-app-sync.pins.json"
 
 AUTOPILOT_TS = "frontend/src/app/services/autopilot-state.service.ts"
 LABEL_VIEW_TS = "frontend/src/app/components/label-view/label-view.component.ts"
+AUTO_SELECT_TS = "frontend/src/app/utils/auto-select-next.ts"
 
 
 @dataclass(frozen=True)
@@ -129,6 +130,40 @@ MIRRORS: list[Mirror] = [
         ),
     ),
     Mirror(
+        id="autopilot.auto_select_next",
+        app=f"ts:{AUTO_SELECT_TS}::export function autoSelectNext(",
+        harness="vtscore/eval/al_strategies.py::_hard_pick_by_index",
+        kind="ported",
+        note=(
+            "The app's auto-advance rule - which item each Select mode shows next. `top` takes "
+            "the highest-ranked unvoted row; `hard` takes the unvoted row nearest the "
+            "acquisition cut BY RANK INDEX, not by score; `new` defers to the coverage atlas. "
+            "_hard_pick_by_index is the `hard` branch verbatim, and it is the branch every "
+            "simulated vote after the seed phase goes through, so a change to the rule that "
+            "does not reach the harness silently re-points every study's vote order. Rank space "
+            "is the load-bearing detail: a score-space argmin biases toward whichever side of "
+            "the line is denser, which is the whole reason the app measures in indices. Note "
+            "the cutoff index is computed over the FULL window, voted rows included, so it does "
+            "not slide as votes accumulate - the harness's `ordered` list must stay the full "
+            "ranking rather than the pool. Also re-check the tie rule: both sides scan "
+            "ascending by index with a strict `<`, so an exact tie takes the higher-ranked row. "
+            "Extracted out of the label-view component (#3428) so this digest covers the pick "
+            "rule alone rather than the component's sort plumbing; "
+            "frontend/src/app/utils/auto-select-next.spec.ts states the same cases executably."
+        ),
+        divergence=(
+            "The harness mirrors only the `hard` branch here. `top` is trivial and is "
+            "reproduced inline by the phase-faithful strategy; `new` is not ported at all - "
+            "_atlas_next DELEGATES to CoverageAtlas.next_sample, the same call the app's New "
+            "pick makes through /api/coverage-atlas/next, so it cannot drift and needs no pin. "
+            "The app's guard that a `new` pick still requires a loaded ranking is a UI "
+            "precondition (the window steers the probe's scores) with no harness counterpart, "
+            "as is `excludeId`: it covers the instant between casting a vote and that vote "
+            "landing in goodVotes/badVotes, which a simulation never observes because it "
+            "records the vote before asking for the next pick."
+        ),
+    ),
+    Mirror(
         id="autopilot.startup_default",
         app=f"ts:{AUTOPILOT_TS}::const INITIAL_STATE",
         harness="vtscore/eval/startup_schedule.py::PRODUCTION_STARTUP",
@@ -154,11 +189,11 @@ MIRRORS: list[Mirror] = [
             "machine reads. Re-check the per-class minimum and the flatness threshold."
         ),
         divergence=(
-            "The harness takes the error-cost window as an argument instead of reading the "
-            "module-level `_cached_steps` MLP cache, which is built for one interactive "
+            "The harness takes the error-cost window as an argument instead of reading a "
+            "`_ProgressCache`'s `steps` MLP cache, which is built for one interactive "
             "detector advancing a vote at a time. The *rules* are copied; only the input "
             "plumbing differs - and only in where the models come from, not in how they are "
-            "scored: the caller (`voting_iterations._labelset_error_costs`) re-scores the "
+            "scored: the caller (`step_trainers._labelset_error_costs`) re-scores the "
             "whole window against the *current* labelset every step, as `_eval_cached_models` "
             "does. Handing in a history of frozen per-step costs instead would silently change "
             "the statistic the slope measures (issue #2923), which is not a declared divergence."
@@ -175,7 +210,7 @@ MIRRORS: list[Mirror] = [
         ),
         divergence=(
             "Same input plumbing divergence as progress.smart_status: flip counts are passed "
-            "in rather than read from `_cached_steps`."
+            "in rather than read from a `_ProgressCache`'s `steps`."
         ),
     ),
     Mirror(
@@ -196,7 +231,7 @@ MIRRORS: list[Mirror] = [
     Mirror(
         id="training.train_and_threshold",
         app="py:vtscore.detectors.training.train_and_threshold",
-        harness="vtscore/eval/voting_iterations.py::_style_train_and_calibrate",
+        harness="vtscore/eval/step_trainers.py::_style_train_and_calibrate",
         kind="default",
         note=(
             "The app's canonical train + calibrate pipeline, which the harness reproduces step "
@@ -205,7 +240,7 @@ MIRRORS: list[Mirror] = [
             "default arm trains a detector the app no longer ships. Note "
             "_mlp_train_and_calibrate is the single-vector path and reproduces the same shape. "
             "The head is the one knob mirrored by name: this function's `hidden_dim` must equal "
-            "`_resolve_hidden_dim(voting_iterations.PRODUCTION_HEAD, ...)`, which "
+            "`resolve_hidden_dim(step_model.PRODUCTION_HEAD, ...)`, which "
             "tests_lib/detectors/test_harness_linear_head.py pins by training this pipeline for "
             "real - so a head change fails the suite as well as tripping this digest."
         ),
@@ -235,11 +270,11 @@ MIRRORS: list[Mirror] = [
     Mirror(
         id="training.blend_schedule_default",
         app="py:vtscore.detectors.training._blend_schedule_for_snap",
-        harness="vtscore/eval/voting_iterations.py::simulate_voting_iterations",
+        harness="vtscore/eval/voting_iterations.py::_resolve_production_defaults",
         kind="default",
         note=(
             "How the app picks a safe-threshold blend schedule when none is named (per voting "
-            "mode). simulate_voting_iterations resolves blend_schedule=None through "
+            "mode). _resolve_production_defaults resolves blend_schedule=None through "
             "production_schedule_for to match; if the app's choice becomes conditional on "
             "something else, that condition has to reach the harness too."
         ),
@@ -247,14 +282,14 @@ MIRRORS: list[Mirror] = [
     Mirror(
         id="training.split_fraction_default",
         app="py:vtscore.detectors.training.resolve_calibration_fraction",
-        harness="vtscore/eval/voting_iterations.py::simulate_voting_iterations",
+        harness="vtscore/eval/voting_iterations.py::_resolve_production_defaults",
         kind="default",
         note=(
             "How the app resolves calibration_fraction when the user has no explicit setting "
             "(#3287/#3290): the per-SPACE production split - 0.3 when the detector learns in a "
             "single-vector space, 0.5 on a patch grid, 0.5 when unknown - keyed on the "
             "embedder's supports_patch_regions capability, NOT on the voting mode. "
-            "simulate_voting_iterations resolves calibration_fraction=None through the same "
+            "_resolve_production_defaults resolves calibration_fraction=None through the same "
             "production_split_for table, keyed on whether any media carries a patch_grid (the "
             "harness's spelling of 'built by a patch embedder'). The values themselves cannot "
             "drift - both sides read PRODUCTION_SPLIT_BY_SPACE - so what this digest watches is "
@@ -265,7 +300,7 @@ MIRRORS: list[Mirror] = [
     ),
     Mirror(
         id="thresholds.vote_exclusion_floor",
-        app="py:vtscore.training.thresholds.resolve_exclusion_floor",
+        app="py:vtscore.training.thresholds.anchored.resolve_exclusion_floor",
         harness="vtscore/eval/voting_iterations.py::_safe_threshold_for_step",
         kind="default",
         note=(
@@ -288,8 +323,8 @@ MIRRORS: list[Mirror] = [
     ),
     Mirror(
         id="thresholds.fold_anchored_fit_then_cut",
-        app="py:vtscore.training.thresholds.fold_anchored_gmm_threshold",
-        harness="vtscore/eval/voting_iterations.py::_cut_inclusion_arms",
+        app="py:vtscore.training.thresholds.anchored.fold_anchored_gmm_threshold",
+        harness="vtscore/eval/arms_inclusion.py::_cut_inclusion_arms",
         kind="default",
         note=(
             "The app composes a fold-anchored threshold as fit_fold_anchored_cut(...) then "
@@ -317,7 +352,7 @@ MIRRORS: list[Mirror] = [
     ),
     Mirror(
         id="thresholds.rate_cut_no_root",
-        app="py:vtscore.training.thresholds._rate_cut",
+        app="py:vtscore.training.thresholds.gmm._rate_cut",
         harness="vtscore/eval/cut_rules.py::gaussian_cuts",
         kind="default",
         note=(

@@ -135,7 +135,7 @@ the task is unknown or nothing resolves.
 | `step_weights(task, *, device, media_type, embedder, n, size_mb, fallback)` | Normalised per-tracker-step weights, or *fallback* |
 | `step_terms(...)` | The same prediction before normalisation - raw predicted seconds per phase |
 | `slot_shares(task, step, ...)` | Measured sub-stage shares *within* one step, for steps that pace several ordered sub-stages behind one number (today only the dataset load's `finalize`). Raw weights; the consumer normalises |
-| `profile_covers(task)` | Whether the active profile has any measured cell for *task* |
+| `profile_covers(task)` | Whether the active profile has any measured cell for *task*. Public API with no in-repo caller - for out-of-tree callers that want to branch on coverage before asking for weights |
 | `active_profile()` / `reload_profile(path=None)` | The parsed profile; re-read it |
 | `known_tasks()` / `task_spec(name)` | Registry lookups |
 | `cell_keys(device, media_type, embedder)` / `normalize_device(device)` | Cell-key resolution, most specific first |

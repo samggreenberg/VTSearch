@@ -98,6 +98,10 @@ The tables below are generated from the demo-dataset registry (each media type's
 | **rico_screen2words_m** | Mobile app UI screenshots by app category | ~1720 MB |
 | **rico_screen2words_l** | Mobile app UI screenshots by app category | ~1720 MB |
 | **rico_screen2words_a** | Mobile app UI screenshots across 16 Google Play app categories | ~1720 MB |
+| **rico_icons_s** | Mobile UI screenshots with boxed, labelled icons | ~883 MB |
+| **rico_icons_m** | Mobile UI screenshots with boxed, labelled icons | ~1115 MB |
+| **rico_icons_l** | Mobile UI screenshots with boxed, labelled icons | ~1579 MB |
+| **rico_icons_a** | All Rico screenshots carrying one of 32 boxed icon classes | ~8307 MB |
 | **rvl_cdip_s** | Scanned document images by type | ~180 MB |
 | **rvl_cdip_m** | Scanned document images by type | ~180 MB |
 | **rvl_cdip_l** | Scanned document images by type | ~180 MB |
@@ -114,6 +118,22 @@ The tables below are generated from the demo-dataset registry (each media type's
 | **vggface2_faces_m** | In-the-wild celebrity photos, one label per person | ~1935 MB |
 
 <!-- END GENERATED: demos:image -->
+
+> **Box annotations.** Most image demos are single-label: one category per
+> image, categories treated as disjoint. Three are not. `visual_genome_*` and
+> `openlogo_*` are multi-label *photographs* that also carry ground-truth
+> bounding boxes, and `rico_icons_*` is the boxed *screenshot* demo — each media
+> is one Android screen, its categories are the icon semantics visible on it
+> (Search, Back arrow, Overflow menu, …) and it carries one normalised box per
+> icon instance. Boxes are stored on the media as `regions` and are read by the
+> evaluation harness; they are not rendered in the app.
+>
+> **Rico Icons is the one source whose size variants differ in download.** Its
+> screenshots run to ~7.7 GB across 67 shard folders, so the loader fetches the
+> 535 MB annotation manifest first, slices it, then pulls only the shard folders
+> that slice lands in — (S) costs two folders, not sixty-seven. Every other
+> source's **Download** column is the full-source figure for all four variants.
+
 
 ## Document
 

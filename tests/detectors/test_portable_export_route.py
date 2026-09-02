@@ -11,11 +11,10 @@ import io
 import json
 import zipfile
 
-import app as app_module
 import pytest
 from tests.fixtures.medias import DEFAULT_AUDIO_EMBEDDER
 from tests.helpers import setup_trainable_model_in_registry
-from vtsearch.state import snapshot_medias
+from vtsearch.state import medias, snapshot_medias
 
 
 def _export(client, detector_id):
@@ -97,12 +96,12 @@ class TestPortableExport:
             bad_ids=[18, 19, 20],
             snap=snapshot_medias(),
         )
-        saved = dict(app_module.medias)
-        app_module.medias.clear()
+        saved = dict(medias)
+        medias.clear()
         try:
             assert _export(client, detector_id).status_code == 400
         finally:
-            app_module.medias.update(saved)
+            medias.update(saved)
 
     def test_export_blocks_structural_detector(self, client, monkeypatch):
         """A structural detector is rejected (409) rather than silently mis-exported.

@@ -248,14 +248,93 @@ class TestStreamingExporterGuard:
     def test_non_streaming_exporter_raises(self):
         from vtscore.cli import _run_streaming_pipeline
 
-        # holder is a registered exporter with no incremental (streaming) mode.
+        # open_url is a registered exporter with no incremental (streaming) mode.
         with pytest.raises(ValueError, match="does not support --stream-results"):
             _run_streaming_pipeline(
                 iter([{1: _make_audio_media(1)}]),
-                exporter_name="holder",
+                exporter_name="open_url",
                 exporter_field_values={},
                 override_detectors=None,
                 autofind_detectors=[],
                 keep_negatives=False,
                 empty_error="none",
             )
+
+
+class TestStreamingWholeDatasetVariants:
+    """``stream_results`` is accepted by the *whole* entry points too.
+
+    It used to be chunked-only, so a caller who did not want chunking had no
+    way to hand a streaming-capable exporter a lazy record iterator even
+    though ``_run_pipeline`` supported it.  A whole-dataset run holds all the
+    medias in RAM by construction, but streaming still keeps the *hits* from
+    accumulating - and, more to the point, the four entry points now differ
+    only in their source.
+    """
+
+    def test_whole_pickle_run_streams_positive_hits(self, client, tmp_path, _stub_split_training):
+        _write_pretrained_detector("stream-whole")
+        settings_path = _settings_file_with_detector(tmp_path, "stream-whole")
+        ds_path = tmp_path / "ds.pkl"
+        _write_pickle_dataset(ds_path, {i: _make_audio_media(i) for i in range(1, 6)})
+        out = tmp_path / "hits.ndjson"
+
+        from vtscore.cli import autodetect_main
+
+        autodetect_main(
+            str(ds_path),
+            settings_path=str(settings_path),
+            exporter_name="server_json_file",
+            exporter_field_values={"filepath": str(out)},
+            stream_results=True,
+        )
+
+        meta, hits = _read_ndjson(out)
+        assert meta["format"] == "vtsearch-hits-ndjson/v1"
+        assert meta["keep_negatives"] is False
+        assert all(h["label"] == "good" for h in hits)
+        assert sorted(h["id"] for h in hits) == [1, 2, 3]
+
+    def test_whole_pickle_run_keeps_negatives(self, client, tmp_path, _stub_split_training):
+        _write_pretrained_detector("stream-whole-neg")
+        settings_path = _settings_file_with_detector(tmp_path, "stream-whole-neg")
+        ds_path = tmp_path / "ds.pkl"
+        _write_pickle_dataset(ds_path, {i: _make_audio_media(i) for i in range(1, 6)})
+        out = tmp_path / "hits.ndjson"
+
+        from vtscore.cli import autodetect_main
+
+        autodetect_main(
+            str(ds_path),
+            settings_path=str(settings_path),
+            exporter_name="server_json_file",
+            exporter_field_values={"filepath": str(out)},
+            stream_results=True,
+            keep_negatives=True,
+        )
+
+        meta, hits = _read_ndjson(out)
+        assert meta["keep_negatives"] is True
+        assert sorted(h["id"] for h in hits if h["label"] == "good") == [1, 2, 3]
+        assert sorted(h["id"] for h in hits if h["label"] == "bad") == [4, 5]
+
+    def test_whole_run_dry_run_reports_streaming(self, client, tmp_path, capsys):
+        _write_pretrained_detector("stream-whole-dry")
+        settings_path = _settings_file_with_detector(tmp_path, "stream-whole-dry")
+        ds_path = tmp_path / "ds.pkl"
+        _write_pickle_dataset(ds_path, {i: _make_audio_media(i) for i in range(1, 6)})
+
+        from vtscore.cli import autodetect_main
+
+        autodetect_main(
+            str(ds_path),
+            settings_path=str(settings_path),
+            exporter_name="server_json_file",
+            exporter_field_values={"filepath": str(tmp_path / "out.ndjson")},
+            dry_run=True,
+            stream_results=True,
+        )
+
+        out = capsys.readouterr().out
+        assert "Chunk size: whole dataset" in out
+        assert "Streaming: yes" in out

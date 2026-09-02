@@ -603,7 +603,9 @@ class TestErrorResponseFormat:
         resp = client.get("/api/medias/99999/audio")
         assert resp.status_code == 404
         data = resp.get_json()
-        assert "error" in data
+        assert data["message"] == "not found"
+        assert data["code"] == 404
+        assert "request_id" in data
 
     def test_400_sort_error_is_json(self, client):
         # The sort blueprint now returns flask-smorest's standard error
@@ -676,7 +678,8 @@ class TestErrorResponseFormat:
         )
         assert resp.status_code == 404
         data = resp.get_json()
-        assert "error" in data
+        assert "nonexistent_exporter" in data["message"]
+        assert "request_id" in data
 
     def test_400_missing_exporter_name_is_json(self, client):
         # Migrated to flask-smorest: schema-level validation surfaces

@@ -15,7 +15,6 @@ import logging
 import os
 import re
 import sys
-from typing import Any, cast
 
 _TIME_SUFFIX_RE = re.compile(r"\s*\(\d+s(?:,\s*\d+\s+modules)?\)$")
 
@@ -625,6 +624,12 @@ def preload_embedder_for_dataset(dataset_id: str) -> str:
 #
 # These return the model instances held by their respective embedder objects.
 # Existing callers that import these functions directly continue to work.
+#
+# They go through the public :meth:`MediaEmbedder.loaded_backbone` accessor
+# rather than each subclass's own private helper, so an embedder that is
+# reimplemented (or replaced out-of-tree) either keeps working via the ABC's
+# default or overrides one documented method - instead of breaking silently
+# the moment a private helper is renamed.
 # ---------------------------------------------------------------------------
 
 
@@ -632,22 +637,18 @@ def get_clap_model():
     """Return ``(clap_model, clap_processor)`` from the CLAP embedder."""
     from vtscore.media import get_embedder
 
-    emb = get_embedder("clap")
-    # _get_model_and_processor is defined on the CLAP subclass, not the ABC.
-    return cast(Any, emb)._get_model_and_processor()
+    return get_embedder("clap").loaded_backbone()
 
 
 def get_xclip_model():
     """Return ``(xclip_model, xclip_processor)`` from the X-CLIP embedder."""
     from vtscore.media import get_embedder
 
-    emb = get_embedder("xclip")
-    return cast(Any, emb)._get_model_and_processor()
+    return get_embedder("xclip").loaded_backbone()
 
 
 def get_e5_model():
     """Return the E5 ``SentenceTransformer`` from the E5 embedder."""
     from vtscore.media import get_embedder
 
-    emb = get_embedder("e5")
-    return cast(Any, emb)._get_model()
+    return get_embedder("e5").loaded_backbone()[0]

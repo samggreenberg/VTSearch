@@ -1179,49 +1179,79 @@ class TestImporterBulkHooks:
             imp.run({}, {})
 
 
-class TestReCallerMultiMedia:
-    """ReCaller is the worked example of a multi-source-type service importer.
+class TestMultiSourceTypeRun:
+    """A single import can pull several source types and convert each one.
 
-    Verifies ``fetch_source_media(spec, ...)`` filters records by
-    ``spec.source_type`` and that the framework's default :meth:`run`
-    drives converter calls so the importer doesn't need to.
+    Exercises the framework contract for multi-source-type importers: the
+    importer yields raw records for one ``SourceSpec`` at a time from
+    ``fetch_source_media``, and the framework's default :meth:`run` loops the
+    spec list and drives ``converter.convert()`` so the importer never has to.
     """
 
-    def _stub_apis(self, monkeypatch, *, media_types=None):
+    def _make_importer(self, records: list[dict]):
+        """A service-style importer that filters its records by source type."""
         import numpy as np
 
-        from vtscore.datasets.importers import recaller as rc
+        from vtscore.datasets.importers.base import DatasetImporter, PluginField, SourceSpec
 
-        if media_types is None:
-            media_types = ["audio"] * 3
-        results = [
+        rng = np.random.default_rng(42)
+        embeddings = {r["mediaID"]: rng.standard_normal(8).astype(np.float32) for r in records}
+
+        class _ServiceImporter(DatasetImporter):
+            name = "test_service"
+            display_name = "Test Service"
+            description = "Test importer."
+            origin_suppressed = True
+            fields = [
+                PluginField("media_type", "Media Type", "select", options=["image", "video", "audio"], default="audio"),
+                PluginField("query_id", "Query ID", "text"),
+            ]
+
+            def fetch_source_media(self, spec: SourceSpec, field_values: dict, thin: bool = False):
+                query_id = (field_values.get("query_id") or "").strip()
+                if not query_id:
+                    raise ValueError("A query ID is required.")
+                for rec in records:
+                    if rec["media_type"] != spec.source_type:
+                        continue
+                    yield {
+                        "media_type": spec.source_type,
+                        "filename": rec["contentID"],
+                        "md5": rec["md5"],
+                        "embeddings": {"fake-embedder": embeddings[rec["mediaID"]]},
+                        "embedder": "fake-embedder",
+                        "media_bytes": None if thin else f"bytes-for-{rec['media_url']}".encode(),
+                        "media_path": None,
+                        "media_url": rec["media_url"],
+                        "duration": 0,
+                        "file_size": 0,
+                        "category": "",
+                        "origin": {
+                            "importer": self.name,
+                            "params": {"contentID": rec["contentID"], "mediaID": rec["mediaID"]},
+                        },
+                        "origin_name": rec["contentID"],
+                    }
+
+        return _ServiceImporter()
+
+    @staticmethod
+    def _records(media_types: list[str]) -> list[dict]:
+        return [
             {
                 "contentID": f"C{i}",
                 "mediaID": f"M{i}",
-                "media_url": f"http://pw/{i}",
+                "media_url": f"http://svc/{i}",
                 "media_type": mt,
                 "md5": f"md5_{i}",
             }
             for i, mt in enumerate(media_types)
         ]
-        monkeypatch.setattr(rc, "_rc_fetch_results", lambda _q: list(results))
 
-        rng = np.random.default_rng(42)
-        embeddings = {f"M{i}": rng.standard_normal(8).astype(np.float32) for i in range(len(results))}
-        monkeypatch.setattr(
-            rc,
-            "_dw_get_embedding",
-            lambda mid: {"embedding": embeddings[mid], "embedder": "fake-embedder"},
-        )
-        monkeypatch.setattr(rc, "_pw_fetch_media", lambda url: f"bytes-for-{url}".encode())
-        return results
-
-    def test_fetch_source_media_filters_by_source_type(self, monkeypatch):
+    def test_fetch_source_media_filters_by_source_type(self):
         from vtscore.datasets.importers.base import SourceSpec
-        from vtscore.datasets.importers.recaller import ReCallerDatasetImporter
 
-        self._stub_apis(monkeypatch, media_types=["audio", "image", "audio"])
-        imp = ReCallerDatasetImporter()
+        imp = self._make_importer(self._records(["audio", "image", "audio"]))
 
         audio_yields = list(
             imp.fetch_source_media(
@@ -1243,26 +1273,8 @@ class TestReCallerMultiMedia:
         assert [m["filename"] for m in image_yields] == ["C1"]
         assert image_yields[0]["media_type"] == "image"
 
-    def test_fetch_source_media_requires_query_id(self, monkeypatch):
-        from vtscore.datasets.importers.base import SourceSpec
-        from vtscore.datasets.importers.recaller import ReCallerDatasetImporter
-
-        self._stub_apis(monkeypatch)
-        imp = ReCallerDatasetImporter()
-        with pytest.raises(ValueError, match="query ID"):
-            list(
-                imp.fetch_source_media(
-                    SourceSpec(source_type="audio", converter=None, params={}),
-                    {"query_id": "", "media_type": "audio"},
-                    thin=True,
-                )
-            )
-
-    def test_default_run_ingests_direct_spec(self, monkeypatch):
-        from vtscore.datasets.importers.recaller import ReCallerDatasetImporter
-
-        self._stub_apis(monkeypatch)
-        imp = ReCallerDatasetImporter()
+    def test_default_run_ingests_direct_spec(self):
+        imp = self._make_importer(self._records(["audio"] * 3))
         medias: dict = {}
         imp.run({"query_id": "Q1", "media_type": "audio"}, medias, thin=True)
 
@@ -1275,10 +1287,8 @@ class TestReCallerMultiMedia:
         """Framework calls converter.convert(); importer never does."""
         import json
 
-        from vtscore.datasets.importers.recaller import ReCallerDatasetImporter
-
-        # Mix of audio (direct) and video (must go through video2image).
-        self._stub_apis(monkeypatch, media_types=["image", "video", "image"])
+        # Mix of image (direct) and video (must go through video2image).
+        imp = self._make_importer(self._records(["image", "video", "image"]))
 
         # Stub video2image to return a deterministic 2-frame expansion.
         from vtscore.converters import get_converter
@@ -1308,7 +1318,6 @@ class TestReCallerMultiMedia:
 
         monkeypatch.setattr(v2i, "convert", fake_convert)
 
-        imp = ReCallerDatasetImporter()
         medias: dict = {}
         source_specs = json.dumps(
             [
@@ -1343,8 +1352,8 @@ class TestReCallerMultiMedia:
 # every converter-derived item because it reads m.get("media_type") to pick
 # the right embedder.
 #
-# The fake converter in TestReCaller above returned media_type explicitly;
-# masking the bug.  The tests below use a converter that omits media_type,
+# The fake converter in TestMultiSourceTypeRun above returned media_type
+# explicitly; masking the bug.  The tests below use a converter that omits media_type,
 # matching the real converter contract.
 
 

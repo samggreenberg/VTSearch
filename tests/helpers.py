@@ -236,3 +236,31 @@ def wire_mock_progress_scope(emb):
 
     emb.progress_scope = _scope
     return emb
+
+
+# ---------------------------------------------------------------------------
+# Progress helpers
+# ---------------------------------------------------------------------------
+
+
+def current_loading_progress() -> dict:
+    """Return the dataset-load snapshot a client would currently be watching.
+
+    Stands in for the removed ``vtscore.concurrency.progress.get_progress()``:
+    the first active loading task if one is running, else the first task still
+    carrying an error, else an idle stub.  Tests use it to assert on "the"
+    in-flight load without having to thread its task id through.
+
+    Unlike the old free function there is no global singleton behind it — the
+    per-task registry is the only progress there is.
+    """
+    from vtscore.concurrency.progress import loading_tasks  # noqa: PLC0415
+
+    tasks = loading_tasks.list_tasks()
+    active = [t for t in tasks if t.get("status") != "idle"]
+    if active:
+        return active[0]
+    errored = [t for t in tasks if t.get("error")]
+    if errored:
+        return errored[0]
+    return {"status": "idle", "message": "", "current": 0, "total": 0, "error": None}

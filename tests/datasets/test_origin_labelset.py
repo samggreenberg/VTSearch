@@ -12,13 +12,9 @@ Covers:
 
 from __future__ import annotations
 
-import app as app_module
 from vtscore.datasets.labelset import LabelSet, LabeledElement
 from vtscore.datasets.origin import Origin
-from vtsearch.state import (
-    build_media_lookup,
-    resolve_media_ids,
-)
+from vtsearch.state import bad_votes, build_media_lookup, good_votes, medias, resolve_media_ids
 
 
 # ---------------------------------------------------------------------------
@@ -403,14 +399,14 @@ class TestBuildOrigin:
 class TestClipOrigins:
     def test_init_medias_have_origin(self):
         """Every media created by init_medias should have origin and origin_name."""
-        for cid, media in app_module.medias.items():
+        for cid, media in medias.items():
             assert "origin" in media, f"Clip {cid} missing origin"
             assert "origin_name" in media, f"Clip {cid} missing origin_name"
             assert media["origin"]["importer"] == "test"
             assert media["origin_name"] == media["filename"]
 
     def test_init_medias_have_filename(self):
-        for cid, media in app_module.medias.items():
+        for cid, media in medias.items():
             assert "filename" in media, f"Clip {cid} missing filename"
             assert media["filename"].startswith("test_media_")
 
@@ -422,7 +418,7 @@ class TestClipOrigins:
 
 class TestLabelExportOrigin:
     def test_export_includes_origin(self, client):
-        app_module.good_votes[1] = None
+        good_votes[1] = None
         resp = client.get("/api/labels/export")
         data = resp.get_json()
         assert len(data["labels"]) == 1
@@ -435,8 +431,8 @@ class TestLabelExportOrigin:
 
     def test_export_roundtrip_with_origin(self, client):
         """Export labels with origin, re-import via legacy route, verify match."""
-        app_module.good_votes.update({k: None for k in [1, 3]})
-        app_module.bad_votes.update({k: None for k in [2]})
+        good_votes.update({k: None for k in [1, 3]})
+        bad_votes.update({k: None for k in [2]})
         resp = client.get("/api/labels/export")
         exported = resp.get_json()
 
@@ -445,17 +441,17 @@ class TestLabelExportOrigin:
             assert "origin" in entry
 
         # Clear and re-import
-        app_module.good_votes.clear()
-        app_module.bad_votes.clear()
+        good_votes.clear()
+        bad_votes.clear()
         resp = client.post("/api/labels/import", json=exported)
         data = resp.get_json()
         assert data["applied"] == 3
-        assert set(app_module.good_votes) == {1, 3}
-        assert set(app_module.bad_votes) == {2}
+        assert set(good_votes) == {1, 3}
+        assert set(bad_votes) == {2}
 
     def test_export_backwards_compatible(self, client):
         """Exported labels still have md5 and label keys for legacy consumers."""
-        app_module.good_votes[1] = None
+        good_votes[1] = None
         resp = client.get("/api/labels/export")
         data = resp.get_json()
         entry = data["labels"][0]

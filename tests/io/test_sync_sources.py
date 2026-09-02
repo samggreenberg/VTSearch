@@ -58,9 +58,9 @@ def _multi_user_mode(user_dir):
 def _force_cold_sync(user_path, username: str = "default") -> None:
     """Guarantee the next settings read runs a real sync-from-source pass.
 
-    Dropping ``_sync_state`` alone is **not** enough: the cross-worker dedup
+    Dropping ``_sync_state`` alone is **not** enough: the cross-process dedup
     marker (``<user_settings>.syncmark``) lives on disk and survives an
-    in-memory reset.  ``_adopt_sync_marker_if_current`` compares it against
+    in-memory reset (which is exactly what a process restart is).  ``_adopt_sync_marker_if_current`` compares it against
     the source's current ``peek_version`` and, when they match, stamps the
     state as freshly synced and skips ``source.load()`` entirely.
 

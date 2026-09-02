@@ -96,8 +96,8 @@ class TestEmbedMediaUpload:
         )
         assert resp.status_code == 404
         body = resp.get_json()
-        assert "Unknown embedder 'nope'" in body["error"]
-        assert "Available:" in body["error"]
+        assert "Unknown embedder 'nope'" in body["message"]
+        assert "Available:" in body["message"]
 
     def test_missing_embedder_field_returns_400(self, client):
         resp = client.post(
@@ -106,7 +106,7 @@ class TestEmbedMediaUpload:
             content_type="multipart/form-data",
         )
         assert resp.status_code == 400
-        assert "embedder is required" in resp.get_json()["error"]
+        assert "embedder is required" in resp.get_json()["message"]
 
     def test_missing_file_returns_400(self, client, fake_image_embedder):
         resp = client.post(
@@ -115,7 +115,7 @@ class TestEmbedMediaUpload:
             content_type="multipart/form-data",
         )
         assert resp.status_code == 400
-        assert "file is required" in resp.get_json()["error"]
+        assert "file is required" in resp.get_json()["message"]
 
     def test_wrong_extension_returns_400(self, client, fake_image_embedder):
         """An audio file uploaded to an image embedder is rejected fast."""
@@ -148,7 +148,7 @@ class TestEmbedMediaUpload:
         )
         assert resp.status_code == 400
         body = resp.get_json()
-        assert "could not embed" in body["error"]
+        assert "could not embed" in body["message"]
         assert body["media_type"] == "image"
 
 
@@ -171,17 +171,17 @@ class TestEmbedTextJson:
     def test_unknown_embedder_returns_404(self, client):
         resp = client.post("/api/embed", json={"embedder": "nope", "text": "hi"})
         assert resp.status_code == 404
-        assert "Unknown embedder 'nope'" in resp.get_json()["error"]
+        assert "Unknown embedder 'nope'" in resp.get_json()["message"]
 
     def test_missing_embedder_returns_400(self, client):
         resp = client.post("/api/embed", json={"text": "hi"})
         assert resp.status_code == 400
-        assert "embedder is required" in resp.get_json()["error"]
+        assert "embedder is required" in resp.get_json()["message"]
 
     def test_missing_text_returns_400(self, client, fake_image_embedder):
         resp = client.post("/api/embed", json={"embedder": "fake_image"})
         assert resp.status_code == 400
-        assert "text is required" in resp.get_json()["error"]
+        assert "text is required" in resp.get_json()["message"]
 
     def test_non_text_embedder_returns_400(self, client, fake_image_embedder):
         fake_image_embedder._supports_text = False
@@ -192,7 +192,7 @@ class TestEmbedTextJson:
         assert resp.status_code == 400
         body = resp.get_json()
         assert body["supports_text"] is False
-        assert "does not support text" in body["error"]
+        assert "does not support text" in body["message"]
 
     def test_embedder_returns_none_yields_500(self, client, fake_image_embedder):
         fake_image_embedder.return_none_text = True
@@ -201,7 +201,7 @@ class TestEmbedTextJson:
             json={"embedder": "fake_image", "text": "a cat"},
         )
         assert resp.status_code == 500
-        assert "returned no vector" in resp.get_json()["error"]
+        assert "returned no vector" in resp.get_json()["message"]
 
     def test_invalid_json_returns_400(self, client):
         resp = client.post(

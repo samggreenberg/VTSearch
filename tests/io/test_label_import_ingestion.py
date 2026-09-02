@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.utils.hashing import content_md5
+from vtsearch.state import bad_votes, good_votes, medias
 
 
 # ---------------------------------------------------------------------------
@@ -69,10 +70,8 @@ class TestIngestMissingEndpoint:
         importer route: a single bad entry must not abort the whole batch,
         and the response carries a ``failed`` list instead of bubbling a 500.
         """
-        import app as app_module
-
-        md5_1 = app_module.medias[1]["md5"]
-        md5_2 = app_module.medias[2]["md5"]
+        md5_1 = medias[1]["md5"]
+        md5_2 = medias[2]["md5"]
         entries = [
             {"md5": md5_1, "label": "good"},
             {"md5": md5_2, "label": "good"},
@@ -87,10 +86,10 @@ class TestIngestMissingEndpoint:
 
             inner(cid, label, **kwargs)
 
-        saved_good = dict(app_module.good_votes)
-        saved_bad = dict(app_module.bad_votes)
-        app_module.good_votes.clear()
-        app_module.bad_votes.clear()
+        saved_good = dict(good_votes)
+        saved_bad = dict(bad_votes)
+        good_votes.clear()
+        bad_votes.clear()
         try:
             with patch.object(importers_module, "apply_label", side_effect=flaky_apply):
                 res = client.post(
@@ -104,10 +103,10 @@ class TestIngestMissingEndpoint:
             assert len(result["failed"]) == 1
             assert result["failed"][0]["entry"]["md5"] == md5_2
         finally:
-            app_module.good_votes.clear()
-            app_module.bad_votes.clear()
-            app_module.good_votes.update(saved_good)
-            app_module.bad_votes.update(saved_bad)
+            good_votes.clear()
+            bad_votes.clear()
+            good_votes.update(saved_good)
+            bad_votes.update(saved_bad)
 
 
 # ---------------------------------------------------------------------------
@@ -322,7 +321,7 @@ class TestClippedReingest:
 
         from vtscore.datasets.ingest import _ingest_via_resolver
         from vtscore.media.audio.audio_generator import generate_wav
-        from vtscore.media.audio.clipper import _wav_slice
+        from vtscore.media.audio.wav import wav_slice
 
         rng = np.random.default_rng(42)
 
@@ -331,7 +330,7 @@ class TestClippedReingest:
         wav_path.write_bytes(wav)
 
         clip_start, clip_end = 0.0, 2.0
-        clip_bytes = _wav_slice(wav, clip_start, clip_end)
+        clip_bytes = wav_slice(wav, clip_start, clip_end)
         expected_clip_md5 = content_md5(clip_bytes)
         parent_md5 = content_md5(wav)
         assert expected_clip_md5 != parent_md5, "clip and parent MD5s must differ"
@@ -441,7 +440,7 @@ class TestClippedReingest:
 
         from vtscore.datasets.ingest import _ingest_via_resolver
         from vtscore.media.audio.audio_generator import generate_wav
-        from vtscore.media.audio.clipper import _wav_slice
+        from vtscore.media.audio.wav import wav_slice
 
         rng = np.random.default_rng(42)
 
@@ -450,7 +449,7 @@ class TestClippedReingest:
         wav_path.write_bytes(wav)
 
         clip_start, clip_end = 0.0, 2.0
-        expected_clip_bytes = _wav_slice(wav, clip_start, clip_end)
+        expected_clip_bytes = wav_slice(wav, clip_start, clip_end)
         assert len(expected_clip_bytes) < len(wav), "clip should be smaller than parent"
 
         origin = {

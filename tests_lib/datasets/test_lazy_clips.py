@@ -20,7 +20,7 @@ import pytest
 
 from vtscore.datasets.clipper_chain import _content_hash
 from vtscore.datasets.stages import clipper as clipper_stage
-from vtscore.media.audio.clipper import _wav_slice
+from vtscore.media.audio.wav import wav_slice
 from vtscore.media.lazy_clip import _ByteBoundedLRU, clip_recipe, lazy_clip_bytes
 
 from tests_lib.helpers import make_png_bytes, make_wav_bytes
@@ -137,7 +137,7 @@ class TestLazyClipBytes:
             "origin": {"params": {"clip_start": "0.2", "clip_end": "0.6"}},
         }
         got = lazy_clip_bytes(media)
-        expected = _wav_slice(src.read_bytes(), 0.2, 0.6)
+        expected = wav_slice(src.read_bytes(), 0.2, 0.6)
         assert got == expected
         # And the slice is genuinely shorter than the source.
         with wave.open(__import__("io").BytesIO(got), "rb") as wf:
@@ -201,7 +201,7 @@ class TestResolveMediaBytes:
             "origin": {"params": {"clip_start": "0.3", "clip_end": "0.7"}},
         }
         resolved = media_registry.get("audio")._resolve_media_bytes(media)
-        assert resolved == _wav_slice(src.read_bytes(), 0.3, 0.7)
+        assert resolved == wav_slice(src.read_bytes(), 0.3, 0.7)
 
     def test_inline_bytes_take_precedence(self, tmp_path):
         import vtscore.media as media_registry
@@ -253,7 +253,7 @@ class TestClipperStageLazyClips:
             import vtscore.media as media_registry
 
             resolved = media_registry.get("audio")._resolve_media_bytes(clip)
-            expected = _wav_slice(src.read_bytes(), float(params["clip_start"]), float(params["clip_end"]))
+            expected = wav_slice(src.read_bytes(), float(params["clip_start"]), float(params["clip_end"]))
             assert resolved == expected
 
     def test_thin_image_tiling_produces_lazy_clips(self, tmp_path, _stub_clip_fixup):
@@ -344,7 +344,7 @@ class TestPickleRoundTrip:
             assert clip["media_path"] == str(src)
             params = clip["origin"]["params"]
             resolved = media_registry.get("audio")._resolve_media_bytes(clip)
-            expected = _wav_slice(src.read_bytes(), float(params["clip_start"]), float(params["clip_end"]))
+            expected = wav_slice(src.read_bytes(), float(params["clip_start"]), float(params["clip_end"]))
             assert resolved == expected
 
 

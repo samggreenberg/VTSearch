@@ -17,7 +17,7 @@ this package is the underlying ML core.
 | Module                                                                | What it provides                                                |
 |-----------------------------------------------------------------------|-----------------------------------------------------------------|
 | `vtscore/training/mlp.py`                                             | `build_model`, `build_model_from_weights`, `train_model`        |
-| `vtscore/training/thresholds.py`                                      | GMM / cross-cal / safe threshold helpers                        |
+| `vtscore/training/thresholds/`                                        | GMM / cross-cal / safe threshold helpers (five submodules)      |
 | `vtscore/training/blend_schedules.py`                                 | Mix-in schedules for the safe-threshold blend                   |
 | `vtscore/training/evt_mixture.py`                                     | Gumbel + Normal score mixture - the extreme-value cut           |
 | `vtscore/training/svm.py`                                             | `SVMClassifier` + `train_svm` prototype                         |
@@ -125,7 +125,7 @@ With the default `MLP_HIDDEN_MIN=8` and `MLP_HIDDEN_MAX=32` (from
 `vtscore.config`), the heuristic keeps the model small when only a
 handful of labels exist - n_train=10 picks 8 (floored), n_train=60 picks 20,
 n_train=120 picks 32 (capped). The function is private but stable; the eval
-harness's `_resolve_hidden_dim` (`vtscore/eval/voting_iterations.py`) calls it
+harness's `resolve_hidden_dim` (`vtscore/eval/step_model.py`) calls it
 for the `"mlp"` arm. The detector code no longer does - it passes
 `LINEAR_SVM_HEAD` for both the final model and the cross-calibration fold
 models, so fold thresholds stay directly comparable to the full-data model.
@@ -260,7 +260,7 @@ lists from votes, caching on `DetectorContext`) sits one layer up.
 
 ### `calculate_gmm_threshold(scores)`
 
-`vtscore/training/thresholds.py`. Fits a 2-component
+`vtscore/training/thresholds/gmm.py`. Fits a 2-component
 `sklearn.mixture.GaussianMixture` to the score list and returns the
 **midpoint between the two component means**. Used to produce a
 reasonable operating point even when only a few labels exist - the score
@@ -280,7 +280,7 @@ score distributions), and to `0.5` when fewer than 2 scores are provided.
 
 ### `conformal_threshold(scores, labels, inclusion_value=0)`
 
-`vtscore/training/thresholds.py`. Split-conformal quantile rule mapping
+`vtscore/training/thresholds/conformal.py`. Split-conformal quantile rule mapping
 `inclusion_value` (integer in [-10, 10]) to a threshold over held-out
 calibration scores. For `k = inclusion_value` (with
 `CONFORMAL_BASE_BUDGET = 0.25`, `CONFORMAL_QPOS_MAX = 0.75`):
@@ -304,7 +304,7 @@ calibration folds - see `docs/experiments/2026-07-27-inclusion-knob/REPORT.md`.)
 
 ### `calculate_cross_calibration_threshold(...)`
 
-`vtscore/training/thresholds.py`. The production threshold trainer.
+`vtscore/training/thresholds/conformal.py`. The production threshold trainer.
 For each of `calibrate_count` rounds:
 
 1. Randomly split `(X_list, y_list)` into Train (`1 - calibration_fraction`)
@@ -374,7 +374,7 @@ re-score the haystack with them.
 
 ### `calculate_safe_threshold(xcal_threshold, all_scores, ctx, schedule=None)`
 
-`vtscore/training/thresholds.py`. Combines the cross-calibration
+`vtscore/training/thresholds/blend.py`. Combines the cross-calibration
 threshold with a GMM threshold computed on the full score distribution.
 The cross-cal output gets noisy when labels are few, so a **mix-in
 schedule** (`vtscore/training/blend_schedules.py`) decides how much of

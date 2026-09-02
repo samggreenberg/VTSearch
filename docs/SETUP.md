@@ -316,7 +316,7 @@ Open `http://localhost:5000` in your browser. The server binds to `0.0.0.0:5000`
 VTSEARCH_SERVER_INIT=1 gunicorn -c gunicorn.conf.py app:app
 ```
 
-`VTSEARCH_SERVER_INIT=1` triggers the same startup sequence (model init, autoload preloading, settings-source sync) that `python app.py` runs, since gunicorn imports `app.py` rather than executing its `__main__` block. `gunicorn.conf.py` pins a single worker with 8 threads; VTSearch keeps all dataset/model state in-process, so multiple workers would each hold their own copy. See [DEPLOYMENT.md](DEPLOYMENT.md#tuning) for tuning.
+`VTSEARCH_SERVER_INIT=1` triggers the same startup sequence (model init, embedder preloading) that `python app.py` runs, since gunicorn imports `app.py` rather than executing its `__main__` block. `gunicorn.conf.py` pins a single worker with 8 threads; VTSearch keeps all dataset/model state in-process, so multiple workers would each hold their own copy. See [DEPLOYMENT.md](DEPLOYMENT.md#tuning) for tuning.
 
 The Docker images already use this configuration (see [Docker](#docker) below).
 

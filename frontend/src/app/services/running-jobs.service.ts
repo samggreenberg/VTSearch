@@ -1,4 +1,5 @@
-import { Injectable, OnDestroy, inject } from '@angular/core';
+import { DestroyRef, Injectable, OnDestroy, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, Subject, timer } from 'rxjs';
 import { catchError, distinctUntilChanged, exhaustMap, map, takeUntil, timeout } from 'rxjs/operators';
@@ -49,13 +50,11 @@ export class RunningJobsService implements OnDestroy {
   private readonly requestTimeoutMs = 10000;
   private readonly busyPairsSubject = new BehaviorSubject<Map<string, string[]>>(new Map());
   private readonly stopPolling$ = new Subject<void>();
-  private readonly destroy$ = new Subject<void>();
+  private readonly destroyRef = inject(DestroyRef);
   private observerCount = 0;
   private polling = false;
 
   ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
     this.stopPolling$.next();
     this.stopPolling$.complete();
   }
@@ -101,7 +100,7 @@ export class RunningJobsService implements OnDestroy {
     timer(0, this.intervalMs)
       .pipe(
         takeUntil(this.stopPolling$),
-        takeUntil(this.destroy$),
+        takeUntilDestroyed(this.destroyRef),
         // exhaustMap (not switchMap): while one /api/jobs/active request
         // is in flight, ignore further ticks instead of aborting and
         // re-issuing. A slow or wedged backend then sees at most one poll

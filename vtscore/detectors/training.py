@@ -366,7 +366,7 @@ def resolve_calibration_fraction(calibration_fraction: float | None, embedder_na
     space is unknown - see
     :func:`vtscore.training.thresholds.production_split_for`.
 
-    Mirrored by the eval harness: ``simulate_voting_iterations`` resolves
+    Mirrored by the eval harness: ``_resolve_production_defaults`` resolves
     ``calibration_fraction=None`` through the same
     :func:`~vtscore.training.thresholds.production_split_for` table, keyed on
     whether the dataset carries a ``patch_grid`` (its spelling of "built by a

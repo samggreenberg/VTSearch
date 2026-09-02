@@ -297,7 +297,7 @@ Training (`vtscore.training.train_model`):
   calls don't race on the global RNG (the linear head has no dropout, so
   this only bites the MLP arm).
 
-Thresholding (`vtscore/training/thresholds.py`):
+Thresholding (`vtscore/training/thresholds/`):
 
 - `calculate_cross_calibration_threshold` runs k-fold cross-cal (k =
   `calibrate_count`), pools the held-out fold scores, and applies the
@@ -377,14 +377,14 @@ A **plugin family** is a registry enumerated by `vtscore.plugins.inventory` (`py
 
 | Family | Tier | Registry | Built-in plugins |
 |---|---|---|---|
-| `importers` | library | Dataset importers | 11 |
+| `importers` | library | Dataset importers | 10 |
 | `datasource_importers` | library | Datasource importers | 2 |
-| `exporters` | library | Results exporters | 8 |
-| `label_importers` | library | Label importers | 3 |
+| `exporters` | library | Results exporters | 7 |
+| `label_importers` | library | Label importers | 2 |
 | `seed_importers` | library | Seed importers | 0 |
 | `labelset_sources` | library | Labelset sources | 1 |
 | `converters` | library | Media converters | 8 |
-| `media_sources` | library | Media sources | 7 |
+| `media_sources` | library | Media sources | 6 |
 | `media_types` | library | Media types | 6 |
 | `embedders` | library | Media embedders | 26 |
 | `clippers` | library | Media clippers | 16 |

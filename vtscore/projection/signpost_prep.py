@@ -6,9 +6,9 @@ hand (see ``docs/plans/vtsbrowse-toponymy.md``):
 * the **ingest** projection stage (``vtscore.datasets.stages.projection``) —
   the user is already watching a progress bar, so prep rides along and the
   first Browse opens lettered;
-* the **lazy Browse build** (``vtsearch.routes.projection._start_umap_build``)
+* the **lazy Browse build** (``vtscore.projection.service.start_full_build``)
   — datasets ingested before/without prep get signs on their first Browse;
-* the **Find→Browse subset build** (``_start_subset_umap_build``) — signs are
+* the **Find→Browse subset build** (``service.start_subset_build``) — signs are
   re-fit over just the subset (contrastive keyphrases recompute against the
   subset's own siblings, which the image study showed beats filtering
   dataset-level signs), reusing the per-media texts cached at ingest so the
@@ -195,7 +195,7 @@ def prep_signposts(
         # Nothing worth lettering (tiny corpus, degenerate tree).  Leave the
         # context slot alone rather than pinning an empty set — an empty set
         # would suppress the lazy ground-truth fallback for datasets that
-        # ship a category hierarchy (see the routes' ``_label_set_for``).
+        # ship a category hierarchy (see ``signpost_serve.label_set_for``).
         return None
 
     if subset:

@@ -7,10 +7,9 @@ labelset stored on disk.
 
 from __future__ import annotations
 
-import app as app_module
 import pytest
 from tests.helpers import setup_trainable_model_in_registry
-from vtsearch.state import snapshot_medias
+from vtsearch.state import medias, snapshot_medias
 
 
 class TestFindLabel:
@@ -29,7 +28,7 @@ class TestFindLabel:
         data = resp.get_json()
         assert data["ok"] is True
         total = data["good_count"] + data["bad_count"]
-        assert total == app_module.NUM_MEDIAS
+        assert total == NUM_MEDIAS
 
     def test_find_label_honors_active_detector_inclusion(self, client):
         """find-label trains at the active detector context's inclusion.
@@ -78,13 +77,13 @@ class TestFindLabel:
             bad_ids=[18, 19, 20],
             snap=snapshot_medias(),
         )
-        saved = dict(app_module.medias)
-        app_module.medias.clear()
+        saved = dict(medias)
+        medias.clear()
         try:
             resp = client.post("/api/find-label", json={"detector_id": detector_id})
             assert resp.status_code == 400
         finally:
-            app_module.medias.update(saved)
+            medias.update(saved)
 
     def test_find_label_body_dataset_id_is_rejected(self, client):
         """Regression for C5: the body must not carry a ``dataset_id`` field.
@@ -152,8 +151,8 @@ class TestFindLabelStructuralRerank:
         data = resp.get_json()
 
         assert captured["good_bad_labels"] == 6
-        assert captured["snap_len"] == app_module.NUM_MEDIAS
-        assert captured["n_results"] == app_module.NUM_MEDIAS
+        assert captured["snap_len"] == NUM_MEDIAS
+        assert captured["n_results"] == NUM_MEDIAS
         # The re-rank's threshold and re-ranked result set drive the labels.
         assert data["threshold"] == 0.5
         assert data["good_count"] == 1
@@ -177,7 +176,6 @@ class TestFindModeIsPerDetector:
     def test_find_label_on_one_detector_does_not_block_sync_on_another(self, client):
         from tests import load_detector_and_wait
         from vtscore.detectors.store import _detector_path, _read_detector
-        from vtsearch.state import medias
 
         if len(medias) < 5:
             pytest.skip("Need at least 5 medias")
@@ -245,7 +243,7 @@ class TestAutoDetect:
         result = data["results"]["auto-detect-model"]
         assert "hits" in result
         assert "negative_hits" in result
-        assert len(result["hits"]) + len(result["negative_hits"]) == app_module.NUM_MEDIAS
+        assert len(result["hits"]) + len(result["negative_hits"]) == NUM_MEDIAS
 
     def test_autofind_hits_carry_the_media_fields_the_table_renders(self, client):
         """Hits must carry the media fields the Auto-Find results table shows.
@@ -343,3 +341,6 @@ class TestAutoDetect:
         resp = client.post("/api/auto-detect", json={})
         assert resp.status_code == 400
         assert "gone-detector" in resp.get_json()["message"]
+
+
+from tests.fixtures.medias import NUM_MEDIAS

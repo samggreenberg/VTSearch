@@ -62,6 +62,5 @@ def memoize_sweep(fn: _F) -> _F:
             cache[key] = fn(*args, **kwargs)
         return cache[key]
 
-    wrapper.cache_clear = cache.clear  # type: ignore[attr-defined]
     wrapper.__wrapped__ = fn  # type: ignore[attr-defined]
     return wrapper  # type: ignore[return-value]

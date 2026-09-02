@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import tempfile
 from pathlib import Path
 from typing import Any
 
 from vtscore.converters.base import MediaConverter
 from vtscore.plugins import PluginField
+
+logger = logging.getLogger(__name__)
 
 
 class Audio2TextMediaConverter(MediaConverter):
@@ -86,7 +89,7 @@ class Audio2TextMediaConverter(MediaConverter):
         try:
             import whisper  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
         except ImportError:
-            print("Audio2TextMediaConverter requires openai-whisper: pip install openai-whisper")
+            logger.warning("audio2text requires openai-whisper: pip install openai-whisper")
             if owns_temp:
                 audio_path.unlink(missing_ok=True)
             return []
@@ -101,8 +104,8 @@ class Audio2TextMediaConverter(MediaConverter):
 
         try:
             model = whisper.load_model(model_size, device=whisper_device)
-        except Exception as e:
-            print(f"Audio2TextMediaConverter: failed to load Whisper model '{model_size}': {e}")
+        except Exception:
+            logger.error("Failed to load Whisper model %r", model_size, exc_info=True)
             if owns_temp:
                 audio_path.unlink(missing_ok=True)
             return []
@@ -112,8 +115,8 @@ class Audio2TextMediaConverter(MediaConverter):
             if language:
                 kwargs["language"] = language
             result = model.transcribe(str(audio_path), **kwargs)
-        except Exception as e:
-            print(f"Audio2TextMediaConverter: transcription failed on {filename}: {e}")
+        except Exception:
+            logger.error("Transcription failed on %s", filename, exc_info=True)
             return []
         finally:
             if owns_temp:

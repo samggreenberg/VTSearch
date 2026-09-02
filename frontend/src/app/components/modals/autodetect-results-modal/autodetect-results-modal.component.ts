@@ -1,8 +1,7 @@
-import { ChangeDetectionStrategy, Component, inject, input, OnDestroy, OnInit, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, inject, input, OnInit, output, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { FormsModule } from '@angular/forms';
-import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
 import { ModalComponent } from '../../modal/modal.component';
 import {
   ClipboardColumn,
@@ -27,7 +26,7 @@ import { openExternalUrl, safeExternalUrl } from '../../../utils/external-url';
   templateUrl: './autodetect-results-modal.component.html',
   styleUrl: './autodetect-results-modal.component.scss',
 })
-export class AutoDetectResultsModalComponent implements OnInit, OnDestroy {
+export class AutoDetectResultsModalComponent implements OnInit {
   private exportersApi = inject(ExportersApiService);
   private templateVars = inject(PluginTemplateVarsService);
 
@@ -51,10 +50,10 @@ export class AutoDetectResultsModalComponent implements OnInit, OnDestroy {
     { key: 'origin', label: 'Origin' },
   ];
 
-  private destroy$ = new Subject<void>();
+  private readonly destroyRef = inject(DestroyRef);
 
   ngOnInit(): void {
-    this.exportersApi.getExporters().pipe(takeUntil(this.destroy$)).subscribe({
+    this.exportersApi.getExporters().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (list) => {
         // Drop exporters the plugin author flagged hidden_from_picker, and
         // those that can't read a scored run - this picker's destination is
@@ -70,11 +69,6 @@ export class AutoDetectResultsModalComponent implements OnInit, OnDestroy {
         }
       },
     });
-  }
-
-  ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
   }
 
   /**

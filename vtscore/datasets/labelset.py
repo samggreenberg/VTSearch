@@ -41,9 +41,9 @@ class LabeledElement:
         filename: Original filename of the media file.
         category: Category or class label from the dataset structure.
         metadata: Arbitrary per-element metadata that round-trips through
-            serialisation.  Importers and external systems (e.g. Holder)
-            can attach extra key-value data here (such as ``contentID``,
-            ``mediaID``, ``media_url``).  ``None`` when no metadata is
+            serialisation.  Importers and external systems can attach
+            extra key-value data here (such as an external ``contentID``
+            or a ``media_url``).  ``None`` when no metadata is
             present.  Built from the media's ``custom_metadata`` through
             :func:`vtscore.utils.hits.hit_custom_metadata`, so the
             pre-computed-vector channel never lands in a persisted labelset.

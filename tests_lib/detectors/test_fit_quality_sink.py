@@ -13,7 +13,8 @@ import numpy as np
 import pytest
 
 from vtscore.eval.fit_quality import FIT_QUALITY_COLUMNS
-from vtscore.eval.voting_iterations import _FIT_QUALITY_COLUMNS, simulate_voting_iterations
+from vtscore.eval.voting_columns import FIT_QUALITY_ROW_COLUMNS
+from vtscore.eval.voting_iterations import simulate_voting_iterations
 
 DIM = 32
 
@@ -67,10 +68,10 @@ class TestFitQualitySink:
         # no error, so the column simply never appears in the CSV.
         sink: list[dict] = []
         _run(sink)
-        cols = set(_FIT_QUALITY_COLUMNS)
+        cols = set(FIT_QUALITY_ROW_COLUMNS)
         for row in sink:
             missing = set(row) - cols
-            assert not missing, f"keys emitted but not in _FIT_QUALITY_COLUMNS: {sorted(missing)}"
+            assert not missing, f"keys emitted but not in FIT_QUALITY_ROW_COLUMNS: {sorted(missing)}"
 
     def test_the_statistics_columns_are_all_present(self):
         sink: list[dict] = []

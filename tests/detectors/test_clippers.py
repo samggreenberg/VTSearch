@@ -254,10 +254,10 @@ class TestWaveFormatExtensible:
         assert format_tag == 0xFFFE
 
     def test_wav_duration_handles_extensible(self):
-        from vtscore.media.audio.clipper import _wav_duration
+        from vtscore.media.audio.wav import wav_duration
 
         wavex = _generate_wavex(440, 3.0)
-        assert _wav_duration(wavex) == pytest.approx(3.0, abs=0.01)
+        assert wav_duration(wavex) == pytest.approx(3.0, abs=0.01)
 
     def test_tiling_clipper_handles_extensible(self):
         from vtscore.media.audio.clipper import SoundTilingClipper
@@ -294,16 +294,16 @@ class TestUndecodableAudio:
     _GARBAGE = b"RIFF\x00\x00\x00\x00WAVEjunk" + b"\x00" * 32
 
     def test_open_wav_raises_audio_decode_error(self):
-        from vtscore.media.audio.clipper import AudioDecodeError, _open_wav
+        from vtscore.media.audio.wav import AudioDecodeError, open_wav
 
         with pytest.raises(AudioDecodeError):
-            _open_wav(self._GARBAGE)
+            open_wav(self._GARBAGE)
 
     def test_wav_duration_raises_audio_decode_error(self):
-        from vtscore.media.audio.clipper import AudioDecodeError, _wav_duration
+        from vtscore.media.audio.wav import AudioDecodeError, wav_duration
 
         with pytest.raises(AudioDecodeError):
-            _wav_duration(self._GARBAGE)
+            wav_duration(self._GARBAGE)
 
     def test_tiling_clipper_returns_media_unchanged(self):
         from vtscore.media.audio.clipper import SoundTilingClipper
@@ -345,16 +345,16 @@ class TestZeroSampleRateWav:
             assert wf.getframerate() == 0
 
     def test_wav_duration_raises_audio_decode_error(self):
-        from vtscore.media.audio.clipper import AudioDecodeError, _wav_duration
+        from vtscore.media.audio.wav import AudioDecodeError, wav_duration
 
         with pytest.raises(AudioDecodeError):
-            _wav_duration(_zero_rate_wav())
+            wav_duration(_zero_rate_wav())
 
     def test_wav_slice_raises_audio_decode_error(self):
-        from vtscore.media.audio.clipper import AudioDecodeError, _wav_slice
+        from vtscore.media.audio.wav import AudioDecodeError, wav_slice
 
         with pytest.raises(AudioDecodeError):
-            _wav_slice(_zero_rate_wav(), 0.0, 1.0)
+            wav_slice(_zero_rate_wav(), 0.0, 1.0)
 
     def test_tiling_clipper_returns_media_unchanged(self):
         from vtscore.media.audio.clipper import SoundTilingClipper
@@ -2457,6 +2457,12 @@ class TestVideoAutoClipper:
         assert isinstance(c.resolve_for_media(long_media), VideoTilingClipper)
 
     def test_resolve_for_durations_is_noop(self):
+        """The dataset-level hook is reserved and inert - see issue #3395.
+
+        Routing is decided per item by ``resolve_for_media``; nothing calls
+        this. ``tests_lib/detectors/test_clipper_chain.py`` pins the "never
+        invoked" half of the contract.
+        """
         from vtscore.media.video.clipper import VideoAutoClipper
 
         c = VideoAutoClipper()

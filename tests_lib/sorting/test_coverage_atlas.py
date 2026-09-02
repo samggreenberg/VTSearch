@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from vtscore.state.coverage_atlas import CoverageAtlas, domain_shift_report
+from vtscore.coverage.atlas import CoverageAtlas, domain_shift_report
 
 
 # ---------------------------------------------------------------------------
@@ -943,7 +943,7 @@ class TestKmeansProgress:
         calls = []
         CoverageAtlas(vecs, k=2, min_node_size=10, on_progress=lambda c, t: calls.append((c, t)))
         total = calls[0][1]
-        from vtscore.state.coverage_atlas import _N_INIT
+        from vtscore.coverage.atlas import _N_INIT
 
         # With k=2, 200 vectors, min_node_size=10 → 5 levels.
         # Estimated total = 5 * 200 * _N_INIT = 10000.

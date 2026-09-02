@@ -7,10 +7,10 @@ Schema-level validation failures (missing required ``name`` on rename,
 missing or wrong-typed ``readers`` on the readers endpoint) surface as
 422 with the standard ``errors`` envelope; handler-level rejects (not
 loaded, not the creator) keep their HTTP codes (400 / 403 / 404 / 500)
-with the standard ``message`` envelope. 404s are intercepted by the
-app-level ``NotFound`` errorhandler in ``app.py`` and keep the legacy
-``{"error": "Not Found", "request_id": ...}`` shape regardless of the
-``message=`` kwarg passed to ``abort()``.
+with the standard ``message`` envelope. 404s pass through the app-level
+``NotFound`` errorhandler (which renders JSON for ``/api/`` paths rather
+than werkzeug's HTML page) and keep their ``abort(404, message=...)``
+text.
 
 Endpoints
 ---------
@@ -493,7 +493,7 @@ def dataset_domain_shift(dataset_id: str):
     from vtsearch.state import get_active_context, get_context
     from vtscore.embedding.binding import embedder_supports_patch_regions
     from vtscore.embedding.media_vectors import media_embedding
-    from vtscore.state.coverage_atlas import domain_shift_report
+    from vtscore.coverage.atlas import domain_shift_report
 
     entry = _reg_get(dataset_id)
     if entry is None:

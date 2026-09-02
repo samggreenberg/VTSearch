@@ -463,19 +463,17 @@ def invalidate_embedding_matrix(ctx: "DatasetContext") -> None:
     advance the counter (and free the cached arrays' RAM immediately).
     """
     with _state_lock:
-        ctx._emb_matrix_ids = None
-        ctx._emb_matrix = None
-        ctx._emb_matrix_revision = None
+        # Only the matrix family: the lookups and the browse layouts are
+        # revision-keyed too and invalidate themselves off the bump below,
+        # so dropping them here would throw away work for nothing.
+        ctx.reset_derived_caches(matrices=True, lookups=False, projection=False, subset=False)
         # An in-place rewrite can leave the id set (and dimension) unchanged,
         # which the sidecar's validity check alone cannot detect - permanently
         # stop trusting the on-disk mmap sidecar for this context so every
         # later rebuild reads live ``ctx.medias``, never a stale cached file.
+        # A latch, not a cache, which is why ``reset_derived_caches`` leaves
+        # it alone and this line stays here.
         ctx._emb_sidecar_disabled = True
-        ctx._region_matrix_ids = None
-        ctx._region_matrix = None
-        ctx._region_matrix_revision = None
-        ctx._region_media_index = None
-        ctx._region_index_per_row = None
         ctx.bump_media_revision()
 
 

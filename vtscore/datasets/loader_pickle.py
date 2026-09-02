@@ -12,9 +12,7 @@ import logging
 from pathlib import Path
 from typing import Any, Iterator
 
-from vtscore.datasets.loader import (
-    ProgressCallback,
-)
+from vtscore.datasets.loader_common import ProgressCallback
 from vtscore.embedding.normalize import l2_normalize
 from vtscore.utils.hashing import content_md5
 
@@ -159,7 +157,7 @@ def _has_external_byte_source(media_info: dict[str, Any]) -> bool:
     serveable: an *archive member* streams its bytes from a byte range inside a
     tar/zip shard we deliberately never extract (``local_archive_member``, e.g.
     audio tiles cut from tar shards), and a *URL-backed* media fetches them
-    from ``media_url`` (e.g. the ``recaller`` importer's thin mode).  Both
+    from ``media_url`` (an importer's thin mode).  Both
     re-resolve on demand in
     :meth:`~vtscore.media.base.MediaType._resolve_media_bytes`, so such an
     entry must be kept lazily rather than dropped as unresolvable.
@@ -249,7 +247,7 @@ def _restore_original_payload(media_data: dict[str, Any], media_info: dict[str, 
 def _restore_media_url(media_data: dict[str, Any], media_info: dict[str, Any]) -> None:
     """Carry a pickled ``media_url`` onto the media when one is recorded.
 
-    URL-backed media (the ``recaller`` importer) keep the remote URL as their
+    URL-backed media keep the remote URL as their
     byte source; it is what lets a reloaded item still serve content when the
     pickle holds no inline bytes and no local file.  Set only when present, so
     the far more common file-backed media keep the shape they had before.

@@ -208,7 +208,7 @@ describe('GenericFormPickerComponent', () => {
     component.submit();
 
     httpMock.expectOne('/api/dataset/import/generic_form').flush(
-      { error: 'boom' },
+      { message: 'boom' },
       { status: 500, statusText: 'Internal Server Error' },
     );
 

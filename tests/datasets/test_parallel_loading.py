@@ -7,10 +7,10 @@ from unittest import mock
 import numpy as np
 import pytest
 
+from tests.helpers import current_loading_progress
 from vtscore.concurrency.progress import (
     CancelledError,
     LoadingTasksTracker,
-    get_progress,
     loading_tasks,
     set_thread_progress,
     get_thread_progress,
@@ -208,19 +208,24 @@ class TestThreadLocalProgress:
 
 
 # ---------------------------------------------------------------------------
-# get_progress() integration with loading tasks
+# The loading-task registry is the only dataset progress there is
 # ---------------------------------------------------------------------------
 
 
-class TestGetProgressWithLoadingTasks:
-    """Verify that get_progress() checks loading tasks first."""
+class TestLoadingTaskProgressIsAuthoritative:
+    """Every dataset-progress read resolves to a per-task tracker.
+
+    The global ``dataset_progress`` singleton these used to fall back to is
+    gone, along with the ``get_progress()`` free function that merged the two:
+    a load that has no task has no progress, rather than progress that belongs
+    to nothing and that nothing terminates (#3167).
+    """
 
     def test_returns_active_loading_task(self):
-        """get_progress() should return the active loading task, not the global tracker."""
         pt = loading_tasks.create_task("test_gp", "TestDS")
         pt.update("loading", "Embedding files", 42, 100, step=3, total_steps=4)
         try:
-            progress = get_progress()
+            progress = current_loading_progress()
             assert progress["status"] == "loading"
             assert progress["message"] == "Embedding files"
             assert progress["current"] == 42
@@ -229,24 +234,33 @@ class TestGetProgressWithLoadingTasks:
             loading_tasks.remove_task("test_gp")
 
     def test_returns_errored_task(self):
-        """get_progress() should return an errored task even when idle."""
         pt = loading_tasks.create_task("test_err", "FailDS")
         pt.update("idle", "", error="Something went wrong")
         try:
-            progress = get_progress()
+            progress = current_loading_progress()
             assert progress["error"] == "Something went wrong"
             assert progress["task_id"] == "test_err"
         finally:
             loading_tasks.remove_task("test_err")
 
-    def test_falls_back_to_global(self):
-        """With no loading tasks, get_progress() returns the global tracker."""
-        from vtscore.concurrency.progress import update_progress
+    def test_no_global_fallback_survives(self):
+        """The removed singleton and its accessors must stay removed.
 
-        update_progress("idle", "Ready")
-        progress = get_progress()
-        assert progress["status"] == "idle"
-        assert "task_id" not in progress
+        A re-introduced process-wide sink would look harmless — it renders
+        nowhere — right up until it parked on a message no worker could clear.
+        """
+        import vtscore.concurrency.progress as progress_mod
+
+        for gone in ("dataset_progress", "get_progress", "check_dataset_cancelled", "LEGACY_PROGRESS_TARGET"):
+            assert not hasattr(progress_mod, gone), f"{gone} is back; the legacy global progress system is not"
+
+    def test_unbound_thread_reports_into_a_noop(self):
+        """With nothing bound, the resolved sink discards rather than parks."""
+        from vtscore.concurrency.progress import noop_progress, resolve_progress_callback
+
+        assert resolve_progress_callback() is noop_progress
+        # And it accepts the four-argument contract without raising.
+        resolve_progress_callback()("loading", "nobody is watching", 1, 2)
 
 
 # ---------------------------------------------------------------------------
@@ -515,23 +529,23 @@ class TestErrorVisibility:
             loading_tasks.remove_task("fail_task")
 
 
-class TestResetCancelSafety:
-    """Verify that starting a new load does not interfere with running loads."""
+class TestCancelIsolation:
+    """Starting a new load must not disturb any other load's cancel flag.
 
-    def test_reset_cancel_skipped_when_tasks_active(self):
-        """dataset_progress.reset_cancel() must not fire when loads are in progress."""
-        from vtscore.concurrency.progress import dataset_progress
+    This used to be enforced by a guard around a global ``reset_cancel()``
+    ("only if no other loads are running"), which had to be right for both
+    halves: reset too eagerly and an in-flight cancel was silently revoked;
+    never reset and a new load aborted the instant it started.  Per-task
+    trackers remove the trade-off, so the property is asserted directly.
+    """
 
-        # Create an active task
+    def test_new_load_leaves_a_running_task_cancelled(self):
         pt = loading_tasks.create_task("active_task", "Running")
         pt.update("loading", "Downloading", 10, 100)
-
-        # Cancel the global tracker (simulating user cancel of a previous load)
-        dataset_progress.cancel()
-        assert dataset_progress.is_cancelled
+        pt.cancel()
+        assert pt.is_cancelled
 
         try:
-            # Start a new load; should NOT reset global cancel since a task is active
             from unittest.mock import patch
 
             from vtscore.datasets.load_pipeline import _run_origin_load_in_background
@@ -542,22 +556,19 @@ class TestResetCancelSafety:
                     {"importer": "test", "params": {}},
                 )
 
-            # The global cancel should still be set (not reset)
-            assert dataset_progress.is_cancelled
+            # The cancel is still owed to the task it was aimed at.
+            assert pt.is_cancelled
         finally:
             loading_tasks.remove_task("active_task")
-            dataset_progress.reset_cancel()
 
-    def test_reset_cancel_allowed_when_no_tasks_active(self):
-        """dataset_progress.reset_cancel() fires when no loads are in progress."""
-        from vtscore.concurrency.progress import dataset_progress
-
-        dataset_progress.cancel()
-        assert dataset_progress.is_cancelled
-
+    def test_new_load_starts_uncancelled(self):
         from unittest.mock import patch
 
         from vtscore.datasets.load_pipeline import _run_origin_load_in_background
+
+        stale = loading_tasks.create_task("stale_task", "Cancelled earlier")
+        stale.update("loading", "", 0, 0)
+        stale.cancel()
 
         with patch("vtscore.datasets.load_pipeline.threading.Thread"):
             task_id = _run_origin_load_in_background(
@@ -566,11 +577,12 @@ class TestResetCancelSafety:
             )
 
         try:
-            # The global cancel should have been reset
-            assert not dataset_progress.is_cancelled
+            fresh = loading_tasks.get_tracker(task_id)
+            assert fresh is not None
+            assert not fresh.is_cancelled
         finally:
             loading_tasks.remove_task(task_id)
-            dataset_progress.reset_cancel()
+            loading_tasks.remove_task("stale_task")
 
 
 class TestConcurrentModelLoading:

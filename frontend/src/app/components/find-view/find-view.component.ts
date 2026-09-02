@@ -1,7 +1,8 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, NgZone, OnDestroy, OnInit, signal, viewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, inject, NgZone, OnDestroy, OnInit, signal, viewChild } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
-import { EMPTY, Subject, Subscription, timer } from 'rxjs';
-import { catchError, finalize, switchMap, takeUntil } from 'rxjs/operators';
+import { EMPTY, Subject, timer } from 'rxjs';
+import { catchError, finalize, switchMap } from 'rxjs/operators';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
@@ -11,7 +12,6 @@ import { FindStatsModalComponent } from '../modals/find-stats-modal/find-stats-m
 import type { LabelFilter } from '../../services/sorting-api.service';
 import { MediasApiService } from '../../services/medias-api.service';
 import { DetectorsFindApiService } from '../../services/detectors-find-api.service';
-import { DatasetsRegistryApiService } from '../../services/datasets-registry-api.service';
 import { DatasetsCrudApiService } from '../../services/datasets-crud-api.service';
 import { DashboardLoadingTasksService } from '../../services/dashboard-loading-tasks.service';
 import { ToastService } from '../../services/toast.service';
@@ -22,15 +22,13 @@ import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { SortStateService, SortedItem } from '../../services/sort-state.service';
 import { SortingApiService } from '../../services/sorting-api.service';
+import { PairScopeService } from '../../services/pair-scope.service';
 import { SettingsStateService } from '../../services/settings-state.service';
-import { ProgressEventsService } from '../../services/progress-events.service';
 import { BrowseSubsetService } from '../../services/browse-subset.service';
 import { BrowseSubsetPrepService } from '../../services/browse-subset-prep.service';
-import { ProgressEvent } from '../../models/api.models';
 import {
   ProgressBarState,
   formatEta,
-  formatProgressMessage,
   progressBarState,
 } from '../../utils/format-progress';
 import { iconSizeToGoalWidth, snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
@@ -58,11 +56,11 @@ const INCLUSION_POST_DEBOUNCE_MS = 150;
   ],
   templateUrl: './find-view.component.html',
   styleUrl: './find-view.component.scss',
+  providers: [PairScopeService],
 })
 export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private mediasApi = inject(MediasApiService);
   private detectorsFindApi = inject(DetectorsFindApiService);
-  private datasetsRegistryApi = inject(DatasetsRegistryApiService);
   private datasetsCrudApi = inject(DatasetsCrudApiService);
   private loadingTasksSvc = inject(DashboardLoadingTasksService);
   private toast = inject(ToastService);
@@ -75,10 +73,11 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   sortState = inject(SortStateService);
   private sortingApi = inject(SortingApiService);
   private settingsState = inject(SettingsStateService);
-  private progressEvents = inject(ProgressEventsService);
   private browseSubset = inject(BrowseSubsetService);
   /** Public: the wait overlay binds this service's progress signals directly. */
   browsePrep = inject(BrowseSubsetPrepService);
+  /** Component-provided. Public: the header binds `pairScope.datasetName()`. */
+  readonly pairScope = inject(PairScopeService);
 
   readonly layoutRef = viewChild.required<ElementRef<HTMLElement>>('layout');
   readonly centerPanel = viewChild(CenterPanelComponent);
@@ -88,7 +87,6 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   // they must be signals — a plain-field write from those contexts would not
   // schedule CD and the view would go stale (zoneless-migration.md, Phase 2.5,
   // Recipe B & F).
-  readonly datasetName = signal('');
   readonly gridGoalWidthLeft = signal(80);
   readonly focusModeLeft = signal<'click' | 'hover'>('click');
   readonly focusModeRight = signal<'click' | 'hover'>('click');
@@ -133,24 +131,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly RIGHT_MIN = 150;
   private readonly CENTER_MIN = 100;
   private readonly DIVIDER_TOTAL = 16; // 2 × 8px dividers
-  private destroy$ = new Subject<void>();
-  /**
-   * Fires whenever the active (dataset, detector) pair changes — and on
-   * destroy. Every request whose response writes *pair-scoped* state (the
-   * ranking, the threshold, the inclusion slider, the dataset name, the vote
-   * cache) is piped through `takeUntil(this.pairScope$)` rather than
-   * `destroy$`, so the work started for the pair we're leaving is torn down
-   * the instant the pair switches.
-   *
-   * Without it, a scoring run — minutes long on a large dataset — outlives the
-   * switch: whichever response lands last wins, so the *old* pair's ranking and
-   * threshold get installed into the new context, and `advanceToBoundary()`
-   * selects a media id that may not exist in the new dataset (broken viewer,
-   * image 404s). Even when the old response lands *first*, its `finalize()`
-   * drops the wait overlay and re-enables voting while the new run is still
-   * going. `takeUntil` here also aborts the stale XHR client-side.
-   */
-  private pairScope$ = new Subject<void>();
+  private readonly destroyRef = inject(DestroyRef);
   /**
    * Inclusion-slider values awaiting their `POST /api/inclusion`, funnelled
    * through a single debounced `switchMap` pipeline (wired in the constructor).
@@ -192,15 +173,15 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
             switchMap(() => this.sortingApi.setInclusion(value)),
             // Pair-scoped like every other threshold write: a response landing
             // after a switch must not install the old pair's cutoff into the
-            // new context (see `pairScope$`).
-            takeUntil(this.pairScope$),
+            // new context (see `PairScopeService`).
+            this.pairScope.scoped(),
             // A failed POST just leaves the cutoff where it was. Swallow it
             // inside the inner observable so the error can't tear down the
             // long-lived outer pipeline and silence every later slide.
             catchError(() => EMPTY),
           ),
         ),
-        takeUntil(this.destroy$),
+        takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((resp) => {
         if (resp.threshold != null && this.sortState.sortOrder) {
@@ -279,25 +260,20 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // VoteStateService), so a fresh Dashboard → Find navigation still holds the
     // previous session's ranking and votes.  Against a *smaller* dataset that
     // stale ranking briefly renders ids that only existed in the prior dataset,
-    // firing a storm of image 404s.  Reset it here (mirroring reloadForNewPair)
-    // before loading — but NOT when returning from the Browser, where the
+    // firing a storm of image 404s.  Reset it here — the same clear the pair
+    // switch runs — but NOT when returning from the Browser, where the
     // preserved ranking + verifications are exactly what we want to keep (see
     // the runFindLabel guard below).
     const returningFromBrowse = this.browseSubset.consumeReturningToFind();
     if (!returningFromBrowse) {
-      this.sortState.setSortResults([], 0);
-      this.sortState.setSortStatus('');
-      this.sortState.setSortProgress(0, 0);
-      this.voteState.clear();
+      this.pairScope.clearPairState();
     }
     this.mediaState.loadMedias();
     this.voteState.loadVotes();
     // The left work queue (ranking minus verified items) is the
     // `unverifiedSortOrder` computed, which tracks sortOrder + verifiedIds.
     this.loadSettings();
-    this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.pairScope$)).subscribe({
-      next: (status) => { this.datasetName.set(status.display_name || ''); },
-    });
+    this.pairScope.loadDatasetName();
 
     // When medias arrive, the media-type sync runs from a constructor effect
     // on `mediaState.mediasSignal()`.
@@ -308,11 +284,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // Good/Bad), and the loadVotes() above refreshes them; re-running find here
     // would re-score with the unchanged model and could re-promote those items,
     // undoing the verification. Keep the verifications instead.
-    // Seed the inclusion slider from the active detector's context value
-    // (GET /api/inclusion resolves per-detector, falling back to the
-    // user-settings default the first time it's read). This keeps Find's
-    // slider in step with whatever the detector was last trained at.
-    this.seedInclusion();
+    this.pairScope.seedInclusion();
 
     if (!returningFromBrowse) {
       this.runFindLabel();
@@ -324,7 +296,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // loads + runFindLabel call above).
     let firstPair = true;
     this.activeContext.pair$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
         if (firstPair) {
           firstPair = false;
@@ -335,32 +307,13 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private reloadForNewPair(): void {
-    // Supersede the pair we're leaving *first*: every in-flight request scoped
-    // to it dies here, before any of the new pair's state is installed, so no
-    // late response can write the old ranking/threshold into the new context.
-    // The old scoring run's `finalize()` runs as part of this teardown, which
-    // is why it can't clobber the fresh run started at the bottom of this
-    // method — that run begins after the teardown has already settled.
-    this.pairScope$.next();
-    this.sortState.setSortResults([], 0);
-    this.sortState.setSortStatus('');
-    this.sortState.setSortProgress(0, 0);
-    this.voteState.clear();
-    this.mediaState.loadMedias();
+    // Supersede → clear → reload, in that order and enforced there; see
+    // `PairScopeService.resetForNewPair`. Find has nothing to quiesce: its
+    // scoring subscription carries a `finalize` that resets the busy flag and
+    // the progress poll as part of the teardown above.
+    this.pairScope.resetForNewPair();
     this.voteState.loadVotes();
-    this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.pairScope$)).subscribe({
-      next: (status) => { this.datasetName.set(status.display_name || ''); },
-    });
-    this.seedInclusion();
     this.runFindLabel();
-  }
-
-  /** Pull the active detector's per-detector inclusion into the slider. */
-  private seedInclusion(): void {
-    this.sortingApi
-      .getInclusion()
-      .pipe(takeUntil(this.pairScope$))
-      .subscribe({ next: (resp) => this.sortState.setInclusion(resp.inclusion) });
   }
 
   ngAfterViewInit(): void {
@@ -368,11 +321,8 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.stopProgressPolling();
-    this.pairScope$.next();
-    this.pairScope$.complete();
-    this.destroy$.next();
-    this.destroy$.complete();
+    this.sortState.stopFindProgressTracking();
+    // `pairScope` is component-provided, so Angular fires its scope on destroy.
     this.inclusionRequests$.complete();
     this.voteState.setFindMode(false);
     this.voteState.stopPolling();
@@ -388,8 +338,6 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   // --- Find-label scoring ---
-
-  private progressPollSub: Subscription | null = null;
 
   /**
    * Whether Find is parked behind a wait overlay — either the detector scoring
@@ -416,31 +364,6 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     return formatEta(this.sortState.sortEtaSeconds);
   }
 
-  private startProgressPolling(): void {
-    this.stopProgressPolling();
-    this.progressPollSub = this.progressEvents.find$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((prog: ProgressEvent) => {
-        if (prog.status === 'running') {
-          this.sortState.setSortStatus(formatProgressMessage(prog, 'Scoring with detector…'));
-          this.sortState.setSortProgress(
-            prog.current ?? 0,
-            prog.total ?? 0,
-            prog.overall ?? null,
-            prog.eta_seconds ?? null,
-            prog.overall_step_end ?? null,
-          );
-        }
-      });
-  }
-
-  private stopProgressPolling(): void {
-    if (this.progressPollSub) {
-      this.progressPollSub.unsubscribe();
-      this.progressPollSub = null;
-    }
-  }
-
   private runFindLabel(): void {
     const modelId = this.activeContext.modelId;
     if (!modelId) return;
@@ -450,17 +373,17 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sortState.setSortProgress(0, 0);
 
     // Start polling for progress concurrently
-    this.startProgressPolling();
+    this.sortState.startFindProgressTracking();
 
     const modelName = this.activeDetector.detectorName() || 'Detector';
     this.detectorsFindApi.findLabel({ detector_id: modelId })
       .pipe(
         // Pair-scoped, NOT lifetime-scoped: scoring runs for minutes, so a pair
         // switch mid-run must kill this subscription before its response can
-        // rank the new pair with the old pair's scores (see `pairScope$`).
-        takeUntil(this.pairScope$),
+        // rank the new pair with the old pair's scores (see `PairScopeService`).
+        this.pairScope.scoped(),
         finalize(() => {
-          this.stopProgressPolling();
+          this.sortState.stopFindProgressTracking();
           this.sortState.setSortBusy(false);
         }),
       )
@@ -610,7 +533,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     const name = m?.filename || m?.origin_name || `#${event.id}`;
     this.voteState
       .submitToggleVoteAndRecord(event.id, event.vote, name)
-      .pipe(takeUntil(this.pairScope$))
+      .pipe(this.pairScope.scoped())
       .subscribe({
         next: () => {
           this.onMediaVoted(event);
@@ -732,7 +655,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
         if (!ok) return;
         this.detectorsFindApi
           .addCorrectionsToDetector()
-          .pipe(takeUntil(this.destroy$))
+          .pipe(takeUntilDestroyed(this.destroyRef))
           .subscribe({
             next: (resp) => {
               if (resp.corrections_added === 0) {
@@ -861,14 +784,14 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private toDatasetFromIds(ids: number[]): void {
     if (ids.length === 0) return;
     const detectorName = this.activeDetector.detectorName() || 'Detector';
-    const base = [this.datasetName(), detectorName, 'Results'].filter((s) => !!s).join(' ');
+    const base = [this.pairScope.datasetName(), detectorName, 'Results'].filter((s) => !!s).join(' ');
 
     this.dialog.prompt('Name the new dataset', base).then((name) => {
       const trimmed = (name ?? '').trim();
       if (!trimmed) return;
       this.datasetsCrudApi
         .promote(trimmed, ids)
-        .pipe(takeUntil(this.destroy$))
+        .pipe(takeUntilDestroyed(this.destroyRef))
         .subscribe({
           next: (res) => {
             this.loadingTasksSvc.startProgressPolling(res.task_id, () => {
@@ -886,7 +809,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  a cancelled status via its progress channel and the finalize() in
    *  runFindLabel() takes care of clearing sortBusy. */
   onSortCancel(): void {
-    this.detectorsFindApi.cancelFind().pipe(takeUntil(this.destroy$)).subscribe();
+    this.detectorsFindApi.cancelFind().pipe(takeUntilDestroyed(this.destroyRef)).subscribe();
   }
 
   // --- Panel percentage helpers ---

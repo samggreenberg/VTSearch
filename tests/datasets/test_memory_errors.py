@@ -6,14 +6,11 @@ from unittest import mock
 import numpy as np
 import pytest
 
-import app as app_module
 from vtscore.datasets.config import DEMO_DATASETS
 from vtsearch.state import medias
-from vtscore.concurrency.progress import (
-    get_progress,
-    update_progress,
-)
+from tests.helpers import current_loading_progress
 from vtsearch.state import clear_medias
+from tests.fixtures.medias import init_medias
 
 
 class TestClearClipsGarbageCollection:
@@ -29,7 +26,7 @@ class TestClearClipsGarbageCollection:
         clear_medias()
         assert len(medias) == 0
         # Restore test medias
-        app_module.init_medias()
+        init_medias()
 
 
 class TestPickleMemoryError:
@@ -225,9 +222,6 @@ class TestBackgroundImportMemoryError:
         mock_importer.supports_chunked = False
         mock_importer.run.side_effect = MemoryError("simulated")
 
-        # Reset progress
-        update_progress("idle", "")
-
         # Patch threading.Thread to run synchronously so we don't race
         with mock.patch("vtscore.datasets.load_pipeline.threading") as mock_threading:
             captured_target = {}
@@ -241,17 +235,16 @@ class TestBackgroundImportMemoryError:
             mock_threading.Thread.side_effect = fake_thread
             _run_importer_in_background(mock_importer, {})
 
-        progress = get_progress()
+        progress = current_loading_progress()
         assert progress["error"] is not None
         assert "Out of memory" in progress["error"]
         assert progress["status"] == "idle"
 
         # Reinitialise medias for subsequent tests
-        app_module.init_medias()
+        init_medias()
 
     def test_demo_load_oom_reports_error(self, client):
         """When loading a demo dataset OOMs, the progress shows the error."""
-        update_progress("idle", "")
 
         def sync_thread(target, daemon=True):
             thread = mock.MagicMock()
@@ -274,9 +267,9 @@ class TestBackgroundImportMemoryError:
             )
             assert resp.status_code == 200
 
-            progress = get_progress()
+            progress = current_loading_progress()
             assert progress["error"] is not None
             assert "Out of memory" in progress["error"]
 
         # Reinitialise medias for subsequent tests
-        app_module.init_medias()
+        init_medias()

@@ -41,7 +41,7 @@ class TestGmmSubsample:
         forced full-population fit on the same data: temporarily lift the cap so
         nothing is dropped.
         """
-        import vtscore.training.thresholds as thr
+        from vtscore.training.thresholds import gmm as thr
 
         scores = _bimodal_scores(150_000, seed=2)
         subsampled = calculate_gmm_threshold(scores)

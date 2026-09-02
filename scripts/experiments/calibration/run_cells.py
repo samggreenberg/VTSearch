@@ -86,11 +86,11 @@ def _text_seed_vectors(ds: str, emb: str, medias: dict) -> tuple[dict, str]:
         common.log(f"  paired opening: {text_emb} vectors already on the cell's medias")
         return medias, "multi_vector"
 
-    from vtscore.datasets import loader as _loader  # noqa: PLC0415
+    from vtscore.config import EMBEDDINGS_DIR  # noqa: PLC0415
 
     from _cells_io import load_medias  # noqa: PLC0415
 
-    text_pkl = _loader.EMBEDDINGS_DIR / cfg.text_pickle_name(ds, emb)
+    text_pkl = EMBEDDINGS_DIR / cfg.text_pickle_name(ds, emb)
     if not text_pkl.exists():
         raise FileNotFoundError(
             f"paired embedder {emb!r} needs {text_emb} vectors: neither the cell's medias nor "
@@ -226,21 +226,21 @@ def main(argv: list[str] | None = None) -> int:
 
     import pandas as pd
 
-    from vtscore.eval.voting_iterations import (
-        _CALIBRATION_COLUMNS,
-        _CUT_DIAGNOSTIC_COLUMNS,
-        _CUT_INCLUSION_COLUMNS,
-        _FIT_QUALITY_COLUMNS,
-        _INCLUSION_SWEEP_COLUMNS,
-        _PICK_COLUMNS,
-        simulate_voting_iterations,
+    from vtscore.eval.voting_columns import (
+        CALIBRATION_COLUMNS,
+        CUT_DIAGNOSTIC_COLUMNS,
+        CUT_INCLUSION_COLUMNS,
+        FIT_QUALITY_ROW_COLUMNS,
+        INCLUSION_SWEEP_COLUMNS,
+        PICK_COLUMNS,
     )
+    from vtscore.eval.voting_iterations import simulate_voting_iterations
 
-    from vtscore.datasets import loader as _loader  # isort: skip
+    from vtscore.config import EMBEDDINGS_DIR  # isort: skip
 
     from _cells_io import load_medias  # noqa: PLC0415
 
-    pkl = _loader.EMBEDDINGS_DIR / cfg.pickle_name(ds, emb)
+    pkl = EMBEDDINGS_DIR / cfg.pickle_name(ds, emb)
     medias: dict[int, dict] = load_medias(pkl)
     common.log(f"loaded {len(medias)} medias from {pkl}")
 
@@ -385,7 +385,7 @@ def main(argv: list[str] | None = None) -> int:
     # is the directory it was read out of - and a frame that has been
     # concatenated across arms no longer has one.
     main_cols = [
-        *_CALIBRATION_COLUMNS,
+        *CALIBRATION_COLUMNS,
         "embedder",
         "seed_mode",
         "seed_query",
@@ -397,29 +397,29 @@ def main(argv: list[str] | None = None) -> int:
     ]
     out = outdir / f"task_{idx:04d}.csv"
     pd.DataFrame(all_rows, columns=pd.Index(main_cols)).to_csv(out, index=False)
-    sweep_cols = [*_INCLUSION_SWEEP_COLUMNS, "embedder"]
+    sweep_cols = [*INCLUSION_SWEEP_COLUMNS, "embedder"]
     sweep_out = outdir / f"task_{idx:04d}__sweep.csv"
     pd.DataFrame(all_sweep, columns=pd.Index(sweep_cols)).to_csv(sweep_out, index=False)
     # The #2836 cut-decomposition frame (one row per step per fit geometry).
-    cutdiag_cols = [*_CUT_DIAGNOSTIC_COLUMNS, "embedder"]
+    cutdiag_cols = [*CUT_DIAGNOSTIC_COLUMNS, "embedder"]
     cutdiag_out = outdir / f"task_{idx:04d}__cutdiag.csv"
     pd.DataFrame(all_cutdiag, columns=pd.Index(cutdiag_cols)).to_csv(cutdiag_out, index=False)
     # The #2865 cut-rule x inclusion frame (one row per step per arm per k).
     # Written unconditionally, like the frames above: an empty CSV with the
     # right header is what tells the analyzer the run had the sweep switched
     # off, rather than that its cells silently failed.
-    cutincl_cols = [*_CUT_INCLUSION_COLUMNS, "embedder"]
+    cutincl_cols = [*CUT_INCLUSION_COLUMNS, "embedder"]
     cutincl_out = outdir / f"task_{idx:04d}__cutincl.csv"
     pd.DataFrame(all_cutincl, columns=pd.Index(cutincl_cols)).to_csv(cutincl_out, index=False)
     # The #3267 per-click pick log.  Written unconditionally, like the frames
     # above, so an empty file with the right header says "the log was off"
     # rather than "the cell failed".
-    picks_cols = [*_PICK_COLUMNS, "embedder"]
+    picks_cols = [*PICK_COLUMNS, "embedder"]
     picks_out = outdir / f"task_{idx:04d}__picks.csv"
     pd.DataFrame(all_picks, columns=pd.Index(picks_cols)).to_csv(picks_out, index=False)
     # The #3329 goodness-of-fit frame (one row per step per scope).  Same
     # unconditional-write rule as every frame above.
-    fitq_cols = [*_FIT_QUALITY_COLUMNS, "embedder"]
+    fitq_cols = [*FIT_QUALITY_ROW_COLUMNS, "embedder"]
     fitq_out = outdir / f"task_{idx:04d}__fitq.csv"
     pd.DataFrame(all_fitq, columns=pd.Index(fitq_cols)).to_csv(fitq_out, index=False)
     common.log(

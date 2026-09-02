@@ -137,8 +137,8 @@ class ImporterBase(PluginBase):
     #: When ``True``, :meth:`build_origin` returns
     #: ``{"importer": self.name, "params": {}}`` regardless of
     #: ``field_values``.  Use this for importers whose dataset-level origin
-    #: is intentionally empty (e.g. the recaller importer, which builds a
-    #: useful per-media origin on each yielded record and has no useful
+    #: is intentionally empty (e.g. an importer that builds a useful
+    #: per-media origin on each yielded record and has no useful
     #: dataset-wide identifier).
     origin_suppressed: bool = False
 

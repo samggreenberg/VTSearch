@@ -76,7 +76,7 @@ class TestImportLabelsRoute:
         )
         assert res.status_code == 404
         body = res.get_json()
-        assert "not_a_real_importer" in body["error"]
+        assert "not_a_real_importer" in body["message"]
 
     def test_missing_filepath_returns_422(self, client):
         _write_seed_detector()
@@ -114,7 +114,7 @@ class TestImportLabelsRoute:
             json={"filepath": str(target)},
         )
         assert res.status_code == 400
-        assert "not found" in res.get_json()["error"].lower()
+        assert "not found" in res.get_json()["message"].lower()
 
     def test_happy_path_merges_labels(self, client, tmp_path, monkeypatch):
         """Successful import writes the entries into the on-disk labelset."""

@@ -3,7 +3,7 @@
 Consumes the same ``results/cells/task_*.csv`` files as ``analyze.py`` but from
 a run with ``CALIB_SAFE_THRESHOLDS=1``, where every step additionally emits one
 row per safe-threshold GMM variant (``gmm_variant`` column; see
-``vtscore.eval.voting_iterations._SAFE_GMM_VARIANTS``).  Computes the
+``vtscore.eval.arms_safe_gmm._SAFE_GMM_VARIANTS``).  Computes the
 pre-registered #2799 deliverables:
 
 * FPR / FNR / cost vs vote count per variant, per arm - the 6-20-vote ramp

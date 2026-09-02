@@ -72,3 +72,90 @@ class TestNoBareHelperImports:
             f"happens to be on sys.path first); use `from {tier}.helpers import "
             "...` instead:\n  " + "\n  ".join(offenders)
         )
+
+
+# Names that used to be copy-pasted into both conftests and drifted (#3424):
+# the library tier's fake audio embedder fell back to a ``PYTHONHASHSEED``-salted
+# ``hash()``, and its reset fixture never dropped the detector-file mtime cache.
+# They now live in ``tests_shared`` and are imported by both.
+_SHARED_CONFTEST_NAMES = (
+    "fake_embed_audio",
+    "fake_embed_text",
+    "allow_test_tmp_paths",
+    "reset_shared_state",
+    "install_startup_contexts",
+    "pin_training_budget",
+    "freeze_startup_heap",
+    "add_group_markers",
+    "print_summary_and_exit",
+)
+
+
+class TestSharedConftestIsTheSingleSource:
+    """Neither conftest may re-define what ``tests_shared`` owns.
+
+    Unlike ``helpers.py`` — duplicated on purpose, and gated byte-identical
+    above — the conftests' shared machinery is genuinely single-sourced.  A
+    local re-definition would shadow the import and silently re-open the drift.
+    """
+
+    @pytest.mark.parametrize("tier", ["tests", "tests_lib"])
+    def test_conftest_defines_no_shared_name(self, tier):
+        path = _REPO_ROOT / tier / "conftest.py"
+        tree = ast.parse(path.read_text(), filename=str(path))
+        offenders = sorted(
+            node.name
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+            # The copies spelled these with a leading underscore; catch both.
+            and node.name.lstrip("_") in _SHARED_CONFTEST_NAMES
+        )
+        assert not offenders, (
+            f"{tier}/conftest.py defines {offenders}, which tests_shared owns.  "
+            "Import from tests_shared instead — a local copy is how the two "
+            "conftests drifted in the first place (issue #3424)."
+        )
+
+    @pytest.mark.parametrize("tier", ["tests", "tests_lib"])
+    def test_conftest_imports_the_shared_package(self, tier):
+        path = _REPO_ROOT / tier / "conftest.py"
+        tree = ast.parse(path.read_text(), filename=str(path))
+        imported = {
+            node.module
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("tests_shared")
+        }
+        assert imported, f"{tier}/conftest.py no longer imports tests_shared"
+
+
+class TestSharedPackageIsLibrarySafe:
+    """``tests_shared`` is imported by ``tests_lib/`` under the Flask blocker.
+
+    ``./run-tests.sh vtscore-clean`` bans ``flask`` / ``werkzeug`` /
+    ``flask_smorest`` from the library-tier session, and ``tests_lib/`` is meant
+    to stay clear of the app tier generally.  A ``vtsearch`` import added here
+    would break that for both — mutable app-tier objects (the ``medias`` map)
+    are passed in by the caller instead.
+    """
+
+    _BANNED_PREFIXES = ("flask", "werkzeug", "flask_smorest", "vtsearch")
+
+    def test_no_app_tier_imports(self):
+        offenders = []
+        for path in sorted((_REPO_ROOT / "tests_shared").rglob("*.py")):
+            tree = ast.parse(path.read_text(), filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom) and node.level == 0:
+                    names = [node.module or ""]
+                elif isinstance(node, ast.Import):
+                    names = [alias.name for alias in node.names]
+                else:
+                    continue
+                for name in names:
+                    root = name.split(".")[0]
+                    if root in self._BANNED_PREFIXES:
+                        offenders.append(f"{path.relative_to(_REPO_ROOT)}:{node.lineno} imports {name}")
+        assert not offenders, (
+            "tests_shared/ must stay importable by the library tier under the "
+            "Flask blocker; pass app-tier objects in as arguments instead:\n  " + "\n  ".join(offenders)
+        )

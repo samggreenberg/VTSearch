@@ -1,7 +1,7 @@
 """Stage 2 (cut-rule study, #2836): which cut, and which term in the derivation is wrong.
 
 Consumes a ``CALIB_SAFE_THRESHOLDS=1`` run's ``results/cells/task_*.csv`` (one row
-per cut variant per step; see ``vtscore.eval.voting_iterations._SAFE_GMM_VARIANTS``)
+per cut variant per step; see ``vtscore.eval.arms_safe_gmm._SAFE_GMM_VARIANTS``)
 together with the ``task_*__cutdiag.csv`` side frames (one row per step per fit
 geometry, carrying the fitted mixture parameters and the whole decomposition
 chain).  Produces two independent things:
@@ -502,7 +502,7 @@ def _complete_chain_rows(frame: pd.DataFrame, chain: "list[str] | tuple[str, ...
     the terms then sum to something other than the total, by an amount nobody
     can see.  Oracle variants are exactly the links that go missing: they do not
     fall back, so a step where the oracle cut is not finite emits no row at all
-    (``vtscore.eval.voting_iterations._safe_gmm_variant_rows``).  Dropping those
+    (``vtscore.eval.arms_safe_gmm._safe_gmm_variant_rows``).  Dropping those
     rows wholesale is what keeps the arithmetic honest; the callers report how
     many were dropped rather than swallowing it.
     """

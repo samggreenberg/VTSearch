@@ -121,7 +121,7 @@ class TestRequestScopedDataset:
         resp = client.get("/api/medias/ids", headers={"X-Dataset-Id": "nope"})
         assert resp.status_code == 409
         body = resp.get_json()
-        assert body["code"] == "dataset_not_loaded"
+        assert body["error_code"] == "dataset_not_loaded"
         assert body["dataset_id"] == "nope"
 
     def test_unloaded_header_does_not_block_routes_that_skip_proxies(self, client):
@@ -244,7 +244,7 @@ class TestRequestScopedModel:
         resp = client.get("/api/votes", headers={"X-Detector-Id": "nonexistent"})
         assert resp.status_code == 409
         body = resp.get_json()
-        assert body["code"] == "detector_not_loaded"
+        assert body["error_code"] == "detector_not_loaded"
         assert body["detector_id"] == "nonexistent"
 
     def test_header_resolves_correct_detector_in_request(self, client):

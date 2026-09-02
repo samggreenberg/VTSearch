@@ -147,6 +147,7 @@ def build_positives_browse_context(
         fit_projection,
         resolve_projection_params,
     )
+    from vtscore.projection.service import install_layout
 
     if on_progress is not None:
         on_progress(total, total, "Building projection…")
@@ -163,6 +164,5 @@ def build_positives_browse_context(
         compact=params.compact,
     )
     pyr = build_pyramid(proj, bin_shape=bin_shape_for_media_type(media_type))
-    ctx._projection = proj
-    ctx._pyramids[pyr.bin_shape] = pyr
+    install_layout(ctx, proj, pyr)
     return ctx

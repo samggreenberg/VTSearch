@@ -93,6 +93,48 @@ output). Each dict must contain at minimum:
 are filled in by the caller. Don't compute embeddings inside
 `convert()`; the loader pipeline embeds the produced media afterwards.
 
+### Reporting failures
+
+Returning `[]` is how a converter says "no output" - but a *silent*
+`[]` is indistinguishable from "this file legitimately had nothing in
+it", and a corpus that fails on every item leaves the user with no
+idea why. So say what went wrong, **through `logging`, never
+`print()`**.
+
+`print()` writes to stdout unconditionally: it can't be levelled,
+filtered, routed to a file, or silenced by the embedding application,
+and one bad corpus turns into thousands of unlabelled lines
+interleaved with real output. `vtscore` is a library, so that choice
+belongs to the caller, not to the converter.
+
+Take a module-level logger and use it in every failure branch:
+
+```python
+import logging
+
+logger = logging.getLogger(__name__)
+```
+
+| Situation | Call | Why |
+|-----------|------|-----|
+| Optional dependency missing | `logger.warning("audio2text requires openai-whisper: pip install openai-whisper")` | Expected and actionable; the traceback adds nothing |
+| A per-item conversion failed, exception in hand | `logger.error("Transcription failed on %s", filename, exc_info=True)` | Unexpected; the traceback is the diagnostic |
+| An external tool failed with its own diagnostic | `logger.error("ffmpeg failed for %s: %s", filename, stderr_text)` | The tool's stderr beats our call frames; skip `exc_info` |
+
+Two conventions that matter:
+
+- **Pass arguments lazily** (`logger.error("... %s", filename)`), not
+  as an f-string. The formatting is skipped entirely when the record is
+  filtered out.
+- **Don't repeat the module or class name in the message.** The logger
+  is already named `vtscore.converters.audio2text`, and every formatter
+  prints it. Where a message does need to name the converter (install
+  advice a user will read), use the registered `source2target` name
+  they see in the UI, not the Python class name.
+
+Every in-tree converter follows this; they are the templates worth
+copying.
+
 ### Reading the source bytes
 
 Read the input through `resolve_media_bytes(media)`
@@ -203,12 +245,15 @@ model size and language.
 # my_pkg/audio2text_whisper.py
 from __future__ import annotations
 
+import logging
 import tempfile
 from pathlib import Path
 from typing import Any
 
 from vtscore.converters.base import MediaConverter, resolve_media_bytes
 from vtscore.plugins import PluginField
+
+logger = logging.getLogger(__name__)
 
 
 class Audio2TextWhisperConverter(MediaConverter):
@@ -259,6 +304,7 @@ class Audio2TextWhisperConverter(MediaConverter):
         try:
             import whisper  # noqa: PLC0415
         except ImportError:
+            logger.warning("audio2text_whisper requires openai-whisper: pip install openai-whisper")
             return []
 
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:

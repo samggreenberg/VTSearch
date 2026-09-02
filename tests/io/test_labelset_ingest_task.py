@@ -29,6 +29,7 @@ from vtscore.concurrency.progress import detector_loading_tasks
 from vtscore.datasets import ingest as ingest_module
 
 from tests import wait_for_detector_task
+from vtsearch.state import bad_votes, good_votes, medias
 
 
 @pytest.fixture
@@ -174,10 +175,8 @@ class TestLabelImportIngestIsBackgrounded:
 
     def test_auto_resolve_applies_labels_and_publishes_counts(self, client, foreign_labels):
         """The backgrounded pass still lands the votes the inline one used to."""
-        import app as app_module
-
         labels_path, _ = foreign_labels
-        saved = dict(app_module.medias)
+        saved = dict(medias)
         try:
             res = client.post(
                 "/api/label-importers/import/server_json_file",
@@ -191,13 +190,11 @@ class TestLabelImportIngestIsBackgrounded:
                 "unresolved": 0,
                 "failed": 0,
             }
-            names = {m.get("origin_name") for m in app_module.medias.values()}
+            names = {m.get("origin_name") for m in medias.values()}
             assert {"task_1.wav", "task_2.wav"} <= names
-            voted = set(app_module.good_votes) | set(app_module.bad_votes)
-            ingested_ids = {
-                cid for cid, m in app_module.medias.items() if m.get("origin_name") in ("task_1.wav", "task_2.wav")
-            }
+            voted = set(good_votes) | set(bad_votes)
+            ingested_ids = {cid for cid, m in medias.items() if m.get("origin_name") in ("task_1.wav", "task_2.wav")}
             assert ingested_ids <= voted, "auto-resolved media must carry their labels"
         finally:
-            app_module.medias.clear()
-            app_module.medias.update(saved)
+            medias.clear()
+            medias.update(saved)

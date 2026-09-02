@@ -1,7 +1,6 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, OnDestroy, OnInit, output, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, input, OnDestroy, OnInit, output, signal, untracked } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
-import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
 import { DetectorsRegistryApiService } from '../../services/detectors-registry-api.service';
 import type { DetectorLabelView } from '../../generated/api-client/models/detector-label-view';
 import { Media } from '../../models/api.models';
@@ -92,46 +91,39 @@ export class RightPanelComponent implements OnInit, OnDestroy {
   /** Normalised region boxes for good votes, keyed by media id; drives cropped
    *  Good-pile thumbnails when an item was region-voted. */
   readonly goodRegionBoxes = computed(() => this.voteState.goodRegionBoxes);
-  // Template-bound and written from the LabelsetStateService `good$`/`bad$`/
-  // `mediaType$` subscribes and the settings `effect()` (Recipe F for
-  // gridGoalWidth) — none of which schedule CD for a plain field under
-  // zoneless — so they are signals. (`sortMode` stays plain: only written from
-  // the bound `(sortModeChange)` handler.)
+  // Template-bound and written from the LabelsetStateService `good$`/`bad$`
+  // subscribes — which do not schedule CD for a plain field under zoneless —
+  // so they are signals. (`sortMode` stays plain: only written from the bound
+  // `(sortModeChange)` handler.)
   readonly goodElements = signal<DetectorLabelView[]>([]);
   readonly badElements = signal<DetectorLabelView[]>([]);
   sortMode: LabelSortMode = 'time-desc';
-  readonly gridGoalWidth = signal(80);
   showLabelImport = false;
   showExport = false;
 
-  private gridIconSizeRightDict: Record<string, string> = {};
   protected readonly currentMediaType = signal('');
-  private destroy$ = new Subject<void>();
+
+  /** Right-pane thumbnail size for the active media type. A `computed` over the
+   *  settings signal, so a size change made anywhere (the view controls, the
+   *  Settings modal, another panel) repaints this one with no mirroring. */
+  private readonly gridIconSizeRight = this.settingsState.perMediaType<string>(
+    'grid_icon_size_right',
+    this.currentMediaType,
+    { fallback: 'M' },
+  );
+  readonly gridGoalWidth = computed(() => iconSizeToGoalWidth(this.gridIconSizeRight.value()));
+  private readonly destroyRef = inject(DestroyRef);
 
   constructor() {
-    effect(() => {
-      const settings = this.settingsState.settingsSignal();
-      if (!settings) return;
-      const sizeDict = settings.grid_icon_size_right;
-      if (sizeDict && typeof sizeDict === 'object') {
-        this.gridIconSizeRightDict = sizeDict as Record<string, string>;
-        if (this.currentMediaType()) {
-          this.gridGoalWidth.set(
-            iconSizeToGoalWidth(this.gridIconSizeRightDict[this.currentMediaType()] ?? 'M'),
-          );
-        }
-      }
-    });
-
     // Track the active media type off the bound medias so the grid icon size
-    // follows the dataset. (Replaces the former `medias` ngOnChanges branch.)
+    // follows the dataset (`gridGoalWidth` is keyed on it). (Replaces the
+    // former `medias` ngOnChanges branch.)
     effect(() => {
       const medias = this.medias();
       if (medias.length === 0) return;
       const newType = medias[0].media_type;
       if (newType !== untracked(this.currentMediaType)) {
         this.currentMediaType.set(newType);
-        this.gridGoalWidth.set(iconSizeToGoalWidth(this.gridIconSizeRightDict[newType] ?? 'M'));
       }
     });
 
@@ -192,8 +184,6 @@ export class RightPanelComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.voteState.stopPolling();
     this.labelsetState.stopPolling();
-    this.destroy$.next();
-    this.destroy$.complete();
   }
 
   onSortModeChange(mode: LabelSortMode): void {
@@ -274,21 +264,20 @@ export class RightPanelComponent implements OnInit, OnDestroy {
 
   private subscribeToLabelset(): void {
     this.labelsetState.good$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((elements) => {
         this.goodElements.set(elements);
       });
     this.labelsetState.bad$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((elements) => {
         this.badElements.set(elements);
       });
     this.labelsetState.mediaType$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((mt) => {
         if (this.useLabelset && mt && mt !== this.currentMediaType()) {
           this.currentMediaType.set(mt);
-          this.gridGoalWidth.set(iconSizeToGoalWidth(this.gridIconSizeRightDict[mt] ?? 'M'));
         }
       });
   }

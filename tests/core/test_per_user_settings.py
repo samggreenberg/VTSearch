@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import json
 
-import app as app_module  # noqa: F401  (triggers conftest media init)
 from vtsearch import settings as settings_mod
 from vtsearch import settings_store as settings_store_mod
 from vtsearch.auth import set_thread_user

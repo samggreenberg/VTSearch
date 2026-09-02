@@ -212,7 +212,7 @@ class TestDownloadUrbansound8k:
 class TestLoadAudioMetadataFromFolders:
     def test_scans_category_subdirectories(self, tmp_path):
         """Finds WAV files in matching category subdirectories."""
-        from vtscore.datasets.loader import load_audio_metadata_from_folders
+        from vtscore.datasets.metadata import load_audio_metadata_from_folders
 
         for genre in ("blues", "rock"):
             d = tmp_path / genre
@@ -233,7 +233,7 @@ class TestLoadAudioMetadataFromFolders:
 
     def test_ignores_non_audio_files(self, tmp_path):
         """Non-audio files (like .txt) are not included."""
-        from vtscore.datasets.loader import load_audio_metadata_from_folders
+        from vtscore.datasets.metadata import load_audio_metadata_from_folders
 
         d = tmp_path / "blues"
         d.mkdir()
@@ -250,7 +250,7 @@ class TestLoadAudioMetadataFromFolders:
         '*.wav' glob matches them by extension, so without a dotfile guard
         the count would double and 1000 undecodable junk clips would load.
         """
-        from vtscore.datasets.loader import load_audio_metadata_from_folders
+        from vtscore.datasets.metadata import load_audio_metadata_from_folders
 
         d = tmp_path / "blues"
         d.mkdir()
@@ -271,7 +271,7 @@ class TestLoadAudioMetadataFromFolders:
 class TestLoadUrbansound8kMetadata:
     def test_loads_csv_metadata(self, tmp_path):
         """Reads UrbanSound8K.csv and maps filenames to metadata."""
-        from vtscore.datasets.loader import load_urbansound8k_metadata
+        from vtscore.datasets.metadata import load_urbansound8k_metadata
 
         meta_dir = tmp_path / "metadata"
         meta_dir.mkdir()
@@ -315,7 +315,7 @@ class TestLoadDemoSourceGtzan:
     def test_gtzan_source_populates_clips(self, tmp_path):
         """load_demo_source with source='gtzan' fills the clips dict."""
         from vtscore.datasets import downloader as dl_module
-        from vtscore.datasets import loader as loader_module
+        from vtscore.datasets import metadata as metadata_module
         from vtscore.media.audio.media_type import AudioMediaType
 
         fake_metadata = {
@@ -334,7 +334,7 @@ class TestLoadDemoSourceGtzan:
 
         with (
             patch.object(dl_module, "download_gtzan", return_value=tmp_path),
-            patch.object(loader_module, "load_audio_metadata_from_folders", return_value=fake_metadata),
+            patch.object(metadata_module, "load_audio_metadata_from_folders", return_value=fake_metadata),
         ):
             mt.load_demo_source(
                 source="gtzan",
@@ -359,7 +359,7 @@ class TestLoadDemoSourceGtzan:
         survive with ``embeddings={}`` so the clipper can re-embed its clips.
         """
         from vtscore.datasets import downloader as dl_module
-        from vtscore.datasets import loader as loader_module
+        from vtscore.datasets import metadata as metadata_module
         from vtscore.media.audio.media_type import AudioMediaType
 
         fake_metadata = {
@@ -380,7 +380,7 @@ class TestLoadDemoSourceGtzan:
 
         with (
             patch.object(dl_module, "download_gtzan", return_value=tmp_path),
-            patch.object(loader_module, "load_audio_metadata_from_folders", return_value=fake_metadata),
+            patch.object(metadata_module, "load_audio_metadata_from_folders", return_value=fake_metadata),
         ):
             mt.load_demo_source(
                 source="gtzan",
@@ -402,7 +402,7 @@ class TestLoadDemoSourceGtzan:
     def test_gtzan_slice_is_applied(self, tmp_path):
         """slice_start/slice_end limits files per category."""
         from vtscore.datasets import downloader as dl_module
-        from vtscore.datasets import loader as loader_module
+        from vtscore.datasets import metadata as metadata_module
         from vtscore.media.audio.media_type import AudioMediaType
 
         fake_metadata = {}
@@ -418,7 +418,7 @@ class TestLoadDemoSourceGtzan:
 
         with (
             patch.object(dl_module, "download_gtzan", return_value=tmp_path),
-            patch.object(loader_module, "load_audio_metadata_from_folders", return_value=fake_metadata),
+            patch.object(metadata_module, "load_audio_metadata_from_folders", return_value=fake_metadata),
         ):
             mt.load_demo_source(
                 source="gtzan",
@@ -449,7 +449,7 @@ class TestLoadDemoSourceSpeechCommands:
     def test_speech_commands_source_populates_clips(self, tmp_path):
         """load_demo_source with source='speech_commands_v2' fills the clips dict."""
         from vtscore.datasets import downloader as dl_module
-        from vtscore.datasets import loader as loader_module
+        from vtscore.datasets import metadata as metadata_module
         from vtscore.media.audio.media_type import AudioMediaType
 
         fake_metadata = {
@@ -466,7 +466,7 @@ class TestLoadDemoSourceSpeechCommands:
 
         with (
             patch.object(dl_module, "download_speech_commands_v2", return_value=tmp_path),
-            patch.object(loader_module, "load_audio_metadata_from_folders", return_value=fake_metadata),
+            patch.object(metadata_module, "load_audio_metadata_from_folders", return_value=fake_metadata),
         ):
             mt.load_demo_source(
                 source="speech_commands_v2",
@@ -499,7 +499,7 @@ class TestLoadDemoSourceUrbansound8k:
     def test_urbansound8k_source_populates_clips(self, tmp_path):
         """load_demo_source with source='urbansound8k' fills the clips dict."""
         from vtscore.datasets import downloader as dl_module
-        from vtscore.datasets import loader as loader_module
+        from vtscore.datasets import metadata as metadata_module
         from vtscore.media.audio.media_type import AudioMediaType
 
         f1 = tmp_path / "100032-3-0-0.wav"
@@ -519,7 +519,7 @@ class TestLoadDemoSourceUrbansound8k:
 
         with (
             patch.object(dl_module, "download_urbansound8k", return_value=tmp_path),
-            patch.object(loader_module, "load_urbansound8k_metadata", return_value=fake_metadata),
+            patch.object(metadata_module, "load_urbansound8k_metadata", return_value=fake_metadata),
         ):
             mt.load_demo_source(
                 source="urbansound8k",

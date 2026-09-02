@@ -8,10 +8,20 @@ registers every sub-package or flat module that exposes a sentinel
 attribute (`IMPORTER`, `EXPORTER`, `EMBEDDER`, …), and then walks the
 matching `importlib.metadata` entry-point group so third-party
 distributions can drop plugins in without forking the repo. Each
-plugin subclasses one base ABC (`DatasetImporter`, `LabelsetExporter`,
+plugin subclasses one base ABC (`DatasetImporter`, `ResultsExporter`,
 `MediaEmbedder`, …) that inherits from `PluginBase`, declares its
 user-facing inputs as a list of `PluginField`s, and implements one or
 two abstract methods.
+
+**This doc set is the library contract**, written for someone shipping a
+plugin as a separate distribution against the semver'd `vtscore` package.
+The repo's own front door is
+[`docs/EXTENDING.md`](../../../docs/EXTENDING.md), whose
+`EXTENDING-*.md` guides cover the same ABCs plus the app-tier wiring
+(routes, forms, the pickers the frontend renders) that an in-repo
+contributor needs. Every page here names its app-side counterpart, and
+`scripts/check-extension-docs.py` holds both sets to the code so they
+cannot drift apart unnoticed.
 
 If you're contributing a plugin to the `vtscore` source tree, drop it
 in the family's package; if you're shipping a separate distribution,
@@ -37,7 +47,7 @@ group to pick.
 | Dataset importers | `vtscore.importers` | `IMPORTER` | `DatasetImporter` | Pull media into a dataset from a source (folder, archive, API, etc.) |
 | Datasource importers | `vtscore.datasource_importers` | `DATASOURCE_IMPORTER` | `DataSourceImporter` | Fetch *one* media item on demand, so a user can supply an exemplar from a URL, a server path, a service |
 | Seed importers | `vtscore.seed_importers` | `SEED_IMPORTER` | `SeedImporter` | Contribute a *batch* of unlabeled seed media ("close but not quite") to a new blank detector |
-| Results exporters | `vtscore.exporters` | `EXPORTER` | `LabelsetExporter` | Send autodetect results or labels somewhere (file, webhook, email, …) |
+| Results exporters | `vtscore.exporters` | `EXPORTER` | `ResultsExporter` | Send autodetect results or labels somewhere (file, webhook, email, …). `LabelsetExporter` is a permanent alias for the old name |
 | Label importers | `vtscore.label_importers` | `LABEL_IMPORTER` | `LabelImporter` | One-shot pull of `(md5, label)` pairs from an external source |
 | Labelset sources | `vtscore.labelset_sources` | `LABELSET_SOURCE` | `LabelsetSource` | Bidirectional sync of a detector's labelset with an external store |
 | Media converters | `vtscore.converters` | `CONVERTER` | `MediaConverter` | Cross-format access: image → text (OCR), audio → image (spectrogram), … |
@@ -57,7 +67,8 @@ directories are loaded via `importlib.util.spec_from_file_location`
 
 ### App tier (in `vtsearch`)
 
-These are documented in the repo-level [`EXTENDING-plugins.md`](../../../docs/EXTENDING-plugins.md);
+These are documented in the repo-level [`EXTENDING-plugins.md`](../../../docs/EXTENDING-plugins.md)
+(indexed from [`docs/EXTENDING.md`](../../../docs/EXTENDING.md));
 their library counterparts (`vtscore.labels.sources`) handle bidirectional
 sync at the model layer.
 
@@ -111,7 +122,7 @@ plugins must be importable in a Flask-free environment - the
 `tests_lib/` test tier is verified by `./run-tests.sh vtscore-clean`,
 which installs a meta-path import hook that refuses `flask`,
 `werkzeug`, and `flask_smorest`. Read configuration through
-`CoreConfig` ([`vtscore/config.py`](../../config.py)); construct
+`CoreConfig` ([`vtscore/config/core_config.py`](../../config/core_config.py)); construct
 one directly when running outside an app context, or call
 `CoreConfig.from_settings()` when an app shim has been registered.
 

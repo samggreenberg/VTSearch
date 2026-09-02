@@ -157,10 +157,8 @@ export class ContextSwitchService {
     // with an id the backend hasn't loaded yet.
     this.activeContext.setIntent(datasetId, detectorId);
 
-    const datasets = this.datasetState.datasets;
-    const detectors = this.datasetState.detectors;
-    const dataset = datasetId ? datasets.find((d) => d.id === datasetId) : null;
-    const detector = detectorId ? detectors.find((d) => d.id === detectorId) : null;
+    const dataset = datasetId ? this.datasetState.datasetById().get(datasetId) ?? null : null;
+    const detector = detectorId ? this.datasetState.detectorById().get(detectorId) ?? null : null;
 
     const needsDatasetLoad = !!dataset && !dataset.loaded;
     // Re-embed labels when the active dataset's embedder differs from the

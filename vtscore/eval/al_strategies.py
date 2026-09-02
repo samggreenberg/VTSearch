@@ -52,7 +52,7 @@ import numpy as np
 from vtscore.eval.startup_schedule import is_startup_phase
 
 if TYPE_CHECKING:
-    from vtscore.state.coverage_atlas import CoverageAtlas
+    from vtscore.coverage.atlas import CoverageAtlas
 
 
 # Initial-phase vote targets, matching the app's Autopilot defaults
@@ -200,9 +200,12 @@ def _centroid_similarities(ctx: ALContext, ids: list[int]) -> Optional[dict[int,
 def _hard_pick_by_index(ctx: ALContext, ranking: dict[int, float], threshold: float) -> Optional[int]:
     """The app's ``hard`` select: the unlabeled item nearest the cutoff *by rank*.
 
-    Mirrors ``LabelViewComponent.autoSelectNext``: rank every item in the
-    current sort descending, find the first position whose score is at or below
-    *threshold*, and take the unlabeled item whose **index** is closest to it.
+    Mirrors the app's ``autoSelectNext`` pick rule
+    (``frontend/src/app/utils/auto-select-next.ts``, pinned by the
+    ``autopilot.auto_select_next`` mirror in
+    ``scripts/check-eval-app-sync.py``): rank every item in the current sort
+    descending, find the first position whose score is at or below *threshold*,
+    and take the unlabeled item whose **index** is closest to it.
 
     Distance is measured in rank space, not score space, and that is deliberate
     in the app — "avoids biasing toward one side when scores cluster unevenly".

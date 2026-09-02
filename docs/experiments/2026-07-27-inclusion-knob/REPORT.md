@@ -129,7 +129,7 @@ every arm, vote count, and treatment:
 
 1. **Replace the inclusion→threshold mapping with the conformal quantile rule**
    (swap the body of `threshold_from_fold_orderings` /
-   `find_optimal_threshold` in `vtscore/training/thresholds.py`). The cached
+   `find_optimal_threshold` in `vtscore/training/thresholds/`). The cached
    inclusion-independent fold orderings are exactly the calibration data the
    rule needs, so `DetectorContext.calibration_cache` and the cheap
    re-threshold-on-slide flow survive unchanged.

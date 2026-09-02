@@ -49,7 +49,11 @@ describe('ProgressModalComponent', () => {
   });
 
   afterEach(() => {
-    component.ngOnDestroy();
+    // `fixture.destroy()`, not a bare hook call: teardown here rides on the
+    // component's `DestroyRef`, which only fires when the fixture is
+    // destroyed. Destroy first, then verify — a cancelled request is not
+    // outstanding.
+    fixture.destroy();
     httpMock.verify();
   });
 
@@ -187,7 +191,7 @@ describe('ProgressModalComponent', () => {
 
   it('does not arm a poller when destroyed before the job envelope arrives', async () => {
     // Regression: destroying the modal while the train POST is in flight must
-    // not leave a poller running against an already-completed `destroy$`.
+    // not leave a poller running past the component's teardown.
     vi.useFakeTimers();
     try {
       fixture.componentRef.setInput('metric', 'diverse');
@@ -195,8 +199,8 @@ describe('ProgressModalComponent', () => {
       missCachedHistory('diverse');
 
       const trainReq = httpMock.expectOne('/api/eval/train-and-score');
-      component.ngOnDestroy();
-      // `takeUntil(destroy$)` unsubscribes from the in-flight POST, so the
+      fixture.destroy();
+      // `takeUntilDestroyed` unsubscribes from the in-flight POST, so the
       // request is cancelled: its `next` never runs, `pollEvalJob` is never
       // armed, and no result poll is issued.
       expect(trainReq.cancelled).toBe(true);
@@ -340,7 +344,7 @@ describe('ProgressModalComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('25%');
 
     // Drain the poller so `httpMock.verify()` sees no outstanding request.
-    component.ngOnDestroy();
+    fixture.destroy();
   });
 
   it('shows the empty state when a finished job yields no points', async () => {

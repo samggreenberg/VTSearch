@@ -93,6 +93,12 @@ describe('ContextSwitchService: H25 active/intent layering', () => {
       get detectors(): DetectorRegistryEntry[] {
         return detectors;
       },
+      // Computed on call, like the real service's `computed` Maps: the
+      // arrays above are reassigned per test.
+      datasetById: (): ReadonlyMap<string, DatasetRegistryEntry> =>
+        new Map(datasets.map((d) => [d.id, d])),
+      detectorById: (): ReadonlyMap<string, DetectorRegistryEntry> =>
+        new Map(detectors.map((d) => [d.id, d])),
       setLoading: (_loading: boolean): void => {
         /* no-op for tests */
       },

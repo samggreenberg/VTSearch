@@ -17,10 +17,10 @@ from pathlib import Path
 
 import pytest
 
-import app as app_module
 from tests.helpers import make_dataset_file as _make_dataset_file
 from vtsearch.settings import get_detectors_dir
 from vtscore.media.audio.audio_generator import generate_wav
+from vtsearch.state import medias
 
 
 @pytest.fixture(autouse=True)
@@ -120,7 +120,7 @@ class TestPortableDetectorCLI:
         _stub_resolve(monkeypatch, files)
         _write_trainable_model("cats", _labelset(good=["alpha.wav", "beta.wav"], bad=["gamma.wav"]))
 
-        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
+        dataset_path = _make_dataset_file(tmp_path, medias)
         settings_path = _settings_file(tmp_path, ["cats"])
         out_template = str(tmp_path / "{detector_name}-detector.zip")
 
@@ -147,7 +147,7 @@ class TestPortableDetectorCLI:
         _write_trainable_model("cats", ls)
         _write_trainable_model("dogs", ls)
 
-        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
+        dataset_path = _make_dataset_file(tmp_path, medias)
         settings_path = _settings_file(tmp_path, ["cats", "dogs"])
         # No {detector_name} in the path: the exporter must insert the slug so
         # the two bundles don't overwrite each other.

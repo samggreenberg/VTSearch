@@ -32,12 +32,8 @@ from vtscore.eval.patch_styles import (
     resolve_style,
     snap_box_to_region,
 )
-from vtscore.eval.voting_iterations import (
-    _VOTING_COLUMNS,
-    TIMING_COLUMNS,
-    run_voting_iterations_eval,
-    simulate_voting_iterations,
-)
+from vtscore.eval.voting_columns import TIMING_COLUMNS, VOTING_COLUMNS
+from vtscore.eval.voting_iterations import run_voting_iterations_eval, simulate_voting_iterations
 from vtscore.media.patch_embed import nearest_patch_to_box
 
 _TIMING_COLS = TIMING_COLUMNS
@@ -644,7 +640,7 @@ class TestStyleVotingSimulation:
         assert rows, f"style {style} produced no rows"
         for r in rows:
             assert r["style"] == style
-            assert set(_VOTING_COLUMNS) == set(r.keys())
+            assert set(VOTING_COLUMNS) == set(r.keys())
             assert np.isfinite(r["cost"])
             assert 0.0 <= r["average_precision"] <= 1.0
 
@@ -781,7 +777,7 @@ class TestStyleVotingSimulation:
             styles=["whole_image", "max_patch"],
         )
         assert set(df["style"].unique()) == {"whole_image", "max_patch"}
-        assert list(df.columns) == list(_VOTING_COLUMNS)
+        assert list(df.columns) == list(VOTING_COLUMNS)
 
     def test_safe_thresholds_with_style(self):
         medias, _ = _planted_dataset(n_per_cat=15, seed=13)

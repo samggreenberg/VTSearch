@@ -35,6 +35,7 @@ import logging
 from flask import jsonify
 from flask_smorest import Blueprint, abort
 
+from vtsearch.errors import error_response
 from vtsearch import settings
 from vtsearch.routes._shared import (
     get_plugin_or_404,
@@ -107,7 +108,7 @@ def run_settings_import(importer_name: str):
         return err
 
     if not isinstance(imported_settings, dict):
-        return jsonify({"error": "Importer did not return a valid settings dict"}), 500
+        return error_response("Importer did not return a valid settings dict", 500)
 
     # Apply imported settings through the settings API
     _apply_settings(imported_settings)

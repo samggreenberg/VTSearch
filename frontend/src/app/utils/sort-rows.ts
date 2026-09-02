@@ -27,13 +27,26 @@ export interface SortState<TCol extends string = string> {
  *
  * Numbers compare numerically; everything else compares as a locale string,
  * with a missing value sorting as `''`.
+ *
+ * `valueAt` overrides that plain field lookup for tables whose sort order
+ * isn't the raw cell value: a status column that sorts by a severity rank
+ * rather than alphabetically, say, or a name column that sorts
+ * case-insensitively. Return a number to opt that column into the numeric
+ * comparison and anything else to opt it into the string one — the two
+ * branches below are unchanged, so an extractor only decides *what* is
+ * compared, never *how*.
  */
-export function sortRowsByColumn<T>(rows: readonly T[], column: string, asc: boolean): T[] {
+export function sortRowsByColumn<T>(
+  rows: readonly T[],
+  column: string,
+  asc: boolean,
+  valueAt: (row: T, column: string) => unknown = (row, col) =>
+    (row as Record<string, unknown>)[col],
+): T[] {
   const dir = asc ? 1 : -1;
-  const valueAt = (row: T): unknown => (row as Record<string, unknown>)[column];
   return [...rows].sort((a, b) => {
-    const va = valueAt(a) ?? '';
-    const vb = valueAt(b) ?? '';
+    const va = valueAt(a, column) ?? '';
+    const vb = valueAt(b, column) ?? '';
     if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
     return String(va).localeCompare(String(vb)) * dir;
   });

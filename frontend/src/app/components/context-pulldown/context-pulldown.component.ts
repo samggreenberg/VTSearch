@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, HostListener, inject, input, OnDestroy, OnInit, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, effect, ElementRef, HostListener, inject, input, OnInit, viewChild } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { TitleCasePipe } from '@angular/common';
 import { NavigationEnd, Router } from '@angular/router';
 
-import { Observable, Subject } from 'rxjs';
-import { filter, takeUntil } from 'rxjs/operators';
+import { Observable } from 'rxjs';
+import { filter } from 'rxjs/operators';
 import { DatasetStateService } from '../../services/dataset-state.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { ContextSwitchService } from '../../services/context-switch.service';
@@ -66,7 +67,7 @@ interface PulldownRow {
   templateUrl: './context-pulldown.component.html',
   styleUrl: './context-pulldown.component.scss',
 })
-export class ContextPulldownComponent implements OnInit, OnDestroy {
+export class ContextPulldownComponent implements OnInit {
   private host = inject<ElementRef<HTMLElement>>(ElementRef);
   private router = inject(Router);
   private datasetState = inject(DatasetStateService);
@@ -118,7 +119,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
   private prevImporterOpen = false;
   private prevDetectorOpen = false;
 
-  private destroy$ = new Subject<void>();
+  private readonly destroyRef = inject(DestroyRef);
 
   /** Live mirror of the Dashboard's sort for this pulldown's table. Kept
    *  in sync via a subscription in `ngOnInit`. */
@@ -129,46 +130,49 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
    *  needing a separate per-row subscription. */
   private busyPairs: Map<string, string[]> = new Map();
 
+  constructor() {
+    // On the Dashboard the bar shows the table selection instead of the
+    // loaded context. Rebuild when visibility flips or either half's
+    // selection changes (both halves matter here because a row's
+    // compatibility/busy state depends on the *other* half's pick). An
+    // `effect` rather than a subscription, so the bar stays live off its own
+    // reads: nothing has to remember to push into it, and it keeps
+    // repainting whether or not the Dashboard is mounted.
+    effect(() => {
+      this.dashSelection.dashboardVisible();
+      this.dashSelection.datasetIds();
+      this.dashSelection.detectorIds();
+      this.rebuildRows();
+    });
+  }
+
   ngOnInit(): void {
-    this.datasetState.datasets$.pipe(takeUntil(this.destroy$)).subscribe(() => {
+    this.datasetState.datasets$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
       this.rebuildRows();
       this.maybeAutoSelectNewDataset();
     });
-    this.datasetState.detectors$.pipe(takeUntil(this.destroy$)).subscribe(() => this.rebuildRows());
+    this.datasetState.detectors$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.rebuildRows());
     // Read intent (not active) so the pulldown highlight updates the
     // moment the user picks a row, rather than waiting for any
     // dataset/detector load to finish.
     this.activeContext.intentPair$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => this.rebuildRows());
-    // On the Dashboard the bar mirrors the table selection instead of the
-    // loaded context. Rebuild when visibility flips or either half's
-    // selection changes (both halves matter here because a row's
-    // compatibility/busy state depends on the *other* half's pick).
-    this.dashSelection.dashboardVisible$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(() => this.rebuildRows());
-    this.dashSelection.datasetIds$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(() => this.rebuildRows());
-    this.dashSelection.detectorIds$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(() => this.rebuildRows());
-    this.datasetState.error$.pipe(takeUntil(this.destroy$)).subscribe((err) => {
+    this.datasetState.error$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((err) => {
       this.registryError = err;
       // Written from an async subscribe; notify the scheduler so the error row
       // repaints under zoneless.
       this.cdr.markForCheck();
     });
 
-    this.newThingFlows.created$.pipe(takeUntil(this.destroy$)).subscribe(({ kind, id }) => {
+    this.newThingFlows.created$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(({ kind, id }) => {
       if (kind !== this.kind() || !id || !this.awaitingNew) return;
       this.sawSuccessSignal = true;
       this.awaitingNew = false;
       this.switchToNewItem(id);
     });
     if (this.isDataset) {
-      this.newThingFlows.importStarted$.pipe(takeUntil(this.destroy$)).subscribe(() => {
+      this.newThingFlows.importStarted$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
         if (!this.awaitingNew) return;
         this.sawSuccessSignal = true;
         this.knownIdsAtAddStart = new Set(this.datasetState.datasets.map((d) => d.id));
@@ -177,13 +181,13 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     // Cancel the await if the user dismisses the underlying modal
     // without submitting. Without this, a later registry refresh from
     // an unrelated source would auto-select an unrelated dataset.
-    this.newThingFlows.importer$.pipe(takeUntil(this.destroy$)).subscribe((state) => {
+    this.newThingFlows.importer$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((state) => {
       const closing = this.prevImporterOpen && !state.open;
       this.prevImporterOpen = state.open;
       if (!closing || !this.isDataset) return;
       if (this.awaitingNew && !this.sawSuccessSignal) this.awaitingNew = false;
     });
-    this.newThingFlows.newDetector$.pipe(takeUntil(this.destroy$)).subscribe((state) => {
+    this.newThingFlows.newDetector$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((state) => {
       const closing = this.prevDetectorOpen && !state.open;
       this.prevDetectorOpen = state.open;
       if (!closing || this.isDataset) return;
@@ -192,7 +196,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
 
     this.pulldownControl
       .openSignal$(this.kind())
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => this.openMenu());
 
     // Mirror of the Dashboard table's sort. Read through
@@ -200,7 +204,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     // so this eager component doesn't pull the column-management code onto
     // the initial bundle.
     const sortState$: Observable<SortState> = this.dashboardSort.sort$(this.kind());
-    sortState$.pipe(takeUntil(this.destroy$)).subscribe((state) => {
+    sortState$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((state) => {
       this.sortState = state;
       this.rebuildRows();
     });
@@ -209,7 +213,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     // pair lights up the spinner glyph here. The service polls lazily;
     // it only fires HTTP traffic while at least one component is
     // subscribed.
-    this.runningJobs.busyPairs$.pipe(takeUntil(this.destroy$)).subscribe((pairs) => {
+    this.runningJobs.busyPairs$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((pairs) => {
       this.busyPairs = pairs;
       this.rebuildRows();
     });
@@ -221,7 +225,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     this.router.events
       .pipe(
         filter((e): e is NavigationEnd => e instanceof NavigationEnd),
-        takeUntil(this.destroy$),
+        takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((e) => this.updateLocked(e.urlAfterRedirects));
 
@@ -239,11 +243,6 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     // Written from the router-events subscribe (async callback), so notify the
     // scheduler to repaint the trigger's disabled state under zoneless.
     this.cdr.markForCheck();
-  }
-
-  ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
   }
 
   get isDataset(): boolean {
@@ -309,12 +308,12 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
   }
 
   pickRow(row: PulldownRow): void {
-    // On the Dashboard the pulldown mirrors the tables: a pick is a plain
-    // single-select of that row (which toggles off if it was the sole
+    // On the Dashboard the pulldown shows the tables' selection: a pick is a
+    // plain single-select of that row (which toggles off if it was the sole
     // pick), never a context load. Off the Dashboard it switches the
     // active/loaded pair as before.
-    if (this.dashSelection.dashboardVisible) {
-      this.dashSelection.requestSelect(this.kind(), row.id);
+    if (this.dashSelection.dashboardVisible()) {
+      this.dashSelection.toggle(this.kind(), row.id, false);
       this.close();
       return;
     }
@@ -340,12 +339,10 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     } else {
       // Seed the new-detector form's media type from the partner dataset:
       // the single selected dataset on the Dashboard, else the active one.
-      const otherDsId = this.dashSelection.dashboardVisible
-        ? singleId(this.dashSelection.datasetIds)
+      const otherDsId = this.dashSelection.dashboardVisible()
+        ? singleId(this.dashSelection.datasetIds())
         : this.activeContext.intentDatasetId;
-      const other = otherDsId
-        ? this.datasetState.datasets.find((d) => d.id === otherDsId)
-        : null;
+      const other = otherDsId ? this.datasetState.datasetById().get(otherDsId) : null;
       this.newThingFlows.openNewDetector({
         defaultMediaType: other?.media_type || '',
         datasetEmbedder: other?.embedder || '',
@@ -484,9 +481,11 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
   private switchToNewItem(id: string): void {
     // On the Dashboard a freshly-added item becomes the selected row (the
     // Dashboard also auto-selects new ids, so this just keeps them aligned)
-    // rather than being loaded as the active pair.
-    if (this.dashSelection.dashboardVisible) {
-      this.dashSelection.requestSelect(this.kind(), id);
+    // rather than being loaded as the active pair. `selectOnly`, not the pick
+    // ladder: this is "make the new thing the selection", and the ladder would
+    // toggle it back *off* if the Dashboard's own auto-select got there first.
+    if (this.dashSelection.dashboardVisible()) {
+      this.dashSelection.selectOnly(this.kind(), [id]);
       return;
     }
     if (this.isDataset) {
@@ -499,17 +498,19 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
   private rebuildRows(): void {
     const datasets = this.datasetState.datasets;
     const detectors = this.datasetState.detectors;
+    const datasetById = this.datasetState.datasetById();
+    const detectorById = this.datasetState.detectorById();
     // Two sources for what counts as "active":
     //  - On the Dashboard, the highlighted table rows (which can be more
     //    than one — the closed label collapses that to "Multiple").
     //  - Elsewhere, the single intent id (what the user picked), not what's
     //    loaded, so picking a row feels instant while a load runs behind it.
-    const dashMode = this.dashSelection.dashboardVisible;
+    const dashMode = this.dashSelection.dashboardVisible();
     const dsIds = dashMode
-      ? this.dashSelection.datasetIds
+      ? this.dashSelection.datasetIds()
       : idList(this.activeContext.intentDatasetId);
     const detIds = dashMode
-      ? this.dashSelection.detectorIds
+      ? this.dashSelection.detectorIds()
       : idList(this.activeContext.intentModelId);
 
     // The row's own selected set (highlight + label) versus the *other*
@@ -519,12 +520,12 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
     const selected = new Set(this.selectedIds);
     if (this.isDataset) {
       const activeDetId = singleId(detIds);
-      const activeDetector = activeDetId ? detectors.find((d) => d.id === activeDetId) : null;
+      const activeDetector = activeDetId ? detectorById.get(activeDetId) ?? null : null;
       const sorted = this.applySort(datasets);
       this.rows = sorted.map((d) => this.datasetRow(d, selected, activeDetector));
     } else {
       const activeDsId = singleId(dsIds);
-      const activeDataset = activeDsId ? datasets.find((d) => d.id === activeDsId) : null;
+      const activeDataset = activeDsId ? datasetById.get(activeDsId) ?? null : null;
       const sorted = this.applySort(detectors);
       this.rows = sorted.map((d) => this.detectorRow(d, selected, activeDataset));
     }

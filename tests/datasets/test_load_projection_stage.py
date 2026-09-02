@@ -18,7 +18,7 @@ import numpy as np
 
 from vtscore.concurrency.progress import LoadingTasksTracker
 from vtscore.datasets.load_pipeline import _parse_bool
-from vtscore.datasets.stages.projection import _build_projection_stage, _persist_projection_to_container
+from vtscore.datasets.stages.projection import _build_projection_stage
 from vtscore.projection import Projection
 from vtscore.state.core import DatasetContext
 
@@ -73,9 +73,9 @@ class TestBuildProjectionStage:
         ctx = self._ctx_with_embeddings("proj_stage_ok")
         with (
             patch("vtscore.projection.fit_projection", side_effect=_fake_fit_projection),
-            patch("vtscore.datasets.stages.projection._persist_projection_to_container") as mock_persist,
+            patch("vtscore.projection.store.persist_projection") as mock_persist,
         ):
-            _build_projection_stage(ctx, _make_tracker(), "ds-123")
+            _build_projection_stage(ctx, _make_tracker())
 
         assert ctx._projection is not None
         assert ctx._projection.projection_id == "fake-pid"
@@ -83,9 +83,9 @@ class TestBuildProjectionStage:
         assert ctx._pyramids.get("square") is not None
         assert ctx._pyramids["square"].projection_id == "fake-pid"
         mock_persist.assert_called_once()
-        # dataset_id and the freshly-built artifacts are forwarded for persistence.
+        # The context's own id and the freshly-built artifacts go to the store.
         args = mock_persist.call_args.args
-        assert args[0] == "ds-123"
+        assert args[0] == "proj_stage_ok"
         assert args[1] is ctx._projection
         assert args[2] is ctx._pyramids["square"]
 
@@ -106,9 +106,9 @@ class TestBuildProjectionStage:
 
         with (
             patch("vtscore.projection.fit_projection", side_effect=_capturing),
-            patch("vtscore.datasets.stages.projection._persist_projection_to_container"),
+            patch("vtscore.projection.store.persist_projection"),
         ):
-            _build_projection_stage(ctx, _make_tracker(), "ds-params")
+            _build_projection_stage(ctx, _make_tracker())
 
         # The fixtures are CLAP-embedded, whose swept defaults are (15, 0.10).
         assert captured["n_neighbors"] == 15
@@ -136,9 +136,9 @@ class TestBuildProjectionStage:
 
         with (
             patch("vtscore.projection.fit_projection", side_effect=_capturing),
-            patch("vtscore.datasets.stages.projection._persist_projection_to_container"),
+            patch("vtscore.projection.store.persist_projection"),
         ):
-            _build_projection_stage(ctx, _make_tracker(), "ds-siglip")
+            _build_projection_stage(ctx, _make_tracker())
 
         assert (captured["n_neighbors"], captured["min_dist"]) == (10, 0.05)
 
@@ -152,7 +152,7 @@ class TestBuildProjectionStage:
         the user silently got the compacted arrangement the sweep measured as
         worse.
         """
-        from vtsearch.routes.projection import _projection_params_match
+        from vtscore.projection.store import projection_params_match
 
         ctx = DatasetContext("proj_stage_untuned")
         rng = np.random.default_rng(11)
@@ -179,60 +179,22 @@ class TestBuildProjectionStage:
 
         with (
             patch("vtscore.projection.fit_projection", side_effect=_stamping),
-            patch("vtscore.datasets.stages.projection._persist_projection_to_container"),
+            patch("vtscore.projection.store.persist_projection"),
         ):
-            _build_projection_stage(ctx, _make_tracker(), "ds-untuned")
+            _build_projection_stage(ctx, _make_tracker())
 
         assert ctx._projection.compact is False
-        assert _projection_params_match(ctx._projection, ctx) is True
+        assert projection_params_match(ctx._projection, ctx) is True
 
     def test_empty_dataset_is_noop(self):
         ctx = DatasetContext("proj_stage_empty")
         with (
             patch("vtscore.projection.fit_projection", side_effect=_fake_fit_projection) as mock_fit,
-            patch("vtscore.datasets.stages.projection._persist_projection_to_container") as mock_persist,
+            patch("vtscore.projection.store.persist_projection") as mock_persist,
         ):
-            _build_projection_stage(ctx, _make_tracker(), "ds-empty")
+            _build_projection_stage(ctx, _make_tracker())
 
         assert ctx._projection is None
         assert ctx._pyramids == {}
         mock_fit.assert_not_called()
         mock_persist.assert_not_called()
-
-
-class TestPersistProjectionToContainer:
-    def test_appends_to_registered_container(self, tmp_path):
-        import pickle as _pickle
-
-        from vtscore.datasets.container import read_projection, write_container
-
-        ids = [1, 2, 3]
-        rng = np.random.default_rng(7)
-        coords = rng.standard_normal((3, 2)).astype(np.float32)
-        proj = Projection("persist-pid", ids, coords, "pca")
-        from vtscore.projection import build_pyramid
-
-        pyr = build_pyramid(proj, n_levels=1)
-
-        pkl = tmp_path / "ds.pkl"
-        write_container(pkl, _pickle.dumps({"medias": {}}), {"format_version": 1})
-
-        with patch(
-            "vtscore.datasets.registry.get_dataset",
-            return_value={"pkl_path": str(pkl)},
-        ):
-            _persist_projection_to_container("ds-xyz", proj, pyr)
-
-        loaded = read_projection(str(pkl))
-        assert loaded is not None
-        loaded_proj, _loaded_pyr = loaded
-        assert loaded_proj.projection_id == "persist-pid"
-
-    def test_missing_registry_entry_is_noop(self):
-        proj = Projection("x", [1], np.zeros((1, 2), dtype=np.float32), "pca")
-        from vtscore.projection import build_pyramid
-
-        pyr = build_pyramid(proj, n_levels=1)
-        with patch("vtscore.datasets.registry.get_dataset", return_value=None):
-            # Must not raise even though there is no container to write to.
-            _persist_projection_to_container("nonexistent", proj, pyr)

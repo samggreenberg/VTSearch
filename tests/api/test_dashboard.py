@@ -2,7 +2,6 @@
 
 import pytest
 
-import app as app_module  # noqa: F401  (triggers conftest side effects)
 from vtscore.datasets.registry import register_dataset
 from vtscore.detectors.registry import register_detector
 from vtsearch.state import medias
@@ -19,12 +18,7 @@ class TestDashboardDatasetInfo:
             resp = client.get("/api/dashboard/dataset-info")
             assert resp.status_code == 404
             data = resp.get_json()
-            # 404s are intercepted by the app-level ``NotFound``
-            # errorhandler in ``app.py`` (which always wins for 404
-            # because it matches a more specific exception subclass than
-            # flask-smorest's ``HTTPException`` handler), so the
-            # response carries ``error`` not ``message``.
-            assert "error" in data
+            assert data["message"] == "No dataset loaded"
         finally:
             medias.update(saved)
 

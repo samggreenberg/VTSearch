@@ -19,7 +19,6 @@ import pickle
 from pathlib import Path
 from typing import Any
 
-import app as app_module  # noqa: F401  (sets up Flask test infra via conftest)
 from vtscore.datasets.importers.server_files import ServerFilesDatasetImporter
 from vtscore.datasets.ingest import _build_media_data
 from vtscore.datasets.load_pipeline import _tag_origins

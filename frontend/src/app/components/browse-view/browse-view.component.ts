@@ -1,15 +1,15 @@
-import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, HostListener, inject, NgZone, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, HostListener, inject, NgZone, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
 import {
   BrowseCanvasComponent,
   BrowseContextMenuEvent,
   HexHoverEvent,
 } from '../browse-canvas/browse-canvas.component';
 import type { BrowseGraphicsMode } from '../browse-canvas/render-perf';
-import { BrowseHoverPreviewComponent, NowPlaying } from '../browse-hover-preview/browse-hover-preview.component';
+import { BrowseHoverPreviewComponent } from '../browse-hover-preview/browse-hover-preview.component';
+import type { NowPlaying } from '../../utils/browse-audio-audition';
 import { BrowseBinPopupComponent } from '../browse-bin-popup/browse-bin-popup.component';
 import { BrowseLegendComponent } from '../browse-legend/browse-legend.component';
 import { BrowseSelectionPanelComponent } from '../browse-selection-panel/browse-selection-panel.component';
@@ -18,6 +18,7 @@ import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { IconComponent } from '../icon/icon.component';
 import { NoFocusStealDirective } from '../../directives/no-focus-steal.directive';
 import { ProjectionApiService } from '../../services/projection-api.service';
+import { pollUntil, type PollHandle, type PollStep } from '../../services/poll-until';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { DatasetsRegistryApiService } from '../../services/datasets-registry-api.service';
@@ -38,7 +39,7 @@ import {
 } from '../browse-canvas/hex-render.util';
 import type { ProjectionMeta, RegionLabelPayload } from '../../models/projection.models';
 import { snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
-import { progressBarState } from '../../utils/format-progress';
+import { formatEta, progressBarState } from '../../utils/format-progress';
 import { shortcutsBlocked } from '../../utils/keyboard-shortcuts';
 import type { AppSettings } from '../../generated/api-client/models/app-settings';
 import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
@@ -141,6 +142,11 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    *  parked at the slice floor during the count-less UMAP fit, the pair bounds
    *  the bar's shimmer zone. See ProgressEvent.overall_step_end. */
   readonly buildStepEnd = signal<number | null>(null);
+  /** Seconds the server estimates are left in the whole build, or ``null``
+   *  while it declines to guess. The tracker withholds one for the first few
+   *  seconds and throughout a count-less phase, so empty is the normal opening
+   *  state rather than a failure; see {@link buildEtaText}. */
+  readonly buildEta = signal<number | null>(null);
 
   /** `<vt-progress-bar>` inputs for the build state, preferring the whole-job
    *  ``overall`` fraction so the bar fills once across the build rather than
@@ -153,6 +159,15 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       overall_step_end: this.buildStepEnd(),
     }),
   );
+
+  /**
+   * The remaining-time estimate for the line beside the count, e.g.
+   * ``"About 10 min left"``. Rendered through the shared `formatEta` and never
+   * re-rounded here: the server already snaps the figure to a coarse sticky
+   * ladder so every consumer displays the same one. Empty string when there is
+   * no estimate, which the template drops.
+   */
+  readonly buildEtaText = computed(() => formatEta(this.buildEta()));
 
   /** Phase line under the bar: `"Step 2 of 3 · building pyramid"`. */
   readonly buildDetail = computed(() => {
@@ -381,11 +396,9 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    *  than spilling onto the side panel or past the canvas edges. */
   contextBounds: DOMRect | null = null;
 
-  private destroy$ = new Subject<void>();
-  private polling = false;
-  private pollTimer: ReturnType<typeof setTimeout> | null = null;
-  private pollErrors = 0;
-  private static readonly MAX_POLL_ERRORS = 5;
+  private readonly destroyRef = inject(DestroyRef);
+  /** The in-flight build poll, or ``null`` when no build is being watched. */
+  private poll: PollHandle | null = null;
 
   /**
    * Gate for the *first* projection load. Held until the per-media display
@@ -479,7 +492,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
 
     this.datasetsRegistryApi
       .getStatus()
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (status) => {
           this.mediaType.set(status.media_type || '');
@@ -502,7 +515,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     // load; genuine later changes reload directly.
     if (!this.subset) {
       this.activeContext.pair$
-        .pipe(takeUntil(this.destroy$))
+        .pipe(takeUntilDestroyed(this.destroyRef))
         .subscribe(() => {
           if (this.initialLoadStarted) {
             this.loadProjection();
@@ -514,9 +527,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
-    if (this.pollTimer) clearTimeout(this.pollTimer);
+    this.stopPoll();
     document.removeEventListener('mousemove', this.boundPanelMove);
     document.removeEventListener('mouseup', this.boundPanelUp);
     document.removeEventListener('mousemove', this.boundDetailsMove);
@@ -979,7 +990,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     if (!meta.has_labels) return;
     this.projectionApi
       .getLabels(this.subset)
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (resp) => {
           // Guard against a stale response landing after the projection moved on.
@@ -1223,7 +1234,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     }
     this.enterBuilding();
     this.buildRequest()
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (resp) => {
           if (resp.status === 'ready') {
@@ -1262,7 +1273,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     const request$ = this.subset
       ? this.projectionApi.reprojectSubset(this.subsetIds)
       : this.projectionApi.reproject();
-    request$.pipe(takeUntil(this.destroy$)).subscribe({
+    request$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (resp) => {
         if (resp.status === 'ready') {
           // Defensive: a forced build always re-fits, but re-read meta anyway.
@@ -1306,7 +1317,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     if (ids.length === 0) return;
     this.mediasApi
       .voteBulk(ids, target)
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => this.dropFromBrowse(ids, target),
         error: () =>
@@ -1343,7 +1354,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     }
     this.projectionApi
       .subsetRemove(removedIds)
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (meta) => {
           // Leave the viewport where the user had it; don't yank the camera to
@@ -1458,14 +1469,15 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.buildTotalSteps.set(meta?.total_steps ?? null);
     this.buildOverall.set(meta?.overall ?? null);
     this.buildStepEnd.set(meta?.overall_step_end ?? null);
+    this.buildEta.set(meta?.eta_seconds ?? null);
   }
 
   private loadProjection(): void {
     this.status.set('loading');
-    this.polling = false;
+    this.stopPoll();
     this.projectionApi
       .getMeta(this.subset)
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (meta) => this.applyMeta(meta),
         error: (err) => {
@@ -1516,55 +1528,47 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.onBuild();
   }
 
+  /**
+   * Watch an in-flight projection build until it lands. Re-entrant callers
+   * (`applyMeta` fires on every status refresh) are absorbed: a poll already
+   * running is left alone rather than restarted.
+   */
   private pollBuildStatus(): void {
-    if (this.polling) return;
-    this.polling = true;
-    this.pollErrors = 0;
-    const poll = (): void => {
-      this.projectionApi
-        .getMeta(this.subset)
-        .pipe(takeUntil(this.destroy$))
-        .subscribe({
-          next: (meta) => {
-            this.pollErrors = 0;
-            this.meta.set(meta);
-            if (meta.media_type) {
-              this.mediaType.set(meta.media_type);
-              this.applyBrowsePrefsForMediaType();
-            }
-            this.tileCache.setProjectionId(meta.projection_id);
-            if (meta.point_count > 0) {
-              this.polling = false;
-              this.syncLabels(meta);
-              this.enterReady();
-              return;
-            }
-            if (meta.status === 'error') {
-              this.polling = false;
-              this.status.set('error');
-              this.errorMessage.set(meta.error || 'Failed to build the map');
-              return;
-            }
-            this.applyBuildProgress(meta);
-            this.pollTimer = setTimeout(poll, 1000);
-          },
-          error: () => {
-            this.pollErrors += 1;
-            // Give up after a run of failures rather than retrying forever.
-            if (this.pollErrors >= BrowseViewComponent.MAX_POLL_ERRORS) {
-              this.polling = false;
-              this.status.set('error');
-              this.errorMessage.set(
-                'Lost contact with the server while building the map.',
-              );
-              return;
-            }
-            // Exponential backoff: 2s, 4s, 8s, … capped at 30s.
-            const delay = Math.min(2000 * 2 ** (this.pollErrors - 1), 30000);
-            this.pollTimer = setTimeout(poll, delay);
-          },
-        });
-    };
-    this.pollTimer = setTimeout(poll, 1000);
+    if (this.poll?.active()) return;
+    this.poll = pollUntil<ProjectionMeta>({
+      fetch: () => this.projectionApi.getMeta(this.subset),
+      apply: (meta) => this.applyBuildMeta(meta),
+      onLostContact: () => {
+        this.status.set('error');
+        this.errorMessage.set('Lost contact with the server while building the map.');
+      },
+    });
+  }
+
+  /** Apply one meta polled during a build, and say whether it is still running. */
+  private applyBuildMeta(meta: ProjectionMeta): PollStep {
+    this.meta.set(meta);
+    if (meta.media_type) {
+      this.mediaType.set(meta.media_type);
+      this.applyBrowsePrefsForMediaType();
+    }
+    this.tileCache.setProjectionId(meta.projection_id);
+    if (meta.point_count > 0) {
+      this.syncLabels(meta);
+      this.enterReady();
+      return 'stop';
+    }
+    if (meta.status === 'error') {
+      this.status.set('error');
+      this.errorMessage.set(meta.error || 'Failed to build the map');
+      return 'stop';
+    }
+    this.applyBuildProgress(meta);
+    return 'continue';
+  }
+
+  private stopPoll(): void {
+    this.poll?.stop();
+    this.poll = null;
   }
 }

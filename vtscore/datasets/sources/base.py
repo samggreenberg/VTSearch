@@ -96,9 +96,10 @@ class MediaSource(ABC):
     them to parallelise I/O and/or surface pre-computed data from a batch API.
 
     See :class:`~vtscore.datasets.sources.local_folder.LocalFolderSource`
-    for a minimal concrete example and
-    :class:`~vtscore.datasets.sources.pullwrest.PullWrestSource`
-    for an example of a bulk override that returns rich metadata.
+    for a minimal concrete example.  No in-tree source overrides the bulk
+    methods today; a source backed by a batch API should, so that one round
+    trip serves a whole page of items and can carry rich per-item metadata
+    back with it.
     """
 
     #: Short identifier for this source type (e.g. ``"local_folder"``).

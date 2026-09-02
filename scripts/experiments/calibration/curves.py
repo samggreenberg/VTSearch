@@ -741,11 +741,11 @@ def crossover(curves: pd.DataFrame, stat: str = STAT, lower_is_better: bool = Tr
 
 
 def _load(results: Path, arms: Sequence[str]) -> pd.DataFrame:
-    import analyze_spikes as sp
+    import _cells_io
 
     parts = []
     for arm in arms:
-        df, _prov = sp.load_arm(results / arm)
+        df, _prov = _cells_io.load_arm(results / arm)
         if not df.empty:
             df = df.copy()
             df["arm"] = arm

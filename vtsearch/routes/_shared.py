@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from functools import wraps
 from typing import TYPE_CHECKING, Any, Callable
 
-from flask import g, jsonify, make_response, request, send_file
+from flask import make_response, request, send_file
 from flask_smorest import abort
 from marshmallow import ValidationError
 from werkzeug.exceptions import HTTPException
@@ -18,6 +18,7 @@ from vtscore.concurrency.progress import update_find_progress
 from vtscore.embedding.media_vectors import EMBEDDINGS_KEY
 from vtscore.utils.hashing import content_md5, new_md5
 from vtscore.utils.hits import hit_custom_metadata
+from vtsearch.errors import error_response
 
 if TYPE_CHECKING:
     from vtscore.plugins import PluginBase
@@ -214,28 +215,6 @@ def find_idle_on_crash(recorder: Any = None) -> Iterator[None]:
             recorder.finish(ok=False)
         find_idle()
         raise
-
-
-def error_response(error: str, status: int, detail: Any | None = None, **extra: Any):
-    """Build a standardized JSON error response.
-
-    Shape::
-
-        {"error": "<short message>", "detail": <optional>, "request_id": "<id>", ...extra}
-
-    ``request_id`` is pulled from ``flask.g`` when available, so clients can
-    quote it in bug reports and operators can correlate it with structured
-    logs. Additional keyword args become top-level fields (e.g.
-    ``missing_fields=[...]``).
-    """
-    body: dict[str, Any] = {"error": error}
-    if detail is not None:
-        body["detail"] = detail
-    rid = getattr(g, "request_id", None)
-    if rid:
-        body["request_id"] = rid
-    body.update(extra)
-    return jsonify(body), status
 
 
 def get_json_safe() -> dict:

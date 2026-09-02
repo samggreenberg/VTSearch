@@ -18,12 +18,12 @@ second test would pass without ever seeing the first one's damage.
 
 from __future__ import annotations
 
-import importlib
 import os
 
 import pytest
 
 from vtscore import config
+from vtscore.config import core_config as core_config_mod
 
 from tests_lib.conftest import TEST_TRAIN_EPOCHS
 
@@ -37,9 +37,9 @@ def test_a_reloading_config_resets_the_training_budget():
     session-level value the reload drops - the registered ``CoreConfig``
     builder goes with it, and its absence makes ``from_settings()`` raise.
     """
-    importlib.reload(config)
+    config._reload_all()
     assert config.TRAIN_EPOCHS == int(os.environ.get("VTSEARCH_TRAIN_EPOCHS", "200"))
-    assert config._core_config_builder is None
+    assert core_config_mod._core_config_builder is None
 
 
 def test_b_the_next_test_still_gets_the_session_budget():
@@ -47,5 +47,5 @@ def test_b_the_next_test_still_gets_the_session_budget():
     assert config.TRAIN_EPOCHS == TEST_TRAIN_EPOCHS
     # Restored, and *callable*: registration alone would still leave
     # ``from_settings()`` raising if the builder came back unusable.
-    assert config._core_config_builder is not None
+    assert core_config_mod._core_config_builder is not None
     assert config.CoreConfig.from_settings().data_dir == config.DATA_DIR

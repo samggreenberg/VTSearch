@@ -13,9 +13,14 @@ The Flask-free core of the VTSBrowse browse canvas (see
   :func:`bin_shape_for_media_type` returns squares for browsable-thumbnail
   media (image/video/document) and hexes for the rest (audio/text).
 
-Persistence of the projection + pyramid (the carve-out from the
-"No Persisted Vectors or MLPs" rule) and the HTTP endpoints live in the
-VTSearch Browse routes, not here.
+Two more modules sit on top of those stages: :mod:`vtscore.projection.store`
+persists a layout beside its dataset (the carve-out from the "No Persisted
+Vectors or MLPs" rule) and judges whether a stored one is still fresh, and
+:mod:`vtscore.projection.service` drives the whole lifecycle the Browse
+canvas sees.  Neither is imported here: they pull the dataset registry and
+the job runners, which the pure-NumPy stages above deliberately do not.
+Only the HTTP endpoints live outside this package, in the VTSearch Browse
+routes.
 """
 
 from __future__ import annotations

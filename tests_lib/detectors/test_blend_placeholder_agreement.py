@@ -20,7 +20,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-import vtscore.training.thresholds as thresholds_mod
+from vtscore.training.thresholds import blend as thresholds_mod
 from vtscore.detectors.training import _train_and_score_xy, train_and_threshold
 from vtscore.training.thresholds import NO_GOOD_THRESHOLD
 

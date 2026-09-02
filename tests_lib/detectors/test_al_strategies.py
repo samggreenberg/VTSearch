@@ -159,7 +159,7 @@ class TestBadPhase:
 
 def _two_cluster_atlas():
     """A coverage atlas over two well-separated clusters (labels start empty)."""
-    from vtscore.state.coverage_atlas import CoverageAtlas
+    from vtscore.coverage.atlas import CoverageAtlas
 
     rng = np.random.default_rng(0)
     vectors = {}
