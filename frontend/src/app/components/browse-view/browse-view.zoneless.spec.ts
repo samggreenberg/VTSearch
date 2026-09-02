@@ -18,7 +18,7 @@ import { VtDialogService } from '../../services/dialog.service';
 import { ToastService } from '../../services/toast.service';
 import type { ProjectionMeta } from '../../models/projection.models';
 import { configureZoneless } from '../../testing/zoneless-testbed';
-import { makeActiveContextStub } from '../../testing/mocks';
+import { makeActiveContextStub, makeSettingsStateStub } from '../../testing/mocks';
 import { settleZoneless } from '../../testing/settle-resource';
 
 /**
@@ -69,15 +69,16 @@ describe('BrowseViewComponent (zoneless canary)', () => {
           DetectorsRegistryApiService['releasePositivesBrowse']
         >,
     };
-    const settingsStub: Partial<SettingsStateService> = {
-      // Settings resolve (as they do in production): the browse view holds its
-      // first projection load until settings + media type are in, so it applies
-      // the saved per-media display prefs before the first canvas fit.
-      settingsSignal: signal({}) as unknown as SettingsStateService['settingsSignal'],
+    // Settings resolve (as they do in production): the browse view holds its
+    // first projection load until settings + media type are in, so it applies
+    // the saved per-media display prefs before the first canvas fit. The stub
+    // carries the real `perMediaType`, which the view's per-media prefs are
+    // built on (see `makeSettingsStateStub`).
+    const { stub: settingsStub, settings: settingsValue } = makeSettingsStateStub({
       error: signal(null) as unknown as SettingsStateService['error'],
-      load: noop,
       update: () => of({}) as ReturnType<SettingsStateService['update']>,
-    };
+    });
+    settingsValue.set({});
     const subsetStub: Partial<BrowseSubsetService> = {
       take: () => null,
       markReturningToFind: noop,
