@@ -108,7 +108,7 @@ describe('LabelImporterModalComponent', () => {
     component.submit();
 
     httpMock.expectOne('/api/label-importers/import/server_json_file').flush(
-      { error: 'File not found' },
+      { message: 'File not found' },
       { status: 404, statusText: 'Not Found' },
     );
 
@@ -218,7 +218,7 @@ describe('LabelImporterModalComponent', () => {
 
     component.submit();
     httpMock.expectOne('/api/label-importers/import/server_json_file').flush(
-      { error: 'Import blew up' },
+      { message: 'Import blew up' },
       { status: 500, statusText: 'Server Error' },
     );
     await settleZoneless(fixture);

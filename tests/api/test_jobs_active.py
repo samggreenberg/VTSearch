@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import threading
 
-import app as app_module  # noqa: F401  (triggers conftest side effects)
 from vtscore.concurrency.async_jobs import (
     AsyncJob,
     eval_jobs,

@@ -201,7 +201,7 @@ def resolve_file_context(
     """Resolve a media file from its origin and keep the backing source alive.
 
     Some :class:`~vtscore.datasets.sources.base.MediaSource` implementations
-    (e.g. PullWrest) materialise the file inside a
+    (e.g. ``http_archive`` on a cache miss) materialise the file inside a
     :class:`tempfile.TemporaryDirectory` they own.  If the source is dropped
     before the caller accesses the file, the temp dir is finalized by GC and
     the path goes stale; ``embed_file`` then crashes with
@@ -468,22 +468,30 @@ def embed_file(file_path: Path, media_type: str, embedder_name: str = "") -> np.
 
 def _clip_audio_to_bytes(file_path: Path, clip_start: float, clip_end: float) -> tuple[bytes, str]:
     """Slice a WAV file to ``[clip_start, clip_end]`` seconds.  Returns ``(bytes, suffix)``."""
-    from vtscore.media.audio.clipper import _wav_slice
+    from vtscore.media.audio.wav import wav_slice
 
     wav_bytes = file_path.read_bytes()
-    return _wav_slice(wav_bytes, clip_start, clip_end), ".wav"
+    return wav_slice(wav_bytes, clip_start, clip_end), ".wav"
 
 
-def _clip_image_to_bytes(file_path: Path, clip_box: str) -> tuple[bytes, str]:
-    """Crop an image to the comma-separated ``clip_box``.  Returns ``(bytes, suffix)``."""
+def _clip_image_to_bytes(file_path: Path, clip_box: Any) -> tuple[bytes, str] | None:
+    """Crop an image to ``clip_box``.  Returns ``(bytes, suffix)``, or ``None`` if unparseable.
+
+    The box is read with the same parser the lazy-clip byte route uses
+    (:func:`~vtscore.media.clip_recipe.parse_clip_box`), so a region that
+    replays for display replays identically for embedding.  A malformed box
+    returns ``None``, which the caller turns into a whole-file embed — the
+    same "better the parent than the wrong region" stance the other branches
+    take.
+    """
     import io as _io
 
+    from vtscore.media.clip_recipe import parse_clip_box
     from vtscore.media.image.decode import open_upright
 
-    parts = [int(float(v)) for v in clip_box.split(",")]
-    if len(parts) != 4:
-        raise ValueError(f"clip_box must have 4 values, got {len(parts)}")
-    box: tuple[int, int, int, int] = (parts[0], parts[1], parts[2], parts[3])
+    box = parse_clip_box(clip_box)
+    if box is None:
+        return None
     # Upright decode, matching the clipper the box was recorded by.
     with open_upright(file_path) as img:
         cropped = img.crop(box)
@@ -551,30 +559,21 @@ def _converter_origin_to_chain(params: dict[str, Any]) -> list[dict[str, Any]] |
     shared sub-output selector, so a reference-converted label re-embeds from
     the source file + recipe exactly like a chain-converted one.
 
-    Returns ``None`` when no ``converter`` is recorded.
+    The dialect is decoded by
+    :func:`~vtscore.media.clip_recipe.parse_converter_recipe`, the same parser
+    the lazy-clip byte route reads it with, so the two replay paths cannot
+    disagree about what a given origin records.
+
+    Returns ``None`` when no ``converter`` is recorded, or when the recipe
+    carries no sub-output disambiguator - the selector would refuse to guess
+    anyway, so there is nothing to gain from running the converter first.
     """
-    converter = params.get("converter")
-    if not converter:
+    from vtscore.media.clip_recipe import parse_converter_recipe
+
+    recipe = parse_converter_recipe(params)
+    if recipe is None or not recipe.is_replayable:
         return None
-    prefix = "converter_param_"
-    conv_params = {k[len(prefix) :]: v for k, v in params.items() if k.startswith(prefix)}
-    entry: dict[str, Any] = {"kind": "converter", "name": str(converter), "params": conv_params}
-    out_index = params.get("converter_out_index")
-    if out_index is not None:
-        try:
-            entry["out_index"] = int(out_index)
-        except (TypeError, ValueError):
-            pass
-    n_out = params.get("converter_n_out")
-    if n_out is not None:
-        try:
-            entry["n_out"] = int(n_out)
-        except (TypeError, ValueError):
-            pass
-    content_hash = params.get("converter_content_hash")
-    if content_hash is not None:
-        entry["content_hash"] = content_hash
-    return [entry]
+    return [recipe.chain_step()]
 
 
 def _replay_chain(file_path: Path, chain_raw: Any, embedder_name: str) -> tuple[np.ndarray, bytes | None] | None:

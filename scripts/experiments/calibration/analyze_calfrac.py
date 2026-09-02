@@ -103,13 +103,13 @@ def voting_mode(geometry: str) -> str:
 
 def load_arms(base: Path, fractions: Sequence[float]) -> tuple[pd.DataFrame, dict]:
     """Every arm's base rows, tagged with its fraction, plus a provenance block."""
-    import analyze_spikes as sp
+    import _cells_io
 
     parts: list[pd.DataFrame] = []
     prov: dict[str, dict] = {}
     for f in fractions:
         arm_dir = base / f"f{round(f * 100):03d}" / "results"
-        df, p = sp.load_arm(arm_dir)
+        df, p = _cells_io.load_arm(arm_dir)
         prov[f"{f:.2f}"] = {**p, "dir": str(arm_dir)}
         if df.empty:
             continue

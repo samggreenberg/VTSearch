@@ -16,6 +16,8 @@ import pickle
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
+
 _DROP_FIELDS = ("media_bytes", "thumbnail_bytes")
 
 #: Suffixes ``run_cells.py`` writes *beside* each cell's main frame, one per
@@ -47,6 +49,105 @@ def main_frame_files(cells_dir: str | Path) -> list[Path]:
 def side_frame_files(cells_dir: str | Path, suffix: str) -> list[Path]:
     """Every cell's side frame of one kind, e.g. ``suffix="__cutincl"``."""
     return sorted(Path(cells_dir).glob(f"task_*{suffix}.csv"))
+
+
+#: The base row's ``pool_variant``.  Whole-image styles emit ``"max"`` here (not
+#: blank) - the re-pool variants #2781 added are ``topk``/``pnorm``, and only the
+#: raw-patch tree arm emits them.  Filtering on "blank" instead drops *every*
+#: row, which is a silent empty analysis, so the accepted set is explicit.
+BASE_POOL_VARIANTS = ("", "max")
+
+
+def _blank(s: pd.Series) -> pd.Series:
+    """True where a tag column is empty/NaN - i.e. the arm's own base row."""
+    return s.isna() | (s.astype(str).str.strip().isin(("", "nan", "None")))
+
+
+def _base_rows(df: pd.DataFrame) -> pd.DataFrame:
+    """The production rows of one cell: no variant tag, base pooling only.
+
+    Applied per file rather than after the concat; see :func:`load_arm`.
+    """
+    for col in ("gmm_variant", "schedule"):
+        if col in df.columns:
+            df = df[_blank(df[col])]
+    if "pool_variant" in df.columns:
+        pv = df["pool_variant"].fillna("").astype(str).str.strip()
+        df = df[pv.isin(BASE_POOL_VARIANTS)]
+    return df
+
+
+def load_arm(arm_dir: Path) -> tuple[pd.DataFrame, dict]:
+    """Concatenate one arm's cell CSVs, keeping only its base rows.
+
+    Returns ``(frame, provenance)``; provenance counts the files read, the
+    unreadable ones, and the zero-byte ones, because an analysis that silently
+    drops cells is how a disk incident becomes a wrong verdict.
+
+    Written for the #2847 spike study and lived in ``analyze_spikes.py`` until
+    #3409 moved it here.  It had become the de-facto arm loader for six callers
+    across five studies -- including ``curves.py``, which every study's figure
+    pair goes through, so the *shared* layer was importing a *study*.  Nothing
+    about it was ever spike-specific; ``analyze_spikes`` re-exports the name so
+    its own callers are unaffected.
+    """
+    files = main_frame_files(arm_dir / "cells")
+    files = [f for f in files if "__" not in f.name]  # skip __sweep / __cutdiag
+    frames, bad, empty, headless, no_base = [], [], [], [], []
+    n_rows_all = 0
+    for f in files:
+        if f.stat().st_size == 0:
+            empty.append(f.name)
+            continue
+        try:
+            fr = pd.read_csv(f)
+        except Exception:  # noqa: BLE001
+            bad.append(f.name)
+            continue
+        # Filter to base rows PER FILE, not after the concat.  A cell emits one
+        # row per (step, gmm_variant, pool_variant) and only ~1 in 34 of them
+        # survives this filter, so concatenating first holds 34x the frame that
+        # is actually wanted - which is fine at #2847's grid size and is where a
+        # long-horizon run with hundreds of cells dies, AFTER the cells have
+        # been paid for.  The counts below are accumulated rather than measured
+        # off the concat so `n_rows_all` still reports what was read.
+        n_rows_all += len(fr)
+        # A header-only cell is not a failure: the simulator emits a row only
+        # once it has at least one good AND one bad vote, so a rare category
+        # whose votes never turned up a positive legitimately writes none.
+        # That is the extreme of the positive-starvation regime the #2847 study
+        # is about, so it is counted and reported rather than silently dropped -
+        # and it differs per arm, which is why paired tests lose those cells.
+        #
+        # Decided on what the cell WROTE, before the base-row filter: "never
+        # found both classes" and "wrote only variant rows" are different facts
+        # and only the first is a result.
+        if fr.empty:
+            headless.append(f.name)
+            continue
+        fr = _base_rows(fr)
+        if fr.empty:
+            no_base.append(f.name)
+            continue
+        frames.append(fr)
+    prov = {
+        "n_files": len(files),
+        "n_read": len(frames),
+        "unreadable": bad,
+        "zero_byte": empty,
+        "no_positive_found": headless,
+        #: Wrote rows, none of them base rows.  A tag-column bug, never a
+        #: legitimate result, so it is named apart from the cells above.
+        "no_base_rows": no_base,
+    }
+    if no_base:
+        raise SystemExit(f"{arm_dir}: base-row filter kept 0 rows in {len(no_base)} cells - check tag columns")
+    if not frames:
+        return pd.DataFrame(), prov
+    df = pd.concat(frames, ignore_index=True)
+    prov["n_rows_all"] = int(n_rows_all)
+    prov["n_rows"] = int(len(df))
+    return df.reset_index(drop=True), prov
 
 
 def dump_medias(medias: dict[int, dict[str, Any]], path: str | Path) -> int:

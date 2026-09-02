@@ -30,7 +30,6 @@ from vtscore.concurrency.notifications import Notification, notifications
 from vtscore.concurrency.progress import (
     LoadingTasksTracker,
     ProgressTracker,
-    dataset_progress,
     detector_loading_tasks,
     eval_progress,
     find_progress,
@@ -77,7 +76,6 @@ BOOT_ID = uuid.uuid4().hex
 
 #: Single-channel trackers (key = SSE event name).
 _TRACKER_CHANNELS: dict[str, ProgressTracker] = {
-    "dataset": dataset_progress,
     "sort": sort_progress,
     "find": find_progress,
     "eval": eval_progress,

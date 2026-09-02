@@ -42,9 +42,10 @@ import tarfile
 import threading
 import zipfile
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Iterator, Optional
+from typing import TYPE_CHECKING, Any, Iterator, Optional
 from uuid import uuid4
 
+from vtscore.concurrency.progress import ProgressCallback, resolve_progress_callback
 from vtscore.config import DATA_DIR
 from vtscore.security.archive import safe_tar_extract
 from vtscore.security.path_validation import glob_top_level, rglob_follow_symlinks
@@ -64,8 +65,6 @@ __all__ = [
     "iter_archive_chunks",
     "load_archive_into",
 ]
-
-ProgressCallback = Callable[[str, str, int, int], None]
 
 #: File suffixes recognised as archives.  Compound tar suffixes are listed
 #: explicitly so :func:`is_archive_path` matches e.g. ``foo.tar.gz``.
@@ -90,13 +89,6 @@ _ARCHIVE_GLOBS: tuple[str, ...] = tuple(f"*{suffix}" for suffix in ARCHIVE_SUFFI
 LOCAL_ARCHIVE_IMPORTER = "local_archive"
 
 _cache_lock = threading.Lock()
-
-
-def _default_progress() -> ProgressCallback:
-    from vtscore.concurrency.progress import get_thread_progress, update_progress  # noqa: PLC0415
-
-    cb = get_thread_progress()
-    return cb if cb is not None else update_progress
 
 
 def is_archive_path(path: str | Path) -> bool:
@@ -161,7 +153,7 @@ def extract_archive(
     before it is written to disk.
     """
     if on_progress is None:
-        on_progress = _default_progress()
+        on_progress = resolve_progress_callback()
 
     name = archive_path.name.lower()
     extract_dir_resolved = extract_dir.resolve()

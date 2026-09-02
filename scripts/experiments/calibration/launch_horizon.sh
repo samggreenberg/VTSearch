@@ -31,6 +31,13 @@
 # profile's results dir, not the source's), which is what keeps
 # `_cells_io.assert_one_opening` quiet about them.
 #
+# #3400 opened a second seam of the same kind: `CALIB_SAFE_THRESHOLDS` defaulted
+# to the #2781-era unfused control, so every benchmark grid written before that
+# ran on a threshold the app cannot produce.  A continuation is pinned to the
+# SHIPPED path below, which is the right threshold and the wrong one for
+# reproducing a pre-#3400 grid -- set `CALIB_SAFE_THRESHOLDS=0` to continue one
+# of those verbatim, and read the difference as the seam it is.
+#
 # Per-step cost RISES with the vote count (each Good vote adds patch rows to the
 # training set): measured at 3.7 s/step early against 7.3 s/step at vote 150 for a
 # patch cell, so a horizon extension is superlinear in wall time and has to be
@@ -93,6 +100,7 @@ profile_env() {
   ENVX="$ENVX VTSEARCH_DATA_DIR=$VTSEARCH_DATA_DIR VTSEARCH_MODELS_DIR=$VTSEARCH_MODELS_DIR HF_HOME=$HF_HOME"
   ENVX="$ENVX VTS_REPO=$WT $GRID CALIB_MAX_STEPS=$HORIZON"
   ENVX="$ENVX CALIB_REPOOL_VARIANTS= CALIB_SCHEDULE_VARIANTS= CALIB_FOLD_COUNTS="
+  ENVX="$ENVX CALIB_SAFE_THRESHOLDS=${CALIB_SAFE_THRESHOLDS:-1}"
   ENVX="$ENVX CALIB_REQUIRE_OPENING=$OPENING"
 }
 

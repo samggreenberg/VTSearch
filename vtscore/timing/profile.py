@@ -568,9 +568,14 @@ def slot_shares(
 def profile_covers(task: str) -> bool:
     """Whether the active profile carries any measured cell for *task*.
 
-    Used by the tuning script's coverage report and by the dataset-load path,
-    which only wants to bypass its own calibrated table when a profile actually
-    has something to say about it.
+    Public API with **no caller inside this repository**: the tuning script's
+    coverage report goes through :func:`vtscore.timing.fit.coverage_report`
+    (which reads the profile dict directly), and the dataset-load path always
+    consults :func:`step_weights` with a fallback rather than gating on
+    coverage first.  It is exported for out-of-tree callers that want to
+    branch on whether a profile has anything to say about a task before
+    asking for weights - and is deliberately kept rather than deleted, since
+    an in-repo grep cannot see those callers.
     """
     return bool(active_profile().steps.get(task))
 

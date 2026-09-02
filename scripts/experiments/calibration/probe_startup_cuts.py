@@ -109,13 +109,13 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     from _cells_io import load_medias  # noqa: PLC0415
-    from vtscore.datasets import loader as _loader  # noqa: PLC0415
+    from vtscore.config import EMBEDDINGS_DIR  # noqa: PLC0415
 
     info = json.loads((common.RESULTS / "prepare_info.json").read_text())
     rows: list[dict] = []
     for ds, per_emb in info.get("datasets", {}).items():
         for emb, entry in per_emb.items():
-            medias = load_medias(_loader.EMBEDDINGS_DIR / cfg.pickle_name(ds, emb))
+            medias = load_medias(EMBEDDINGS_DIR / cfg.pickle_name(ds, emb))
             for cat in entry.get("selected_categories") or []:
                 r = probe_cell(ds, emb, cat, medias)
                 if r is not None:

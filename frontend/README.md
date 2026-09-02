@@ -69,12 +69,19 @@ as authoritative.
 npx ng update @angular/core@<N> @angular/cli@<N> @angular/cdk@<N>
 ```
 
+`@angular/build` is a direct devDependency and `ng update` does not always carry
+it along, so bump it in the same step (`npx ng update @angular/build@<N>`, or by
+hand) and check `npm ls @angular/build` afterwards. Do **not** reintroduce
+`@angular-devkit/build-angular` to get it: that package was removed in #3439
+because nothing here uses its builders, and it drags the whole webpack toolchain
+(and its unfixable advisories) back into the tree.
+
 Per step, expect: a **TypeScript floor** bump and a possible **Node floor** bump
 (verify the container satisfies it — if not, that's a setup-script/image change
 outside `frontend/`, surface it to the user); automated schematics for
 renamed/removed APIs; and a possible `vite`/`esbuild` `overrides` revisit if the
-new `@angular-devkit` pulls a different range (stale overrides can break
-`npm ci` or the build). Gate after each: `build:prod` clean, TypeScript clean,
+new `@angular/build` pulls a different range (stale overrides can break
+`npm ci` or the build), including the `@angular/build` → `undici` pin. Gate after each: `build:prod` clean, TypeScript clean,
 app boots; after the final major also smoke the core flow (load dataset → train
 detector → sort).
 
@@ -84,6 +91,8 @@ detector → sort).
   `@angular/build:*` builders (not the `@angular-devkit/build-angular:*`
   aliases) — **required**, because the `@angular/build:unit-test` runner warns
   and fails to inherit polyfills when `buildTarget` points at a devkit alias.
+  Since #3439 the alias package isn't installed at all, so naming one now fails
+  outright rather than degrading quietly.
   `test` (watch) / `test:ci` (`ng test --no-watch`) each have a `pretest*` hook
   regenerating the API client.
 - **Dedicated `test` build configuration.** `angular.json`'s `test` target points

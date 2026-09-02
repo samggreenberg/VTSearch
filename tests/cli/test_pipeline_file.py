@@ -14,10 +14,10 @@ from pathlib import Path
 import pytest
 import yaml
 
-import app as app_module
 from tests.helpers import make_dataset_file as _make_dataset_file
 from vtscore.media.audio.audio_generator import generate_wav
 from vtsearch.settings import get_detectors_dir
+from vtsearch.state import medias
 
 
 @pytest.fixture(autouse=True)
@@ -298,7 +298,7 @@ class TestRunPipelineFile:
 
         _write_detector("yaml-detector", _trained_labelset())
 
-        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
+        dataset_path = _make_dataset_file(tmp_path, medias)
         settings_path = _settings_file(tmp_path, ["yaml-detector"])
         out_path = tmp_path / "hits.json"
 
@@ -333,7 +333,7 @@ class TestRunPipelineFile:
         # The settings file points at a *different* detector that doesn't
         # exist on disk; if the override isn't honoured the run will fail.
 
-        dataset_path = _make_dataset_file(tmp_path, app_module.medias)
+        dataset_path = _make_dataset_file(tmp_path, medias)
         settings_path = _settings_file(tmp_path, ["nonexistent-detector"])
         out_path = tmp_path / "hits.json"
 

@@ -13,7 +13,7 @@ Two recipe families participate:
 * **clip slices** - the media type's clipper re-slices the source bytes:
 
   * **audio** - ``clip_start`` / ``clip_end`` seconds, sliced via
-    :func:`~vtscore.media.audio.clipper._wav_slice`.
+    :func:`~vtscore.media.audio.wav.wav_slice`.
   * **image** - ``clip_box`` pixel box, cropped via Pillow.
 
   Text clips keep their (tiny) ``media_string`` materialized, and video clips
@@ -45,6 +45,8 @@ import threading
 from collections import OrderedDict
 from pathlib import Path
 from typing import Any
+
+from vtscore.media.clip_recipe import parse_clip_box, parse_converter_recipe
 
 log = logging.getLogger(__name__)
 
@@ -108,65 +110,21 @@ _CONV_CACHE_MAX_BYTES = 256 * 1024 * 1024
 _conv_cache = _ByteBoundedLRU(_CONV_CACHE_MAX_BYTES)
 
 
-def _parse_box(raw: Any) -> tuple[int, int, int, int] | None:
-    """Parse a ``clip_box`` into a 4-int pixel tuple, or ``None`` if malformed.
-
-    Accepts the ``"x1,y1,x2,y2"`` string stored in ``origin.params`` as well
-    as a native list/tuple (the in-memory form on a freshly clipped media).
-    """
-    if isinstance(raw, (list, tuple)):
-        parts = list(raw)
-    elif isinstance(raw, str):
-        parts = [p for p in raw.split(",") if p != ""]
-    else:
-        return None
-    if len(parts) != 4:
-        return None
-    try:
-        return (int(float(parts[0])), int(float(parts[1])), int(float(parts[2])), int(float(parts[3])))
-    except (TypeError, ValueError):
-        return None
-
-
 def _converter_recipe(params: dict[str, Any]) -> tuple | None:
-    """Build a converter recipe from ``origin.params``, or ``None``.
+    """Build a hashable converter recipe from ``origin.params``, or ``None``.
 
-    Returns ``("converter", name, params_items, out_index, n_out,
-    content_hash)`` where ``params_items`` is a hashable
-    ``tuple(sorted(...))`` of the reconstructed converter params (rebuilt
-    from the ``converter_param_<key>`` keys).  Requires at least one
-    sub-output disambiguator (``converter_out_index`` or
-    ``converter_content_hash``); without one, replay cannot pick the right
-    output, so it is treated as "not a lazy converter media" (``None``) and
-    the caller falls through to its normal resolution order.
+    Parsing is shared with the resolver's replay path via
+    :func:`~vtscore.media.clip_recipe.parse_converter_recipe`; what stays local
+    is the *gate*.  A recipe with no sub-output disambiguator cannot pick the
+    right output, so it is treated here as "not a lazy converter media"
+    (``None``) and the caller falls through to its normal resolution order,
+    rather than running the converter only to have the selector refuse to
+    guess.
     """
-    name = params.get("converter")
-    if not name:
+    recipe = parse_converter_recipe(params)
+    if recipe is None or not recipe.is_replayable:
         return None
-    out_index_raw = params.get("converter_out_index")
-    content_hash = params.get("converter_content_hash")
-    if out_index_raw is None and content_hash is None:
-        return None
-
-    prefix = "converter_param_"
-    conv_params = {k[len(prefix) :]: v for k, v in params.items() if k.startswith(prefix)}
-
-    def _as_int(raw: Any) -> int | None:
-        if raw is None:
-            return None
-        try:
-            return int(raw)
-        except (TypeError, ValueError):
-            return None
-
-    return (
-        "converter",
-        str(name),
-        tuple(sorted(conv_params.items())),
-        _as_int(out_index_raw),
-        _as_int(params.get("converter_n_out")),
-        content_hash,
-    )
+    return recipe.cache_key()
 
 
 def clip_recipe(media: dict[str, Any]) -> tuple | None:
@@ -222,7 +180,7 @@ def clip_recipe(media: dict[str, Any]) -> tuple | None:
             return None
 
     if media_type == "image":
-        box = _parse_box(params.get("clip_box"))
+        box = parse_clip_box(params.get("clip_box"))
         if box is None:
             return None
         return ("image", box)
@@ -236,9 +194,9 @@ def _apply_recipe(source_bytes: bytes, recipe: tuple, media: dict[str, Any]) -> 
     if kind == "converter":
         return _apply_converter_recipe(source_bytes, recipe, media)
     if kind == "audio":
-        from vtscore.media.audio.clipper import _wav_slice  # noqa: PLC0415
+        from vtscore.media.audio.wav import wav_slice  # noqa: PLC0415
 
-        return _wav_slice(source_bytes, recipe[1], recipe[2])
+        return wav_slice(source_bytes, recipe[1], recipe[2])
     if kind == "image":
         from vtscore.media.image.decode import open_upright  # noqa: PLC0415
 

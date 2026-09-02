@@ -45,7 +45,7 @@ def main(argv: list[str] | None = None) -> int:
 
     import pandas as pd
 
-    from vtscore.state.coverage_atlas import CoverageAtlas, auto_max_depth, domain_shift_report
+    from vtscore.coverage.atlas import CoverageAtlas, auto_max_depth, domain_shift_report
 
     names = [d for d in args.datasets.split(",") if d]
     mats: dict[str, np.ndarray] = {}

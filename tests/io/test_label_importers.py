@@ -13,8 +13,8 @@ import json
 
 import pytest
 
-import app as app_module
 from tests import wait_for_detector_task
+from vtsearch.state import bad_votes, good_votes, medias
 
 
 # ---------------------------------------------------------------------------
@@ -346,7 +346,7 @@ class TestServerJsonLabelImporter:
         assert result[0]["md5"] == "xyz"
 
     def test_api_route(self, client, tmp_path):
-        md5 = app_module.medias[1]["md5"]
+        md5 = medias[1]["md5"]
         payload = {"labels": [{"md5": md5, "label": "good"}]}
         p = tmp_path / "server_labels.json"
         p.write_text(json.dumps(payload))
@@ -357,7 +357,7 @@ class TestServerJsonLabelImporter:
         assert res.status_code == 200
         result = res.get_json()
         assert result["applied"] == 1
-        assert 1 in app_module.good_votes
+        assert 1 in good_votes
 
 
 # ---------------------------------------------------------------------------
@@ -409,8 +409,8 @@ class TestServerCsvLabelImporter:
         assert result[0]["md5"] == "xyz789"
 
     def test_api_route(self, client, tmp_path):
-        md5_1 = app_module.medias[1]["md5"]
-        md5_2 = app_module.medias[2]["md5"]
+        md5_1 = medias[1]["md5"]
+        md5_2 = medias[2]["md5"]
         p = tmp_path / "server_labels.csv"
         p.write_text(f"md5,label\n{md5_1},good\n{md5_2},bad\n")
         res = client.post(
@@ -420,8 +420,8 @@ class TestServerCsvLabelImporter:
         assert res.status_code == 200
         result = res.get_json()
         assert result["applied"] == 2
-        assert 1 in app_module.good_votes
-        assert 2 in app_module.bad_votes
+        assert 1 in good_votes
+        assert 2 in bad_votes
 
     def test_csv_importer_preserves_origin_name(self, tmp_path):
         """CSV importer reads origin_name/filename/category columns."""
@@ -468,8 +468,8 @@ class TestServerCsvLabelImporter:
         ingest the original media (via the resolver / ingest-missing flow)
         and have it matched by content hash.
         """
-        origin_name_1 = app_module.medias[1].get("origin_name", "")
-        origin_name_2 = app_module.medias[2].get("origin_name", "")
+        origin_name_1 = medias[1].get("origin_name", "")
+        origin_name_2 = medias[2].get("origin_name", "")
         assert origin_name_1, "Test media 1 must have an origin_name"
         csv_text = f"label,md5,origin_name\ngood,wrong_md5_1,{origin_name_1}\nbad,wrong_md5_2,{origin_name_2}\n"
         p = tmp_path / "cross_dataset.csv"
@@ -481,8 +481,8 @@ class TestServerCsvLabelImporter:
         assert res.status_code == 200
         result = res.get_json()
         assert result["applied"] == 0, "no labels should be applied via basename collision"
-        assert 1 not in app_module.good_votes
-        assert 2 not in app_module.bad_votes
+        assert 1 not in good_votes
+        assert 2 not in bad_votes
         # The rows are handed to the background auto-resolve pass (#2703),
         # which can't reach them either (no origin), so they stay unresolved.
         assert result["ingest_pending_count"] == 2

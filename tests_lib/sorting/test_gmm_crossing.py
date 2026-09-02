@@ -158,7 +158,7 @@ class TestGmmThresholdCutRule:
         scores = _pooled_scores(1000, -1.0, 1.1, rng).tolist()
         expected = calculate_gmm_threshold(scores)
         with mock.patch(
-            "vtscore.training.thresholds._weighted_gaussian_crossing",
+            "vtscore.training.thresholds.gmm._weighted_gaussian_crossing",
             side_effect=AssertionError("the production cut must not call the crossing solver"),
         ):
             assert calculate_gmm_threshold(scores) == expected

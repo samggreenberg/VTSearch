@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import io
+import logging
 from pathlib import Path
 from typing import Any
 
-
 from vtscore.converters.base import MediaConverter, resolve_media_bytes
 from vtscore.utils.optional_deps import agpl_unavailable_message
+
+logger = logging.getLogger(__name__)
 
 
 class Document2ImageMediaConverter(MediaConverter):
@@ -54,14 +56,14 @@ class Document2ImageMediaConverter(MediaConverter):
         try:
             import fitz  # noqa: PLC0415 - PyMuPDF
         except ImportError:
-            print(agpl_unavailable_message("PyMuPDF", "Converting documents to images"))
+            logger.warning("%s", agpl_unavailable_message("PyMuPDF", "Converting documents to images"))
             return []
 
         results: list[dict[str, Any]] = []
         try:
             doc = fitz.open(stream=media_bytes, filetype=Path(filename).suffix.lstrip(".") or "pdf")
-        except Exception as e:
-            print(f"Error opening document {filename}: {e}")
+        except Exception:
+            logger.error("Failed to open document %s", filename, exc_info=True)
             return []
 
         try:

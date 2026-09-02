@@ -921,6 +921,63 @@ RICO_SCREEN2WORDS_CATEGORIES = [
 ]
 
 
+# ------------------------------------------------------------------
+# Rico UI semantics (the boxed-icon screenshot demo)
+# ------------------------------------------------------------------
+# Unlike ENRICO_CATEGORIES / RICO_SCREEN2WORDS_CATEGORIES, which label a *whole
+# screen*, these name the individual icons drawn on it.  The source's
+# ``content_or_function`` field carries ~98 distinct icon semantics as snake_case
+# tokens; this is a curated subset of 32 that are frequent (each ≥1,000
+# instances corpus-wide) and visually distinguishable from one another.
+#
+# Each entry is ``(source_token, display_name)``.  We show the display name
+# because the category string is what a user reads in the picker and what a text
+# embedder is prompted with, and "Back arrow" is a far better query than
+# "arrow_backward".  Deliberately included near-neighbours (the four arrows;
+# Add vs. Close; Play vs. Pause) keep the demo honest — a detector that cannot
+# tell an up arrow from a down arrow should not score well on it.
+#
+# Excluded despite being frequent: ``avatar`` (arbitrary user photos, not an icon
+# shape), ``national_flag`` and ``weather`` (whole families under one token), and
+# ``wallpaper`` / ``font`` (label the screen's content, not a glyph).
+RICO_ICON_IDENTITIES: list[tuple[str, str]] = [
+    ("arrow_backward", "Back arrow"),
+    ("arrow_forward", "Forward arrow"),
+    ("arrow_upward", "Up arrow"),
+    ("arrow_downward", "Down arrow"),
+    ("expand_more", "Expand chevron"),
+    ("menu", "Hamburger menu"),
+    ("more", "Overflow menu"),
+    ("search", "Search"),
+    ("close", "Close"),
+    ("add", "Add"),
+    ("minus", "Minus"),
+    ("check", "Checkmark"),
+    ("play", "Play"),
+    ("pause", "Pause"),
+    ("refresh", "Refresh"),
+    ("share", "Share"),
+    ("settings", "Settings gear"),
+    ("chat", "Chat bubble"),
+    ("favorite", "Heart"),
+    ("star", "Star"),
+    ("home", "Home"),
+    ("edit", "Edit pencil"),
+    ("cart", "Shopping cart"),
+    ("notifications", "Notification bell"),
+    ("email", "Envelope"),
+    ("delete", "Trash"),
+    ("location", "Location pin"),
+    ("date_range", "Calendar"),
+    ("file_download", "Download"),
+    ("call", "Phone"),
+    ("microphone", "Microphone"),
+    ("info", "Info"),
+]
+
+RICO_ICON_CATEGORIES = [display for _token, display in RICO_ICON_IDENTITIES]
+
+
 ENRICO_CATEGORIES = [
     "Bare",
     "Camera",

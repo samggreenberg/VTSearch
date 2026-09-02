@@ -11,13 +11,15 @@ in after the importer returns.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
+from vtscore.concurrency.progress import ProgressCallback, resolve_progress_callback
 from vtscore.security.path_validation import glob_top_level, rglob_follow_symlinks
 from vtscore.utils.hashing import content_md5
 
-ProgressCallback = Callable[[str, str, int, int], None]
+logger = logging.getLogger(__name__)
 
 
 def _normalise_converter_specs(
@@ -51,17 +53,6 @@ def _normalise_converter_specs(
             continue
         result.append((c, params))
     return result
-
-
-def _default_progress() -> ProgressCallback:
-    from vtscore.concurrency.progress import get_thread_progress
-
-    cb = get_thread_progress()
-    if cb is not None:
-        return cb
-    from vtscore.concurrency.progress import update_progress
-
-    return update_progress
 
 
 _OPTIONAL_OUTPUT_FIELDS = ("media_bytes", "media_string", "width", "height", "word_count", "character_count")
@@ -173,8 +164,8 @@ def _run_converter_on_source(
             return None
     try:
         return converter.convert_normalized(source_media, conv_params)
-    except Exception as exc:
-        print(f"Converter {converter.name} failed on {source_rel}: {exc}")
+    except Exception:
+        logger.error("Converter %s failed on %s", converter.name, source_rel, exc_info=True)
         return None
 
 
@@ -326,7 +317,7 @@ def run_converters_on_folder(
         return
 
     if on_progress is None:
-        on_progress = _default_progress()
+        on_progress = resolve_progress_callback()
 
     from vtscore.media import get as media_get, get_by_folder_name  # noqa: PLC0415
 
@@ -396,7 +387,7 @@ def apply_converter_to_demo(
     converter_name: str,
     dataset_name: str,
     medias: dict[int, dict[str, Any]],
-    embedder_name: str = "",  # noqa: ARG001 - kept for call-site compatibility; framework picks the embedder now
+    embedder_name: str = "",  # noqa: ARG001 - accepted and ignored by design; see the docstring
     on_progress: Optional[ProgressCallback] = None,
 ) -> None:
     """Convert all medias in-place using the named converter.
@@ -406,6 +397,13 @@ def apply_converter_to_demo(
     origin records the demo dataset and the converter used.  Outputs
     leave with ``embedding=None``; the framework embed stage fills them
     in.
+
+    :param embedder_name: **Accepted and ignored.**  Conversion changes the
+        media type, so an embedder chosen for the *source* type does not
+        apply to the outputs - the framework embed stage resolves the
+        target type's embedder itself.  The parameter is kept (rather than
+        removed) because out-of-tree callers may still pass it positionally
+        or by keyword, and dropping it would break them for no gain.
     """
     from vtscore.converters import get_converter  # noqa: PLC0415 - deferred to avoid circular import during eager registry discovery
 
@@ -414,7 +412,7 @@ def apply_converter_to_demo(
         raise ValueError(f"Unknown converter: {converter_name}")
 
     if on_progress is None:
-        on_progress = _default_progress()
+        on_progress = resolve_progress_callback()
 
     source_items = list(medias.items())
     converted: dict[int, dict[str, Any]] = {}

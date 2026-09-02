@@ -35,8 +35,8 @@ it shows a login screen at startup, otherwise it goes straight to the app.
 Whether the server actually *rejects* unauthenticated requests is governed by
 the provider's `enforce_auth()`, checked by a `before_request` hook: when it
 is true and `is_authenticated(request)` is false, any `/api/*` request is
-refused with **401** `{"error": "Authentication required", "code":
-"auth_required"}` before reaching a route handler. Exactly three paths are
+refused with **401** `{"message": "Authentication required", "error_code":
+"auth_required", ...}` before reaching a route handler. Exactly three paths are
 exempt — `/api/auth/status`, `/api/auth/login`, `/api/auth/logout` — so a
 client can always discover the auth mode and log in; everything else,
 including `/api/auth/huggingface/*`, sits behind the gate. Non-API paths
@@ -114,8 +114,8 @@ Only the `trivial` provider supports login.
 
 → **`trivial`**: sets the session username and returns the auth status dict
 (same shape as `GET /api/auth/status`, now `authenticated: true`).
-→ **`default` / `api_key`**: **400** `{"error": "Login/logout not supported by
-the active provider"}`.
+→ **`default` / `api_key`**: **400** `{"message": "Login/logout not supported by
+the active provider", ...}`.
 
 ### Logout
 
@@ -126,8 +126,8 @@ POST /api/auth/logout
 Only the `trivial` provider supports logout.
 
 → **`trivial`**: clears the session username and returns the auth status dict.
-→ **`default` / `api_key`**: **400** `{"error": "Login/logout not supported by
-the active provider"}`.
+→ **`default` / `api_key`**: **400** `{"message": "Login/logout not supported by
+the active provider", ...}`.
 
 ---
 

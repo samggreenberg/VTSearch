@@ -88,6 +88,12 @@ export CALIB_REPOOL_VARIANTS=""
 export CALIB_SCHEDULE_VARIANTS=""
 export CALIB_FOLD_COUNTS=""
 export CALIB_PATCH_STYLES="${CALIB_PATCH_STYLES:-max_patch}"
+# The SHIPPED threshold path, named for the same reason the geometry above is:
+# "shipped defaults only" is this study's premise, and a harness default is not
+# automatically a shipped one.  `CALIB_SAFE_THRESHOLDS` defaulted to the
+# #2781-era unfused control until #3400, so the band contrast was being read off
+# a threshold no user can get.
+export CALIB_SAFE_THRESHOLDS="${CALIB_SAFE_THRESHOLDS:-1}"
 
 # Declare the opening this study is FOR (#3278), rather than leaving it to be
 # decided per cell by whether a query happens to exist.  The pair guards itself
@@ -164,7 +170,7 @@ ENVX="$ENVX CALIB_N_SEEDS=$CALIB_N_SEEDS CALIB_MAX_STEPS=$CALIB_MAX_STEPS"
 # different cell.
 ENVX="$ENVX CALIB_CELL_ORDER=$CALIB_CELL_ORDER"
 ENVX="$ENVX CALIB_REPOOL_VARIANTS= CALIB_SCHEDULE_VARIANTS= CALIB_FOLD_COUNTS="
-ENVX="$ENVX CALIB_PATCH_STYLES=$CALIB_PATCH_STYLES"
+ENVX="$ENVX CALIB_PATCH_STYLES=$CALIB_PATCH_STYLES CALIB_SAFE_THRESHOLDS=$CALIB_SAFE_THRESHOLDS"
 # `REQUIRE_SEED_QUERY` filters CATEGORIES, so it reaches the cell list: it has to
 # travel with the rest or a task enumerates a different grid than the launcher
 # counted.  `REQUIRE_OPENING` is checked per cell and travels beside it.

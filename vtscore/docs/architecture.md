@@ -282,7 +282,7 @@ vtscore/
 │   │   ├── synthetic/                  # deterministic synthetic media
 │   │   ├── demo/                       # bundled demo datasets
 │   │   └── …                           # see packages/datasets.md
-│   ├── sources/                        # MediaSource resolvers (local_folder, http_archive, pullwrest)
+│   ├── sources/                        # MediaSource resolvers (local_folder, http_archive, …)
 │   ├── origin.py                       # Origin dataclass
 │   ├── labelset.py                     # LabelSet + LabeledElement
 │   ├── loader.py                       # façade re-exporting loader_folder/loader_pickle/loader_demo
@@ -331,7 +331,7 @@ is the authority on where to import it from.
 
 | Package | How to import |
 |---------|---------------|
-| `vtscore.config` | Plain module (`vtscore/config.py`): `from vtscore.config import CoreConfig, DATA_DIR`. |
+| `vtscore.config` | Package (`vtscore/config/`), everything public re-exported from its `__init__`: `from vtscore.config import CoreConfig, DATA_DIR`. |
 | `vtscore.datasets` | Re-exports the loader / importer-registry / `Origin` / `LabelSet` surface. Per-dataset demo metadata helpers live in their own submodules. |
 | `vtscore.media` | Re-exports the ABCs (`MediaType`, `MediaEmbedder`, `MediaClipper`, the processor ABCs) and the registry helpers (`get`, `get_embedder`, `get_clipper`, `set_progress_callback`, …). |
 | `vtscore.embedding` | Re-exports the embed / loader / matrix helpers. |

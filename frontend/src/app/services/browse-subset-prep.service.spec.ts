@@ -164,6 +164,30 @@ describe('BrowseSubsetPrepService', () => {
     }
   });
 
+  it('shows the build\'s remaining-time estimate once the backend has one', async () => {
+    vi.useFakeTimers();
+    try {
+      service.start(DS, IDS);
+
+      // No estimate yet: the backend withholds one until the build has run
+      // long enough to extrapolate from, and an absent ETA must render as
+      // nothing rather than a placeholder.
+      metaProvider = () => of(meta({ status: 'building', message: 'Arranging the items…', step: 1, total_steps: 3 }));
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(service.eta()).toBe('');
+
+      // The estimate has to survive the meta → ProgressEvent copy: the chip
+      // reads `eta_seconds` off the copied progress, so a field dropped here
+      // leaves the chip permanently blank with nothing to show it is broken.
+      metaProvider = () =>
+        of(meta({ status: 'building', message: 'building pyramid', step: 2, total_steps: 3, eta_seconds: 450 }));
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(service.eta()).toBe('About 7.5 min left');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('leaves the user in Find when the build fails', async () => {
     vi.useFakeTimers();
     try {

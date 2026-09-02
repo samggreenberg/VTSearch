@@ -122,7 +122,7 @@ frontend/
         ├── services/       API services, state services, coordination services (§4)
         ├── guards/         Route guards that resolve the URL pair into context (§6)
         ├── interceptors/   The four HTTP interceptors (§7)
-        ├── directives/     Cross-cutting DOM behaviour (`no-focus-steal`)
+        ├── directives/     Cross-cutting DOM behaviour (`no-focus-steal`, `panel-resize`)
         ├── models/         Hand-written types the OpenAPI spec cannot describe (§7)
         ├── utils/          Pure functions — no Angular DI, trivially unit-testable
         ├── testing/        Shared TestBed fragments and zoneless helpers (§10)
@@ -160,9 +160,13 @@ the component —
 - `DashboardLoadingTasksService` — per-task loading rows, and the
   poll-until-settled-then-refresh bookkeeping.
 - `DashboardSelectionService` — the highlighted table rows (which drive
-  Train / Find / Combine / Delete), bridged to the top-bar pulldowns so they
-  show what is *selected* while the Dashboard is on screen, not merely what is
-  loaded.
+  Train / Find / Combine / Delete), *owned* here rather than mirrored from the
+  component, so the top-bar pulldowns show what is *selected* while the
+  Dashboard is on screen (not merely what is loaded) by reading signals
+  directly, and the selection survives a round trip to another view. Both
+  grids share one `toggle(kind, id, additive)` ladder, and the ids the top bar
+  reads are `computed` over the selection and the registry — the pulldown
+  needs no push, and there is no per-mutation mirror call to forget.
 
 The Add-Dataset and New-Detector flows are *not* owned by the Dashboard at
 all: `NewThingFlowsService` is a singleton opener, and the modals are rendered
@@ -171,7 +175,8 @@ by `AppComponent` inside `@defer` blocks, so any surface can start those flows.
 ### Label view (`components/label-view/`)
 
 The training loop. A three-panel layout (`vt-left-panel`, `vt-center-panel`,
-`vt-right-panel`) with draggable dividers (`panel-resize.directive.ts`), plus
+`vt-right-panel`) with draggable dividers (the shared
+`directives/panel-resize.directive.ts`), plus
 `LabelViewPanelStateService` — a **component-provided** (not root) service
 holding per-media-type panel preferences.
 
@@ -266,6 +271,7 @@ The ones worth knowing before changing anything:
 | `VtDialogService` | `confirm()` / `prompt()` as promises, rendered by `dialog-host` |
 | `NewThingFlowsService` | Singleton openers for the Add-Dataset / New-Detector flows |
 | `MediaMetadataCacheService` | Lazy batched fetch of full metadata for whatever is in the viewport |
+| `PairScopeService` | **Component-provided** (`find-view`, `label-view`): the active pair's lifetime, the `scoped()` teardown operator, and the pair-change reset in its one correct order |
 | `KeyboardService`, `ThemeService`, `AchievementsService`, `AuthService` | App-wide concerns wired in `AppComponent` |
 
 `adaptive-poll.ts` is not a service but a shared operator; see
@@ -303,10 +309,23 @@ this codebase, and it is silent.
   becoming reactive. A signal read through a getter during template evaluation
   *is* tracked as a dependency of that view —
   `testing/getter-signal-zoneless.spec.ts` pins this.
+- **Per-media-type settings prefs go through `SettingsStateService.perMediaType`.**
+  A `{media_type: value}` settings key bound to a media-type signal returns a
+  `computed` value plus a merge-preserving setter, replacing the shadow
+  `Record` field + settings-mirror `effect()` + media-switch `effect()` +
+  hand-spread write that used to be repeated at every consumer. Two things it
+  buys: the value is a real signal (so a template binding on it repaints on its
+  own, instead of relying on some co-located `effect()` to dirty the view), and
+  there is no mirror left to go stale when a key disappears server-side. The
+  setter **merges**; a setter that replaced the dict would wipe every other
+  media type's preference. `LabelViewPanelStateService` is the reference use.
+
 - **Consumers use `effect()`, not `subscribe()`.** A constructor `effect()`
   reading a signal auto-disposes with the component, which is why the
-  `takeUntil(destroy$)` / `ngOnDestroy` plumbing has been dropped wherever it
-  was the last user.
+  teardown plumbing has been dropped wherever it was the last user.
+- **Where a subscription is still needed, tear it down with
+  `takeUntilDestroyed()`** — see "Subscription teardown vs. cancellation"
+  below for the one distinction that decides it.
 - **Reads go through `rxResource`.** The read path is being migrated onto
   Angular's reactive resource primitives (`SettingsStateService`,
   `MediaStateService`, several picker modals so far). `rxResource({ params,
@@ -323,9 +342,9 @@ this codebase, and it is silent.
   no exceptions today. A new component should be too.
 - **Callbacks from outside Angular must write a signal.** The SSE pump, canvas
   RAF loops, and the drag handlers that deliberately run outside Angular
-  (`panel-resize.directive.ts`) all reach the UI either by writing a signal or
-  by emitting through a template-bound output. `NgZone.run()` is a no-op here
-  and is not the fix.
+  (`directives/panel-resize.directive.ts`) all reach the UI either by writing a
+  signal or by emitting through a template-bound output. `NgZone.run()` is a
+  no-op here and is not the fix.
 - **A `BehaviorSubject` service is not wrong, but its bridge is load-bearing.**
   Roughly a third of the services still hold RxJS subjects; each is
   change-detected via its `toSignal`/`AsyncPipe` bridge. A missed bridge is a
@@ -342,7 +361,7 @@ The backend resolves per-dataset and per-detector state from the
 `X-Dataset-Id` / `X-Detector-Id` request headers (see
 [ARCHITECTURE.md § Multi-dataset support](ARCHITECTURE.md#multi-dataset-support)).
 The frontend's job is to make sure those headers name a pair the backend has
-actually loaded. Four pieces cooperate.
+actually loaded. Five pieces cooperate.
 
 ### `ActiveContextService` — two layers, not one
 
@@ -364,6 +383,53 @@ highlights; `active` lags until a load completes and is promoted explicitly.
   prep step captures the id at start and discards its result if the id has
   moved. Cancelling in-flight work is best-effort; this check is the
   correctness guarantee.
+
+### `ActiveDatasetService` / `ActiveDetectorService` — the ids as *entries*
+
+`ActiveContextService` carries **ids**, on an RxJS layer a `computed` can't
+track. Almost every consumer wants the registry *entry* behind the id — its
+name, its media type, its embedder — so each one used to redo the same
+`datasets.find(d => d.id === …)` by hand. That read whatever happened to be
+loaded at call time and never updated when the registry landed a moment later:
+the lifecycle gap that left an export filename detector-less when the modal
+opened first (#2819).
+
+The two services close it, one per half, with the same five members:
+
+```
+activeId      the id the backend has loaded ('' when none)
+intentId      the id the user picked
+datasetId /   activeId || intentId — name the user's pick immediately
+  detectorId  rather than blanking for the duration of a load
+dataset /     the registry entry, or null (nothing selected, or the
+  detector    registry fetch is still in flight)
+datasetName / the entry's name, or ''
+  detectorName
+```
+
+Reach for these from **components**: a `computed`/`effect`/template read
+repopulates on its own once the registry or an in-flight switch settles.
+
+Two places deliberately keep the imperative lookup, and should:
+
+- **Route guards** run once, before activation, and have already awaited the
+  registry — there is nothing left to arrive.
+- **Pre-reactive services** (`ActiveContextWatcherService`) resolve the pair
+  from the arrays their own `combineLatest` emitted; reading a signal instead
+  would resolve against a *different* snapshot than the one being handled.
+
+Both still index rather than scan: `DatasetStateService` exposes `datasetById`
+/ `detectorById`, `computed` Maps over the two registries. They are the shared
+lookup the services are built on, and reading one is signal-tracked exactly
+like reading `datasets` — so swapping a `find` for a `.get` is a readability
+change, never a reactivity one.
+
+Note what these services are *not* for. A lookup that resolves something other
+than the active pair — the Dashboard's multi-select, the id being switched
+*to*, an entry from an HTTP response body — is a different question that
+happens to share the `find(d => d.id === …)` shape. Use the Maps there if the
+predicate is a plain id match; do not route it through the active-context
+services.
 
 ### `ContextSwitchService` — the only way to *change* the pair
 
@@ -495,13 +561,90 @@ of the matching level. See [`api/events.md`](api/events.md) for the payload
 and [`EXTENDING-plugins.md`](EXTENDING-plugins.md#notifying-the-user-toasts)
 for the producing side.
 
-Where a real poll is still needed, use `adaptivePoll()` from
-`services/adaptive-poll.ts` rather than `timer(0, n)` + `switchMap`. It runs
-each request to completion before scheduling the next (a `switchMap` timer
-cancels in-flight requests, so a backend slower than the interval froze the
-panel permanently), eases from `fastMs` to `slowMs` after N unchanged
-responses, and suspends entirely while the tab is hidden. Callers own teardown
-via `takeUntil(stop$)`.
+### Subscription teardown vs. cancellation
+
+Two different jobs get done with the same RxJS machinery, and conflating them
+is how a working poller gets swept into a bug. Name which one you are doing
+before reaching for an idiom.
+
+**Teardown** — "stop this when the component dies." There is exactly one
+sanctioned idiom, and new code must use it:
+
+```ts
+private destroyRef = inject(DestroyRef);
+...
+this.someService.thing$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(...);
+```
+
+Drop the explicit `destroyRef` argument only in an injection context (a field
+initializer or the constructor body); anywhere else — `ngOnInit`,
+`ngAfterViewInit`, an event handler — it must be passed. The point of the
+idiom is that teardown is *declared at the subscription*, so adding a
+subscription can never forget to add a matching `unsubscribe()`. It is now the
+**only** teardown idiom in the SPA: the hand-rolled `destroy$ = new
+Subject<void>()` fired from `ngOnDestroy` and the `subs: Subscription[]` array
+drained in `ngOnDestroy` are both gone, and neither may be reintroduced. Both
+were strictly worse — the bookkeeping was manual and the compiler did not check
+it — and the subject form had a hazard the sanctioned idiom does not: RxJS
+`takeUntil` never fires on a pre-completed notifier, so a subscription armed
+*after* `ngOnDestroy` ran was never torn down at all. `takeUntilDestroyed`
+completes such a subscription immediately.
+
+Because teardown rides on the `DestroyRef`, a **spec drives it with
+`fixture.destroy()`**, never by calling `ngOnDestroy()` by hand — a bare hook
+call runs only what the hook itself still does.
+
+**Cancellation** — "stop the *previous* one because a newer one supersedes
+it." This is not teardown and `takeUntilDestroyed()` cannot express it; the
+component is very much still alive. It legitimately takes one of two shapes,
+and both are correct as written:
+
+- A **scope subject** fired on each reset, for a family of streams that share
+  a lifetime shorter than the component's: `findPolling$` (`dashboard`) and
+  `stopPolling$` (`VoteStateService`) cancel a superseded poll. Name it for the
+  scope it bounds, never `destroy$`.
+
+  The dataset/detector pair's scope is the one case where the subject is not a
+  component field: `PairScopeService` (component-provided on `find-view` and
+  `label-view`) keeps it private and exposes `pairScope.scoped()` as the pipe
+  operator, because the *ordering* around firing it is load-bearing. A pair
+  switch must supersede **before** any of the new pair's state is installed, or
+  a late response repaints the old pair's ranking over the new one's — a silent
+  wrong-results bug, not a crash. Both views used to spell that sequence out in
+  a comment and enforce nothing; `resetForNewPair()` is now the only caller that
+  can fire the scope, so the order is not a caller's to get wrong. The service's
+  own `ngOnDestroy` covers destroy-time teardown, so a view must not (and need
+  not) fire the scope by hand.
+- A **re-assigned `Subscription` field** that unsubscribes the previous value
+  before storing the next: `text-viewer`'s `sub`, `folder-browser`'s
+  `currentSub`, `browse-bin-member-grid`'s `scrollSub` (re-keyed to the
+  viewport *instance*), `label-importer-modal`'s `ingestSub`.
+
+A `Subscription` field is only a teardown idiom when it is written once and
+read only by `ngOnDestroy`. If it is re-assigned anywhere, it is cancellation
+— leave it alone.
+
+Where a real poll is still needed, reach for one of the two primitives rather
+than `timer(0, n)` + `switchMap`. Both run each request to completion before
+scheduling the next — a `switchMap` timer cancels in-flight requests, so a
+backend slower than the interval froze the panel permanently (#2572) — and
+which one you want is decided by whether the thing being polled *ends*:
+
+- **`adaptivePoll()`** (`services/adaptive-poll.ts`) for open-ended background
+  polling. Eases from `fastMs` to `slowMs` after N unchanged responses, and
+  suspends entirely while the tab is hidden. Callers own teardown via
+  `takeUntil(stop$)`.
+- **`pollUntil()`** (`services/poll-until.ts`) for a job the user is waiting on:
+  a projection build, anything with a terminal state. The caller's `apply`
+  returns `'continue'` or `'stop'`, and the loop tears itself down when it
+  settles. A failed request is absorbed and retried with exponential backoff
+  (2s → 30s); only five consecutive failures give up, via `onLostContact`.
+  Teardown is the returned handle's `stop()`.
+
+`adaptivePoll`'s cadence easing and pause-while-hidden are precisely wrong for
+the second case — progress is never stale while a build runs, and pausing in a
+background tab would strand the user behind a bar that stopped moving — which
+is why they are two helpers rather than one with a flag.
 
 ---
 
@@ -670,8 +813,9 @@ the output alongside them (favicons, logo); `docs-assets/` is a
 symlink to `docs/user/`, so the in-app user guide (rendered with `marked` in
 the keyboard-help modal) is the same file the repo ships.
 
-`angular.json` pins the canonical `@angular/build:*` builders (not the
-`@angular-devkit/build-angular:*` aliases) and gives the test target its own
+`angular.json` pins the canonical `@angular/build:*` builders (`@angular/build`
+is a direct devDependency; the `@angular-devkit/build-angular` alias package is
+deliberately not installed) and gives the test target its own
 `build:test` configuration, so spec polyfills stay decoupled from production.
 Both polyfill arrays are empty and must stay that way — reintroducing
 `zone.js` would invalidate every rule in [§5](#5-reactivity-the-zoneless-change-detection-model).

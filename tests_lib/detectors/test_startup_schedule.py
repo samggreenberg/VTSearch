@@ -28,7 +28,8 @@ from vtscore.eval.startup_schedule import (
     parse_startup_schedule,
     round_cut,
 )
-from vtscore.eval.voting_iterations import _PICK_COLUMNS, simulate_voting_iterations
+from vtscore.eval.voting_columns import PICK_COLUMNS
+from vtscore.eval.voting_iterations import simulate_voting_iterations
 
 DIM = 24
 
@@ -269,7 +270,7 @@ class TestPickLog:
     def test_every_declared_column_is_present(self):
         _, picks = _run("n6@q0.02,n8@q0.25")
         for row in picks:
-            assert set(row) == set(_PICK_COLUMNS)
+            assert set(row) == set(PICK_COLUMNS)
 
     def test_carries_where_on_the_seed_sort_each_click_came_from(self):
         _, picks = _run("n6@q0.02,n8@q0.25")

@@ -13,7 +13,7 @@ import math
 import pytest
 
 from vtscore import timing
-from vtscore.concurrency.progress import _PROGRESS_COMMON_EXTRAS, ProgressTracker
+from vtscore.concurrency.progress import PROGRESS_COMMON_EXTRAS, ProgressTracker
 from vtscore.timing import profile as timing_profile
 from vtscore.timing import recorder as timing_recorder
 from vtscore.timing.fit import (
@@ -51,7 +51,7 @@ def _weights(task: str, **kwargs) -> list[float]:
 
 
 def _tracker() -> ProgressTracker:
-    return ProgressTracker(extra_fields=dict(_PROGRESS_COMMON_EXTRAS))
+    return ProgressTracker(extra_fields=dict(PROGRESS_COMMON_EXTRAS))
 
 
 @pytest.fixture

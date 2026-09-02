@@ -126,7 +126,7 @@ def path_pvalues(atlas, matrix: np.ndarray) -> list[list[float]]:
     which is the difference between "the null is false" and "here is what to do
     about it".
     """
-    from vtscore.state.coverage_atlas import (  # noqa: PLC0415
+    from vtscore.coverage.atlas import (  # noqa: PLC0415
         _CALIBRATION_GRID,
         _CALIBRATION_MIN_NODE,
         _CALIBRATION_MIN_RBAR,
@@ -218,7 +218,7 @@ def deepest_pvalues(atlas, matrix: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     the shipped version averaged over, which is the explanatory variable for any
     under-dispersion it shows.
     """
-    from vtscore.state.coverage_atlas import (  # noqa: PLC0415
+    from vtscore.coverage.atlas import (  # noqa: PLC0415
         _CALIBRATION_GRID,
         _CALIBRATION_MIN_NODE,
         _CALIBRATION_MIN_RBAR,
@@ -280,9 +280,9 @@ def load_matrix(dataset: str, embedder: str) -> tuple[np.ndarray, list[int], lis
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "calibration"))
     from _cells_io import load_medias  # noqa: PLC0415
 
-    from vtscore.datasets import loader as _loader  # noqa: PLC0415
+    from vtscore.config import EMBEDDINGS_DIR  # noqa: PLC0415
 
-    pkl = _loader.EMBEDDINGS_DIR / f"{dataset}__{embedder}.pkl"
+    pkl = EMBEDDINGS_DIR / f"{dataset}__{embedder}.pkl"
     medias = load_medias(pkl)
     ids = sorted(medias)
     vecs, keep, cats = [], [], []
@@ -319,7 +319,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0915
 
     import pandas as pd
 
-    from vtscore.state.coverage_atlas import CoverageAtlas, auto_max_depth, domain_shift_report
+    from vtscore.coverage.atlas import CoverageAtlas, auto_max_depth, domain_shift_report
 
     t0 = time.time()
     matrix, ids, cats = load_matrix(args.dataset, args.embedder)

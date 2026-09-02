@@ -1,5 +1,5 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, effect, ElementRef, inject, input, NgZone, OnDestroy, output, untracked, viewChild } from '@angular/core';
-import { Subscription } from 'rxjs';
+import { AfterViewInit, ChangeDetectionStrategy, Component, DestroyRef, effect, ElementRef, inject, input, NgZone, OnDestroy, output, untracked, viewChild } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { BrowseViewportService } from '../../services/browse-viewport.service';
@@ -48,6 +48,15 @@ import {
   type BrowseGraphicsMode,
 } from './render-perf';
 import { onDevicePixelRatioChange } from '../../utils/device-pixel-ratio';
+import { MAX_THUMBS, THUMB_NATIVE_MAX_DIM, ThumbStore } from './thumb-store';
+import {
+  finerTilesForZoom,
+  offViewRing,
+  smoothPanDirection,
+  tilesAtLevel,
+  type PanDirection,
+  type TileCoord,
+} from './prefetch-geometry';
 import type {
   HexCellPayload,
   ProjectionMeta,
@@ -101,6 +110,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
   private viewport = inject(BrowseViewportService);
   private selection = inject(BrowseSelectionService);
   private mediaTypeCaps = inject(MediaTypeCapabilityService);
+  private destroyRef = inject(DestroyRef);
 
   private readonly canvasRef = viewChild.required<ElementRef<HTMLCanvasElement>>('canvas');
   readonly meta = input<ProjectionMeta | null>(null);
@@ -114,11 +124,10 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
   /** On-screen bin radius (CSS px) the "M" thumbnail size targets, and the
    * default before any saved size is applied. See {@link targetRadius}. */
   static readonly DEFAULT_TARGET_RADIUS = 28;
-  /** Longest side (px) the ``/thumbnail`` route caps images at (mirrors
-   * ``vtscore`` ``DEFAULT_MAX_DIM``). Once a cell is drawn wider than this the
-   * capped thumbnail would upscale, so at those zoom levels the canvas fetches
-   * the full-res ``/image`` instead. See {@link useFullResThumbs}. */
-  static readonly THUMB_NATIVE_MAX_DIM = 384;
+  /** Longest side (px) the ``/thumbnail`` route caps images at. Re-exported
+   * from `thumb-store.ts` (which owns the tier the constant defines) so the
+   * browse toolbar's size pulldown can keep reading it off the component. */
+  static readonly THUMB_NATIVE_MAX_DIM = THUMB_NATIVE_MAX_DIM;
   /**
    * Target on-screen bin radius in CSS px: the size each bin/thumbnail aims to
    * render at. Level selection picks the pyramid level whose bins land closest
@@ -213,22 +222,17 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
    */
   readonly firstViewReady = output<void>();
 
-  /** Loaded representative thumbnails, keyed by media id (insertion-ordered LRU). */
-  private thumbCache = new Map<number, HTMLImageElement>();
-  /** Media ids whose thumbnail failed to load, so we don't retry every frame. */
-  private thumbFailed = new Set<number>();
-  private readonly MAX_THUMBS = 2048;
-  /** Audio waveform thumbnails are theme-agnostic alpha masks (issue #2369);
-   *  this caches each one tinted to the current theme's accent colour so the
-   *  {@link ImageBitmap}-style ``source-in`` fill runs once per (clip, theme),
-   *  not per frame. Cleared whenever the raw {@link thumbCache} is (dataset /
-   *  level switch) and — via {@link retintWaveforms} — on a theme flip. */
-  private tintedThumbCache = new Map<number, HTMLCanvasElement>();
-  /** Resolution tier the {@link thumbCache} is currently filled at. Flips to
-   * ``true`` once the zoom is large enough that {@link getThumb} fetches the
-   * full-res ``/image`` instead of the capped ``/thumbnail``; crossing the
-   * threshold drops the cache so cells reload at the matching resolution. */
-  private thumbsAreFullRes = false;
+  /**
+   * Representative-thumbnail cache: the LRU of decoded images, the tinted
+   * waveform masks, the resolution tier, and the retry backoff for failed
+   * loads. See `thumb-store.ts`; the canvas only decides *which* ids to ask
+   * for, never how they are fetched or retained.
+   */
+  private readonly thumbs = new ThumbStore({
+    mediaUrl: (path) => this.activeContext.mediaUrl(path),
+    onLoaded: () => this.requestRedraw(),
+    accent: () => this.waveAccent,
+  });
   /** Cap on new thumbnail fetches kicked off per idle preload pass, so a fast
    * pan can warm the just-revealed ring without flooding the network or filling
    * the thumbnail cache in a single burst. */
@@ -248,9 +252,9 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
    * centre it was last measured from. Biases which off-view tiles warm first:
    * the preload ring extends one tile further on the leading edges so a sustained
    * pan stays ahead of the motion. Decays toward zero when the view holds still,
-   * so a stationary view warms its ring symmetrically. */
-  private panDirX = 0;
-  private panDirY = 0;
+   * so a stationary view warms its ring symmetrically. See
+   * {@link smoothPanDirection}. */
+  private panDir: PanDirection = { x: 0, y: 0 };
   private lastDrawCenterX = Number.NaN;
   private lastDrawCenterY = Number.NaN;
 
@@ -465,7 +469,6 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
   private lastClientY = 0;
   private pointerInside = false;
 
-  private tileLoadSub: Subscription | null = null;
   private rafId = 0;
   /** Set in ngOnDestroy: late async callbacks (thumbnail loads, tile
    *  responses) must not schedule new rAF / idle work on a dead component. */
@@ -579,8 +582,6 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
   private boundDblClick = this.onDblClick.bind(this);
   private boundContextMenu = this.onContextMenu.bind(this);
 
-  private recenterSub: Subscription | null = null;
-
   // Repaint when the selection changes so the per-cell selection rings track
   // the live set. An effect (not a subscription) so a signal write — including
   // one from a raw canvas event handler — schedules the redraw under zoneless
@@ -618,9 +619,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
         // A brand-new projection opens auto-fit: clear the user-framed flag so a
         // saved cell size applied right after load re-fits to keep it all in view.
         this.framedByUser = false;
-        this.thumbCache.clear();
-        this.thumbFailed.clear();
-        this.tintedThumbCache.clear();
+        this.thumbs.clear();
         // A new projection (media-type switch / rebuild) re-lays-out every item,
         // so the old selection no longer maps to what's on screen — drop it. A
         // bin-shape toggle keeps the same projection id and selection, since the
@@ -676,24 +675,12 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     return this.mediaTypeCaps.usesThumbnails(this.mediaType());
   }
 
-  /** At the largest zoom levels a cell is drawn wider (in device px) than the
-   * thumbnail's native longest side, so painting the capped ``/thumbnail`` would
-   * just upscale a blurry bitmap. Past that point fetch the full-res ``/image``
-   * instead. Only a handful of such giant cells fit on screen at once, so the
-   * LRU still bounds memory. */
-  private get useFullResThumbs(): boolean {
-    return 2 * this.targetRadius * this.dpr > BrowseCanvasComponent.THUMB_NATIVE_MAX_DIM;
-  }
-
-  /** Drop the thumbnail cache when the zoom crosses the full-res threshold so
-   * cells reload at the resolution matching the new tier. Cheap no-op while the
-   * tier is unchanged. */
+  /** Push the current cell size / pixel density at the thumb store, which drops
+   * its cache when the zoom crosses the full-res threshold so cells reload at
+   * the resolution matching the new tier. Cheap no-op while the tier is
+   * unchanged. See {@link ThumbStore.wantsFullRes}. */
   private syncThumbResolutionTier(): void {
-    if (this.useFullResThumbs === this.thumbsAreFullRes) return;
-    this.thumbsAreFullRes = this.useFullResThumbs;
-    this.thumbCache.clear();
-    this.thumbFailed.clear();
-    this.tintedThumbCache.clear();
+    this.thumbs.setFullRes(ThumbStore.wantsFullRes(this.targetRadius, this.dpr));
   }
 
   /** Geometry (hex or square) for the active projection's bin shape. */
@@ -713,13 +700,13 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
   ngAfterViewInit(): void {
     this.ctx = this.canvasRef().nativeElement.getContext('2d')!;
 
-    this.tileLoadSub = this.tileCache.tileLoaded$.subscribe(() => {
+    this.tileCache.tileLoaded$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
       this.requestRedraw();
     });
 
     // The minimap publishes recenter requests when the user clicks/drags it;
     // jump the viewport centre there (keeping zoom) and redraw.
-    this.recenterSub = this.viewport.recenter$.subscribe(({ x, y }) => {
+    this.viewport.recenter$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(({ x, y }) => {
       // A minimap jump is a programmatic move, not an elastic gesture: cancel any
       // snap-back / directional glide and hard-clamp straight to the bounds.
       this.cancelSettle();
@@ -749,7 +736,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
       // drop the tinted cache (issue #2369); each visible wave re-tints on the
       // redraw below. The raw mask cache is untouched — the masks are
       // theme-agnostic, so nothing needs re-fetching.
-      this.tintedThumbCache.clear();
+      this.thumbs.clearTinted();
       this.requestRedraw();
     });
     this.themeObserver.observe(document.documentElement, {
@@ -770,8 +757,6 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.destroyed = true;
-    this.tileLoadSub?.unsubscribe();
-    this.recenterSub?.unsubscribe();
     this.viewport.setViewport(null);
     this.resizeObserver?.disconnect();
     this.dprListenerTeardown?.();
@@ -802,9 +787,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     }
     document.removeEventListener('mousemove', this.boundMouseMove);
     document.removeEventListener('mouseup', this.boundMouseUp);
-    this.thumbCache.clear();
-    this.thumbFailed.clear();
-    this.tintedThumbCache.clear();
+    this.thumbs.clear();
   }
 
   private resize(): void {
@@ -1110,7 +1093,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
    * sit just outside the frozen viewport. `sctx` is the snapshot context with a
    * CSS-px (dpr) transform already applied and the buffer centred on
    * {@link animFrom}'s centre. Only cells whose tile is already cached are drawn
-   * (and `getThumb` paints whatever the prefetch warmed), so the fill reaches as
+   * (and the thumb store paints whatever the prefetch warmed), so the fill reaches as
    * far as the cache does and falls off to background past it — never a network
    * wait. The centre is left for the frozen viewport copy to overwrite.
    */
@@ -1536,11 +1519,11 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
         const [sx, sy] = this.projToScreen(cell.cx, cell.cy);
         if (sx < -screenRadius * 2 || sx > this.width + screenRadius * 2) continue;
         if (sy < -screenRadius * 2 || sy > this.height + screenRadius * 2) continue;
-        if (this.thumbFailed.has(cell.rep_id)) continue;
+        if (this.thumbs.failed(cell.rep_id)) continue;
         // draw() already kicked off the load for every drawn cell; here we only
         // read whether it has decoded. A missing / still-decoding image holds
         // the reveal (its onload fires a redraw that re-checks).
-        const img = this.thumbCache.get(cell.rep_id);
+        const img = this.thumbs.peek(cell.rep_id);
         if (!img || !img.complete || img.naturalWidth === 0) return;
       }
     }
@@ -1705,7 +1688,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     // inside the bin's border. The hovered cell (either type) instead draws the
     // whole thumbnail to fill `trim`, whose rectangle already carries the
     // image's aspect ratio, so it shows undistorted and uncropped.
-    const thumb = this.thumbnailMode ? this.getThumb(cell.rep_id) : null;
+    const thumb = this.thumbnailMode ? this.thumbs.get(cell.rep_id) : null;
     if (thumb) {
       ctx.save();
       ctx.clip();
@@ -1716,7 +1699,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
         // recolours on a theme flip instead of showing baked-in pixels.
         ctx.fillStyle = this.waveSurface;
         ctx.fill();
-        const tinted = this.getTintedThumb(cell.rep_id, thumb);
+        const tinted = this.thumbs.tinted(cell.rep_id, thumb);
         if (trim) {
           ctx.drawImage(tinted, cx - trim.hw, cy - trim.hh, trim.hw * 2, trim.hh * 2);
         } else {
@@ -1819,7 +1802,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     // singleton (`traceTrimRect`). A non-thumbnail (flat density) cell has no
     // such rectangle, so it keeps its silhouette and simply lifts off with a
     // fixed size bump.
-    const thumb = this.thumbnailMode ? this.getThumb(cell.rep_id) : null;
+    const thumb = this.thumbnailMode ? this.thumbs.get(cell.rep_id) : null;
     const trim = thumb ? this.hoverThumbRect(thumb, radius) : null;
     const bumped = radius * HOVER_RADIUS_SCALE;
 
@@ -1921,109 +1904,6 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     return hoverThumbHalfExtents(aspect, radius, this.geom.neighborOffsets());
   }
 
-  /**
-   * Return the loaded thumbnail for a representative media id, or null while it
-   * loads / if it failed. Kicks off the fetch on first request and redraws when
-   * the image arrives.
-   */
-  private getThumb(representativeId: number): HTMLImageElement | null {
-    const cached = this.thumbCache.get(representativeId);
-    if (cached) {
-      // Bump recency: re-insert so a thumbnail painted this frame becomes the
-      // newest entry. The cache is insertion-ordered (see {@link evictThumbs}),
-      // so this keeps currently-visible thumbnails last in line for eviction —
-      // off-view preloads (which never bump) are dropped first, so warming the
-      // ring can never evict something that's on screen.
-      this.thumbCache.delete(representativeId);
-      this.thumbCache.set(representativeId, cached);
-      return cached.complete && cached.naturalWidth > 0 ? cached : null;
-    }
-    this.startThumbLoad(representativeId, false);
-    return null;
-  }
-
-  /**
-   * Kick off the thumbnail fetch for a representative id and stash the pending
-   * image in the cache. ``preload`` marks an off-view warm-up: it loads at low
-   * network priority and does not repaint when it lands (the cell isn't on
-   * screen), so it never competes with visible thumbnails. A no-op when the id
-   * is already cached or known-failed.
-   */
-  private startThumbLoad(representativeId: number, preload: boolean): void {
-    if (this.thumbCache.has(representativeId) || this.thumbFailed.has(representativeId)) return;
-
-    if (this.thumbCache.size >= this.MAX_THUMBS) this.evictThumbs();
-
-    const img = new Image();
-    img.decoding = 'async';
-    if (preload) {
-      // Idle warm-up: let the browser schedule it behind visible-thumbnail and
-      // tile requests, and skip the repaint — the cell is off-screen, so a later
-      // draw picks it up from the cache once the user pans to it.
-      img.setAttribute('fetchpriority', 'low');
-    } else {
-      img.onload = () => this.requestRedraw();
-    }
-    img.onerror = () => {
-      this.thumbCache.delete(representativeId);
-      this.thumbFailed.add(representativeId);
-    };
-    // Downscaled /thumbnail by default: a browse projection can hold thousands
-    // of points, so painting full-size bitmaps onto every hex would exhaust
-    // memory. The /thumbnail route serves the frame for video via the same
-    // image_response hook, then downscales it. At the largest zoom levels,
-    // though, a cell is drawn wider than the thumbnail's native resolution, so
-    // we fetch the full-res /image instead (only a few such giant cells fit on
-    // screen, so memory stays bounded). See {@link useFullResThumbs}.
-    const endpoint = this.thumbsAreFullRes ? 'image' : 'thumbnail';
-    img.src = this.activeContext.mediaUrl(`/api/medias/${representativeId}/${endpoint}`);
-    this.thumbCache.set(representativeId, img);
-  }
-
-  /** Drop the oldest quarter of cached thumbnails (insertion-ordered LRU). */
-  private evictThumbs(): void {
-    const target = Math.floor(this.MAX_THUMBS * 0.75);
-    const toRemove = this.thumbCache.size - target;
-    let i = 0;
-    for (const key of this.thumbCache.keys()) {
-      if (i++ >= toRemove) break;
-      this.thumbCache.delete(key);
-      // Drop the matching tinted mask (issue #2369) so it can't outlive its
-      // raw source and leak; it re-tints on demand if the clip is revisited.
-      this.tintedThumbCache.delete(key);
-    }
-  }
-
-  /**
-   * Return the audio waveform thumbnail tinted to the live theme's accent
-   * colour, built once per (clip, theme) and cached (issue #2369).
-   *
-   * The raw thumbnail is a theme-agnostic alpha mask — a transparent PNG whose
-   * only opaque pixels are the wave. Painting it to an offscreen canvas and
-   * compositing the accent through ``source-in`` recolours just the wave,
-   * leaving the background transparent so the tile's themed surface (filled by
-   * the caller) shows through. The tinted cache is cleared on a theme flip and
-   * whenever the raw {@link thumbCache} is, so it never serves a stale colour.
-   */
-  private getTintedThumb(representativeId: number, src: HTMLImageElement): HTMLCanvasElement {
-    const cached = this.tintedThumbCache.get(representativeId);
-    if (cached) return cached;
-
-    const w = src.naturalWidth || 1;
-    const h = src.naturalHeight || 1;
-    const off = document.createElement('canvas');
-    off.width = w;
-    off.height = h;
-    const octx = off.getContext('2d');
-    if (octx) {
-      octx.drawImage(src, 0, 0);
-      octx.globalCompositeOperation = 'source-in';
-      octx.fillStyle = this.waveAccent;
-      octx.fillRect(0, 0, w, h);
-    }
-    this.tintedThumbCache.set(representativeId, off);
-    return off;
-  }
 
   private themeColor(varName: string): string {
     return getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
@@ -2042,7 +1922,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     // Warm the geometry of the ring just beyond the drawn tiles (8-connected, so
     // diagonals are covered, plus an extra tile in the direction of travel) so a
     // pan into it never blanks while the tile fetch is in flight.
-    for (const { tx, ty } of this.offViewRing(visibleTiles)) {
+    for (const { tx, ty } of offViewRing(visibleTiles, this.panDir)) {
       this.tileCache.prefetch(level, tx, ty);
     }
     if (level > 0) {
@@ -2062,44 +1942,6 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     if (this.thumbnailMode) this.scheduleThumbPrefetch();
   }
 
-  /**
-   * The ring of tiles just outside the drawn set: the bounding box of
-   * ``visibleTiles`` grown by one tile on every side (8-connected, so diagonals
-   * are included), minus the box itself. The growth is extended by a second tile
-   * on whichever sides the view is panning toward ({@link panDirX} /
-   * {@link panDirY}), so a sustained pan warms further ahead in the direction of
-   * travel. ``visibleTiles`` already carries a one-tile margin (see
-   * {@link getVisibleTiles}), so this ring sits one to two tiles beyond what's
-   * actually painted.
-   */
-  private offViewRing(visibleTiles: { tx: number; ty: number }[]): { tx: number; ty: number }[] {
-    if (visibleTiles.length === 0) return [];
-    let txMin = Infinity;
-    let txMax = -Infinity;
-    let tyMin = Infinity;
-    let tyMax = -Infinity;
-    for (const { tx, ty } of visibleTiles) {
-      if (tx < txMin) txMin = tx;
-      if (tx > txMax) txMax = tx;
-      if (ty < tyMin) tyMin = ty;
-      if (ty > tyMax) tyMax = ty;
-    }
-    // One ring on every side, plus a directional extra tile on the leading edges.
-    const DIR = 0.3;
-    const outTxMin = txMin - (this.panDirX < -DIR ? 2 : 1);
-    const outTxMax = txMax + (this.panDirX > DIR ? 2 : 1);
-    const outTyMin = tyMin - (this.panDirY < -DIR ? 2 : 1);
-    const outTyMax = tyMax + (this.panDirY > DIR ? 2 : 1);
-    const ring: { tx: number; ty: number }[] = [];
-    for (let tx = outTxMin; tx <= outTxMax; tx++) {
-      for (let ty = outTyMin; ty <= outTyMax; ty++) {
-        // Keep only the new border; the interior is the already-drawn box.
-        if (tx >= txMin && tx <= txMax && ty >= tyMin && ty <= tyMax) continue;
-        ring.push({ tx, ty });
-      }
-    }
-    return ring;
-  }
 
   /**
    * Queue a single low-priority pass that warms off-view thumbnails when the main
@@ -2150,7 +1992,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     if (!this.thumbnailMode || !meta) return;
     const level = this.activeLevel;
     const total = BrowseCanvasComponent.PRELOAD_MAX_PER_PASS;
-    const panRing = this.offViewRing(this.getVisibleTiles());
+    const panRing = offViewRing(this.getVisibleTiles(), this.panDir);
     // Only reserve for zoom when there's a finer level to zoom into; otherwise
     // pan gets the whole budget on the first sweep.
     const canZoomIn = meta.levels.length > level + 1;
@@ -2161,7 +2003,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     let remaining = total - this.warmThumbsForTiles(level, panRing, total - zoomReserve);
     // Zoom-in: the finer tiles centred under the view, newest-revealed first.
     if (canZoomIn && remaining > 0) {
-      remaining -= this.warmThumbsForTiles(level + 1, this.finerTilesForZoom(), remaining);
+      remaining -= this.warmThumbsForTiles(level + 1, this.finerZoomTiles(), remaining);
     }
     // Hand any unspent budget back to the pan ring.
     if (remaining > 0) this.warmThumbsForTiles(level, panRing, remaining);
@@ -2186,11 +2028,14 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
       if (!tile) continue;
       for (const cell of tile.cells) {
         if (spent >= budget) break;
-        if (this.thumbCache.has(cell.rep_id) || this.thumbFailed.has(cell.rep_id)) continue;
+        if (this.thumbs.known(cell.rep_id)) continue;
         // Stop before the cache fills so a preload never forces an eviction; the
-        // free slots come from visible getThumb()s bumping past stale warms.
-        if (this.thumbCache.size >= this.MAX_THUMBS) return spent;
-        this.startThumbLoad(cell.rep_id, true);
+        // free slots come from visible ThumbStore.get()s bumping past stale warms.
+        if (this.thumbs.full) return spent;
+        // Refused outright in the full-res tier, where a speculative fetch costs
+        // a multi-megabyte original rather than a capped thumbnail; the whole
+        // pass is abandoned rather than spun through — see {@link ThumbStore.warm}.
+        if (!this.thumbs.warm(cell.rep_id)) return spent;
         spent++;
       }
     }
@@ -2199,88 +2044,60 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
 
   /**
    * The tiles of the next finer level ({@link activeLevel} + 1) that cover the
-   * current viewport: what a zoom-in would render. A finer level halves the bin
-   * radius, so each visible tile maps to a 2×2 block of finer tiles; the union is
-   * returned sorted by distance from the view centre, since a zoom-in anchors
-   * near the centre (or cursor) and so reveals the central tiles first. Mirrors
-   * the geometry warmed by {@link prefetchLevel} for ``level + 1``, so the tiles
-   * walked here are the ones already being fetched.
+   * current viewport: what a zoom-in would render. Derives the finer level's
+   * tile pitch and the view centre in those tile units, then hands the ranking
+   * to {@link finerTilesForZoom}. Mirrors the geometry warmed by
+   * {@link prefetchLevel} for ``level + 1``, so the tiles walked here are the
+   * ones already being fetched.
    */
-  private finerTilesForZoom(): { tx: number; ty: number }[] {
+  private finerZoomTiles(): TileCoord[] {
     const meta = this.meta();
     if (!meta) return [];
-    const finerLevel = this.activeLevel + 1;
-    const radius = meta.base_radius / Math.pow(2, finerLevel);
+    const radius = meta.base_radius / Math.pow(2, this.activeLevel + 1);
     const tileW = meta.tile_span * this.geom.dx(radius);
     const tileH = meta.tile_span * this.geom.dy(radius);
     const [vxmin, vymin, vxmax, vymax] = this.getVisibleBounds();
-    // View centre in finer-tile coordinates, to rank tiles centre-out.
-    const ccx = (vxmin + vxmax) / 2 / tileW;
-    const ccy = (vymin + vymax) / 2 / tileH;
-    const seen = new Set<string>();
-    const tiles: { tx: number; ty: number; d2: number }[] = [];
-    for (const { tx, ty } of this.getVisibleTiles()) {
-      // Each current-level tile spans a 2×2 block at the finer level.
-      for (let dx = 0; dx <= 1; dx++) {
-        for (let dy = 0; dy <= 1; dy++) {
-          const ftx = tx * 2 + dx;
-          const fty = ty * 2 + dy;
-          const key = `${ftx}:${fty}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          const ex = ftx + 0.5 - ccx;
-          const ey = fty + 0.5 - ccy;
-          tiles.push({ tx: ftx, ty: fty, d2: ex * ex + ey * ey });
-        }
-      }
-    }
-    tiles.sort((a, b) => a.d2 - b.d2);
-    return tiles.map(({ tx, ty }) => ({ tx, ty }));
+    return finerTilesForZoom(
+      this.getVisibleTiles(),
+      (vxmin + vxmax) / 2 / tileW,
+      (vymin + vymax) / 2 / tileH,
+    );
   }
 
   /**
    * Track a smoothed pan direction from the frame-to-frame change in the view
-   * centre, used to bias which off-view tiles to warm first. The exponential
-   * smoothing keeps a single jittery frame from flipping the bias and lets the
-   * direction decay toward zero when the view holds still (so a stationary view
-   * warms its ring symmetrically).
+   * centre, used to bias which off-view tiles to warm first. The smoothing
+   * itself is {@link smoothPanDirection}; this only supplies consecutive
+   * centres and holds the result. The first frame has no predecessor, so it
+   * seeds the reference centre without moving the direction.
    */
   private updatePanDirection(): void {
     const cx = this.transform.centerX;
     const cy = this.transform.centerY;
-    const SMOOTH = 0.4;
     if (!Number.isNaN(this.lastDrawCenterX)) {
-      const dx = cx - this.lastDrawCenterX;
-      const dy = cy - this.lastDrawCenterY;
-      const mag = Math.hypot(dx, dy);
-      const ux = mag > 1e-6 ? dx / mag : 0;
-      const uy = mag > 1e-6 ? dy / mag : 0;
-      this.panDirX += (ux - this.panDirX) * SMOOTH;
-      this.panDirY += (uy - this.panDirY) * SMOOTH;
+      this.panDir = smoothPanDirection(
+        this.panDir,
+        { x: this.lastDrawCenterX, y: this.lastDrawCenterY },
+        { x: cx, y: cy },
+      );
     }
     this.lastDrawCenterX = cx;
     this.lastDrawCenterY = cy;
   }
 
-  private prefetchLevel(targetLevel: number, sourceTiles: { tx: number; ty: number }[]): void {
+  /**
+   * Warm the geometry of ``sourceTiles``' region at an adjacent pyramid level,
+   * so a zoom in either direction finds its tiles already fetched. The tile-set
+   * maths is {@link tilesAtLevel}; this only resolves the two levels' radius
+   * ratio and issues the prefetches.
+   */
+  private prefetchLevel(targetLevel: number, sourceTiles: TileCoord[]): void {
     const meta = this.meta();
     if (!meta) return;
     const sourceRadius = meta.base_radius / Math.pow(2, this.activeLevel);
     const targetRadius = meta.base_radius / Math.pow(2, targetLevel);
-    const ratio = sourceRadius / targetRadius;
-    const seen = new Set<string>();
-    for (const { tx, ty } of sourceTiles) {
-      const ttx = Math.floor(tx * ratio);
-      const tty = Math.floor(ty * ratio);
-      for (let dx = -1; dx <= 1; dx++) {
-        for (let dy = -1; dy <= 1; dy++) {
-          const key = `${ttx + dx}:${tty + dy}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            this.tileCache.prefetch(targetLevel, ttx + dx, tty + dy);
-          }
-        }
-      }
+    for (const { tx, ty } of tilesAtLevel(sourceTiles, sourceRadius / targetRadius)) {
+      this.tileCache.prefetch(targetLevel, tx, ty);
     }
   }
 

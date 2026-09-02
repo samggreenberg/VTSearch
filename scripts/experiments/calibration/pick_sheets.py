@@ -79,7 +79,7 @@ def main(argv: list[str] | None = None) -> int:
 
     from PIL import Image, ImageDraw, ImageFont
 
-    from vtscore.datasets import loader as _loader
+    from vtscore.config import EMBEDDINGS_DIR
     from vtscore.eval.labels import region_box_for_category
 
     from _cells_io import load_medias  # noqa: PLC0415
@@ -96,7 +96,7 @@ def main(argv: list[str] | None = None) -> int:
         missing = [m for m in args.expect.split(",") if m.strip() and not any(m.strip() in k for k in modes)]
         if missing:
             print(f"NOTE: no picks yet for {', '.join(missing)} -- not drawn")
-    medias = load_medias(_loader.EMBEDDINGS_DIR / "vg_scale__siglip.pkl")
+    medias = load_medias(EMBEDDINGS_DIR / "vg_scale__siglip.pkl")
     print(f"{args.category} seed {args.seed}: " + ", ".join(f"{m} {len(by_mode[m])} clicks" for m in modes))
 
     def path_of(mid: int):

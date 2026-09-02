@@ -4,6 +4,18 @@ Caches trained MLPs and stability metrics per labelling step so that
 repeated queries (the progress button, the auto-indicator) never retrain
 models that have already been computed.
 
+Cache shape
+-----------
+All cache state lives in :class:`_ProgressCache` instances held in ``_caches``,
+an LRU-bounded map keyed by ``(dataset_id, detector_id)``, plus the
+per-*dataset* :class:`_MonitoredPool` tensors those caches share.  Every entry
+point opens with ``cache = _active_cache()`` (or ``_ensure_cache``, which
+returns one) under ``_progress_lock`` and works through that object.  Keying by
+the pair is a correctness requirement, not a convenience: without it one
+detector's history gets replayed onto another's accumulated label sets, and one
+detector's models get served as another's Smart / Stable indicators (issue
+#2914).
+
 Unrelated to :mod:`vtscore.concurrency.progress`, which is the
 infrastructure for tracking and cancelling long-running operations
 (``ProgressTracker`` and the dataset/sort/eval/find singletons).  The
@@ -27,6 +39,8 @@ and could deadlock.
 from __future__ import annotations
 
 import threading
+from collections import OrderedDict
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
@@ -40,72 +54,124 @@ if TYPE_CHECKING:
     import torch.nn as nn
 
 # ---------------------------------------------------------------------------
-# Module-level cache
+# Per-(dataset, detector) cache
 # ---------------------------------------------------------------------------
-# Each entry in ``_cached_steps`` corresponds to one index in ``label_history``
-# and stores the model, threshold, label sets, and stability result for that
-# step.  ``_cache_good_ids`` / ``_cache_bad_ids`` track the running label sets
-# so the next step only needs to apply a single delta.
-#
-# The cache holds exactly one ``(dataset, detector)`` pair at a time, stamped in
-# ``_cache_key``; switching to another pair drops it (see that variable's note).
 
-_cache_inclusion: Optional[int] = None
-_cached_steps: list[dict[str, Any]] = []
-_cache_good_ids: set[int] = set()
-_cache_bad_ids: set[int] = set()
-_cache_prev_predictions: Optional[dict[int, int]] = None
-_cache_coverage_atlas: Any = None  # CoverageAtlas | None
 
-# Fixed pool the per-step stability forward pass scores, built once per cache
-# lifetime and reused by every step (see ``_monitored_pool``).  ``_cache_
-# monitored_X`` is a device-resident float tensor of the pool's embeddings;
-# ``_cache_monitored_set`` is the id set for O(labels) unlabeled counting.
-# In-memory only - never serialized (see the "No Persisted Vectors" rule).
-_cache_monitored_ids: Optional[list[int]] = None
-_cache_monitored_X: Any = None  # torch.Tensor | None
-_cache_monitored_set: Optional[set[int]] = None
+@dataclass
+class _MonitoredPool:
+    """The fixed pool the per-step stability forward pass scores.
 
-# Last fully-computed ``/api/labeling-status`` payload (minus the transient
-# ``stale`` flag).  ``compute_labeling_status`` refreshes it on every full
-# compute; the route returns it immediately to pollers while a background
-# worker advances the per-step cache, so the 2 s poll never blocks on an MLP
-# retrain (issue #2397).  Cleared alongside the cache so a stale detector's
-# status is never shown after a detector switch / vote clear.
-_status_snapshot: Optional[dict[str, Any]] = None
+    Built once per *dataset* and reused by every step of every cache over that
+    dataset.  ``X`` is a device-resident float tensor of the pool's embeddings;
+    ``id_set`` is the id set for O(labels) unlabeled counting.  In-memory only -
+    never serialized (see the "No Persisted Vectors" rule).
 
-# Identity of the ``(dataset_id, detector_id)`` pair every cache variable above
-# belongs to, or ``None`` when the cache is empty and belongs to nobody.
-#
-# Every input the cache is built from is resolved *per request* from the
-# ``X-Dataset-Id`` / ``X-Detector-Id`` headers (``label_history``,
-# ``good_votes`` / ``bad_votes`` via the detector context; ``clips_dict`` and
-# the coverage atlas via the dataset context), while the cache itself is a
-# single module-global slot.  Multiple detectors stay loaded at once and the UI
-# switches between them freely - re-selecting an *already loaded* detector never
-# goes through ``register_detector_context`` / ``unregister_detector_context``,
-# so those clears do not cover the switch.  Without an identity stamp the
-# freshness gates (which compare only ``len(_cached_steps)`` to
-# ``len(label_history)``) would replay one detector's history on top of
-# another's accumulated label sets, or serve one detector's models as another's
-# Smart / Stable indicators.  :func:`_bind_cache_identity` stamps this key and
-# drops the cache whenever the active pair changes.
-_cache_key: Optional[tuple[str, str]] = None
+    Keyed by ``dataset_id`` rather than by the full cache key because the pool
+    is a pure function of ``clips_dict``: two detectors over the same dataset
+    would build byte-identical tensors, and the tensor is by far the largest
+    thing this module holds (up to ``_STABILITY_MAX_SAMPLES`` x embedding-dim
+    floats).  Sharing it is what keeps caching several pairs at once from
+    multiplying peak memory.
+    """
 
-# Live models injected by `train_and_score` during sorting.  Keyed by
-# ``(frozenset(good_ids), frozenset(bad_ids))`` so that ``_ensure_cache``
-# can look up the actual model that was used at each label step instead
-# of retraining from scratch.
-_live_models: dict[tuple[frozenset[int], frozenset[int]], tuple[Any, float]] = {}
+    ids: list[int]
+    X: Any  # torch.Tensor | None
+    id_set: set[int]
 
-# Reentrant lock protecting all module-level cache variables.
-# RLock is used because public functions call _ensure_cache which may
-# call _clear_cache_data internally (inclusion change, or a rebind onto a
-# different dataset/detector) while already holding the lock.
+
+@dataclass
+class _ProgressCache:
+    """Everything cached for one ``(dataset_id, detector_id)`` pair.
+
+    Each entry in ``steps`` corresponds to one index in ``label_history`` and
+    stores the model, threshold, label sets, and stability result for that step.
+    ``good_ids`` / ``bad_ids`` track the running label sets so the next step
+    only needs to apply a single delta.
+
+    Every input a cache is built from is resolved *per request* from the
+    ``X-Dataset-Id`` / ``X-Detector-Id`` headers (``label_history``,
+    ``good_votes`` / ``bad_votes`` via the detector context; ``clips_dict`` and
+    the coverage atlas via the dataset context).  Multiple detectors stay loaded
+    at once and the UI switches between them freely - re-selecting an *already
+    loaded* detector never goes through ``register_detector_context`` /
+    ``unregister_detector_context``, so those clears do not cover the switch.
+    Keying the cache by the pair is what stops one detector's history being
+    replayed on top of another's accumulated label sets, or one detector's
+    models being served as another's Smart / Stable indicators (issue #2914).
+    """
+
+    key: tuple[str, str]
+
+    #: Inclusion value every cached step was trained under.  A different value
+    #: rebuilds the cache in place (see :func:`_ensure_cache`).
+    inclusion: Optional[int] = None
+
+    steps: list[dict[str, Any]] = field(default_factory=list)
+    good_ids: set[int] = field(default_factory=set)
+    bad_ids: set[int] = field(default_factory=set)
+    prev_predictions: Optional[dict[int, int]] = None
+    coverage_atlas: Any = None  # CoverageAtlas | None
+
+    #: Last fully-computed ``/api/labeling-status`` payload (minus the transient
+    #: ``stale`` flag).  ``compute_labeling_status`` refreshes it on every full
+    #: compute; the route returns it immediately to pollers while a background
+    #: worker advances the per-step cache, so the 2 s poll never blocks on an
+    #: MLP retrain (issue #2397).
+    status_snapshot: Optional[dict[str, Any]] = None
+
+    #: Live models injected by ``train_and_score`` during sorting.  Keyed by
+    #: ``(frozenset(good_ids), frozenset(bad_ids))`` so that ``_ensure_cache``
+    #: can look up the actual model that was used at each label step instead of
+    #: retraining from scratch.  Per-pair because the lookup is by labelset
+    #: alone, so a model must not outlive the detector it was trained for.
+    live_models: dict[tuple[frozenset[int], frozenset[int]], tuple[Any, float]] = field(default_factory=dict)
+
+    def reset(self) -> None:
+        """Drop everything derived from labels, keeping the pair identity.
+
+        Used by the in-place rebuild (an inclusion change) that keeps the cache
+        bound to the same pair.  Callers that want the cache gone entirely
+        should use :func:`clear_progress_cache`.
+        """
+        self.steps.clear()
+        self.good_ids.clear()
+        self.bad_ids.clear()
+        self.prev_predictions = None
+        self.inclusion = None
+        self.coverage_atlas = None
+        self.live_models.clear()
+        # Drop the status snapshot too: it belonged to the just-cleared
+        # labelset and would otherwise be served (stale) for the rebuild until
+        # its first background refresh lands.
+        self.status_snapshot = None
+
+
+# Caches keyed by ``(dataset_id, detector_id)``, most-recently-used last.
+# Bounded so that a session cycling through many detectors cannot grow without
+# limit; the LRU victim is simply rebuilt on demand if it is selected again.
+_caches: OrderedDict[tuple[str, str], _ProgressCache] = OrderedDict()
+
+# Stability pools keyed by ``dataset_id``, shared by every cache over that
+# dataset (see :class:`_MonitoredPool`).  Pruned whenever the last cache
+# referencing a dataset goes away.
+_monitored_pools: dict[str, _MonitoredPool] = {}
+
+# How many ``(dataset, detector)`` pairs stay warm at once.  Small on purpose:
+# each cache holds one trained MLP per label-history step plus a
+# ``prev_predictions`` map over the monitored pool, so the point is to keep an
+# A-to-B-and-back detector toggle from throwing away work, not to cache
+# everything a long session ever touched.
+_MAX_CACHED_PAIRS = 3
+
+# Reentrant lock protecting ``_caches``, ``_monitored_pools``, and every field
+# of every cache in them.  RLock is used because public functions call
+# _ensure_cache which may call ``_ProgressCache.reset`` internally (inclusion
+# change) while already holding the lock.
 _progress_lock = threading.RLock()
 
 # Upper bound on the number of items the per-step stability forward pass
-# evaluates.  Advancing this cache (from the ``/api/labeling-status``
+# evaluates.  Advancing a cache (from the ``/api/labeling-status``
 # background worker, or the ``/api/eval/train-and-score`` job) runs a forward
 # over the whole monitored pool once per label step - O(dataset) per new vote.
 # Above this cap we score a deterministic seeded sample of the eligible pool
@@ -138,7 +204,9 @@ def _active_cache_key() -> tuple[str, str]:
 
     Falls back to ``("", "")`` when resolution fails (e.g. a request naming an
     unloaded detector, whose resolver raises); such a caller cannot reach a
-    usable ``label_history`` anyway.
+    usable ``label_history`` anyway.  That fallback is a key like any other, so
+    two such callers share one (empty) cache rather than corrupting a real
+    detector's.
     """
     try:
         from vtscore.state.core import get_active_context, get_active_detector_context  # noqa: PLC0415
@@ -148,78 +216,78 @@ def _active_cache_key() -> tuple[str, str]:
         return ("", "")
 
 
-def _clear_cache_data() -> None:
-    """Clear every cache variable *except* the identity stamp.
+def _prune_monitored_pools() -> None:
+    """Drop stability pools no live cache refers to any more."""
+    live = {key[0] for key in _caches}
+    for dataset_id in [d for d in _monitored_pools if d not in live]:
+        del _monitored_pools[dataset_id]
 
-    Used by the in-place rebuilds (an inclusion change) that keep the cache
-    bound to the same ``(dataset, detector)`` pair.  Callers that hand the
-    cache back to nobody should use :func:`clear_progress_cache`.
+
+def _active_cache() -> _ProgressCache:
+    """Return the cache for the active ``(dataset, detector)`` pair.
+
+    Creates it on first use and marks it most-recently-used, evicting the LRU
+    victim once more than :data:`_MAX_CACHED_PAIRS` pairs are warm.  Must be
+    called with ``_progress_lock`` held.
+
+    This is what makes the old identity-stamp invariant structural.  Cache
+    state used to live in module globals guarded by a ``_bind_cache_identity()``
+    call that every entry point had to remember to make first, or it would
+    serve detector A's models as detector B's (issue #2914) - an invariant
+    nothing enforced.  Now the only way to reach cache state at all is through
+    the key, so a new entry point cannot forget.
     """
-    global _cache_inclusion, _cache_prev_predictions, _cache_coverage_atlas, _status_snapshot
-    global _cache_monitored_ids, _cache_monitored_X, _cache_monitored_set
-    with _progress_lock:
-        _cached_steps.clear()
-        _cache_good_ids.clear()
-        _cache_bad_ids.clear()
-        _cache_prev_predictions = None
-        _cache_inclusion = None
-        _cache_coverage_atlas = None
-        # The monitored pool is derived from ``clips_dict``; medias may have
-        # changed under us, so drop it alongside everything else.
-        _cache_monitored_ids = None
-        _cache_monitored_X = None
-        _cache_monitored_set = None
-        _live_models.clear()
-        # Drop the status snapshot too: it belonged to the just-cleared
-        # detector/labelset and would otherwise be served (stale) for the next
-        # one until its first background refresh lands.
-        _status_snapshot = None
-
-
-def _bind_cache_identity() -> None:
-    """Drop the cache when the active ``(dataset, detector)`` pair has changed.
-
-    Must be called with ``_progress_lock`` held, at the top of every entry
-    point that reads or writes the module cache, so a poll for detector A can
-    never see state accumulated for detector B (issue #2914).
-    """
-    global _cache_key
     key = _active_cache_key()
-    if _cache_key is not None and _cache_key != key:
-        _clear_cache_data()
-    _cache_key = key
+    cache = _caches.get(key)
+    if cache is None:
+        cache = _ProgressCache(key=key)
+        _caches[key] = cache
+    _caches.move_to_end(key)
+    while len(_caches) > _MAX_CACHED_PAIRS:
+        _caches.popitem(last=False)
+    _prune_monitored_pools()
+    return cache
 
 
 def clear_progress_cache() -> None:
-    """Clear all cached progress data and unbind it from any detector.
+    """Drop every cached pair's progress data.
 
     Must be called whenever votes are cleared, medias change, or inclusion
     is altered so that stale models are not reused.
+
+    Deliberately global rather than scoped to the active pair: the callers
+    (``clear_votes``, ``clear_medias``, ``set_inclusion``,
+    ``register_detector_context`` / ``unregister_detector_context``) each
+    invalidate *at least* the active pair, and some - a dataset's medias
+    changing, the global inclusion knob moving - invalidate every pair over
+    that dataset or every pair outright.  Clearing everything is the
+    conservative reading and costs only a rebuild.  What the per-pair keying
+    buys is the path that does *not* come through here: switching between two
+    already-loaded detectors, which no longer throws either one's work away.
     """
-    global _cache_key
     with _progress_lock:
-        _clear_cache_data()
-        _cache_key = None
+        _caches.clear()
+        _monitored_pools.clear()
 
 
 def invalidate_progress_cache_from(media_id: int) -> None:
-    """Truncate the progress cache to just before *media_id* first appeared.
+    """Truncate the active pair's progress cache to just before *media_id* first appeared.
 
     Called when a vote switches polarity (good→bad or bad→good).  Steps
     before the media was first labeled are still valid - their models never
     included this media in training data.  Only steps from the first
     appearance onward are discarded so they can be retrained and their
     stability/evaluation metrics recomputed.
+
+    Scoped to the active pair: a polarity flip on one detector says nothing
+    about another's cache.
     """
-    global _cache_prev_predictions, _status_snapshot
     with _progress_lock:
-        # A polarity flip on one detector must not truncate another's cache;
-        # rebinding drops a foreign cache outright, leaving nothing to trim.
-        _bind_cache_identity()
+        cache = _active_cache()
 
         # Find the first cached step that includes media_id in its training data.
         truncate_at = None
-        for i, step in enumerate(_cached_steps):
+        for i, step in enumerate(cache.steps):
             if media_id in step["good_ids"] or media_id in step["bad_ids"]:
                 truncate_at = i
                 break
@@ -228,43 +296,43 @@ def invalidate_progress_cache_from(media_id: int) -> None:
             # Media never appeared in any cached step.  Still need to clear
             # live models - they may have been injected by learned-sort
             # without building the progress cache.
-            _live_models.clear()
+            cache.live_models.clear()
             return
 
         # Keep steps [0, truncate_at); discard the rest.
-        del _cached_steps[truncate_at:]
+        del cache.steps[truncate_at:]
 
         # Restore the running ID sets to the surviving prefix's final state.
-        _cache_good_ids.clear()
-        _cache_bad_ids.clear()
-        if _cached_steps:
-            last = _cached_steps[-1]
-            _cache_good_ids.update(last["good_ids"])
-            _cache_bad_ids.update(last["bad_ids"])
+        cache.good_ids.clear()
+        cache.bad_ids.clear()
+        if cache.steps:
+            last = cache.steps[-1]
+            cache.good_ids.update(last["good_ids"])
+            cache.bad_ids.update(last["bad_ids"])
         else:
             # truncate_at == 0: media was present from the very first step, so
             # the whole prefix is gone and no label survives.  No cached step
             # remains to source the Smart / Stable indicators from, so drop the
             # stale snapshot (parity with the old step-0 full-clear path).
-            _status_snapshot = None
+            cache.status_snapshot = None
 
         # Reset the stability prediction chain - it will restart from the
         # truncation point when _ensure_cache replays the remaining history.
-        _cache_prev_predictions = None
+        cache.prev_predictions = None
 
         # Clear live models - some may have been trained with the old label.
-        _live_models.clear()
+        cache.live_models.clear()
 
         # Rewind the coverage-atlas overlay and replay the surviving labels
         # rather than nulling the atlas (which would force a full hierarchical
         # k-means rebuild on the next /api/labeling-status poll, starving the
         # request pool at scale).  The structure is unchanged - only labels
         # moved - so the atlas object identity survives the invalidate.
-        if _cache_coverage_atlas is not None:
-            _cache_coverage_atlas.reset_labeled()
-            for mid in _cache_good_ids | _cache_bad_ids:
-                if mid in _cache_coverage_atlas.vector_to_leaf:
-                    _cache_coverage_atlas.label(mid, good=mid in _cache_good_ids)
+        if cache.coverage_atlas is not None:
+            cache.coverage_atlas.reset_labeled()
+            for mid in cache.good_ids | cache.bad_ids:
+                if mid in cache.coverage_atlas.vector_to_leaf:
+                    cache.coverage_atlas.label(mid, good=mid in cache.good_ids)
 
 
 def inject_live_model(
@@ -276,15 +344,12 @@ def inject_live_model(
     """Register a live model from ``train_and_score`` for progress-cache reuse.
 
     Called by the learned-sort route after each live training run.  The model
-    is stored keyed by its label set so ``_ensure_cache`` can look it up
-    instead of retraining from scratch.
+    is stored on the active pair's cache, keyed by its label set, so
+    ``_ensure_cache`` can look it up instead of retraining from scratch.
     """
     key = (frozenset(good_votes), frozenset(bad_votes))
     with _progress_lock:
-        # Live models are looked up by labelset alone, so they must not outlive
-        # the detector they were trained for.
-        _bind_cache_identity()
-        _live_models[key] = (model, threshold)
+        _active_cache().live_models[key] = (model, threshold)
 
 
 def _active_context_atlas() -> Any:
@@ -329,7 +394,7 @@ def _build_coverage_atlas(clips_dict: dict[int, dict[str, Any]]) -> Any:
     if ctx_atlas is not None and ctx_atlas.vector_to_leaf.keys() == vectors.keys():
         return ctx_atlas.structural_clone()
 
-    from vtscore.state.coverage_atlas import CoverageAtlas, auto_max_depth  # noqa: PLC0415
+    from vtscore.coverage.atlas import CoverageAtlas, auto_max_depth  # noqa: PLC0415
 
     # Cap the depth exactly as every other build site does
     # (``build_coverage_atlas`` / ``build_coverage_atlas_for_context``).
@@ -341,55 +406,59 @@ def _build_coverage_atlas(clips_dict: dict[int, dict[str, Any]]) -> Any:
     return CoverageAtlas(vectors, k=3, max_depth=auto_max_depth(len(vectors), k=3))
 
 
-def _apply_label_event(media_id: int, label: str) -> bool:
-    """Update ``_cache_good_ids`` / ``_cache_bad_ids`` for one label event.
+def _apply_label_event(cache: _ProgressCache, media_id: int, label: str) -> bool:
+    """Update *cache*'s running good/bad ID sets for one label event.
 
     Returns ``True`` if *media_id* was already labeled before this event.
     """
-    was_labeled = media_id in _cache_good_ids or media_id in _cache_bad_ids
+    was_labeled = media_id in cache.good_ids or media_id in cache.bad_ids
     if label == "unlabel":
-        _cache_good_ids.discard(media_id)
-        _cache_bad_ids.discard(media_id)
+        cache.good_ids.discard(media_id)
+        cache.bad_ids.discard(media_id)
     elif label == "good":
-        _cache_bad_ids.discard(media_id)
-        _cache_good_ids.add(media_id)
+        cache.bad_ids.discard(media_id)
+        cache.good_ids.add(media_id)
     else:
-        _cache_good_ids.discard(media_id)
-        _cache_bad_ids.add(media_id)
+        cache.good_ids.discard(media_id)
+        cache.bad_ids.add(media_id)
     return was_labeled
 
 
-def _sync_coverage_atlas(media_id: int, label: str, was_labeled: bool) -> Optional[dict[str, Any]]:
+def _sync_coverage_atlas(
+    cache: _ProgressCache, media_id: int, label: str, was_labeled: bool
+) -> Optional[dict[str, Any]]:
     """Mirror a label event onto the coverage atlas and return level info."""
-    if _cache_coverage_atlas is None:
+    atlas = cache.coverage_atlas
+    if atlas is None:
         return None
     if label == "unlabel":
         # Only unlabel on the atlas when the item is no longer labeled at all
         # (guards against good→bad re-labels going through "unlabel").
-        if was_labeled and media_id not in _cache_good_ids and media_id not in _cache_bad_ids:
-            if media_id in _cache_coverage_atlas.vector_to_leaf:
-                _cache_coverage_atlas.unlabel(media_id)
+        if was_labeled and media_id not in cache.good_ids and media_id not in cache.bad_ids:
+            if media_id in atlas.vector_to_leaf:
+                atlas.unlabel(media_id)
     else:
-        if media_id in _cache_coverage_atlas.vector_to_leaf:
-            _cache_coverage_atlas.label(media_id, good=label == "good")
+        if media_id in atlas.vector_to_leaf:
+            atlas.label(media_id, good=label == "good")
     return {
-        "num_labels": len(_cache_good_ids) + len(_cache_bad_ids),
-        "diversity_level": _cache_coverage_atlas.coverage_level(),
-        "depth": _cache_coverage_atlas.total_nodes,
+        "num_labels": len(cache.good_ids) + len(cache.bad_ids),
+        "diversity_level": atlas.coverage_level(),
+        "depth": atlas.total_nodes,
     }
 
 
 def _collect_training_data(
+    cache: _ProgressCache,
     clips_dict: dict[int, dict[str, Any]],
 ) -> tuple[list[np.ndarray], list[float]]:
-    """Gather embeddings and labels from the current good/bad ID sets."""
+    """Gather embeddings and labels from *cache*'s running good/bad ID sets."""
     X_list: list[np.ndarray] = []
     y_list: list[float] = []
-    for cid in _cache_good_ids:
+    for cid in cache.good_ids:
         if cid in clips_dict and media_embedding(clips_dict[cid]) is not None:
             X_list.append(media_embedding(clips_dict[cid]))
             y_list.append(1.0)
-    for cid in _cache_bad_ids:
+    for cid in cache.bad_ids:
         if cid in clips_dict and media_embedding(clips_dict[cid]) is not None:
             X_list.append(media_embedding(clips_dict[cid]))
             y_list.append(0.0)
@@ -397,29 +466,29 @@ def _collect_training_data(
 
 
 def _monitored_pool(
+    dataset_id: str,
     clips_dict: dict[int, dict[str, Any]],
     all_media_ids: list[int],
-) -> tuple[list[int], Any, set[int]]:
-    """Return the fixed ``(ids, X, id_set)`` pool the stability pass scores.
+) -> _MonitoredPool:
+    """Return the fixed pool the stability pass scores for *dataset_id*.
 
     The pool is the embeddable subset of *all_media_ids*, bounded to a
     deterministic seeded sample of ``_STABILITY_MAX_SAMPLES``.  Sampling the
     full eligible pool (rather than the per-step unlabeled set) keeps the
     monitored ids stable across steps, so the flip comparison against
-    ``_cache_prev_predictions`` stays over a consistent id set; the resulting
+    ``cache.prev_predictions`` stays over a consistent id set; the resulting
     flip *rate* is an unbiased estimate of the true rate.
 
-    Built once per cache lifetime and memoised.  It used to be rebuilt inside
-    every step - an O(N x D) numpy materialisation per label-history step,
-    which dominated the cost of advancing the cache.  The pool depends only on
-    *clips_dict*, which cannot change without a ``clear_progress_cache()`` (in
-    place) or a ``_cache_key`` change (a different dataset), so one build per
-    cache lifetime is sound.
+    Built once per dataset and memoised.  It used to be rebuilt inside every
+    step - an O(N x D) numpy materialisation per label-history step, which
+    dominated the cost of advancing the cache.  The pool depends only on
+    *clips_dict*, which cannot change without a ``clear_progress_cache()``, so
+    one build per dataset is sound - and is why the memo is keyed by dataset
+    rather than by the full ``(dataset, detector)`` pair.
     """
-    global _cache_monitored_ids, _cache_monitored_X, _cache_monitored_set
-
-    if _cache_monitored_ids is not None:
-        return _cache_monitored_ids, _cache_monitored_X, _cache_monitored_set  # type: ignore[return-value]
+    pool = _monitored_pools.get(dataset_id)
+    if pool is not None:
+        return pool
 
     import torch  # noqa: PLC0415
 
@@ -436,16 +505,17 @@ def _monitored_pool(
         embs = np.array([media_embedding(clips_dict[cid]) for cid in eligible])
         # Park the tensor on the training device once so per-step scoring is a
         # pure forward pass with no host->device copy.
-        _cache_monitored_X = torch.tensor(embs, dtype=torch.float32).to(get_torch_device())
+        X = torch.tensor(embs, dtype=torch.float32).to(get_torch_device())
     else:
-        _cache_monitored_X = None
+        X = None
 
-    _cache_monitored_ids = eligible
-    _cache_monitored_set = set(eligible)
-    return _cache_monitored_ids, _cache_monitored_X, _cache_monitored_set
+    pool = _MonitoredPool(ids=eligible, X=X, id_set=set(eligible))
+    _monitored_pools[dataset_id] = pool
+    return pool
 
 
 def _compute_step_stability(
+    cache: _ProgressCache,
     model: nn.Sequential,
     threshold: float,
     clips_dict: dict[int, dict[str, Any]],
@@ -454,39 +524,35 @@ def _compute_step_stability(
     num_labels: int,
 ) -> Optional[dict[str, Any]]:
     """Compute prediction stability by comparing to the previous step's predictions."""
-    global _cache_prev_predictions
     import torch  # noqa: PLC0415
 
-    monitored_ids, X_monitored, monitored_set = _monitored_pool(clips_dict, all_media_ids)
+    pool = _monitored_pool(cache.key[0], clips_dict, all_media_ids)
 
-    labeled_ids = _cache_good_ids | _cache_bad_ids
+    labeled_ids = cache.good_ids | cache.bad_ids
     # Labels are few relative to the pool, so count the overlap from the
     # labelset rather than rescanning the pool.
-    num_unlabeled = len(monitored_ids) - sum(1 for cid in labeled_ids if cid in monitored_set)
+    num_unlabeled = len(pool.ids) - sum(1 for cid in labeled_ids if cid in pool.id_set)
 
-    if num_unlabeled <= 0 or X_monitored is None:
+    if num_unlabeled <= 0 or pool.X is None:
         return {"time_index": t, "num_labels": num_labels, "num_flips": 0, "num_unlabeled": 0}
 
     # Score the whole monitored pool in one pass and drop the currently-labeled
     # ids afterwards.  Scoring the handful of extra (labeled) rows is far
     # cheaper than re-materialising a per-step tensor of the unlabeled subset.
     with torch.no_grad():
-        X_in = X_monitored.to(next(model.parameters()).device)
+        X_in = pool.X.to(next(model.parameters()).device)
         scores_unl = torch.sigmoid(model(X_in)).squeeze(1).cpu().tolist()
 
     predictions: dict[int, int] = {
         cid: 1 if score >= threshold else 0
-        for cid, score in zip(monitored_ids, scores_unl, strict=True)
+        for cid, score in zip(pool.ids, scores_unl, strict=True)
         if cid not in labeled_ids
     }
 
     stability: Optional[dict[str, Any]] = None
-    if _cache_prev_predictions is not None:
-        num_flips = sum(
-            1
-            for cid in predictions.keys() & _cache_prev_predictions.keys()
-            if predictions[cid] != _cache_prev_predictions[cid]
-        )
+    if cache.prev_predictions is not None:
+        prev = cache.prev_predictions
+        num_flips = sum(1 for cid in predictions.keys() & prev.keys() if predictions[cid] != prev[cid])
         stability = {
             "time_index": t,
             "num_labels": num_labels,
@@ -495,11 +561,12 @@ def _compute_step_stability(
         }
     # else: no prior predictions to compare - leave stability as None.
 
-    _cache_prev_predictions = predictions
+    cache.prev_predictions = predictions
     return stability
 
 
 def _train_step(
+    cache: _ProgressCache,
     clips_dict: dict[int, dict[str, Any]],
     all_media_ids: list[int],
     t: int,
@@ -511,15 +578,13 @@ def _train_step(
     Returns ``(model, threshold, stability)``.  All three are ``None`` when
     training is not possible (e.g. only one label polarity present).
     """
-    global _cache_prev_predictions
-
-    if not _cache_good_ids or not _cache_bad_ids:
+    if not cache.good_ids or not cache.bad_ids:
         # No model possible - clear prediction baseline so the first step
         # after regaining a model doesn't produce a misleading flip count.
-        _cache_prev_predictions = None
+        cache.prev_predictions = None
         return None, None, None
 
-    X_list, y_list = _collect_training_data(clips_dict)
+    X_list, y_list = _collect_training_data(cache, clips_dict)
     if len(X_list) < 2:
         return None, None, None
 
@@ -539,11 +604,12 @@ def _train_step(
     # band from in-sample quantiles is acceptable here.
     threshold = conformal_threshold(scores, y_list, inclusion_value)
 
-    stability = _compute_step_stability(model, threshold, clips_dict, all_media_ids, t, num_labels)
+    stability = _compute_step_stability(cache, model, threshold, clips_dict, all_media_ids, t, num_labels)
     return model, threshold, stability
 
 
 def _resolve_step_model(
+    cache: _ProgressCache,
     clips_dict: dict[int, dict[str, Any]],
     all_media_ids: list[int],
     t: int,
@@ -577,82 +643,83 @@ def _resolve_step_model(
     # Check whether train_and_score already produced a model for
     # this exact label set during live sorting.  If so, reuse it
     # (correct cross-calibrated threshold, zero compute cost).
-    live_key = (frozenset(_cache_good_ids), frozenset(_cache_bad_ids))
-    live = _live_models.get(live_key)
+    live_key = (frozenset(cache.good_ids), frozenset(cache.bad_ids))
+    live = cache.live_models.get(live_key)
     if live is not None:
         model, threshold = live
-        stability = _compute_step_stability(model, threshold, clips_dict, all_media_ids, t, num_labels)
+        stability = _compute_step_stability(cache, model, threshold, clips_dict, all_media_ids, t, num_labels)
         return model, threshold, stability
 
-    return _train_step(clips_dict, all_media_ids, t, num_labels, inclusion_value)
+    return _train_step(cache, clips_dict, all_media_ids, t, num_labels, inclusion_value)
 
 
 def _ensure_cache(
     clips_dict: dict[int, dict[str, Any]],
     label_history: list[tuple[int, str, float]],
     inclusion_value: int,
-) -> None:
-    """Bring the cache up to date with *label_history*.
+) -> _ProgressCache:
+    """Bring the active pair's cache up to date with *label_history*.
 
     Only computes steps that are not yet cached.  If *inclusion_value*
     differs from the value used for existing cache entries the entire cache
-    is rebuilt.
+    is rebuilt.  Returns the cache, so callers never have to re-resolve it.
+
+    Must be called with ``_progress_lock`` held.
     """
-    global _cache_inclusion, _cache_coverage_atlas
+    cache = _active_cache()
 
-    # Drop anything accumulated for a different (dataset, detector) pair before
-    # comparing lengths below: the ``start >= len(label_history)`` gate has no
-    # idea whose history it is looking at (issue #2914).
-    _bind_cache_identity()
+    if cache.inclusion is not None and cache.inclusion != inclusion_value:
+        # Same pair, different inclusion: rebuild in place.  The monitored pool
+        # is a pure function of ``clips_dict`` and so survives, but medias may
+        # have changed under us, so drop it alongside the rest for parity with
+        # the full clear.
+        cache.reset()
+        _monitored_pools.pop(cache.key[0], None)
 
-    if _cache_inclusion is not None and _cache_inclusion != inclusion_value:
-        # Same pair, different inclusion: rebuild in place and keep the stamp.
-        _clear_cache_data()
+    if cache.inclusion is None:
+        cache.inclusion = inclusion_value
 
-    if _cache_inclusion is None:
-        _cache_inclusion = inclusion_value
-
-    start = len(_cached_steps)
+    start = len(cache.steps)
     if start >= len(label_history):
-        return  # already up to date
+        return cache  # already up to date
 
     all_media_ids = sorted(clips_dict.keys())
 
-    if _cache_coverage_atlas is None:
-        _cache_coverage_atlas = _build_coverage_atlas(clips_dict)
+    if cache.coverage_atlas is None:
+        cache.coverage_atlas = _build_coverage_atlas(clips_dict)
         # A freshly built (or cloned) atlas starts with an empty label overlay.
         # Defensively seed it with any labels already accumulated in the
         # running ID sets so coverage_level() is correct before the history
         # replay below runs; normally these sets are empty at first build
         # (invalidate rewinds and replays its atlas in place rather than
         # nulling it, so this branch no longer runs mid-history).
-        if _cache_coverage_atlas is not None:
-            for mid in _cache_good_ids | _cache_bad_ids:
-                if mid in _cache_coverage_atlas.vector_to_leaf:
-                    _cache_coverage_atlas.label(mid, good=mid in _cache_good_ids)
+        if cache.coverage_atlas is not None:
+            for mid in cache.good_ids | cache.bad_ids:
+                if mid in cache.coverage_atlas.vector_to_leaf:
+                    cache.coverage_atlas.label(mid, good=mid in cache.good_ids)
 
     for t in range(start, len(label_history)):
         # Each step retrains a model; honour a cancel of the owning eval job
         # here so a long history doesn't run to completion after cancel.  The
         # partially-built cache is a valid prefix (steps 0..t-1), so the next
-        # run resumes cleanly from ``len(_cached_steps)``.  No-op outside a
+        # run resumes cleanly from ``len(cache.steps)``.  No-op outside a
         # job (see ``async_jobs.check_job_cancelled``).
         check_job_cancelled()
         media_id, label, _ = label_history[t]
 
-        was_labeled = _apply_label_event(media_id, label)
-        diversity_info = _sync_coverage_atlas(media_id, label, was_labeled)
+        was_labeled = _apply_label_event(cache, media_id, label)
+        diversity_info = _sync_coverage_atlas(cache, media_id, label, was_labeled)
 
-        good_ids = list(_cache_good_ids)
-        bad_ids = list(_cache_bad_ids)
+        good_ids = list(cache.good_ids)
+        bad_ids = list(cache.bad_ids)
         num_labels = len(good_ids) + len(bad_ids)
 
-        prev = _cached_steps[-1] if _cached_steps else None
+        prev = cache.steps[-1] if cache.steps else None
         model, threshold, stability = _resolve_step_model(
-            clips_dict, all_media_ids, t, num_labels, inclusion_value, good_ids, bad_ids, prev
+            cache, clips_dict, all_media_ids, t, num_labels, inclusion_value, good_ids, bad_ids, prev
         )
 
-        _cached_steps.append(
+        cache.steps.append(
             {
                 "model": model,
                 "threshold": threshold,
@@ -662,6 +729,8 @@ def _ensure_cache(
                 "diversity": diversity_info,
             }
         )
+
+    return cache
 
 
 # ---------------------------------------------------------------------------
@@ -750,6 +819,7 @@ def _build_eval_set(
 
 
 def _eval_cached_models(
+    cache: _ProgressCache,
     clips_dict: dict[int, dict[str, Any]],
     current_good_votes: dict[int, None],
     current_bad_votes: dict[int, None],
@@ -757,7 +827,7 @@ def _eval_cached_models(
     start: int = 0,
     end: Optional[int] = None,
 ) -> list[dict[str, Any]]:
-    """Score cached models against the current labelset (forward passes only).
+    """Score *cache*'s models against the current labelset (forward passes only).
 
     Returns a list of error-cost dicts for every cached step in
     ``[start, end)`` that has a trained model.
@@ -775,11 +845,11 @@ def _eval_cached_models(
     X_eval, eval_labels, total_positives, total_negatives = eval_set
 
     if end is None:
-        end = len(_cached_steps)
+        end = len(cache.steps)
 
     results: list[dict[str, Any]] = []
     for t in range(start, end):
-        step = _cached_steps[t]
+        step = cache.steps[t]
         if step["model"] is None:
             continue
 
@@ -816,9 +886,9 @@ def recreate_model_at_time(
         return None, None, [], []
 
     with _progress_lock:
-        _ensure_cache(clips_dict, label_history, inclusion_value)
+        cache = _ensure_cache(clips_dict, label_history, inclusion_value)
 
-        step = _cached_steps[time_index]
+        step = cache.steps[time_index]
         return step["model"], step["threshold"], step["good_ids"], step["bad_ids"]
 
 
@@ -834,8 +904,8 @@ def calculate_error_cost_over_time(
     Uses cached models - no retraining.
     """
     with _progress_lock:
-        _ensure_cache(clips_dict, label_history, inclusion_value)
-        return _eval_cached_models(clips_dict, current_good_votes, current_bad_votes, inclusion_value)
+        cache = _ensure_cache(clips_dict, label_history, inclusion_value)
+        return _eval_cached_models(cache, clips_dict, current_good_votes, current_bad_votes, inclusion_value)
 
 
 def calculate_prediction_stability_over_time(
@@ -845,11 +915,12 @@ def calculate_prediction_stability_over_time(
 ) -> list[dict[str, Any]]:
     """Return cached prediction-stability metrics for every step."""
     with _progress_lock:
-        _ensure_cache(clips_dict, label_history, inclusion_value)
-        return [step["stability"] for step in _cached_steps if step["stability"] is not None]
+        cache = _ensure_cache(clips_dict, label_history, inclusion_value)
+        return [step["stability"] for step in cache.steps if step["stability"] is not None]
 
 
 def _compute_smart_status(
+    cache: _ProgressCache,
     clips_dict: dict[int, dict[str, Any]],
     label_history: list[tuple[int, str, float]],
     current_good_votes: dict[int, None],
@@ -866,13 +937,13 @@ def _compute_smart_status(
             "reason": f"Need at least 5 good and 5 bad. Currently {good}g, {bad}b.",
         }
 
-    n = len(_cached_steps)
+    n = len(cache.steps)
     if n < 3:
         return {"status": "yellow", "reason": "Not enough label history steps to assess trend."}
 
     start_idx = max(0, n - 10)
     recent_entries = _eval_cached_models(
-        clips_dict, current_good_votes, current_bad_votes, inclusion_value, start_idx, n
+        cache, clips_dict, current_good_votes, current_bad_votes, inclusion_value, start_idx, n
     )
     recent_error_costs = [e["error_cost"] for e in recent_entries]
 
@@ -905,6 +976,7 @@ def _compute_smart_status(
 
 
 def _compute_stable_status(
+    cache: _ProgressCache,
     good: int,
     bad: int,
     total: int,
@@ -916,7 +988,7 @@ def _compute_stable_status(
             "reason": f"Need at least 5 good and 5 bad. Currently {good}g, {bad}b.",
         }
 
-    stability = [step["stability"] for step in _cached_steps if step["stability"] is not None]
+    stability = [step["stability"] for step in cache.steps if step["stability"] is not None]
 
     MIN_STABLE_ENTRIES = 5
     if len(stability) < MIN_STABLE_ENTRIES:
@@ -1013,25 +1085,22 @@ def compute_labeling_status(
 
     Advancing the per-step cache (``_ensure_cache``) can retrain MLPs and run a
     forward pass over every unlabeled media, so this is the *heavy* path.  The
-    result is stashed in ``_status_snapshot`` so the ``/api/labeling-status``
-    route can serve it immediately (marked ``stale``) on subsequent polls while
-    a background worker calls this to advance the cache off the request thread
-    (issue #2397).
+    result is stashed in the pair's ``status_snapshot`` so the
+    ``/api/labeling-status`` route can serve it immediately (marked ``stale``)
+    on subsequent polls while a background worker calls this to advance the
+    cache off the request thread (issue #2397).
     """
-    global _status_snapshot
-
     good = len(current_good_votes)
     bad = len(current_bad_votes)
     total = good + bad
 
     with _progress_lock:
-        _ensure_cache(clips_dict, label_history, inclusion_value)
-        computed_for = _cache_key
+        cache = _ensure_cache(clips_dict, label_history, inclusion_value)
 
         smart = _compute_smart_status(
-            clips_dict, label_history, current_good_votes, current_bad_votes, inclusion_value, good, bad, total
+            cache, clips_dict, label_history, current_good_votes, current_bad_votes, inclusion_value, good, bad, total
         )
-        stable = _compute_stable_status(good, bad, total)
+        stable = _compute_stable_status(cache, good, bad, total)
 
     # Span status from coverage atlas info (passed in from the route).
     span = _compute_span_status(span_info)
@@ -1048,12 +1117,13 @@ def compute_labeling_status(
     # Store a copy so a caller that mutates the returned dict (e.g. adding the
     # ``stale`` flag) doesn't retroactively corrupt the snapshot.  The lock was
     # released for the (settings-reading) Span computation above, so another
-    # thread may have rebound the cache to a different detector meanwhile;
-    # publishing this result under that detector's key is exactly the bleed
-    # this cache-keying exists to prevent, so drop it instead.
+    # thread may have dropped this pair's cache meanwhile (a vote clear, a
+    # detector unload, an LRU eviction); the identity check republishes only
+    # onto the very object these indicators were computed from, never onto a
+    # successor that has been rebuilt or belongs to someone else.
     with _progress_lock:
-        if _cache_key == computed_for:
-            _status_snapshot = dict(result)
+        if _caches.get(cache.key) is cache:
+            cache.status_snapshot = dict(result)
     return result
 
 
@@ -1095,12 +1165,13 @@ def cached_indicator_history(
         if not is_status_cache_fresh(label_history, inclusion_value):
             return [], False
 
+        cache = _active_cache()
         if metric == "smart":
-            data = _eval_cached_models(clips_dict, current_good_votes, current_bad_votes, inclusion_value)
+            data = _eval_cached_models(cache, clips_dict, current_good_votes, current_bad_votes, inclusion_value)
         elif metric == "stable":
-            data = [step["stability"] for step in _cached_steps if step["stability"] is not None]
+            data = [step["stability"] for step in cache.steps if step["stability"] is not None]
         else:
-            data = [step["diversity"] for step in _cached_steps if step.get("diversity") is not None]
+            data = [step["diversity"] for step in cache.steps if step.get("diversity") is not None]
         return data, True
     finally:
         _progress_lock.release()
@@ -1112,15 +1183,15 @@ def is_status_cache_fresh(label_history: list[tuple[int, str, float]], inclusion
     A fresh cache means ``compute_labeling_status`` will not retrain any model,
     so the route can compute the status inline instead of deferring to a
     background worker.  A mismatched ``inclusion_value`` counts as not-fresh
-    because :func:`_ensure_cache` would rebuild the cache from scratch.  So
-    does a cache belonging to a different ``(dataset, detector)`` pair, which is
-    dropped here rather than length-compared against a history it never saw.
+    because :func:`_ensure_cache` would rebuild the cache from scratch.  The
+    length comparison is against the *active pair's* cache, so another
+    detector's longer history can never be read as covering this one's.
     """
     with _progress_lock:
-        _bind_cache_identity()
-        if _cache_inclusion is not None and _cache_inclusion != inclusion_value:
+        cache = _active_cache()
+        if cache.inclusion is not None and cache.inclusion != inclusion_value:
             return False
-        return len(_cached_steps) >= len(label_history)
+        return len(cache.steps) >= len(label_history)
 
 
 def _pending_labeling_status(
@@ -1163,12 +1234,13 @@ def stale_labeling_status(
     """
     status = _pending_labeling_status(current_good_votes, current_bad_votes, span_info)
     with _progress_lock:
-        # Never hand another detector's last snapshot to this one; rebinding
-        # drops it so the "computing" placeholder shows instead.
-        _bind_cache_identity()
-        if _status_snapshot is not None:
-            status["smart"] = dict(_status_snapshot["smart"])
-            status["stable"] = dict(_status_snapshot["stable"])
+        # Reading the snapshot off the *active pair's* cache is what stops one
+        # detector's indicators being handed to another; a detector with no
+        # snapshot of its own shows the "computing" placeholder instead.
+        snapshot = _active_cache().status_snapshot
+        if snapshot is not None:
+            status["smart"] = dict(snapshot["smart"])
+            status["stable"] = dict(snapshot["stable"])
     return status
 
 
@@ -1184,8 +1256,8 @@ def calculate_diversity_level_over_time(
     current before reading it.
     """
     with _progress_lock:
-        _ensure_cache(clips_dict, label_history, inclusion_value)
-        return [step["diversity"] for step in _cached_steps if step.get("diversity") is not None]
+        cache = _ensure_cache(clips_dict, label_history, inclusion_value)
+        return [step["diversity"] for step in cache.steps if step.get("diversity") is not None]
 
 
 def analyze_labeling_progress(
@@ -1201,11 +1273,11 @@ def analyze_labeling_progress(
     cost is recomputed cheaply using cached models (forward passes only).
     """
     with _progress_lock:
-        _ensure_cache(clips_dict, label_history, inclusion_value)
+        cache = _ensure_cache(clips_dict, label_history, inclusion_value)
 
-        error_cost = _eval_cached_models(clips_dict, current_good_votes, current_bad_votes, inclusion_value)
+        error_cost = _eval_cached_models(cache, clips_dict, current_good_votes, current_bad_votes, inclusion_value)
 
-        stability = [step["stability"] for step in _cached_steps if step["stability"] is not None]
+        stability = [step["stability"] for step in cache.steps if step["stability"] is not None]
 
         diversity = calculate_diversity_level_over_time(clips_dict, label_history, inclusion_value)
 

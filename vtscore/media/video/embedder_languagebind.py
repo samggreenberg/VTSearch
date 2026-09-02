@@ -219,10 +219,13 @@ class VideoLanguageBindEmbedder(MediaEmbedder):
             logging.getLogger(__name__).exception("Error embedding text query for video (LanguageBind)")
             return None
 
-    # Internal helper used by loader.py bridge
-    def _get_model_and_processor(self):
-        if self._model is None:
-            self.load_models()
+    def loaded_backbone(self):
+        """Return ``(model, tokenizer)``.
+
+        Overridden because LanguageBind's companion object is a tokenizer held
+        as ``_tokenizer``, not the ``_processor`` the base accessor reads.
+        """
+        self.load_models()
         return self._model, self._tokenizer
 
 

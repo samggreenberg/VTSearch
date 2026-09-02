@@ -1,22 +1,33 @@
 #!/usr/bin/env bash
-# Build one deck without make:  ./render.sh hold-the-line [pdf|html|pptx] [--speaker]
+# Build one deck without make:  ./render.sh hold-the-line [pdf|html|pptx] [--speaker|--watch]
 # --speaker builds the speaker view -> _out/<deck>.speaker.<fmt>: each page is
 # a miniature of the real rendered slide beside its presenter notes. It renders
 # the audience deck to per-slide PNGs first, so it is a two-pass build.
+# --watch starts Marp's live-reloading browser preview instead of writing a file.
+#
+# This is the single Marp wrapper: slides/Makefile delegates every target here
+# rather than invoking Marp itself, so the --no-stdin and PIPESTATUS fixes below
+# cannot be bypassed by building through `make` (#3434).
 set -euo pipefail
 cd "$(dirname "$0")"
 
-deck=${1:?usage: ./render.sh <deck-name> [pdf|html|pptx] [--speaker]}
+deck=${1:?usage: ./render.sh <deck-name> [pdf|html|pptx] [--speaker|--watch]}
 shift
 fmt=pdf
 speaker=
+watch=
 for arg in "$@"; do
     case "$arg" in
         --speaker) speaker=1 ;;
+        --watch) watch=1 ;;
         pdf|html|pptx) fmt=$arg ;;
         *) echo "unknown argument: $arg" >&2; exit 1 ;;
     esac
 done
+if [[ -n $speaker && -n $watch ]]; then
+    echo "--speaker and --watch are mutually exclusive" >&2
+    exit 1
+fi
 
 MARP=(npx --yes @marp-team/marp-cli@4)
 mkdir -p _out
@@ -49,6 +60,14 @@ run_marp() {
 }
 
 ./build.py "$deck"
+
+# Live preview: Marp stays resident and re-renders on save, so it never reaches
+# the exit-status/figure checks in run_marp. --no-stdin still matters -- without
+# it Marp blocks on stdin before the watcher ever starts.
+if [[ -n $watch ]]; then
+    exec "${MARP[@]}" "_build/$deck.md" --theme-set themes/ --allow-local-files \
+        --no-stdin -w --preview
+fi
 
 if [[ -n $speaker ]]; then
     mkdir -p _build/imgs

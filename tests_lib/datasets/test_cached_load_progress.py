@@ -18,7 +18,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from vtscore.datasets import loader as _loader
+from vtscore.datasets import loader_demo as _loader_demo
 from vtscore.datasets.config import DEMO_DATASETS
 from vtscore.datasets.loader import export_dataset_to_file, load_demo_dataset
 
@@ -60,7 +60,7 @@ def _write_cached_demo(tmp_path: Path, monkeypatch, n: int = 120) -> dict[int, d
     """Plant a cached demo container in a redirected ``EMBEDDINGS_DIR``."""
     medias = _image_medias(n)
     container = export_dataset_to_file(medias, embedder="siglip", media_type="image")
-    monkeypatch.setattr(_loader, "EMBEDDINGS_DIR", tmp_path)
+    monkeypatch.setattr(_loader_demo, "EMBEDDINGS_DIR", tmp_path)
     (tmp_path / f"{DEMO_ID}.pkl").write_bytes(container)
     return medias
 

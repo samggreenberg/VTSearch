@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, effect, ElementRef, inject, input, OnDestroy, OnInit, output, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, effect, ElementRef, inject, input, OnInit, output, signal, viewChild } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { Subject, takeUntil, timer, switchMap, filter, take } from 'rxjs';
 import { ModalComponent } from '../../modal/modal.component';
@@ -24,7 +25,7 @@ export type ProgressMetric = 'smart' | 'stable' | 'diverse';
   templateUrl: './progress-modal.component.html',
   styleUrl: './progress-modal.component.scss',
 })
-export class ProgressModalComponent implements OnInit, OnDestroy {
+export class ProgressModalComponent implements OnInit {
   private sortingApi = inject(SortingApiService);
   private chartsService = inject(ChartsService);
   private settingsState = inject(SettingsStateService);
@@ -51,7 +52,7 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
    *  backend hands back a job envelope; consumed by ``onCancel``. */
   private currentJobId: string | null = null;
 
-  private destroy$ = new Subject<void>();
+  private readonly destroyRef = inject(DestroyRef);
 
   constructor() {
     // The canvas lives in the results `@else` branch, so it only exists one
@@ -86,16 +87,11 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
     this.loadCachedHistory();
   }
 
-  ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
-  }
-
   private loadCachedHistory(): void {
     this.analyzing.set(true);
     this.sortingApi
       .getIndicatorScoreHistory(this.metric())
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (res) => {
           // `complete: false` means the per-step cache is behind the label
@@ -127,12 +123,12 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
     // dedicated notifier to stop watching once the bar reaches 100%: the
     // backend emits the `idle/Done` eval frame *inside* `_run`, before the
     // job flips to `done`, so this fires while the result poller is still
-    // polling. It must NOT tear down the poller — hence a separate subject
-    // rather than `this.destroy$.next()`, which would kill the poller too
-    // and leave `analyzing` hung forever.
+    // polling. It must NOT tear down the poller — hence a subject scoped to
+    // this one stream, rather than anything component-wide, which would kill
+    // the poller too and leave `analyzing` hung forever.
     const stopWatchingProgress$ = new Subject<void>();
     this.progressEvents.votingIterations$
-      .pipe(takeUntil(this.destroy$), takeUntil(stopWatchingProgress$))
+      .pipe(takeUntilDestroyed(this.destroyRef), takeUntil(stopWatchingProgress$))
       .subscribe({
         next: (res) => {
           if (res.total > 0) {
@@ -146,13 +142,17 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
       });
 
     // Request train-and-score; the new endpoint returns a job envelope.
-    // `takeUntil(destroy$)` guards the case where the modal is dismissed
-    // while the POST is in flight: without it, a late `next` would arm
-    // `pollEvalJob()` against an already-completed `destroy$` (RxJS
-    // `takeUntil` never fires on a pre-completed notifier), leaking a poller.
+    // Teardown here guards the case where the modal is dismissed while the
+    // POST is in flight: without it, a late `next` would arm `pollEvalJob()`
+    // on a dead component, leaking a poller. `takeUntilDestroyed` closes that
+    // from both ends — it stops this subscription at destroy, and a
+    // subscription armed *after* destroy completes immediately (its
+    // `destroyRef.destroyed` branch). A hand-rolled `takeUntil(destroy$)`
+    // could not do the second half: RxJS `takeUntil` never fires on a
+    // pre-completed notifier, so the poller would have run forever.
     this.sortingApi
       .trainAndScore(this.metric())
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (res) => {
           if (res.status === 'done') {
@@ -173,7 +173,7 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
   private pollEvalJob(jobId: string): void {
     timer(200, 500)
       .pipe(
-        takeUntil(this.destroy$),
+        takeUntilDestroyed(this.destroyRef),
         switchMap(() => this.sortingApi.getEvalTrainAndScoreResult(jobId)),
         filter((res) => res.status !== 'running'),
         take(1),
@@ -206,7 +206,7 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
     const jobId = this.currentJobId;
     this.currentJobId = null;
     if (jobId) {
-      this.sortingApi.cancelEvalTrainAndScore(jobId).pipe(takeUntil(this.destroy$)).subscribe();
+      this.sortingApi.cancelEvalTrainAndScore(jobId).pipe(takeUntilDestroyed(this.destroyRef)).subscribe();
     }
     this.analyzing.set(false);
     this.close();

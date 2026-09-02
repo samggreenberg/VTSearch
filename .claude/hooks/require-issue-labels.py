@@ -35,10 +35,13 @@ than letting the check be dodged by rewording the body.
 
 from __future__ import annotations
 
-import json
-import os
 import re
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from hook_payload import read_payload, tool_arguments  # noqa: E402
 
 TOOL_SUFFIX = "issue_write"
 
@@ -77,38 +80,6 @@ WEAK_SIGNALS = [
     r"\brecall@",
     r"\bprecision@",
 ]
-
-
-def _read_payload() -> dict:
-    """Parse the PreToolUse payload, preferring stdin and falling back to env."""
-    raw = ""
-    if not sys.stdin.isatty():
-        raw = sys.stdin.read().strip()
-    if not raw:
-        raw = os.environ.get("TOOL_INPUT", "").strip()
-    if not raw:
-        return {}
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError:
-        return {}
-    return parsed if isinstance(parsed, dict) else {}
-
-
-def _tool_input(payload: dict) -> dict | None:
-    """Return the issue_write arguments, or None if this is not our tool.
-
-    Handles both the nested envelope (`{"tool_name", "tool_input"}`) and a
-    bare arguments dict, since the two shapes have both been observed.
-    """
-    name = payload.get("tool_name") or payload.get("toolName") or ""
-    args = payload.get("tool_input") or payload.get("toolInput")
-    if isinstance(args, dict):
-        return args if name.endswith(TOOL_SUFFIX) else None
-    # Bare arguments: identify it by its own shape rather than by a tool name.
-    if "method" in payload and "repo" in payload:
-        return payload
-    return None
 
 
 def _looks_like_an_experiment(text: str) -> bool:
@@ -198,7 +169,7 @@ CLOSE_FOOTER = (
 
 
 def main() -> int:
-    args = _tool_input(_read_payload())
+    args = tool_arguments(read_payload(), TOOL_SUFFIX, bare_keys=("method", "repo"))
     if args is None:
         return 0
 

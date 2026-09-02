@@ -19,7 +19,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-import app as app_module  # noqa: F401  (activates the default dataset context)
 from vtscore.cli import _score_direct_all
 
 DIM = 4

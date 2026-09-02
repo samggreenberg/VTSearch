@@ -8,6 +8,7 @@ from typing import Optional
 import requests
 
 from vtscore.datasets.downloader import core as _core
+from vtscore.concurrency.progress import resolve_progress_callback
 from vtscore.datasets.downloader.core import ProgressCallback
 
 
@@ -20,14 +21,14 @@ def download_esc50(on_progress: Optional[ProgressCallback] = None) -> Path:
 
     Args:
         on_progress: Optional progress callback. Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         Path to the ``audio/`` subdirectory inside the extracted ``ESC-50-master``
         directory (e.g. ``data/ESC-50-master/audio``).
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     extract_dir = _core.DATA_DIR / "ESC-50-master"
     _core._download_and_extract(
@@ -54,14 +55,14 @@ def download_gtzan(on_progress: Optional[ProgressCallback] = None) -> Path:
 
     Args:
         on_progress: Optional progress callback.  Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         Path to the ``genres/`` directory containing genre subdirectories
         with ``.wav`` files (e.g. ``data/gtzan/genres``).
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     genres_dir = _core.DATA_DIR / "gtzan" / "genres"
     _core._download_and_extract(
@@ -88,7 +89,7 @@ def download_speech_commands_v2(on_progress: Optional[ProgressCallback] = None) 
 
     Args:
         on_progress: Optional progress callback.  Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         Path to the ``speech_commands_v2/`` directory containing keyword
@@ -96,7 +97,7 @@ def download_speech_commands_v2(on_progress: Optional[ProgressCallback] = None) 
         ``data/speech_commands_v2``).
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     extract_dir = _core.DATA_DIR / "speech_commands_v2"
     _core._download_and_extract(
@@ -123,14 +124,14 @@ def download_urbansound8k(on_progress: Optional[ProgressCallback] = None) -> Pat
 
     Args:
         on_progress: Optional progress callback.  Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         Path to the ``UrbanSound8K/`` directory containing ``audio/`` and
         ``metadata/`` subdirectories (e.g. ``data/UrbanSound8K``).
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     extract_dir = _core.DATA_DIR / "UrbanSound8K"
     _core._download_and_extract(
@@ -160,14 +161,14 @@ def download_clotho(on_progress: Optional[ProgressCallback] = None) -> Path:
 
     Args:
         on_progress: Optional progress callback.  Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         Path to the ``clotho/`` directory holding the extracted ``.wav`` files
         (e.g. ``data/clotho``).
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     extract_dir = _core.DATA_DIR / "clotho"
     _core._download_and_extract(
@@ -197,14 +198,14 @@ def download_tut_sound_events_2017(on_progress: Optional[ProgressCallback] = Non
 
     Args:
         on_progress: Optional progress callback.  Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         Path to the ``tut_sound_events_2017/`` directory whose subdirectories
         hold the extracted ``.wav`` files.
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     base = _core.DATA_DIR / "tut_sound_events_2017"
     archives = _core.TUT_SOUND_EVENTS_2017_ARCHIVES
@@ -406,13 +407,13 @@ def download_apollo11_audio(
             :func:`apollo11_audio_manifest`.  ``None`` fetches every track
             (~10.1 GB).
         on_progress: Optional progress callback.  Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         Path to the ``apollo11_audio/`` directory holding the ``.mp3`` files.
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
     if tracks is None:
         tracks = apollo11_audio_manifest()
 
@@ -475,14 +476,14 @@ def download_birdvox_full_night(
             :func:`birdvox_full_night_manifest`.  ``None`` fetches all six
             (~5.65 GB).
         on_progress: Optional progress callback.  Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         Path to the ``birdvox_full_night/`` directory whose per-unit
         subdirectories hold the segmented ``.flac`` chunks.
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
     if units is None:
         units = birdvox_full_night_manifest()
 
@@ -553,14 +554,14 @@ def download_nixon_tapes(
             :func:`nixon_tape_manifest`.  ``None`` fetches all twelve
             (~10.2 GB).
         on_progress: Optional progress callback.  Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         Path to the ``nixon_tapes/`` directory whose per-tape subdirectories
         hold the conversation ``.mp3`` files.
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
     if tapes is None:
         tapes = nixon_tape_manifest()
 

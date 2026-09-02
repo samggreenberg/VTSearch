@@ -227,7 +227,7 @@ class TestCanaryChecksThePathTheBuildReads:
     """The canary must name the *same* source the builder opens (#3299).
 
     Its first real run reported ``coco_val`` REBUILD-BROKEN. Nothing was
-    broken: ``_load_coco`` reads ``images/val2017.zip``, which was present,
+    broken: the COCO loader reads ``images/val2017.zip``, which was present,
     while the canary checked ``images/val2017`` -- an extracted directory the
     staging area has never held. A canary pointed at a path the build never
     touches raises a false alarm exactly as loudly as a true one, which is the
@@ -274,12 +274,13 @@ class TestCanaryChecksThePathTheBuildReads:
         """Pins the repair itself: both sides go through ``pc.COCO_VAL_ZIP``.
 
         Spelling the zip inline in the builder while a constant named the
-        directory is what let the two drift apart in the first place.
+        directory is what let the two drift apart in the first place. The two
+        sides now live in one module -- ``load()`` and ``check()`` of
+        ``pilebuild/loaders/coco.py`` -- so this reads the whole of it.
         """
-        source = (_PILE_DIR / "build_pile.py").read_text()
-        loader = source.split("def _load_coco(", 1)[1].split("\ndef ", 1)[0]
-        assert "pc.COCO_VAL_ZIP" in loader
-        assert 'val2017.zip"' not in loader, "the builder is spelling the zip path inline again"
+        source = (_PILE_DIR / "pilebuild" / "loaders" / "coco.py").read_text()
+        assert "pc.COCO_VAL_ZIP" in source
+        assert 'val2017.zip"' not in source, "the builder is spelling the zip path inline again"
 
 
 def test_selector_reads_only_fields_the_pre_envelope_scan_carries() -> None:
@@ -292,11 +293,11 @@ def test_selector_reads_only_fields_the_pre_envelope_scan_carries() -> None:
     silently acceptable -- so this pins the fields it may touch, and fails when
     a new one appears rather than when a rebuild does.
     """
-    source = (_PILE_DIR / "build_pile.py").read_text()
-    body = source.split("def _band_categories(", 1)[1].split("\ndef ", 1)[0]
+    source = (_PILE_DIR / "pilebuild" / "boxscan.py").read_text()
+    body = source.split("def band_categories(", 1)[1].split("\ndef ", 1)[0]
     allowed = {"voted_area", "n_images", "union_inflation"}
     read = set(re.findall(r'\["(\w+)"\]', body))
     assert read <= allowed, (
-        f"_band_categories reads scan fields a pre-envelope file does not carry: "
+        f"band_categories reads scan fields a pre-envelope file does not carry: "
         f"{sorted(read - allowed)}. Either drop the read or stop accepting the bare shape."
     )

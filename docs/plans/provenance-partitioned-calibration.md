@@ -47,7 +47,7 @@ surfacing context the study measured as trustworthy.
   The partition only bites when a session demonstrably mixes flows; it must not
   silently gut calibration for every existing labelset.
 - **Partition point.** The fold split, not the training set.
-  `compute_fold_orderings` / `_grouped_folds` (`vtscore/training/thresholds.py`)
+  `compute_fold_orderings` / `_grouped_folds` (`vtscore/training/thresholds/conformal.py`)
   gain a per-vote calibration-eligibility mask threaded from the detector glue
   (`vtscore/detectors/training.py`, where votes become `X_list`/`y_list`):
   ineligible votes are pinned to the **Train** side of every fold split and

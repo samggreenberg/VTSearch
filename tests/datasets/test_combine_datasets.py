@@ -869,18 +869,32 @@ class TestClearStagingEndpoint:
 
 
 class TestProgressStagingResult:
-    def test_staging_result_in_progress(self):
-        """update_progress stores staging_result and get_progress returns it."""
-        from vtscore.concurrency.progress import get_progress, update_progress
+    def test_staging_result_rides_the_tasks_own_tracker(self):
+        """``staging_result`` is a per-task field, not a global one.
+
+        It used to live on the ``dataset_progress`` singleton, where two
+        concurrent stagings were last-writer-wins and the loser's staged pkl
+        was orphaned.  Declaring it as an extra field on the staging task's own
+        tracker is what makes the results disjoint.
+        """
+        from tests.helpers import current_loading_progress
+        from vtscore.concurrency.progress import loading_tasks
 
         staging = {"path": "/tmp/test.pkl", "name": "test", "count": 5, "media_type": "audio"}
-        update_progress("idle", "done", 100, 100, staging_result=staging)
-        progress = get_progress()
-        assert progress["staging_result"] == staging
+        tracker = loading_tasks.create_task("_staging_probe", "Staging", extra_fields={"staging_result": None})
+        try:
+            tracker.update("loading", "staging", 100, 100, staging_result=staging)
+            assert current_loading_progress()["staging_result"] == staging
 
-        # Clean up; explicitly clear staging_result (update has merge semantics)
-        update_progress("idle", "", 0, 0, staging_result=None)
-        assert get_progress()["staging_result"] is None
+            # Merge semantics: an update that omits it leaves it in place.
+            tracker.update("loading", "still staging", 100, 100)
+            assert tracker.get()["staging_result"] == staging
+
+            # ...and it can be cleared explicitly.
+            tracker.update("idle", "", 0, 0, staging_result=None)
+            assert tracker.get()["staging_result"] is None
+        finally:
+            loading_tasks.remove_task("_staging_probe")
 
 
 class _FakeStagingImporter:
@@ -925,8 +939,8 @@ def _sync_thread_factory(store: list):
 class TestStagingPerTaskIsolation:
     """Two concurrent staging imports must each publish their own
     ``staging_result`` on their own per-task tracker; the terminal result is
-    no longer last-writer-wins on the global ``dataset_progress`` singleton
-    (which orphaned the loser's staged pkl).
+    not last-writer-wins on one shared channel (which orphaned the loser's
+    staged pkl).
 
     Grouped with ``TestClearStagingEndpoint``: the existence assertions below
     read the repo-shared ``data/staging/`` dir, which that class wipes."""

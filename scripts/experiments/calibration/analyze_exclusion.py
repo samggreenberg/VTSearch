@@ -97,14 +97,14 @@ def voting_mode(geometry: str) -> str:
 
 def load_arms(base: Path, stages: Sequence[str]) -> tuple[pd.DataFrame, dict]:
     """Every arm's base rows, tagged with its stage and arm, plus provenance."""
-    import analyze_spikes as sp
+    import _cells_io
 
     parts: list[pd.DataFrame] = []
     prov: dict[str, dict] = {}
     for stage in stages:
         for arm in STAGE_ARMS[stage]:
             arm_dir = base / f"stage{stage}" / arm / "results"
-            df, p = sp.load_arm(arm_dir)
+            df, p = _cells_io.load_arm(arm_dir)
             prov[f"{stage}/{arm}"] = {**p, "dir": str(arm_dir)}
             if df.empty:
                 continue

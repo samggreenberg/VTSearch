@@ -15,6 +15,30 @@ proxy classes.
 This module is the canonical app-tier state API (the proxy layer), not a
 thin adapter, which is why it lives at ``vtsearch/state_proxies.py`` rather
 than under ``vtsearch/shim/`` (which holds the genuine Flask glue).
+
+.. warning::
+
+   **The proxies' own built-in storage is permanently empty**, so anything
+   that reads a proxy through the C-level ``dict`` / ``list`` slots instead
+   of through an overridden Python method sees *nothing* and returns a
+   confidently wrong answer rather than raising.  Two distinct cases:
+
+   * **Unforwarded methods.**  Fixed by forwarding, and kept fixed by
+     ``tests/core/test_state_proxies.py``, which fails when any public
+     ``dict`` / ``list`` method is neither forwarded nor listed in that
+     test's explicit blacklist.  Add a forward (or a blacklist entry with a
+     reason) when a new Python version grows a container method.
+
+   * **C fast paths, which cannot be forwarded at all.**  ``json.dumps()``
+     and ``copy.copy()`` read a ``dict`` subclass's internal table directly
+     via ``PyDict_Next``; no Python-level override can intercept them, so
+     ``json.dumps(medias)`` returns ``"{}"``.  Unbound calls
+     (``dict.keys(medias)``) bypass the overrides the same way.  **Never
+     hand a proxy straight to a serializer** - materialise it first with
+     ``dict(medias)`` / ``sorted(good_votes)`` / a comprehension, which all
+     route through ``__iter__`` and are correct.  Every production call site
+     does this today; ``test_state_proxies.py`` pins the known-bypassing
+     operations so the boundary stays documented rather than surprising.
 """
 
 from __future__ import annotations
@@ -117,6 +141,12 @@ class _ProxyDict(dict):
         target.__ior__(other)
         return self
 
+    def __ror__(self, other):
+        return self._target().__ror__(other)
+
+    def popitem(self):
+        return self._target().popitem()
+
     def __reversed__(self):
         # Snapshot to avoid RuntimeError under concurrent mutation.
         return reversed(list(self._target()))
@@ -159,11 +189,47 @@ class _ProxyList(list):
     def __eq__(self, other):
         return self._target().__eq__(other)
 
+    def __ne__(self, other):
+        return self._target().__ne__(other)
+
+    # Ordering comparisons.  ``list`` defines all four, so an unforwarded one
+    # would compare the proxy's permanently-empty own storage and quietly
+    # answer as if the context held nothing.
+    def __lt__(self, other):
+        return self._target().__lt__(other)
+
+    def __le__(self, other):
+        return self._target().__le__(other)
+
+    def __gt__(self, other):
+        return self._target().__gt__(other)
+
+    def __ge__(self, other):
+        return self._target().__ge__(other)
+
     def __bool__(self):
         return bool(self._target())
 
+    def __reversed__(self):
+        # Snapshot to avoid RuntimeError under concurrent mutation.
+        return reversed(list(self._target()))
+
     def __add__(self, other):
         return self._target().__add__(other)
+
+    def __radd__(self, other):
+        return other.__add__(self._target())
+
+    def __mul__(self, count):
+        return self._target().__mul__(count)
+
+    def __rmul__(self, count):
+        return self._target().__rmul__(count)
+
+    def __imul__(self, count):
+        target = self._target()
+        target.__imul__(count)
+        return self
 
     def __iadd__(self, other):
         target = self._target()

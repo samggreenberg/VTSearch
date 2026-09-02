@@ -1,8 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, OnDestroy, OnInit, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, input, OnDestroy, OnInit, output, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { FormsModule } from '@angular/forms';
-import { forkJoin, Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { forkJoin } from 'rxjs';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
 import { SettingsImporterModalComponent } from '../settings-importer-modal/settings-importer-modal.component';
@@ -94,13 +94,11 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   readonly browserBlocksMotion = signal(browserPrefersReducedMotion());
   private reducedMotionCleanup: (() => void) | null = null;
 
-  private destroy$ = new Subject<void>();
+  private readonly destroyRef = inject(DestroyRef);
 
   ngOnDestroy(): void {
     if (this.savedTimer !== null) clearTimeout(this.savedTimer);
     this.reducedMotionCleanup?.();
-    this.destroy$.next();
-    this.destroy$.complete();
   }
 
   ngOnInit(): void {
@@ -119,7 +117,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
       embedders: this.datasetsListingsApi.getEmbedders(),
       version: this.settingsApi.getVersion(),
     })
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
       next: (res) => {
         this.settings.set(res.settings);
@@ -614,7 +612,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     }
     this.settingsApi
       .getDefaults()
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (defaults) => {
           this.settings.set(defaults);
@@ -635,7 +633,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     // Reload settings from the server after import
     this.settingsApi
       .getSettings()
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (s) => {
           this.settings.set(s);
@@ -653,7 +651,7 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   private save(): void {
     this.settingsState
       .update(this.settings())
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {
           this.error.set('');

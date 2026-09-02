@@ -72,7 +72,7 @@ describe('DetectorStatsModalComponent', () => {
   it('repaints the error text on a failed load (zoneless canary)', async () => {
     await fixture.whenStable();
     httpMock.expectOne('/api/detectors/registry/det1/stats').flush(
-      { error: 'gone' },
+      { message: 'gone' },
       { status: 404, statusText: 'Not Found' },
     );
     await settleZoneless(fixture);

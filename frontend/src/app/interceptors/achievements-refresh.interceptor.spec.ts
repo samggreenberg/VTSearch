@@ -51,7 +51,7 @@ describe('achievementsRefreshInterceptor', () => {
     http.post('/api/find-label', {}).subscribe({ error: () => {} });
     httpMock
       .expectOne('/api/find-label')
-      .flush({ error: 'boom' }, { status: 500, statusText: 'Server Error' });
+      .flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
     expect(achievements.refresh).not.toHaveBeenCalled();
   });
 

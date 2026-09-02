@@ -30,7 +30,11 @@ from vtscore.state.core import DetectorContext
 # read-modify-write.  Every taker acquires this lock *before* ``_state_lock``
 # (via ``validated_vote_snapshot`` or an explicit ``with _state_lock`` inside
 # the body), so no ordering cycle is possible.
-_label_sync_write_lock = threading.Lock()
+#
+# Public because those out-of-module takers are part of the contract: an
+# out-of-package writer that does its own detector-JSON RMW *must* hold this
+# lock.  Reach it through :mod:`vtscore.detectors.labelset_ops`.
+label_sync_write_lock = threading.Lock()
 
 
 def _get_loaded_detector_state() -> tuple[dict[str, Any], Path, dict[str, Any], DetectorContext] | None:
@@ -64,7 +68,7 @@ def _get_loaded_detector_state() -> tuple[dict[str, Any], Path, dict[str, Any], 
     return entry, path, data, det_ctx
 
 
-def _merge_labelsets_across_datasets(
+def merge_labelsets_across_datasets(
     existing_ls: LabelSet,
     current_ls: LabelSet,
     current_dataset_medias: dict[int, dict[str, Any]],
@@ -154,7 +158,7 @@ def sync_labels_to_loaded_detector() -> None:
     because the global votes reflect scoring results on a different dataset,
     not the detector's original training labels.
     """
-    with _label_sync_write_lock:
+    with label_sync_write_lock:
         _sync_labels_to_loaded_detector_locked()
 
 
@@ -191,7 +195,7 @@ def _sync_labels_to_loaded_detector_locked() -> None:
     # Existing labelset entries that resolve into the active dataset are
     # "owned" by it and get reconciled against the current votes; entries that
     # resolve to nothing are cross-dataset and are preserved verbatim.
-    merged = _merge_labelsets_across_datasets(existing_ls, current_ls, snap)
+    merged = merge_labelsets_across_datasets(existing_ls, current_ls, snap)
     data["labelset"] = merged.to_dict()
     _write_detector(path, data)
 

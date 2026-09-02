@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import logging
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 from collections.abc import Iterator
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 
 from vtscore import cli_progress
@@ -761,7 +762,6 @@ def _load_importer_whole(importer_name: str, field_values: dict[str, Any]) -> It
 
     medias: dict[int, dict[str, Any]] = {}
     importer.run_cli(field_values, medias, thin=True)
-    apply_custom_metadata_md5(medias)
     if not medias:
         raise ValueError(f"No medias loaded by importer '{importer_name}'")
     yield medias
@@ -780,6 +780,54 @@ def _load_importer_chunked(
 
     importer.validate_cli_field_values(field_values)
     yield from _renumber_chunks(importer.run_chunked_cli(field_values, chunk_size, thin=True))
+
+
+@dataclass(frozen=True)
+class _SourceSpec:
+    """Where one autodetect run gets its medias: pickle/importer x whole/chunked.
+
+    The four public ``autodetect_*_main`` entry points used to hand-copy
+    three things per cell of that 2x2 - the loader call, the ``--dry-run``
+    source description, and the "nothing loaded" message - which is how the
+    matrix drifted (the chunked pair grew ``stream_results`` and the whole
+    pair did not).  Owning all three here means a new source variant is one
+    ``_SourceSpec`` construction, and the three can no longer disagree.
+    """
+
+    kind: Literal["pickle", "importer"]
+    dataset_path: str = ""
+    importer_name: str = ""
+    field_values: dict[str, Any] = field(default_factory=dict)
+    chunk_size: int | None = None
+
+    @property
+    def empty_error(self) -> str:
+        """The error text raised when the source yields no medias at all."""
+        if self.kind == "pickle":
+            return f"No medias loaded from dataset: {self.dataset_path}"
+        return f"No medias loaded by importer '{self.importer_name}'"
+
+    def load(self) -> Iterator[dict[int, dict[str, Any]]]:
+        """Open the media source, one dict per chunk (one chunk when whole)."""
+        if self.kind == "pickle":
+            if self.chunk_size:
+                return _load_pickle_chunked(self.dataset_path, self.chunk_size)
+            return _load_pickle_whole(self.dataset_path)
+        if self.chunk_size:
+            return _load_importer_chunked(self.importer_name, self.field_values, self.chunk_size)
+        return _load_importer_whole(self.importer_name, self.field_values)
+
+    def describe(self, *, stream_results: bool, keep_negatives: bool) -> dict[str, Any]:
+        """Build the ``source_description`` block reported by ``--dry-run``."""
+        common: dict[str, Any] = {
+            "kind": self.kind,
+            "chunk_size": self.chunk_size,
+            "stream_results": stream_results,
+            "keep_negatives": keep_negatives,
+        }
+        if self.kind == "pickle":
+            return {**common, "dataset": self.dataset_path}
+        return {**common, "importer": self.importer_name, "params": self.field_values}
 
 
 def _validate_dry_run_source(sd: dict[str, Any]) -> None:
@@ -1127,6 +1175,40 @@ def _run_pipeline(
     )
 
 
+def _autodetect(
+    spec: _SourceSpec,
+    *,
+    settings_path: str | None = None,
+    exporter_name: str | None = None,
+    exporter_field_values: dict[str, Any] | None = None,
+    dry_run: bool = False,
+    stream_results: bool = False,
+    keep_negatives: bool = False,
+) -> None:
+    """Shared body of the four public ``autodetect_*_main`` entry points.
+
+    Everything that used to be hand-copied across the 2x2 (pickle /
+    importer) x (whole / chunked) matrix lives here; *spec* supplies the
+    only parts that legitimately differ - the loader call, the dry-run
+    source description, and the "nothing loaded" message.
+    """
+    try:
+        _run_pipeline(
+            spec.load() if not dry_run else iter(()),
+            settings_path=settings_path,
+            exporter_name=exporter_name,
+            exporter_field_values=exporter_field_values,
+            empty_error=spec.empty_error,
+            dry_run=dry_run,
+            stream_results=stream_results,
+            keep_negatives=keep_negatives,
+            source_description=spec.describe(stream_results=stream_results, keep_negatives=keep_negatives),
+        )
+    except Exception as e:
+        cli_progress.emit_error(str(e))
+        sys.exit(1)
+
+
 def autodetect_main(
     dataset_path: str,
     settings_path: str | None = None,
@@ -1134,21 +1216,19 @@ def autodetect_main(
     exporter_field_values: dict[str, Any] | None = None,
     *,
     dry_run: bool = False,
+    stream_results: bool = False,
+    keep_negatives: bool = False,
 ) -> None:
     """CLI entry point: run autodetect with all Auto-Find detectors."""
-    try:
-        _run_pipeline(
-            _load_pickle_whole(dataset_path) if not dry_run else iter(()),
-            settings_path=settings_path,
-            exporter_name=exporter_name,
-            exporter_field_values=exporter_field_values,
-            empty_error=f"No medias loaded from dataset: {dataset_path}",
-            dry_run=dry_run,
-            source_description={"kind": "pickle", "dataset": dataset_path, "chunk_size": None},
-        )
-    except Exception as e:
-        cli_progress.emit_error(str(e))
-        sys.exit(1)
+    _autodetect(
+        _SourceSpec(kind="pickle", dataset_path=dataset_path),
+        settings_path=settings_path,
+        exporter_name=exporter_name,
+        exporter_field_values=exporter_field_values,
+        dry_run=dry_run,
+        stream_results=stream_results,
+        keep_negatives=keep_negatives,
+    )
 
 
 def autodetect_importer_main(
@@ -1159,26 +1239,19 @@ def autodetect_importer_main(
     exporter_field_values: dict[str, Any] | None = None,
     *,
     dry_run: bool = False,
+    stream_results: bool = False,
+    keep_negatives: bool = False,
 ) -> None:
     """CLI entry point: run autodetect with a named importer and output results."""
-    try:
-        _run_pipeline(
-            _load_importer_whole(importer_name, field_values) if not dry_run else iter(()),
-            settings_path=settings_path,
-            exporter_name=exporter_name,
-            exporter_field_values=exporter_field_values,
-            empty_error=f"No medias loaded by importer '{importer_name}'",
-            dry_run=dry_run,
-            source_description={
-                "kind": "importer",
-                "importer": importer_name,
-                "params": field_values,
-                "chunk_size": None,
-            },
-        )
-    except Exception as e:
-        cli_progress.emit_error(str(e))
-        sys.exit(1)
+    _autodetect(
+        _SourceSpec(kind="importer", importer_name=importer_name, field_values=field_values),
+        settings_path=settings_path,
+        exporter_name=exporter_name,
+        exporter_field_values=exporter_field_values,
+        dry_run=dry_run,
+        stream_results=stream_results,
+        keep_negatives=keep_negatives,
+    )
 
 
 def autodetect_main_chunked(
@@ -1193,27 +1266,15 @@ def autodetect_main_chunked(
     keep_negatives: bool = False,
 ) -> None:
     """CLI entry point: chunked autodetect on a pickle dataset."""
-    try:
-        _run_pipeline(
-            _load_pickle_chunked(dataset_path, chunk_size) if not dry_run else iter(()),
-            settings_path=settings_path,
-            exporter_name=exporter_name,
-            exporter_field_values=exporter_field_values,
-            empty_error=f"No medias loaded from dataset: {dataset_path}",
-            dry_run=dry_run,
-            stream_results=stream_results,
-            keep_negatives=keep_negatives,
-            source_description={
-                "kind": "pickle",
-                "dataset": dataset_path,
-                "chunk_size": chunk_size,
-                "stream_results": stream_results,
-                "keep_negatives": keep_negatives,
-            },
-        )
-    except Exception as e:
-        cli_progress.emit_error(str(e))
-        sys.exit(1)
+    _autodetect(
+        _SourceSpec(kind="pickle", dataset_path=dataset_path, chunk_size=chunk_size),
+        settings_path=settings_path,
+        exporter_name=exporter_name,
+        exporter_field_values=exporter_field_values,
+        dry_run=dry_run,
+        stream_results=stream_results,
+        keep_negatives=keep_negatives,
+    )
 
 
 def autodetect_importer_main_chunked(
@@ -1229,25 +1290,17 @@ def autodetect_importer_main_chunked(
     keep_negatives: bool = False,
 ) -> None:
     """CLI entry point: chunked autodetect with a named importer."""
-    try:
-        _run_pipeline(
-            _load_importer_chunked(importer_name, field_values, chunk_size) if not dry_run else iter(()),
-            settings_path=settings_path,
-            exporter_name=exporter_name,
-            exporter_field_values=exporter_field_values,
-            empty_error=f"No medias loaded by importer '{importer_name}'",
-            dry_run=dry_run,
-            stream_results=stream_results,
-            keep_negatives=keep_negatives,
-            source_description={
-                "kind": "importer",
-                "importer": importer_name,
-                "params": field_values,
-                "chunk_size": chunk_size,
-                "stream_results": stream_results,
-                "keep_negatives": keep_negatives,
-            },
-        )
-    except Exception as e:
-        cli_progress.emit_error(str(e))
-        sys.exit(1)
+    _autodetect(
+        _SourceSpec(
+            kind="importer",
+            importer_name=importer_name,
+            field_values=field_values,
+            chunk_size=chunk_size,
+        ),
+        settings_path=settings_path,
+        exporter_name=exporter_name,
+        exporter_field_values=exporter_field_values,
+        dry_run=dry_run,
+        stream_results=stream_results,
+        keep_negatives=keep_negatives,
+    )

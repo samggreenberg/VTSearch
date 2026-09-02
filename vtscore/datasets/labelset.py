@@ -22,6 +22,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Iterator
 
+from vtscore.utils.hits import hit_custom_metadata
+
 
 @dataclass
 class LabeledElement:
@@ -39,10 +41,12 @@ class LabeledElement:
         filename: Original filename of the media file.
         category: Category or class label from the dataset structure.
         metadata: Arbitrary per-element metadata that round-trips through
-            serialisation.  Importers and external systems (e.g. Holder)
-            can attach extra key-value data here (such as ``contentID``,
-            ``mediaID``, ``media_url``).  ``None`` when no metadata is
-            present.
+            serialisation.  Importers and external systems can attach
+            extra key-value data here (such as an external ``contentID``
+            or a ``media_url``).  ``None`` when no metadata is
+            present.  Built from the media's ``custom_metadata`` through
+            :func:`vtscore.utils.hits.hit_custom_metadata`, so the
+            pre-computed-vector channel never lands in a persisted labelset.
         region_box: Normalised ``(x0, y0, x1, y1)`` box on the source
             image when the user drew a region as part of a yes-vote;
             ``None`` for image-level votes (the perpetual default for
@@ -462,7 +466,12 @@ def _clip_to_elements(
     right default.
     """
     origin = media.get("origin")
-    cm = media.get("custom_metadata") or None
+    # Sanitised, not read straight off the media: ``custom_metadata_map`` lets
+    # an importer nest a pre-computed vector in ``custom_metadata``, and this
+    # dict is persisted verbatim into the detector JSON.  A numpy array there
+    # is both a hard ``json.dump`` failure and exactly the vector persistence
+    # the no-persisted-vectors rule forbids.
+    cm = hit_custom_metadata(media) or None
     if expand_dupes and isinstance(origin, dict) and origin.get("importer") == "dupe_set":
         members = origin.get("members", [])
         if members:

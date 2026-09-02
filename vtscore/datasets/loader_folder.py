@@ -20,9 +20,8 @@ from contextlib import closing
 from pathlib import Path
 from typing import Any, Callable, Generator, Iterator, Optional
 
-from vtscore.datasets.loader import (
-    ProgressCallback,
-    _default_progress,
+from vtscore.concurrency.progress import ProgressCallback, resolve_progress_callback
+from vtscore.datasets.loader_common import (
     _get_embedding_value,
     _get_md5_value,
     _pop_md5_key,
@@ -518,7 +517,7 @@ _PARALLEL_MIN_FILES = 64
 
 
 def _folder_ingest_workers() -> int:
-    """Worker count for the parallel per-file build (mirrors near_dupes/recaller)."""
+    """Worker count for the parallel per-file build (mirrors near_dupes)."""
     return min(8, os.cpu_count() or 4)
 
 
@@ -696,7 +695,7 @@ def load_dataset_from_folder(
             multiple files in the folder.
     """
     if on_progress is None:
-        on_progress = _default_progress()
+        on_progress = resolve_progress_callback()
 
     on_progress("loading", "Scanning media files...", 0, 0)
 
@@ -804,7 +803,7 @@ def load_dataset_from_folder_chunked(
             has a bare-basename key that would silently fan out.
     """
     if on_progress is None:
-        on_progress = _default_progress()
+        on_progress = resolve_progress_callback()
 
     on_progress("loading", "Scanning media files...", 0, 0)
 

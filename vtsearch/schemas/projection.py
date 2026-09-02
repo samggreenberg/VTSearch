@@ -80,6 +80,17 @@ class ProjectionMetaSchema(Schema):
             ),
         },
     )
+    eta_seconds = fields.Float(
+        load_default=None,
+        metadata={
+            "description": (
+                "Estimated seconds remaining for the whole build, smoothed and "
+                "snapped to a coarse ladder so the displayed figure does not "
+                "twitch. ``null`` until the build has run long enough to "
+                "extrapolate from."
+            ),
+        },
+    )
     error = fields.String(load_default=None)
 
 

@@ -17,26 +17,14 @@ full importer - this is much faster when only a few medias are missing.
 from __future__ import annotations
 
 import json
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
+from vtscore.concurrency.progress import ProgressCallback, resolve_progress_callback
 from vtscore.state import next_media_id
 from vtscore.embedding.media_vectors import init_embeddings
 from vtscore.embedding.normalize import l2_normalize
 from vtscore.state.core import _state_lock
 from vtscore.utils.hashing import content_md5
-
-ProgressCallback = Callable[[str, str, int, int], None]
-
-
-def _default_progress() -> ProgressCallback:
-    from vtscore.concurrency.progress import get_thread_progress
-
-    cb = get_thread_progress()
-    if cb is not None:
-        return cb
-    from vtscore.concurrency.progress import update_progress
-
-    return update_progress
 
 
 def _group_by_origin(
@@ -535,7 +523,7 @@ def ingest_missing_medias(
         The number of medias successfully ingested.
     """
     if on_progress is None:
-        on_progress = _default_progress()
+        on_progress = resolve_progress_callback()
 
     groups = _group_by_origin(missing_entries)
     if not groups:

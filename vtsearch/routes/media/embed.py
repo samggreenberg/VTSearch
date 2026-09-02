@@ -35,6 +35,7 @@ from flask_smorest import Blueprint
 from vtscore.config import DATA_DIR
 from vtscore.media import all_embedders, get_by_extension, get_embedder
 from vtscore.media.embedder import media_from_path
+from vtsearch.errors import error_response
 from vtsearch.routes._shared import get_json_or_400
 
 embed_bp = Blueprint(
@@ -51,10 +52,7 @@ logger = logging.getLogger(__name__)
 
 def _unknown_embedder_response(name: str):
     available = sorted(e.name for e in all_embedders())
-    return (
-        jsonify({"error": f"Unknown embedder '{name}'. Available: {available}"}),
-        404,
-    )
+    return error_response(f"Unknown embedder '{name}'. Available: {available}", 404, available=available)
 
 
 def _vector_response(vec, embedder):
@@ -98,7 +96,7 @@ def _embed_text_json():
 
     name = str(data.get("embedder") or "").strip()
     if not name:
-        return jsonify({"error": "embedder is required"}), 400
+        return error_response("embedder is required", 400)
 
     try:
         embedder = get_embedder(name)
@@ -107,28 +105,18 @@ def _embed_text_json():
 
     text = data.get("text")
     if not isinstance(text, str) or not text.strip():
-        return (
-            jsonify(
-                {
-                    "error": (
-                        "text is required for JSON input. "
-                        "To embed a media file instead, send a multipart/form-data "
-                        "request with a 'file' field."
-                    )
-                }
-            ),
+        return error_response(
+            "text is required for JSON input. "
+            "To embed a media file instead, send a multipart/form-data "
+            "request with a 'file' field.",
             400,
         )
 
     if not embedder.supports_text:
-        return (
-            jsonify(
-                {
-                    "error": f"Embedder '{embedder.name}' does not support text input.",
-                    "supports_text": False,
-                }
-            ),
+        return error_response(
+            f"Embedder '{embedder.name}' does not support text input.",
             400,
+            supports_text=False,
         )
 
     try:
@@ -136,10 +124,10 @@ def _embed_text_json():
         vec = embedder.embed_text(text)
     except Exception as exc:
         logger.exception("embed text failed for '%s'", name)
-        return jsonify({"error": f"Embedding failed: {exc}"}), 500
+        return error_response(f"Embedding failed: {exc}", 500)
 
     if vec is None:
-        return jsonify({"error": f"Embedder '{embedder.name}' returned no vector for the text"}), 500
+        return error_response(f"Embedder '{embedder.name}' returned no vector for the text", 500)
 
     return _vector_response(vec, embedder)
 
@@ -147,7 +135,7 @@ def _embed_text_json():
 def _embed_media_upload():
     name = str(request.form.get("embedder") or "").strip()
     if not name:
-        return jsonify({"error": "embedder is required"}), 400
+        return error_response("embedder is required", 400)
 
     try:
         embedder = get_embedder(name)
@@ -156,23 +144,17 @@ def _embed_media_upload():
 
     file = request.files.get("file")
     if file is None or not file.filename:
-        return jsonify({"error": "file is required"}), 400
+        return error_response("file is required", 400)
 
     suffix = Path(file.filename).suffix
     detected = get_by_extension(suffix.lower()) if suffix else None
     if detected is not None and detected.type_id != embedder.media_type_id:
-        return (
-            jsonify(
-                {
-                    "error": (
-                        f"Embedder '{embedder.name}' expects {embedder.media_type_id} files, "
-                        f"but the uploaded file looks like {detected.type_id} (extension '{suffix}')."
-                    ),
-                    "expected_media_type": embedder.media_type_id,
-                    "detected_media_type": detected.type_id,
-                }
-            ),
+        return error_response(
+            f"Embedder '{embedder.name}' expects {embedder.media_type_id} files, "
+            f"but the uploaded file looks like {detected.type_id} (extension '{suffix}').",
             400,
+            expected_media_type=embedder.media_type_id,
+            detected_media_type=detected.type_id,
         )
 
     DATA_DIR.mkdir(exist_ok=True)
@@ -184,20 +166,13 @@ def _embed_media_upload():
             vec = embedder.embed_media(media_from_path(temp_path))
         except Exception as exc:
             logger.exception("embed media failed for '%s'", name)
-            return jsonify({"error": f"Embedding failed: {exc}"}), 500
+            return error_response(f"Embedding failed: {exc}", 500)
 
         if vec is None:
-            return (
-                jsonify(
-                    {
-                        "error": (
-                            f"Embedder '{embedder.name}' (media_type={embedder.media_type_id}) "
-                            f"could not embed the uploaded file."
-                        ),
-                        "media_type": embedder.media_type_id,
-                    }
-                ),
+            return error_response(
+                f"Embedder '{embedder.name}' (media_type={embedder.media_type_id}) could not embed the uploaded file.",
                 400,
+                media_type=embedder.media_type_id,
             )
         return _vector_response(vec, embedder)
     finally:

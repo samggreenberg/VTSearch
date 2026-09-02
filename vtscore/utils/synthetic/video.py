@@ -10,11 +10,11 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Optional
 
 import numpy as np
 
-ProgressCallback = Callable[[str, str, int, int], None]
+from vtscore.concurrency.progress import ProgressCallback
 
 CANVAS_SIZE = 224
 FPS = 12

@@ -635,3 +635,101 @@ class TestPhaseProgress:
         job.update_progress(1, 2, "arranging items")
         job.set_phase(2, 3)
         assert job.message == "arranging items"
+
+
+class TestTrackerBackedProgress:
+    """``AsyncJob`` state lives in one :class:`ProgressTracker`, not a copy of it.
+
+    The point of the delegation is that a job stops being a second, poorer
+    implementation of the progress model: whatever the tracker computes for a
+    dataset load (whole-job ``overall``, a smoothed ETA, push subscriptions)
+    a job gets for free, and there is exactly one cancel flag to observe.
+    """
+
+    def test_attribute_writes_land_in_the_tracker_snapshot(self):
+        """The legacy attribute API is a view of the tracker, not a parallel store."""
+        job = AsyncJob(job_id="j1")
+        job.update_progress(3, 10, "training")
+
+        snap = job.progress.get()
+        assert (snap["current"], snap["total"], snap["message"]) == (3, 10, "training")
+
+        # ...and a bare attribute write (the route's ``job.total = n`` seed)
+        # publishes through the tracker too, leaving its neighbours alone.
+        job.total = 20
+        snap = job.progress.get()
+        assert (snap["current"], snap["total"], snap["message"]) == (3, 20, "training")
+
+    def test_phase_structure_yields_a_whole_job_overall_fraction(self):
+        """``overall``/``overall_step_end`` come from the tracker, not the poller.
+
+        Every consumer that renders a whole-job bar used to re-derive this pair
+        from ``step``/``total_steps``/``current``/``total``; now it is computed
+        once, in the place that also owns the step weights.
+        """
+        job = AsyncJob(job_id="j1")
+        job.set_phase(2, 4, "building pyramid")
+        job.update_progress(1, 2, "building pyramid")
+
+        snap = job.progress.get()
+        # Step 2 of 4, half way through it: (1 + 0.5) / 4.
+        assert snap["overall"] == pytest.approx(0.375)
+        assert snap["overall_step_end"] == pytest.approx(0.5)
+
+    def test_overall_is_none_for_a_single_phase_job(self):
+        job = AsyncJob(job_id="j1")
+        job.update_progress(1, 2, "training")
+        snap = job.progress.get()
+        assert snap["overall"] is None
+        assert snap["overall_step_end"] is None
+
+    def test_step_weights_reshape_the_overall_fraction(self):
+        """A job can pace its bar by phase cost — a tracker feature, now reachable."""
+        job = AsyncJob(job_id="j1")
+        job.progress.set_step_weights([1.0, 9.0])
+        job.set_phase(2, 2, "the expensive half")
+
+        # Step 1 was a tenth of the work, so entering step 2 banks 0.1 — not
+        # the 0.5 an equal-weight split would claim.
+        assert job.progress.get()["overall"] == pytest.approx(0.1)
+
+    def test_subscribers_are_pushed_every_job_update(self):
+        """``subscribe()`` is what a push channel would attach to."""
+        seen: list[tuple[int, int]] = []
+        job = AsyncJob(job_id="j1")
+        job.progress.subscribe(lambda snap: seen.append((snap["current"], snap["total"])))
+
+        job.update_progress(1, 3)
+        job.update_progress(2, 3)
+
+        assert seen == [(1, 3), (2, 3)]
+
+    def test_one_cancel_flag_serves_every_cancellation_entry_point(self):
+        """The job's event *is* the tracker's, so no two flags can disagree."""
+        job = AsyncJob(job_id="j1")
+        assert job.cancel_event is job.progress.cancel_event
+
+        job.cancel()
+        assert job.is_cancelled
+        assert job.progress.is_cancelled
+        with pytest.raises(CancelledError):
+            job.progress.check_cancelled()
+        with bind_job_cancellation(job), pytest.raises(CancelledError):
+            check_job_cancelled()
+
+    def test_cancelling_through_the_tracker_stops_a_running_job(self):
+        """Cancel reached via ``job.progress`` unwinds the runner exactly as ``job.cancel()`` does."""
+        mgr = JobManager("tracker-cancel")
+        started = threading.Event()
+
+        def _target(job):
+            started.set()
+            while True:
+                check_job_cancelled()
+                time.sleep(0.01)
+
+        job = mgr.start("sig", _target)
+        assert started.wait(timeout=5)
+        job.progress.cancel()
+        assert job.done_event.wait(timeout=5)
+        assert job.status == "cancelled"

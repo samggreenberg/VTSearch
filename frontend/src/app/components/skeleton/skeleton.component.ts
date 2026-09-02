@@ -12,13 +12,12 @@ import { NgStyle } from '@angular/common';
 export class SkeletonComponent {
   readonly width = input('100%');
   readonly height = input('12px');
-  readonly borderRadius = input('var(--radius-sm)');
 
   get boxStyle(): Record<string, string> {
     return {
       width: this.width(),
       height: this.height(),
-      'border-radius': this.borderRadius(),
+      'border-radius': 'var(--radius-sm)',
     };
   }
 }

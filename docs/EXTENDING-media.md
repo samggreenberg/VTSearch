@@ -60,6 +60,13 @@ Media types define how VTSearch handles a particular kind of content: how
 to serve clips over HTTP, what file extensions to scan for, what demo
 datasets are available, and how to load media-specific fields from files.
 
+**Library contract:**
+[`vtscore/docs/extending/media-types.md`](../vtscore/docs/extending/media-types.md)
+states the same contract from the library side, and is the guide to follow
+when shipping a media type as a separate distribution rather than adding one
+to this repo. This section is the in-repo path: the same contract plus the
+app-tier wiring.
+
 ### File structure
 
 ```
@@ -291,6 +298,13 @@ def pickle_extra_fields(self) -> list[str]:
 Media embedders produce fixed-size vector embeddings from media files and
 text queries. Each embedder is associated with exactly one media type but a
 media type may have multiple embedders.
+
+**Library contract:**
+[`vtscore/docs/extending/embedders.md`](../vtscore/docs/extending/embedders.md)
+states the same contract from the library side, and is the guide to follow
+when shipping an embedder as a separate distribution rather than adding one
+to this repo. This section is the in-repo path: the same contract plus the
+app-tier wiring.
 
 ### File structure
 
@@ -629,7 +643,7 @@ def supports_text(self) -> bool:
 | Flag | Default | When to override |
 |---|---|---|
 | `supports_text: bool` | **True** | Return `False` for vision-only or patch-based encoders with no text tower (DINOv2/v3, EUPE, SIFT/VLAD, FaceNet, BEATs, AST, Whisper-encoder). The default is `True` because most shipped embedders are cross-modal (CLIP, SigLIP, CLAP, E5, BGE); leaving it unset on a vision-only encoder wrongly advertises `POST /api/sort` text queries. |
-| `supports_patch_regions: bool` | False | Return `True` for image embedders that implement `_patch_forward(image) -> PatchEmbedOutput`. Loaders that see this flag run the patch pass after the standard CLS pass and store a hierarchical region set plus the raw patch grid. |
+| `supports_patch_regions: bool` | False | Return `True` for image embedders that implement `_patch_forward_impl(media) -> PatchEmbedOutput` (the hook behind the public `patch_forward`, which takes the `_embed_lock` for you). Loaders that see this flag run the patch pass after the standard CLS pass and store a hierarchical region set plus the raw patch grid. |
 | `supports_geometric_verification: bool` | False | Return `True` for structural embedders that produce local features for instance matching (SIFT/VLAD). The loader then asks for a `StructuralFeatures` per image and stores it as `media["local_features"]`, enabling the geometric re-rank and match-stat verification paths. Deliberately media-agnostic, so an audio fingerprint backend can reuse it. |
 | `license_notice: Optional[str]` | None | Return a short human-readable string when the upstream weights carry a usage restriction (e.g. FAIR Noncommercial). The frontend embedder picker surfaces this as a warning chip; the dataset-create flow surfaces it inline. |
 
@@ -642,6 +656,13 @@ All four are included in `MediaEmbedder.to_dict()` and exposed via `GET /api/emb
 Media clippers split a single media item into one or more items of the
 **same** type. Unlike processors which return metadata about media,
 clippers return **new media dicts** that can replace the original.
+
+**Library contract:**
+[`vtscore/docs/extending/clippers.md`](../vtscore/docs/extending/clippers.md)
+states the same contract from the library side, and is the guide to follow
+when shipping a clipper as a separate distribution rather than adding one to
+this repo. This section is the in-repo path: the same contract plus the
+app-tier wiring.
 
 ### Built-in clippers
 
@@ -769,7 +790,7 @@ overwrite the first.
 | `parameters`         | `list[dict[str, Any]]`   | Configurable parameters (key, label, type, default, description)  |
 | `creation_questions` | `list[dict[str, Any]]`   | Questions shown at creation time (defaults to `parameters`)       |
 | `with_params(p)`     | `(dict) -> MediaClipper` | Return a **new** clipper with overridden parameters; never mutate `self` |
-| `resolve_for_durations(d)` | `(list[float]) -> MediaClipper` | Per-dataset hook called once at load time                  |
+| `resolve_for_durations(d)` | `(list[float]) -> MediaClipper` | **Reserved - never called.** An override here is inert; use `resolve_for_media` |
 | `resolve_for_media(m)` | `(dict) -> MediaClipper` | Per-media hook; used by auto-selecting clippers (e.g. `video_auto`) |
 
 Parameter dicts support an optional `description` key alongside `label`
@@ -994,6 +1015,13 @@ document pages to images, video to audio). Converters are
 **auto-discovered** via `PluginRegistry` with the `CONVERTER` sentinel,
 just like other plugin families.
 
+**Library contract:**
+[`vtscore/docs/extending/converters.md`](../vtscore/docs/extending/converters.md)
+states the same contract from the library side, and is the guide to follow
+when shipping a converter as a separate distribution rather than adding one
+to this repo. This section is the in-repo path: the same contract plus the
+app-tier wiring.
+
 ### Built-in converters
 
 <!-- BEGIN GENERATED: plugins:converters -->
@@ -1178,7 +1206,7 @@ Media sources are **flat `.py` modules**, not sub-packages — the discovery sca
 (`discover_modules=True` in `vtscore/datasets/sources/__init__.py`) walks module
 files and picks up their `SOURCE` sentinel. A source built inside a subdirectory
 `__init__.py` is never seen. Every built-in source (`local_folder.py`,
-`http_archive.py`, `pullwrest.py`, …) follows this shape.
+`http_archive.py`, `server_files.py`, …) follows this shape.
 
 ### What to implement
 

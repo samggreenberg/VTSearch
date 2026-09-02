@@ -9,6 +9,8 @@ from typing import Any
 
 from vtscore.plugins import PluginBase, PluginField
 
+logger = logging.getLogger(__name__)
+
 
 def resolve_media_bytes(media: dict[str, Any]) -> bytes | None:
     """Read raw bytes from ``media_bytes`` or, failing that, ``media_path``.
@@ -261,7 +263,7 @@ class MediaConverter(PluginBase, ABC):
         # typo or a field that was renamed/removed out from under a caller —
         # which would otherwise read as an empty string forever. Surface it
         # (L9) instead of swallowing it silently.
-        logging.getLogger(__name__).warning(
+        logger.warning(
             "get_param(%r) on converter %r: no field declares that key; returning ''. "
             "A renamed or removed field will silently read as empty.",
             key,

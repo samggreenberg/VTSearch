@@ -4,10 +4,10 @@ Wraps each media type's :meth:`MediaType.load_demo_source` with pickle
 caching and origin-stamping.  Split out from
 :mod:`vtscore.datasets.loader` for navigability.
 
-To keep the existing test patches working
-(``patch("vtscore.datasets.loader.load_dataset_from_pickle", ...)`` and
-``patch("vtscore.datasets.loader.EMBEDDINGS_DIR", ...)``), the call sites
-go through the parent ``loader`` module so the lookup happens at call time.
+``EMBEDDINGS_DIR`` and ``load_dataset_from_pickle`` are bound here as
+module globals, so tests that need to redirect the demo pickle cache patch
+them on *this* module (``patch("vtscore.datasets.loader_demo.EMBEDDINGS_DIR",
+...)``) rather than reaching through the façade.
 """
 
 from __future__ import annotations
@@ -17,12 +17,12 @@ from typing import Any, Optional
 
 import numpy as np
 
+from vtscore.config import EMBEDDINGS_DIR
 from vtscore.embedding.stack import embedding_stack
 from vtscore.datasets.config import DEMO_DATASETS
-from vtscore.datasets.loader import (
-    ProgressCallback,
-    _default_progress,
-)
+from vtscore.concurrency.progress import ProgressCallback, resolve_progress_callback
+from vtscore.datasets.loader_common import _embeddings_dict_for_pickle
+from vtscore.datasets.loader_pickle import load_dataset_from_pickle
 
 
 def _effective_clipper(clipper_name: str, media_type_id: str) -> str:
@@ -109,8 +109,6 @@ def _try_load_cached(
     case the stale pickle (if any) has been unlinked and the caller should
     rebuild from scratch.
     """
-    from vtscore.datasets import loader as _loader
-
     if not pkl_file.exists():
         return False
 
@@ -147,7 +145,7 @@ def _try_load_cached(
     # entire load, which reads as "nothing is happening" right after the user
     # clicks Import.  ``load_dataset_from_pickle`` emits "Reading <file>…" and
     # then a per-item "Processing i of N items…" tick.
-    _loader.load_dataset_from_pickle(pkl_file, medias, on_progress=on_progress)
+    load_dataset_from_pickle(pkl_file, medias, on_progress=on_progress)
 
     # Check if any medias were actually loaded
     if len(medias) == 0:
@@ -213,7 +211,9 @@ def load_demo_dataset(
     named converter.  The resulting dataset contains the *target* type and
     is cached under a separate pickle key.
 
-    Progress throughout the operation is reported via :func:`update_progress`.
+    Progress throughout the operation is reported through the calling
+    thread's progress sink (see
+    :func:`~vtscore.concurrency.progress.resolve_progress_callback`).
 
     Args:
         dataset_name: Key into ``DEMO_DATASETS`` identifying which demo dataset
@@ -239,12 +239,8 @@ def load_demo_dataset(
         ValueError: If ``dataset_name`` is not in ``DEMO_DATASETS``, or if the
             media type does not support the requested demo source.
     """
-    # Look up via the parent module so `patch("vtscore.datasets.loader.X")`
-    # in tests continues to take effect at call time.
-    from vtscore.datasets import loader as _loader
-
     if on_progress is None:
-        on_progress = _default_progress()
+        on_progress = resolve_progress_callback()
 
     if dataset_name not in DEMO_DATASETS:
         raise ValueError(f"Unknown dataset: {dataset_name}")
@@ -256,7 +252,7 @@ def load_demo_dataset(
     cache_key = f"{dataset_name}__{converter_name}" if converter_name else dataset_name
 
     # Check if already embedded
-    pkl_file = _loader.EMBEDDINGS_DIR / f"{cache_key}.pkl"
+    pkl_file = EMBEDDINGS_DIR / f"{cache_key}.pkl"
     if _try_load_cached(
         pkl_file,
         dataset_name,
@@ -317,11 +313,13 @@ def load_demo_dataset(
     if converter_name:
         from vtscore.converters.runner import apply_converter_to_demo
 
+        # No embedder_name: conversion changes the media type, so the
+        # source-type embedder resolved above does not apply to the outputs.
+        # The framework embed stage picks the target type's embedder.
         apply_converter_to_demo(
             converter_name=converter_name,
             dataset_name=dataset_name,
             medias=medias,
-            embedder_name=embedder_name,
             on_progress=on_progress,
         )
 
@@ -396,12 +394,6 @@ def _write_demo_cache(
     file the external dir resolves by name, so its bytes must ride in the
     pickle (dataset pickles are the one place persisted bytes are allowed).
     """
-    from vtscore.datasets import loader as _loader
-
-    # Local import avoids a circular import at module load (loader imports
-    # loader_demo before this helper is defined).
-    from vtscore.datasets.loader import _embeddings_dict_for_pickle
-
     store_external = external_dir is not None and not converter_name and not clipper_applied
 
     def _pickle_media(media: dict[str, Any]) -> dict[str, Any]:
@@ -418,7 +410,7 @@ def _write_demo_cache(
     if store_external:
         pkl_data[mt.dir_key] = external_dir
 
-    _loader.EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
+    EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
 
     resolved_name = getattr(embedder, "name", "") if embedder is not None else ""
 

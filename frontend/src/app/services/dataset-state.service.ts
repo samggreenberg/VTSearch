@@ -1,14 +1,14 @@
-import { Injectable, OnDestroy, inject, signal } from '@angular/core';
-import { toObservable } from '@angular/core/rxjs-interop';
+import { DestroyRef, Injectable, Signal, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { Subject, forkJoin, of } from 'rxjs';
-import { catchError, switchMap, takeUntil } from 'rxjs/operators';
+import { catchError, switchMap } from 'rxjs/operators';
 import { DatasetRegistryEntry } from '../models/api.models';
 import { DetectorRegistryEntry } from '../generated/api-client/models/detector-registry-entry';
 import { DatasetsRegistryApiService } from './datasets-registry-api.service';
 import { DetectorsRegistryApiService } from './detectors-registry-api.service';
 
 @Injectable({ providedIn: 'root' })
-export class DatasetStateService implements OnDestroy {
+export class DatasetStateService {
   private datasetsRegistryApi = inject(DatasetsRegistryApiService);
   private detectorsRegistryApi = inject(DetectorsRegistryApiService);
 
@@ -33,7 +33,7 @@ export class DatasetStateService implements OnDestroy {
    *  registry; on a deep-link cold start, the guard may run before the
    *  initial fetch lands. */
   private readonly _loaded = signal(false);
-  private readonly destroy$ = new Subject<void>();
+  private readonly destroyRef = inject(DestroyRef);
   /** Emits whenever a refresh is requested; switchMap ensures only the latest response is used. */
   private readonly refreshTrigger$ = new Subject<void>();
 
@@ -57,7 +57,7 @@ export class DatasetStateService implements OnDestroy {
             detectors: this.detectorsRegistryApi.getRegistry(),
           }).pipe(catchError(() => of(null))),
         ),
-        takeUntil(this.destroy$),
+        takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
         next: (res) => {
@@ -76,11 +76,6 @@ export class DatasetStateService implements OnDestroy {
       });
   }
 
-  ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
-  }
-
   get datasets(): DatasetRegistryEntry[] {
     return this._datasets();
   }
@@ -88,6 +83,28 @@ export class DatasetStateService implements OnDestroy {
   get detectors(): DetectorRegistryEntry[] {
     return this._detectors();
   }
+
+  // By-id indexes over the two registries. Every consumer that wants "the
+  // entry for this id" used to scan the array with `find(d => d.id === x)`;
+  // the Maps give them one shared, memoised lookup instead. Reading them is
+  // signal-tracked exactly like reading `datasets` / `detectors`, so this is
+  // a readability change and never a reactivity one: a `computed` recomputes
+  // the Map only when the underlying registry array is replaced.
+  //
+  // The point is not the O(1) — the registries hold tens of entries, so the
+  // scan was never a cost. It is that `datasetById().get(id)` says what it
+  // means, and that `ActiveDatasetService` / `ActiveDetectorService` can be
+  // one-liners over a single index rather than each re-deriving a lookup.
+
+  /** Dataset registry keyed by id. */
+  readonly datasetById: Signal<ReadonlyMap<string, DatasetRegistryEntry>> = computed(
+    () => new Map(this._datasets().map((d) => [d.id, d])),
+  );
+
+  /** Detector registry keyed by id. */
+  readonly detectorById: Signal<ReadonlyMap<string, DetectorRegistryEntry>> = computed(
+    () => new Map(this._detectors().map((d) => [d.id, d])),
+  );
 
   get loading(): boolean {
     return this._loading();

@@ -17,7 +17,7 @@ non-security, one non-finite score sentinel, one wording for the
 
 | Module | Concern |
 |--------|---------|
-| `vtscore/utils/hits.py` | `build_media_hit` - the scored-media hit-dict shape |
+| `vtscore/utils/hits.py` | `build_media_hit` - the scored-media hit-dict shape; `hit_custom_metadata` - the one filter for served importer metadata |
 | `vtscore/utils/hashing.py` | Content fingerprints (`content_md5`, `content_sha1`, `new_md5`, `file_md5`) |
 | `vtscore/utils/scores.py` | Non-finite score sanitisation, so a `NaN` logit can't produce invalid JSON |
 | `vtscore/utils/optional_deps.py` | Actionable errors when an opt-out AGPL dependency isn't installed |
@@ -58,15 +58,24 @@ The returned dict always has these keys:
 Optional keys are added only when the corresponding field is present
 on *media*:
 
-| Key            | Added when…                              |
-|----------------|------------------------------------------|
-| `origin`       | `media["origin"] is not None`            |
-| `origin_name`  | `media["origin_name"]` is truthy         |
-| `md5`          | `media["md5"]` is truthy                 |
-| `clip_start`   | `media["clip_start"] is not None`        |
-| `clip_end`     | `media["clip_end"] is not None`          |
-| `clip_box`     | `media["clip_box"] is not None`          |
-| `clip_index`   | `media["clip_index"] is not None`        |
+| Key               | Added when…                                        |
+|-------------------|----------------------------------------------------|
+| `custom_metadata` | `media["custom_metadata"]` is a non-empty dict      |
+| `origin`          | `media["origin"] is not None`                      |
+| `origin_name`     | `media["origin_name"]` is truthy                   |
+| `md5`             | `media["md5"]` is truthy                           |
+| `clip_start`      | `media["clip_start"] is not None`                  |
+| `clip_end`        | `media["clip_end"] is not None`                    |
+| `clip_box`        | `media["clip_box"] is not None`                    |
+| `clip_index`      | `media["clip_index"] is not None`                  |
+
+`custom_metadata` is the importer-supplied metadata the media carries
+(asset ids, catalogue rows, whatever the source system attached), and
+it is what lets an exporter correlate a hit back to that system. It is
+a fresh dict, so mutating it cannot reach back into the loaded media,
+and the `embedding` key is stripped: that key is the pre-computed
+vector channel of `custom_metadata_map`, consumed at load time, and a
+numpy array has no business in an export.
 
 The `clip_*` keys are how sub-medias produced by a clipper round-trip
 through scoring. They are passed through unchanged so the consumer
@@ -84,6 +93,7 @@ media = {
     "origin": {"importer": "server_folder", "params": {"folder": "/srv/sounds"}},
     "origin_name": "/srv/sounds/talk_01.wav",
     "md5": "abc123",
+    "custom_metadata": {"asset_id": "XY-7"},
     "clip_start": 12.5,
     "clip_end": 17.5,
     "clip_index": 2,
@@ -96,6 +106,7 @@ hit = build_media_hit(cid=42, media=media, score=0.873, label="good")
 #     "filename": "talk_01.wav",
 #     "category": "podcast",
 #     "score": 0.873,
+#     "custom_metadata": {"asset_id": "XY-7"},
 #     "origin": {"importer": "server_folder", "params": {"folder": "/srv/sounds"}},
 #     "origin_name": "/srv/sounds/talk_01.wav",
 #     "md5": "abc123",
@@ -109,6 +120,33 @@ hit = build_media_hit(cid=42, media=media, score=0.873, label="good")
 Extra keyword arguments are merged in last, so callers can attach
 detector-specific or call-site-specific fields (`label="good"`,
 `detector="my-detector"`) without needing to extend this function.
+
+## `vtscore.utils.hits.hit_custom_metadata`
+
+```python
+def hit_custom_metadata(media: dict[str, Any]) -> dict[str, Any]:
+```
+
+The filter `build_media_hit` applies to `media["custom_metadata"]`, exposed
+on its own for every other surface that serves that dict to an outside
+caller. Returns a **fresh** dict - mutating it cannot reach back into the
+loaded media - carrying the importer's metadata minus the `embedding` key,
+and `{}` when the media has no `custom_metadata` (or a non-dict one).
+
+Reach for it anywhere a media's `custom_metadata` leaves the process: an
+export row, an API response, a payload handed to a plugin. Filtering the
+media's *top-level* keys is not enough, because `custom_metadata_map` lets
+an importer ship a pre-computed vector **nested inside** `custom_metadata`
+(see `vtscore.datasets.loader_folder.load_dataset_from_folder`). That vector
+is consumed at load time and is a numpy array, so left in it breaks
+`json.dumps` in the JSON exporters and the response encoder alike - and
+persisting it would be exactly the vector persistence the no-persisted-vectors
+rule forbids.
+
+In the app this backs `vtsearch.routes._shared.media_info_for_response`,
+which the detector and processor scoring routes use to strip a media before
+it is serialized, as well as `POST /api/medias/batch` and the label-export
+metadata blob.
 
 ## `vtscore.utils.hashing` - content fingerprints
 

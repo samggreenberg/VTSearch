@@ -119,9 +119,9 @@ def _enforce_auth():
             return None
     except Exception:
         logging.getLogger(__name__).exception("Login provider auth check failed; rejecting request (fail closed)")
-    from vtsearch.routes._shared import error_response
+    from vtsearch.errors import error_response
 
-    body, status = error_response("Authentication required", 401, code="auth_required")
+    body, status = error_response("Authentication required", 401, error_code="auth_required")
     body.status_code = status
     try:
         challenge = provider.www_authenticate()

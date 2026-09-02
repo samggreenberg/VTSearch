@@ -19,7 +19,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-import app as app_module  # noqa: F401  (ensures routes are registered)
+import app as app_module
 from vtsearch.routes.detectors import find as find_mod
 
 DIM = 4

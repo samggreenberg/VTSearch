@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { applyClipWindow, clearClipWindow, clipProgress } from './clip-window';
+import { applyClipWindow, armClipWindow, clearClipWindow, clipProgress, enforceClipWindow } from './clip-window';
 import type { MediaBatchResponse } from '../generated/api-client/models/media-batch-response';
 
 /**
@@ -160,5 +160,98 @@ describe('clipProgress', () => {
     const el = audioWithDuration(100);
     el.currentTime = 40;
     expect(clipProgress(el, () => media({ clip_start: 40, clip_end: 40 }))).toBeNull();
+  });
+});
+
+/**
+ * Unit coverage for the template-bound half used by the full center-panel
+ * players. jsdom's HTMLMediaElement never seeks or fires real media events, so
+ * these drive `currentTime` / `paused` directly and assert on the seek the
+ * helpers perform — the *playback* behaviour is verified in real chromium.
+ */
+describe('armClipWindow', () => {
+  function el(currentTime: number): HTMLMediaElement {
+    const audio = document.createElement('audio');
+    audio.currentTime = currentTime;
+    return audio;
+  }
+
+  it('seeks into the window and returns bounds when outside it', () => {
+    const audio = el(0);
+    expect(armClipWindow(audio, { clip_start: 40, clip_end: 50 })).toEqual({ start: 40, end: 50 });
+    expect(audio.currentTime).toBe(40);
+  });
+
+  it('seeks when playback has run past the window end', () => {
+    const audio = el(55);
+    armClipWindow(audio, { clip_start: 40, clip_end: 50 });
+    expect(audio.currentTime).toBe(40);
+  });
+
+  it('does NOT yank a clip already looping inside its window', () => {
+    // The behaviour that rules out reusing applyClipWindow, which seeks
+    // unconditionally: re-arming on metadata enrichment must not restart audio.
+    const audio = el(45);
+    armClipWindow(audio, { clip_start: 40, clip_end: 50 });
+    expect(audio.currentTime).toBe(45);
+  });
+
+  it('leaves el.loop alone — these players drive looping themselves', () => {
+    const audio = el(0);
+    audio.loop = true;
+    armClipWindow(audio, { clip_start: 40, clip_end: 50 });
+    expect(audio.loop).toBe(true);
+  });
+
+  it('returns null and seeks nowhere for an unwindowed media', () => {
+    const audio = el(12);
+    expect(armClipWindow(audio, { clip_start: null, clip_end: null })).toBeNull();
+    expect(audio.currentTime).toBe(12);
+  });
+
+  it('seeks but does not arm looping for a half-open window', () => {
+    const audio = el(0);
+    expect(armClipWindow(audio, { clip_start: 40 })).toBeNull();
+    expect(audio.currentTime).toBe(40);
+  });
+});
+
+describe('enforceClipWindow', () => {
+  function playing(currentTime: number): HTMLMediaElement {
+    const audio = document.createElement('audio');
+    audio.currentTime = currentTime;
+    Object.defineProperty(audio, 'paused', { value: false, configurable: true });
+    return audio;
+  }
+
+  it('loops back to the window start once playback reaches the end', () => {
+    const audio = playing(50);
+    enforceClipWindow(audio, { start: 40, end: 50 });
+    expect(audio.currentTime).toBe(40);
+  });
+
+  it('loops back when playback falls before the window start', () => {
+    const audio = playing(10);
+    enforceClipWindow(audio, { start: 40, end: 50 });
+    expect(audio.currentTime).toBe(40);
+  });
+
+  it('leaves playback inside the window untouched', () => {
+    const audio = playing(45);
+    enforceClipWindow(audio, { start: 40, end: 50 });
+    expect(audio.currentTime).toBe(45);
+  });
+
+  it('is a no-op with no bounds', () => {
+    const audio = playing(99);
+    enforceClipWindow(audio, null);
+    expect(audio.currentTime).toBe(99);
+  });
+
+  it('does not seek a paused element scrubbed outside the window', () => {
+    const audio = document.createElement('audio');
+    audio.currentTime = 5;
+    enforceClipWindow(audio, { start: 40, end: 50 });
+    expect(audio.currentTime).toBe(5);
   });
 });

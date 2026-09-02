@@ -366,7 +366,7 @@ with resolve_file_context(origin, origin_name, filename) as path:
 
 | Function                                                             | Behaviour                                                          |
 |----------------------------------------------------------------------|--------------------------------------------------------------------|
-| `resolve_file_context(origin, origin_name, filename)` (line 195)     | **Context manager** - must wrap any code that reads the file. Some sources (PullWrest, http_archive cache misses) materialise files in a tempdir they own; the `ExitStack` keeps that tempdir alive until the `with` block exits. |
+| `resolve_file_context(origin, origin_name, filename)` (line 195)     | **Context manager** - must wrap any code that reads the file. Some sources (`http_archive` cache misses) materialise files in a tempdir they own; the `ExitStack` keeps that tempdir alive until the `with` block exits. |
 | `resolve_file_from_origin(origin, origin_name, filename)` (line 223) | One-shot convenience. Safe for `path.exists()` checks; unsafe for any call that may garbage-collect the source. |
 | `embed_file(file_path, media_type, embedder_name="")` (line 376)     | Pick the embedder for the media type (named, else first registered) and call `embedder.embed_media(media_from_path(...))`. |
 | `resolve_label_embeddings(labels, media_type, progress_callback=None)` (line 691) | Batch entry point. Returns `ResolvedLabels`.            |
@@ -472,6 +472,39 @@ active votes (replaced, flipped, or removed). Skipped entirely when
 `is_find_mode()` is True - find-mode votes are scoring hits on a
 different dataset and don't belong in the training set.
 
+### `label_sync.label_sync_write_lock`
+
+The lock that serialises every read → merge → write pass over a
+detector JSON file. It is public because the contract binds callers
+outside this module: **if you do your own RMW of a detector JSON, hold
+this lock across the whole pass**, or a concurrent sync merges against
+a stale base and one side's just-written entries are lost. (The write
+itself is atomic via `os.replace`, but atomicity doesn't serialise a
+read-modify-write.) Acquire it *before* `_state_lock` - every existing
+taker does, so that ordering is what keeps the pair cycle-free. The
+app's four detector-JSON route writers and
+`sync_labels_to_loaded_detector` are the in-tree takers.
+
+### `label_sync.merge_labelsets_across_datasets(existing_ls, current_ls, current_dataset_medias)`
+
+Merge a freshly-composed per-dataset labelset into the cross-dataset
+one already on disk, and the companion to the lock above: a writer that
+composes a labelset from the active dataset's votes wants this to
+reconcile it. Existing entries that resolve to a media in
+*current_dataset_medias* are dropped (they are re-emitted by
+`current_ls`, the authoritative record of what the user voted there);
+entries that resolve to nothing were accumulated under other datasets
+and are kept verbatim. Ownership is decided by the same origin-or-md5
+resolution `restore_labels_from_detector` uses, so an element that
+becomes a vote on load is one `current_ls` re-emits. Duplicate
+identities in the result are collapsed, first occurrence winning.
+*current_dataset_medias* must be the snapshot *current_ls* was composed
+from, so the two halves can't straddle a dataset switch.
+
+Both names are re-exported from
+[`vtscore.detectors.labelset_ops`](../../detectors/labelset_ops.py);
+prefer importing them from there with the rest of the surface.
+
 ### `label_restoration.restore_labels_from_detector(det_data)` (line 11)
 
 Take a detector-JSON dict, resolve every labelset element against the
@@ -528,28 +561,41 @@ in place, non-matching files are embedded, inserted with an
 obvious.
 
 - **`vtscore.concurrency.progress`** - long-running-operation
-  progress and cancellation (`ProgressTracker`, `dataset_progress`,
+  progress and cancellation (`ProgressTracker`, `loading_tasks`,
   `sort_progress`, etc.).
 - **`vtscore.detectors.labeling_progress`** - per-step model cache and
   stopping-condition metrics. Used by the labeling-progress UI to
   answer "should I keep voting?" without retraining.
 
-A single `threading.RLock` (`_progress_lock`) protects all module
-state: `_cache_inclusion` (rebuild trigger), `_cached_steps` (one entry
-per label-history step with `model` / `threshold` / `good_ids` /
-`bad_ids` / `stability` / `diversity`), `_cache_good_ids` /
-`_cache_bad_ids` (running label sets), `_cache_prev_predictions`
-(stability baseline), `_cache_coverage_atlas` (the per-step replay of
-coverage evidence), the monitored-pool tensors, and `_live_models`
-(models injected by `train_and_score` during sorting, keyed by
-`(frozenset(good), frozenset(bad))`).
+All cache state lives in `_ProgressCache` instances held in `_caches`, an
+LRU-bounded map keyed by `(dataset_id, detector_id)`. Each cache carries
+`inclusion` (rebuild trigger), `steps` (one entry per label-history step with
+`model` / `threshold` / `good_ids` / `bad_ids` / `stability` / `diversity`),
+`good_ids` / `bad_ids` (running label sets), `prev_predictions` (stability
+baseline), `coverage_atlas` (the per-step replay of coverage evidence),
+`status_snapshot` (the last full `/api/labeling-status` payload), and
+`live_models` (models injected by `train_and_score` during sorting, keyed by
+`(frozenset(good), frozenset(bad))`). The stability pool tensors sit beside
+them in `_monitored_pools`, keyed by `dataset_id` alone and shared by every
+cache over that dataset: the pool is a pure function of `clips_dict`, and its
+tensor is by far the largest thing the module holds, so sharing is what keeps
+several warm pairs from multiplying peak memory.
+
+A single `threading.RLock` (`_progress_lock`) protects both maps and every
+field inside them. Keying by the pair is a correctness requirement, not a
+convenience: the cache's inputs all resolve per-request from the
+`X-Dataset-Id` / `X-Detector-Id` headers, so a single shared slot replays one
+detector's history onto another's label sets and serves one detector's models
+as another's indicators (issue #2914). Every entry point therefore opens with
+`cache = _active_cache()` (or `_ensure_cache`, which returns one) — reaching
+cache state without going through the key is not possible.
 
 ### Public API
 
 | Function                                        | Behaviour                                                              |
 |-------------------------------------------------|------------------------------------------------------------------------|
-| `clear_progress_cache()`                        | Drop everything. Call when votes are cleared, medias change, etc.      |
-| `invalidate_progress_cache_from(media_id)`      | Truncate the cache to just before `media_id` first appeared (vote-flip case) |
+| `clear_progress_cache()`                        | Drop *every* cached pair. Call when votes are cleared, medias change, etc. |
+| `invalidate_progress_cache_from(media_id)`      | Truncate the active pair's cache to just before `media_id` first appeared (vote-flip case) |
 | `inject_live_model(good, bad, model, threshold)`| Register a model produced by `train_and_score` so the cache can reuse it |
 | `recreate_model_at_time(snap, history, t, inclusion)` | Return the model + threshold + good/bad ids for step `t`           |
 | `calculate_error_cost_over_time(...)`           | Per-step FPR/FNR-weighted cost on current votes                        |

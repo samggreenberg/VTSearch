@@ -227,23 +227,50 @@ describe('ContextPulldownComponent', () => {
       await createPulldown('dataset');
       dashSelection.setDashboardVisible(true);
       setRegistry([makeDataset('d1', 'Alpha'), makeDataset('d2', 'Beta')]);
-      const selectSpy = vi.spyOn(dashSelection, 'requestSelect');
       const switchSpy = vi.spyOn(contextSwitch, 'switchTo');
 
       component.pickRow(component.rows.find((r) => r.id === 'd2')!);
 
-      expect(selectSpy).toHaveBeenCalledWith('dataset', 'd2');
+      expect([...dashSelection.ids('dataset')]).toEqual(['d2']);
       expect(switchSpy).not.toHaveBeenCalled();
     });
 
     it('collapses a multi-selection to the "Multiple" label', async () => {
       await createPulldown('dataset');
       dashSelection.setDashboardVisible(true);
-      dashSelection.setDatasetIds(['d1', 'd2']);
+      dashSelection.selectOnly('dataset', ['d1', 'd2']);
       setRegistry([makeDataset('d1', 'Alpha'), makeDataset('d2', 'Beta')]);
 
       expect(component.rows.filter((r) => r.active).length).toBe(2);
       expect(component.activeName).toBe('Multiple');
+    });
+
+    it('repaints the trigger when the selection changes with no Dashboard mounted', async () => {
+      // The selection lives in the service, so the bar tracks it off its own
+      // reads. Nothing pushes into the pulldown here — no Dashboard exists in
+      // this TestBed — and the assertion is on rendered DOM, so a missing
+      // notification shows up as a stale label rather than a passing spec.
+      await createPulldown('dataset');
+      dashSelection.setDashboardVisible(true);
+      setRegistry([makeDataset('d1', 'Alpha'), makeDataset('d2', 'Beta')]);
+      const value = () =>
+        (fixture.nativeElement as HTMLElement).querySelector('.trigger-value')!.textContent!.trim();
+      expect(value()).toBe('Select a dataset');
+
+      dashSelection.toggle('dataset', 'd2', false);
+      await settleZoneless(fixture);
+      expect(value()).toBe('Beta');
+
+      dashSelection.toggle('dataset', 'd1', true);
+      await settleZoneless(fixture);
+      expect(value()).toBe('Multiple');
+
+      // Leaving the Dashboard falls back to the loaded context, and that
+      // switch has to repaint too.
+      activeContext.setIntent('d1', '');
+      dashSelection.setDashboardVisible(false);
+      await settleZoneless(fixture);
+      expect(value()).toBe('Alpha');
     });
   });
 
@@ -368,6 +395,24 @@ describe('ContextPulldownComponent', () => {
       TestBed.tick();
 
       expect(switchSpy).toHaveBeenCalledWith('d1', 'mNew');
+    });
+
+    it('selects a newly created detector on the Dashboard, even if already picked', async () => {
+      // On the Dashboard the new item is selected rather than loaded. The
+      // Dashboard's own registry auto-select may get there first, so this must
+      // not be the pick *ladder* — that would toggle the sole selection off.
+      await createPulldown('detector');
+      dashSelection.setDashboardVisible(true);
+      setRegistry([makeDataset('d1', 'DS')], [makeDetector('mNew', 'Fresh')]);
+      dashSelection.selectOnly('detector', ['mNew']);
+      const switchSpy = vi.spyOn(contextSwitch, 'switchTo').mockImplementation(() => {});
+
+      component.addNew();
+      newThingFlows.emitDetectorCreated('mNew');
+      TestBed.tick();
+
+      expect([...dashSelection.ids('detector')]).toEqual(['mNew']);
+      expect(switchSpy).not.toHaveBeenCalled();
     });
   });
 

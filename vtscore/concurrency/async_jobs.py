@@ -26,6 +26,13 @@ the training loop.
 Results from the most recent successful run are kept by *signature* so a
 follow-up request with an unchanged signature can short-circuit and return
 the previous result - the "re-sort without new votes is free" fast path.
+
+Progress and cancellation are **not** re-implemented here.  Every job owns a
+:class:`~vtscore.concurrency.progress.ProgressTracker` (``job.progress``), so
+a job's counts, phase structure, whole-job ``overall`` fraction, smoothed
+``eta_seconds`` and cancel flag are the same objects the dataset-load and
+sort/eval/find bars already use - and a poller that wants the whole set reads
+``job.progress.get()`` instead of assembling it field by field.
 """
 
 from __future__ import annotations
@@ -38,28 +45,44 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterator, Optional
 
-from vtscore.concurrency.progress import CancelledError
+from vtscore.concurrency.progress import (
+    PROGRESS_COMMON_EXTRAS,
+    CancelledError,
+    ProgressTracker,
+)
 
 
 @dataclass
 class AsyncJob:
-    """State container for a single background training job."""
+    """State container for a single background training job.
+
+    Progress is **not** re-implemented here: every progress field lives in the
+    job's own :class:`~vtscore.concurrency.progress.ProgressTracker`, reached
+    as :attr:`progress` and mirrored by the read/write properties below.  The
+    tracker is what supplies the parts a hand-rolled field set never gets:
+    a smoothed, coarsened ``eta_seconds``, the whole-job ``overall`` /
+    ``overall_step_end`` fractions (optionally weighted per step via
+    ``job.progress.set_step_weights``), and :meth:`~vtscore.concurrency.progress.ProgressTracker.subscribe`
+    for pushing snapshots instead of polling them.  Read the whole set at once
+    with ``job.progress.get()``.
+
+    The tracker also owns the job's cancellation flag, so a job has exactly
+    **one** cancel signal: :meth:`cancel`, :attr:`is_cancelled`,
+    :attr:`cancel_event`, :func:`check_job_cancelled` and
+    ``job.progress.check_cancelled()`` all observe the same
+    :class:`threading.Event`.
+    """
 
     job_id: str
     signature: Any = None
     status: str = "running"  # "pending" | "running" | "done" | "error" | "cancelled"
     result: Any = None
     error: str | None = None
-    current: int = 0
-    total: int = 0
-    message: str = ""
-    #: Optional multi-phase structure for jobs that walk a fixed sequence of
-    #: steps (see :meth:`set_phase`).  ``0`` means "single-phase job"; pollers
-    #: that render a whole-job bar skip the step decoration then.
-    step: int = 0
-    total_steps: int = 0
+    #: This job's progress state.  One tracker per job, so the ETA clock and
+    #: the monotonic ``overall`` clamp start fresh for every run rather than
+    #: inheriting a previous job's pace.
+    progress: ProgressTracker = field(default_factory=lambda: ProgressTracker(dict(PROGRESS_COMMON_EXTRAS)))
     started_at: float = 0.0
-    cancel_event: threading.Event = field(default_factory=threading.Event)
     done_event: threading.Event = field(default_factory=threading.Event)
     # Username of the request that spawned this job, captured at start()
     # time so the worker thread can resolve per-user settings correctly.
@@ -70,19 +93,93 @@ class AsyncJob:
     dataset_id: str = ""
     detector_id: str = ""
 
+    # ------------------------------------------------------------------ #
+    # Progress, delegated to the tracker
+    # ------------------------------------------------------------------ #
+    #
+    # These read/write properties keep the pre-tracker attribute API
+    # (``job.current``, ``job.total = n``, ...) working unchanged for the
+    # routes and job targets that use it, while the values themselves live in
+    # exactly one place.  A write publishes through the tracker, so it also
+    # recomputes the derived fields and fans the snapshot out to subscribers.
+
+    def _publish(
+        self,
+        *,
+        current: int | None = None,
+        total: int | None = None,
+        message: str | None = None,
+        step: int | None = None,
+        total_steps: int | None = None,
+    ) -> None:
+        """Publish a partial progress change through the tracker.
+
+        The tracker's :meth:`~vtscore.concurrency.progress.ProgressTracker.update`
+        takes the whole bar at once, so unspecified fields are carried over from
+        the current snapshot.  Like the pre-tracker fields this assumed, a job
+        has a single progress writer (its worker thread); the one exception is
+        a route seeding ``job.total`` right after :meth:`JobManager.start`,
+        which happens before the target's first report.
+        """
+        snap = self.progress.get()
+        self.progress.update(
+            self.status,
+            snap.get("message", "") if message is None else message,
+            snap.get("current", 0) if current is None else current,
+            snap.get("total", 0) if total is None else total,
+            step=snap.get("step") if step is None else step,
+            total_steps=snap.get("total_steps") if total_steps is None else total_steps,
+        )
+
+    @property
+    def current(self) -> int:
+        return int(self.progress.get().get("current") or 0)
+
+    @current.setter
+    def current(self, value: int) -> None:
+        self._publish(current=int(value))
+
+    @property
+    def total(self) -> int:
+        return int(self.progress.get().get("total") or 0)
+
+    @total.setter
+    def total(self, value: int) -> None:
+        self._publish(total=int(value))
+
+    @property
+    def message(self) -> str:
+        return self.progress.get().get("message") or ""
+
+    @message.setter
+    def message(self, value: str) -> None:
+        self._publish(message=value)
+
+    @property
+    def step(self) -> int:
+        """Which phase of :attr:`total_steps` is running; ``0`` = single-phase."""
+        return int(self.progress.get().get("step") or 0)
+
+    @property
+    def total_steps(self) -> int:
+        """How many coarse phases this job walks; ``0`` = single-phase."""
+        return int(self.progress.get().get("total_steps") or 0)
+
+    @property
+    def cancel_event(self) -> threading.Event:
+        """The job's cancellation flag - the tracker's own event, not a copy."""
+        return self.progress.cancel_event
+
     @property
     def is_cancelled(self) -> bool:
-        return self.cancel_event.is_set()
+        return self.progress.is_cancelled
 
     def cancel(self) -> None:
-        self.cancel_event.set()
+        self.progress.cancel()
 
     def update_progress(self, current: int, total: int, message: str = "") -> None:
         """Update progress counters atomically (single writer per job)."""
-        self.current = current
-        self.total = total
-        if message:
-            self.message = message
+        self._publish(current=current, total=total, message=message or None)
 
     def set_phase(self, step: int, total_steps: int, message: str = "") -> None:
         """Enter phase *step* of *total_steps*, resetting the within-phase counts.
@@ -91,14 +188,10 @@ class AsyncJob:
         tile → name-regions) calls this at each boundary so a poller can render
         **one** whole-job bar instead of three bars that each restart at zero.
         The within-phase ``current``/``total`` are zeroed because they belong to
-        the phase being left, not the one being entered.
+        the phase being left, not the one being entered; the tracker stitches
+        the two levels into the ``overall`` fraction and a whole-job ETA.
         """
-        self.step = step
-        self.total_steps = total_steps
-        self.current = 0
-        self.total = 0
-        if message:
-            self.message = message
+        self._publish(step=step, total_steps=total_steps, current=0, total=0, message=message or None)
 
 
 # ---------------------------------------------------------------------- #
@@ -114,6 +207,14 @@ class AsyncJob:
 # step).  When the job's ``cancel_event`` is set, the next poll raises
 # :class:`CancelledError`, which unwinds the training/eval stack and is
 # caught in :meth:`JobManager._run_inner` to mark the job ``cancelled``.
+#
+# That event is the job's :class:`~vtscore.concurrency.progress.ProgressTracker`
+# event, not a second flag beside it, so there is exactly one way to cancel a
+# job and one flag to observe it through: :meth:`AsyncJob.cancel` and
+# ``job.progress.cancel()`` are the same signal, and :func:`check_job_cancelled`
+# and ``job.progress.check_cancelled()`` both raise the same
+# :class:`CancelledError` off it.  Library code deep in a compute loop can poll
+# whichever it already has a handle on.
 #
 # The binding is thread-local and restored on scope exit, and every job
 # runs on its own fresh daemon thread, so no cancellation state leaks

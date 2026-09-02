@@ -9,6 +9,7 @@ a logic change, and it stays quiet for everything else.
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import sys
 from pathlib import Path
@@ -188,3 +189,49 @@ class TestResolutionFailures:
     def test_deleted_harness_file_is_an_error(self):
         with pytest.raises(gate.MirrorError, match="does not exist"):
             gate._check_harness_side(self._mirror(harness="vtscore/eval/no_such_file.py::thing"))
+
+
+class TestHarnessAnchorsAreSpecific:
+    """A mirror's harness side must name the code that does the mirroring.
+
+    ``_check_harness_side`` is a substring test on the file, so *any* name that
+    survives in the text satisfies it.  That makes a coarse anchor two kinds of
+    useless at once: the gate's failure message points the reconciler at the
+    whole enclosing function instead of at the reproduction, and the existence
+    check passes even when the reproduction itself has been deleted, because the
+    function around it is still there.
+
+    Both ``training.*_default`` mirrors used to name the thousand-line
+    ``simulate_voting_iterations`` for exactly that reason (#3403).  They now
+    name the small helper that resolves the defaults, so deleting a resolution
+    trips the gate.  Pin the property rather than the helper's current name.
+    """
+
+    #: Mirror id -> the app-side call its harness anchor must contain.
+    RESOLUTION_CALLS = {
+        "training.blend_schedule_default": "production_schedule_for",
+        "training.split_fraction_default": "production_split_for",
+    }
+
+    def _harness_function_source(self, mirror) -> str:
+        rel, _, symbol = mirror.harness.partition("::")
+        tree = ast.parse((gate.REPO_ROOT / rel).read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == symbol:
+                return ast.get_source_segment((gate.REPO_ROOT / rel).read_text(encoding="utf-8"), node) or ""
+        raise AssertionError(f"{symbol!r} is not a function in {rel}")
+
+    @pytest.mark.parametrize("mirror_id", sorted(RESOLUTION_CALLS))
+    def test_anchor_contains_the_resolution_it_claims_to_pin(self, mirror_id):
+        mirror = next(m for m in gate.MIRRORS if m.id == mirror_id)
+        source = self._harness_function_source(mirror)
+        assert self.RESOLUTION_CALLS[mirror_id] in source, (
+            f"{mirror_id} names {mirror.harness}, which no longer resolves the default it pins"
+        )
+
+    @pytest.mark.parametrize("mirror_id", sorted(RESOLUTION_CALLS))
+    def test_anchor_is_small_enough_to_read(self, mirror_id):
+        """The reconciler reads this function when the gate trips."""
+        mirror = next(m for m in gate.MIRRORS if m.id == mirror_id)
+        lines = self._harness_function_source(mirror).count("\n") + 1
+        assert lines < 120, f"{mirror_id} points at {lines} lines; a tripped gate should not need a tour"

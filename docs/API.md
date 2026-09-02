@@ -84,11 +84,32 @@ both for any dataset- or detector-scoped call.
 | `X-Dataset-Id` / `X-Detector-Id` | [Context headers](#context-headers-x-dataset-id--x-detector-id) selecting the active dataset / detector |
 | Async endpoints | Return immediately; subscribe to the `dataset` channel on `GET /api/events` (SSE) for progress |
 
-**Common error shape:**
+**Common error shape.** Every JSON error the API returns — from a route, from
+a global handler, or from schema validation — carries the same envelope
+(`vtsearch/errors.py`, documented in the OpenAPI spec as the `Error` schema):
 
 ```json
-{"error": "Human-readable message"}
+{
+  "code": 404,
+  "status": "Not Found",
+  "message": "Human-readable message",
+  "request_id": "ab12cd34ef56"
+}
 ```
+
+`code` is the numeric HTTP status and `status` its name. `request_id` is
+present on every error raised inside a request (it also comes back in the
+`X-Request-Id` header), so a user can quote it in a bug report and an
+operator can grep the structured logs for it.
+
+Three optional fields appear when they apply, plus any endpoint-specific
+extras (e.g. `available`, `missing_fields`, `dataset_id`):
+
+| Field | When |
+|-------|------|
+| `errors` | Schema validation failed; maps location → field → messages (see the 422 example in [file-browser.md](api/file-browser.md)) |
+| `detail` | 500s; the exception type and its first line, e.g. `"RuntimeError: embedder X not loaded"` |
+| `error_code` | A machine-readable slug where the client branches on the *kind* of failure: `auth_required`, `dataset_not_loaded`, `detector_not_loaded` |
 
 Status codes follow standard HTTP semantics: 200 OK, 201 Created, 204 No
 Content, 400 Bad Request, 404 Not Found, 409 Conflict, 500 Internal Server

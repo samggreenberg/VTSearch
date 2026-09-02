@@ -10,13 +10,8 @@ import gc
 from pathlib import Path
 from typing import Any, Callable, Iterator
 
+from vtscore.concurrency.progress import resolve_progress_callback
 from vtscore.datasets.importers.base import ImporterBase, PluginField
-
-
-def _get_progress():
-    from vtscore.concurrency.progress import update_progress
-
-    return update_progress
 
 
 def _load_clips_from_pickle(file_path: Path, thin: bool = False) -> dict[int, dict[str, Any]]:
@@ -223,7 +218,7 @@ class CombineDatasetsImporter(ImporterBase):
         """
         paths = _parse_dataset_paths(field_values.get("datasets", ""))
         keep_embedders = _parse_keep_embedders(field_values.get("keep_embedders"))
-        progress = _get_progress()
+        progress = resolve_progress_callback()
 
         all_clips: list[dict[str, Any]] = []
         seen_md5s: set[str] = set()
@@ -272,7 +267,7 @@ class CombineDatasetsImporter(ImporterBase):
         msg = f"Combined {len(medias)} medias from {len(paths)} datasets"
         if total_dupes:
             msg += f" ({total_dupes} duplicate(s) skipped)"
-        progress("idle", msg)
+        progress("idle", msg, 0, 0)
 
     def run_cli(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
         """CLI entry point -- *datasets* is a comma-separated path string."""
@@ -302,7 +297,7 @@ class CombineDatasetsImporter(ImporterBase):
             from vtscore.embedding.binding import derive_binding_from_names  # noqa: PLC0415
 
             _, kept_patch, kept_structural = derive_binding_from_names(keep_embedders)
-        progress = _get_progress()
+        progress = resolve_progress_callback()
         seen_md5s: set[str] = set()
         mtype_state: list[str | None] = [None]
 

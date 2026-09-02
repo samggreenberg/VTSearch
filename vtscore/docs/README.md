@@ -41,6 +41,7 @@ surface, worked examples, and gotchas.
 | `vtscore.labels` | Label importers + bidirectional labelset sources | [packages/labels.md](packages/labels.md) |
 | `vtscore.plugins` | `PluginRegistry`, sentinel-based discovery, entry-points | [packages/plugins.md](packages/plugins.md) |
 | `vtscore.state` | `DatasetContext`, `DetectorContext`, vote / click ops | [packages/state.md](packages/state.md) |
+| `vtscore.coverage` | Coverage Atlas: hierarchical partition, evidence channels, typicality | [packages/coverage.md](packages/coverage.md) |
 | `vtscore.sync` | `SyncSource[L,S]` generic ABC | [packages/sync.md](packages/sync.md) |
 | `vtscore.concurrency` | Async jobs, memory budget, long-running progress | [packages/concurrency.md](packages/concurrency.md) |
 | `vtscore.security` | Path / URL validation, allowlist pickle loader | [packages/security.md](packages/security.md) |

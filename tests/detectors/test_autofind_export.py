@@ -75,12 +75,12 @@ class TestAutofindExportOpenUrl:
         results are valuable on their own, so a misconfigured export must not
         sink the request - and must not be handed a shape it cannot read.
         """
-        settings.set_autofind_exporter("holder")
+        settings.set_autofind_exporter("portable_detector")
         status = _run_autofind_export(dict(_SAMPLE_RESULTS))
         assert status is not None
         assert status["success"] is False
         assert "cannot export find results" in status["error"]
-        assert "labelset" in status["error"]
+        assert "detector_bundles" in status["error"]
 
     def test_unusable_url_is_dropped_not_forwarded(self, isolated_settings):
         """The same scheme allowlist the export route applies — a plugin must

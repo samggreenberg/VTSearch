@@ -1,7 +1,11 @@
-"""Tests for the standardized JSON error envelope.
+"""Tests for the single JSON error envelope.
 
-The ``{error, detail, request_id}`` shape is consumed by the frontend
-``ErrorService`` / global error banner; keep this contract stable.
+Every API error -- from a ``flask_smorest.abort()`` inside a route, from a
+global ``@app.errorhandler``, or from a route helper returning an error
+tuple -- renders the same ``{code, status, message, request_id, ...}`` shape
+(see :mod:`vtsearch.errors`). It is consumed by the frontend interceptor /
+``apiErrorMessage`` helper and documented in the OpenAPI spec; keep this
+contract stable.
 """
 
 from __future__ import annotations
@@ -12,6 +16,78 @@ import json
 class TestErrorEnvelope:
     """4xx responses from inline error returns include ``request_id``."""
 
+    def test_helper_and_abort_agree_on_the_envelope_keys(self, client):
+        """The two ways a route can fail must produce the same shape.
+
+        This is the whole point of the unification: ``error_response`` (used
+        by the global handlers) and ``flask_smorest.abort`` (used by ~350
+        route sites) used to emit ``{error, detail, request_id}`` and
+        ``{code, status, message, errors}`` respectively, so the client had
+        to read both spellings.
+        """
+        # error_response path (get_json_or_400 on /api/embed).
+        helper = json.loads(client.post("/api/embed", content_type="application/json").data)
+        # abort(404, message=...) path (server-media thumbnail).
+        aborted = json.loads(client.get("/api/server-media-files/nope.wav/thumbnail").data)
+
+        for body in (helper, aborted):
+            assert set(body) >= {"code", "status", "message", "request_id"}
+            assert isinstance(body["code"], int)
+            assert isinstance(body["status"], str)
+        assert helper["code"] == 400
+        assert aborted["code"] == 404
+
+    def test_abort_message_survives_the_global_404_handler(self, client):
+        """``abort(404, message=...)`` bodies are no longer discarded.
+
+        The app registers a ``NotFound`` handler so unknown ``/api/`` paths
+        render JSON rather than werkzeug's HTML page. Flask resolves the most
+        specific exception class first, so that handler used to take *every*
+        404 away from flask-smorest and render the literal 'Not Found' --
+        silently dropping the message from ~85 ``abort(404, message=...)``
+        sites. It now delegates the rendering back to flask-smorest.
+        """
+        resp = client.get("/api/server-media-files/nope.wav/thumbnail")
+        assert resp.status_code == 404
+        body = json.loads(resp.data)
+        assert body["message"] == "File not found: nope.wav"
+        assert "request_id" in body
+
+    def test_abort_extra_kwargs_ride_along(self, client):
+        """Unreserved ``abort()`` kwargs become top-level fields.
+
+        flask-smorest's own handler reads only ``message``/``errors``/
+        ``headers`` and drops the rest; the ``**extra`` support the retired
+        hand-rolled envelope had is preserved by the ``VTSearchApi`` override.
+        """
+        # ``eval_train_and_score_result`` aborts with two extras, and its
+        # 404 is exactly the case the global ``NotFound`` handler used to
+        # flatten.
+        resp = client.get("/api/eval/train-and-score/result?job_id=no-such-job")
+        assert resp.status_code == 404
+        body = json.loads(resp.data)
+        assert body["message"] == "Job not found"
+        assert body["job_id"] == "no-such-job"
+        assert body["job_status"] == "missing"
+        # The envelope's own fields win: an extra never overwrites one.
+        assert body["status"] == "Not Found"
+        assert "request_id" in body
+
+    def test_webargs_internals_never_reach_the_body(self, client):
+        """A 422 must not try to serialize webargs's ``schema`` kwarg.
+
+        webargs attaches the live marshmallow ``Schema`` and the
+        ``ValidationError`` to ``exc.data`` alongside ``messages``; a
+        pass-through that copied every unreserved key would 500 the error
+        handler itself on ``Object of type ... is not JSON serializable``.
+        """
+        resp = client.post("/api/medias/1/vote", json={"target": 123})
+        assert resp.status_code == 422
+        body = json.loads(resp.data)
+        assert "schema" not in body
+        assert "exc" not in body
+        assert body["errors"]
+
     def test_invalid_json_body_carries_request_id(self, client):
         # ``/api/embed`` is still on the legacy ``get_json_or_400``
         # helper (the dual-mode multipart-or-JSON dispatcher doesn't fit
@@ -21,7 +97,7 @@ class TestErrorEnvelope:
         resp = client.post("/api/embed", content_type="application/json")
         assert resp.status_code == 400
         body = json.loads(resp.data)
-        assert body["error"] == "Invalid request body"
+        assert body["message"] == "Invalid request body"
         assert "request_id" in body and len(body["request_id"]) >= 8
         # The header echoes the same id so the client can correlate logs.
         assert resp.headers.get("X-Request-Id") == body["request_id"]
@@ -42,7 +118,7 @@ class TestErrorEnvelope:
         # Exercise the helper directly so plugin discovery and route
         # wiring don't muddy the contract.
         from app import app as flask_app
-        from vtsearch.routes._shared import error_response
+        from vtsearch.errors import error_response
 
         with flask_app.test_request_context("/api/anything"):
             from flask import g
@@ -55,7 +131,9 @@ class TestErrorEnvelope:
             )
             assert status == 400
             body = resp.get_json()
-            assert body["error"] == "Missing required field(s): ['name']"
+            assert body["code"] == 400
+            assert body["status"] == "Bad Request"
+            assert body["message"] == "Missing required field(s): ['name']"
             assert body["missing_fields"] == ["name"]
             assert body["request_id"] == "abc123"
 
@@ -63,19 +141,25 @@ class TestErrorEnvelope:
         # Background-thread error paths have no g.request_id; the helper
         # should still produce a valid JSON envelope.
         from app import app as flask_app
-        from vtsearch.routes._shared import error_response
+        from vtsearch.errors import error_response
 
         with flask_app.app_context():
             resp, status = error_response("Something broke", 500)
             assert status == 500
             body = resp.get_json()
-            assert body == {"error": "Something broke"}
+            assert body == {
+                "code": 500,
+                "status": "Internal Server Error",
+                "message": "Something broke",
+            }
 
     def test_unknown_api_path_returns_json_404(self, client):
         resp = client.get("/api/this-route-does-not-exist")
         assert resp.status_code == 404
         body = json.loads(resp.data)
-        assert "error" in body
+        # No route aborted, so there is no message to preserve; the envelope
+        # falls back to the status name rather than omitting the key.
+        assert body["message"] == "Not Found"
         assert "request_id" in body
 
     def test_non_api_404_is_not_json(self, client):
@@ -128,7 +212,7 @@ class TestUncaughtExceptionHandler:
         resp = client.get(path)
         assert resp.status_code == 500
         body = json.loads(resp.data)
-        assert body["error"] == "Internal server error"
+        assert body["message"] == "Internal server error"
         assert "RuntimeError" in body.get("detail", "")
         assert "request_id" in body
 

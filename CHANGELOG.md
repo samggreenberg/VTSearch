@@ -15,7 +15,60 @@ not list every commit. Use `git log` for the full history.
 
 ## Unreleased
 
+### Fixed
+
+- **The "arranging your items" wait now shows a remaining-time estimate.**
+  Preparing a subset map from Find results renders an ETA chip beside the
+  progress bar, but the projection build's status payload never carried an
+  estimate for it to show, so the chip was always blank. Background jobs are
+  now backed by the same progress tracker the dataset loads use, which derives
+  one from the rate the build is actually sustaining (rebased at each phase
+  boundary, published on a coarse sticky ladder so the figure doesn't twitch),
+  and the projection status payload passes it through as `eta_seconds`.
+
+### Added
+
+- **New demo dataset: Rico Icons -- screenshots with boxed, labelled icons.**
+  Four new image demos (`rico_icons_s/m/l/a`) built on the Rico UI-semantics
+  corpus: 66,261 Android screenshots whose annotations sit on the *elements*
+  rather than the screen. Each media carries the icon classes visible on it as
+  multi-label categories (32 curated semantics -- Search, Back arrow, Overflow
+  menu, Notification bell, ...) plus one ground-truth bounding box per icon
+  instance. This is the first demo in the tree that boxes something *inside* a
+  screenshot: every other born-digital source (Enrico, RICO App UIs) labels the
+  screen as a whole, and the only two boxed sources (Visual Genome, OpenLogo)
+  are natural photographs. Boxes are stored normalised, exactly like Visual
+  Genome's.
+
+  Unlike every other demo, the four size variants advertise **different**
+  download figures (~0.9 / 1.1 / 1.5 / 8.3 GB). The corpus's screenshots run to
+  ~7.7 GB across 67 shard folders, so the loader fetches the annotation manifest
+  first, slices it, and then pulls only the shard folders that slice actually
+  lands in -- an (S) load costs two folders, not sixty-seven. Re-loading, or
+  moving from (S) to (M), pays only for the shards it adds.
+
 ### Changed
+
+- **Your Dashboard selection now survives leaving the Dashboard.** Going to
+  Train and back used to drop the highlighted rows and blank the top bar to
+  "Select a dataset" -- even though the pair you had just opened was still
+  loaded -- because the selection lived on the Dashboard component and died
+  with it. It now lives in `DashboardSelectionService`, so the rows come back
+  highlighted and the top bar keeps naming them. The detector grid's
+  Drafts/AutoRun tab travels with the selection it scopes, so returning can no
+  longer leave a hidden AutoRun row feeding the section actions. (Issue #3445.)
+
+- **Switching between two loaded detectors no longer throws away the labeling
+  indicators' cached work.** The Smart / Stable per-step cache retrains one MLP
+  per label-history step, and it used to be a single slot stamped with whichever
+  `(dataset, detector)` pair last touched it -- so re-selecting a detector you
+  had already been labeling in dropped the other one's cache outright, and the
+  next `/api/labeling-status` poll rebuilt it from step zero. The cache is now
+  keyed by the pair, with the three most recent kept warm, so an A-to-B-and-back
+  switch costs nothing. The stability pool tensor -- the largest thing the cache
+  holds -- is keyed by dataset instead and shared across that dataset's
+  detectors, so keeping several pairs warm does not multiply memory. (Issue
+  #3390.)
 
 - **"Enrich descriptions" is now a per-model choice, and can no longer make
   your search worse.** The setting averages a typed query over several

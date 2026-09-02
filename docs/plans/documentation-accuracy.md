@@ -96,7 +96,7 @@ separately.
 - **docs/api/ — wrong or incomplete contracts.** `settings.md` documents the theme enum and default
   wrongly and omits roughly twenty real `PUT /api/settings` keys; `labeling.md` omits the resolved
   detector fields both `/api/inclusion` verbs return; `detectors.md`'s second create example omits
-  the required `media_type`; `io.md`'s exporter list omits `holder` and `portable_detector`;
+  the required `media_type`; `io.md`'s exporter list omits `portable_detector`;
   `datasets.md` shows load responses in a shape the routes do not return; `auth.md` omits the SPA
   deep-link routes. `API.md` undersells the error envelope (`{error, detail, request_id}`, plus the
   422 marshmallow shape).

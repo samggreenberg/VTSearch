@@ -142,9 +142,12 @@ arm_dir() { printf '%s/%s/%s' "$BASE" "$1" "$2"; }
 
 # --- science knobs -----------------------------------------------------------
 # The SHIPPED threshold path.  `docs/ML.md`: "Every trained threshold fuses the
-# haystack into the cut.  There is no setting for this."  The harness default is
-# the #2781-era unfused control, and the acquisition cut is taken off the FUSED
-# threshold, so leaving this alone would sweep an arm axis that never executes.
+# haystack into the cut.  There is no setting for this."  Named rather than left
+# unset: the acquisition cut is taken off the FUSED threshold, so this is the
+# premise of the arm axis rather than incidental, and the run's path is readable
+# here instead of from a harness default three modules away.  (That default was
+# the #2781-era unfused control until #3400; the pin is what kept this study off
+# it, and is also what keeps it right when submitted into an older worktree.)
 export CALIB_SAFE_THRESHOLDS=1
 # Every arm chains `noop.py`; the analysis is CROSS-ARM and CROSS-MODE and is
 # submitted once, dependent on every array.

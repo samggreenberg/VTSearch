@@ -40,6 +40,73 @@ export function applyClipWindow(
   };
 }
 
+/**
+ * The clip extents to hold playback inside, as {@link armClipWindow} resolves
+ * them.
+ */
+export interface ClipBounds {
+  start: number;
+  end: number;
+}
+
+/** The clip fields {@link armClipWindow} reads, common to `Media` and
+ *  `MediaBatchResponse`. */
+interface ClipExtents {
+  clip_start?: number | null;
+  clip_end?: number | null;
+}
+
+/**
+ * Seek `el` into its media's clip window and resolve the bounds to enforce as
+ * playback advances, returning `null` when there is nothing to enforce.
+ *
+ * This is the *template-bound* half of the clip story, for the full center-panel
+ * `<audio>` / `<video>` players: they bind `(loadedmetadata)` and `(timeupdate)`
+ * in their templates and call this from those handlers, pairing it with
+ * {@link enforceClipWindow}. {@link applyClipWindow} above is the imperative
+ * alternative for the hover previews, which own no template and so install
+ * `on*` properties on the element directly — the two must not be mixed on one
+ * element, since assigning `el.ontimeupdate` would sit alongside, not replace,
+ * a template's `(timeupdate)` binding.
+ *
+ * Two details are load-bearing and are why the players cannot simply call
+ * {@link applyClipWindow}: the seek happens *only when playback is outside the
+ * window*, so a clip already looping correctly is not yanked back to its start
+ * when metadata is re-delivered; and `el.loop` is left alone, because these
+ * players drive looping from their own controls.
+ *
+ * Safe to call both on `(loadedmetadata)` and on a later metadata-enrichment
+ * cycle: a windowed archive member first renders as a stub with no extents, and
+ * the batch response supplies them afterwards.
+ */
+export function armClipWindow(el: HTMLMediaElement, media: ClipExtents): ClipBounds | null {
+  const start = media.clip_start;
+  if (start == null) return null;
+  const end = media.clip_end;
+  if (el.currentTime < start || (end != null && el.currentTime >= end)) {
+    el.currentTime = start;
+  }
+  // A half-open window (a start but no end) is seeked into but not looped:
+  // there is no boundary to loop at, so playback runs to the file's end.
+  return end == null ? null : { start, end };
+}
+
+/**
+ * Hold playback inside `bounds`, looping back to the start once it leaves.
+ *
+ * Call from the element's `(timeupdate)` handler — which fires as playback
+ * advances and not at all while paused, so this replaces what would otherwise
+ * be a polling interval. A `null` bounds (no window, or a half-open one) is a
+ * no-op, as is a paused element: a user who has scrubbed outside the window
+ * while paused stays where they put the playhead until they press play.
+ */
+export function enforceClipWindow(el: HTMLMediaElement, bounds: ClipBounds | null): void {
+  if (!bounds || el.paused) return;
+  if (el.currentTime >= bounds.end || el.currentTime < bounds.start) {
+    el.currentTime = bounds.start;
+  }
+}
+
 /** Detach the clip-window handlers wired by {@link applyClipWindow}. */
 export function clearClipWindow(el: HTMLAudioElement): void {
   el.onloadedmetadata = null;

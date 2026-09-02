@@ -69,16 +69,24 @@ export CALIB_REPOOL_VARIANTS=""
 export CALIB_SCHEDULE_VARIANTS=""
 export CALIB_FOLD_COUNTS=""
 
-# PRODUCTION GEOMETRY ONLY.  The calibration study's default is
-# "max_patch,max_patch_pca_hac" because that study wanted the contrast -- but a
-# *study* default is not a *shipped* default.  Per vtscore/eval/patch_styles.py,
-# `max_patch` IS the production patch pipeline, while the HAC hybrids lost the
-# Max-Patch study at the operating point (PR #2749) and production no longer
-# carries the tree they delegate to; they survive only for an open calibration
-# follow-up.  Running them here would put non-production rows in a benchmark
-# whose whole purpose is "what does a current user get", and would double the
-# cost of every patch cell.
+# PRODUCTION GEOMETRY ONLY.  Per vtscore/eval/patch_styles.py, `max_patch` IS
+# the production patch pipeline, while the HAC hybrids lost the Max-Patch study
+# at the operating point (PR #2749) and production no longer carries the tree
+# they delegate to.  Running them here would put non-production rows in a
+# benchmark whose whole purpose is "what does a current user get", and would
+# double the cost of every patch cell.  (The calibration study's default WAS
+# "max_patch,max_patch_pca_hac" -- a *study* default, not a *shipped* one -- and
+# this pin is why that never reached the benchmark.  #3400 fixed the default
+# itself; the pin stays, because it is also what holds when this launcher
+# submits into an older worktree.)
 export CALIB_PATCH_STYLES="${CALIB_PATCH_STYLES:-max_patch}"
+
+# THE SHIPPED THRESHOLD PATH, for the same reason.  `docs/ML.md`: "Every trained
+# threshold fuses the haystack into the cut.  There is no setting for this."
+# The harness default was the #2781-era unfused control until #3400, so this
+# baseline WAS measuring a threshold no user can get -- the exact hazard the
+# geometry pin above was added for, one knob over.
+export CALIB_SAFE_THRESHOLDS="${CALIB_SAFE_THRESHOLDS:-1}"
 
 LOGS="$CALIB_EXP/logs"
 mkdir -p "$LOGS" "$CALIB_RESULTS/cells"
@@ -108,7 +116,7 @@ ENVX="$ENVX CALIB_REPOOL_VARIANTS= CALIB_SCHEDULE_VARIANTS= CALIB_FOLD_COUNTS="
 # Explicit, not via --export=ALL.  This one decides whether the run measures the
 # production geometry or silently adds a retired arm, so it must not depend on
 # the submitting shell's environment surviving into the job.
-ENVX="$ENVX CALIB_PATCH_STYLES=$CALIB_PATCH_STYLES"
+ENVX="$ENVX CALIB_PATCH_STYLES=$CALIB_PATCH_STYLES CALIB_SAFE_THRESHOLDS=$CALIB_SAFE_THRESHOLDS"
 
 # A submission is not a launch: --parsable returns an EMPTY id when the submit
 # filter refuses the job (#2897 lost both arms this way).

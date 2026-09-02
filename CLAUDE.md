@@ -261,6 +261,29 @@ This is not an absolute bar — a genuinely better contract can be worth it — 
 - **Say so where extension authors will see it:** an `[Unreleased]` entry in `vtscore/CHANGELOG.md`, plus the relevant guide under `docs/EXTENDING-plugins.md` / `vtscore/docs/extending/`.
 - **Raise it with the user before committing to it.** An extension-facing break is a decision to make on purpose, out loud.
 
+### "Dead code" in `vtscore/` is a claim you cannot verify by grepping
+
+Out-of-tree extensions import `vtscore` symbols this repository cannot see, so a
+repo-wide grep proves a symbol is unused *by us* — never that it is unused. Treat
+"no callers found" as a prompt to classify, not a licence to delete:
+
+- **Delete freely:** private (`_`-prefixed) symbols, `vtsearch/` app-tier internals,
+  frontend code, tests, and one-off scripts.
+- **Keep the name, retire the body:** anything exported from a `vtscore` package
+  `__init__`, documented under `vtscore/docs/`, a plugin ABC method, a registry or
+  `register_*` function, an entry-point-facing name, or a public module-level
+  constant. Collapse it to a thin delegation, or deprecate it with an
+  `[Unreleased]` note in `vtscore/CHANGELOG.md`.
+- **Public-but-undocumented is still public.** A name without a leading underscore
+  is importable even when it is absent from `__all__` and from the docs.
+
+A zero-registrant extension point is the shape of a *working* extension point, not
+a dead one: `register_*` hooks, ABC methods no shipped subclass overrides, and
+"backwards-compatible getter" helpers all look unused from inside this repo by
+design. Removing one is a deliberate library break — raise it with the user first,
+per the bullets above. (This rule was written after a full-codebase audit wrote up
+four documented `vtscore` surfaces as deletions on grep evidence alone.)
+
 ## Frontend Scope: Desktop Only
 
 VTSearch is a desktop web app. **Do not design, implement, or test for mobile or narrow viewports.** No responsive breakpoints, no touch-targeted controls, no mobile-only layouts, no concerns about portrait orientation. If a design discussion raises "what about mobile?", the answer is "we don't care." When evaluating a layout, assume a standard desktop viewport and skip mobile considerations entirely.
@@ -370,6 +393,7 @@ A flow can legitimately carry both: a nested view shows `← Back` at the top to
 - **Check eval/app sync**: `python scripts/check-eval-app-sync.py` (also a `./run-tests.sh` gate; re-pin with `--update` after reconciling the harness)
 - **Check for a stale tree**: `python scripts/check-phantom-base.py` (also the first `./run-tests.sh` gate; fails when the branch deletes files it never created, or carries none of what `dev` gained across two or more consecutive commits. Override a deliberate deletion with `VTSEARCH_ALLOW_DELETIONS=1`, a deliberate revert with `VTSEARCH_ALLOW_REVERTS=1`)
 - **Check documentation**: `python scripts/check-docs.py` (also a `./run-tests.sh` gate; validates relative links, `#anchors`, backticked repo paths, absolute-path leaks, `docs/plans/*.md` citations anywhere in the tree, and code fences. Pure invariants — nothing to re-pin. Fix the doc, or add an allowlist entry with a reason if the path is runtime-generated or a deliberately fictional example)
+- **Check extension docs**: `python scripts/check-extension-docs.py` (also a `./run-tests.sh` gate; proves the app-tier and library-tier extension guides still describe members that exist on the plugin ABCs, and that neither names a public wrapper as the override point. Pure invariants — nothing to re-pin. Fix the doc, or register a new contract section in `SECTIONS`)
 - **Regenerate doc inventories**: `python scripts/gen-docs-inventories.py` (fills the `<!-- BEGIN GENERATED: ... -->` regions in the docs from the live registries — embedders, plugin families, demo datasets; `--check` is a `./run-tests.sh` gate, so registry changes require rerunning this and committing the result)
 - **Install deps**: `bash scripts/install.sh` (auto-detects CPU vs GPU; pass `cpu`/`gpu` to force, or a `cuXYZ` tag to override the GPU wheel, e.g. `bash scripts/install.sh cu121`)
 - **Build frontend**: `cd frontend && npm install && npm run build:prod` (builds Angular app to `static/`)
@@ -380,7 +404,8 @@ A flow can legitimately carry both: a nested view shows `← Back` at the top to
 - **Format**: `ruff format .`
 - **Spell check**: `codespell --toml pyproject.toml`
 - **Dependency check**: `python -m deptry .`
-- **Dead code audit** (manual, pre-release): see `.vulture-whitelist.py` for the full invocation (60% confidence, with marshmallow/pydantic field directories excluded and pytest/Flask/dunder noise filtered). Run before each release; not a CI gate.
+- **Dead code audit** (manual, pre-release): `python scripts/vulture-audit.py` — the script owns the invocation (scan paths, excludes, ignore lists, confidence floor), so there is nothing to copy-paste. Scans every tier that defines or consumes first-party Python: `vtsearch/`, `app.py`, `tests/`, `vtscore/`, `tests_lib/`, `scripts/`. Run before each release; the **findings** are not a gate (see `docs/RELEASE.md` step 1 for the triage rules).
+- **Check the vulture whitelist**: `python scripts/vulture-audit.py --check-whitelist` (a `./run-tests.sh` lane; fails when an entry in `.vulture-whitelist.py` suppresses no finding). This is the half of vulture that *is* mechanically checkable — it keeps the whitelist from asserting things nothing can verify — and it means adding an entry is no longer free: whitelist what is genuinely reflective, delete what is genuinely dead.
 
 ## What `run-tests.sh` gates
 
@@ -403,6 +428,8 @@ Wrapping everything: a wall-clock cap (`VTSEARCH_TEST_TIMEOUT`, default **1800s 
 | Dockerfiles | `scripts/check-dockerfiles.py` | |
 | User-docs screenshot wiring | `scripts/screenshots/wiring-check.py` | Browser-free; the pixel-diff (`check.sh`) stays a manual chore. Also what makes the reshoot queue un-rottable. |
 | vtscore package docs | `scripts/check-vtscore-docs.py` | |
+| Extension docs | `scripts/check-extension-docs.py` | Holds `docs/EXTENDING-*.md` and `vtscore/docs/extending/` to the plugin ABCs they both document: every member named in a contract table must exist, and neither set may present a public wrapper as the override point when the class defines an `_impl` hook behind it. AST sweep, imports nothing. Register a new contract section in `SECTIONS` — an unregistered one fails the gate rather than going unchecked. |
+| Calibration script index | `scripts/check-calibration-index.py` | Every `.py`/`.sh` in `scripts/experiments/calibration/` is filed under exactly one study (or the shared layer) in that directory's `README.md`, and every file the index names exists. That directory is flat by decision (#3409), so the table *is* the navigation; unchecked, it decays back into 120 unclassified files. |
 | Slide decks | `slides/build.py --check` | Preflights every deck manifest: fragments exist, figures resolve. Marp only warns on a missing figure and exits 0, so a rotted deck is otherwise silent. |
 | Eval/app sync | `scripts/check-eval-app-sync.py` | Re-pin with `--update` **after** reconciling the harness. |
 
@@ -414,15 +441,16 @@ Wrapping everything: a wall-clock cap (`VTSEARCH_TEST_TIMEOUT`, default **1800s 
 |------|-----------------|------|-------|
 | Types | `pyright` (pinned via `PYRIGHT_PYTHON_FORCE_VERSION`) | Full run only | Scope is `pyrightconfig.json`. |
 | Known CVEs | `pip-audit` | Full run only | Audits the resolved venv, not the requirements files. `PIP_AUDIT_IGNORE` in the script lists advisories with no upstream fix; re-audit and remove an entry once a patched release exists. |
-| Frontend audit | `cd frontend && npm audit --omit=dev` | Full run, `core`, `frontend` | Prod deps only — dev-only advisories don't ship. |
+| Frontend audit | `cd frontend && npm audit` | Full run, `core`, `frontend` | Whole tree, dev deps included. |
+| Vulture whitelist | `scripts/vulture-audit.py --check-whitelist` | Full run only | Whitelist hygiene, **not** the dead-code audit: fails when an entry in `.vulture-whitelist.py` suppresses no finding. The findings themselves stay a manual pre-release chore, because a hit on a public `vtscore` name is not evidence of anything. Whole-repo scan, ~5s. |
 | Frontend unit tests | `cd frontend && npm run test:ci` | Full run or `frontend` **only** — deliberately off the fast `core` path | Headless Vitest. |
 | Python tests | `pytest tests/ tests_lib/ -n auto --dist loadgroup` | Every run except a `frontend`-only group | |
 
-**Group runs skip the whole-repo stage-3 gates** (pyright, pip-audit, and the frontend gates unless the group asks for them) so the edit/test loop stays in the seconds — the skip is announced in the output, and `VTSEARCH_FULL_GATES=1` forces the complete chain on a group run. Stage 1 runs on every invocation. This is a deliberate trade: the fast inner loop may miss a type error or CVE, which is why **a full `./run-tests.sh` remains mandatory before pushing** — with exactly one exception, `./run-tests.sh slides`, whose narrower scope is a proof rather than a gamble (see the Test Groups table) and which blocks itself the moment the diff stops being slides-only.
+**Group runs skip the whole-repo stage-3 gates** (pyright, pip-audit, the vulture whitelist check, and the frontend gates unless the group asks for them) so the edit/test loop stays in the seconds — the skip is announced in the output, and `VTSEARCH_FULL_GATES=1` forces the complete chain on a group run. Stage 1 runs on every invocation. This is a deliberate trade: the fast inner loop may miss a type error or CVE, which is why **a full `./run-tests.sh` remains mandatory before pushing** — with exactly one exception, `./run-tests.sh slides`, whose narrower scope is a proof rather than a gamble (see the Test Groups table) and which blocks itself the moment the diff stops being slides-only.
 
 ## Test Groups
 
-Tests are grouped by folder under `tests/` and `tests_lib/`. Each folder is a pytest marker; `./run-tests.sh <group>` runs all tests in `tests[_lib]/<group>/`. New tests inherit their group from the folder they're added to. Not every group lives in both trees — the "Tier" column below says which one has the folder; missing an app-tier folder for `projection` (or a lib-tier folder for `api` / `converters`) is by design, not a gap.
+Tests are grouped by folder under `tests/` and `tests_lib/`. Each folder is a pytest marker; `./run-tests.sh <group>` runs all tests in `tests[_lib]/<group>/`. New tests inherit their group from the folder they're added to. Not every group lives in both trees — the "Tier" column below says which one has the folder; missing an app-tier folder for `projection` / `downloads` / `gpu` (or a lib-tier folder for `api` / `converters`) is by design, not a gap.
 
 | Group | Tier | Description |
 |-------|------|-------------|
@@ -432,7 +460,7 @@ Tests are grouped by folder under `tests/` and `tests_lib/`. Each folder is a py
 | `datasets` | both | Dataset loading, splitting, dedup, parallel/chunked/thin loading, multi-dataset context |
 | `io` | both | Importers, exporters, label I/O, settings I/O, sync sources, PDF/NPZ import |
 | `detectors` | both | Detectors, embedders, clippers, eval, processors, training |
-| `downloads` | both | Demo dataset downloads (AG News, BBC, GTZAN, IMDB, image sources, UCSF, video, generic extract) |
+| `downloads` | lib only | Demo dataset downloads (AG News, BBC, GTZAN, IMDB, image sources, UCSF, video, generic extract) |
 | `integration` | both | End-to-end workflows, thread safety, async jobs |
 | `cli` | both | CLI autodetect, load sort window, progress bars |
 | `converters` | app only | Media converters (document, video, image) |
@@ -517,7 +545,9 @@ All mutable global state is reset automatically before each test via two autouse
   ```
 - If a test needs to read the settings file path (e.g. to verify persistence), use `isolated_settings` as a parameter: `def test_foo(self, isolated_settings): ...`
 
-`tests_lib/conftest.py` provides app-free, settings-free shared fixtures: `reset_contexts` (autouse, resets dataset/detector contexts, progress trackers, async jobs, label-sync, registries), `_allow_test_tmp_paths` (autouse, widens path validation for tmp dirs), `_stub_embedding_models` (session, stubs every embedder). It also installs a library-only `CoreConfig.from_settings()` builder so library code that calls it works without the app shim. `tests/helpers.py` and `tests_lib/helpers.py` (and likewise `tests/fixtures/medias.py` / `tests_lib/fixtures/medias.py`) are intentional duplicates so each tier is self-contained. **Import them tier-qualified** — `from tests.helpers import ...` inside `tests/`, `from tests_lib.helpers import ...` inside `tests_lib/` — never as a bare `from helpers import ...`. There is deliberately no `pythonpath` entry in `pyproject.toml`: putting both directories on `sys.path` made the bare name resolve to `tests/helpers.py` for *both* trees (pytest inserts `pythonpath` entries in reverse order), which made `tests_lib/helpers.py` dead code and let the copies drift. `tests/core/test_test_tier_helpers.py` gates both halves of this: the duplicated files must stay byte-identical, and no bare `helpers` import may reappear.
+`tests_lib/conftest.py` provides app-free, settings-free shared fixtures: `reset_contexts` (autouse, resets dataset/detector contexts, progress trackers, async jobs, label-sync, registries), `_allow_test_tmp_paths` (autouse, widens path validation for tmp dirs), `_stub_embedding_models` (session, stubs every embedder). It also installs a library-only `CoreConfig.from_settings()` builder so library code that calls it works without the app shim.
+
+**The machinery behind those fixtures is single-sourced in `tests_shared/`, not duplicated.** Both conftests import the fake embedders, the tmp-path widener, the embedder-stub fixture factory, `reset_shared_state()` (the whole library-tier half of the per-test reset), the group-marker hook and the end-of-run summary printer from that package; each conftest keeps only its tier-specific extras (the app tier's `client`, `isolated_settings` and autorun-processor reset; the library tier's Flask blocker, native-thread caps and `CoreConfig` builder). Add a new library-tier global's reset to `tests_shared/state_reset.py` so *both* suites get it — copying it into one conftest is exactly how the fake embedder and the detector-mtime cache reset drifted (issue #3424). `tests_shared/` must never import `flask`, `werkzeug`, `flask_smorest`, or any `vtsearch.*` module, because `tests_lib/` imports it under the Flask blocker; pass app-tier objects (the `medias` map) in as arguments instead. `tests/core/test_test_tier_helpers.py` gates both halves: neither conftest may re-define a name `tests_shared` owns, and nothing under `tests_shared/` may import the app tier. `tests/helpers.py` and `tests_lib/helpers.py` (and likewise `tests/fixtures/medias.py` / `tests_lib/fixtures/medias.py`) are intentional duplicates so each tier is self-contained. **Import them tier-qualified** — `from tests.helpers import ...` inside `tests/`, `from tests_lib.helpers import ...` inside `tests_lib/` — never as a bare `from helpers import ...`. There is deliberately no `pythonpath` entry in `pyproject.toml`: putting both directories on `sys.path` made the bare name resolve to `tests/helpers.py` for *both* trees (pytest inserts `pythonpath` entries in reverse order), which made `tests_lib/helpers.py` dead code and let the copies drift. `tests/core/test_test_tier_helpers.py` gates both halves of this: the duplicated files must stay byte-identical, and no bare `helpers` import may reappear.
 
 ## Avoiding Flaky Tests (IMPORTANT)
 
@@ -568,7 +598,7 @@ A `for i in range(100): sleep(0.05)` loop finishes in 5 seconds — but on a loa
 def slow_load():
     started.set()
     while True:                            # exits ONLY via CancelledError
-        dataset_progress.check_cancelled()
+        tracker.check_cancelled()
         time.sleep(0.05)
 ```
 
@@ -577,7 +607,7 @@ def slow_load():
 def slow_load():
     started.set()
     for i in range(100):                   # FLAKY; can finish before cancel arrives
-        dataset_progress.check_cancelled()
+        tracker.check_cancelled()
         time.sleep(0.05)
 ```
 

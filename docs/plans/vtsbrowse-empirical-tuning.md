@@ -7,7 +7,7 @@ done** — a GRID/cuML sweep over `n_neighbors` × `min_dist` × `compact` × 3 
 across 23 embedded (dataset × embedder) matrices, scored with a ceiling-normalized
 taxonomy-separability metric and label-free structure guards, CPU-verified with
 `umap-learn`. The chosen per-embedder values live in
-`vtscore/config.py:PROJECTION_DEFAULTS_BY_EMBEDDER` (+
+`vtscore/config/runtime.py`'s `PROJECTION_DEFAULTS_BY_EMBEDDER` (+
 `PROJECTION_COMPACT_DEFAULT`), resolved by
 `vtscore/projection/params.py:resolve_projection_params` (the one resolver every
 projection fit path calls); the harness is
@@ -149,6 +149,6 @@ the rework below exists.
 
 | Knob | Current value | Location |
 |------|---------------|----------|
-| Audio | `loop=true`, hard-cut on move | `playAudio` |
+| Audio | `loop=true`, hard-cut on move; `200` ms hover dwell | `BrowseAudioAudition` (`frontend/src/app/utils/browse-audio-audition.ts`) |
 | Text truncation | `300` chars | `loadText` |
 | Popup offset | `+16 / -8` px from cursor | `show` |

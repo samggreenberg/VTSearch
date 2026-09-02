@@ -1,6 +1,5 @@
-import { ChangeDetectionStrategy, Component, inject, OnDestroy, OnInit } from '@angular/core';
-import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { ChangeDetectionStrategy, Component, DestroyRef, inject, OnInit } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AchievementsService } from '../../services/achievements.service';
 import { ToastService } from '../../services/toast.service';
 
@@ -11,14 +10,14 @@ import { ToastService } from '../../services/toast.service';
   imports: [],
   template: '',
 })
-export class AchievementUnlockHostComponent implements OnInit, OnDestroy {
+export class AchievementUnlockHostComponent implements OnInit {
   private achievements = inject(AchievementsService);
   private toast = inject(ToastService);
 
-  private destroy$ = new Subject<void>();
+  private readonly destroyRef = inject(DestroyRef);
 
   ngOnInit(): void {
-    this.achievements.unlocks.pipe(takeUntil(this.destroy$)).subscribe((p) => {
+    this.achievements.unlocks.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((p) => {
       this.toast.success({
         message: `${p.tier_name}: ${p.name}`,
         detail: `Milestone reached: ${p.threshold.toLocaleString()}`,
@@ -29,10 +28,5 @@ export class AchievementUnlockHostComponent implements OnInit, OnDestroy {
         },
       });
     });
-  }
-
-  ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
   }
 }

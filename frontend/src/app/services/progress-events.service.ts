@@ -25,7 +25,6 @@ import { ConnectionStateService } from './connection-state.service';
  *    `boot_id` between connects means the backend restarted, which fires
  *    `serverReset$` so consumers can drop any state keyed on stale
  *    `task_id`s from the previous process)
- *  - `dataset` -> ProgressEvent (singleton tracker; staging operations)
  *  - `loading-tasks` -> LoadingTask[] (per-task progress for dataset loads)
  *  - `detector-loading-tasks` -> LoadingTask[]
  *  - `sort` -> ProgressEvent (text-sort)
@@ -49,7 +48,6 @@ export class ProgressEventsService implements OnDestroy {
   // callback notifies Angular's scheduler directly, so the SSE pump triggers
   // change detection on bound templates with no NgZone re-entry — correct under
   // both zone-based and zoneless change detection.
-  private readonly _dataset = signal<ProgressEvent>({});
   private readonly _loadingTasks = signal<LoadingTask[]>([]);
   private readonly _detectorLoadingTasks = signal<LoadingTask[]>([]);
   private readonly _sort = signal<ProgressEvent>({});
@@ -58,7 +56,6 @@ export class ProgressEventsService implements OnDestroy {
 
   // Read-only signal views: the canonical reads (also the synchronous
   // latest-value accessors — call them, e.g. `loadingTasks()`).
-  readonly dataset = this._dataset.asReadonly();
   readonly loadingTasks = this._loadingTasks.asReadonly();
   readonly detectorLoadingTasks = this._detectorLoadingTasks.asReadonly();
   readonly sort = this._sort.asReadonly();
@@ -67,7 +64,6 @@ export class ProgressEventsService implements OnDestroy {
   // Observable bridges for the consumers that compose channel updates with
   // RxJS operators (takeUntil/filter/take/…). Each is a `toObservable` view of
   // the backing signal, so a signal write still drives them.
-  readonly dataset$ = toObservable(this._dataset);
   readonly loadingTasks$ = toObservable(this._loadingTasks);
   readonly detectorLoadingTasks$ = toObservable(this._detectorLoadingTasks);
   readonly sort$ = toObservable(this._sort);
@@ -171,9 +167,6 @@ export class ProgressEventsService implements OnDestroy {
     this.source = es;
 
     this.listen(es, 'server', (e) => this.handleServerFrame(e));
-    this.listen(es, 'dataset', (e) =>
-      this._dataset.set(this.parse<ProgressEvent>(e, {})),
-    );
     this.listen(es, 'loading-tasks', (e) =>
       this._loadingTasks.set(this.parse<LoadingTask[]>(e, [])),
     );

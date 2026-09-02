@@ -131,6 +131,12 @@ ENVX="$ENVX $GRID CALIB_MAX_STEPS=150"
 # raising on a cell that is doing exactly what was asked.
 ENVX="$ENVX CALIB_REQUIRE_OPENING=$OPENING"
 ENVX="$ENVX CALIB_REPOOL_VARIANTS= CALIB_SCHEDULE_VARIANTS= CALIB_FOLD_COUNTS="
+# The SHIPPED threshold path, pinned rather than inherited.  It defaulted to the
+# #2781-era unfused control until #3400, so a grid written before then ran on a
+# threshold the app cannot produce: dumping its errors under today's default
+# would explain predictions the source cell never made.  Set
+# `CALIB_SAFE_THRESHOLDS=0` to re-run a pre-#3400 cell as it actually ran.
+ENVX="$ENVX CALIB_SAFE_THRESHOLDS=${CALIB_SAFE_THRESHOLDS:-1}"
 ENVX="$ENVX VTS_DUMP_TEST_SCORES=$DUMP"
 
 for spec in "$@"; do

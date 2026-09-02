@@ -90,18 +90,40 @@ def _atomic_write(path: Path, data: dict[str, Any]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Cross-worker sync-dedup marker (H28 residual follow-up)
+# Cross-process sync-dedup marker (H28 residual follow-up)
 #
-# On a fresh container every Gunicorn worker independently runs
-# sync-from-source once per user, duplicating the (potentially expensive)
-# ``source.load()`` read.  A worker that finishes its sync stamps a small
-# sibling marker next to the user's settings file recording the source
-# ``peek_version`` it applied.  A later worker whose first read finds the
-# source *unchanged* at that version skips its own load: the synced values
-# are already on disk in the user file (which it loaded into its cache),
-# so re-reading the source would be pure duplicate I/O.  The marker is a
-# best-effort optimisation only - any read/write/serialisation failure is
-# swallowed and the worker falls back to the full load.
+# ``_sync_state`` is in-memory, so every fresh process runs sync-from-source
+# once per user, duplicating the (potentially expensive, potentially
+# network-bound) ``source.load()`` read.  A process that finishes its sync
+# stamps a small sibling marker next to the user's settings file recording
+# the source ``peek_version`` it applied.  A later process whose first read
+# finds the source *unchanged* at that version skips its own load: the
+# synced values are already on disk in the user file (which it loaded into
+# its cache), so re-reading the source would be pure duplicate I/O.
+#
+# "A later process" is deliberately not "a sibling Gunicorn worker".  This
+# layer started life guarding the concurrent-worker case, and that case does
+# not arise in any shipped deployment: ``gunicorn.conf.py`` pins
+# ``workers = 1`` because all dataset/model state is in-process.  What keeps
+# the marker load-bearing is that it *outlives the process*.  The data
+# directory is a persistent volume (``VOLUME /app/data``; see
+# ``docker/Dockerfile``), so the marker survives a container restart or a
+# worker recycle and the next start adopts it instead of re-reading the
+# source.  A second process sharing the same data directory - a
+# ``python app.py --autodetect`` CLI run, a dev server - is deduped the same
+# way; that shared-directory topology is also why every settings write here
+# goes through the cross-process ``file_lock``.
+#
+# Do not read ``workers = 1`` as evidence that this code is unreachable (a
+# structure audit did, and proposed deleting it).  The clearest counter-proof
+# is in the test suite: ``_force_cold_sync`` in
+# ``tests/io/test_sync_sources.py`` has to *delete* the marker to make a test
+# perform a real load, precisely because dropping the in-memory state - the
+# thing a restart does - is not enough on its own.
+#
+# The marker is a best-effort optimisation only - any read/write/
+# serialisation failure is swallowed and the caller falls back to the full
+# load.
 # ---------------------------------------------------------------------------
 
 
@@ -135,7 +157,7 @@ def _write_sync_marker(user_path: Path, version: Any) -> None:
 
     Best-effort: a ``None`` token (source can't cheaply report a version),
     a non-JSON-serialisable token, or any write failure is swallowed - the
-    marker is a pure cross-worker dedup hint, never a correctness input.
+    marker is a pure cross-process dedup hint, never a correctness input.
     """
     if version is None:
         return
@@ -403,7 +425,7 @@ class UserSettingsStore:
 
         The first load runs under the cross-process *server* file lock so the
         one-shot legacy migration's ``_atomic_write`` calls are protected
-        against a sibling worker migrating the same files concurrently (H28
+        against another process migrating the same files concurrently (H28
         residual follow-up). The file lock is taken *before* ``settings_lock``
         (the canonical file-lock -> settings-lock order), so this must never
         be called while already holding ``settings_lock``: callers that need
@@ -533,7 +555,7 @@ class UserSettingsStore:
             # No state, or state exists only because a setter populated it
             # via ``mark_user_keys_dirty`` before we'd ever talked to the
             # source.  Either way: this process's first sync attempt is due -
-            # unless a sibling worker already synced this user's file at the
+            # unless an earlier process already synced this user's file at the
             # source's current version, in which case adopt that (the values
             # are already on disk) and skip the duplicate load.
             if self._adopt_sync_marker_if_current(username, cache_cfg):
@@ -588,7 +610,7 @@ class UserSettingsStore:
         return True
 
     def _adopt_sync_marker_if_current(self, username: str, cache_cfg: dict[str, Any]) -> bool:
-        """Skip the first sync-from-source load if a sibling worker already did it.
+        """Skip the first sync-from-source load if an earlier process already did it.
 
         Returns ``True`` (and stamps ``_sync_state`` as freshly synced) when
         an on-disk marker records that *username*'s file was synced at the
@@ -597,6 +619,11 @@ class UserSettingsStore:
         follow-up).  Returns ``False`` (caller does the full load) when there
         is no marker, the source is unknown, it can't cheaply report a
         version, or the versions differ.
+
+        This is the path a container restart takes: the marker outlives the
+        process on the persistent data volume, so a restart with an unchanged
+        source costs one ``peek_version`` instead of a full ``load()``.  See
+        the module comment above ``_sync_marker_path``.
         """
         marker_version = _read_sync_marker(self._user_path(username))
         if marker_version is None:
@@ -615,8 +642,8 @@ class UserSettingsStore:
         if current_version is None or current_version != marker_version:
             return False
 
-        # The user file already reflects the source at this version (a sibling
-        # worker applied it and stamped the marker).  Adopt it without a load.
+        # The user file already reflects the source at this version (an earlier
+        # process applied it and stamped the marker).  Adopt it without a load.
         with self._lock:
             self._sync_state[username] = UserSyncState(
                 last_version=current_version,
@@ -737,8 +764,8 @@ class UserSettingsStore:
             # confirms the source matches local (which clears them) or a
             # manual POST sync clears them on purpose.
 
-        # Stamp the cross-worker dedup marker so a sibling worker can skip
-        # its own first load while the source stays at this version.
+        # Stamp the cross-process dedup marker so the next process to start
+        # can skip its own first load while the source stays at this version.
         _write_sync_marker(self._user_path(username), new_version)
 
     def _maybe_migrate_legacy_settings(self, server_cache: dict[str, Any], server_path: Path) -> None:

@@ -14,6 +14,7 @@ from urllib.parse import urlencode
 import requests
 
 from vtscore.datasets.downloader import core as _core
+from vtscore.concurrency.progress import resolve_progress_callback
 from vtscore.datasets.downloader.core import ProgressCallback
 
 
@@ -85,7 +86,7 @@ def download_20newsgroups(
             Any category not in the mapping is passed through unchanged as the
             full newsgroup name.
         on_progress: Optional progress callback. Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         A 3-tuple ``(texts, labels, category_names)`` where:
@@ -98,7 +99,7 @@ def download_20newsgroups(
           ordered to correspond with label index values.
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     from sklearn.datasets import fetch_20newsgroups
 
@@ -234,14 +235,14 @@ def download_bbc_news(
 
     Args:
         on_progress: Optional progress callback. Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         A dict mapping category name to a list of article text strings, e.g.
         ``{"business": ["Article text...", ...], "sport": [...], ...}``.
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     extract_dir = _core.DATA_DIR / "bbc-fulltext"
     _core.DATA_DIR.mkdir(exist_ok=True)
@@ -282,7 +283,7 @@ def download_ag_news(
 
     Args:
         on_progress: Optional progress callback. Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         A dict mapping category name to a list of article text strings, e.g.
@@ -291,7 +292,7 @@ def download_ag_news(
     import csv  # noqa: PLC0415
 
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     csv_path = _core.DATA_DIR / "ag_news_train.csv"
     _core.DATA_DIR.mkdir(exist_ok=True)
@@ -356,14 +357,14 @@ def download_imdb(
 
     Args:
         on_progress: Optional progress callback. Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         A dict mapping category name to a list of review text strings, e.g.
         ``{"pos": ["Great film...", ...], "neg": ["Terrible...", ...]}``.
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     extract_dir = _core.DATA_DIR / "aclImdb"
     _core._download_and_extract(
@@ -439,7 +440,7 @@ def download_dbpedia(
 
     Args:
         on_progress: Optional progress callback.  Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         A dict mapping ontology class name (e.g. ``"Company"``,
@@ -448,7 +449,7 @@ def download_dbpedia(
     import csv  # noqa: PLC0415
 
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     extract_dir = _core.DATA_DIR / "dbpedia_csv"
     _core._download_and_extract(
@@ -571,14 +572,14 @@ def download_arxiv_abstracts(  # noqa: C901
             per category.  The API may return fewer if a category has less
             content; this just bounds the work.
         on_progress: Optional progress callback.  Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         A dict mapping category name to a list of ``title + abstract``
         strings, e.g. ``{"cs.AI": ["Deep Learning...", ...], ...}``.
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     cats = list(categories) if categories else list(ARXIV_DEFAULT_CATEGORIES)
 
@@ -687,14 +688,14 @@ def download_reuters21578(
 
     Args:
         on_progress: Optional progress callback.  Falls back to the
-            application-wide ``update_progress`` when ``None``.
+            the calling thread's progress sink when ``None``.
 
     Returns:
         A dict mapping TOPIC name (e.g. ``"earn"``, ``"acq"``) to a list of
         ``title + body`` strings.
     """
     if on_progress is None:
-        on_progress = _core._default_progress()
+        on_progress = resolve_progress_callback()
 
     extract_dir = _core.DATA_DIR / "reuters21578"
     _core._download_and_extract(

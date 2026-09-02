@@ -285,8 +285,10 @@ class ResultsExporter(PluginBase):
                      Each hit comes from
                      :func:`vtscore.utils.hits.build_media_hit`: ``id``,
                      ``filename``, ``category``, ``score``, plus ``origin`` /
-                     ``origin_name`` / ``md5`` and any clip bounds the media
-                     carries.
+                     ``origin_name`` / ``md5``, the importer-supplied
+                     ``custom_metadata`` (when the media carries any - this is
+                     how an exporter correlates a hit back to the caller's own
+                     system), and any clip bounds the media carries.
 
                      **``negative_hits`` is conventionally ignored.** Every
                      built-in exporter writes positives only, because "the

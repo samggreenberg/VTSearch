@@ -30,7 +30,7 @@
     "tslib": "^2.3.0"
   },
   "devDependencies": {
-    "@angular-devkit/build-angular": "^21.2.16",
+    "@angular/build": "^21.2.16",
     "@angular/cli": "^21.2.16",
     "@angular/compiler-cli": "^21.2.17",
     "jsdom": "^25.0.1",
@@ -42,13 +42,12 @@
     "pacote": {
       "tar": "^7.5.13"
     },
-    "serialize-javascript": "^7.0.5",
     "vite": "^6.4.2",
     "esbuild": "^0.28.1",
     "postcss": "^8.5.10",
-    "uuid": "^14.0.0",
     "qs": "^6.15.2",
-    "shell-quote": "^1.8.4",
-    "webpack-dev-server": "^5.2.4"
+    "@angular/build": {
+      "undici": "^7.29.0"
+    }
   }
 }

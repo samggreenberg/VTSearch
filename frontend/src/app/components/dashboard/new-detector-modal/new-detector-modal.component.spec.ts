@@ -221,7 +221,7 @@ describe('NewDetectorModalComponent', () => {
     component.submit();
 
     httpMock.expectOne('/api/detectors/registry').flush(
-      { error: 'Detector already exists' },
+      { message: 'Detector already exists' },
       { status: 409, statusText: 'Conflict' },
     );
 

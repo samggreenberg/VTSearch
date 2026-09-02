@@ -1,8 +1,9 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, effect, ElementRef, inject, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, Component, DestroyRef, effect, ElementRef, inject, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { HttpErrorResponse } from '@angular/common/http';
-import { Subject, Subscription, of, pairwise, throwError } from 'rxjs';
-import { takeUntil, catchError, filter, take, tap } from 'rxjs/operators';
+import { Subscription, of, pairwise, throwError } from 'rxjs';
+import { catchError, filter, take, tap } from 'rxjs/operators';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
@@ -17,30 +18,28 @@ import {
 import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { ToastService } from '../../services/toast.service';
 import { SortingApiService } from '../../services/sorting-api.service';
+import { PairScopeService } from '../../services/pair-scope.service';
 import { adaptivePoll } from '../../services/adaptive-poll';
 import { DetectorsFindApiService } from '../../services/detectors-find-api.service';
 import { DetectorsRegistryApiService } from '../../services/detectors-registry-api.service';
 import { MediasApiService } from '../../services/medias-api.service';
-import { DatasetsRegistryApiService } from '../../services/datasets-registry-api.service';
 import { LabelSessionService } from '../../services/label-session.service';
 import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { LabelsetStateService } from '../../services/labelset-state.service';
-import { SortStateService, SortMode, SelectMode, SortedItem } from '../../services/sort-state.service';
+import { SortStateService, SortMode, SelectMode } from '../../services/sort-state.service';
+import { autoSelectNext as pickNextMedia } from '../../utils/auto-select-next';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { AutopilotStateService } from '../../services/autopilot-state.service';
 import { EmbedderCapabilityService } from '../../services/embedder-capability.service';
 import { ActiveContextService } from '../../services/active-context.service';
-import { ProgressEventsService } from '../../services/progress-events.service';
-import { ProgressEvent } from '../../models/api.models';
 import { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
 import { ProgressModalComponent, ProgressMetric } from '../modals/progress-modal/progress-modal.component';
 import { ResortPromptModalComponent, ResortResult } from '../modals/resort-prompt-modal/resort-prompt-modal.component';
 import type { LabelingStatusResponse } from '../../generated/api-client/models/labeling-status-response';
 import type { LearnedSortResponse } from '../../generated/api-client/models/learned-sort-response';
-import { formatProgressMessage } from '../../utils/format-progress';
 import { snapPanelWidthToGridColumns, iconSizeToGoalWidth } from '../../utils/grid-icon-size';
-import { PanelResizeDirective } from './panel-resize.directive';
+import { PanelResizeDirective } from '../../directives/panel-resize.directive';
 import { LabelViewPanelStateService } from './label-view-panel-state.service';
 import { buildMediaContextMenuItems } from './media-context-menu-items';
 
@@ -58,7 +57,7 @@ import { buildMediaContextMenuItems } from './media-context-menu-items';
     MediaCropModalComponent,
     PanelResizeDirective
 ],
-  providers: [LabelViewPanelStateService],
+  providers: [LabelViewPanelStateService, PairScopeService],
   templateUrl: './label-view.component.html',
   styleUrl: './label-view.component.scss',
 })
@@ -67,7 +66,6 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private detectorsFindApi = inject(DetectorsFindApiService);
   private detectorsRegistryApi = inject(DetectorsRegistryApiService);
   private mediasApi = inject(MediasApiService);
-  private datasetsRegistryApi = inject(DatasetsRegistryApiService);
   private labelSession = inject(LabelSessionService);
   mediaState = inject(MediaStateService);
   voteState = inject(VoteStateService);
@@ -77,15 +75,15 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private autopilotStateService = inject(AutopilotStateService);
   private embedderCaps = inject(EmbedderCapabilityService);
   private activeContext = inject(ActiveContextService);
-  private progressEvents = inject(ProgressEventsService);
   private newThingFlows = inject(NewThingFlowsService);
   private toast = inject(ToastService);
   panelState = inject(LabelViewPanelStateService);
+  /** Component-provided. Public: the header binds `pairScope.datasetName()`. */
+  readonly pairScope = inject(PairScopeService);
 
   readonly layoutRef = viewChild.required<ElementRef<HTMLElement>>('layout');
   readonly centerPanel = viewChild(CenterPanelComponent);
 
-  readonly datasetName = signal('');
   /** Name of the trainable model owning the labels shown on the right pane.
    *  Empty when no trainable model is active; the right pane then falls
    *  back to cid-based vote display. */
@@ -156,27 +154,12 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly RIGHT_MIN = 150;
   readonly CENTER_MIN = 100;
   readonly DIVIDER_TOTAL = 16; // 2 × 8px dividers
-  private destroy$ = new Subject<void>();
-  /**
-   * Fires whenever the active (dataset, detector) pair changes — and on
-   * destroy. Every request whose response writes *pair-scoped* state (the sort
-   * window, the inclusion slider, the dataset name, the selected media) is
-   * piped through `takeUntil(this.pairScope$)` rather than `destroy$`, so the
-   * work started for the pair we're leaving is torn down the instant the pair
-   * switches.
-   *
-   * Without it, a detector-scoring POST or a learned-sort job poll outlives the
-   * switch and calls `applySortWindow` into whatever pair happens to be active
-   * when it finally settles — installing the previous pair's ranking and
-   * threshold, then auto-selecting an id that may not exist in the new dataset.
-   * `takeUntil` also aborts the stale request client-side. NOTE: subscriptions
-   * started from `modelId$` (which emits *before* `pair$`) must stay on
-   * `destroy$`, or `reloadForNewPair`'s teardown would kill the request they
-   * just issued for the new pair.
-   */
-  private pairScope$ = new Subject<void>();
+  private readonly destroyRef = inject(DestroyRef);
+  // NOTE: a subscription started from `modelId$` (which emits *before*
+  // `pair$`) must stay on component teardown — `takeUntilDestroyed` — rather
+  // than the pair scope, or `reloadForNewPair`'s teardown would kill the
+  // request it just issued for the new pair.
   private statusPolling$: Subscription | null = null;
-  private scoringProgressPoll$: Subscription | null = null;
   private learnedSortPending = false;
   /** Active learned-sort job id while a training run is in flight. Set in
    *  ``onLearnedSort`` once the backend returns a job id, cleared in
@@ -213,7 +196,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       // loop, plus spurious re-runs that revert a manual collapse toggle while
       // the settings write is still in flight.
       untracked(() => {
-        this.panelState.loadFromSettings(settings);
+        // `panelState` reads the settings signal directly (its prefs are
+        // `computed`s), so there is nothing to hydrate here — this branch only
+        // reacts to the new values.
         if (this.panelState.currentMediaType) {
           this.applyPanelPx();
           // Detect an icon-size change (same media type) and debounce a re-pop.
@@ -309,22 +294,20 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.loadTrainingVotes();
     this.loadSettings();
     this.startStatusPolling();
-    this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.pairScope$)).subscribe({
-      next: (status) => { this.datasetName.set(status.display_name || ''); },
-    });
+    this.pairScope.loadDatasetName();
 
     this.activeContext.modelId$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((modelId) => this.refreshTrainableModelName(modelId));
     this.refreshTrainableModelName(this.activeContext.modelId);
-    this.seedInclusion();
+    this.pairScope.seedInclusion();
 
     // Reload data when the active pair changes via the top-bar switcher.
     // Skip the first emission; `ngOnInit` above already triggered the
     // initial loads.
     let firstPair = true;
     this.activeContext.pair$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
         if (firstPair) {
           firstPair = false;
@@ -334,7 +317,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       });
 
     this.autopilotStateService.state$
-      .pipe(pairwise(), takeUntil(this.destroy$))
+      .pipe(pairwise(), takeUntilDestroyed(this.destroyRef))
       .subscribe(([prev, curr]) => {
         if (prev.phase === curr.phase) return;
         this.autopilotExhausted.set(curr.phase === 'exhausted');
@@ -377,28 +360,20 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  and starts a fresh job otherwise; either way the user lands on
    *  learned-sorted content without a manual mode toggle. */
   private reloadForNewPair(): void {
-    // Supersede the pair we're leaving *first*: every in-flight request scoped
-    // to it dies here, before any of the new pair's state is installed, so no
-    // late scoring/learned-sort response can `applySortWindow` into the new
-    // context. Those subscriptions carry no `finalize`, so the busy flag and
-    // the scoring progress feed they own are reset explicitly below.
-    this.pairScope$.next();
-    this.stopScoringProgressPoll();
-    this.currentLearnedSortJobId = null;
-    this.sortState.setSortBusy(false);
-    this.pendingRehydrateLearned = false;
-    this.sortState.setSortResults([], 0);
-    this.sortState.setSortStatus('');
-    this.sortState.setSortProgress(0, 0);
-    this.voteState.clear();
-    this.pendingSnapOnLoad = true;
-    this.mediaState.loadMedias();
-    this.loadTrainingVotes();
-    this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.pairScope$)).subscribe({
-      next: (status) => { this.datasetName.set(status.display_name || ''); },
+    // Supersede → quiesce → clear → reload, in that order and enforced there;
+    // see `PairScopeService.resetForNewPair`.
+    this.pairScope.resetForNewPair(() => {
+      // Train's scoring and learned-sort subscriptions carry no `finalize`, so
+      // the busy flag, the job id and the progress feed they own are reset here
+      // — after the supersede, so nothing can re-set them.
+      this.sortState.stopFindProgressTracking();
+      this.currentLearnedSortJobId = null;
+      this.sortState.setSortBusy(false);
+      this.pendingRehydrateLearned = false;
+      // Read by the medias effect when the reload below lands.
+      this.pendingSnapOnLoad = true;
     });
-    // Re-seed the slider for the detector we just switched to.
-    this.seedInclusion();
+    this.loadTrainingVotes();
 
     // Arm the rehydrate effect: it fires `onLearnedSort` once the reloaded
     // votes land (counts go 0 → available) if the user is still in learned mode.
@@ -422,7 +397,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private loadTrainingVotes(): void {
     this.detectorsFindApi
       .endFindSession()
-      .pipe(takeUntil(this.pairScope$))
+      .pipe(this.pairScope.scoped())
       .subscribe({
         next: () => this.voteState.loadVotes(),
         error: () => this.voteState.loadVotes(),
@@ -430,15 +405,12 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.stopScoringProgressPoll();
+    this.sortState.stopFindProgressTracking();
     this.cancelAutoPop('left');
     this.cancelAutoPop('right');
     this.cancelSnapOnLoad();
     if (this.animatePopTimer) clearTimeout(this.animatePopTimer);
-    this.pairScope$.next();
-    this.pairScope$.complete();
-    this.destroy$.next();
-    this.destroy$.complete();
+    // `pairScope` is component-provided, so Angular fires its scope on destroy.
     this.voteState.stopPolling();
   }
 
@@ -558,13 +530,17 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // --- Icon-size auto-pop ---
 
-  /** Right-pane grid goal width for the active media type, read from the live
-   *  settings (the right pane owns its own size dict, unlike the left which is
-   *  mirrored on `panelState`). */
+  /** Right-pane grid goal width for the active media type. The right pane owns
+   *  its own size key (`grid_icon_size_right`); the left one lives on
+   *  `panelState`. Both are `perMediaType` prefs over the settings signal. */
+  private readonly gridIconSizeRight = this.settingsState.perMediaType<string>(
+    'grid_icon_size_right',
+    this.panelState.mediaType,
+    { fallback: 'M' },
+  );
+
   private currentRightGoalWidth(): number {
-    const settings = this.settingsState.settingsSignal();
-    const dict = (settings?.grid_icon_size_right ?? null) as Record<string, string> | null;
-    return iconSizeToGoalWidth(dict?.[this.panelState.currentMediaType] ?? 'M');
+    return iconSizeToGoalWidth(this.gridIconSizeRight.value());
   }
 
   /** Record the current goal widths as the no-pop baseline for the active media
@@ -631,7 +607,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       fastMs: 2000,
       slowMs: 10000,
     })
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (status) => {
           this.labelingStatus.set(status);
@@ -692,7 +668,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     const offset = this.sortState.sortOrder?.length ?? 0;
     this.sortingApi
       .getSortPage(token, offset, 200)
-      .pipe(takeUntil(this.pairScope$))
+      .pipe(this.pairScope.scoped())
       .subscribe({
         next: (page) => {
           const items = (page.results ?? []).map((r) => ({
@@ -711,7 +687,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sortState.setTextQuery(text);
     this.sortState.setSortBusy(true);
     this.sortState.setSortStatus('Sorting…');
-    this.sortingApi.sort({ text }).pipe(takeUntil(this.pairScope$)).subscribe({
+    this.sortingApi.sort({ text }).pipe(this.pairScope.scoped()).subscribe({
       next: (response) => {
         this.applySortWindow(response);
         this.sortState.setSortBusy(false);
@@ -729,7 +705,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (!this.voteState.learnedSortAvailable) return;
     this.sortState.setSortBusy(true);
     this.sortState.setSortStatus('Training…');
-    this.sortingApi.learnedSort().pipe(takeUntil(this.pairScope$)).subscribe({
+    this.sortingApi.learnedSort().pipe(this.pairScope.scoped()).subscribe({
       next: (response) => {
         if (response.status === 'done') {
           this.applyLearnedSortResult(response, autoSelect);
@@ -799,8 +775,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .pipe(
         // Pair-scoped: a training job can outlive the pair it was started for,
         // and its result must not be applied to whatever pair is active when it
-        // finally settles (see `pairScope$`).
-        takeUntil(this.pairScope$),
+        // finally settles (see `PairScopeService`).
+        this.pairScope.scoped(),
         filter((res) => res.status !== 'running'),
         take(1),
       )
@@ -843,41 +819,16 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.currentLearnedSortJobId) {
       const jobId = this.currentLearnedSortJobId;
       this.currentLearnedSortJobId = null;
-      this.sortingApi.cancelLearnedSort(jobId).pipe(takeUntil(this.destroy$)).subscribe();
+      this.sortingApi.cancelLearnedSort(jobId).pipe(takeUntilDestroyed(this.destroyRef)).subscribe();
       return;
     }
     if (this.sortState.sortMode === 'load') {
-      this.detectorsFindApi.cancelFind().pipe(takeUntil(this.destroy$)).subscribe();
+      this.detectorsFindApi.cancelFind().pipe(takeUntilDestroyed(this.destroyRef)).subscribe();
     }
   }
 
   onLoadSort(): void {
     // Re-sort using existing load sort results when switching back to load mode
-  }
-
-  private startScoringProgressPoll(): void {
-    this.stopScoringProgressPoll();
-    this.scoringProgressPoll$ = this.progressEvents.find$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((prog: ProgressEvent) => {
-        if (prog.status === 'running') {
-          this.sortState.setSortStatus(formatProgressMessage(prog, 'Scoring with detector…'));
-          this.sortState.setSortProgress(
-            prog.current ?? 0,
-            prog.total ?? 0,
-            prog.overall ?? null,
-            prog.eta_seconds ?? null,
-            prog.overall_step_end ?? null,
-          );
-        }
-      });
-  }
-
-  private stopScoringProgressPoll(): void {
-    if (this.scoringProgressPoll$) {
-      this.scoringProgressPoll$.unsubscribe();
-      this.scoringProgressPoll$ = null;
-    }
   }
 
   onModelSelected(modelId: string): void {
@@ -887,18 +838,18 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sortState.setSortStatus('Scoring with detector…');
     this.sortState.setSortProgress(0, 0);
 
-    this.startScoringProgressPoll();
+    this.sortState.startFindProgressTracking();
 
     // Pair-scoped: scoring runs for minutes on a large dataset, so a pair switch
     // mid-run must kill this before it ranks the new pair with old scores.
-    this.detectorsFindApi.findLabel({ detector_id: modelId }).pipe(takeUntil(this.pairScope$)).subscribe({
+    this.detectorsFindApi.findLabel({ detector_id: modelId }).pipe(this.pairScope.scoped()).subscribe({
       next: (raw) => {
         const response = raw as {
           results: { id: number; score: number; best_region?: number[] }[];
           threshold: number;
           detector_name?: string;
         };
-        this.stopScoringProgressPoll();
+        this.sortState.stopFindProgressTracking();
         this.applySortWindow(response);
         this.sortState.setLoadSortLabel(response.detector_name || 'Detector');
         this.sortState.setSortBusy(false);
@@ -907,7 +858,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         this.autoSelectNext();
       },
       error: () => {
-        this.stopScoringProgressPoll();
+        this.sortState.stopFindProgressTracking();
         this.sortState.setSortBusy(false);
         this.sortState.setSortStatus('Detector sort failed');
         this.sortState.setSortProgress(0, 0);
@@ -945,7 +896,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       // the atlas probe by a node's median score), so it takes the acquisition
       // cut alongside the Hard pick.
       .getCoverageAtlasNext(scores, this.sortState.acqThreshold ?? undefined)
-      .pipe(takeUntil(this.pairScope$))
+      .pipe(this.pairScope.scoped())
       .subscribe({
         next: (response) => {
           if (response.id !== null) {
@@ -960,22 +911,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // --- Inclusion ---
 
-  /**
-   * Seed the slider from the active detector's per-detector inclusion
-   * (GET /api/inclusion, which falls back to the user-settings default the
-   * first time it's read for a detector). Called on entry and on every
-   * detector switch so the slider tracks the detector, not a stale global.
-   */
-  private seedInclusion(): void {
-    this.sortingApi
-      .getInclusion()
-      .pipe(takeUntil(this.pairScope$))
-      .subscribe({ next: (resp) => this.sortState.setInclusion(resp.inclusion) });
-  }
-
   onInclusionChange(value: number): void {
     this.sortState.setInclusion(value);
-    this.sortingApi.setInclusion(value).pipe(takeUntil(this.pairScope$)).subscribe();
+    this.sortingApi.setInclusion(value).pipe(this.pairScope.scoped()).subscribe();
     this.autoSelectNext();
     if (this.sortState.sortMode === 'learned' && this.voteState.learnedSortAvailable) {
       this.scheduleLearnedSort(false);
@@ -1048,7 +986,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sortState.setSortStatus('Sorting by example…');
     this.sortingApi
       .exampleSortById({ media_id: mediaId, crop_params: cropParams })
-      .pipe(takeUntil(this.pairScope$))
+      .pipe(this.pairScope.scoped())
       .subscribe({
         next: (response) => {
           this.sortState.setSortMode('load');
@@ -1127,7 +1065,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       this.trainableModelName.set(null);
       return;
     }
-    this.detectorsRegistryApi.getRegistry().pipe(takeUntil(this.destroy$)).subscribe({
+    this.detectorsRegistryApi.getRegistry().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (resp) => {
         const entry = resp.detectors.find((m: DetectorRegistryEntry) => m.id === modelId);
         this.trainableModelName.set(entry?.name || null);
@@ -1141,7 +1079,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   onHoverVote(event: { id: number; vote: 'good' | 'bad' }): void {
     this.voteState
       .submitToggleVoteAndRecord(event.id, event.vote, this.mediaDisplayName(event.id))
-      .pipe(takeUntil(this.pairScope$))
+      .pipe(this.pairScope.scoped())
       .subscribe({
         next: () => {
           this.onMediaVoted(event);
@@ -1286,7 +1224,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (filenames.length > 0) {
       this.sortState.setSortBusy(true);
       this.sortState.setSortStatus(filenames.length > 1 ? 'Sorting by examples…' : 'Sorting by example…');
-      this.sortingApi.exampleSortServer({ filenames }).pipe(takeUntil(this.pairScope$)).subscribe({
+      this.sortingApi.exampleSortServer({ filenames }).pipe(this.pairScope.scoped()).subscribe({
         next: (response) => {
           this.applySortWindow(response);
           this.sortState.setSortBusy(false);
@@ -1453,46 +1391,27 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // --- Helpers ---
 
+  /**
+   * Advance to the next media the current Sort + Select says to show.
+   *
+   * The rule itself lives in {@link autoSelectNext} (`utils/auto-select-next`)
+   * as a pure function so it can be unit-tested and so the eval harness's copy
+   * of it can be digest-pinned; this method is the side-effecting half —
+   * applying the selection, or firing the coverage-atlas probe the `new` mode
+   * asks for.
+   */
   private autoSelectNext(excludeId?: number): void {
-    const sortOrder = this.sortState.sortOrder;
-    if (!sortOrder || sortOrder.length === 0) return;
-    const goodVotes = this.voteState.goodVotes;
-    const badVotes = this.voteState.badVotes;
-
-    const isVoted = (id: number): boolean =>
-      id === excludeId || goodVotes.has(id) || badVotes.has(id);
-
-    if (this.sortState.selectMode === 'top') {
-      const next = sortOrder.find((s) => !isVoted(s.id));
-      if (next) this.mediaState.selectMedia(next.id);
-    } else if (this.sortState.selectMode === 'hard' && this.sortState.acqThreshold !== null) {
-      // The *acquisition* cut, not the decision line: this reads the threshold
-      // as a rank position, which is why it wants one further up the ranking
-      // than the one the user is shown (#2876).
-      const threshold = this.sortState.acqThreshold!;
-      // Find the index where the threshold falls in the sorted (descending) list.
-      // This is the first position whose score is at or below the threshold.
-      let thresholdIndex = sortOrder.length;
-      for (let i = 0; i < sortOrder.length; i++) {
-        if (sortOrder[i].score <= threshold) {
-          thresholdIndex = i;
-          break;
-        }
-      }
-      // Pick the unlabeled item whose index is closest to the threshold index.
-      // This avoids biasing toward one side when scores cluster unevenly.
-      let best: SortedItem | null = null;
-      let bestDist = Infinity;
-      for (let i = 0; i < sortOrder.length; i++) {
-        if (isVoted(sortOrder[i].id)) continue;
-        const dist = Math.abs(i - thresholdIndex);
-        if (dist < bestDist) {
-          bestDist = dist;
-          best = sortOrder[i];
-        }
-      }
-      if (best) this.mediaState.selectMedia(best.id);
-    } else if (this.sortState.selectMode === 'new') {
+    const pick = pickNextMedia({
+      sortOrder: this.sortState.sortOrder,
+      selectMode: this.sortState.selectMode,
+      acqThreshold: this.sortState.acqThreshold,
+      goodVotes: this.voteState.goodVotes,
+      badVotes: this.voteState.badVotes,
+      excludeId,
+    });
+    if (pick.kind === 'media') {
+      this.mediaState.selectMedia(pick.id);
+    } else if (pick.kind === 'diversity') {
       this.fetchDiversityNext();
     }
   }

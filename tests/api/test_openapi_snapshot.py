@@ -11,7 +11,6 @@ version. These tests pin the canonical form so the drift guard is stable.
 
 from __future__ import annotations
 
-import app as app_module  # noqa: F401  (triggers conftest side effects)
 from vtsearch.openapi_postprocess import normalize_unprocessable_response
 
 

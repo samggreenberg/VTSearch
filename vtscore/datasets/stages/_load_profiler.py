@@ -142,7 +142,6 @@ class LoadProfiler:
         self._last_step: Any = None
         # finalize sub-slots: ordered (slot, monotonic-start)
         self._slot_start: list[tuple[str, float]] = []
-        self._t0 = time.monotonic()
 
     # -- capture ------------------------------------------------------------
     def on_update(self, snapshot: dict[str, Any]) -> None:

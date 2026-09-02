@@ -8,8 +8,8 @@ still consumes the full ``results`` (windowed model lands separately).
 
 from __future__ import annotations
 
-import app as app_module
 import vtscore.state.sort_results_cache as sort_cache
+from tests.fixtures.medias import NUM_MEDIAS
 
 
 class TestSortResponseWindowMeta:
@@ -18,8 +18,8 @@ class TestSortResponseWindowMeta:
         assert resp.status_code == 200
         data = resp.get_json()
         # Full list still returned (additive change).
-        assert len(data["results"]) == app_module.NUM_MEDIAS
-        assert data["total"] == app_module.NUM_MEDIAS
+        assert len(data["results"]) == NUM_MEDIAS
+        assert data["total"] == NUM_MEDIAS
         assert isinstance(data["sort_token"], str) and data["sort_token"]
         # above_threshold matches how many rows are >= the returned threshold.
         expected = sum(1 for r in data["results"] if r["similarity"] >= data["threshold"])
@@ -34,7 +34,7 @@ class TestSortResponseWindowMeta:
         # NUM_MEDIAS (20) < a high threshold → full list, no windowing.
         monkeypatch.setattr(sort_cache, "SORT_WINDOW_THRESHOLD", 1000)
         data = client.post("/api/sort", json={"text": "beep"}).get_json()
-        assert len(data["results"]) == app_module.NUM_MEDIAS
+        assert len(data["results"]) == NUM_MEDIAS
         assert data["has_more_below"] is False
 
 
@@ -50,10 +50,10 @@ class TestWindowedTransmission:
         self._shrink_window(monkeypatch)
         data = client.post("/api/sort", json={"text": "beep"}).get_json()
         above = data["above_threshold"]
-        expected = min(app_module.NUM_MEDIAS, min(above, 2) + 1)
-        assert data["total"] == app_module.NUM_MEDIAS
+        expected = min(NUM_MEDIAS, min(above, 2) + 1)
+        assert data["total"] == NUM_MEDIAS
         assert len(data["results"]) == expected
-        assert data["has_more_below"] is (expected < app_module.NUM_MEDIAS)
+        assert data["has_more_below"] is (expected < NUM_MEDIAS)
 
     def test_paging_reconstructs_the_full_ranking(self, client, monkeypatch):
         self._shrink_window(monkeypatch)
@@ -69,8 +69,8 @@ class TestWindowedTransmission:
             if not body["has_more"]:
                 break
             offset += 5
-        assert len(collected) == app_module.NUM_MEDIAS
-        assert len(set(collected)) == app_module.NUM_MEDIAS
+        assert len(collected) == NUM_MEDIAS
+        assert len(set(collected)) == NUM_MEDIAS
 
 
 class TestSortPage:
@@ -85,8 +85,8 @@ class TestSortPage:
         assert [r["id"] for r in body["results"]] == full_ids[1:3]
         assert body["offset"] == 1
         assert body["limit"] == 2
-        assert body["total"] == app_module.NUM_MEDIAS
-        assert body["has_more"] is (3 < app_module.NUM_MEDIAS)
+        assert body["total"] == NUM_MEDIAS
+        assert body["has_more"] is (3 < NUM_MEDIAS)
 
     def test_page_default_offset_and_limit(self, client):
         token = client.post("/api/sort", json={"text": "tone"}).get_json()["sort_token"]
