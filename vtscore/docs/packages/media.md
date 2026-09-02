@@ -19,6 +19,8 @@ and is the foundation every other `vtscore` subsystem builds on.
 | `vtscore/media/__init__.py` | The registries and their accessors (`get`, `get_embedder`, `all_types`, …), plus sentinel discovery |
 | `vtscore/media/base.py` | The `MediaType` ABC |
 | `vtscore/media/embedder.py` | The `MediaEmbedder` ABC and its capability flags |
+| `vtscore/media/load_progress.py` | Model-load progress interception (tqdm, weight tensors) and resilient HF fetching |
+| `vtscore/media/torch_ops.py` | Torch tensor/device adapters shared by every embedder |
 | `vtscore/media/clipper.py` | The `MediaClipper` ABC (1 → N, same type) |
 | `vtscore/media/cleaner.py` | The `MediaCleaner` ABC (1 → 1 cleanup gate, run before embedding) |
 | `vtscore/media/processors.py` | The `Processor` / `Detector` / `Localizer` / `Extractor` ABCs |
@@ -151,18 +153,20 @@ Optional capability flags (`supports_text`, `supports_patch_regions`,
 stack reads these to gate features (text-search affordances, the
 patch-region pipeline).
 
-The helper module ships several shared building blocks every embedder
-implementation uses:
+Several shared building blocks every embedder implementation uses live
+beside the ABC, and are **re-exported from `vtscore.media.embedder`** so an
+embedder can import all of them from the one module (the column below names
+the file each is defined in):
 
 | Helper                                                 | Purpose                                       |
 |--------------------------------------------------------|-----------------------------------------------|
 | `media_from_path(path)` (`vtscore/media/embedder.py`) | Wrap a `Path` in a minimal media dict.       |
-| `embedder_load_setup(cb, msg)` (`vtscore/media/embedder.py`) | Wire torch threads, return cache dir. |
-| `load_pretrained_local_first(fn, *)` (`vtscore/media/embedder.py`) | Prefer cached weights, retry transient HF errors. |
-| `intercept_tqdm_progress(cb)` (`vtscore/media/embedder.py`) | Forward HF tqdm bars to your progress callback. |
-| `intercept_weight_loading_progress(cb, label)` (`vtscore/media/embedder.py`) | Tensor-level progress for weight loading. |
-| `extract_tensor(out)` (`vtscore/media/embedder.py`)  | Normalise the assorted shapes HF returns.    |
-| `timed_progress(cb, status, msg)` (`vtscore/media/embedder.py`) | Append `(Ns)` to a stuck progress message. |
+| `embedder_load_setup(cb, msg)` (`vtscore/media/load_progress.py`) | Wire torch threads, return cache dir. |
+| `load_pretrained_local_first(fn, *)` (`vtscore/media/load_progress.py`) | Prefer cached weights, retry transient HF errors. |
+| `intercept_tqdm_progress(cb)` (`vtscore/media/load_progress.py`) | Forward HF tqdm bars to your progress callback. |
+| `intercept_weight_loading_progress(cb, label)` (`vtscore/media/load_progress.py`) | Tensor-level progress for weight loading. |
+| `extract_tensor(out)` (`vtscore/media/torch_ops.py`)  | Normalise the assorted shapes HF returns.    |
+| `timed_progress(cb, status, msg)` (`vtscore/media/load_progress.py`) | Append `(Ns)` to a stuck progress message. |
 | `resolve_embed_batch_size(default)` (`vtscore/media/embedder.py`) | Read `$VTSEARCH_EMBED_BATCH_SIZE`.      |
 
 Image embedders additionally share `vtscore/media/image/_image_bulk.py`,
