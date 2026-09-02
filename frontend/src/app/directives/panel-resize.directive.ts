@@ -16,8 +16,8 @@ import { Directive, ElementRef, HostBinding, HostListener, NgZone, OnDestroy, in
  * distance from one edge of a layout rect, producing one width.** If that is
  * your divider, bind it and delete your handlers.
  *
- * It deliberately does **not** cover three shapes that look similar but are
- * not, and stretching it to fit them would cost more than it saves:
+ * It deliberately does **not** cover two shapes that look similar but are not,
+ * and stretching it to fit them would cost more than it saves:
  *
  * - **Delta drags** that track `startX`/`startWidth` from mousedown rather
  *   than an absolute edge distance (`browse-bin-popup`'s metadata divider —
@@ -25,8 +25,6 @@ import { Directive, ElementRef, HostBinding, HostListener, NgZone, OnDestroy, in
  * - **Cross-axis drags**, where vertical motion drives a *width*
  *   (`browse-view`'s docked-details row divider maps `dy` 1:1 onto the panel
  *   width, because the focused item is square).
- * - **Two-dimensional resizes** (`browse-minimap`'s corner handle, which
- *   drives width *and* height from a bottom-right anchor).
  *
  * ## The change-detection contract (read before adopting)
  *

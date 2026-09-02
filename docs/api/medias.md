@@ -637,28 +637,6 @@ POST /api/seed-import/{importer_name}/options
 
 Dynamic select options, same contract as the dataset-importer variant.
 
-### Seed votes from examples
-
-```
-POST /api/votes/seed-from-examples
-```
-
-**Body:** `{"examples": [{"type": "media", "value": "abc123.wav"}, ...]}`
-
-The per-example field is named `value` (the same shape used by the
-detector-registration endpoint in `detectors.md`), not `filename` — the code
-reads `ex.get("value", "")` and silently skips anything else.
-
-Seeds good votes from a detector's media examples. For each `type: "media"`
-entry the file is read out of `example_media/` and MD5'd: a matching loaded
-media is voted Good, and an example that isn't in the dataset is embedded,
-inserted as a new media, and voted Good.
-
-→ `{"seeded": 2, "skipped": 1}` — `skipped` is every example that produced no
-vote (`len(examples) - seeded`).
-
-500 if the seeded votes could not be persisted to the detector store.
-
 ### Label-file sort
 
 ```

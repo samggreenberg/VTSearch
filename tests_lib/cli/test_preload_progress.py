@@ -19,7 +19,7 @@ import torch
 import torch.nn as nn
 
 from tests_lib.helpers import wire_mock_progress_scope
-from vtscore.media.embedder import (
+from vtscore.media.load_progress import (
     _hub_metadata_preflight,
     hf_token,
     intercept_weight_loading_progress,
@@ -789,7 +789,7 @@ class TestLoadPretrainedLocalFirst:
         except ImportError:
             pass
 
-    @patch("vtscore.media.embedder.time.sleep")
+    @patch("vtscore.media.load_progress.time.sleep")
     def test_network_fallback_error_propagates(self, mock_sleep):
         """If both local and network attempts fail, the network error propagates."""
 
@@ -804,7 +804,7 @@ class TestLoadPretrainedLocalFirst:
         except ConnectionError:
             pass
 
-    @patch("vtscore.media.embedder.time.sleep")
+    @patch("vtscore.media.load_progress.time.sleep")
     def test_retries_on_transient_hf_hub_error(self, mock_sleep):
         """Transient HfHubHTTPError (5xx) should be retried with backoff."""
         network_calls = [0]
@@ -831,7 +831,7 @@ class TestLoadPretrainedLocalFirst:
         assert mock_sleep.call_args_list[0][0][0] == 2
         assert mock_sleep.call_args_list[1][0][0] == 4
 
-    @patch("vtscore.media.embedder.time.sleep")
+    @patch("vtscore.media.load_progress.time.sleep")
     def test_retries_exhausted_raises_last_error(self, mock_sleep):
         """When all retries are exhausted, the last transient error is raised."""
         errors = []
@@ -854,7 +854,7 @@ class TestLoadPretrainedLocalFirst:
             assert exc is errors[-1]
             assert "attempt 3" in str(exc)
 
-    @patch("vtscore.media.embedder.time.sleep")
+    @patch("vtscore.media.load_progress.time.sleep")
     def test_non_transient_error_not_retried(self, mock_sleep):
         """Non-transient errors (e.g. 404) should not be retried."""
 
@@ -873,7 +873,7 @@ class TestLoadPretrainedLocalFirst:
             pass
         mock_sleep.assert_not_called()
 
-    @patch("vtscore.media.embedder.time.sleep")
+    @patch("vtscore.media.load_progress.time.sleep")
     def test_retries_on_connection_error(self, mock_sleep):
         """ConnectionError should be retried as transient."""
         network_calls = [0]
@@ -891,7 +891,7 @@ class TestLoadPretrainedLocalFirst:
         assert result is sentinel
         assert mock_sleep.call_count == 2
 
-    @patch("vtscore.media.embedder.time.sleep")
+    @patch("vtscore.media.load_progress.time.sleep")
     def test_retries_on_timeout_error(self, mock_sleep):
         """TimeoutError should be retried as transient."""
         network_calls = [0]
@@ -909,7 +909,7 @@ class TestLoadPretrainedLocalFirst:
         assert result is sentinel
         assert mock_sleep.call_count == 2
 
-    @patch("vtscore.media.embedder._hub_metadata_preflight")
+    @patch("vtscore.media.load_progress._hub_metadata_preflight")
     def test_on_progress_consumed_and_preflight_runs(self, mock_preflight):
         """on_progress triggers the Hub preflight + ticker and is never forwarded to load_fn."""
         events = []
@@ -929,7 +929,7 @@ class TestLoadPretrainedLocalFirst:
         mock_preflight.assert_called_once_with(("model-id",), {"cache_dir": "/tmp"})
         assert any("Contacting HuggingFace Hub" in e[1] for e in events)
 
-    @patch("vtscore.media.embedder._hub_metadata_preflight")
+    @patch("vtscore.media.load_progress._hub_metadata_preflight")
     def test_no_preflight_when_cached(self, mock_preflight):
         """A successful local_files_only load must not touch the network preflight."""
         events = []
@@ -943,7 +943,7 @@ class TestLoadPretrainedLocalFirst:
         mock_preflight.assert_not_called()
         assert events == []
 
-    @patch("vtscore.media.embedder._hub_metadata_preflight")
+    @patch("vtscore.media.load_progress._hub_metadata_preflight")
     def test_no_preflight_without_on_progress(self, mock_preflight):
         """Without on_progress there is no ticker, so the preflight is skipped."""
 

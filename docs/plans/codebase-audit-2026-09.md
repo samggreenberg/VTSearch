@@ -70,7 +70,6 @@ care.
 
 ## Library tier — god modules & misplaced code
 
-- [ ] #3384 — Extract the load-progress and torch-ops subsystems out of `vtscore/media/embedder.py` (Sonnet 5)
 - [ ] #3396 — Move `evt_mixture.py` out of the shipped `vtscore/training/` surface (Haiku 4.5)
 
 ## Library tier — duplication
@@ -83,14 +82,14 @@ care.
 
 ## Library tier — dead code & unkept promises
 
-- [ ] #3397 — Keep the resolver extension point but delete its auto-wire dance and import-error mask (Sonnet 5)
+- [x] #3397 — Keep the resolver extension point but delete its auto-wire dance and import-error mask (Sonnet 5)
 - [ ] #3401 — Declare `image_response` on the `MediaType` ABC and document both undeclared hooks (Sonnet 5)
 - [ ] #3402 — Apply the sub-output disambiguators in the converted-demo emitter (Sonnet 5)
 - [ ] #3404 — Small vtscore batch: `JOB_MANAGERS` coverage, registry construction, `SAVED_DATASETS_DIR` (Haiku 4.5)
 
 ## Concurrency & progress
 
-- [ ] #3382 — Route the raw staging thread through `vtsearch.threading.spawn` (Haiku 4.5)
+- [x] #3382 — Route the raw staging thread through `vtsearch.threading.spawn` (Haiku 4.5)
 
 ## Layering & host seams
 
@@ -117,10 +116,6 @@ care.
 - [ ] #3408 — `run_autopilot_sweep.py` re-implements the harness vote loop against a retired configuration (Sonnet 5)
 - [ ] #3411 — `common.py` forked seven ways; `_cells_io.py` forked twice (Haiku 4.5)
 - [ ] #3414 — The Smart-indicator FP/FN cost loop is a mirror that doesn't need to be one (Opus 4.8)
-
-## Frontend — god components & extraction seams
-
-- [ ] #3428 — Promote `SortStateService` from anemic store to orchestrator (Opus 4.8)
 
 ## Frontend — duplication & dead code
 

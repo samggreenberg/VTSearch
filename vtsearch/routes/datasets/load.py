@@ -1,11 +1,11 @@
-"""Dataset load endpoints: demo, file, folder, browser-folder upload, source
+"""Dataset load endpoints: demo, file, browser-folder upload, source
 reload, plus export and clear.
 
 Migrated to ``flask_smorest`` so these routes appear in
 ``/api/openapi.json``.
 
-Routes with a single marshmallow-able body (``load-demo``, ``load-folder``,
-``load-source``, ``clear``) use the standard ``@arguments`` + ``@response``
+Routes with a single marshmallow-able body (``load-demo``, ``load-source``,
+``clear``) use the standard ``@arguments`` + ``@response``
 decorators. Schema-level validation failures (missing required ``path`` /
 ``name`` / ``source``) surface as 422 with the standard ``errors``
 envelope; handler-level rejects (unknown demo, invalid path, importer
@@ -49,7 +49,6 @@ from vtsearch.routes.datasets._helpers import _safe_relative_upload_path
 from vtsearch.schemas.datasets import (
     DatasetClearResponseSchema,
     DatasetLoadDemoRequestSchema,
-    DatasetLoadFolderRequestSchema,
     DatasetLoadSourceRequestSchema,
     DatasetLoadStartedResponseSchema,
 )
@@ -462,35 +461,6 @@ def load_dataset_file():
             "build_projection": "true" if _form_flag(request.form.get("build_projection")) else "false",
         },
     )
-    return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}
-
-
-@datasets_load_bp.route("/api/dataset/load-folder", methods=["POST"])
-@datasets_load_bp.arguments(DatasetLoadFolderRequestSchema)
-@datasets_load_bp.response(200, DatasetLoadStartedResponseSchema)
-@datasets_load_bp.alt_response(400, description="Invalid or missing folder path.")
-def load_dataset_folder(body: dict):
-    """Generate dataset from a folder of media files."""
-    folder_path = body.get("path")
-    media_type = body.get("media_type", "audio")
-
-    if not folder_path:
-        abort(400, message="No folder path provided")
-
-    try:
-        # Consume the *approved* path, not the raw string: under multi-user
-        # confinement a relative path is checked against the user's data dir
-        # but would be read relative to the process CWD.
-        folder_path = _paths.confine_server_filepath(str(folder_path), _paths.get_file_access_base_dir())
-    except ValueError as exc:
-        abort(400, message=str(exc))
-
-    folder = Path(folder_path)
-    if not folder.exists() or not folder.is_dir():
-        abort(400, message="Invalid folder path")
-
-    importer = get_importer("server_folder")
-    task_id = _run_importer_in_background(importer, {"path": str(folder), "media_type": media_type})
     return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}
 
 
