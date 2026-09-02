@@ -267,6 +267,7 @@ The ones worth knowing before changing anything:
 | `VtDialogService` | `confirm()` / `prompt()` as promises, rendered by `dialog-host` |
 | `NewThingFlowsService` | Singleton openers for the Add-Dataset / New-Detector flows |
 | `MediaMetadataCacheService` | Lazy batched fetch of full metadata for whatever is in the viewport |
+| `PairScopeService` | **Component-provided** (`find-view`, `label-view`): the active pair's lifetime, the `scoped()` teardown operator, and the pair-change reset in its one correct order |
 | `KeyboardService`, `ThemeService`, `AchievementsService`, `AuthService` | App-wide concerns wired in `AppComponent` |
 
 `adaptive-poll.ts` is not a service but a shared operator; see
@@ -531,11 +532,21 @@ component is very much still alive. It legitimately takes one of two shapes,
 and both are correct as written:
 
 - A **scope subject** fired on each reset, for a family of streams that share
-  a lifetime shorter than the component's: `pairScope$` (`find-view`,
-  `label-view`) tears down everything belonging to the dataset/detector pair
-  being left, `findPolling$` (`dashboard`) and `stopPolling$`
-  (`VoteStateService`) cancel a superseded poll. Name it for the scope it
-  bounds, never `destroy$`.
+  a lifetime shorter than the component's: `findPolling$` (`dashboard`) and
+  `stopPolling$` (`VoteStateService`) cancel a superseded poll. Name it for the
+  scope it bounds, never `destroy$`.
+
+  The dataset/detector pair's scope is the one case where the subject is not a
+  component field: `PairScopeService` (component-provided on `find-view` and
+  `label-view`) keeps it private and exposes `pairScope.scoped()` as the pipe
+  operator, because the *ordering* around firing it is load-bearing. A pair
+  switch must supersede **before** any of the new pair's state is installed, or
+  a late response repaints the old pair's ranking over the new one's — a silent
+  wrong-results bug, not a crash. Both views used to spell that sequence out in
+  a comment and enforce nothing; `resetForNewPair()` is now the only caller that
+  can fire the scope, so the order is not a caller's to get wrong. The service's
+  own `ngOnDestroy` covers destroy-time teardown, so a view must not (and need
+  not) fire the scope by hand.
 - A **re-assigned `Subscription` field** that unsubscribes the previous value
   before storing the next: `text-viewer`'s `sub`, `folder-browser`'s
   `currentSub`, `browse-bin-popup`'s `scrollSub` (re-keyed to the viewport
