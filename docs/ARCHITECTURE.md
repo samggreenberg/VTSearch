@@ -439,7 +439,8 @@ VTSearch/
 ├── frontend/                       Angular SPA source (components, services, SCSS)
 │                                   -> see docs/FRONTEND.md for the SPA architecture
 ├── tests/                          App-tier test suite (uses Flask client, vtsearch.*)
-└── tests_lib/                      Library-tier test suite (Flask-import-clean, vtscore.*)
+├── tests_lib/                      Library-tier test suite (Flask-import-clean, vtscore.*)
+└── tests_shared/                   Conftest machinery both suites import (no test modules)
 ```
 
 **The library tier is entirely Flask-free, and that is enforced, not

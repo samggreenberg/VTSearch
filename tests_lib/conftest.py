@@ -1,11 +1,14 @@
 """Pytest conftest for the *library-only* test suite under ``tests_lib/``.
 
-These tests exercise the ``vtscore`` candidate subpackages without
-booting Flask, ``vtsearch.app``, or ``vtsearch.settings``.  The fixtures
-here mirror the behaviour of ``tests/conftest.py`` for the library
-seams (context reset, embedding stubs, progress reset, …) and
-deliberately omit the app-tier ones (``client``, ``isolated_settings``,
-``_set_login_provider``, autorun-processor reset, etc.).
+These tests exercise the ``vtscore`` candidate subpackages without booting
+Flask, ``vtsearch.app``, or ``vtsearch.settings``.  Everything the two suites
+share — the group-marker hook, the fake embedders, the tmp-path widener, the
+embedder stub fixture, the bulk of the reset fixture and the end-of-run summary
+printer — lives in ``tests_shared`` and is imported by both conftests, so the
+two can no longer drift (issue #3424).  What stays here is library-tier only:
+the Flask blocker, the native-thread caps, and the library-only ``CoreConfig``
+builder.  The app-tier fixtures (``client``, ``isolated_settings``,
+``_set_login_provider``, autorun-processor reset) are deliberately absent.
 
 Phase 7 of ``../vtscore/docs/architecture.md``.
 """
@@ -39,43 +42,32 @@ _torch_threads = str(max(1, int(os.environ.get("VTSEARCH_TORCH_THREADS", "1"))))
 os.environ.setdefault("OMP_NUM_THREADS", _torch_threads)
 os.environ.setdefault("MKL_NUM_THREADS", _torch_threads)
 
-from pathlib import Path  # noqa: E402
 from unittest.mock import patch  # noqa: E402
 
-import numpy as np  # noqa: E402
 import pytest  # noqa: E402
 
 import vtscore.config as config  # noqa: E402
-from vtscore.config import runtime as config_runtime  # noqa: E402
-from vtscore.utils.hashing import content_md5  # noqa: E402
-
-
-_NON_GROUP_DIRS = {"tests_lib", "fixtures", "__pycache__"}
+from tests_shared.embedding_stubs import (  # noqa: E402
+    fake_embed_audio as _fake_embed_audio,
+    make_stub_embedding_models_fixture,
+)
+from tests_shared.pytest_plumbing import add_group_markers, print_summary_and_exit  # noqa: E402
+from tests_shared.state_reset import (  # noqa: E402
+    TEST_TRAIN_EPOCHS,  # noqa: F401  (re-exported: tests_lib/core/test_training_budget_isolation.py)
+    allow_test_tmp_paths as _allow_test_tmp_paths,  # noqa: F401  (autouse fixture)
+    freeze_startup_heap,
+    install_startup_contexts,
+    pin_training_budget,
+    reset_shared_state,
+)
 
 
 def pytest_collection_modifyitems(items, config):
     """Auto-assign group markers based on the test file's parent directory."""
-    for item in items:
-        parent = item.fspath.dirpath().basename
-        if parent and parent not in _NON_GROUP_DIRS and not parent.startswith("_"):
-            item.add_marker(getattr(pytest.mark, parent))
+    add_group_markers(items, root_dir_name="tests_lib")
 
 
-#: Training epochs for the whole test session (production default is 200; 30 is
-#: enough for the tiny heads to converge on the small test fixtures).  Named
-#: rather than inlined because it is re-asserted per test in ``reset_contexts``
-#: below - ``tests_lib/core/test_torch_config.py`` reloads ``vtscore.config``,
-#: which resets every module-level constant to its import-time value, and a
-#: leaked 200 silently retrains every later detector fixture against a different
-#: budget (issue #3101).
-TEST_TRAIN_EPOCHS = 30
-
-#: Written to the package *and* to the submodule that defines it.
-#: ``vtscore.training.mlp`` reads ``config.TRAIN_EPOCHS`` off the package at call
-#: time, so the package write is the load-bearing one; the submodule write keeps
-#: the two from disagreeing after a reload, which is what a future in-package
-#: reader would see.
-config.TRAIN_EPOCHS = config_runtime.TRAIN_EPOCHS = TEST_TRAIN_EPOCHS
+pin_training_budget()
 
 
 # ---------------------------------------------------------------------------
@@ -116,50 +108,15 @@ config.register_core_config_builder(_lib_default_core_config)
 # Stub heavy embedders BEFORE importing anything that touches the registry.
 # ---------------------------------------------------------------------------
 
-_EMBEDDING_DIM = 512
-
-
-def _fake_embed_audio(arg):
-
-    path = arg["media_path"] if isinstance(arg, dict) else arg
-    try:
-        with open(path, "rb") as f:
-            data = f.read(1000)
-        seed = int(content_md5(data), 16) % 2**31
-    except Exception:
-        seed = hash(str(path)) % 2**31
-    rng = np.random.RandomState(seed)
-    vec = rng.randn(_EMBEDDING_DIM).astype(np.float32)
-    # Real embedders now L2-normalize at ingest, so the fakes must too:
-    # region_similarity scores by dot product on the unit-norm assumption.
-    return vec / np.linalg.norm(vec)
-
-
-def _fake_embed_text(text):
-    import hashlib as _hl
-
-    seed = int(_hl.md5(text.encode()).hexdigest(), 16) % 2**31
-    rng = np.random.RandomState(seed)
-    vec = rng.randn(_EMBEDDING_DIM).astype(np.float32)
-    return vec / np.linalg.norm(vec)
-
-
-_patch_embed_audio = patch("tests_lib.fixtures.medias.embed_audio_file", side_effect=_fake_embed_audio)
+_EMBED_AUDIO_FILE_TARGET = "tests_lib.fixtures.medias.embed_audio_file"
+_patch_embed_audio = patch(_EMBED_AUDIO_FILE_TARGET, side_effect=_fake_embed_audio)
 _patch_embed_audio.start()
 
-import vtscore.state.core as _state_core
-
-_startup_ctx = _state_core.DatasetContext("_startup")
-_state_core.register_context(_startup_ctx)
-_state_core.set_thread_dataset_context(_startup_ctx)
-_startup_det = _state_core.DetectorContext("_startup_det")
-_state_core.register_detector_context(_startup_det)
-_state_core.set_thread_detector_context(_startup_det)
+install_startup_contexts()
 
 from vtscore.media.audio.audio_generator import GENERATOR_SAMPLE_RATE  # noqa: F401, E402
 from vtscore.media.audio.audio_generator import generate_wav  # noqa: F401, E402
 from vtscore.embedding import initialize_models  # noqa: E402
-from vtscore.detectors.labeling_progress import clear_progress_cache  # noqa: E402
 from vtsearch.state import medias  # noqa: E402
 
 from tests_lib.fixtures.medias import NUM_MEDIAS, init_medias  # noqa: F401, E402
@@ -172,44 +129,10 @@ _test_medias_snapshot = {k: dict(v) for k, v in medias.items()}
 
 _patch_embed_audio.stop()
 
-# Freeze the startup heap (torch, registries, test medias — all of it lives
-# for the whole session anyway) so it is excluded from garbage-collection
-# scans.  Production code sprinkles ``gc.collect()`` through the dataset-load
-# pipeline for memory hygiene on huge datasets; with the multi-hundred-MB
-# startup heap unfrozen, each of those calls costs ~0.3s of pure scan time in
-# tests that load several tiny datasets.
-import gc  # noqa: E402
+freeze_startup_heap()
 
-gc.collect()
-gc.freeze()
-
-from vtscore.media import (  # noqa: E402
-    all_embedders as _all_embedders,
-    all_types as _all_types,
-)
-
-_ALL_EMBEDDERS = _all_embedders()
-_ALL_MEDIA_TYPES = _all_types()
-
-
-@pytest.fixture(autouse=True)
-def _allow_test_tmp_paths(monkeypatch):
-    """Widen ``validate_server_filepath`` to also accept the system temp tree."""
-    import tempfile
-
-    import vtscore.security.path_validation as paths_mod
-
-    _original = paths_mod.validate_server_filepath
-
-    def _permissive(filepath_str, base_dir=None):
-        try:
-            return _original(filepath_str, base_dir)
-        except ValueError:
-            if base_dir is not None:
-                raise
-            return _original(filepath_str, Path(tempfile.gettempdir()))
-
-    monkeypatch.setattr(paths_mod, "validate_server_filepath", _permissive)
+# Stub every registered media type and embedder for the whole session.
+_stub_embedding_models = make_stub_embedding_models_fixture(_EMBED_AUDIO_FILE_TARGET)
 
 
 @pytest.fixture(scope="session")
@@ -254,197 +177,55 @@ def aac_bytes():
     return result.stdout
 
 
-@pytest.fixture(scope="session", autouse=True)
-def _stub_embedding_models():
-    """Prevent any embedder from loading real model weights during tests."""
-    from contextlib import ExitStack
-
-    stack = ExitStack()
-    stack.enter_context(patch("tests_lib.fixtures.medias.embed_audio_file", side_effect=_fake_embed_audio))
-    for mt in _ALL_MEDIA_TYPES:
-        stack.enter_context(patch.object(mt, "embed_text", side_effect=_fake_embed_text))
-        stack.enter_context(patch.object(mt, "load_models"))
-    for emb in _ALL_EMBEDDERS:
-        stack.enter_context(patch.object(emb, "embed_media", side_effect=_fake_embed_audio))
-        stack.enter_context(patch.object(emb, "embed_text", side_effect=_fake_embed_text))
-        stack.enter_context(patch.object(emb, "load_models"))
-    yield
-    stack.close()
-
-
-import vtscore.state.core as _core  # noqa: E402
-from vtscore.concurrency.progress import (  # noqa: E402
-    clear_thread_progress as _clear_thread_progress,
-    eval_progress as _eval_progress,
-    find_progress as _find_progress,
-    loading_tasks as _loading_tasks,
-    detector_loading_tasks as _model_loading_tasks,
-    sort_progress as _sort_progress,
-)
-from vtscore.datasets.registry import reset_for_tests as _reset_ds_reg  # noqa: E402
-from vtscore.detectors.registry import reset_for_tests as _reset_model_reg  # noqa: E402
-
-
 @pytest.fixture(autouse=True)
 def reset_contexts(tmp_path, monkeypatch):
     """Reset all library-tier mutable global state before each test.
 
-    Smaller cousin of the app-tier ``reset_state`` fixture in
-    ``tests/conftest.py``; only touches state that lives under
-    library-candidate packages.  No login provider, no autorun
-    processors, no settings file isolation (the library default
-    CoreConfig builder above is stable for every test).
+    The bulk of it lives in :func:`tests_shared.state_reset.reset_shared_state`,
+    which the app-tier ``reset_state`` calls too.  Only the library-tier extras
+    are spelled out here: no login provider, no autorun processors, no settings
+    file isolation (the library default ``CoreConfig`` builder above is stable
+    for every test), and registry storage redirected to ``tmp_path`` so tests
+    can't pollute the repo's ``data/`` tree.
     """
-    _core.clear_all_contexts()
-    default_ctx = _core.DatasetContext("_test_default")
-    _core.register_context(default_ctx)
-    _core.set_thread_dataset_context(default_ctx)
-
-    _core.clear_all_detector_contexts()
-    default_det = _core.DetectorContext("_test_default_det")
-    _core.register_detector_context(default_det)
-    _core.set_thread_detector_context(default_det)
-
-    medias.update({k: dict(v) for k, v in _test_medias_snapshot.items()})
-
-    from vtscore.security.hf_auth import clear_credential as _clear_hf_credential
-
-    _clear_hf_credential()
-
-    # Drain background jobs (joining any live worker) BEFORE clearing the
-    # progress cache: a labeling-status refresh writes the status snapshot at
-    # the end of its run, so it must be stopped first or its late write would
-    # survive the clear and leak into this test.
-    from vtscore.concurrency.async_jobs import reset_all_async_jobs_for_tests
-
-    reset_all_async_jobs_for_tests()
-
-    from vtscore.state.sort_results_cache import sort_results_cache
-
-    sort_results_cache.reset_for_tests()
-
-    clear_progress_cache()
-
-    from vtscore.embedding.helpers import clear_text_query_cache as _clear_query_cache
-
-    _clear_query_cache()
-
-    # ``resolve_device`` is lru_cached for the life of the process.  A test
-    # that resolves it under mocked CUDA (e.g. test_torch_config.py) would
-    # otherwise leak a cached "cuda" into every later ``train_model`` on a
-    # CPU-only box.  ``vtscore.embedding.loader`` binds the function at
-    # import, and the ``importlib.reload`` in those tests can leave it
-    # holding a *different* function object than the current module
-    # attribute — clear both.
-    import vtscore.config as _config
-    import vtscore.embedding.loader as _emb_loader
-
-    _config.resolve_device.cache_clear()
-    _emb_loader.resolve_device.cache_clear()
-
-    # A test that bound a per-thread progress sink must not leak it into the
-    # next one: with the global fallback gone, resolve_progress_callback() reads
-    # this and nothing else.
-    _clear_thread_progress()
-    _find_progress.update("idle", "", 0, 0, step=None, total_steps=None, error=None)
-    _sort_progress.update("idle", "", 0, 0, step=None, total_steps=None, error=None)
-    _eval_progress.update("idle", "", 0, 0, step=None, total_steps=None, error=None)
-    _loading_tasks.reset_for_tests()
-    _model_loading_tasks.reset_for_tests()
-
-    from vtscore.labels.sync import reset_label_sync_for_tests
-
-    reset_label_sync_for_tests()
-
-    from vtscore import cli_progress
-
-    cli_progress.set_format("text")
-
-    # Drop notification subscribers: they are process-global, so a test that
-    # subscribes a collector (or drives the CLI, which subscribes a printer)
-    # would otherwise keep receiving every later test's notifications.
-    from vtscore.concurrency.notifications import notifications as _notifications
-
-    _notifications.clear_subscribers()
-
-    # Redirect registry storage to tmp_path so tests can't pollute repo data/.
     from vtscore.datasets import registry as ds_reg_mod
     from vtscore.detectors import registry as det_reg_mod
 
     monkeypatch.setattr(ds_reg_mod, "REGISTRY_PATH", tmp_path / "dataset_registry.json")
     monkeypatch.setattr(det_reg_mod, "REGISTRY_PATH", tmp_path / "detector_registry.json")
 
-    _reset_ds_reg()
-    _reset_model_reg()
+    reset_shared_state(medias, _test_medias_snapshot)
 
-    # ``test_torch_config.py`` reloads the ``vtscore.config`` package tree to
-    # test env-var behaviour, which wipes *every* module-level value installed
+    # ``test_torch_config.py`` reloads ``vtscore.config`` to test env-var
+    # behaviour, which wipes *every* module-level value this conftest installed
     # at import time.  That file restores its own snapshot now (issue #3101),
-    # but re-assert the two that matter defensively, so any future reload - or
-    # any test that writes to ``vtscore.config`` and forgets to restore - cannot
-    # silently change what the rest of the session runs against: a missing
-    # builder makes ``CoreConfig.from_settings()`` raise, and a leaked training
-    # budget retrains every later detector fixture on a different number of
-    # epochs (which is how #3101 turned a seeded fixture order-dependent).
+    # but re-assert the builder defensively, so any future reload - or any test
+    # that writes to ``vtscore.config`` and forgets to restore - cannot silently
+    # leave ``CoreConfig.from_settings()`` raising for the rest of the session.
+    # (``reset_shared_state`` re-asserts the training budget for the same
+    # reason.)
     config.register_core_config_builder(_lib_default_core_config)
-    config.TRAIN_EPOCHS = config_runtime.TRAIN_EPOCHS = TEST_TRAIN_EPOCHS
 
 
 @pytest.hookimpl(trylast=True)
 def pytest_unconfigure(config):
-    """Force-exit to avoid SIGABRT from native library cleanup at shutdown.
+    """Print the run summary and force-exit (see ``tests_shared``).
 
-    Same rationale as in ``tests/conftest.py``: PyTorch / OpenMP / numba
-    spin up C++ thread pools whose teardown can call ``std::terminate``
-    during interpreter shutdown, producing exit code 134 even though all
-    tests passed.  ``os._exit`` skips atexit/static-destructor teardown.
-
-    Only runs when ``tests_lib/`` is the *sole* pytest session. When both
+    Only runs when ``tests_lib/`` is the *sole* pytest session.  When both
     ``tests/`` and ``tests_lib/`` collect together (a single pytest
-    invocation), the app-tier conftest's ``pytest_unconfigure`` handles
-    the force-exit and prints the summary.
+    invocation), the app-tier conftest's ``pytest_unconfigure`` handles the
+    force-exit and prints the summary; exactly one of the two must.  Detected
+    by looking for the app conftest among the registered plugins — when this
+    conftest is loaded standalone (``pytest tests_lib/``) the app one is never
+    imported.
     """
-    import sys
-
-    # Heuristic: only one of the two confests should print the summary.
-    # When this conftest is loaded standalone (pytest tests_lib/), the
-    # app conftest never gets imported.  Check by looking at registered
-    # plugin names.
     plugin_names = {getattr(p, "__name__", "") for p in config.pluginmanager.get_plugins()}
     if any("tests.conftest" in n for n in plugin_names):
         return
 
-    exitstatus = getattr(config, "_vtsearch_lib_exitstatus", 0)
-    reporter = config.pluginmanager.getplugin("terminalreporter")
-    print("", flush=True)
-    print("=" * 60, flush=True)
-    if reporter:
-        passed = len(reporter.stats.get("passed", []))
-        failed = len(reporter.stats.get("failed", []))
-        errors = len(reporter.stats.get("error", []))
-        skipped = len(reporter.stats.get("skipped", []))
-        xfailed = len(reporter.stats.get("xfailed", []))
-        total = passed + failed + errors + skipped
-
-        if failed or errors:
-            parts = [f"{failed} failed", f"{errors} errors", f"{passed} passed", f"{skipped} skipped"]
-            if xfailed:
-                parts.append(f"{xfailed} xfailed")
-            print(f"TESTS FAILED: {', '.join(parts)} (total: {total})", flush=True)
-        else:
-            extra = f"{skipped} skipped"
-            if xfailed:
-                extra += f", {xfailed} xfailed"
-            print(f"ALL {passed} TESTS PASSED ({extra}, total: {total})", flush=True)
-    else:
-        status = "PASSED" if exitstatus == 0 else "FAILED"
-        print(f"TESTS {status} (exit code {exitstatus}; reporter unavailable)", flush=True)
-    print("=" * 60, flush=True)
-
-    sys.stdout.flush()
-    sys.stderr.flush()
-    os._exit(exitstatus)
+    print_summary_and_exit(config, getattr(config, "_vtsearch_lib_exitstatus", 0))
 
 
 def pytest_sessionfinish(session, exitstatus):
+    """Stash the exit status so pytest_unconfigure can use it."""
     session.config._vtsearch_lib_exitstatus = exitstatus
