@@ -1,7 +1,6 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, OnDestroy, OnInit, output, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, input, OnDestroy, OnInit, output, signal, untracked } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
-import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
 import { DetectorsRegistryApiService } from '../../services/detectors-registry-api.service';
 import type { DetectorLabelView } from '../../generated/api-client/models/detector-label-view';
 import { Media } from '../../models/api.models';
@@ -113,7 +112,7 @@ export class RightPanelComponent implements OnInit, OnDestroy {
     { fallback: 'M' },
   );
   readonly gridGoalWidth = computed(() => iconSizeToGoalWidth(this.gridIconSizeRight.value()));
-  private destroy$ = new Subject<void>();
+  private readonly destroyRef = inject(DestroyRef);
 
   constructor() {
     // Track the active media type off the bound medias so the grid icon size
@@ -185,8 +184,6 @@ export class RightPanelComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.voteState.stopPolling();
     this.labelsetState.stopPolling();
-    this.destroy$.next();
-    this.destroy$.complete();
   }
 
   onSortModeChange(mode: LabelSortMode): void {
@@ -267,17 +264,17 @@ export class RightPanelComponent implements OnInit, OnDestroy {
 
   private subscribeToLabelset(): void {
     this.labelsetState.good$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((elements) => {
         this.goodElements.set(elements);
       });
     this.labelsetState.bad$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((elements) => {
         this.badElements.set(elements);
       });
     this.labelsetState.mediaType$
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((mt) => {
         if (this.useLabelset && mt && mt !== this.currentMediaType()) {
           this.currentMediaType.set(mt);
