@@ -46,6 +46,7 @@ import numpy as np  # noqa: E402
 import pytest  # noqa: E402
 
 import vtscore.config as config  # noqa: E402
+from vtscore.config import runtime as config_runtime  # noqa: E402
 from vtscore.utils.hashing import content_md5  # noqa: E402
 
 
@@ -69,7 +70,12 @@ def pytest_collection_modifyitems(items, config):
 #: budget (issue #3101).
 TEST_TRAIN_EPOCHS = 30
 
-config.TRAIN_EPOCHS = TEST_TRAIN_EPOCHS
+#: Written to the package *and* to the submodule that defines it.
+#: ``vtscore.training.mlp`` reads ``config.TRAIN_EPOCHS`` off the package at call
+#: time, so the package write is the load-bearing one; the submodule write keeps
+#: the two from disagreeing after a reload, which is what a future in-package
+#: reader would see.
+config.TRAIN_EPOCHS = config_runtime.TRAIN_EPOCHS = TEST_TRAIN_EPOCHS
 
 
 # ---------------------------------------------------------------------------
@@ -371,8 +377,8 @@ def reset_contexts(tmp_path, monkeypatch):
     _reset_ds_reg()
     _reset_model_reg()
 
-    # ``test_torch_config.py`` reloads ``vtscore.config`` to test env-var
-    # behaviour, which wipes *every* module-level value this conftest installed
+    # ``test_torch_config.py`` reloads the ``vtscore.config`` package tree to
+    # test env-var behaviour, which wipes *every* module-level value installed
     # at import time.  That file restores its own snapshot now (issue #3101),
     # but re-assert the two that matter defensively, so any future reload - or
     # any test that writes to ``vtscore.config`` and forgets to restore - cannot
@@ -381,7 +387,7 @@ def reset_contexts(tmp_path, monkeypatch):
     # budget retrains every later detector fixture on a different number of
     # epochs (which is how #3101 turned a seeded fixture order-dependent).
     config.register_core_config_builder(_lib_default_core_config)
-    config.TRAIN_EPOCHS = TEST_TRAIN_EPOCHS
+    config.TRAIN_EPOCHS = config_runtime.TRAIN_EPOCHS = TEST_TRAIN_EPOCHS
 
 
 @pytest.hookimpl(trylast=True)

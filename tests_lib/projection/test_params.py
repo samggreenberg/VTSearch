@@ -19,6 +19,10 @@ from vtscore.config import (
     PROJECTION_MIN_DIST,
     PROJECTION_N_NEIGHBORS,
 )
+
+# The builder is module state on ``core_config``; a rebind on the ``vtscore.config``
+# package would only touch a copy that ``from_settings()`` never reads.
+from vtscore.config import core_config
 from vtscore.projection.params import projection_embedder_for, resolve_projection_params
 from vtscore.state.core import DatasetContext
 
@@ -44,7 +48,7 @@ def override_settings(monkeypatch):
     def _apply(**fields):
         base = config.CoreConfig.from_settings()
         replaced = dataclasses.replace(base, **fields)
-        monkeypatch.setattr(config, "_core_config_builder", lambda _path=None: replaced)
+        monkeypatch.setattr(core_config, "_core_config_builder", lambda _path=None: replaced)
 
     return _apply
 
@@ -99,7 +103,7 @@ class TestResolveProjectionParams:
     def test_unavailable_core_config_falls_back_to_the_tuned_defaults(self, monkeypatch):
         # A library-only process with no builder installed must still fit, not
         # raise: no override is readable, so the tuned defaults stand.
-        monkeypatch.setattr(config, "_core_config_builder", None)
+        monkeypatch.setattr(core_config, "_core_config_builder", None)
         params = resolve_projection_params(_ctx("clip"))
         assert (params.n_neighbors, params.min_dist) == (10, 0.05)
         assert params.compact is PROJECTION_COMPACT_DEFAULT

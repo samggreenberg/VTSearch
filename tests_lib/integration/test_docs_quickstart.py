@@ -96,7 +96,7 @@ def loaded_medias(corpus: Path) -> dict[int, dict[str, Any]]:
 @pytest.fixture
 def detectors_dir(tmp_path: Path, monkeypatch) -> Path:
     """Point ``CoreConfig.detectors_dir`` at a scratch directory."""
-    import vtscore.config as config_mod
+    from vtscore.config import core_config as config_mod
 
     target = tmp_path / "detectors"
     base = config_mod.CoreConfig.from_settings()
@@ -104,7 +104,6 @@ def detectors_dir(tmp_path: Path, monkeypatch) -> Path:
         config_mod,
         "_core_config_builder",
         lambda _settings_path=None: replace_detectors_dir(base, target),
-        raising=False,
     )
     return target
 
@@ -125,7 +124,7 @@ class TestCoreConfigSetup:
     """The config builder the docs tell a library-only consumer to install."""
 
     def test_builder_snippet_constructs_and_registers(self, tmp_path: Path, monkeypatch):
-        import vtscore.config as config_mod
+        from vtscore.config import core_config as config_mod
 
         DATA = tmp_path / "vtscore-quickstart"
         DATA.mkdir(exist_ok=True)
@@ -146,7 +145,7 @@ class TestCoreConfigSetup:
                 inclusion=0,
             )
 
-        monkeypatch.setattr(config_mod, "_core_config_builder", _build, raising=False)
+        monkeypatch.setattr(config_mod, "_core_config_builder", _build)
 
         config = CoreConfig.from_settings()
         assert config.data_dir == DATA
@@ -155,7 +154,7 @@ class TestCoreConfigSetup:
     def test_from_settings_takes_a_settings_path(self, monkeypatch):
         """The builder is called with the ``settings_path`` argument, so a
         zero-argument builder (as the docs used to show) would raise."""
-        import vtscore.config as config_mod
+        from vtscore.config import core_config as config_mod
 
         seen: list[Any] = []
 
@@ -163,7 +162,7 @@ class TestCoreConfigSetup:
             seen.append(settings_path)
             return _minimal_config()
 
-        monkeypatch.setattr(config_mod, "_core_config_builder", _build, raising=False)
+        monkeypatch.setattr(config_mod, "_core_config_builder", _build)
         CoreConfig.from_settings("/tmp/run-settings.json")
         assert seen == ["/tmp/run-settings.json"]
 

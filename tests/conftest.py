@@ -7,6 +7,7 @@ import os
 import pytest
 
 import vtscore.config as config
+from vtscore.config import runtime as config_runtime
 from vtscore.utils.hashing import content_md5
 
 # ---------------------------------------------------------------------------
@@ -39,7 +40,10 @@ def pytest_collection_modifyitems(items, config):
 # resets every module-level constant to its import-time value (issue #3101).
 TEST_TRAIN_EPOCHS = 30
 
-config.TRAIN_EPOCHS = TEST_TRAIN_EPOCHS
+# Written to the package *and* to the submodule that defines it: ``vtscore.training.mlp``
+# reads it off the package at call time, but a reload re-executes the submodule, so
+# leaving the two disagreeing would be a trap for any future in-package reader.
+config.TRAIN_EPOCHS = config_runtime.TRAIN_EPOCHS = TEST_TRAIN_EPOCHS
 
 # ---------------------------------------------------------------------------
 # Stub out heavy embedding models BEFORE importing the app.

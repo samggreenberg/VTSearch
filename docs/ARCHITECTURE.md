@@ -578,7 +578,7 @@ modules on the right.
 | `vtscore/concurrency/progress.py` | No | No | **Yes**: threading only |
 | `vtscore/projection/` | No | No (params) | **Yes**: numpy + UMAP over an (N, d) matrix |
 | `vtscore/state/` | No | N/A (IS the state) | **Yes**: plain Python dicts |
-| `vtscore/config.py` | No | No | **Yes**: just constants |
+| `vtscore/config/` | No | No | **Yes**: just constants |
 | `vtscore/io.py` + `gpu_backends.py` | No | No | **Yes**: file I/O / backend selection |
 | `vtscore/security/login.py` | No | No | **Yes**: `LoginProvider` ABC + `DefaultLoginProvider` |
 | `vtsearch/auth/` | Lazy (`session`, `g`) | No | Partially: the Flask-session providers need Flask |
@@ -591,7 +591,7 @@ modules on the right.
 
 ### The ML training pipeline
 
-**Files:** `vtscore/training/mlp.py` / `vtscore/training/thresholds/`, `vtscore/config.py` (for `TRAIN_EPOCHS`)
+**Files:** `vtscore/training/mlp.py` / `vtscore/training/thresholds/`, `vtscore/config/runtime.py` (for `TRAIN_EPOCHS`)
 
 **Dependencies:** `torch`, `sklearn`, `numpy`
 

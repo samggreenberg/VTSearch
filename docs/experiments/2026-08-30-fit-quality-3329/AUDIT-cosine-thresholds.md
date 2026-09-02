@@ -177,7 +177,7 @@ reason rather than re-derive it.
 | scene-cut threshold (`vtscore/media/video/clipper.py`) | Pearson correlation of hue×saturation **histograms** |
 | VAD threshold, `top_db` (`vtscore/media/audio/clipper.py`) | Silero speech probability; amplitude in dB |
 | detection threshold (`vtscore/media/image/clipper.py`) | object-detector confidence |
-| `PROJECTION_MIN_DIST = 0.1` (`vtscore/config.py`) | a UMAP **output-space** parameter. The metric is cosine; the constant is not |
+| `PROJECTION_MIN_DIST = 0.1` (`vtscore/config/runtime.py`) | a UMAP **output-space** parameter. The metric is cosine; the constant is not |
 | compaction radius (`vtscore/projection/compaction.py`) | a 90th percentile of 2-D layout coordinates — data-driven, and off by default |
 | `_LOGISTIC_K = 8.0` (`vtscore/training/blend_schedules.py`) | warps a vote-count ramp in [0, 1] |
 | `SMART_FLAT_THRESHOLD`, `STABLE_*` (`vtscore/eval/autopilot_flow.py`) | a relative cost slope and a class-flip rate. Both dimensionless |

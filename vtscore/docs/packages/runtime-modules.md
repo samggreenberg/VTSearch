@@ -12,7 +12,7 @@ single-instance lock.
 | [`vtscore/gpu_backends.py`](#vtscoregpu_backends) | Route UMAP and k-means to cuML on a usable GPU, degrade to CPU otherwise |
 | [`vtscore/single_instance.py`](#vtscoresingle_instance) | Refuse a second server process on the same port |
 
-(`vtscore/config.py` also sits at the top level but is large enough to
+(`vtscore/config/` also sits at the top level but is large enough to
 have its own page: [`config.md`](config.md). The CLI modules likewise -
 see [`cli.md`](cli.md).)
 
