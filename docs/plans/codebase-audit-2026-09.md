@@ -93,7 +93,7 @@ care.
 
 ## Layering & host seams
 
-- [ ] #3385 — Replace the nine hand-rolled app-to-library hook seams with one typed registry (Sonnet 5)
+- [ ] #3385 — Give the app-to-library host seams a shared test reset (Sonnet 5)
 - [ ] #3388 — Drive `PluginBase` auto-derivation from family-base opt-in instead of three hardcoded tables (Opus 4.8)
 
 ## App tier — settings
