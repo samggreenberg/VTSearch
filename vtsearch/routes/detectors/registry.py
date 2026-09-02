@@ -1391,4 +1391,3 @@ def release_detector_positives_browse(detector_id: str):
 
     dropped = unregister_context(detpos_dataset_id(detector_id))
     return {"ok": True, "released": dropped is not None}
-

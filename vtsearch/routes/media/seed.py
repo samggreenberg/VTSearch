@@ -145,4 +145,3 @@ def seed_importer_field_options(body: dict, importer_name: str):
     assert importer is not None  # narrowed by err check
 
     return plugin_field_options(importer, body)
-

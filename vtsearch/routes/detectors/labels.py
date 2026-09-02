@@ -707,4 +707,3 @@ def vote_detector_label(body: dict, name: str, element_id: str):
         update_detector(reg_entry["id"], num_training=new_count, last_trained_at=time.time())
 
     return {"ok": True, "action": action}
-

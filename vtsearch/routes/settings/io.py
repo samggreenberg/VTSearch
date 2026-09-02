@@ -184,4 +184,3 @@ def run_settings_export(body: dict):
 
 # Re-export from settings module for backward compatibility and local use.
 from vtsearch.settings import _apply_settings  # noqa: F401, E402
-

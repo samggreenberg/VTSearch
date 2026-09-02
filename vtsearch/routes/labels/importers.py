@@ -376,4 +376,3 @@ def ingest_missing(body: dict):
         "failed": failed,
         "message": message,
     }
-
