@@ -538,8 +538,8 @@ and both are correct as written:
   bounds, never `destroy$`.
 - A **re-assigned `Subscription` field** that unsubscribes the previous value
   before storing the next: `text-viewer`'s `sub`, `folder-browser`'s
-  `currentSub`, `browse-bin-popup`'s `scrollSub` (re-keyed to the viewport
-  *instance*), `label-importer-modal`'s `ingestSub`.
+  `currentSub`, `browse-bin-member-grid`'s `scrollSub` (re-keyed to the
+  viewport *instance*), `label-importer-modal`'s `ingestSub`.
 
 A `Subscription` field is only a teardown idiom when it is written once and
 read only by `ngOnDestroy`. If it is re-assigned anywhere, it is cancellation
