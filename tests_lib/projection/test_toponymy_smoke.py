@@ -7,10 +7,16 @@ library for real, run :func:`build_region_labels` (clusterable UMAP →
 multiresolution clustering → contrastive keyphrases → KeyphraseNamer) on a
 tiny seeded corpus, and assert signs come out.  Numba compilation makes this
 a ~1 minute test → ``slow`` marker; run with ``-m slow``.
+
+It is also the only place the ``KeyphraseNamer``'s prompt parsing meets a
+prompt the *library* built rather than one a test wrote, so it carries the
+regression guard for issue #2567: the fit's suppressed-warning count (issue
+#3512) must be zero.
 """
 
 from __future__ import annotations
 
+import logging
 
 import numpy as np
 import pytest
@@ -58,9 +64,10 @@ def _seeded_corpus(per_cluster: int = 100):
     return proj, matrix, texts
 
 
-def test_real_toponymy_fit_produces_signs():
+def test_real_toponymy_fit_produces_signs(caplog):
     proj, matrix, texts = _seeded_corpus()
 
+    caplog.set_level(logging.DEBUG, logger="vtscore.projection.signpost_build")
     label_set = build_region_labels(
         proj,
         matrix,
@@ -84,6 +91,20 @@ def test_real_toponymy_fit_produces_signs():
     corpus_vocab = {w for words in _WORDS.values() for phrase in words for w in phrase.split()}
     named_words = {w for lab in label_set.labels for w in lab.text.lower().split()}
     assert named_words & corpus_vocab
+
+    # The regression guard for #2567 (issue #3512): the fit suppresses
+    # toponymy's warnings but now counts them, so a library bump that breaks
+    # the `KeyphraseNamer` prompt parse fails here instead of silently buying
+    # three `wait_random_exponential(4, 10)` retries per colliding cluster.
+    # Nothing else can see this: the warnings never reach stdout/stderr (they
+    # are suppressed, and pytest captures warnings separately anyway), and the
+    # parse unit tests feed prompts they build themselves.
+    (record,) = [r for r in caplog.records if hasattr(r, "toponymy_suppressed_warnings")]
+    assert getattr(record, "toponymy_suppressed_warnings") == 0, record.getMessage()
+    # Every naming prompt goes through `_keyphrase_topic_name`, so a drifted
+    # keyword-line layout would letter the canvas "unnamed" without warning.
+    assert getattr(record, "toponymy_named_topics") > 0
+    assert getattr(record, "toponymy_unnamed_topics") == 0, record.getMessage()
 
 
 def test_real_toponymy_fit_is_quiet_and_reports_layers(capsys):
