@@ -581,13 +581,16 @@ _lane_pip_audit() { pip-audit "${PIP_AUDIT_IGNORE[@]}"; }
 # symbol it was written for. That is how the file rotted before -- 49 of 102
 # entries were asserting nothing. Whole-repo scan (~5s), hence a lane.
 _lane_vulture_whitelist() { python scripts/vulture-audit.py --check-whitelist; }
-# --omit=dev: only audit production deps. Dev-only deps (e.g.
-# @angular-devkit/build-angular → webpack-dev-server) regularly carry
-# advisories with "no fix available" upstream because Angular hasn't
-# cut a release yet. Those affect `ng serve` on a developer's machine,
-# not anything that ships to users. Auditing prod deps is the actual
-# security gate worth blocking tests on.
-_lane_npm_audit() { (cd frontend && npm audit --omit=dev); }
+# Audits the whole tree, dev deps included. This used to be `--omit=dev`
+# because `@angular-devkit/build-angular` dragged in the webpack toolchain
+# (webpack-dev-server → sockjs/express/launch-editor), which regularly carried
+# advisories with no upstream fix. That package was never used -- angular.json
+# names only `@angular/build:*` builders -- so it was swapped for a direct
+# `@angular/build` devDependency (#3439), taking ~400 packages and every
+# unfixable advisory with it. Keep the gate wide: if a dev-only advisory ever
+# has genuinely no fix, pin it in `overrides` or carve it out here explicitly,
+# rather than re-blinding the audit to the entire dev tree.
+_lane_npm_audit() { (cd frontend && npm audit); }
 # `npm run test:ci` regenerates the API client (pretest:ci) then runs
 # `ng test --no-watch`, which exits non-zero on any spec failure.
 _lane_frontend_unit() { (cd frontend && npm run test:ci); }

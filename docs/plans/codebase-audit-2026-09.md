@@ -171,7 +171,6 @@ care.
 - [ ] #3431 — `Dockerfile.image-embedders` and its GPU twin are a 90% copy (Sonnet 5)
 - [ ] #3434 — Repo-hygiene batch: stale allowlists, three unreferenced scripts, `slides/Makefile` hardening (Haiku 4.5)
 - [ ] #3437 — `gridenv.sh` contradicts itself: the "untracked" shim is tracked (Sonnet 5)
-- [ ] #3439 — `@angular-devkit/build-angular` is an unused devDependency narrowing the audit gate (Sonnet 5)
 - [ ] #3440 — The ensure-test-deps `PreToolUse` hook reads `$TOOL_INPUT` only (Sonnet 5)
 
 ## Documentation
