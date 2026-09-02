@@ -961,13 +961,6 @@ export class NewDetectorModalComponent implements OnInit {
 
   // --- Local file upload (single file for the example) ---
 
-  formatSize(bytes?: number): string {
-    if (bytes == null) return '';
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  }
-
   /** Local file picker handler.  Used by the drop-zone affordance in both
    *  the main form (next to "Browse Media…") and the Local Folder / Local
    *  Files cards in the media picker.  Multi-file drops (e.g. a folder)

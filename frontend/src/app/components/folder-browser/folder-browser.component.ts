@@ -16,6 +16,7 @@ import {
 import { Observable, Subscription } from 'rxjs';
 
 import { IconComponent } from '../icon/icon.component';
+import { formatBytes } from '../../utils/format-metadata';
 
 export interface FolderBrowserDirEntry {
   name: string;
@@ -421,11 +422,9 @@ export class FolderBrowserComponent implements OnDestroy, AfterViewInit {
   // Helpers
   // ------------------------------------------------------------------
 
+  /** Template-bound size cell; see {@link formatBytes}. */
   formatSize(bytes?: number): string {
-    if (bytes === undefined || bytes === null) return '';
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return formatBytes(bytes);
   }
 
   trackRow(_index: number, row: Row): string {

@@ -19,6 +19,7 @@ import {
 } from '../../utils/bin-grid-metrics';
 import { applyClipWindow, clearClipWindow, clipProgress } from '../../utils/clip-window';
 import { shortcutsBlocked } from '../../utils/keyboard-shortcuts';
+import { formatMetadataValue as formatMetadataValueUtil } from '../../utils/format-metadata';
 import type { NowPlaying } from '../browse-hover-preview/browse-hover-preview.component';
 import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
 import type { MediaBatchResponse } from '../../generated/api-client/models/media-batch-response';
@@ -671,19 +672,10 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
     return (this.focusedMedia()?.custom_metadata as Record<string, unknown>) ?? {};
   }
 
-  /** Format a custom-metadata value for display. Mirrors the center panel's
-   *  ``formatMetadataValue`` so the same categories read identically here. */
+  /** Template-bound metadata cell. Shares the center panel's formatter so the
+   *  same categories read identically here; see {@link formatMetadataValue}. */
   formatMetadataValue(label: string, value: unknown): string {
-    if (label === 'File Size' && typeof value === 'number') {
-      return (value / 1024).toFixed(1) + ' KB';
-    }
-    if (label === 'Duration' && typeof value === 'number') {
-      return value.toFixed(1) + 's';
-    }
-    if (label === 'Frequency' && typeof value === 'number') {
-      return value + ' Hz';
-    }
-    return String(value);
+    return formatMetadataValueUtil(label, value);
   }
 
   /** Pull the remembered thumbnail size for the active media type, rechunk the
