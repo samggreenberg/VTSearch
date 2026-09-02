@@ -1924,6 +1924,14 @@ def simulate_voting_iterations(  # noqa: C901
             "n_haystack": len(sim_ids),
             "n_remainder": len(pool),
             "phase": flow.phase if flow is not None else "",
+            # The three lights behind that phase (#3560).  Already computed by
+            # `flow.update` above and previously discarded; the phase alone
+            # cannot say whether Smart or Stable is what holds a run in `hard`.
+            "smart": flow.smart if flow is not None else "",
+            "stable": flow.stable if flow is not None else "",
+            "span": flow.span if flow is not None else "",
+            "span_level": flow.span_level if flow is not None else -1,
+            "span_depth": flow.span_depth if flow is not None else -1,
             "app_trained": 1 if (flow is None or app_has_detector(flow.phase)) else 0,
             "startup_schedule": startup_schedule or "",
             "acq_threshold": round(float(acq_threshold), 6),

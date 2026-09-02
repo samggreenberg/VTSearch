@@ -89,7 +89,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 
 import common
@@ -344,6 +344,46 @@ def _prevalence_norm(prevalence: dict[tuple[str, str], float] | None):
     return mcolors.LogNorm(vmin=min(vals), vmax=max(vals))
 
 
+def _stop_clicks(stops: pd.DataFrame | None, panels: Iterable[tuple[str, str]]) -> dict[tuple[str, str], float]:
+    """Median first-fire click per ``(dataset, arm)``, for the panels being drawn.
+
+    Only where **at least half** the arm's runs on that dataset ever fired.
+    Below that the median of the firers is a survivorship artefact — the runs it
+    leaves out are exactly the slow ones — and a marker drawn from it would put
+    an authoritative glyph on a number the sample cannot support.  Those arms
+    are named in the caption instead (see :func:`_stop_caption`), which is
+    itself the finding.
+    """
+    if stops is None or stops.empty or "t_stop" not in stops.columns:
+        return {}
+    want = set(panels)
+    out: dict[tuple[str, str], float] = {}
+    for (arm, ds), g in stops.groupby(["arm", "dataset"], dropna=False):
+        if (str(ds), str(arm)) not in want:
+            continue
+        fired = g[g["stopped"]] if "stopped" in g.columns else g[g["t_stop"].notna()]
+        if len(g) == 0 or len(fired) / len(g) < 0.5:
+            continue
+        med = float(pd.to_numeric(fired["t_stop"], errors="coerce").median())
+        if np.isfinite(med):
+            out[(str(ds), str(arm))] = med
+    return out
+
+
+def _stop_caption(stops: pd.DataFrame, stop_at: dict[tuple[str, str], float], panels: Iterable[tuple[str, str]]) -> str:
+    """The one line the stopping marker needs to be readable.
+
+    Says what the glyph is, and — the part that is easy to omit and expensive to
+    omit — names the arms that carry no glyph *because their runs mostly never
+    stopped*, so an absent marker cannot be read as an oversight.
+    """
+    drawn = "▽ = median click at which the app's stopping rules first fired"
+    missing = sorted({arm for (ds, arm) in set(panels) if (ds, arm) not in stop_at})
+    if not missing:
+        return drawn
+    return drawn + f"; no marker for {', '.join(missing)} — fewer than half those runs ever fired"
+
+
 def mean_figure(  # noqa: C901
     main: pd.DataFrame,
     outdir: Path,
@@ -357,6 +397,7 @@ def mean_figure(  # noqa: C901
     baseline_label: str = BASELINE_LABEL,
     stat: str = STAT,
     lower_is_better: bool = True,
+    stops: pd.DataFrame | None = None,
     dpi: int = FIG_DPI,
 ) -> tuple[str | None, pd.DataFrame]:
     """Per-dataset mean curves with an inter-quartile band.
@@ -365,6 +406,16 @@ def mean_figure(  # noqa: C901
     dashed/solid switch does not — see :func:`_strip_worth_drawing`; otherwise
     the panel takes the height and its title names the click from which every
     arm is fully measured.
+
+    *stops* is :func:`stopping.stopping_points`' output (issue #3560).  When
+    given, each arm's curve carries a marker at the click where the app's
+    stopping rules fired for **half** the runs that ever fired — the point on
+    this very axis past which the user was being told they could stop.  It is
+    drawn as a marker on the curve rather than a rule across the panel for the
+    same reason the click-0 anchor is: a rule implies a level that holds
+    everywhere, and this one holds at one click.  Arms where fewer than half
+    the runs ever fired get no marker and are named in the caption instead,
+    because there is no click to put one at.
 
     Returns ``(filename, curves)``; ``curves`` is the plotted numbers, long
     format, one row per ``(arm, dataset, t)``, and always carries ``coverage``.
@@ -426,6 +477,7 @@ def mean_figure(  # noqa: C901
                 }
             )
 
+    stop_at = _stop_clicks(stops, series.keys())
     strip = _strip_worth_drawing([sr["cov"] for sr in series.values()], t_index)
     fig = plt.figure(figsize=(6.6 * len(datasets), 5.4 if strip else 4.4), layout="constrained")
     gs = (
@@ -474,6 +526,24 @@ def mean_figure(  # noqa: C901
             # implied a level that holds at every click when it holds at one.
             if base and np.isfinite(y[0]):
                 ax.plot(0, y[0], marker="o", ms=4.5, color=palette[arm], zorder=5)
+            # Where the app told the user they could stop (#3560).  On the
+            # curve, at the median first-fire click, so it reads as a point on
+            # this arm rather than as a level across the panel.
+            ts = stop_at.get((ds, arm))
+            if ts is not None:
+                yi = np.interp(ts, t_index, y, left=np.nan, right=np.nan)
+                if np.isfinite(yi):
+                    ax.plot(
+                        ts,
+                        yi,
+                        marker="v",
+                        ms=7,
+                        mfc="none",
+                        mew=1.6,
+                        color=palette[arm],
+                        zorder=6,
+                        ls="none",
+                    )
             if axc is not None:
                 axc.plot(t_index[clicked], 100.0 * cov[clicked], color=palette[arm], lw=1.2)
                 if not clicked.all():
@@ -499,11 +569,13 @@ def mean_figure(  # noqa: C901
                 axc.set_ylabel("% of cells\nmeasured", fontsize=8)
     top_axes[0].legend(fontsize=7, ncol=2)
     better = "lower is better" if lower_is_better else "higher is better"
-    fig.suptitle(
+    caption = (
         f"Is the user's detector getting better as they click?  —  {metric} vs clicks ({better})\n"
-        f"dashed where fewer than {SOLID_COVERAGE:.0%} of that arm's cells are measured at that click",
-        fontsize=10,
+        f"dashed where fewer than {SOLID_COVERAGE:.0%} of that arm's cells are measured at that click"
     )
+    if stops is not None and not stops.empty:
+        caption += "\n" + _stop_caption(stops, stop_at, series.keys())
+    fig.suptitle(caption, fontsize=10)
     outdir.mkdir(parents=True, exist_ok=True)
     p = outdir / f"{metric}_vs_clicks.png"
     fig.savefig(p, dpi=dpi)
@@ -662,12 +734,16 @@ def quality_vs_clicks(
     stat: str = STAT,
     max_runs: int = 0,
     lower_is_better: bool = True,
+    stops: pd.DataFrame | None = None,
     dpi: int = FIG_DPI,
 ) -> list[str]:
     """Both standard figures (averaged, and per run) plus the curve CSV.
 
     The one call an analyzer needs: pass the main metric frame tagged with
     ``arm``, the cell list as *denominator*, and the text-sort *baseline*.
+    Pass *stops* (from ``stopping.stopping_points``) to mark where the app's
+    stopping rules fired on the averaged panel — the click past which every
+    further click on the axis was one the app had already said was optional.
     """
     written: list[str] = []
     name, _curves = mean_figure(
@@ -682,6 +758,7 @@ def quality_vs_clicks(
         baseline_label=baseline_label,
         stat=stat,
         lower_is_better=lower_is_better,
+        stops=stops,
         dpi=dpi,
     )
     if name:

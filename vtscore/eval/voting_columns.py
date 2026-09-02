@@ -86,6 +86,27 @@ IDENT_COLUMNS: tuple[str, ...] = (
     "n_haystack",
     "n_remainder",
     "phase",
+    #: The three quality indicators behind that phase (issue #3560), each
+    #: ``red`` / ``yellow`` / ``green``, plus the raw counts the Span light is a
+    #: threshold on.  Blank / ``-1`` on a run with no phase machine (a
+    #: non-autopilot strategy, ``autopilot_fidelity=False``) and throughout a
+    #: startup schedule's rounds, which own the phase without consulting them.
+    #:
+    #: The phase is *almost* a lossless encoding of the three - ``new`` means
+    #: Smart and Stable are green and Span is not, ``done`` means all three -
+    #: with one gap that matters: in ``hard`` it cannot say whether Smart,
+    #: Stable, or both are what is holding the run there.  That is exactly the
+    #: question "why did this run never stop?" asks, so the lights are emitted
+    #: beside the phase.  They cost three attribute writes: the phase machine
+    #: already computes all three every step and threw them away.
+    "smart",
+    "stable",
+    "span",
+    #: Consecutive evidence-bearing atlas nodes, out of the tree's total.  The
+    #: Span light is ``level >= min(autopilot_goal_diversity, depth)``, so these
+    #: two say *how far short* a run fell rather than merely that it did.
+    "span_level",
+    "span_depth",
     "app_trained",
     #: The parameterised opening this run took (issue #3267), verbatim - so a
     #: pooled frame says which arm each row came from without depending on the
