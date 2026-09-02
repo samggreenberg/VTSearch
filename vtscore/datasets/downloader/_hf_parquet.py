@@ -3,7 +3,7 @@
 Some demo datasets (RICO-Screen2Words, RVL-CDIP) are distributed on the Hub as
 parquet shards whose images live in an ``Image``-feature column (a struct of
 ``{bytes, path}``) rather than as loose files.  The rest of the image demo
-pipeline (``_collect_simple_folder_files`` → ``_embed_file_images``) and the
+pipeline (``_collect_simple_folder_files`` → ``_render_single_label_image``) and the
 on-demand file re-resolution in the demo importer both expect *loose files on
 disk grouped into ``<category>/`` folders*.  So the download step for these
 datasets pulls the parquet shards, decodes each row's image bytes to a

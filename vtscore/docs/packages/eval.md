@@ -44,6 +44,7 @@ surface a programmatic consumer calls into.
 |-----------------------------------------|----------------------------------------------------------|
 | `vtscore/eval/patch_styles.py`          | Detection-style abstraction for the Max-Patch experiment |
 | `vtscore/eval/cut_rules.py`             | Score-cut rules and their oracle decomposition           |
+| `vtscore/eval/evt_mixture.py`           | Gumbel + Normal score mixture behind the `gumbel_*` cut rules |
 | `vtscore/eval/calibration_metrics.py`   | Pure-numpy calibration metrics and pooling variants      |
 | `vtscore/eval/trainers.py`              | Shared trainer registry for the learned-sort comparisons |
 | `vtscore/eval/label_curve.py`           | MLP-vs-SVM label-curve sweep (`run_label_curve_eval`)    |

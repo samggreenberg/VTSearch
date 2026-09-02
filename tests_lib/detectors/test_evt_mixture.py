@@ -21,7 +21,7 @@ import math
 import numpy as np
 import pytest
 
-from vtscore.training.evt_mixture import (
+from vtscore.eval.evt_mixture import (
     CROSSING_REASONS,
     GumbelNormalFit1D,
     FIT_FAILURES,
