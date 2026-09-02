@@ -7,15 +7,25 @@ on a single CPU box: the embedding cache and scratch data live under an
 experiment directory outside the repo (``INCKNOB_EXP``, defaulting to a
 temp-style path), while the committed outputs (CSVs, figures, report) go
 to ``docs/experiments/2026-07-27-inclusion-knob/`` in the worktree.
+
+The env/dir setup lives in ``scripts/experiments/_expcommon.py``, shared with
+the other studies (#3411).  Because this one runs from the repo checkout
+itself, there is no second checkout for the venv's editable install to resolve
+to, so it does **not** neutralise that finder the way the grid studies do.
 """
 
 from __future__ import annotations
 
 import os
 import sys
-import time
-from contextlib import contextmanager
 from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+
+import _expcommon
+from _expcommon import log, timed  # re-exported: stages call ``common.timed`` / ``common.log``
+
+__all__ = ["CACHE", "DATADIR", "EXP", "REPO", "RESULTS", "log", "setup_env", "timed"]
 
 REPO = Path(__file__).resolve().parents[3]
 EXP = Path(os.environ.get("INCKNOB_EXP", str(Path.home() / ".cache" / "incknob-exp")))
@@ -26,25 +36,11 @@ RESULTS = REPO / "docs" / "experiments" / "inclusion-knob"
 
 def setup_env() -> None:
     """Point vtscore + HF caches at the experiment dirs; make the repo importable."""
-    os.environ.setdefault("VTSEARCH_DATA_DIR", str(DATADIR))
-    os.environ.setdefault("VTSEARCH_MODELS_DIR", str(EXP / "models"))
-    os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
-    for d in (DATADIR, CACHE, EXP / "models", RESULTS):
-        d.mkdir(parents=True, exist_ok=True)
-    if str(REPO) not in sys.path:
-        sys.path.insert(0, str(REPO))
-
-
-@contextmanager
-def timed(label: str, sink: dict | None = None):
-    """Record wall-clock seconds for *label* (optionally into *sink*) and print it."""
-    t0 = time.time()
-    yield
-    dt = time.time() - t0
-    if sink is not None:
-        sink[label] = round(dt, 2)
-    print(f"[timing] {label}: {dt:.1f}s", flush=True)
-
-
-def log(msg: str) -> None:
-    print(msg, flush=True)
+    _expcommon.setup_env(
+        repo=REPO,
+        datadir=DATADIR,
+        models_dir=EXP / "models",
+        results=RESULTS,
+        extra_dirs=(CACHE,),
+        neutralise=False,
+    )
