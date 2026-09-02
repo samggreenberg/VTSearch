@@ -30,7 +30,7 @@ from types import SimpleNamespace
 from flask import send_file
 from flask_smorest import Blueprint, abort
 
-from vtsearch.routes._shared import require_dataset_header
+from vtsearch.routes._context import require_dataset_header
 from vtsearch.state import snapshot_medias
 
 logger = logging.getLogger(__name__)

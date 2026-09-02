@@ -18,7 +18,7 @@ importing any Flask / Werkzeug symbols:
   ``--file <path>`` argument in :class:`CliUploadedFile`, which exposes
   the same surface backed by a local filesystem path.
 - The background-thread upload path
-  (``file_mode="bytesio"`` in :func:`vtsearch.routes._shared.validate_plugin_args`)
+  (``file_mode="bytesio"`` in :func:`vtsearch.routes._plugins.validate_plugin_args`)
   uses :class:`BytesIOUploadedFile`, which holds the upload bytes in
   memory so the thread can read them after the Flask request context
   has been torn down.

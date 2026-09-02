@@ -422,7 +422,13 @@ VTSearch/
 │   │   └── sources/                server_json_file (bidirectional settings sync)
 │   │
 │   └── routes/                     Flask blueprints; all HTTP request handling
-│       ├── _shared.py              Shared route helpers (request parsing, JSON safety)
+│       ├── _context.py             X-Dataset-Id / X-Detector-Id route guards
+│       ├── _http.py                Request-body parsing, error-detail and mtime formatting
+│       ├── _media_response.py      Thumbnail responses; media-dict JSON safety filter
+│       ├── _plugins.py             Plugin lookup, field options, argument validation
+│       ├── _policy.py              Deployment-policy guards (the Semantic lock)
+│       ├── _progress.py            Parking the sort / find progress trackers at idle
+│       ├── _sort_window.py         Windowing a full ranking into a sort response
 │       ├── auth.py                 /api/auth/status, login, logout
 │       ├── auth_huggingface.py     HuggingFace OAuth (/api/auth/huggingface/*)
 │       ├── main.py                 Root route, favicon, logo

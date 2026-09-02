@@ -30,7 +30,7 @@ Plugin bodies are expected to trust the resulting dict - no more
 
 Wired into both ingress points:
 
-- HTTP path: ``vtsearch/routes/_shared.py:validate_plugin_args`` calls
+- HTTP path: ``vtsearch/routes/_plugins.py:validate_plugin_args`` calls
   this after marshmallow loads the body and file uploads are populated.
 - CLI path: :meth:`PluginBase.validate_cli_field_values` calls this
   after the presence check.

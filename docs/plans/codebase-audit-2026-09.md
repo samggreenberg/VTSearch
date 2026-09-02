@@ -103,7 +103,7 @@ care.
 
 ## App tier — routes, schemas, facades
 
-- [ ] #3420 — Split `routes/_shared.py`: nine unrelated modules in one 866-line file (Haiku 4.5)
+- [x] #3420 — Split `routes/_shared.py`: nine unrelated modules in one 866-line file (Haiku 4.5)
 - [ ] #3427 — Register one dynamic plugin route and generate its bodies at spec-build time (Opus 4.8)
 - [ ] #3438 — Small app-tier batch: exempt prefixes as a route attribute, plus the orphan-endpoint decision (Sonnet 5)
 
