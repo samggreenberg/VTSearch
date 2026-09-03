@@ -782,7 +782,8 @@ def _resolve_display_image(media_id: int) -> tuple[bytes, str, str]:
 
     media_type = c.get("media_type")
 
-    # For non-image types, delegate to the media type's image_response if available
+    # For non-image types, delegate to the media type's ``image_response``
+    # hook; a type with no paintable form returns None and we 400.
     if media_type and media_type != "image":
         from vtscore.media import get as get_media_type  # noqa: PLC0415
 
@@ -790,11 +791,13 @@ def _resolve_display_image(media_id: int) -> tuple[bytes, str, str]:
             mt = get_media_type(media_type)
         except KeyError:
             mt = None
-        image_response_fn = getattr(mt, "image_response", None) if mt else None
-        if image_response_fn is not None:
-            resp = image_response_fn(c)
-            if resp is not None:
-                return resp.data, resp.mimetype, resp.download_name
+        resp = mt.image_response(c) if mt else None
+        # ``MediaResponse.data`` is ``bytes | dict`` (text types serve JSON),
+        # but an image is always bytes.  A hook handing back a dict is a
+        # broken plugin, not an image: treat it as "no picture" rather than
+        # letting it reach ``send_file``.
+        if resp is not None and isinstance(resp.data, (bytes, bytearray)):
+            return bytes(resp.data), resp.mimetype, resp.download_name
         abort(400, message="no image available")
 
     media_bytes = _resolve_bytes(c)
@@ -812,15 +815,16 @@ def _resolve_display_image(media_id: int) -> tuple[bytes, str, str]:
 
 @medias_bp.route("/api/medias/<int:media_id>/image")
 @medias_bp.arguments(MediaVariantQuerySchema, location="query")
-@medias_bp.alt_response(400, description="Media is not an image and has no image_response delegate.")
+@medias_bp.alt_response(400, description="Media is not an image and its image_response hook yielded nothing.")
 @medias_bp.alt_response(404, description="Media not found, or media bytes unavailable.")
 def media_image(query: dict, media_id: int):
     """Stream the image bytes for a single image media item.
 
     Determines the MIME type from the media's filename extension, defaulting
     to ``image/jpeg`` for unrecognised extensions. For non-image media types
-    that declare an ``image_response`` hook (audio waveforms, video frames),
-    the route delegates to that hook.
+    the route delegates to the type's ``image_response`` hook (audio
+    waveforms, video frames), which returns ``None`` for a type with no
+    paintable form.
     """
     data, mimetype, download_name = _resolve_display_image(media_id)
     return send_file(io.BytesIO(data), mimetype=mimetype, download_name=download_name)
@@ -828,7 +832,7 @@ def media_image(query: dict, media_id: int):
 
 @medias_bp.route("/api/medias/<int:media_id>/thumbnail")
 @medias_bp.arguments(MediaVariantQuerySchema, location="query")
-@medias_bp.alt_response(400, description="Media is not an image and has no image_response delegate.")
+@medias_bp.alt_response(400, description="Media is not an image and its image_response hook yielded nothing.")
 @medias_bp.alt_response(404, description="Media not found, or media bytes unavailable.")
 def media_thumbnail(query: dict, media_id: int):
     """Stream a downscaled thumbnail of a media item's image.

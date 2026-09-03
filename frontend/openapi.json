@@ -12798,7 +12798,7 @@
     },
     "/api/medias/{media_id}/image": {
       "get": {
-        "description": "Determines the MIME type from the media's filename extension, defaulting\nto ``image/jpeg`` for unrecognised extensions. For non-image media types\nthat declare an ``image_response`` hook (audio waveforms, video frames),\nthe route delegates to that hook.",
+        "description": "Determines the MIME type from the media's filename extension, defaulting\nto ``image/jpeg`` for unrecognised extensions. For non-image media types\nthe route delegates to the type's ``image_response`` hook (audio\nwaveforms, video frames), which returns ``None`` for a type with no\npaintable form.",
         "operationId": "media_image",
         "parameters": [
           {
@@ -12818,7 +12818,7 @@
         ],
         "responses": {
           "400": {
-            "description": "Media is not an image and has no image_response delegate."
+            "description": "Media is not an image and its image_response hook yielded nothing."
           },
           "404": {
             "description": "Media not found, or media bytes unavailable."
@@ -13042,7 +13042,7 @@
         ],
         "responses": {
           "400": {
-            "description": "Media is not an image and has no image_response delegate."
+            "description": "Media is not an image and its image_response hook yielded nothing."
           },
           "404": {
             "description": "Media not found, or media bytes unavailable."

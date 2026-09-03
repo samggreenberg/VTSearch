@@ -381,9 +381,19 @@ class TestImageRoute:
         assert resp.content_type == "image/jpeg"
 
     def test_unregistered_non_image_type_returns_400(self, client):
-        # A non-image type with no registered MediaType (so no image_response
-        # delegate) has no image to serve.
+        # A non-image type with no registered MediaType at all: there is no
+        # instance to ask for an image_response, so nothing to serve.
         mid = _inject(media_type="mystery_type", media_bytes=b"whatever")
+        resp = client.get(f"/api/medias/{mid}/image")
+        assert resp.status_code == 400
+
+    def test_registered_type_inheriting_the_default_returns_400(self, client):
+        # Text is registered and reaches the delegate, but has no visual form,
+        # so it keeps ``MediaType.image_response``'s ``None`` default. The 400
+        # must come from the hook answering "no picture", not from the route
+        # failing to find a hook -- the distinction the getattr duck-typing
+        # this replaced could not make.
+        mid = _inject(media_type="text", filename="note.txt", media_string="hello")
         resp = client.get(f"/api/medias/{mid}/image")
         assert resp.status_code == 400
 

@@ -18,6 +18,7 @@ depending on a particular codec being present in the container.
 from __future__ import annotations
 
 import io
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import pytest
@@ -33,6 +34,9 @@ from vtscore.media.video.media_type import (
     generate_video_thumbnail_from_file,
     generate_video_thumbnail_from_file_at,
 )
+
+if TYPE_CHECKING:
+    from vtscore.media.embedder import MediaEmbedder
 
 _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 
@@ -484,5 +488,7 @@ class TestVideoLoadDemoSourceErrors:
                 slice_end=None,
                 clips={},
                 on_progress=lambda *a, **k: None,
-                embedder=object(),  # non-None so no embedder registry lookup happens
+                # Non-None so no embedder registry lookup happens; the source
+                # check rejects it before anything touches the embedder.
+                embedder=cast("MediaEmbedder", object()),
             )
