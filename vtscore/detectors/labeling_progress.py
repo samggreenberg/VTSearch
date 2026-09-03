@@ -48,7 +48,7 @@ import numpy as np
 from vtscore.concurrency.async_jobs import check_job_cancelled
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.training.mlp import LINEAR_SVM_HEAD, train_model
-from vtscore.training.thresholds import conformal_threshold
+from vtscore.training.thresholds import conformal_threshold, inclusion_cost_weights, weighted_error_cost
 
 if TYPE_CHECKING:
     import torch.nn as nn
@@ -742,8 +742,6 @@ def _score_step(
     step: dict[str, Any],
     X_eval: Any,
     eval_labels: list[float],
-    total_positives: int,
-    total_negatives: int,
     fpr_weight: float,
     fnr_weight: float,
     t: int,
@@ -752,6 +750,11 @@ def _score_step(
 
     Returns an error-cost dict for the step.  The caller guarantees
     ``step["model"]`` is not ``None``.
+
+    The weighted FPR/FNR arithmetic is
+    :func:`~vtscore.training.thresholds.weighted_error_cost`, shared with the
+    eval harness (``vtscore.eval.step_trainers._labelset_error_costs``) so the
+    Smart indicator a study measures is the one the app shows.
     """
     import torch  # noqa: PLC0415
 
@@ -759,17 +762,7 @@ def _score_step(
         X_in = X_eval.to(next(step["model"].parameters()).device)
         scores = torch.sigmoid(step["model"](X_in)).squeeze(1).cpu().tolist()
 
-    fp = fn = 0
-    for score, true_label in zip(scores, eval_labels, strict=True):
-        predicted = 1 if score >= step["threshold"] else 0
-        if predicted == 1 and true_label == 0:
-            fp += 1
-        elif predicted == 0 and true_label == 1:
-            fn += 1
-
-    fpr = fp / total_negatives if total_negatives > 0 else 0.0
-    fnr = fn / total_positives if total_positives > 0 else 0.0
-    error_cost = fpr_weight * fpr + fnr_weight * fnr
+    error_cost, fpr, fnr = weighted_error_cost(scores, eval_labels, step["threshold"], fpr_weight, fnr_weight)
 
     return {
         "time_index": t,
@@ -784,11 +777,13 @@ def _build_eval_set(
     clips_dict: dict[int, dict[str, Any]],
     current_good_votes: dict[int, None],
     current_bad_votes: dict[int, None],
-) -> Optional[tuple[Any, list[float], int, int]]:
+) -> Optional[tuple[Any, list[float]]]:
     """Build the evaluation tensor and label set from the current votes.
 
-    Returns ``(X_eval, eval_labels, total_positives, total_negatives)`` or
-    ``None`` when there are no usable labeled medias to evaluate against.
+    Returns ``(X_eval, eval_labels)`` or ``None`` when there are no usable
+    labeled medias to evaluate against.  Built once and reused by every model
+    in the window, so all points of the Smart indicator's slope regression
+    share one eval set.
     """
     # Build evaluation set from current votes
     current_labels: dict[int, float] = {}
@@ -812,10 +807,7 @@ def _build_eval_set(
 
     import torch  # noqa: PLC0415
 
-    X_eval = torch.tensor(np.array(eval_embs), dtype=torch.float32)
-    total_positives = sum(1 for lbl in eval_labels if lbl == 1)
-    total_negatives = len(eval_labels) - total_positives
-    return X_eval, eval_labels, total_positives, total_negatives
+    return torch.tensor(np.array(eval_embs), dtype=torch.float32), eval_labels
 
 
 def _eval_cached_models(
@@ -830,19 +822,17 @@ def _eval_cached_models(
     """Score *cache*'s models against the current labelset (forward passes only).
 
     Returns a list of error-cost dicts for every cached step in
-    ``[start, end)`` that has a trained model.
+    ``[start, end)`` that has a trained model.  The Inclusion weights come from
+    the shipped :func:`~vtscore.training.thresholds.inclusion_cost_weights`, so
+    the indicator prices a miss exactly as the threshold rule that produced the
+    cut does.
     """
-    if inclusion_value >= 0:
-        fpr_weight = 1.0
-        fnr_weight = 2.0**inclusion_value
-    else:
-        fpr_weight = 2.0 ** (-inclusion_value)
-        fnr_weight = 1.0
+    fpr_weight, fnr_weight = inclusion_cost_weights(inclusion_value)
 
     eval_set = _build_eval_set(clips_dict, current_good_votes, current_bad_votes)
     if eval_set is None:
         return []
-    X_eval, eval_labels, total_positives, total_negatives = eval_set
+    X_eval, eval_labels = eval_set
 
     if end is None:
         end = len(cache.steps)
@@ -853,9 +843,7 @@ def _eval_cached_models(
         if step["model"] is None:
             continue
 
-        results.append(
-            _score_step(step, X_eval, eval_labels, total_positives, total_negatives, fpr_weight, fnr_weight, t)
-        )
+        results.append(_score_step(step, X_eval, eval_labels, fpr_weight, fnr_weight, t))
 
     return results
 

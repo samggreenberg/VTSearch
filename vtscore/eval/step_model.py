@@ -4,9 +4,11 @@
 :mod:`vtscore.eval.step_trainers` returns and every scorer in
 :mod:`vtscore.eval.voting_iterations` consumes: a ``predict`` callable plus the
 provenance the result rows record.  The rest of this module is the handful of
-primitives that sit on both sides of that contract - the head sentinels, the
-cost weights, and the two functions that turn a media into a training vector or
-a simulation set into scores.
+primitives that sit on both sides of that contract - the head sentinels and the
+two functions that turn a media into a training vector or a simulation set into
+scores.  The Inclusion cost weights are *not* here: there is one eval-tier
+spelling of them, :func:`vtscore.eval.calibration_metrics.inclusion_weights`,
+over the shipped :func:`vtscore.training.thresholds.inclusion_cost_weights`.
 
 They live here rather than in the harness module because the trainers and the
 loop both need them, and a module that is *only* the contract keeps that
@@ -88,17 +90,6 @@ def resolve_hidden_dim(head: str, n_votes: int) -> int:
     if head == "mlp":
         return _auto_hidden_dim(n_votes)
     raise ValueError(f"unknown head {head!r}; expected one of {HEADS}")
-
-
-def inclusion_weights(inclusion: int) -> tuple[float, float]:
-    """``(fpr_weight, fnr_weight)`` for an inclusion value.
-
-    Delegates to the production definition so a measured cost and the shipped
-    threshold rule can never disagree about what an inclusion value prices.
-    """
-    from vtscore.training.thresholds import inclusion_cost_weights  # noqa: PLC0415
-
-    return inclusion_cost_weights(inclusion)
 
 
 def good_training_vec(

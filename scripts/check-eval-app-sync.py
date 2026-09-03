@@ -196,7 +196,11 @@ MIRRORS: list[Mirror] = [
             "scored: the caller (`step_trainers._labelset_error_costs`) re-scores the "
             "whole window against the *current* labelset every step, as `_eval_cached_models` "
             "does. Handing in a history of frozen per-step costs instead would silently change "
-            "the statistic the slope measures (issue #2923), which is not a declared divergence."
+            "the statistic the slope measures (issue #2923), which is not a declared divergence. "
+            "The weighted-cost arithmetic underneath both is no longer a copy at all: since "
+            "#3414 both score through `vtscore.training.thresholds.weighted_error_cost` and "
+            "price inclusion through `inclusion_cost_weights`, so that half cannot drift and "
+            "needs no pin - only the flatness rule above it does."
         ),
     ),
     Mirror(
