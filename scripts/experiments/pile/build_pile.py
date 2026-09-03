@@ -203,7 +203,14 @@ def main() -> int:
     if args.provenance or args.backfill_provenance:
         return provenance_report(backfill=args.backfill_provenance)
 
-    datasets = args.datasets.split(",") if args.datasets else list(pc.DATASETS)
+    # `on_request` datasets are built only when NAMED. The pile's default sweep
+    # is "everything the shared studies need"; a cell sized for one study is a
+    # cost the sweep should not silently take on (see `vg_scale_deep`).
+    datasets = (
+        args.datasets.split(",")
+        if args.datasets
+        else [d for d, spec in pc.DATASETS.items() if not spec.get("on_request")]
+    )
     embedders = args.embedders.split(",") if args.embedders else list(pc.EMBEDDERS)
     for bad in [d for d in datasets if d not in pc.DATASETS]:
         raise SystemExit(f"unknown dataset {bad!r}; known: {sorted(pc.DATASETS)}")
