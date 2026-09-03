@@ -61,7 +61,13 @@ UNIT_PT = 38.0
 CANVAS = (19.8, 11.0)
 
 COLS, ROWS = 3, 3
-CELL_W, CELL_H = CANVAS[0] / COLS, CANVAS[1] / ROWS
+
+#: How much of the canvas's bottom edge the grid keeps clear. The slide draws
+#: its own page number in the bottom-right corner, and the last row of tiles
+#: otherwise runs underneath it.
+GRID_FOOT = 0.75
+
+CELL_W, CELL_H = CANVAS[0] / COLS, (CANVAS[1] - GRID_FOOT) / ROWS
 
 #: How much of each cell is margin rather than image. Wide enough that two
 #: tiles never touch — several of these thumbnails are white-on-white at the
