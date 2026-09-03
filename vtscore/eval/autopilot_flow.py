@@ -200,6 +200,31 @@ def next_phase(
 TRAINED_PHASES: frozenset[str] = frozenset({"hard", "new", "done", "exhausted"})
 
 
+#: The phase in which the app has told the user it is done: all three quality
+#: indicators are green, and the panel reads "All quality indicators are green.
+#: You can continue labeling or export your results."  Spelled here so that
+#: analysis asking "where did the stopping rule fire?" compares against a name
+#: rather than a string literal.
+#:
+#: ``exhausted`` is deliberately **not** here.  It is the app running out of
+#: pool with the indicators still amber - the opposite result - and folding the
+#: two together would report a starved run as a converged one.
+STOPPING_PHASE: str = "done"
+
+
+def stopping_rule_fired(phase: str) -> bool:
+    """Whether *phase* is the one the app's stopping rules produce.
+
+    The app announces completion the **first** time this becomes true and never
+    re-announces it (``AutopilotStateService.completionAnnounced``), while the
+    phase itself is *derived* every step and can therefore go back to ``hard``
+    on the next vote.  So "where did the stopping rule fire" is the first step
+    this holds, not the last, and the two are routinely far apart - see
+    ``scripts/experiments/calibration/stopping.py``, which reports both.
+    """
+    return phase == STOPPING_PHASE
+
+
 def app_has_detector(phase: str) -> bool:
     """Whether the app would have a trained detector on screen in *phase*.
 
@@ -222,6 +247,11 @@ class AutopilotFlow:
     and the accumulated per-step prediction-flip counts (Stable) — and
     recomputes the phase after every vote.  The atlas span is read from the
     harness's atlas, which it labels in lock-step with the votes.
+
+    After every :meth:`update` the three indicator lights that produced the
+    phase are left on :attr:`smart` / :attr:`stable` / :attr:`span` (with the
+    raw :attr:`span_level` / :attr:`span_depth` behind the last of them), which
+    is what lets a run say *which* rule held it short of ``done``.
 
     Note the asymmetry between the two, which is the app's: Stable's flip counts
     are a genuine history (each entry compares two consecutive models and can
@@ -254,6 +284,25 @@ class AutopilotFlow:
         self.recent_error_costs: list[float] = []
         self.stability: list[dict[str, Any]] = []
         self._prev_predictions: Optional[dict[int, int]] = None
+        #: The three indicator lights behind the phase, as of the last
+        #: :meth:`update`.  The phase alone cannot say which of Smart and Stable
+        #: is holding a trajectory in ``hard`` - both gate that transition
+        #: together - so a study asking *why* a run never stopped needs the
+        #: lights themselves.  Computing them is already paid for by
+        #: :meth:`update`; keeping them costs three attribute writes.  Blank
+        #: until the first :meth:`update`, and left blank throughout a startup
+        #: schedule's rounds, which own the phase without consulting them.
+        self.smart: Status | str = ""
+        self.stable: Status | str = ""
+        self.span: Status | str = ""
+        #: The raw span counts the Span light is a threshold on: how many
+        #: consecutive BFS-order atlas nodes carry evidence, out of how many the
+        #: tree has.  ``-1`` where there is no atlas (a non-autopilot run) or no
+        #: update yet.  Reported alongside the light because "red" and "green"
+        #: cannot say how far short a run fell, and the gap is the actionable
+        #: number when Span turns out to be the binding rule.
+        self.span_level: int = -1
+        self.span_depth: int = -1
 
     def record_step(self, error_costs: list[float] | None, predictions: dict[int, int] | None) -> None:
         """Fold one step's model into the Smart / Stable inputs.
@@ -296,6 +345,9 @@ class AutopilotFlow:
         smart = smart_status(self.recent_error_costs, good_count, bad_count)
         stable = stable_status(self.stability, good_count, bad_count)
         sp: Status = span_status(int(span["level"]), int(span["depth"]), self.span_green) if span is not None else "red"
+        self.smart, self.stable, self.span = smart, stable, sp
+        self.span_level = int(span["level"]) if span is not None else -1
+        self.span_depth = int(span["depth"]) if span is not None else -1
         self.phase = next_phase(
             good_count,
             bad_count,
