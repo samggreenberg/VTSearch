@@ -114,13 +114,13 @@ HIT_ATTRS = (
     "disc",
     "ribbon",
     "bottle",
-    '"Coke"',
+    "“Coke”",
 )
 
 #: The eight results the search returned, each as (what it is, attributes it
 #: has). Read off the actual hits, not invented: the wordmark reversed out of
 #: a solid red field; the round red button badge; that badge with a contour
-#: bottle beside it; the wordmark over the dynamic ribbon; "Coke" set in a
+#: bottle beside it; the wordmark over the dynamic ribbon; “Coke” set in a
 #: heavy sans that is not the script at all; the wordmark in flat black; the
 #: wordmark in red on white; and Diet Coke, which is a different product.
 #:
@@ -133,10 +133,10 @@ HITS = (
     ("the round red badge", ("script", "red", "red\nfield", "disc")),
     ("that badge, with a bottle", ("script", "red", "red\nfield", "disc", "bottle")),
     ("wordmark over the ribbon", ("script", "red", "ribbon")),
-    ('"Coke" in a heavy sans', ("red", '"Coke"')),
+    ("“Coke” in a heavy sans", ("red", "“Coke”")),
     ("the wordmark in black", ("script",)),
     ("the wordmark in red", ("script", "red")),
-    ("Diet Coke", ("script", "red", '"Coke"')),
+    ("Diet Coke", ("script", "red", "“Coke”")),
 )
 
 #: Where the matrix sits. The row labels run left from `LABEL_RIGHT` and the
@@ -278,8 +278,8 @@ JOBS_STAGES = 5
 #: own tick once it no longer sits directly under it.
 CANDIDATES = (
     "a red\ndelivery truck",
-    "a rival's\nswash script",
-    '"Coke" set\nin Arial',
+    "a rival’s\nswash script",
+    "“Coke” set\nin Arial",
     "Diet Coke",
     "a red disc,\ntoo far to read",
     "the wordmark,\nto spec",

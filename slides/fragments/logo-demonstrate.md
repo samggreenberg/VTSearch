@@ -1,6 +1,6 @@
 <!-- _class: statement -->
 
-# "Logo detection" is not one task.<br>It is four tasks sharing a name,<br>and they disagree about the answer.
+# “Logo detection” is not one task.<br>It is four tasks sharing a name,<br>and they disagree about the answer.
 
 <!-- Land the appendix. None of this is about model capability: a perfect
      detector still has to be told which of the four it is, and nothing in the
