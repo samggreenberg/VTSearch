@@ -298,15 +298,6 @@ cost_k  # noqa: F821 - vtscore.eval.voting_iterations operating-cost triple
 _allow_test_tmp_paths  # noqa: F821
 
 # ---------------------------------------------------------------------------
-# ``reset_all_async_jobs_for_tests`` is called from
-# ``tests_shared/state_reset.py``, which is not in vulture's SCAN_PATHS (the
-# shared helpers package sits outside both test trees). It is also part of
-# ``vtscore.concurrency``'s public surface, tabulated in
-# ``vtscore/docs/packages/concurrency.md``.
-# ---------------------------------------------------------------------------
-reset_all_async_jobs_for_tests  # noqa: F821
-
-# ---------------------------------------------------------------------------
 # ``StreamProgress.readable`` overrides ``io.IOBase.readable`` on a stream
 # wrapper the container reader hands to ``pickle.load``. Python's io / pickle
 # machinery queries ``.readable()`` reflectively before pulling bytes; there

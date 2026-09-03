@@ -121,6 +121,23 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **`JOB_MANAGERS` is now the single registry of every module-level
+  `JobManager`, with visibility carried by the manager** (issue #3404). It
+  previously held only the managers surfaced by `/api/jobs/active`, which
+  forced `reset_all_async_jobs_for_tests()` to re-list the hidden ones by
+  hand — and that second list went stale, leaving `archive_thumbnail_jobs`
+  unreset between tests. `JobManager.__init__` gained a keyword-only
+  `user_visible: bool = True`, `list_active_pairs()` filters on it, and the
+  reset helper walks the whole registry. Registering a new manager is now one
+  edit in one place, and its visibility is declared at its own definition.
+
+  **For library consumers:** the `JobManager(...)` change is purely additive —
+  the default keeps existing constructions user-visible. `JOB_MANAGERS` itself
+  now enumerates the internal managers too (`labeling-status`,
+  `signpost-relabel`, `archive-thumbnail-warm`), so code that iterated it
+  expecting only user-facing work should read `list_active_pairs()` or filter
+  on `mgr.user_visible`. The keys of the visible entries are unchanged.
+
 - **`vtscore.training.evt_mixture` moved to `vtscore.eval.evt_mixture`** (issue
   #3396). The Gumbel/Normal score mixture is a research arm from the #2836 /
   #2846 cut studies, not a shipped threshold rule: nothing in the app or the

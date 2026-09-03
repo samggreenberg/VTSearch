@@ -39,7 +39,15 @@ def get_saved_datasets_dir() -> Path:
     return CoreConfig.from_settings().saved_datasets_dir
 
 
-# Backward-compat alias - prefer :func:`get_saved_datasets_dir` for live value.
+#: The built-in *default* saved-datasets location: the same path
+#: ``ServerSettings.saved_datasets_dir`` falls back to when nothing is
+#: configured.  Being a module-level constant it is fixed at import and cannot
+#: follow a directory the user has since pointed elsewhere in settings, so it
+#: is the right value only for tests and tooling that bypass settings
+#: entirely.  Everything that wants the directory actually in use must call
+#: :func:`get_saved_datasets_dir`.  (Mirrors ``vtscore.detectors.store``'s
+#: ``DETECTORS_DIR``, which stands in the same relation to
+#: ``get_detectors_dir``.)
 SAVED_DATASETS_DIR = DATA_DIR / "saved_datasets"
 
 _T = TypeVar("_T")
