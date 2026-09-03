@@ -329,15 +329,26 @@ Most of the harness is safe by construction because it **delegates** — `MaxPat
 - **Ported** — app logic re-implemented in the harness because the original is unreachable (it lives in TypeScript) or unusable (wrapped in interactive, lock-guarded, single-detector caches). `vtscore/eval/autopilot_flow.py` is the whole of this category today.
 - **Default resolution** — where the harness resolves "no explicit arm" to whatever the app currently defaults to (`style=None` → `max_patch` on a patch dataset; `blend_schedule=None` → `production_schedule_for(...)`). When the app's default changes, the harness keeps handing out the old one *under the name "default"*.
 
-**The gate:** `scripts/check-eval-app-sync.py` pins a digest of every mirrored app surface (Python and TypeScript), and `./run-tests.sh` fails when one moves. It tells you which harness code to reconcile. After reconciling — or after confirming nothing is owed — re-pin:
+**The gate:** `scripts/check-eval-app-sync.py` pins a digest of every mirrored app surface (Python and TypeScript) **and of the harness code that mirrors it**, and `./run-tests.sh` fails when either moves. A copy stays faithful only while neither half moves without the other, so the gate names which half did:
+
+- `app-changed` — the original moved. Reconcile the harness copy to it.
+- `harness-changed` — the copy moved while the original stood still. Re-read the two against each other. This direction is not hypothetical: it is how the Smart-indicator plumbing drifted in #2923, with the app standing still and the gate green throughout.
+
+After reconciling — or after confirming nothing is owed — re-pin:
 
 ```
 python scripts/check-eval-app-sync.py --update
 ```
 
-Digests ignore comments, docstrings, and formatting, so only real logic changes trip it. **Re-pinning without looking at the harness defeats the entire gate**; the digest is a prompt to check, not a checkbox.
+Digests ignore comments, docstrings, and formatting, so only real logic changes trip it. **Re-pinning without looking at the other side defeats the entire gate**; the digest is a prompt to check, not a checkbox.
 
-**When you add a new mirror** (any new place the harness copies app logic or tracks an app default), add a `Mirror(...)` entry to `MIRRORS` in that script and run `--update`. If the harness *intentionally* differs from the app at that point, put the reason in `divergence=` — the text is printed whenever that mirror trips, so the next person reconciling it knows which differences are deliberate. Named experiment arms (`whole_image`, `max_patch_hac`, …) are supposed to differ and are out of scope; this rule is about the **default** arm only.
+**When you add a new mirror** (any new place the harness copies app logic or tracks an app default), add a `Mirror(...)` entry to `MIRRORS` in that script and run `--update`. Three fields carry the judgment:
+
+- If the harness *intentionally* differs from the app, put the reason in `divergence=` — the text is printed whenever that mirror trips, so the next person reconciling it knows which differences are deliberate.
+- The harness side is digest-pinned **by default**; opt out with `no_harness_pin=<reason>` only when the harness symbol is too coarse to be worth watching (one function serving several mirrors and much else besides — today only `_safe_threshold_for_step`). A `ported` mirror may never opt out; the harness side of a hand copy *is* the copy. When a coarse anchor's blind spot starts to matter, extract the reproduction into its own helper (as #3403 did for the two `*_default` mirrors) rather than digesting a thousand lines.
+- A harness side spread over more than one top-level name lists them all: `file.py::GOOD_TARGET,BAD_TARGET`. Each is resolved by parsing, so a name surviving only inside a comment does not count as present.
+
+Named experiment arms (`whole_image`, `max_patch_hac`, …) are supposed to differ and are out of scope; this rule is about the **default** arm only.
 
 ## Fix All Errors (CRITICAL)
 
@@ -431,7 +442,7 @@ Wrapping everything: a wall-clock cap (`VTSEARCH_TEST_TIMEOUT`, default **1800s 
 | Extension docs | `scripts/check-extension-docs.py` | Holds `docs/EXTENDING-*.md` and `vtscore/docs/extending/` to the plugin ABCs they both document: every member named in a contract table must exist, and neither set may present a public wrapper as the override point when the class defines an `_impl` hook behind it. AST sweep, imports nothing. Register a new contract section in `SECTIONS` — an unregistered one fails the gate rather than going unchecked. |
 | Calibration script index | `scripts/check-calibration-index.py` | Every `.py`/`.sh` in `scripts/experiments/calibration/` is filed under exactly one study (or the shared layer) in that directory's `README.md`, and every file the index names exists. That directory is flat by decision (#3409), so the table *is* the navigation; unchecked, it decays back into 120 unclassified files. |
 | Slide decks | `slides/build.py --check` | Preflights every deck manifest: fragments exist, figures resolve. Marp only warns on a missing figure and exits 0, so a rotted deck is otherwise silent. |
-| Eval/app sync | `scripts/check-eval-app-sync.py` | Re-pin with `--update` **after** reconciling the harness. |
+| Eval/app sync | `scripts/check-eval-app-sync.py` | Digests both sides of every mirror, so `harness-changed` is as loud as `app-changed`. Re-pin with `--update` **after** reconciling the two. |
 
 **Stage 2 — frontend production build, serial (full run and the `core` / `frontend` groups):** `cd frontend && npm run build:prod`. Any `▲ [WARNING]` line is a hard failure. Runs *before* pytest because some tests serve the built bundle out of `static/`. Skipped with a notice if `frontend/node_modules` is absent.
 
