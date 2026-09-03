@@ -26,8 +26,26 @@ cost us the `book` pass.
 - **The rule travels in the dataset name.** The name in the app is the whole
   rule you are voting under. If the name and this document ever disagree,
   the name is what you actually voted, and this document is wrong.
-- **Vote on the object, not a picture of it.** A car on a billboard, cutlery
-  printed on a menu, a bottle in a logo — all Bad, for every class here.
+- **Vote on the object, not a depiction of it.** A car on a billboard, cutlery
+  printed on a menu, a bottle in a logo — all Bad, for every class here. So is
+  a *pictogram*: the bicycle on a BIKE ROUTE sign is a sign, not a bicycle. Note
+  that COCO's annotators do not always agree — three of the ten
+  `bicycle@small` positives in #3156 are road-sign pictograms COCO boxed as
+  `bicycle`. Where the two rules collide, **this one wins**: a depiction is Bad
+  even when COCO boxed it (#3614).
+- **A reflection is evidence of the object; an illustration is not.** A phone
+  seen in a mirror, a bike in a shop window, a bird on the surface of a pond —
+  the object is physically in the scene, and the reflection is how you can tell.
+  Good. The line is whether the thing itself is there, not whether you are
+  looking straight at it.
+- **Obvious toys and models are Bad.** A toddler's plastic Cinderella phone is
+  not a cell phone; a die-cast car is not a car. The reason is not English but
+  consistency: the shared negative pool was drawn as *images COCO says hold none
+  of these classes*, and COCO does not annotate toys — 41 toy-ish boxes in
+  49,579 across the shipped twelve, which is noise. Voting a toy Good makes the
+  same content a positive here and a negative there. **"Obvious" is the
+  operative word**: if you have to squint to decide whether it is a toy, it is
+  not obvious, so judge it as the object.
 
 ## Risk order
 
