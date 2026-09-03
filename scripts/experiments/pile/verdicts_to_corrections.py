@@ -24,11 +24,21 @@ builder therefore drops it from every cell of that class: not a positive, and no
 longer a negative either. That is the whole point of the three-valued design --
 the alternative is inventing a box to keep the arithmetic tidy.
 
-**A rejection is not a deletion in the small band.** Boxed review confirms only
-~2/3 of sub-patch positives even when the box is drawn for the reviewer, and the
-same objects defeat the model, so "not confirmed" there is recorded as exactly
-that and the label stands. Above one patch a rejection backed by adjudication
-does remove the positive.
+**A rejection is not a deletion in the small band -- unless it is definitional.**
+Boxed review confirms only ~2/3 of sub-patch positives even when the box is drawn
+for the reviewer, and the same objects defeat the model, so "not confirmed" there
+is recorded as exactly that and the label stands. Above one patch a rejection
+backed by adjudication does remove the positive.
+
+That guard reads a small-band rejection as *"I cannot tell at this size"*, which
+is the right default and the wrong one when the adjudicator has named what the
+object actually is. Three of the ten ``bicycle@small`` positives are bicycle
+pictograms on road signs; they are not bicycles at any resolution, and the guard
+made them uncorrectable by a human rejection and an adjudicated one alike
+(#3614). An adjudication may therefore carry ``"reason": "definition"``
+alongside ``"claude": "absent"``, which removes the positive regardless of band.
+Use it only where the identity of the object is settled -- never to force through
+a rejection that is really about confirmability, which is what the guard is for.
 
 Usage::
 
@@ -140,7 +150,25 @@ def main() -> int:
                 continue
             # Rejected. Small band: not confirmed is not absent.
             a = adj.get(key)
-            if band == "small":
+            # ...unless the rejection is DEFINITIONAL. The band guard exists
+            # because a small object is hard to confirm, so a rejection there is
+            # ambiguous between "absent" and "I cannot tell at 26 px". That
+            # ambiguity does not arise when the adjudicator names *what the
+            # object is*: a bicycle pictogram on a road sign is not a bicycle at
+            # any size, and no amount of resolution would change the answer.
+            # Without this branch such a positive is uncorrectable -- the guard
+            # swallows the human rejection and the adjudicated one alike (#3614).
+            if a and a.get("claude") == "absent" and a.get("reason") == "definition":
+                out[key] = {
+                    "image_id": key[0],
+                    "class": key[1],
+                    "present": False,
+                    "boxes": [],
+                    "source": "human_reject+adjudicated_definition",
+                    "note": a.get("note", ""),
+                }
+                stats["positive_removed_definitional"] += 1
+            elif band == "small":
                 stats["small_unconfirmed"] += 1
             elif a and a["claude"] == "absent":
                 out[key] = {
