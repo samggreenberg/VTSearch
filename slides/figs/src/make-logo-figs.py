@@ -27,6 +27,7 @@ spare that corner has to carry no title at all.
 
 from __future__ import annotations
 
+import functools
 import sys
 import textwrap
 from pathlib import Path
@@ -85,7 +86,7 @@ CELL_W, CELL_H = CANVAS[0] / COLS, (CANVAS[1] - GRID_FOOT) / ROWS
 CELL_PAD = 0.42
 
 #: The eight results, in the order the slide reveals them, as
-#: `(file, what it is)`. The file is looked up in `logo-src/`; a slot whose
+#: `(file, what it is, size class)`. The file is looked up in `logo-src/`; a slot whose
 #: file is not there yet draws a dashed placeholder carrying its description,
 #: so the deck builds and the layout can be reviewed before every asset has
 #: arrived. **A placeholder is not a figure** — re-run this script once the
@@ -95,15 +96,23 @@ CELL_PAD = 0.42
 #: nobody argues about, walks out through the ones that are still obviously
 #: the mark, and ends on three that each break a *different* attribute — the
 #: colour, the typeface, the product. See the fragment's notes.
+#:
+#: The **size class** is what stops the grid from making a point it does not
+#: mean. These eight arrived at eight unrelated resolutions and crops, and
+#: fitted individually to their cells they came out at eight different sizes —
+#: so the black script printed a third larger than the red one it is supposed
+#: to be identical to, and the room reads a size difference as a claim. Members
+#: of a class are drawn at one common width (see `_class_widths`); the four
+#: classes are the four parallel pairs the slide actually argues over.
 RESULTS = (
-    ("01-wordmark-on-red.jpg", "wordmark, white on a solid red field"),
-    ("02-red-disc.jpg", "the round red badge"),
-    ("03-disc-with-bottle.jpg", "that badge, with a contour bottle"),
-    ("04-wordmark-ribbon.jpg", "wordmark over the dynamic ribbon"),
-    ("05-script-red-on-white.jpg", "the script, red on white"),
-    ("06-script-black.jpg", "the script, in flat black"),
-    ("07-coke-sans.png", "“Coke”, in a heavy sans"),
-    ("08-diet-coke.jpg", "Diet Coke"),
+    ("01-wordmark-on-red.jpg", "wordmark, white on a solid red field", "panel"),
+    ("02-red-disc.jpg", "the round red badge", "disc"),
+    ("03-disc-with-bottle.jpg", "that badge, with a contour bottle", "disc"),
+    ("04-wordmark-ribbon.jpg", "wordmark over the dynamic ribbon", "panel"),
+    ("05-script-red-on-white.jpg", "the script, red on white", "script"),
+    ("06-script-black.jpg", "the script, in flat black", "script"),
+    ("07-coke-sans.png", "“Coke”, in a heavy sans", "coke"),
+    ("08-diet-coke.jpg", "Diet Coke", "coke"),
 )
 
 #: How wide a placeholder's description may run before it wraps, in
@@ -187,10 +196,56 @@ def _trimmed(image: Image.Image) -> Image.Image:
     return image if box is None else image.crop(box)
 
 
+@functools.lru_cache(maxsize=None)
+def _art_size(index: int) -> tuple[int, int] | None:
+    """Result *index*'s trimmed art size in pixels, or None if its file is absent."""
+    path = SRC / RESULTS[index][0]
+    if not path.exists():
+        return None
+    with Image.open(path) as image:
+        return _trimmed(_flattened(image)).size
+
+
+@functools.lru_cache(maxsize=None)
+def _class_widths() -> dict[str, float]:
+    """The drawn width, in canvas units, shared by every member of each size class.
+
+    One width per class rather than one per image, because "the same size" is
+    the whole point: 05 and 06 are the *same artwork* in two colours, and 07
+    and 08 differ only by a script word riding above the cap line. Fitted
+    independently they came out at different sizes, and on a slide asking the
+    room whether two logos are the same thing, a gratuitous size difference is
+    an answer nobody meant to give.
+
+    **Width** is the shared dimension, not height and not area, and 07/08 is
+    why. "Diet Coke" is taller than "Coke" only because *Diet* rides above the
+    cap line, so equalising height (or area, which follows height here) would
+    shrink the word "Coke" in 08 relative to 07 — the one thing the pair has in
+    common, drawn at two sizes. Equalising width leaves them matched. For the
+    other three classes the members share an aspect closely enough that all
+    three rules agree.
+
+    The width is the largest one every member can *fit*: an image is capped by
+    the cell's width, and by the cell's height once its own aspect is applied,
+    so the class is bound by whichever member runs out of room first.
+    """
+    cell_w = CELL_W - 2 * CELL_PAD
+    cell_h = CELL_H - 2 * CELL_PAD
+    widths: dict[str, float] = {}
+    for index, (_, _, size_class) in enumerate(RESULTS):
+        art = _art_size(index)
+        if art is None:
+            continue
+        width, height = art
+        fits = min(cell_w, cell_h * width / height)
+        widths[size_class] = min(widths.get(size_class, fits), fits)
+    return widths
+
+
 def _draw(ax: plt.Axes, index: int) -> None:
-    """Draw result *index* in its cell, fitted and centred, or a placeholder."""
+    """Draw result *index* in its cell at its class's width, centred, or a placeholder."""
     x0, y0, x1, y1 = _cell_box(index)
-    name, described = RESULTS[index]
+    name, described, _ = RESULTS[index]
     path = SRC / name
     if not path.exists():
         ax.add_patch(
@@ -219,12 +274,12 @@ def _draw(ax: plt.Axes, index: int) -> None:
     with Image.open(path) as image:
         pixels = _trimmed(_flattened(image))
         width, height = pixels.size
-        # `fit` semantics, done here rather than left to imshow: scale to touch
-        # the cell on its binding axis and centre on the other, so a wide
-        # wordmark and a square badge are as large as their cell allows and
-        # neither is stretched.
-        scale = min((x1 - x0) / width, (y1 - y0) / height)
-        half_w, half_h = width * scale / 2, height * scale / 2
+        # Not "fit to the cell" — every member of a size class is drawn at the
+        # one width that class agreed on, so two tiles the slide calls parallel
+        # are the same size however their sources happened to be cropped.
+        # Aspect is preserved, so the height follows.
+        drawn_w = _class_widths()[RESULTS[index][2]]
+        half_w, half_h = drawn_w / 2, drawn_w * height / width / 2
         cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
         ax.imshow(
             pixels,
