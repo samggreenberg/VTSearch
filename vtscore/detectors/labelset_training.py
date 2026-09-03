@@ -592,6 +592,93 @@ def labeled_media_ids(labelset: LabelSet, snap: dict[int, dict[str, Any]] | None
     return ids
 
 
+def labelset_resolution_report(
+    det_ctx,
+    labelset: LabelSet,
+    *,
+    media_type: str,
+    snap: dict[int, dict[str, Any]] | None,
+) -> dict[str, Any]:
+    """Why *labelset* produced no trainable head, as a UI-facing diagnostic.
+
+    :func:`train_from_labelset` and :func:`labelset_train_and_score` simply
+    decline to train when the labels don't resolve into at least one Good and
+    one Bad vector - which is the right shape for a *training* entry point but
+    loses the "why did this detector produce nothing?" answer the find-label
+    and portable-export routes show the user.  This rebuilds that answer from
+    what the training pass already left on *det_ctx*: the elements
+    :func:`build_xy_from_labelset` can assemble a row for are exactly the ones
+    that resolved, so the failures are the complement.
+
+    Call it **after** :func:`populate_label_embeddings` (i.e. after the training
+    attempt), never before - on a cold context it would report every element as
+    a failure.  It is a failure-path-only report, so the extra
+    :func:`~vtscore.state.media_lookup.build_media_lookup` pass it costs is
+    paid only by a detector that is already not going to score.
+
+    ``dataset_matched`` counts elements resolving to a media in *snap* by the
+    full origin ▸ md5 ▸ name ladder :func:`resolve_current_dataset_cid` walks -
+    not md5 alone, which is all the hand-rolled predecessor of this path could
+    match on.
+    """
+    from vtscore.detectors.labelset_elements import resolve_current_dataset_cid, stable_element_id
+
+    # Ask the trainer's own assembly which elements contributed, rather than
+    # re-deriving "did this resolve?" from the embedding cache: a Bad element on
+    # a patch dataset trains from ``label_negative_regions`` and can contribute
+    # rows with nothing in ``label_embeddings``, so the cache alone would report
+    # a label that trained fine as a failure.
+    _x, y_list, groups, _score_rows = build_xy_from_labelset(det_ctx, labelset)
+    contributed = {eid for _kind, eid in groups}
+    has_good = any(y == 1.0 for y in y_list)
+    has_bad = any(y == 0.0 for y in y_list)
+    lookups = _lookups_for_snap(snap)
+
+    total = 0
+    dataset_matched = 0
+    resolved_from_origin = 0
+    failures: list[LabeledElement] = []
+    for elem in labelset.elements:
+        if elem.label not in ("good", "bad"):
+            continue
+        total += 1
+        in_dataset = False
+        if snap:
+            cid = resolve_current_dataset_cid(elem, lookups)
+            in_dataset = cid is not None and cid in snap
+        if in_dataset:
+            dataset_matched += 1
+        if stable_element_id(elem) not in contributed:
+            failures.append(elem)
+        elif not in_dataset:
+            resolved_from_origin += 1
+
+    diagnostic: dict[str, Any] = {
+        "total_labels": total,
+        "dataset_matched": dataset_matched,
+        "needed_resolution": total - dataset_matched,
+        "resolved_from_origin": resolved_from_origin,
+        "failed_resolution": len(failures),
+        "has_good": has_good,
+        "has_bad": has_bad,
+        "media_type": media_type,
+    }
+    if failures:
+        diagnostic["sample_failures"] = [
+            {
+                "origin": elem.origin,
+                "origin_name": elem.origin_name,
+                "filename": elem.filename,
+                "md5": elem.md5[:12],
+                "label": elem.label,
+            }
+            for elem in failures[:3]
+        ]
+    elif not has_good or not has_bad:
+        diagnostic["hint"] = "Every label resolved, but they are all the same class (need both good and bad)"
+    return diagnostic
+
+
 # ---------------------------------------------------------------------------
 # Cross-dataset local features (structural / SIFT-VLAD detectors)
 # ---------------------------------------------------------------------------

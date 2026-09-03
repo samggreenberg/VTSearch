@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from flask_smorest import Blueprint, abort
 
@@ -35,8 +35,10 @@ from vtsearch.schemas.detectors import (
     FindLabelResponseSchema,
     FindStatsResponseSchema,
 )
-from vtscore.utils.scores import sigmoid_to_finite_scores
 from vtsearch.state import snapshot_medias
+
+if TYPE_CHECKING:  # pragma: no cover - import cycle / heavy-import avoidance
+    from vtscore.detectors.training import ScoringRows
 
 logger = logging.getLogger(__name__)
 
@@ -222,7 +224,7 @@ def find_label(body: dict):
                 error_msg = (
                     f"Detector '{d['name']}' could not be trained: "
                     f"{diagnostic['total_labels']} training labels found, "
-                    f"{diagnostic['md5_matched']} matched current dataset by MD5, "
+                    f"{diagnostic['dataset_matched']} matched the current dataset, "
                     f"{diagnostic['needed_resolution']} needed origin resolution, "
                     f"{diagnostic['resolved_from_origin']} resolved successfully, "
                     f"{diagnostic['failed_resolution']} failed to resolve. "
@@ -446,11 +448,22 @@ def _score_detector_for_auto_detect(
     reg_entry: dict | None,
     media_type: str,
     snap: dict,
-    all_ids: list[int],
-    X_all: Any,
+    rows: ScoringRows,
 ) -> tuple[str, dict] | None:
-    """Train (or reuse) one detector and score every media in *snap*."""
-    import torch  # noqa: PLC0415
+    """Train (or reuse) one detector and score every media in *snap*.
+
+    *rows* is the :class:`~vtscore.detectors.training.ScoringRows` stack for
+    this detector's score space, built once by the route and shared by every
+    detector that resolves to the same embedder.  Scoring goes through
+    :func:`~vtscore.detectors.training.score_rows_with_model` - the app's one
+    definition of what a head scores a media at - so this route pools a patch
+    head over its media's rows exactly as ``/api/find-label`` does.  It used to
+    forward a bare image-level matrix instead, which was self-consistent only
+    while ``resolve_or_train_detector`` hand-rolled a whole-image head; now that
+    it delegates to the app's own labelset training (issue #3544), an
+    image-level pass here would be the same train/score mismatch inverted.
+    """
+    from vtscore.detectors.training import score_rows_with_model  # noqa: PLC0415
 
     # Poll BEFORE the catch-all try: CancelledError subclasses Exception, and
     # a cancel must propagate to the route (via future.result()), not be
@@ -470,13 +483,11 @@ def _score_detector_for_auto_detect(
         if mlp is None:
             return None
 
-        with torch.no_grad():
-            X_in = X_all.to(next(mlp.parameters()).device)
-            scores = sigmoid_to_finite_scores(mlp(X_in))
+        scores, _best_row = score_rows_with_model(mlp, rows)
 
         positive_hits = []
         negative_hits = []
-        for cid, score in zip(all_ids, scores, strict=True):
+        for cid, score in zip(rows.ids, scores, strict=True):
             clip_info = media_info_for_response(snap[cid])
             clip_info["score"] = round(score, 4)
             if score >= threshold:
@@ -869,8 +880,6 @@ def auto_detect(body: dict):
     one's MLP on demand from its on-disk labelset.  Returns one result column
     per detector. Pass ``detector_name`` to run a single Auto-Find detector.
     """
-    import torch  # noqa: PLC0415
-
     snap = snapshot_medias()
     if not snap:
         abort(400, message="No medias loaded")
@@ -897,12 +906,12 @@ def auto_detect(body: dict):
     # dataset can't supply (see _compatible_detectors).
     detectors_to_run = _compatible_detectors(detectors_to_run, snap)
 
-    from vtscore.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
+    from vtscore.detectors.training import scoring_rows_for_snap  # noqa: PLC0415
     from vtscore.state.core import get_active_context  # noqa: PLC0415
 
     # Each detector scores in the concrete embedder of its locked type, so build
-    # one matrix per distinct embedder the Auto-Find detectors call for
-    # (collapsing to a single shared matrix on the common single-embedder
+    # one row stack per distinct embedder the Auto-Find detectors call for
+    # (collapsing to a single shared stack on the common single-embedder
     # dataset, where every type resolves to the same name).  A legacy/typeless
     # detector falls back to the dataset score precedence, matching
     # resolve_or_train_detector's cold-train space.
@@ -915,19 +924,28 @@ def auto_detect(body: dict):
     for dname, ddata, _entry in detectors_to_run:
         keyed = keying_embedder_for_snap(SimpleNamespace(embedder_type=_detector_type(ddata)), snap)
         det_embedders[dname] = keyed or default_score
-    matrices: dict[str | None, tuple[list[int], Any]] = {}
-    for emb in set(det_embedders.values()):
-        ids, embs = get_embedding_matrix_for_snap(snap, emb)
-        matrices[emb] = (ids, torch.from_numpy(embs))
 
-    # Size the worker cap off the biggest matrix actually built.  Indexing by
+    # These are ``scoring_rows_for_snap`` rows - the app's single definition of
+    # what a detector scores a media at - not an image-level matrix: the heads
+    # ``resolve_or_train_detector`` returns are the app's own labelset-trained
+    # ones, which are MaxPatch heads on a patch dataset (issue #3544).  On such
+    # a dataset the build is the region matrix cached on the active dataset
+    # context, so one stack per space costs nothing the first vote of a session
+    # would not have paid anyway.
+    row_stacks: dict[str | None, ScoringRows] = {}
+    for emb in set(det_embedders.values()):
+        row_stacks[emb] = scoring_rows_for_snap(snap, emb)
+
+    # Size the worker cap off the biggest stack actually built.  Indexing by
     # ``default_score`` would KeyError whenever no detector keys to it - the
     # normal case on a multi-embedder dataset where every Auto-Find detector is
     # type-locked to a semantic embedder while the score precedence picks the
-    # patch/structural one.  ``matrices`` is never empty here because
+    # patch/structural one.  ``row_stacks`` is never empty here because
     # ``_compatible_detectors`` aborts 400 when the type gate leaves nothing.
-    cap_rows = max(len(ids) for ids, _X in matrices.values())
-    cap_dim = max(int(X.shape[1]) if X.ndim > 1 else 0 for _ids, X in matrices.values())
+    # The cap counts *rows*, not media: a patch stack is H*W+1 rows per media
+    # and that is what each worker's forward pass allocates.
+    cap_rows = max(int(r.matrix.shape[0]) for r in row_stacks.values())
+    cap_dim = max(int(r.matrix.shape[1]) if r.matrix.ndim > 1 else 0 for r in row_stacks.values())
     worker_cap = cap_workers_by_memory(
         cap_rows,
         cap_dim,
@@ -948,7 +966,7 @@ def auto_detect(body: dict):
                     entry,
                     media_type,
                     snap,
-                    *matrices[det_embedders[name]],
+                    row_stacks[det_embedders[name]],
                 )
                 for name, data, entry in detectors_to_run
             ]
@@ -958,9 +976,9 @@ def auto_detect(body: dict):
     if results:
         from vtsearch.achievements import record_find  # noqa: PLC0415
 
-        # Each detector scored the medias in its own embedder's matrix, so count
-        # them per detector rather than multiplying one matrix's row count out.
-        record_find(sum(len(matrices[det_embedders[name]][0]) for name in results))
+        # Each detector scored the medias in its own embedder's stack, so count
+        # them per detector rather than multiplying one stack's media count out.
+        record_find(sum(len(row_stacks[det_embedders[name]].ids) for name in results))
 
     response = {
         "media_type": media_type,
