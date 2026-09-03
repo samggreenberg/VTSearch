@@ -22,6 +22,7 @@ from typing import Any, Callable
 import numpy as np
 
 from vtscore.datasets.labelset import LabeledElement, LabelSet
+from vtscore.embedding.binding import keying_embedder_for_snap
 from vtscore.embedding.media_vectors import media_embedding
 
 
@@ -46,24 +47,6 @@ def _lookups_for_snap(
     from vtscore.state import build_media_lookup
 
     return build_media_lookup(snap)
-
-
-def _detector_embedder(det_ctx, snap: dict[int, dict[str, Any]] | None) -> str:
-    """The embedder a *detector* resolves and embeds its labels in.
-
-    The concrete embedder of the detector's locked type (``det_ctx.embedder_type``)
-    that the active dataset supplies wins; otherwise the dataset's score
-    precedence (the legacy-migration default and the cross-dataset portability
-    fallback - re-embed against whatever space the new dataset uses).  This is
-    :func:`keying_embedder_for_snap`, so it agrees with the model-invalidation
-    and re-embed checks.  Keeping a detector's label cache keyed to its type
-    means switching the active dataset under the detector no longer invalidates
-    the cache as long as the new dataset binds the same concrete embedder of
-    that type.  See ``docs/plans/patch-embedder.md`` → "Per-detector embedder type".
-    """
-    from vtscore.embedding.binding import keying_embedder_for_snap
-
-    return keying_embedder_for_snap(det_ctx, snap)
 
 
 def _patch_output_from_file(
@@ -432,7 +415,12 @@ def populate_label_embeddings(
     """
     from vtscore.detectors.labelset_elements import stable_element_id
 
-    embedder_name = _detector_embedder(det_ctx, snap)
+    # Labels are resolved and embedded in the same space the model-invalidation
+    # and re-embed checks key on, so the label cache stays valid across an
+    # active-dataset switch that keeps binding the same concrete embedder of the
+    # detector's type.  See ``docs/plans/patch-embedder.md`` → "Per-detector
+    # embedder type".
+    embedder_name = keying_embedder_for_snap(det_ctx, snap)
     _maybe_clear_cache_on_embedder_switch(det_ctx, embedder_name)
     cache: dict[str, np.ndarray] = det_ctx.label_embeddings
     region_cache: dict[str, tuple[float, float, float, float] | None] = det_ctx.label_embedding_regions
@@ -592,6 +580,93 @@ def labeled_media_ids(labelset: LabelSet, snap: dict[int, dict[str, Any]] | None
     return ids
 
 
+def labelset_resolution_report(
+    det_ctx,
+    labelset: LabelSet,
+    *,
+    media_type: str,
+    snap: dict[int, dict[str, Any]] | None,
+) -> dict[str, Any]:
+    """Why *labelset* produced no trainable head, as a UI-facing diagnostic.
+
+    :func:`train_from_labelset` and :func:`labelset_train_and_score` simply
+    decline to train when the labels don't resolve into at least one Good and
+    one Bad vector - which is the right shape for a *training* entry point but
+    loses the "why did this detector produce nothing?" answer the find-label
+    and portable-export routes show the user.  This rebuilds that answer from
+    what the training pass already left on *det_ctx*: the elements
+    :func:`build_xy_from_labelset` can assemble a row for are exactly the ones
+    that resolved, so the failures are the complement.
+
+    Call it **after** :func:`populate_label_embeddings` (i.e. after the training
+    attempt), never before - on a cold context it would report every element as
+    a failure.  It is a failure-path-only report, so the extra
+    :func:`~vtscore.state.media_lookup.build_media_lookup` pass it costs is
+    paid only by a detector that is already not going to score.
+
+    ``dataset_matched`` counts elements resolving to a media in *snap* by the
+    full origin ▸ md5 ▸ name ladder :func:`resolve_current_dataset_cid` walks -
+    not md5 alone, which is all the hand-rolled predecessor of this path could
+    match on.
+    """
+    from vtscore.detectors.labelset_elements import resolve_current_dataset_cid, stable_element_id
+
+    # Ask the trainer's own assembly which elements contributed, rather than
+    # re-deriving "did this resolve?" from the embedding cache: a Bad element on
+    # a patch dataset trains from ``label_negative_regions`` and can contribute
+    # rows with nothing in ``label_embeddings``, so the cache alone would report
+    # a label that trained fine as a failure.
+    _x, y_list, groups, _score_rows = build_xy_from_labelset(det_ctx, labelset)
+    contributed = {eid for _kind, eid in groups}
+    has_good = any(y == 1.0 for y in y_list)
+    has_bad = any(y == 0.0 for y in y_list)
+    lookups = _lookups_for_snap(snap)
+
+    total = 0
+    dataset_matched = 0
+    resolved_from_origin = 0
+    failures: list[LabeledElement] = []
+    for elem in labelset.elements:
+        if elem.label not in ("good", "bad"):
+            continue
+        total += 1
+        in_dataset = False
+        if snap:
+            cid = resolve_current_dataset_cid(elem, lookups)
+            in_dataset = cid is not None and cid in snap
+        if in_dataset:
+            dataset_matched += 1
+        if stable_element_id(elem) not in contributed:
+            failures.append(elem)
+        elif not in_dataset:
+            resolved_from_origin += 1
+
+    diagnostic: dict[str, Any] = {
+        "total_labels": total,
+        "dataset_matched": dataset_matched,
+        "needed_resolution": total - dataset_matched,
+        "resolved_from_origin": resolved_from_origin,
+        "failed_resolution": len(failures),
+        "has_good": has_good,
+        "has_bad": has_bad,
+        "media_type": media_type,
+    }
+    if failures:
+        diagnostic["sample_failures"] = [
+            {
+                "origin": elem.origin,
+                "origin_name": elem.origin_name,
+                "filename": elem.filename,
+                "md5": elem.md5[:12],
+                "label": elem.label,
+            }
+            for elem in failures[:3]
+        ]
+    elif not has_good or not has_bad:
+        diagnostic["hint"] = "Every label resolved, but they are all the same class (need both good and bad)"
+    return diagnostic
+
+
 # ---------------------------------------------------------------------------
 # Cross-dataset local features (structural / SIFT-VLAD detectors)
 # ---------------------------------------------------------------------------
@@ -669,7 +744,12 @@ def populate_label_local_features(
     """
     from vtscore.detectors.labelset_elements import stable_element_id
 
-    embedder_name = _detector_embedder(det_ctx, snap)
+    # Labels are resolved and embedded in the same space the model-invalidation
+    # and re-embed checks key on, so the label cache stays valid across an
+    # active-dataset switch that keeps binding the same concrete embedder of the
+    # detector's type.  See ``docs/plans/patch-embedder.md`` → "Per-detector
+    # embedder type".
+    embedder_name = keying_embedder_for_snap(det_ctx, snap)
     embedder = None
     if embedder_name:
         from vtscore.media import get_embedder

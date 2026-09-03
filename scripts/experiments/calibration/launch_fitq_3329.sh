@@ -304,7 +304,7 @@ status)
   echo "queue:   $(squeue -u "$USER" -h -n "$JOB_NAME" -o %i | wc -l) tasks named $JOB_NAME"
   echo "cells:   $(find "$CALIB_RESULTS/cells" -name 'task_*.csv' ! -name '*__*' 2>/dev/null | wc -l) main frames"
   echo "fitq:    $(find "$CALIB_RESULTS/cells" -name 'task_*__fitq.csv' 2>/dev/null | wc -l) fit-quality frames"
-  echo "empty:   $(find "$CALIB_RESULTS/cells" -name 'task_*.csv' -size 0 2>/dev/null | wc -l) zero-byte (delete before any resume)"
+  echo "empty:   $(find "$CALIB_RESULTS/cells" -name 'task_*.csv' ! -name '*__*' -size 0 2>/dev/null | wc -l) zero-byte (delete before any resume)"
   ;;
 
 *)

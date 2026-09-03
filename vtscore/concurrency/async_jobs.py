@@ -274,8 +274,14 @@ class JobManager:
     result instead of re-running.
     """
 
-    def __init__(self, name: str, max_history: int = 8) -> None:
+    def __init__(self, name: str, max_history: int = 8, *, user_visible: bool = True) -> None:
         self._name = name
+        #: Whether this manager's jobs are surfaced in ``/api/jobs/active``.
+        #: Internal refreshes and warm-ups set this ``False``: they are not
+        #: user-initiated training work, so they get no spinner.  Every
+        #: manager - visible or not - still belongs in ``JOB_MANAGERS``, which
+        #: is what ``reset_all_async_jobs_for_tests`` walks.
+        self.user_visible = user_visible
         self._lock = threading.RLock()
         self._jobs: dict[str, AsyncJob] = {}
         self._current_id: str | None = None
@@ -587,9 +593,8 @@ eval_jobs = JobManager("eval-train-score")
 #: Background runner that advances the labeling-status per-step cache off the
 #: ``/api/labeling-status`` poll thread (issue #2397).  Not surfaced in
 #: ``/api/jobs/active`` - it is an internal refresh of a cheap 2 s poll, not a
-#: user-visible training job - so it is intentionally absent from
-#: ``JOB_MANAGERS`` below.
-labeling_status_jobs = JobManager("labeling-status")
+#: user-visible training job - hence ``user_visible=False``.
+labeling_status_jobs = JobManager("labeling-status", user_visible=False)
 
 #: Background runner for ``/api/projection/build`` (VTSBrowse UMAP + pyramid).
 projection_jobs = JobManager("projection")
@@ -600,9 +605,9 @@ projection_jobs = JobManager("projection")
 #: signs self-heal without a forced Re-project.  Kept on its own single slot so
 #: a self-heal never queues behind (or delays) a user-visible UMAP build in
 #: ``projection_jobs``.  Like ``labeling_status_jobs`` it is an internal
-#: refresh, not a user-visible training job, so it is intentionally absent from
-#: ``JOB_MANAGERS`` below (no ``/api/jobs/active`` spinner).
-signpost_relabel_jobs = JobManager("signpost-relabel")
+#: refresh, not a user-visible training job, so it is ``user_visible=False``
+#: (no ``/api/jobs/active`` spinner).
+signpost_relabel_jobs = JobManager("signpost-relabel", user_visible=False)
 
 #: Background runner for the archive-member thumbnail warm-up (issue #2738).
 #: An archive-member import reads no member bytes by design, so its media leave
@@ -611,20 +616,31 @@ signpost_relabel_jobs = JobManager("signpost-relabel")
 #: :mod:`vtscore.datasets.thumbnail_warm`, whose job target sweeps **every**
 #: loaded dataset precisely because this manager's single slot supersedes a
 #: parked pending job.  Like the two managers above it is an internal warm-up,
-#: not a user-visible training job, so it is intentionally absent from
-#: ``JOB_MANAGERS`` below (no ``/api/jobs/active`` spinner): browse is fully
-#: functional while it runs, just colder.
-archive_thumbnail_jobs = JobManager("archive-thumbnail-warm")
+#: not a user-visible training job, so it is ``user_visible=False`` (no
+#: ``/api/jobs/active`` spinner): browse is fully functional while it runs,
+#: just colder.
+archive_thumbnail_jobs = JobManager("archive-thumbnail-warm", user_visible=False)
 
-#: Logical name → :class:`JobManager` lookup used by ``/api/jobs/active`` to
-#: enumerate which (dataset_id, detector_id) pairs currently have background
-#: work in flight. The string keys are the public job-type names exposed in
-#: the response (consumed by the frontend pulldown for spinner tooltips), so
-#: keep them stable across releases.
+#: Logical name → :class:`JobManager` lookup: **every** singleton manager in
+#: the process, whether or not it is user-visible.  The string keys of the
+#: ``user_visible`` entries are the public job-type names exposed by
+#: ``/api/jobs/active`` (consumed by the frontend pulldown for spinner
+#: tooltips), so keep those stable across releases.
+#:
+#: This is deliberately one registry rather than "the visible ones here, the
+#: hidden ones re-listed by hand over there": the second list is what silently
+#: went stale, leaving ``archive_thumbnail_jobs`` unreset between tests.
+#: :func:`list_active_pairs` filters on :attr:`JobManager.user_visible`;
+#: :func:`reset_all_async_jobs_for_tests` walks the lot.  A new manager is
+#: registered in exactly one place, and declares its visibility at its own
+#: definition.
 JOB_MANAGERS: dict[str, JobManager] = {
     "learned-sort": learned_sort_jobs,
     "eval": eval_jobs,
     "projection": projection_jobs,
+    "labeling-status": labeling_status_jobs,
+    "signpost-relabel": signpost_relabel_jobs,
+    "archive-thumbnail-warm": archive_thumbnail_jobs,
 }
 
 
@@ -633,12 +649,16 @@ def list_active_pairs() -> list[dict[str, Any]]:
     with at least one running or pending job across every registered
     :class:`JobManager`.
 
-    Jobs with no ``(dataset_id, detector_id)`` recorded (legacy callers that
-    skipped the kwargs, e.g. test fixtures) are dropped - there is no row
-    in the pulldown to attach a spinner to without both ids.
+    Managers with ``user_visible=False`` are skipped: their work is an
+    internal refresh or warm-up, not user-initiated training, so it earns no
+    spinner.  Jobs with no ``(dataset_id, detector_id)`` recorded (legacy
+    callers that skipped the kwargs, e.g. test fixtures) are dropped - there
+    is no row in the pulldown to attach a spinner to without both ids.
     """
     pair_jobs: dict[tuple[str, str], list[str]] = {}
     for job_type, mgr in JOB_MANAGERS.items():
+        if not mgr.user_visible:
+            continue
         for job in mgr.active_jobs():
             ds, det = job.dataset_id, job.detector_id
             if not ds or not det:
@@ -651,11 +671,11 @@ def list_active_pairs() -> list[dict[str, Any]]:
 
 
 def reset_all_async_jobs_for_tests() -> None:
-    """Reset every singleton job manager.  Called from the autouse fixture."""
+    """Reset every singleton job manager.  Called from the autouse fixture.
+
+    Walks all of :data:`JOB_MANAGERS`, hidden managers included - test
+    isolation cares about every daemon thread in the process, not just the
+    ones that get a spinner.
+    """
     for mgr in JOB_MANAGERS.values():
         mgr.reset_for_tests()
-    # Not in ``JOB_MANAGERS`` (they are deliberately hidden from
-    # ``/api/jobs/active``), so reset them explicitly for test isolation.
-    labeling_status_jobs.reset_for_tests()
-    signpost_relabel_jobs.reset_for_tests()
-    archive_thumbnail_jobs.reset_for_tests()

@@ -244,6 +244,7 @@ def _push_to_labelset_source() -> None:
                 vote_snap.good_votes,
                 vote_snap.bad_votes,
                 vote_region_boxes=vote_snap.vote_region_boxes,
+                vote_provenance=vote_snap.vote_provenance,
                 detector_meta=detector_meta or None,
             )
             source.save(labelset, field_values)
@@ -321,6 +322,7 @@ def sync_from_labelset_source(detector_id: str | None = None) -> list[dict[str, 
     with _sync_lock:
         _syncing = True
         try:
+            from vtscore.datasets.vote_provenance import read_provenance
             from vtscore.state.core import get_active_context, override_detector_context
             from vtscore.state.votes import apply_label
 
@@ -346,7 +348,12 @@ def sync_from_labelset_source(detector_id: str | None = None) -> list[dict[str, 
                             # ``record_detector_import`` call below covers the
                             # achievement credit instead of crediting each
                             # imported label as a user vote.
-                            apply_label(mid, label, record_achievement=False)
+                            apply_label(
+                                mid,
+                                label,
+                                record_achievement=False,
+                                provenance=read_provenance(entry.get("metadata")),
+                            )
                             applied_any = True
                             break
         finally:

@@ -19,20 +19,16 @@ import json
 import logging
 import threading
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from flask import request
 from flask_smorest import Blueprint, abort
 
-from vtsearch.routes._shared import (
-    format_exception_detail,
-    get_embedder_for_medias,
-    require_detector_header,
-    windowed_sort_response,
-)
+from vtsearch.routes._context import require_detector_header
+from vtsearch.routes._http import format_exception_detail
+from vtsearch.routes._progress import sort_idle
+from vtsearch.routes._sort_window import windowed_sort_response
 
 from vtscore.config import DATA_DIR
-import vtscore.security.path_validation as _paths
 from vtscore.embedding import embed_text_query
 from vtsearch.schemas.sorting import (
     CoverageAtlasNextResponseSchema,
@@ -52,7 +48,15 @@ from vtsearch.schemas.sorting import (
     TextsortSuggestionsResponseSchema,
     VotesResponseSchema,
 )
-from vtscore.training.thresholds import calculate_gmm_threshold
+from vtscore.training.query_sort import (
+    apply_crop_or_keep,
+    cosine_sort_active,
+    embed_external_labels,
+    example_sort_from_paths,
+    parse_label_file,
+    score_embedder_for_active,
+    train_and_score_active,
+)
 from vtsearch.state import (
     add_textsort_suggestion,
     bad_votes,
@@ -70,9 +74,6 @@ from vtsearch.state import (
     vote_region_boxes,
 )
 from vtscore.concurrency.progress import sort_progress, update_sort_progress
-
-if TYPE_CHECKING:
-    from vtscore.media.embedder import MediaEmbedder
 
 sorting_bp = Blueprint(
     "sorting",
@@ -93,51 +94,6 @@ _SORT_STEPS = 3
 _SORT_TASK = "text_sort"
 
 
-def _sort_idle() -> None:
-    """Reset the sort progress bar to idle, clearing the whole-job step frame."""
-    update_sort_progress("idle", "", step=None, total_steps=None)
-
-
-def _cosine_sort(query_vec, *, role: str = "score", snap=None):
-    """Sort all loaded medias by cosine similarity to *query_vec*.
-
-    Returns ``(results, threshold)`` where *results* is a list of
-    ``{"id": …, "similarity": …}`` dicts sorted descending, and
-    *threshold* is the GMM-based boundary (rounded to 4 decimals).
-
-    *role* selects which bound embedder the haystack is scored against (the
-    v3 routing table, see :meth:`DatasetContext.routed_embedder`): ``"text"``
-    for a text query, ``"score"`` (patch-else-text) for an example/cosine
-    query.  *query_vec* must have been embedded by that same embedder.
-
-    For datasets embedded with a patch-aware embedder (DINOv2, DINOv3,
-    EUPE), each result also carries a ``best_region`` field containing the
-    bounding box of the region that scored highest, in normalised
-    image coordinates ``[x0, y0, x1, y1]``.  Single-vector embedders
-    take a fast vectorised numpy path with no per-result box.
-
-    Both paths live in :mod:`vtscore.training.region_similarity`.
-
-    *snap* lets the caller thread in a medias snapshot it already took, so a
-    single handler doesn't copy the full medias dict under ``_state_lock`` more
-    than once per request; when ``None`` a fresh snapshot is taken.
-    """
-    from vtscore.state.core import get_active_context  # noqa: PLC0415
-    from vtscore.training.region_similarity import cosine_sort_with_boxes  # noqa: PLC0415
-
-    ctx = get_active_context()
-    embedder_name = ctx.routed_embedder(role)
-    # Region vectors belong to the patch embedder; the per-region max-pool is
-    # valid only when the query was scored against that same embedder.
-    region_aware = embedder_name is not None and embedder_name == ctx.patch_embedder
-
-    if snap is None:
-        snap = snapshot_medias()
-    results, sims_list = cosine_sort_with_boxes(snap, query_vec, embedder_name, region_aware=region_aware)
-    threshold = calculate_gmm_threshold(sims_list)
-    return results, round(threshold, 4)
-
-
 _embedder_load_lock = threading.Lock()
 
 
@@ -147,32 +103,11 @@ def _get_embedder_for_loaded_data(snap=None):
     *snap* threads in an already-taken medias snapshot to avoid re-copying the
     medias dict under ``_state_lock``; when ``None`` a fresh snapshot is taken.
     """
+    from vtscore.media import embedder_for_medias
+
     if snap is None:
         snap = snapshot_medias()
-    return get_embedder_for_medias(snap)
-
-
-def _score_embedder_for_loaded_data(snap=None) -> tuple["MediaEmbedder | None", str | None]:
-    """Return ``(embedder, embedder_name)`` for the dataset's score embedder.
-
-    The score embedder is the patch slot if bound, else the text slot (the v3
-    routing table; see :meth:`DatasetContext.routed_embedder`).  Used to embed
-    an example/label query so it shares the space the haystack is scored
-    against.  A slot-less single-vector dataset falls back to the primary
-    embedder and a ``None`` name (the matrix layer then reads the primary
-    vector); for single-embedder datasets the two coincide.
-    """
-    from vtscore.state.core import get_active_context  # noqa: PLC0415
-
-    score_name = get_active_context().routed_embedder("score")
-    if score_name is not None:
-        from vtscore.media import get_embedder  # noqa: PLC0415
-
-        try:
-            return get_embedder(score_name), score_name
-        except KeyError:
-            pass
-    return _get_embedder_for_loaded_data(snap), score_name
+    return embedder_for_medias(snap)
 
 
 def _load_embedder_with_progress(snap=None):
@@ -217,12 +152,12 @@ def sort_clips(body: dict):
     """Return medias sorted by cosine similarity to a text query."""
     text = body.get("text", "").strip()
     if not text:
-        _sort_idle()
+        sort_idle()
         abort(400, message="text is required")
 
     snap = snapshot_medias()
     if not snap:
-        _sort_idle()
+        sort_idle()
         abort(400, message="No medias loaded")
 
     first = next(iter(snap.values()))
@@ -238,7 +173,7 @@ def sort_clips(body: dict):
     ctx = get_active_context()
     embedder_name = ctx.routed_embedder("text")
     if embedder_name is None:
-        _sort_idle()
+        sort_idle()
         primary = first.get("embedder", "") or "this dataset's embedder"
         abort(
             400,
@@ -253,7 +188,7 @@ def sort_clips(body: dict):
         timing.step_weights(_SORT_TASK, media_type=media_type, embedder=embedder_name, n=len(snap))
     )
     # Every exit below — success and abort alike — parks the tracker at "idle"
-    # via ``_sort_idle()``, which is what closes the recorder.
+    # via ``sort_idle()``, which is what closes the recorder.
     recorder = timing.record_task(
         sort_progress, _SORT_TASK, media_type=media_type, embedder=embedder_name, auto_finish=True
     )
@@ -268,12 +203,12 @@ def sort_clips(body: dict):
         enrich = settings.get_enrich_descriptions()
         text_vec = embed_text_query(text, media_type, enrich=enrich, embedder_name=embedder_name)
         if text_vec is None:
-            _sort_idle()
+            sort_idle()
             abort(500, message=f"Could not embed text for media type {media_type}")
 
         update_sort_progress("sorting", "Computing similarities…", 0, 0, step=3, total_steps=_SORT_STEPS)
-        results, threshold = _cosine_sort(text_vec, role="text", snap=snap)
-        _sort_idle()
+        results, threshold = cosine_sort_active(text_vec, role="text", snap=snap)
+        sort_idle()
         return windowed_sort_response(results, threshold)
     except Exception as exc:
         recorder.finish(ok=False)
@@ -285,7 +220,7 @@ def sort_clips(body: dict):
             # in a 500.
             raise
         logging.getLogger(__name__).exception("text sort failed")
-        _sort_idle()
+        sort_idle()
         abort(500, message=f"Text sort failed: {format_exception_detail(exc)}")
 
 
@@ -610,7 +545,23 @@ def set_inclusion_route(body: dict):
     mode, re-splits the unverified items over the frozen scores.  The new
     cutoff is returned so the Find slider can move the green/red line.
     """
-    new_inclusion = int(max(-10, min(10, body["inclusion"])))
+    # The clamp is not spelled out here: ``settings.validate_inclusion`` is
+    # generated from the ``[-10, 10]`` bound declared once on
+    # ``UserSettings.inclusion``, so this endpoint and ``PUT /api/settings``
+    # cannot drift apart (issue #3416). The schema admits any number
+    # (``fields.Raw`` plus a numeric check), so truncate toward zero first --
+    # the pydantic field is an ``int`` and rejects a fractional value, and
+    # truncate-then-clamp is what this route has always done.
+    #
+    # This note stays a comment rather than joining the docstring above:
+    # flask-smorest publishes the docstring as the endpoint's OpenAPI
+    # ``description``, and internal wiring is not part of the contract.
+    from vtsearch import settings  # noqa: PLC0415
+
+    try:
+        new_inclusion = settings.validate_inclusion(int(body["inclusion"]))
+    except (TypeError, ValueError) as exc:
+        abort(400, message=str(exc))
     set_inclusion(new_inclusion)
     return {"inclusion": get_inclusion(), "threshold": _active_detector_threshold()}
 
@@ -629,65 +580,6 @@ def _active_detector_threshold() -> float | None:
     return getattr(det_ctx, "threshold", None)
 
 
-def _example_sort_from_paths(file_paths: list[Path]) -> tuple:
-    """Embed one or more media files and sort all loaded medias by similarity.
-
-    Returns ``(results_list, threshold)`` on success or raises on error.
-    Each file is embedded using the embedder of the currently loaded
-    dataset.  A single example sorts by cosine similarity to its vector;
-    multiple examples sort against their centroid (the mean of the
-    L2-normalised example vectors), so each example contributes equally
-    regardless of its embedding norm.
-    """
-    import numpy as np  # noqa: PLC0415
-
-    if not file_paths:
-        raise ValueError("No example files provided")
-
-    snap = snapshot_medias()
-    if not snap:
-        raise ValueError("No medias loaded")
-
-    # Embed the examples with the dataset's score embedder so the query shares
-    # the space the haystack is scored against.
-    emb, _score_name = _score_embedder_for_loaded_data(snap)
-    if emb is None:
-        raise ValueError("No embedder available for loaded dataset")
-    from vtscore.media.embedder import media_from_path  # noqa: PLC0415
-
-    medias = [media_from_path(p) for p in file_paths]
-    embeddings = []
-    for path, media in zip(file_paths, medias, strict=True):
-        vec = emb.embed_media(media)
-        if vec is None:
-            raise ValueError(f"Failed to embed media file: {path.name}")
-        embeddings.append(np.asarray(vec, dtype=np.float32))
-
-    if len(embeddings) == 1:
-        query_vec = embeddings[0]
-    else:
-        normed = [v / n if (n := float(np.linalg.norm(v))) > 0 else v for v in embeddings]
-        query_vec = np.mean(np.stack(normed), axis=0)
-
-    results, threshold = _cosine_sort(query_vec, snap=snap)
-
-    # Stage-2 structural re-rank (a no-op for non-structural datasets): for a
-    # SIFT/VLAD dataset, geometrically verify the VLAD shortlist against the
-    # uploaded example's own local features.  The example is the template; any
-    # crop was already applied to the file above, so it restricts the template.
-    # Geometric verification needs a single template, so the multi-example
-    # centroid path skips it and keeps the pure cosine ranking.
-    if len(medias) == 1 and getattr(emb, "supports_geometric_verification", False):
-        from vtscore.training.structural_similarity import maybe_structural_rerank_example  # noqa: PLC0415
-
-        example_features = emb.local_features_forward(medias[0])
-        results, threshold = maybe_structural_rerank_example(
-            results, threshold, snap, example_features, score_key="similarity"
-        )
-
-    return results, threshold
-
-
 def _parse_crop_params(raw: str | None) -> dict | None:
     """Parse a JSON string of crop bounds, or return None if absent.
 
@@ -703,29 +595,6 @@ def _parse_crop_params(raw: str | None) -> dict | None:
     if not isinstance(params, dict):
         return None
     return params
-
-
-def _apply_crop_or_keep(temp_path: Path, crop_params: dict | None) -> Path:
-    """Apply *crop_params* to *temp_path* in-place when set; otherwise keep file.
-
-    Resolves the target media type from the loaded dataset's first media
-    item (the embedder is the same one we're about to use).  Writes the
-    cropped bytes back to *temp_path*.
-    """
-    if not crop_params:
-        return temp_path
-
-    snap = snapshot_medias()
-    if not snap:
-        return temp_path
-    first_media = next(iter(snap.values()))
-    media_type = first_media.get("media_type", "")
-
-    from vtscore.media.cropping import crop_file_bytes
-
-    cropped = crop_file_bytes(temp_path, media_type, crop_params)
-    temp_path.write_bytes(cropped)
-    return temp_path
 
 
 @sorting_bp.route("/api/example-sort", methods=["POST"])
@@ -764,8 +633,8 @@ def example_sort():
 
         try:
             crop_params = _parse_crop_params(request.form.get("crop_params"))
-            _apply_crop_or_keep(temp_path, crop_params)
-            results, thresh = _example_sort_from_paths([temp_path])
+            apply_crop_or_keep(temp_path, crop_params)
+            results, thresh = example_sort_from_paths([temp_path])
         finally:
             # Clean up temp file even if sorting raises
             temp_path.unlink(missing_ok=True)
@@ -779,90 +648,6 @@ def example_sort():
             raise
         logging.getLogger(__name__).exception("example-sort failed")
         abort(500, message=f"Example sort failed: {format_exception_detail(exc)}")
-
-
-def _parse_label_file(file) -> list[dict]:
-    """Parse the uploaded label file and return its ``labels`` list, or abort 400."""
-    text = file.read().decode("utf-8")
-    try:
-        label_data = json.loads(text)
-    except Exception:
-        abort(400, message="Invalid label file format")
-    labels = label_data.get("labels", [])
-    if not labels:
-        abort(400, message="No labels found in file")
-    return labels
-
-
-def _embed_external_labels(labels: list[dict], emb) -> tuple[list, list[float], int, int]:
-    """Embed every well-formed entry in *labels* using *emb*.
-
-    Returns ``(X_list, y_list, loaded_count, skipped_count)``. Entries are
-    skipped (not aborted) when the label is malformed, the path is missing
-    or escapes the allowed directory, the file doesn't exist, or the
-    embedder returns None.
-    """
-    from vtscore.media.embedder import media_from_path  # noqa: PLC0415
-
-    X_list: list = []
-    y_list: list[float] = []
-    loaded = 0
-    skipped = 0
-    file_base = _paths.get_file_access_base_dir()
-
-    for entry in labels:
-        label = entry.get("label")
-        if label not in ("good", "bad"):
-            skipped += 1
-            continue
-
-        raw_path = entry.get("path") or entry.get("file") or entry.get("filename")
-        if not raw_path:
-            skipped += 1
-            continue
-
-        try:
-            # Embed the approved path, not the raw one: under confinement the
-            # check anchors a relative path at the user's data dir while
-            # ``Path(...)`` would anchor it at the process CWD.
-            media_path = Path(_paths.confine_server_filepath(str(raw_path), file_base))
-        except ValueError:
-            skipped += 1
-            continue
-        if not media_path.exists():
-            skipped += 1
-            continue
-
-        embedding = emb.embed_media(media_from_path(media_path))
-        if embedding is None:
-            skipped += 1
-            continue
-
-        X_list.append(embedding)
-        y_list.append(1.0 if label == "good" else 0.0)
-        loaded += 1
-
-    return X_list, y_list, loaded, skipped
-
-
-def _train_and_score_dataset(
-    X_list: list, y_list: list[float], embedder_name: str | None = None
-) -> tuple[list[dict], float]:
-    """Train an MLP on (X, y), then score every media in the active dataset.
-
-    *embedder_name* is the embedder the external labels in *X_list* were
-    embedded with; scoring sources the haystack vectors from the same embedder
-    so the trained MLP and the scored vectors share one space.  ``None`` reads
-    each media's primary vector.  The same name is handed to
-    :func:`train_and_threshold` so the safe-threshold GMM is fitted on exactly
-    the score distribution returned here - including the region max-pool on a
-    patch dataset, where results also gain a ``best_region`` box.
-    """
-    from vtscore.detectors.training import score_media_with_model, train_and_threshold  # noqa: PLC0415
-
-    snap = snapshot_medias()
-    model, threshold = train_and_threshold(X_list, y_list, snap=snap, embedder_name=embedder_name)
-    return score_media_with_model(model, snap, embedder_name), threshold
 
 
 @sorting_bp.route("/api/label-file-sort", methods=["POST"])
@@ -893,13 +678,16 @@ def label_file_sort():
 
     # Embed external labels with (and later score against) the dataset's
     # score embedder so training and scoring share one space.
-    emb, score_name = _score_embedder_for_loaded_data()
+    emb, score_name = score_embedder_for_active()
     if emb is None:
         abort(400, message="No embedder available for loaded dataset")
 
     try:
-        labels = _parse_label_file(file)
-        X_list, y_list, loaded, skipped = _embed_external_labels(labels, emb)
+        try:
+            labels = parse_label_file(file)
+        except ValueError as exc:
+            abort(400, message=str(exc))
+        X_list, y_list, loaded, skipped = embed_external_labels(labels, emb)
 
         if loaded < 2:
             abort(
@@ -914,7 +702,7 @@ def label_file_sort():
         except ValueError:
             abort(400, message="Need at least one good and one bad labeled example")
 
-        results, threshold = _train_and_score_dataset(X_list, y_list, score_name)
+        results, threshold = train_and_score_active(X_list, y_list, score_name)
         threshold = round(threshold, 4)
         return {**windowed_sort_response(results, threshold), "loaded": loaded, "skipped": skipped}
 

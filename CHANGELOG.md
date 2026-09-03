@@ -33,6 +33,24 @@ not list every commit. Use `git log` for the full history.
   the dashboard and toasts read it as a red failure; both import paths now
   share one exception taxonomy and a cancel reads as `Cancelled` either side.
 
+- **Autopilot opens on the detector you already trained, instead of on its text
+  hint.** Whether a detector arrives already trained -- and so whether Autopilot
+  ranks with the model from its first screen instead of seeding from the text or
+  example hint -- was decided the instant the Autopilot panel mounted. On entry
+  to the Train window that instant is always two round trips before
+  `/api/votes` can answer (the window ends any live Find session before it reads
+  the votes), so the labelset counts it read were the not-yet-loaded zeroes and
+  the answer was always "untrained", however trained the detector was. Only the
+  Manual -> Autopilot tab switch, which rebuilds the panel with the counts
+  already loaded, ever got it right. The mount-time reading is now a guess that
+  the run's first *real* reading of the labelset corrects, and the ranking
+  follows that correction. It matters most for a detector trained on one dataset
+  and opened on another, where there are no votes to move the phase and so
+  nothing else would ever have corrected it. Two smaller things read the same
+  flag and were deciding from a value that was false for reasons of timing
+  rather than of fact: the re-sort prompt, and the sort mode Autopilot leaves
+  selected when you stop it.
+
 - **Find now calibrates each detector against the corpus it is searching, and
   scores each head the way that head was trained.** Two independent faults met
   in the cross-dataset Find route. A detector that is not loaded against the
@@ -124,6 +142,26 @@ not list every commit. Use `git log` for the full history.
   `PUT /api/datasets/registry/{id}/rename`,
   `POST /api/dataset/import/server_folder`, and detector load respectively.
   (Issue #3438.)
+
+- **Old settings-file shapes are no longer migrated forward.** VTSearch used to
+  carry three shims for settings written by older versions: a one-shot rewrite
+  that split a pre-tier-split `data/settings.json` across the two files, and a
+  pair of coercions that read a pre-enum boolean `show_animations` as
+  `"show"` / `"hide"`. `CLAUDE.md`'s backwards-compatibility policy allows
+  breaking saved data freely and forbids exactly these shims, so they are gone.
+  A value the settings models reject -- one written before a field changed
+  shape, or a hand-edit out of range -- is now **ignored on load** and the
+  field's default applies. Your file is never rewritten, so nothing is lost:
+  fix the value and it takes effect on the next start. Concretely, a boolean
+  `show_animations` now reads as `"show"` (the default) rather than mapping
+  True-ish to `"show"` and False-ish to `"hide"`, and `PUT /api/settings` now
+  rejects the boolean with a 422 instead of silently rewriting it. Per-user
+  keys sitting in `data/settings.json` are inert rather than migrated into the
+  default user's file. The one deliberate tier exception is unchanged: the
+  built-in `default` user still reads `autofind_detectors`,
+  `autofind_exporter` and `autofind_exporter_field_values` through to
+  `data/settings.json`, which is what keeps the CLI's `--settings` flat-file
+  workflow working. (Issue #3413.)
 
 ### Changed
 

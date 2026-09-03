@@ -7,9 +7,11 @@ These cover the pure resolvers that route training/scoring through that choice:
 
 * ``embedder_type`` / ``embedder_of_type`` / ``dataset_supplied_types`` /
   ``detector_dataset_compatible`` - the type taxonomy.
-* ``keying_embedder_for_snap`` - the dataset's concrete embedder of the
-  detector's type when the snap supplies it, else the dataset score precedence
-  (the legacy / cross-dataset-portability fallback).
+* ``keying_embedder_for_snap`` / ``keying_embedder_for_type`` - the dataset's
+  concrete embedder of the detector's type when the snap supplies it, else the
+  dataset score precedence (the legacy / cross-dataset-portability fallback).
+  The two forms differ only in whether the type arrives on a context object or
+  as a bare string, and must never disagree.
 * ``detector_score_embedder`` - the scoring-space name handed to the matrix
   layer (delegates to keying).
 * ``_score_all_media`` region gating - region max-pool only when the detector
@@ -44,6 +46,7 @@ from vtscore.embedding.binding import (
     embedder_of_type,
     embedder_type,
     keying_embedder_for_snap,
+    keying_embedder_for_type,
 )
 
 DIM = 4
@@ -167,6 +170,39 @@ class TestKeyingEmbedder:
         # labelset re-embeds in clip - the same-type portability.
         clip_snap = {1: {"id": 1, "embedder": "clip", "embeddings": {"clip": _basis(0)}}}
         assert keying_embedder_for_snap(_det("semantic"), clip_snap) == "clip"
+
+
+class TestKeyingEmbedderForType:
+    """The bare-type entry point onto the same resolver (issue #3386).
+
+    Five call sites used to conjure a ``SimpleNamespace(embedder_type=...)``
+    carrier so a serialised detector's type string could reach
+    ``keying_embedder_for_snap``.  The two forms must resolve identically: the
+    name feeds model invalidation and ``resolve_calibration_fraction``, so drift
+    between them would change detector behaviour silently.
+    """
+
+    def test_matches_the_det_ctx_form_for_every_type(self):
+        snap = _dual_snap()
+        for det_type in ("semantic", "patch_semantic", "structural", ""):
+            assert keying_embedder_for_type(det_type, snap) == keying_embedder_for_snap(_det(det_type), snap)
+
+    def test_concrete_of_type_used_when_snap_supplies_it(self):
+        snap = _dual_snap()
+        assert keying_embedder_for_type("semantic", snap) == "siglip"
+        assert keying_embedder_for_type("patch_semantic", snap) == "dinov3_patch"
+
+    def test_falls_back_to_precedence_when_type_absent(self):
+        assert keying_embedder_for_type("structural", _dual_snap()) == "dinov3_patch"
+
+    def test_no_type_is_precedence_and_matches_a_null_context(self):
+        snap = _dual_snap()
+        assert keying_embedder_for_type("", snap) == "dinov3_patch"
+        assert keying_embedder_for_type("", snap) == keying_embedder_for_snap(None, snap)
+
+    def test_empty_snap_is_empty_string(self):
+        assert keying_embedder_for_type("semantic", {}) == ""
+        assert keying_embedder_for_type("semantic", None) == ""
 
 
 class TestDetectorScoreEmbedder:

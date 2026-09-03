@@ -18,6 +18,7 @@ from typing import Any
 from vtscore.config import DATA_DIR
 from vtscore.io import read_server_json
 from vtscore.labels.importers.base import LabelImporter, PluginField
+from vtscore.labels.json_format import extract_labels
 
 
 class ServerJsonLabelImporter(LabelImporter):
@@ -53,7 +54,7 @@ class ServerJsonLabelImporter(LabelImporter):
     def run(self, field_values: dict[str, Any]) -> list[dict[str, str]]:
         """Read and parse the JSON labels file from the server filesystem."""
         data = read_server_json(field_values["filepath"])
-        return _extract_labels(data)
+        return extract_labels(data)
 
     def run_cli(self, field_values: dict[str, Any]) -> list[dict[str, str]]:
         """Load labels from a file-path string (CLI usage)."""
@@ -66,14 +67,6 @@ class ServerJsonLabelImporter(LabelImporter):
             help="Path to a VTSearch labels JSON file on the server.",
             required=False,
         )
-
-
-def _extract_labels(data: Any) -> list[dict[str, str]]:
-    """Pull the labels list out of an already-parsed JSON object."""
-    labels = data.get("labels") if isinstance(data, dict) else None
-    if not isinstance(labels, list):
-        raise ValueError("JSON must contain a top-level 'labels' list.")
-    return [entry for entry in labels if isinstance(entry, dict)]
 
 
 LABEL_IMPORTER = ServerJsonLabelImporter()

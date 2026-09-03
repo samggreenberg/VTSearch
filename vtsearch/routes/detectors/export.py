@@ -25,12 +25,11 @@ from __future__ import annotations
 import io
 import logging
 from datetime import datetime, timezone
-from types import SimpleNamespace
 
 from flask import send_file
 from flask_smorest import Blueprint, abort
 
-from vtsearch.routes._shared import require_dataset_header
+from vtsearch.routes._context import require_dataset_header
 from vtsearch.state import snapshot_medias
 
 logger = logging.getLogger(__name__)
@@ -69,7 +68,7 @@ def export_portable_bundle(detector_id: str):
     from vtscore.detectors.registry import get_detector as reg_get_detector  # noqa: PLC0415
     from vtscore.detectors.store import _detector_path, _read_detector, _slug  # noqa: PLC0415
     from vtscore.detectors.training import serialize_weights  # noqa: PLC0415
-    from vtscore.embedding.binding import keying_embedder_for_snap  # noqa: PLC0415
+    from vtscore.embedding.binding import keying_embedder_for_type  # noqa: PLC0415
     from vtscore.media import get_embedder  # noqa: PLC0415
     from vtsearch.routes.detectors.scoring import (  # noqa: PLC0415
         _dataset_supplies_detector_type,
@@ -120,7 +119,7 @@ def export_portable_bundle(detector_id: str):
 
     # Score-space embedder: the concrete embedder of the detector's locked type
     # this dataset supplies (matches Find / resolve_or_train_detector's space).
-    score_emb = keying_embedder_for_snap(SimpleNamespace(embedder_type=det_type), snap)
+    score_emb = keying_embedder_for_type(det_type, snap)
     embedder_display = score_emb or ""
     embedder_model_id: str | None = None
     if score_emb:

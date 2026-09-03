@@ -422,7 +422,13 @@ VTSearch/
 │   │   └── sources/                server_json_file (bidirectional settings sync)
 │   │
 │   └── routes/                     Flask blueprints; all HTTP request handling
-│       ├── _shared.py              Shared route helpers (request parsing, JSON safety)
+│       ├── _context.py             X-Dataset-Id / X-Detector-Id route guards
+│       ├── _http.py                Request-body parsing, error-detail and mtime formatting
+│       ├── _media_response.py      Thumbnail responses; media-dict JSON safety filter
+│       ├── _plugins.py             Plugin lookup, field options, argument validation
+│       ├── _policy.py              Deployment-policy guards (the Semantic lock)
+│       ├── _progress.py            Parking the sort / find progress trackers at idle
+│       ├── _sort_window.py         Windowing a full ranking into a sort response
 │       ├── auth.py                 /api/auth/status, login, logout
 │       ├── auth_huggingface.py     HuggingFace OAuth (/api/auth/huggingface/*)
 │       ├── main.py                 Root route, favicon, logo
@@ -1075,9 +1081,11 @@ server-tier set is shared; everything else lives in
 Background threads spawned from a request handler propagate the user via the
 `vtsearch.auth.thread_user(...)` context manager (which snapshots and restores
 the prior thread-local automatically), so per-user writes — autopilot toggles,
-sync-source exports — land in the right file. Legacy single-file
-`data/settings.json` files that pre-date the split are migrated to the default
-user's file on first load.
+sync-source exports — land in the right file. A single-file
+`data/settings.json` that pre-dates the split is **not** migrated: its
+per-user keys simply have no effect where they sit, and the file is left as
+written (the one exception is the Auto-Find trio, which the built-in `default`
+user reads through to — see [Deployment](DEPLOYMENT.md#settings-file-schema)).
 
 ---
 
@@ -1130,8 +1138,14 @@ recoverable long after the import job ended:
   of the real source file**), `converter_param_<key>`, the replay
   disambiguators `converter_out_index` / `converter_n_out` /
   `converter_content_hash`, and `parent_importer` plus the parent importer's
-  locator (`parent_path` / `parent_url` / `parent_paths_file` /
-  `parent_manifest`).  `source_file` and `source_path` diverge whenever the
+  own locator param under a `parent_` prefix (`parent_path` / `parent_url` /
+  `parent_paths_file` / `parent_manifest`, or `parent_name` for a demo
+  dataset).  The resolver rebuilds the parent origin by stripping that prefix,
+  so a new importer's locator resolves with no resolver change.  The same
+  keys are stamped whether the source corpus was a scanned folder or a demo
+  dataset, and every one of a source's N outputs gets its own origin dict —
+  sharing one would leave page 3 and page 7 indistinguishable on replay.
+  `source_file` and `source_path` diverge whenever the
   scanned folder is a staging area of symlinks — the `server_files`
   (Manifest) importer links listed paths into a temp dir under their
   basenames, disambiguating collisions as `name__1.ext` — so `source_path` is
@@ -1215,7 +1229,8 @@ full materialization rather than lazy resolution.
 A `LabelSet` extends the dataset concept: each element carries its origin,
 its name within that origin, its label (`"good"` / `"bad"`), and optional
 `metadata` (arbitrary key-value dict for round-tripping extra data like
-`contentID`, `mediaID`, etc.).
+`contentID`, `mediaID`, etc., plus the reserved `"vt:provenance"` key —
+see below).
 
 ```python
 from vtscore.datasets.labelset import LabelSet
@@ -1230,6 +1245,37 @@ ls = LabelSet.from_results(results_dict, medias=medias)
 data = ls.to_dict()   # {"labels": [{"md5": ..., "label": ..., "origin": ..., ...}]}
 ls2 = LabelSet.from_dict(data)
 ```
+
+#### Vote surfacing provenance (`"vt:provenance"`)
+
+One key inside `metadata` is reserved: `"vt:provenance"` records **how each
+vote was surfaced** — which UI flow drove it, which autopilot phase (if any),
+how the item was drawn off the ranking, which ranking that was, and the item's
+rank and score at click time. `vtscore/datasets/vote_provenance.py` owns the
+vocabulary and the validation; `DetectorContext.vote_provenance` carries it in
+memory, threaded exactly like `vote_region_boxes`.
+
+It is recorded at click time because it is **not re-derivable later**: the
+ranking is client-side ephemeral state and the model behind the score is
+overwritten by the next retrain. Scalars only — the no-persisted-vectors rule
+is untouched.
+
+The four categorical fields are independent axes, not one fused enum, because
+the calibration bias this exists to measure tracks *how the item was drawn*
+(`select_mode`) rather than *who was driving* (`flow`). The two come apart at
+both edges: a user can pick the `hard` select mode by hand and get autopilot's
+exact margin-sampled draw, and autopilot's own `good` phase is mechanically a
+top-of-list draw.
+
+Recording only — nothing reads these values back to change behaviour. The
+consumer (partitioning the conformal calibration set by trustworthy surfacing
+context) is gated on the experiment pre-registered in
+[`docs/plans/provenance-partitioned-calibration.md`](plans/provenance-partitioned-calibration.md).
+Two rules keep the record honest: it is written **only on a vote-state change**
+(an idempotent re-apply keeps what the original click recorded, so a stale tab
+cannot rewrite it), and `restore_labels_from_detector` carries it back into
+vote state on load — without that, the next vote's labelset resync would erase
+every recorded vote's provenance, the bug `region_box` shipped with.
 
 The `GET /api/labels/export` endpoint returns a `LabelSet` serialised
 as JSON.  The format is backward-compatible: old consumers that only

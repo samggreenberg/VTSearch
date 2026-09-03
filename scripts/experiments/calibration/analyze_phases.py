@@ -22,15 +22,17 @@ from __future__ import annotations
 
 import argparse
 import csv
-import glob
 import os
 from collections import defaultdict
+from pathlib import Path
+
+from _cells_paths import side_frame_files
 
 _ap = argparse.ArgumentParser(description=__doc__)
 _ap.add_argument("--exp", default=f"/expscratch/{os.environ.get('USER', 'sgreenberg')}/scale-3156-fixed")
 EXP = _ap.parse_args().exp
 rows_by = defaultdict(lambda: {"n": 0, "good": 0, "pct": [], "runs": set()})
-files = sorted(glob.glob(os.path.join(EXP, "results", "cells", "task_*__picks.csv")))
+files = side_frame_files(Path(EXP) / "results" / "cells", "__picks")
 for path in files:
     try:
         with open(path, newline="") as fh:

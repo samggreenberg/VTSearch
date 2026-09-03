@@ -64,7 +64,6 @@ from vtscore.eval.step_model import (
     HEADS,
     PRODUCTION_HEAD,
     StepModel,
-    inclusion_weights,
     score_sim_set_with_model,
 )
 from vtscore.eval.step_trainers import (
@@ -487,28 +486,17 @@ def _evaluate_on_test(
 
     true_labels = [1.0 if media_is_positive(clips_dict[cid], target_category) else 0.0 for cid in test_ids]
 
-    total_pos = sum(1 for lbl in true_labels if lbl == 1.0)
-    total_neg = len(true_labels) - total_pos
-
-    fp = fn = 0
-    for score, label in zip(scores, true_labels, strict=True):
-        predicted = 1 if score >= threshold else 0
-        if predicted == 1 and label == 0.0:
-            fp += 1
-        elif predicted == 0 and label == 1.0:
-            fn += 1
-
-    fpr = fp / total_neg if total_neg > 0 else 0.0
-    fnr = fn / total_pos if total_pos > 0 else 0.0
-
     maybe_dump_predictions(clips_dict, test_ids, scores, true_labels, threshold, target_category, suffix="__eval")
-
-    fpr_weight, fnr_weight = inclusion_weights(inclusion)
-    cost = fpr_weight * fpr + fnr_weight * fnr
 
     scores_arr = np.asarray(scores, dtype=np.float64)
     labels_arr = np.asarray(true_labels, dtype=np.float64)
-    from vtscore.eval.calibration_metrics import detection_metrics  # noqa: PLC0415
+    from vtscore.eval.calibration_metrics import (  # noqa: PLC0415
+        detection_metrics,
+        inclusion_weights,
+        operating_cost,
+    )
+
+    cost, fpr, fnr = operating_cost(scores_arr, labels_arr, threshold, *inclusion_weights(inclusion))
 
     det = detection_metrics(scores_arr, labels_arr, threshold)
     return {
@@ -1924,6 +1912,14 @@ def simulate_voting_iterations(  # noqa: C901
             "n_haystack": len(sim_ids),
             "n_remainder": len(pool),
             "phase": flow.phase if flow is not None else "",
+            # The three lights behind that phase (#3560).  Already computed by
+            # `flow.update` above and previously discarded; the phase alone
+            # cannot say whether Smart or Stable is what holds a run in `hard`.
+            "smart": flow.smart if flow is not None else "",
+            "stable": flow.stable if flow is not None else "",
+            "span": flow.span if flow is not None else "",
+            "span_level": flow.span_level if flow is not None else -1,
+            "span_depth": flow.span_depth if flow is not None else -1,
             "app_trained": 1 if (flow is None or app_has_detector(flow.phase)) else 0,
             "startup_schedule": startup_schedule or "",
             "acq_threshold": round(float(acq_threshold), 6),
@@ -2151,6 +2147,15 @@ def simulate_voting_iterations(  # noqa: C901
             "n_haystack": len(sim_ids),
             "n_remainder": 0,
             "phase": "",
+            # A skyline belongs to no step, so no phase ran and no indicator
+            # was ever read for it (#3560).  Blank / -1 is the "not measured"
+            # spelling every other unphased row uses; a `red` here would say
+            # the rules had looked and refused, which they never did.
+            "smart": "",
+            "stable": "",
+            "span": "",
+            "span_level": -1,
+            "span_depth": -1,
             "app_trained": 0,
             "startup_schedule": startup_schedule or "",
             "acq_threshold": float("nan"),

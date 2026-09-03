@@ -285,7 +285,7 @@ def _handle_uncaught_exception(exc):
         return exc
     from flask import request as _req
 
-    from vtsearch.routes._shared import format_exception_detail
+    from vtsearch.routes._http import format_exception_detail
 
     logging.getLogger(__name__).exception("Unhandled exception on %s %s", _req.method, _req.path)
     if not _req.path.startswith("/api/"):

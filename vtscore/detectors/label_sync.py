@@ -189,6 +189,7 @@ def _sync_labels_to_loaded_detector_locked() -> None:
         vote_snap.bad_votes,
         expand_dupes=False,
         vote_region_boxes=vote_snap.vote_region_boxes,
+        vote_provenance=vote_snap.vote_provenance,
     )
     existing_ls = LabelSet.from_dict(data.get("labelset") or {})
 

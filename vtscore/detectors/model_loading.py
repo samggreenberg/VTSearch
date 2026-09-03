@@ -9,6 +9,15 @@ This logic lived inline in ``vtsearch/routes/detectors/scoring.py`` until it
 grew its own resolution/embedding/training branches; it has no Flask or
 request-context dependency, so it belongs in the library tier where it can be
 exercised directly.
+
+The training itself is **not** re-implemented here.  It used to be - a
+hand-rolled read of each label's image-level vector, an md5-only in-dataset
+lookup, and one negative per Bad label - which quietly made the same labelset
+mean a different detector depending on which entry point trained it
+(issue #3544, the sibling of #3525 one path over).  Everything below the
+resolution/progress plumbing now delegates to
+:func:`~vtscore.detectors.labelset_training.train_from_labelset`, the same
+entry point the detector-load and learned-sort paths use.
 """
 
 from __future__ import annotations
@@ -16,10 +25,9 @@ from __future__ import annotations
 from typing import Any
 
 from vtscore.concurrency.progress import update_find_progress
-from vtscore.embedding.media_vectors import media_embedding
 
 
-def resolve_or_train_detector(  # noqa: C901
+def resolve_or_train_detector(
     detector_id: str,
     det_data: dict | None,
     media_type: str,
@@ -31,19 +39,35 @@ def resolve_or_train_detector(  # noqa: C901
     """Return (mlp, threshold, diagnostic) for *detector_id*.
 
     Tries the loaded :class:`~vtscore.state.core.DetectorContext` first.  Falls
-    back to training on demand from the detector's labelset, embedding label
-    media via its origin importer.  Returns ``(None, _, diag)`` when training
-    is not possible.
+    back to training on demand from the detector's labelset via
+    :func:`~vtscore.detectors.labelset_training.train_from_labelset`, which
+    resolves each element (in-dataset by origin ▸ md5 ▸ name, else through its
+    origin importer), pools a Good element's ``region_box`` down to the raw
+    patch under it, floods a Bad element's patch rows as negatives, and
+    calibrates per bag.  Returns ``(None, _, diag)`` when training is not
+    possible; *diag* is
+    :func:`~vtscore.detectors.labelset_training.labelset_resolution_report`.
+
+    **The head this returns is a MaxPatch head on a patch dataset**, so its
+    callers score it through the ordinary max-pooled
+    :func:`~vtscore.detectors.training.scoring_rows_for_snap` geometry - the
+    geometry they were already using against the whole-image head this replaced,
+    which was the train/score mismatch #3544 was filed for.  On any dataset whose
+    embedder produces no patch grid every bag holds one row and the whole path
+    collapses to the historical single-vector behaviour.
 
     Inclusion is a pure cutoff knob now (find-verification-workflow.md): a slide
     does **not** retrain or drop the MLP, it re-derives the threshold over the
-    cached fold orderings.  So the cold branch passes ``det_ctx`` to
-    :func:`~vtscore.detectors.training.train_and_threshold`, which caches those
-    orderings on the context — without that cache a later Inclusion slide can't
-    move the cutoff (it would silently no-op).
+    cached fold orderings.  ``train_from_labelset`` passes the detector context
+    down to :func:`~vtscore.detectors.training.train_and_threshold`, which caches
+    those orderings on it — without that cache a later Inclusion slide can't move
+    the cutoff (it would silently no-op).
     """
+    from vtscore.datasets.labelset import LabelSet
     from vtscore.detectors.dataset_sync import invalidate_detector_model_on_embedder_mismatch
-    from vtscore.state.core import get_detector_context
+    from vtscore.detectors.labelset_training import labelset_resolution_report, train_from_labelset
+    from vtscore.embedding.binding import keying_embedder_for_snap
+    from vtscore.state.core import DetectorContext, get_detector_context
 
     det_ctx = get_detector_context(detector_id)
     if det_ctx is not None:
@@ -55,8 +79,6 @@ def resolve_or_train_detector(  # noqa: C901
         # supply it (so a valid cached model survives), else the dataset score
         # precedence (so a genuine mismatch invalidates).  See patch-embedder.md
         # → "Per-detector primary embedder".
-        from vtscore.embedding.binding import keying_embedder_for_snap
-
         snap_embedder = keying_embedder_for_snap(det_ctx, snap)
         invalidate_detector_model_on_embedder_mismatch(det_ctx, snap_embedder)
     if det_ctx is not None and det_ctx.model is not None:
@@ -65,8 +87,8 @@ def resolve_or_train_detector(  # noqa: C901
     if det_data is None:
         return None, 0.5, None
 
-    label_entries = det_data.get("labelset", {}).get("labels", [])
-    if not label_entries:
+    labelset = LabelSet.from_dict(det_data.get("labelset") or {})
+    if not labelset.elements:
         return None, 0.5, None
 
     update_find_progress(
@@ -78,131 +100,41 @@ def resolve_or_train_detector(  # noqa: C901
         total_steps=progress_total_steps,
     )
 
-    from vtscore.detectors.resolver import resolve_label_embeddings
-    from vtscore.detectors.training import train_and_threshold
+    # A never-loaded detector (the Auto-Find and portable-export cases) has no
+    # context to train against, so it gets a throwaway one.  ``detector_id`` is
+    # deliberately left empty on it: ``populate_label_embeddings`` ends by
+    # calling ``record_detector_embedder`` to persist the space it embedded in,
+    # and a scoring pass over a detector nobody loaded should not be what writes
+    # that.  ``record_detector_embedder`` no-ops on an empty id.  A *loaded*
+    # detector is handed its live context, exactly as the load path does: the
+    # snapshot here is the active dataset, so the caches this populates are the
+    # ones that context is supposed to hold, and the trained head lands on
+    # ``det_ctx.model`` where the fast path above will find it next time.
+    train_ctx = det_ctx
+    if train_ctx is None:
+        train_ctx = DetectorContext(
+            "",
+            name=det_data.get("name", "") or "",
+            media_type=media_type,
+            embedder_type=det_data.get("embedder_type", "") or "",
+        )
 
-    # The space to cold-train the MLP in: the concrete embedder of the
-    # detector's locked type that this snap supplies, else the dataset score
-    # precedence (the legacy / cross-dataset-portability fallback).  Both the
-    # in-snap vectors and the origin-resolved label vectors are read/embedded in
-    # this one space so the cold-trained MLP never mixes embedder outputs.
-    # ``keying_embedder_for_snap`` is fed a throwaway carrier for the detector's
-    # type because an unloaded detector has no live context.
-    from types import SimpleNamespace  # noqa: PLC0415
-
-    from vtscore.embedding.binding import keying_embedder_for_snap  # noqa: PLC0415
-
-    det_type = (det_data.get("embedder_type", "") or "") if det_data else ""
-    cold_embedder = keying_embedder_for_snap(SimpleNamespace(embedder_type=det_type), snap)
-
-    X_list: list = []
-    y_list: list[float] = []
-    md5_to_emb = {}
-    md5_to_id: dict[str, int] = {}
-    if snap:
-        md5_to_emb = {c["md5"]: media_embedding(c, cold_embedder or None) for c in snap.values()}
-        md5_to_id = {c["md5"]: cid for cid, c in snap.items()}
-
-    # Match origin-resolved label vectors to the cold-train space so the two
-    # paths don't produce a mixed-space training set (silently garbage MLP).
-    # Empty when the snap is empty or untyped, which falls back to the media
-    # type's default embedder.
-    dataset_embedder = cold_embedder
-    if not dataset_embedder and snap:
-        dataset_embedder = next(iter(snap.values()), {}).get("embedder", "") or ""
-
-    # Labels that live in the current dataset are also haystack members; the
-    # threshold path drops them from its population fit (issue #3308).
-    voted_ids: set[int] = set()
-    unresolved: list[dict] = []
-    for entry in label_entries:
-        label_val = entry.get("label", "")
-        if label_val not in ("good", "bad"):
-            continue
-        md5 = entry.get("md5", "")
-        if md5 and md5 in md5_to_emb:
-            X_list.append(md5_to_emb[md5])
-            y_list.append(1.0 if label_val == "good" else 0.0)
-            voted_ids.add(md5_to_id[md5])
-        else:
-            unresolved.append(entry)
-
-    md5_matched = len(X_list)
-    resolved = None
-    if unresolved:
-        n_unresolved = len(unresolved)
+    def _on_label(_name: str, current: int, total: int) -> None:
+        # Resolving a label that isn't in *snap* costs an importer fetch (plus a
+        # ``patch_forward`` on a patch detector), so it is the phase of a cold
+        # train that can run long.  The final element hands over to the fold
+        # fitting, which is the other one.
+        done = current >= total
         update_find_progress(
             "running",
-            f"Resolving {n_unresolved} label origins…",
-            current=0,
-            total=n_unresolved,
+            "Cross-calibrating threshold…" if done else f"Resolving {total} label origins…",
+            current=current,
+            total=total,
             step=progress_step,
             total_steps=progress_total_steps,
         )
 
-        def _origin_progress(current: int, total: int) -> None:
-            update_find_progress(
-                "running",
-                f"Resolving {n_unresolved} label origins…",
-                current=current,
-                total=total,
-                step=progress_step,
-                total_steps=progress_total_steps,
-            )
+    if train_from_labelset(train_ctx, labelset, media_type=media_type, snap=snap, on_progress=_on_label):
+        return train_ctx.model, train_ctx.threshold, None
 
-        resolved = resolve_label_embeddings(
-            unresolved,
-            media_type,
-            progress_callback=_origin_progress,
-            embedder_name=dataset_embedder,
-        )
-        X_list.extend(resolved.embeddings)
-        y_list.extend(resolved.labels)
-
-    has_good = any(v == 1.0 for v in y_list)
-    has_bad = any(v == 0.0 for v in y_list)
-    if has_good and has_bad:
-        update_find_progress(
-            "running",
-            "Cross-calibrating threshold…",
-            current=0,
-            total=0,
-            step=progress_step,
-            total_steps=progress_total_steps,
-        )
-        # Pass the detector's context so the K fold orderings get cached on it:
-        # a later Inclusion slide re-derives the threshold over the cache (and
-        # re-splits the Find good/bad) instead of being a no-op.  ``det_ctx`` is
-        # the loaded context for this detector (None only for a never-loaded
-        # detector, which simply skips the cache).  See train_and_threshold.
-        trained_mlp, threshold = train_and_threshold(
-            X_list, y_list, snap=snap, embedder_name=cold_embedder or None, det_ctx=det_ctx, voted_ids=voted_ids
-        )
-        return trained_mlp, threshold, None
-
-    diagnostic: dict = {
-        "total_labels": md5_matched + len(unresolved),
-        "md5_matched": md5_matched,
-        "needed_resolution": len(unresolved),
-        "resolved_from_origin": resolved.resolved_count if resolved else 0,
-        "failed_resolution": len(resolved.missing_entries) if resolved else len(unresolved),
-        "has_good": has_good,
-        "has_bad": has_bad,
-        "media_type": media_type,
-    }
-    if resolved and resolved.missing_entries:
-        samples = resolved.missing_entries[:3]
-        diagnostic["sample_failures"] = [
-            {
-                "origin": e.get("origin"),
-                "origin_name": e.get("origin_name", ""),
-                "filename": e.get("filename", ""),
-                "md5": e.get("md5", "")[:12],
-                "label": e.get("label", ""),
-            }
-            for e in samples
-        ]
-    elif not unresolved and (not has_good or not has_bad):
-        diagnostic["hint"] = "All labels matched by MD5 but all are the same class (need both good and bad)"
-
-    return None, 0.5, diagnostic
+    return None, 0.5, labelset_resolution_report(train_ctx, labelset, media_type=media_type, snap=snap)

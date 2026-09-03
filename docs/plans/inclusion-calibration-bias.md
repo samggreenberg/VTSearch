@@ -15,9 +15,16 @@ See [`docs/experiments/2026-07-27-inclusion-knob/SELECTION-BIAS.md`](../experime
 **So no bias-correction work is warranted right now.** What remains is a
 cold-start gap and some documentation.
 
-The harness (`scripts/experiments/inclusion_knob/run_autopilot_sweep.py`) drives
-the repo's own `vtscore.eval.al_strategies` selector, so any follow-up can reuse
-it rather than re-simulating the vote order.
+The harness (`scripts/experiments/inclusion_knob/run_autopilot_sweep.py`) is a
+thin driver over `vtscore.eval.voting_iterations.simulate_voting_iterations`
+(#3408), so any follow-up reuses the shipped vote loop rather than re-simulating
+it. **The measurements quoted above predate that rebuild**: they came from a
+hand-rolled loop that had drifted onto the retired `"mlp"` head, the pre-#2877
+interleave and an un-offset acquisition cut, so the specific figures describe a
+detector no longer shipped even though the qualitative finding is what the
+plan rests on. Any item below that turns on a number should re-measure first;
+the driver emits every step, not just the 12/24/50/100 checkpoints, which is
+where the cold-start item lives.
 
 ## Open work
 

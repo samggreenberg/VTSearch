@@ -418,7 +418,7 @@ class VoteSnapshot(NamedTuple):
 
     ``safe`` reports whether the vote dicts could be proved to be keyed in
     the snapshot's medias' cid space.  When ``safe`` is False, ``good_votes``
-    / ``bad_votes`` / ``vote_region_boxes`` are returned empty (so read paths
+    / ``bad_votes`` / ``vote_region_boxes`` / ``vote_provenance`` are returned empty (so read paths
     that just compose with ``medias`` degrade to an empty result instead of
     leaking cross-dataset cids).  Write paths that would replace on-disk
     state must check ``safe`` and skip the write; otherwise an empty
@@ -429,6 +429,10 @@ class VoteSnapshot(NamedTuple):
     good_votes: dict[int, None]
     bad_votes: dict[int, None]
     vote_region_boxes: dict[int, tuple[float, float, float, float]]
+    # Per-vote surfacing provenance, captured under the same lock so a
+    # composed labelset can't pair one vote's label with another snapshot's
+    # context.  See :mod:`vtscore.datasets.vote_provenance`.
+    vote_provenance: dict[int, dict[str, Any]]
     safe: bool
     # Find-mode: ids the human has explicitly verified this session, captured
     # under the same lock so verified/unverified export filters stay atomic
@@ -495,12 +499,13 @@ def validated_vote_snapshot() -> VoteSnapshot:
         # match the active dataset) is the race / stale-state scenario and
         # is the only one we refuse to compose for.
         if det_ctx.detector_id and det_ctx.votes_dataset_id and det_ctx.votes_dataset_id != ds_ctx.dataset_id:
-            return VoteSnapshot(snap, {}, {}, {}, safe=False, verified_ids={})
+            return VoteSnapshot(snap, {}, {}, {}, {}, safe=False, verified_ids={})
         return VoteSnapshot(
             snap,
             dict(det_ctx.good_votes),
             dict(det_ctx.bad_votes),
             dict(det_ctx.vote_region_boxes),
+            dict(det_ctx.vote_provenance),
             safe=True,
             verified_ids=dict(det_ctx.verified_ids),
         )

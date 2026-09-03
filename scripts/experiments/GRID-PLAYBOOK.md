@@ -153,7 +153,10 @@ silently runs as binary voting**, which has now cost three studies (#2877,
   wrapper before anything.
 - **Editable-finder shadow trap:** with multiple worktrees, a worktree's `app.py`
   can silently import the *other* checkout's package via the editable install.
-  Pin the intended worktree with the shadow-module `PYTHONPATH` trick.
+  Pin the intended worktree with the shadow-module `PYTHONPATH` trick. A study's
+  stage scripts get this for free from `scripts/experiments/_expcommon.py`, which
+  every per-study `common.py` delegates to — the fix lives there and nowhere else,
+  because it fails without an error when it is wrong.
 - **GPU nodes are `Exclusive_Process`** (**[HLTCOE]**): one CUDA process at a time —
   serialize GPU stages within a job.
 

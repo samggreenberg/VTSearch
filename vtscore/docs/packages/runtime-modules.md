@@ -36,6 +36,9 @@ def sanitize_csv_cell(value: str) -> str: ...
 def desanitize_csv_cell(value: str) -> str: ...
 
 @contextmanager
+def atomic_write_stream(path, *, encoding="utf-8", newline="") -> Iterator[IO[str]]: ...
+
+@contextmanager
 def file_lock(path) -> Iterator[None]: ...
 ```
 
@@ -43,6 +46,13 @@ The helpers are deliberately small. Their job is to standardise the
 `ValueError` text the framework surfaces to users, and to make "a future
 file-writing plugin that forgets `fsync`" impossible without explicitly
 working around the helper.
+
+**Streaming writes.** `atomic_write_stream` is the same ritual for a writer
+that has no finished string to hand `atomic_write_text` - a `csv` writer fed
+from a generator, an NDJSON export written row by row. It yields the open
+handle, `fsync`s and renames on a clean exit, and unlinks the tmp file if the
+block raises, so an export that dies halfway through its record iterator
+leaves the destination untouched rather than half-written.
 
 **CSV cells.** `sanitize_csv_cell` prefixes a value starting with `=`,
 `+`, `-`, `@`, tab or carriage return with a single quote, so a label

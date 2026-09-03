@@ -31,7 +31,7 @@ common.setup_env()
 
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
-from _cells_io import assert_one_opening, main_frame_files  # noqa: E402
+from _cells_io import load_cells as _load_cells  # noqa: E402
 
 #: The window every headline number is computed over: the app's first trained
 #: detector appears at 7 votes, and the production ramp ends at 20.  Below 7 no
@@ -58,26 +58,18 @@ def load_cells(results: Path) -> pd.DataFrame:
     study that quietly analyses 1295 of 1344 cells while reporting neither
     number is exactly how a disk incident turns into a wrong verdict.
     """
-    files = main_frame_files(results / "cells")
-    files = [f for f in files if not f.name.endswith("__sweep.csv")]
-    if not files:
+    df, prov = _load_cells(results / "cells", where=f"analyze_mixin.py ({results.name})")
+    if not prov["n_files"]:
         raise SystemExit(f"no cell CSVs under {results / 'cells'}")
-    frames, unreadable = [], []
-    for f in files:
-        try:
-            frames.append(pd.read_csv(f))
-        except (pd.errors.EmptyDataError, pd.errors.ParserError):
-            unreadable.append(f.name)
-    if unreadable:
+    if prov["unreadable"] or prov["zero_byte"]:
+        dropped = [n for n, _ in prov["unreadable"]] + prov["zero_byte"]
         print(
-            f"WARNING: {len(unreadable)} of {len(files)} cell files under {results.name} "
-            f"were unreadable and are excluded: {', '.join(sorted(unreadable)[:5])}"
-            + (" ..." if len(unreadable) > 5 else "")
+            f"WARNING: {len(dropped)} of {prov['n_files']} cell files under {results.name} "
+            f"were unreadable or zero-byte and are excluded: {', '.join(sorted(dropped)[:5])}"
+            + (" ..." if len(dropped) > 5 else "")
         )
-    if not frames:
-        raise SystemExit(f"every cell CSV under {results / 'cells'} was unreadable")
-    df = pd.concat([f for f in frames if len(f)], ignore_index=True)
-    assert_one_opening(df, f"analyze_mixin.py ({results.name})")
+    if df.empty:
+        raise SystemExit(f"every cell CSV under {results / 'cells'} was unreadable or empty")
     for col in ("schedule", "gmm_variant"):
         df[col] = df[col].fillna("")
     df["n_votes"] = df["n_good"] + df["n_bad"]

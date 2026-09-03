@@ -4,6 +4,10 @@ Covers the anchored EM itself (seeded synthetic bimodal / unimodal /
 anchors-contradict-modes cases, determinism, degeneracy fallbacks), the
 rank-transfer scale carrier, and the fold-anchored ("cross-LabeledGMM")
 combiner.  Library tier: pure ``vtscore.training.thresholds``, no app imports.
+
+``TestAnchoredEmEquivalence`` additionally pins the #3558 optimisation of the
+EM loop to bit-for-bit equality with the two-column form it replaced, which is
+kept here verbatim as ``_reference_anchored_em``.
 """
 
 from __future__ import annotations
@@ -32,6 +36,7 @@ from vtscore.training.thresholds import (
     inclusion_cost_weights,
     rank_transfer,
 )
+from vtscore.training.thresholds.gmm import _anchored_em
 
 
 def _bimodal(
@@ -165,6 +170,191 @@ class TestAnchoredEm:
         assert provenance == "anchored"
         assert fit is not None
         assert fit.mu_hi > fit.mu_lo
+
+
+def _reference_anchored_em(
+    x: np.ndarray,
+    a_lo: np.ndarray,
+    a_hi: np.ndarray,
+    init: GmmFit1D,
+    anchor_weight: float,
+    max_iter: int = 200,
+    tol: float = 1e-8,
+) -> GmmFit1D | None:
+    """The pre-#3558 anchored EM, verbatim, as the equivalence reference.
+
+    Kept as the readable two-column form the shipped
+    :func:`~vtscore.training.thresholds.gmm._anchored_em` was optimised out of:
+    one ``(n, 2)`` responsibility array per iteration, ``axis=1`` reductions,
+    fresh temporaries throughout.  It is a *specification*, not a copy to keep
+    in sync - if a future change to the shipped loop makes this disagree, the
+    shipped loop has moved the threshold, which is the thing #3558 was not
+    allowed to do.
+    """
+    lam = float(anchor_weight)
+    n = float(x.size)
+    n_lo, n_hi = float(a_lo.size), float(a_hi.size)
+    total_mass = n + lam * (n_lo + n_hi)
+
+    w = np.array([init.w_lo, init.w_hi], dtype=np.float64)
+    mu = np.array([init.mu_lo, init.mu_hi], dtype=np.float64)
+    var = np.array([init.var_lo, init.var_hi], dtype=np.float64)
+
+    pooled = np.concatenate([x, a_lo, a_hi])
+    var_floor = max(1e-12, 1e-6 * float(np.var(pooled)))
+    var = np.maximum(var, var_floor)
+
+    sum_a_lo, sum_a_hi = float(a_lo.sum()), float(a_hi.sum())
+
+    for _ in range(max_iter):
+        log_p = (
+            np.log(np.maximum(w, 1e-300))[None, :]
+            - 0.5 * np.log(2.0 * math.pi * var)[None, :]
+            - (x[:, None] - mu[None, :]) ** 2 / (2.0 * var[None, :])
+        )
+        log_p -= log_p.max(axis=1, keepdims=True)
+        r = np.exp(log_p)
+        r /= r.sum(axis=1, keepdims=True)
+
+        m_lo = float(r[:, 0].sum()) + lam * n_lo
+        m_hi = float(r[:, 1].sum()) + lam * n_hi
+        if not (m_lo > 0.0 and m_hi > 0.0):
+            return None
+        mu_new = np.array(
+            [
+                (float(np.sum(r[:, 0] * x)) + lam * sum_a_lo) / m_lo,
+                (float(np.sum(r[:, 1] * x)) + lam * sum_a_hi) / m_hi,
+            ]
+        )
+        var_new = np.array(
+            [
+                (float(np.sum(r[:, 0] * (x - mu_new[0]) ** 2)) + lam * float(((a_lo - mu_new[0]) ** 2).sum())) / m_lo,
+                (float(np.sum(r[:, 1] * (x - mu_new[1]) ** 2)) + lam * float(((a_hi - mu_new[1]) ** 2).sum())) / m_hi,
+            ]
+        )
+        var_new = np.maximum(var_new, var_floor)
+        w_new = np.array([m_lo, m_hi]) / total_mass
+
+        if not (np.all(np.isfinite(mu_new)) and np.all(np.isfinite(var_new)) and np.all(np.isfinite(w_new))):
+            return None
+        delta = max(
+            float(np.max(np.abs(mu_new - mu))),
+            float(np.max(np.abs(var_new - var))),
+            float(np.max(np.abs(w_new - w))),
+        )
+        mu, var, w = mu_new, var_new, w_new
+        if delta < tol:
+            break
+
+    return GmmFit1D(
+        w_lo=float(w[0]),
+        mu_lo=float(mu[0]),
+        var_lo=float(var[0]),
+        w_hi=float(w[1]),
+        mu_hi=float(mu[1]),
+        var_hi=float(var[1]),
+    )
+
+
+def _params(fit: GmmFit1D | None) -> tuple[float, ...] | None:
+    return None if fit is None else (fit.w_lo, fit.mu_lo, fit.var_lo, fit.w_hi, fit.mu_hi, fit.var_hi)
+
+
+class TestAnchoredEmEquivalence:
+    """#3558: the optimised anchored EM must be **bit-for-bit** the old one.
+
+    The shipped loop was rewritten to run in preallocated 1-D buffers because
+    it is the dominant term in a calibration fold (86% of one, per the
+    2026-08-28 fold-count study), and the whole value of that rewrite depends
+    on it being an *optimisation*: a fit that moved by even one ulp would move
+    the threshold through the fold-quantile transfer, and that is a
+    calibration change requiring a study rather than an engineering task.
+
+    So these compare all six fitted parameters with ``==``, never
+    ``pytest.approx``.  A failure here is not a tolerance to widen.
+    """
+
+    @staticmethod
+    def _fit_pair(x, a_scores, a_labels, anchor_weight, max_iter=200, tol=1e-8):
+        arr = gmm_fit_array(x)
+        init = fit_score_gmm(arr)
+        assert init is not None
+        a = np.asarray(a_scores, dtype=np.float64)
+        z = np.asarray(a_labels, dtype=np.float64)
+        a_hi, a_lo = a[z == 1.0], a[z != 1.0]
+        return (
+            _reference_anchored_em(arr, a_lo, a_hi, init, anchor_weight, max_iter, tol),
+            _anchored_em(arr, a_lo, a_hi, init, anchor_weight, max_iter, tol),
+        )
+
+    @pytest.mark.parametrize("seed", [0, 1, 2, 3, 7])
+    @pytest.mark.parametrize("n_votes", [2, 5, 20, 120])
+    @pytest.mark.parametrize("anchor_weight", [0.01, FOLD_ANCHOR_WEIGHT, 1.0, 100.0])
+    def test_bit_identical_on_bimodal_haystacks(self, seed, n_votes, anchor_weight):
+        rng = np.random.default_rng(seed)
+        arr = _bimodal(rng, n=3000)
+        scores = np.clip(rng.normal(0.6, 0.15, n_votes), 0.0, 1.0)
+        labels = (np.arange(n_votes) % 2 == 0).astype(float)
+        reference, optimised = self._fit_pair(arr, scores, labels, anchor_weight)
+        assert _params(optimised) == _params(reference)
+
+    def test_bit_identical_with_one_sided_anchors(self):
+        rng = np.random.default_rng(19)
+        arr = _bimodal(rng)
+        reference, optimised = self._fit_pair(arr, rng.normal(0.8, 0.05, 12), np.ones(12), FOLD_ANCHOR_WEIGHT)
+        assert _params(optimised) == _params(reference)
+
+    def test_bit_identical_when_anchors_contradict_the_modes(self):
+        rng = np.random.default_rng(23)
+        arr = _bimodal(rng)
+        scores = np.concatenate([rng.normal(0.8, 0.02, 8), rng.normal(0.2, 0.02, 8)])
+        labels = np.concatenate([np.zeros(8), np.ones(8)])
+        reference, optimised = self._fit_pair(arr, scores, labels, FOLD_ANCHOR_WEIGHT)
+        assert _params(optimised) == _params(reference)
+
+    def test_bit_identical_on_a_degenerate_haystack(self):
+        # Every free score identical: the variance floor is what keeps this
+        # finite, and it has to bind at the same iteration in both forms.
+        arr = np.full(500, 0.5)
+        reference, optimised = self._fit_pair(arr, [0.4, 0.41, 0.6], [0.0, 0.0, 1.0], FOLD_ANCHOR_WEIGHT)
+        assert _params(optimised) == _params(reference)
+
+    def test_bit_identical_at_an_extreme_score_scale(self):
+        # Scores far from the unit interval: the shifted/squared terms are
+        # where a reassociated expression would first show up.
+        rng = np.random.default_rng(29)
+        arr = rng.standard_normal(4000) * 1e6
+        reference, optimised = self._fit_pair(arr, [-1.0e6, 1.0e6], [0.0, 1.0], FOLD_ANCHOR_WEIGHT)
+        assert _params(optimised) == _params(reference)
+
+    @pytest.mark.parametrize("max_iter", [1, 2, 7])
+    def test_bit_identical_mid_run_so_the_iteration_path_matches(self, max_iter):
+        # Stopping short compares the *trajectory*, not just the fixed point:
+        # two loops can converge to the same answer by different routes, and
+        # only the truncated runs can tell them apart.
+        rng = np.random.default_rng(31)
+        arr = _bimodal(rng, n=1500)
+        reference, optimised = self._fit_pair(
+            arr, rng.normal(0.75, 0.05, 10), np.ones(10), FOLD_ANCHOR_WEIGHT, max_iter=max_iter
+        )
+        assert _params(optimised) == _params(reference)
+
+    def test_bit_identical_through_the_shipped_fold_threshold(self):
+        # The end-to-end check: the equality that matters is the threshold the
+        # app ships, not the mixture parameters on their own.
+        rng = np.random.default_rng(37)
+        fold_haystacks = [_bimodal(rng, n=2500) for _ in range(3)]
+        orderings = [
+            (list(np.concatenate([rng.normal(0.2, 0.05, 6), rng.normal(0.8, 0.05, 6)])), [0.0] * 6 + [1.0] * 6)
+            for _ in range(3)
+        ]
+        final = _bimodal(rng, n=2500)
+        thresholds = [fold_anchored_gmm_threshold(fold_haystacks, orderings, final, k) for k in (0, 2, -2)]
+        # Deterministic across repeat calls, and the provenance says the
+        # anchored path (not a fallback) is what produced them.
+        again = [fold_anchored_gmm_threshold(fold_haystacks, orderings, final, k) for k in (0, 2, -2)]
+        assert thresholds == again
+        assert all(prov.startswith("fold_anchored[3/3]") for _thr, prov in thresholds)
 
 
 class TestCutFromFit:

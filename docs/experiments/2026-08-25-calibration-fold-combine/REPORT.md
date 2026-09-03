@@ -246,6 +246,31 @@ inclusion 0, `PRODUCTION_HEAD`. Analyzed at dev `e87c90956` + this branch.
 > effect is neither cleanly, and would need a second patch embedder to take
 > further.
 
+> ### ⚠ Resolved, 2026-09-02 (#3310): the missing corner was filled, and the answer is the embedder
+>
+> The disambiguating run above was never launched *for this study* — but
+> [#3310](../2026-08-28-calibration-fold-count-3310/REPORT.md) ran exactly the
+> three-cell design three days later, on the same `vg_scale_any` grid:
+> `siglip/whole_image`, **`dinov3_patch/whole_image`**, `dinov3_patch/max_patch`.
+> On its own question (the fold count) the decomposition is unambiguous:
+>
+> | contrast | holds fixed | early-band Δ at K=6 |
+> |---|---|---|
+> | `dinov3/whole` vs `dinov3/max_patch` | the embedder | −0.0056 vs −0.0057 — **no difference** |
+> | `siglip/whole` vs `dinov3/whole` | the voting mode | −0.0015 vs −0.0056 — **the whole effect** |
+>
+> Switching the voting mode changes nothing; switching the embedder changes
+> everything. #3287's calibration-fraction optimum followed the embedder too.
+>
+> **This is a neighbouring knob, not this study's `space` leg**, so it does not
+> *measure* the sign flip's attribution — the combine arms have never been run on
+> the middle cell. What it does is remove the prior that made "voting mode" the
+> natural reading: two independent calibration knobs on this exact grid both
+> follow the embedder once the corner is filled. Anyone picking this up should
+> key on the embedder, and should read the mode framing here as an artifact of
+> the two-cell design. That is why #3258 — which proposed a mode-dependent
+> combine rule — was closed unbuilt rather than rescoped.
+
 ### BLUF
 
 **Both docstrings are wrong, and they are wrong in different places.**
@@ -254,7 +279,10 @@ inclusion 0, `PRODUCTION_HEAD`. Analyzed at dev `e87c90956` + this branch.
   reason — *"the pool is exchangeable enough for the quantile rule"* — does not
   survive contact: averaging the folds' own conformal cuts beats pooling their
   scores by **−0.0078 ± 0.0015** (binary) and **−0.016 ± 0.003** (region).
-- **The comparability premise is mode-dependent, and that is the finding.** The
+- **The comparability premise is cell-dependent, and that is the finding.**
+  (Written as *mode*-dependent; see the two correction boxes above — the cells
+  confound mode with the embedder, and #3310 later found the embedder is what
+  neighbouring knobs follow.) The
   anchored path keeps each fold's haystack *"to read a cut's quantile in the
   scale it was measured on"*. On **region** voting that is right and worth
   **−0.032 ± 0.005**; on **binary** voting it is wrong and costs
@@ -320,6 +348,50 @@ So `qmean` is *better* than pooling for the first ~20 votes on binary and
 regime to ship on — it is where a real search spends its votes — but a
 recommendation quoted without the band is wrong about the first twenty clicks in
 both modes.
+
+### So does the `combine` leg — and that is what un-recommends `tmean`
+
+> **Added 2026-09-02 (#3258's evaluation).** The table above is the `total` leg.
+> The prose below it, and the follow-up calling `tmean` "the cheap, safe half",
+> both left the reader to assume the `combine` leg does not cross. **It does**,
+> and reading it off the two `regret_over_votes_*_k4` figures above is what
+> closed #3258 unbuilt.
+
+`tmean` (the dark blue line in both figures) sits **above** zero — worse than
+pooling — over the whole cold start, and the two cells cross at very different
+places:
+
+| cell | `tmean` crosses zero at | worst cold-start cost | deep-regime gain |
+|---|---:|---:|---:|
+| binary (`siglip`/`whole_image`) | ~45 votes | **≈ +0.03** near 20 votes | −0.0078 ± 0.0015 |
+| region (`dinov3_patch`/`max_patch`) | ~15–18 votes | ≈ +0.01 near 0–10 votes | −0.016 ± 0.003 |
+
+**The mechanism is the pooled rule's *other* argument.** Its docstring makes two
+claims, and this study refutes only one of them:
+
+- *Exchangeability* — "all folds' scores live on the same sigmoid scale" —
+  refuted, in the deep regime, by the `combine` leg's headline numbers.
+- *Resolution* — "per-fold quantiles on a handful of votes each would waste the
+  other folds' scores" — **vindicated**, in the cold regime, by the crossing
+  above. Each fold's cut is a quantile over its own few held-out points;
+  averaging K coarse cuts loses to one quantile over the pool until the folds
+  are individually well-populated. That is also why the cell holding out more
+  per fold crosses earlier.
+
+Two consequences the deep-regime number on its own does not carry:
+
+- **The crossing is a property of held-out points per fold, not of the calendar.**
+  This run predates #3287, so both cells shared one `calibration_fraction`.
+  Production now splits per space (0.3 single-vector, 0.5 patch), so a
+  single-vector detector today holds out **fewer** votes per fold than this run's
+  binary cell did — pushing that ~45-vote crossing later, not earlier.
+- **"Ship on the deep regime" no longer describes where the rule fires.** It was
+  written when the pooled cut was believed to threshold every reloaded detector.
+  After the three corrections below, its one remaining app site is the Inclusion
+  slider's re-cut for a *degenerate anchored fit*, joined by two library-tier
+  re-derivation entry points — all haystack-less fallbacks, none of which has any
+  reason to sit past 45 votes. Promoting `tmean` would buy −0.008/−0.016 in a
+  regime these paths do not reliably occupy, at up to +0.03 in the one they do.
 
 ### Does the gap grow with K?
 
@@ -542,13 +614,21 @@ Still: `vg_scale_any` inherits whatever `vg_scale` holds, and `build_pile.py
   path fuses against the haystack like any other training pass and starts on the
   fold-anchored cut (see the correction above). The conformal cut still never
   reaches acquisition; what it does reach is cold Find's verdicts.
-- **#3258 — a mode-dependent combine for the conformal path.** The evidence points at
-  quantile space for region and score space for binary. `threshold_from_fold_orderings`
-  takes no voting-mode argument today, so this is a signature change, not a
-  constant.
-- **`tmean` is the cheap, safe half.** Averaging beats pooling in *both* modes
-  and needs no haystack, no rank transfer, and no mode switch. It is the part of
-  this result that could ship on its own.
+- **~~#3258 — a mode-dependent combine for the conformal path.~~ CLOSED UNBUILT
+  2026-09-02**, on both halves. The mode framing is an artifact of the two-cell
+  design, and #3310 filled the missing corner: on this grid, calibration knobs
+  follow the **embedder**, not the voting mode (see the resolution note above).
+  Anyone reviving this should key on the embedder and must run the combine arms
+  on the middle cell first.
+- **~~`tmean` is the cheap, safe half.~~ Withdrawn 2026-09-02 — it is cheap but
+  it is not safe here.** Averaging does beat pooling in both cells past ~100
+  votes, with no haystack, rank transfer or mode switch. But the `combine` leg
+  crosses zero on the vote axis just as the `total` leg does (≈45 votes binary,
+  ≈15 region, costing up to +0.03 before that), and after the three corrections
+  above the pooled rule's only remaining sites are haystack-less fallbacks that
+  have no reason to sit past the crossing. The bullet was written when the
+  pooled cut was believed to threshold every reloaded detector, which the
+  2026-09-02 correction refuted.
 - **#3115's contamination hypothesis needs a different instrument** — the
   splitter prevents it, so testing it at all would mean deliberately disabling
   stratification, which is not obviously worth doing.

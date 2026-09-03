@@ -2,7 +2,7 @@
 
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -853,7 +853,45 @@ class TestLoadDemoWithConverter:
             assert m["origin"]["importer"] == "converter"
             assert m["origin"]["params"]["converter"] == "document2image"
             assert m["origin"]["params"]["parent_importer"] == "demo"
-            assert m["origin"]["params"]["parent_demo"] == "test_demo"
+            assert m["origin"]["params"]["parent_name"] == "test_demo"
             assert "test.pdf" in m["origin"]["params"]["source_file"]
             # Category should be preserved from source
             assert m["category"] == "test_cat"
+            # Every output carries the sub-output disambiguators, so a label on
+            # one page can be replayed back to *that* page.
+            assert m["origin"]["params"]["converter_out_index"] == str(m["id"] - 1)
+            assert m["origin"]["params"]["converter_n_out"] == str(len(medias))
+            assert m["origin"]["params"]["converter_content_hash"]
+
+    def test_apply_converter_to_demo_gives_each_output_its_own_origin(self):
+        """N outputs of one source must not share a single origin dict."""
+        from vtscore.converters.runner import apply_converter_to_demo
+
+        outputs = [
+            {"filename": f"page_{i}.png", "media_bytes": f"page-{i}-bytes".encode(), "duration": 0} for i in range(3)
+        ]
+        converter = MagicMock()
+        converter.name = "document2image"
+        converter.display_name = "Document \u2192 Images"
+        converter.target_type = "image"
+        converter.convert_normalized.return_value = outputs
+
+        medias = {1: {"id": 1, "media_type": "document", "filename": "doc.pdf", "media_path": "/data/doc.pdf"}}
+        with patch("vtscore.converters.get_converter", return_value=converter):
+            apply_converter_to_demo(
+                converter_name="document2image",
+                dataset_name="test_demo",
+                medias=medias,
+            )
+
+        assert len(medias) == 3
+        origins = [medias[mid]["origin"] for mid in sorted(medias)]
+        # Distinct objects, not one aliased dict.
+        assert origins[0] is not origins[1]
+        indexes = [o["params"]["converter_out_index"] for o in origins]
+        assert indexes == ["0", "1", "2"]
+        hashes = {o["params"]["converter_content_hash"] for o in origins}
+        assert len(hashes) == 3
+        assert all(o["params"]["converter_n_out"] == "3" for o in origins)
+        # The demo path is not reference mode, so nothing is lazified.
+        assert all("_lazy_source" not in m for m in medias.values())

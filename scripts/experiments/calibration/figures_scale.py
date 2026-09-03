@@ -19,11 +19,12 @@ from __future__ import annotations
 
 import argparse
 import csv
-import glob
 import math
 import os
 from collections import defaultdict
 from pathlib import Path
+
+from _cells_paths import main_frame_files
 
 # One wrapped-panel-grid helper, not two: both figure scripts face the same
 # problem (a row of panels that grows with the arm count) and a second copy is
@@ -69,10 +70,8 @@ def main() -> int:
     out.mkdir(parents=True, exist_ok=True)
 
     rows = []
-    for f in sorted(glob.glob(str(cells / "task_*.csv"))):
-        if "__" in Path(f).name:
-            continue
-        with open(f, newline="") as fh:
+    for f in main_frame_files(cells):
+        with f.open(newline="") as fh:
             rows.extend(list(csv.DictReader(fh)))
     print(f"{len(rows)} rows")
 

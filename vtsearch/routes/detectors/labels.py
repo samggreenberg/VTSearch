@@ -48,6 +48,7 @@ from pathlib import Path
 from flask import jsonify, send_file
 from flask_smorest import Blueprint, abort
 
+from vtscore.datasets.vote_provenance import normalize_provenance
 from vtscore.detectors.store import (
     _detector_path,
     _read_detector,
@@ -55,7 +56,8 @@ from vtscore.detectors.store import (
 )
 from vtscore.detectors.workflow import apply_and_retrain as _apply_and_retrain
 from vtsearch.errors import error_response
-from vtsearch.routes._shared import image_thumbnail_response, require_dataset_header, require_detector_header
+from vtsearch.routes._context import require_dataset_header, require_detector_header
+from vtsearch.routes._media_response import image_thumbnail_response
 from vtsearch.schemas.detectors import (
     DetectorLabelsDetailResponseSchema,
     DetectorLabelVoteRequestSchema,
@@ -159,6 +161,7 @@ def save_detector_labels(name: str):
             snap.bad_votes,
             expand_dupes=False,
             vote_region_boxes=snap.vote_region_boxes,
+            vote_provenance=snap.vote_provenance,
         )
 
         # Existing labelset entries that resolve into the active dataset are
@@ -330,11 +333,7 @@ def import_labels_into_detector(name: str, importer_name: str):
         return error_response(f"Detector '{name}' not found", 404)
 
     from vtscore.labels.importers import get_label_importer, list_label_importers
-    from vtsearch.routes._shared import (
-        get_plugin_or_404,
-        run_plugin_or_error,
-        validate_plugin_args,
-    )
+    from vtsearch.routes._plugins import get_plugin_or_404, run_plugin_or_error, validate_plugin_args
 
     importer, err = get_plugin_or_404(get_label_importer, list_label_importers, importer_name, "label importer")
     if err:
@@ -499,8 +498,9 @@ def _in_memory_thumbnail_response(media: dict, media_type: str, crop=None):
     when ``media_bytes`` is not held in memory (thin-loaded datasets, e.g. a
     local folder import). This mirrors the center viewer's
     ``/api/medias/<id>/image`` byte resolution so a thumbnail never 404s for an
-    item the center can display. Audio/video/document: defer to the media
-    type's ``image_response`` (cached waveform / midframe PNG). Returns
+    item the center can display. Every other type: defer to the media type's
+    ``image_response`` (cached waveform / midframe PNG / first PDF page),
+    which returns ``None`` for a type with no paintable form. Returns
     ``None`` if no thumbnail can be produced.
 
     ``crop`` (a normalised region box) restricts an image thumbnail to the
@@ -519,14 +519,12 @@ def _in_memory_thumbnail_response(media: dict, media_type: str, crop=None):
             return None
         return image_thumbnail_response(bytes(resp.data), resp.mimetype, resp.download_name, crop=crop)
 
-    image_response_fn = getattr(mt, "image_response", None)
-    if image_response_fn is None:
-        return None
-    resp = image_response_fn(media)
-    if resp is None:
+    resp = mt.image_response(media)
+    # ``bytes | dict``, as in the image branch above: only bytes are paintable.
+    if resp is None or not isinstance(resp.data, (bytes, bytearray)):
         return None
     return send_file(
-        io.BytesIO(resp.data),
+        io.BytesIO(bytes(resp.data)),
         mimetype=resp.mimetype,
         download_name=resp.download_name,
     )
@@ -643,6 +641,7 @@ def thumbnail_detector_label(name: str, element_id: str):
 )
 @detectors_labels_bp.arguments(DetectorLabelVoteRequestSchema)
 @detectors_labels_bp.response(200, DetectorLabelVoteResponseSchema)
+@detectors_labels_bp.alt_response(400, description="provenance is malformed.")
 @detectors_labels_bp.alt_response(404, description="Detector or label element not found.")
 def vote_detector_label(body: dict, name: str, element_id: str):
     """Set a saved labelset element's label to an absolute target.
@@ -656,6 +655,11 @@ def vote_detector_label(body: dict, name: str, element_id: str):
     When the element resolves into the active dataset, the detector's
     in-memory ``good_votes`` / ``bad_votes`` are kept in sync so MLP
     retraining and learned-sort see the change.
+
+    An optional ``provenance`` block records how the element was surfaced,
+    defaulting to ``{"flow": "labelset_review"}`` - this route is the
+    dashboard's review of already-saved labels, not a draw off any ranking.
+    It is written only when the label actually flips.
     """
     from vtscore.detectors.labelset_elements import (
         apply_element_vote_in_data,
@@ -663,6 +667,11 @@ def vote_detector_label(body: dict, name: str, element_id: str):
     )
 
     target = body["target"]
+
+    try:
+        provenance = normalize_provenance(body.get("provenance") or {"flow": "labelset_review"})
+    except ValueError as exc:
+        abort(400, message=str(exc))
 
     from vtscore.datasets.labelset import LabelSet
     from vtscore.detectors.labelset_elements import find_element_by_id
@@ -684,7 +693,7 @@ def vote_detector_label(body: dict, name: str, element_id: str):
 
         cid_before = resolve_current_dataset_cid(pre_elem)
 
-        changed, _updated, action = apply_element_vote_in_data(data, element_id, target)
+        changed, _updated, action = apply_element_vote_in_data(data, element_id, target, provenance=provenance)
         if not changed:
             return {"ok": True, "action": action}
 
@@ -697,7 +706,7 @@ def vote_detector_label(body: dict, name: str, element_id: str):
     if cid_before is not None:
         from vtsearch.state import set_vote
 
-        set_vote(cid_before, "none" if target == "remove" else target)
+        set_vote(cid_before, "none" if target == "remove" else target, provenance=provenance)
 
     from vtscore.detectors.registry import find_by_name, update_detector
 

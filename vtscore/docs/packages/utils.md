@@ -143,7 +143,7 @@ is consumed at load time and is a numpy array, so left in it breaks
 persisting it would be exactly the vector persistence the no-persisted-vectors
 rule forbids.
 
-In the app this backs `vtsearch.routes._shared.media_info_for_response`,
+In the app this backs `vtsearch.routes._media_response.media_info_for_response`,
 which the detector and processor scoring routes use to strip a media before
 it is serialized, as well as `POST /api/medias/batch` and the label-export
 metadata blob.

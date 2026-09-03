@@ -316,7 +316,7 @@ numeric job id, then watch cells appear rather than watching squeue.
 
   squeue -u \$USER -n cal-cells
   for a in ${ARM_ORDER[*]}; do
-    printf '%-14s %s\n' "\$a" "\$(ls $CALIB_EXP/results/\$a/cells/task_*.csv 2>/dev/null | grep -c . )"
+    printf '%-14s %s\n' "\$a" "\$(find $CALIB_EXP/results/\$a/cells -name 'task_*.csv' ! -name '*__*' 2>/dev/null | wc -l)"
   done
 
 When the queue drains:  python analyze_startup.py

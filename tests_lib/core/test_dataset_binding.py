@@ -18,6 +18,7 @@ from vtscore.embedding.binding import (
     derive_binding_from_names,
     score_marker_embedder,
     score_marker_embedder_for_snap,
+    slot_embedders_for_snap,
     validate_binding,
 )
 from vtscore.state.core import DatasetContext
@@ -332,6 +333,45 @@ class TestScoreMarkerEmbedder:
     def test_for_snap_uses_first_media(self, fake_caps):
         snap = {7: self._media("faketext", ["faketext", "fakepatch"])}
         assert score_marker_embedder_for_snap(snap) == "fakepatch"
+
+
+class TestSlotEmbeddersForSnap:
+    """The raw ``(text, patch, structural)`` slot read for a snapshot.
+
+    The single first-media derivation the training path's score- and
+    patch-slot resolvers both read off (issue #3386), so the two cannot
+    disagree about which media a snapshot's binding comes from.  Unlike
+    :func:`score_marker_embedder_for_snap` it does *not* collapse the triple
+    or fall back to the primary name: a slot-less dataset must read as
+    ``None`` so the matrix layer falls back to each media's own vector.
+    """
+
+    def _media(self, primary: str, names: list[str]) -> dict:
+        return {
+            "embedder": primary,
+            "embedding": np.ones(4, dtype=np.float32),
+            "embeddings": {n: np.ones(4, dtype=np.float32) for n in names},
+        }
+
+    def test_empty_snap_is_all_none(self):
+        assert slot_embedders_for_snap(None) == (None, None, None)
+        assert slot_embedders_for_snap({}) == (None, None, None)
+
+    def test_trio_fills_every_slot(self, fake_caps):
+        snap = {3: self._media("faketext", ["faketext", "fakepatch", "fakestructural"])}
+        assert slot_embedders_for_snap(snap) == ("faketext", "fakepatch", "fakestructural")
+
+    def test_slot_less_dataset_reads_none_not_the_primary(self, fake_caps):
+        # The difference that earns this function its keep: the score *marker*
+        # falls back to the primary name here, but the slot read must not, or
+        # the matrix layer stops collapsing to the cached primary path.
+        snap = {3: self._media("fakesingle", ["fakesingle"])}
+        assert slot_embedders_for_snap(snap) == (None, None, None)
+        assert score_marker_embedder_for_snap(snap) == "fakesingle"
+
+    def test_uses_the_first_media(self, fake_caps):
+        snap = {7: self._media("faketext", ["faketext"]), 8: self._media("fakepatch", ["fakepatch"])}
+        assert slot_embedders_for_snap(snap) == ("faketext", None, None)
 
 
 class TestRealRegisteredEmbedder:

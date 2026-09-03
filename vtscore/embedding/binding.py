@@ -410,6 +410,50 @@ def score_marker_embedder_for_snap(snap: dict[int, dict[str, Any]] | None) -> st
     return score_marker_embedder(next(iter(snap.values()), {}))
 
 
+def slot_embedders_for_snap(
+    snap: dict[int, dict[str, Any]] | None,
+) -> tuple[str | None, str | None, str | None]:
+    """:func:`derive_binding_from_names` for the first media in a *snap* dict.
+
+    Returns the ``(text, patch, structural)`` slot triple a snapshot's medias
+    bind, or ``(None, None, None)`` when *snap* is empty.  A snapshot's medias
+    all come from one dataset and therefore share a binding, so the first media
+    determines it - the same first-media convention
+    :func:`score_marker_embedder_for_snap` and :func:`keying_embedder_for_snap`
+    use.
+
+    This is the raw-slot counterpart of :func:`score_marker_embedder_for_snap`:
+    that one collapses the triple to the score marker and falls back to the
+    media's primary name, while this one hands back the slots unresolved so a
+    caller can read the patch slot on its own, or distinguish "no slot bound"
+    (a slot-less single-vector dataset like ``dinov2_single``, ``None``) from
+    "the score slot is X".
+    """
+    if not snap:
+        return (None, None, None)
+    return derive_binding_from_names(media_embedder_names(next(iter(snap.values()), {})))
+
+
+def keying_embedder_for_type(embedder_type_name: str, snap: dict[int, dict[str, Any]] | None) -> str:
+    """:func:`keying_embedder_for_snap` for a bare embedder **type** string.
+
+    The type-locked resolution does not otherwise need a detector context - it
+    reads exactly one attribute off it - so a caller holding a detector's type
+    as a plain string (a serialised detector dict, a cold-load record) calls
+    this instead of conjuring a throwaway carrier object to satisfy the
+    ``det_ctx`` parameter.  ``""`` means "no type locked" and yields the snap's
+    score precedence, matching ``keying_embedder_for_snap(None, snap)``.
+
+    See :func:`keying_embedder_for_snap` for the full invalidation semantics;
+    this is that function's body, and it delegates here.
+    """
+    if embedder_type_name and snap:
+        concrete = embedder_of_type(media_embedder_names(next(iter(snap.values()), {})), embedder_type_name)
+        if concrete:
+            return concrete
+    return score_marker_embedder_for_snap(snap)
+
+
 def keying_embedder_for_snap(det_ctx: Any, snap: dict[int, dict[str, Any]] | None) -> str:
     """The marker to compare against ``det_ctx.embedder`` for cache invalidation.
 
@@ -438,12 +482,7 @@ def keying_embedder_for_snap(det_ctx: Any, snap: dict[int, dict[str, Any]] | Non
     so a single-embedder dataset and every existing detector are unaffected.
     """
     det_type = (getattr(det_ctx, "embedder_type", "") or "") if det_ctx is not None else ""
-    if det_type and snap:
-        first = next(iter(snap.values()), {})
-        concrete = embedder_of_type(media_embedder_names(first), det_type)
-        if concrete:
-            return concrete
-    return score_marker_embedder_for_snap(snap)
+    return keying_embedder_for_type(det_type, snap)
 
 
 def validate_binding(

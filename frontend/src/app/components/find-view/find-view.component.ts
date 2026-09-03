@@ -546,7 +546,9 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     const m = this.mediaState.getMedia(event.id);
     const name = m?.filename || m?.origin_name || `#${event.id}`;
     this.voteState
-      .submitToggleVoteAndRecord(event.id, event.vote, name)
+      // Find is its own surfacing flow: the item was put here by a scoring
+      // pass, not by the Train window's sort.
+      .submitToggleVoteAndRecord(event.id, event.vote, name, null, 'find_verify')
       .pipe(this.pairScope.scoped())
       .subscribe({
         next: () => {

@@ -24,7 +24,7 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 
@@ -37,6 +37,10 @@ from vtscore.concurrency.progress import (  # noqa: E402
     ProgressCallback,
     noop_progress as _noop_progress,
 )
+
+if TYPE_CHECKING:  # ``vtscore.media.embedder`` imports this module, so the
+    # annotation on ``load_demo_source`` can only be a type-time reference.
+    from vtscore.media.embedder import MediaEmbedder
 
 __all__ = [
     "DemoDataset",
@@ -504,6 +508,10 @@ class MediaType(ABC):
         slice_end: int | None,
         clips: dict[int, dict],
         on_progress: "ProgressCallback | None" = None,
+        embedder: "MediaEmbedder | None" = None,
+        slice_frac_start: float | None = None,
+        slice_frac_end: float | None = None,
+        skip_embedding: bool = False,
         **kwargs,
     ) -> str | None:
         """Download and embed a demo dataset source, populating *clips* in-place.
@@ -511,6 +519,14 @@ class MediaType(ABC):
         Each media type overrides this to handle its own demo sources (e.g.
         the audio type handles ESC-50, the image type handles CIFAR-10 /
         Caltech-101/256, etc.).
+
+        Every parameter below the callback used to hide inside ``**kwargs``,
+        even though :mod:`vtscore.datasets.loader_demo` passes all four on
+        every call and all five shipped types spell them out — so an author
+        reading this signature could not see what their override would be
+        handed.  They are declared now; the trailing ``**kwargs`` stays so an
+        override that predates the change (or one that accepts only the
+        parameters it uses) keeps working.
 
         Args:
             source: The ``source`` identifier from the :class:`DemoDataset`.
@@ -521,12 +537,21 @@ class MediaType(ABC):
             clips: Dict to populate in-place.  The caller has already cleared
                 it.  Keys should be sequential integer clip IDs starting at 1.
             on_progress: Optional progress callback.
-            skip_embedding: When ``True`` (passed via ``**kwargs``), populate
-                each media with a deferred-embed placeholder (``embeddings={}``)
-                instead of embedding it here.  The demo loader sets this when a
-                clipper will split + re-embed every clip, so embedding the full
-                parent would be wasted (and, for audio, can fail on parents
-                longer than the embedder window before the clipper trims them).
+            embedder: The resolved :class:`~vtscore.media.embedder.MediaEmbedder`
+                to embed each loaded media with.  ``None`` means "use this
+                type's default embedder"; a non-embeddable type (``document``)
+                ignores it, since the converter's target type embeds instead.
+            slice_frac_start: Optional fractional start of the per-category
+                slice (``0.0``-``1.0``), for sources whose per-category counts
+                are only known after the download.  Takes precedence over
+                *slice_start* where a type supports it.
+            slice_frac_end: Fractional end of that slice, same convention.
+            skip_embedding: When ``True``, populate each media with a
+                deferred-embed placeholder (``embeddings={}``) instead of
+                embedding it here.  The demo loader sets this when a clipper
+                will split + re-embed every clip, so embedding the full parent
+                would be wasted (and, for audio, can fail on parents longer
+                than the embedder window before the clipper trims them).
 
         Returns:
             An optional external media directory path (absolute string) to
@@ -721,3 +746,31 @@ class MediaType(ABC):
         :meth:`_resolve_media_string` to transparently support both preloaded
         medias and thin (lazy-loaded) medias.
         """
+
+    def image_response(self, media: dict) -> MediaResponse | None:
+        """Return a *paintable image* for *media*, or ``None`` if it has none.
+
+        :meth:`media_response` serves a media's own bytes, which for most
+        types are not an image: an audio clip is a WAV, a video is an MP4, a
+        PDF is ``application/pdf``.  Every surface that shows a *picture* of a
+        media — the grid tile, the VTSBrowse bin popup, the labeling
+        thumbnail, ``GET /api/medias/<id>/image`` and
+        ``/api/medias/<id>/thumbnail`` — needs something it can decode as an
+        image instead, and this hook is where a type supplies it: the audio
+        waveform PNG, the video mid-frame, a PDF's first page rasterised, a
+        face crop.
+
+        The default returns ``None``, which is the right answer for a type
+        with no visual form (text) and for the ``image`` type itself, whose
+        source bytes the routes stream directly without consulting this hook.
+        A type that returns ``None`` gets the caller's placeholder rather than
+        an error.
+
+        Implementations that have a cacheable thumbnail should generate it
+        through :meth:`ensure_thumbnail_bytes` and wrap the result, so the
+        bytes served here are byte-identical to the ones the background
+        warm-up pass in :mod:`vtscore.datasets.thumbnail_warm` produces.  The
+        result is *not* persisted — like every ``thumbnail_bytes``, it lives
+        in memory only.
+        """
+        return None

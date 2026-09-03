@@ -89,6 +89,58 @@ Optional overrides:
 | `dir_key` | `type_id + "_dir"` | Key in pickle files for external directories |
 | `pickle_extra_fields` | `[]` | Custom clip-dict keys to preserve through pickle round-trip |
 | `display_metadata(media)` | base fields | Extra fields surfaced in the labeling UI |
+| `image_response(media)` | `None` | A *paintable image* for the media, as a `MediaResponse` - the waveform, frame, or page a grid tile shows. `None` = this type has no visual form |
+| `ensure_thumbnail_bytes(media)` | cached value | Build + memoise `media["thumbnail_bytes"]` from the media's *resolvable* bytes, for media that arrived with no readable file |
+| `load_demo_source(...)` | raises `ValueError` | Download and embed one of this type's `demo_datasets` entries |
+
+### `image_response` vs. `media_response`
+
+`media_response` serves the media's **own** bytes, which for most types are
+not an image: audio is a WAV, video an MP4, a document an
+`application/pdf`. Everything that shows a *picture* of a media - the grid
+tile, the VTSBrowse bin popup, the labeling thumbnail,
+`GET /api/medias/<id>/image` and `/api/medias/<id>/thumbnail` - calls
+`image_response` instead, and falls back to a placeholder when it returns
+`None`.
+
+The shipped answers: audio returns its waveform PNG, video its mid-frame,
+`document` its first page rasterised, `face` the crop itself. `text` has no
+visual form and keeps the `None` default; the `image` type also keeps it,
+because the routes stream an image media's source bytes directly without
+consulting the hook.
+
+```python
+def image_response(self, media: dict) -> MediaResponse | None:
+    thumb = self.ensure_thumbnail_bytes(media)
+    if not thumb:
+        return None
+    return MediaResponse(
+        data=thumb,
+        mimetype="image/png",
+        download_name=f"media_{media['id']}_thumb.png",
+    )
+```
+
+### `ensure_thumbnail_bytes`
+
+`load_media_data` covers media the loader can read from a file at ingest.
+Some media have no file: an **archive-member** media
+([`vtscore/datasets/importers/local_archive_member/`](../../datasets/importers/local_archive_member/))
+carries only `{archive path, member}` and re-derives its bytes by streaming
+one tar/zip member, so it leaves import with no thumbnail at all. Override
+`ensure_thumbnail_bytes` to generate one on demand; the background warm-up
+pass in [`vtscore/datasets/thumbnail_warm.py`](../../datasets/thumbnail_warm.py)
+calls it per media after a load, and the serving path calls it too - so
+route the `image_response` above through it and a warmed thumbnail is
+byte-identical to a lazily generated one.
+
+Two rules bind implementations: memoise onto `media["thumbnail_bytes"]`, and
+**never** retain the resolved payload on the media - keeping member bytes out
+of memory is the whole point of the archive-member importer. Like every
+`thumbnail_bytes` these are in-memory only; they ride along on an explicit
+save and are otherwise regenerated. The default is a plain read of what is
+already cached, which is the right answer for a type with no cheap way to
+build one.
 
 `MediaResponse` is a small dataclass (`data`, `mimetype`,
 `download_name`) that decouples the library from Flask

@@ -56,6 +56,7 @@ from tests_shared.pytest_plumbing import add_group_markers, print_summary_and_ex
 from tests_shared.state_reset import (  # noqa: E402
     TEST_TRAIN_EPOCHS,  # noqa: F401  (re-exported: tests_lib/core/test_training_budget_isolation.py)
     allow_test_tmp_paths as _allow_test_tmp_paths,  # noqa: F401  (autouse fixture)
+    capture_startup_host_seams,
     freeze_startup_heap,
     install_startup_contexts,
     pin_training_budget,
@@ -129,6 +130,10 @@ init_medias()
 _test_medias_snapshot = {k: dict(v) for k, v in get_active_context().medias.items()}
 
 _patch_embed_audio.stop()
+
+# Record the host seams this conftest has just wired, so the per-test reset can
+# put them back after a test installs its own (see :mod:`vtscore.host_seams`).
+capture_startup_host_seams()
 
 freeze_startup_heap()
 

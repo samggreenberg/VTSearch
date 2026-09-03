@@ -295,7 +295,8 @@ rather than shipping one from your own distribution:
   declare - the entry-point route in the guide is for out-of-tree
   distributions.
 - Write files through `vtscore.io.atomic_write_bytes` /
-  `atomic_write_text` rather than hand-rolling the tmp-file +
+  `atomic_write_text` - or `atomic_write_stream` when the exporter
+  streams its rows - rather than hand-rolling the tmp-file +
   `os.replace` ritual, and default any path field under
   `vtscore.config.DATA_DIR` as the built-ins do (see [Template variables
   in path fields](#template-variables-in-path-fields)). New

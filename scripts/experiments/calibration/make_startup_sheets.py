@@ -41,6 +41,8 @@ import matplotlib.pyplot as plt  # noqa: E402
 import pandas as pd  # noqa: E402
 from PIL import Image  # noqa: E402
 
+from _cells_io import side_frame_files  # noqa: E402
+
 DATA = Path(os.environ.get("VTSEARCH_DATA_DIR", "/expscratch/sgreenberg/vts-cache/datadir"))
 IMAGE_ROOTS: dict[str, list[Path]] = {
     "visual_genome_m": [DATA / "visual_genome/VG_100K", DATA / "visual_genome/VG_100K_2"],
@@ -99,7 +101,7 @@ def load_picks(root: Path, dataset: str, category: str, seed: int) -> pd.DataFra
         cells = root / arm / "cells"
         if not cells.is_dir():
             continue
-        for f in sorted(cells.glob("task_*__picks.csv")):
+        for f in side_frame_files(cells, "__picks"):
             try:
                 df = pd.read_csv(f)
             except Exception:  # noqa: BLE001, S112
@@ -127,7 +129,7 @@ def pick_best_cell(root: Path) -> tuple[str, str, int]:
         cells = root / arm / "cells"
         if not cells.is_dir():
             continue
-        for f in sorted(cells.glob("task_*__picks.csv")):
+        for f in side_frame_files(cells, "__picks"):
             try:
                 df = pd.read_csv(f)
             except Exception:  # noqa: BLE001, S112

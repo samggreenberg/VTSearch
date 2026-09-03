@@ -77,7 +77,7 @@ care.
 - [ ] #3379 — Collapse the five copies of the clip-dict builder in `image/_demo_sources.py` (Sonnet 5)
 - [ ] #3383 — Deduplicate the clipper family: tiling math, segment emission, six no-op clippers (Sonnet 5)
 - [ ] #3386 — Collapse the near-synonymous embedder-resolution wrappers (Sonnet 5)
-- [ ] #3389 — Deduplicate the media registries, the atomic-write ritual, and JSON label extraction (Haiku 4.5)
+- [x] #3389 — Deduplicate the streaming atomic-write ritual and JSON label extraction (Haiku 4.5)
 - [x] #3394 — Extract one background-import harness shared by both import pipelines (Sonnet 5)
 
 ## Library tier — dead code & unkept promises
@@ -85,7 +85,7 @@ care.
 - [x] #3397 — Keep the resolver extension point but delete its auto-wire dance and import-error mask (Sonnet 5)
 - [ ] #3401 — Declare `image_response` on the `MediaType` ABC and document both undeclared hooks (Sonnet 5)
 - [ ] #3402 — Apply the sub-output disambiguators in the converted-demo emitter (Sonnet 5)
-- [ ] #3404 — Small vtscore batch: `JOB_MANAGERS` coverage, registry construction, `SAVED_DATASETS_DIR` (Haiku 4.5)
+- [x] #3404 — Small vtscore batch: `JOB_MANAGERS` coverage, registry construction, `SAVED_DATASETS_DIR` (Haiku 4.5)
 
 ## Concurrency & progress
 
@@ -93,7 +93,7 @@ care.
 
 ## Layering & host seams
 
-- [ ] #3385 — Replace the nine hand-rolled app-to-library hook seams with one typed registry (Sonnet 5)
+- [ ] #3385 — Give the app-to-library host seams a shared test reset (Sonnet 5)
 - [ ] #3388 — Drive `PluginBase` auto-derivation from family-base opt-in instead of three hardcoded tables (Opus 4.8)
 
 ## App tier — settings
@@ -103,17 +103,14 @@ care.
 
 ## App tier — routes, schemas, facades
 
-- [ ] #3419 — Move `routes/sorting.py`'s ML pipeline logic into `vtscore/training/` (Sonnet 5)
-- [ ] #3420 — Split `routes/_shared.py`: nine unrelated modules in one 866-line file (Haiku 4.5)
+- [x] #3420 — Split `routes/_shared.py`: nine unrelated modules in one 866-line file (Haiku 4.5)
 - [ ] #3427 — Register one dynamic plugin route and generate its bodies at spec-build time (Opus 4.8)
 - [ ] #3438 — Small app-tier batch: exempt prefixes as a route attribute, plus the orphan-endpoint decision (Sonnet 5)
 
 ## Eval harness & experiments
 
-- [ ] #3406 — `check-eval-app-sync` is one-directional: harness-side edits never trip the gate (Sonnet 5)
 - [ ] #3407 — Eight hand-rolled `load_cells` copies, and the live `bench_cells._SIDECARS` regression (Sonnet 5)
-- [ ] #3408 — `run_autopilot_sweep.py` re-implements the harness vote loop against a retired configuration (Sonnet 5)
-- [ ] #3411 — `common.py` forked seven ways; `_cells_io.py` forked twice (Haiku 4.5)
+- [ ] #3411 — Experiment runners: `_neutralise_editable_finder` forked four ways (Sonnet 5)
 - [ ] #3414 — The Smart-indicator FP/FN cost loop is a mirror that doesn't need to be one (Opus 4.8)
 
 ## Frontend — duplication & dead code

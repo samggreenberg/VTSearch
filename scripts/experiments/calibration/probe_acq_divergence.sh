@@ -20,14 +20,13 @@ common.setup_env()
 import pandas as pd
 
 import analyze_spikes as sp  # noqa: F401  (for _base_rows)
+from _cells_paths import main_frame_files
 from analyze_spikes import _base_rows
 
 rows = []
 for d in sorted(glob.glob("/expscratch/sgreenberg/acq-2877/sizing/*-*")):
     half, arm = pathlib.Path(d).name.split("-", 1)
-    for f in sorted(glob.glob(f"{d}/task_*.csv")):
-        if "__" in pathlib.Path(f).name:
-            continue
+    for f in main_frame_files(d):
         fr = _base_rows(pd.read_csv(f))
         if fr.empty:
             continue

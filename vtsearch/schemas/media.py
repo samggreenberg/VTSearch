@@ -7,6 +7,8 @@ Listing / per-media routes (``vtsearch/routes/media/list.py``):
                                 :class:`MediaBatchResponseSchema`
 * ``POST /api/medias/<id>/vote`` -> :class:`MediaVoteRequestSchema` ->
                                     :class:`MediaVoteResponseSchema`
+        (its optional ``provenance`` block is :class:`VoteProvenanceSchema`,
+        shared with the bulk and detector-label vote routes)
 * ``GET  /api/medias/<id>/paragraph`` and ``GET /api/medias/<id>/text`` ->
         :class:`MediaParagraphResponseSchema`
 * ``POST /api/medias/add-to-pile`` -> :class:`MediaAddToPileResponseSchema`
@@ -46,6 +48,8 @@ docstring there.
 from __future__ import annotations
 
 from marshmallow import Schema, fields, validate
+
+from vtscore.datasets import vote_provenance
 
 from vtsearch.schemas.datasets import ImporterPickerTabSchema
 
@@ -198,6 +202,75 @@ class MediaBatchResponseSchema(MediaEntrySchema):
 
 
 # ---------------------------------------------------------------------------
+# Vote surfacing provenance (shared by the vote request schemas)
+# ---------------------------------------------------------------------------
+
+
+class VoteProvenanceSchema(Schema):
+    """How the item being voted on came to be in front of the user.
+
+    Optional on every vote request.  Recording only - nothing reads these
+    values back to change behaviour yet; consuming them is gated on the
+    experiment in ``docs/plans/provenance-partitioned-calibration.md``.  The
+    context is recorded at click time because it is *not re-derivable*: the
+    ranking is client-side state and the model that produced the score is
+    overwritten by the next retrain.
+
+    The four categorical fields are deliberately **separate axes** rather
+    than one fused enum, because the calibration bias the recording exists to
+    measure tracks ``select_mode`` (how the item was drawn off the ranking),
+    not ``flow`` (who was driving).  The two come apart at both edges: a user
+    can pick the ``hard`` select mode by hand and get autopilot's exact
+    margin-sampled draw, and autopilot's own ``good`` phase is mechanically a
+    top-of-list draw.  See :mod:`vtscore.datasets.vote_provenance`, which owns
+    the vocabulary these validators are built from.
+
+    Every field is optional: a client that knows only some of the axes sends
+    what it has.  A payload that carries nothing beyond ``flow="unknown"`` is
+    dropped rather than stored.
+    """
+
+    flow = fields.String(
+        allow_none=True,
+        validate=validate.OneOf(sorted(vote_provenance.FLOWS)),
+        metadata={"description": "Which UI flow drove the vote."},
+    )
+    phase = fields.String(
+        allow_none=True,
+        validate=validate.OneOf(sorted(vote_provenance.PHASES)),
+        metadata={"description": "Autopilot phase at click time. Ignored unless ``flow`` is ``autopilot``."},
+    )
+    select_mode = fields.String(
+        allow_none=True,
+        validate=validate.OneOf(sorted(vote_provenance.SELECT_MODES)),
+        metadata={
+            "description": (
+                "How the item was drawn off the ranking: ``top`` (head of the "
+                "sort), ``hard`` (margin sampling near the cutoff), or ``new`` "
+                "(diverse exploration)."
+            )
+        },
+    )
+    sort_kind = fields.String(
+        allow_none=True,
+        validate=validate.OneOf(sorted(vote_provenance.SORT_KINDS)),
+        metadata={"description": "Which ranking the user was looking at."},
+    )
+    rank_at_vote = fields.Integer(
+        allow_none=True,
+        validate=validate.Range(min=0),
+        metadata={"description": "Zero-based position of the item in the sort the user was looking at."},
+    )
+    score_at_vote = fields.Float(
+        allow_none=True,
+        metadata={"description": "The item's model score when it was surfaced, if the client has one."},
+    )
+
+    class Meta:
+        unknown = "exclude"
+
+
+# ---------------------------------------------------------------------------
 # /api/medias/<id>/vote
 # ---------------------------------------------------------------------------
 
@@ -237,6 +310,18 @@ class MediaVoteRequestSchema(Schema):
             "description": (
                 "Optional 4-element ``[x0, y0, x1, y1]`` in normalised image "
                 "coordinates ``[0, 1]``. Only valid when ``target`` is ``good``."
+            ),
+        },
+    )
+    provenance = fields.Nested(
+        VoteProvenanceSchema,
+        allow_none=True,
+        metadata={
+            "description": (
+                "Optional surfacing context for this vote. Recorded only when "
+                "the call actually changes the vote state, so an idempotent "
+                "re-send from a stale tab cannot overwrite what the original "
+                "click recorded."
             ),
         },
     )
@@ -299,6 +384,16 @@ class MediaVoteBulkRequestSchema(Schema):
         validate=validate.OneOf(["good", "bad", "none"]),
         metadata={
             "description": "Absolute target state applied to every id: ``good``, ``bad``, or ``none``. Idempotent.",
+        },
+    )
+    provenance = fields.Nested(
+        VoteProvenanceSchema,
+        allow_none=True,
+        metadata={
+            "description": (
+                "Optional surfacing context applied to every id in the batch. "
+                'Defaults to ``{"flow": "bulk"}`` when omitted.'
+            ),
         },
     )
 

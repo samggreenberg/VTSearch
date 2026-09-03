@@ -12,7 +12,7 @@ from typing import Any
 from flask import request
 
 from vtsearch.errors import error_response
-from vtsearch.routes._shared import get_json_safe
+from vtsearch.routes._http import get_json_safe
 
 
 def _normalize_media_type_param(value: str) -> str:

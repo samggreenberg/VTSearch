@@ -169,7 +169,7 @@ def _insert_example_media(
             "origin_name": origin_name,
         }
 
-    apply_label(new_id, "good", record_achievement=False)
+    apply_label(new_id, "good", record_achievement=False, provenance={"flow": "seed_example"})
 
 
 def labeled_elements_from_examples(examples: list[dict]) -> list["LabeledElement"]:
@@ -302,7 +302,7 @@ def _seed_one_example(
             # System-driven seeding from a detector's saved examples, not a
             # user vote action, so don't credit achievement counters.
             for cid in cids:
-                apply_label(cid, "good", record_achievement=False)
+                apply_label(cid, "good", record_achievement=False, provenance={"flow": "seed_example"})
             return 1, embedder
 
         # Example is NOT in the dataset - embed and insert as new media.

@@ -130,7 +130,7 @@ class TestPortableExport:
         import vtsearch.routes.detectors.scoring as scoring_mod
 
         monkeypatch.setattr(scoring_mod, "_dataset_supplies_detector_type", lambda *_a, **_kw: True)
-        monkeypatch.setattr(binding_mod, "keying_embedder_for_snap", lambda *_a, **_kw: DEFAULT_AUDIO_EMBEDDER)
+        monkeypatch.setattr(binding_mod, "keying_embedder_for_type", lambda *_a, **_kw: DEFAULT_AUDIO_EMBEDDER)
         detector_id = setup_trainable_model_in_registry(
             "portable-patch",
             good_ids=[1, 2, 3],

@@ -46,7 +46,8 @@ common.setup_env()
 
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
-from _cells_io import assert_one_opening, main_frame_files  # noqa: E402
+from _cells_io import describe_load, side_frame_files  # noqa: E402
+from _cells_io import load_cells as _load_cells  # noqa: E402
 
 from vtscore.eval.cut_rules import TAIL_ALPHA_PREREGISTERED, TAIL_RULES  # noqa: E402
 from vtscore.eval.transfer_rules import BAGGED_FIT_RULES, TRANSFER_ORACLE_RULES  # noqa: E402
@@ -195,20 +196,18 @@ def _wilcoxon(vals: np.ndarray) -> float | None:
 
 
 def load_cells(cells_dir: Path) -> pd.DataFrame:
-    files = main_frame_files(cells_dir)
-    if not files:
-        return pd.DataFrame()
-    df = pd.concat([pd.read_csv(p) for p in files], ignore_index=True)
+    df, prov = _load_cells(cells_dir, where="analyze_cut.py")
+    if df.empty:
+        return df
     df["gmm_variant"] = df["gmm_variant"].fillna("")
     df["arm"] = df["dataset"] + "/" + df["embedder"] + "/" + df["style"]
     df["n_votes"] = df["n_good"] + df["n_bad"]
-    common.log(f"loaded {len(df)} variant rows from {len(files)} cells")
-    assert_one_opening(df, "analyze_cut.py")
+    common.log(f"loaded {describe_load(prov)} (variant rows included)")
     return df
 
 
 def load_cutdiag(cells_dir: Path) -> pd.DataFrame:
-    files = sorted(cells_dir.glob("task_*__cutdiag.csv"))
+    files = side_frame_files(cells_dir, "__cutdiag")
     if not files:
         return pd.DataFrame()
     df = pd.concat([pd.read_csv(p) for p in files], ignore_index=True)

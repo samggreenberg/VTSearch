@@ -10,6 +10,40 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`slot_embedders_for_snap(snap)` and `keying_embedder_for_type(type, snap)`
+  on `vtscore.embedding.binding`** (issue #3386). Purely additive companions to
+  the two existing snapshot resolvers, added so the near-synonymous private
+  wrappers scattered across `vtscore/detectors/` could collapse onto them.
+  `slot_embedders_for_snap` is `derive_binding_from_names` applied to a
+  snapshot's first media, returning the raw `(text, patch, structural)` triple
+  without `score_marker_embedder_for_snap`'s collapse-and-fall-back-to-primary
+  step. `keying_embedder_for_type` is `keying_embedder_for_snap`'s body taking
+  the detector's embedder *type* as a plain string, for callers holding a
+  serialised detector rather than a live context - four of them were conjuring
+  a throwaway `SimpleNamespace(embedder_type=...)` carrier to satisfy the
+  `det_ctx` parameter. `keying_embedder_for_snap` now delegates to it, so the
+  two cannot disagree. No resolved embedder name changes.
+
+  `vtscore.detectors.training.detector_score_embedder` keeps its name, its
+  signature and its `None`-for-empty-snap normalisation; only its docstring
+  moved. The four underscore-prefixed wrappers around it are private and were
+  inlined or collapsed.
+
+- **`vtscore.host_seams` snapshots the host seams** (issue #3385). The eight
+  callbacks a host application installs into the library
+  (`register_core_config_builder`, the context resolvers, the setting
+  persisters, the achievement recorders, …) are each a process global declared
+  beside the code that calls them, so nothing knew the complete list — and a
+  test that installed one leaked it into every test that followed.
+  `capture_host_seams()` / `restore_host_seams()` snapshot and put back the
+  whole set. Deliberately snapshot-and-restore rather than reset-to-default, so
+  an integration whose tests run against its real wiring keeps the seams under
+  test. See `docs/integration.md`.
+
+  `register_plugin_family` is deliberately **not** covered: the library
+  registers its own families at import time, so it is a plugin extension point
+  rather than a host seam, and restoring it would drop the built-ins.
+
 - **The Toponymy signpost fit counts the library warnings it suppresses**
   (issue #3512). `signpost_build` keeps Toponymy's per-topic naming warnings
   off the CLI (issue #2558), but it used to `filterwarnings("ignore")` them,
@@ -93,6 +127,33 @@ instead, since every commit on `dev` is effectively a new app release.)
   `loaded_backbone()` instead.
 
 ### Changed
+
+- **`JOB_MANAGERS` is now the single registry of every module-level
+  `JobManager`, with visibility carried by the manager** (issue #3404). It
+  previously held only the managers surfaced by `/api/jobs/active`, which
+  forced `reset_all_async_jobs_for_tests()` to re-list the hidden ones by
+  hand — and that second list went stale, leaving `archive_thumbnail_jobs`
+  unreset between tests. `JobManager.__init__` gained a keyword-only
+  `user_visible: bool = True`, `list_active_pairs()` filters on it, and the
+  reset helper walks the whole registry. Registering a new manager is now one
+  edit in one place, and its visibility is declared at its own definition.
+
+  **For library consumers:** the `JobManager(...)` change is purely additive —
+  the default keeps existing constructions user-visible. `JOB_MANAGERS` itself
+  now enumerates the internal managers too (`labeling-status`,
+  `signpost-relabel`, `archive-thumbnail-warm`), so code that iterated it
+  expecting only user-facing work should read `list_active_pairs()` or filter
+  on `mgr.user_visible`. The keys of the visible entries are unchanged.
+
+- **`register_setting_persister` rejects an unrecognised key** (issue #3385).
+  It previously stored a persister under any key, but only `inclusion`,
+  `calibrate_count` and `calibration_fraction` are ever fired, so any other key
+  was a typo in the host's wiring that sat there silently never firing — the
+  failure mode `achievements_hooks.KNOWN_EVENTS` already existed to catch. The
+  key set is now public as `vtscore.state.KNOWN_SETTING_KEYS`, and an unknown
+  key raises `ValueError`. This is an extension-facing behaviour change, but no
+  working integration can be relying on it: a rejected key could never have
+  persisted anything.
 
 - **`vtscore.training.evt_mixture` moved to `vtscore.eval.evt_mixture`** (issue
   #3396). The Gumbel/Normal score mixture is a research arm from the #2836 /

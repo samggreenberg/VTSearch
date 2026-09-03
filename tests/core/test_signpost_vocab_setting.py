@@ -69,13 +69,18 @@ class TestApiContract:
     def test_stale_per_user_copy_does_not_shadow_the_server_value(self, client, isolated_settings):
         """A user file written before the tier move still carries the key.
 
-        ``get_all`` layers the per-user cache over the server one, so without
-        the accessor read-through such a leftover would be reported by GET
-        while projection builds used the operator's value.
+        ``get_all`` layers the per-user cache over the server one, so such a
+        leftover would be reported by GET while projection builds (which read
+        the accessor) used the operator's value. The load-time sanitizer drops
+        server-tier keys out of a per-user file, so the stale copy never
+        reaches the cache in the first place (issue #3413).
         """
-        from vtsearch.auth import get_current_user
+        import json as _json
 
         settings_mod.set_browse_signpost_vocab({"audio": ["rain"]})
-        with settings_mod._settings_lock:
-            settings_mod._user_caches.setdefault(get_current_user(), {})["browse_signpost_vocab"] = {"audio": ["stale"]}
+        isolated_settings._user.parent.mkdir(parents=True, exist_ok=True)
+        isolated_settings._user.write_text(_json.dumps({"browse_signpost_vocab": {"audio": ["stale"]}}) + "\n")
+        settings_mod.reset()  # re-read both tiers from disk
+
         assert client.get("/api/settings").get_json()["browse_signpost_vocab"] == {"audio": ["rain"]}
+        assert settings_mod.get_browse_signpost_vocab() == {"audio": ["rain"]}

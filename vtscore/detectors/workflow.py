@@ -43,6 +43,7 @@ def apply_and_retrain(  # noqa: C901
 
     Returns ``(resolved_count, trained_bool)``.
     """
+    from vtscore.datasets.vote_provenance import read_provenance
     from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
     from vtscore.state import (
         apply_label,
@@ -61,15 +62,16 @@ def apply_and_retrain(  # noqa: C901
 
         # 1) Resolve every entry into concrete (cid, label) pairs without
         #    touching any state yet.
-        resolved_pairs: list[tuple[int, str]] = []
+        resolved_pairs: list[tuple[int, str, dict | None]] = []
         resolved = 0
         for entry in new_entries:
             label = entry.get("label", "")
             if label not in ("good", "bad"):
                 continue
+            prov = read_provenance(entry.get("metadata")) or {"flow": "import"}
             cids = resolve_media_ids(entry, origin_lookup, md5_lookup, name_lookup)
             for cid in cids:
-                resolved_pairs.append((cid, label))
+                resolved_pairs.append((cid, label, prov))
             if cids:
                 resolved += 1
 
@@ -78,7 +80,7 @@ def apply_and_retrain(  # noqa: C901
         #    via dict; new opposite-side labels supersede the old ones.
         proposed_good = dict(det_ctx.good_votes)
         proposed_bad = dict(det_ctx.bad_votes)
-        for cid, label in resolved_pairs:
+        for cid, label, _prov in resolved_pairs:
             if label == "good":
                 proposed_bad.pop(cid, None)
                 proposed_good[cid] = None
@@ -128,12 +130,13 @@ def apply_and_retrain(  # noqa: C901
         saved_good_votes = dict(det_ctx.good_votes)
         saved_bad_votes = dict(det_ctx.bad_votes)
         saved_region_boxes = dict(det_ctx.vote_region_boxes)
+        saved_provenance = dict(det_ctx.vote_provenance)
         saved_history = list(det_ctx.label_history)
         saved_click_times = dict(det_ctx.vote_click_times)
         saved_click_counter = det_ctx.click_counter
 
-        for cid, label in resolved_pairs:
-            apply_label(cid, label)
+        for cid, label, prov in resolved_pairs:
+            apply_label(cid, label, provenance=prov)
 
         try:
             sync_labels_to_loaded_detector()
@@ -145,6 +148,8 @@ def apply_and_retrain(  # noqa: C901
                 det_ctx.bad_votes.update(saved_bad_votes)
                 det_ctx.vote_region_boxes.clear()
                 det_ctx.vote_region_boxes.update(saved_region_boxes)
+                det_ctx.vote_provenance.clear()
+                det_ctx.vote_provenance.update(saved_provenance)
                 det_ctx.label_history.clear()
                 det_ctx.label_history.extend(saved_history)
                 det_ctx.vote_click_times.clear()

@@ -73,7 +73,8 @@ from vtscore.eval import (
 > drift: `autopilot_flow.py`, which is ported because the original is
 > TypeScript, and the places where "no arm" resolves to the app's
 > current default. `scripts/check-eval-app-sync.py` (a `./run-tests.sh`
-> gate) pins a digest of each mirrored surface and fails when one moves.
+> gate) pins a digest of each mirrored surface **on both sides** - the app
+> code and the harness copy of it - and fails when either moves.
 > See the "Eval Default Arm IS the App" rule in `CLAUDE.md`.
 
 ---

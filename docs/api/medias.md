@@ -149,7 +149,11 @@ GET /api/medias/{media_id}/image
 
 → Image binary stream (`image/jpeg`, `image/png`, `image/gif`, `image/webp`, or
 `image/bmp` based on filename extension).
-400 if not an image. 404 if not found.
+For a non-image media type the route delegates to that type's
+`image_response` hook, so audio serves its waveform PNG, video its
+mid-frame, and a PDF document its first page.
+400 if the media is not an image and its `image_response` hook yielded
+nothing. 404 if not found.
 
 ### Get text content
 
@@ -204,6 +208,40 @@ cells on the fly). The box is dropped when the vote is removed
 {"target": "good", "region_box": [0.2, 0.3, 0.55, 0.7]}
 ```
 
+**Optional `provenance`**: how the item came to be in front of the user.
+Recorded per vote, read by nothing — the recording exists because the
+surfacing context is *not re-derivable later*: the ranking is client-side
+state and the model behind the score is overwritten by the next retrain, so a
+vote not annotated at click time is annotated never. It is stored in the
+element's labelset `metadata` under `"vt:provenance"` and round-trips through
+label export/import.
+
+Six optional fields, four of them independent categorical axes rather than one
+fused enum (the bias this recording exists to measure tracks *how the item was
+drawn*, not *who was driving*, and the two come apart — a user can pick the
+`hard` select mode by hand and get autopilot's exact margin-sampled draw):
+
+| Field | Values | Meaning |
+|-------|--------|---------|
+| `flow` | `autopilot`, `list_review`, `find_verify`, `labelset_review`, `seed_example`, `import`, `bulk`, `undo`, `unknown` | Which UI flow drove the vote. |
+| `phase` | `good`, `bad`, `hard`, `new` | Autopilot phase; ignored unless `flow` is `autopilot`. |
+| `select_mode` | `top`, `hard`, `new` | How the item was drawn off the ranking. |
+| `sort_kind` | `learned`, `text`, `load` | Which ranking the user was looking at. |
+| `rank_at_vote` | integer ≥ 0 | The item's position in that ranking. |
+| `score_at_vote` | float | The item's model score when it was surfaced. |
+
+Recorded **only when the call actually changes the vote state**, so an
+idempotent re-send from a stale tab cannot overwrite what the original click
+recorded. An unrecognised *value* for any of these fields is rejected (422); a
+payload carrying nothing beyond `{"flow": "unknown"}` is dropped rather than
+stored.
+
+```json
+{"target": "good", "provenance": {"flow": "autopilot", "phase": "hard",
+                                  "select_mode": "hard", "sort_kind": "learned",
+                                  "rank_at_vote": 12, "score_at_vote": 0.44}}
+```
+
 →
 ```json
 {"ok": true, "state": "good", "click_time": 17}
@@ -222,7 +260,7 @@ Unknown body fields are silently dropped, so a client may attach advisory keys
 |--------|-------|
 | `400` | `region_box` on a `"bad"` / `"none"` target; `region_box` outside `[0, 1]`, not a 4-element list, or non-numeric. |
 | `404` | Media not found. |
-| `422` | Missing `target`, or a `target` outside `good` / `bad` / `none` (marshmallow validation envelope). |
+| `422` | Missing `target`, a `target` outside `good` / `bad` / `none`, or an unrecognised `provenance` value (marshmallow validation envelope). |
 | `500` | The vote was applied in memory but the detector labelset could not be persisted. |
 
 ### Bulk vote
@@ -231,7 +269,9 @@ Unknown body fields are silently dropped, so a client may attach advisory keys
 POST /api/medias/vote-bulk
 ```
 
-**Body:** `{"ids": [1, 2, 3], "target": "good"}`
+**Body:** `{"ids": [1, 2, 3], "target": "good"}`, plus an optional
+`provenance` block (same shape as the per-media vote) applied to every id in
+the batch. It defaults to `{"flow": "bulk"}` when omitted.
 
 Applies one absolute vote `target` (`"good"` / `"bad"` / `"none"`) to many
 medias in a single request, with the same idempotent semantics as the
@@ -244,7 +284,7 @@ the Marathoner streak.
 → `{"ok": true, "changed": 2, "missing": [3]}` — `changed` counts only ids
 whose state actually moved (idempotent re-applies don't count); ids not in the
 loaded dataset are reported in `missing`.
-400 if no ids supplied.
+400 if no ids supplied; 422 on an unrecognised `provenance` value.
 
 ### Thumbnail
 
@@ -260,7 +300,8 @@ Streams a downscaled thumbnail bounded to a fixed longest-side length, the
 same regardless of zoom level (an `ETag` lets the browser reuse it across
 scrolls/zoom). Grid and list tiles use this instead of `/image` so a gallery
 of high-resolution items doesn't decode every full-size bitmap at once.
-400 if the media is not an image and has no `image_response` delegate. 404 if
+400 if the media is not an image and its `image_response` hook yielded
+nothing. 404 if
 not found or bytes unavailable.
 
 ---

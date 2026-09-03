@@ -19,7 +19,10 @@ subset and said nothing".  Every check here is one of those:
   dashed rule above it does not — a healthy grid must not spend a quarter of
   the figure restating the crossing the line thickness already marks — while a
   starving, never-recovering, or falling-back denominator must keep it;
-* the per-run panel must **count** the runs that drew no line at all.
+* the per-run panel must **count** the runs that drew no line at all;
+* the stopping marker (#3560) must appear only where at least half an arm's runs
+  actually stopped, must name the arms it withheld itself from, and must not
+  move a single plotted number.
 
 Run: ``python selftest_curves.py``
 """
@@ -291,6 +294,48 @@ def main() -> int:  # noqa: C901
             f"{n_cells - n_trained}/{n_cells}",
         )
         ok &= _check("per-run figures written for every dataset", len(names) == 2, str(names))
+
+        # --- the stopping marker (#3560) -----------------------------------
+        # One arm whose runs all stop at click 30, one whose runs never do.
+        # The marker must land on the first and be withheld from the second,
+        # with the caption saying which - an absent glyph that is not explained
+        # reads as an oversight rather than as the finding it is.
+        stops = pd.DataFrame(
+            [
+                {
+                    "arm": a,
+                    "dataset": d,
+                    "category": c,
+                    "seed": sd,
+                    "stopped": a != "starver",
+                    "t_stop": 30.0 if a != "starver" else float("nan"),
+                    "t_budget": float(N_STEP),
+                }
+                for a in arms
+                for d in ("dsA", "dsB")
+                for c in range(N_CAT)
+                for sd in range(N_SEED)
+            ]
+        )
+        marked = C._stop_clicks(stops, [("dsA", a) for a in arms])
+        ok &= _check(
+            "a marker is placed only for arms where at least half the runs stopped",
+            all(marked.get(("dsA", a)) == 30.0 for a in arms if a != "starver") and ("dsA", "starver") not in marked,
+            str(marked),
+        )
+        cap = C._stop_caption(stops, marked, [("dsA", a) for a in arms])
+        ok &= _check(
+            "...and the caption names the arm that has none, and why",
+            "starver" in cap and "fewer than half" in cap,
+            cap,
+        )
+        kw = dict(arms=arms, denominator=cells, baseline=base)
+        ok &= _check(
+            "drawing the marker does not touch the plotted numbers",
+            C.mean_figure(main_df, tmp / "stops", stops=stops, **kw)[1].equals(
+                C.mean_figure(main_df, tmp / "nostops", **kw)[1]
+            ),
+        )
 
         # --- degrade gracefully with no baseline ---------------------------
         plain = C.mean_figure(main_df, tmp / "nobase", arms=arms, denominator=cells)[1]

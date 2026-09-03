@@ -228,7 +228,7 @@ class TestExceptionDetailPathScrub:
         import os
 
         from vtscore.config import DATA_DIR
-        from vtsearch.routes._shared import format_exception_detail
+        from vtsearch.routes._http import format_exception_detail
 
         leaked = str(DATA_DIR / "detectors" / "x.json.tmp")
         detail = format_exception_detail(OSError(f"[Errno 36] File name too long: '{leaked}'"))
@@ -239,7 +239,7 @@ class TestExceptionDetailPathScrub:
         assert f"detectors{os.sep}x.json.tmp" in detail
 
     def test_ordinary_message_untouched(self):
-        from vtsearch.routes._shared import format_exception_detail
+        from vtsearch.routes._http import format_exception_detail
 
         detail = format_exception_detail(RuntimeError("embedder X not loaded"))
         assert detail == "RuntimeError: embedder X not loaded"

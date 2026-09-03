@@ -45,12 +45,8 @@ from vtscore.datasets.registry import (
     register_dataset as _reg_register,
 )
 from vtsearch.auth import get_current_user
-from vtsearch.routes._shared import (
-    abort_if_semantic_only_embedders,
-    get_plugin_or_404,
-    plugin_field_options,
-    validate_plugin_args,
-)
+from vtsearch.routes._plugins import get_plugin_or_404, plugin_field_options, validate_plugin_args
+from vtsearch.routes._policy import abort_if_semantic_only_embedders
 from vtsearch.routes.datasets._helpers import _extract_clipper_params
 from vtsearch.schemas.datasets import (
     ClearStagingResponseSchema,
