@@ -1,20 +1,20 @@
 <!-- _class: full -->
 
-![bg fit](figs/logo-grid.png)
+![bg fit](figs/logo-grid.webp)
 
 ## The Real Thing
 
-<!-- build: figs/logo-grid.build1.png -->
+<!-- build: figs/logo-grid.build1.webp -->
 
-<!-- build: figs/logo-grid.build2.png -->
+<!-- build: figs/logo-grid.build2.webp -->
 
-<!-- build: figs/logo-grid.build3.png -->
+<!-- build: figs/logo-grid.build3.webp -->
 
-<!-- build: figs/logo-grid.build4.png -->
+<!-- build: figs/logo-grid.build4.webp -->
 
-<!-- build: figs/logo-grid.build5.png -->
+<!-- build: figs/logo-grid.build5.webp -->
 
-<!-- build: figs/logo-grid.build6.png -->
+<!-- build: figs/logo-grid.build6.webp -->
 
 <!-- **a** — Let's say I googled *Coke logo*. Are these the same? I think so. -->
 
