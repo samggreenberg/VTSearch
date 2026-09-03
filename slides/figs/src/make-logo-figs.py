@@ -99,7 +99,7 @@ RESULTS = (
     ("01-wordmark-on-red.jpg", "wordmark, white on a solid red field"),
     ("02-red-disc.jpg", "the round red badge"),
     ("03-disc-with-bottle.jpg", "that badge, with a contour bottle"),
-    ("04-wordmark-ribbon.png", "wordmark over the dynamic ribbon"),
+    ("04-wordmark-ribbon.jpg", "wordmark over the dynamic ribbon"),
     ("05-script-red-on-white.jpg", "the script, red on white"),
     ("06-script-black.jpg", "the script, in flat black"),
     ("07-coke-sans.png", "“Coke”, in a heavy sans"),
@@ -147,6 +147,23 @@ def _cell_box(index: int) -> tuple[float, float, float, float]:
 #: These are JPEG thumbnails, so a "white" margin is white plus ringing, and an
 #: exact-match trim finds nothing at all on half of them.
 TRIM_TOLERANCE = 12
+
+
+def _flattened(image: Image.Image) -> Image.Image:
+    """`image` as RGB, with any transparency composited onto white.
+
+    A bare `.convert("RGB")` resolves a transparent pixel to whatever its
+    palette index happens to hold, which on one of these sources is black: the
+    logo arrived as a palette PNG with a transparent ground, and converting it
+    directly produced a black rectangle that then defeated the border trim and
+    would have printed a black tile onto a white slide. White is the right
+    ground because the slide is white.
+    """
+    if image.mode not in ("RGBA", "LA", "P"):
+        return image.convert("RGB")
+    rgba = image.convert("RGBA")
+    ground = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
+    return Image.alpha_composite(ground, rgba).convert("RGB")
 
 
 def _trimmed(image: Image.Image) -> Image.Image:
@@ -200,7 +217,7 @@ def _draw(ax: plt.Axes, index: int) -> None:
         return
 
     with Image.open(path) as image:
-        pixels = _trimmed(image.convert("RGB"))
+        pixels = _trimmed(_flattened(image))
         width, height = pixels.size
         # `fit` semantics, done here rather than left to imshow: scale to touch
         # the cell on its binding axis and centre on the other, so a wide
