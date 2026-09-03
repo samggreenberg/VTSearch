@@ -1719,7 +1719,6 @@ _store = UserSettingsStore(
     user_path=_user_settings_path,
     apply_settings=_apply_settings,
     server_default_source=_server_default_settings_source,
-    server_keys=_SERVER_KEYS,
     sanitize=_sanitize_tier,
     exclude_from_source_export=_EXCLUDE_FROM_SOURCE_EXPORT,
     freshness_check_interval=_FRESHNESS_CHECK_INTERVAL,

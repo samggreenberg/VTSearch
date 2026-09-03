@@ -669,11 +669,6 @@ def _digests(mirror: Mirror) -> dict[str, str]:
 # ----------------------------------------------------------------------- pins
 
 
-#: What a pins entry may record.  ``harness`` is absent for a mirror that
-#: declares ``no_harness_pin``.
-PIN_SIDES = ("app", "harness")
-
-
 def _load_pins() -> dict[str, dict[str, str]]:
     """The recorded digests, as ``{mirror id: {side: digest}}``."""
     if not PINS_PATH.exists():
