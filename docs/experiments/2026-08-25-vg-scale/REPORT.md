@@ -215,6 +215,76 @@ Which classes carry it:
 
 ![which classes carry the size penalty](figures/size_penalty_per_class.png)
 
+## Which class, not just which size
+
+The penalty is not spread evenly, and the per-class numbers carry something the
+band means hide. `siglip` / whole image, cost at 150 clicks, mean over 20 seeds,
+ordered by the three-band mean:
+
+| class | small | medium | large | small − large | small / large |
+|---|---:|---:|---:|---:|---:|
+| `kite` | 0.067 | 0.077 | 0.037 | 0.029 | 1.8x |
+| `boat` | 0.163 | 0.156 | 0.051 | 0.112 | 3.2x |
+| `knife` | 0.353 | 0.254 | 0.146 | 0.207 | 2.4x |
+| `bird` | 0.520 | 0.239 | 0.026 | 0.494 | 20.2x |
+| `stop sign` | 0.588 | 0.167 | 0.032 | 0.556 | 18.5x |
+| `bicycle` | 0.422 | 0.347 | 0.087 | 0.335 | 4.8x |
+| `clock` | 0.553 | 0.300 | 0.047 | 0.507 | 11.8x |
+| `dog` | 0.538 | 0.280 | 0.093 | 0.446 | 5.8x |
+| `bus` | 0.460 | 0.318 | 0.139 | 0.321 | 3.3x |
+| `umbrella` | 0.471 | 0.396 | 0.106 | 0.365 | 4.4x |
+| `book` | 0.411 | 0.504 | 0.234 | 0.177 | 1.8x |
+| `backpack` | 0.627 | 0.560 | 0.294 | 0.333 | 2.1x |
+
+**Inside a band, which class matters more than which band.** Every small-band
+positive is under 1/196 of the frame by construction, so the **9.4x** spread
+across classes at `small` (0.067 to 0.627) is not a size difference: it is the
+same size, twelve different objects. The band effect on the pooled mean is
+**4x** (0.43 to 0.11). The axis this dataset was built to isolate is the smaller
+of the two effects in it.
+
+**Easy-when-large does not predict easy-when-small.** Ranked over the twelve
+classes, rho(small cost, large cost) = **-0.02**. `bird` is the cheapest cell in
+the study at large (0.026) and 31st of 36 at small (0.520). The two ends of the
+size axis behave more like two tasks than like two difficulties of one.
+
+The steepest penalties therefore belong to the classes that are easiest when
+large — rho(large cost, small − large) = **-0.40**, led by `bird` (20x),
+`stop sign` (18x) and `clock` (12x). Part of that is a floor effect on a cost of
+0.026; read it as an ordering, not as a magnitude.
+
+**Two classes invert.** `book` costs more at medium (0.504) than at
+small (0.411), and `kite` marginally so (0.077 against 0.067). Both replicate in
+`siglip2_l` and in the pair, and `clip` inverts on `bicycle` as well. `kite`'s
+0.010 does not deserve a mechanism — its three bands are flat. `book`'s 0.09
+hump is real, and `book` is also the class carrying most of the measured
+contamination of the negative pool (3 of the 4 residual positives among 200
+reviewed negatives, [`DATASHEET.md`](DATASHEET.md)), so some part of its cost in
+every band is label noise rather than detector failure. This grid cannot say
+which part.
+
+**What separates the classes is not something this run measured.** The two
+flattest classes are the two whose scenes are near-exclusive to them — open sky
+for `kite`, open water for `boat` — and the most expensive small cells
+(`backpack` 0.627, `stop sign` 0.588, `clock` 0.553) are objects whose
+surroundings *are* the negative pool: a street, a room. That reading fits the
+ordering and is **not** a measurement: this grid varies size and class together
+and carries no context-ablated arm to separate them.
+[#3589](https://github.com/samggreenberg/VTSearch/issues/3589) proposes the
+ablation that would, and
+[#3588](https://github.com/samggreenberg/VTSearch/issues/3588) the class list
+that would let it be fitted rather than eyeballed.
+
+Region voting does not preserve this ordering. Rho between `siglip`'s per-class
+ranks and the pair's is **0.67**, against 0.83–0.90 for the three other
+whole-image columns. It buys the most where a compact object sits in a cluttered
+frame (`backpack@large` 0.294 to 0.097, `knife@large` 0.146 to 0.064) and is
+*worse* on five classes at large — `bird` 0.026 to 0.058, `kite` 0.037 to 0.056,
+plus `boat`, `clock` and `umbrella`. Four of those five are among the five
+cheapest large cells in the shipped default; the fifth of those cheapest,
+`stop sign`, is one region voting improves (0.032 to 0.012). Where the frame was
+doing the work, cutting it into patches takes it away.
+
 ## The tail
 
 **8 runs of 3600 (0.2%) end at cost ≥ 0.9** — seven of them `clip`, one
