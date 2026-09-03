@@ -54,9 +54,10 @@ def _sample(n: float, seconds: float, branch: str = "") -> dict:
 
 class TestRecorderCarriesTheBranch:
     def test_marked_step_carries_its_branch(self, sink):
-        with record_task(_tracker(), "dataset_open", media_type="image") as rec:
+        tracker = _tracker()
+        with record_task(tracker, "dataset_open", media_type="image") as rec:
             rec.mark_branch("coverage", "restored")
-            _open_run(rec._tracker)
+            _open_run(tracker)
             rec.set_scale(n=980)
         rows = {r["step"]: r for r in sink()}
         assert rows["coverage"]["branch"] == "restored"
@@ -64,10 +65,11 @@ class TestRecorderCarriesTheBranch:
 
     def test_note_branch_reaches_the_thread_bound_recorder(self, sink):
         """The deep call sites name the branch without holding the recorder."""
-        with record_task(_tracker(), "dataset_open", media_type="image") as rec:
+        tracker = _tracker()
+        with record_task(tracker, "dataset_open", media_type="image") as rec:
             rec.bind_thread()
             note_branch("coverage", "rebuilt")  # as the route's atlas branch does
-            _open_run(rec._tracker)
+            _open_run(tracker)
         assert {r["step"]: r.get("branch") for r in sink()}["coverage"] == "rebuilt"
 
     def test_note_branch_is_a_no_op_with_nothing_recording(self):
@@ -81,17 +83,19 @@ class TestRecorderCarriesTheBranch:
         that really loads the model — otherwise the genuinely cold load that
         follows is written ``cold_model: false`` (the #3345 mislabel, reached
         by a different route)."""
-        with record_task(_tracker(), "dataset_stage", media_type="image", embedder="siglip") as rec:
+        cached_tracker = _tracker()
+        with record_task(cached_tracker, "dataset_stage", media_type="image", embedder="siglip") as rec:
             rec.bind_thread()
             note_branch("embed", "cached")
             note_no_encoder_load()
             for step in (1, 2, 3):
-                rec._tracker.update("loading", "x", 0, 0, step=step, total_steps=3)
-        with record_task(_tracker(), "dataset_stage", media_type="image", embedder="siglip") as rec:
+                cached_tracker.update("loading", "x", 0, 0, step=step, total_steps=3)
+        fresh_tracker = _tracker()
+        with record_task(fresh_tracker, "dataset_stage", media_type="image", embedder="siglip") as rec:
             rec.bind_thread()
             note_branch("embed", "fresh")
             for step in (1, 2, 3):
-                rec._tracker.update("loading", "x", 0, 0, step=step, total_steps=3)
+                fresh_tracker.update("loading", "x", 0, 0, step=step, total_steps=3)
         embeds = [r for r in sink() if r["step"] == "embed"]
         assert [r["branch"] for r in embeds] == ["cached", "fresh"]
         assert "cold_model" not in embeds[0], "a run that loaded no encoder claims nothing"
@@ -103,8 +107,9 @@ class TestRecorderCarriesTheBranch:
         Without the narrowing it would write ``items: 0.0`` — indistinguishable
         from a measurement that opening a dataset's pickle is free.
         """
+        tracker = _tracker()
         rec = record_task(
-            _tracker(),
+            tracker,
             "dataset_open",
             media_type="image",
             status_phases={"loading": "coverage"},
@@ -112,7 +117,7 @@ class TestRecorderCarriesTheBranch:
         )
         rec.start()
         rec.mark_branch("coverage", "rebuilt")
-        rec._tracker.update("loading", "Building coverage atlas…", 0, 0, step=1, total_steps=1)
+        tracker.update("loading", "Building coverage atlas…", 0, 0, step=1, total_steps=1)
         rec.finish(n=980)
         assert [r["step"] for r in sink()] == ["coverage"]
 
