@@ -136,13 +136,13 @@ def _recorded_embedder_name(media_dict: dict, requested: str) -> str:
 def _parse_bool(value: Any) -> bool:
     """Coerce a request-supplied flag to ``bool``.
 
-    Accepts native bools, the ``"true"``/``"false"`` strings that
-    checkbox fields serialize to (per :class:`PluginField`), and ``None``
-    (treated as ``False``).
+    Thin alias for :func:`vtscore.plugins.parse_checkbox`, kept so the many
+    call sites in this module read unchanged; the coercion itself is shared
+    with the CLI so the two cannot drift.
     """
-    if isinstance(value, bool):
-        return value
-    return str(value).strip().lower() == "true"
+    from vtscore.plugins import parse_checkbox  # noqa: PLC0415
+
+    return parse_checkbox(value)
 
 
 def _parse_embedder_list(value: Any) -> list[str] | None:

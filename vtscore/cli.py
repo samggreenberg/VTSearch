@@ -707,6 +707,9 @@ def _load_pickle_whole(dataset_path: str) -> Iterator[dict[int, dict[str, Any]]]
     if not dataset_file.exists():
         raise FileNotFoundError(f"Dataset file not found: {dataset_path}")
 
+    # Thin is safe here: the pickle loader only drops bytes it can re-read
+    # (a file on disk, an archive member, a URL) and keeps the payload of a
+    # self-contained entry, which nothing outside the pickle could reproduce.
     medias: dict[int, dict[str, Any]] = {}
     load_dataset_from_pickle(dataset_file, medias, thin=True)
     if not medias:
@@ -749,6 +752,37 @@ def _load_pickle_chunked(dataset_path: str, chunk_size: int) -> Iterator[dict[in
     yield from _renumber_chunks(load_dataset_from_pickle_chunked(dataset_file, chunk_size, thin=True))
 
 
+def _reference_files_choice(field_values: dict[str, Any]) -> bool:
+    """Pop the importer's ``reference_files`` choice and return it as ``thin``.
+
+    The GUI resolves thin mode from the importer's own ``reference_files``
+    checkbox (``load_pipeline`` pops it out of the field values and hands it to
+    ``run`` as ``thin=``); the field is deliberately not part of the persisted
+    origin, so it is a per-load storage choice rather than part of the source's
+    identity.  The CLI passes the same field through
+    :meth:`~vtscore.plugins.PluginBase.add_cli_arguments`, which turns it into
+    ``--reference-files`` / ``--no-reference-files``, but it used to leave the
+    value sitting inert in ``field_values`` and force ``thin=True`` regardless.
+
+    Two things went wrong with that.  The flag did nothing, so a CLI user could
+    not turn reference mode off; and thin discards ``media_bytes`` in favour of
+    a path reference, which strands any media whose bytes cannot be re-read
+    from outside the source.  A stranded media cannot be embedded, so it is
+    silently skipped at scoring - and because the calibrated threshold is
+    fitted on the haystack being scored, the surviving population also moved
+    the cut.  Same dataset, same detector, different hits *and* a different
+    threshold in the CLI than in the GUI (issue #3556).
+
+    Popping (rather than reading) matches the GUI: ``run`` takes ``thin`` as a
+    parameter, not as a field, so the key must not be forwarded into an
+    importer's ``field_values``.  Importers that declare no such field get
+    ``False`` - non-reference mode, the GUI's default for them too.
+    """
+    from vtscore.plugins import parse_checkbox  # noqa: PLC0415
+
+    return parse_checkbox(field_values.pop("reference_files", False))
+
+
 def _load_importer_whole(importer_name: str, field_values: dict[str, Any]) -> Iterator[dict[int, dict[str, Any]]]:
     """Yield a single medias dict loaded via a named importer."""
     from vtscore.datasets.importers import get_importer
@@ -760,8 +794,9 @@ def _load_importer_whole(importer_name: str, field_values: dict[str, Any]) -> It
 
     importer.validate_cli_field_values(field_values)
 
+    thin = _reference_files_choice(field_values)
     medias: dict[int, dict[str, Any]] = {}
-    importer.run_cli(field_values, medias, thin=True)
+    importer.run_cli(field_values, medias, thin=thin)
     if not medias:
         raise ValueError(f"No medias loaded by importer '{importer_name}'")
     yield medias
@@ -779,7 +814,8 @@ def _load_importer_chunked(
         raise ValueError(f"Unknown importer: {importer_name}. Available: {', '.join(available)}")
 
     importer.validate_cli_field_values(field_values)
-    yield from _renumber_chunks(importer.run_chunked_cli(field_values, chunk_size, thin=True))
+    thin = _reference_files_choice(field_values)
+    yield from _renumber_chunks(importer.run_chunked_cli(field_values, chunk_size, thin=thin))
 
 
 @dataclass(frozen=True)
