@@ -1,79 +1,109 @@
 #!/usr/bin/env python
-"""The two figures behind the *what does "logo detection" mean* appendix.
+"""One slide: eight results for *Coke logo*, arriving one at a time.
 
     python slides/figs/src/make-logo-figs.py
 
-Writes `figs/logo-hits.png` and `figs/logo-jobs.png`, each with its build
-stages. They exist to make one argument concretely rather than by assertion:
-**"the Coke logo" is not a set of images, and no amount of model capability
-turns it into one.**
+Writes `figs/logo-grid.png` and its six build stages — the slide is a build, so
+the room is asked about each result as it lands rather than being handed all
+eight at once. The whole argument lives in the presenter notes
+(`fragments/logo-grid.md`): *are these the same? …and this one? …what if the
+colours invert? …this can't count, right?* Every answer is defensible and no
+two people give the same set of them, which is the point.
 
-The material is a real image search for *Coke logo*, and the eight results it
-returned. Nothing of that search is committed and nothing of the mark is
-redrawn — a slide that reproduced eight thumbnails of a live trademark at
-150px would be illegible from the third row *and* be reproducing somebody's
-mark to make a point about ambiguity. What the figures draw instead is the
-part the argument actually needs, and the part a photograph hides: **which
-visual attributes each result has**, and **which of them each job counts as a
-positive**. That is the same move `calib-cost-knob` makes when it takes the
-photographs away and leaves the marks — see `make-calib-figs.py` — and for the
-same reason: the disagreement is over decisions, not over pixels.
+There is nothing to compute here. The figure is a **compositor**: it lays the
+committed thumbnails in `logo-src/` onto a fixed 3x3 grid and saves one stage
+per reveal, with later cells simply empty. That fixed grid is the whole reason
+this is a generated figure rather than eight `<img>` tags in the fragment — a
+build marker reveals by *truncating* the fragment, so an HTML grid would
+reflow on every page and the images would shuffle around the slide instead of
+arriving in place. `slides/STYLE.md` is explicit that a reveal adds ink and
+does nothing else.
 
-The deck's own running example is `book`, and this appendix is the same claim
-in a domain where the audience expects it *not* to bite. Everyone accepts that
-"book" has a fuzzy edge. Almost nobody expects "the Coke logo" to, because a
-logo is a designed artefact with a spec sheet — and it does anyway, harder,
-because the disagreement is not at the edge of one concept but between four
-different concepts sharing three words.
+The top-left cell is left empty for the slide's headline, which is what buys
+this figure a title: eight tiles in a 4x2 grid would fill the corner
+`slide_figure.TITLE_NOTCH_PX` reserves, and a full-bleed figure that cannot
+spare that corner has to carry no title at all.
 """
 
 from __future__ import annotations
 
 import sys
+import textwrap
 from pathlib import Path
 
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.patches import FancyBboxPatch, Rectangle
+from matplotlib.patches import Rectangle
+from PIL import Image, ImageChops
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from slide_figure import (  # noqa: E402
     FULL_BLEED,
-    LABEL_GAP_PT,
     save,
 )
 
 OUT = Path(__file__).resolve().parent.parent
+SRC = Path(__file__).resolve().parent / "logo-src"
 
 INK = "#14181f"
 SOFT = "#5b6472"
 RULE = "#d8dee6"
-NEUTRAL_FILL = "#e8ebef"
-RED = "#b91c1c"  # the reject side, everywhere else in this deck
 
-#: Shared with the calibration schematics so a label set at 16pt here is the
-#: size it is there: the axes fill the figure, so the canvas is just the figure
-#: rescaled. See `make-calib-figs.FLOW_UNIT_PT`.
+#: Points per drawing unit, shared with the calibration schematics so type set
+#: here is the size it is there. See `make-calib-figs.FLOW_UNIT_PT`.
 UNIT_PT = 38.0
 
-#: Exactly 16:9, and both figures are written with `tight=False`, so the canvas
-#: maps one-to-one onto the 1280x720 slide. That is what makes `NOTCH` below a
-#: rectangle in these coordinates rather than something to be discovered by
-#: running the check.
+#: Exactly 16:9, and every stage is written with `tight=False`, so the canvas
+#: maps one-to-one onto the 1280x720 slide and the grid geometry below is in
+#: slide pixels divided by 64.65.
 CANVAS = (19.8, 11.0)
 
-#: `slide_figure.TITLE_NOTCH_PX` converted into canvas units: the top-left
-#: corner the slide overlays its headline on. `save()` enforces it; this is
-#: here so the layouts can be *written* clear of it instead of nudged until
-#: they pass. x in [0.93, 5.57], y in [7.26, 10.35].
-_PX = CANVAS[0] / 1280.0
-NOTCH_X1 = (60.0 + 300.0) * _PX
-NOTCH_Y0 = CANVAS[1] - (42.0 + 200.0) * _PX
+COLS, ROWS = 3, 3
+CELL_W, CELL_H = CANVAS[0] / COLS, CANVAS[1] / ROWS
 
-#: `slide_figure`'s spacing standard in these drawing units.
-LABEL_GAP = LABEL_GAP_PT / UNIT_PT
+#: How much of each cell is margin rather than image. Wide enough that two
+#: tiles never touch — several of these thumbnails are white-on-white at the
+#: edges and would otherwise read as one wide picture.
+CELL_PAD = 0.42
+
+#: The eight results, in the order the slide reveals them, as
+#: `(file, what it is)`. The file is looked up in `logo-src/`; a slot whose
+#: file is not there yet draws a dashed placeholder carrying its description,
+#: so the deck builds and the layout can be reviewed before every asset has
+#: arrived. **A placeholder is not a figure** — re-run this script once the
+#: file lands and commit the result.
+#:
+#: The order is the argument's, not the search engine's: it starts with two
+#: nobody argues about, walks out through the ones that are still obviously
+#: the mark, and ends on three that each break a *different* attribute — the
+#: colour, the typeface, the product. See the fragment's notes.
+RESULTS = (
+    ("01-wordmark-on-red.jpg", "wordmark, white on a solid red field"),
+    ("02-red-disc.jpg", "the round red badge"),
+    ("03-disc-with-bottle.jpg", "that badge, with a contour bottle"),
+    ("04-wordmark-ribbon.png", "wordmark over the dynamic ribbon"),
+    ("05-script-red-on-white.jpg", "the script, red on white"),
+    ("06-script-black.jpg", "the script, in flat black"),
+    ("07-coke-sans.png", "“Coke”, in a heavy sans"),
+    ("08-diet-coke.jpg", "Diet Coke"),
+)
+
+#: How wide a placeholder's description may run before it wraps, in
+#: characters. Measured against the cell rather than guessed: a placeholder
+#: that overflows its own box is the one thing it must not do, since its whole
+#: job is to show what the finished layout will look like.
+PLACEHOLDER_CHARS = 24
+
+#: Which grid cell each result lands in, as `(col, row)` with row 0 at the top.
+#: The top-left cell is skipped: that is where the headline goes.
+CELLS = ((1, 0), (2, 0), (0, 1), (1, 1), (2, 1), (0, 2), (1, 2), (2, 2))
+
+#: How many pages the slide is. The first shows **two** results, because the
+#: opening question is a comparison — "are these the same?" needs two things to
+#: be the same as each other — and every later page adds one.
+STAGES = len(RESULTS) - 1
 
 plt.rcParams.update(
     {
@@ -87,327 +117,121 @@ plt.rcParams.update(
 )
 
 
-def _canvas() -> tuple[plt.Figure, plt.Axes]:
-    """A blank 16:9 drawing whose axes fill the figure, in `CANVAS` units."""
+def _cell_box(index: int) -> tuple[float, float, float, float]:
+    """Result *index*'s drawable rectangle as `(x0, y0, x1, y1)`, padded."""
+    col, row = CELLS[index]
+    x0 = col * CELL_W + CELL_PAD
+    x1 = (col + 1) * CELL_W - CELL_PAD
+    y1 = CANVAS[1] - row * CELL_H - CELL_PAD
+    y0 = CANVAS[1] - (row + 1) * CELL_H + CELL_PAD
+    return x0, y0, x1, y1
+
+
+#: How far a pixel may sit from the corner colour and still count as border.
+#: These are JPEG thumbnails, so a "white" margin is white plus ringing, and an
+#: exact-match trim finds nothing at all on half of them.
+TRIM_TOLERANCE = 12
+
+
+def _trimmed(image: Image.Image) -> Image.Image:
+    """`image` with its uniform border cropped off.
+
+    The sources are search-result thumbnails, which are padded to a squarish
+    box: several are a wordmark occupying a third of their own height with
+    white above and below. Fitted untrimmed, that padding is what touches the
+    cell and the art is drawn at a third of the size the slide is paying for.
+    Trimming is what makes the eight tiles comparable to *each other*, too —
+    otherwise a tile's apparent size records how much whitespace its thumbnail
+    happened to carry.
+
+    Returns the image unchanged when the trim finds nothing (art that already
+    bleeds to all four edges) or everything (a solid tile, which cannot
+    happen here but would otherwise crop to nothing).
+    """
+    border = Image.new("RGB", image.size, image.getpixel((0, 0)))
+    difference = ImageChops.difference(image, border).convert("L")
+    box = difference.point(lambda v: 255 if v > TRIM_TOLERANCE else 0).getbbox()
+    return image if box is None else image.crop(box)
+
+
+def _draw(ax: plt.Axes, index: int) -> None:
+    """Draw result *index* in its cell, fitted and centred, or a placeholder."""
+    x0, y0, x1, y1 = _cell_box(index)
+    name, described = RESULTS[index]
+    path = SRC / name
+    if not path.exists():
+        ax.add_patch(
+            Rectangle(
+                (x0, y0),
+                x1 - x0,
+                y1 - y0,
+                facecolor="none",
+                edgecolor=SOFT,
+                linewidth=1.4,
+                linestyle=(0, (4, 4)),
+            )
+        )
+        ax.text(
+            (x0 + x1) / 2,
+            (y0 + y1) / 2,
+            "awaiting\n" + "\n".join(textwrap.wrap(described, PLACEHOLDER_CHARS)),
+            ha="center",
+            va="center",
+            fontsize=15,
+            color=SOFT,
+            linespacing=1.3,
+        )
+        return
+
+    with Image.open(path) as image:
+        pixels = _trimmed(image.convert("RGB"))
+        width, height = pixels.size
+        # `fit` semantics, done here rather than left to imshow: scale to touch
+        # the cell on its binding axis and centre on the other, so a wide
+        # wordmark and a square badge are as large as their cell allows and
+        # neither is stretched.
+        scale = min((x1 - x0) / width, (y1 - y0) / height)
+        half_w, half_h = width * scale / 2, height * scale / 2
+        cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+        ax.imshow(
+            pixels,
+            extent=(cx - half_w, cx + half_w, cy - half_h, cy + half_h),
+            aspect="auto",
+            interpolation="lanczos",
+            zorder=2,
+        )
+        # A hairline frame, because several of these are black or red art on a
+        # white ground and the slide is white: without it the tiles have no
+        # edges and eight results read as one wide smear.
+        ax.add_patch(
+            Rectangle(
+                (cx - half_w, cy - half_h),
+                2 * half_w,
+                2 * half_h,
+                facecolor="none",
+                edgecolor=RULE,
+                linewidth=1.2,
+                zorder=3,
+            )
+        )
+
+
+def _stage(stage: int) -> plt.Figure:
+    """The first *stage* reveals (1-based, cumulative): two results, then one more each."""
     fig, ax = plt.subplots(figsize=tuple(c * UNIT_PT / 72 for c in CANVAS))
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
     ax.set_xlim(0, CANVAS[0])
     ax.set_ylim(0, CANVAS[1])
     ax.set_axis_off()
-    return fig, ax
-
-
-# ── figure 1: eight results, and no attribute they share ─────────────────────
-
-#: How many stages `logo-hits` reveals in: the query and what came back; the
-#: attributes each result actually has; and the reading — no column is full.
-HITS_STAGES = 3
-
-#: The attributes the eight results vary over, as (heading, ...) — one column
-#: each, headings broken across two lines where a single word will not fit the
-#: column pitch. Chosen as the things a *detector* would have to fire on or
-#: not: what shape carries the mark, what colour it is, what word it spells.
-HIT_ATTRS = (
-    "script",
-    "red",
-    "red\nfield",
-    "disc",
-    "ribbon",
-    "bottle",
-    "“Coke”",
-)
-
-#: The eight results the search returned, each as (what it is, attributes it
-#: has). Read off the actual hits, not invented: the wordmark reversed out of
-#: a solid red field; the round red button badge; that badge with a contour
-#: bottle beside it; the wordmark over the dynamic ribbon; “Coke” set in a
-#: heavy sans that is not the script at all; the wordmark in flat black; the
-#: wordmark in red on white; and Diet Coke, which is a different product.
-#:
-#: The column sums are the whole figure: script 7, red 7, and every other
-#: column in low single figures. **No attribute is in all eight** — so there is
-#: no feature a detector could key on that would return this set, and the set
-#: is what a person typing the query got.
-HITS = (
-    ("white on a solid red field", ("script", "red", "red\nfield", "ribbon")),
-    ("the round red badge", ("script", "red", "red\nfield", "disc")),
-    ("that badge, with a bottle", ("script", "red", "red\nfield", "disc", "bottle")),
-    ("wordmark over the ribbon", ("script", "red", "ribbon")),
-    ("“Coke” in a heavy sans", ("red", "“Coke”")),
-    ("the wordmark in black", ("script",)),
-    ("the wordmark in red", ("script", "red")),
-    ("Diet Coke", ("script", "red", "“Coke”")),
-)
-
-#: Where the matrix sits. The row labels run left from `LABEL_RIGHT` and the
-#: tick columns run right from `TICKS_LEFT`, which is clear of `NOTCH_X1`; the
-#: first row sits below `NOTCH_Y0`, so the column headings are the only thing
-#: at notch height and they are all to the right of it.
-LABEL_RIGHT = 6.6
-TICKS_LEFT, TICKS_RIGHT = 7.6, 18.3
-ROW_TOP, ROW_PITCH = 6.75, 0.72
-
-#: The most gaps a column may have and still have them marked — see
-#: `_mark_holes`. Two, which picks out `script` and `red` and nothing else.
-MARKED_HOLES = 2
-
-
-def _col_x(index: int) -> float:
-    """The centre of attribute column *index*, evenly spread across the ticks."""
-    span = TICKS_RIGHT - TICKS_LEFT
-    return TICKS_LEFT + span * (index + 0.5) / len(HIT_ATTRS)
-
-
-def hits_fig() -> None:
-    """Eight results for one query, and the attribute they have in common."""
-    for stage in range(1, HITS_STAGES):
-        save(_hits_stage(stage), OUT, f"logo-hits.build{stage}.png", column=FULL_BLEED, tight=False)
-    save(_hits_stage(HITS_STAGES), OUT, "logo-hits.png", column=FULL_BLEED, tight=False)
-
-
-def _hits_stage(stage: int) -> plt.Figure:
-    """Draw the first *stage* steps (1-based, cumulative) of the hits figure."""
-    fig, ax = _canvas()
-
-    # ── stage 1: the query, and the eight things that came back ──────────────
-    # The search box is drawn because the argument is about a *query*: these
-    # eight are not a curated set of hard cases, they are what one ordinary
-    # search returned, in the order it returned them.
-    ax.add_patch(
-        FancyBboxPatch(
-            (TICKS_LEFT, 9.35),
-            7.0,
-            0.86,
-            boxstyle="round,pad=0,rounding_size=0.43",
-            facecolor="white",
-            edgecolor=SOFT,
-            linewidth=1.6,
-        )
-    )
-    ax.text(TICKS_LEFT + 0.42, 9.78, "Coke logo", ha="left", va="center", fontsize=17, color=INK)
-    ax.text(
-        TICKS_LEFT + 7.0 + 4 * LABEL_GAP,
-        9.78,
-        "8 results",
-        ha="left",
-        va="center",
-        fontsize=15,
-        color=SOFT,
-    )
-
-    for row, (name, _) in enumerate(HITS):
-        ax.text(LABEL_RIGHT, ROW_TOP - row * ROW_PITCH, name, ha="right", va="center", fontsize=16, color=INK)
-
-    # ── stage 2: what each of them actually has ──────────────────────────────
-    if stage >= 2:
-        for index, heading in enumerate(HIT_ATTRS):
-            ax.text(
-                _col_x(index),
-                ROW_TOP + 0.62,
-                heading,
-                ha="center",
-                va="bottom",
-                fontsize=15,
-                color=SOFT,
-                linespacing=1.15,
-            )
-        for row, (_, attrs) in enumerate(HITS):
-            y = ROW_TOP - row * ROW_PITCH
-            for index, heading in enumerate(HIT_ATTRS):
-                if heading not in attrs:
-                    continue
-                ax.text(_col_x(index), y, "●", ha="center", va="center", fontsize=17, color=INK)
-
-    # ── stage 3: the reading — every column has a hole in it ─────────────────
-    if stage >= HITS_STAGES:
-        _mark_holes(ax)
-    return fig
-
-
-def _mark_holes(ax: plt.Axes) -> None:
-    """Mark the gaps in the columns that come *closest* to being full.
-
-    Only those: `script` and `red` are the two attributes anybody would name if
-    asked what a Coke logo is, and each of them is missing from a result the
-    search returned as one. Marking every gap in every column would draw
-    thirty-odd crosses and say "this matrix is sparse", which is not the claim
-    — the claim is that the two columns you would have bet on have a hole too.
-    """
-    for index, heading in enumerate(HIT_ATTRS):
-        missing = [row for row, (_, attrs) in enumerate(HITS) if heading not in attrs]
-        if len(missing) > MARKED_HOLES:
-            continue
-        for row in missing:
-            ax.text(
-                _col_x(index),
-                ROW_TOP - row * ROW_PITCH,
-                "✗",
-                ha="center",
-                va="center",
-                fontsize=19,
-                color=RED,
-                fontweight="bold",
-            )
-    ax.text(
-        TICKS_LEFT,
-        ROW_TOP - (len(HITS) - 1) * ROW_PITCH - 0.95,
-        "no attribute is in all eight",
-        ha="left",
-        va="top",
-        fontsize=17,
-        color=RED,
-    )
-
-
-# ── figure 2: four jobs, and the four different answers they want ────────────
-
-#: How many stages `logo-jobs` reveals in: the six candidates in order; then
-#: one job's positives per stage, three of them nested and the fourth not.
-JOBS_STAGES = 5
-
-#: The candidates, ordered left to right by how unmistakably each *is* the
-#: mark. The order is a claim the figure makes and the slide defends: it is not
-#: the only defensible order, and it does not have to be — the argument is that
-#: **no single cut on it serves all four jobs**, which survives reordering.
-#:
-#: Written two lines deep and hung on **alternating ranks** below the axis,
-#: each on its own leader. Six labels sharing one rank get 2.1 units apiece —
-#: about nine characters — and "delivery truck" is fourteen, so a single rank
-#: printed them through one another. Two ranks double the pitch to 4.2 units,
-#: which every line here clears; the leader is what keeps a label bound to its
-#: own tick once it no longer sits directly under it.
-CANDIDATES = (
-    "a red\ndelivery truck",
-    "a rival’s\nswash script",
-    "“Coke” set\nin Arial",
-    "Diet Coke",
-    "a red disc,\ntoo far to read",
-    "the wordmark,\nto spec",
-)
-
-#: Each job, as (name, the candidate indices it counts as a **positive**, is it
-#: a cut on this axis at all). The first three are nested — one slider, three
-#: settings, which is the Inclusion knob of Part 3 wearing a different hat. The
-#: fourth is the point of the slide: trademark enforcement wants the passing-off
-#: cases and does *not* want the genuine mark, so its positives are exactly the
-#: items every other job throws away. It is not a looser or tighter cut. It is a
-#: different concept that the same three words also name.
-JOBS = (
-    ("brand compliance", (5,), True),
-    ("sponsorship seconds", (3, 4, 5), True),
-    ("archive retrieval", (0, 1, 2, 3, 4, 5), True),
-    ("trademark enforcement", (1, 2), False),
-)
-
-AXIS_LEFT, AXIS_RIGHT, AXIS_Y = 6.6, 18.3, 9.55
-BAR_TOP, BAR_PITCH, BAR_H = 5.85, 1.32, 0.5
-
-#: How far below the axis each rank of candidate labels hangs. The axis starts
-#: right of `NOTCH_X1` for the same reason the calibration panels do — a top
-#: row that spans the drawing cannot be panned out of the title notch — and
-#: the leftmost label is what actually sets `AXIS_LEFT`, since it is centred
-#: half a column left of the first tick.
-LABEL_RANKS = (0.34, 1.42)
-
-
-def _cand_x(index: int) -> float:
-    """The centre of candidate *index* on the axis."""
-    span = AXIS_RIGHT - AXIS_LEFT
-    return AXIS_LEFT + span * (index + 0.5) / len(CANDIDATES)
-
-
-def jobs_fig() -> None:
-    """One phrase, four jobs, and the four different sets they are asking for."""
-    for stage in range(1, JOBS_STAGES):
-        save(_jobs_stage(stage), OUT, f"logo-jobs.build{stage}.png", column=FULL_BLEED, tight=False)
-    save(_jobs_stage(JOBS_STAGES), OUT, "logo-jobs.png", column=FULL_BLEED, tight=False)
-
-
-def _jobs_stage(stage: int) -> plt.Figure:
-    """Draw the first *stage* steps (1-based, cumulative) of the jobs figure."""
-    fig, ax = _canvas()
-
-    # ── stage 1: the candidates, in order ────────────────────────────────────
-    # The axis is indented from the left rather than spanning the drawing: a
-    # top row that spans cannot be panned out of the title notch, and the right
-    # margin is what pays for it (`slides/STYLE.md`).
-    ax.annotate(
-        "",
-        xy=(AXIS_RIGHT, AXIS_Y),
-        xytext=(AXIS_LEFT, AXIS_Y),
-        arrowprops={"arrowstyle": "-|>", "color": INK, "linewidth": 1.8, "shrinkA": 0, "shrinkB": 0},
-    )
-    ax.text(
-        AXIS_RIGHT,
-        AXIS_Y + 0.36,
-        "more unmistakably the mark",
-        ha="right",
-        va="bottom",
-        fontsize=15,
-        color=SOFT,
-    )
-    for index, name in enumerate(CANDIDATES):
-        x, drop = _cand_x(index), LABEL_RANKS[index % len(LABEL_RANKS)]
-        ax.plot([x, x], [AXIS_Y - 0.16, AXIS_Y + 0.16], color=INK, linewidth=1.8, zorder=3)
-        # The leader runs from under the tick to a label gap above the label,
-        # so the label's nearest ink is its own leader and not its neighbour.
-        ax.plot(
-            [x, x],
-            [AXIS_Y - 0.16, AXIS_Y - drop + LABEL_GAP],
-            color=RULE,
-            linewidth=1.2,
-            zorder=1,
-        )
-        ax.text(x, AXIS_Y - drop, name, ha="center", va="top", fontsize=15, color=INK, linespacing=1.2)
-
-    # ── stages 2-5: one job's positives per stage ────────────────────────────
-    span = (AXIS_RIGHT - AXIS_LEFT) / len(CANDIDATES)
-    for job, (name, keeps, is_cut) in enumerate(JOBS):
-        if stage < job + 2:
-            continue
-        y = BAR_TOP - job * BAR_PITCH
-        colour = INK if is_cut else RED
-        # A wash across the whole axis first, so the bar reads as a selection
-        # *out of* the six rather than as a bar chart of some quantity.
-        ax.add_patch(
-            Rectangle(
-                (AXIS_LEFT, y - BAR_H / 2),
-                AXIS_RIGHT - AXIS_LEFT,
-                BAR_H,
-                facecolor=NEUTRAL_FILL,
-                edgecolor=RULE,
-                linewidth=1.0,
-                zorder=1,
-            )
-        )
-        left = _cand_x(min(keeps)) - span / 2
-        ax.add_patch(
-            Rectangle(
-                (left, y - BAR_H / 2),
-                span * len(keeps),
-                BAR_H,
-                facecolor=colour,
-                edgecolor="none",
-                zorder=2,
-            )
-        )
-        ax.text(AXIS_LEFT - 4 * LABEL_GAP, y, name, ha="right", va="center", fontsize=16, color=colour)
-        if not is_cut:
-            ax.text(
-                AXIS_RIGHT,
-                y - BAR_H / 2 - 3 * LABEL_GAP,
-                "not a looser cut — the sign has flipped",
-                ha="right",
-                va="top",
-                fontsize=16,
-                color=RED,
-            )
+    for index in range(stage + 1):
+        _draw(ax, index)
     return fig
 
 
 def main() -> None:
-    hits_fig()
-    jobs_fig()
+    for stage in range(1, STAGES):
+        save(_stage(stage), OUT, f"logo-grid.build{stage}.png", column=FULL_BLEED, tight=False)
+    save(_stage(STAGES), OUT, "logo-grid.png", column=FULL_BLEED, tight=False)
 
 
 if __name__ == "__main__":
