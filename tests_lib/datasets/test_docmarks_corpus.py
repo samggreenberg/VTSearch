@@ -62,6 +62,7 @@ def mods(_on_path):
         "roster": importlib.import_module("roster"),
         "shortlist": importlib.import_module("shortlist"),
         "audit": importlib.import_module("audit_to_corrections"),
+        "slate": importlib.import_module("make_audit_slate"),
         "report": importlib.import_module("make_report"),
     }
 
@@ -718,6 +719,224 @@ class TestMembershipAudit:
         row = {"class_id": "spods/a", "page_ids": classes["spods/a"]["page_ids"], "verdict": "maybe"}
         _changes, problems = mods["audit"].apply_membership(pages, classes, [row])
         assert "must be 'ok' or comma-separated indices" in problems[0]
+
+
+class TestMergeSlateOrdering:
+    """The slate's numbering is what the reviewer's answer refers to."""
+
+    def test_seriation_puts_near_identical_classes_next_to_each_other(self, mods):
+        # Three tight pairs, scrambled: 0~4, 1~3, 2~5.
+        far = 0.9
+        d = np.full((6, 6), far)
+        for a, b in ((0, 4), (1, 3), (2, 5)):
+            d[a, b] = d[b, a] = 0.01
+        np.fill_diagonal(d, 0.0)
+        order = mods["slate"].seriate(d)
+        assert sorted(order) == list(range(6))
+        adjacent = {frozenset(pair) for pair in zip(order, order[1:])}
+        for pair in ((0, 4), (1, 3), (2, 5)):
+            assert frozenset(pair) in adjacent, f"{pair} was split by the ordering"
+
+    def test_seriation_is_deterministic_including_ties(self, mods):
+        # An all-equal matrix is nothing but ties; a re-render must still
+        # produce the same numbering or a half-finished merges.txt goes stale.
+        d = np.full((8, 8), 0.5)
+        np.fill_diagonal(d, 0.0)
+        assert mods["slate"].seriate(d) == mods["slate"].seriate(d.copy())
+
+    def test_seriation_of_an_empty_or_single_slate(self, mods):
+        assert mods["slate"].seriate(np.zeros((0, 0))) == []
+        assert mods["slate"].seriate(np.zeros((1, 1))) == [0]
+
+    def test_near_pairs_are_the_closest_ones_nearest_first(self, mods):
+        d = np.array([[0.0, 0.3, 0.1], [0.3, 0.0, 0.2], [0.1, 0.2, 0.0]])
+        assert mods["slate"].near_pairs(d, 2) == [(0.1, 0, 2), (0.2, 1, 2)]
+
+
+class TestMergeAnswerParsing:
+    def test_a_group_is_a_line_of_indices(self, mods):
+        groups, reviewed, problems = mods["audit"].parse_merge_groups("3 8 12\n", 20)
+        assert not problems and reviewed is False
+        assert [g["indices"] for g in groups] == [[3, 8, 12]]
+
+    def test_commas_and_trailing_notes_are_accepted(self, mods):
+        groups, _reviewed, problems = mods["audit"].parse_merge_groups("3, 8   # same elephant, blue and red\n", 20)
+        assert not problems
+        assert groups[0]["indices"] == [3, 8]
+        assert groups[0]["note"] == "same elephant, blue and red"
+
+    def test_overlapping_groups_are_unioned_not_refused(self, mods):
+        # "3 8" and "8 12" are two observations of one equivalence class. A
+        # reviewer writing the same truth twice is redundant, not contradictory.
+        groups, _reviewed, problems = mods["audit"].parse_merge_groups("3 8\n8 12\n", 20)
+        assert not problems
+        assert [g["indices"] for g in groups] == [[3, 8, 12]]
+
+    def test_comments_and_blank_lines_are_ignored(self, mods):
+        groups, reviewed, problems = mods["audit"].parse_merge_groups("# a header\n\n   \n1 2\n", 5)
+        assert not problems and [g["indices"] for g in groups] == [[1, 2]]
+
+    def test_reviewed_all_is_a_line_of_its_own(self, mods):
+        _groups, reviewed, problems = mods["audit"].parse_merge_groups("REVIEWED-ALL\n", 5)
+        assert reviewed is True and not problems
+
+    @pytest.mark.parametrize(
+        "line, fragment",
+        [
+            ("99 1", "outside the slate"),
+            ("foo 2", "not a slate index"),
+            ("4", "fewer than two distinct classes"),
+            ("3 3", "fewer than two distinct classes"),
+        ],
+    )
+    def test_a_typo_is_refused_never_guessed_at(self, mods, line, fragment):
+        # Every one of these silently reinterpreted would write a permanent
+        # merge between classes nobody looked at.
+        groups, _reviewed, problems = mods["audit"].parse_merge_groups(line + "\n", 6)
+        assert groups == []
+        assert fragment in problems[0]
+
+
+class TestMergeVerdictCompilation:
+    def _index(self, n=6, near=((0, 1, 0.01), (2, 3, 0.02), (4, 5, 0.03))):
+        return {
+            "classes": [{"index": i, "class_id": f"spods/c{i}", "n_instances": 5} for i in range(n)],
+            "near_pairs": [
+                {"rank": r, "left_index": a, "right_index": b, "distance": d} for r, (a, b, d) in enumerate(near)
+            ],
+        }
+
+    def test_a_group_compiles_to_a_star_not_a_clique(self, mods):
+        # Sameness is transitive and apply_confusable merges outright, so n-1
+        # rows state the whole group; n(n-1)/2 would just restate it.
+        groups, reviewed, _ = mods["audit"].parse_merge_groups("0 1 2\n", 6)
+        rows, problems = mods["audit"].merge_verdicts(self._index(), groups, reviewed)
+        assert not problems
+        assert [(r["left_class_id"], r["right_class_id"]) for r in rows] == [
+            ("spods/c0", "spods/c1"),
+            ("spods/c0", "spods/c2"),
+        ]
+
+    def test_without_reviewed_all_only_merges_are_recorded(self, mods):
+        groups, reviewed, _ = mods["audit"].parse_merge_groups("0 1\n", 6)
+        rows, _problems = mods["audit"].merge_verdicts(self._index(), groups, reviewed)
+        assert {r["verdict"] for r in rows} == {"same"}
+
+    def test_reviewed_all_separates_the_appendix_pairs_and_only_those(self, mods):
+        # The closed world covers what the reviewer was actually shown: the
+        # near-pair sheets. Pairs that live only at the far end of the ranking
+        # were never compared and stay unadjudicated.
+        groups, reviewed, _ = mods["audit"].parse_merge_groups("REVIEWED-ALL\n", 6)
+        rows, _problems = mods["audit"].merge_verdicts(self._index(), groups, reviewed)
+        different = {(r["left_class_id"], r["right_class_id"]) for r in rows if r["verdict"] == "different"}
+        assert different == {("spods/c0", "spods/c1"), ("spods/c2", "spods/c3"), ("spods/c4", "spods/c5")}
+        assert ("spods/c0", "spods/c5") not in different
+
+    def test_a_merged_near_pair_is_never_also_separated(self, mods):
+        # save_adjudications refuses a pair ruled both ways outright, so this is
+        # a correctness gate rather than tidiness: without it, merging an
+        # appendix pair on a REVIEWED-ALL slate would abort the whole apply.
+        groups, reviewed, _ = mods["audit"].parse_merge_groups("0 1\nREVIEWED-ALL\n", 6)
+        rows, _problems = mods["audit"].merge_verdicts(self._index(), groups, reviewed)
+        ruled = {(r["left_class_id"], r["right_class_id"]): r["verdict"] for r in rows}
+        assert ruled[("spods/c0", "spods/c1")] == "same"
+        assert list(ruled.values()).count("same") == 1
+        assert ("spods/c1", "spods/c0") not in ruled
+
+    def test_transitively_merged_classes_do_not_separate_each_other(self, mods):
+        # 0~1 and 1~2 makes {0,1,2} one class, so an appendix pair (0,2) is
+        # inside the group even though no line named that pair.
+        index = self._index(near=((0, 2, 0.01),))
+        groups, reviewed, _ = mods["audit"].parse_merge_groups("0 1\n1 2\nREVIEWED-ALL\n", 6)
+        rows, _problems = mods["audit"].merge_verdicts(index, groups, reviewed)
+        assert [r["verdict"] for r in rows] == ["same", "same"]
+
+    def test_every_same_row_is_emitted_before_every_different_row(self, mods):
+        # apply_confusable merges as it goes and follows the chain afterwards;
+        # a separation pinned first would name a class about to stop existing.
+        groups, reviewed, _ = mods["audit"].parse_merge_groups("0 1\nREVIEWED-ALL\n", 6)
+        rows, _problems = mods["audit"].merge_verdicts(self._index(), groups, reviewed)
+        verdicts = [r["verdict"] for r in rows]
+        assert verdicts == sorted(verdicts, key=lambda v: v != "same")
+
+    def test_pairs_that_name_the_same_two_post_merge_classes_are_stated_once(self, mods):
+        # Once 0 and 1 are one class, the appendix pairs (0, 2) and (1, 2) are
+        # one statement about one pair of classes. Emitting both prints a
+        # contradiction-shaped log for a decision that was made once.
+        index = self._index(near=((0, 1, 0.01), (0, 2, 0.02), (1, 2, 0.03)))
+        groups, reviewed, _ = mods["audit"].parse_merge_groups("0 1\nREVIEWED-ALL\n", 6)
+        rows, _problems = mods["audit"].merge_verdicts(index, groups, reviewed)
+        different = [r for r in rows if r["verdict"] == "different"]
+        assert len(different) == 1
+        assert "rank 1" in different[0]["notes"], "the nearest of the redundant pairs is the one kept"
+
+    def test_an_index_missing_from_the_slate_is_reported(self, mods):
+        index = self._index()
+        index["classes"] = index["classes"][:3]
+        rows, problems = mods["audit"].merge_verdicts(index, [{"indices": [0, 5], "note": ""}], False)
+        assert rows == []
+        assert "not on the slate" in problems[0]
+
+
+class TestMergeSlateEndToEnd:
+    """The slate is an input format, not a second path through the ground truth."""
+
+    def _corpus(self, mods):
+        pages = [
+            _page(mods, f"spods/{c}{i}", "spods", [("logo", (0, 0, 200, 120), f"spods/{c}", "clustered")])
+            for c in "abcd"
+            for i in range(3)
+        ]
+        classes = {
+            f"spods/{c}": {
+                "class_id": f"spods/{c}",
+                "n_instances": 3,
+                "page_ids": [f"spods/{c}{i}" for i in range(3)],
+                "audit": {"membership_verified": False, "rejected_page_ids": []},
+            }
+            for c in "abcd"
+        }
+        return pages, classes
+
+    def _index(self, near):
+        return {
+            "classes": [{"index": i, "class_id": f"spods/{c}", "n_instances": 3} for i, c in enumerate("abcd")],
+            "near_pairs": [
+                {"rank": r, "left_index": a, "right_index": b, "distance": 0.01 * (r + 1)}
+                for r, (a, b) in enumerate(near)
+            ],
+        }
+
+    def test_a_slate_answer_merges_and_separates_through_the_pairwise_applier(self, mods):
+        pages, classes = self._corpus(mods)
+        groups, reviewed, _ = mods["audit"].parse_merge_groups("0 1\nREVIEWED-ALL\n", 4)
+        rows, _ = mods["audit"].merge_verdicts(self._index([(0, 1), (2, 3)]), groups, reviewed)
+        _changes, problems, separations, merges = mods["audit"].apply_confusable(pages, classes, rows)
+        assert not problems
+        assert "spods/b" not in classes
+        assert classes["spods/a"]["n_instances"] == 6
+        assert len(merges) == 1 and len(separations) == 1
+        assert classes["spods/c"]["distinct_from"] == ["spods/d"]
+
+    def test_the_resulting_adjudications_never_rule_a_pair_both_ways(self, mods, tmp_path):
+        # save_adjudications raises on a conflicting pair by design. Compiling a
+        # slate that merges one of its own appendix pairs must not trip it.
+        pages, classes = self._corpus(mods)
+        groups, reviewed, _ = mods["audit"].parse_merge_groups("0 1\n2 3\nREVIEWED-ALL\n", 4)
+        rows, _ = mods["audit"].merge_verdicts(self._index([(0, 1), (2, 3), (0, 2)]), groups, reviewed)
+        _c, _p, separations, merges = mods["audit"].apply_confusable(pages, classes, rows)
+        mods["cluster"].save_adjudications(merges, separations, tmp_path / "adjudications.json")
+        same, diff = mods["cluster"].load_adjudications(tmp_path / "adjudications.json")
+        assert not (set(map(frozenset, same)) & set(map(frozenset, diff)))
+        assert len(same) == 2 and len(diff) == 1
+
+    def test_separations_are_keyed_on_page_ids_so_they_survive_a_recluster(self, mods):
+        pages, classes = self._corpus(mods)
+        groups, reviewed, _ = mods["audit"].parse_merge_groups("REVIEWED-ALL\n", 4)
+        rows, _ = mods["audit"].merge_verdicts(self._index([(0, 1)]), groups, reviewed)
+        _c, _p, separations, _m = mods["audit"].apply_confusable(pages, classes, rows)
+        assert separations[0]["left_page_id"] == "spods/a0"
+        assert separations[0]["right_page_id"] == "spods/b0"
 
 
 # -------------------------------------------------------------------- tiers
