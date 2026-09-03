@@ -308,3 +308,42 @@ a hardcoded `a100` wearing a query, which sent the #3299 build into a 24-hour
 queue with 109 V100s idle. It now reads `AllocTRES` where `GresUsed` is absent
 and refuses to count a node whose usage it cannot read; see
 [the lesson](../lessons/2026-08-28-the-gpu-picker-reported-every-gpu-free.md).
+
+## Considering a new class for `vg_scale` (#3588)
+
+Three scripts, in the order they answer questions. None of them changes
+`SCALE_CLASSES`; they produce the evidence for doing so.
+
+```bash
+python shortlist_scale_classes.py --compact --floor 100 --n 80   # what VG supports
+python coco_folds.py --classes cup,bowl --out folds.json         # what the name MEANS
+python make_class_slate.py --supply-only                         # what a build would get
+python make_class_slate.py --out .../slates                      # the review material
+python import_slates.py --slates .../slates                      # datasets + empty detectors
+```
+
+**`coco_folds.py` is the one that is easy to skip and should not be.** It asks,
+over the ~51k images that are both VG and COCO, which VG names land on a COCO
+class's boxes (fold-in: what a reviewer must accept) and which COCO class sits
+under a VG box of a given name (fold-out: what the VG name denotes). Run against
+`book` it prints `magazine` and `magazines` — i.e. it would have caught the split
+that cost the `book` pass 49 verdicts, before a human saw one image.
+
+Its fold-out column doubles as a **definition-risk score**: the share of a name's
+boxes landing on *no* COCO class, on images COCO annotated exhaustively. The
+mechanical floor is ~7-15%; `book`, the class that actually broke, scores 43%.
+Anything near that is a class whose rule has to be settled before review, not
+during it.
+
+That rule then travels in `pile_config.SCALE_CLASS_RULES`, whose value is the
+**dataset and detector name** — the only string the app shows while voting. A
+rule in a manifest is a rule the reviewer never reads.
+
+`make_class_slate.py` differs from `make_audit_slate.py` in what it can assume:
+the audit slate reads a class the pickle already holds, while a candidate has
+neither banded positives nor a checked negative pool. Positives come from the VG
+source through the loader's own `band_candidates`, so the banding is the one a
+build would use; negatives come from the built pickle's shared pool, **minus any
+image that holds the candidate**. That subtraction is not hygiene: the shared
+pool was drawn as "holds none of the current twelve", so 34% of it holds at least
+one of the thirteen candidates, and the count is the rebuild cost (#3604).

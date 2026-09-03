@@ -170,14 +170,23 @@ def band_candidates(
     labels: dict[int, dict[str, list[list[float]]]],
     box_dims: dict[int, tuple[int, int]],
     unbanded: set[tuple[int, str]],
+    classes: tuple[str, ...] | None = None,
 ) -> tuple[dict[str, dict[str, list[int]]], dict[tuple[int, str], list[list[float]]], list[int]]:
     """Sort every image into ``(class, band)`` supply, or into the clean pool.
 
     Returns ``(supply, boxes_for, clean)``. An image with no instance of any
     class in C joins ``clean`` -- unless a reviewer said one *is* present without
     drawing it, which makes it neither a positive nor a true negative.
+
+    *classes* defaults to :data:`pile_config.SCALE_CLASSES`, i.e. the built
+    dataset. It is a parameter so a class being *considered* for C can be banded
+    by this exact rule -- the scatter filter and the band edges included --
+    rather than by a second implementation in the slate builder that would be
+    free to drift from it (#3588). The default keeps every existing caller
+    byte-identical.
     """
-    supply: dict[str, dict[str, list[int]]] = {c: {b: [] for b in pc.BOX_BANDS} for c in pc.SCALE_CLASSES}
+    classes = tuple(classes) if classes is not None else pc.SCALE_CLASSES
+    supply: dict[str, dict[str, list[int]]] = {c: {b: [] for b in pc.BOX_BANDS} for c in classes}
     boxes_for: dict[tuple[int, str], list[list[float]]] = {}
     clean: list[int] = []
 
@@ -186,7 +195,7 @@ def band_candidates(
         area = float(W * H)
         if not by_name:
             # Only a true negative for every class in C may join the shared pool.
-            if not any((iid, c) in unbanded for c in pc.SCALE_CLASSES):
+            if not any((iid, c) in unbanded for c in classes):
                 clean.append(iid)
             continue
         for name, bs in by_name.items():
