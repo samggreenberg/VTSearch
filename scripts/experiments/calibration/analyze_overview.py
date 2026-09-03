@@ -52,11 +52,12 @@ from __future__ import annotations
 
 import argparse
 import csv
-import glob
 import math
 import os
 from collections import defaultdict
 from pathlib import Path
+
+from _cells_paths import main_frame_files
 
 STEPS = (20, 50, 150)
 DEEP = 150
@@ -202,7 +203,7 @@ def main() -> int:
     args = ap.parse_args()
 
     cells = Path(args.exp) / "results" / "cells"
-    paths = [p for p in sorted(glob.glob(str(cells / "task_*.csv"))) if "__" not in Path(p).name]
+    paths = main_frame_files(cells)
     rows: list[dict] = []
     unreadable: list[str] = []
     for path in paths:

@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from _cells_io import main_frame_files
+from _cells_io import load_cells
 
 # dataviz palette, validated (categorical slots 1-2; diverging blue<->red)
 BLUE, ORANGE, RED = "#2a78d6", "#eb6834", "#d03b3b"
@@ -31,8 +31,7 @@ rng = np.random.default_rng(2846)
 
 
 def load() -> pd.DataFrame:
-    files = main_frame_files(RESULTS / "cells")
-    df = pd.concat([pd.read_csv(p) for p in files], ignore_index=True)
+    df, _ = load_cells(RESULTS / "cells")
     df["gmm_variant"] = df["gmm_variant"].fillna("")
     df["arm"] = df["dataset"] + "/" + df["embedder"] + "/" + df["style"]
     df["n_votes"] = df["n_good"] + df["n_bad"]

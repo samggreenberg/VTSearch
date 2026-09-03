@@ -36,10 +36,11 @@ from __future__ import annotations
 
 import argparse
 import csv
-import glob
 import os
 from collections import defaultdict
 from pathlib import Path
+
+from _cells_paths import main_frame_files
 
 from figures_overview import BANDS, MODE_COLORS, band_of, mean_se
 
@@ -58,15 +59,13 @@ METRICS = {
 def load_runs(exp: str, metric: str) -> dict[tuple, list[tuple[int, float]]]:
     """``(mode, category, seed) -> [(t, value), ...]`` sorted by t.
 
-    Side frames (``task_*__sweep.csv`` and friends) are excluded by the ``__``
-    test, the same guard ``_cells_io.SIDE_FRAME_SUFFIXES`` exists to centralise:
-    they are separate long-format tables and concatenating them yields a ragged
-    frame whose extra rows enter every aggregate silently.
+    Side frames (``task_*__sweep.csv`` and friends) are excluded by
+    :func:`_cells_paths.main_frame_files`, which every reader in this directory
+    goes through: they are separate long-format tables and concatenating one
+    yields a ragged frame whose extra rows enter every aggregate silently.
     """
     runs: dict[tuple, list[tuple[int, float]]] = defaultdict(list)
-    for path in sorted(glob.glob(str(Path(exp) / "results" / "cells" / "task_*.csv"))):
-        if "__" in Path(path).name:
-            continue
+    for path in main_frame_files(Path(exp) / "results" / "cells"):
         try:
             with open(path, newline="") as fh:
                 for r in csv.DictReader(fh):

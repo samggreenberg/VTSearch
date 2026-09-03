@@ -29,7 +29,7 @@ common.setup_env()
 
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
-from _cells_io import assert_one_opening, main_frame_files, side_frame_files  # noqa: E402
+from _cells_io import describe_load, load_cells, side_frame_files  # noqa: E402
 
 import experiment_config as cfg  # noqa: E402
 
@@ -50,14 +50,12 @@ def _arm(row) -> str:
 
 
 def load_all(cells_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
-    main_files = main_frame_files(cells_dir)
+    main, prov = load_cells(cells_dir, where="analyze.py")
     sweep_files = side_frame_files(cells_dir, "__sweep")
-    main = pd.concat([pd.read_csv(p) for p in main_files], ignore_index=True) if main_files else pd.DataFrame()
     sweep = pd.concat([pd.read_csv(p) for p in sweep_files], ignore_index=True) if sweep_files else pd.DataFrame()
     if not main.empty:
         main["arm"] = main.apply(_arm, axis=1)
-    assert_one_opening(main, "analyze.py")
-    common.log(f"loaded {len(main)} main rows from {len(main_files)} cells, {len(sweep)} sweep rows")
+    common.log(f"loaded {describe_load(prov)}, {len(sweep)} sweep rows")
     return main, sweep
 
 

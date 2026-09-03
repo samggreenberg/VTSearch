@@ -43,7 +43,8 @@ a report's committed-figure requirement points at.
 | Files | What they are |
 |---|---|
 | `common.py`, `experiment_config.py` | Env/`sys.path` setup (call `setup_env()` before importing anything under `vtscore`) and the pre-registered grid. |
-| `_cells_io.py` | Cell-pickle I/O, main-vs-side frame discovery (`SIDE_FRAME_SUFFIXES`), the opening assertion, and `load_arm` — the per-arm loader six callers across five studies use (it lived in `analyze_spikes.py` until #3409, and that module re-exports the name). |
+| `_cells_paths.py` | Which files in a `cells/` directory are a cell's **main** frame (`main_frame_files`, `side_frame_files`, `SIDE_FRAME_SUFFIXES`). Import-free on purpose — no pandas — so the csv-and-stdlib figure scripts share the rule with the pandas analyzers instead of each re-typing it. |
+| `_cells_io.py` | Cell-pickle I/O, the one cell reader (`load_cells` → `(frame, provenance)`, and `describe_load` to print it), the opening assertion, and `load_arm` — the per-arm loader six callers across five studies use (it lived in `analyze_spikes.py` until #3409, and that module re-exports the name). Re-exports `_cells_paths`' discovery functions. |
 | `prepare_data.py`, `run_cells.py`, `analyze.py`, `launch_all.sh`, `launch_cells.sh` | The three-stage pipeline (#2781). Every study launcher is a wrapper that flips pre-registered knobs over these and re-points `CALIB_EXP`. |
 | `noop.py` | The analyze step for a launcher whose analysis runs separately. |
 | `curves.py`, `selftest_curves.py` | The standard quality-over-clicks figure pair every simulated-user study owes. One implementation; do not write it again. |
@@ -152,12 +153,32 @@ Each analyzer has a self-test that runs it on fabricated cells with a planted
 answer, so a sign error is caught before an overnight run rather than after:
 `python selftest_analyze_ab.py`, `python selftest_analyze_cut.py`.
 
-Every analyzer discovers its input through `_cells_io.main_frame_files` /
-`side_frame_files` rather than globbing `task_*.csv` itself. That glob also
-matches the side frames (`__sweep`, `__cutdiag`, `__cutincl`), which are separate
+Every analyzer discovers *and reads* its input through `_cells_io`:
+`main_frame_files` / `side_frame_files` for discovery, `load_cells` for the read.
+Nothing globs `task_*.csv` itself. A bare glob also matches the side frames
+(`__sweep`, `__cutdiag`, `__cutincl`, `__picks`, `__fitq`), which are separate
 long-format tables — concatenating one into the main frame yields a ragged
-DataFrame whose extra rows enter every aggregate silently. Add a new side frame's
-suffix to `SIDE_FRAME_SUFFIXES` and every analyzer is correct by construction.
+DataFrame whose extra rows enter every aggregate silently.
+
+`main_frame_files` excludes side frames **structurally**, on the `__` in the
+stem, not on a list of known suffixes. The list shape is one a human has to
+remember to extend and twice did not: `__picks` (#3267) and `__fitq` (#3329)
+were both added to `run_cells.py` without it, and `bench_cells.py` — which had
+its own private copy of the list — was reading the per-click pick log into four
+bench analyzers' metric frames as a result. `SIDE_FRAME_SUFFIXES` survives as
+the registry `side_frame_files` reads and as documentation; a meta-test holds it
+to what `run_cells.py` actually writes, and holds every script in this directory
+to going through `_cells_io`.
+
+`load_cells(cells_dir)` returns `(frame, provenance)` and is the only reader.
+Eight analyzers used to have their own, diverging on the three guards a grid run
+needs and nothing else — zero-byte skip, unreadable catch, header-only count —
+with four of the eight having none of them. The provenance names all three
+separately, because they are different facts: a zero-byte or unreadable cell is
+data loss, while a header-only cell is a *starved* cell (the simulator emits no
+row before one Good and one Bad vote coexist), which is a legitimate result and
+the extreme of the regime several of these studies are about. `describe_load`
+formats them into one line so two reports mean the same thing by "N of M cells".
 
 `launch_all.sh` points `VTSEARCH_DATA_DIR` at the Max-Patch datadir so the shared
 embeddings pickles and demo data are read in place (the `siglip_l` pickles land

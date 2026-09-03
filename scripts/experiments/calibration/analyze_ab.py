@@ -38,7 +38,8 @@ common.setup_env()
 
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
-from _cells_io import assert_one_opening, main_frame_files  # noqa: E402
+from _cells_io import describe_load  # noqa: E402
+from _cells_io import load_cells as _load_cells  # noqa: E402
 
 #: Vote-count windows the comparison aggregates over.  Below 6 votes the blend
 #: is pure GMM (full authority), 6-20 is the ramp, above 20 it is pure
@@ -84,11 +85,9 @@ def load_base_rows(results_dir: Path, label: str) -> pd.DataFrame:
     *operated at* counts — that is the threshold that drove the next Hard pick.
     """
     cells = results_dir / "cells"
-    files = main_frame_files(cells)
-    if not files:
-        return pd.DataFrame()
-    df = pd.concat([pd.read_csv(p) for p in files], ignore_index=True)
-    assert_one_opening(df, f"analyze_ab.py ({label})")
+    df, prov = _load_cells(cells, where=f"analyze_ab.py ({label})")
+    if df.empty:
+        return df
     if "gmm_variant" in df.columns:
         df["gmm_variant"] = df["gmm_variant"].fillna("")
         df = df[df["gmm_variant"] == ""]
@@ -96,7 +95,7 @@ def load_base_rows(results_dir: Path, label: str) -> pd.DataFrame:
     df["arm"] = df["dataset"] + "/" + df["embedder"] + "/" + df["style"]
     df["n_votes"] = df["n_good"] + df["n_bad"]
     df["run"] = label
-    common.log(f"{label}: {len(df)} base rows from {len(files)} cells ({results_dir})")
+    common.log(f"{label}: {len(df)} base rows; {describe_load(prov)} ({results_dir})")
     return df
 
 

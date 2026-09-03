@@ -9,7 +9,9 @@ them or a table and a figure can disagree about the same claim:
 
 * **what counts as a loaded cell** — a header-only CSV is a *starved* cell (the
   run never found a positive, so no row was ever emitted), not a corrupt one,
-  and it must be counted rather than silently skipped.
+  and it must be counted rather than silently skipped.  That reading is
+  `_cells_io.load_cells`'; this module only adds the bench study's own
+  `embedder_suffix` tagging on top of it.
 * **how an arm-vs-arm difference is measured** — paired on (category, seed),
   with a standard error, so the report can say which differences the sample
   actually resolves.
@@ -21,52 +23,27 @@ from pathlib import Path
 
 import pandas as pd
 
-from _cells_io import assert_one_opening
+from _cells_io import describe_load
+from _cells_io import load_cells as _load_cells
 
 #: Identifies one run of the loop: a (dataset, embedder, category, seed) cell.
 CELL_KEY = ["dataset", "embedder", "category", "seed"]
-_SIDECARS = ("sweep", "cutdiag", "cutincl")
-
-
-def cell_files(results: Path) -> list[Path]:
-    return sorted(f for f in (results / "cells").glob("task_*.csv") if not any(k in f.name for k in _SIDECARS))
 
 
 def load_cells(results: Path, embedder_suffix: str = "", quiet: bool = False) -> tuple[pd.DataFrame, dict]:
     """Load a run's per-step rows plus a provenance dict of what was dropped.
 
     *embedder_suffix* tags an arm that differs from its twin by something the
-    row itself does not record — the binary-voting run is `dinov3_patch` in
+    row itself does not record - the binary-voting run is `dinov3_patch` in
     every column, and only the run it came from says no box was drawn.
     """
-    files = cell_files(Path(results))
-    frames, empty, unreadable = [], [], []
-    for f in files:
-        try:
-            df = pd.read_csv(f)
-        except Exception as exc:  # noqa: BLE001 — a truncated cell is data loss to report, not a crash
-            unreadable.append((f.name, repr(exc)[:60]))
-            continue
-        if df.empty:
-            empty.append(f.name)
-            continue
-        frames.append(df)
-    out = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
-    assert_one_opening(out, f"bench_cells.load_cells({results})")
+    results = Path(results)
+    out, prov = _load_cells(results / "cells", where=f"bench_cells.load_cells({results})")
     if embedder_suffix and not out.empty:
         out["embedder"] = out["embedder"] + embedder_suffix
-    prov = {
-        "results": str(results),
-        "files_found": len(files),
-        "with_data": len(frames),
-        "header_only": empty,
-        "unreadable": unreadable,
-    }
+    prov["results"] = str(results)
     if not quiet:
-        print(
-            f"  {results}: {len(files)} cell files, {len(frames)} with data, "
-            f"{len(empty)} header-only (starved), {len(unreadable)} unreadable"
-        )
+        print(f"  {results}: {describe_load(prov)}")
     return out, prov
 
 

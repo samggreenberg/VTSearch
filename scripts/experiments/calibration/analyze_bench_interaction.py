@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 
 import pandas as pd
+from _cells_io import describe_load
 from bench_cells import load_cells, paired_contrasts
 
 BINARY_SUFFIX = " (binary)"
@@ -49,10 +50,7 @@ def main() -> int:
     emit("BINARY vs BOXES - the interaction axis, isolated")
     emit("=" * 110)
     for prov in (prov_b, prov_x):
-        emit(
-            f"{prov['results']}: {prov['files_found']} cells, {prov['with_data']} with data, "
-            f"{len(prov['header_only'])} starved, {len(prov['unreadable'])} unreadable"
-        )
+        emit(f"{prov['results']}: {describe_load(prov)}")
     starved_b = {n for n in prov_b["header_only"]}
     emit(f"starved cells in the binary arm: {sorted(starved_b)}")
 
