@@ -1075,9 +1075,11 @@ server-tier set is shared; everything else lives in
 Background threads spawned from a request handler propagate the user via the
 `vtsearch.auth.thread_user(...)` context manager (which snapshots and restores
 the prior thread-local automatically), so per-user writes — autopilot toggles,
-sync-source exports — land in the right file. Legacy single-file
-`data/settings.json` files that pre-date the split are migrated to the default
-user's file on first load.
+sync-source exports — land in the right file. A single-file
+`data/settings.json` that pre-dates the split is **not** migrated: its
+per-user keys simply have no effect where they sit, and the file is left as
+written (the one exception is the Auto-Find trio, which the built-in `default`
+user reads through to — see [Deployment](DEPLOYMENT.md#settings-file-schema)).
 
 ---
 

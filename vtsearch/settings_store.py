@@ -308,6 +308,12 @@ class UserSettingsStore:
     mutable containers passed in (``settings_lock``, ``user_caches``,
     ``sync_state``, ``syncing``) are shared by reference with
     :mod:`vtsearch.settings` so external importers see one set of objects.
+
+    ``sanitize(data, tier)`` is applied to every dict on its way *into* a
+    cache (``tier`` is ``"server"`` or ``"user"``); it is the store's only
+    view of the settings schema.  It runs on the read side only - what is
+    written back to disk is always the raw dict, so hiding a value the
+    models reject never deletes it from the file.
     """
 
     def __init__(
@@ -322,7 +328,7 @@ class UserSettingsStore:
         apply_settings: Callable[[dict[str, Any], Container[str] | None], None],
         server_default_source: Callable[[], dict[str, Any] | None],
         server_keys: frozenset[str],
-        fallback_keys: frozenset[str],
+        sanitize: Callable[[dict[str, Any], str], dict[str, Any]],
         exclude_from_source_export: set[str],
         freshness_check_interval: float = 1.0,
     ) -> None:
@@ -338,13 +344,12 @@ class UserSettingsStore:
         self._apply_settings = apply_settings
         self._server_default_source = server_default_source
         self._server_keys = server_keys
-        self._fallback_keys = fallback_keys
+        self._sanitize = sanitize
         self._exclude_from_source_export = exclude_from_source_export
         self._freshness_check_interval = freshness_check_interval
 
         # Store-only state (no external references).
         self._server_cache: dict[str, Any] | None = None
-        self._legacy_migrated: bool = False
         self._user_sync_locks: dict[str, threading.RLock] = {}
         self._user_sync_locks_guard = threading.Lock()
         # Thread-scoped import context: the set of usernames *this* thread is
@@ -421,32 +426,30 @@ class UserSettingsStore:
     # -- cache loaders ---------------------------------------------------
 
     def ensure_server_loaded(self) -> dict[str, Any]:
-        """Load the server-tier cache on first access and migrate legacy keys.
+        """Load the server-tier cache on first access.
 
-        The first load runs under the cross-process *server* file lock so the
-        one-shot legacy migration's ``_atomic_write`` calls are protected
-        against another process migrating the same files concurrently (H28
-        residual follow-up). The file lock is taken *before* ``settings_lock``
-        (the canonical file-lock -> settings-lock order), so this must never
-        be called while already holding ``settings_lock``: callers that need
-        the server tier loaded before touching a user cache (see
-        :meth:`ensure_user_loaded`) invoke it *outside* the lock.
+        The read runs under the cross-process *server* file lock, so a
+        sibling process rewriting the file cannot be observed mid-write. The
+        file lock is taken *before* ``settings_lock`` (the canonical
+        file-lock -> settings-lock order), so this must never be called while
+        already holding ``settings_lock``: callers that need the server tier
+        loaded before touching a user cache (see :meth:`ensure_user_loaded`)
+        invoke it *outside* the lock.
         """
         with self._lock:
             if self._server_cache is not None:
                 return self._server_cache
-        self._load_and_migrate_server()
+        self._load_server()
         with self._lock:
             assert self._server_cache is not None
             return self._server_cache
 
-    def _load_and_migrate_server(self) -> None:
-        """Read the server settings file and run the one-shot legacy migration.
+    def _load_server(self) -> None:
+        """Read the server settings file into the cache.
 
         Runs under the cross-process server file lock. The freshly-read dict
-        is migrated *before* it is published to ``self._server_cache`` so no
-        concurrent reader ever observes the intermediate (pre-migration)
-        shape.
+        is sanitized *before* it is published to ``self._server_cache`` so no
+        reader ever observes a value the model would reject.
         """
         server_path = self._server_path()
         with file_lock(server_path):
@@ -455,8 +458,7 @@ class UserSettingsStore:
                     # A sibling thread completed the load while we waited
                     # for the file lock.
                     return
-            fresh = _load_path(server_path)
-            self._maybe_migrate_legacy_settings(fresh, server_path)
+            fresh = self._sanitize(_load_path(server_path), "server")
             with self._lock:
                 self._server_cache = fresh
 
@@ -476,17 +478,15 @@ class UserSettingsStore:
         sync, so a concurrent thread B saw the marker and returned the
         pre-sync local cache.
         """
-        # Ensure the server tier is loaded (and the one-shot legacy migration
-        # has run) *before* we take ``settings_lock``: ``ensure_server_loaded``
-        # acquires the server file lock, and taking a file lock while holding
-        # ``settings_lock`` would invert the canonical file -> settings order.
-        # The migration may populate ``_user_caches["default"]``; we pick that
-        # up below.
+        # Ensure the server tier is loaded *before* we take ``settings_lock``:
+        # ``ensure_server_loaded`` acquires the server file lock, and taking a
+        # file lock while holding ``settings_lock`` would invert the canonical
+        # file -> settings order.
         self.ensure_server_loaded()
         with self._lock:
             cache = self._user_caches.get(username)
             if cache is None:
-                cache = _load_path(self._user_path(username))
+                cache = self._sanitize(_load_path(self._user_path(username)), "user")
                 self._user_caches[username] = cache
             # Re-entrance guard: a setter inside ``_apply_settings`` re-enters
             # this function while the outer call holds the sync lock.  Skip
@@ -768,79 +768,6 @@ class UserSettingsStore:
         # can skip its own first load while the source stays at this version.
         _write_sync_marker(self._user_path(username), new_version)
 
-    def _maybe_migrate_legacy_settings(self, server_cache: dict[str, Any], server_path: Path) -> None:
-        """Move per-user keys from a legacy ``data/settings.json`` into the
-        default user's per-user file (one-shot, idempotent).
-
-        Called from :meth:`_load_and_migrate_server` with the **server file
-        lock** held. Operates on *server_cache* - the freshly-read,
-        not-yet-published dict - in place, so the migrated shape is what gets
-        published to ``self._server_cache``. The default user's file write
-        takes that file's own cross-process ``file_lock`` (server-then-user
-        ordering; no other path acquires both, so no deadlock), giving both
-        ``_atomic_write`` calls full multi-process protection - previously
-        they wrote without any cross-process lock (H28 residual follow-up).
-        """
-        with self._lock:
-            if self._legacy_migrated:
-                return
-            self._legacy_migrated = True
-        # ``fallback_keys`` legitimately live in the server file (the
-        # default user reads through to them), so they are NOT "orphaned per-user"
-        # keys; leave them in place rather than moving them into the default user's
-        # file (which would also rewrite a CLI ``--settings`` file under the user).
-        legacy_user_entries = {
-            k: v for k, v in server_cache.items() if k not in self._server_keys and k not in self._fallback_keys
-        }
-        if not legacy_user_entries:
-            return
-
-        # Migrate into the "default" user's file. The default user is the one
-        # the single-user provider returns, and is also the safe target for
-        # multi-user upgrades (admins can copy it into other users' files).
-        default_user = "default"
-        user_path = self._user_path(default_user)
-        with file_lock(user_path):
-            if user_path.exists():
-                existing = _load_path(user_path)
-                # Existing per-user values win - never clobber a real user file.
-                merged: dict[str, Any] = {**legacy_user_entries, **existing}
-            else:
-                merged = dict(legacy_user_entries)
-            try:
-                _atomic_write(user_path, merged)
-            except Exception as exc:
-                logger.warning("Legacy settings migration to %s failed: %s", user_path, exc)
-                return
-
-            # Build the server-tier shape first; a failure here must not mutate
-            # the fresh dict, or the published server_cache and disk would
-            # silently diverge. Keep the default-user fallback keys in the
-            # server file (they are read through there, not migrated out).
-            new_server = {k: v for k, v in server_cache.items() if k in self._server_keys or k in self._fallback_keys}
-            try:
-                _atomic_write(server_path, new_server)
-            except Exception as exc:
-                logger.warning("Failed to rewrite server settings after legacy migration: %s", exc)
-                return
-
-            # Mutate the not-yet-published dict in place to the migrated shape.
-            for k in list(server_cache.keys()):
-                if k not in self._server_keys and k not in self._fallback_keys:
-                    server_cache.pop(k, None)
-
-            # Refresh the default user's cache if it was already materialised.
-            with self._lock:
-                self._user_caches[default_user] = _load_path(user_path)
-        logger.info(
-            "Migrated %d legacy per-user setting(s) from %s into %s",
-            len(legacy_user_entries),
-            server_path,
-            user_path,
-        )
-
-    # -- save helpers ----------------------------------------------------
-
     def mutate_server_locked(self, mutator: Callable[[dict[str, Any]], None]) -> None:
         """Apply *mutator* to a fresh-from-disk server cache, atomically.
 
@@ -850,9 +777,10 @@ class UserSettingsStore:
         atomically writes the result back. This is the only correct way to
         mutate a multi-writer settings file from a Python process.
 
-        The legacy migration is left to ``ensure_server_loaded`` and never
-        fires from inside the lock - by the time any setter runs the cache
-        has been loaded at least once.
+        The dict written back to disk is the *unsanitized* one: a value the
+        models reject is hidden from readers (see ``sanitize``) but never
+        deleted from the user's file by an unrelated setting change. Only the
+        in-memory cache carries the sanitized view.
 
         File I/O (``_load_path``, ``_atomic_write``) runs under the
         cross-process file lock only; ``settings_lock`` is acquired briefly
@@ -865,8 +793,9 @@ class UserSettingsStore:
             fresh = _load_path(path)
             mutator(fresh)
             _atomic_write(path, fresh)
+            clean = self._sanitize(fresh, "server")
             with self._lock:
-                self._server_cache = fresh
+                self._server_cache = clean
 
     def mutate_user_locked(
         self,
@@ -924,16 +853,20 @@ class UserSettingsStore:
             fresh = _load_path(path)
             mutator(fresh)
             _atomic_write(path, fresh)
+            # Disk keeps the raw dict; only the cache (and the snapshot pushed
+            # to the sync source) carries the sanitized view, so an unrelated
+            # write never deletes a key from the user's file.
+            clean = self._sanitize(fresh, "user")
             touched = list(resolve_keys(fresh)) if resolve_keys is not None else named
             with self._lock:
-                self._user_caches[username] = fresh
+                self._user_caches[username] = clean
                 if username in self._syncing:
                     return None
                 exportable = [k for k in touched if k not in self._exclude_from_source_export]
                 if exportable:
                     state = self._sync_state.setdefault(username, UserSyncState())
                     state.dirty_keys.update(exportable)
-                return dict(fresh)
+                return dict(clean)
 
     # -- sync to source --------------------------------------------------
 
@@ -1051,13 +984,12 @@ class UserSettingsStore:
     # -- lifecycle -------------------------------------------------------
 
     def invalidate_server_cache(self) -> None:
-        """Drop the server cache and re-arm the one-shot legacy migration.
+        """Drop the server cache so the next read re-loads it.
 
         Used when the server settings path is repointed (CLI ``--settings``).
         Caller already holds ``settings_lock``.
         """
         self._server_cache = None
-        self._legacy_migrated = False
 
     def drop_sync_state(self, username: str) -> None:
         """Forget *username*'s sync bookkeeping (e.g. when the source is cleared)."""
@@ -1079,6 +1011,5 @@ class UserSettingsStore:
             self._user_caches.clear()
             self._sync_state.clear()
             self._syncing.clear()
-            self._legacy_migrated = False
         with self._user_sync_locks_guard:
             self._user_sync_locks.clear()

@@ -125,6 +125,26 @@ not list every commit. Use `git log` for the full history.
   `POST /api/dataset/import/server_folder`, and detector load respectively.
   (Issue #3438.)
 
+- **Old settings-file shapes are no longer migrated forward.** VTSearch used to
+  carry three shims for settings written by older versions: a one-shot rewrite
+  that split a pre-tier-split `data/settings.json` across the two files, and a
+  pair of coercions that read a pre-enum boolean `show_animations` as
+  `"show"` / `"hide"`. `CLAUDE.md`'s backwards-compatibility policy allows
+  breaking saved data freely and forbids exactly these shims, so they are gone.
+  A value the settings models reject -- one written before a field changed
+  shape, or a hand-edit out of range -- is now **ignored on load** and the
+  field's default applies. Your file is never rewritten, so nothing is lost:
+  fix the value and it takes effect on the next start. Concretely, a boolean
+  `show_animations` now reads as `"show"` (the default) rather than mapping
+  True-ish to `"show"` and False-ish to `"hide"`, and `PUT /api/settings` now
+  rejects the boolean with a 422 instead of silently rewriting it. Per-user
+  keys sitting in `data/settings.json` are inert rather than migrated into the
+  default user's file. The one deliberate tier exception is unchanged: the
+  built-in `default` user still reads `autofind_detectors`,
+  `autofind_exporter` and `autofind_exporter_field_values` through to
+  `data/settings.json`, which is what keeps the CLI's `--settings` flat-file
+  workflow working. (Issue #3413.)
+
 ### Changed
 
 - **Your Dashboard selection now survives leaving the Dashboard.** Going to

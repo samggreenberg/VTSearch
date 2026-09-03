@@ -90,15 +90,26 @@ class TestPerUserIsolation:
         assert "autofind_detectors" in out
 
 
-class TestLegacyMigration:
-    def test_legacy_mixed_file_migrates_user_keys(self, tmp_path, monkeypatch):
-        """A pre-refactor settings.json with both tiers must be split on load."""
+class TestUnmigratedFiles:
+    """Old on-disk shapes are *ignored*, not migrated.
+
+    VTSearch used to split a pre-refactor flat ``settings.json`` across the
+    two tiers on first load, rewriting both files. ``CLAUDE.md``'s
+    backwards-compatibility policy forbids migration shims for saved data, so
+    that one-shot rewrite is gone (issue #3413): a value the tier's model
+    can't accept is dropped from the in-memory cache on load and the pydantic
+    default applies, while the file on disk is left exactly as the user wrote
+    it.
+    """
+
+    def test_legacy_mixed_file_ignores_user_keys(self, tmp_path, monkeypatch):
+        """Per-user keys in the server file are inert - no migration, no rewrite."""
         from vtsearch import settings as settings_mod
 
         legacy = {
             "saved_datasets_dir": "/tmp/legacy",  # server tier
-            "volume": 0.33,  # user tier
-            "theme": "light",  # user tier
+            "volume": 0.33,  # user tier - ignored where it sits
+            "theme": "light",  # user tier - ignored where it sits
         }
         server_path = tmp_path / "settings.json"
         server_path.write_text(json.dumps(legacy))
@@ -106,148 +117,135 @@ class TestLegacyMigration:
         settings_mod.set_user_data_dir_override(tmp_path / "users")
         settings_mod.reset()
         try:
-            # Triggers _ensure_server_loaded + migration.
-            assert settings_mod.get_volume() == 0.33
-            assert settings_mod.get_theme() == "light"
+            # The server-tier key still applies.
             assert str(settings_mod.get_saved_datasets_dir()) == "/tmp/legacy"
+            # The stranded per-user keys do not: defaults win.
+            assert settings_mod.get_volume() == 1.0
+            assert settings_mod.get_theme() == "system"
 
-            # Server file now contains only server-tier keys.
-            remaining = json.loads(server_path.read_text())
-            assert "volume" not in remaining
-            assert "theme" not in remaining
-            assert remaining["saved_datasets_dir"] == "/tmp/legacy"
-
-            # Default user's file contains only per-user keys.
-            user_path = tmp_path / "users" / "default" / "user_settings.json"
-            assert user_path.exists()
-            user_data = json.loads(user_path.read_text())
-            assert user_data["volume"] == 0.33
-            assert user_data["theme"] == "light"
-            assert "saved_datasets_dir" not in user_data
+            # Nothing on disk was rewritten, and no user file was conjured.
+            assert json.loads(server_path.read_text()) == legacy
+            assert not (tmp_path / "users" / "default" / "user_settings.json").exists()
         finally:
             settings_mod.set_user_data_dir_override(None)
             settings_mod.reset()
 
-    def test_user_write_failure_keeps_cache_and_disk_consistent(self, tmp_path, monkeypatch):
-        """If the per-user write fails, the in-memory cache and on-disk
-        server file must stay aligned (no half-migrated state)."""
+    def test_autofind_keys_in_server_file_still_read_through(self, tmp_path, monkeypatch):
+        """The one deliberate tier exception survives: the Auto-Find trio.
+
+        The CLI's documented ``--settings`` flat-file workflow puts
+        ``autofind_detectors`` in the server file and expects the ``default``
+        user to see it (see ``_DEFAULT_USER_FALLBACK_KEYS``). That read-through
+        is a live feature, not a migration, so it is *not* sanitized away.
+        """
         from vtsearch import settings as settings_mod
 
-        legacy = {
-            "saved_datasets_dir": "/tmp/legacy",
-            "volume": 0.33,
-            "theme": "light",
-        }
         server_path = tmp_path / "settings.json"
-        server_path.write_text(json.dumps(legacy))
+        server_path.write_text(json.dumps({"autofind_detectors": ["Dog Barks"]}))
         monkeypatch.setattr(settings_mod, "SETTINGS_PATH", server_path)
         settings_mod.set_user_data_dir_override(tmp_path / "users")
         settings_mod.reset()
-
-        real_atomic_write = settings_store_mod._atomic_write
-        user_settings_path = tmp_path / "users" / "default" / "user_settings.json"
-
-        def failing_atomic_write(path, data):
-            if path == user_settings_path:
-                raise OSError("simulated user-file write failure")
-            return real_atomic_write(path, data)
-
-        monkeypatch.setattr(settings_store_mod, "_atomic_write", failing_atomic_write)
         try:
-            # Triggers migration; user-file write raises and is swallowed.
-            settings_mod.get_saved_datasets_dir()
-
-            # Server file on disk is untouched (legacy keys still present).
-            on_disk = json.loads(server_path.read_text())
-            assert on_disk == legacy
-
-            # In-memory server cache matches disk (legacy keys still there).
-            assert settings_mod._store.server_cache is not None
-            assert settings_mod._store.server_cache.get("volume") == 0.33
-            assert settings_mod._store.server_cache.get("theme") == "light"
-
-            # No phantom user file was created.
-            assert not user_settings_path.exists()
+            assert settings_mod.get_autofind_detectors() == ["Dog Barks"]
+            assert settings_mod.get_all()["autofind_detectors"] == ["Dog Barks"]
         finally:
             settings_mod.set_user_data_dir_override(None)
             settings_mod.reset()
 
-    def test_server_rewrite_failure_keeps_cache_and_disk_consistent(self, tmp_path, monkeypatch):
-        """If the server-file rewrite fails after the user write succeeds,
-        the in-memory ``_server_cache`` must not have legacy keys popped;
-        otherwise it would silently disagree with the on-disk server file."""
+    def test_bad_autofind_value_in_server_file_is_dropped(self, tmp_path, monkeypatch):
+        """The read-through is an exception to the *tier* rule, not to the
+        value check: the trio is validated against ``UserSettings``, the model
+        that actually reads it, so a hand-edit of the wrong shape still falls
+        back to the default rather than reaching a caller."""
         from vtsearch import settings as settings_mod
 
-        legacy = {
-            "saved_datasets_dir": "/tmp/legacy",
-            "volume": 0.33,
-            "theme": "light",
-        }
         server_path = tmp_path / "settings.json"
-        server_path.write_text(json.dumps(legacy))
+        server_path.write_text(json.dumps({"autofind_detectors": "Dog Barks", "autofind_exporter": "json"}))
         monkeypatch.setattr(settings_mod, "SETTINGS_PATH", server_path)
         settings_mod.set_user_data_dir_override(tmp_path / "users")
         settings_mod.reset()
-
-        real_atomic_write = settings_store_mod._atomic_write
-        user_settings_path = tmp_path / "users" / "default" / "user_settings.json"
-
-        def failing_atomic_write(path, data):
-            if path == server_path:
-                raise OSError("simulated server-file write failure")
-            return real_atomic_write(path, data)
-
-        monkeypatch.setattr(settings_store_mod, "_atomic_write", failing_atomic_write)
         try:
-            # Triggers migration; user write succeeds, server rewrite raises.
-            settings_mod.get_saved_datasets_dir()
+            assert settings_mod.get_autofind_detectors() == []  # bare string, not a list
+            assert settings_mod.get_autofind_exporter() == "json"  # the valid sibling survives
+        finally:
+            settings_mod.set_user_data_dir_override(None)
+            settings_mod.reset()
 
-            # User file was written successfully.
-            assert user_settings_path.exists()
-            user_data = json.loads(user_settings_path.read_text())
-            assert user_data["volume"] == 0.33
-            assert user_data["theme"] == "light"
+    def test_stranded_server_key_in_user_file_does_not_shadow(self, tmp_path, monkeypatch):
+        """A server-tier key left in a user file must not shadow the real value.
 
-            # Server file on disk still has legacy keys (rewrite failed).
-            on_disk = json.loads(server_path.read_text())
-            assert on_disk == legacy
+        ``browse_signpost_vocab`` was per-user before it became a server-tier
+        operator setting, so user files written before the move still carry a
+        copy. ``get_all`` layers the user cache over the server one, so the
+        stale copy used to be reported by GET while projection builds (which
+        read the accessor) used the operator's. It is dropped on load now.
+        """
+        from vtsearch import settings as settings_mod
 
-            # Crucially, in-memory cache matches disk; legacy keys NOT popped.
-            assert settings_mod._store.server_cache is not None
-            assert settings_mod._store.server_cache.get("volume") == 0.33
-            assert settings_mod._store.server_cache.get("theme") == "light"
-            assert settings_mod._store.server_cache.get("saved_datasets_dir") == "/tmp/legacy"
+        server_path = tmp_path / "settings.json"
+        server_path.write_text(json.dumps({"browse_signpost_vocab": {"image": ["operator"]}}))
+        user_path = tmp_path / "users" / "default" / "user_settings.json"
+        user_path.parent.mkdir(parents=True, exist_ok=True)
+        user_path.write_text(json.dumps({"browse_signpost_vocab": {"image": ["stale"]}}))
+        monkeypatch.setattr(settings_mod, "SETTINGS_PATH", server_path)
+        settings_mod.set_user_data_dir_override(tmp_path / "users")
+        settings_mod.reset()
+        try:
+            assert settings_mod.get_all()["browse_signpost_vocab"] == {"image": ["operator"]}
+            assert settings_mod.get_browse_signpost_vocab() == {"image": ["operator"]}
+            # The user's file itself is left alone - the drop is read-side only.
+            assert json.loads(user_path.read_text()) == {"browse_signpost_vocab": {"image": ["stale"]}}
+        finally:
+            settings_mod.set_user_data_dir_override(None)
+            settings_mod.reset()
+
+    def test_unrelated_write_does_not_delete_dropped_keys(self, tmp_path, monkeypatch):
+        """Sanitizing is a read-side view: a later setter must not eat the file.
+
+        Dropping a value the model rejects has to stay non-destructive, or the
+        migration we just deleted would come back in another form - silently,
+        on whatever unrelated setting the user happened to change next.
+        """
+        from vtsearch import settings as settings_mod
+
+        server_path = tmp_path / "settings.json"
+        server_path.write_text(json.dumps({}))
+        user_path = tmp_path / "users" / "default" / "user_settings.json"
+        user_path.parent.mkdir(parents=True, exist_ok=True)
+        user_path.write_text(json.dumps({"show_animations": "True", "hand_added": 7}))
+        monkeypatch.setattr(settings_mod, "SETTINGS_PATH", server_path)
+        settings_mod.set_user_data_dir_override(tmp_path / "users")
+        settings_mod.reset()
+        try:
+            assert settings_mod.get_show_animations() == "show"  # default applies
+            settings_mod.set_volume(0.42)
+            on_disk = json.loads(user_path.read_text())
+            assert on_disk["show_animations"] == "True"  # untouched
+            assert on_disk["hand_added"] == 7  # extra keys still round-trip
+            assert on_disk["volume"] == 0.42
         finally:
             settings_mod.set_user_data_dir_override(None)
             settings_mod.reset()
 
 
-class TestMigrationCrossProcessLock:
-    """H28 residual follow-up: the one-shot legacy migration must run its two
-    ``_atomic_write`` calls under the cross-process ``file_lock`` (previously
-    it wrote bare), and must migrate exactly once even under concurrent first
-    loads."""
+class TestServerLoadCrossProcessLock:
+    """The first server-tier load runs under the cross-process ``file_lock``
+    (file-lock -> settings-lock order), and concurrent first loads must not
+    deadlock or disagree."""
 
-    def _seed_legacy(self, tmp_path, monkeypatch):
-        legacy = {
-            "saved_datasets_dir": "/tmp/legacy",  # server tier
-            "volume": 0.33,  # user tier
-            "theme": "light",  # user tier
-        }
+    def _seed(self, tmp_path, monkeypatch):
         server_path = tmp_path / "settings.json"
-        server_path.write_text(json.dumps(legacy))
+        server_path.write_text(json.dumps({"saved_datasets_dir": "/tmp/legacy"}))
         monkeypatch.setattr(settings_mod, "SETTINGS_PATH", server_path)
         settings_mod.set_user_data_dir_override(tmp_path / "users")
         settings_mod.reset()
         return server_path
 
-    def test_migration_writes_under_file_lock(self, tmp_path, monkeypatch):
-        """Both the default-user write and the server rewrite happen inside a
-        ``file_lock`` for their target file."""
+    def test_server_load_takes_file_lock(self, tmp_path, monkeypatch):
         import contextlib
         from pathlib import Path
 
-        server_path = self._seed_legacy(tmp_path, monkeypatch)
+        self._seed(tmp_path, monkeypatch)
 
         locked: list[str] = []
         real_file_lock = settings_store_mod.file_lock
@@ -260,44 +258,38 @@ class TestMigrationCrossProcessLock:
 
         monkeypatch.setattr(settings_store_mod, "file_lock", recording_file_lock)
         try:
-            # Triggers ensure_server_loaded -> load+migrate.
-            assert settings_mod.get_volume() == 0.33
-            # Server file locked for the load+migrate; default user's file
-            # locked for the migration write.
+            assert str(settings_mod.get_saved_datasets_dir()) == "/tmp/legacy"
             assert "settings.json" in locked
-            assert "user_settings.json" in locked
-            # Migration still produced the correct split.
-            remaining = json.loads(server_path.read_text())
-            assert "volume" not in remaining
-            assert remaining["saved_datasets_dir"] == "/tmp/legacy"
         finally:
             settings_mod.set_user_data_dir_override(None)
             settings_mod.reset()
 
-    def test_concurrent_first_load_migrates_once(self, tmp_path, monkeypatch):
-        """Four threads racing the first load must not double-migrate or
-        deadlock; the migration body runs exactly once."""
+    def test_concurrent_first_load_reads_file_once(self, tmp_path, monkeypatch):
+        """Four threads racing the first load must not deadlock, and only the
+        winner of the file lock actually reads the file."""
         import threading
 
-        server_path = self._seed_legacy(tmp_path, monkeypatch)
+        self._seed(tmp_path, monkeypatch)
 
         calls = {"n": 0}
-        real = settings_store_mod.UserSettingsStore._maybe_migrate_legacy_settings
+        real_load = settings_store_mod._load_path
+        server_name = "settings.json"
 
-        def counting(self, cache, path):
-            calls["n"] += 1
-            return real(self, cache, path)
+        def counting_load(path):
+            if path.name == server_name:
+                calls["n"] += 1
+            return real_load(path)
 
-        monkeypatch.setattr(settings_store_mod.UserSettingsStore, "_maybe_migrate_legacy_settings", counting)
+        monkeypatch.setattr(settings_store_mod, "_load_path", counting_load)
         try:
             barrier = threading.Barrier(4)
-            results: list[float] = []
+            results: list[str] = []
             errors: list[Exception] = []
 
             def worker():
                 try:
                     barrier.wait(timeout=5)
-                    results.append(settings_mod.get_volume())
+                    results.append(str(settings_mod.get_saved_datasets_dir()))
                 except Exception as exc:  # pragma: no cover - surfaced below
                     errors.append(exc)
 
@@ -310,12 +302,10 @@ class TestMigrationCrossProcessLock:
             assert not errors, f"workers raised: {errors}"
             for t in threads:
                 assert not t.is_alive(), "thread hung (likely deadlock)"
-            assert results == [0.33] * 4
-            # The first thread to win the server file lock migrates; the rest
-            # find the cache already published and skip the body entirely.
+            assert results == ["/tmp/legacy"] * 4
+            # The first thread to win the server file lock loads; the rest find
+            # the cache already published and skip the read entirely.
             assert calls["n"] == 1
-            remaining = json.loads(server_path.read_text())
-            assert "volume" not in remaining
         finally:
             settings_mod.set_user_data_dir_override(None)
             settings_mod.reset()

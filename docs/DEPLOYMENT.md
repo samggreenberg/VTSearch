@@ -578,6 +578,12 @@ provider. Both files are auto-created on first use and auto-saved on every
 change. Both models accept extra keys, so an unrecognised key is preserved
 rather than dropped.
 
+A key the model *does* know but whose value it rejects — a hand-edit out of
+range, or a value written before the field changed shape — is **ignored on
+load**: the field reads as unset, so its default applies. Nothing is rewritten,
+so the file keeps whatever you put in it; fix the value and it takes effect on
+the next start. VTSearch does not migrate old settings shapes forward.
+
 **If you are changing a user preference, edit `user_settings.json`, not
 `settings.json`.** A `theme` or `autopilot_enabled` key placed in
 `data/settings.json` is simply ignored. The one deliberate exception is the

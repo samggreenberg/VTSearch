@@ -265,10 +265,11 @@ _SERVER_KEYS: frozenset[str] = frozenset(ServerSettings.model_fields.keys())
 #: These are the Auto-Find knobs: per-user in multi-user deployments, but the
 #: single-user GUI (everyone is "default") and the CLI ``--settings`` flat file
 #: still expect a value placed in ``settings.json`` to take effect. The
-#: read-through (see :func:`_read_value`) makes that work without the
-#: destructive legacy migration moving them out of the server file (see
-#: ``UserSettingsStore._maybe_migrate_legacy_settings``, which skips
-#: these keys).
+#: read-through (see :func:`_read_value`) is what makes that documented
+#: flat-file workflow work; it is a live tier exception, not a migration.
+#: :func:`_sanitize_tier` therefore keeps these keys in the server file
+#: (validating them against ``UserSettings``, which owns them) and drops only
+#: the reverse direction: a server key stranded in a per-user file.
 _DEFAULT_USER_FALLBACK_KEYS: frozenset[str] = frozenset(
     {"autofind_detectors", "autofind_exporter", "autofind_exporter_field_values"}
 )
@@ -571,9 +572,6 @@ def get_user_settings() -> dict[str, Any]:
     user_copy = snapshot_user(get_current_user())
     result = dict(_user_defaults())
     result.update(user_copy)
-    # Same legacy migration as ``get_all`` so settings exports carry a value
-    # a fresh import will accept.
-    result["show_animations"] = get_show_animations()
     result["grid_icon_size_left"] = get_grid_icon_size_left()
     result["grid_icon_size_right"] = get_grid_icon_size_right()
     result["focus_mode_left"] = get_focus_mode_left()
@@ -610,20 +608,8 @@ def get_all() -> dict[str, Any]:
     result["panel_pct_right"] = get_panel_pct_right()
     # Auto-Find keys go through their accessors so the default-user read-through
     # (and per-user isolation for named users) is applied consistently: the
-    # plain ``result.update(server_copy)`` above would otherwise leak a legacy
-    # server-file Auto-Find list to every named user.
-    # ``show_animations`` goes through its accessor so pre-enum settings
-    # files (boolean ``True``/``"True"``; see ``coerce_animation_mode``) are
-    # migrated on read - the raw merge above would leak the legacy value to
-    # GET, and the frontend would echo it into a PUT that 422s.
-    result["show_animations"] = get_show_animations()
-    # ``browse_signpost_vocab`` was a per-user key until it became a server-tier
-    # operator setting, so user files written before the move still carry a copy
-    # that the ``result.update(user_copy)`` above would layer over the server
-    # value - GET would report a stale vocabulary while projection builds
-    # (which read the accessor) used the operator's. The accessor is the tier
-    # router, so going through it drops the shadowing copy.
-    result["browse_signpost_vocab"] = get_browse_signpost_vocab()
+    # plain ``result.update(server_copy)`` above would otherwise leak the
+    # server file's Auto-Find list to every named user, not just "default".
     result["autofind_detectors"] = get_autofind_detectors()
     result["autofind_exporter"] = get_autofind_exporter()
     result["autofind_exporter_field_values"] = get_autofind_exporter_field_values()
@@ -696,6 +682,57 @@ def _validate_field(model: type, key: str, value: Any) -> Any:
     except ValidationError as exc:
         first = exc.errors()[0] if exc.errors() else {"msg": str(exc)}
         raise ValueError(f"Invalid {key}: {first.get('msg', exc)}") from None
+
+
+def _sanitize_tier(data: dict[str, Any], tier: str) -> dict[str, Any]:
+    """Return *data* with values the tier's model would reject removed.
+
+    Applied by :class:`~vtsearch.settings_store.UserSettingsStore` to every
+    dict on its way into a cache, so the raw caches that ``get_all`` merges
+    hold only values the API can serialise. Two things are dropped:
+
+    * **Uncoercible typed values.** A settings file can carry a value from
+      before a field changed shape - a boolean ``show_animations`` from
+      before it became a three-way enum, a scalar ``browse_colormap`` from
+      before it became a per-media-type dict - or simply a hand-edit that
+      is out of range. Dropping it makes the field read as unset, so the
+      pydantic default applies (per the "break persisted data freely"
+      policy in ``CLAUDE.md``); keeping it used to leak the stale value
+      straight out of ``GET /api/settings``, which the frontend then echoed
+      back into a ``PUT`` that 422'd.
+    * **Server-tier keys stranded in a per-user file**, left behind when a
+      key moved tiers (``browse_signpost_vocab`` did). ``get_all`` layers
+      the user cache over the server one, so a stale copy would shadow the
+      operator's real value.
+
+    The reverse direction is deliberately *not* dropped: per-user keys in the
+    server file are the documented Auto-Find read-through (see
+    :data:`_DEFAULT_USER_FALLBACK_KEYS`), so those keys are kept - but checked
+    against ``UserSettings``, the model that will actually read them, so the
+    tier exception is not a hole in the value check. Unknown keys are
+    preserved in both tiers - both models set ``extra="allow"`` so a
+    forward-compatible or hand-added key round-trips rather than being
+    silently deleted.
+
+    This is a read-side view only; nothing here is written back to disk.
+    """
+    server_tier = tier == "server"
+    model = ServerSettings if server_tier else UserSettings
+    drop_wrong_tier = frozenset() if server_tier else _SERVER_KEYS
+    clean: dict[str, Any] = {}
+    for key, value in data.items():
+        if key in drop_wrong_tier:
+            continue
+        # The Auto-Find trio is read out of the server file by the "default"
+        # user, so validate it there against the model that owns it.
+        against = UserSettings if server_tier and key in _DEFAULT_USER_FALLBACK_KEYS else model
+        if key in against.model_fields:
+            try:
+                _validate_field(against, key, value)
+            except ValueError:
+                continue
+        clean[key] = value
+    return clean
 
 
 def _make_scalar_accessors(model: type, key: str):
@@ -1683,7 +1720,7 @@ _store = UserSettingsStore(
     apply_settings=_apply_settings,
     server_default_source=_server_default_settings_source,
     server_keys=_SERVER_KEYS,
-    fallback_keys=_DEFAULT_USER_FALLBACK_KEYS,
+    sanitize=_sanitize_tier,
     exclude_from_source_export=_EXCLUDE_FROM_SOURCE_EXPORT,
     freshness_check_interval=_FRESHNESS_CHECK_INTERVAL,
 )

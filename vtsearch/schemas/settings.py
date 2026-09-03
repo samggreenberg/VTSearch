@@ -12,11 +12,10 @@ the schema is flat to match what the frontend sends and receives.
 
 from __future__ import annotations
 
-from marshmallow import Schema, fields, pre_load, validate
+from marshmallow import Schema, fields, validate
 
 from vtsearch.settings_models import (
     VALID_ANIMATION_MODES,
-    coerce_animation_mode,
     VALID_BROWSE_GRAPHICS,
     VALID_FOCUS_MODES,
     VALID_GRID_ICON_SIZES,
@@ -256,21 +255,6 @@ class SettingsUpdateSchema(Schema):
     show_animations = fields.String(validate=validate.OneOf(VALID_ANIMATION_MODES))
     show_metadata = fields.Boolean()
     label_hint_dismissed = fields.Boolean()
-
-    @pre_load
-    def _migrate_legacy_show_animations(self, data, **kwargs):
-        """Fold pre-enum boolean ``show_animations`` values into the enum.
-
-        Settings files written before the 3-way pulldown (a3a37106) stored a
-        boolean; a client that fetched such a value re-sends it verbatim on
-        the next save, and without this hook the ``OneOf`` validator rejects
-        the entire update (every settings save 422s until the value is fixed
-        by hand).  See ``vtsearch.settings_models.coerce_animation_mode``.
-        """
-        if isinstance(data, dict) and "show_animations" in data:
-            data = dict(data)
-            data["show_animations"] = coerce_animation_mode(data["show_animations"])
-        return data
 
     grid_icon_size_left = fields.Raw()
     grid_icon_size_right = fields.Raw()
