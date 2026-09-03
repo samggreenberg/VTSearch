@@ -77,6 +77,7 @@ ap.add_argument("--shallow", default="acq_m3", help="the DiD's shallow reference
 ap.add_argument("--deep", default="acq_m4,acq_m5,acq_m6", help="comma-separated DiD deep arms")
 ap.add_argument("--markdown", default=None)
 ap.add_argument("--boot", type=int, default=10000)
+ap.add_argument("--csv", default=None, help="directory for the tidy CSVs the figures read")
 args = ap.parse_args()
 
 BASE = pathlib.Path(args.base)
@@ -177,6 +178,14 @@ if CONTROL not in per_arm:
     raise SystemExit(f"no {CONTROL} arm under {BASE}/bin -- nothing to pair against")
 
 arms = [a for a in ARM_K if a in per_arm]
+
+# Tidy rows for `--csv`, accumulated as each table is built rather than
+# recomputed, so a figure and its table cannot disagree.
+csv_harvest: list[dict] = []
+csv_speed: list[dict] = []
+csv_delta: list[dict] = []
+csv_did: list[dict] = []
+csv_spikes: list[dict] = []
 out(f"# #3547 — does the optimum move deeper? — `{args.embedder} x {args.style}`\n")
 out(f"Arms: {', '.join(f'`{a}` (k={ARM_K[a]:g})' for a in arms)}")
 out(f"Horizons: {', '.join(str(h) for h in HORIZONS)} clicks, off ONE wave (see the module docstring)")
@@ -209,6 +218,18 @@ for a in arms:
     med = float(np.nanmedian(h))
     if med > 0.50:
         harvest_flag.append(a)
+    csv_harvest.append(
+        {
+            "arm": a,
+            "k": ARM_K[a],
+            "sim_pos": float(np.nanmedian(s4["sim_pos"])),
+            "positives_400": float(np.nanmedian(s4["positives"])),
+            "harvest_med": med,
+            "frac_over_50": float(np.nanmean(h > 0.50)),
+            "frac_over_80": float(np.nanmean(h > 0.80)),
+            "compressed": med > 0.50,
+        }
+    )
     out(
         f"| `{a}` | {ARM_K[a]:g} | {float(np.nanmedian(s4['sim_pos'])):.0f} | "
         f"{float(np.nanmedian(s4['positives'])):.0f} | {100 * med:.1f}% | "
@@ -276,6 +297,16 @@ for a in arms:
         sh = s[s["horizon"] == H]
         cells.append(f"{float(np.nanmedian(sh['ctt'])):.1f}" if len(sh) else "—")
         cells.append(f"{100 * float(np.mean(sh['ctt_miss'])):.0f}%" if len(sh) else "—")
+        if len(sh):
+            csv_speed.append(
+                {
+                    "arm": a,
+                    "k": ARM_K[a],
+                    "horizon": H,
+                    "ctt_median": float(np.nanmedian(sh["ctt"])),
+                    "miss_frac": float(np.mean(sh["ctt_miss"])),
+                }
+            )
     out(f"| `{a}` | {ARM_K[a]:g} | " + " | ".join(cells) + " |")
 out()
 out("`prod` reaches its own target in 100% of cells **by construction**; a miss")
@@ -294,6 +325,19 @@ for a in arms:
     c100, c400 = paired("cost", a, CONTROL, 100), paired("cost", a, CONTROL, 400)
     p400, ap400 = paired("positives", a, CONTROL, 400), paired("ap", a, CONTROL, 400)
     out(f"| `{a}` | {ARM_K[a]:g} | {fmt(c100)} | {fmt(c400)} | {p400['mean']:+.1f} | {ap400['mean']:+.3f} |")
+    for metric, H, pr in (("cost", 100, c100), ("cost", 400, c400), ("positives", 400, p400), ("ap", 400, ap400)):
+        csv_delta.append(
+            {
+                "arm": a,
+                "k": ARM_K[a],
+                "metric": metric,
+                "horizon": H,
+                "mean": pr["mean"],
+                "lo": pr["lo"],
+                "hi": pr["hi"],
+                "n": pr["n"],
+            }
+        )
 out()
 
 # --- the falsification arm -----------------------------------------------------
@@ -351,6 +395,20 @@ for dp in [x for x in args.deep.split(",") if x in per_arm]:
             verdict = "no move"
         clean = dp not in compressed and args.shallow not in compressed
         did_verdicts.append((dp, metric, verdict, clean))
+        csv_did.append(
+            {
+                "deep_arm": dp,
+                "k": ARM_K[dp],
+                "shallow_arm": args.shallow,
+                "metric": metric,
+                "mean": mean,
+                "lo": lo,
+                "hi": hi,
+                "pairs": len(did),
+                "clean": clean,
+                "verdict": verdict.replace("*", "").replace(" ✓", "").replace(" ✗", "").strip(),
+            }
+        )
         out(
             f"| `{dp}` | {ARM_K[dp]:g} | {metric} | {mean:+.{prec}f} [{lo:+.{prec}f}, {hi:+.{prec}f}] | "
             f"{len(did)} | {'clean' if clean else '**compressed**'} | {verdict} |"
@@ -407,11 +465,37 @@ for a in arms:
     s4 = s[s["horizon"] == 400]
     hv = f"{100 * float(np.nanmedian(s4['harvest'])):.1f}%" if len(s4) else "—"
     out(f"| `{a}` | {ARM_K[a]:g} | {r[0]} | {r[1]} | {hv} |")
+    for H in HORIZONS:
+        sh = s[s["horizon"] == H]
+        if len(sh):
+            csv_spikes.append(
+                {
+                    "arm": a,
+                    "k": ARM_K[a],
+                    "horizon": H,
+                    "spike_frac": float(np.mean(sh["has_deep"])),
+                    "n_cells": int(len(sh)),
+                    "harvest_med": float(np.nanmedian(s4["harvest"])) if len(s4) else float("nan"),
+                }
+            )
 out()
 out("**Power, stated rather than discovered.** At a 0.5% baseline 192 cells expects")
 out("~1 event, so this table cannot rank arms against each other for safety — which")
 out("is exactly why #3319 recorded a hazard rather than evidence. It CAN resolve")
 out("H2's contrast, which is large: 5.7% against ≤1% is ~11 events against ~2.\n")
+
+if args.csv:
+    cdir = pathlib.Path(args.csv)
+    cdir.mkdir(parents=True, exist_ok=True)
+    for name, rows in (
+        ("harvest", csv_harvest),
+        ("speed", csv_speed),
+        ("delta_vs_prod", csv_delta),
+        ("did", csv_did),
+        ("spikes", csv_spikes),
+    ):
+        pd.DataFrame(rows).to_csv(cdir / f"frontier_3547_{name}.csv", index=False)
+    print(f"wrote 5 CSVs to {cdir}")
 
 if args.markdown:
     pathlib.Path(args.markdown).write_text("\n".join(lines) + "\n")

@@ -1,11 +1,28 @@
+"""Per-arm harvest (n_good / simulated positives) at each cell's final step.
+
+Harvest is what sets whether a trajectory's tail is COMPRESSED: an arm that has
+already found most of the positives cannot show a late gain, so a high-harvest
+arm biases every deep contrast toward "no move". Point `--base` at a study's
+`bin/` to see which arms are near their ceiling; missing arms are skipped.
+"""
+
+import argparse
 import csv
 import glob
 import os
 import statistics
 
-BASE = "/expscratch/sgreenberg/acq-3319-deep/bin"
-for arm in ["prod", "acq_m1", "acq_m3", "acq_m4"]:
-    d = os.path.join(BASE, arm, "results", "cells")
+ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+ap.add_argument("--base", default="/expscratch/sgreenberg/acq-3547/bin")
+ap.add_argument("--arms", default="prod,acq_m1,acq_m3,acq_m4,acq_m5,acq_m6,acq_p2")
+a = ap.parse_args()
+
+print("base %s" % a.base)
+for arm in a.arms.split(","):
+    d = os.path.join(a.base, arm, "results", "cells")
+    if not os.path.isdir(d):
+        print("%-8s (no cells dir -- skipped)" % arm)
+        continue
     files = [f for f in sorted(glob.glob(d + "/task_*.csv")) if "__" not in os.path.basename(f)]
     best = {}  # (seed, cat) -> (t, n_good, sim_pos)
     for f in files:
