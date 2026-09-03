@@ -142,12 +142,10 @@ def cells_resolve(profile_path: Path, tasks: set[str]) -> dict[str, bool]:
     os.environ["VTSEARCH_TIMING_PROFILE"] = str(profile_path)
     reload_profile()
     profile = active_profile()
-    out: dict[str, bool] = {}
-    for task in sorted(tasks):
-        cells = profile.tasks.get(task, {})
-        keys = cell_keys(resolve_device_name(), "", "")
-        out[task] = any(any(k.startswith(key.split("|")[0]) for k in cells) for key in keys)
-    return out
+    # The media-agnostic key of each candidate device is enough: a task with no
+    # cell under any of them cannot be reached at any specificity.
+    wanted = set(cell_keys(resolve_device_name(), "", ""))
+    return {task: bool(wanted & set(profile.steps.get(task, {}))) for task in sorted(tasks)}
 
 
 def predict(run: dict, profile_path: Path | None) -> dict[str, float] | None:
@@ -321,9 +319,14 @@ def main() -> int:
     # the cross-leg table above never asks `new` to predict an atlas rebuild,
     # which is the branch it exists for.
     self_records: list[dict] = []
-    for label, rows in (("old", strip_branches(old_rows)), ("new", new_rows)):
+    for label, rows in (("old", old_rows), ("new", new_rows)):
+        # Split on the labelled runs so the held-out half keeps its branch
+        # names; strip only what feeds the fit, since stripping emulates dev's
+        # *fitter*, not a held-out run forgetting which branch it took.
         fit_runs, held_runs = split_runs(group_runs(rows))
         fit_rows = [row for run in fit_runs for row in run["rows"]]
+        if label == "old":
+            fit_rows = strip_branches(fit_rows)
         half = exp / f"profile_{label}_half.json"
         doc = fit_profile(fit_rows, min_samples=2, notes=f"#3521 {label} leg, fit half")
         half.write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -344,7 +347,10 @@ def main() -> int:
     lines = [
         "# #3521 — does the corrected driver produce a usable profile?",
         "",
-        f"Device `{resolve_device_name()}`. Each profile is scored on the *other* leg's runs;",
+        f"Device `{resolve_device_name()}`, profile cell key `{cell_key}` — the arms below are"
+        " only meaningful if the profiles' cells resolve under that key (`cell_keys` derives the"
+        " cuML suffix from the *live* backend, so a `cuda+cuml` profile read on a host without it"
+        " silently becomes the shipped arm). Each profile is scored on the *other* leg's runs;",
         "`shipped` is scored on both. `bar` is the fraction of the progress bar budgeted to",
         "the wrong step (0 is perfect, 1 is every second in the wrong slot); `step` is the",
         "median per-step relative error over steps that took at least",
