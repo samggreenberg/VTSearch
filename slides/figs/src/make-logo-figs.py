@@ -92,10 +92,12 @@ CELL_PAD = 0.42
 #: arrived. **A placeholder is not a figure** — re-run this script once the
 #: file lands and commit the result.
 #:
-#: The order is the argument's, not the search engine's: it starts with two
-#: nobody argues about, walks out through the ones that are still obviously
-#: the mark, and ends on three that each break a *different* attribute — the
-#: colour, the typeface, the product. See the fragment's notes.
+#: The order is the argument's, not the search engine's, and it is also the
+#: **grid's reading order**: the two badges, then the three red-field marks,
+#: then the three that each break a *different* attribute — the colour, the
+#: typeface, the product. Reveal order and layout order are the same tuple on
+#: purpose, so a slide that fills left-to-right, top-to-bottom cannot disagree
+#: with the order the presenter narrates. See the fragment's notes.
 #:
 #: The **size class** is what stops the grid from making a point it does not
 #: mean. These eight arrived at eight unrelated resolutions and crops, and
@@ -105,9 +107,9 @@ CELL_PAD = 0.42
 #: of a class are drawn at one common width (see `_class_widths`); the four
 #: classes are the four parallel pairs the slide actually argues over.
 RESULTS = (
-    ("01-wordmark-on-red.jpg", "wordmark, white on a solid red field", "panel"),
     ("02-red-disc.jpg", "the round red badge", "disc"),
     ("03-disc-with-bottle.jpg", "that badge, with a contour bottle", "disc"),
+    ("01-wordmark-on-red.jpg", "wordmark, white on a solid red field", "panel"),
     ("04-wordmark-ribbon.jpg", "wordmark over the dynamic ribbon", "panel"),
     ("05-script-red-on-white.jpg", "the script, red on white", "script"),
     ("06-script-black.jpg", "the script, in flat black", "script"),
@@ -121,9 +123,41 @@ RESULTS = (
 #: job is to show what the finished layout will look like.
 PLACEHOLDER_CHARS = 24
 
-#: Which grid cell each result lands in, as `(col, row)` with row 0 at the top.
-#: The top-left cell is skipped: that is where the headline goes.
+#: Which grid cell each result lands in, as `(col, row)` with row 0 at the top,
+#: in `RESULTS` order. The top-left cell is skipped: that is where the headline
+#: goes, which is why the top row holds two results and the others hold three.
 CELLS = ((1, 0), (2, 0), (0, 1), (1, 1), (2, 1), (0, 2), (1, 2), (2, 2))
+
+#: Rows whose tiles are aligned on a common **baseline** rather than centred.
+#: The bottom row is “Coca-Cola”, “Coke” and “Diet Coke”, and centring them
+#: lined up the wrong thing: *Diet* rides above the cap line, so centring
+#: pushed 08's “Coke” down until it sat lower than 07's. Sharing a baseline
+#: lines up the word the three tiles have in common. The row's tallest tile
+#: still centres in its cell and the others hang from its baseline, so the row
+#: does not sink to the bottom of the grid.
+BASELINE_ROWS = frozenset({2})
+
+#: What fraction of a tile's width is the logo's *lettering* rather than the
+#: field it is printed on. A bare wordmark is cropped to its own letters, so it
+#: is 1.0 by construction; a red panel carries margin around the script, so
+#: drawing panel and wordmark at one width prints the panel's script visibly
+#: smaller than the same script standing alone — which is a size difference
+#: the slide does not mean, on a slide about whether two logos are the same.
+#:
+#: 0.86 is measured, not chosen: the white script spans 0.828 of the trimmed
+#: width of `01` and 0.894 of `04`, and this is their mean. To re-take it, mask
+#: the near-white pixels of a trimmed panel and read the span of the columns
+#: holding a real number of them — for `04` restrict to the top 62% of the
+#: height first, or the dynamic ribbon (which runs the panel's full width, and
+#: is part of the mark rather than margin) reads as lettering and returns 1.0.
+LETTERFORM = {"panel": 0.86, "disc": 1.0, "script": 1.0, "coke": 1.0}
+
+#: The classes whose *lettering* is normalised against one another, rather than
+#: their tiles. These are the marks that are all fundamentally a word, so the
+#: word is what should match. Discs are deliberately out: a badge is a badge,
+#: and shrinking one until its script matched a bare wordmark's would leave a
+#: tiny disc floating in its cell.
+MATCHED_CLASSES = frozenset({"panel", "script", "coke"})
 
 #: How many pages the slide is. The first shows **two** results, because the
 #: opening question is a comparison — "are these the same?" needs two things to
@@ -207,6 +241,32 @@ def _art_size(index: int) -> tuple[int, int] | None:
 
 
 @functools.lru_cache(maxsize=None)
+def _row_baseline_height(row: int) -> float:
+    """The drawn height of the tallest tile in a baseline-aligned *row*."""
+    heights = []
+    for index, (col_row, (_, _, size_class)) in enumerate(zip(CELLS, RESULTS, strict=True)):
+        art = _art_size(index)
+        if col_row[1] != row or art is None:
+            continue
+        width, height = art
+        heights.append(_class_widths()[size_class] * height / width)
+    return max(heights, default=0.0)
+
+
+def _tile_bottom(index: int, y0: float, y1: float, drawn_h: float) -> float:
+    """Where result *index*'s art sits vertically in its cell.
+
+    Centred, except in a `BASELINE_ROWS` row, where every tile hangs from the
+    baseline of the row's tallest one — so the word three tiles share lines up
+    rather than their bounding boxes.
+    """
+    row = CELLS[index][1]
+    if row not in BASELINE_ROWS:
+        return (y0 + y1) / 2 - drawn_h / 2
+    return (y0 + y1) / 2 - _row_baseline_height(row) / 2
+
+
+@functools.lru_cache(maxsize=None)
 def _class_widths() -> dict[str, float]:
     """The drawn width, in canvas units, shared by every member of each size class.
 
@@ -239,6 +299,16 @@ def _class_widths() -> dict[str, float]:
         width, height = art
         fits = min(cell_w, cell_h * width / height)
         widths[size_class] = min(widths.get(size_class, fits), fits)
+
+    # Then equalise the *lettering* across `MATCHED_CLASSES`, not the tiles: a
+    # class that carries margin around its script needs a wider tile to print
+    # the same size word. The shared lettering width is the largest every
+    # matched class can still fit, so nothing overflows its cell.
+    matched = [c for c in widths if c in MATCHED_CLASSES]
+    if matched:
+        lettering = min(widths[c] * LETTERFORM[c] for c in matched)
+        for size_class in matched:
+            widths[size_class] = lettering / LETTERFORM[size_class]
     return widths
 
 
@@ -279,28 +349,15 @@ def _draw(ax: plt.Axes, index: int) -> None:
         # are the same size however their sources happened to be cropped.
         # Aspect is preserved, so the height follows.
         drawn_w = _class_widths()[RESULTS[index][2]]
-        half_w, half_h = drawn_w / 2, drawn_w * height / width / 2
-        cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+        drawn_h = drawn_w * height / width
+        cx = (x0 + x1) / 2
+        bottom = _tile_bottom(index, y0, y1, drawn_h)
         ax.imshow(
             pixels,
-            extent=(cx - half_w, cx + half_w, cy - half_h, cy + half_h),
+            extent=(cx - drawn_w / 2, cx + drawn_w / 2, bottom, bottom + drawn_h),
             aspect="auto",
             interpolation="lanczos",
             zorder=2,
-        )
-        # A hairline frame, because several of these are black or red art on a
-        # white ground and the slide is white: without it the tiles have no
-        # edges and eight results read as one wide smear.
-        ax.add_patch(
-            Rectangle(
-                (cx - half_w, cy - half_h),
-                2 * half_w,
-                2 * half_h,
-                facecolor="none",
-                edgecolor=RULE,
-                linewidth=1.2,
-                zorder=3,
-            )
         )
 
 
