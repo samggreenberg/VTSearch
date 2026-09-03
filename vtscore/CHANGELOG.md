@@ -10,6 +10,33 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`vtscore.host_seams` snapshots the host seams** (issue #3385). The eight
+  callbacks a host application installs into the library
+  (`register_core_config_builder`, the context resolvers, the setting
+  persisters, the achievement recorders, …) are each a process global declared
+  beside the code that calls them, so nothing knew the complete list — and a
+  test that installed one leaked it into every test that followed.
+  `capture_host_seams()` / `restore_host_seams()` snapshot and put back the
+  whole set. Deliberately snapshot-and-restore rather than reset-to-default, so
+  an integration whose tests run against its real wiring keeps the seams under
+  test. See `docs/integration.md`.
+
+  `register_plugin_family` is deliberately **not** covered: the library
+  registers its own families at import time, so it is a plugin extension point
+  rather than a host seam, and restoring it would drop the built-ins.
+
+### Changed
+
+- **`register_setting_persister` rejects an unrecognised key** (issue #3385).
+  It previously stored a persister under any key, but only `inclusion`,
+  `calibrate_count` and `calibration_fraction` are ever fired, so any other key
+  was a typo in the host's wiring that sat there silently never firing — the
+  failure mode `achievements_hooks.KNOWN_EVENTS` already existed to catch. The
+  key set is now public as `vtscore.state.KNOWN_SETTING_KEYS`, and an unknown
+  key raises `ValueError`. This is an extension-facing behaviour change, but no
+  working integration can be relying on it: a rejected key could never have
+  persisted anything.
+
 - **The Toponymy signpost fit counts the library warnings it suppresses**
   (issue #3512). `signpost_build` keeps Toponymy's per-topic naming warnings
   off the CLI (issue #2558), but it used to `filterwarnings("ignore")` them,

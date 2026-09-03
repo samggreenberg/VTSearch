@@ -194,15 +194,25 @@ def clear_all() -> None:
 # app startup.  Library-only callers (no app) see in-memory mutation
 # only.  See Phase 2 of ``../docs/architecture.md``.
 
+#: Settings the library knows how to hand back to a host for persistence.
+#: Only :func:`_persist_setting` calls below can ever fire a persister, so a key
+#: outside this set is a typo in the host's wiring that would silently never
+#: fire - the same failure mode :data:`vtscore.achievements_hooks.KNOWN_EVENTS`
+#: exists to catch, so this seam rejects it the same way rather than accepting
+#: a registration nothing will ever call.
+KNOWN_SETTING_KEYS: frozenset[str] = frozenset({"inclusion", "calibrate_count", "calibration_fraction"})
+
 _setting_persisters: dict[str, Callable[[Any], None]] = {}
 
 
 def register_setting_persister(key: str, fn: Callable[[Any], None]) -> None:
     """Install the persistence callback for setting *key*.
 
-    Recognised keys: ``inclusion``, ``calibrate_count``, ``calibration_fraction``.
-    Called by ``vtsearch/shim`` at app startup.
+    Called by ``vtsearch/shim`` at app startup.  *key* must be one of
+    :data:`KNOWN_SETTING_KEYS`.
     """
+    if key not in KNOWN_SETTING_KEYS:
+        raise ValueError(f"Unknown setting key {key!r}; known keys: {sorted(KNOWN_SETTING_KEYS)}")
     _setting_persisters[key] = fn
 
 
