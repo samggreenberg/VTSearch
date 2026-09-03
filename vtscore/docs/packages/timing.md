@@ -139,6 +139,8 @@ the task is unknown or nothing resolves.
 | `active_profile()` / `reload_profile(path=None)` | The parsed profile; re-read it |
 | `known_tasks()` / `task_spec(name)` | Registry lookups |
 | `cell_keys(device, media_type, embedder)` / `normalize_device(device)` | Cell-key resolution, most specific first |
+| `note_branch(step, branch)` | Name the path *step* took on the run recording this thread. A no-op when nothing is recording, so ordinary product code calls it unconditionally |
+| `note_no_encoder_load()` | Declare that this run instantiated no encoder, so it does not claim the residency key the next run needs |
 
 ---
 
@@ -163,11 +165,46 @@ take part - a `dataset_open` reads a pkl and touches no encoder, so it
 neither carries the field nor claims a key that the genuinely cold sort
 behind it needs.
 
+### Which branch a step took
+
+`cold_model` is a property of the **run**. A step's cost can also fork on
+a cache that is neither the encoder nor scoped to the process, and those
+forks are recorded per **step**, in a `branch` field, by the code that
+chooses them (`note_branch`):
+
+| step | cheap branch | dear branch |
+|---|---|---|
+| `dataset_open` · `coverage` | `restored` (the atlas cached in the pickle), `deferred` (past the auto-build threshold) | `rebuilt` |
+| `dataset_load` / `dataset_stage` · `embed` | `cached` (the demo embeddings pkl) | `fresh` |
+
+The vocabulary is `CHEAP_BRANCHES` / `DEAR_BRANCHES` in `tasks.py`, and
+the fitter reads it: a forked step is priced from the runs that did the
+work, and a step whose runs *all* read a cache withholds its whole cell
+so the task keeps its shipped defaults. A row without the field is not
+a claim that the step never forks - unmarked rows fit as they always
+did.
+
+This exists because #3345's sweep opened 16 datasets and restored the
+cached atlas on every one, recording 0.008-0.016 s at every `n` from
+245 to 2954. That is a correct measurement of a branch nobody waits on,
+and the profile fitted from it gave 2 % of the bar to a step whose
+shipped default is 0.85 because a rebuild takes minutes. A run count
+cannot say that, which is why `coverage_report` now does (#3521).
+
+A run that satisfied itself from a cache also calls
+`note_no_encoder_load()`: it instantiated no model, so it must not claim
+the residency key that the next run - the one that really pays the load
+- needs in order to be written cold.
+
 Because the recorder sits behind an env var, an admin has two ways to
 gather data and both produce the same file:
 
 - **Drive it.** Run the tuning script, which exercises each task family
-  against exemplar datasets with the recorder armed.
+  against exemplar datasets with the recorder armed. It also *arranges*
+  the dear branch where that is cheap and non-destructive: `--cold-embed`
+  (on by default) clears the demo embeddings cache before each measured
+  import, and `--cold-atlas` rebuilds each dataset's coverage atlas
+  through the on-demand endpoint rather than editing anybody's pickle.
 - **Watch it.** Set `VTSEARCH_TIMING_RECORD` on the real server and let
   real users generate the timings. This measures the production mix
   directly - the datasets people actually load, at the sizes they

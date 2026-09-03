@@ -202,6 +202,27 @@ TASKS: dict[str, TaskSpec] = {
 }
 
 
+#: Branch names meaning "this run took the step's **cheap** path" — a cached
+#: artefact stood in for work a first run has to do. They are recorded by
+#: :func:`vtscore.timing.note_branch` at the site that makes the decision, and
+#: read by the fitter, which will not price a step from cheap runs alone.
+#:
+#: ``cached``    a demo import satisfied itself from the embeddings pkl, so it
+#:               downloaded nothing, embedded nothing, and loaded no encoder.
+#: ``restored``  a dataset open adopted the coverage atlas cached in its pickle
+#:               instead of rebuilding the hierarchical k-means.
+#: ``deferred``  a dataset open past ``COVERAGE_ATLAS_AUTO_THRESHOLD`` skipped
+#:               the atlas entirely, leaving it to the on-demand endpoint.
+CHEAP_BRANCHES = frozenset({"cached", "restored", "deferred"})
+
+#: Branch names meaning "this run did the work" — the branch somebody waits on,
+#: and the only population a step's coefficients may be fitted from.
+#:
+#: ``fresh``     the import really downloaded, embedded, and finalised.
+#: ``rebuilt``   the coverage atlas was built from scratch.
+DEAR_BRANCHES = frozenset({"fresh", "rebuilt"})
+
+
 def task_spec(task: str) -> TaskSpec | None:
     """Return the :class:`TaskSpec` for *task*, or ``None`` if unregistered.
 

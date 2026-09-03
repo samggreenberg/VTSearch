@@ -28,6 +28,13 @@ The fit itself is deliberately plain. Per ``(task, cell, step)``:
   A cold run pays once-per-process costs no later run repeats, and it always
   lands at whichever ``n`` happened to go first, so it has enormous leverage on
   the slope. See :func:`fit_step`.
+- **A step that forked on a cache is priced from the runs that did the work**,
+  and a step whose runs *all* read a cache is not priced at all — the whole cell
+  is withheld and the task keeps its shipped defaults. This is not the same
+  judgement as the cold/warm holdout above. A warm run is a cheap sample of the
+  same code path; a cached run is a measurement of a different one, and the two
+  populations have no common mean worth reporting. See :func:`cheap_branch_only`
+  and :data:`vtscore.timing.tasks.CHEAP_BRANCHES` (#3521).
 
 Cells are emitted at three specificities — exact ``(device, media, embedder)``,
 then ``(device, media, *)``, then ``(device, *, *)``. The rollups are what make a
@@ -59,7 +66,7 @@ from collections import defaultdict
 from typing import Any, Iterable, Optional
 
 from vtscore.timing.profile import SCHEMA_NAME, SCHEMA_VERSION, StepCoeffs
-from vtscore.timing.tasks import TASKS, task_spec
+from vtscore.timing.tasks import CHEAP_BRANCHES, DEAR_BRANCHES, TASKS, task_spec
 
 #: Phase names the older dataset-load profiler writes, mapped onto the task
 #: registry's step names for ``dataset_load``.
@@ -172,6 +179,12 @@ def normalize_row(raw: dict) -> Optional[dict]:
         # that loads no encoder — should be treated as: it keeps every such
         # sample in a single population and fits exactly as it did before.
         "cold": bool(raw.get("cold_model", False)),
+        # Which path this step took, when the code that chose it said so (see
+        # ``vtscore.timing.note_branch``). Absent means "not a forking step, or
+        # a row recorded before the marker existed"; such rows keep fitting
+        # exactly as they did, because an unmarked population is not evidence
+        # that a cheap branch monopolised it.
+        "branch": str(raw.get("branch", "")),
     }
 
 
@@ -247,6 +260,34 @@ def _deferred_cost_floor(median_seconds: float, cold: list[dict]) -> float:
     return _ONCE_PER_PROCESS_FLOOR_S
 
 
+def branch_split(samples: list[dict]) -> tuple[list[dict], list[dict], list[dict]]:
+    """Partition *samples* into ``(dear, cheap, unmarked)`` by their branch.
+
+    Unmarked rows are their own population rather than being folded into either
+    named one: an unmarked row is a step that never forks, or a row written
+    before the marker existed, and neither is evidence about a fork.
+    """
+    dear = [s for s in samples if s.get("branch") in DEAR_BRANCHES]
+    cheap = [s for s in samples if s.get("branch") in CHEAP_BRANCHES]
+    unmarked = [s for s in samples if not s.get("branch")]
+    return dear, cheap, unmarked
+
+
+def cheap_branch_only(samples: list[dict]) -> bool:
+    """True when every run of this step took a cached path and none did the work.
+
+    The step is then **unpriceable from these rows**, and that is a different
+    state from "measured as cheap". #3345's sweep opened 16 datasets and every
+    one of them restored the coverage atlas cached in its pickle; the honest
+    reading of 0.008-0.016 s is not "the atlas costs 10 ms here", it is "this
+    sweep never saw one built". Both are correct measurements; only one of them
+    is a cost model, and ``tasks.py`` weights that step at 0.85 of the bar
+    precisely because the branch nobody measured is the minutes-long one.
+    """
+    dear, cheap, unmarked = branch_split(samples)
+    return bool(cheap) and not dear and not unmarked
+
+
 def fit_step(samples: list[dict], byte_scaled: bool) -> Optional[StepCoeffs]:
     """Fit one step's coefficients from its samples, or ``None`` if unusable."""
     if not samples:
@@ -275,6 +316,16 @@ def fit_step(samples: list[dict], byte_scaled: bool) -> Optional[StepCoeffs]:
     # (and in a cell that only ever ran cold, which is all the legacy profiler
     # ever writes for a model load) the cold rows stay in the regression and the
     # floor below does what it can.
+    # A step that forked on a cache is priced from the runs that did the work.
+    # Unlike the cold/warm holdout below this is not leverage control: a cached
+    # run is not a cheap sample of the same cost, it is a measurement of a
+    # different code path, and averaging the two describes neither. Callers
+    # reach here only when at least one such run exists — ``cheap_branch_only``
+    # withholds the cell otherwise — so this never empties the population.
+    worked = [s for s in samples if s.get("branch") in DEAR_BRANCHES]
+    if worked and len(worked) < len(samples):
+        samples = worked
+
     cold = [s for s in samples if s.get("cold")]
     warm = [s for s in samples if not s.get("cold")]
     fittable = warm if len({s["n"] for s in warm}) >= 2 else samples
@@ -436,6 +487,18 @@ def _fit_task_cells(spec, cells: _CellSamples, slots: _CellSlots, min_samples: i
     for cell, step_samples in cells.items():
         runs = _run_count(step_samples)
         if runs < min_samples:
+            continue
+        # Withhold the **whole cell**, not just the offending step, when a step
+        # only ever measured a cached path. Dropping one step looks like the
+        # rollup case above but behaves quite differently: ``step_terms`` fills
+        # a missing step from ``TaskSpec.default_terms``, which are documented
+        # pseudo-seconds whose ratios alone are meaningful. Pairing one measured
+        # step in real seconds with another in pseudo-seconds produces a weight
+        # vector in no units at all — for ``dataset_open`` a measured 2.5 s of
+        # ``items`` beside a 0.85 pseudo-second ``coverage`` prices the atlas at
+        # a quarter of the bar by arithmetic accident. Falling back to the whole
+        # shipped vector keeps the units consistent and the ratios considered.
+        if any(cheap_branch_only(samples) for step, samples in step_samples.items() if step not in spec.byte_scaled):
             continue
         steps_out: dict[str, Any] = {}
         for step, samples in step_samples.items():
@@ -634,6 +697,39 @@ def _withheld_by_specificity(spec, cells: _CellSamples) -> dict[str, int]:
     return dict(out)
 
 
+def _branch_lines(spec, samples_by_step: dict[str, list[dict]]) -> list[str]:
+    """Name every step whose runs only ever took a cached path.
+
+    The line the issue that prompted this asked for: *"coverage_report should be
+    able to say 'this cell only ever measured the warm path', because a cell
+    count cannot"* (#3521). A step measured 16 times on the cheap branch and
+    never once on the dear one reads, in every other column of this report, as
+    the best-covered thing in the sweep.
+
+    Reported per ``(step, branch)`` across the cells rather than per cell: an
+    admin who has just been told a whole task fell back to its defaults needs to
+    know *what to drive differently*, and the branch name is the actionable
+    half. The per-cell breakdown is in the rows.
+
+    Counts come from the **normalized rows**, not from the cell buckets, because
+    every row is bucketed into three cells at three specificities and counting
+    the buckets would report each run three times.
+    """
+    census: dict[tuple[str, str], int] = defaultdict(int)
+    for step, samples in samples_by_step.items():
+        if step in spec.byte_scaled or not cheap_branch_only(samples):
+            continue
+        for sample in samples:
+            census[(step, sample["branch"])] += 1
+    lines: list[str] = []
+    for (step, branch), count in sorted(census.items()):
+        lines.append(
+            f"  {'':<16} {step}: {count} run{'' if count == 1 else 's'}, all '{branch}' — "
+            f"the branch a user waits on was never measured, so this cell keeps its defaults"
+        )
+    return lines
+
+
 def coverage_report(rows: Iterable[dict], profile: dict[str, Any]) -> list[str]:
     """Human-readable lines describing what the sweep did and did not cover.
 
@@ -655,10 +751,20 @@ def coverage_report(rows: Iterable[dict], profile: dict[str, Any]) -> list[str]:
     like the exact number and is used like the rollup one, since the rollup is
     the cell guaranteed to match. Split, "5 cells" resolves into how many are
     measurements and how many are fallbacks (#3522).
+
+    A third thing a count cannot say is *which branch* the runs took. A step
+    whose every run read a cache is not a well-covered step; it is an unmeasured
+    one wearing a full sample count, and it is the state that made #3345's sweep
+    price a minutes-long atlas rebuild at 2 % of the bar. :func:`_branch_lines`
+    names those explicitly (#3521).
     """
     rows = list(rows)
     normalized = [n for n in (normalize_row(r) for r in rows) if n is not None]
     seen_tasks = {n["task"] for n in normalized}
+    by_step: dict[str, dict[str, list[dict]]] = defaultdict(lambda: defaultdict(list))
+    for sample in normalized:
+        if not sample["slot"]:
+            by_step[sample["task"]][sample["step"]].append(sample)
     by_cell, _ = _bucket_rows(rows)
     lines: list[str] = []
     for task in TASKS:
@@ -667,8 +773,14 @@ def coverage_report(rows: Iterable[dict], profile: dict[str, Any]) -> list[str]:
             samples = sum(int(c.get("samples", 0)) for c in cells.values())
             lines.append(f"  {task:<16} {len(cells)} cells, {samples} step-samples")
             lines.extend(_specificity_lines(TASKS[task], cells, by_cell.get(task, {})))
+            lines.extend(_branch_lines(TASKS[task], by_step.get(task, {})))
         elif task in seen_tasks:
-            lines.append(f"  {task:<16} measured but too few runs to fit — using built-in defaults")
+            branch_lines = _branch_lines(TASKS[task], by_step.get(task, {}))
+            if branch_lines:
+                lines.append(f"  {task:<16} measured on the cached path only — using built-in defaults")
+                lines.extend(branch_lines)
+            else:
+                lines.append(f"  {task:<16} measured but too few runs to fit — using built-in defaults")
         else:
             lines.append(f"  {task:<16} NOT MEASURED — using built-in defaults")
     return lines

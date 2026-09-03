@@ -35,6 +35,29 @@ a dataset, an import writes one, and a staging import leaves a pkl behind — so
 they need ``--allow-mutating`` and should be pointed at a scratch ``--data-dir``,
 never at live user data.
 
+**Which branch ``--drive`` measures.** Several steps fork on a cache, and the
+cheap side of each fork is what a driven sweep hits by default: a demo import
+whose embeddings pkl already exists embeds nothing, and a dataset open whose
+pickle carries a cached coverage atlas restores it in milliseconds instead of
+rebuilding a hierarchical k-means for minutes. Both are correct measurements of
+a branch nobody waits on, and a profile fitted from them inverts the bar (#3521).
+
+So ``--drive`` does two things about it, and the split is deliberate:
+
+- **It arranges the dear branch where that is cheap and non-destructive.**
+  ``--cold-embed`` (the default) removes the demo embeddings cache before each
+  measured import, exactly as ``calibrate_load_weights.py`` does, so every rep
+  measures a real embed rather than the first one measuring an embed and the
+  rest a pkl read. ``--cold-atlas`` additionally rebuilds each dataset's
+  coverage atlas through the on-demand endpoint, which is the only way to price
+  that branch without editing the pickles the datasets live in.
+- **It records which branch actually ran**, always, cold flags or not. The
+  arranging can only cover what a driven sweep controls; the observe-real-usage
+  flow above cannot be arranged at all, and its rows have the same fork in them.
+  The marker is what lets the fitter price a step from the runs that did the
+  work, and lets the coverage report say *"every run of this step read a cache"*
+  — which a sample count reads as full coverage.
+
 Both modes end the same way: the fit runs, the profile is written, and a coverage
 report says exactly which task families got measured and which fell back to the
 built-in defaults. Deploy it with::
@@ -127,6 +150,18 @@ def _parse_args() -> argparse.Namespace:
     )
     ap.add_argument("--reps", type=int, default=2, help="repetitions per cell (default 2)")
     ap.add_argument(
+        "--cold-embed",
+        dest="cold_embed",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="clear the demo embeddings cache before each measured import so every rep really embeds (default: on)",
+    )
+    ap.add_argument(
+        "--cold-atlas",
+        action="store_true",
+        help="also rebuild each dataset's coverage atlas through the on-demand endpoint (minutes per dataset)",
+    )
+    ap.add_argument(
         "--min-samples",
         type=int,
         default=2,
@@ -179,6 +214,29 @@ def _wait_for_task(registry, task_id: str, label: str) -> bool:
     return False
 
 
+def _clear_embedding_cache() -> None:
+    """Delete the demo embeddings cache so the next import embeds for real.
+
+    ``load_demo_dataset`` satisfies itself from ``EMBEDDINGS_DIR/<demo>.pkl``
+    when one exists, which makes every import after the first a pkl read
+    recorded under the same cell as the import that did the work. The cache is
+    on **disk**, so a fresh interpreter does not clear it: #3345 drove
+    ``dataset_stage`` in its own process after ``dataset_load`` and still
+    measured 0.000-0.002 s of embedding on all four image tiers (#3521).
+
+    Only the embeddings cache goes. Registry datasets live in
+    ``saved_datasets/`` and the extracted sources in the data dir's own
+    subdirectories, so the read-only families still have something to drive
+    against and nothing re-downloads. ``calibrate_load_weights.py`` clears the
+    same directory for the same reason.
+    """
+    import shutil  # noqa: PLC0415
+
+    from vtscore.config import EMBEDDINGS_DIR  # noqa: PLC0415
+
+    shutil.rmtree(EMBEDDINGS_DIR, ignore_errors=True)
+
+
 def _resolve_datasets(names: list[str]) -> list[dict]:
     """Registry entries for the requested ids/names (all accessible if empty)."""
     from vtscore.datasets.registry import list_datasets  # noqa: PLC0415
@@ -223,12 +281,32 @@ def _open_dataset(client, dataset_id: str, *, reopen: bool) -> bool:
     return _wait_for_task(loading_tasks, task_id, f"dataset {dataset_id}")
 
 
-def drive_dataset_open(client, datasets: list[dict], reps: int) -> None:
-    """Measure opening each dataset from its pkl (read + dedup, coverage atlas)."""
+def drive_dataset_open(client, datasets: list[dict], reps: int, *, cold_atlas: bool = False) -> None:
+    """Measure opening each dataset from its pkl (read + dedup, coverage atlas).
+
+    With *cold_atlas*, each dataset additionally gets one real atlas rebuild
+    through ``POST /api/datasets/registry/<id>/coverage-atlas``. Every ordinary
+    open restores the atlas cached in the pickle at import time, so without this
+    a sweep measures the coverage step's millisecond branch however many times
+    it repeats and never once the minutes-long one the shipped weights are
+    paced for. The endpoint rebuilds in memory and leaves the pickle alone,
+    which is what keeps ``dataset_open`` a read-only family.
+    """
+    from vtscore.concurrency.progress import loading_tasks  # noqa: PLC0415
+
     for entry in datasets:
         for rep in range(reps):
             _log(f"dataset_open {entry.get('name')} rep {rep + 1}/{reps}")
             _open_dataset(client, entry["id"], reopen=True)
+        if not cold_atlas:
+            continue
+        _log(f"dataset_open {entry.get('name')} atlas rebuild (cold branch)")
+        resp = client.post(f"/api/datasets/registry/{entry['id']}/coverage-atlas")
+        if resp.status_code != 200:
+            _log(f"SKIPPED atlas rebuild on {entry.get('name')}: {resp.status_code}")
+            continue
+        task_id = (resp.get_json() or {}).get("task_id") or ""
+        _wait_for_task(loading_tasks, task_id, f"atlas rebuild {entry['id']}")
 
 
 def drive_text_sort(client, datasets: list[dict], queries: list[str], reps: int) -> None:
@@ -341,8 +419,15 @@ def drive_dataset_promote(client, datasets: list[dict], reps: int) -> None:
     _log("NOTE: dataset_promote left '_tuning_*' datasets in the registry; delete them when done.")
 
 
-def drive_dataset_load(demo_ids: list[str], reps: int) -> None:
-    """Measure importing demo datasets end to end (acquire, load, embed, finalize)."""
+def drive_dataset_load(demo_ids: list[str], reps: int, *, cold_embed: bool = True) -> None:
+    """Measure importing demo datasets end to end (acquire, load, embed, finalize).
+
+    With *cold_embed* the demo embeddings cache is cleared before every rep, so
+    each one measures an import rather than the first measuring an import and
+    the rest measuring a pkl read. At the default ``--reps 2`` this is the
+    difference between a slope fitted from two real embeds and one fitted
+    through a real embed and a zero.
+    """
     from vtscore.concurrency.progress import loading_tasks  # noqa: PLC0415
     from vtscore.datasets.config import DEMO_DATASETS  # noqa: PLC0415
     from vtscore.datasets.importers import get_importer  # noqa: PLC0415
@@ -358,7 +443,9 @@ def drive_dataset_load(demo_ids: list[str], reps: int) -> None:
             _log(f"SKIPPED demo {demo_id}: unknown demo dataset")
             continue
         for rep in range(reps):
-            _log(f"dataset_load {demo_id} rep {rep + 1}/{reps}")
+            if cold_embed:
+                _clear_embedding_cache()
+            _log(f"dataset_load {demo_id} rep {rep + 1}/{reps}{' (cold embed)' if cold_embed else ''}")
             task_id = _run_importer_in_background(
                 importer,
                 {"name": demo_id, "media_type": info.get("media_type", ""), "embedder": ""},
@@ -366,8 +453,14 @@ def drive_dataset_load(demo_ids: list[str], reps: int) -> None:
             _wait_for_task(loading_tasks, task_id, f"demo {demo_id}")
 
 
-def drive_dataset_stage(demo_ids: list[str], reps: int) -> None:
-    """Measure staging demo datasets (acquire, embed, serialize; no registry)."""
+def drive_dataset_stage(demo_ids: list[str], reps: int, *, cold_embed: bool = True) -> None:
+    """Measure staging demo datasets (acquire, embed, serialize; no registry).
+
+    Staging reads the same demo embeddings pkl a full import writes, so a
+    staging leg run after a load leg against a shared data dir measures nothing
+    at all — that is the 0.000-0.002 s #3345 recorded across all four image
+    tiers. *cold_embed* clears the cache before each rep.
+    """
     from vtscore.concurrency.progress import loading_tasks  # noqa: PLC0415
     from vtscore.datasets.config import DEMO_DATASETS  # noqa: PLC0415
     from vtscore.datasets.importers import get_importer  # noqa: PLC0415
@@ -383,7 +476,9 @@ def drive_dataset_stage(demo_ids: list[str], reps: int) -> None:
             _log(f"SKIPPED demo {demo_id}: unknown demo dataset")
             continue
         for rep in range(reps):
-            _log(f"dataset_stage {demo_id} rep {rep + 1}/{reps}")
+            if cold_embed:
+                _clear_embedding_cache()
+            _log(f"dataset_stage {demo_id} rep {rep + 1}/{reps}{' (cold embed)' if cold_embed else ''}")
             task_id = _stage_importer_in_background(
                 importer,
                 {"name": demo_id, "media_type": info.get("media_type", ""), "embedder": ""},
@@ -403,7 +498,7 @@ def run_drivers(args: argparse.Namespace, tasks: list[str]) -> None:
         _log("nothing to drive: no datasets matched. Load or name at least one registry dataset.")
     with app_module.app.test_client() as client:
         if "dataset_open" in tasks:
-            drive_dataset_open(client, datasets, args.reps)
+            drive_dataset_open(client, datasets, args.reps, cold_atlas=args.cold_atlas)
         if "text_sort" in tasks:
             drive_text_sort(client, datasets, _split(args.queries), args.reps)
         if "find" in tasks:
@@ -415,9 +510,9 @@ def run_drivers(args: argparse.Namespace, tasks: list[str]) -> None:
         if "dataset_promote" in tasks:
             drive_dataset_promote(client, datasets, args.reps)
     if "dataset_load" in tasks:
-        drive_dataset_load(_split(args.demo), args.reps)
+        drive_dataset_load(_split(args.demo), args.reps, cold_embed=args.cold_embed)
     if "dataset_stage" in tasks:
-        drive_dataset_stage(_split(args.demo), args.reps)
+        drive_dataset_stage(_split(args.demo), args.reps, cold_embed=args.cold_embed)
 
 
 # ---------------------------------------------------------------------------
@@ -495,7 +590,13 @@ def main() -> int:
     if not tasks:
         _log("no task families left to drive")
         return 2
-    _log(f"driving: {', '.join(tasks)}  (reps={args.reps}, record={record_path})")
+    arranged = []
+    if args.cold_embed and not _DEMO_DRIVEN_TASKS.isdisjoint(tasks):
+        arranged.append("cold embed")
+    if args.cold_atlas and "dataset_open" in tasks:
+        arranged.append("cold atlas")
+    branch_note = f", branches arranged: {' + '.join(arranged)}" if arranged else ""
+    _log(f"driving: {', '.join(tasks)}  (reps={args.reps}, record={record_path}{branch_note})")
     if args.dry_run:
         return 0
 
