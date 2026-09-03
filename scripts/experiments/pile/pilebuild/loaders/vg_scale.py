@@ -24,7 +24,7 @@ is the single point at which a box crosses from normalised into pixel space
 (#3281), and :func:`designate_cells` is what decides whether a rebuild keeps the
 images a human already reviewed. Each takes what it reads and returns what it
 produces, so both can be exercised without the 100 GB of VG source the loader
-otherwise needs. See ``tests_lib/core/test_pile_vg_scale.py``.
+otherwise needs. See ``tests_lib/meta/test_pile_vg_scale.py``.
 """
 
 from __future__ import annotations

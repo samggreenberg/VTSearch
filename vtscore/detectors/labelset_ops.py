@@ -57,6 +57,7 @@ from vtscore.detectors.labelset_rename import (
 )
 from vtscore.detectors.labelset_training import (
     build_xy_from_labelset,
+    labelset_resolution_report,
     labelset_train_and_score,
     populate_label_embeddings,
     train_from_labelset,
@@ -82,6 +83,7 @@ __all__ = [
     "move_labelset_file",
     # labelset_training
     "build_xy_from_labelset",
+    "labelset_resolution_report",
     "labelset_train_and_score",
     "populate_label_embeddings",
     "train_from_labelset",

@@ -118,6 +118,9 @@ documented workarounds; this section describes the code as it stands.
 | `VTSEARCH_SUPPORT_EMAIL` | built-in project address | Recipient for the Help modal's "Email us" link. Overrides the persisted `support_email` setting for the process lifetime (all users; not editable via the API). Equivalent to the `--support-email` CLI flag, for the gunicorn images that never parse `argv`; an explicit flag wins. |
 | `VTSEARCH_SEMANTIC_ONLY` | unset | Set to `1`/`true`/`yes`/`on` to lock the deployment to **Semantic** embedders, hiding the prototype Patch Semantic and Structural types from every picker and rejecting them at the dataset-load / detector-create routes. Env-var equivalent of `--semantic-only`, for the gunicorn images; an explicit flag wins, and either beats the persisted `semantic_only` server setting. |
 | `VTSEARCH_DATASET_MAX_AGE_DAYS` | unset (datasets never expire) | Stamps every newly created dataset with an expiry this many days out. Positive integers only; anything else is ignored with a warning on stdout. Env-var equivalent of `--dataset-max-age-days`, for the gunicorn images; an explicit flag wins. |
+| `VTSEARCH_SOLO_MEDIA_TYPE` | unset | Lock the whole instance to one mediaType: the importer and new-detector flows hide their mediaType pickers, converter offerings are filtered to converters that output this type, and that type's default embedder is preloaded at startup. Must be a registered media-type id (`audio`, `image`, `video`, `text`, `document`). Env-var equivalent of `--solo-media-type`, for the gunicorn images; an explicit flag wins, and either beats the persisted `solo_media_type` server setting. |
+| `VTSEARCH_SOLO_EMBEDDERS` | unset | Comma-separated `TYPE=EMBEDDER` pairs (e.g. `image=siglip,audio=clap`) locking the embedder for those mediaTypes, so the importer modal hides its embedder picker for each. A per-process *fallback*: any user who picks their own embedder in the settings UI overrides it for themselves. Env-var equivalent of the repeatable `--solo-embedder`; an explicit flag wins. |
+| `VTSEARCH_HIDE_PLUGINS` | unset | Comma-separated `FAMILY:NAME` pairs (e.g. `embedders:e5,importers:synthetic`) hidden from picker and listing API responses. Hidden plugins stay importable and callable by name — this declutters the UI, it is not a security boundary. Env-var equivalent of the repeatable `--hide-plugin`; an explicit flag wins, and the result is *unioned* with the persisted `hidden_plugins` setting (either source can add a hide; neither can un-hide). |
 
 ### Progress-bar timing
 
@@ -125,7 +128,7 @@ documented workarounds; this section describes the code as it stands.
 |----------|---------|-------------|
 | `VTSEARCH_TIMING_PROFILE` | unset | Path to a timing-profile JSON measured on this environment's hardware. Tells every instance how long each step of each long-running task takes here, so progress bars pace and predict against reality instead of the shipped defaults. See [Progress-bar timing profile](#progress-bar-timing-profile). |
 | `VTSEARCH_TIMING_RECORD` | unset | Path to a JSONL sink. When set, every long-running task — dataset imports included — appends one row per step as it finishes. This is how you gather the measurements the profile is fit from; leave it unset in steady state. |
-| `VTSEARCH_PROFILE_LOAD` | unset | Path to a second JSONL sink, written only by dataset imports and in more detail: it additionally splits cold from warm model loads, cold from cached downloads, and the finalize step into its sub-slots. Optional — imports already feed `VTSEARCH_TIMING_RECORD` above. Arm it as well when you are calibrating the load pipeline specifically; the fitter reads both files and both row shapes. |
+| `VTSEARCH_PROFILE_LOAD` | unset | Path to a second JSONL sink, written only by dataset imports and in more detail: it additionally splits cold from cached downloads and the finalize step into its sub-slots. (Both recorders mark cold vs warm model loads.) Optional — imports already feed `VTSEARCH_TIMING_RECORD` above. Arm it as well when you are calibrating the load pipeline specifically; the fitter reads both files and both row shapes. |
 
 ### Dataset-ingest concurrency
 
@@ -575,6 +578,12 @@ provider. Both files are auto-created on first use and auto-saved on every
 change. Both models accept extra keys, so an unrecognised key is preserved
 rather than dropped.
 
+A key the model *does* know but whose value it rejects — a hand-edit out of
+range, or a value written before the field changed shape — is **ignored on
+load**: the field reads as unset, so its default applies. Nothing is rewritten,
+so the file keeps whatever you put in it; fix the value and it takes effect on
+the next start. VTSearch does not migrate old settings shapes forward.
+
 **If you are changing a user preference, edit `user_settings.json`, not
 `settings.json`.** A `theme` or `autopilot_enabled` key placed in
 `data/settings.json` is simply ignored. The one deliberate exception is the
@@ -625,8 +634,10 @@ working.
   (`"converters"`, `"embedders"`, `"importers"`, … — the keys used by
   `vtscore.plugins.inventory`) to a list of plugin names to omit from picker
   and listing responses. Merged at read time with any `--hide-plugin
-  family:name` CLI flags. This is a UI-declutter setting, **not a security
-  boundary**: hidden plugins remain importable and callable by name.
+  family:name` flags / `VTSEARCH_HIDE_PLUGINS` entries — the merge is a union,
+  so either source can add a hide and neither can un-hide. This is a
+  UI-declutter setting, **not a security boundary**: hidden plugins remain
+  importable and callable by name.
 - `dataset_max_age_days`: stamps new datasets with an expiry this many days
   out. `null` (the default) means datasets never expire. Also settable with
   `--dataset-max-age-days` / `VTSEARCH_DATASET_MAX_AGE_DAYS`, either of which
@@ -645,7 +656,8 @@ working.
   and new-detector flows hide their media-type pickers and lock to it, the
   converter picker filters to converters that output it, and media-type steps
   in tabbed UIs are skipped. `null` shows everything. Users cannot change it;
-  also settable with `--solo-media-type`.
+  also settable with `--solo-media-type` / `VTSEARCH_SOLO_MEDIA_TYPE`, either of
+  which wins for the process lifetime.
 - `projection_n_neighbors`, `projection_min_dist`: UMAP knobs for the VTSBrowse
   map. The persisted projection is keyed on these, so changing one forces a
   recompute rather than serving a layout fit under the old params. Clamped to
@@ -810,7 +822,21 @@ at live user data.
 
 Either way the script ends by printing a coverage report naming which task
 families got measured and which fell back to the defaults, so a thin sweep is
-visible rather than silently half-effective.
+visible rather than silently half-effective. Each measured family is broken
+down by **cell specificity**, because "5 cells" reads like five measurements
+and may be one measurement plus four fallbacks:
+
+```
+  dataset_load     5 cells, 24 step-samples
+                   exact  (device|media|embedder)  2 cells, 6 affine (median r² 1.00)
+                   rollup (device|media|*)         2 cells, 4 affine (median r² 0.98, 1 below 0.90)
+                   rollup (device|*|*)             1 cell, 2 affine (median r² 0.29, 2 below 0.90)
+```
+
+The levels are listed in the order lookup tries them, so the first one with a
+cell for a given media type and encoder is what will actually pace that job.
+Expect the exact cells to fit far better than the rollups; if a family has
+*only* rollup lines, the sweep never covered the media types you care about.
 
 ### Deploying it
 
@@ -848,6 +874,14 @@ lookup walks from the most specific key to the least:
 
 The fit emits rollup cells (`cuda||`) alongside precise ones, so measuring three
 exemplar datasets still improves pacing for every dataset that host will see.
+A rollup is only reached for a combination the sweep never measured, so it is
+always an extrapolation — and the fit refuses to make one it has already
+contradicted: when the rows behind a rollup disagree about a step by more than
+3x (an image import at 0.014 s/item pooled with an audio one at 0.102, say),
+that step is left out of the cell and falls through to the shipped default
+instead. The coverage report says how many steps were withheld that way. If
+you see a lot of them, the sweep is spanning media types too unlike each other
+for one cell to describe; measure them separately rather than widening it.
 
 Re-run the tuning whenever the hardware, storage, or GPU stack changes. Nothing
 expires a profile automatically; a stale one costs accuracy, never correctness.
@@ -993,8 +1027,8 @@ requirements/gpu.txt                 ← `-e .[dev,agpl]` (install.sh / Dockerfi
 requirements/base-no-agpl.txt        ← base.txt without the `agpl` extra (see below)
 requirements/gpu-no-agpl.txt         ← gpu.txt without the `agpl` extra (see below)
 requirements/labbench.txt            ← LabBench (SigLIP-only) image deps (standalone)
-requirements/image-embedders.txt     ← All-image-embedders image deps (CPU, standalone)
-requirements/image-embedders-gpu.txt ← All-image-embedders image deps (GPU, standalone)
+requirements/image-embedders.txt     ← All-image-embedders image deps (standalone; shared by the CPU
+                                       and GPU Dockerfiles, which each pass their own --extra-index-url)
 ```
 
 Install commands:

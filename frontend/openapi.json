@@ -1168,70 +1168,6 @@
         ],
         "type": "object"
       },
-      "DashboardDatasetInfoResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "media_type": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "num_dupes": {
-            "type": "integer"
-          },
-          "num_medias": {
-            "type": "integer"
-          },
-          "origin": {
-            "type": "string"
-          },
-          "source": {
-            "additionalProperties": {},
-            "nullable": true,
-            "type": "object"
-          }
-        },
-        "required": [
-          "media_type",
-          "name",
-          "num_dupes",
-          "num_medias",
-          "origin",
-          "source"
-        ],
-        "type": "object"
-      },
-      "DashboardDatasetRenameRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "name": {
-            "maxLength": 128,
-            "minLength": 1,
-            "type": "string"
-          }
-        },
-        "required": [
-          "name"
-        ],
-        "type": "object"
-      },
-      "DashboardDatasetRenameResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "success": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "name",
-          "success"
-        ],
-        "type": "object"
-      },
       "DashboardDiskUsageResponse": {
         "additionalProperties": false,
         "properties": {
@@ -1490,23 +1426,6 @@
         },
         "required": [
           "name"
-        ],
-        "type": "object"
-      },
-      "DatasetLoadFolderRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "media_type": {
-            "default": "audio",
-            "type": "string"
-          },
-          "path": {
-            "minLength": 1,
-            "type": "string"
-          }
-        },
-        "required": [
-          "path"
         ],
         "type": "object"
       },
@@ -2421,8 +2340,12 @@
         "type": "object"
       },
       "DetectorLabelVoteRequest": {
-        "additionalProperties": false,
         "properties": {
+          "provenance": {
+            "$ref": "#/components/schemas/VoteProvenance",
+            "description": "Optional surfacing context; see :class:`VoteProvenanceSchema`.",
+            "nullable": true
+          },
           "target": {
             "enum": [
               "good",
@@ -4945,6 +4868,11 @@
             },
             "type": "array"
           },
+          "provenance": {
+            "$ref": "#/components/schemas/VoteProvenance",
+            "description": "Optional surfacing context applied to every id in the batch. Defaults to ``{\"flow\": \"bulk\"}`` when omitted.",
+            "nullable": true
+          },
           "target": {
             "description": "Absolute target state applied to every id: ``good``, ``bad``, or ``none``. Idempotent.",
             "enum": [
@@ -4988,6 +4916,11 @@
       },
       "MediaVoteRequest": {
         "properties": {
+          "provenance": {
+            "$ref": "#/components/schemas/VoteProvenance",
+            "description": "Optional surfacing context for this vote. Recorded only when the call actually changes the vote state, so an idempotent re-send from a stale tab cannot overwrite what the original click recorded.",
+            "nullable": true
+          },
           "region_box": {
             "description": "Optional 4-element ``[x0, y0, x1, y1]`` in normalised image coordinates ``[0, 1]``. Only valid when ``target`` is ``good``.",
             "items": {
@@ -5568,38 +5501,6 @@
         },
         "required": [
           "success"
-        ],
-        "type": "object"
-      },
-      "SeedFromExamplesRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "examples": {
-            "items": {
-              "additionalProperties": {},
-              "type": "object"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "examples"
-        ],
-        "type": "object"
-      },
-      "SeedFromExamplesResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "seeded": {
-            "type": "integer"
-          },
-          "skipped": {
-            "type": "integer"
-          }
-        },
-        "required": [
-          "seeded",
-          "skipped"
         ],
         "type": "object"
       },
@@ -6230,6 +6131,73 @@
         "required": [
           "version"
         ],
+        "type": "object"
+      },
+      "VoteProvenance": {
+        "properties": {
+          "flow": {
+            "description": "Which UI flow drove the vote.",
+            "enum": [
+              "autopilot",
+              "bulk",
+              "find_verify",
+              "import",
+              "labelset_review",
+              "list_review",
+              "seed_example",
+              "undo",
+              "unknown",
+              null
+            ],
+            "nullable": true,
+            "type": "string"
+          },
+          "phase": {
+            "description": "Autopilot phase at click time. Ignored unless ``flow`` is ``autopilot``.",
+            "enum": [
+              "bad",
+              "good",
+              "hard",
+              "new",
+              null
+            ],
+            "nullable": true,
+            "type": "string"
+          },
+          "rank_at_vote": {
+            "description": "Zero-based position of the item in the sort the user was looking at.",
+            "minimum": 0,
+            "nullable": true,
+            "type": "integer"
+          },
+          "score_at_vote": {
+            "description": "The item's model score when it was surfaced, if the client has one.",
+            "nullable": true,
+            "type": "number"
+          },
+          "select_mode": {
+            "description": "How the item was drawn off the ranking: ``top`` (head of the sort), ``hard`` (margin sampling near the cutoff), or ``new`` (diverse exploration).",
+            "enum": [
+              "hard",
+              "new",
+              "top",
+              null
+            ],
+            "nullable": true,
+            "type": "string"
+          },
+          "sort_kind": {
+            "description": "Which ranking the user was looking at.",
+            "enum": [
+              "learned",
+              "load",
+              "text",
+              null
+            ],
+            "nullable": true,
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "VotesResponse": {
@@ -7079,1134 +7047,6 @@
           "id",
           "similarity"
         ],
-        "type": "object"
-      },
-      "datasource_import_ServerFileDataSourceImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "path": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "path"
-        ],
-        "type": "object"
-      },
-      "datasource_import_UrlDownloadDataSourceImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "url": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "url"
-        ],
-        "type": "object"
-      },
-      "import_dataset_CombineDatasetsImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "build_projection": {
-            "default": null,
-            "nullable": true
-          },
-          "cleaners": {
-            "default": null,
-            "nullable": true
-          },
-          "clipper": {
-            "default": null,
-            "nullable": true
-          },
-          "clipper_params": {
-            "default": null,
-            "nullable": true
-          },
-          "dataset_name": {
-            "default": null,
-            "nullable": true
-          },
-          "datasets": {
-            "type": "string"
-          },
-          "embedder": {
-            "default": null,
-            "nullable": true
-          },
-          "embedders": {
-            "default": null,
-            "nullable": true
-          },
-          "merge_near_duplicates": {
-            "default": null,
-            "nullable": true
-          },
-          "name": {
-            "default": "",
-            "type": "string"
-          },
-          "source_specs": {
-            "default": null,
-            "nullable": true
-          }
-        },
-        "required": [
-          "datasets"
-        ],
-        "type": "object"
-      },
-      "import_dataset_DemoDatasetImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "build_projection": {
-            "default": null,
-            "nullable": true
-          },
-          "cleaners": {
-            "default": null,
-            "nullable": true
-          },
-          "clipper": {
-            "default": null,
-            "nullable": true
-          },
-          "clipper_params": {
-            "default": null,
-            "nullable": true
-          },
-          "converter": {
-            "default": "",
-            "type": "string"
-          },
-          "dataset_name": {
-            "default": null,
-            "nullable": true
-          },
-          "embedder": {
-            "default": "",
-            "type": "string"
-          },
-          "embedders": {
-            "default": null,
-            "nullable": true
-          },
-          "merge_near_duplicates": {
-            "default": null,
-            "nullable": true
-          },
-          "name": {
-            "enum": [
-              "esc50_s",
-              "esc50_m",
-              "esc50_l",
-              "esc50_a",
-              "gtzan_a",
-              "speech_commands_v2_s",
-              "speech_commands_v2_m",
-              "speech_commands_v2_l",
-              "speech_commands_v2_a",
-              "urbansound8k_s",
-              "urbansound8k_m",
-              "urbansound8k_l",
-              "urbansound8k_a",
-              "tut_sound_events_2017_s",
-              "tut_sound_events_2017_m",
-              "tut_sound_events_2017_l",
-              "tut_sound_events_2017_a",
-              "clotho_s",
-              "clotho_m",
-              "clotho_l",
-              "clotho_a",
-              "apollo11_audio_s",
-              "apollo11_audio_m",
-              "apollo11_audio_l",
-              "apollo11_audio_a",
-              "birdvox_full_night_s",
-              "birdvox_full_night_m",
-              "birdvox_full_night_l",
-              "birdvox_full_night_a",
-              "nixon_tapes_s",
-              "nixon_tapes_m",
-              "nixon_tapes_l",
-              "nixon_tapes_a",
-              "synthetic_world_audio",
-              "ucsf_documents_a",
-              "synthetic_world_image",
-              "caltech101_s",
-              "caltech101_m",
-              "caltech101_l",
-              "caltech101_a",
-              "caltech256_s",
-              "caltech256_m",
-              "caltech256_l",
-              "caltech256_a",
-              "oxford_flowers_102_a",
-              "food101_s",
-              "food101_m",
-              "food101_l",
-              "food101_a",
-              "eurosat_s",
-              "eurosat_m",
-              "eurosat_l",
-              "eurosat_a",
-              "places365_s",
-              "places365_m",
-              "places365_l",
-              "places365_a",
-              "enrico_s",
-              "enrico_m",
-              "enrico_l",
-              "enrico_a",
-              "rico_screen2words_s",
-              "rico_screen2words_m",
-              "rico_screen2words_l",
-              "rico_screen2words_a",
-              "rico_icons_s",
-              "rico_icons_m",
-              "rico_icons_l",
-              "rico_icons_a",
-              "rvl_cdip_s",
-              "rvl_cdip_m",
-              "rvl_cdip_l",
-              "rvl_cdip_a",
-              "roxford5k_s",
-              "roxford5k_a",
-              "openlogo_s",
-              "openlogo_a",
-              "visual_genome_s",
-              "visual_genome_m",
-              "visual_genome_l",
-              "visual_genome_a",
-              "vggface2_faces_s",
-              "vggface2_faces_m",
-              "20newsgroups_s",
-              "20newsgroups_m",
-              "20newsgroups_l",
-              "20newsgroups_a",
-              "ag_news_s",
-              "ag_news_m",
-              "ag_news_l",
-              "ag_news_a",
-              "bbc_news_a",
-              "imdb_s",
-              "imdb_m",
-              "imdb_l",
-              "imdb_a",
-              "wikipedia_topics_s",
-              "wikipedia_topics_m",
-              "wikipedia_topics_l",
-              "wikipedia_topics_a",
-              "arxiv_abstracts_s",
-              "arxiv_abstracts_m",
-              "arxiv_abstracts_l",
-              "arxiv_abstracts_a",
-              "reuters21578_s",
-              "reuters21578_m",
-              "reuters21578_l",
-              "reuters21578_a",
-              "ucf101_s",
-              "ucf101_m",
-              "ucf101_l",
-              "ucf101_a",
-              "hmdb51_s",
-              "hmdb51_m",
-              "hmdb51_l",
-              "hmdb51_a",
-              "ucf101_full_s",
-              "ucf101_full_m",
-              "ucf101_full_l",
-              "ucf101_full_a",
-              "kth_s",
-              "kth_m",
-              "kth_l",
-              "kth_a"
-            ],
-            "type": "string"
-          },
-          "source_specs": {
-            "default": null,
-            "nullable": true
-          }
-        },
-        "required": [
-          "name"
-        ],
-        "type": "object"
-      },
-      "import_dataset_HttpArchiveDatasetImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "build_projection": {
-            "default": null,
-            "nullable": true
-          },
-          "cleaners": {
-            "default": null,
-            "nullable": true
-          },
-          "clipper": {
-            "default": null,
-            "nullable": true
-          },
-          "clipper_params": {
-            "default": null,
-            "nullable": true
-          },
-          "dataset_name": {
-            "default": null,
-            "nullable": true
-          },
-          "embedder": {
-            "default": null,
-            "nullable": true
-          },
-          "embedders": {
-            "default": null,
-            "nullable": true
-          },
-          "media_type": {
-            "default": "audio",
-            "enum": [
-              "audio",
-              "document",
-              "face",
-              "image",
-              "text",
-              "video",
-              ""
-            ],
-            "type": "string"
-          },
-          "merge_near_duplicates": {
-            "default": null,
-            "nullable": true
-          },
-          "source_specs": {
-            "default": null,
-            "nullable": true
-          },
-          "url": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "url"
-        ],
-        "type": "object"
-      },
-      "import_dataset_LocalArchiveMemberImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "build_projection": {
-            "default": null,
-            "nullable": true
-          },
-          "cleaners": {
-            "default": null,
-            "nullable": true
-          },
-          "clipper": {
-            "default": null,
-            "nullable": true
-          },
-          "clipper_params": {
-            "default": null,
-            "nullable": true
-          },
-          "dataset_name": {
-            "default": null,
-            "nullable": true
-          },
-          "embedder": {
-            "default": null,
-            "nullable": true
-          },
-          "embedders": {
-            "default": null,
-            "nullable": true
-          },
-          "manifest": {
-            "type": "string"
-          },
-          "media_type": {
-            "default": "video",
-            "enum": [
-              "audio",
-              "document",
-              "face",
-              "image",
-              "text",
-              "video",
-              ""
-            ],
-            "type": "string"
-          },
-          "merge_near_duplicates": {
-            "default": null,
-            "nullable": true
-          },
-          "source_specs": {
-            "default": null,
-            "nullable": true
-          }
-        },
-        "required": [
-          "manifest"
-        ],
-        "type": "object"
-      },
-      "import_dataset_LocalFilesDatasetImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "build_projection": {
-            "default": null,
-            "nullable": true
-          },
-          "cleaners": {
-            "default": null,
-            "nullable": true
-          },
-          "clipper": {
-            "default": null,
-            "nullable": true
-          },
-          "clipper_params": {
-            "default": null,
-            "nullable": true
-          },
-          "dataset_name": {
-            "default": null,
-            "nullable": true
-          },
-          "embedder": {
-            "default": null,
-            "nullable": true
-          },
-          "embedders": {
-            "default": null,
-            "nullable": true
-          },
-          "merge_near_duplicates": {
-            "default": null,
-            "nullable": true
-          },
-          "source_specs": {
-            "default": null,
-            "nullable": true
-          }
-        },
-        "type": "object"
-      },
-      "import_dataset_LocalFolderDatasetImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "build_projection": {
-            "default": null,
-            "nullable": true
-          },
-          "cleaners": {
-            "default": null,
-            "nullable": true
-          },
-          "clipper": {
-            "default": null,
-            "nullable": true
-          },
-          "clipper_params": {
-            "default": null,
-            "nullable": true
-          },
-          "dataset_name": {
-            "default": null,
-            "nullable": true
-          },
-          "embedder": {
-            "default": null,
-            "nullable": true
-          },
-          "embedders": {
-            "default": null,
-            "nullable": true
-          },
-          "merge_near_duplicates": {
-            "default": null,
-            "nullable": true
-          },
-          "recursive": {
-            "default": null
-          },
-          "source_specs": {
-            "default": null,
-            "nullable": true
-          }
-        },
-        "type": "object"
-      },
-      "import_dataset_ServerFilesDatasetImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "build_projection": {
-            "default": null,
-            "nullable": true
-          },
-          "cleaners": {
-            "default": null,
-            "nullable": true
-          },
-          "clipper": {
-            "default": null,
-            "nullable": true
-          },
-          "clipper_params": {
-            "default": null,
-            "nullable": true
-          },
-          "dataset_name": {
-            "default": null,
-            "nullable": true
-          },
-          "embedder": {
-            "default": null,
-            "nullable": true
-          },
-          "embedders": {
-            "default": null,
-            "nullable": true
-          },
-          "media_type": {
-            "default": "audio",
-            "enum": [
-              "audio",
-              "document",
-              "face",
-              "image",
-              "text",
-              "video",
-              ""
-            ],
-            "type": "string"
-          },
-          "merge_near_duplicates": {
-            "default": null,
-            "nullable": true
-          },
-          "paths_file": {
-            "type": "string"
-          },
-          "reference_files": {
-            "default": null
-          },
-          "source_specs": {
-            "default": null,
-            "nullable": true
-          }
-        },
-        "required": [
-          "paths_file"
-        ],
-        "type": "object"
-      },
-      "import_dataset_ServerFolderDatasetImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "build_projection": {
-            "default": null,
-            "nullable": true
-          },
-          "cleaners": {
-            "default": null,
-            "nullable": true
-          },
-          "clipper": {
-            "default": null,
-            "nullable": true
-          },
-          "clipper_params": {
-            "default": null,
-            "nullable": true
-          },
-          "dataset_name": {
-            "default": null,
-            "nullable": true
-          },
-          "dig_archives": {
-            "default": null
-          },
-          "embedder": {
-            "default": null,
-            "nullable": true
-          },
-          "embedders": {
-            "default": null,
-            "nullable": true
-          },
-          "media_type": {
-            "default": "audio",
-            "enum": [
-              "audio",
-              "document",
-              "face",
-              "image",
-              "text",
-              "video",
-              ""
-            ],
-            "type": "string"
-          },
-          "merge_near_duplicates": {
-            "default": null,
-            "nullable": true
-          },
-          "path": {
-            "type": "string"
-          },
-          "recursive": {
-            "default": null
-          },
-          "reference_files": {
-            "default": null
-          },
-          "source_specs": {
-            "default": null,
-            "nullable": true
-          }
-        },
-        "required": [
-          "path"
-        ],
-        "type": "object"
-      },
-      "import_dataset_SyntheticDatasetImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "build_projection": {
-            "default": null,
-            "nullable": true
-          },
-          "cleaners": {
-            "default": null,
-            "nullable": true
-          },
-          "clipper": {
-            "default": null,
-            "nullable": true
-          },
-          "clipper_params": {
-            "default": null,
-            "nullable": true
-          },
-          "dataset_name": {
-            "default": null,
-            "nullable": true
-          },
-          "embedder": {
-            "default": null,
-            "nullable": true
-          },
-          "embedders": {
-            "default": null,
-            "nullable": true
-          },
-          "media_type": {
-            "default": "image",
-            "enum": [
-              "image",
-              "audio",
-              "video",
-              ""
-            ],
-            "type": "string"
-          },
-          "merge_near_duplicates": {
-            "default": null,
-            "nullable": true
-          },
-          "size": {
-            "default": 100,
-            "minimum": 1,
-            "type": "integer"
-          },
-          "source_specs": {
-            "default": null,
-            "nullable": true
-          }
-        },
-        "type": "object"
-      },
-      "import_labels_into_detector_ServerCsvLabelImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "filepath": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "filepath"
-        ],
-        "type": "object"
-      },
-      "import_labels_into_detector_ServerJsonLabelImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "filepath": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "filepath"
-        ],
-        "type": "object"
-      },
-      "register_detector_from_labelset_ServerCsvLabelImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "filepath": {
-            "type": "string"
-          },
-          "name": {
-            "default": null,
-            "nullable": true
-          }
-        },
-        "required": [
-          "filepath"
-        ],
-        "type": "object"
-      },
-      "register_detector_from_labelset_ServerJsonLabelImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "filepath": {
-            "type": "string"
-          },
-          "name": {
-            "default": null,
-            "nullable": true
-          }
-        },
-        "required": [
-          "filepath"
-        ],
-        "type": "object"
-      },
-      "run_label_import_ServerCsvLabelImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "filepath": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "filepath"
-        ],
-        "type": "object"
-      },
-      "run_label_import_ServerJsonLabelImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "filepath": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "filepath"
-        ],
-        "type": "object"
-      },
-      "run_settings_import_ServerFileSettingsImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "filepath": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "filepath"
-        ],
-        "type": "object"
-      },
-      "stage_import_CombineDatasetsImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "dataset_name": {
-            "default": null,
-            "nullable": true
-          },
-          "datasets": {
-            "type": "string"
-          },
-          "name": {
-            "default": "",
-            "type": "string"
-          },
-          "source_specs": {
-            "default": null,
-            "nullable": true
-          }
-        },
-        "required": [
-          "datasets"
-        ],
-        "type": "object"
-      },
-      "stage_import_DemoDatasetImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "converter": {
-            "default": "",
-            "type": "string"
-          },
-          "dataset_name": {
-            "default": null,
-            "nullable": true
-          },
-          "embedder": {
-            "default": "",
-            "type": "string"
-          },
-          "name": {
-            "enum": [
-              "esc50_s",
-              "esc50_m",
-              "esc50_l",
-              "esc50_a",
-              "gtzan_a",
-              "speech_commands_v2_s",
-              "speech_commands_v2_m",
-              "speech_commands_v2_l",
-              "speech_commands_v2_a",
-              "urbansound8k_s",
-              "urbansound8k_m",
-              "urbansound8k_l",
-              "urbansound8k_a",
-              "tut_sound_events_2017_s",
-              "tut_sound_events_2017_m",
-              "tut_sound_events_2017_l",
-              "tut_sound_events_2017_a",
-              "clotho_s",
-              "clotho_m",
-              "clotho_l",
-              "clotho_a",
-              "apollo11_audio_s",
-              "apollo11_audio_m",
-              "apollo11_audio_l",
-              "apollo11_audio_a",
-              "birdvox_full_night_s",
-              "birdvox_full_night_m",
-              "birdvox_full_night_l",
-              "birdvox_full_night_a",
-              "nixon_tapes_s",
-              "nixon_tapes_m",
-              "nixon_tapes_l",
-              "nixon_tapes_a",
-              "synthetic_world_audio",
-              "ucsf_documents_a",
-              "synthetic_world_image",
-              "caltech101_s",
-              "caltech101_m",
-              "caltech101_l",
-              "caltech101_a",
-              "caltech256_s",
-              "caltech256_m",
-              "caltech256_l",
-              "caltech256_a",
-              "oxford_flowers_102_a",
-              "food101_s",
-              "food101_m",
-              "food101_l",
-              "food101_a",
-              "eurosat_s",
-              "eurosat_m",
-              "eurosat_l",
-              "eurosat_a",
-              "places365_s",
-              "places365_m",
-              "places365_l",
-              "places365_a",
-              "enrico_s",
-              "enrico_m",
-              "enrico_l",
-              "enrico_a",
-              "rico_screen2words_s",
-              "rico_screen2words_m",
-              "rico_screen2words_l",
-              "rico_screen2words_a",
-              "rico_icons_s",
-              "rico_icons_m",
-              "rico_icons_l",
-              "rico_icons_a",
-              "rvl_cdip_s",
-              "rvl_cdip_m",
-              "rvl_cdip_l",
-              "rvl_cdip_a",
-              "roxford5k_s",
-              "roxford5k_a",
-              "openlogo_s",
-              "openlogo_a",
-              "visual_genome_s",
-              "visual_genome_m",
-              "visual_genome_l",
-              "visual_genome_a",
-              "vggface2_faces_s",
-              "vggface2_faces_m",
-              "20newsgroups_s",
-              "20newsgroups_m",
-              "20newsgroups_l",
-              "20newsgroups_a",
-              "ag_news_s",
-              "ag_news_m",
-              "ag_news_l",
-              "ag_news_a",
-              "bbc_news_a",
-              "imdb_s",
-              "imdb_m",
-              "imdb_l",
-              "imdb_a",
-              "wikipedia_topics_s",
-              "wikipedia_topics_m",
-              "wikipedia_topics_l",
-              "wikipedia_topics_a",
-              "arxiv_abstracts_s",
-              "arxiv_abstracts_m",
-              "arxiv_abstracts_l",
-              "arxiv_abstracts_a",
-              "reuters21578_s",
-              "reuters21578_m",
-              "reuters21578_l",
-              "reuters21578_a",
-              "ucf101_s",
-              "ucf101_m",
-              "ucf101_l",
-              "ucf101_a",
-              "hmdb51_s",
-              "hmdb51_m",
-              "hmdb51_l",
-              "hmdb51_a",
-              "ucf101_full_s",
-              "ucf101_full_m",
-              "ucf101_full_l",
-              "ucf101_full_a",
-              "kth_s",
-              "kth_m",
-              "kth_l",
-              "kth_a"
-            ],
-            "type": "string"
-          },
-          "source_specs": {
-            "default": null,
-            "nullable": true
-          }
-        },
-        "required": [
-          "name"
-        ],
-        "type": "object"
-      },
-      "stage_import_HttpArchiveDatasetImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "dataset_name": {
-            "default": null,
-            "nullable": true
-          },
-          "media_type": {
-            "default": "audio",
-            "enum": [
-              "audio",
-              "document",
-              "face",
-              "image",
-              "text",
-              "video",
-              ""
-            ],
-            "type": "string"
-          },
-          "source_specs": {
-            "default": null,
-            "nullable": true
-          },
-          "url": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "url"
-        ],
-        "type": "object"
-      },
-      "stage_import_LocalArchiveMemberImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "dataset_name": {
-            "default": null,
-            "nullable": true
-          },
-          "manifest": {
-            "type": "string"
-          },
-          "media_type": {
-            "default": "video",
-            "enum": [
-              "audio",
-              "document",
-              "face",
-              "image",
-              "text",
-              "video",
-              ""
-            ],
-            "type": "string"
-          },
-          "source_specs": {
-            "default": null,
-            "nullable": true
-          }
-        },
-        "required": [
-          "manifest"
-        ],
-        "type": "object"
-      },
-      "stage_import_LocalFilesDatasetImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "dataset_name": {
-            "default": null,
-            "nullable": true
-          },
-          "source_specs": {
-            "default": null,
-            "nullable": true
-          }
-        },
-        "type": "object"
-      },
-      "stage_import_LocalFolderDatasetImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "dataset_name": {
-            "default": null,
-            "nullable": true
-          },
-          "recursive": {
-            "default": null
-          },
-          "source_specs": {
-            "default": null,
-            "nullable": true
-          }
-        },
-        "type": "object"
-      },
-      "stage_import_ServerFilesDatasetImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "dataset_name": {
-            "default": null,
-            "nullable": true
-          },
-          "media_type": {
-            "default": "audio",
-            "enum": [
-              "audio",
-              "document",
-              "face",
-              "image",
-              "text",
-              "video",
-              ""
-            ],
-            "type": "string"
-          },
-          "paths_file": {
-            "type": "string"
-          },
-          "reference_files": {
-            "default": null
-          },
-          "source_specs": {
-            "default": null,
-            "nullable": true
-          }
-        },
-        "required": [
-          "paths_file"
-        ],
-        "type": "object"
-      },
-      "stage_import_ServerFolderDatasetImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "dataset_name": {
-            "default": null,
-            "nullable": true
-          },
-          "dig_archives": {
-            "default": null
-          },
-          "media_type": {
-            "default": "audio",
-            "enum": [
-              "audio",
-              "document",
-              "face",
-              "image",
-              "text",
-              "video",
-              ""
-            ],
-            "type": "string"
-          },
-          "path": {
-            "type": "string"
-          },
-          "recursive": {
-            "default": null
-          },
-          "reference_files": {
-            "default": null
-          },
-          "source_specs": {
-            "default": null,
-            "nullable": true
-          }
-        },
-        "required": [
-          "path"
-        ],
-        "type": "object"
-      },
-      "stage_import_SyntheticDatasetImporter_Args": {
-        "additionalProperties": true,
-        "properties": {
-          "dataset_name": {
-            "default": null,
-            "nullable": true
-          },
-          "media_type": {
-            "default": "image",
-            "enum": [
-              "image",
-              "audio",
-              "video",
-              ""
-            ],
-            "type": "string"
-          },
-          "size": {
-            "default": 100,
-            "minimum": 1,
-            "type": "integer"
-          },
-          "source_specs": {
-            "default": null,
-            "nullable": true
-          }
-        },
         "type": "object"
       }
     }
@@ -9249,71 +8089,6 @@
         ]
       }
     },
-    "/api/dashboard/dataset-info": {
-      "get": {
-        "description": "Returns a JSON object with ``name``, ``num_medias``, ``media_type``, and\n``origin`` extracted from the first media that has origin info.",
-        "operationId": "dashboard_dataset_info",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DashboardDatasetInfoResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "404": {
-            "description": "No dataset is currently loaded."
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Return metadata about the currently loaded dataset for the dashboard.",
-        "tags": [
-          "datasets_ui"
-        ]
-      }
-    },
-    "/api/dashboard/dataset-rename": {
-      "put": {
-        "operationId": "dashboard_dataset_rename",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DashboardDatasetRenameRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DashboardDatasetRenameResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Set a custom display name for the currently loaded dataset.",
-        "tags": [
-          "datasets_ui"
-        ]
-      }
-    },
     "/api/dashboard/disk-usage": {
       "get": {
         "operationId": "dashboard_disk_usage",
@@ -9819,258 +8594,6 @@
         ]
       }
     },
-    "/api/dataset/import/combine_datasets": {
-      "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "import_dataset__combine_datasets",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/import_dataset_CombineDatasetsImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run a registered importer by name in a background thread.",
-        "tags": [
-          "datasets_staging"
-        ]
-      }
-    },
-    "/api/dataset/import/demo": {
-      "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "import_dataset__demo",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/import_dataset_DemoDatasetImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run a registered importer by name in a background thread.",
-        "tags": [
-          "datasets_staging"
-        ]
-      }
-    },
-    "/api/dataset/import/http_archive": {
-      "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "import_dataset__http_archive",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/import_dataset_HttpArchiveDatasetImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run a registered importer by name in a background thread.",
-        "tags": [
-          "datasets_staging"
-        ]
-      }
-    },
-    "/api/dataset/import/local_archive_member": {
-      "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "import_dataset__local_archive_member",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/import_dataset_LocalArchiveMemberImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run a registered importer by name in a background thread.",
-        "tags": [
-          "datasets_staging"
-        ]
-      }
-    },
-    "/api/dataset/import/local_files": {
-      "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "import_dataset__local_files",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/import_dataset_LocalFilesDatasetImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run a registered importer by name in a background thread.",
-        "tags": [
-          "datasets_staging"
-        ]
-      }
-    },
-    "/api/dataset/import/local_folder": {
-      "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "import_dataset__local_folder",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/import_dataset_LocalFolderDatasetImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run a registered importer by name in a background thread.",
-        "tags": [
-          "datasets_staging"
-        ]
-      }
-    },
-    "/api/dataset/import/server_files": {
-      "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "import_dataset__server_files",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/import_dataset_ServerFilesDatasetImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run a registered importer by name in a background thread.",
-        "tags": [
-          "datasets_staging"
-        ]
-      }
-    },
-    "/api/dataset/import/server_folder": {
-      "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "import_dataset__server_folder",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/import_dataset_ServerFolderDatasetImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run a registered importer by name in a background thread.",
-        "tags": [
-          "datasets_staging"
-        ]
-      }
-    },
-    "/api/dataset/import/synthetic": {
-      "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "import_dataset__synthetic",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/import_dataset_SyntheticDatasetImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run a registered importer by name in a background thread.",
-        "tags": [
-          "datasets_staging"
-        ]
-      }
-    },
     "/api/dataset/import/{importer_name}": {
       "parameters": [
         {
@@ -10084,7 +8607,7 @@
         }
       ],
       "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "description": "Plugin-dependent body shape: the accepted keys are the named\nplugin's declared ``fields``, so they cannot be enumerated in a\nstatic OpenAPI schema.  Fetch them at runtime from\n``GET /api/dataset/importers``, whose ``fields`` array carries each key's\n``field_type``, ``required`` flag, and any ``options`` / bounds.",
         "operationId": "import_dataset",
         "responses": {
           "default": {
@@ -10311,46 +8834,6 @@
         ]
       }
     },
-    "/api/dataset/load-folder": {
-      "post": {
-        "operationId": "load_dataset_folder",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DatasetLoadFolderRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DatasetLoadStartedResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "400": {
-            "description": "Invalid or missing folder path."
-          },
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Generate dataset from a folder of media files.",
-        "tags": [
-          "datasets_load"
-        ]
-      }
-    },
     "/api/dataset/load-source": {
       "post": {
         "operationId": "load_dataset_from_source",
@@ -10513,258 +8996,6 @@
         ]
       }
     },
-    "/api/dataset/stage-import/combine_datasets": {
-      "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "stage_import__combine_datasets",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/stage_import_CombineDatasetsImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run a registered importer in staging mode.",
-        "tags": [
-          "datasets_staging"
-        ]
-      }
-    },
-    "/api/dataset/stage-import/demo": {
-      "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "stage_import__demo",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/stage_import_DemoDatasetImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run a registered importer in staging mode.",
-        "tags": [
-          "datasets_staging"
-        ]
-      }
-    },
-    "/api/dataset/stage-import/http_archive": {
-      "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "stage_import__http_archive",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/stage_import_HttpArchiveDatasetImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run a registered importer in staging mode.",
-        "tags": [
-          "datasets_staging"
-        ]
-      }
-    },
-    "/api/dataset/stage-import/local_archive_member": {
-      "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "stage_import__local_archive_member",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/stage_import_LocalArchiveMemberImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run a registered importer in staging mode.",
-        "tags": [
-          "datasets_staging"
-        ]
-      }
-    },
-    "/api/dataset/stage-import/local_files": {
-      "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "stage_import__local_files",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/stage_import_LocalFilesDatasetImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run a registered importer in staging mode.",
-        "tags": [
-          "datasets_staging"
-        ]
-      }
-    },
-    "/api/dataset/stage-import/local_folder": {
-      "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "stage_import__local_folder",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/stage_import_LocalFolderDatasetImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run a registered importer in staging mode.",
-        "tags": [
-          "datasets_staging"
-        ]
-      }
-    },
-    "/api/dataset/stage-import/server_files": {
-      "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "stage_import__server_files",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/stage_import_ServerFilesDatasetImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run a registered importer in staging mode.",
-        "tags": [
-          "datasets_staging"
-        ]
-      }
-    },
-    "/api/dataset/stage-import/server_folder": {
-      "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "stage_import__server_folder",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/stage_import_ServerFolderDatasetImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run a registered importer in staging mode.",
-        "tags": [
-          "datasets_staging"
-        ]
-      }
-    },
-    "/api/dataset/stage-import/synthetic": {
-      "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "stage_import__synthetic",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/stage_import_SyntheticDatasetImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run a registered importer in staging mode.",
-        "tags": [
-          "datasets_staging"
-        ]
-      }
-    },
     "/api/dataset/stage-import/{importer_name}": {
       "parameters": [
         {
@@ -10778,7 +9009,7 @@
         }
       ],
       "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "description": "Plugin-dependent body shape: the accepted keys are the named\nplugin's declared ``fields``, so they cannot be enumerated in a\nstatic OpenAPI schema.  Fetch them at runtime from\n``GET /api/dataset/importers``, whose ``fields`` array carries each key's\n``field_type``, ``required`` flag, and any ``options`` / bounds.",
         "operationId": "stage_import",
         "responses": {
           "default": {
@@ -11313,62 +9544,6 @@
         ]
       }
     },
-    "/api/datasource-import/server_file": {
-      "post": {
-        "description": "Plugin-dependent body shape (JSON, or multipart when the importer\ndeclares ``file`` fields).  On success the fetched bytes are saved\ninto the per-user ``example_media/`` directory and the saved\n``filename`` (persistence key) plus the human-readable\n``original_name`` are returned, matching the upload endpoint's\ncontract, along with the item's durable ``origin`` when the importer\nreports one (``null`` otherwise).",
-        "operationId": "datasource_import__server_file",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/datasource_import_ServerFileDataSourceImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Fetch one media item via the named datasource importer.",
-        "tags": [
-          "datasource_importers"
-        ]
-      }
-    },
-    "/api/datasource-import/url_download": {
-      "post": {
-        "description": "Plugin-dependent body shape (JSON, or multipart when the importer\ndeclares ``file`` fields).  On success the fetched bytes are saved\ninto the per-user ``example_media/`` directory and the saved\n``filename`` (persistence key) plus the human-readable\n``original_name`` are returned, matching the upload endpoint's\ncontract, along with the item's durable ``origin`` when the importer\nreports one (``null`` otherwise).",
-        "operationId": "datasource_import__url_download",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/datasource_import_UrlDownloadDataSourceImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Fetch one media item via the named datasource importer.",
-        "tags": [
-          "datasource_importers"
-        ]
-      }
-    },
     "/api/datasource-import/{importer_name}": {
       "parameters": [
         {
@@ -11701,62 +9876,6 @@
         ]
       }
     },
-    "/api/detectors/registry/from-labelset/server_csv_file": {
-      "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "register_detector_from_labelset__server_csv_file",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/register_detector_from_labelset_ServerCsvLabelImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Create a detector seeded with labels from a label importer.",
-        "tags": [
-          "detectors_registry"
-        ]
-      }
-    },
-    "/api/detectors/registry/from-labelset/server_json_file": {
-      "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "register_detector_from_labelset__server_json_file",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/register_detector_from_labelset_ServerJsonLabelImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Create a detector seeded with labels from a label importer.",
-        "tags": [
-          "detectors_registry"
-        ]
-      }
-    },
     "/api/detectors/registry/from-labelset/{importer_name}": {
       "parameters": [
         {
@@ -11770,7 +9889,7 @@
         }
       ],
       "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "description": "Plugin-dependent body shape: the accepted keys are the named\nplugin's declared ``fields``, so they cannot be enumerated in a\nstatic OpenAPI schema.  Fetch them at runtime from\n``GET /api/label-importers``, whose ``fields`` array carries each key's\n``field_type``, ``required`` flag, and any ``options`` / bounds.",
         "operationId": "register_detector_from_labelset",
         "responses": {
           "default": {
@@ -12521,84 +10640,6 @@
         ]
       }
     },
-    "/api/detectors/{name}/import-labels/server_csv_file": {
-      "parameters": [
-        {
-          "in": "path",
-          "name": "name",
-          "required": true,
-          "schema": {
-            "minLength": 1,
-            "type": "string"
-          }
-        }
-      ],
-      "post": {
-        "description": "Unlike the regular ``/api/label-importers/import/`` route, this does\n**not** require a dataset to be loaded.  The imported label entries are\nmerged directly into the detector's persisted labelset, and the\ndetector-registry entry is updated so the dashboard reflects the new\ncount.\n\nWhen the detector is loaded into memory, the new labels are also resolved\nagainst the loaded dataset's medias, applied to the detector's votes, and\na fresh MLP is trained with a cross-validated threshold, all inside the\nloaded detector context.\n\nPlugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "import_labels_into_detector__server_csv_file",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/import_labels_into_detector_ServerCsvLabelImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run a label importer and merge results into this detector's labelset.",
-        "tags": [
-          "detectors_labels"
-        ]
-      }
-    },
-    "/api/detectors/{name}/import-labels/server_json_file": {
-      "parameters": [
-        {
-          "in": "path",
-          "name": "name",
-          "required": true,
-          "schema": {
-            "minLength": 1,
-            "type": "string"
-          }
-        }
-      ],
-      "post": {
-        "description": "Unlike the regular ``/api/label-importers/import/`` route, this does\n**not** require a dataset to be loaded.  The imported label entries are\nmerged directly into the detector's persisted labelset, and the\ndetector-registry entry is updated so the dashboard reflects the new\ncount.\n\nWhen the detector is loaded into memory, the new labels are also resolved\nagainst the loaded dataset's medias, applied to the detector's votes, and\na fresh MLP is trained with a cross-validated threshold, all inside the\nloaded detector context.\n\nPlugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "import_labels_into_detector__server_json_file",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/import_labels_into_detector_ServerJsonLabelImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run a label importer and merge results into this detector's labelset.",
-        "tags": [
-          "detectors_labels"
-        ]
-      }
-    },
     "/api/detectors/{name}/import-labels/{importer_name}": {
       "parameters": [
         {
@@ -12621,7 +10662,7 @@
         }
       ],
       "post": {
-        "description": "Unlike the regular ``/api/label-importers/import/`` route, this does\n**not** require a dataset to be loaded.  The imported label entries are\nmerged directly into the detector's persisted labelset, and the\ndetector-registry entry is updated so the dashboard reflects the new\ncount.\n\nWhen the detector is loaded into memory, the new labels are also resolved\nagainst the loaded dataset's medias, applied to the detector's votes, and\na fresh MLP is trained with a cross-validated threshold, all inside the\nloaded detector context.\n\nPlugin-dependent body shape: not described in the OpenAPI spec.",
+        "description": "Unlike the regular ``/api/label-importers/import/`` route, this does\n**not** require a dataset to be loaded.  The imported label entries are\nmerged directly into the detector's persisted labelset, and the\ndetector-registry entry is updated so the dashboard reflects the new\ncount.\n\nWhen the detector is loaded into memory, the new labels are also resolved\nagainst the loaded dataset's medias, applied to the detector's votes, and\na fresh MLP is trained with a cross-validated threshold, all inside the\nloaded detector context.\n\nPlugin-dependent body shape: the accepted keys are the named\nplugin's declared ``fields``, so they cannot be enumerated in a\nstatic OpenAPI schema.  Fetch them at runtime from\n``GET /api/label-importers``, whose ``fields`` array carries each key's\n``field_type``, ``required`` flag, and any ``options`` / bounds.",
         "operationId": "import_labels_into_detector",
         "responses": {
           "default": {
@@ -12819,7 +10860,7 @@
         }
       ],
       "post": {
-        "description": "Body: ``{\"target\": \"good\"}``, ``{\"target\": \"bad\"}``, or\n``{\"target\": \"remove\"}``.\n\nAbsolute-target semantics mirror :func:`~vtsearch.state.set_vote`:\n``\"good\"`` / ``\"bad\"`` set the element's label (a re-assert of the\ncurrent label is an idempotent no-op), ``\"remove\"`` drops the element.\nWhen the element resolves into the active dataset, the detector's\nin-memory ``good_votes`` / ``bad_votes`` are kept in sync so MLP\nretraining and learned-sort see the change.",
+        "description": "Body: ``{\"target\": \"good\"}``, ``{\"target\": \"bad\"}``, or\n``{\"target\": \"remove\"}``.\n\nAbsolute-target semantics mirror :func:`~vtsearch.state.set_vote`:\n``\"good\"`` / ``\"bad\"`` set the element's label (a re-assert of the\ncurrent label is an idempotent no-op), ``\"remove\"`` drops the element.\nWhen the element resolves into the active dataset, the detector's\nin-memory ``good_votes`` / ``bad_votes`` are kept in sync so MLP\nretraining and learned-sort see the change.\n\nAn optional ``provenance`` block records how the element was surfaced,\ndefaulting to ``{\"flow\": \"labelset_review\"}`` - this route is the\ndashboard's review of already-saved labels, not a draw off any ranking.\nIt is written only when the label actually flips.",
         "operationId": "vote_detector_label",
         "requestBody": {
           "content": {
@@ -12841,6 +10882,9 @@
               }
             },
             "description": "OK"
+          },
+          "400": {
+            "description": "provenance is malformed."
           },
           "404": {
             "description": "Detector or label element not found."
@@ -13537,7 +11581,7 @@
     },
     "/api/find/boundary-next": {
       "get": {
-        "description": "Walks outward from the cutoff, alternating faces, so \"just sit and vote\"\nsamples the marginal positives and marginal negatives rather than only\nmarching up the positive pile.  Computed server-side from the frozen scores +\ncutoff + verified set so it stays correct once the client holds only a\nwindow of the ranking.  Returns ``{\"id\": null, \"side\": null}`` when both\nsides are exhausted (the done state).",
+        "description": "Walks outward from the cutoff, alternating faces, so \"just sit and vote\"\nsamples the marginal positives and marginal negatives rather than only\nmarching up the positive pile.  Computed server-side from the frozen scores +\ncutoff + verified set so it stays correct once the client holds only a\nwindow of the ranking.  Returns ``{\"id\": null, \"side\": null}`` when both\nsides are exhausted (the done state).\n\n**No frontend caller yet, deliberately** \u2014 the same story as\n``/api/find/queue-ids`` above: it awaits the ``find-view`` windowing slice\nthat moves ``advanceToBoundary`` onto it (``docs/plans/scalability.md``\nS3/S17/S19). Not dead code.",
         "operationId": "find_boundary_next_route",
         "parameters": [
           {
@@ -13739,7 +11783,7 @@
     },
     "/api/find/queue-ids": {
       "get": {
-        "description": "The left work queue (Browse / To Dataset / Export) and the right-panel\nactions scope over the *entire* positive set, which the frontend used to\nderive by scanning the whole client-side ranking.  This endpoint computes it\nserver-side from the frozen Find scores + current cutoff + verified set, so a\nwindowed client that no longer holds the full order can still act on every\nmatching item (``docs/plans/scalability.md`` S3/S17/S19).\n\nEmpty outside Find mode or before a scoring pass has run.",
+        "description": "The left work queue (Browse / To Dataset / Export) and the right-panel\nactions scope over the *entire* positive set, which the frontend used to\nderive by scanning the whole client-side ranking.  This endpoint computes it\nserver-side from the frozen Find scores + current cutoff + verified set, so a\nwindowed client that no longer holds the full order can still act on every\nmatching item (``docs/plans/scalability.md`` S3/S17/S19).\n\n**No frontend caller yet, deliberately.** It is built and tested ahead of\nthe ``find-view`` windowing slice that switches ``unverifiedGoodIds`` /\n``goodIds`` onto it; the two must land atomically, so this half shipped\nfirst. Not dead code \u2014 see the plan above before proposing its removal.\n\nEmpty outside Find mode or before a scoring pass has run.",
         "operationId": "find_queue_ids_route",
         "parameters": [
           {
@@ -13915,7 +11959,7 @@
     },
     "/api/jobs/active": {
       "get": {
-        "description": "Used by the top-bar pulldown to render a spinner glyph on rows whose\npair has background work in flight (learned-sort, eval, \u2026). The endpoint\nis intentionally cheap; it walks the in-memory ``JOB_MANAGERS`` map and\nreads each manager's current/pending slot under the manager's own lock,\nnothing else. Safe to poll on a 2\u20133 second interval.",
+        "description": "Used by the top-bar pulldown to render a spinner glyph on rows whose\npair has background work in flight (learned-sort, eval, \u2026). The endpoint\nis intentionally cheap; it walks the in-memory ``JOB_MANAGERS`` map and\nreads each manager's current/pending slot under the manager's own lock,\nnothing else. Safe to poll on a 2\u20133 second interval.\n\n``@state_sync_exempt`` keeps that poll off the global ``_state_lock``:\nthis handler reads no dataset/detector proxy, and queuing a 2-second\npoll behind a long lock-holder is how the worker's threads got\nexhausted in the first place.",
         "operationId": "active_jobs",
         "responses": {
           "200": {
@@ -14059,62 +12103,6 @@
         ]
       }
     },
-    "/api/label-importers/import/server_csv_file": {
-      "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "run_label_import__server_csv_file",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/run_label_import_ServerCsvLabelImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run the named label importer and apply the resulting labels.",
-        "tags": [
-          "label_importers"
-        ]
-      }
-    },
-    "/api/label-importers/import/server_json_file": {
-      "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "run_label_import__server_json_file",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/run_label_import_ServerJsonLabelImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run the named label importer and apply the resulting labels.",
-        "tags": [
-          "label_importers"
-        ]
-      }
-    },
     "/api/label-importers/import/{importer_name}": {
       "parameters": [
         {
@@ -14128,7 +12116,7 @@
         }
       ],
       "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "description": "Plugin-dependent body shape: the accepted keys are the named\nplugin's declared ``fields``, so they cannot be enumerated in a\nstatic OpenAPI schema.  Fetch them at runtime from\n``GET /api/label-importers``, whose ``fields`` array carries each key's\n``field_type``, ``required`` flag, and any ``options`` / bounds.",
         "operationId": "run_label_import",
         "responses": {
           "default": {
@@ -14745,7 +12733,7 @@
             "description": "OK"
           },
           "400": {
-            "description": "No ids supplied."
+            "description": "No ids supplied, or provenance is malformed."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
@@ -14810,7 +12798,7 @@
     },
     "/api/medias/{media_id}/image": {
       "get": {
-        "description": "Determines the MIME type from the media's filename extension, defaulting\nto ``image/jpeg`` for unrecognised extensions. For non-image media types\nthat declare an ``image_response`` hook (audio waveforms, video frames),\nthe route delegates to that hook.",
+        "description": "Determines the MIME type from the media's filename extension, defaulting\nto ``image/jpeg`` for unrecognised extensions. For non-image media types\nthe route delegates to the type's ``image_response`` hook (audio\nwaveforms, video frames), which returns ``None`` for a type with no\npaintable form.",
         "operationId": "media_image",
         "parameters": [
           {
@@ -14830,7 +12818,7 @@
         ],
         "responses": {
           "400": {
-            "description": "Media is not an image and has no image_response delegate."
+            "description": "Media is not an image and its image_response hook yielded nothing."
           },
           "404": {
             "description": "Media not found, or media bytes unavailable."
@@ -15054,7 +13042,7 @@
         ],
         "responses": {
           "400": {
-            "description": "Media is not an image and has no image_response delegate."
+            "description": "Media is not an image and its image_response hook yielded nothing."
           },
           "404": {
             "description": "Media not found, or media bytes unavailable."
@@ -15150,7 +13138,7 @@
         }
       ],
       "post": {
-        "description": "``target`` is one of:\n\n- ``\"good\"``: set to good (overrides ``bad`` if present).\n- ``\"bad\"``: set to bad (overrides ``good`` if present).\n- ``\"none\"``: un-vote (remove any existing vote).\n\nBehaviour is **idempotent**: sending the current state is a no-op\nthat does not append to ``label_history``, does not credit\nachievements, and returns the existing click-time.  This is the\nfix for logical-bug-audit H1; two stale-view tabs that race the\nsame media no longer alternate ADD/REMOVE on the server, so the\nachievement counter no longer inflates beyond the number of real\nlabeling decisions.\n\nYes-targets may carry ``\"region_box\": [x0, y0, x1, y1]`` (normalised\nimage coords in ``[0, 1]``) to designate the good region.\n``\"bad\"`` and ``\"none\"`` targets must not include ``region_box``; by\ndesign no-votes are image-level always (patch-embedder v2).\n\nReturns ``{\"ok\": true, \"state\": <new state>, \"click_time\": <int|null>}``\nso the client can reconcile its optimistic view directly from the\nresponse.",
+        "description": "``target`` is one of:\n\n- ``\"good\"``: set to good (overrides ``bad`` if present).\n- ``\"bad\"``: set to bad (overrides ``good`` if present).\n- ``\"none\"``: un-vote (remove any existing vote).\n\nBehaviour is **idempotent**: sending the current state is a no-op\nthat does not append to ``label_history``, does not credit\nachievements, and returns the existing click-time.  This is the\nfix for logical-bug-audit H1; two stale-view tabs that race the\nsame media no longer alternate ADD/REMOVE on the server, so the\nachievement counter no longer inflates beyond the number of real\nlabeling decisions.\n\nYes-targets may carry ``\"region_box\": [x0, y0, x1, y1]`` (normalised\nimage coords in ``[0, 1]``) to designate the good region.\n``\"bad\"`` and ``\"none\"`` targets must not include ``region_box``; by\ndesign no-votes are image-level always (patch-embedder v2).\n\nAn optional ``provenance`` block records how the item was surfaced\n(flow / autopilot phase / select mode / sort / rank / score).  It is\nstored only when the call actually changes the vote state, so an\nidempotent re-send from a stale tab cannot overwrite what the original\nclick recorded.  See :mod:`vtscore.datasets.vote_provenance`.\n\nReturns ``{\"ok\": true, \"state\": <new state>, \"click_time\": <int|null>}``\nso the client can reconcile its optimistic view directly from the\nresponse.",
         "operationId": "vote_media",
         "requestBody": {
           "content": {
@@ -15174,7 +13162,7 @@
             "description": "OK"
           },
           "400": {
-            "description": "region_box is malformed, or a non-good target carries a region_box."
+            "description": "region_box or provenance is malformed, or a non-good target carries a region_box."
           },
           "404": {
             "description": "Media not found."
@@ -15885,34 +13873,6 @@
         ]
       }
     },
-    "/api/settings-importers/import/server_json_file": {
-      "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
-        "operationId": "run_settings_import__server_json_file",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/run_settings_import_ServerFileSettingsImporter_Args"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Run the named settings importer and apply imported settings.",
-        "tags": [
-          "settings_io"
-        ]
-      }
-    },
     "/api/settings-importers/import/{importer_name}": {
       "parameters": [
         {
@@ -15926,7 +13886,7 @@
         }
       ],
       "post": {
-        "description": "Plugin-dependent body shape: not described in the OpenAPI spec.",
+        "description": "Plugin-dependent body shape: the accepted keys are the named\nplugin's declared ``fields``, so they cannot be enumerated in a\nstatic OpenAPI schema.  Fetch them at runtime from\n``GET /api/settings-importers``, whose ``fields`` array carries each key's\n``field_type``, ``required`` flag, and any ``options`` / bounds.",
         "operationId": "run_settings_import",
         "responses": {
           "default": {
@@ -16313,44 +14273,6 @@
           }
         },
         "summary": "Clear all votes without clearing medias.",
-        "tags": [
-          "sorting"
-        ]
-      }
-    },
-    "/api/votes/seed-from-examples": {
-      "post": {
-        "description": "For each ``type: \"media\"`` example, reads the file from the current\nuser's ``example_media/`` directory, computes its MD5, and either marks\nthe matching loaded media as Good, or (if the example is new) embeds it,\ninserts it into the ``medias`` dict, and votes it Good.\n\nReturns::\n\n    {\"seeded\": 2, \"skipped\": 1}",
-        "operationId": "seed_votes_from_examples",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SeedFromExamplesRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SeedFromExamplesResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Seed good votes from a model's media examples.",
         "tags": [
           "sorting"
         ]

@@ -733,3 +733,76 @@ class TestTrackerBackedProgress:
         job.progress.cancel()
         assert job.done_event.wait(timeout=5)
         assert job.status == "cancelled"
+
+
+class TestSingletonRegistry:
+    """``JOB_MANAGERS`` is the single registry of module-level managers.
+
+    It used to hold only the user-visible ones, which forced
+    ``reset_all_async_jobs_for_tests`` to re-list the hidden managers by
+    hand — and that second list went stale, leaving
+    ``archive_thumbnail_jobs`` unreset between tests (issue #3404).  These
+    tests fail if a future manager is added to the module but not to the
+    registry, which is the drift that caused the miss.
+    """
+
+    def test_every_module_level_manager_is_registered(self):
+        from vtscore.concurrency import async_jobs
+
+        registered = set(map(id, async_jobs.JOB_MANAGERS.values()))
+        missing = sorted(
+            name for name, obj in vars(async_jobs).items() if isinstance(obj, JobManager) and id(obj) not in registered
+        )
+        assert not missing, (
+            f"module-level JobManager singletons absent from JOB_MANAGERS: {missing}. "
+            "Add them to the registry (with user_visible=False if they earn no "
+            "/api/jobs/active spinner) rather than re-listing them by hand."
+        )
+
+    def test_reset_walks_hidden_managers_too(self):
+        """A hidden manager's in-flight job is cleared by the autouse reset."""
+        from vtscore.concurrency.async_jobs import (
+            archive_thumbnail_jobs,
+            reset_all_async_jobs_for_tests,
+        )
+
+        started = threading.Event()
+
+        def _target(job):
+            started.set()
+            while True:
+                check_job_cancelled()
+                time.sleep(0.01)
+
+        job = archive_thumbnail_jobs.start("sig", _target)
+        assert started.wait(timeout=5)
+        try:
+            reset_all_async_jobs_for_tests()
+            assert job.done_event.wait(timeout=5)
+            assert archive_thumbnail_jobs.active_jobs() == []
+        finally:
+            job.cancel()
+            job.done_event.wait(timeout=5)
+
+    def test_hidden_managers_earn_no_active_pairs_row(self):
+        """``/api/jobs/active`` still shows only user-visible work."""
+        from vtscore.concurrency.async_jobs import (
+            labeling_status_jobs,
+            list_active_pairs,
+        )
+
+        started = threading.Event()
+
+        def _target(job):
+            started.set()
+            while True:
+                check_job_cancelled()
+                time.sleep(0.01)
+
+        job = labeling_status_jobs.start("sig", _target, dataset_id="ds1", detector_id="det1")
+        try:
+            assert started.wait(timeout=5)
+            assert list_active_pairs() == []
+        finally:
+            job.cancel()
+            job.done_event.wait(timeout=5)

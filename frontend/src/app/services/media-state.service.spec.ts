@@ -77,6 +77,22 @@ describe('MediaStateService', () => {
     expect(service.selectedId()).toBeNull();
   });
 
+  it('clearSelection should drop the selection but keep the loaded medias', async () => {
+    load();
+    await settleResource();
+    service.selectMedia(1);
+    expect(service.selectedMedia).not.toBeNull();
+
+    // The pair-change reset wants only this half: the stub list is re-fetched
+    // by `loadMedias()` rather than blanked, so the grid never flashes empty
+    // (issue #3489).
+    service.clearSelection();
+    TestBed.tick();
+    expect(service.selectedId()).toBeNull();
+    expect(service.selectedMedia).toBeNull();
+    expect(service.mediasSignal()).toEqual(mockMedias);
+  });
+
   it('loadMedias should restart an in-flight fetch instead of dropping the reload', async () => {
     // Pair switch A->B issues the first fetch (stamped with B's X-Dataset-Id)...
     service.loadMedias();

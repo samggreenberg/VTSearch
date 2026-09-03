@@ -8,8 +8,8 @@ embeddings for training.  This module handles that resolution:
 2. Embed the file using the appropriate embedder for the media type.
 3. Return resolved embeddings with availability stats.
 
-File resolution is split into two pluggable resolvers, auto-wired on
-first use:
+File resolution is split into two resolvers, each installed with a
+default implementation at import time:
 
 - **Source resolver**: delegates to
   :func:`~vtscore.datasets.sources.get_source_for_origin` and calls
@@ -39,6 +39,9 @@ from pathlib import Path
 from typing import Any, Iterator, Protocol, runtime_checkable
 
 import numpy as np
+
+from vtscore.datasets.importers import get_importer
+from vtscore.datasets.sources import get_source_for_origin
 
 log = logging.getLogger(__name__)
 
@@ -89,13 +92,41 @@ class ImporterResolver(Protocol):
 # Pluggable resolver registry
 # ---------------------------------------------------------------------------
 
-_source_resolver: SourceResolver | None = None
-_importer_resolver: ImporterResolver | None = None
-_auto_wired = False
+
+def _default_source_resolver(
+    stack: ExitStack,
+    origin: dict[str, Any],
+    origin_name: str,
+    filename: str,
+) -> Path | None:
+    """Resolve *origin* through its :class:`MediaSource`, if it has one."""
+    source = get_source_for_origin(origin)
+    if source is None:
+        return None
+    # Keep the source alive (and its temp dir, if any) until the caller's
+    # resolve_file_context exits.
+    stack.callback(source.cleanup)
+    return source.resolve_path(origin_name, filename).path
+
+
+def _default_importer_resolver(
+    origin: dict[str, Any],
+    origin_name: str,
+    filename: str,
+) -> Path | None:
+    """Resolve *origin* through its dataset importer, if it is registered."""
+    importer = get_importer(origin.get("importer", ""))
+    if importer is not None:
+        return importer.resolve_file(origin, origin_name, filename)
+    return None
+
+
+_source_resolver: SourceResolver = _default_source_resolver
+_importer_resolver: ImporterResolver = _default_importer_resolver
 
 
 def register_source_resolver(fn: SourceResolver) -> None:
-    """Register a source-based file resolver.
+    """Register a source-based file resolver, replacing the default.
 
     The resolver is called with ``(stack, origin, origin_name, filename)``
     and should return a :class:`~pathlib.Path` or ``None``.  Register the
@@ -107,70 +138,13 @@ def register_source_resolver(fn: SourceResolver) -> None:
 
 
 def register_importer_resolver(fn: ImporterResolver) -> None:
-    """Register an importer-based file resolver.
+    """Register an importer-based file resolver, replacing the default.
 
     The resolver is called with ``(origin, origin_name, filename)`` and
     should return a :class:`~pathlib.Path` or ``None``.
     """
     global _importer_resolver
     _importer_resolver = fn
-
-
-def _auto_wire_resolvers() -> None:
-    """Auto-wire the default resolvers on first use.
-
-    Imports the datasets source and importer packages lazily and registers
-    them as the default resolvers.  This avoids hard-coding cross-package
-    imports throughout :func:`resolve_file_from_origin` while still
-    providing zero-config behaviour.
-    """
-    global _auto_wired
-    if _auto_wired:
-        return
-    _auto_wired = True
-
-    # Source-based resolver
-    if _source_resolver is None:
-        try:
-            from vtscore.datasets.sources import get_source_for_origin
-
-            def _default_source_resolver(
-                stack: ExitStack,
-                origin: dict[str, Any],
-                origin_name: str,
-                filename: str,
-            ) -> Path | None:
-                source = get_source_for_origin(origin)
-                if source is None:
-                    return None
-                # Keep the source alive (and its temp dir, if any) until
-                # the caller's resolve_file_context exits.
-                stack.callback(source.cleanup)
-                return source.resolve_path(origin_name, filename).path
-
-            register_source_resolver(_default_source_resolver)
-        except ImportError:
-            pass
-
-    # Importer-based resolver
-    if _importer_resolver is None:
-        try:
-            from vtscore.datasets.importers import get_importer
-
-            def _default_importer_resolver(
-                origin: dict[str, Any],
-                origin_name: str,
-                filename: str,
-            ) -> Path | None:
-                importer_name = origin.get("importer", "")
-                importer = get_importer(importer_name)
-                if importer is not None:
-                    return importer.resolve_file(origin, origin_name, filename)
-                return None
-
-            register_importer_resolver(_default_importer_resolver)
-        except ImportError:
-            pass
 
 
 @dataclass
@@ -298,35 +272,29 @@ def _resolve_with_stack(  # noqa: C901
 
     # -- Source-based dispatch (preferred) --
 
-    _auto_wire_resolvers()
-
-    if _source_resolver is not None:
-        result = _source_resolver(stack, origin, origin_name, filename)
-        if result is not None:
-            log.debug("resolve_file: source-based dispatch succeeded → %s", result)
-            return result
-        log.debug(
-            "resolve_file: source resolver returned None for origin_name=%r, filename=%r",
-            origin_name,
-            filename,
-        )
+    result = _source_resolver(stack, origin, origin_name, filename)
+    if result is not None:
+        log.debug("resolve_file: source-based dispatch succeeded → %s", result)
+        return result
+    log.debug(
+        "resolve_file: source resolver returned None for origin_name=%r, filename=%r",
+        origin_name,
+        filename,
+    )
 
     # -- Registry-based dispatch (fallback for importers without a source) --
 
-    if _importer_resolver is not None:
-        result = _importer_resolver(origin, origin_name, filename)
-        if result is not None:
-            log.debug("resolve_file: importer dispatch (%s) succeeded → %s", importer_name, result)
-            return result
-        log.debug(
-            "resolve_file: importer resolver returned None (importer=%r, origin_name=%r, filename=%r, params=%r)",
-            importer_name,
-            origin_name,
-            filename,
-            params,
-        )
-    else:
-        log.debug("resolve_file: no importer resolver registered")
+    result = _importer_resolver(origin, origin_name, filename)
+    if result is not None:
+        log.debug("resolve_file: importer dispatch (%s) succeeded → %s", importer_name, result)
+        return result
+    log.debug(
+        "resolve_file: importer resolver returned None (importer=%r, origin_name=%r, filename=%r, params=%r)",
+        importer_name,
+        origin_name,
+        filename,
+        params,
+    )
 
     # -- Generic fallback for unregistered origins with a path param --
     # Handles synthetic origins like "pdf" that store a direct file path.
@@ -389,18 +357,28 @@ def _resolve_example_media(params: dict[str, Any]) -> Path | None:
 
 
 def _resolve_converter(stack: ExitStack, params: dict[str, str]) -> Path | None:
-    """Resolve a converter origin by rebuilding its parent origin."""
+    """Resolve a converter origin by rebuilding its parent origin.
+
+    Every ``parent_<key>`` the converter runner copied over is a locator param
+    of the *parent* importer's own origin, stored under its own key with a
+    ``parent_`` prefix (see ``_PARENT_LOCATOR_KEYS`` in
+    :mod:`vtscore.converters.runner`).  Rebuilding the parent origin is
+    therefore just stripping that prefix - deliberately generic rather than an
+    allow-list of ``path`` / ``url``, because an allow-list silently drops the
+    locators of every other importer (``paths_file`` for Manifest, ``manifest``
+    for an archive, ``name`` for a demo dataset), leaving their converted
+    outputs unresolvable with no signal that anything was missing.
+    """
     source_file = params.get("source_file", "")
     parent_importer = params.get("parent_importer", "")
     if not source_file or not parent_importer:
         return None
 
-    # Reconstruct a parent origin dict from the converter's stored params
-    parent_params: dict[str, str] = {}
-    if params.get("parent_path"):
-        parent_params["path"] = params["parent_path"]
-    if params.get("parent_url"):
-        parent_params["url"] = params["parent_url"]
+    parent_params: dict[str, str] = {
+        key[len("parent_") :]: value
+        for key, value in params.items()
+        if key.startswith("parent_") and key != "parent_importer" and value
+    }
 
     parent_origin = {"importer": parent_importer, "params": parent_params}
     return _resolve_with_stack(stack, parent_origin, origin_name=source_file)

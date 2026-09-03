@@ -36,7 +36,7 @@ from vtscore.config import DATA_DIR
 from vtscore.media import all_embedders, get_by_extension, get_embedder
 from vtscore.media.embedder import media_from_path
 from vtsearch.errors import error_response
-from vtsearch.routes._shared import get_json_or_400
+from vtsearch.routes._http import get_json_or_400
 
 embed_bp = Blueprint(
     "embed",

@@ -22,6 +22,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Iterator
 
+from vtscore.datasets.vote_provenance import attach_provenance
 from vtscore.utils.hits import hit_custom_metadata
 
 
@@ -47,6 +48,10 @@ class LabeledElement:
             present.  Built from the media's ``custom_metadata`` through
             :func:`vtscore.utils.hits.hit_custom_metadata`, so the
             pre-computed-vector channel never lands in a persisted labelset.
+            The reserved key
+            :data:`~vtscore.datasets.vote_provenance.METADATA_KEY`
+            (``"vt:provenance"``) namespaces the vote's surfacing context
+            when one was recorded; see that module.
         region_box: Normalised ``(x0, y0, x1, y1)`` box on the source
             image when the user drew a region as part of a yes-vote;
             ``None`` for image-level votes (the perpetual default for
@@ -154,6 +159,7 @@ class LabelSet:
         *,
         expand_dupes: bool = True,
         vote_region_boxes: dict[int, tuple[float, float, float, float]] | None = None,
+        vote_provenance: dict[int, dict[str, Any]] | None = None,
         detector_meta: dict[str, Any] | None = None,
     ) -> LabelSet:
         """Build a ``LabelSet`` from the current media and vote state.
@@ -173,6 +179,13 @@ class LabelSet:
                 box is attached to the corresponding good vote's
                 :class:`LabeledElement`.  Ignored for bad votes (no-votes
                 are always image-level - see the patch-embedder v2 design).
+            vote_provenance: Optional ``media_id -> provenance dict`` map
+                recording how each vote was surfaced (which flow / autopilot
+                phase / sort / rank).  Written into the element's ``metadata``
+                under :data:`~vtscore.datasets.vote_provenance.METADATA_KEY`.
+                Applies to good and bad votes alike - the surfacing context is
+                what a later calibration partition needs, and it is just as
+                real for a no-vote.
             detector_meta: Optional detector-level metadata block to attach
                 to the labelset (e.g. ``{"media_type": ..., "input_spec":
                 ..., "threshold": ...}``).  Lets the labelset carry the
@@ -184,6 +197,7 @@ class LabelSet:
             voted media, in vote-insertion order (good votes first, then bad).
         """
         region_boxes = vote_region_boxes or {}
+        provenance = vote_provenance or {}
         elements: list[LabeledElement] = []
         for cid in good_votes:
             media = medias.get(cid)
@@ -194,12 +208,20 @@ class LabelSet:
                         "good",
                         expand_dupes=expand_dupes,
                         region_box=region_boxes.get(cid),
+                        provenance=provenance.get(cid),
                     )
                 )
         for cid in bad_votes:
             media = medias.get(cid)
             if media:
-                elements.extend(_clip_to_elements(media, "bad", expand_dupes=expand_dupes))
+                elements.extend(
+                    _clip_to_elements(
+                        media,
+                        "bad",
+                        expand_dupes=expand_dupes,
+                        provenance=provenance.get(cid),
+                    )
+                )
         return cls(elements, detector_meta=detector_meta)
 
     @classmethod
@@ -446,6 +468,7 @@ def _clip_to_elements(
     *,
     expand_dupes: bool = True,
     region_box: tuple[float, float, float, float] | None = None,
+    provenance: dict[str, Any] | None = None,
 ) -> list[LabeledElement]:
     """Convert a media dict into one or more :class:`LabeledElement` instances.
 
@@ -464,6 +487,12 @@ def _clip_to_elements(
     good in *this* image" and the representative is what the user actually
     saw, so cloning the box across structurally-identical members is the
     right default.
+
+    *provenance*, when given, is merged into every emitted element's metadata
+    under :data:`~vtscore.datasets.vote_provenance.METADATA_KEY`.  Dupe-set
+    members share the representative's record for the same reason they share
+    its box: the representative is what the user was actually shown, so it is
+    what was surfaced.
     """
     origin = media.get("origin")
     # Sanitised, not read straight off the media: ``custom_metadata_map`` lets
@@ -471,7 +500,7 @@ def _clip_to_elements(
     # dict is persisted verbatim into the detector JSON.  A numpy array there
     # is both a hard ``json.dump`` failure and exactly the vector persistence
     # the no-persisted-vectors rule forbids.
-    cm = hit_custom_metadata(media) or None
+    cm = attach_provenance(hit_custom_metadata(media) or None, provenance)
     if expand_dupes and isinstance(origin, dict) and origin.get("importer") == "dupe_set":
         members = origin.get("members", [])
         if members:

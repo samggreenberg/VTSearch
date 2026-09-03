@@ -197,6 +197,69 @@ describe('SettingsStateService', () => {
       expect(pref.value()).toBe('M');
     });
 
+    /**
+     * A refetch must be invisible to a preference. `load()` reloads the
+     * resource in place rather than swapping its request, so the last value
+     * survives the round-trip; resolving through the old null window would
+     * flicker the value to its default, and merging through it would send a
+     * one-entry dict that the PUT *replaces* the stored one with, wiping every
+     * sibling media type. See `SettingsStateService.load`.
+     */
+    it('holds its value across an in-flight refetch', async () => {
+      const pref = service.perMediaType<string>('grid_icon_size_right', signal('audio'), {
+        fallback: 'M',
+      });
+      await loadDicts();
+      expect(pref.value()).toBe('L');
+
+      service.load();
+      TestBed.tick();
+      expect(service.isLoading()).toBe(true);
+      expect(service.settingsSignal()).not.toBeNull();
+      expect(pref.value()).toBe('L');
+
+      httpMock.expectOne('/api/settings').flush(withDicts);
+      await settleResource();
+      expect(pref.value()).toBe('L');
+    });
+
+    it('set() still merges when a refetch is in flight', async () => {
+      const pref = service.perMediaType<string>('grid_icon_size_right', signal('audio'), {
+        fallback: 'M',
+      });
+      await loadDicts();
+
+      service.load();
+      TestBed.tick();
+      const getReq = httpMock.expectOne((r) => r.method === 'GET');
+
+      pref.set('XL')?.subscribe();
+      const putReq = httpMock.expectOne((r) => r.method === 'PUT');
+      // `image: 'S'` MUST survive a write that races the refetch.
+      expect(putReq.request.body).toEqual({
+        grid_icon_size_right: { audio: 'XL', image: 'S' },
+      });
+      // Settle the refetch first: flushing the PUT installs its response as the
+      // resource's value, which aborts the GET still in flight.
+      getReq.flush(withDicts);
+      putReq.flush({ ...withDicts, grid_icon_size_right: { audio: 'XL', image: 'S' } });
+      await settleResource();
+      expect(pref.value()).toBe('XL');
+    });
+
+    it('clear() drops the value, so prefs fall back again', async () => {
+      const pref = service.perMediaType<string>('grid_icon_size_right', signal('audio'), {
+        fallback: 'M',
+      });
+      await loadDicts();
+      expect(pref.value()).toBe('L');
+
+      service.clear();
+      TestBed.tick();
+      expect(pref.value()).toBe('M');
+      expect(pref.dict()).toEqual({});
+    });
+
     it('ignores a non-dict value stored under the key', async () => {
       const pref = service.perMediaType<string>('grid_icon_size_right', signal('audio'), {
         fallback: 'M',

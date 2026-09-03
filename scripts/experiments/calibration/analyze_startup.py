@@ -50,6 +50,7 @@ import pandas as pd  # noqa: E402
 import viewer as viewer_mod  # noqa: E402
 
 import analyze_spikes as sp  # noqa: E402  (reuse the #2847 loader)
+from _cells_io import side_frame_files  # noqa: E402
 
 try:
     from scipy.stats import wilcoxon as _wilcoxon
@@ -123,7 +124,7 @@ def load_picks(arm_dir: Path) -> tuple[pd.DataFrame, dict]:
     unreadable or zero-byte cell is counted, never dropped in silence.
     """
     cells = arm_dir / "cells"
-    files = sorted(cells.glob("task_*__picks.csv")) if cells.is_dir() else []
+    files = side_frame_files(cells, "__picks") if cells.is_dir() else []
     frames, bad, empty, headless = [], [], [], []
     for f in files:
         if f.stat().st_size == 0:

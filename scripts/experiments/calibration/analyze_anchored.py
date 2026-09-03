@@ -37,7 +37,8 @@ common.setup_env()
 
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
-from _cells_io import assert_one_opening, main_frame_files  # noqa: E402
+from _cells_io import describe_load  # noqa: E402
+from _cells_io import load_cells as _load_cells  # noqa: E402
 
 import experiment_config as cfg  # noqa: E402
 
@@ -61,15 +62,13 @@ def _md(df: pd.DataFrame) -> str:
 
 
 def load_cells(cells_dir: Path) -> pd.DataFrame:
-    files = main_frame_files(cells_dir)
-    if not files:
-        return pd.DataFrame()
-    df = pd.concat([pd.read_csv(p) for p in files], ignore_index=True)
-    assert_one_opening(df, "analyze_anchored.py")
+    df, prov = _load_cells(cells_dir, where="analyze_anchored.py")
+    if df.empty:
+        return df
     df["gmm_variant"] = df["gmm_variant"].fillna("")
     df["arm"] = df["dataset"] + "/" + df["embedder"] + "/" + df["style"]
     df["n_votes"] = df["n_good"] + df["n_bad"]
-    common.log(f"loaded {len(df)} rows from {len(files)} cells")
+    common.log(f"loaded {describe_load(prov)}")
     return df
 
 

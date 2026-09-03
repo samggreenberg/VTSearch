@@ -1,4 +1,4 @@
-import { Injectable, Signal, computed, effect, inject, signal } from '@angular/core';
+import { Injectable, Signal, computed, effect, inject, isSignal, signal } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
@@ -36,9 +36,16 @@ export interface PerMediaTypePref<T> {
   /**
    * Persist `next` for the active media type, preserving every other type's
    * entry. No-op when the media type is empty (nothing to key the write on).
+   *
+   * The merge is taken from the live dict, so it depends on the settings signal
+   * never reading as empty while the values are merely in flight — see
+   * {@link SettingsStateService.load}.
    */
   set(next: T): Observable<AppSettings> | null;
 }
+
+/** A writable `AppSettings` key. */
+export type SettingsKey = keyof AppSettings & string;
 
 /** Options for {@link SettingsStateService.perMediaType}. */
 export interface PerMediaTypeOptions<T> {
@@ -58,8 +65,9 @@ export class SettingsStateService {
 
   // A monotonic load counter doubles as the resource request. `0` means
   // "not requested yet" -> `params()` returns `undefined` -> the resource stays
-  // idle (no fetch). Each `load()` bumps the counter, which changes the request
-  // and so re-runs the loader.
+  // idle (no fetch). The FIRST `load()` bumps the counter, which changes the
+  // request and so runs the loader; later ones reload in place instead, which
+  // keeps the last value while the refetch is in flight (see `load()`).
   private readonly loadCount = signal(0);
 
   private readonly resource = rxResource({
@@ -96,9 +104,32 @@ export class SettingsStateService {
     });
   }
 
-  /** Fetch (or refetch) settings from the server. No-op while a fetch is in flight. */
+  /**
+   * Fetch (or refetch) settings from the server. No-op while a fetch is in
+   * flight.
+   *
+   * A **refetch goes through `reload()`**, not through another bump of the
+   * request counter. Both re-run the loader, but changing the request throws
+   * the resource's stream away, so `value()` — and with it `settingsSignal()` —
+   * reverts to `null` for the length of the round-trip; `reload()` keeps the
+   * last value and only flips `isLoading()`. That window is not cosmetic:
+   * `load()` is called from half a dozen components' init hooks, so it lands
+   * regularly on a mounted view, and while it is open every consumer reads
+   * "no settings yet". Two things go wrong there.
+   *
+   * - **Values flicker.** A preference resolved through the null reports its
+   *   default and then snaps back — panel widths, thumbnail sizes, focus modes.
+   * - **A concurrent write destroys data.** A `{media_type: value}` write
+   *   merges into the dict it can see; against a null that merge yields
+   *   `{[mediaType]: value}` alone, and `PUT /api/settings` *replaces* the
+   *   stored dict — so every other media type's entry is silently dropped.
+   *   {@link perMediaType} is exactly this shape.
+   *
+   * The first load still bumps the counter: there is nothing to reload yet.
+   */
   load(): void {
     if (this.resource.isLoading()) return;
+    if (this.loadCount() > 0 && this.resource.reload()) return;
     this.loadCount.update((n) => n + 1);
   }
 
@@ -128,19 +159,24 @@ export class SettingsStateService {
    *   went absent server-side left the last-seen copy in place forever. Reading
    *   through a `computed` has no such state.
    *
-   * @param key       the `AppSettings` key holding the dict.
+   * @param key       the `AppSettings` key holding the dict, or a signal of one
+   *                  where the key itself varies (`view-controls` picks
+   *                  `focus_mode_left` / `_right` / `_popup` from its `side`
+   *                  input).
    * @param mediaType signal carrying the active media type (`''` when unknown).
    * @param options   `fallback`, plus an optional `coerce` that rejects an
    *                  out-of-range or unrecognized stored value by returning
    *                  `undefined`.
    */
   perMediaType<T>(
-    key: keyof AppSettings & string,
+    key: SettingsKey | Signal<SettingsKey>,
     mediaType: Signal<string>,
     options: PerMediaTypeOptions<T>,
   ): PerMediaTypePref<T> {
+    const keySignal: Signal<SettingsKey> = isSignal(key) ? key : computed(() => key);
+
     const dict = computed<Record<string, T>>(() => {
-      const raw = this.settingsSignal()?.[key];
+      const raw = this.settingsSignal()?.[keySignal()];
       return raw && typeof raw === 'object' && !Array.isArray(raw)
         ? (raw as Record<string, T>)
         : {};
@@ -165,7 +201,7 @@ export class SettingsStateService {
         // Merge, never replace: dropping the other media types' entries here is
         // the one way this helper could silently destroy user data.
         const merged = { ...dict(), [mt]: next };
-        return this.update({ [key]: merged } as unknown as SettingsUpdate);
+        return this.update({ [keySignal()]: merged } as unknown as SettingsUpdate);
       },
     };
   }

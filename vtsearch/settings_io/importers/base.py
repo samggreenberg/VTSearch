@@ -29,6 +29,10 @@ class SettingsImporter(PluginBase):
     via the settings module's update mechanism.
     """
 
+    #: Abstract family base: no auto-derived metadata, and concrete
+    #: subclasses strip ``SettingsImporter`` from their class names.
+    _is_plugin_family_base = True
+
     icon: str = "\u2699\ufe0f"  # gear
     fields: list[PluginField]
 

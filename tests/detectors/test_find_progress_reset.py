@@ -7,7 +7,7 @@ global handler while the tracker stayed at ``"running"`` on whatever step it
 died on — broadcast to every SSE client until the next Find reset it, with the
 ``auto_finish`` timing recorder still subscribed to the singleton.
 
-``vtsearch.routes._shared.find_idle_on_crash`` now guards the post-resolve body
+``vtsearch.routes._progress.find_idle_on_crash`` now guards the post-resolve body
 of ``/api/find``, ``/api/find-label``, and ``/api/auto-detect``, mirroring
 ``sort_clips``' exception branch.  ``/api/auto-detect`` additionally never
 parked the tracker on its *success* path (a cold detector's train writes
@@ -40,7 +40,7 @@ class TestGuardUnit:
     """``find_idle_on_crash`` itself."""
 
     def test_parks_idle_and_reraises(self):
-        from vtsearch.routes._shared import find_idle_on_crash
+        from vtsearch.routes._progress import find_idle_on_crash
 
         find_progress.update("running", "Scoring…", step=3, total_steps=4)
         with pytest.raises(_Boom), find_idle_on_crash():
@@ -56,7 +56,7 @@ class TestGuardUnit:
     def test_closes_the_recorder_as_a_failed_run(self):
         """The idle update's ``auto_finish`` hook would otherwise bank a crashed
         run's partial phase timings as a good cost sample."""
-        from vtsearch.routes._shared import find_idle_on_crash
+        from vtsearch.routes._progress import find_idle_on_crash
 
         calls: list[bool] = []
 
@@ -75,7 +75,7 @@ class TestGuardUnit:
         idle frame or re-render flask-smorest's envelope."""
         from werkzeug.exceptions import HTTPException
 
-        from vtsearch.routes._shared import find_idle_on_crash
+        from vtsearch.routes._progress import find_idle_on_crash
 
         calls: list[bool] = []
 

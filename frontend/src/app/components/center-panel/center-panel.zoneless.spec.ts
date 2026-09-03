@@ -9,6 +9,7 @@ import { ANIMATIONS_OFF_CLASS, ANIMATIONS_ON_CLASS } from '../../utils/reduced-m
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleZoneless } from '../../testing/settle-resource';
 import { provideHttpTesting } from '../../testing/test-providers';
+import { voteBodyWithoutProvenance } from '../../testing/mocks';
 
 /**
  * Zoneless staleness canary for the center panel.
@@ -235,7 +236,7 @@ describe('CenterPanelComponent', () => {
     // server's response reconciles the optimistic local view directly (no
     // follow-up GET /api/votes).
     const voteReq = httpMock.expectOne('/api/medias/1/vote');
-    expect(voteReq.request.body).toEqual({ target: 'good' });
+    expect(voteBodyWithoutProvenance(voteReq)).toEqual({ target: 'good' });
     voteReq.flush({ state: 'good', click_time: 1 });
 
     expect(emitted).toEqual({ id: 1, vote: 'good' });
@@ -367,7 +368,7 @@ describe('CenterPanelComponent', () => {
       component.onRegionBoxChange(box);
       component.castVote('good');
       const req = httpMock.expectOne('/api/medias/1/vote');
-      expect(req.request.body).toEqual({ target: 'good', region_box: [0.1, 0.2, 0.5, 0.6] });
+      expect(voteBodyWithoutProvenance(req)).toEqual({ target: 'good', region_box: [0.1, 0.2, 0.5, 0.6] });
       req.flush({ state: 'good', click_time: 1 });
     });
 
@@ -375,7 +376,7 @@ describe('CenterPanelComponent', () => {
       setup();
       component.castVote('good');
       const req = httpMock.expectOne('/api/medias/1/vote');
-      expect(req.request.body).toEqual({ target: 'good' });
+      expect(voteBodyWithoutProvenance(req)).toEqual({ target: 'good' });
       req.flush({ state: 'good', click_time: 1 });
     });
 
@@ -389,7 +390,7 @@ describe('CenterPanelComponent', () => {
       // Second ← throws the box away and votes no.
       component.castVote('bad');
       const req = httpMock.expectOne('/api/medias/1/vote');
-      expect(req.request.body).toEqual({ target: 'bad' });
+      expect(voteBodyWithoutProvenance(req)).toEqual({ target: 'bad' });
       req.flush({ state: 'bad', click_time: 1 });
     });
 
@@ -397,7 +398,7 @@ describe('CenterPanelComponent', () => {
       setup();
       component.castVote('bad');
       const req = httpMock.expectOne('/api/medias/1/vote');
-      expect(req.request.body).toEqual({ target: 'bad' });
+      expect(voteBodyWithoutProvenance(req)).toEqual({ target: 'bad' });
       expect(component.pendingBadConfirm()).toBe(false);
       req.flush({ state: 'bad', click_time: 1 });
     });
@@ -428,7 +429,7 @@ describe('CenterPanelComponent', () => {
 
       component.castVote('bad');
       const req = httpMock.expectOne('/api/medias/1/vote');
-      expect(req.request.body).toEqual({ target: 'bad' });
+      expect(voteBodyWithoutProvenance(req)).toEqual({ target: 'bad' });
       expect(component.pendingBadConfirm()).toBe(false);
       req.flush({ state: 'bad', click_time: 1 });
     });
@@ -475,7 +476,7 @@ describe('CenterPanelComponent', () => {
       setup();
       component.castVote('bad');
       const req = httpMock.expectOne('/api/medias/1/vote');
-      expect(req.request.body).toEqual({ target: 'bad' });
+      expect(voteBodyWithoutProvenance(req)).toEqual({ target: 'bad' });
       expect(component.pendingBadConfirm()).toBe(false);
       req.flush({ state: 'bad', click_time: 1 });
     });
@@ -486,7 +487,7 @@ describe('CenterPanelComponent', () => {
       // Without arming first: yes-vote attaches the box immediately.
       component.castVote('good');
       const req = httpMock.expectOne('/api/medias/1/vote');
-      expect(req.request.body).toEqual({ target: 'good', region_box: [0.1, 0.2, 0.5, 0.6] });
+      expect(voteBodyWithoutProvenance(req)).toEqual({ target: 'good', region_box: [0.1, 0.2, 0.5, 0.6] });
       req.flush({ state: 'good', click_time: 1 });
     });
   });

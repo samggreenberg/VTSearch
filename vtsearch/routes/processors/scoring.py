@@ -12,7 +12,7 @@ from flask_smorest import Blueprint, abort
 
 from vtscore.concurrency.memory_budget import cap_workers_by_memory
 from vtscore.embedding.media_vectors import media_embedding
-from vtsearch.routes._shared import media_info_for_response
+from vtsearch.routes._media_response import media_info_for_response
 from vtsearch.routes.processors.crud import _build_extractor, _build_localizer
 from vtsearch.schemas.processors import (
     AutoExtractResponseSchema,

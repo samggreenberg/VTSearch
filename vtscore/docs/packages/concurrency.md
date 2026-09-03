@@ -154,24 +154,40 @@ consumers leave `user=None`.
 # vtscore/concurrency/async_jobs.py
 learned_sort_jobs = JobManager("learned-sort")
 eval_jobs = JobManager("eval-train-score")
+labeling_status_jobs = JobManager("labeling-status", user_visible=False)
 
 JOB_MANAGERS: dict[str, JobManager] = {
     "learned-sort": learned_sort_jobs,
     "eval": eval_jobs,
+    "labeling-status": labeling_status_jobs,
 }
 ```
 
-`JOB_MANAGERS` is what `/api/jobs/active` reads. The string keys are
-public job-type names exposed in the response, so they're stable across
-releases. Library consumers can add their own manager and register it
-here for the active-jobs surface to pick up.
+`JOB_MANAGERS` holds **every** module-level manager, and is the single
+place a manager is registered. Whether one is surfaced to the user is a
+property of the manager itself, not of which list it appears in:
+`JobManager(..., user_visible=False)` marks the internal refreshes and
+warm-ups (labeling-status, signpost-relabel, archive-thumbnail-warm)
+that run no user-initiated training and so earn no spinner.
+
+`/api/jobs/active` reads the registry through `list_active_pairs()`,
+which skips the non-visible managers. The string keys of the visible
+entries are public job-type names exposed in the response, so they're
+stable across releases. Library consumers can add their own manager and
+register it here for the active-jobs surface to pick up.
 
 `list_active_pairs()` returns
 `[{dataset_id, detector_id, job_types}, ...]` for every (dataset,
 detector) pair with at least one running or pending job across every
-registered manager. Jobs missing `dataset_id` / `detector_id` are
-dropped. `reset_all_async_jobs_for_tests()` walks `JOB_MANAGERS` and
-clears state.
+user-visible manager. Jobs missing `dataset_id` / `detector_id` are
+dropped. `reset_all_async_jobs_for_tests()` walks the whole of
+`JOB_MANAGERS` — hidden managers included, since test isolation cares
+about every daemon thread — and clears state.
+
+Splitting these two concerns across two lists is what the single
+registry replaced: the visible managers lived in `JOB_MANAGERS` while
+the hidden ones were re-listed by hand inside the reset helper, and that
+second list went stale (issue #3404).
 
 ---
 

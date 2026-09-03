@@ -43,10 +43,12 @@ a report's committed-figure requirement points at.
 | Files | What they are |
 |---|---|
 | `common.py`, `experiment_config.py` | Env/`sys.path` setup (call `setup_env()` before importing anything under `vtscore`) and the pre-registered grid. |
-| `_cells_io.py` | Cell-pickle I/O, main-vs-side frame discovery (`SIDE_FRAME_SUFFIXES`), the opening assertion, and `load_arm` — the per-arm loader six callers across five studies use (it lived in `analyze_spikes.py` until #3409, and that module re-exports the name). |
+| `_cells_paths.py` | Which files in a `cells/` directory are a cell's **main** frame (`main_frame_files`, `side_frame_files`, `SIDE_FRAME_SUFFIXES`). Import-free on purpose — no pandas — so the csv-and-stdlib figure scripts share the rule with the pandas analyzers instead of each re-typing it. |
+| `_cells_io.py` | Cell-pickle I/O, the one cell reader (`load_cells` → `(frame, provenance)`, and `describe_load` to print it), the opening assertion, and `load_arm` — the per-arm loader six callers across five studies use (it lived in `analyze_spikes.py` until #3409, and that module re-exports the name). Re-exports `_cells_paths`' discovery functions. |
 | `prepare_data.py`, `run_cells.py`, `analyze.py`, `launch_all.sh`, `launch_cells.sh` | The three-stage pipeline (#2781). Every study launcher is a wrapper that flips pre-registered knobs over these and re-points `CALIB_EXP`. |
 | `noop.py` | The analyze step for a launcher whose analysis runs separately. |
 | `curves.py`, `selftest_curves.py` | The standard quality-over-clicks figure pair every simulated-user study owes. One implementation; do not write it again. |
+| `stopping.py`, `selftest_stopping.py` | **Stopping point and stopping cost** (#3560): where the app's own stopping rules fired on each trajectory, and what the detector cost there — the number a user actually leaves with, as against the "final cost" at a click budget nobody chose. Reads the `phase` column every run since 2026-07-31 already emits, so it enriches finished studies without a re-run. Handles the three things that make a naive average wrong: the rules **flap**, they **often never fire**, and the runs excluded by "average over the ones that stopped" are exactly the slow ones. |
 | `viewer.py`, `selftest_viewer.py` | The interactive `viewer.html` every study's report links to. `--reskin` pushes a template change onto committed pages. |
 | `make_bench_html.py` | A study's `report.html` reading copy, generated from its own `REPORT.md`. |
 | `bench_cells.py` | Pure-pandas reading and pairing of overview-benchmark cells, shared by the bench analyzers. |
@@ -65,6 +67,7 @@ files here are how it was produced.
 | **#2841 Mix-in schedule** — [report](../../../docs/experiments/2026-08-04-mixin-schedule/REPORT.md) | `launch_mixin.sh`, `build_coco_pickle.py`, `analyze_mixin.py`, `selftest_analyze_mixin.py` |
 | **#2852 Anchored mixture**, and the #2861 anchor-mass sweep — [report](../../../docs/experiments/2026-08-05-population-anchored-calibration/REPORT.md) | `launch_anchored.sh`, `analyze_anchored.py`, `selftest_analyze_anchored.py`, `launch_rate_2861.sh`, `launch_folds_2861.sh`, `analyze_rate.py`, `analyze_folds.py`, `selftest_analyze_rate.py`, `make_rate_figs.py`, `theory_kappa_bench.py` |
 | **#2877 / #2905 Acquisition–reporting decoupling** — [report](../../../docs/experiments/2026-08-07-acquisition-inclusion/REPORT.md) | `launch_acq_incl.sh`, `launch_acq_incl_vg.sh`, `launch_acq_2877.sh`, `launch_acq_region_2905.sh`, `analyze_acq.py`, `selftest_analyze_acq.py`, `per_env_acq_2877.py`, `status_acq_2877.sh`, `bump_acq_2877_throttle.sh`, `probe_acq_divergence.sh` |
+| **#3319 Acquisition-offset frontier** (past −4, half steps, the deep regime; shipped −4) — [report](../../../docs/experiments/2026-08-07-acquisition-inclusion/REPORT_3319.md) | `launch_acq_3319.sh`, `frontier_3319.py` — and the #2877 row's analyzer, whose arm table this study widens through `ACQ_ANALYZE_ARMS` rather than forking |
 | **#2847 Do the MLP-era spikes survive?** — [report](../../../docs/experiments/2026-08-07-spike-check-2847/REPORT.md) | `launch_spike_2847.sh`, `analyze_spikes.py`, `selftest_analyze_spikes.py` |
 | **#2897 Fold count** — [report](../../../docs/experiments/2026-08-12-calibration-fold-count/REPORT.md) | `launch_folds_2897.sh`, `launch_folds_2897_ab.sh`, `chain_folds_2897_ab.sh`, `status_folds_2897.sh`, `analyze_folds_2897.py`, `selftest_analyze_folds_2897.py` |
 | **Overview benchmark** (production defaults across the pile) — [report](../../../docs/experiments/2026-08-12-overview-bench/REPORT.md) | `launch_bench.sh`, `launch_errdump.sh`, `launch_horizon.sh`, `analyze_bench.py`, `analyze_bench_interaction.py`, `analyze_horizon.py`, `make_bench_figs.py`, `error_report.py`, `make_error_sheets.py`, `label_noise.py`, `text_baseline.py` |
@@ -150,12 +153,32 @@ Each analyzer has a self-test that runs it on fabricated cells with a planted
 answer, so a sign error is caught before an overnight run rather than after:
 `python selftest_analyze_ab.py`, `python selftest_analyze_cut.py`.
 
-Every analyzer discovers its input through `_cells_io.main_frame_files` /
-`side_frame_files` rather than globbing `task_*.csv` itself. That glob also
-matches the side frames (`__sweep`, `__cutdiag`, `__cutincl`), which are separate
+Every analyzer discovers *and reads* its input through `_cells_io`:
+`main_frame_files` / `side_frame_files` for discovery, `load_cells` for the read.
+Nothing globs `task_*.csv` itself. A bare glob also matches the side frames
+(`__sweep`, `__cutdiag`, `__cutincl`, `__picks`, `__fitq`), which are separate
 long-format tables — concatenating one into the main frame yields a ragged
-DataFrame whose extra rows enter every aggregate silently. Add a new side frame's
-suffix to `SIDE_FRAME_SUFFIXES` and every analyzer is correct by construction.
+DataFrame whose extra rows enter every aggregate silently.
+
+`main_frame_files` excludes side frames **structurally**, on the `__` in the
+stem, not on a list of known suffixes. The list shape is one a human has to
+remember to extend and twice did not: `__picks` (#3267) and `__fitq` (#3329)
+were both added to `run_cells.py` without it, and `bench_cells.py` — which had
+its own private copy of the list — was reading the per-click pick log into four
+bench analyzers' metric frames as a result. `SIDE_FRAME_SUFFIXES` survives as
+the registry `side_frame_files` reads and as documentation; a meta-test holds it
+to what `run_cells.py` actually writes, and holds every script in this directory
+to going through `_cells_io`.
+
+`load_cells(cells_dir)` returns `(frame, provenance)` and is the only reader.
+Eight analyzers used to have their own, diverging on the three guards a grid run
+needs and nothing else — zero-byte skip, unreadable catch, header-only count —
+with four of the eight having none of them. The provenance names all three
+separately, because they are different facts: a zero-byte or unreadable cell is
+data loss, while a header-only cell is a *starved* cell (the simulator emits no
+row before one Good and one Bad vote coexist), which is a legitimate result and
+the extreme of the regime several of these studies are about. `describe_load`
+formats them into one line so two reports mean the same thing by "N of M cells".
 
 `launch_all.sh` points `VTSEARCH_DATA_DIR` at the Max-Patch datadir so the shared
 embeddings pickles and demo data are read in place (the `siglip_l` pickles land

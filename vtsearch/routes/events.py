@@ -11,11 +11,13 @@ from typing import Generator
 from flask import Blueprint, Response, jsonify, stream_with_context
 
 from vtscore.concurrency.events import acquire_sse_slot, release_sse_slot, stream_progress_events
+from vtsearch.hooks import state_sync_exempt
 
 events_bp = Blueprint("events", __name__)
 
 
 @events_bp.route("/api/events")
+@state_sync_exempt
 def progress_events() -> Response:
     """Stream progress updates for every channel as Server-Sent Events.
 
@@ -36,6 +38,12 @@ def progress_events() -> Response:
     proof the backend is alive — never counts toward the offline circuit
     breaker (#2816). The dev server (``app.run(threaded=True)``) has no
     thread pool to protect and runs uncapped (``uncap_sse_connections``).
+
+    ``@state_sync_exempt`` keeps the (re)connect off the global
+    ``_state_lock``: the stream is read-only and subscribes only to the
+    *global* progress trackers, and gating it on the very lock a long
+    Find/load contends would stop progress events reaching the client
+    during exactly the operations the progress bar exists to report.
     """
     if not acquire_sse_slot():
         response = jsonify({"message": "Too many live event streams open; retry shortly."})

@@ -8,6 +8,12 @@ artifacts (embeddings npy, texts, topic trees, metrics) go to RESULTS.
 Import ``common`` and call :func:`setup_env` **before** importing anything
 from ``vtscore`` — ``vtscore.config`` reads ``VTSEARCH_DATA_DIR`` /
 ``VTSEARCH_MODELS_DIR`` at import time.
+
+The env/dir setup itself lives in ``scripts/experiments/_expcommon.py``, shared
+with the other studies (#3411).  These runs launch from the repo checkout the
+grid job ``cd``s into rather than a dedicated worktree, so they do **not**
+neutralise the venv's editable-install finder the way the ``calibration`` /
+``max_patch`` / ``mlp_vs_svm`` grids do.
 """
 
 from __future__ import annotations
@@ -15,9 +21,14 @@ from __future__ import annotations
 import json
 import os
 import sys
-import time
-from contextlib import contextmanager
 from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+
+import _expcommon
+from _expcommon import timed  # re-exported: stages call ``common.timed``
+
+__all__ = ["REPO", "RESULTS", "WORK", "ds_dir", "load_json", "save_json", "setup_env", "timed"]
 
 REPO = Path(os.environ.get("VTS_REPO", "/exp/sgreenberg/projects/VTSearch"))
 # Node-local scratch: on HLTCOE grid nodes only /scratch/jobs/$USER is
@@ -28,15 +39,14 @@ RESULTS = Path(os.environ.get("TOPO_RESULTS", "/exp/sgreenberg/experiments/topon
 
 def setup_env() -> None:
     """Point vtscore + HF at scratch, put the repo on sys.path."""
-    os.environ.setdefault("VTSEARCH_DATA_DIR", str(WORK / "vts-data"))
-    os.environ.setdefault("VTSEARCH_MODELS_DIR", str(WORK / "vts-models"))
-    os.environ.setdefault("HF_HOME", str(WORK / "hf"))
-    os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
-    for var in ("VTSEARCH_DATA_DIR", "VTSEARCH_MODELS_DIR", "HF_HOME"):
-        Path(os.environ[var]).mkdir(parents=True, exist_ok=True)
-    RESULTS.mkdir(parents=True, exist_ok=True)
-    if str(REPO) not in sys.path:
-        sys.path.insert(0, str(REPO))
+    _expcommon.setup_env(
+        repo=REPO,
+        datadir=WORK / "vts-data",
+        models_dir=WORK / "vts-models",
+        results=RESULTS,
+        hf_home=WORK / "hf",
+        neutralise=False,
+    )
 
 
 def ds_dir(dataset: str) -> Path:
@@ -52,12 +62,3 @@ def save_json(path: Path, obj) -> None:
 
 def load_json(path: Path):
     return json.loads(path.read_text())
-
-
-@contextmanager
-def timed(label: str, timings: dict):
-    t0 = time.time()
-    yield
-    dt = time.time() - t0
-    timings[label] = round(dt, 2)
-    print(f"[timing] {label}: {dt:.1f}s", flush=True)

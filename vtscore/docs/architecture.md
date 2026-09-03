@@ -417,7 +417,7 @@ the library has working defaults for all five (no context, no
 `"default"`, and achievement events that no-op).
 
 **The dependency direction is enforced by a test.**
-`tests_lib/core/test_library_layering.py` walks the AST of every
+`tests_lib/meta/test_library_layering.py` walks the AST of every
 `vtscore` module and fails on any `import vtsearch`, at any nesting
 depth. Lazy function-level imports were how the rule kept breaking: the
 module still imported cleanly and the inverted dependency only bit at

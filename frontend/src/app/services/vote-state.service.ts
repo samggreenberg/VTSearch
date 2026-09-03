@@ -7,6 +7,7 @@ import { VotesResponse } from '../generated/api-client/models/votes-response';
 import { adaptivePoll } from './adaptive-poll';
 import { MediasApiService } from './medias-api.service';
 import { SortingApiService } from './sorting-api.service';
+import { VoteFlow, VoteProvenanceService } from './vote-provenance.service';
 
 /**
  * One vote captured for Cmd/Ctrl-Z undo.  `previousPolarity` is the polarity
@@ -63,6 +64,7 @@ const UNDO_STACK_MAX = 20;
 export class VoteStateService implements OnDestroy {
   private sortingApi = inject(SortingApiService);
   private mediasApi = inject(MediasApiService);
+  private provenance = inject(VoteProvenanceService);
 
   private readonly _goodVotes = signal<Set<number>>(new Set());
   private readonly _badVotes = signal<Set<number>>(new Set());
@@ -306,17 +308,26 @@ export class VoteStateService implements OnDestroy {
    *
    * @param regionBox  Optional good-vote region.  Honoured only when the
    *                   computed target is ``'good'``.
+   * @param flow       Overrides the derived surfacing flow for a caller that
+   *                   knows better than autopilot/sort state can tell (a Find
+   *                   verify, an undo replay).  Every other surface gets a
+   *                   correct annotation for free by funnelling through here.
    */
   submitToggleVote(
     id: number,
     clickedDirection: 'good' | 'bad',
     regionBox?: readonly number[] | null,
+    flow?: VoteFlow,
   ): Observable<MediaVoteResponse> {
     const target = this.toggleTargetFor(id, clickedDirection);
     this.applyOptimisticState(id, target);
     const effectiveBox = target === 'good' && regionBox && regionBox.length === 4 ? regionBox : null;
     this.applyOptimisticRegionBox(id, effectiveBox);
-    return this.mediasApi.vote(id, target, effectiveBox).pipe(
+    // Read before the request goes out: the sort the user was looking at can
+    // be replaced by a retrain while the POST is in flight, and the rank we
+    // want is the one that was on screen when they clicked.
+    const provenance = this.provenance.forVote(id, flow);
+    return this.mediasApi.vote(id, target, effectiveBox, provenance).pipe(
       tap({
         next: (resp) => this.reconcileVoteResponse(id, resp),
         // A failed POST means the server never saw the vote. Without the
@@ -361,12 +372,13 @@ export class VoteStateService implements OnDestroy {
     clickedDirection: 'good' | 'bad',
     mediaName: string,
     regionBox?: readonly number[] | null,
+    flow?: VoteFlow,
   ): Observable<MediaVoteResponse> {
     const { previousPolarity, previousRegionBox } = this.capturePrevious(id);
     const target = this.toggleTargetFor(id, clickedDirection);
     const clickedRegionBox =
       target === 'good' && regionBox && regionBox.length === 4 ? [...regionBox] : null;
-    return this.submitToggleVote(id, clickedDirection, regionBox).pipe(
+    return this.submitToggleVote(id, clickedDirection, regionBox, flow).pipe(
       tap(() => {
         this.past.push({
           mediaId: id,
@@ -603,7 +615,10 @@ export class VoteStateService implements OnDestroy {
     this.applyOptimisticState(entry.mediaId, target);
     this.applyOptimisticRegionBox(entry.mediaId, box);
     this.mirrorVerified(entry.mediaId, target);
-    this.mediasApi.vote(entry.mediaId, target, box).subscribe({
+    // An undo is a correction, not a fresh surfacing: recording the current
+    // sort position would attribute the restored state to a ranking that had
+    // nothing to do with it.
+    this.mediasApi.vote(entry.mediaId, target, box, { flow: 'undo' }).subscribe({
       next: (resp) => this.reconcileVoteResponse(entry.mediaId, resp),
       // rollbackOptimistic (not a bare loadVotes): the pending entries set
       // by the optimistic apply above would override the reloaded server
@@ -628,7 +643,8 @@ export class VoteStateService implements OnDestroy {
     this.applyOptimisticState(entry.mediaId, target);
     this.applyOptimisticRegionBox(entry.mediaId, box);
     this.mirrorVerified(entry.mediaId, target);
-    this.mediasApi.vote(entry.mediaId, target, box).subscribe({
+    // See undo(): a replay off the stack is not a surfacing event.
+    this.mediasApi.vote(entry.mediaId, target, box, { flow: 'undo' }).subscribe({
       next: (resp) => this.reconcileVoteResponse(entry.mediaId, resp),
       // See undo(): drop the pending entries before reloading server state.
       error: () => this.rollbackOptimistic(entry.mediaId),

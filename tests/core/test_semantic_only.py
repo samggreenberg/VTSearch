@@ -184,7 +184,7 @@ class TestImportRejection:
         """The Semantic path is untouched by the lock. Asserted against the
         guard directly rather than through the route, so the request doesn't
         start a real background import just to prove it wasn't rejected."""
-        from vtsearch.routes._shared import abort_if_semantic_only_embedders
+        from vtsearch.routes._policy import abort_if_semantic_only_embedders
 
         settings_mod.set_cli_semantic_only(True)
         # No raise == not rejected. Unknown names are left to their own
@@ -194,6 +194,6 @@ class TestImportRejection:
         abort_if_semantic_only_embedders(["not_a_registered_embedder"])
 
     def test_guard_is_a_no_op_when_unlocked(self):
-        from vtsearch.routes._shared import abort_if_semantic_only_embedders
+        from vtsearch.routes._policy import abort_if_semantic_only_embedders
 
         abort_if_semantic_only_embedders(["sift_vlad", "dinov3_patch"])

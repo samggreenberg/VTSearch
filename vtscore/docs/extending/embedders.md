@@ -92,8 +92,10 @@ class MyEmbedder(MediaEmbedder):
         self._model = HeavyModel.from_pretrained("…", cache_dir=cache_dir)
 ```
 
-Three helpers in [`vtscore/media/embedder.py`](../../media/embedder.py)
-keep heavy loads non-blocking from the UI's point of view:
+Three helpers in [`vtscore/media/load_progress.py`](../../media/load_progress.py),
+re-exported from [`vtscore.media.embedder`](../../media/embedder.py) along with
+everything else in that module, keep heavy loads non-blocking from the UI's
+point of view:
 
 - `embedder_load_setup(on_progress, message)` - calls
   `ensure_torch_configured()`, emits an initial progress event, and

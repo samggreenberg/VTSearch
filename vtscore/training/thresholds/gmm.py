@@ -516,6 +516,43 @@ def _anchored_em(
     numerical failure (non-finite parameters) returns ``None`` here; semantic
     degeneracy (inverted means, collapsed component) is judged by the caller so
     it can name the reason.
+
+    **This loop is the shipped threshold's dominant cost, which is why it is
+    written the way it is** (issue #3558).  The 2026-08-28 fold-count study
+    priced a calibration fold at 0.148 s and put **86% of that in this
+    function's caller**, :func:`fit_anchored_score_gmm`; that single term is
+    the whole reason ``calibrate_count`` ships at 2 when the study measured
+    K=6 as worth −0.0057 ± 0.0012 cost early
+    (``docs/experiments/2026-08-28-calibration-fold-count-3310/REPORT.md``).
+    At the study's 7,747-media haystack the loop is **overhead-bound, not
+    FLOP-bound**: two components over one dimension is ~15k doubles an
+    iteration, so what it costs is numpy dispatches and allocation, not
+    arithmetic.  So the body works in **preallocated 1-D buffers, one per
+    component**, instead of allocating a fresh ``(n, 2)`` array (and half a
+    dozen ``(n, 2)`` temporaries) per iteration - measured **5-6x faster** at
+    1k-50k free scores, and the gap widens with *n*.
+
+    Every operation is deliberately the *same* operation on the *same* values
+    as the two-column form it replaces, so the fit is **bit-for-bit**
+    identical, not merely close: the arithmetic is elementwise either way, an
+    ``axis=1`` max over two columns is :func:`numpy.maximum` of the two, an
+    ``axis=1`` sum over two columns is their sum, and each reduction still
+    sees a contiguous array of the same values in the same order.  That
+    equivalence is the point - a faster fit that moved the threshold would be
+    a calibration change needing a study, not an optimisation - and it is
+    pinned by ``TestAnchoredEmEquivalence`` in
+    ``tests_lib/sorting/test_anchored_gmm.py``, which runs the pre-#3558
+    two-column loop side by side and asserts exact equality of all six
+    parameters.  **Keep that test passing rather than "tidying" this body**;
+    the readable form is right there in the test to diff against.
+
+    What is *not* fixed here is the initialiser: :func:`fit_score_gmm`'s
+    sklearn ``GaussianMixture`` fit, which every anchored fit runs first, is
+    now the larger half of the remaining cost (~0.04 s of ~0.057 s per fold at
+    7,747 scores) - and it is ~12x slower per EM iteration than this loop, on
+    the same estimation problem.  It cannot be replaced without moving the
+    fit, so it is out of scope here; issue #3585 carries the measurement that
+    would have to come first.
     """
     lam = float(anchor_weight)
     n = float(x.size)
@@ -532,38 +569,74 @@ def _anchored_em(
 
     sum_a_lo, sum_a_hi = float(a_lo.sum()), float(a_hi.sum())
 
+    # Reused every iteration: ``r_lo`` / ``r_hi`` hold the two columns the
+    # two-column form kept in one ``(n, 2)`` array, and ``scratch`` stands in
+    # for its per-iteration temporaries.  Allocated once because the loop is
+    # dispatch- and allocation-bound at these sizes (see the docstring).
+    r_lo = np.empty_like(x)
+    r_hi = np.empty_like(x)
+    scratch = np.empty_like(x)
+
     for _ in range(max_iter):
         # E-step over the free sample only (anchors are clamped one-hot).
         # Log-domain: log w_c - 0.5*log(2*pi*var_c) - (x-mu_c)^2 / (2*var_c).
-        log_p = (
-            np.log(np.maximum(w, 1e-300))[None, :]
-            - 0.5 * np.log(2.0 * math.pi * var)[None, :]
-            - (x[:, None] - mu[None, :]) ** 2 / (2.0 * var[None, :])
-        )
-        log_p -= log_p.max(axis=1, keepdims=True)
-        r = np.exp(log_p)
-        r /= r.sum(axis=1, keepdims=True)
+        # ``const`` is that first pair of terms, which do not depend on x.
+        const = np.log(np.maximum(w, 1e-300)) - 0.5 * np.log(2.0 * math.pi * var)
+        two_var = 2.0 * var
+        np.subtract(x, mu[0], out=r_lo)
+        np.square(r_lo, out=r_lo)
+        np.divide(r_lo, two_var[0], out=r_lo)
+        np.subtract(const[0], r_lo, out=r_lo)
+        np.subtract(x, mu[1], out=r_hi)
+        np.square(r_hi, out=r_hi)
+        np.divide(r_hi, two_var[1], out=r_hi)
+        np.subtract(const[1], r_hi, out=r_hi)
+        # Subtract the per-row max (an ``axis=1`` max over two columns is just
+        # their elementwise maximum), exponentiate, and normalise by the row
+        # sum (likewise, their elementwise sum).
+        np.maximum(r_lo, r_hi, out=scratch)
+        np.subtract(r_lo, scratch, out=r_lo)
+        np.subtract(r_hi, scratch, out=r_hi)
+        np.exp(r_lo, out=r_lo)
+        np.exp(r_hi, out=r_hi)
+        np.add(r_lo, r_hi, out=scratch)
+        np.divide(r_lo, scratch, out=r_lo)
+        np.divide(r_hi, scratch, out=r_hi)
 
         # M-step with the anchors folded in at weight ``lam`` each.
-        m_lo = float(r[:, 0].sum()) + lam * n_lo
-        m_hi = float(r[:, 1].sum()) + lam * n_hi
+        m_lo = float(r_lo.sum()) + lam * n_lo
+        m_hi = float(r_hi.sum()) + lam * n_hi
         if not (m_lo > 0.0 and m_hi > 0.0):
             return None
         # ``np.sum`` rather than ``@``: a dot product is dispatched to BLAS,
         # whose accumulation order depends on the kernel the CPU selects and on
         # the thread count, so the same input can differ in its last bits
         # between two machines.  numpy's own pairwise reduction does not
-        # (issue #3166).  The extra temporaries are one ``x``-sized array each.
+        # (issue #3166), and it reduces in the same order whatever the stride,
+        # which is what lets these run over the 1-D buffers instead of over
+        # two strided column views.
+        np.multiply(r_lo, x, out=scratch)
+        sum_lo_x = float(np.sum(scratch))
+        np.multiply(r_hi, x, out=scratch)
+        sum_hi_x = float(np.sum(scratch))
         mu_new = np.array(
             [
-                (float(np.sum(r[:, 0] * x)) + lam * sum_a_lo) / m_lo,
-                (float(np.sum(r[:, 1] * x)) + lam * sum_a_hi) / m_hi,
+                (sum_lo_x + lam * sum_a_lo) / m_lo,
+                (sum_hi_x + lam * sum_a_hi) / m_hi,
             ]
         )
+        np.subtract(x, mu_new[0], out=scratch)
+        np.square(scratch, out=scratch)
+        np.multiply(scratch, r_lo, out=scratch)
+        sum_lo_sq = float(np.sum(scratch))
+        np.subtract(x, mu_new[1], out=scratch)
+        np.square(scratch, out=scratch)
+        np.multiply(scratch, r_hi, out=scratch)
+        sum_hi_sq = float(np.sum(scratch))
         var_new = np.array(
             [
-                (float(np.sum(r[:, 0] * (x - mu_new[0]) ** 2)) + lam * float(((a_lo - mu_new[0]) ** 2).sum())) / m_lo,
-                (float(np.sum(r[:, 1] * (x - mu_new[1]) ** 2)) + lam * float(((a_hi - mu_new[1]) ** 2).sum())) / m_hi,
+                (sum_lo_sq + lam * float(((a_lo - mu_new[0]) ** 2).sum())) / m_lo,
+                (sum_hi_sq + lam * float(((a_hi - mu_new[1]) ** 2).sum())) / m_hi,
             ]
         )
         var_new = np.maximum(var_new, var_floor)

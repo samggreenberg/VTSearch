@@ -21,6 +21,7 @@ convention.
 
 - [The contract](#the-contract)
 - [Default clippers vs. tiling clippers](#default-clippers-vs-tiling-clippers)
+- [Shared helpers](#shared-helpers)
 - [The `CLIPPERS` list sentinel](#the-clippers-list-sentinel)
 - [Parameters and re-parameterisation](#parameters-and-re-parameterisation)
 - [Worked example](#worked-example)
@@ -73,6 +74,27 @@ splitting." for the description. Existing default clippers:
 | `DocumentDefaultClipper` (`document_default`) | document |
 | `FaceDefaultClipper` (`face_default`) | face |
 
+Each of those is a four-line subclass of the concrete
+`DefaultClipper` base (`vtscore/media/clipper.py`), which fixes the three
+things every default clipper agrees on - the `"None"` display label, the
+pass-through `clip()`, and the name/type/description trio passed to
+`__init__`:
+
+```python
+from vtscore.media.clipper import DefaultClipper
+
+
+class SoundDefaultClipper(DefaultClipper):
+    """Returns the audio media unchanged."""
+
+    def __init__(self) -> None:
+        super().__init__("sound_default", "audio", "Import each audio file as-is, without splitting.")
+```
+
+Subclass it (rather than instantiating `DefaultClipper` directly) so the
+media type keeps a named class the registry, the docs and out-of-tree
+code can refer to.
+
 **Tiling** clippers actually split. The convention is `<type>_tiling` -
 `sound_tiling` for audio tiles, `video_tiling` for video tiles.
 
@@ -88,6 +110,27 @@ Scene-based or content-aware clippers get their own names -
 `VideoSceneClipper` is `video_scene`, `SoundSilenceClipper` is
 `sound_silence`. There's no "tiling" suffix when the split isn't
 grid-based.
+
+## Shared helpers
+
+`vtscore/media/clipper.py` carries the pieces that would otherwise be
+copied between clippers. Reach for them before hand-rolling an
+equivalent - a second copy of the tiling arithmetic is exactly the kind
+of drift that makes two media types tile differently.
+
+| Helper | Purpose |
+|--------|---------|
+| `DefaultClipper` | Concrete base for the per-type no-op clipper (above) |
+| `clip_with_bounds(media, index, start, end)` | Shallow-copy *media* and stamp `duration` / `clip_index` / `clip_start` / `clip_end`, rounded consistently. Add your own fields (`media_bytes`, `file_size`, `scene_index`, …) to the returned dict |
+| `tile_starts(total, duration, min_overlap=0.0)` | Start times of equally-spaced tiles: first at 0, last ending at *total*, overlapping by at least *min_overlap* |
+| `validate_tiling_params(duration, min_overlap)` | Constructor validation for a fixed-length tiling clipper (positive tile, non-negative overlap, overlap < tile) |
+| `tiling_parameters(duration, min_overlap, *, item_label)` | The standard `duration` / `min_overlap` parameter descriptors, with *item_label* naming the unit in the help text |
+
+Per-type emission helpers live next to their clippers rather than here,
+because they touch type-specific bytes: `_emit_wav_segments` in
+`vtscore/media/audio/clipper.py` slices WAV bytes for every audio clipper,
+and `_emit_text_pieces` in `vtscore/media/text/clipper.py` rebuilds the
+word/character counts for the paragraph and sentence clippers.
 
 ## The `CLIPPERS` list sentinel
 

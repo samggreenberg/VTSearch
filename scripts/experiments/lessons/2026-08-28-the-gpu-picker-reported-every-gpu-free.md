@@ -48,7 +48,7 @@ it, falls back to `AllocTRES`'s `gres/gpu:<type>=<n>`, and returns `None` when
 **neither** field is present — a node whose usage cannot be read now contributes
 nothing at all, exactly like a drained one, so an unreadable cluster degrades to
 the fallback type instead of confidently claiming everything is free. The new
-tests in `tests_lib/core/test_pick_gpu.py` are built from records copied
+tests in `tests_lib/meta/test_pick_gpu.py` are built from records copied
 verbatim off `rack5n06` and `rack10n01` rather than composed, so the fixture
 cannot drift away from the machine again.
 

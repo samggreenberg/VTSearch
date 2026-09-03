@@ -11,6 +11,7 @@ import type { MediaVoteRequest } from '../generated/api-client/models/media-vote
 import type { MediaVoteResponse } from '../generated/api-client/models/media-vote-response';
 import type { MediaAddToPileResponse } from '../generated/api-client/models/media-add-to-pile-response';
 import type { PayloadVariant } from '../models/api.models';
+import type { VoteProvenance } from './vote-provenance.service';
 import { listMediaIds } from '../generated/api-client/fn/medias/list-media-ids';
 import { batchMedias } from '../generated/api-client/fn/medias/batch-medias';
 import { mediaParagraphGet2 } from '../generated/api-client/fn/medias/media-paragraph-get-2';
@@ -58,14 +59,21 @@ export class MediasApiService {
    * Returns the server-confirmed new state and click-time so the optimistic
    * local view can be reconciled directly from the response without a
    * follow-up ``GET /api/votes``.
+   *
+   * ``provenance`` records how the item was surfaced. The server stores it
+   * only when the call actually changes the vote state, so sending it on a
+   * call that turns out to be idempotent cannot overwrite what the original
+   * click recorded.
    */
   vote(
     id: number,
     target: 'good' | 'bad' | 'none',
     regionBox?: readonly number[] | null,
+    provenance?: VoteProvenance | null,
   ): Observable<MediaVoteResponse> {
     const body: MediaVoteRequest = { target };
     if (regionBox && regionBox.length === 4) body.region_box = [...regionBox];
+    if (provenance) body.provenance = provenance;
     return voteMedia(this.http, this.config.rootUrl, { media_id: id, body }).pipe(
       map((r) => r.body),
     );
@@ -84,10 +92,11 @@ export class MediasApiService {
   voteBulk(
     ids: number[],
     target: 'good' | 'bad' | 'none',
+    provenance?: VoteProvenance | null,
   ): Observable<{ ok: boolean; changed: number; missing: number[] }> {
     return this.http.post<{ ok: boolean; changed: number; missing: number[] }>(
       '/api/medias/vote-bulk',
-      { ids, target },
+      { ids, target, ...(provenance ? { provenance } : {}) },
     );
   }
 

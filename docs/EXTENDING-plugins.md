@@ -137,6 +137,29 @@ default filled in automatically:
 
 An explicit value always wins over the derived default.
 
+**Abstract intermediates must opt out.** Auto-derivation fires for every
+`PluginBase` subclass, so an abstract class of your own that sits *between*
+the family base and your concrete plugins would get a `name` stamped onto
+it — and every concrete subclass that doesn't declare its own would then
+inherit that name from the MRO before the per-subclass default could fire,
+so they'd all collide on one registry key. Mark such a class as a family
+base in its own body:
+
+```python
+class AcmeStorageDatasetImporter(DatasetImporter):
+    """Shared plumbing for Acme's storage-backed importers."""
+
+    _is_plugin_family_base = True
+```
+
+That does three things: the class gets no derived metadata of its own, its
+`icon` is treated as the family's stock glyph (so concrete subclasses that
+don't pick one get a letter instead of inheriting yours), and its
+`__name__` becomes a suffix its subclasses strip — so
+`PhotosAcmeStorageDatasetImporter` derives `"photos"` rather than
+`"photos_acme_storage"`. If you'd rather it *not* be stripped, add
+`_strippable_family_base = False` beside the marker.
+
 **Optional class attributes:**
 
 | Attribute            | Type   | Default  | Description                                     |
@@ -183,7 +206,7 @@ Both ingress points run the pass, so HTTP and CLI behave identically:
 
 | Path | Where it runs |
 |------|---------------|
-| HTTP, flat body | `validate_plugin_args()` in `vtsearch/routes/_shared.py`, after the marshmallow load and file-upload population |
+| HTTP, flat body | `validate_plugin_args()` in `vtsearch/routes/_plugins.py`, after the marshmallow load and file-upload population |
 | HTTP, nested `{"..._name", "field_values"}` body | `validate_exporter_field_values()` in the same module |
 | CLI  | `PluginBase.validate_cli_field_values()`, after the presence check |
 | Sync sources | `SyncSource.load()` / `save()` / `peek_version()` normalize a **copy** of `field_values` before dispatching to your `_do_*` hook (`vtscore/sync/__init__.py`) |

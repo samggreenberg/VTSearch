@@ -55,7 +55,8 @@ common.setup_env()
 from experiment_config import region_voting_for  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
-from _cells_io import assert_one_opening, main_frame_files  # noqa: E402
+from _cells_io import describe_load  # noqa: E402
+from _cells_io import load_cells as _load_cells  # noqa: E402
 from scipy.stats import mannwhitneyu, wilcoxon  # noqa: E402
 
 #: The arms this analyzer owns.  ``xcal`` / ``blend`` / ``anchored`` are the
@@ -112,42 +113,21 @@ def _md(df: pd.DataFrame) -> str:
 
 
 def load_cells(cells_dir: Path) -> pd.DataFrame:
-    """Load the fold-count rows, reporting what was dropped rather than hiding it."""
-    files = main_frame_files(cells_dir)
-    frames, empty, unreadable, headers_only = [], 0, 0, []
-    for p in files:
-        if p.stat().st_size == 0:
-            empty += 1
-            continue
-        try:
-            # `low_memory=False` because pandas otherwise types each chunk of a
-            # column independently and warns on `cut_fallback` /
-            # `cut_fallback_kind`, whose values differ between the base rows and
-            # the variant rows.  The warning is noise, but it fires once per cell
-            # and buries the load line that reports what was actually dropped.
-            f = pd.read_csv(p, low_memory=False)
-        except Exception as exc:  # noqa: BLE001 - a truncated cell must be counted, not crash the run
-            common.log(f"  UNREADABLE {p.name}: {exc}")
-            unreadable += 1
-            continue
-        # A cell whose simulation never reached a trainable step writes its
-        # HEADER and nothing else.  That file is non-empty, parses cleanly, and
-        # contributes zero rows - so it is invisible to a zero-byte check, to
-        # `find -size 0`, and to any count of "cells present".  A rare category
-        # can legitimately produce one (Autopilot never collects both classes),
-        # which is exactly why it has to be *counted* rather than assumed away:
-        # "208/208 cells" over a grid where 20 of them are empty is a different
-        # study from the one that sentence describes.
-        if f.empty:
-            headers_only.append(p.name)
-            continue
-        frames.append(f)
-    if headers_only:
-        common.log(f"  {len(headers_only)} header-only cells (0 rows): {', '.join(sorted(headers_only)[:8])}...")
-    if not frames:
-        return pd.DataFrame()
-    df = pd.concat(frames, ignore_index=True)
-    assert_one_opening(df, "analyze_folds_2897.py")
+    """Load the fold-count rows, reporting what was dropped rather than hiding it.
+
+    "208/208 cells" over a grid where 20 of them are header-only is a different
+    study from the one that sentence describes, so the drops are named.
+    """
+    df, prov = _load_cells(cells_dir, where="analyze_folds_2897.py")
+    for name, key in (("UNREADABLE", "unreadable"), ("ZERO-BYTE", "zero_byte")):
+        for entry in prov[key]:
+            common.log(f"  {name} {entry if isinstance(entry, str) else ': '.join(entry)}")
+    if prov["header_only"]:
+        common.log(
+            f"  {len(prov['header_only'])} header-only cells (0 rows): {', '.join(sorted(prov['header_only'])[:8])}..."
+        )
+    if df.empty:
+        return df
     df["gmm_variant"] = df["gmm_variant"].fillna("")
     df["env"] = df["dataset"] + "/" + df["embedder"] + "/" + df["style"]
     df["n_votes"] = df["n_good"] + df["n_bad"]
@@ -176,10 +156,7 @@ def load_cells(cells_dir: Path) -> pd.DataFrame:
         "region",
         "binary",
     )
-    common.log(
-        f"loaded {len(df):,} rows from {len(frames)}/{len(files)} cells "
-        f"({empty} zero-byte, {unreadable} unreadable, {len(headers_only)} header-only, skipped)"
-    )
+    common.log(f"loaded {describe_load(prov)}")
     return df
 
 

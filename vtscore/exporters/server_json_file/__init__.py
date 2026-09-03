@@ -11,14 +11,12 @@ No additional pip packages are required; uses only Python's ``json`` and
 from __future__ import annotations
 
 import json
-import os
-import uuid
 from pathlib import Path
 from typing import Any, Iterator
 
 from vtscore.config import DATA_DIR
 from vtscore.exporters.base import PluginField, ResultsExporter
-from vtscore.io import atomic_write_json
+from vtscore.io import atomic_write_json, atomic_write_stream
 
 _DEFAULT_JSON_PATH = f"{DATA_DIR}/autodetect_results_{{YYYYMMDD-HHMMSS}}.json"
 
@@ -89,17 +87,12 @@ class ServerJsonResultsExporter(ResultsExporter):
         The first line is a metadata object describing the run; every
         subsequent line is a single hit with its ``detector`` name merged in.
         Lines are flushed as they stream, so the full result set is never
-        held in memory.  The file is built at a per-writer-unique sibling
-        ``.tmp`` path and atomically renamed on success, so a crash mid-run
-        cannot leave a half-written file at the destination and two concurrent
-        exports to the same path can't clobber each other's temp file.
+        held in memory.  :func:`~vtscore.io.atomic_write_stream` owns the
+        tmp-file/``fsync``/rename ritual, so a crash mid-run cannot leave a
+        half-written file at the destination and two concurrent exports to the
+        same path can't clobber each other's temp file.
         """
         filepath = Path(field_values["filepath"])
-        filepath.parent.mkdir(parents=True, exist_ok=True)
-        # Per-writer unique suffix (pid + uuid) so two threads/processes racing
-        # to export the same path can't truncate each other's in-flight tmp or
-        # chase one already renamed away.  Matches vtscore.io.atomic_write_text.
-        tmp_path = filepath.with_name(f"{filepath.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
 
         meta = {
             "format": "vtsearch-hits-ndjson/v1",
@@ -109,20 +102,11 @@ class ServerJsonResultsExporter(ResultsExporter):
         }
 
         total_hits = 0
-        try:
-            with open(tmp_path, "w", encoding="utf-8") as f:
-                f.write(json.dumps({"_meta": meta}) + "\n")
-                for detector_name, hit in records:
-                    f.write(json.dumps({"detector": detector_name, **hit}) + "\n")
-                    total_hits += 1
-                f.flush()
-                os.fsync(f.fileno())
-            os.replace(tmp_path, filepath)
-        finally:
-            # Clean up the temp file if the rename never happened (e.g. an
-            # exception propagated out of the records iterator).
-            if tmp_path.exists():
-                tmp_path.unlink()
+        with atomic_write_stream(filepath) as f:
+            f.write(json.dumps({"_meta": meta}) + "\n")
+            for detector_name, hit in records:
+                f.write(json.dumps({"detector": detector_name, **hit}) + "\n")
+                total_hits += 1
 
         return {
             "message": (

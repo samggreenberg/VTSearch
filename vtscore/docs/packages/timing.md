@@ -150,8 +150,18 @@ Each task wrapped in `record_task` then appends one row per step:
 ```json
 {"task": "text_sort", "device": "cuda", "cuml": true, "media_type": "image",
  "embedder": "siglip", "n": 12403, "size_mb": 0.0, "step": "score",
- "seconds": 1.83, "ok": true}
+ "seconds": 1.83, "ok": true, "cold_model": false}
 ```
+
+`cold_model` says whether this run was the first in the process to need
+its `(media_type, embedder)` encoder, and so the one that paid to
+download and instantiate it. Without it a once-per-process cost is
+unfittable: a text sort's model load measures 15 s once and 0 s on the
+next 47, and a fitter that cannot separate the two populations medians
+them into "free". Only tasks whose `TaskSpec` declares `loads_encoder`
+take part - a `dataset_open` reads a pkl and touches no encoder, so it
+neither carries the field nor claims a key that the genuinely cold sort
+behind it needs.
 
 Because the recorder sits behind an env var, an admin has two ways to
 gather data and both produce the same file:
@@ -170,12 +180,11 @@ of no-op method calls: no tracker subscription, no file handle.
 
 The dataset-load pipeline carries an older, richer recorder
 (`vtscore/datasets/stages/_load_profiler.py`) that additionally
-distinguishes cold from warm model loads, cold from cached downloads,
-and the sub-slots inside finalize. Both run on the same load. They
-answer different questions, are armed by different env vars, and write
-different files - and the fitter reads both row shapes, so a
-pre-existing dataset-load calibration sweep folds into a new profile
-rather than being re-measured.
+distinguishes cold from cached downloads and splits finalize into its
+sub-slots. Both run on the same load. They answer different questions,
+are armed by different env vars, and write different files - and the
+fitter reads both row shapes, so a pre-existing dataset-load calibration
+sweep folds into a new profile rather than being re-measured.
 
 ---
 
@@ -196,7 +205,86 @@ The fit is deliberately plain. Per `(task, cell, step)`:
 - **Everything else** gets ordinary least squares against `n`: the
   intercept is what the step costs at all (loading an encoder, opening a
   file) and the slope is what each additional item adds.
+- **Cold runs are held out** when the warm ones can carry the regression
+  alone. A cold run pays once-per-process costs no later run repeats -
+  the encoder download, the CUDA context, the first forward pass - and it
+  always lands at whichever `n` ran first, so it has enormous leverage on
+  the slope. The holdout stops short of costing a cell its only line:
+  below two distinct warm sizes no slope is estimable, and a two-run
+  sweep's first run is always the cold one. When the warm runs then
+  measure a step as *exactly* free while a cold one measured it as real,
+  the step is not free here but deferred, and it keeps a small floor
+  rather than 0 so the bar still shows a slice for it.
 - A fit with no spread in `n`, or one that comes back with a **negative**
   slope (noise beating signal on a short step), collapses to the median
   seconds with no slope. A confidently wrong slope extrapolates badly at
   sizes the sweep never visited; a flat median merely stops improving.
+
+### Is the fit any good?
+
+`affine_fit` returns an OLS r² and `StepCoeffs` keeps it, so a profile can
+be read for whether its cost model describes the deployment it was measured
+on. `tune_timing_profile.py`'s coverage report prints it per task:
+
+```
+  dataset_load     5 cells, 24 step-samples
+                   exact  (device|media|embedder)  2 cells, 6 affine (median r² 1.00)
+                   rollup (device|media|*)         2 cells, 4 affine (median r² 0.98, 1 below 0.90), 4 byte-rate
+                   rollup (device|*|*)             1 cell, 2 affine (median r² 0.29, 2 below 0.90), 1 step withheld (pooled groups disagree)
+```
+
+The counts are **split by specificity**, in the order
+[`cell_keys`](#the-three-layer-resolution) tries them, because pooling the levels hides the
+one that matters most: `(device, *, *)` is the cell guaranteed to match, and
+it is the weakest. Read down the block and the first level with a cell for
+your media type and encoder is the one that will pace that job. A bare
+"5 cells" cannot tell you whether a sweep bought five measurements or one
+measurement and four fallbacks.
+
+Read the three counts before the r². **A missing r² is not a bad fit** - it
+means the step was not fitted as a line at all, which happens two ways: a
+byte-scaled step is a per-MB rate by design, and the median fallback above
+declined to draw one. `to_json` omits the key rather than writing a
+misleading zero, and `from_json` restores it as `NaN`.
+
+**A sweep at one dataset size produces no r² anywhere.** One size means one
+`n` per cell, `affine_fit` finds no x-variance and returns `(mean, 0, 0)`,
+and every step lands in the median fallback. Drive several sizes per
+(media type, embedder) - four is comfortable - or the profile is a table of
+averages with no scaling term and nothing to judge it by.
+
+Two cautions from the measurements in
+[#3345](../../../docs/experiments/2026-09-02-timing-r2-3345/REPORT.md):
+
+- **A high r² is not a well-paced step.** r² asks whether the points lie on
+  the line; a bar wants to know how far off the prediction is. They can
+  disagree, and the second is the one that shows.
+- **The rollup cells are much weaker than the exact ones**, which matters
+  because the least-specific cell is the one that always matches. Same
+  sweep, same rows: exact cells fit to r² 1.00 with 3 % prediction error,
+  and the `(device, *, *)` rollup to r² 0.29 with 50 % (162 % on one arm).
+
+### Contradicted rollups are not emitted
+
+A rollup is only ever *reached* for a combination the sweep never measured:
+`cell_keys` tries every more specific key first, and the fitter emits a cell
+for everything it saw. So `(device, media, *)` serves only encoders that
+media type was never measured with, and `(device, *, *)` only media types the
+sweep never touched at all. Extrapolation is the rollup's whole job - which
+is why it must not be built by averaging rows measured to be unlike.
+
+Before fitting a rollup step, `fit.py` fits each pooled group on its own and
+asks what the step costs at a size all of them cover. If the cheapest and
+dearest answers differ by more than `_MAX_ROLLUP_SPREAD` (3x), that step is
+**left out of the cell**, and `step_terms` falls it through to the shipped
+default while the rest of the cell still applies. #3345's measured case is
+the one this catches: `(cuda+cuml, *, *)` fitting a single slope through an
+image import at 0.014 s/item and an audio one at 0.102.
+
+The threshold sits well above the spread a healthy rollup shows - that same
+study's media rollups ran at 9 % error - so it fires on disagreement rather
+than on scatter. A merely imprecise rollup still beats the shipped default
+and is kept; a rollup with one group behind it is a rename of the cell it
+backs up and is never suppressed. The withheld count is printed in the
+coverage report, because a step the profile does *not* contain is invisible
+to anything that reads the profile.

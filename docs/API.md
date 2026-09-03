@@ -19,7 +19,7 @@ unless otherwise noted. File uploads use `multipart/form-data`.
 | [Datasets](api/datasets.md) | Loading, importers, demos, staging, registry, media types, embedders, clippers, converters, file browsing |
 | [Import & Export](api/io.md) | Result exporters, label importers, pregen processors, autorun extractors/localizers |
 | [Settings](api/settings.md) | App settings, autorun processors, settings sources, labelset sources |
-| [Dashboard](api/dashboard.md) | Dashboard dataset info/rename, disk/RAM usage probes |
+| [Dashboard](api/dashboard.md) | Dashboard disk/RAM usage probes |
 | [Find, Auto-Detect & Scoring](api/find.md) | Multi-dataset find (+ cancel/check-labels), Find Label, Auto-Detect, find stats/corrections, find progress |
 | [File Browser](api/file-browser.md) | Server filesystem browsing |
 | [Progress events (SSE)](api/events.md) | `GET /api/events`: the single Server-Sent Events stream carrying progress for every long-running operation |
@@ -48,7 +48,7 @@ chosen **per request** by two HTTP headers:
 | `X-Dataset-Id` | Which loaded `DatasetContext` the request's `medias` / coverage / dataset-scoped votes resolve to | Angular's `HttpClient` interceptor on every API call |
 | `X-Detector-Id` | Which loaded `DetectorContext` the request's `good_votes` / `bad_votes` / model / labelset resolve to | Same interceptor |
 
-Key semantics (`app.py` `before_request`, `vtsearch/routes/_shared.py`):
+Key semantics (`app.py` `before_request`, `vtsearch/routes/_context.py`):
 
 - **Per-request, not global.** The headers stash the chosen context on
   `flask.g` for the lifetime of the request; they do **not** mutate any global

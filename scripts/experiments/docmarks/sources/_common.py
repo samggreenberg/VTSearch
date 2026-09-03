@@ -380,20 +380,42 @@ class FetchError(RuntimeError):
     """A source could not be fetched, with an actionable reason."""
 
 
+class RateLimited(FetchError):
+    """The server asked us to slow down.
+
+    Separated from :class:`FetchError` because it is the one failure that is
+    about *us* rather than about the document: a 403 on a restricted PDF is
+    permanent and must be skipped, while a 429 means back off and the document
+    is still there.  Conflating them would have the fetcher discard documents it
+    was merely asking for too quickly.
+    """
+
+
 def require_kaggle_credentials(slug: str) -> None:
     """Raise :class:`FetchError` unless a Kaggle credential is in place.
 
-    The Kaggle CLI reads ``~/.kaggle/kaggle.json`` or the ``KAGGLE_USERNAME`` /
-    ``KAGGLE_KEY`` environment pair.  Checking here means a missing token is
-    reported with the setup instruction, rather than as a 403 halfway through a
-    grid job.
+    The Kaggle CLI reads ``~/.kaggle/kaggle.json``, ``~/.kaggle/access_token``
+    or the ``KAGGLE_USERNAME`` / ``KAGGLE_KEY`` environment pair.  Checking here
+    means a missing token is reported with the setup instruction, rather than as
+    a 403 halfway through a grid job.
+
+    ``access_token`` is in that list because it is what Kaggle's own "Create New
+    Token" now writes, and what ``kagglesdk`` reads natively (its
+    ``kaggle_creds.py`` / ``kaggle_oauth.py``).  Accepting only ``kaggle.json``
+    made a *working* credential look like a missing one: on the GRID the probe
+    reported both Kaggle sources BLOCKED while ``kaggle datasets download``
+    succeeded from the very same shell, against the very same token.  Since the
+    whole point of this gate is to fail fast rather than 403 mid-job, a false
+    BLOCKED is the one way it can be worse than having no gate at all.
     """
     has_env = bool(os.environ.get("KAGGLE_USERNAME") and os.environ.get("KAGGLE_KEY"))
-    has_file = (Path.home() / ".kaggle" / "kaggle.json").exists()
+    kaggle_dir = Path.home() / ".kaggle"
+    has_file = (kaggle_dir / "kaggle.json").exists() or (kaggle_dir / "access_token").exists()
     if not (has_env or has_file):
         raise FetchError(
             f"Kaggle credentials not found, needed for '{slug}'. "
-            "Put a token at ~/.kaggle/kaggle.json (Kaggle > Settings > Create New Token), "
+            "Put a token at ~/.kaggle/kaggle.json or ~/.kaggle/access_token "
+            "(Kaggle > Settings > Create New Token writes one of the two), "
             "or export KAGGLE_USERNAME and KAGGLE_KEY."
         )
 
@@ -423,9 +445,25 @@ def kaggle_probe(slug: str) -> None:
     except subprocess.CalledProcessError as exc:
         raise FetchError(f"kaggle metadata call for '{slug}' failed: {exc.stderr.strip()[:400]}") from exc
 
-    rows = [line for line in (proc.stdout or "").splitlines() if line.strip()]
-    header = rows[0].lower().split(",") if rows else []
-    if "name" not in header or len(rows) < 2:
+    # FIND the header rather than assuming it is the first line.  Kaggle CLI
+    # 2.2.4 prints a pagination preamble ahead of the CSV, and the CSV itself is
+    # CRLF, so the naive read of this output is wrong twice over:
+    #
+    #     Next Page Token = CfDJ8ImuQD4OY2pEnVW2WQ-kgndQdHqu9wY-...
+    #     name,size,creationDate\r
+    #     ground-truth-maps/.../stampDS-00001-gt.png,9151,2018-04-11 ...\r
+    #
+    # Taking row 0 as the header made every reachable dataset report as
+    # unreachable -- `staver BLOCKED` and `tobacco800 BLOCKED` against a token
+    # that had just downloaded 32.8 MB from the same shell.  Since this probe
+    # exists so a missing token is caught before a queue slot is burned, a false
+    # negative here costs exactly what the probe was written to save.
+    rows = [line.strip() for line in (proc.stdout or "").splitlines() if line.strip()]
+    header_at = next(
+        (i for i, row in enumerate(rows) if "name" in [cell.strip() for cell in row.lower().split(",")]),
+        None,
+    )
+    if header_at is None or len(rows) - header_at < 2:
         detail = " ".join((proc.stdout or "").split())[:400] or "(no output)"
         raise FetchError(f"kaggle could not list '{slug}': {detail}")
 
@@ -455,8 +493,15 @@ def kaggle_download(slug: str, dest: Path, *, unzip: bool = True) -> Path:
     return dest
 
 
-def http_download(url: str, dest: Path, *, chunk: int = 1 << 20) -> Path:
-    """Stream *url* to *dest*, resuming a partial file and writing atomically."""
+def http_download(url: str, dest: Path, *, chunk: int = 1 << 20, session: Any = None) -> Path:
+    """Stream *url* to *dest*, resuming a partial file and writing atomically.
+
+    Pass *session* to reuse one connection across a long pull.  Measured on the
+    UCSF endpoint it is worth only ~1.09x (307ms -> 281ms per PDF, so the cost
+    is the archive generating and sending the file, not the TLS handshake), but
+    it is free and it is strictly *less* load on a shared public service than
+    re-handshaking once per document across 216,000 of them.
+    """
     import requests
 
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -466,7 +511,10 @@ def http_download(url: str, dest: Path, *, chunk: int = 1 << 20) -> Path:
     tmp = dest.with_suffix(dest.suffix + ".part")
     have = tmp.stat().st_size if tmp.exists() else 0
     headers = {"Range": f"bytes={have}-"} if have else {}
-    with requests.get(url, headers=headers, stream=True, timeout=(20, 120)) as resp:
+    get = session.get if session is not None else requests.get
+    with get(url, headers=headers, stream=True, timeout=(20, 120)) as resp:
+        if resp.status_code in (429, 503, 509):
+            raise RateLimited(f"{url} returned HTTP {resp.status_code}")
         if resp.status_code not in (200, 206):
             raise FetchError(f"{url} returned HTTP {resp.status_code}")
         mode = "ab" if have and resp.status_code == 206 else "wb"

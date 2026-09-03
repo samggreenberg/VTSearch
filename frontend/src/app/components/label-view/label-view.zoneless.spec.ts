@@ -9,6 +9,8 @@ import { LabelSessionService } from '../../services/label-session.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { SortStateService } from '../../services/sort-state.service';
 import { AutopilotStateService } from '../../services/autopilot-state.service';
+import { EmbedderCapabilityService } from '../../services/embedder-capability.service';
+import type { EmbedderInfo } from '../../models/api.models';
 import { ActiveContextService } from '../../services/active-context.service';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleResource, settleZoneless } from '../../testing/settle-resource';
@@ -78,7 +80,7 @@ describe('LabelViewComponent (zoneless dataset-name canary)', () => {
       httpMock.match('/api/votes').forEach((req) =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
-      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 80 }));
+      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8 }));
       httpMock.match('/api/inclusion').forEach((req) => req.flush({ inclusion: 0 }));
       httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
       httpMock.match('/api/embedders').forEach((req) => req.flush([]));
@@ -143,7 +145,7 @@ describe('LabelViewComponent', () => {
   // requests are driven by `timer(0, …)`, which only fires on a real macrotask
   // after the synchronous test body returns, so they are NOT flushed here —
   // they are drained by `afterEach`'s catch-all instead.
-  function flushInitialRequests(): void {
+  function flushInitialRequests(votes?: Record<string, unknown>): void {
     TestBed.tick();
     // The medias and settings reads ride `rxResource`, whose loader runs in a
     // root effect rather than synchronously during `detectChanges()`; tick so
@@ -165,11 +167,13 @@ describe('LabelViewComponent', () => {
     TestBed.tick();
     // /api/votes (label-view loadVotes)
     httpMock.match('/api/votes').forEach(req =>
-      req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
+      req.flush(votes ?? { good: [], bad: [], click_times: {}, learned_scores: {} }),
     );
-    // /api/settings
+    // /api/settings. `volume` is a 0-1 fraction: the server clamps it to that
+    // range (`settings_models.py`), and the centre panel writes it straight
+    // onto `HTMLMediaElement.volume`, which throws on anything outside it.
     httpMock.match('/api/settings').forEach(req =>
-      req.flush({ volume: 80 }),
+      req.flush({ volume: 0.8 }),
     );
     // /api/dataset/status
     httpMock.match('/api/dataset/status').forEach(req =>
@@ -501,7 +505,7 @@ describe('LabelViewComponent', () => {
       req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
     );
     httpMock.match('/api/settings').forEach(req =>
-      req.flush({ volume: 80 }),
+      req.flush({ volume: 0.8 }),
     );
     httpMock.match('/api/dataset/status').forEach(req =>
       req.flush({ display_name: 'Test dataset' }),
@@ -552,7 +556,7 @@ describe('LabelViewComponent', () => {
       httpMock.match('/api/votes').forEach(req =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
-      httpMock.match('/api/settings').forEach(req => req.flush({ volume: 80 }));
+      httpMock.match('/api/settings').forEach(req => req.flush({ volume: 0.8 }));
       httpMock.match('/api/dataset/status').forEach(req =>
         req.flush({ display_name: 'DINOv3 dataset' }),
       );
@@ -614,10 +618,20 @@ describe('LabelViewComponent', () => {
     autopilot.activate();
     TestBed.tick();
 
-    // Transition good → bad
+    // Transition good → bad. The votes above gave the detector a labelset with
+    // both classes, so the panel's first real reading of it turned retrain mode
+    // on (#3535) — and in retrain mode every phase ranks with the model, so
+    // this transition sorts too. Flush it so the one under assertion below is
+    // the `hard` transition's.
     autopilot.checkPhaseTransition(3, 0);
     TestBed.tick();
     expect(autopilot.state.phase).toBe('bad');
+    expect(autopilot.state.retrainMode).toBe(true);
+    httpMock.expectOne('/api/learned-sort').flush({
+      status: 'done',
+      results: [{ id: 1, score: 0.8 }, { id: 2, score: 0.2 }],
+      threshold: 0.5,
+    });
 
     // Transition bad → hard: should trigger learned sort
     autopilot.checkPhaseTransition(3, 4);
@@ -654,6 +668,13 @@ describe('LabelViewComponent', () => {
     TestBed.tick();
     autopilot.checkPhaseTransition(3, 0); // good → bad
     TestBed.tick();
+    // Retrain mode is on (the labelset above has both classes), so the `bad`
+    // phase ranks with the model as well — see #3535.
+    httpMock.expectOne('/api/learned-sort').flush({
+      status: 'done',
+      results: [{ id: 1, score: 0.8 }, { id: 2, score: 0.2 }],
+      threshold: 0.5,
+    });
     autopilot.checkPhaseTransition(3, 4); // bad → hard
     TestBed.tick();
     // Flush learned sort from hard transition
@@ -927,6 +948,48 @@ describe('LabelViewComponent', () => {
       expect(component.sortState.sortOrder ?? []).toEqual([]);
     });
 
+    it('clears the centre viewer selection, and repaints, when the pair changes', async () => {
+      const activeContext = seedPair();
+      flushInitialRequests();
+      flushDetectorRegistry();
+      // The stub list rides `rxResource`, so `selectedMedia` cannot resolve id
+      // 1 into a media until the loader's value has landed.
+      await settleResource();
+
+      // The user is looking at an item from pair 1.
+      component.mediaState.selectMedia(1);
+      TestBed.tick();
+      expect(fixture.nativeElement.querySelector('vt-center-panel .center-panel.empty')).toBeNull();
+
+      activeContext.setActivePair('ds2', 'det2');
+      flushDetectorRegistry();
+      // Answer the reset's own media reload with a list that *also* carries id
+      // 1. Ids restart at 1 in every dataset, so this collision is the common
+      // case, not a contrived one — and it is what makes the assertion below
+      // mean something: an uncleared selection resolves against the new list
+      // and keeps the viewer populated, rather than merely surviving the
+      // moment the resource is empty mid-reload.
+      TestBed.tick();
+      httpMock.match('/api/medias/ids').forEach((req) =>
+        req.flush([
+          { id: 1, media_type: 'audio' },
+          { id: 2, media_type: 'audio' },
+        ]),
+      );
+      await settleResource();
+      expect(component.mediaState.mediasSignal().length).toBe(2);
+
+      // Media ids are per-dataset, so the selection is pair-scoped state and
+      // has to go with the ranking (#3489). Asserting through the DOM rather
+      // than only on the signal is the point: the centre viewer stamps the
+      // dataset id into its media URL and only rebuilds it when the media id
+      // changes, so a clear that does not notify under zoneless change
+      // detection would leave the stale pair-1 item painted
+      // (`docs/FRONTEND.md` §5) — which is the bug, not the fix.
+      expect(fixture.nativeElement.querySelector('vt-center-panel .center-panel.empty')).not.toBeNull();
+      expect(component.mediaState.selectedId()).toBeNull();
+    });
+
     it('stops polling a learned-sort job when the active pair changes', async () => {
       const activeContext = seedPair();
       flushInitialRequests();
@@ -970,6 +1033,259 @@ describe('LabelViewComponent', () => {
       await new Promise<void>((resolve) => setTimeout(resolve, 800));
       httpMock.expectNone((req) => req.url.startsWith('/api/learned-sort/result'));
       expect(component.sortState.sortBusy).toBe(false);
+    });
+  });
+
+  // Issue #3510: a pair switch reloads medias and votes but re-ran no sort, so
+  // the pair it landed on kept the empty ranking the reset left behind — an
+  // empty work queue and a placeholder in the centre, where a fresh entry to
+  // that same pair produces a ranking and an item. `reseedForNewPair` is the
+  // backstop that ranks it.
+  describe('pair-switch re-ranking', () => {
+    /** Seed an active pair *before* ngOnInit so the `pair$` replay is the
+     *  subscription's skipped first emission rather than a spurious reload. */
+    function seedPair(): ActiveContextService {
+      const activeContext = TestBed.inject(ActiveContextService);
+      activeContext.setActivePair('ds1', 'det1');
+      return activeContext;
+    }
+
+    /** The detector-registry read the switch fires off `modelId$` needs its
+     *  real shape; the catch-all `[]` drain elsewhere would break its handler. */
+    function flushDetectorRegistry(): void {
+      httpMock
+        .match((req) => req.url.startsWith('/api/detectors'))
+        .forEach((req) => req.flush({ detectors: [] }));
+    }
+
+    /** Answer the reload the pair switch fires: medias, the find hand-off, and
+     *  the votes read whose landing is what arms the reseed.
+     *  @param labelset good/bad label counts the new pair's votes report. */
+    async function flushPairReload(
+      labelset: { good: number[]; bad: number[]; labelset?: [number, number] },
+    ): Promise<void> {
+      flushDetectorRegistry();
+      TestBed.tick();
+      await settleResource();
+      httpMock.match('/api/medias/ids').forEach((req) =>
+        req.flush([
+          { id: 1, media_type: 'audio' },
+          { id: 2, media_type: 'audio' },
+        ]),
+      );
+      httpMock.match('/api/find/end-session').forEach((req) => req.flush({ ok: true, ended: false }));
+      TestBed.tick();
+      httpMock.match('/api/votes').forEach((req) =>
+        req.flush({
+          good: labelset.good,
+          bad: labelset.bad,
+          click_times: {},
+          learned_scores: {},
+          labelset_good_count: labelset.labelset?.[0] ?? labelset.good.length,
+          labelset_bad_count: labelset.labelset?.[1] ?? labelset.bad.length,
+        }),
+      );
+      TestBed.tick();
+      // The reseed is deferred a beat so a re-rank riding the same vote load
+      // gets there first; wait it out.
+      await new Promise<void>((resolve) => setTimeout(resolve, 400));
+    }
+
+    it('re-runs the learned sort for a pair whose labelset has both classes', async () => {
+      const activeContext = seedPair();
+      flushInitialRequests();
+      flushDetectorRegistry();
+      component.sortState.setSortMode('learned');
+
+      activeContext.setActivePair('ds2', 'det2');
+      // The reset drops the old pair's ranking; nothing re-ranked it before.
+      expect(component.sortState.sortOrder ?? []).toEqual([]);
+
+      // Labelset counts without dataset votes: the detector carries labels from
+      // another dataset, so learned sort is available and both medias here are
+      // still unvoted (and so still selectable).
+      await flushPairReload({ good: [], bad: [], labelset: [1, 1] });
+
+      const rerank = httpMock.match('/api/learned-sort');
+      expect(rerank.length).toBe(1);
+      rerank[0].flush({
+        status: 'done',
+        results: [{ id: 2, score: 0.9 }, { id: 1, score: 0.1 }],
+        threshold: 0.5,
+      });
+      TestBed.tick();
+      expect(component.sortState.sortOrder?.length).toBe(2);
+      // The ranking the switch produced seeds the centre the reset emptied.
+      expect(component.mediaState.selectedId()).toBe(2);
+    });
+
+    it('re-runs Autopilot\'s text seed sort when the new pair has no labelset', async () => {
+      const activeContext = seedPair();
+      flushInitialRequests();
+      flushDetectorRegistry();
+      TestBed.inject(LabelSessionService).textQuery = 'a query';
+      TestBed.inject(AutopilotStateService).activate(false);
+
+      activeContext.setActivePair('ds2', 'det2');
+      await flushPairReload({ good: [], bad: [] });
+
+      // No labelset for the new pair, so learned sort is impossible: the switch
+      // falls back to the same text sort Autopilot's activation fires on entry.
+      httpMock.expectNone('/api/learned-sort');
+      const textSort = httpMock.match('/api/sort');
+      expect(textSort.length).toBe(1);
+      expect(textSort[0].request.body).toEqual({ text: 'a query' });
+    });
+
+    it('rehydrates the learned sort with Autopilot off, when that is the mode', async () => {
+      const activeContext = seedPair();
+      component.autopilotEnabled.set(false);
+      flushInitialRequests();
+      flushDetectorRegistry();
+      TestBed.inject(AutopilotStateService).clear();
+      component.sortState.setSortMode('learned');
+
+      activeContext.setActivePair('ds2', 'det2');
+      await flushPairReload({ good: [], bad: [], labelset: [1, 1] });
+
+      // The Phase-3 rehydration predates the backstop and does not depend on
+      // Autopilot: a manual user who left the pair in learned mode lands on
+      // learned-sorted content in the new one, with no mode toggle.
+      expect(httpMock.match('/api/learned-sort').length).toBe(1);
+    });
+
+    it('seeds nothing with Autopilot off and no learned sort to rehydrate', async () => {
+      const activeContext = seedPair();
+      component.autopilotEnabled.set(false);
+      flushInitialRequests();
+      flushDetectorRegistry();
+      TestBed.inject(AutopilotStateService).clear();
+      TestBed.inject(LabelSessionService).textQuery = 'a query';
+
+      activeContext.setActivePair('ds2', 'det2');
+      await flushPairReload({ good: [], bad: [] });
+
+      // Entering the window with Autopilot off ranks nothing until the user
+      // sorts, so a switch must not rank either — and must not hijack the sort
+      // mode they chose.
+      httpMock.expectNone('/api/sort');
+      httpMock.expectNone('/api/learned-sort');
+    });
+
+    it('stands down when something already ranked the new pair', async () => {
+      const activeContext = seedPair();
+      flushInitialRequests();
+      flushDetectorRegistry();
+      component.sortState.setSortMode('learned');
+      TestBed.inject(LabelSessionService).textQuery = 'a query';
+
+      activeContext.setActivePair('ds2', 'det2');
+      flushDetectorRegistry();
+      TestBed.tick();
+      await settleResource();
+      httpMock.match('/api/medias/ids').forEach((req) =>
+        req.flush([{ id: 1, media_type: 'audio' }, { id: 2, media_type: 'audio' }]),
+      );
+      httpMock.match('/api/find/end-session').forEach((req) => req.flush({ ok: true, ended: false }));
+      TestBed.tick();
+      httpMock.match('/api/votes').forEach((req) =>
+        req.flush({
+          good: [1],
+          bad: [2],
+          click_times: {},
+          learned_scores: {},
+          labelset_good_count: 1,
+          labelset_bad_count: 1,
+        }),
+      );
+      // A re-rank riding the same vote load (an Autopilot phase change) lands
+      // its ranking first. The backstop must not train the same model again.
+      component.sortState.setSortWindow({
+        items: [{ id: 1, score: 0.9 }],
+        threshold: 0.5,
+        acqThreshold: null,
+        total: 1,
+        hasMore: false,
+        token: null,
+        aboveThreshold: 1,
+      });
+      TestBed.tick();
+      await new Promise<void>((resolve) => setTimeout(resolve, 400));
+
+      httpMock.expectNone('/api/learned-sort');
+      httpMock.expectNone('/api/sort');
+    });
+
+    it('keeps Autopilot available while the new pair\'s votes are still loading', async () => {
+      seedPair();
+      flushInitialRequests();
+      // A dataset whose embedder cannot embed text: Autopilot then has only the
+      // labelset to seed from — and mid-switch that labelset is not loaded, so
+      // its zeroed counts must not be read as "this detector has no labels".
+      // They were, which stopped Autopilot for good on every switch onto a
+      // no-text dataset, leaving the new pair unranked with no way back short
+      // of re-entering the window (#3510).
+      TestBed.inject(EmbedderCapabilityService).infos.set([
+        { name: 'dinov2_patch', supports_text: false } as EmbedderInfo,
+      ]);
+      component.mediaState.loadMedias();
+      TestBed.tick();
+      await settleResource();
+      httpMock.match('/api/medias/ids').forEach((req) =>
+        req.flush([{ id: 1, media_type: 'image', embedders: ['dinov2_patch'] }]),
+      );
+      TestBed.tick();
+      await settleResource();
+      expect(component.textSupported).toBe(false);
+
+      component.voteState.clear();
+      expect(component.voteState.votesLoaded).toBe(false);
+      expect(component.autopilotDisabled).toBe(false);
+
+      // Once the votes land, an empty labelset really does mean Autopilot has
+      // nothing to seed from.
+      component.voteState.loadVotes();
+      TestBed.tick();
+      httpMock.match('/api/votes').forEach((req) =>
+        req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
+      );
+      TestBed.tick();
+      expect(component.voteState.votesLoaded).toBe(true);
+      expect(component.autopilotDisabled).toBe(true);
+    });
+
+    // Issue #3535: Autopilot's retrain mode is guessed when the panel mounts,
+    // which on entry is two round trips before `/api/votes` answers — so a
+    // detector that arrives already trained activated as untrained. On a
+    // dataset it has no votes for the phase never moves either, so nothing
+    // corrected it later and the run stayed on the text hint.
+    it('ranks with the model when the labelset lands after Autopilot activated', async () => {
+      seedPair();
+      // A detector carrying labels from another dataset: both classes in the
+      // labelset, no votes on the dataset in front of us.
+      flushInitialRequests({
+        good: [],
+        bad: [],
+        click_times: {},
+        learned_scores: {},
+        labelset_good_count: 3,
+        labelset_bad_count: 2,
+      });
+      flushDetectorRegistry();
+      TestBed.tick();
+      await settleResource();
+
+      const autopilot = TestBed.inject(AutopilotStateService);
+      expect(autopilot.running).toBe(true);
+      // The run's first real reading of the labelset corrects the guess.
+      expect(autopilot.state.retrainMode).toBe(true);
+      // ...and the phase has nowhere to go, so no transition sorts for us.
+      expect(autopilot.state.phase).toBe('good');
+
+      await new Promise<void>((resolve) => setTimeout(resolve, 400));
+      const learned = httpMock.match('/api/learned-sort');
+      expect(learned.length).toBe(1);
+      expect(component.sortState.sortMode).toBe('learned');
     });
   });
 

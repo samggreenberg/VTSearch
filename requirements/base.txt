@@ -12,7 +12,7 @@
 # installs exactly what it always has. To skip those two AGPL-3.0 packages,
 # install `requirements/base-no-agpl.txt` instead (or run the installer as
 # `VTSEARCH_NO_AGPL=1 bash scripts/install.sh`); see NOTICE. Keep the two
-# files in sync -- `tests_lib/core/test_agpl_optional_extra.py` enforces that they
+# files in sync -- `tests_lib/meta/test_agpl_optional_extra.py` enforces that they
 # differ only in the extras.
 
 --extra-index-url https://download.pytorch.org/whl/cpu

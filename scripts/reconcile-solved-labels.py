@@ -35,7 +35,7 @@ in exactly the ways prose hides: closing keywords must be told apart from
 #M`, a comment posted *after* a fix pointer may or may not dispute it, and a
 pointer naming a commit instead of a PR cannot be resolved here at all.
 Getting any of those subtly wrong silently corrupts both views above.
-Encoding it here makes it testable; see tests/core/test_reconcile_solved_labels.py.
+Encoding it here makes it testable; see tests_lib/meta/test_reconcile_solved_labels.py.
 
 ## The assignee half, and why it only ever removes
 

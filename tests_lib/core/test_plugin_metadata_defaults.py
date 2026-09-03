@@ -186,3 +186,136 @@ class TestMediaConverterPropertyNotStomped:
         # survived.
         instance = Video2ImageMediaConverter()
         assert instance.name == "video2image"
+
+
+class TestFamilyBaseContributesItsSuffix:
+    """A family base's ``__name__`` is strippable by its own subclasses.
+
+    This is what lets a new plugin family be declared by marking one class,
+    instead of also appending its name to a central suffix table that a
+    later family will forget to update.
+    """
+
+    def test_subclass_strips_the_base_name(self):
+        class AcmeWidgetBase(PluginBase):
+            """A third-party family base."""
+
+            _is_plugin_family_base = True
+            fields: list[PluginField] = []
+
+        class ShinyAcmeWidgetBase(AcmeWidgetBase):
+            """Doc."""
+
+        assert ShinyAcmeWidgetBase.name == "shiny"
+
+    def test_base_name_beats_a_generic_suffix(self):
+        """Longest match wins, so the family's own name is preferred over
+        the generic tail even though both are suffixes of the class name."""
+
+        class AcmeWidgetExporter(PluginBase):
+            """A third-party family base whose name ends in ``Exporter``."""
+
+            _is_plugin_family_base = True
+            fields: list[PluginField] = []
+
+        class ShinyAcmeWidgetExporter(AcmeWidgetExporter):
+            """Doc."""
+
+        # Not ``shiny_acme_widget``, which is what stripping the generic
+        # ``Exporter`` alone would have produced.
+        assert ShinyAcmeWidgetExporter.name == "shiny"
+
+    def test_non_strippable_base_withholds_its_name(self):
+        class AcmeSyncSource(PluginBase):
+            """A base whose name must not be stripped."""
+
+            _is_plugin_family_base = True
+            _strippable_family_base = False
+            fields: list[PluginField] = []
+
+        class ShinyAcmeSyncSource(AcmeSyncSource):
+            """Doc."""
+
+        # Falls through to the generic ``Source``, exactly as it did before
+        # family bases contributed suffixes at all.
+        assert ShinyAcmeSyncSource.name == "shiny_acme_sync"
+
+    def test_contribution_is_scoped_to_the_subclass_mro(self):
+        """One family's base name never leaks into another family.
+
+        The suffix set is read off the deriving class's own MRO rather than
+        a process-global registry, so the derived name can't depend on which
+        unrelated modules happened to be imported first.
+        """
+
+        class AcmeWidgetBase(PluginBase):
+            """Family A."""
+
+            _is_plugin_family_base = True
+            fields: list[PluginField] = []
+
+        class OtherFamilyBase(PluginBase):
+            """Family B, which knows nothing about family A."""
+
+            _is_plugin_family_base = True
+            fields: list[PluginField] = []
+
+        class ShinyAcmeWidgetBase(OtherFamilyBase):
+            """A family-B plugin whose name happens to end in family A's."""
+
+        assert ShinyAcmeWidgetBase.name == "shiny_acme_widget_base"
+
+
+class TestStockIconDetectedByDefiningClass:
+    """An inherited icon counts as "no icon chosen" when a *family base*
+    defines it, rather than when it matches one of the emoji this repo
+    happens to ship."""
+
+    def test_third_party_family_stock_icon_is_replaced(self):
+        class AcmeWidgetBase(PluginBase):
+            """A third-party family base with its own generic glyph."""
+
+            _is_plugin_family_base = True
+            icon = "🚀"
+            fields: list[PluginField] = []
+
+        class ShinyAcmeWidgetBase(AcmeWidgetBase):
+            """Doc."""
+
+        assert ShinyAcmeWidgetBase.icon == "S"
+
+    def test_icon_inherited_from_a_non_base_ancestor_is_kept(self):
+        class AcmeWidgetBase(PluginBase):
+            """Doc."""
+
+            _is_plugin_family_base = True
+            fields: list[PluginField] = []
+
+        class DeliberateAcmeWidgetBase(AcmeWidgetBase):
+            """A concrete plugin that chose an icon."""
+
+            icon = "🚀"
+
+        class VariantAcmeWidgetBase(DeliberateAcmeWidgetBase):
+            """A subclass of it, which inherits that deliberate choice."""
+
+        assert VariantAcmeWidgetBase.icon == "🚀"
+
+    def test_explicit_icon_matching_another_familys_stock_glyph_survives(self):
+        """The old rule compared codepoints against a table of our own
+        emoji, so a plugin that deliberately picked one of them was at the
+        mercy of where it sat in the MRO."""
+
+        class AcmeWidgetBase(PluginBase):
+            """Doc."""
+
+            _is_plugin_family_base = True
+            icon = "🔌"
+            fields: list[PluginField] = []
+
+        class ShinyAcmeWidgetBase(AcmeWidgetBase):
+            """Doc."""
+
+            icon = "🔌"  # the dataset-importer family's stock plug, on purpose
+
+        assert ShinyAcmeWidgetBase.icon == "🔌"

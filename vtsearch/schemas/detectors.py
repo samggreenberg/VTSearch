@@ -72,7 +72,7 @@ from marshmallow import Schema, fields, validate
 
 from vtsearch.schemas.common import PluginExtrasSchema, list_of_strings
 from vtsearch.schemas.labels import LabeledElementSchema
-from vtsearch.schemas.media import MediaEntrySchema, OriginSchema
+from vtsearch.schemas.media import MediaEntrySchema, OriginSchema, VoteProvenanceSchema
 
 #: Upper bound on user-supplied detector names.  A name this long is already
 #: past any reasonable display use, and capping it here keeps the derived
@@ -893,9 +893,23 @@ class DetectorLabelVoteRequestSchema(Schema):
     direction: ``"good"`` / ``"bad"`` set the element's label, ``"remove"``
     drops it from the labelset. Sending an absolute target makes repeated
     requests from stale tabs idempotent (logical-bug-audit H1).
+
+    The optional ``provenance`` block records how the element came to be in
+    front of the user; it defaults to ``{"flow": "labelset_review"}``, which
+    is what this surface is - a correction to an already-saved label, not a
+    fresh draw off any ranking.  Recorded only when the label actually
+    flips.
     """
 
     target = fields.String(required=True, validate=validate.OneOf(["good", "bad", "remove"]))
+    provenance = fields.Nested(
+        VoteProvenanceSchema,
+        allow_none=True,
+        metadata={"description": "Optional surfacing context; see :class:`VoteProvenanceSchema`."},
+    )
+
+    class Meta:
+        unknown = "exclude"
 
 
 class DetectorLabelVoteResponseSchema(Schema):

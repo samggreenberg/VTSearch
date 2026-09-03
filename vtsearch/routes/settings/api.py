@@ -25,11 +25,12 @@ from typing import Any, Callable, NamedTuple
 from flask_smorest import Blueprint, abort
 from marshmallow import fields
 
-from vtsearch import settings
+from vtsearch import admin_overrides, settings
 from vtsearch.schemas.settings import AppSettingsSchema, SettingsUpdateSchema
 from vtsearch.state import (
     set_calibrate_count as _state_set_calibrate_count,
     set_calibration_fraction as _state_set_calibration_fraction,
+    set_inclusion as _state_set_inclusion,
 )
 
 settings_bp = Blueprint(
@@ -78,20 +79,6 @@ def _apply_enable_achievements(value: bool) -> None:
         from vtsearch import achievements
 
         achievements.wipe_state()
-
-
-def _validate_inclusion(value) -> int:
-    try:
-        return int(max(-10, min(10, int(value))))
-    except (TypeError, ValueError) as exc:
-        abort(400, message=str(exc))
-
-
-def _apply_inclusion(clamped: int) -> None:
-    """``inclusion`` is set via :mod:`vtsearch.state`, not :mod:`settings`."""
-    from vtsearch.state import set_inclusion
-
-    set_inclusion(clamped)
 
 
 def _validate_solo_embedder_per_media_type(value) -> dict[str, str] | None:
@@ -187,38 +174,23 @@ def _coerce_dict_fields(data: dict) -> dict:
 def _with_effective(data: dict) -> dict:
     """Overlay the resolver-computed (read-only) views onto *data*.
 
-    Centralises the augmentation shared by the GET and PUT responses:
+    Every process-level **admin override** -- the solo mediaType lock, the
+    per-mediaType solo-embedder locks, the plugin hide list, the dataset
+    retention window, the support email, the Semantic-only lock -- publishes
+    the value *actually in force* here, so the frontend never has to know
+    whether a restriction came from a CLI flag, an env var, or the settings
+    file. The set is not spelled out: each knob declares its own
+    ``effective_key`` (and any JSON coercion) in
+    :mod:`vtsearch.admin_overrides`, and this loops the registry, so a new
+    override is surfaced without touching this route.
 
-    * ``effective_solo_embedder_per_media_type`` - the per-user embedder
-      locks layered over their CLI fallbacks; the frontend reads this to
-      decide whether to hide the embedder picker for a given mediaType.
-    * ``hidden_plugins`` - the persisted server setting unioned with any
-      ``--hide-plugin`` CLI flags, normalised to sorted lists so the
-      "Server" settings tab can render what's actually in force.
-
-    Stale dict fields are coerced to ``{}`` first so a corrupt persisted
-    value can't 500 the endpoint (see :func:`_coerce_dict_fields`).
+    Shared by the GET and PUT responses. Stale dict fields are coerced to
+    ``{}`` first so a corrupt persisted value can't 500 the endpoint (see
+    :func:`_coerce_dict_fields`).
     """
     _coerce_dict_fields(data)
-    data["effective_solo_embedder_per_media_type"] = settings.get_effective_solo_embedders()
-    data["hidden_plugins"] = {
-        family: sorted(names) for family, names in settings.get_effective_hidden_plugins().items()
-    }
-    # Surface the CLI-overridable retention policy as the value actually in
-    # force (``--dataset-max-age-days`` wins over the persisted file), so the
-    # dashboard's Age-Off column reflects what new datasets are stamped with.
-    data["dataset_max_age_days"] = settings.get_effective_dataset_max_age_days()
-    # Surface the CLI/env-overridable "Email us" recipient as the value
-    # actually in force, so the Help modal's mailto link is pre-addressed.
-    data["support_email"] = settings.get_effective_support_email()
-    # Surface the CLI/env-overridable Semantic-only lock as the value actually
-    # in force, so the New-detector modal can drop its embedder-type picker and
-    # the Server settings tab can report the restriction.
-    data["semantic_only"] = settings.get_effective_semantic_only()
-    # Surface the CLI-overridable solo-mediaType restriction as the value
-    # actually in force, so the importer / new-detector / import-defaults
-    # surfaces lock their mediaType pickers to what the admin allowed.
-    data["solo_media_type"] = settings.get_effective_solo_media_type()
+    for override in admin_overrides.OVERRIDES.values():
+        data[override.effective_key] = override.dump(settings.get_effective_override(override.name))
     return data
 
 
@@ -293,7 +265,6 @@ def _validate_autofind_exporter_field_values(value) -> dict[str, dict[str, str]]
 #: with the writer that persists it, so a whole PUT body can be validated
 #: before any of it is committed (see :func:`update_settings`).
 _CUSTOM_SETTERS: dict[str, _CustomSetter] = {
-    "inclusion": _CustomSetter(_validate_inclusion, _apply_inclusion),
     "saved_datasets_dir": _CustomSetter(
         lambda v: _validate_dir("saved_datasets_dir", v), settings.set_saved_datasets_dir
     ),
@@ -310,16 +281,34 @@ _CUSTOM_SETTERS: dict[str, _CustomSetter] = {
 
 
 # The training-relevant settings route through ``vtsearch.state`` rather
-# than ``vtsearch.settings`` so the state setter's side-effect
-# (``invalidate_loaded_detector_models``) fires and the cached MLP /
-# threshold on every loaded detector context is dropped; otherwise
-# ``/api/find-label`` / ``/api/find`` / ``/api/auto-detect`` would keep
-# scoring with a threshold computed under the prior setting (M7). These
+# than ``vtsearch.settings`` so the state setter's side-effect fires and the
+# stale derived artefacts on every loaded detector context are dropped;
+# otherwise ``/api/find-label`` / ``/api/find`` / ``/api/auto-detect`` would
+# keep scoring with a threshold computed under the prior setting (M7). These
 # override the plain ``settings.set_<key>`` accessor the table would
 # otherwise pick up.
+#
+# ``calibrate_count`` / ``calibration_fraction`` change what a *retrain*
+# produces, so their setters invalidate the cached MLP
+# (``invalidate_loaded_detector_models``). ``inclusion`` is a pure cutoff
+# knob, so its setter keeps the MLP and only re-derives the threshold from
+# the cached fold orderings
+# (``recompute_detector_thresholds_for_inclusion``). All three persist back
+# to :mod:`vtsearch.settings` through the shim's setting-persister hook
+# (:func:`vtsearch.shim.register_app_persistence_hooks`), which is why the
+# state-tier setter is the whole write and no ``settings.set_<key>`` call
+# belongs beside it.
+#
+# Routing ``inclusion`` here rather than through :data:`_CUSTOM_SETTERS` is
+# what gives it a *single* clamp: :func:`_plan_one_key` validates every
+# entry in this table with ``settings.validate_setting``, which resolves to
+# the autogenerated ``settings.validate_inclusion`` and therefore to the
+# ``[-10, 10]`` bound declared once on ``UserSettings.inclusion``. A bespoke
+# validator here would be a second copy of that range (issue #3416).
 _STATE_TIER_SETTERS: dict[str, Callable[[Any], Any]] = {
     "calibrate_count": _state_set_calibrate_count,
     "calibration_fraction": _state_set_calibration_fraction,
+    "inclusion": _state_set_inclusion,
 }
 
 #: Keys that ``SettingsUpdateSchema`` accepts and that have a

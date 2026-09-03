@@ -367,7 +367,12 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
 
     from vtsearch.threading import spawn
 
-    _loading_tasks.set_worker(task_id, spawn(load_task, name=f"ds-load-{dataset_id[:8]}"))
+    # Registered before the thread starts so a cancel arriving in the same
+    # instant can tell "not started yet" from "nothing here"; see
+    # ``LoadingTasksTracker.set_worker``.
+    worker = spawn(load_task, name=f"ds-load-{dataset_id[:8]}", start=False)
+    _loading_tasks.set_worker(task_id, worker)
+    worker.start()
     return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}
 
 
@@ -453,7 +458,10 @@ def build_dataset_coverage_atlas(dataset_id: str):
 
     from vtsearch.threading import spawn
 
-    _loading_tasks.set_worker(task_id, spawn(build_task, name=f"atlas-{dataset_id[:8]}"))
+    # Registered before the thread starts; see ``LoadingTasksTracker.set_worker``.
+    worker = spawn(build_task, name=f"atlas-{dataset_id[:8]}", start=False)
+    _loading_tasks.set_worker(task_id, worker)
+    worker.start()
     return {"ok": True, "message": "Coverage atlas build started", "task_id": str(task_id)}
 
 

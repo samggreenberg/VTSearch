@@ -10,7 +10,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from vtscore.eval.step_model import StepModel, good_training_vec, inclusion_weights
+from vtscore.eval.calibration_metrics import inclusion_weights
+from vtscore.eval.step_model import StepModel, good_training_vec
 from vtscore.eval.step_trainers import _labelset_error_costs
 from vtscore.eval.voting_columns import TIMING_COLUMNS
 from vtscore.eval.voting_iterations import (

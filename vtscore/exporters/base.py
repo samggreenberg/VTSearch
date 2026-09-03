@@ -175,6 +175,10 @@ class ResultsExporter(PluginBase):
     there is no labelset equivalent.
     """
 
+    #: Abstract family base: no auto-derived metadata, and concrete
+    #: subclasses strip ``ResultsExporter`` from their class names.
+    _is_plugin_family_base = True
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         # A subclass that overrode only the pre-payload-kinds ``export()`` gets

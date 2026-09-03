@@ -115,7 +115,7 @@ LINK_BASE_OVERRIDES: dict[str, str] = {
 PLAN_SELF_REFERENCE = frozenset(
     {
         "scripts/check-docs.py",
-        "tests_lib/core/test_docs_gate.py",
+        "tests_lib/meta/test_docs_gate.py",
     }
 )
 

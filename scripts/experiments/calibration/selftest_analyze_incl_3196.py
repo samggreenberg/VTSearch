@@ -68,7 +68,6 @@ N_TEST = 800
 #: Every step is past ``DEEP_VOTES_MIN``, so the deep filter keeps the whole
 #: fixture and a failure is never "the analyzer looked at no rows".
 STEPS = [110, 140, 170, 200]
-OFFSET = -3
 
 
 def _arm(rule: str, step: float | None = None) -> str:
@@ -251,7 +250,15 @@ def main() -> int:  # noqa: C901 - a linear list of planted-answer assertions
 
         # --- H4: the offset collapses exactly where the band is ---------------
         gaps = pd.read_csv(out / "incl3196_offset_gap.csv")
-        assert set(gaps["offset"]) == {OFFSET}, gaps["offset"].unique()
+        # The live app constant, not a copy: the analyzer reads
+        # `ACQUISITION_INCLUSION_OFFSET` from the app, so a number pinned here
+        # asserts what the offset used to be.  This was `-3` and the app moved
+        # to `-4`, which failed the selftest without anything being wrong with
+        # the analyzer -- the shape the "eval default arm IS the app" rule
+        # exists to prevent, one tier down.
+        from vtscore.training.thresholds import ACQUISITION_INCLUSION_OFFSET  # noqa: PLC0415
+
+        assert set(gaps["offset"]) == {ACQUISITION_INCLUSION_OFFSET}, gaps["offset"].unique()
         by_head = gaps.groupby(["head_arm", "env"])["collapse_rate"].mean()
         assert by_head[("linear", region_env)] < 0.01, by_head
         assert by_head[("svm", region_env)] > 0.5, by_head

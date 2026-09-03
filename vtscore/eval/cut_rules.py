@@ -23,7 +23,7 @@ rule             ``lam``                     minimises
 ===============  ==========================  ===================================
 
 The ``gumbel_*`` rules are the same three tilts against a
-:class:`~vtscore.training.evt_mixture.GumbelNormalFit1D` - a component with the
+:class:`~vtscore.eval.evt_mixture.GumbelNormalFit1D` - a component with the
 right *shape* for a max over region nodes.  ``gumbel_any_*`` are those three
 again without #2836's assumption that the Gumbel is necessarily the *low*
 component; that assumption is what the Gumbel arm's fallback rate turned out to
@@ -61,16 +61,16 @@ from typing import Any
 import numpy as np
 
 from vtscore.eval.calibration_metrics import oracle_cut
+from vtscore.eval.evt_mixture import (
+    GumbelNormalFit1D,
+    fit_gumbel_normal_mixture_state,
+    gaussian_mixture_mean_loglik,
+)
 from vtscore.eval.transfer_rules import (
     BAGGED_FIT_RULES,
     TRANSFER_ORACLE_RULES,
     bagged_gaussian_fit_cuts,
     transfer_oracle_cuts,
-)
-from vtscore.training.evt_mixture import (
-    GumbelNormalFit1D,
-    fit_gumbel_normal_mixture_state,
-    gaussian_mixture_mean_loglik,
 )
 from vtscore.training.thresholds import (
     CUT_KIND_CONTINUED,
@@ -277,7 +277,7 @@ def evt_cuts(fit: GumbelNormalFit1D, fpr_weight: float, fnr_weight: float) -> tu
     same point as solving in score space would have given.
 
     *reasons* names why each rule produced no cut (one of
-    :data:`~vtscore.training.evt_mixture.CROSSING_REASONS`), which is what makes
+    :data:`~vtscore.eval.evt_mixture.CROSSING_REASONS`), which is what makes
     a fallback auditable rather than invisible — the #2846 diagnosis turned
     entirely on being able to tell ``modes_swapped`` (the fit is sound, the
     orientation assumption was not) from ``hi_owns_lo_mode`` (the two components
@@ -317,7 +317,7 @@ def tail_cuts(
     reads whichever component came out low, so the ``modes_swapped`` axis that
     #2836 and #2846 spent themselves on simply does not arise.  A rule declines
     only for a degenerate fit, which is why the reason vocabulary is a two-element
-    subset of :data:`~vtscore.training.evt_mixture.CROSSING_REASONS` rather than
+    subset of :data:`~vtscore.eval.evt_mixture.CROSSING_REASONS` rather than
     the full set.
     """
     cuts: dict[str, float] = {}

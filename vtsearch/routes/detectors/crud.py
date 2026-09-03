@@ -142,7 +142,7 @@ def create_detector(body: dict):
         abort(409, message=f"A detector named '{name}' already exists")
 
     from vtscore.detectors.embedder_type import resolve_detector_embedder_type
-    from vtsearch.routes._shared import abort_if_semantic_only_type
+    from vtsearch.routes._policy import abort_if_semantic_only_type
 
     embedder_type, type_err = resolve_detector_embedder_type(body.get("embedder_type", ""))
     if type_err:

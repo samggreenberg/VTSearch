@@ -187,12 +187,16 @@ are skipped.
 
 ### Public accessors
 
-| Function (`vtscore/converters/__init__.py`)                | Purpose                                       |
-|------------------------------------------------------------|-----------------------------------------------|
-| `list_converters()` (`:34`)                                | Every registered converter.                   |
-| `get_converter(name)` (`:39`)                              | Look up by `name`; returns `None` on miss.    |
-| `list_converters_for_target(target_type)` (`:44`)          | All converters producing `target_type`.       |
-| `list_converters_for_source(source_type)` (`:49`)          | All converters consuming `source_type`.       |
+| Function (`vtscore/converters/__init__.py`)     | Purpose                                    |
+|--------------------------------------------------|--------------------------------------------|
+| `list_converters()`                              | Every registered converter.                |
+| `get_converter(name)`                            | Look up by `name`; returns `None` on miss. |
+| `list_converters_for_target(target_type)`        | All converters producing `target_type`.    |
+| `list_converters_for_source(source_type)`        | All converters consuming `source_type`.    |
+
+`get_converter` / `list_converters` are the registry's own accessors,
+returned by `make_plugin_registry` — the same construction every other
+plugin family uses.
 
 `list_converters_for_target("image")` is the typical query for "give
 me every way to produce an image, regardless of source". This is
@@ -353,7 +357,7 @@ Vectors"). The recorded `params` are:
 | `converter_out_index` / `converter_n_out` | This output's position in the converter's returned list, and the list's length at import time |
 | `converter_content_hash` | Short md5 of the output bytes - the authoritative replay disambiguator |
 | `parent_importer` | The importer that supplied the source corpus |
-| `parent_path` / `parent_url` / `parent_paths_file` / `parent_manifest` | That importer's locator, so the corpus itself is recoverable, not just the file inside it |
+| `parent_<key>` (`parent_path`, `parent_url`, `parent_paths_file`, `parent_manifest`, `parent_name` for a demo dataset) | That importer's own locator param, prefixed - so the corpus itself is recoverable, not just the file inside it.  The resolver rebuilds the parent origin by stripping the prefix, so a new importer's locator needs no resolver change |
 
 `source_file` and `source_path` differ whenever the scanned folder is a
 staging area of symlinks: the `server_files` (Manifest) importer links every

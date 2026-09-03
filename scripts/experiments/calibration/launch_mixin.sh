@@ -115,7 +115,10 @@ import sys
 from pathlib import Path
 
 cells, n = Path(sys.argv[1]), int(sys.argv[2])
-have = {int(p.stem.split("_")[1]) for p in cells.glob("task_*.csv") if "__sweep" not in p.name}
+# `__` marks a side frame (`__sweep`, `__picks`, ...); only the main frame
+# means the cell ran.  Same rule as `_cells_io.main_frame_files`, spelled out
+# rather than imported because this heredoc runs before the venv is on path.
+have = {int(p.stem.split("_")[1]) for p in cells.glob("task_*.csv") if "__" not in p.stem}
 todo = [i for i in range(n) if i not in have]
 # Collapse consecutive indices into ranges.  sbatch rejects an over-long
 # --array string outright ("Pathname ... too long"), which a fully-missing arm

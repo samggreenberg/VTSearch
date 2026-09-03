@@ -88,7 +88,7 @@ keep updated.
 |---|---|---|---|---|---|
 | **1** | **Stop running `domain_shift_report` on patch embedders** — gate it at `registry.py:524` and return "not supported for this embedder" rather than a verdict | 0.13 separation between "my own data" and "a different corpus" is not carrying information; the endpoint currently answers a user's direct question with noise | [B4](#b4b5--the-guards-actual-operating-point), [B6](#b6--the-obvious-repair-priced-it-does-not-work) | one guard clause | **done** |
 | **2** | **Delete the false null from `typicality_pvalues`' docstring** and say what the p-values actually are: under-dispersed (sd 0.250 vs 0.289), path-averaged, uncalibrated | The docstring's claim is the reason nobody checked for two years. It is false for all five embedders, not just the broken one | [B1–B2](#b1b3--the-atlass-null-and-why-it-fails) | one docstring | **done** |
-| **3** | **Record one timing profile** with `VTSEARCH_RECORD_TIMING` on a real dataset load, and read the r² this PR started keeping | The r² is now persisted but has never been looked at; the fix is untested against real data | [Appendix A](#d--the-timing-statistic-that-was-computed-and-thrown-away) | one dataset load | #3345 |
+| **3** | **Record one timing profile** with `VTSEARCH_TIMING_RECORD` on real dataset loads *at several sizes*, and read the r² this PR started keeping | The r² is now persisted but has never been looked at; the fix is untested against real data | [Appendix A](#d--the-timing-statistic-that-was-computed-and-thrown-away) | a short sweep | **done** — [#3345](../2026-09-02-timing-r2-3345/REPORT.md) |
 | **4** | **Label coarse browse signs as approximate** in the UI, or stop showing signs below layer 2 | At layers 2–3, 45–48 % of regions have no ground-truth category holding even half their members — the sign names something no single label describes | [C4](#c4--are-the-browse-canvass-named-regions-coherent-inventory-item-10) | UX call, small | #3346 |
 | **5** | **Audit other cosine-magnitude thresholds for patch embedders** — anywhere in the tree a constant is compared against a similarity | Four independent measurements say `dinov3_patch`'s absolute cosines live in a different range; `domain_shift_report` is the instance that was caught, not necessarily the only one | [§6 above](#the-short-version) | a grep and a think | #3347, [inventory](AUDIT-cosine-thresholds.md) |
 | **6** | *If* the atlas guard is wanted on patch embedders: **fix the per-node vMF model**, not a threshold on top of it | r̄ = 0.61 says the mean-direction model describes this space poorly; every threshold repair was priced and failed | [B6](#b6--the-obvious-repair-priced-it-does-not-work) | real work, unbudgeted | #3348 |
@@ -776,8 +776,17 @@ carry no r² rather than a misleading zero, and `to_json` omits the key entirely
 
 **No measurement accompanies this fix**, and that is a gap rather than a
 finding: there is no recorded timing profile on this cluster to read an r² off.
-Producing one needs a real dataset load with `VTSEARCH_RECORD_TIMING` set, which
+Producing one needs real dataset loads with `VTSEARCH_TIMING_RECORD` set, which
 this grid does not do — [action item 3](#action-items).
+
+*Corrected 2026-09-02 by [#3345](../2026-09-02-timing-r2-3345/REPORT.md), which
+did the measurement.* Two things above are wrong. The env var is
+`VTSEARCH_TIMING_RECORD`, not `VTSEARCH_RECORD_TIMING` — an admin following the
+name as written would have armed nothing, silently. And **one** dataset load
+cannot produce an r² at all: a single load gives one `n` per cell, `affine_fit`
+returns `(mean, 0, 0)` with no x-variance, and `fit_step` takes the median
+branch that deliberately drops the r². Reading an r² needs spread in `n`, which
+means several sizes.
 
 ## B — instrument defects found and fixed
 

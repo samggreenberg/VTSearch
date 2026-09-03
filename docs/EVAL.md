@@ -280,6 +280,32 @@ Two columns make this visible in the output:
 
 Metrics are still recorded at every trainable step in both modes — fidelity changes the *vote order* and the `app_trained` flag, not measurement coverage.
 
+#### Stopping point and stopping cost (issue #3560)
+
+A study's headline number is its **final cost** — the metric at the last click of `CALIB_MAX_STEPS` (usually 150). Nobody in the app is asking that question. The app has *stopping rules*: when the Smart, Stable and Span indicators are all green the phase becomes `done` and the panel says *"All quality indicators are green. You can continue labeling or export your results."* The number a user leaves with is the metric **there**, at a click count they did not pick in advance. So every simulated-user study owes two more numbers:
+
+| | what it is | column it comes from |
+|---|---|---|
+| **stopping point** | the click at which the rules first fired — the *width* | first `t` where `phase == "done"` |
+| **stopping cost** | the metric at that click — the *height* | that row's `cost` (and `average_precision` beside it) |
+
+`phase` has been on every metric row since the harness adopted the app's phase machine, so **this needs no re-run**: a finished study's cells carry it already. Five columns beside it (added by #3560) say *which* rule was doing the holding, which `phase` alone cannot:
+
+- **`smart` / `stable` / `span`** — the three indicator lights that produced the phase, each `red` / `yellow` / `green`. `done` is all three green and `new` is Span alone short, so the phase already encodes those; what it cannot encode is whether Smart, Stable or both hold a run in `hard`.
+- **`span_level` / `span_depth`** — the raw atlas counts the Span light thresholds (`level >= min(autopilot_goal_diversity, depth)`), so a run can say how far short it fell rather than only that it did.
+
+All five are blank / `-1` where no phase machine ran (a non-`autopilot` strategy, `autopilot_fidelity=False`) and throughout a startup schedule's rounds, which own the phase without consulting the indicators — *not measured* is deliberately distinguishable from *not green*. They cost nothing: the phase machine already computed all three every step and threw them away.
+
+**Do not truncate the run at `done`.** The simulated user keeps clicking to the budget exactly as before, because the stretch past the stopping point is what says whether stopping there was the right call — and because arms can only be compared at a fixed `t`.
+
+[`scripts/experiments/calibration/stopping.py`](../scripts/experiments/calibration/stopping.py) is the one implementation of the derivation, and there are three reasons not to write it again by hand:
+
+- **The rules flap.** The phase is derived from the current labelset every step, never latched, so a run can go `done` on one vote and back to `hard` on the next. The app announces on the **first** fire and never re-announces, so first-fire is the faithful stopping point (`t_stop`); `t_sustained` reports the stricter reading, and `n_done_episodes` says how far apart the two are.
+- **They often never fire**, which makes every average a **censored** statistic. Averaging the runs that stopped excludes precisely the slow ones, so the mean flatters, and flatters harder the worse the arm is. `summarise()` leads with the fire *rate*, and its `km_t_stop` is a Kaplan–Meier median that carries the non-firing runs as censored at their own budget — returning `NaN`, honestly, when fewer than half of them ever fired.
+- **Cost at the stop and cost at the budget are different numbers, and the difference has a sign.** Report both, paired within run.
+
+Pass the result to `curves.quality_vs_clicks(..., stops=...)` and the mandatory averaged figure carries a `▽` at each arm's median stopping click, with the arms that mostly never stopped named in the caption rather than silently unmarked.
+
 #### The acquisition cut (`acq_inclusion_offset`, default: whatever `vtscore.training.thresholds` ships)
 
 The selector and the metrics read **different thresholds**. Reporting and every emitted metric stay at `inclusion`; the threshold handed to the picks is re-cut at `inclusion + acq_inclusion_offset` from the same fold-anchored fit. This mirrors production, which decoupled the two jobs in PR #2876 — see [`docs/ML.md`](ML.md#threshold-calibration) for the mechanism and the measured effect.
@@ -486,27 +512,38 @@ Prefer delegation whenever it's possible; it's the only fix that can't rot.
 
 ### The drift gate
 
-`scripts/check-eval-app-sync.py` pins a digest of each mirrored app surface — Python symbols by parsing the module, TypeScript blocks by brace-matching an anchor — and `./run-tests.sh` fails when one changes. It parses rather than imports, so it's dependency-free and takes ~0.3s. A failure names the mirror, both sides of it, and what to re-check:
+`scripts/check-eval-app-sync.py` pins a digest of each mirrored surface — Python symbols by parsing the module, TypeScript blocks by brace-matching an anchor — and `./run-tests.sh` fails when one changes. It parses rather than imports, so it's dependency-free and takes ~0.3s. A failure names the mirror, both sides of it, and what to re-check:
 
 ```
-  * autopilot.phase_machine  [ported, changed]
+  * autopilot.phase_machine  [ported, app-changed]
       app:     frontend/src/app/services/autopilot-state.service.ts::checkPhaseTransition(
       harness: vtscore/eval/autopilot_flow.py::next_phase
       The phase ordering and every transition trigger of the simulated Autopilot user. ...
 ```
 
-Reconcile the harness side, then re-pin:
+**Both sides are pinned**, because a copy stays faithful only while neither half moves without the other, and the reason says which half did:
+
+| Reason | What happened | What to do |
+|---|---|---|
+| `app-changed` | The original moved. | Reconcile the harness copy to it. |
+| `harness-changed` | The copy moved while the original stood still. | Re-read the two against each other. A harness edit can silently re-point the default arm with the app untouched — that is exactly what #2923 was, and the gate was green throughout. |
+| `app-unpinned` / `harness-unpinned` | A new mirror, or a `--update` never run. | Run `--update`. |
+| `unresolvable` | One side no longer exists under the name the manifest claims. | Fix the manifest, or restore what was deleted. |
+
+Reconcile, then re-pin:
 
 ```bash
 python scripts/check-eval-app-sync.py --update
 ```
 
-Digests ignore comments, docstrings, and formatting (including the magic trailing comma `ruff format` adds when it wraps a line), so only real logic changes trip the gate. Re-pinning without reading the harness defeats the whole thing — the digest is a prompt to check, not a checkbox.
+Digests ignore comments, docstrings, and formatting (including the magic trailing comma `ruff format` adds when it wraps a line), so only real logic changes trip the gate. Re-pinning without reading the other side defeats the whole thing — the digest is a prompt to check, not a checkbox.
+
+A handful of mirrors name a harness anchor too coarse to digest — one function serving several mirrors and carrying arm knobs that no mirror is about (today only `_safe_threshold_for_step`). Those declare `no_harness_pin=<reason>` and keep the app-side pin alone; the reason prints with the mirror when it trips. A `ported` mirror may never opt out, since the harness side of a hand copy *is* the copy. When a coarse anchor's blind spot starts to matter, the fix is to extract the reproduction into a helper small enough to pin — what `_resolve_production_defaults` is — not to digest a thousand lines.
 
 ### Adding and diverging
 
-A new mirror is a new `Mirror(...)` entry in `MIRRORS`, plus `--update`. Give it a `note` that says what to re-check when the app moves, not just what the code is.
+A new mirror is a new `Mirror(...)` entry in `MIRRORS`, plus `--update`. Give it a `note` that says what to re-check when either side moves, not just what the code is. Name every top-level symbol the reproduction spans — `file.py::GOOD_TARGET,BAD_TARGET` — since watching one of a pair is half a mirror.
 
-When the harness *intentionally* differs from the app at a mirror, record why in `divergence=`. That doesn't exempt it from the digest — you still re-pin — but the text prints whenever the mirror trips, so whoever reconciles it next knows which differences are deliberate. The ported indicators use this: they take their histories as arguments rather than reading a `_ProgressCache`'s `steps`, which is plumbing, not a rule change.
+When the harness *intentionally* differs from the app at a mirror, record why in `divergence=`. That doesn't exempt it from the digest — both sides are still pinned — but the text prints whenever the mirror trips, so whoever reconciles it next knows which differences are deliberate. The ported indicators use this: they take their histories as arguments rather than reading a `_ProgressCache`'s `steps`, which is plumbing, not a rule change.
 
 Named experiment arms (`whole_image`, `max_patch_hac`, `max_patch_pca_hac`) are *supposed* to differ from the app — that's what makes them arms. This gate is about the default arm only.

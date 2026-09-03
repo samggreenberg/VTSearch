@@ -32,7 +32,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import glob
 import sys
 from pathlib import Path
 
@@ -47,13 +46,15 @@ common.setup_env()
 
 import pile_config as pc  # noqa: E402
 
+from _cells_paths import side_frame_files  # noqa: E402
+
 VG_DIRS = [pc.DEMO_CACHE / "visual_genome" / "VG_100K", pc.DEMO_CACHE / "visual_genome" / "VG_100K_2"]
 
 
 def load_picks(exp: str, category: str, seed: str) -> dict[str, list[dict]]:
     """``mode -> [pick rows in click order]`` for one (category, seed)."""
     by_mode: dict[str, list[dict]] = {}
-    for path in sorted(glob.glob(str(Path(exp) / "results" / "cells" / "task_*__picks.csv"))):
+    for path in side_frame_files(Path(exp) / "results" / "cells", "__picks"):
         try:
             with open(path, newline="") as fh:
                 rows = [r for r in csv.DictReader(fh) if r.get("category") == category and r.get("seed") == seed]

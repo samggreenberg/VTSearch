@@ -19,7 +19,7 @@ from vtsearch.schemas.labels import (
     LabelsImportResponseSchema,
 )
 from vtscore.detectors.dataset_sync import validated_vote_snapshot
-from vtsearch.routes._shared import require_dataset_header, require_detector_header
+from vtsearch.routes._context import require_dataset_header, require_detector_header
 from vtsearch.state import (
     apply_label,
     apply_label_with_click_time,
@@ -28,6 +28,7 @@ from vtsearch.state import (
     get_active_detector_context,
     resolve_media_ids,
 )
+from vtscore.datasets.vote_provenance import read_provenance
 from vtscore.utils.hits import build_media_hit, hit_custom_metadata
 
 logger = logging.getLogger(__name__)
@@ -368,6 +369,7 @@ def export_labels(query: dict):
         goods,
         bads,
         vote_region_boxes=snap.vote_region_boxes,
+        vote_provenance=snap.vote_provenance,
     )
 
     fallback_entries = _origin_only_fallback_entries(labelset, all_medias, label_filter, query["goods_only"])
@@ -466,7 +468,13 @@ def import_labels(body: dict):
             # Importing a labelset is a bulk action, not consecutive individual
             # hand-clicks: credit the other vote achievements but not the
             # Marathoner streak.
-            apply_label(cid, label, region_box=region_box, count_streak=False)
+            apply_label(
+                cid,
+                label,
+                region_box=region_box,
+                count_streak=False,
+                provenance=read_provenance(entry.get("metadata")) or {"flow": "import"},
+            )
         applied += 1
 
     from vtscore.detectors.label_sync import sync_labels_to_loaded_detector
@@ -573,16 +581,28 @@ def fill_labels_from_sort(body: dict):
     saved_good_votes = dict(det_ctx.good_votes)
     saved_bad_votes = dict(det_ctx.bad_votes)
     saved_region_boxes = dict(det_ctx.vote_region_boxes)
+    saved_provenance = dict(det_ctx.vote_provenance)
     saved_history = list(det_ctx.label_history)
     saved_click_times = dict(det_ctx.vote_click_times)
     saved_click_counter = det_ctx.click_counter
 
     # Apply labels
+    # Fill-from-sort takes a whole window off the head of the current sort -
+    # the top-of-list draw the selection-bias study measured as the unsafe
+    # one - so it is recorded as such, with each item's own sort score.
     for entry in good_candidates:
-        apply_label_with_click_time(entry["id"], "good")
+        apply_label_with_click_time(
+            entry["id"],
+            "good",
+            provenance={"flow": "bulk", "select_mode": "top", "score_at_vote": entry["score"]},
+        )
 
     for entry in bad_candidates:
-        apply_label_with_click_time(entry["id"], "bad")
+        apply_label_with_click_time(
+            entry["id"],
+            "bad",
+            provenance={"flow": "bulk", "select_mode": "top", "score_at_vote": entry["score"]},
+        )
 
     # Persist labels to disk BEFORE building the response.  Letting a
     # silent disk-write failure here fall through to ``return {...}`` is
@@ -603,6 +623,8 @@ def fill_labels_from_sort(body: dict):
             det_ctx.bad_votes.update(saved_bad_votes)
             det_ctx.vote_region_boxes.clear()
             det_ctx.vote_region_boxes.update(saved_region_boxes)
+            det_ctx.vote_provenance.clear()
+            det_ctx.vote_provenance.update(saved_provenance)
             det_ctx.label_history.clear()
             det_ctx.label_history.extend(saved_history)
             det_ctx.vote_click_times.clear()

@@ -241,6 +241,7 @@ changes to `vtscore/media/__init__.py` are needed.
 | Method                        | Signature                          | Description                        |
 |-------------------------------|------------------------------------|------------------------------------|
 | `display_metadata(media)`     | `(dict) -> dict[str, Any]`         | Metadata for the labeling UI       |
+| `image_response(media)`       | `(dict) -> MediaResponse \| None`  | A *paintable image* for the media (waveform, frame, first page, crop) for every surface that shows a picture rather than plays the media. Defaults to `None` — "this type has no visual form" |
 | `ensure_thumbnail_bytes(media)` | `(dict) -> bytes \| None`        | Generate + memoise `media["thumbnail_bytes"]` from the media's *resolvable* bytes, for media that had no file at ingest. Defaults to a plain read of what's cached (no generation) |
 | `load_models()`               | `() -> None`                       | Load inline embedding models (legacy) |
 | `embed_text(text)`            | `(str) -> Optional[np.ndarray]`    | Inline text embedding (legacy)     |
@@ -255,6 +256,20 @@ changes to `vtscore/media/__init__.py` are needed.
 > per-media signpost text a Browse-prepped dataset already carries (see
 > `vtscore/projection/signpost_texts.py`). A type that returns its own dict
 > without merging silently drops all of them.
+
+> **Override `image_response` if your type has a picture but is not one.**
+> `media_response` serves your media's *own* bytes, and for most types those
+> are not an image: audio is a WAV, video an MP4, a document an
+> `application/pdf`. Every surface that shows a **picture** of a media — the
+> grid tile, the VTSBrowse bin popup, the labeling thumbnail,
+> `GET /api/medias/<id>/image` and `/api/medias/<id>/thumbnail` — calls
+> `image_response` instead, and paints a placeholder when it returns `None`.
+> Audio returns its waveform PNG, video its mid-frame, `document` its first
+> page rasterised, `face` the crop; `text` has no visual form and keeps the
+> `None` default, and so does `image`, whose source bytes the routes stream
+> directly without consulting the hook. Generate through
+> `ensure_thumbnail_bytes` (below) rather than inline, so the bytes you serve
+> match the ones the warm-up pass produces.
 
 > **Override `ensure_thumbnail_bytes` if your type has a browsable thumbnail.**
 > The path-based hooks above only fire for media the loader can read at ingest.
@@ -740,6 +755,26 @@ class SoundOverlapClipper(MediaClipper):
         # Return list of new media dicts with updated media_bytes, duration, etc.
         return [media]  # placeholder
 ```
+
+### Shared helpers
+
+Don't hand-roll what `vtscore/media/clipper.py` already exports.
+`clip_with_bounds(media, index, start, end)` returns a copy of *media*
+stamped with the standard `duration` / `clip_index` / `clip_start` /
+`clip_end` fields (add your own on top); `tile_starts(total, duration,
+min_overlap)`, `validate_tiling_params(...)` and
+`tiling_parameters(..., item_label=...)` are the tiling arithmetic,
+constructor validation and parameter descriptors shared by the audio and
+video tiling clippers. A **default** (no-op) clipper subclasses the
+concrete `DefaultClipper` base instead of `MediaClipper`, passing its
+name, media type and description to `super().__init__()` — see
+[`vtscore/docs/extending/clippers.md § Shared
+helpers`](../vtscore/docs/extending/clippers.md#shared-helpers).
+
+For audio specifically, `_emit_wav_segments` in
+`vtscore/media/audio/clipper.py` turns a list of `(start, end)` ranges
+into clip dicts with the WAV bytes sliced and `file_size` refreshed, so a
+new audio clipper only has to produce the ranges.
 
 ### Register the clipper
 

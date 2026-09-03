@@ -38,7 +38,7 @@ false negative. It is how you lose the check.
 **Prevented.** `pile_config.COCO_VAL_ZIP` now names the zip once; `_load_coco`
 and `rebuildable()` both go through it, and `COCO_IMAGES` is documented as the
 optional extracted directory that only `box_sheets.py` wants. Three tests in
-`tests_lib/core/test_pile_box_scan.py` cover the COCO branch of the canary,
+`tests_lib/meta/test_pile_box_scan.py` cover the COCO branch of the canary,
 which had none: a staged-zip-only tree passes, a missing zip still fails, and a
 source-level assertion fails if the builder ever spells `val2017.zip` inline
 again. That last one is the real guard — it pins the *identity*, not the

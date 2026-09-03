@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 from pydantic import TypeAdapter, ValidationError
 
 from vtscore.config import DATA_DIR
+from vtsearch import admin_overrides as _admin
 from vtsearch.settings_models import (
     VALID_FOCUS_MODES,
     VALID_GRID_ICON_SIZES,
@@ -188,58 +189,15 @@ if TYPE_CHECKING:
 #: ``set_settings_path()`` helper also points it at a different file.
 SETTINGS_PATH: Path = DATA_DIR / "settings.json"
 
-#: Process-level override for the server-tier ``solo_media_type`` setting,
-#: set by :func:`set_cli_solo_media_type` from the ``--solo-media-type``
-#: flag in :mod:`app`. ``None`` means "no CLI override" - reads fall
-#: through to the persisted server setting. When a value is set it applies
-#: to every user and wins over the persisted file for the lifetime of the
-#: process; the setting is not user-editable via the API (see
-#: :func:`get_effective_solo_media_type`).
-_cli_solo_media_type: str | None = None
-
-#: Process-level fallback for the ``hidden_plugins`` server setting, set
-#: by :func:`set_cli_hidden_plugins` / :func:`add_cli_hidden_plugin` from
-#: the repeatable ``--hide-plugin family:name`` flag in :mod:`app`. Maps
-#: a plugin-family id to the set of plugin ``name``s to hide. Merged with
-#: the persisted ``hidden_plugins`` server setting at read time - see
-#: :func:`get_effective_hidden_plugins`. Empty dict means "no CLI hides".
-_cli_hidden_plugins: dict[str, set[str]] = {}
-
-#: Process-level fallback for the per-user
-#: ``solo_embedder_per_media_type`` setting, set by
-#: :func:`set_cli_solo_embedder` from the (repeatable) ``--solo-embedder``
-#: flag in :mod:`app`. Maps ``media_type_id`` → embedder name. Empty means
-#: "no CLI default". The resolver :func:`get_effective_solo_embedders`
-#: layers per-user entries over this dict (per-key), so a user can override
-#: individual mediaTypes without losing the others.
-_cli_solo_embedders: dict[str, str] = {}
-
-#: Process-level override for the server-tier ``dataset_max_age_days``
-#: setting, set by :func:`set_cli_dataset_max_age_days` from the
-#: ``--dataset-max-age-days`` flag in :mod:`app`. ``None`` means "no CLI
-#: override" - reads fall through to the persisted server setting. When a
-#: value is set it applies to every user and wins over the persisted file
-#: for the lifetime of the process; the setting is not user-editable via
-#: the API (see :func:`get_effective_dataset_max_age_days`).
-_cli_dataset_max_age_days: int | None = None
-
-#: Process-level override for the server-tier ``support_email`` setting, set
-#: by :func:`set_cli_support_email` from the ``--support-email`` flag in
-#: :mod:`app`. ``None`` means "no CLI override" - reads fall through to the
-#: persisted server setting (and then the model default). When a value is set
-#: it applies to every user and wins over the persisted file for the lifetime
-#: of the process; the setting is not user-editable via the API (see
-#: :func:`get_effective_support_email`).
-_cli_support_email: str | None = None
-
-#: Process-level override for the server-tier ``semantic_only`` setting, set by
-#: :func:`set_cli_semantic_only` from the ``--semantic-only`` flag (or the
-#: ``VTSEARCH_SEMANTIC_ONLY`` env var) in :mod:`app`. ``None`` means "no CLI
-#: override" - reads fall through to the persisted server setting. ``True``
-#: locks the instance to Semantic embedders for the lifetime of the process;
-#: the setting is not user-editable via the API (see
-#: :func:`get_effective_semantic_only`).
-_cli_semantic_only: bool | None = None
+#: The process-level **admin overrides** (the solo mediaType lock, the
+#: solo-embedder locks, the plugin hide list, the dataset retention window,
+#: the support email, the Semantic-only lock) live in
+#: :mod:`vtsearch.admin_overrides`, which owns one declarative descriptor per
+#: knob covering its CLI flag, its env var, the validator both share, how it
+#: combines with the persisted setting, and the key it is published under at
+#: ``/api/settings``. The ``set_cli_X`` / ``get_cli_X`` / ``get_effective_X``
+#: accessors further down are thin wrappers over that registry, kept as named
+#: functions because they are what the rest of the app (and the tests) call.
 
 #: Filename used for the per-user settings file inside
 #: ``get_user_data_dir(user)``.
@@ -307,10 +265,11 @@ _SERVER_KEYS: frozenset[str] = frozenset(ServerSettings.model_fields.keys())
 #: These are the Auto-Find knobs: per-user in multi-user deployments, but the
 #: single-user GUI (everyone is "default") and the CLI ``--settings`` flat file
 #: still expect a value placed in ``settings.json`` to take effect. The
-#: read-through (see :func:`_read_value`) makes that work without the
-#: destructive legacy migration moving them out of the server file (see
-#: ``UserSettingsStore._maybe_migrate_legacy_settings``, which skips
-#: these keys).
+#: read-through (see :func:`_read_value`) is what makes that documented
+#: flat-file workflow work; it is a live tier exception, not a migration.
+#: :func:`_sanitize_tier` therefore keeps these keys in the server file
+#: (validating them against ``UserSettings``, which owns them) and drops only
+#: the reverse direction: a server key stranded in a per-user file.
 _DEFAULT_USER_FALLBACK_KEYS: frozenset[str] = frozenset(
     {"autofind_detectors", "autofind_exporter", "autofind_exporter_field_values"}
 )
@@ -613,9 +572,6 @@ def get_user_settings() -> dict[str, Any]:
     user_copy = snapshot_user(get_current_user())
     result = dict(_user_defaults())
     result.update(user_copy)
-    # Same legacy migration as ``get_all`` so settings exports carry a value
-    # a fresh import will accept.
-    result["show_animations"] = get_show_animations()
     result["grid_icon_size_left"] = get_grid_icon_size_left()
     result["grid_icon_size_right"] = get_grid_icon_size_right()
     result["focus_mode_left"] = get_focus_mode_left()
@@ -652,20 +608,8 @@ def get_all() -> dict[str, Any]:
     result["panel_pct_right"] = get_panel_pct_right()
     # Auto-Find keys go through their accessors so the default-user read-through
     # (and per-user isolation for named users) is applied consistently: the
-    # plain ``result.update(server_copy)`` above would otherwise leak a legacy
-    # server-file Auto-Find list to every named user.
-    # ``show_animations`` goes through its accessor so pre-enum settings
-    # files (boolean ``True``/``"True"``; see ``coerce_animation_mode``) are
-    # migrated on read - the raw merge above would leak the legacy value to
-    # GET, and the frontend would echo it into a PUT that 422s.
-    result["show_animations"] = get_show_animations()
-    # ``browse_signpost_vocab`` was a per-user key until it became a server-tier
-    # operator setting, so user files written before the move still carry a copy
-    # that the ``result.update(user_copy)`` above would layer over the server
-    # value - GET would report a stale vocabulary while projection builds
-    # (which read the accessor) used the operator's. The accessor is the tier
-    # router, so going through it drops the shadowing copy.
-    result["browse_signpost_vocab"] = get_browse_signpost_vocab()
+    # plain ``result.update(server_copy)`` above would otherwise leak the
+    # server file's Auto-Find list to every named user, not just "default".
     result["autofind_detectors"] = get_autofind_detectors()
     result["autofind_exporter"] = get_autofind_exporter()
     result["autofind_exporter_field_values"] = get_autofind_exporter_field_values()
@@ -738,6 +682,57 @@ def _validate_field(model: type, key: str, value: Any) -> Any:
     except ValidationError as exc:
         first = exc.errors()[0] if exc.errors() else {"msg": str(exc)}
         raise ValueError(f"Invalid {key}: {first.get('msg', exc)}") from None
+
+
+def _sanitize_tier(data: dict[str, Any], tier: str) -> dict[str, Any]:
+    """Return *data* with values the tier's model would reject removed.
+
+    Applied by :class:`~vtsearch.settings_store.UserSettingsStore` to every
+    dict on its way into a cache, so the raw caches that ``get_all`` merges
+    hold only values the API can serialise. Two things are dropped:
+
+    * **Uncoercible typed values.** A settings file can carry a value from
+      before a field changed shape - a boolean ``show_animations`` from
+      before it became a three-way enum, a scalar ``browse_colormap`` from
+      before it became a per-media-type dict - or simply a hand-edit that
+      is out of range. Dropping it makes the field read as unset, so the
+      pydantic default applies (per the "break persisted data freely"
+      policy in ``CLAUDE.md``); keeping it used to leak the stale value
+      straight out of ``GET /api/settings``, which the frontend then echoed
+      back into a ``PUT`` that 422'd.
+    * **Server-tier keys stranded in a per-user file**, left behind when a
+      key moved tiers (``browse_signpost_vocab`` did). ``get_all`` layers
+      the user cache over the server one, so a stale copy would shadow the
+      operator's real value.
+
+    The reverse direction is deliberately *not* dropped: per-user keys in the
+    server file are the documented Auto-Find read-through (see
+    :data:`_DEFAULT_USER_FALLBACK_KEYS`), so those keys are kept - but checked
+    against ``UserSettings``, the model that will actually read them, so the
+    tier exception is not a hole in the value check. Unknown keys are
+    preserved in both tiers - both models set ``extra="allow"`` so a
+    forward-compatible or hand-added key round-trips rather than being
+    silently deleted.
+
+    This is a read-side view only; nothing here is written back to disk.
+    """
+    server_tier = tier == "server"
+    model = ServerSettings if server_tier else UserSettings
+    drop_wrong_tier = frozenset() if server_tier else _SERVER_KEYS
+    clean: dict[str, Any] = {}
+    for key, value in data.items():
+        if key in drop_wrong_tier:
+            continue
+        # The Auto-Find trio is read out of the server file by the "default"
+        # user, so validate it there against the model that owns it.
+        against = UserSettings if server_tier and key in _DEFAULT_USER_FALLBACK_KEYS else model
+        if key in against.model_fields:
+            try:
+                _validate_field(against, key, value)
+            except ValueError:
+                continue
+        clean[key] = value
+    return clean
 
 
 def _make_scalar_accessors(model: type, key: str):
@@ -1026,26 +1021,42 @@ def set_last_embedder_for_media_type(media_type: str, embedder: str) -> None:
     set_last_embedder_per_media_type(updated)
 
 
+def get_effective_override(name: str) -> Any:
+    """Resolve one :mod:`~vtsearch.admin_overrides` knob against its setting.
+
+    Reads the persisted value through the getter the descriptor names, then
+    hands both to the descriptor's ``resolve`` rule. The named
+    ``get_effective_X`` functions below are one-liners over this, and
+    ``/api/settings`` loops the registry through it to build its read-only
+    overlay -- so a new knob is published without touching the route.
+    """
+    override = _admin.OVERRIDES[name]
+    return override.resolve(_admin.get_override(name), globals()[override.persisted_getter]())
+
+
 def set_cli_solo_media_type(value: str | None) -> None:
     """Set the process-level override for the ``solo_media_type`` setting.
 
     Called once from ``app.py`` startup when ``--solo-media-type`` is
-    passed on the command line. The value applies server-wide (every user)
-    and is fixed for the process lifetime;
-    :func:`get_effective_solo_media_type` returns it in preference to the
-    persisted server setting. Pass ``None`` (or an empty / whitespace-only
-    string) to clear the override so reads fall back to the persisted file
-    value.
+    passed on the command line (or ``VTSEARCH_SOLO_MEDIA_TYPE`` is set).
+    The value applies server-wide (every user) and is fixed for the process
+    lifetime; :func:`get_effective_solo_media_type` returns it in preference
+    to the persisted server setting. Pass ``None`` (or an empty /
+    whitespace-only string) to clear the override so reads fall back to the
+    persisted file value.
+
+    This stores whatever it is given: validation against the live media-type
+    registry happens on the way in, in
+    :func:`vtsearch.admin_overrides.apply_flag_values`.
     """
-    global _cli_solo_media_type
     if value is not None:
         value = value.strip() or None
-    _cli_solo_media_type = value
+    _admin.set_override("solo_media_type", value)
 
 
 def get_cli_solo_media_type() -> str | None:
-    """Return the process-level CLI override (``None`` if unset)."""
-    return _cli_solo_media_type
+    """Return the process-level CLI / env override (``None`` if unset)."""
+    return _admin.get_override("solo_media_type")
 
 
 def get_effective_solo_media_type() -> str | None:
@@ -1053,9 +1064,9 @@ def get_effective_solo_media_type() -> str | None:
 
     Resolution order:
 
-    1. The process-level CLI override set by
-       :func:`set_cli_solo_media_type` (``--solo-media-type``), which
-       applies to every user for the lifetime of the process.
+    1. The process-level override set by :func:`set_cli_solo_media_type`
+       (``--solo-media-type`` / ``VTSEARCH_SOLO_MEDIA_TYPE``), which applies
+       to every user for the lifetime of the process.
     2. The persisted server-tier setting (``data/settings.json``), which
        defaults to ``None``.
 
@@ -1064,32 +1075,25 @@ def get_effective_solo_media_type() -> str | None:
     pickers to. This is an admin-set restriction: there is no per-user
     override, and ``PUT /api/settings`` cannot change it.
     """
-    if _cli_solo_media_type is not None:
-        return _cli_solo_media_type
-    persisted = get_solo_media_type()
-    # Empty string from JSON drift normalises to None.
-    if isinstance(persisted, str) and not persisted.strip():
-        return None
-    return persisted
+    return get_effective_override("solo_media_type")
 
 
 def set_cli_dataset_max_age_days(value: int | None) -> None:
     """Set the process-level override for the ``dataset_max_age_days`` setting.
 
     Called once from ``app.py`` startup when ``--dataset-max-age-days`` is
-    passed on the command line. The value applies server-wide (every user)
-    and is fixed for the process lifetime;
+    passed (or ``VTSEARCH_DATASET_MAX_AGE_DAYS`` is set). The value applies
+    server-wide (every user) and is fixed for the process lifetime;
     :func:`get_effective_dataset_max_age_days` returns it in preference to
     the persisted server setting. Pass ``None`` to clear the override
     (reads fall back to the persisted file value).
     """
-    global _cli_dataset_max_age_days
-    _cli_dataset_max_age_days = value
+    _admin.set_override("dataset_max_age_days", value)
 
 
 def get_cli_dataset_max_age_days() -> int | None:
-    """Return the process-level CLI override (``None`` if unset)."""
-    return _cli_dataset_max_age_days
+    """Return the process-level CLI / env override (``None`` if unset)."""
+    return _admin.get_override("dataset_max_age_days")
 
 
 def get_effective_dataset_max_age_days() -> int | None:
@@ -1097,9 +1101,10 @@ def get_effective_dataset_max_age_days() -> int | None:
 
     Resolution order:
 
-    1. The process-level CLI override set by
-       :func:`set_cli_dataset_max_age_days` (``--dataset-max-age-days``),
-       which applies to every user for the lifetime of the process.
+    1. The process-level override set by
+       :func:`set_cli_dataset_max_age_days` (``--dataset-max-age-days`` /
+       ``VTSEARCH_DATASET_MAX_AGE_DAYS``), which applies to every user for
+       the lifetime of the process.
     2. The persisted server-tier setting (``data/settings.json``).
 
     ``None`` means datasets never expire. This is the value the dataset
@@ -1107,30 +1112,28 @@ def get_effective_dataset_max_age_days() -> int | None:
     at ``/api/settings`` so the dashboard's Age-Off column reflects what is
     actually in force.
     """
-    if _cli_dataset_max_age_days is not None:
-        return _cli_dataset_max_age_days
-    return get_dataset_max_age_days()
+    return get_effective_override("dataset_max_age_days")
 
 
 def set_cli_support_email(value: str | None) -> None:
     """Set the process-level override for the ``support_email`` setting.
 
-    Called once from ``app.py`` startup when ``--support-email`` is passed on
-    the command line. The value applies server-wide (every user) and is fixed
-    for the process lifetime; :func:`get_effective_support_email` returns it in
-    preference to the persisted server setting. Pass ``None`` (or an empty /
-    whitespace-only string) to clear the override so reads fall back to the
-    persisted file value.
+    Called once from ``app.py`` startup when ``--support-email`` is passed (or
+    ``VTSEARCH_SUPPORT_EMAIL`` is set). The value applies server-wide (every
+    user) and is fixed for the process lifetime;
+    :func:`get_effective_support_email` returns it in preference to the
+    persisted server setting. Pass ``None`` (or an empty / whitespace-only
+    string) to clear the override so reads fall back to the persisted file
+    value.
     """
-    global _cli_support_email
     if value is not None:
         value = value.strip() or None
-    _cli_support_email = value
+    _admin.set_override("support_email", value)
 
 
 def get_cli_support_email() -> str | None:
-    """Return the process-level CLI override (``None`` if unset)."""
-    return _cli_support_email
+    """Return the process-level CLI / env override (``None`` if unset)."""
+    return _admin.get_override("support_email")
 
 
 def get_effective_support_email() -> str:
@@ -1138,18 +1141,16 @@ def get_effective_support_email() -> str:
 
     Resolution order:
 
-    1. The process-level CLI override set by :func:`set_cli_support_email`
-       (``--support-email``), which applies to every user for the lifetime of
-       the process.
+    1. The process-level override set by :func:`set_cli_support_email`
+       (``--support-email`` / ``VTSEARCH_SUPPORT_EMAIL``), which applies to
+       every user for the lifetime of the process.
     2. The persisted server-tier setting (``data/settings.json``), which
        defaults to :data:`~vtsearch.settings_models.DEFAULT_SUPPORT_EMAIL`.
 
     This is the value surfaced at ``/api/settings`` so the Help modal's
     "Email us" link opens a pre-addressed compose window.
     """
-    if _cli_support_email is not None:
-        return _cli_support_email
-    return get_support_email()
+    return get_effective_override("support_email")
 
 
 def set_cli_semantic_only(value: bool | None) -> None:
@@ -1162,13 +1163,12 @@ def set_cli_semantic_only(value: bool | None) -> None:
     persisted server setting. Pass ``None`` to clear the override so reads fall
     back to the persisted file value.
     """
-    global _cli_semantic_only
-    _cli_semantic_only = None if value is None else bool(value)
+    _admin.set_override("semantic_only", None if value is None else bool(value))
 
 
 def get_cli_semantic_only() -> bool | None:
-    """Return the process-level CLI override (``None`` if unset)."""
-    return _cli_semantic_only
+    """Return the process-level CLI / env override (``None`` if unset)."""
+    return _admin.get_override("semantic_only")
 
 
 def get_effective_semantic_only() -> bool:
@@ -1176,7 +1176,7 @@ def get_effective_semantic_only() -> bool:
 
     Resolution order:
 
-    1. The process-level CLI override set by :func:`set_cli_semantic_only`
+    1. The process-level override set by :func:`set_cli_semantic_only`
        (``--semantic-only`` / ``VTSEARCH_SEMANTIC_ONLY``), which applies to
        every user for the lifetime of the process.
     2. The persisted server-tier setting (``data/settings.json``), which
@@ -1186,68 +1186,46 @@ def get_effective_semantic_only() -> bool:
     hidden from every picker (``GET /api/embedders`` filters them out) and
     rejected by the dataset-load and detector-create routes.
     """
-    if _cli_semantic_only is not None:
-        return _cli_semantic_only
-    return bool(get_semantic_only())
+    return get_effective_override("semantic_only")
 
 
 def set_cli_solo_embedder(media_type: str, embedder: str | None) -> None:
     """Set or clear a process-level solo-embedder fallback for *media_type*.
 
     Called from ``app.py`` startup for each ``--solo-embedder TYPE=EMB``
-    pair on the command line. Pass ``embedder=None`` (or an empty
+    pair on the command line (or each comma-separated entry in
+    ``VTSEARCH_SOLO_EMBEDDERS``). Pass ``embedder=None`` (or an empty
     string) to clear an entry. Both arguments are stripped; an empty
-    *media_type* is silently ignored (the CLI parser already validates).
+    *media_type* is silently ignored (the parser already validates).
     """
     mt = (media_type or "").strip()
     if not mt:
         return
     emb = (embedder or "").strip() if embedder else ""
+    current = _admin.get_override("solo_embedders")
     if not emb:
-        _cli_solo_embedders.pop(mt, None)
-        return
-    _cli_solo_embedders[mt] = emb
+        current.pop(mt, None)
+    else:
+        current[mt] = emb
+    _admin.set_override("solo_embedders", current or None)
 
 
 def get_cli_solo_embedders() -> dict[str, str]:
-    """Return a copy of the process-level solo-embedder CLI fallbacks."""
-    return dict(_cli_solo_embedders)
+    """Return a copy of the process-level solo-embedder fallbacks."""
+    return _admin.get_override("solo_embedders")
 
 
 def get_effective_solo_embedders() -> dict[str, str]:
     """Return the merged ``{media_type: embedder}`` dict for the current user.
 
-    Combines the per-user :func:`get_solo_embedder_per_media_type` map
-    (user explicit) with the process-level
-    :data:`_cli_solo_embedders` (CLI fallback). User entries win per-key;
-    missing user keys fall through to the CLI value. An **empty-string
-    value** in the user map is a per-type opt-out sentinel - it removes
-    that type from the merged map even if the CLI fallback has a
-    value for it. (``solo_media_type`` has no such per-user opt-out: it is
-    an admin-set server restriction.)
-
-    Validity (does the embedder still exist for this type?) is *not*
-    checked here - the frontend resolves it against the live embedder
-    registry on its end and falls back to the normal picker for any
-    entry that no longer matches. Keeping validation client-side means a
-    rename or removal never blocks the settings UI from rendering.
+    Combines the per-user :func:`get_solo_embedder_per_media_type` map (user
+    explicit) with the process-level ``--solo-embedder`` /
+    ``VTSEARCH_SOLO_EMBEDDERS`` fallbacks. The merge rule -- user entries win
+    per-key, an empty-string user value is a per-type opt-out sentinel -- lives
+    with the descriptor, in
+    :func:`vtsearch.admin_overrides._resolve_solo_embedders`.
     """
-    merged: dict[str, str] = {}
-    for mt, emb in _cli_solo_embedders.items():
-        if mt and isinstance(emb, str) and emb.strip():
-            merged[mt] = emb.strip()
-    user_map = get_solo_embedder_per_media_type()
-    if isinstance(user_map, dict):
-        for mt, emb in user_map.items():
-            if not isinstance(mt, str) or not mt:
-                continue
-            if isinstance(emb, str) and emb.strip():
-                merged[mt] = emb.strip()
-            else:
-                # Empty-string sentinel - user explicitly opted out for
-                # this type, so drop the CLI fallback too.
-                merged.pop(mt, None)
-    return merged
+    return get_effective_override("solo_embedders")
 
 
 def get_effective_solo_embedder(media_type: str) -> str | None:
@@ -1350,71 +1328,49 @@ def is_autofind_detector(name: str) -> bool:
 # -------------------------------------------------------------------
 
 
-def _normalize_hidden_plugins(value: Any) -> dict[str, set[str]]:
-    """Coerce arbitrary input to ``{family: {name, ...}}`` form.
-
-    Accepts ``dict[str, Iterable[str]]`` shapes and drops empty entries.
-    Non-string keys / names and ``None`` values are silently skipped so a
-    corrupt settings file doesn't crash plugin listings.
-    """
-    out: dict[str, set[str]] = {}
-    if not isinstance(value, dict):
-        return out
-    for family, names in value.items():
-        if not isinstance(family, str) or not family:
-            continue
-        if isinstance(names, (str, bytes)):
-            continue
-        try:
-            members = {n for n in names if isinstance(n, str) and n}
-        except TypeError:
-            continue
-        if members:
-            out[family] = members
-    return out
+#: Re-exported for the settings-file readers that normalise a persisted
+#: ``hidden_plugins`` value; the canonical definition sits beside the
+#: descriptor that uses it.
+_normalize_hidden_plugins = _admin.normalize_hidden_plugins
 
 
 def set_cli_hidden_plugins(value: dict[str, Any] | None) -> None:
     """Replace the process-level ``--hide-plugin`` fallback in one shot.
 
-    Called by ``app.py`` after parsing ``--hide-plugin family:name`` flags
-    (or by tests that want to seed a known CLI hide list). ``None`` or an
-    empty dict clears the fallback.
+    Called by tests that want to seed a known hide list. ``None`` or an empty
+    dict clears the fallback. The ``--hide-plugin`` /
+    ``VTSEARCH_HIDE_PLUGINS`` entry points accumulate through
+    :func:`vtsearch.admin_overrides.apply_flag_values` instead, which
+    validates each family against the live registry first.
     """
-    global _cli_hidden_plugins
-    _cli_hidden_plugins = _normalize_hidden_plugins(value or {})
+    normalized = _admin.normalize_hidden_plugins(value or {})
+    _admin.set_override("hidden_plugins", normalized or None)
 
 
 def add_cli_hidden_plugin(family: str, name: str) -> None:
-    """Append ``(family, name)`` to the CLI hide list (idempotent).
-
-    Used by the ``--hide-plugin`` argparse hook to accumulate one entry
-    per flag occurrence.
-    """
+    """Append ``(family, name)`` to the process-level hide list (idempotent)."""
     if not family or not name:
         return
-    _cli_hidden_plugins.setdefault(family, set()).add(name)
+    current = _admin.get_override("hidden_plugins")
+    current.setdefault(family, set()).add(name)
+    _admin.set_override("hidden_plugins", current)
 
 
 def get_cli_hidden_plugins() -> dict[str, set[str]]:
-    """Return a defensive copy of the CLI-only hide map."""
-    return {family: set(names) for family, names in _cli_hidden_plugins.items()}
+    """Return a defensive copy of the CLI/env-only hide map."""
+    return _admin.get_override("hidden_plugins")
 
 
 def get_effective_hidden_plugins() -> dict[str, set[str]]:
     """Return the merged ``{family: {name, ...}}`` hide map.
 
     Combines the persisted ``hidden_plugins`` server setting with the
-    process-level ``--hide-plugin`` fallback. The union semantics matter:
-    a plugin is hidden if either source asks for it, so the CLI flag can
-    only add hides (never un-hide something the settings file marks
-    hidden).
+    process-level ``--hide-plugin`` / ``VTSEARCH_HIDE_PLUGINS`` fallback. The
+    union semantics matter: a plugin is hidden if either source asks for it,
+    so the flag can only add hides (never un-hide something the settings file
+    marks hidden).
     """
-    persisted = _normalize_hidden_plugins(get_hidden_plugins())
-    merged: dict[str, set[str]] = {family: set(names) for family, names in persisted.items()}
-    for family, names in _cli_hidden_plugins.items():
-        merged.setdefault(family, set()).update(names)
-    return merged
+    return get_effective_override("hidden_plugins")
 
 
 def is_plugin_hidden(family: str, name: str) -> bool:
@@ -1425,7 +1381,7 @@ def is_plugin_hidden(family: str, name: str) -> bool:
     ``to_dict()`` and filtered client-side. This function only answers
     "is the admin hiding this in this deployment?"
     """
-    hidden = _cli_hidden_plugins.get(family)
+    hidden = _admin.get_override("hidden_plugins").get(family)
     if hidden and name in hidden:
         return True
     persisted = get_hidden_plugins()
@@ -1763,8 +1719,7 @@ _store = UserSettingsStore(
     user_path=_user_settings_path,
     apply_settings=_apply_settings,
     server_default_source=_server_default_settings_source,
-    server_keys=_SERVER_KEYS,
-    fallback_keys=_DEFAULT_USER_FALLBACK_KEYS,
+    sanitize=_sanitize_tier,
     exclude_from_source_export=_EXCLUDE_FROM_SOURCE_EXPORT,
     freshness_check_interval=_FRESHNESS_CHECK_INTERVAL,
 )

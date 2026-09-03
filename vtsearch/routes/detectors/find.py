@@ -3,7 +3,10 @@
 Run selected detectors against selected datasets and return merged hit/miss
 results.  Each detector's MLP is sourced from its in-memory
 :class:`~vtsearch.state.DetectorContext` (when loaded) or trained on demand
-from its on-disk labelset.
+from its on-disk labelset - through
+:func:`~vtscore.detectors.labelset_training.labelset_train_and_score`, the same
+entry point the load and learned-sort paths use, so one labelset means one
+detector no matter which of the two paths produced the verdicts (issue #3525).
 
 Migrated to ``flask_smorest`` so the routes are described in
 ``/api/openapi.json``.
@@ -18,15 +21,13 @@ import numpy as np
 from flask_smorest import Blueprint, abort
 
 from vtscore.concurrency.progress import CancelledError, find_progress, update_find_progress
-from vtscore.detectors.training import train_and_threshold
-from vtscore.embedding.media_vectors import media_embedding
-from vtscore.utils.scores import sigmoid_to_finite_scores
-from vtsearch.routes._shared import (
-    find_idle,
-    find_idle_on_crash,
-    require_dataset_header,
-    require_detector_header,
+from vtscore.detectors.training import (
+    ScoringRows,
+    score_rows_with_model,
+    scoring_rows_for_snap,
 )
+from vtsearch.routes._context import require_dataset_header, require_detector_header
+from vtsearch.routes._progress import find_idle, find_idle_on_crash
 from vtsearch.schemas.detectors import (
     FindBoundaryNextQuerySchema,
     FindBoundaryNextResponseSchema,
@@ -260,11 +261,9 @@ def _find_score_embedder(dc: dict, temp_medias: dict[int, dict]) -> str:
     against the same role-bound vector the active-context paths use rather than
     each media's primary vector.  Empty only when *temp_medias* is empty.
     """
-    from types import SimpleNamespace  # noqa: PLC0415
+    from vtscore.embedding.binding import keying_embedder_for_type  # noqa: PLC0415
 
-    from vtscore.embedding.binding import keying_embedder_for_snap  # noqa: PLC0415
-
-    return keying_embedder_for_snap(SimpleNamespace(embedder_type=dc.get("embedder_type", "")), temp_medias)
+    return keying_embedder_for_type(dc.get("embedder_type", ""), temp_medias)
 
 
 def _select_scorer(dc: dict, temp_medias: dict[int, dict]) -> str:
@@ -279,6 +278,11 @@ def _select_scorer(dc: dict, temp_medias: dict[int, dict]) -> str:
     routed to the live MLP when (and only when) that keying embedder matches.
     When they don't match, fall back to the cold path (which retrains from the
     labelset in that same score embedder), or ``"na"`` if no cold data exists.
+
+    The two paths differ in *provenance*, not in geometry: the cold path
+    delegates to the same labelset training the live head came from, so a
+    detector routed cold is the detector the user trained, re-derived in this
+    dataset's space (issue #3525).
     """
     temp_embedder = _find_score_embedder(dc, temp_medias) if temp_medias else ""
     live_embedder = dc.get("live_embedder", "") or ""
@@ -383,108 +387,193 @@ def _record_verdicts(
         }
 
 
-def _score_with_live_mlp(dc: dict, X_all, all_ids: list[int], media_results: dict[int, dict]) -> None:
-    """Score with an already-trained MLP from a :class:`DetectorContext`."""
-    import torch  # noqa: PLC0415
+def _score_with_live_mlp(dc: dict, rows: ScoringRows, all_ids: list[int], media_results: dict[int, dict]) -> None:
+    """Score with an already-trained MLP from a :class:`DetectorContext`.
 
+    The detector keeps its **own** calibrated cut (``det_ctx.threshold``) rather
+    than being re-cut against this dataset: the head is fixed, so its threshold
+    is a property of that head and the population it was calibrated on, and
+    re-fitting per Find corpus would make one media's verdict depend on which
+    *other* datasets the run happened to select.  The cold path re-fits because
+    it retrains the head per dataset (see :func:`_score_with_cold_detector`);
+    this one does not retrain, so it does not re-cut.
+
+    That cut is only meaningful in the geometry it was fitted in, which is why
+    the scores here come from :func:`score_rows_with_model` - the region
+    max-pool every other scoring path in the app uses - and not from a matmul
+    against the image-level matrix.  Since #3525 the cold path builds a head at
+    that same geometry, so the two scorers now differ only in where the head
+    came from.
+    """
     try:
-        mlp = dc["live_mlp"]
-        with torch.no_grad():
-            X_in = X_all.to(next(mlp.parameters()).device)
-            scores = sigmoid_to_finite_scores(mlp(X_in))
-        _record_verdicts(media_results, dc["name"], all_ids, scores, dc.get("threshold", 0.5), None)
+        scores, _best = score_rows_with_model(dc["live_mlp"], rows)
+        _record_verdicts(media_results, dc["name"], rows.ids, scores, dc.get("threshold", 0.5), None)
     except Exception:
         _record_verdicts(media_results, dc["name"], all_ids, None, 0.0, "Error")
 
 
-def _collect_cold_training_data(
-    det_data: dict,
-    temp_medias: dict[int, dict],
-    score_emb: str,
-) -> tuple[list, list]:
-    """Assemble training X/y for a cold detector, embedded in *score_emb*'s space.
+def _cold_labelset(dc: dict):
+    """The parsed :class:`LabelSet` for *dc*'s on-disk detector, memoised on *dc*.
 
-    Prefers labels that resolve directly into the dataset (good_ids/bad_ids
-    via origin/md5 lookup); falls back to :func:`resolve_label_embeddings`
-    when the direct path doesn't yield both classes.
-
-    Both paths read/embed in *score_emb* - the concrete embedder of the
-    detector's type this dataset supplies - so the cold-trained MLP and the
-    matrix it is scored against share one vector space rather than mixing the
-    dataset's primary vector (which differs from the keying embedder on a trio
-    dataset) with the score-space matrix.  Empty *score_emb* falls back to each
-    media's primary vector / the media type's default embedder, the legacy
-    single-embedder behaviour.
+    One Find run scores each detector against every selected dataset, so the
+    parse is hoisted out of the per-dataset loop.
     """
-    from vtsearch.state import build_media_lookup, resolve_media_ids  # noqa: PLC0415
+    from vtscore.datasets.labelset import LabelSet  # noqa: PLC0415
 
-    labels = det_data.get("labelset", {}).get("labels", [])
-    origin_lookup, md5_lookup, _ = build_media_lookup(temp_medias)
-    good_ids: list[int] = []
-    bad_ids: list[int] = []
-    for lbl in labels:
-        matched = resolve_media_ids(lbl, origin_lookup, md5_lookup)
-        label_val = lbl.get("label", "")
-        for mid in matched:
-            if label_val == "good":
-                good_ids.append(mid)
-            elif label_val == "bad":
-                bad_ids.append(mid)
+    labelset = dc.get("cold_labelset")
+    if labelset is None:
+        labelset = LabelSet.from_dict(dc["detector_data"].get("labelset") or {})
+        dc["cold_labelset"] = labelset
+    return labelset
 
-    if good_ids and bad_ids:
-        good_embs = [media_embedding(temp_medias[i], score_emb or None) for i in good_ids if i in temp_medias]
-        bad_embs = [media_embedding(temp_medias[i], score_emb or None) for i in bad_ids if i in temp_medias]
-        return good_embs + bad_embs, [1.0] * len(good_embs) + [0.0] * len(bad_embs)
 
-    from vtscore.detectors.resolver import resolve_label_embeddings  # noqa: PLC0415
+def _cold_detector_context(dc: dict):
+    """A throwaway :class:`DetectorContext` for *dc*'s cold path, memoised on *dc*.
 
-    # Resolve+embed using the dataset's score embedder for this detector's type
-    # so the resulting training vectors share one space with the score-space
-    # matrix the MLP will be scored against.  Empty when the dataset is somehow
-    # embedder-less, which falls back to the media type's default embedder.
-    resolved = resolve_label_embeddings(
-        labels,
-        det_data.get("media_type", "audio"),
-        embedder_name=score_emb,
-    )
-    if resolved.has_good_and_bad:
-        return resolved.embeddings, resolved.labels
-    return [], []
+    :func:`~vtscore.detectors.labelset_training.populate_label_embeddings`
+    writes its resolved vectors into ``label_embeddings`` /
+    ``label_negative_regions`` / ``label_score_regions`` and stamps ``embedder``
+    on the context it is handed.  Find must not hand it the **live** context:
+    those caches belong to whatever dataset that detector is loaded against, and
+    a cold Find is by definition scoring a different one, so populating them
+    here would leave a loaded detector holding another dataset's vectors.  A
+    context is a bag of empty dicts (:class:`~vtscore.state.core.DetectorContext`
+    has no I/O in ``__init__``), so a private one costs nothing.
+
+    Two fields are load-bearing:
+
+    * ``embedder_type`` is the detector's locked type, which is what
+      :func:`~vtscore.detectors.training.detector_score_embedder` routes on.
+      Carrying it over makes the delegated path resolve the *same* concrete
+      embedder :func:`_find_score_embedder` picks for the rows.
+    * ``detector_id`` is deliberately left **empty**.  ``populate_label_embeddings``
+      ends by calling ``record_detector_embedder`` to persist the space it
+      embedded in, so the smart preload predictor warms the right model next
+      session.  That is right for the load path and wrong here: it would write
+      the *foreign* dataset's embedder into the registry as the detector's own.
+      ``record_detector_embedder`` no-ops on an empty id.
+
+    The context is kept for the whole run rather than per dataset, so a label
+    that has to be resolved from its origin (an importer fetch, plus a
+    ``patch_forward`` on a patch detector) is resolved **once** and every
+    later dataset reads it from the cache.  Its own embedder-switch guard
+    (``_maybe_clear_cache_on_embedder_switch``) drops the cache if a later
+    dataset resolves to a different space, which is exactly the case where the
+    vectors are not reusable.
+    """
+    from vtscore.state.core import DetectorContext  # noqa: PLC0415
+
+    ctx = dc.get("cold_ctx")
+    if ctx is None:
+        ctx = DetectorContext(
+            "",  # see the docstring: keeps record_detector_embedder a no-op
+            name=dc["name"],
+            media_type=dc["detector_data"].get("media_type", "") or "",
+            embedder_type=dc.get("embedder_type", "") or "",
+        )
+        dc["cold_ctx"] = ctx
+    return ctx
 
 
 def _score_with_cold_detector(
     dc: dict,
     temp_medias: dict[int, dict],
-    X_all,
+    rows: ScoringRows,
     all_ids: list[int],
     media_results: dict[int, dict],
-    score_emb: str,
 ) -> None:
-    """Train an MLP on-the-fly from the cold detector's labelset and score.
+    """Train from the cold detector's labelset and score, at the app's geometry.
 
-    *X_all* must already be built in *score_emb*'s space (the same embedder the
-    cold labelset is resolved in), so the freshly-trained MLP scores the matrix
-    in the space it was trained against.
+    **This is the app's labelset training, not a second one.**  Find used to
+    hand-roll it: read each label's image-level vector out of *temp_medias*,
+    train, cut.  That silently produced a *different detector* from the same
+    labels - a Good vote's ``region_box`` was discarded rather than pooled to
+    the raw patch under it, a Bad vote contributed one image vector rather than
+    its flooded patch stack, and calibration collapsed per row rather than per
+    bag - so a detector the user trained by drawing boxes became a whole-image
+    detector the moment Find pointed it at a dataset it was not loaded against
+    (issue #3525).  Delegating to
+    :func:`~vtscore.detectors.labelset_training.labelset_train_and_score` -
+    the same entry point the load and learned-sort paths use - is what makes one
+    labelset mean one detector.
+
+    Because the head is now the flooded, region-aware one, *rows* is the
+    ordinary max-pooled stack the live path already scores against; the
+    image-level pin this path used to need (``region_pooling=False``) went with
+    the whole-image head that required it.  The rows are passed through rather
+    than rebuilt inside because
+    :func:`~vtscore.embedding.matrix.get_region_matrix_for_snap` caches only
+    against the *active* dataset context, so every cold detector on this
+    snapshot would otherwise restack the corpus.
+
+    The cut is still fitted on the corpus it decides (issue #3516):
+    ``labelset_train_and_score`` scores *temp_medias* and fuses the
+    fold-anchored population estimator over those same rows, dropping the
+    labelled media from the haystack (issue #3308).  Below the usable-fold
+    floor the schedule blend answers, exactly as everywhere else.
     """
-    import torch  # noqa: PLC0415
+    from vtscore.detectors.labelset_training import labelset_train_and_score  # noqa: PLC0415
+
+    det_ctx = _cold_detector_context(dc)
+    labelset = _cold_labelset(dc)
+    media_type = dc["detector_data"].get("media_type", "audio")
+
+    # Resolving a label that is not in *temp_medias* costs an importer fetch and
+    # (on a patch detector) a patch_forward, so it is the one phase of a cold
+    # Find that can run long.  Report it the way /api/find-label reports its own
+    # origin resolution, and give the run a cancellation checkpoint while it
+    # does - the port this replaced had none, so a Find stuck resolving origins
+    # ignored Cancel until it finished.
+    def _on_label(_name: str, current: int, total: int) -> None:
+        find_progress.check_cancelled()
+        update_find_progress(
+            "running",
+            f'Resolving "{dc["name"]}" labels ({current}/{total})…',
+            current=current,
+            total=total,
+            step=3,
+            total_steps=_FIND_STEPS,
+        )
 
     try:
-        X_list, y_list = _collect_cold_training_data(dc["detector_data"], temp_medias, score_emb)
-        has_both_classes = X_list and any(v == 1.0 for v in y_list) and any(v == 0.0 for v in y_list)
-        if not has_both_classes:
+        results, threshold, model = labelset_train_and_score(
+            det_ctx,
+            labelset,
+            media_type=media_type,
+            clips_dict=temp_medias,
+            rows=rows,
+            on_progress=_on_label,
+        )
+        if model is None:
             _record_verdicts(media_results, dc["name"], all_ids, None, 0.0, "N/A")
             return
-
-        # ``score_emb`` is the space the labelset was resolved and X_all built
-        # in; naming it lets the unset calibration_fraction resolve to that
-        # space's production split rather than the unknown-embedder fallback.
-        mlp, threshold = train_and_threshold(X_list, y_list, embedder_name=score_emb)
-        with torch.no_grad():
-            X_in = X_all.to(next(mlp.parameters()).device)
-            scores = sigmoid_to_finite_scores(mlp(X_in))
-        _record_verdicts(media_results, dc["name"], all_ids, scores, threshold, None)
+        _record_verdicts(
+            media_results,
+            dc["name"],
+            [entry["id"] for entry in results],
+            [entry["score"] for entry in results],
+            threshold,
+            None,
+        )
+    except CancelledError:
+        raise
     except Exception:
         _record_verdicts(media_results, dc["name"], all_ids, None, 0.0, "Error")
+
+
+def _record_unscored(media_results: dict[int, dict], dc_name: str, all_ids: list[int]) -> None:
+    """Write ``"N/A"`` for every media *dc_name* produced no verdict for.
+
+    :func:`~vtscore.detectors.training.scoring_rows_for_snap` skips a media with
+    no usable vector in the scored space instead of failing the detector
+    (issue #3179), so the scorers report on ``rows.ids``, which can be shorter
+    than *all_ids*.  Filling the difference keeps every media in exactly one of
+    the hit / miss tables; :func:`_partition_find_results` reads only the
+    verdicts that exist, so a silently missing one would drop the media from
+    both.
+    """
+    for cid in all_ids:
+        media_results[cid]["detector_verdicts"].setdefault(dc_name, {"verdict": "N/A", "score": 0})
 
 
 def _partition_find_results(media_results: dict[int, dict]) -> tuple[list[dict], list[dict]]:
@@ -514,36 +603,46 @@ def _score_dataset(
     """
     import gc  # noqa: PLC0415
 
-    import torch  # noqa: PLC0415
-
     temp_medias = _load_find_dataset_medias(ds)
     if not temp_medias:
         return [], [], scored_units, 0, ""
 
     detected_media_type = next(iter(temp_medias.values()), {}).get("media_type", "")
 
-    from vtscore.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
-
-    # The row order is the sorted media ids and is embedder-independent; the
-    # (N, D) matrix itself is built per detector in *its* score-embedder space
+    # The media order is the sorted media ids and is embedder-independent; the
+    # score rows themselves are built per detector in *its* score-embedder space
     # (see below), so a trio dataset scores each detector against the role-bound
     # vector instead of every media's primary vector.
     all_ids = sorted(temp_medias.keys())
 
-    # One matrix per distinct score embedder the detectors call for, built lazily
-    # and shared across detectors that resolve to the same space (the common
-    # single-embedder dataset collapses every detector to the one cached primary
-    # matrix, so this stays a single build there).
-    matrix_cache: dict[str | None, torch.Tensor] = {}
+    # One row stack per distinct score embedder the detectors call for, built
+    # lazily and shared across detectors that resolve to the same space (the
+    # common single-embedder dataset collapses every detector to one build).
+    #
+    # These are `scoring_rows_for_snap` rows - the app's single definition of
+    # what a detector scores a media at - not an image-level matrix stacked
+    # here.  Both scorers read them at that one geometry, because both now score
+    # a head the app's own training produced: the live path reuses the cached
+    # MLP, and the cold path re-derives it through `labelset_train_and_score`,
+    # which floods a Bad label's patch rows as negatives and calibrates on the
+    # max-pooled distribution (issue #3525).  Scoring either one's image-level
+    # row alone would read a systematically *lower* quantity than the cut it is
+    # compared against, and the detector would under-return.
+    #
+    # Nothing here is cached by the matrix layer: `get_region_matrix_for_snap`
+    # keys its cache to the *active* dataset context and a Find snapshot is
+    # never that, so this dict is what stops N detectors over one dataset
+    # restacking the corpus N times.  The cold path is handed these same rows
+    # rather than building its own.
+    rows_cache: dict[str | None, ScoringRows] = {}
 
-    def _matrix_for(embedder_name: str | None) -> torch.Tensor:
+    def _rows_for(embedder_name: str | None) -> ScoringRows:
         key = embedder_name or None
-        tensor = matrix_cache.get(key)
-        if tensor is None:
-            _ids, embs = get_embedding_matrix_for_snap(temp_medias, key)
-            tensor = torch.from_numpy(embs)
-            matrix_cache[key] = tensor
-        return tensor
+        rows = rows_cache.get(key)
+        if rows is None:
+            rows = scoring_rows_for_snap(temp_medias, key)
+            rows_cache[key] = rows
+        return rows
 
     added_units = len(all_ids) * len(detector_configs)
     new_total = total_scoring_units + added_units
@@ -562,22 +661,37 @@ def _score_dataset(
         )
 
         choice = _select_scorer(dc, temp_medias)
-        # Building the score-space matrix can raise when this dataset lacks the
+        # Building the score-space rows can raise when this dataset lacks the
         # detector's embedder vector (a media missing that role's vector); record
         # an Error verdict for the detector rather than sinking the whole run,
         # matching the scorers' own failure handling.
         try:
             if choice == "live":
-                X_all = _matrix_for(dc.get("live_embedder") or None)
-                _score_with_live_mlp(dc, X_all, all_ids, media_results)
+                _score_with_live_mlp(dc, _rows_for(dc.get("live_embedder") or None), all_ids, media_results)
             elif choice == "cold":
                 score_emb = _find_score_embedder(dc, temp_medias)
-                X_all = _matrix_for(score_emb or None)
-                _score_with_cold_detector(dc, temp_medias, X_all, all_ids, media_results, score_emb)
+                _score_with_cold_detector(
+                    dc,
+                    temp_medias,
+                    _rows_for(score_emb or None),
+                    all_ids,
+                    media_results,
+                )
             else:
                 _record_verdicts(media_results, dc["name"], all_ids, None, 0.0, "N/A")
+        except CancelledError:
+            # A user cancel is not a detector failure: let it unwind the run
+            # rather than being flattened into an Error verdict.  The cold path
+            # checks the flag while resolving label origins, which is the one
+            # phase long enough for a cancel to land inside a single detector.
+            raise
         except Exception:
             _record_verdicts(media_results, dc["name"], all_ids, None, 0.0, "Error")
+        # The row builder drops media with no usable vector in this space rather
+        # than failing the whole detector, so a scorer can return fewer verdicts
+        # than there are media.  Name the remainder explicitly - an unmentioned
+        # media falls out of both the hit and the miss table.
+        _record_unscored(media_results, dc["name"], all_ids)
 
         scored_units += len(all_ids)
         update_find_progress(
@@ -590,11 +704,11 @@ def _score_dataset(
         )
 
     positives, negatives = _partition_find_results(media_results)
-    # Drop the score-space matrices eagerly (temp_medias is freed when this
-    # frame returns).  Both are captured by the _matrix_for closure, so they are
+    # Drop the score-space row stacks eagerly (temp_medias is freed when this
+    # frame returns).  They are captured by the _rows_for closure, so they are
     # cleared in place rather than ``del``'d (deleting a closed-over name is a
     # SyntaxError).
-    matrix_cache.clear()
+    rows_cache.clear()
     gc.collect()
     return positives, negatives, scored_units, added_units, detected_media_type
 
@@ -766,6 +880,11 @@ def find_queue_ids_route(query: dict):
     windowed client that no longer holds the full order can still act on every
     matching item (``docs/plans/scalability.md`` S3/S17/S19).
 
+    **No frontend caller yet, deliberately.** It is built and tested ahead of
+    the ``find-view`` windowing slice that switches ``unverifiedGoodIds`` /
+    ``goodIds`` onto it; the two must land atomically, so this half shipped
+    first. Not dead code — see the plan above before proposing its removal.
+
     Empty outside Find mode or before a scoring pass has run.
     """
     from vtsearch.state import find_queue_ids  # noqa: PLC0415
@@ -787,6 +906,11 @@ def find_boundary_next_route(query: dict):
     cutoff + verified set so it stays correct once the client holds only a
     window of the ranking.  Returns ``{"id": null, "side": null}`` when both
     sides are exhausted (the done state).
+
+    **No frontend caller yet, deliberately** — the same story as
+    ``/api/find/queue-ids`` above: it awaits the ``find-view`` windowing slice
+    that moves ``advanceToBoundary`` onto it (``docs/plans/scalability.md``
+    S3/S17/S19). Not dead code.
     """
     from vtsearch.state import find_boundary_next  # noqa: PLC0415
 

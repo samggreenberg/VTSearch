@@ -312,6 +312,101 @@ class TestFitting:
         assert noisy.b > 0
         assert noisy.r2 < 0.9
 
+    def test_a_two_point_line_reports_no_r2(self):
+        # Two points define a line exactly, so ss_res is 0 and r2 is 1.0
+        # whatever the points are -- a goodness score that is arithmetic rather
+        # than evidence (#3345). The slope is still the best line available and
+        # is kept; only the claim about it is withheld.
+        two = _fit(
+            [
+                {"n": 100.0, "size_mb": 0.0, "seconds": 3.0},
+                {"n": 200.0, "size_mb": 0.0, "seconds": 5.0},
+            ],
+            byte_scaled=False,
+        )
+        assert two.a > 0, "this fixture is chosen NOT to clamp"
+        assert two.b > 0, "the coefficients are still the best line available"
+        assert math.isnan(two.r2)
+        assert "r2" not in two.to_json()
+
+    def test_a_clamped_two_point_line_still_reports_its_real_r2(self):
+        # The two guards meet here, and the clamp wins on purpose. Once the
+        # intercept is clamped the stored model is no longer the interpolant, so
+        # its residuals are real and worth reporting however few points there
+        # were. This is the `cuda+cuml|*|*` model-load cell from #3345: it used
+        # to advertise r2 1.000 while mispredicting its own two samples by
+        # 4290%, and the honest score is heavily negative.
+        clamped = _fit(
+            [
+                {"n": 245.0, "size_mb": 0.0, "seconds": 1.8},
+                {"n": 412.0, "size_mb": 0.0, "seconds": 54.9},
+            ],
+            byte_scaled=False,
+        )
+        assert clamped.a == 0.0
+        assert clamped.r2 < 0, "worse than predicting the mean, and it should say so"
+
+        # A third distinct size is enough to say something, so the r2 returns.
+        three = _fit(
+            [{"n": float(x), "size_mb": 0.0, "seconds": 1.0 + 0.01 * x} for x in (100, 200, 300)],
+            byte_scaled=False,
+        )
+        assert three.r2 == pytest.approx(1.0)
+
+    def test_repeats_at_two_sizes_still_report_no_r2(self):
+        # Four samples, two sizes: the count looks comfortable and the fit is
+        # still a two-point line with repeats. It is the number of *distinct*
+        # sizes that decides whether an r2 means anything.
+        coeffs = _fit(
+            [
+                {"n": n, "size_mb": 0.0, "seconds": secs}
+                for n, secs in ((100.0, 2.0), (100.0, 2.4), (200.0, 4.1), (200.0, 3.7))
+            ],
+            byte_scaled=False,
+        )
+        assert coeffs.b > 0
+        assert math.isnan(coeffs.r2)
+
+    def test_a_clamped_intercept_is_rescored_against_what_is_stored(self):
+        # `seconds()` must never hand the bar a negative slice, so a negative
+        # OLS intercept is clamped to zero. That makes the stored model a
+        # DIFFERENT line from the one `affine_fit` scored, and #3345 measured 58
+        # of 195 affine cells in exactly that state -- one carrying r2 0.98 on
+        # coefficients 52% out. The r2 has to describe the coefficients that
+        # ship, not the line they were derived from.
+        samples = [
+            {"n": 245.0, "size_mb": 0.0, "seconds": 1.8},
+            {"n": 412.0, "size_mb": 0.0, "seconds": 54.9},
+            {"n": 600.0, "size_mb": 0.0, "seconds": 120.0},
+        ]
+        coeffs = _fit(samples, byte_scaled=False)
+        assert coeffs.a == 0.0, "this fixture is chosen to land a negative intercept"
+        assert coeffs.b > 0
+
+        raw_r2 = affine_fit([s["n"] for s in samples], [s["seconds"] for s in samples])[2]
+        # The unclamped line fits well; the clamped one does not, and the
+        # reported number must be the second.
+        assert raw_r2 > 0.95
+        assert coeffs.r2 < raw_r2
+
+        # And it must equal the goodness of the shipped model, computed the same
+        # way `seconds()` evaluates it.
+        expected = 1.0 - (
+            sum((s["seconds"] - coeffs.seconds(n=s["n"])) ** 2 for s in samples)
+            / sum((s["seconds"] - sum(x["seconds"] for x in samples) / 3) ** 2 for s in samples)
+        )
+        assert coeffs.r2 == pytest.approx(expected)
+
+    def test_an_unclamped_fit_keeps_the_ols_r2(self):
+        # The rescoring must not disturb the ordinary case: a non-negative
+        # intercept means the stored line IS the fitted line.
+        coeffs = _fit(
+            [{"n": float(x), "size_mb": 0.0, "seconds": 5.0 + 0.01 * x} for x in (100, 200, 300, 400)],
+            byte_scaled=False,
+        )
+        assert coeffs.a > 0
+        assert coeffs.r2 == pytest.approx(1.0)
+
     def test_a_step_that_was_not_fitted_as_a_line_has_no_r2(self):
         # NaN here means "not fitted this way", which is a different statement
         # from a bad fit: the median fallback and the byte-scaled path never
@@ -452,3 +547,243 @@ class TestRoundTrip:
         assert "find" in lines
         assert "NOT MEASURED" in lines
         assert "text_sort" in lines
+
+    def test_coverage_report_reads_the_r2_it_fitted(self):
+        # #3345: the r2 was persisted by #3334 and read by nothing, including
+        # the one report an admin sees after a sweep. A cell count cannot say
+        # whether the coefficients describe the data, so the report has to.
+        rows = [
+            {
+                "task": "find",
+                "device": "cpu",
+                "media_type": "image",
+                "embedder": "siglip",
+                "n": n,
+                "size_mb": 0,
+                "step": "score",
+                "seconds": 2.0 * n,  # exactly linear -> r2 == 1
+                "ok": True,
+                "complete": True,
+            }
+            for n in (10, 20, 30)
+        ]
+        lines = "\n".join(coverage_report(rows, fit_profile(rows, min_samples=2)))
+        assert "affine" in lines
+        assert "median r² 1.00" in lines
+
+    def test_coverage_report_counts_the_fits_below_the_bar(self):
+        # A median hides the tail, and the tail is where a bar drifts. A clean
+        # cell and a noisy one must report the noisy one, not average it away.
+        #
+        # The noise is deliberately *inside* one encoder rather than across the
+        # two. #3522 withholds a rollup step whose groups contradict each other,
+        # so a fixture whose only bad fit was the pooled cell would now measure
+        # that suppression instead of the r² count this test is about. These two
+        # encoders average ~50 s and ~55 s, well inside the spread a rollup
+        # keeps, so every cell survives and the poor fit is a real one.
+        rows = []
+        for embedder, secs in (
+            ("clean", lambda n: 2.0 * n),
+            ("noisy", lambda n: {10: 20.0, 20: 80.0, 30: 30.0}.get(n, 90.0)),
+        ):
+            rows += [
+                {
+                    "task": "find",
+                    "device": "cpu",
+                    "media_type": "image",
+                    "embedder": embedder,
+                    "n": n,
+                    "size_mb": 0,
+                    "step": "score",
+                    "seconds": secs(n),
+                    "ok": True,
+                    "complete": True,
+                }
+                for n in (10, 20, 30, 40)
+            ]
+        lines = "\n".join(coverage_report(rows, fit_profile(rows, min_samples=2)))
+        assert "below 0.90" in lines
+
+    def test_coverage_report_does_not_score_a_step_it_did_not_fit_as_a_line(self):
+        # A byte-scaled step and a median fallback carry no r2 at all. Counting
+        # either as a bad fit would be the exact confusion #3345 set out to
+        # separate, so they are named as their own outcomes.
+        rows = [
+            {
+                "device": "cpu",
+                "media_type": "image",
+                "embedder": "siglip",
+                "dataset_id": "caltech101_s",
+                "n": 400,  # one size only: no spread for OLS to use
+                "download_size_mb": 131.0,
+                "phase": phase,
+                "seconds": 3.0,
+            }
+            for phase in ("download", "embed")
+            for _ in range(2)
+        ]
+        lines = "\n".join(coverage_report(rows, fit_profile(rows, min_samples=2)))
+        assert "byte-rate" in lines
+        assert "median-fallback" in lines
+        assert "affine" not in lines
+
+
+def _load_row(media: str, embedder: str, step: str, n: float, seconds: float, device: str = "cuda") -> dict:
+    """One recorded `dataset_load` step, for the rollup-suppression tests."""
+    return {
+        "task": "dataset_load",
+        "device": device,
+        "cuml": True,
+        "media_type": media,
+        "embedder": embedder,
+        "n": n,
+        "size_mb": 0,
+        "step": step,
+        "seconds": seconds,
+        "ok": True,
+        "complete": True,
+    }
+
+
+class TestContradictedRollups:
+    """#3522: a rollup must not fit one line through groups it measured as unlike.
+
+    A rollup cell is only ever *reached* for a combination the sweep never
+    measured — `cell_keys` tries every more specific key first and the fitter
+    emits one for everything it saw — so the rollup's whole job is
+    extrapolation. #3345 measured what averaging unlike groups costs there:
+    exact cells at median r² 1.00 / 3 % error against `(device, *, *)` at
+    0.29 / 50 %, and 162 % on one arm.
+    """
+
+    #: #3345's measured mechanism, to the digit: `(cuda+cuml, *, *)` pooling an
+    #: image import at 0.014 s/item with an audio one at 0.102 (7.3x apart).
+    DIVERGENT = (("image", "siglip", 0.014), ("audio", "clap_general", 0.102))
+
+    def _rows(self, groups, step="embed"):
+        return [
+            _load_row(media, embedder, step, n, rate * n)
+            for media, embedder, rate in groups
+            for n in (400, 800, 1600, 2400)
+        ]
+
+    def test_the_device_rollup_withholds_a_step_its_own_groups_contradict(self):
+        cells = fit_profile(self._rows(self.DIVERGENT), min_samples=2)["tasks"]["dataset_load"]["cells"]
+        # Both exact cells keep the slope they measured...
+        assert cells["cuda+cuml|image|siglip"]["steps"]["embed"]["b"] == pytest.approx(0.014)
+        assert cells["cuda+cuml|audio|clap_general"]["steps"]["embed"]["b"] == pytest.approx(0.102)
+        # ...and the cell that pools them declines to claim a third number.
+        assert "cuda+cuml||" not in cells
+
+    def test_a_coherent_rollup_is_still_emitted(self):
+        # The rollups are the reason a small sweep is worth running, so a merely
+        # imprecise one must survive: only *contradiction* withholds a step.
+        coherent = (("image", "siglip", 0.014), ("audio", "clap_general", 0.020))
+        cells = fit_profile(self._rows(coherent), min_samples=2)["tasks"]["dataset_load"]["cells"]
+        assert cells["cuda+cuml||"]["steps"]["embed"]["b"] == pytest.approx(0.017)
+
+    def test_only_the_contradicted_step_is_withheld(self):
+        # Suppression is per-step, not per-cell: `step_terms` falls one absent
+        # step through to its shipped default while the rest of the cell applies.
+        rows = self._rows(self.DIVERGENT, step="embed")
+        rows += self._rows((("image", "siglip", 0.004), ("audio", "clap_general", 0.005)), step="finalize")
+        steps = fit_profile(rows, min_samples=2)["tasks"]["dataset_load"]["cells"]["cuda+cuml||"]["steps"]
+        assert "embed" not in steps
+        assert steps["finalize"]["b"] == pytest.approx(0.0045)
+
+    def test_the_media_rollup_withholds_contradicted_encoders(self):
+        # Same mechanism one level in: `(device, media, *)` is reached only for
+        # an encoder that media type was never measured with, and #3062 measured
+        # a 4.75x spread in finalize's slope across embedding dimension.
+        rows = self._rows((("image", "siglip", 0.014), ("image", "clip_b32", 0.070)))
+        cells = fit_profile(rows, min_samples=2)["tasks"]["dataset_load"]["cells"]
+        assert cells["cuda+cuml|image|siglip"]["steps"]["embed"]["b"] == pytest.approx(0.014)
+        assert "cuda+cuml|image|" not in cells
+
+    def test_a_single_group_rollup_is_never_contradicted(self):
+        # One media type behind the rollup: it repeats the exact cell's claim
+        # rather than blending anything, and is the coverage rollups exist for.
+        rows = self._rows((("image", "siglip", 0.014),))
+        cells = fit_profile(rows, min_samples=2)["tasks"]["dataset_load"]["cells"]
+        assert cells["cuda+cuml||"]["steps"]["embed"]["b"] == pytest.approx(0.014)
+
+    def test_a_step_every_group_calls_free_is_not_contradicted(self):
+        # Sub-10ms against sub-10ms is arithmetic noise, not disagreement: a
+        # ratio between two negligible numbers must not withhold a real cell.
+        rows = [
+            _load_row(media, embedder, "finalize", n, secs)
+            for media, embedder, secs in (("image", "siglip", 0.001), ("audio", "clap_general", 0.006))
+            for n in (400, 800, 1600, 2400)
+        ]
+        cells = fit_profile(rows, min_samples=2)["tasks"]["dataset_load"]["cells"]
+        assert "finalize" in cells["cuda+cuml||"]["steps"]
+
+    def test_one_free_group_beside_a_costly_one_is_contradicted(self):
+        # The shape #3520/#3521 measured: a warm zero pooled with a cold cost.
+        # Whichever way the lookup lands, the pooled number is wrong.
+        rows = [
+            _load_row(media, embedder, "finalize", n, secs)
+            for media, embedder, secs in (("image", "siglip", 0.0), ("audio", "clap_general", 6.0))
+            for n in (400, 800, 1600, 2400)
+        ]
+        cells = fit_profile(rows, min_samples=2)["tasks"]["dataset_load"]["cells"]
+        assert "cuda+cuml||" not in cells
+
+    def test_the_exact_cell_is_never_suppressed(self):
+        # It wildcards nothing, so it pools nothing, however wild its samples.
+        rows = [_load_row("image", "siglip", "embed", n, s) for n, s in ((400, 0.5), (800, 40.0), (1600, 2.0))]
+        cells = fit_profile(rows, min_samples=2)["tasks"]["dataset_load"]["cells"]
+        assert "embed" in cells["cuda+cuml|image|siglip"]["steps"]
+
+
+class TestCoverageReportSpecificity:
+    """#3522: the coverage report must not pool the specificity levels.
+
+    "5 cells" reads like five measurements. #3345 measured that the level
+    guaranteed to match is the weakest one, so the split is what tells an admin
+    whether their sweep bought exact cells or fallbacks.
+    """
+
+    def _rows(self):
+        return [
+            _load_row(media, embedder, "embed", n, rate * n)
+            for media, embedder, rate in (("image", "siglip", 0.014), ("audio", "clap_general", 0.102))
+            for n in (400, 800, 1600, 2400)
+        ]
+
+    def test_the_quality_line_is_broken_down_by_specificity(self):
+        rows = self._rows()
+        lines = "\n".join(coverage_report(rows, fit_profile(rows, min_samples=2)))
+        assert "exact  (device|media|embedder)  2 cells" in lines
+        assert "rollup (device|media|*)         2 cells" in lines
+
+    def test_a_withheld_rollup_is_named_rather_than_vanishing(self):
+        # The device rollup has no surviving cell here, and silently omitting
+        # its line would read as "the sweep never got that far" — the opposite
+        # of what happened.
+        rows = self._rows()
+        lines = "\n".join(coverage_report(rows, fit_profile(rows, min_samples=2)))
+        assert "rollup (device|*|*)" in lines
+        assert "0 cells, 1 step withheld (pooled groups disagree)" in lines
+
+    def test_the_split_reports_each_level_own_r2(self):
+        # The point of the split: a weak rollup beside strong exact cells must
+        # not be averaged into one reassuring median.
+        rows = [
+            _load_row(media, embedder, "embed", n, rate * n + noise)
+            for media, embedder, rate, noise in (("image", "siglip", 0.05, 0.0), ("audio", "clap_general", 0.07, 0.0))
+            for n in (400, 800, 1600, 2400)
+        ]
+        report = coverage_report(rows, fit_profile(rows, min_samples=2))
+        exact = next(line for line in report if "exact" in line)
+        rollup = next(line for line in report if "(device|*|*)" in line)
+        assert "median r² 1.00" in exact  # each media type is exactly linear
+        assert "median r² 1.00" not in rollup  # one slope through both is not
+
+    def test_the_cell_counts_still_sum_to_the_header(self):
+        rows = self._rows()
+        profile = fit_profile(rows, min_samples=2)
+        report = coverage_report(rows, profile)
+        header = next(line for line in report if "dataset_load" in line)
+        split = sum(int(line.split("  ")[-1].split(" cell")[0]) for line in report if "device|" in line)
+        assert f"{split} cells" in header

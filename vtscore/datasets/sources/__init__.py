@@ -20,22 +20,17 @@ from __future__ import annotations
 from typing import Any
 
 from vtscore.datasets.sources.base import MediaItem, MediaSource
-from vtscore.plugins import PluginRegistry
+from vtscore.plugins import make_plugin_registry
 
 __all__ = ["MediaItem", "MediaSource", "get_source_for_origin", "list_media_sources"]
 
-_registry: PluginRegistry = PluginRegistry(
-    package="vtscore.datasets.sources",
+_get_source_factory, list_media_sources = make_plugin_registry(
+    package=__name__,
     sentinel="SOURCE",
     label="media source",
     discover_modules=True,
     entry_point_group="vtscore.media_sources",
 )
-
-
-def list_media_sources() -> list:
-    """Return all registered media source factories."""
-    return _registry.list()
 
 
 def get_source_for_origin(origin: dict[str, Any] | None) -> MediaSource | None:
@@ -48,7 +43,7 @@ def get_source_for_origin(origin: dict[str, Any] | None) -> MediaSource | None:
         return None
 
     importer = origin.get("importer", "")
-    factory = _registry.get(importer)
+    factory = _get_source_factory(importer)
     if factory is not None:
         return factory.create_from_origin(origin)
     return None

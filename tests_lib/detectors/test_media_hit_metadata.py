@@ -81,7 +81,7 @@ class TestCustomMetadataOnHit:
 class TestHitCustomMetadataDirectly:
     """The sanitiser is public because the app's route helpers reuse it.
 
-    ``vtsearch.routes._shared.media_info_for_response``, ``POST
+    ``vtsearch.routes._media_response.media_info_for_response``, ``POST
     /api/medias/batch`` and the enriched label export all call it, so its
     contract is pinned here rather than only through ``build_media_hit``.
     """

@@ -59,6 +59,15 @@ class TaskSpec:
             regressing them against ``n``, because a 2 GB archive of 500 videos
             and a 20 MB archive of 500 texts take wildly different times to
             fetch for reasons ``n`` cannot see.
+        loads_encoder: Whether a run of this task can pay a **cold encoder
+            load** — the first time a process needs a given ``(media_type,
+            embedder)`` it downloads/instantiates the model, and every later run
+            finds it resident and pays nothing. Only tasks that declare this
+            participate in the recorder's residency ledger, because the ledger's
+            key is shared process-wide: a ``dataset_open`` that never touches an
+            encoder must not claim ``(image, siglip)`` and leave the genuinely
+            cold ``text_sort`` behind it stamped warm. Default ``False`` — the
+            safe direction, since an unmarked task simply fits as it does today.
     """
 
     name: str
@@ -68,6 +77,7 @@ class TaskSpec:
     scale: str
     default_terms: tuple[float, ...] = ()
     byte_scaled: tuple[str, ...] = ()
+    loads_encoder: bool = False
 
     def __post_init__(self) -> None:
         if len(self.step_index) != len(self.steps):
@@ -76,7 +86,14 @@ class TaskSpec:
             raise ValueError(f"{self.name}: default_terms must be parallel to steps")
 
 
-def _linear(name: str, steps: tuple[str, ...], scale: str, terms: tuple[float, ...]) -> TaskSpec:
+def _linear(
+    name: str,
+    steps: tuple[str, ...],
+    scale: str,
+    terms: tuple[float, ...],
+    *,
+    loads_encoder: bool = False,
+) -> TaskSpec:
     """Build a spec whose phases map 1:1 onto tracker steps (the common case)."""
     return TaskSpec(
         name=name,
@@ -85,6 +102,7 @@ def _linear(name: str, steps: tuple[str, ...], scale: str, terms: tuple[float, .
         tracker_steps=len(steps),
         scale=scale,
         default_terms=terms,
+        loads_encoder=loads_encoder,
     )
 
 
@@ -106,6 +124,7 @@ TASKS: dict[str, TaskSpec] = {
         tracker_steps=4,
         scale="media items embedded",
         byte_scaled=("download", "extract"),
+        loads_encoder=True,
     ),
     # Re-opening an already-imported dataset from its pkl. Step 1 (pickle read +
     # convert + the near-instant exact-dedup) is seconds at most; step 2 is the
@@ -138,6 +157,7 @@ TASKS: dict[str, TaskSpec] = {
         ("acquire", "embed", "serialize"),
         "media items staged",
         (0.30, 0.60, 0.10),
+        loads_encoder=True,
     ),
     # Loading a saved detector: read its labelset, pull the label examples back
     # into the active dataset, retrain the MLP. Training dominates; the other
@@ -147,6 +167,7 @@ TASKS: dict[str, TaskSpec] = {
         ("restore_labels", "seed_examples", "train"),
         "labels in the detector's labelset",
         (0.15, 0.15, 0.70),
+        loads_encoder=True,
     ),
     # Text search: load the embedder, embed the one-line query, score every
     # media by cosine similarity. The model load dominates on a cold start
@@ -157,6 +178,7 @@ TASKS: dict[str, TaskSpec] = {
         ("load_model", "embed_query", "score"),
         "medias scored",
         (0.75, 0.05, 0.20),
+        loads_encoder=True,
     ),
     # Running saved detectors across saved datasets. Scoring dominates; loading
     # datasets from pkl is moderate; preparing detector configs is quick.
@@ -165,6 +187,7 @@ TASKS: dict[str, TaskSpec] = {
         ("prepare", "load", "score"),
         "medias scored across all selected datasets",
         (0.10, 0.30, 0.60),
+        loads_encoder=True,
     ),
     # Train-and-score against the active dataset: resolve the detector, train
     # its MLP, score every media, apply the resulting labels. Train + score
@@ -174,6 +197,7 @@ TASKS: dict[str, TaskSpec] = {
         ("resolve", "train", "score", "apply"),
         "medias scored",
         (0.10, 0.45, 0.40, 0.05),
+        loads_encoder=True,
     ),
 }
 

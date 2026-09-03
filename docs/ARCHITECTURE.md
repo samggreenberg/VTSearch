@@ -145,8 +145,11 @@ VTSearch/
 │   ├── media/                      Media type, embedder, clipper + processor ABCs
 │   │   ├── base.py                 MediaType ABC, MediaResponse, DemoDataset, _resolve_media_bytes
 │   │   ├── processors.py           Processor, Detector, Localizer, Extractor ABCs
-│   │   ├── embedder.py             MediaEmbedder ABC + shared helpers (media_from_path,
-│   │   │                           progress_scope, bulk embedding)
+│   │   ├── embedder.py             MediaEmbedder ABC (progress_scope, bulk embedding,
+│   │   │                           media_from_path); re-exports the two modules below
+│   │   ├── load_progress.py       Model-load progress interception (tqdm bars, weight
+│   │   │                           tensors) + resilient HuggingFace fetching
+│   │   ├── torch_ops.py           Torch tensor/device adapters shared by every embedder
 │   │   ├── clipper.py              MediaClipper ABC + shared clipper logic
 │   │   ├── cleaner.py              MediaCleaner (a MediaClipper subclass; 1→1 cleanup gates)
 │   │   ├── patch_embed.py          Patch-semantic embedding: per-region vectors on one media
@@ -186,8 +189,7 @@ VTSearch/
 │   │
 │   ├── training/                   Generic learned-sort primitives (no Flask, no state)
 │   │   ├── mlp.py                  build_model, train_model (pure PyTorch)
-│   │   ├── thresholds.py           GMM / cross-calibration / fold-anchored threshold helpers
-│   │   ├── evt_mixture.py          Extreme-value tail model behind the threshold helpers
+│   │   ├── thresholds/             GMM / cross-calibration / fold-anchored threshold helpers
 │   │   ├── blend_schedules.py      Vote-count → blend-weight schedules (production + arms)
 │   │   ├── svm.py                  SVM trainer prototype
 │   │   ├── region_similarity.py    Region-aware cosine similarity scoring
@@ -292,6 +294,7 @@ VTSearch/
 │   │   ├── runner.py               run_eval() orchestrator
 │   │   ├── trainers.py             Per-arm trainer wrappers
 │   │   ├── patch_styles.py         Patch-scoring arms (max_patch default, whole_image, HAC, …)
+│   │   ├── evt_mixture.py          Gumbel/Normal mixture — the research arm behind the gumbel_* cuts
 │   │   ├── autopilot_flow.py       Ported autopilot loop (the app's TypeScript flow, re-implemented)
 │   │   ├── voting_iterations.py    Voting-iteration simulation
 │   │   ├── al_strategies.py        Active-learning acquisition strategies, benchmarked by
@@ -377,6 +380,11 @@ VTSearch/
 │   ├── settings_store.py           Two-tier persistence engine (file locking, caches) for settings.py
 │   ├── settings_models.py          Pydantic ServerSettings / UserSettings models; the source of
 │   │                               truth for setting types, defaults, ranges, and enums
+│   ├── admin_overrides.py          Declarative registry of the process-level admin overrides
+│   │                               (solo mediaType / embedder locks, plugin hides, dataset
+│   │                               retention, support email, Semantic-only): one descriptor
+│   │                               per knob carrying its CLI flag, env var, shared validator,
+│   │                               resolution rule, and /api/settings key
 │   ├── threading.py                Context-carrying thread helper (user + dataset + detector locals)
 │   ├── achievements.py             Achievement state management
 │   ├── autorun_processors.py       autorun_extractors / autorun_localizers CRUD
@@ -414,7 +422,13 @@ VTSearch/
 │   │   └── sources/                server_json_file (bidirectional settings sync)
 │   │
 │   └── routes/                     Flask blueprints; all HTTP request handling
-│       ├── _shared.py              Shared route helpers (request parsing, JSON safety)
+│       ├── _context.py             X-Dataset-Id / X-Detector-Id route guards
+│       ├── _http.py                Request-body parsing, error-detail and mtime formatting
+│       ├── _media_response.py      Thumbnail responses; media-dict JSON safety filter
+│       ├── _plugins.py             Plugin lookup, field options, argument validation
+│       ├── _policy.py              Deployment-policy guards (the Semantic lock)
+│       ├── _progress.py            Parking the sort / find progress trackers at idle
+│       ├── _sort_window.py         Windowing a full ranking into a sort response
 │       ├── auth.py                 /api/auth/status, login, logout
 │       ├── auth_huggingface.py     HuggingFace OAuth (/api/auth/huggingface/*)
 │       ├── main.py                 Root route, favicon, logo
@@ -880,6 +894,18 @@ field lists — this document names the tiers and the shape, not every key.
   **Auto-Find** keys `autofind_detectors`, `autofind_exporter`,
   `autofind_exporter_field_values`.
 
+Six of those server-tier keys double as **admin overrides**: an operator can
+pin `solo_media_type`, `solo_embedder_per_media_type`, `hidden_plugins`,
+`dataset_max_age_days`, `support_email` and `semantic_only` at startup, for
+every user and for the life of the process, without the settings file. Each is
+declared once in `vtsearch/admin_overrides.py` — a descriptor carrying its CLI
+flag, its env-var equivalent (so the gunicorn images, which never parse `argv`,
+can set it too), the validator both entry paths share, how it combines with the
+persisted value, and the key `/api/settings` publishes the result under. The
+argparse arguments, the env fallbacks, the `get_effective_*` resolvers in
+`settings.py` and the response overlay all derive from that registry rather
+than being re-plumbed per knob.
+
 Both models set `extra = "allow"`, so free-form sub-objects
 (`achievement_state`, `settings_source`) round-trip alongside the typed keys.
 The Auto-Find keys read through to the server file for the built-in `default`
@@ -1055,9 +1081,11 @@ server-tier set is shared; everything else lives in
 Background threads spawned from a request handler propagate the user via the
 `vtsearch.auth.thread_user(...)` context manager (which snapshots and restores
 the prior thread-local automatically), so per-user writes — autopilot toggles,
-sync-source exports — land in the right file. Legacy single-file
-`data/settings.json` files that pre-date the split are migrated to the default
-user's file on first load.
+sync-source exports — land in the right file. A single-file
+`data/settings.json` that pre-dates the split is **not** migrated: its
+per-user keys simply have no effect where they sit, and the file is left as
+written (the one exception is the Auto-Find trio, which the built-in `default`
+user reads through to — see [Deployment](DEPLOYMENT.md#settings-file-schema)).
 
 ---
 
@@ -1110,8 +1138,14 @@ recoverable long after the import job ended:
   of the real source file**), `converter_param_<key>`, the replay
   disambiguators `converter_out_index` / `converter_n_out` /
   `converter_content_hash`, and `parent_importer` plus the parent importer's
-  locator (`parent_path` / `parent_url` / `parent_paths_file` /
-  `parent_manifest`).  `source_file` and `source_path` diverge whenever the
+  own locator param under a `parent_` prefix (`parent_path` / `parent_url` /
+  `parent_paths_file` / `parent_manifest`, or `parent_name` for a demo
+  dataset).  The resolver rebuilds the parent origin by stripping that prefix,
+  so a new importer's locator resolves with no resolver change.  The same
+  keys are stamped whether the source corpus was a scanned folder or a demo
+  dataset, and every one of a source's N outputs gets its own origin dict —
+  sharing one would leave page 3 and page 7 indistinguishable on replay.
+  `source_file` and `source_path` diverge whenever the
   scanned folder is a staging area of symlinks — the `server_files`
   (Manifest) importer links listed paths into a temp dir under their
   basenames, disambiguating collisions as `name__1.ext` — so `source_path` is
@@ -1195,7 +1229,8 @@ full materialization rather than lazy resolution.
 A `LabelSet` extends the dataset concept: each element carries its origin,
 its name within that origin, its label (`"good"` / `"bad"`), and optional
 `metadata` (arbitrary key-value dict for round-tripping extra data like
-`contentID`, `mediaID`, etc.).
+`contentID`, `mediaID`, etc., plus the reserved `"vt:provenance"` key —
+see below).
 
 ```python
 from vtscore.datasets.labelset import LabelSet
@@ -1210,6 +1245,37 @@ ls = LabelSet.from_results(results_dict, medias=medias)
 data = ls.to_dict()   # {"labels": [{"md5": ..., "label": ..., "origin": ..., ...}]}
 ls2 = LabelSet.from_dict(data)
 ```
+
+#### Vote surfacing provenance (`"vt:provenance"`)
+
+One key inside `metadata` is reserved: `"vt:provenance"` records **how each
+vote was surfaced** — which UI flow drove it, which autopilot phase (if any),
+how the item was drawn off the ranking, which ranking that was, and the item's
+rank and score at click time. `vtscore/datasets/vote_provenance.py` owns the
+vocabulary and the validation; `DetectorContext.vote_provenance` carries it in
+memory, threaded exactly like `vote_region_boxes`.
+
+It is recorded at click time because it is **not re-derivable later**: the
+ranking is client-side ephemeral state and the model behind the score is
+overwritten by the next retrain. Scalars only — the no-persisted-vectors rule
+is untouched.
+
+The four categorical fields are independent axes, not one fused enum, because
+the calibration bias this exists to measure tracks *how the item was drawn*
+(`select_mode`) rather than *who was driving* (`flow`). The two come apart at
+both edges: a user can pick the `hard` select mode by hand and get autopilot's
+exact margin-sampled draw, and autopilot's own `good` phase is mechanically a
+top-of-list draw.
+
+Recording only — nothing reads these values back to change behaviour. The
+consumer (partitioning the conformal calibration set by trustworthy surfacing
+context) is gated on the experiment pre-registered in
+[`docs/plans/provenance-partitioned-calibration.md`](plans/provenance-partitioned-calibration.md).
+Two rules keep the record honest: it is written **only on a vote-state change**
+(an idempotent re-apply keeps what the original click recorded, so a stale tab
+cannot rewrite it), and `restore_labels_from_detector` carries it back into
+vote state on load — without that, the next vote's labelset resync would erase
+every recorded vote's provenance, the bug `region_box` shipped with.
 
 The `GET /api/labels/export` endpoint returns a `LabelSet` serialised
 as JSON.  The format is backward-compatible: old consumers that only

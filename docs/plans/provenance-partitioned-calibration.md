@@ -33,15 +33,27 @@ surfacing context the study measured as trustworthy.
 
 ## Design decisions (settled)
 
-- **Provenance taxonomy.** `surfaced_by ∈ {autopilot:good, autopilot:bad,
-  autopilot:hard, autopilot:new, list_review, seed_example, unknown}` plus
-  context scalars (`score_at_vote`, `rank_at_vote`, `sort_kind`). Recorded per
-  vote at click time — the surfacing model is gone by the next retrain, so this
-  is *not re-derivable* and must be persisted (scalars only; the No Persisted
-  Vectors rule is untouched). Storage: a namespaced key in
-  `LabeledElement.metadata`, which already round-trips through labelset
-  export/import. Recording is issue #2850 and ships independently of everything
-  below.
+- **Provenance taxonomy.** Recorded per vote at click time — the surfacing
+  model is gone by the next retrain, so this is *not re-derivable* and must be
+  persisted (scalars only; the No Persisted Vectors rule is untouched).
+  Storage: `"vt:provenance"` in `LabeledElement.metadata`, which already
+  round-trips through labelset export/import. **Shipped as separate axes, not
+  the single fused `surfaced_by` enum this plan first proposed:** `flow ∈
+  {autopilot, list_review, find_verify, labelset_review, seed_example, import,
+  bulk, undo, unknown}`, `phase ∈ {good, bad, hard, new}` (autopilot only),
+  `select_mode ∈ {top, hard, new}`, `sort_kind ∈ {learned, text, load}`, plus
+  `rank_at_vote` and `score_at_vote`. The fused enum labelled votes by *who was
+  driving* while the bias this plan exists to repair tracks *how the item was
+  drawn*, and the two come apart at both edges — a user can pick the `hard`
+  select mode by hand and get autopilot's exact margin-sampled draw, and
+  autopilot's own `good` phase is mechanically a top-of-list draw. See
+  `vtscore/datasets/vote_provenance.py`.
+
+  **Consequence for the arms below:** eligibility is a predicate over these
+  axes, not a membership test on a flow list. The measurement should partition
+  on `select_mode` (with `flow` available as a covariate) rather than on
+  "autopilot vs. list review", and the mixed-stream harness must tag simulated
+  votes in the shipped shape.
 - **Eligibility default for unattributed votes.** Legacy votes and imported
   labelsets carry no provenance (`unknown`) and stay **calibration-eligible**.
   The partition only bites when a session demonstrably mixes flows; it must not
@@ -61,12 +73,20 @@ surfacing context the study measured as trustworthy.
 
 ## Pre-registered experiment
 
-**Harness:** extend `scripts/experiments/inclusion_knob/run_autopilot_sweep.py`,
-which already drives the repo's own `vtscore.eval.al_strategies` selector, and
-reuse the `toplist` policy from `run_selection_sweep.py` (batches of 8 off the
-current sort, matching page-at-a-time manual review). New knob: a **mixed vote
-stream** that interleaves autopilot-selected votes with toplist bursts at a
-configured fraction, tagging each simulated vote with its provenance.
+**Harness:** `scripts/experiments/inclusion_knob/run_autopilot_sweep.py`, which
+since #3408 is a thin driver over
+`vtscore.eval.voting_iterations.simulate_voting_iterations` rather than a vote
+loop of its own. The mixed stream therefore belongs **in the harness**, not in
+the script: a `toplist` vote source (batches of 8 off the current sort, matching
+page-at-a-time manual review) registered beside `autopilot` in
+`vtscore.eval.al_strategies`, plus a mix fraction that interleaves the two and
+tags each simulated vote with its provenance. Re-adding it script-side would
+recreate exactly the uncovered second copy #3408 removed. (The pre-#3408
+`run_selection_sweep.py` held a hand-rolled `toplist` loop against the retired
+configuration; it was deleted, and its measured behaviour survives in
+`docs/experiments/2026-07-27-inclusion-knob/selection_sweep.csv` and that
+study's `SELECTION-BIAS.md` as the adversarial bound this study's mix
+interpolates towards.)
 
 **Arms.** Vote-stream mix (autopilot : list-review) ∈ {100:0, 85:15, 70:30,
 50:50, 0:100} × calibration policy ∈ {`all-votes` (status quo),
@@ -110,16 +130,12 @@ fraction of cells where the starvation fallback engaged.
 
 <!-- item-sep -->
 
-- [ ] #2850 — Record vote surfacing provenance in `LabeledElement.metadata`
-  (Sonnet 5)
-
-<!-- item-sep -->
-
-- **Mixed-flow harness arm + measurement.** The `run_autopilot_sweep.py`
-  vote-stream mix knob, provenance tagging in the simulated stream, the
-  `partitioned` calibration policy behind a harness flag, and the paired
-  analysis per the pre-registered metrics and decision rules above. CPU-cheap
-  (same scale as the selection-bias sweep).
+- **Mixed-flow harness arm + measurement.** The `toplist` vote source and
+  vote-stream mix knob in `vtscore.eval.al_strategies` (not in the driver
+  script — see the harness note above), provenance tagging in the simulated
+  stream, the `partitioned` calibration policy behind a harness flag, and the
+  paired analysis per the pre-registered metrics and decision rules above.
+  CPU-cheap (same scale as the selection-bias sweep).
 
 <!-- item-sep -->
 

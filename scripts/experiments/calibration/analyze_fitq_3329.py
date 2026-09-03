@@ -89,20 +89,9 @@ def load_fitq(results: Path) -> tuple[pd.DataFrame, dict[str, int]]:
 
 def load_main(results: Path) -> pd.DataFrame:
     """The base metric rows, for the regret column H4 regresses on."""
-    files = _cells_io.main_frame_files(results / "cells")
-    frames: list[pd.DataFrame] = []
-    for p in files:
-        try:
-            if p.stat().st_size == 0:
-                continue
-            f = pd.read_csv(p)
-        except Exception:
-            continue
-        if not f.empty:
-            frames.append(f)
-    if not frames:
-        return pd.DataFrame()
-    out = pd.concat(frames, ignore_index=True)
+    out, _prov = _cells_io.load_cells(results / "cells")
+    if out.empty:
+        return out
     # The base row only: variant arms carry their own cuts and would enter the
     # regression as extra, non-independent rows for the same step.
     #

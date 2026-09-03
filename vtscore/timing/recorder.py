@@ -5,7 +5,7 @@ wraps its work in :func:`record_task` then appends one row per step::
 
     {"task": "text_sort", "device": "cuda", "cuml": true, "media_type": "image",
      "embedder": "siglip", "n": 12403, "size_mb": 0.0, "step": "score",
-     "seconds": 1.83, "ok": true}
+     "seconds": 1.83, "ok": true, "cold_model": false}
 
 ``scripts/profiling/tune_timing_profile.py`` fits those rows into the profile
 JSON that :mod:`vtscore.timing.profile` reads back. Because the recorder lives
@@ -22,14 +22,23 @@ gather data, and both produce the same file:
 When disarmed the cost is one ``os.environ`` lookup per task and a couple of
 no-op method calls; there is no tracker subscription and no file handle.
 
+**Cold vs warm.** Every row also carries ``cold_model``: whether this run was
+the first in the process to need its ``(media_type, embedder)`` encoder, and so
+the one that paid to download and instantiate it. Without that marker the rows
+for a once-per-process cost are unfittable — the model load of a text sort
+measures 15 s once and 0 s on the next 47, and a fitter that cannot tell the two
+populations apart medians them into "free" (#3520). Only tasks whose
+:class:`~vtscore.timing.tasks.TaskSpec` declares ``loads_encoder`` take part, so
+a task that never touches an encoder neither claims a key nor carries the field.
+
 The dataset-load pipeline *also* carries an older, richer recorder
 (:mod:`vtscore.datasets.stages._load_profiler`) that additionally distinguishes
-cold from warm model loads, cold from cached downloads, and the sub-slots inside
-finalize. The two run side by side on the same load: they answer different
-questions, are armed by different env vars, and write to different files. The
-tuning script's fitter reads both row shapes, so a pre-existing dataset-load
-calibration sweep still folds into a profile — but an admin who armed only
-``VTSEARCH_TIMING_RECORD`` gets import rows too, which for a while they did not.
+cold from cached downloads and splits finalize into its sub-slots. The two run
+side by side on the same load: they answer different questions, are armed by
+different env vars, and write to different files. The tuning script's fitter
+reads both row shapes, so a pre-existing dataset-load calibration sweep still
+folds into a profile — but an admin who armed only ``VTSEARCH_TIMING_RECORD``
+gets import rows too, which for a while they did not.
 
 Kept in ``vtscore`` (no Flask) so a plain CLI or library run records the same
 way a served request does.
@@ -51,6 +60,30 @@ logger = logging.getLogger(__name__)
 
 #: Environment variable naming the JSONL sink. Unset means "record nothing".
 RECORD_ENV_VAR = "VTSEARCH_TIMING_RECORD"
+
+#: ``(media_type, embedder)`` pairs whose encoder this process has already
+#: needed. The first run for a pair pays the cold load — downloading the weights
+#: and instantiating the model — and every later one finds it resident, which is
+#: why a warm text sort skips its ``load_model`` step entirely.
+#:
+#: Self-detecting residency is more robust than a caller-supplied flag, and lets
+#: one driven sweep measure both branches in a single process. The key pairs the
+#: media type in rather than keying on the embedder alone, because the name can
+#: legitimately arrive blank: two blanks from different media types would
+#: otherwise collide, and the second one's genuinely cold load would be written
+#: ``cold_model: false`` — the mislabel #3345 measured on the other recorder.
+_seen_models: set[tuple[str, str]] = set()
+_seen_lock = threading.Lock()
+
+
+def reset_seen_models_for_tests() -> None:
+    """Forget every encoder this process has recorded a load for.
+
+    Process-global, so one test's recorded run would otherwise decide whether
+    the next test's run is written cold or warm.
+    """
+    with _seen_lock:
+        _seen_models.clear()
 
 
 def recording_enabled() -> bool:
@@ -134,20 +167,41 @@ class TaskTimingRecorder:
             return
         self._subscribed = True
 
-    def set_scale(self, n: Optional[float] = None, size_mb: Optional[float] = None) -> None:
+    def set_scale(
+        self,
+        n: Optional[float] = None,
+        size_mb: Optional[float] = None,
+        embedder: Optional[str] = None,
+    ) -> None:
         """Record the job's scale variables once they are known.
 
         Safe to call repeatedly and from any thread; the last value wins.
+
+        *embedder* is here for the same reason *n* is: a task can start without
+        knowing which encoder it will use. An import whose caller named no
+        embedder still runs one — the media-type default, resolved deep in the
+        embed stage — and recording the blank instead files every such run under
+        the media rollup, leaving the exact ``(device, media, embedder)`` cell
+        permanently empty (#3345). An empty string is ignored rather than
+        written, so learning nothing cannot erase what the caller did know.
         """
         with self._lock:
             if n is not None:
                 self._n = float(n)
             if size_mb is not None:
                 self._size_mb = float(size_mb)
+            if embedder:
+                self._embedder = str(embedder)
 
-    def finish(self, n: Optional[float] = None, size_mb: Optional[float] = None, ok: bool = True) -> None:
+    def finish(
+        self,
+        n: Optional[float] = None,
+        size_mb: Optional[float] = None,
+        ok: bool = True,
+        embedder: Optional[str] = None,
+    ) -> None:
         """Unsubscribe and append this run's rows. Idempotent."""
-        self.set_scale(n, size_mb)
+        self.set_scale(n, size_mb, embedder)
         with self._lock:
             self._ok = self._ok and ok
         if self._subscribed:
@@ -194,6 +248,27 @@ class TaskTimingRecorder:
         return None
 
     # -- emit ---------------------------------------------------------------
+    def _claim_encoder(self) -> Optional[bool]:
+        """Whether this run paid the cold encoder load, claiming the key if so.
+
+        ``None`` for a task that loads no encoder: it neither carries the field
+        nor claims a key, because the ledger is process-wide and a task that
+        never instantiates a model would otherwise mark one resident on behalf
+        of the task that actually loads it.
+
+        Read where the rows are written rather than at construction, for two
+        reasons: a run that learns its embedder partway through is then filed
+        under the encoder it really used, and a run that recorded nothing does
+        not claim a key on behalf of the next one.
+        """
+        if self._spec is None or not self._spec.loads_encoder:
+            return None
+        key = (self._media_type, self._embedder)
+        with _seen_lock:
+            cold = key not in _seen_models
+            _seen_models.add(key)
+        return cold
+
     def _emit(self) -> None:
         end = time.monotonic()
         if not self._path:
@@ -224,6 +299,9 @@ class TaskTimingRecorder:
             "ok": ok,
             "complete": complete,
         }
+        cold = self._claim_encoder()
+        if cold is not None:
+            base["cold_model"] = cold
         durations = {
             phase: max(0.0, (starts[order[i + 1]] if i + 1 < len(order) else end) - starts[phase])
             for i, phase in enumerate(order)
@@ -259,10 +337,21 @@ class _NullRecorder:
     def start(self) -> None:
         pass
 
-    def set_scale(self, n: Optional[float] = None, size_mb: Optional[float] = None) -> None:
+    def set_scale(
+        self,
+        n: Optional[float] = None,
+        size_mb: Optional[float] = None,
+        embedder: Optional[str] = None,
+    ) -> None:
         pass
 
-    def finish(self, n: Optional[float] = None, size_mb: Optional[float] = None, ok: bool = True) -> None:
+    def finish(
+        self,
+        n: Optional[float] = None,
+        size_mb: Optional[float] = None,
+        ok: bool = True,
+        embedder: Optional[str] = None,
+    ) -> None:
         pass
 
 

@@ -1,4 +1,4 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, DestroyRef, effect, ElementRef, inject, input, model, NgZone, OnDestroy, output, untracked, viewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, Component, DestroyRef, effect, ElementRef, inject, input, NgZone, OnDestroy, signal, untracked, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { TileCacheService } from '../../services/tile-cache.service';
 import { BrowseViewportService, ViewportBounds } from '../../services/browse-viewport.service';
@@ -12,21 +12,23 @@ import {
 } from '../browse-canvas/hex-render.util';
 import { binGeometry } from '../browse-canvas/bin-geometry';
 import { onDevicePixelRatioChange } from '../../utils/device-pixel-ratio';
-import { IconComponent } from '../icon/icon.component';
 import { DecimalPipe } from '@angular/common';
 import type { HexCellPayload, ProjectionMeta } from '../../models/projection.models';
 
-/** Resize clamps; must mirror the backend ``browse_minimap_*`` setting ranges. */
-export const MINIMAP_MIN_WIDTH = 120;
-export const MINIMAP_MAX_WIDTH = 600;
-export const MINIMAP_MIN_HEIGHT = 90;
-export const MINIMAP_MAX_HEIGHT = 450;
+/**
+ * Floor for the tracked container box, so a collapsed panel can never ask for a
+ * zero-sized canvas backing store.
+ */
+const MINIMAP_MIN_WIDTH = 120;
+const MINIMAP_MIN_HEIGHT = 90;
 
 /**
- * Lower-right overview for the browse canvas: a density heatmap of the whole
- * projection, with a rectangle marking the region the main canvas is currently
- * showing. Clicking/dragging the minimap recenters the main view; a corner
- * handle resizes it and a close button hides it.
+ * Overview for the browse canvas: a density heatmap of the whole projection,
+ * with a rectangle marking the region the main canvas is currently showing.
+ * Clicking/dragging the minimap recenters the main view.
+ *
+ * It fills its container (the browse side panel's meta-row) and sizes its
+ * canvas to fit via a {@link ResizeObserver}, so the panel owns the geometry.
  *
  * The heatmap picks the pyramid level whose hexes land near a small target
  * on-screen size, so the whole projection is shown as a fine-grained field of
@@ -38,8 +40,7 @@ export const MINIMAP_MAX_HEIGHT = 450;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-browse-minimap',
   standalone: true,
-  imports: [IconComponent, DecimalPipe],
-  host: { '[class.dock]': 'dock()' },
+  imports: [DecimalPipe],
   templateUrl: './browse-minimap.component.html',
   styleUrl: './browse-minimap.component.scss',
 })
@@ -63,11 +64,10 @@ export class BrowseMinimapComponent implements AfterViewInit, OnDestroy {
 
   private readonly canvasRef = viewChild.required<ElementRef<HTMLCanvasElement>>('canvas');
   readonly meta = input<ProjectionMeta | null>(null);
-  /** Rendered size (CSS px). Models rather than plain inputs because the
-   *  minimap writes them back itself: dock mode tracks its container's box and
-   *  the floating corner handle resizes by drag. */
-  readonly width = model(200);
-  readonly height = model(150);
+  /** Rendered size (CSS px). Written by the component itself rather than bound
+   *  by the parent: {@link startContainerSizing} tracks the container's box. */
+  private readonly width = signal(200);
+  private readonly height = signal(150);
   /** Density colormap preset; mirrors the main canvas so the overview matches. */
   readonly colormap = input<BrowseColormapId>('auto');
   /**
@@ -75,23 +75,14 @@ export class BrowseMinimapComponent implements AfterViewInit, OnDestroy {
    * browse). The count itself is read from ``meta.point_count``.
    */
   readonly countNoun = input('items');
-  /**
-   * Docked mode: the minimap fills its container (the browse side panel's
-   * meta-row) and sizes its canvas to fit via a {@link ResizeObserver},
-   * rather than floating over the canvas at an explicit size. In this mode
-   * the close button and corner resize handle are hidden — the panel owns
-   * the geometry — but click/drag-to-navigate stays live. Mirrored onto the
-   * host's ``dock`` class via the component's ``host`` binding.
-   */
-  readonly dock = input(false);
 
   // The input→resize/redraw dispatch that used to live in ngOnChanges (signal
   // inputs don't fire it). Bodies run untracked so incidental reads can't
   // widen the triggers; work needing the 2D context waits for ngAfterViewInit
   // (which does the initial sizing/paint itself, as ngOnInit used to).
 
-  /** A size change (parent binding, dock observer, or the corner drag — the
-   *  models funnel all three here) rebuilds the canvas backing store. */
+  /** A size change (the container observer writing the size signals) rebuilds
+   *  the canvas backing store. */
   private readonly sizeChanged = effect(() => {
     this.width();
     this.height();
@@ -117,13 +108,11 @@ export class BrowseMinimapComponent implements AfterViewInit, OnDestroy {
     this.colormap();
     untracked(() => this.requestRedraw());
   });
-  /** Hide request from the close button (floating mode only). */
-  readonly closed = output<void>();
   private resizeObserver: ResizeObserver | null = null;
   // Teardown for the devicePixelRatio-change listener. A pure density change
-  // (monitor-to-monitor drag) leaves the element box untouched, so neither the
-  // dock ResizeObserver nor the floating width/height inputs fire; this re-runs
-  // resizeCanvas() to rebuild the backing store at the new density.
+  // (monitor-to-monitor drag) leaves the element box untouched, so the
+  // ResizeObserver never fires; this re-runs resizeCanvas() to rebuild the
+  // backing store at the new density.
   private dprListenerTeardown: (() => void) | null = null;
 
   private ctx!: CanvasRenderingContext2D;
@@ -135,22 +124,14 @@ export class BrowseMinimapComponent implements AfterViewInit, OnDestroy {
   // Repaints when the document theme flips, matching the main canvas.
   private themeObserver: MutationObserver | null = null;
 
-  private resizing = false;
-  private resizeStartX = 0;
-  private resizeStartY = 0;
-  private resizeStartW = 0;
-  private resizeStartH = 0;
-
   private navigating = false;
 
-  private boundResizeMove = this.onResizeMove.bind(this);
-  private boundResizeUp = this.onResizeUp.bind(this);
   private boundNavMove = this.onNavMove.bind(this);
   private boundNavUp = this.onNavUp.bind(this);
 
   ngAfterViewInit(): void {
     this.ctx = this.canvasRef().nativeElement.getContext('2d')!;
-    if (this.dock()) this.startDockSizing();
+    this.startContainerSizing();
     this.resizeCanvas();
 
     // A pure devicePixelRatio change doesn't resize the element, so re-run the
@@ -187,17 +168,16 @@ export class BrowseMinimapComponent implements AfterViewInit, OnDestroy {
     this.resizeObserver?.disconnect();
     this.dprListenerTeardown?.();
     if (this.rafId) cancelAnimationFrame(this.rafId);
-    this.detachResizeListeners();
     this.detachNavListeners();
   }
 
   /**
-   * Docked mode: track the host element's box and resize the canvas to fill
-   * it, so the overview grows/shrinks with the side panel's divider drag. The
-   * observer fires outside Angular; writing the size models triggers the
+   * Track the host element's box and resize the canvas to fill it, so the
+   * overview grows/shrinks with the side panel's divider drag. The observer
+   * fires outside Angular; writing the size signals triggers the
    * {@link sizeChanged} effect, which rebuilds the backing store and repaints.
    */
-  private startDockSizing(): void {
+  private startContainerSizing(): void {
     const el = this.host.nativeElement;
     this.ngZone.runOutsideAngular(() => {
       this.resizeObserver = new ResizeObserver(() => {
@@ -495,47 +475,5 @@ export class BrowseMinimapComponent implements AfterViewInit, OnDestroy {
   private detachNavListeners(): void {
     document.removeEventListener('mousemove', this.boundNavMove);
     document.removeEventListener('mouseup', this.boundNavUp);
-  }
-
-  // --- Resize handle --------------------------------------------------------
-
-  onResizeDown(event: MouseEvent): void {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    event.stopPropagation();
-    this.resizing = true;
-    this.resizeStartX = event.clientX;
-    this.resizeStartY = event.clientY;
-    this.resizeStartW = this.width();
-    this.resizeStartH = this.height();
-    document.addEventListener('mousemove', this.boundResizeMove);
-    document.addEventListener('mouseup', this.boundResizeUp);
-  }
-
-  private onResizeMove(event: MouseEvent): void {
-    if (!this.resizing) return;
-    // Anchored bottom-right: dragging the top-left handle up/left grows it.
-    // The model writes drive the resize/repaint via the size effect.
-    const dw = this.resizeStartX - event.clientX;
-    const dh = this.resizeStartY - event.clientY;
-    this.width.set(
-      Math.round(Math.max(MINIMAP_MIN_WIDTH, Math.min(MINIMAP_MAX_WIDTH, this.resizeStartW + dw))),
-    );
-    this.height.set(
-      Math.round(
-        Math.max(MINIMAP_MIN_HEIGHT, Math.min(MINIMAP_MAX_HEIGHT, this.resizeStartH + dh)),
-      ),
-    );
-  }
-
-  private onResizeUp(): void {
-    if (!this.resizing) return;
-    this.resizing = false;
-    this.detachResizeListeners();
-  }
-
-  private detachResizeListeners(): void {
-    document.removeEventListener('mousemove', this.boundResizeMove);
-    document.removeEventListener('mouseup', this.boundResizeUp);
   }
 }

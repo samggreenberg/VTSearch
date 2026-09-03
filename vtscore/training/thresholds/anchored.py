@@ -331,7 +331,7 @@ class FoldAnchoredCut:
         """
         return self._quantile_at(*inclusion_cost_weights(inclusion_value))
 
-    def threshold_at(self, inclusion_value: int) -> float:
+    def threshold_at(self, inclusion_value: float) -> float:
         """The threshold this estimator cuts at *inclusion_value*.
 
         Inclusion reaches the cut only as the rate weights it optimises

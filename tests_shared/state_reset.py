@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import pytest
 
+from vtscore.host_seams import HostSeams, restore_host_seams
+
 #: Training epochs for the whole test session (production default is 200; 30 is
 #: enough for the tiny MLP heads to converge on the small test fixtures).
 #: Re-asserted per test by :func:`reset_shared_state` because
@@ -60,6 +62,33 @@ def install_startup_contexts() -> None:
     state_core.set_thread_detector_context(startup_det)
 
 
+#: Host seams as the conftest left them at the end of its bootstrap.  Filled by
+#: :func:`capture_startup_host_seams` and put back before every test by
+#: :func:`reset_shared_state`.  ``None`` until captured, so a suite that never
+#: calls the bootstrap simply skips the seam restore rather than wiping seams it
+#: never recorded.
+_startup_host_seams: HostSeams | None = None
+
+
+def capture_startup_host_seams() -> None:
+    """Record the host seams the conftest has just finished installing.
+
+    Must run *after* the tier has wired its seams - for the app tier that means
+    after ``import app`` has run its ``register_app_*`` calls, for the library
+    tier after the conftest's ``register_core_config_builder``.  Both conftests
+    call it beside :func:`freeze_startup_heap`, which is already at that point.
+
+    Deliberately a snapshot rather than a reset: the app tier's tests run
+    *against* the real ``vtsearch`` wiring, so resetting the slots to their
+    library defaults before each test would strip the seams under test.
+    """
+    global _startup_host_seams
+
+    from vtscore.host_seams import capture_host_seams
+
+    _startup_host_seams = capture_host_seams()
+
+
 def freeze_startup_heap() -> None:
     """Exclude the import-time heap from garbage-collection scans.
 
@@ -75,16 +104,30 @@ def freeze_startup_heap() -> None:
     gc.freeze()
 
 
-def reset_shared_state(medias_map, medias_snapshot) -> None:
+def reset_shared_state(medias_snapshot) -> None:
     """Reset every ``vtscore`` global that leaks between tests.
 
-    *medias_map* is the live medias mapping and *medias_snapshot* the deep copy
-    taken at import time; they are passed in rather than imported so this module
-    stays free of ``vtsearch`` (``tests_lib/`` imports it under the Flask
-    blocker).
+    *medias_snapshot* is the deep copy of the generated test medias taken at
+    each conftest's import time; it is passed in rather than imported because
+    generating them is a tier-specific fixture concern.
+
+    The live mapping to refill is **not** a parameter: it is the ``medias`` dict
+    of the default context this function has just registered, so resolving it
+    here is both simpler and safer than accepting one.  A caller can only pass a
+    mapping it resolved *before* the reset - i.e. the previous test's context -
+    unless it hands over a lazily-resolving proxy, and the only such proxy in the
+    repo is app-tier (``vtsearch.state_proxies``), which ``tests_lib/`` may not
+    import.
     """
     import vtscore.config as config
     import vtscore.state.core as core
+
+    # Put the host seams back first: two of them (the dataset / detector context
+    # resolvers) decide which context the rest of this reset - and the test that
+    # follows - actually lands on, so a resolver leaked by the previous test
+    # would misdirect the contexts registered just below.
+    if _startup_host_seams is not None:
+        restore_host_seams(_startup_host_seams)
 
     core.clear_all_contexts()
     default_ctx = core.DatasetContext(_TEST_DATASET_CONTEXT_ID)
@@ -96,7 +139,7 @@ def reset_shared_state(medias_map, medias_snapshot) -> None:
     core.register_detector_context(default_det)
     core.set_thread_detector_context(default_det)
 
-    medias_map.update({k: dict(v) for k, v in medias_snapshot.items()})
+    default_ctx.medias.update({k: dict(v) for k, v in medias_snapshot.items()})
 
     from vtscore.security.hf_auth import clear_credential
 
@@ -168,6 +211,13 @@ def reset_shared_state(medias_map, medias_snapshot) -> None:
     from vtscore.detectors.dataset_sync import reset_mtime_cache_for_tests
 
     reset_mtime_cache_for_tests()
+
+    # Forget which encoders the timing recorder has seen loaded: the ledger is
+    # process-global and decides whether a recorded run is written cold or warm,
+    # so one test's run would otherwise label the next test's.
+    from vtscore.timing.recorder import reset_seen_models_for_tests
+
+    reset_seen_models_for_tests()
 
     # Reset CLI progress format so a test that flips it to "json" can't leak the
     # choice into the next test.

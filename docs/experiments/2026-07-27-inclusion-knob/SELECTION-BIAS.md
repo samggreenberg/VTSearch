@@ -35,14 +35,30 @@ runs 0.298 and the calibration set is both tiny and policy-shaped.
 > correctly scoped as a manual-review adversarial bound.
 
 Companion to [REPORT.md](REPORT.md) (which established the conformal rule).
-Primary harness: `scripts/experiments/inclusion_knob/run_autopilot_sweep.py`
-(+ `summarize_autopilot.py`), which drives the repo's own
-`vtscore.eval.al_strategies.select_next` over a real `CoverageAtlas` and mirrors
-`vtscore.eval.voting_iterations.simulate_voting_iterations`' loop, so the vote
-order is the app's by construction rather than by imitation. Raw grid:
-[`autopilot_sweep.csv`](autopilot_sweep.csv); tables:
+Harness at the time of the run:
+`scripts/experiments/inclusion_knob/run_autopilot_sweep.py`
+(+ `summarize_autopilot.py`), which drove the repo's own
+`vtscore.eval.al_strategies.select_next` over a real `CoverageAtlas` and
+*mirrored* `vtscore.eval.voting_iterations.simulate_voting_iterations`' loop,
+so the vote order was the app's by construction rather than by imitation. Raw
+grid: [`autopilot_sweep.csv`](autopilot_sweep.csv); tables:
 [`autopilot_tables.md`](autopilot_tables.md). 224 cells x 3 designs x 11
 inclusions = 7,392 rows; run 2026-07-30.
+
+> **The harness has since been rebuilt, and no longer reproduces these
+> numbers.** Mirroring the harness loop is exactly what let it go stale: by
+> September it was fitting the retired `"mlp"` head rather than the shipped
+> `linear_svm`, taking the pre-#2877 parity-interleaved Hard/New order rather
+> than the app's phase machine, selecting against an un-offset threshold, and
+> pinning `calibration_fraction=0.5` where production resolves 0.3 — none of
+> which tripped a gate, because `scripts/check-eval-app-sync.py` covers nothing
+> under `scripts/`. Issue #3408 replaced the mirror with a thin driver over
+> `simulate_voting_iterations`, which cannot drift because it keeps no copy; it
+> writes `autopilot_prod_*.csv` and leaves the files above untouched. The
+> numbers in this report stand as the record of the 2026-07-30 run under the
+> then-shipped detector; a re-measurement under the current one is the open
+> work in
+> [`docs/plans/inclusion-calibration-bias.md`](../../plans/inclusion-calibration-bias.md).
 
 ## Method
 
@@ -136,8 +152,11 @@ phase has diversified anything). Any future mitigation should target the first
 
 ## Superseded arm: `toplist` (manual top-of-sort review)
 
-`run_selection_sweep.py` and [`selection_sweep.csv`](selection_sweep.csv) are
-retained for the `toplist` policy: greedy top-of-sort voting in batches of 8.
+[`selection_sweep.csv`](selection_sweep.csv) and
+[`selection_tables.md`](selection_tables.md) record the `toplist` policy: greedy
+top-of-sort voting in batches of 8. (Its runner and summarizer were deleted with
+the mirror by #3408 — they hand-rolled the same retired loop; the data stay as
+the record.)
 That is **not** Autopilot, but it is a fair model of a user manually reviewing
 and voting down a learned-sort result list (the Find-and-verify flow), and it is
 a useful adversarial bound. There it behaves as badly as first reported: excess

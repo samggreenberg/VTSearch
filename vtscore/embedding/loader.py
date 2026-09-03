@@ -269,6 +269,28 @@ def _warm_threadpool_controller() -> None:
             pass
 
 
+def _install_transformers_logging_bridge() -> None:
+    """Route transformers' logs through the app's handler, when the app is present.
+
+    A module-level function rather than a closure inside
+    :func:`initialize_models` so tests have a *library-tier* seam to patch.
+    Patching it saves the ~0.7s ``transformers`` import in suites that stub
+    every embedder; without the seam the only patchable name was the app-tier
+    ``vtsearch.logging_config`` symbol, which forced ``tests_lib/`` (whose whole
+    contract is "no ``vtsearch`` imports") to reach across the tier boundary.
+
+    The ``vtsearch`` import is optional by design - see the ``embedding/loader.py``
+    entry in ``tests_lib/meta/test_library_layering.py``'s allowlist - so the
+    library keeps working when the app package is absent.
+    """
+    try:
+        from vtsearch.logging_config import install_transformers_logging_bridge  # noqa: PLC0415
+
+        install_transformers_logging_bridge()
+    except Exception:
+        pass
+
+
 def initialize_models(on_progress: ProgressCallback | None = None) -> None:
     """Prepare the runtime environment for embedding models.
 
@@ -296,17 +318,9 @@ def initialize_models(on_progress: ProgressCallback | None = None) -> None:
     def _warm() -> None:
         _warm_threadpool_controller()
 
-    def _bridge() -> None:
-        try:
-            from vtsearch.logging_config import install_transformers_logging_bridge  # noqa: PLC0415
-
-            install_transformers_logging_bridge()
-        except Exception:
-            pass
-
     if on_progress is None:
         _warm()
-        _bridge()
+        _install_transformers_logging_bridge()
     else:
         from vtscore.media.embedder import IMPORT_MODULE_ESTIMATES, timed_progress  # noqa: PLC0415
 
@@ -324,7 +338,7 @@ def initialize_models(on_progress: ProgressCallback | None = None) -> None:
             "Importing transformers…",
             est_modules=IMPORT_MODULE_ESTIMATES["transformers_logging"],
         ):
-            _bridge()
+            _install_transformers_logging_bridge()
         console_cb.flush()  # type: ignore[attr-defined]
 
     gc.collect()

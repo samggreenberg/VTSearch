@@ -160,14 +160,6 @@ ship on its own.
 
 <!-- item-sep -->
 
-- **Staging imports bypass the download/embed concurrency gates** — `vtscore/datasets/load_pipeline.py:837` (medium impact)
-
-  `_stage_importer_in_background` runs `importer.run(...)` and `embed_missing(...)` directly on its daemon thread without acquiring `_download_gate` or `_embed_gate`, unlike `_run_origin_load_in_background` which carefully sequences both. The combine flow can stage several datasets at once, so N stagings download and embed fully in parallel with each other *and* with gated regular loads — defeating the user-configurable `max_concurrent_dataset_downloads` / `max_concurrent_dataset_embeddings` limits whose whole purpose is bounding bandwidth/RAM/GPU pressure (and, per the embedder-singleton finding, making the `_on_progress` race reachable even when the embed gate is 1). Concrete benefit: staging a handful of image datasets on a RAM-constrained host would no longer multiply resident model weights and working sets past the configured budget.
-
-  *Direction:* Reuse `_LoadGateController` in `stage_task`: acquire the download gate before `importer.run`, swap to the embed gate before `embed_missing`, release in the finally block.
-
-<!-- item-sep -->
-
 - **sync_from_labelset_source applies labels with an O(labels × medias) scan** — `vtscore/labels/sync.py:343` (low impact)
 
   For every imported label entry, the apply loop does a linear scan `for mid, media in ds_medias.items(): if media.get("md5") == md5` — O(L × N) while holding `_sync_lock` (which blocks every concurrent debounced push). With a 100k-item dataset and a few thousand imported labels this is hundreds of millions of dict lookups on the sync path that runs at detector load. Concrete benefit: building a one-pass `{md5: mid}` index before the loop makes the apply O(L + N) and shrinks the window during which `_sync_lock` starves `_push_to_labelset_source`.
@@ -182,9 +174,9 @@ ship on its own.
 
 - **check-eval-app-sync gate does not pin several ported surfaces, including the two that actually drifted** — `scripts/check-eval-app-sync.py:86` (medium impact)
 
-  MIRRORS pins the phase machine, vote targets, three indicator rules, and four training defaults — but the harness ports more app logic than that, and the unpinned surfaces are exactly where drift was found: (1) `al_strategies._hard_pick_by_index` says it "Mirrors LabelViewComponent.autoSelectNext" (rank-space cutoff pick) and `_select_phase_faithful` mirrors the phase->Sort/Select pairing (`restoreAutopilotSortSelect`) — neither TS block is pinned, so changing the app's select rule or pairing silently detaches every simulated pick; (2) `_labelset_error_costs` / `AutopilotFlow.record_step` mirror `labeling_progress._eval_cached_models` / `_score_step` / `_compute_step_stability` (the Smart/Stable input semantics) — unpinned, and the Smart plumbing had in fact drifted (fixed in #2923, but nothing stops it drifting again); the `progress.smart_status` mirror pins only the rule function, so its `divergence=` text is the only thing standing in for a pin on the plumbing. Two smaller mechanism gaps: `_check_harness_side` (line 359) verifies the harness symbol by raw substring (`symbol in path.read_text()`), so a symbol surviving only in a comment passes; and `_normalize_python`'s trailing-comma stripping (line 265) erases the semantic difference between `(x,)` and `(x)`, so that one real logic change cannot trip a pin.
+  MIRRORS pins the phase machine, vote targets, three indicator rules, and four training defaults — but the harness ports more app logic than that, and the unpinned surfaces are exactly where drift was found: (1) `al_strategies._hard_pick_by_index` says it "Mirrors LabelViewComponent.autoSelectNext" (rank-space cutoff pick) and `_select_phase_faithful` mirrors the phase->Sort/Select pairing (`restoreAutopilotSortSelect`) — neither TS block is pinned, so changing the app's select rule or pairing silently detaches every simulated pick; (2) `_labelset_error_costs` / `AutopilotFlow.record_step` mirror `labeling_progress._eval_cached_models` / `_score_step` / `_compute_step_stability` (the Smart/Stable input semantics) — unpinned, and the Smart plumbing had in fact drifted (fixed in #2923, but nothing stops it drifting again); the `progress.smart_status` mirror pins only the rule function, so its `divergence=` text is the only thing standing in for a pin on the plumbing. One smaller mechanism gap remains: `_normalize_python`'s trailing-comma stripping erases the semantic difference between `(x,)` and `(x)`, so that one real logic change cannot trip a pin.
 
-  *Direction:* Add Mirror entries for `ts:...label-view.component.ts::autoSelectNext(`, the sort/select restore block, and `py:vtscore.detectors.labeling_progress._eval_cached_models` / `_score_step` / `_compute_step_stability`; AST-check the harness symbol instead of substring; keep the trailing comma when the next token is `)` and the previous token is not an argument (or only strip inside call/collection contexts with >1 element).
+  *Direction:* Add Mirror entries for `ts:...label-view.component.ts::autoSelectNext(`, the sort/select restore block, and `py:vtscore.detectors.labeling_progress._eval_cached_models` / `_score_step` / `_compute_step_stability`; keep the trailing comma when the next token is `)` and the previous token is not an argument (or only strip inside call/collection contexts with >1 element).
 
 <!-- item-sep -->
 
@@ -264,11 +256,13 @@ ship on its own.
 
 <!-- item-sep -->
 
-- **Find-view duplicates label-view's per-media-type panel-preference machinery by hand** — `frontend/src/app/components/find-view/find-view.component.ts:87` (medium impact)
+- **Find-view duplicates label-view's panel drag/snap machinery by hand** — `frontend/src/app/components/find-view/find-view.component.ts` (medium impact)
 
-  Label-view extracted its per-media-type panel bookkeeping into LabelViewPanelStateService (grid-size dicts, focus-mode dicts, panel_pct_left/right persistence, applyPanelPx clamping) and uses PanelResizeDirective for divider drags, but find-view still carries a parallel hand-rolled copy: gridIconSizeLeftDict / focusModeLeftDict / focusModeRightDict / panelPxLeftDict / panelPxRightDict fields (lines 87-91), a near-identical settings-mirror effect (lines 137-177), applyPanelPx (line 821), savePanelPx (line 812), and duplicated divider-drag + grid-snap logic (lines 407-483). The two implementations have already drifted — find-view lacks the icon-size auto-pop and snap-on-load behaviors label-view gained — and every future panel fix must be made twice. Since the settings keys are shared between the views, drift produces user-visible inconsistency (e.g. a width saved and snapped in Label restores un-snapped in Find).
+  Label-view uses PanelResizeDirective for its divider drags and has icon-size auto-pop plus snap-on-load; find-view still carries its own divider-drag and grid-snap code and neither of those behaviours. Every future panel fix has to be made twice, and because the two views share the same settings keys the drift is user-visible — a width saved and snapped in Label restores un-snapped in Find.
 
-  *Direction:* Provide LabelViewPanelStateService (renamed to a view-agnostic PanelStateService) in find-view too, and reuse PanelResizeDirective for its dividers, deleting the duplicated dict/effect/drag code.
+  *Direction:* Reuse PanelResizeDirective for find-view's dividers and lift the auto-pop / snap-on-load behaviour alongside it, deleting the duplicated drag code.
+
+  *Background:* the settings half of this item is done — both views now resolve their per-media-type panel preferences through `SettingsStateService.perMediaType` (#3447), so the shadow dicts and the mirror effects are gone from find-view. What remains is the drag/snap duplication.
 
 <!-- item-sep -->
 

@@ -45,6 +45,7 @@ def clear_votes() -> None:
         ctx.textsort_suggestions.clear()
         ctx.vote_click_times.clear()
         ctx.vote_region_boxes.clear()
+        ctx.vote_provenance.clear()
         ctx.click_counter = 0
         ctx.last_learned_scores.clear()
         ctx.find_initial_labels.clear()
@@ -316,6 +317,25 @@ def _record_vote_locked(count_streak: bool = True) -> None:
     record_achievement("vote", det_ctx.detector_id, media_type=det_ctx.media_type, count_streak=count_streak)
 
 
+def _store_provenance(ctx, media_id: int, provenance: dict[str, Any] | None) -> None:
+    """Record (or clear) *media_id*'s surfacing provenance under ``_state_lock``.
+
+    Called only on a transition that produces a labeled state, never on an
+    idempotent re-apply - see the comment in :func:`_set_vote_locked`.  A
+    caller with nothing to record clears the slot rather than leaving the
+    previous vote's record in place: the new vote was surfaced *somehow*, and
+    keeping the old context would attribute it to a flow that did not produce
+    it.
+    """
+    from vtscore.datasets.vote_provenance import coerce_provenance
+
+    cleaned = coerce_provenance(provenance)
+    if cleaned is None:
+        ctx.vote_provenance.pop(media_id, None)
+    else:
+        ctx.vote_provenance[media_id] = cleaned
+
+
 def _current_label_locked(ctx, media_id: int) -> str:
     """Return ``"good"`` / ``"bad"`` / ``"none"`` for *media_id* (lock held)."""
     if media_id in ctx.good_votes:
@@ -331,6 +351,7 @@ def _set_vote_locked(
     region_box: tuple[float, float, float, float] | None = None,
     *,
     count_streak: bool = True,
+    provenance: dict[str, Any] | None = None,
 ) -> tuple[str, str, int | None]:
     """Set *media_id*'s vote to *target* under an already-held ``_state_lock``.
 
@@ -365,6 +386,11 @@ def _set_vote_locked(
         # ``region_box`` on an idempotent call leaves the existing one alone.
         if target == "good" and region_box is not None:
             ctx.vote_region_boxes[media_id] = region_box
+        # Provenance is deliberately *not* refreshed here.  It records the
+        # surfacing event that produced the vote, and an idempotent call
+        # produced no such event - it is a stale tab replaying a target the
+        # media already holds.  Overwriting would let whichever tab spoke
+        # last rewrite history that the first click already recorded.
         existing_click = ctx.vote_click_times.get(media_id) if target != "none" else None
         return (old, old, existing_click)
 
@@ -375,6 +401,7 @@ def _set_vote_locked(
             ctx.vote_region_boxes[media_id] = region_box
         else:
             ctx.vote_region_boxes.pop(media_id, None)
+        _store_provenance(ctx, media_id, provenance)
         click_time = assign_click_time(media_id)
         add_label_to_history(media_id, "good")
         coverage_atlas_label(media_id, good=True)
@@ -382,6 +409,7 @@ def _set_vote_locked(
         ctx.good_votes.pop(media_id, None)
         ctx.vote_region_boxes.pop(media_id, None)
         ctx.bad_votes[media_id] = None
+        _store_provenance(ctx, media_id, provenance)
         click_time = assign_click_time(media_id)
         add_label_to_history(media_id, "bad")
         coverage_atlas_label(media_id, good=False)
@@ -389,6 +417,7 @@ def _set_vote_locked(
         ctx.good_votes.pop(media_id, None)
         ctx.bad_votes.pop(media_id, None)
         ctx.vote_region_boxes.pop(media_id, None)
+        ctx.vote_provenance.pop(media_id, None)
         remove_click_time(media_id)
         add_label_to_history(media_id, "unlabel")
         coverage_atlas_unlabel(media_id)
@@ -440,6 +469,7 @@ def set_vote(
     region_box: tuple[float, float, float, float] | None = None,
     *,
     count_streak: bool = True,
+    provenance: dict[str, Any] | None = None,
 ) -> tuple[str, str, int | None]:
     """Atomically set a media's vote to an absolute target state.
 
@@ -470,6 +500,11 @@ def set_vote(
             achievement but does not inflate the Marathoner streak, which only
             counts consecutive *individual* hand-clicks.  Defaults to True (the
             single-item vote path).
+        provenance: Optional surfacing context for this vote (which flow /
+            autopilot phase / sort / rank put the item in front of the user);
+            see :mod:`vtscore.datasets.vote_provenance`.  Recorded only on a
+            state *change* - an idempotent re-apply keeps whatever the
+            original click recorded, so a stale tab cannot rewrite it.
 
     Returns:
         ``(old_label, new_label, click_time)``.  ``click_time`` is the
@@ -477,7 +512,13 @@ def set_vote(
         idempotent calls.
     """
     with _state_lock:
-        result = _set_vote_locked(media_id, target, region_box=region_box, count_streak=count_streak)
+        result = _set_vote_locked(
+            media_id,
+            target,
+            region_box=region_box,
+            count_streak=count_streak,
+            provenance=provenance,
+        )
         _mark_verified_if_find_mode(get_active_detector_context(), media_id, result[1])
     # Progress-cache invalidation runs *after* ``_state_lock`` is released so
     # we never establish a ``_state_lock → _progress_lock`` ordering across
@@ -542,6 +583,7 @@ def apply_label(
     region_box: tuple[float, float, float, float] | None = None,
     record_achievement: bool = True,
     count_streak: bool = True,
+    provenance: dict[str, Any] | None = None,
 ) -> None:
     """Atomically apply a label to a media (for imports).
 
@@ -574,6 +616,11 @@ def apply_label(
             such as label import, which credit the other vote achievements but
             must not build a Marathoner streak out of one import.  Defaults to
             True (e.g. a single add-to-pile upload is an individual vote).
+        provenance: Optional surfacing context to record for this label; see
+            :mod:`vtscore.datasets.vote_provenance`.  The label-restoration
+            path passes the element's *recorded* provenance straight back
+            through, which is what keeps the next labelset resync from
+            erasing it (the same hazard ``region_box`` had).
     """
     with _state_lock:
         ctx = get_active_detector_context()
@@ -585,6 +632,7 @@ def apply_label(
                 ctx.vote_region_boxes[media_id] = region_box
             else:
                 ctx.vote_region_boxes.pop(media_id, None)
+            _store_provenance(ctx, media_id, provenance)
             if not silent:
                 add_label_to_history(media_id, "good")
         else:
@@ -592,6 +640,7 @@ def apply_label(
             ctx.good_votes.pop(media_id, None)
             ctx.vote_region_boxes.pop(media_id, None)
             ctx.bad_votes[media_id] = None
+            _store_provenance(ctx, media_id, provenance)
             if not silent:
                 add_label_to_history(media_id, "bad")
         if not silent:
@@ -600,7 +649,12 @@ def apply_label(
                 _record_vote_locked(count_streak=count_streak)
 
 
-def apply_label_with_click_time(media_id: int, label: str) -> None:
+def apply_label_with_click_time(
+    media_id: int,
+    label: str,
+    *,
+    provenance: dict[str, Any] | None = None,
+) -> None:
     """Atomically apply a label with click-time assignment (for fill-from-sort).
 
     Same as :func:`apply_label` but also assigns a click-time ordinal so the
@@ -614,6 +668,11 @@ def apply_label_with_click_time(media_id: int, label: str) -> None:
     Args:
         media_id: Integer ID of the media to label.
         label: ``"good"`` or ``"bad"``.
+        provenance: Optional surfacing context; see
+            :mod:`vtscore.datasets.vote_provenance`.  Fill-from-sort is the
+            purest top-of-list draw in the app - it labels a whole sort window
+            at once - so the caller records it as such rather than leaving it
+            unattributed.
     """
     with _state_lock:
         ctx = get_active_detector_context()
@@ -627,6 +686,7 @@ def apply_label_with_click_time(media_id: int, label: str) -> None:
             ctx.vote_region_boxes.pop(media_id, None)
             ctx.bad_votes[media_id] = None
             add_label_to_history(media_id, "bad")
+        _store_provenance(ctx, media_id, provenance)
         assign_click_time(media_id)
         coverage_atlas_label(media_id, good=label == "good")
         # Bulk fill-from-sort: credit votes_cast/days/hours/types but never the
@@ -635,7 +695,7 @@ def apply_label_with_click_time(media_id: int, label: str) -> None:
 
 
 def _purge_vote_state_outside(ctx: Any, kept: set[int]) -> None:
-    """Drop every vote / click-time / region box / verified marker outside *kept*.
+    """Drop every vote / click-time / region box / provenance / verified marker outside *kept*.
 
     The ``replace_all`` half of :func:`apply_labels_bulk_with_click_time`.  The
     verified markers go with the votes they described: a marker whose vote was
@@ -651,6 +711,8 @@ def _purge_vote_state_outside(ctx: Any, kept: set[int]) -> None:
         ctx.vote_click_times.pop(cid, None)
     for cid in [c for c in ctx.vote_region_boxes if c not in kept]:
         ctx.vote_region_boxes.pop(cid, None)
+    for cid in [c for c in ctx.vote_provenance if c not in kept]:
+        ctx.vote_provenance.pop(cid, None)
     for cid in [c for c in ctx.verified_ids if c not in kept]:
         ctx.verified_ids.pop(cid, None)
     ctx.find_initial_labels.clear()
@@ -675,6 +737,10 @@ def apply_labels_bulk_with_click_time(
     When *record_achievement* is True, the credited votes still never touch the
     Marathoner ``vote_streak``: this applies a whole batch at once, which is
     not the consecutive-individual-hand-click effort the streak measures.
+
+    These are the detector's own machine calls, not a surfacing event, so any
+    recorded vote provenance for the affected ids is cleared: the human's
+    later verify vote is what stamps a fresh one.
 
     When *replace_all* is True, any pre-existing votes/click-times for IDs
     outside *labels* are cleared first.  This is what ``/api/find-label``
@@ -708,6 +774,7 @@ def apply_labels_bulk_with_click_time(
         bad_votes = ctx.bad_votes
         vote_click_times = ctx.vote_click_times
         vote_region_boxes = ctx.vote_region_boxes
+        vote_provenance = ctx.vote_provenance
         verified_ids = ctx.verified_ids
         label_history = ctx.label_history
         atlas = get_active_context().coverage_atlas
@@ -726,11 +793,13 @@ def apply_labels_bulk_with_click_time(
                 bad_votes.pop(media_id, None)
                 good_votes[media_id] = None
                 vote_region_boxes.pop(media_id, None)
+                vote_provenance.pop(media_id, None)
                 label_history.append((media_id, "good", _time.time()))
             else:
                 already = media_id in bad_votes
                 good_votes.pop(media_id, None)
                 vote_region_boxes.pop(media_id, None)
+                vote_provenance.pop(media_id, None)
                 bad_votes[media_id] = None
                 label_history.append((media_id, "bad", _time.time()))
             ctx.click_counter += 1

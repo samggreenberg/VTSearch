@@ -1,5 +1,14 @@
 """Gumbel + Normal score mixture — the extreme-value cut (issues #2836, #2846).
 
+**Research arm, not a shipped threshold rule.**  This lives in :mod:`vtscore.eval`
+rather than beside its Gaussian counterpart in :mod:`vtscore.training.thresholds`
+because nothing in the app or the library's production path fits a Gumbel: the
+only consumers are the eval harness's cut families (:mod:`vtscore.eval.cut_rules`,
+:mod:`vtscore.eval.fit_quality`, :mod:`vtscore.eval.arms_safe_gmm`) and the
+calibration studies under ``scripts/experiments/calibration/``.  Sitting in
+``vtscore/training/`` made it indistinguishable from the shipped
+``thresholds/`` package a library consumer is invited to use (issue #3396).
+
 A region-voted media's score is the **max** over ~24 region nodes, so even a
 thoroughly Bad image gets ~24 draws at a false positive and its score is an
 extreme-value statistic: right-skewed, with a heavy upper tail.  The production

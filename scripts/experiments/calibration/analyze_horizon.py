@@ -24,6 +24,7 @@ import sys
 from pathlib import Path
 
 import pandas as pd
+from _cells_io import describe_load
 from bench_cells import load_cells
 
 #: Compared windows: the old horizon's deep regime, and the same width at the new
@@ -62,10 +63,7 @@ def main() -> int:
     emit(f"HORIZON COMPARISON — {int(short['t'].max())} votes against {int(long_['t'].max())}")
     emit("=" * 110)
     for prov in (prov_s, prov_l):
-        emit(
-            f"{prov['results']}: {prov['files_found']} cells, {prov['with_data']} with data, "
-            f"{len(prov['header_only'])} never found a positive"
-        )
+        emit(f"{prov['results']}: {describe_load(prov)}")
 
     # --- the premise: the overlap must reproduce -----------------------------
     cols = ["cost", "fpr", "fnr", "average_precision", "auroc", "n_good", "threshold"]

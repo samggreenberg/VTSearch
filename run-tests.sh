@@ -11,6 +11,9 @@
 #
 # Available groups: core, api, sorting, datasets, io, detectors,
 #                   downloads, integration, cli, converters, projection,
+#                   meta (repo/tooling tests: packaging, Dockerfiles, docs,
+#                   scripts/, .claude/hooks/, the gates themselves, the test
+#                   harness — nothing that ships as vtsearch/vtscore code),
 #                   frontend (build + audit + Vitest, no Python tests),
 #                   slides (the four gates a deck can trip, no Python
 #                   tests — see the note below), gpu

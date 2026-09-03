@@ -30,12 +30,7 @@ from __future__ import annotations
 from flask_smorest import Blueprint, abort
 
 from vtscore.datasource_importers import get_datasource_importer, list_datasource_importers
-from vtsearch.routes._shared import (
-    get_plugin_or_404,
-    plugin_field_options,
-    register_plugin_typed_routes,
-    validate_plugin_args,
-)
+from vtsearch.routes._plugins import get_plugin_or_404, plugin_field_options, validate_plugin_args
 from vtsearch.schemas.datasets import (
     ImporterFieldOptionsRequestSchema,
     ImporterFieldOptionsResponseSchema,
@@ -138,17 +133,3 @@ def datasource_importer_field_options(body: dict, importer_name: str):
     assert importer is not None  # narrowed by err check
 
     return plugin_field_options(importer, body)
-
-
-# Per-plugin typed routes for /api/datasource-import/<name>, so each known
-# importer gets a static URL whose body schema is described in
-# /api/openapi.json with real per-field types.  Unknown names fall through
-# to the parameterized route above; plugins with file fields stay on the
-# multipart fallback.
-register_plugin_typed_routes(
-    datasource_importers_bp,
-    list_plugins=list_datasource_importers,
-    path_template="/api/datasource-import/{plugin_name}",
-    endpoint_prefix="datasource_import",
-    delegate=run_datasource_import,
-)

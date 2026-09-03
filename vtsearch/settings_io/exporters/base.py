@@ -29,6 +29,10 @@ class SettingsExporter(PluginBase):
     a dict with at minimum a ``"message"`` key describing what happened.
     """
 
+    #: Abstract family base: no auto-derived metadata, and concrete
+    #: subclasses strip ``SettingsExporter`` from their class names.
+    _is_plugin_family_base = True
+
     icon: str = "\U0001f4e4"  # outbox tray
     fields: list[PluginField]
 

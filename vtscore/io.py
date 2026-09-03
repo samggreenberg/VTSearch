@@ -27,7 +27,7 @@ import threading
 import uuid
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import IO, Any
 
 try:
     import fcntl as _fcntl  # POSIX-only; falls back to in-process locking on Windows.
@@ -39,6 +39,7 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "atomic_write_bytes",
     "atomic_write_json",
+    "atomic_write_stream",
     "atomic_write_text",
     "desanitize_csv_cell",
     "file_lock",
@@ -179,6 +180,62 @@ def atomic_write_json(path: Path | str, obj: Any, *, indent: int = 2) -> None:
     newline don't complain).
     """
     atomic_write_text(path, json.dumps(obj, indent=indent) + "\n")
+
+
+@contextlib.contextmanager
+def atomic_write_stream(
+    path: Path | str,
+    *,
+    encoding: str = "utf-8",
+    newline: str = "",
+) -> Iterator[IO[str]]:
+    """Open *path* for incremental text writes, committing atomically on exit.
+
+    The streaming twin of :func:`atomic_write_text`, for writers that build
+    their content a piece at a time - a :mod:`csv` writer fed from a
+    generator, an NDJSON export written row by row - and so have no finished
+    string to hand the whole-file helper.  Yields the open handle::
+
+        with atomic_write_stream(path) as f:
+            writer = csv.writer(f)
+            for row in rows:
+                writer.writerow(row)
+
+    Writes land in a per-writer-unique sibling ``.tmp`` file that is
+    ``fsync``\\ ed and then renamed into place with :func:`os.replace` once
+    the block exits normally, so a reader of *path* sees either the previous
+    content or the complete new content - never a partial write - and two
+    concurrent writers targeting the same destination cannot truncate each
+    other's in-flight tmp file.  Parent directories are created if needed.
+
+    If the block raises - including from the generator feeding it, which is
+    the common case for a streaming export - the tmp file is removed and
+    *path* is left untouched, so a run that dies halfway through leaves no
+    half-written export behind.
+
+    Like :func:`atomic_write_text`, the handle is opened with ``newline=""``
+    so ``\\r\\n`` sequences a :mod:`csv` writer emits are preserved exactly
+    rather than being translated a second time.
+    """
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_name(f"{p.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
+    committed = False
+    try:
+        with open(tmp, "w", encoding=encoding, newline=newline) as f:
+            yield f
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, p)
+        committed = True
+    finally:
+        # Best-effort cleanup of the tmp file on any non-completing exit.
+        # Tracking the commit explicitly (rather than probing with
+        # ``tmp.exists()``) keeps a concurrent writer's freshly-renamed file
+        # out of reach and avoids the exists/unlink race.
+        if not committed:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp)
 
 
 # ---------------------------------------------------------------------------

@@ -10,7 +10,7 @@ import { MediaMetadataCacheService } from '../../services/media-metadata-cache.s
 import { ActiveContextService } from '../../services/active-context.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { configureZoneless } from '../../testing/zoneless-testbed';
-import { makeActiveContextStub } from '../../testing/mocks';
+import { makeActiveContextStub, makeSettingsStateStub } from '../../testing/mocks';
 import { settleZoneless } from '../../testing/settle-resource';
 
 /**
@@ -58,11 +58,12 @@ describe('BrowseBinPopupComponent (zoneless positioning)', () => {
       ensureLoaded: () => {},
     };
     const activeContextStub = makeActiveContextStub();
-    const settingsStub: Partial<SettingsStateService> = {
+    // The popup's per-media preferences are built on the real `perMediaType`,
+    // which `makeSettingsStateStub` borrows from the prototype.
+    const { stub: settingsStub } = makeSettingsStateStub({
       settingsSignal: settings as unknown as SettingsStateService['settingsSignal'],
-      load: () => {},
       update: () => of({}) as ReturnType<SettingsStateService['update']>,
-    };
+    });
 
     TestBed.resetTestingModule();
     configureZoneless({
@@ -132,15 +133,20 @@ describe('BrowseBinPopupComponent (zoneless positioning)', () => {
   it('reveals once settings resolve after mount, with no re-summon (the two-right-click bug)', async () => {
     // Regression for "the first right-click shows nothing; the second opens it".
     //
-    // In the app the popup mounts while its settings-driven prefs are already known
-    // (settings loaded app-wide), but its own ngAfterViewInit `settingsState.load()`
-    // momentarily resets `settingsSignal()` to null while the resource refetches. So
-    // its first placement pass runs with `settingsReady` false and the reveal gate in
-    // nudgeOnScreen holds `placed` false. When settings land *again* the prefs are
-    // unchanged (same values), so the settings effect's size-change branch is a no-op
-    // — and before the fix nothing else re-ran `place()`, stranding the popup hidden
-    // until the next summon (the second right-click). The `!this.placed` clause makes
-    // the effect re-place on settings-arrival while still unrevealed.
+    // A popup summoned before settings have landed places itself with
+    // `settingsReady` false, and the reveal gate in nudgeOnScreen holds `placed`
+    // false. When settings then arrive the prefs may be unchanged from the
+    // defaults it already used, so the settings effect's size-change branch is a
+    // no-op — and before the fix nothing else re-ran `place()`, stranding the
+    // popup hidden until the next summon (the second right-click). The
+    // `!this.placed` clause makes the effect re-place on settings-arrival while
+    // still unrevealed.
+    //
+    // The original report reached this state through the popup's own
+    // ngAfterViewInit `settingsState.load()`, which used to blank
+    // `settingsSignal()` for the length of the refetch. `load()` reloads in place
+    // now (see `SettingsStateService.load`), so that route is closed — but a
+    // genuine first load still opens the same window, which is what this drives.
     //
     // Reproduce that state precisely: place with settings null (→ hidden, `placed`
     // false), then pre-seed the effect's "last seen prefs" to the values the arriving
@@ -168,8 +174,8 @@ describe('BrowseBinPopupComponent (zoneless positioning)', () => {
     comp.lastPreviewOverride = comp.previewOverride;
     comp.lastMetadataShown = comp.showMetadataColumn;
 
-    // Settings resolve (resource refetch completes). No new summon, and — with last*
-    // pre-seeded — no pref change, so only the unrevealed-re-place path is left.
+    // Settings resolve. No new summon, and — with last* pre-seeded — no pref
+    // change, so only the unrevealed-re-place path is left.
     settings.set({});
     await settlePasses(fixture);
 
@@ -360,11 +366,12 @@ describe('BrowseBinPopupComponent (docked presentation)', () => {
       ensureLoaded: () => {},
     };
     const activeContextStub = makeActiveContextStub();
-    const settingsStub: Partial<SettingsStateService> = {
+    // The popup's per-media preferences are built on the real `perMediaType`,
+    // which `makeSettingsStateStub` borrows from the prototype.
+    const { stub: settingsStub } = makeSettingsStateStub({
       settingsSignal: settings as unknown as SettingsStateService['settingsSignal'],
-      load: () => {},
       update: () => of({}) as ReturnType<SettingsStateService['update']>,
-    };
+    });
 
     TestBed.resetTestingModule();
     configureZoneless({

@@ -79,6 +79,10 @@ class FetchedMediaItem:
 class DataSourceImporter(PluginBase):
     """Abstract base class for single-media-item importers."""
 
+    #: Abstract family base: no auto-derived metadata, and concrete
+    #: subclasses strip ``DataSourceImporter`` from their class names.
+    _is_plugin_family_base = True
+
     #: Stock emoji for the family (inbox tray).  Concrete subclasses that
     #: don't pick their own icon get a letter glyph instead (see
     #: ``_autoderive_plugin_metadata``).

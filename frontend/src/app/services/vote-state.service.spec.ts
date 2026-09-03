@@ -3,6 +3,7 @@ import { HttpTestingController } from '@angular/common/http/testing';
 
 import { VoteStateService } from './vote-state.service';
 import { provideHttpTesting } from '../testing/test-providers';
+import { voteBodyWithoutProvenance } from '../testing/mocks';
 
 describe('VoteStateService', () => {
   let service: VoteStateService;
@@ -237,11 +238,52 @@ describe('VoteStateService', () => {
     });
   });
 
+  describe('vote surfacing provenance', () => {
+    /**
+     * Every component vote funnels through this service, which is why the
+     * provenance is attached here rather than at each call site: a new vote
+     * surface is annotated correctly by default instead of silently
+     * recording nothing.
+     */
+    it('attaches provenance to every vote', () => {
+      service.submitToggleVote(5, 'good').subscribe();
+      const req = httpMock.expectOne('/api/medias/5/vote');
+      expect(req.request.body.provenance).toEqual(
+        expect.objectContaining({ flow: 'list_review' }),
+      );
+      req.flush({ ok: true, state: 'good', click_time: 1 });
+    });
+
+    it('lets a caller override the flow', () => {
+      service.submitToggleVote(5, 'good', null, 'find_verify').subscribe();
+      const req = httpMock.expectOne('/api/medias/5/vote');
+      expect(req.request.body.provenance.flow).toBe('find_verify');
+      req.flush({ ok: true, state: 'good', click_time: 1 });
+    });
+
+    it('marks undo and redo as replays, not fresh surfacings', () => {
+      // Recording the live sort position on an undo would attribute the
+      // restored state to a ranking that had nothing to do with it.
+      service.recordVote(5, 'good', 'a.wav');
+      service.applyOptimisticState(5, 'good');
+
+      service.undo();
+      const undoReq = httpMock.expectOne('/api/medias/5/vote');
+      expect(undoReq.request.body.provenance).toEqual({ flow: 'undo' });
+      undoReq.flush({ ok: true, state: 'none', click_time: null });
+
+      service.redo();
+      const redoReq = httpMock.expectOne('/api/medias/5/vote');
+      expect(redoReq.request.body.provenance).toEqual({ flow: 'undo' });
+      redoReq.flush({ ok: true, state: 'good', click_time: 2 });
+    });
+  });
+
   describe('submitToggleVote (the H1 fix surface)', () => {
     it('posts absolute target=good when clicking good on an unvoted media', () => {
       service.submitToggleVote(5, 'good').subscribe();
       const req = httpMock.expectOne('/api/medias/5/vote');
-      expect(req.request.body).toEqual({ target: 'good' });
+      expect(voteBodyWithoutProvenance(req)).toEqual({ target: 'good' });
       req.flush({ ok: true, state: 'good', click_time: 1 });
       expect(service.goodVotes.has(5)).toBe(true);
     });
@@ -250,7 +292,7 @@ describe('VoteStateService', () => {
       service.applyOptimisticState(5, 'good');
       service.submitToggleVote(5, 'good').subscribe();
       const req = httpMock.expectOne('/api/medias/5/vote');
-      expect(req.request.body).toEqual({ target: 'none' });
+      expect(voteBodyWithoutProvenance(req)).toEqual({ target: 'none' });
       req.flush({ ok: true, state: 'none', click_time: null });
       expect(service.goodVotes.has(5)).toBe(false);
       expect(service.clickTimes['5']).toBeUndefined();
@@ -260,7 +302,7 @@ describe('VoteStateService', () => {
       service.applyOptimisticState(5, 'good');
       service.submitToggleVote(5, 'bad').subscribe();
       const req = httpMock.expectOne('/api/medias/5/vote');
-      expect(req.request.body).toEqual({ target: 'bad' });
+      expect(voteBodyWithoutProvenance(req)).toEqual({ target: 'bad' });
       req.flush({ ok: true, state: 'bad', click_time: 2 });
       expect(service.badVotes.has(5)).toBe(true);
       expect(service.goodVotes.has(5)).toBe(false);
@@ -269,13 +311,13 @@ describe('VoteStateService', () => {
     it('honours region_box only when the computed target is good', () => {
       service.submitToggleVote(5, 'good', [0.1, 0.2, 0.3, 0.4]).subscribe();
       const req = httpMock.expectOne('/api/medias/5/vote');
-      expect(req.request.body).toEqual({ target: 'good', region_box: [0.1, 0.2, 0.3, 0.4] });
+      expect(voteBodyWithoutProvenance(req)).toEqual({ target: 'good', region_box: [0.1, 0.2, 0.3, 0.4] });
       req.flush({ ok: true, state: 'good', click_time: 1 });
 
       // Click good again → target=none, region_box must be omitted.
       service.submitToggleVote(5, 'good', [0.1, 0.2, 0.3, 0.4]).subscribe();
       const req2 = httpMock.expectOne('/api/medias/5/vote');
-      expect(req2.request.body).toEqual({ target: 'none' });
+      expect(voteBodyWithoutProvenance(req2)).toEqual({ target: 'none' });
       req2.flush({ ok: true, state: 'none', click_time: null });
     });
 
@@ -337,7 +379,7 @@ describe('VoteStateService', () => {
       // state lines up with the server.
       service.submitToggleVote(5, 'good').subscribe();
       const req = httpMock.expectOne('/api/medias/5/vote');
-      expect(req.request.body).toEqual({ target: 'good' });
+      expect(voteBodyWithoutProvenance(req)).toEqual({ target: 'good' });
       req.flush({ ok: true, state: 'good', click_time: 42 });
 
       expect(service.goodVotes.has(5)).toBe(true);
@@ -461,7 +503,7 @@ describe('VoteStateService', () => {
       service.undo();
       // The inverse target is the saved previousPolarity ('good').
       const req = httpMock.expectOne('/api/medias/5/vote');
-      expect(req.request.body).toEqual({ target: 'good' });
+      expect(voteBodyWithoutProvenance(req)).toEqual({ target: 'good' });
       req.flush({ ok: true, state: 'good', click_time: 1 });
 
       expect(service.canRedo()).toBe(true);
@@ -474,7 +516,7 @@ describe('VoteStateService', () => {
 
       service.undo();
       const req = httpMock.expectOne('/api/medias/7/vote');
-      expect(req.request.body).toEqual({ target: 'none' });
+      expect(voteBodyWithoutProvenance(req)).toEqual({ target: 'none' });
       req.flush({ ok: true, state: 'none', click_time: null });
     });
 
@@ -489,7 +531,7 @@ describe('VoteStateService', () => {
 
       service.redo();
       const req = httpMock.expectOne('/api/medias/7/vote');
-      expect(req.request.body).toEqual({ target: 'bad' });
+      expect(voteBodyWithoutProvenance(req)).toEqual({ target: 'bad' });
       req.flush({ ok: true, state: 'bad', click_time: 2 });
 
       expect(service.canRedo()).toBe(false);
@@ -595,7 +637,7 @@ describe('VoteStateService', () => {
       // flood-filled 'good' as a human label (issue #2922).
       service.undo();
       const req = httpMock.expectOne('/api/medias/5/vote');
-      expect(req.request.body).toEqual({ target: 'none' });
+      expect(voteBodyWithoutProvenance(req)).toEqual({ target: 'none' });
       req.flush({ ok: true, state: 'none', click_time: null });
 
       // ...and the left/right split follows immediately, without a poll.
@@ -622,7 +664,7 @@ describe('VoteStateService', () => {
       // previousPolarity that was really the detector's presumption.
       service.redo();
       const req = httpMock.expectOne('/api/medias/5/vote');
-      expect(req.request.body).toEqual({ target: 'good' });
+      expect(voteBodyWithoutProvenance(req)).toEqual({ target: 'good' });
       req.flush({ ok: true, state: 'good', click_time: 2 });
       expect(service.verifiedIds.has(5)).toBe(true);
     });
@@ -634,14 +676,14 @@ describe('VoteStateService', () => {
       // Clicking Good again un-votes it, which un-verifies it too.
       service.submitToggleVoteAndRecord(5, 'good', 'foo.wav').subscribe();
       const off = httpMock.expectOne('/api/medias/5/vote');
-      expect(off.request.body).toEqual({ target: 'none' });
+      expect(voteBodyWithoutProvenance(off)).toEqual({ target: 'none' });
       off.flush({ ok: true, state: 'none', click_time: null });
       verifyLikeFindView(5);
       expect(service.verifiedIds.has(5)).toBe(false);
 
       service.undo();
       const req = httpMock.expectOne('/api/medias/5/vote');
-      expect(req.request.body).toEqual({ target: 'good' });
+      expect(voteBodyWithoutProvenance(req)).toEqual({ target: 'good' });
       req.flush({ ok: true, state: 'good', click_time: 2 });
       expect(service.verifiedIds.has(5)).toBe(true);
     });
@@ -703,7 +745,7 @@ describe('VoteStateService', () => {
       // the click, NOT the polarity that the optimistic flip put us in).
       service.undo();
       const undoReq = httpMock.expectOne('/api/medias/5/vote');
-      expect(undoReq.request.body).toEqual({ target: 'good' });
+      expect(voteBodyWithoutProvenance(undoReq)).toEqual({ target: 'good' });
       undoReq.flush({ ok: true, state: 'good', click_time: 3 });
     });
 
@@ -745,7 +787,7 @@ describe('VoteStateService', () => {
         .submitToggleVoteAndRecord(5, 'good', 'foo.wav', [0.1, 0.2, 0.3, 0.4])
         .subscribe();
       const req = httpMock.expectOne('/api/medias/5/vote');
-      expect(req.request.body).toEqual({ target: 'good', region_box: [0.1, 0.2, 0.3, 0.4] });
+      expect(voteBodyWithoutProvenance(req)).toEqual({ target: 'good', region_box: [0.1, 0.2, 0.3, 0.4] });
       req.flush({ ok: true, state: 'good', click_time: 1 });
     });
 
@@ -765,7 +807,7 @@ describe('VoteStateService', () => {
       // Redo must restore the original crop, not POST a box-less good vote.
       service.redo();
       const redoReq = httpMock.expectOne('/api/medias/5/vote');
-      expect(redoReq.request.body).toEqual({ target: 'good', region_box: [0.1, 0.2, 0.3, 0.4] });
+      expect(voteBodyWithoutProvenance(redoReq)).toEqual({ target: 'good', region_box: [0.1, 0.2, 0.3, 0.4] });
       redoReq.flush({ ok: true, state: 'good', click_time: 2 });
       expect(service.goodRegionBoxes['5']).toEqual([0.1, 0.2, 0.3, 0.4]);
     });
@@ -786,7 +828,7 @@ describe('VoteStateService', () => {
       // Undo must restore the prior crop, not drop it.
       service.undo();
       const undoReq = httpMock.expectOne('/api/medias/5/vote');
-      expect(undoReq.request.body).toEqual({ target: 'good', region_box: [0.5, 0.6, 0.7, 0.8] });
+      expect(voteBodyWithoutProvenance(undoReq)).toEqual({ target: 'good', region_box: [0.5, 0.6, 0.7, 0.8] });
       undoReq.flush({ ok: true, state: 'good', click_time: 2 });
       expect(service.goodRegionBoxes['5']).toEqual([0.5, 0.6, 0.7, 0.8]);
     });

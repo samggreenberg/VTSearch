@@ -24,7 +24,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from _cells_io import assert_one_opening, main_frame_files
+from _cells_io import describe_load
+from _cells_io import load_cells as _load_cells
 from scipy.stats import mannwhitneyu, wilcoxon
 
 FOLD_RE = re.compile(r"^fold_anchored_w(?P<w>[\d.]+)_(?P<rule>mid|rate)_(?P<combine>\w+)$")
@@ -34,10 +35,7 @@ CELL = ["category", "seed", "window"]
 
 
 def load(results: Path) -> pd.DataFrame:
-    files = main_frame_files(results)
-    frames = [pd.read_csv(p) for p in files if p.stat().st_size > 0]
-    df = pd.concat(frames, ignore_index=True)
-    assert_one_opening(df, "analyze_folds.py")
+    df, prov = _load_cells(results, where="analyze_folds.py")
     df["gmm_variant"] = df["gmm_variant"].fillna("")
     df["env"] = df["dataset"] + "/" + df["embedder"] + "/" + df["style"]
     df = df[df["env"] == ENV]
@@ -46,7 +44,7 @@ def load(results: Path) -> pd.DataFrame:
     df["window"] = pd.cut(df["n_votes"], bins=edges, labels=labels)
     df = df[df["window"].notna()]
     df["window_hi"] = df["window"].map({"le_20": 20, "le_50": 50, "le_100": 100, "le_200": 200, "le_300": 300})
-    print(f"  {results}: {len(files)} cells, {len(df):,} rows, {df['category'].nunique()} categories")
+    print(f"  {results}: {describe_load(prov)}, {df['category'].nunique()} categories in window")
     return df
 
 

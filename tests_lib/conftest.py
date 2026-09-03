@@ -1,7 +1,8 @@
 """Pytest conftest for the *library-only* test suite under ``tests_lib/``.
 
 These tests exercise the ``vtscore`` candidate subpackages without booting
-Flask, ``vtsearch.app``, or ``vtsearch.settings``.  Everything the two suites
+Flask and without importing ``vtsearch`` at all — see ``tests_lib/__init__.py``
+for the two gates that hold that line.  Everything the two suites
 share — the group-marker hook, the fake embedders, the tmp-path widener, the
 embedder stub fixture, the bulk of the reset fixture and the end-of-run summary
 printer — lives in ``tests_shared`` and is imported by both conftests, so the
@@ -55,6 +56,7 @@ from tests_shared.pytest_plumbing import add_group_markers, print_summary_and_ex
 from tests_shared.state_reset import (  # noqa: E402
     TEST_TRAIN_EPOCHS,  # noqa: F401  (re-exported: tests_lib/core/test_training_budget_isolation.py)
     allow_test_tmp_paths as _allow_test_tmp_paths,  # noqa: F401  (autouse fixture)
+    capture_startup_host_seams,
     freeze_startup_heap,
     install_startup_contexts,
     pin_training_budget,
@@ -117,7 +119,7 @@ install_startup_contexts()
 from vtscore.media.audio.audio_generator import GENERATOR_SAMPLE_RATE  # noqa: F401, E402
 from vtscore.media.audio.audio_generator import generate_wav  # noqa: F401, E402
 from vtscore.embedding import initialize_models  # noqa: E402
-from vtsearch.state import medias  # noqa: E402
+from vtscore.state.core import get_active_context  # noqa: E402
 
 from tests_lib.fixtures.medias import NUM_MEDIAS, init_medias  # noqa: F401, E402
 
@@ -125,9 +127,13 @@ from tests_lib.fixtures.medias import NUM_MEDIAS, init_medias  # noqa: F401, E40
 initialize_models()
 init_medias()
 
-_test_medias_snapshot = {k: dict(v) for k, v in medias.items()}
+_test_medias_snapshot = {k: dict(v) for k, v in get_active_context().medias.items()}
 
 _patch_embed_audio.stop()
+
+# Record the host seams this conftest has just wired, so the per-test reset can
+# put them back after a test installs its own (see :mod:`vtscore.host_seams`).
+capture_startup_host_seams()
 
 freeze_startup_heap()
 
@@ -194,7 +200,7 @@ def reset_contexts(tmp_path, monkeypatch):
     monkeypatch.setattr(ds_reg_mod, "REGISTRY_PATH", tmp_path / "dataset_registry.json")
     monkeypatch.setattr(det_reg_mod, "REGISTRY_PATH", tmp_path / "detector_registry.json")
 
-    reset_shared_state(medias, _test_medias_snapshot)
+    reset_shared_state(_test_medias_snapshot)
 
     # ``test_torch_config.py`` reloads ``vtscore.config`` to test env-var
     # behaviour, which wipes *every* module-level value this conftest installed

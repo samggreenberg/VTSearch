@@ -479,12 +479,8 @@ def setup_env() -> None:
     """Point vtscore + HF at the pile. Call before importing anything vtscore."""
     import sys
 
-    os.environ.setdefault("VTSEARCH_DATA_DIR", str(DATADIR))
-    os.environ.setdefault("VTSEARCH_MODELS_DIR", str(MODELS))
-    os.environ.setdefault("HF_HOME", str(MODELS))
-    os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
-    for var in ("VTSEARCH_DATA_DIR", "VTSEARCH_MODELS_DIR", "HF_HOME"):
-        Path(os.environ[var]).mkdir(parents=True, exist_ok=True)
+    sys.path.append(str(Path(__file__).resolve().parents[1]))
+    import _expcommon  # noqa: PLC0415
 
     # Default to the checkout this file lives in, rather than requiring VTS_REPO.
     # Depending on the env var is a live hazard: with it unset, ``import vtscore``
@@ -495,16 +491,8 @@ def setup_env() -> None:
     # `VAR=x cmd1 && cmd2` applies VAR to cmd1 only, so the second command
     # silently ran against the wrong tree.)
     repo = os.environ.get("VTS_REPO") or str(Path(__file__).resolve().parents[3])
-    if repo not in sys.path:
-        sys.path.insert(0, repo)
     os.environ["VTS_REPO"] = repo  # so calibration's common.py agrees with us
-    # Drop the venv's editable-install finder so ``import vtscore`` resolves to
-    # this checkout rather than whichever clone the editable install points at.
-    keep = []
-    for finder in sys.meta_path:
-        mod = type(finder).__module__ or ""
-        name = f"{mod}.{type(finder).__name__}".lower()
-        if "editable" in name and ("vtsearch" in name or "vtscore" in name):
-            continue
-        keep.append(finder)
-    sys.meta_path[:] = keep
+    # `_expcommon.setup_env` puts `repo` first on sys.path and drops the venv's
+    # editable-install finder, so `import vtscore` resolves to this checkout
+    # rather than whichever clone that install points at.
+    _expcommon.setup_env(repo=repo, datadir=DATADIR, models_dir=MODELS, hf_home=MODELS)

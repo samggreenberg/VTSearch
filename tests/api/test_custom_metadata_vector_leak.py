@@ -152,7 +152,7 @@ class TestMediaInfoForResponse:
     """The shared helper, directly."""
 
     def test_strips_both_layers(self):
-        from vtsearch.routes._shared import media_info_for_response
+        from vtsearch.routes._media_response import media_info_for_response
 
         media = {
             "id": 1,
@@ -165,7 +165,7 @@ class TestMediaInfoForResponse:
         assert info == {"id": 1, "filename": "a.wav", "custom_metadata": {"asset_id": "XY-7"}}
 
     def test_custom_metadata_is_a_copy(self):
-        from vtsearch.routes._shared import media_info_for_response
+        from vtsearch.routes._media_response import media_info_for_response
 
         media = {"id": 1, "custom_metadata": {"asset_id": "XY-7"}}
         info = media_info_for_response(media)
@@ -173,7 +173,7 @@ class TestMediaInfoForResponse:
         assert media["custom_metadata"] == {"asset_id": "XY-7"}
 
     def test_leaves_a_media_without_custom_metadata_alone(self):
-        from vtsearch.routes._shared import media_info_for_response
+        from vtsearch.routes._media_response import media_info_for_response
 
         assert media_info_for_response({"id": 1, "custom_metadata": None}) == {"id": 1, "custom_metadata": None}
         assert media_info_for_response({"id": 1}) == {"id": 1}

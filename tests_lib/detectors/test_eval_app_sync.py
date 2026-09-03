@@ -5,6 +5,10 @@ has moved.  If it stops noticing - or starts crying wolf over a reworded
 comment - it gets ignored, and then the eval default arm drifts from the app
 exactly the way it did before the gate existed.  So pin both halves: it fires on
 a logic change, and it stays quiet for everything else.
+
+"Both halves" is now literal in a second sense too - the gate digests the
+harness side as well as the app side (#3406), because a hand copy drifts just as
+easily by being edited as by being left behind.
 """
 
 from __future__ import annotations
@@ -46,6 +50,31 @@ class TestManifestIsLive:
             assert "::" in mirror.harness, mirror.id
             assert mirror.kind in ("ported", "default"), mirror.id
             assert mirror.note.strip(), mirror.id
+
+    def test_every_ported_mirror_pins_its_harness_side(self):
+        """A hand copy is exactly the thing that can drift by being edited.
+
+        `no_harness_pin` exists for a harness symbol too coarse to digest - one
+        function serving several mirrors and much else besides.  That is never
+        true of a `ported` mirror: the harness side of a port is the port, so
+        an opt-out there would re-open the hole #3406 closed.  The escape hatch
+        for a coarse anchor is to extract the reproduction (as #3403 did), not
+        to stop watching it.
+        """
+        for mirror in gate.MIRRORS:
+            if mirror.kind == "ported":
+                assert mirror.no_harness_pin is None, f"{mirror.id} is a hand copy but is not harness-pinned"
+
+    def test_an_opt_out_says_why(self):
+        """The field is a written-down decision, not a flag to flip."""
+        for mirror in gate.MIRRORS:
+            if mirror.no_harness_pin is not None:
+                assert len(mirror.no_harness_pin.strip()) > 40, mirror.id
+
+    def test_most_mirrors_are_pinned_on_both_sides(self):
+        """An opt-out is the exception; a gate mostly opted out is not a gate."""
+        opted_out = [m.id for m in gate.MIRRORS if m.no_harness_pin is not None]
+        assert len(opted_out) < len(gate.MIRRORS) / 2, opted_out
 
     def test_the_manifest_is_not_empty(self):
         """A gate with nothing pinned passes vacuously and fools everyone."""
@@ -184,22 +213,37 @@ class TestResolutionFailures:
 
     def test_renamed_harness_symbol_is_an_error(self):
         with pytest.raises(gate.MirrorError, match="not found"):
-            gate._check_harness_side(self._mirror(harness="vtscore/eval/voting_iterations.py::no_such_symbol"))
+            gate._harness_source(self._mirror(harness="vtscore/eval/voting_iterations.py::no_such_symbol"))
 
     def test_deleted_harness_file_is_an_error(self):
         with pytest.raises(gate.MirrorError, match="does not exist"):
-            gate._check_harness_side(self._mirror(harness="vtscore/eval/no_such_file.py::thing"))
+            gate._harness_source(self._mirror(harness="vtscore/eval/no_such_file.py::thing"))
+
+    def test_a_harness_side_naming_no_symbol_is_an_error(self):
+        with pytest.raises(gate.MirrorError, match="names no symbol"):
+            gate._harness_source(self._mirror(harness="vtscore/eval/voting_iterations.py::"))
+
+    def test_an_unresolvable_harness_side_is_drift_even_when_it_is_not_pinned(self):
+        """Resolution is not conditional on pinning - a deleted copy is the loudest case."""
+        with pytest.raises(gate.MirrorError, match="not found"):
+            gate._digests(
+                self._mirror(
+                    harness="vtscore/eval/voting_iterations.py::no_such_symbol",
+                    no_harness_pin="declared: the anchor is too coarse to digest, at length.",
+                )
+            )
 
 
 class TestHarnessAnchorsAreSpecific:
     """A mirror's harness side must name the code that does the mirroring.
 
-    ``_check_harness_side`` is a substring test on the file, so *any* name that
-    survives in the text satisfies it.  That makes a coarse anchor two kinds of
-    useless at once: the gate's failure message points the reconciler at the
-    whole enclosing function instead of at the reproduction, and the existence
-    check passes even when the reproduction itself has been deleted, because the
-    function around it is still there.
+    A coarse anchor is two kinds of useless at once: the gate's failure message
+    points the reconciler at the whole enclosing function instead of at the
+    reproduction, and - now that the harness side is digested (#3406) - its pin
+    trips on every unrelated edit to that function, which trains people to run
+    ``--update`` without reading.  That is why the coarse anchors are the ones
+    that opt out of a harness pin, and why the fix is to extract rather than to
+    widen.
 
     Both ``training.*_default`` mirrors used to name the thousand-line
     ``simulate_voting_iterations`` for exactly that reason (#3403).  They now
@@ -235,3 +279,112 @@ class TestHarnessAnchorsAreSpecific:
         mirror = next(m for m in gate.MIRRORS if m.id == mirror_id)
         lines = self._harness_function_source(mirror).count("\n") + 1
         assert lines < 120, f"{mirror_id} points at {lines} lines; a tripped gate should not need a tour"
+
+
+class TestTheHarnessSideIsWatchedToo:
+    """#3406: an edit to the *copy* is drift, and used to be invisible.
+
+    Before this, only the app side carried a digest and the harness side was a
+    substring existence check.  So the gate could see the original move but not
+    the copy, which is precisely the direction the Smart-indicator plumbing
+    actually drifted in (#2923): the app stood still, the harness's own
+    implementation stopped meaning what its mirror claimed, and the gate stayed
+    green throughout.
+
+    ``check()`` reads the real manifest and the committed pins, so these drive
+    it through a one-mirror manifest and a fabricated pins file instead - that
+    way a reason string can be asserted without editing tracked source.
+    """
+
+    #: A real, resolvable mirror, so both sides digest for real.
+    def _probe(self, **kwargs):
+        base = dict(
+            id="probe",
+            app="py:vtscore.detectors.training.train_and_threshold",
+            harness="vtscore/eval/autopilot_flow.py::next_phase",
+            kind="ported",
+            note="probe",
+        )
+        base.update(kwargs)
+        return gate.Mirror(**base)
+
+    def _check_with(self, monkeypatch, mirror, pins):
+        monkeypatch.setattr(gate, "MIRRORS", [mirror])
+        monkeypatch.setattr(gate, "_load_pins", lambda: pins)
+        return gate.check()
+
+    def test_a_moved_harness_side_reports_harness_changed(self, monkeypatch):
+        mirror = self._probe()
+        pins = {"probe": {**gate._digests(mirror), "harness": "0" * 64}}
+        (drift,) = self._check_with(monkeypatch, mirror, pins)
+        assert drift.reason == "harness-changed"
+        assert "harness: pinned" in drift.detail
+
+    def test_a_moved_app_side_reports_app_changed(self, monkeypatch):
+        mirror = self._probe()
+        pins = {"probe": {**gate._digests(mirror), "app": "0" * 64}}
+        (drift,) = self._check_with(monkeypatch, mirror, pins)
+        assert drift.reason == "app-changed"
+
+    def test_both_sides_moving_is_one_drift_naming_both(self, monkeypatch):
+        """The ordinary shape of a faithful port - reported once, not twice."""
+        mirror = self._probe()
+        pins = {"probe": {"app": "0" * 64, "harness": "1" * 64}}
+        (drift,) = self._check_with(monkeypatch, mirror, pins)
+        assert drift.reason == "app-changed, harness-changed"
+
+    def test_an_unpinned_harness_side_is_reported_on_its_own(self, monkeypatch):
+        """A mirror added without `--update` must not pass on its app half alone."""
+        mirror = self._probe()
+        pins = {"probe": {"app": gate._digests(mirror)["app"]}}
+        (drift,) = self._check_with(monkeypatch, mirror, pins)
+        assert drift.reason == "harness-unpinned"
+
+    def test_an_opted_out_mirror_records_no_harness_digest(self, monkeypatch):
+        mirror = self._probe(kind="default", no_harness_pin="declared: the anchor is far too coarse to digest.")
+        assert set(gate._digests(mirror)) == {"app"}
+        assert not self._check_with(monkeypatch, mirror, {"probe": gate._digests(mirror)})
+
+    def test_a_leftover_digest_from_a_dropped_pin_is_reported(self, monkeypatch):
+        """Opting a mirror out must not leave its old harness pin asserting things."""
+        mirror = self._probe(kind="default", no_harness_pin="declared: the anchor is far too coarse to digest.")
+        pins = {"probe": {**gate._digests(mirror), "harness": "0" * 64}}
+        (drift,) = self._check_with(monkeypatch, mirror, pins)
+        assert drift.reason == "side-not-pinned-anymore"
+        assert "harness" in drift.detail
+
+    def test_a_multi_symbol_harness_ref_covers_every_symbol(self):
+        """`GOOD_TARGET,BAD_TARGET`: watching one of a pair is half a mirror."""
+        mirror = next(m for m in gate.MIRRORS if m.id == "autopilot.vote_targets")
+        source = gate._harness_source(mirror)
+        assert "GOOD_TARGET" in source and "BAD_TARGET" in source
+
+    def test_a_name_surviving_only_in_a_comment_is_not_a_symbol(self, tmp_path):
+        """The substring check the August 2026 audit flagged: `symbol in text`.
+
+        A reproduction deleted with a note saying so left its own name behind in
+        that note, and the old existence check was happy.
+        """
+        module = tmp_path / "harness.py"
+        module.write_text("# next_phase was inlined into the caller\ndef other():\n    return 1\n")
+        with pytest.raises(gate.MirrorError, match="no top-level"):
+            gate._py_symbol_source(module, "next_phase")
+
+
+class TestThePinsFile:
+    """Its shape is part of the contract - `--update` and `check()` must agree."""
+
+    def test_it_records_exactly_the_sides_each_mirror_pins(self):
+        pins = gate._load_pins()
+        assert set(pins) == {m.id for m in gate.MIRRORS}
+        for mirror in gate.MIRRORS:
+            expected = {"app"} if mirror.no_harness_pin else {"app", "harness"}
+            assert set(pins[mirror.id]) == expected, mirror.id
+
+    def test_the_one_sided_format_says_what_to_run(self, monkeypatch, tmp_path):
+        """Only reachable mid-rebase, and a bare crash there is a puzzle."""
+        stale = tmp_path / "pins.json"
+        stale.write_text('{"autopilot.phase_machine": "deadbeef"}')
+        monkeypatch.setattr(gate, "PINS_PATH", stale)
+        with pytest.raises(SystemExit, match="--update"):
+            gate._load_pins()

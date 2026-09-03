@@ -383,6 +383,7 @@ markers = [
     "cli: CLI autodetect, load sort window, progress",
     "converters: document and media converters",
     "projection: VTSBrowse UMAP projection and hex-tile pyramid",
+    "meta: repo/tooling meta-tests (packaging, Dockerfiles, docs, scripts/, .claude/hooks/, the run-tests.sh gates, the test harness); no vtsearch/vtscore behaviour",
     "frontend: frontend-only gate (Angular build + npm audit + Vitest unit suite); has no Python tests, runs via ./run-tests.sh frontend",
     "slides: slide-deck gate (ruff, codespell, check-docs, deck preflight); has no Python tests, runs via ./run-tests.sh slides",
 ]

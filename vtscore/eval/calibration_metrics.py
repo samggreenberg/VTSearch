@@ -4,7 +4,8 @@ This module has **no torch / vtscore-heavy imports** so it can be unit-tested on
 a CPU-only box without the model stack.  It provides:
 
 * :func:`operating_cost` — inclusion-weighted ``FPR + FNR`` cost at a fixed cut
-  (the number the trained threshold actually pays on a held-out set).
+  (the number the trained threshold actually pays on a held-out set), delegated
+  to :func:`vtscore.training.thresholds.weighted_error_cost`.
 * :func:`oracle_cut` — the cut that *minimises* that same weighted cost over a
   score/label set (the best a threshold rule could possibly do on this ranking),
   via an O(n log n) sweep over the observed scores.  The gap between the trained
@@ -23,7 +24,10 @@ a CPU-only box without the model stack.  It provides:
   remedial arms (re-pool the same model's node scores; see the plan).
 
 Every threshold uses the ``predicted positive iff score >= threshold``
-convention, matching :func:`vtscore.eval.voting_iterations._evaluate_on_test`.
+convention - the codebase-wide one, since
+:func:`vtscore.eval.voting_iterations._evaluate_on_test` and the app's Smart
+indicator now score through the same
+:func:`vtscore.training.thresholds.weighted_error_cost`.
 """
 
 from __future__ import annotations
@@ -54,22 +58,16 @@ def operating_cost(
 ) -> tuple[float, float, float]:
     """Return ``(cost, fpr, fnr)`` at *threshold* (predict positive iff ``>=``).
 
-    ``cost = fpr_weight * FPR + fnr_weight * FNR``.  Empty denominators yield a
-    zero rate (no negatives -> FPR 0; no positives -> FNR 0), matching the
-    harness's historical behaviour.
+    Delegates to :func:`vtscore.training.thresholds.weighted_error_cost` - the
+    same arithmetic the shipped Smart indicator scores through - so a measured
+    arm and the app can never disagree about what a cut costs.  ``cost =
+    fpr_weight * FPR + fnr_weight * FNR``; empty denominators yield a zero rate
+    (no negatives -> FPR 0; no positives -> FNR 0), matching the harness's
+    historical behaviour.
     """
-    scores = np.asarray(scores, dtype=np.float64)
-    labels = np.asarray(labels, dtype=np.float64)
-    predicted = scores >= threshold
-    pos = labels == 1.0
-    neg = ~pos
-    total_pos = float(pos.sum())
-    total_neg = float(neg.sum())
-    fp = float(np.count_nonzero(predicted & neg))
-    fn = float(np.count_nonzero(~predicted & pos))
-    fpr = fp / total_neg if total_neg > 0 else 0.0
-    fnr = fn / total_pos if total_pos > 0 else 0.0
-    return fpr_weight * fpr + fnr_weight * fnr, fpr, fnr
+    from vtscore.training.thresholds import weighted_error_cost
+
+    return weighted_error_cost(scores, labels, threshold, fpr_weight, fnr_weight)
 
 
 #: Every metric :func:`detection_metrics` returns, and how a reader should read

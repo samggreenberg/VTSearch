@@ -43,11 +43,7 @@ from flask_smorest import Blueprint, abort
 from vtscore.exporters import get_exporter, list_exporters
 from vtscore.exporters.base import ResultsExporter
 from vtscore.security.url_validation import validate_browser_url
-from vtsearch.routes._shared import (
-    get_plugin_or_404,
-    plugin_field_options,
-    validate_exporter_field_values,
-)
+from vtsearch.routes._plugins import get_plugin_or_404, plugin_field_options, validate_exporter_field_values
 from vtsearch.schemas.datasets import (
     ImporterFieldOptionsRequestSchema,
     ImporterFieldOptionsResponseSchema,

@@ -5,6 +5,9 @@
 # baked-in weights, but on the CUDA 12.1 runtime base with PyTorch
 # pulled from the cu121 wheel index so the embedders actually use the
 # GPU at inference time.
+# The two share requirements/image-embedders.txt (each passes its own
+# --extra-index-url) and a byte-identical BEGIN/END SHARED BODY region
+# below, checked by tests_lib/meta/test_image_embedders_pair.py.
 #
 # Embedders bundled (identical to the CPU image):
 #
@@ -86,7 +89,7 @@ RUN apt-get update && \
 WORKDIR /app
 
 # ---------- dependency layer (cached unless requirements/*.txt change) ----
-COPY requirements/image-embedders-gpu.txt requirements/
+COPY requirements/image-embedders.txt requirements/
 COPY pyproject.toml ./
 COPY vtsearch/__init__.py vtsearch/__init__.py
 
@@ -101,8 +104,36 @@ RUN pip install --no-cache-dir --upgrade pip setuptools && \
     pip install --no-cache-dir \
         --extra-index-url https://download.pytorch.org/whl/cu121 \
         --prefer-binary \
-        -r requirements/image-embedders-gpu.txt && \
+        -r requirements/image-embedders.txt && \
     pip install --no-cache-dir --no-deps -e .
+
+# ===== BEGIN SHARED BODY: keep byte-identical with the CPU/GPU twin =====
+# Everything between these two markers is byte-identical in
+# docker/Dockerfile.image-embedders and docker/Dockerfile.image-embedders.gpu.
+# Docker has no include directive, so the copy is enforced instead of avoided:
+# tests_lib/meta/test_image_embedders_pair.py fails the suite the moment the two
+# regions diverge. The files differ only OUTSIDE this region -- the base image
+# (plus the apt layer CUDA needs), the PyTorch wheel index passed to pip, and
+# the NVIDIA runtime env. Edit one, paste into the other.
+# ---------- import-only canary -------------------------------------------
+# Fail fast (in seconds) if any transformers class used in the
+# pre-download blocks below would hit ImportError once we call
+# ``.from_pretrained``. Transformers loads optional backends lazily via
+# ``requires_backends``, so touching ``.from_pretrained`` on each class
+# is what triggers the check; `from transformers import X` alone only
+# returns a placeholder. Adding new pre-download blocks below? Add the
+# class here too. (See PR #1282 for the bug this guards against:
+# AutoImageProcessor required torchvision but the requirements file
+# didn't pull it in, and the failure only surfaced minutes into the
+# DINOv2 weights download.)
+RUN python -c "import torch, torchvision; \
+from transformers import (AutoModel, AutoProcessor, AutoImageProcessor, \
+    SiglipModel, SiglipImageProcessor, SiglipTokenizer, \
+    CLIPModel, CLIPProcessor); \
+[c.from_pretrained for c in (AutoModel, AutoProcessor, AutoImageProcessor, \
+    SiglipModel, SiglipImageProcessor, SiglipTokenizer, \
+    CLIPModel, CLIPProcessor)]; \
+print('image-embedders import canary OK', flush=True)"
 
 # ---------- pre-download every image embedder's weights ------------------
 # Bake weights into a non-volume path so they survive volume mounts on
@@ -167,14 +198,17 @@ print('DINOv2 weights cached.', flush=True)"
 
 # DINOv3 (gated). The COPY above seeded $VTSEARCH_MODELS_DIR from the
 # host's ./model_cache/. ``local_files_only=True`` makes this RUN succeed
-# whenever the cache script populated the weights, and fail loudly only
+# whenever the cache script populated the weights, and fail with OSError
 # when the user did neither ran the cache script nor accepted that
-# DINOv3 will be unavailable. We swallow the failure so the build still
-# produces a usable image with the other five embedders.
+# DINOv3 will be unavailable. The `|| echo` swallows that failure at the
+# shell level so the build still produces a usable image with the other
+# five embedders; we can't use Python try/except here because the body
+# is a single ``python -c`` line and try/except is a compound statement
+# that can't be flattened with semicolons.
 RUN python -u -c "import os; \
 from vtscore.config import DINOV3_MODEL_ID; \
-from transformers import AutoModel, AutoImageProcessor; \
 cache=os.environ['VTSEARCH_MODELS_DIR']; \
+from transformers import AutoModel, AutoImageProcessor; \
 AutoModel.from_pretrained(DINOV3_MODEL_ID, cache_dir=cache, local_files_only=True); \
 AutoImageProcessor.from_pretrained(DINOV3_MODEL_ID, cache_dir=cache, local_files_only=True); \
 print('DINOv3 weights loaded from local cache.', flush=True)" \
@@ -220,7 +254,7 @@ RUN mkdir -p /app/data && \
 # Note: model weights live under /opt/vtsearch/models, NOT this volume.
 VOLUME /app/data
 
-# Run as a non-root user. See the CPU Dockerfile for the rationale and
+# Run as a non-root user. See docker/Dockerfile for the rationale and
 # the GID-0 / g=u perm pattern that lets arbitrary OpenShift UIDs write.
 # /opt/vtsearch/models is also opened up so the baked-in HuggingFace
 # snapshots stay readable when the runtime UID is unknown at build time.
@@ -232,6 +266,7 @@ ENV HOME=/home/vtsearch
 USER 1000
 
 EXPOSE 5000
+# ===== END SHARED BODY =====
 
 ENV OMP_NUM_THREADS=1 \
     MKL_NUM_THREADS=1 \

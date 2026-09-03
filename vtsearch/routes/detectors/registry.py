@@ -196,7 +196,7 @@ def register_detector_route(body: dict):
         abort(400, message="media_type is required (must be a specific type, not 'any')")
 
     from vtscore.detectors.embedder_type import resolve_detector_embedder_type
-    from vtsearch.routes._shared import abort_if_semantic_only_type
+    from vtsearch.routes._policy import abort_if_semantic_only_type
 
     embedder_type, type_err = resolve_detector_embedder_type(body.get("embedder_type", ""))
     if type_err:
@@ -328,18 +328,18 @@ def _start_imported_labelset_ingest(label_dicts: list[dict], entry: dict) -> str
 def register_detector_from_labelset(importer_name: str):  # noqa: C901
     """Create a detector seeded with labels from a label importer.
 
-    Plugin-dependent body shape: not described in the OpenAPI spec.
+    Plugin-dependent body shape: the accepted keys are the named
+    plugin's declared ``fields``, so they cannot be enumerated in a
+    static OpenAPI schema.  Fetch them at runtime from
+    ``GET /api/label-importers``, whose ``fields`` array carries each key's
+    ``field_type``, ``required`` flag, and any ``options`` / bounds.
     """
     from vtscore.datasets.ingest import _media_type_from_origin
     from vtscore.datasets.labelset import LabeledElement, LabelSet
     from vtscore.labels.importers import get_label_importer, list_label_importers
     from vtscore.detectors.registry import register_detector, update_detector
-    from vtsearch.routes._shared import (
-        abort_if_semantic_only_type,
-        get_plugin_or_404,
-        run_plugin_or_error,
-        validate_plugin_args,
-    )
+    from vtsearch.routes._plugins import get_plugin_or_404, run_plugin_or_error, validate_plugin_args
+    from vtsearch.routes._policy import abort_if_semantic_only_type
 
     importer, err = get_plugin_or_404(get_label_importer, list_label_importers, importer_name, "label importer")
     if err:
@@ -1387,25 +1387,3 @@ def release_detector_positives_browse(detector_id: str):
 
     dropped = unregister_context(detpos_dataset_id(detector_id))
     return {"ok": True, "released": dropped is not None}
-
-
-# ---------------------------------------------------------------------------
-# Per-plugin typed routes for /api/detectors/registry/from-labelset/<importer>.
-# Registered at module-import time by iterating the label-importer
-# registry, so each known importer gets a static URL whose body schema
-# is described in /api/openapi.json with real per-field types.  Unknown
-# importer names fall through to the parameterized route above
-# (preserving the legacy 404 message).
-# ---------------------------------------------------------------------------
-
-from vtscore.labels.importers import list_label_importers as _list_label_importers  # noqa: E402
-from vtsearch.routes._shared import register_plugin_typed_routes as _register_plugin_typed_routes  # noqa: E402
-
-_register_plugin_typed_routes(
-    detectors_registry_bp,
-    list_plugins=_list_label_importers,
-    path_template="/api/detectors/registry/from-labelset/{plugin_name}",
-    endpoint_prefix="register_detector_from_labelset",
-    delegate=register_detector_from_labelset,
-    extra_keys=("name",),
-)

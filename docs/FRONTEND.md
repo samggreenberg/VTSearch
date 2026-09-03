@@ -180,6 +180,15 @@ The training loop. A three-panel layout (`vt-left-panel`, `vt-center-panel`,
 `LabelViewPanelStateService` — a **component-provided** (not root) service
 holding per-media-type panel preferences.
 
+Two more component-provided services carry the view's non-chrome work:
+`PairScopeService` (the pair lifetime and its reset) and `SortRunnerService`
+(the sorts, and the `autoSelectNext` each one ends on). The component keeps
+one-line forwarders for the handlers its template binds, so what is left in
+`label-view.component.ts` is panel chrome, Autopilot's phase wiring and the
+re-sort prompt. Neither service is `providedIn: 'root'`: the requests in them
+are cancelled by the *component's* pair scope, which a singleton has no way to
+name — see the note on `SortStateService` in `PairScopeService`'s header.
+
 The three panels are shared with the Find view:
 
 - **Left** — media list (virtual scroller), sort bar, inclusion slider, stripe
@@ -272,6 +281,7 @@ The ones worth knowing before changing anything:
 | `NewThingFlowsService` | Singleton openers for the Add-Dataset / New-Detector flows |
 | `MediaMetadataCacheService` | Lazy batched fetch of full metadata for whatever is in the viewport |
 | `PairScopeService` | **Component-provided** (`find-view`, `label-view`): the active pair's lifetime, the `scoped()` teardown operator, and the pair-change reset in its one correct order |
+| `SortRunnerService` | **Component-provided** (`label-view`): runs the sorts — text, learned (with its job poll), detector, example — and advances the selection they end on. Lives beside the view rather than on the root-singleton `SortStateService` because every call in it is torn down by `pairScope.scoped()` |
 | `KeyboardService`, `ThemeService`, `AchievementsService`, `AuthService` | App-wide concerns wired in `AppComponent` |
 
 `adaptive-poll.ts` is not a service but a shared operator; see
@@ -318,7 +328,20 @@ this codebase, and it is silent.
   own, instead of relying on some co-located `effect()` to dirty the view), and
   there is no mirror left to go stale when a key disappears server-side. The
   setter **merges**; a setter that replaced the dict would wipe every other
-  media type's preference. `LabelViewPanelStateService` is the reference use.
+  media type's preference. It takes a plain key, or a *signal* of a key where
+  the key itself varies (`vt-view-controls` picks `focus_mode_left` /
+  `_right` / `_popup` from its `side` input). `LabelViewPanelStateService` is
+  the reference use; `find-view`, `browse-view`, `browse-bin-popup` and
+  `view-controls` are the other consumers.
+
+  Two notes on where the seams are. **The Settings modal is deliberately not a
+  consumer**: it edits a *draft* settings signal across *every* media type via
+  a `typeId` loop, not "the current one", so the helper's shape does not fit.
+  And a preference whose control derives its next value from the current one —
+  the `vt-view-controls` size buttons, which also grey out at the ends of the
+  ladder — keeps a **local optimistic signal** written on click, with the
+  preference behind it; binding straight to the preference would make a rapid
+  second click read a pre-round-trip value.
 
 - **Consumers use `effect()`, not `subscribe()`.** A constructor `effect()`
   reading a signal auto-disposes with the component, which is why the

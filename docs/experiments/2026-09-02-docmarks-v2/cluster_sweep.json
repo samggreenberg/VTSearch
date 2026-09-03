@@ -1,0 +1,370 @@
+{
+  "corpus": "/expscratch/sgreenberg/docmarks/corpus",
+  "measured": "2026-09-02",
+  "backend": "phash",
+  "grid": [
+    0.02,
+    0.03,
+    0.04,
+    0.05,
+    0.06,
+    0.08,
+    0.1,
+    0.12,
+    0.15,
+    0.18,
+    0.22
+  ],
+  "note": "largest_share is the number to read, not classes: a run can report a healthy class count while one component holds most of the marks.",
+  "sources": {
+    "spods": {
+      "marks_total": 2054,
+      "marks_swept": 2054,
+      "sampled": null,
+      "clustered_in_build": true,
+      "chosen_threshold": 0.1,
+      "sweep": [
+        {
+          "threshold": 0.02,
+          "classes": 1261,
+          "largest": 31,
+          "largest_share": 0.0151,
+          "singletons": 1221
+        },
+        {
+          "threshold": 0.03,
+          "classes": 1183,
+          "largest": 31,
+          "largest_share": 0.0151,
+          "singletons": 1141
+        },
+        {
+          "threshold": 0.04,
+          "classes": 1104,
+          "largest": 31,
+          "largest_share": 0.0151,
+          "singletons": 1033
+        },
+        {
+          "threshold": 0.05,
+          "classes": 1057,
+          "largest": 31,
+          "largest_share": 0.0151,
+          "singletons": 966
+        },
+        {
+          "threshold": 0.06,
+          "classes": 986,
+          "largest": 31,
+          "largest_share": 0.0151,
+          "singletons": 866
+        },
+        {
+          "threshold": 0.08,
+          "classes": 800,
+          "largest": 31,
+          "largest_share": 0.0151,
+          "singletons": 637
+        },
+        {
+          "threshold": 0.1,
+          "classes": 672,
+          "largest": 31,
+          "largest_share": 0.0151,
+          "singletons": 498
+        },
+        {
+          "threshold": 0.12,
+          "classes": 523,
+          "largest": 166,
+          "largest_share": 0.0808,
+          "singletons": 369
+        },
+        {
+          "threshold": 0.15,
+          "classes": 335,
+          "largest": 603,
+          "largest_share": 0.2936,
+          "singletons": 233
+        },
+        {
+          "threshold": 0.18,
+          "classes": 237,
+          "largest": 836,
+          "largest_share": 0.407,
+          "singletons": 149
+        },
+        {
+          "threshold": 0.22,
+          "classes": 138,
+          "largest": 1288,
+          "largest_share": 0.6271,
+          "singletons": 84
+        }
+      ],
+      "seconds": 257.7
+    },
+    "staver": {
+      "marks_total": 374,
+      "marks_swept": 374,
+      "sampled": null,
+      "clustered_in_build": true,
+      "chosen_threshold": 0.04,
+      "sweep": [
+        {
+          "threshold": 0.02,
+          "classes": 354,
+          "largest": 21,
+          "largest_share": 0.0561,
+          "singletons": 353
+        },
+        {
+          "threshold": 0.03,
+          "classes": 351,
+          "largest": 24,
+          "largest_share": 0.0642,
+          "singletons": 350
+        },
+        {
+          "threshold": 0.04,
+          "classes": 339,
+          "largest": 27,
+          "largest_share": 0.0722,
+          "singletons": 332
+        },
+        {
+          "threshold": 0.05,
+          "classes": 329,
+          "largest": 38,
+          "largest_share": 0.1016,
+          "singletons": 323
+        },
+        {
+          "threshold": 0.06,
+          "classes": 325,
+          "largest": 41,
+          "largest_share": 0.1096,
+          "singletons": 318
+        },
+        {
+          "threshold": 0.08,
+          "classes": 298,
+          "largest": 63,
+          "largest_share": 0.1684,
+          "singletons": 288
+        },
+        {
+          "threshold": 0.1,
+          "classes": 278,
+          "largest": 80,
+          "largest_share": 0.2139,
+          "singletons": 266
+        },
+        {
+          "threshold": 0.12,
+          "classes": 244,
+          "largest": 108,
+          "largest_share": 0.2888,
+          "singletons": 228
+        },
+        {
+          "threshold": 0.15,
+          "classes": 177,
+          "largest": 174,
+          "largest_share": 0.4652,
+          "singletons": 162
+        },
+        {
+          "threshold": 0.18,
+          "classes": 135,
+          "largest": 227,
+          "largest_share": 0.607,
+          "singletons": 123
+        },
+        {
+          "threshold": 0.22,
+          "classes": 75,
+          "largest": 291,
+          "largest_share": 0.7781,
+          "singletons": 67
+        }
+      ],
+      "seconds": 53.6
+    },
+    "tobacco800": {
+      "marks_total": 432,
+      "marks_swept": 432,
+      "sampled": null,
+      "clustered_in_build": true,
+      "chosen_threshold": 0.18,
+      "sweep": [
+        {
+          "threshold": 0.02,
+          "classes": 432,
+          "largest": 1,
+          "largest_share": 0.0023,
+          "singletons": 432
+        },
+        {
+          "threshold": 0.03,
+          "classes": 430,
+          "largest": 2,
+          "largest_share": 0.0046,
+          "singletons": 428
+        },
+        {
+          "threshold": 0.04,
+          "classes": 422,
+          "largest": 4,
+          "largest_share": 0.0093,
+          "singletons": 415
+        },
+        {
+          "threshold": 0.05,
+          "classes": 411,
+          "largest": 10,
+          "largest_share": 0.0231,
+          "singletons": 403
+        },
+        {
+          "threshold": 0.06,
+          "classes": 405,
+          "largest": 13,
+          "largest_share": 0.0301,
+          "singletons": 397
+        },
+        {
+          "threshold": 0.08,
+          "classes": 352,
+          "largest": 40,
+          "largest_share": 0.0926,
+          "singletons": 327
+        },
+        {
+          "threshold": 0.1,
+          "classes": 301,
+          "largest": 43,
+          "largest_share": 0.0995,
+          "singletons": 269
+        },
+        {
+          "threshold": 0.12,
+          "classes": 212,
+          "largest": 45,
+          "largest_share": 0.1042,
+          "singletons": 177
+        },
+        {
+          "threshold": 0.15,
+          "classes": 129,
+          "largest": 55,
+          "largest_share": 0.1273,
+          "singletons": 99
+        },
+        {
+          "threshold": 0.18,
+          "classes": 91,
+          "largest": 65,
+          "largest_share": 0.1505,
+          "singletons": 63
+        },
+        {
+          "threshold": 0.22,
+          "classes": 48,
+          "largest": 148,
+          "largest_share": 0.3426,
+          "singletons": 30
+        }
+      ],
+      "seconds": 8.5
+    },
+    "ucsf": {
+      "marks_total": 14002,
+      "marks_swept": 3000,
+      "sampled": 3000,
+      "clustered_in_build": false,
+      "chosen_threshold": null,
+      "sweep": [
+        {
+          "threshold": 0.02,
+          "classes": 2609,
+          "largest": 353,
+          "largest_share": 0.1177,
+          "singletons": 2574
+        },
+        {
+          "threshold": 0.03,
+          "classes": 2396,
+          "largest": 545,
+          "largest_share": 0.1817,
+          "singletons": 2351
+        },
+        {
+          "threshold": 0.04,
+          "classes": 1865,
+          "largest": 1066,
+          "largest_share": 0.3553,
+          "singletons": 1825
+        },
+        {
+          "threshold": 0.05,
+          "classes": 1623,
+          "largest": 1329,
+          "largest_share": 0.443,
+          "singletons": 1583
+        },
+        {
+          "threshold": 0.06,
+          "classes": 1394,
+          "largest": 1566,
+          "largest_share": 0.522,
+          "singletons": 1361
+        },
+        {
+          "threshold": 0.08,
+          "classes": 870,
+          "largest": 2103,
+          "largest_share": 0.701,
+          "singletons": 847
+        },
+        {
+          "threshold": 0.1,
+          "classes": 581,
+          "largest": 2404,
+          "largest_share": 0.8013,
+          "singletons": 568
+        },
+        {
+          "threshold": 0.12,
+          "classes": 332,
+          "largest": 2657,
+          "largest_share": 0.8857,
+          "singletons": 321
+        },
+        {
+          "threshold": 0.15,
+          "classes": 172,
+          "largest": 2813,
+          "largest_share": 0.9377,
+          "singletons": 159
+        },
+        {
+          "threshold": 0.18,
+          "classes": 86,
+          "largest": 2888,
+          "largest_share": 0.9627,
+          "singletons": 74
+        },
+        {
+          "threshold": 0.22,
+          "classes": 34,
+          "largest": 2958,
+          "largest_share": 0.986,
+          "singletons": 29
+        }
+      ],
+      "seconds": 666.1,
+      "why_not_clustered": "No flat region at any threshold: largest component 12.4% at 0.02, the lowest on the grid, rising monotonically to 98.8% at 0.22 with ~85% of marks singletons throughout. SPODS holds 1.5% across the same range. The band is a fixed top-of-page crop, so the descriptor measures page layout rather than the mark; no threshold separates them."
+    }
+  }
+}
