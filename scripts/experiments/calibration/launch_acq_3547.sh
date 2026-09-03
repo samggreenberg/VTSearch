@@ -117,9 +117,17 @@ export CALIB_REQUIRE_OPENING=text
 export CALIB_REQUIRE_SEED_QUERY=1
 export CALIB_CATEGORY_MODE="${CALIB_CATEGORY_MODE:-prevalence}"
 export CALIB_N_CATEGORIES="${CALIB_N_CATEGORIES:-12}"
-# Binary voting only: the shipped arm is `siglip x whole_image`, and no patch
-# cell of this dataset is built (a dinov3_patch grid at 22k medias is ~7 GB).
-export CALIB_PATCH_STYLES="${CALIB_PATCH_STYLES:-whole_image}"
+# BOTH styles declared, exactly as #3319 and #2877 declare them -- and only
+# `whole_image` executes, because the embedder is `siglip` and the harness
+# resolves a patch style against the embedder's capability (#3319's `bin` half
+# logs `styles=['whole_image']` off this same declaration).  Pinning the bare
+# `whole_image` instead is NOT equivalent: preflight check 12 reads it as an
+# UNDECLARED divergence from a production default whose style set contains
+# `max_patch`, and it is right to -- a study that pins the style axis is
+# sweeping it, and this one is not.  So the set is declared and the cell
+# resolves it; no patch cell of this dataset exists to run anyway (a
+# `dinov3_patch` grid at 22k medias is ~7 GB).
+export CALIB_PATCH_STYLES="${CALIB_PATCH_STYLES:-whole_image,max_patch}"
 export CALIB_REPOOL_VARIANTS=""
 export CALIB_SCHEDULE_VARIANTS=""
 export CALIB_MAX_STEPS="${CALIB_MAX_STEPS:-400}"
