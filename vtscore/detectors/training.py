@@ -42,14 +42,15 @@ def _score_embedder_for_snap(snap: dict[int, dict[str, Any]] | None) -> str | No
     so the matrix layer falls back to each media's primary vector.  For a
     single-embedder dataset the resolved name equals the primary, which the
     matrix layer collapses to the cached primary path.
-    """
-    if not snap:
-        return None
-    from vtscore.embedding.binding import derive_binding_from_names  # noqa: PLC0415
-    from vtscore.embedding.media_vectors import media_embedder_names  # noqa: PLC0415
 
-    first = next(iter(snap.values()))
-    text, patch, structural = derive_binding_from_names(media_embedder_names(first))
+    This is deliberately **not** :func:`~vtscore.embedding.binding.score_marker_embedder_for_snap`:
+    that one falls back to the media's primary *name* and returns ``""``, where
+    the matrix layer here wants ``None`` to mean "no bound slot, read each
+    media's primary vector".
+    """
+    from vtscore.embedding.binding import slot_embedders_for_snap  # noqa: PLC0415
+
+    text, patch, structural = slot_embedders_for_snap(snap)
     return structural or patch or text
 
 
@@ -60,10 +61,14 @@ def detector_score_embedder(det_ctx: Any, snap: dict[int, dict[str, Any]] | None
     (``det_ctx.embedder_type``) that the snap supplies wins; otherwise the
     dataset score precedence - the legacy-migration default and the
     cross-dataset portability fallback (a detector pointed at a dataset that
-    lacks its type re-embeds against that dataset's space).  This is exactly
-    :func:`keying_embedder_for_snap`.  Returns a concrete name (collapsed to the
-    cached primary path by the matrix layer when it equals the dataset's
-    primary), or ``None`` when there is nothing to resolve (empty snap).  See
+    lacks its type re-embeds against that dataset's space).
+
+    This is :func:`~vtscore.embedding.binding.keying_embedder_for_snap` with the
+    empty marker normalised to ``None``, which is the *only* reason the name
+    exists: the training and scoring paths read ``None`` as "no explicit
+    primary, fall back to each media's own vector", so the resolver's ``""``
+    for an empty snap has to become ``None`` before it reaches them.  Kept as a
+    public name because out-of-tree code may import it.  See
     ``docs/plans/patch-embedder.md`` → "Per-detector embedder type".
     """
     from vtscore.embedding.binding import keying_embedder_for_snap  # noqa: PLC0415
@@ -73,14 +78,9 @@ def detector_score_embedder(det_ctx: Any, snap: dict[int, dict[str, Any]] | None
 
 def _patch_embedder_for_snap(snap: dict[int, dict[str, Any]] | None) -> str | None:
     """Resolve the patch-slot embedder name for *snap*'s medias, or ``None``."""
-    if not snap:
-        return None
-    from vtscore.embedding.binding import derive_binding_from_names  # noqa: PLC0415
-    from vtscore.embedding.media_vectors import media_embedder_names  # noqa: PLC0415
+    from vtscore.embedding.binding import slot_embedders_for_snap  # noqa: PLC0415
 
-    first = next(iter(snap.values()), {})
-    _text, patch, _structural = derive_binding_from_names(media_embedder_names(first))
-    return patch
+    return slot_embedders_for_snap(snap)[1]
 
 
 def _scores_in_patch_space(snap: dict[int, dict[str, Any]] | None, embedder_name: str | None) -> bool:

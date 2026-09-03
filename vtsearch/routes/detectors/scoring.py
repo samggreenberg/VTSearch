@@ -267,17 +267,15 @@ def find_label(body: dict):
         # Highlight overlay can outline it - matching the learned-sort path.  Plain
         # single-vector datasets take the cached embedding-matrix path inside and
         # gain no ``best_region`` field.
-        from types import SimpleNamespace
-
         from vtscore.detectors.training import score_media_with_model
-        from vtscore.embedding.binding import keying_embedder_for_snap
+        from vtscore.embedding.binding import keying_embedder_for_type
 
         # Score in the same space the MLP was trained in: the concrete embedder of
         # the detector's locked type this dataset supplies, else the dataset score
         # precedence (keying_embedder_for_snap) - matching resolve_or_train_detector's
         # cold path and the learned-sort cache-space marker.
         _abort_if_find_cancelled()
-        score_emb = keying_embedder_for_snap(SimpleNamespace(embedder_type=_detector_type(det_data)), snap)
+        score_emb = keying_embedder_for_type(_detector_type(det_data), snap)
         results = score_media_with_model(mlp, snap, embedder_name=score_emb or None)
         update_find_progress(
             "running",
@@ -915,14 +913,12 @@ def auto_detect(body: dict):
     # dataset, where every type resolves to the same name).  A legacy/typeless
     # detector falls back to the dataset score precedence, matching
     # resolve_or_train_detector's cold-train space.
-    from types import SimpleNamespace  # noqa: PLC0415
-
-    from vtscore.embedding.binding import keying_embedder_for_snap  # noqa: PLC0415
+    from vtscore.embedding.binding import keying_embedder_for_type  # noqa: PLC0415
 
     default_score = get_active_context().routed_embedder("score")
     det_embedders: dict[str, str | None] = {}
     for dname, ddata, _entry in detectors_to_run:
-        keyed = keying_embedder_for_snap(SimpleNamespace(embedder_type=_detector_type(ddata)), snap)
+        keyed = keying_embedder_for_type(_detector_type(ddata), snap)
         det_embedders[dname] = keyed or default_score
 
     # These are ``scoring_rows_for_snap`` rows - the app's single definition of

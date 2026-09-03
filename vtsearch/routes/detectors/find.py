@@ -265,11 +265,9 @@ def _find_score_embedder(dc: dict, temp_medias: dict[int, dict]) -> str:
     against the same role-bound vector the active-context paths use rather than
     each media's primary vector.  Empty only when *temp_medias* is empty.
     """
-    from types import SimpleNamespace  # noqa: PLC0415
+    from vtscore.embedding.binding import keying_embedder_for_type  # noqa: PLC0415
 
-    from vtscore.embedding.binding import keying_embedder_for_snap  # noqa: PLC0415
-
-    return keying_embedder_for_snap(SimpleNamespace(embedder_type=dc.get("embedder_type", "")), temp_medias)
+    return keying_embedder_for_type(dc.get("embedder_type", ""), temp_medias)
 
 
 def _select_scorer(dc: dict, temp_medias: dict[int, dict]) -> str:
