@@ -183,14 +183,31 @@ flowers. A cooking pot on a stove does not, and neither does a plain bowl.
 ### `bench not chairs`
 
 Park benches, bus-stop and station benches, picnic-table benches, church pews
-and any backed or backless seat built for two or more people count. A single
-chair does not, and a sofa or couch does not — VG puts 53 `chair` boxes on COCO
-benches, and those are the calls to get right. For a picnic table the bench is
-the seating plank rather than the table top, but COCO's boxes here are loose
-(23 VG `picnic table` and 58 `table` boxes land on bench boxes), so if the whole
-picnic table is boxed and it has integral benches, vote Good. A bench with
-people sitting on it still counts; the reviewer's job is the bench, not whether
-it is occupied.
+and any backed or backless seat **built as seating for two or more people**
+count. A single chair does not, and a sofa or couch does not — VG puts 53
+`chair` boxes on COCO benches. For a picnic table the bench is the seating plank
+rather than the table top, but COCO's boxes here are loose (23 VG `picnic table`
+boxes land on bench boxes), so if the whole picnic table is boxed and it has
+integral benches, vote Good. A bench with people sitting on it still counts; the
+reviewer's job is the bench, not whether it is occupied.
+
+**The two largest confusions are not `chair`.** `seat` (64 boxes) and `table`
+(58) both outrank it, and the class's rule turns on two questions COCO's
+annotators do not ask.
+
+*Is it seating, or is it a surface?* A **judge's bench is a table** — the
+seating is the individual chairs behind it — and so is a low console or coffee
+table of bench proportions. COCO boxes 58 VG `table` boxes as bench; reject them
+on what the object is *for*, not on its silhouette.
+
+*Was it built as seating, or is it merely sittable?* A **concrete planter wall
+in a courtyard is not a bench** even though people sit on it, and neither is a
+ledge, a low wall, a kerb or a platform (`wall` 16, `concrete` 6, `platform` 5,
+`rail`/`railing` 10). The test is intent of manufacture, not affordance.
+
+Together these narrow the class by roughly 3% of COCO's bench boxes, which the
+supply absorbs. **Still open:** a rowboat's *thwart* — the crosswise plank that
+is genuinely built to sit on — falls under `seat` and has not been ruled on.
 
 ### `chair incl stools not couches`
 
