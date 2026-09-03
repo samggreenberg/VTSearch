@@ -253,13 +253,32 @@ class PluginField:
 # ---------------------------------------------------------------------------
 
 
-#: Class-name suffixes stripped before snake-casing for the default
-#: :attr:`PluginBase.name`.  Order matters; longer / more-specific
-#: suffixes come first so ``HolderResultsExporter`` strips
-#: ``ResultsExporter`` rather than just ``Exporter``.  ``LabelsetExporter``
-#: stays listed beside it: it is the results-exporter base class's permanent
-#: alias, so an out-of-tree ``FooLabelsetExporter`` must keep deriving ``foo``.
-_PLUGIN_NAME_SUFFIXES: tuple[str, ...] = (
+#: Historical class-name suffixes stripped before snake-casing for the
+#: default :attr:`PluginBase.name`.
+#:
+#: **This tuple is a compatibility contract, not a lookup table to tidy.**
+#: A derived ``name`` is a registry key: it is what ``get_exporter("…")``
+#: resolves, what a third party writes into an entry-point config, what
+#: ``origin.params`` records, and what persisted settings store.  These
+#: sixteen literals are the suffixes that have *ever* been stripped, so
+#: removing one silently renames every out-of-tree plugin whose class name
+#: ends in it — on a user's install, with no error.  Entries may be added
+#: (a name that derived nothing before starts deriving something); they may
+#: never be removed or edited.
+#:
+#: Order is **not** load-bearing: :func:`_default_plugin_name` strips the
+#: *longest* matching suffix, and no entry here is a proper suffix of
+#: another except via the four generic tail entries, which are shorter than
+#: everything they appear in.  ``tests_lib/core/test_plugin_name_suffix_contract.py``
+#: proves both halves of that.
+#:
+#: ``LabelsetExporter`` earns its place beside ``ResultsExporter``: it is the
+#: results-exporter base class's permanent module-level alias, so an
+#: out-of-tree ``FooLabelsetExporter`` must keep deriving ``foo`` even though
+#: no class of that name exists.  ``MediaSource`` likewise names an abstract
+#: base that is *not* a :class:`PluginBase`, so it can never contribute
+#: itself dynamically.
+_LEGACY_PLUGIN_NAME_SUFFIXES: tuple[str, ...] = (
     "DataSourceImporter",
     "DatasetImporter",
     "LabelsetExporter",
@@ -279,52 +298,6 @@ _PLUGIN_NAME_SUFFIXES: tuple[str, ...] = (
 )
 
 
-#: Framework-level abstract plugin bases that should never get
-#: auto-derived metadata stamped onto them.  Setting a derived
-#: ``name`` on, say, :class:`LabelImporter` itself would pollute every
-#: concrete subclass that doesn't declare its own ``name``; concrete
-#: subclasses inherit the polluted value from the MRO before the
-#: per-subclass auto-default can fire.  Third-party intermediates that
-#: should behave the same way can opt out by setting
-#: ``_is_plugin_family_base = True`` in their own ``__dict__``.
-_PLUGIN_FAMILY_BASE_NAMES: frozenset[str] = frozenset(
-    {
-        "ImporterBase",
-        "DataSourceImporter",
-        "DatasetImporter",
-        "LabelsetExporter",
-        "ResultsExporter",
-        "LabelImporter",
-        "LabelsetSource",
-        "SeedImporter",
-        "SettingsImporter",
-        "SettingsExporter",
-        "SettingsSource",
-        "MediaConverter",
-        "MediaSource",
-        "SyncSource",
-    }
-)
-
-
-#: Generic emoji stamped directly onto each plugin-family's abstract base
-#: (e.g. :attr:`ImporterBase.icon`).  A concrete subclass that hasn't set
-#: its own ``icon`` inherits one of these through the MRO; treated as "no
-#: icon chosen" so :func:`_autoderive_plugin_metadata` can replace it with
-#: a distinguishing letter glyph instead (see :func:`_default_plugin_letter_icon`).
-_FAMILY_STOCK_ICONS: frozenset[str] = frozenset(
-    {
-        "\U0001f50c",  # dataset importer (plug)
-        "\U0001f4e5",  # datasource importer (inbox tray)
-        "\U0001f4e4",  # labelset / settings exporter (outbox tray)
-        "\U0001f3f7️",  # label importer (label)
-        "\U0001f331",  # seed importer (seedling)
-        "\U0001f504",  # sync source (counterclockwise arrows)
-        "⚙️",  # settings importer (gear)
-    }
-)
-
-
 def _snake_case(name: str) -> str:
     """Convert a CamelCase / PascalCase identifier to snake_case."""
     out: list[str] = []
@@ -335,12 +308,53 @@ def _snake_case(name: str) -> str:
     return "".join(out)
 
 
+def _is_family_base(cls: type) -> bool:
+    """Return True if *cls*'s own body marks it a plugin-family base.
+
+    Read from ``__dict__`` rather than via :func:`getattr` so the marker
+    never leaks down the MRO: a family base's concrete subclasses are
+    ordinary plugins, not bases themselves.
+    """
+    return bool(cls.__dict__.get("_is_plugin_family_base", False))
+
+
+def _family_base_suffixes(cls: type) -> list[str]:
+    """Return the strippable class names contributed by *cls*'s own bases.
+
+    Every plugin-family base in the MRO contributes its ``__name__`` as a
+    suffix its subclasses may strip, so declaring a new family means marking
+    exactly one class rather than also editing a central table.  A base sets
+    ``_strippable_family_base = False`` to withhold its name — see
+    :attr:`PluginBase._strippable_family_base`.
+
+    Scoped to *cls*'s own MRO, not to a global registry, so the result can't
+    depend on which unrelated modules happen to have been imported first.
+    """
+    return [
+        base.__name__
+        for base in cls.__mro__[1:]
+        if _is_family_base(base) and base.__dict__.get("_strippable_family_base", True)
+    ]
+
+
 def _default_plugin_name(cls: type) -> str:
+    """Derive the snake_case registry key for *cls* from its class name.
+
+    Strips the **longest** family suffix the name ends in — from
+    :data:`_LEGACY_PLUGIN_NAME_SUFFIXES` or from a family base in *cls*'s own
+    MRO — and snake-cases what is left.  A name that *is* a suffix keeps it
+    (``Exporter`` derives ``exporter``, not ``""``) but may still shed a
+    shorter one (``MediaSource`` sheds ``Source`` and derives ``media``).
+
+    Longest-match rather than first-match: two suffixes can both match a
+    class name only when one is a suffix of the other, and there the more
+    specific one is always what the author meant.
+    """
     raw = cls.__name__
-    for suffix in _PLUGIN_NAME_SUFFIXES:
-        if raw.endswith(suffix) and raw != suffix:
-            raw = raw[: -len(suffix)]
-            break
+    candidates = set(_LEGACY_PLUGIN_NAME_SUFFIXES) | set(_family_base_suffixes(cls))
+    matches = [s for s in candidates if raw.endswith(s) and raw != s]
+    if matches:
+        raw = raw[: -len(max(matches, key=len))]
     return _snake_case(raw)
 
 
@@ -395,20 +409,39 @@ def _mro_provides(cls: type, attr: str) -> bool:
     return False
 
 
+def _inherits_family_stock_icon(cls: type) -> bool:
+    """Return True if *cls*'s inherited :attr:`icon` comes from a family base.
+
+    A plugin family stamps a generic emoji on its abstract base (a plug for
+    dataset importers, an outbox tray for exporters, …) so the family is
+    recognisable before anyone writes a plugin.  Inheriting it means the
+    author never picked an icon, so :func:`_autoderive_plugin_metadata`
+    replaces it with a distinguishing letter glyph.
+
+    Decided by *where the icon is defined* rather than by comparing its
+    codepoints against a table of the emoji we happen to ship: a table
+    cannot see a third-party family's stock icon, and gets it wrong in the
+    other direction too when a plugin deliberately picks an emoji that a
+    base elsewhere also uses.
+    """
+    for base in cls.__mro__[1:]:
+        if "icon" in base.__dict__:
+            return _is_family_base(base)
+    return False
+
+
 def _autoderive_plugin_metadata(cls: type) -> None:
     """Fill in default :attr:`name` / :attr:`display_name` /
     :attr:`description` / :attr:`icon` on *cls* when neither *cls* itself
     nor any ancestor already provides them.
 
-    Called from :meth:`PluginBase.__init_subclass__`.  Framework-level
-    abstract bases (named in :data:`_PLUGIN_FAMILY_BASE_NAMES`) and
-    third-party intermediates that set
-    ``_is_plugin_family_base = True`` skip auto-derivation entirely so
-    they don't leak a derived name down to their concrete subclasses.
+    Called from :meth:`PluginBase.__init_subclass__`.  Classes that mark
+    themselves a family base with ``_is_plugin_family_base = True`` — the
+    in-tree abstract bases and any third-party intermediate — skip
+    auto-derivation entirely, so they don't leak a derived name down to
+    their concrete subclasses.
     """
-    if cls.__name__ in _PLUGIN_FAMILY_BASE_NAMES:
-        return
-    if cls.__dict__.get("_is_plugin_family_base", False):
+    if _is_family_base(cls):
         return
     if "name" not in cls.__dict__ and not _mro_provides(cls, "name"):
         cls.name = _default_plugin_name(cls)
@@ -418,8 +451,7 @@ def _autoderive_plugin_metadata(cls: type) -> None:
     if "description" not in cls.__dict__ and not _mro_provides(cls, "description"):
         cls.description = _default_plugin_description(cls)
     if "icon" not in cls.__dict__:
-        current_icon = getattr(cls, "icon", "")
-        if not current_icon or current_icon in _FAMILY_STOCK_ICONS:
+        if not getattr(cls, "icon", "") or _inherits_family_stock_icon(cls):
             letter = _default_plugin_letter_icon(cls)
             if letter:
                 cls.icon = letter
@@ -438,7 +470,10 @@ class PluginBase:
     - :attr:`name`: class name with the trailing family suffix
       (``DatasetImporter`` / ``ResultsExporter`` / ``MediaConverter`` /
       etc.) stripped and the remainder snake-cased.  E.g.
-      ``MyShinyExporter`` → ``"my_shiny"``.
+      ``MyShinyExporter`` → ``"my_shiny"``.  The strippable suffixes are
+      :data:`_LEGACY_PLUGIN_NAME_SUFFIXES` plus the ``__name__`` of every
+      family base in the class's own MRO, so declaring a new family needs
+      no edit here — see :attr:`_is_plugin_family_base`.
     - :attr:`display_name`: title-cased :attr:`name`.
     - :attr:`description`: first line of the class docstring.
     - :attr:`icon`: the first letter of :attr:`display_name`, upper-cased
@@ -448,9 +483,10 @@ class PluginBase:
       distinguishing default instead of every plugin in the family
       sharing the same generic emoji.  This only fires when *cls* hasn't
       set its own ``icon`` and would otherwise inherit either nothing
-      (``""``) or one of the generic family defaults (e.g.
-      :attr:`~vtscore.datasets.importers.base.core.ImporterBase.icon`);
-      an author is always free to set a fancier emoji or SVG-type string.
+      (``""``) or an icon defined by a family base (e.g.
+      :attr:`~vtscore.datasets.importers.base.core.ImporterBase.icon`),
+      which is the family's stock glyph rather than a chosen one; an
+      author is always free to set a fancier emoji or SVG-type string.
 
     Explicit declarations always win.  The defaults only fire when
     nothing further up the MRO already provides a string value or a
@@ -458,6 +494,24 @@ class PluginBase:
     declares ``name`` as a property, so concrete converter subclasses
     inherit the property rather than getting a stomped string).
     """
+
+    #: Set to ``True`` in a class's *own* body to mark it a plugin-family
+    #: base: an abstract intermediate that groups concrete plugins rather
+    #: than being one.  A family base gets no auto-derived metadata (a
+    #: derived ``name`` on a base would be inherited by every concrete
+    #: subclass that doesn't declare its own, shadowing the per-subclass
+    #: default before it can fire), its ``icon`` is treated as the family's
+    #: stock glyph rather than a chosen one, and its ``__name__`` becomes a
+    #: suffix its subclasses strip when deriving their own names.  Never
+    #: inherited — it is read from ``__dict__``, so each base declares it.
+    _is_plugin_family_base: bool = False
+
+    #: Whether this family base's ``__name__`` is strippable by its
+    #: subclasses.  Set to ``False`` on a base whose name a third-party
+    #: subclass may already end in *without* it having been stripped
+    #: historically: making it strippable would rename that plugin.  Only
+    #: meaningful alongside :attr:`_is_plugin_family_base`.
+    _strippable_family_base: bool = True
 
     #: Internal snake_case identifier used in API routes.
     name: str

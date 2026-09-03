@@ -44,6 +44,14 @@ class SyncSource(PluginBase, Generic[LoadT, SaveT]):
     - see this module's docstring.
     """
 
+    #: Abstract family base: no auto-derived metadata.  Its name is *not*
+    #: strippable — ``SyncSource`` has never been in
+    #: :data:`~vtscore.plugins._LEGACY_PLUGIN_NAME_SUFFIXES`, so an
+    #: out-of-tree ``AcmeSyncSource`` derives ``acme_sync`` today and must keep
+    #: doing so.
+    _is_plugin_family_base = True
+    _strippable_family_base = False
+
     icon: str = "\U0001f504"  # counterclockwise arrows (sync)
     fields: list[PluginField]
 

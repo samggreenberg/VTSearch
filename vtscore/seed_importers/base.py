@@ -106,6 +106,10 @@ class SeedMediaItem:
 class SeedImporter(PluginBase):
     """Abstract base class for batch importers of unlabeled seed media."""
 
+    #: Abstract family base: no auto-derived metadata, and concrete
+    #: subclasses strip ``SeedImporter`` from their class names.
+    _is_plugin_family_base = True
+
     #: Stock emoji for the family (seedling).  Concrete subclasses that
     #: don't pick their own icon get a letter glyph instead (see
     #: ``_autoderive_plugin_metadata``).

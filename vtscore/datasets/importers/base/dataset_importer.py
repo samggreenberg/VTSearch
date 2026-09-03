@@ -35,6 +35,10 @@ class DatasetImporter(ImporterBase):
     :meth:`run`.
     """
 
+    #: Abstract family base: no auto-derived metadata, and concrete
+    #: subclasses strip ``DatasetImporter`` from their class names.
+    _is_plugin_family_base = True
+
     def run(self, field_values: dict[str, Any], medias: dict, thin: bool = False) -> None:
         """Perform the import, populating *medias* in-place.
 

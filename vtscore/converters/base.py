@@ -70,6 +70,10 @@ class MediaConverter(PluginBase, ABC):
     embeddings, and hashing.
     """
 
+    #: Abstract family base: no auto-derived metadata, and concrete
+    #: subclasses strip ``MediaConverter`` from their class names.
+    _is_plugin_family_base = True
+
     #: Human-readable label shown in the converter chooser UI.
     #: Subclasses may override; the default is derived from the source
     #: and target type IDs.

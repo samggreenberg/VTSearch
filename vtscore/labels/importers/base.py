@@ -95,6 +95,10 @@ class LabelImporter(PluginBase):
     identically in both code paths.
     """
 
+    #: Abstract family base: no auto-derived metadata, and concrete
+    #: subclasses strip ``LabelImporter`` from their class names.
+    _is_plugin_family_base = True
+
     #: Emoji or icon string shown next to the display name in the UI.
     icon: str = "🏷️"
     #: Ordered list of fields the user must fill before importing.

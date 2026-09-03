@@ -102,6 +102,14 @@ class ImporterBase(PluginBase):
     from the request-time flow (e.g. the chunked-pickle fast path).
     """
 
+    #: Abstract family base: no auto-derived metadata.  Its name is *not*
+    #: strippable — ``ImporterBase`` has never been in
+    #: :data:`~vtscore.plugins._LEGACY_PLUGIN_NAME_SUFFIXES`, so an
+    #: out-of-tree ``AcmeImporterBase`` derives ``acme_importer_base`` today and must keep
+    #: doing so.
+    _is_plugin_family_base = True
+    _strippable_family_base = False
+
     #: Emoji or icon string shown next to the display name in the UI.
     icon: str = "\U0001f50c"
     #: Ordered list of fields the user must fill before importing.

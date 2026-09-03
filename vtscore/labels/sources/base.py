@@ -47,6 +47,10 @@ class LabelsetSource(SyncSource[list[dict[str, str]], "LabelSet"]):
     round-trip labels keep working unchanged.
     """
 
+    #: Abstract family base: no auto-derived metadata, and concrete
+    #: subclasses strip ``LabelsetSource`` from their class names.
+    _is_plugin_family_base = True
+
     def load_full(self, field_values: dict[str, str]) -> "LabelSet":
         """Return the full :class:`LabelSet` (labels + optional detector_meta).
 
