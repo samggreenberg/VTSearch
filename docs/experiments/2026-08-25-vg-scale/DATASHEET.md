@@ -70,6 +70,20 @@ empty that plainly hold the object, and four adjudicated COCO errors among the
 twelve classes (two prohibition circles and a school-crossing paddle labelled
 `stop sign`; a box on a hedge labelled `umbrella`).
 
+**`bicycle` is built from one VG spelling, and the published pickle still is.**
+VG names objects in free text and the builder matched an object's primary name
+only, so a bicycle annotated `bike` was never a `bicycle` positive — and on the
+non-COCO half, where VG's silence is the only evidence of absence, it was a
+`bicycle` **negative**. Over the 51,411-image VG∩COCO overlap `bike` carries
+**638** of COCO's 3,683 `bicycle` boxes against the `bicycle` spelling's 775, so
+roughly half the class's positives on that half are missing and its negative pool
+holds the ones it missed (#3605). The builder now withholds `bike` images from
+both — `bike` cannot simply be merged, since only 40.1% of its boxes land on a
+COCO `bicycle` and it is a measured alias of `motorcycle` too — but **the
+published cells predate that**, so any per-class reading of `bicycle` in the
+#3156 grid carries it. The other eleven classes have not been measured for the
+same defect.
+
 **The small band is at the limit of verification, and this is a property of the
 data, not a defect to hide.** A sub-patch object is under 1/196 of the frame;
 reviewing bare thumbnails rejected 43% of small-band positives against 10% of

@@ -18,7 +18,16 @@ a paired contrast on one class rather than two datasets of different difficulty.
 VG's own annotation is not exhaustive and measurably fails this construction --
 see :func:`anchor_to_coco` and ``coco_anchor.py``.
 
-The build is six passes, and they are named rather than inlined because two of
+**On the other half, VG's vocabulary is the construction's weak point.** VG names
+objects in free text and the read matches an object's primary name only, so a
+class is built from one spelling out of several. What that costs is not supply:
+an instance annotated `bike` while the class is `bicycle` is not a missing
+positive, it is a *negative*, because on the non-COCO half VG's silence is the
+only evidence of absence (#3605). :func:`canonicalise` folds in the spellings
+measured to be the same object, and :func:`lift_ambiguous` withholds the ones
+that may not be -- from the bands and from the negative pool alike.
+
+The build is eight passes, and they are named rather than inlined because two of
 them are where this dataset's expensive bugs have lived: :func:`apply_corrections`
 is the single point at which a box crosses from normalised into pixel space
 (#3281), and :func:`designate_cells` is what decides whether a rebuild keeps the
@@ -57,6 +66,77 @@ def read_vg_labels(
             continue
         labels[iid] = vg_boxes_by_name(rec, wanted)
     return labels
+
+
+def canonicalise(
+    labels: dict[int, dict[str, list[list[float]]]], vg_names: dict[str, tuple[str, ...]]
+) -> dict[str, int]:
+    """Fold each class's alternate VG spellings onto the class name, in place.
+
+    ``vg_boxes_by_name`` matches VG's PRIMARY name only, so `hydrant` and
+    `fire hydrant` arrive as two categories of one object. Merging after the read
+    -- rather than aliasing during it -- keeps the merge visible and reversible,
+    and keeps it out of the shared reader every other VG build uses.
+
+    Returns ``{class: boxes folded in}``, which is the number the build reports:
+    a merge that folds nothing has either been mis-spelled or is not needed, and
+    both are worth seeing.
+    """
+    reverse = {n: cls for cls, names in vg_names.items() for n in names if n != cls}
+    folded: dict[str, int] = {c: 0 for c in vg_names}
+    for by_name in labels.values():
+        for vg_name in [n for n in by_name if n in reverse]:
+            cls = reverse[vg_name]
+            boxes = by_name.pop(vg_name)
+            by_name.setdefault(cls, []).extend(boxes)
+            folded[cls] += len(boxes)
+    return folded
+
+
+def lift_ambiguous(
+    labels: dict[int, dict[str, list[list[float]]]],
+    vg_names: dict[str, tuple[str, ...]],
+    exhaustive: set[int],
+) -> set[tuple[int, str]]:
+    """Take ambiguous spellings out of *labels*, and return the pairs they suppress.
+
+    A name in :data:`pile_config.SCALE_VG_AMBIGUOUS` may denote its class or
+    something else -- VG's `bike` sits on a COCO `bicycle` 40% of the time, and
+    59.6% of the time on no COCO class at all, because much of it is motorcycles
+    (#3605). It is therefore evidence in neither direction: too weak to band as a
+    positive, and far too strong to leave in the shared negative pool, where it
+    would score a detector wrong for finding the bicycle that is really there.
+
+    So the boxes are dropped, and the ``(image, class)`` pair joins the
+    ``unbanded`` set :func:`band_candidates` already keeps out of both. Three
+    things stop a pair being suppressed, and they are the whole judgment in this
+    pass:
+
+    * **The image is exhaustively labelled.** COCO annotates C exhaustively and a
+      reviewer has looked; either answers the question the spelling leaves open,
+      so the spelling is ignored and the image stays a usable negative. This is
+      why the pass runs after :func:`anchor_to_coco` and
+      :func:`apply_corrections` rather than straight off the read -- on the ~48%
+      of VG that is COCO-sourced the defect does not exist, and suppressing there
+      would throw away good negatives to fix nothing.
+    * **The class is already established on the image.** It is confirmed present
+      by a box we trust, and an ambiguous box can only make its extent less
+      certain -- a smaller question than this one, and not worth discarding a
+      confirmed positive over.
+    * The name is the class name itself, which is not ambiguous by definition.
+
+    The boxes are dropped either way: :func:`band_candidates` bands by category
+    name and has no cell to put a `bike` in.
+    """
+    reverse = {n: cls for cls, names in vg_names.items() for n in names if n != cls}
+    pairs: set[tuple[int, str]] = set()
+    for iid, by_name in labels.items():
+        for vg_name in [n for n in by_name if n in reverse]:
+            cls = reverse[vg_name]
+            by_name.pop(vg_name)
+            if cls not in by_name and iid not in exhaustive:
+                pairs.add((iid, cls))
+    return pairs
 
 
 def anchor_to_coco(
@@ -174,8 +254,11 @@ def band_candidates(
     """Sort every image into ``(class, band)`` supply, or into the clean pool.
 
     Returns ``(supply, boxes_for, clean)``. An image with no instance of any
-    class in C joins ``clean`` -- unless a reviewer said one *is* present without
-    drawing it, which makes it neither a positive nor a true negative.
+    class in C joins ``clean`` -- unless its ``(image, class)`` pair is in
+    *unbanded*, which makes it neither a positive nor a true negative. Two things
+    put a pair there: a reviewer who said one *is* present without drawing it (no
+    size was measured, and a band is a claim about size), and an ambiguous VG
+    spelling that may or may not be the class (:func:`lift_ambiguous`).
     """
     supply: dict[str, dict[str, list[int]]] = {c: {b: [] for b in pc.BOX_BANDS} for c in pc.SCALE_CLASSES}
     boxes_for: dict[tuple[int, str], list[list[float]]] = {}
@@ -356,10 +439,14 @@ def _emit_medias(
 
 
 def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
-    """Run the six passes over the VG source and write the designated medias."""
+    """Run the eight passes over the VG source and write the designated medias."""
     import coco_anchor as ca  # noqa: PLC0415
 
     wanted = set(pc.SCALE_CLASSES)
+    # The READ has to be wider than the class list: a VG spelling absent from it
+    # is invisible downstream, because an image holding only that spelling then
+    # looks like an image holding nothing -- i.e. like a negative (#3605).
+    wanted_vg = pc.scale_vg_wanted()
     cells = [pc.scale_cell(c, b) for c in pc.SCALE_CLASSES for b in pc.BOX_BANDS]
 
     paths = vg_image_paths()
@@ -373,13 +460,36 @@ def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
     corrections = load_corrections()
     log(f"  {len(coco_of)} VG images carry a coco_id; {len(corrections)} human verdicts on file")
 
-    labels = read_vg_labels(records, paths, dims, wanted)
+    labels = read_vg_labels(records, paths, dims, wanted_vg)
+    folded = canonicalise(labels, pc.SCALE_VG_NAMES)
     box_dims, exhaustive, n_anchored, n_reframed = anchor_to_coco(labels, dims, coco_of, truth, ca.COCO_DIMS, wanted)
     unbanded = apply_corrections(labels, corrections, box_dims, exhaustive)
+    suppressed = lift_ambiguous(labels, pc.SCALE_VG_AMBIGUOUS, exhaustive)
+    unbanded |= suppressed
     log(
         f"  labels: {len(labels)} VG images, {n_anchored} repaired from COCO, "
         f"{len(exhaustive)} with a verified pair, {n_reframed} skipped as re-framed copies"
     )
+    if folded:
+        log("  merged VG spellings: " + ", ".join(f"{c}+{n}" for c, n in sorted(folded.items())))
+    if suppressed:
+        by_class: dict[str, int] = defaultdict(int)
+        for _iid, c in suppressed:
+            by_class[c] += 1
+        log(
+            "  ambiguous spellings withheld from both bands and the pool: "
+            + ", ".join(f"{c}={n}" for c, n in sorted(by_class.items()))
+        )
+    unaudited = [c for c in pc.SCALE_CLASSES if c not in pc.SCALE_VG_NAMES_AUDITED]
+    if unaudited:
+        # Not a failure: the dataset this builds is the one #3156 published, and
+        # blocking a rebuild on unmeasured classes would strand it. But it is the
+        # one moment the fix is cheap, so it says so rather than passing quietly.
+        log(
+            f"  VG-NAME COVERAGE UNMEASURED for {len(unaudited)} of {len(pc.SCALE_CLASSES)} classes: "
+            + ", ".join(unaudited)
+        )
+        log("    run `coco_folds.py --classes <c>` and record the result in pile_config.SCALE_VG_NAMES_AUDITED (#3605)")
 
     supply, boxes_for, clean = band_candidates(labels, box_dims, unbanded)
 

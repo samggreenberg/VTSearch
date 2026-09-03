@@ -47,6 +47,8 @@ from pilebuild.loaders.vg_scale import (
     anchor_to_coco,
     apply_corrections,
     band_candidates,
+    canonicalise,
+    lift_ambiguous,
     rank,
     read_vg_labels,
 )
@@ -141,7 +143,7 @@ def draw_negatives(clean: list[int], roster: dict) -> tuple[list[int], list[int]
 
 
 def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
-    """``vg_scale``'s six passes, with a band-free designation in the middle."""
+    """``vg_scale``'s eight passes, with a band-free designation in the middle."""
     import coco_anchor as ca  # noqa: PLC0415
 
     wanted = set(pc.SCALE_CLASSES)
@@ -158,9 +160,17 @@ def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
     corrections = load_corrections()
     log(f"  {len(coco_of)} VG images carry a coco_id; {len(corrections)} human verdicts on file")
 
-    labels = read_vg_labels(records, paths, dims, wanted)
+    # Read wider than the class list, fold the measured spellings in, and
+    # withhold the ambiguous ones -- `vg_scale`'s passes, called unchanged, so
+    # the sibling cannot carry a defect the shallow cell has been repaired of
+    # (#3605). Leaving them out would put a VG `bike` image in this pool as a
+    # `bicycle` negative while `vg_scale` excludes it, which is precisely the
+    # "only depth changed" premise breaking.
+    labels = read_vg_labels(records, paths, dims, pc.scale_vg_wanted())
+    canonicalise(labels, pc.SCALE_VG_NAMES)
     box_dims, exhaustive, n_anchored, n_reframed = anchor_to_coco(labels, dims, coco_of, truth, ca.COCO_DIMS, wanted)
     unbanded = apply_corrections(labels, corrections, box_dims, exhaustive)
+    unbanded |= lift_ambiguous(labels, pc.SCALE_VG_AMBIGUOUS, exhaustive)
     log(
         f"  labels: {len(labels)} VG images, {n_anchored} repaired from COCO, "
         f"{len(exhaustive)} with a verified pair, {n_reframed} skipped as re-framed copies"
