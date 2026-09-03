@@ -62,3 +62,10 @@ slides:
   # results slide, not an idea: the argument carries the change, this carries
   # the sweep that justified it, and it comes up only if someone asks.
   split-fraction-result
+
+  # Appendix — what "logo detection" actually means. Parked after the end for
+  # now, to be worked into the argument later: it is the `book` slide's claim
+  # made a second time, in the one domain where a room expects a concept to
+  # have a published spec sheet. Eight results for one query, arriving one at a
+  # time, and the presenter asks about each without answering.
+  logo-grid
