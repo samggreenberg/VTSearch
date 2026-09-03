@@ -17,6 +17,22 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **CLI autodetect no longer drops media the GUI keeps, and its detector
+  threshold no longer moves as a result.** The CLI forced *thin* loading on
+  every import -- storing a path reference in place of each media's bytes --
+  while the GUI passed the user's "Reference files in place" choice. Thin is
+  only a deferral when something outside the source can reproduce the bytes; a
+  self-contained pickle, or an importer whose items have no local file, lost
+  its only copy. Those media could not be embedded, so they were skipped at
+  scoring, and because a detector's threshold is calibrated against the
+  population actually being scored, the smaller survivor set also moved the
+  cut. The same dataset and detector therefore returned more hits, at a lower
+  threshold, from the CLI than from the GUI. Two fixes: the pickle loader now
+  keeps inline bytes that nothing can re-read (thin still drops bytes that are
+  also on disk, in an archive member, or behind a URL), and the CLI honours the
+  importer's own `--reference-files` / `--no-reference-files` flag -- which
+  previously did nothing at all -- defaulting to off, as the GUI does.
+
 - **Staging a dataset for the combine flow now queues behind the same
   concurrency limits a regular import does, and a cancelled staging no longer
   reports itself as a failure.** Staging ran its importer and its embed pass on

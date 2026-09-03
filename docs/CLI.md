@@ -62,6 +62,21 @@ python app.py --autodetect --importer http_archive --url /data/sounds.tar.gz --m
 
 Use `python app.py --list-importers` to see all available importers. The full set includes: `server_folder`, `server_files`, `local_folder`, `local_files`, `local_archive_member`, `pickle`, `http_archive`, `combine_datasets`, `demo`, `synthetic`. Each importer adds its own flags; run `python app.py --autodetect --importer <name> --help` to see them. `--help` resolves the named plugin first, so its flags are listed at the end of the usual help output (the same works for `--exporter <name> --help`).
 
+**Reference mode**: importers that offer a "Reference files in place" checkbox
+in the GUI (`server_folder`, `server_files`) expose it here as
+`--reference-files` / `--no-reference-files`. Enabled, the dataset stores a path
+reference to each original file instead of its bytes, which saves memory —
+and, as in the GUI, makes the run depend on those files staying put. It is
+**off by default**, so a CLI import ingests a source exactly the way the same
+importer does in the GUI.
+
+Leave it off unless every item really is re-readable from its original
+location. Reference mode swaps a media's bytes for a path, so an item that has
+no file to point back at (a remote source with no local copy) keeps neither —
+it cannot be embedded, and is then skipped at scoring. That silently shortens
+the hit list *and* moves the detector's threshold, because the threshold is
+calibrated against the population actually being scored.
+
 **Chunked loading**: for large datasets, use `--chunk-size N` to process in batches to limit memory:
 
 ```bash
