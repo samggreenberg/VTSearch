@@ -63,6 +63,7 @@ def mods(_on_path):
         "shortlist": importlib.import_module("shortlist"),
         "audit": importlib.import_module("audit_to_corrections"),
         "slate": importlib.import_module("make_audit_slate"),
+        "siglip": importlib.import_module("siglip_audit"),
         "report": importlib.import_module("make_report"),
     }
 
@@ -2237,3 +2238,152 @@ class TestUcsfBandsAreNotClustered:
         # and that was always 92% of what it was for.
         assert "ucsf" not in mods["cfg"].ANCHOR_SOURCES
         assert mods["cfg"].eligible_distractor("spods", "ucsf", "Opioids") is True
+
+
+class TestSiglipAuditVectors:
+    """The audit's second opinion, over cached vectors rather than a card."""
+
+    @staticmethod
+    def _cache(tmp_path, items, vecs, embedder="siglip2_l"):
+        import numpy as np
+
+        out = tmp_path / "audit" / "siglip"
+        out.mkdir(parents=True)
+        np.savez_compressed(tmp_path / "audit" / "siglip" / "vectors.npz", vecs=np.asarray(vecs, dtype=np.float32))
+        (out / "items.json").write_text(
+            json.dumps({"embedder": embedder, "max_per_class": 24, "items": items}), encoding="utf-8"
+        )
+        return tmp_path
+
+    def test_a_missing_cache_is_an_error_not_an_empty_answer(self, mods, tmp_path):
+        with pytest.raises(SystemExit, match="--embed"):
+            mods["siglip"].load_cache(tmp_path)
+
+    def test_a_centroid_is_the_normalised_mean_of_its_instances(self, mods, tmp_path):
+        items = [
+            {"class_id": "a", "page_id": "p1", "kind": "instance"},
+            {"class_id": "a", "page_id": "p2", "kind": "instance"},
+            {"class_id": "b", "page_id": "p3", "kind": "instance"},
+            # A query crop must not move the centroid it is going to be judged
+            # against, or the check is comparing the crop with itself.
+            {"class_id": "a", "page_id": "p9", "kind": "query"},
+        ]
+        vecs = np.array([[1.0, 0.0], [0.0, 1.0], [0.0, 1.0], [-1.0, 0.0]], dtype=np.float32)
+        order, centroids = mods["siglip"].class_centroids(items, vecs)
+        assert order == ["a", "b"]
+        assert centroids[0] == pytest.approx([2**-0.5, 2**-0.5], abs=1e-6)
+        assert np.linalg.norm(centroids[1]) == pytest.approx(1.0, abs=1e-6)
+
+    def test_split_uses_average_linkage_so_one_crop_cannot_bridge_two_marks(self, mods):
+        # Two tight groups plus a crop halfway between them.  Single linkage
+        # chains all three together through the bridge -- which is the exact
+        # defect this pass exists to detect, so it must not be the linkage.
+        a, b = np.array([1.0, 0.0]), np.array([0.0, 1.0])
+        bridge = (a + b) / np.linalg.norm(a + b)
+        vecs = np.vstack([a, a, a, b, b, b, bridge]).astype(np.float32)
+        labels = mods["siglip"].split_class(vecs, 0.4)
+        assert len(set(labels.tolist())) >= 2
+        assert labels[0] == labels[1] == labels[2]
+        assert labels[3] == labels[4] == labels[5]
+        assert labels[0] != labels[3]
+
+    def test_one_tight_class_stays_one_group(self, mods):
+        vecs = np.tile(np.array([1.0, 0.0], dtype=np.float32), (5, 1))
+        assert len(set(mods["siglip"].split_class(vecs, 0.2).tolist())) == 1
+
+    def test_the_query_check_reports_the_rank_of_the_class_own_centroid(self, mods):
+        # The eval searches with the query crop, so the question is what that
+        # crop retrieves -- not how far it is, which is the screen #3599
+        # records failing.
+        items = [
+            {"class_id": "a", "page_id": "p1", "kind": "instance"},
+            {"class_id": "b", "page_id": "p2", "kind": "instance"},
+            {"class_id": "a", "page_id": "p9", "kind": "query"},
+        ]
+        vecs = np.array([[1.0, 0.0], [0.0, 1.0], [0.0, 1.0]], dtype=np.float32)
+        order, centroids = mods["siglip"].class_centroids(items, vecs)
+        rows = mods["siglip"].query_check(items, vecs, order, centroids)
+        assert len(rows) == 1
+        assert rows[0]["class_id"] == "a"
+        assert rows[0]["rank_of_own_class"] == 1
+        assert rows[0]["nearest_class"] == "b"
+
+    def test_pairs_are_ranked_by_centroid_distance_nearest_first(self, mods):
+        order = ["a", "b", "c"]
+        centroids = np.array([[1.0, 0.0], [0.99, 0.141], [0.0, 1.0]], dtype=np.float32)
+        rows = mods["siglip"].pair_report(order, centroids, 3)
+        assert [(r["left"], r["right"]) for r in rows][0] == ("a", "b")
+        assert rows[0]["distance"] < rows[-1]["distance"]
+
+    def test_the_split_sweep_records_every_threshold_not_a_verdict(self, mods):
+        items = [{"class_id": "a", "page_id": f"p{i}", "kind": "instance"} for i in range(4)]
+        # Two pairs 0.5 apart: a tight threshold separates them, a loose one
+        # does not, and the file records both rather than choosing.
+        far = [0.5, 3**0.5 / 2]
+        vecs = np.array([[1.0, 0.0], [1.0, 0.0], far, far], dtype=np.float32)
+        rows = mods["siglip"].split_report(items, vecs, (0.1, 0.9))
+        assert rows[0]["sweep"]["0.10"] == [2, 2]
+        assert rows[0]["sweep"]["0.90"] == [4]
+
+
+class TestSlateDescriptorChoice:
+    """Which descriptor the slate is ordered by, and what it refuses."""
+
+    @staticmethod
+    def _items(class_ids):
+        return [{"class_id": c, "page_id": f"p{i}", "kind": "instance"} for i, c in enumerate(class_ids)]
+
+    def test_phash_needs_no_cache_and_is_the_default(self, mods, tmp_path):
+        from PIL import Image
+
+        images = [Image.new("RGB", (40, 40), c) for c in ("white", "black")]
+        dist = mods["slate"].class_distances(["a", "b"], images, "phash", tmp_path)
+        assert dist.shape == (2, 2)
+        assert dist[0, 0] == 0.0
+        assert mods["cfg"].SLATE_DESCRIPTOR == "phash"
+
+    def test_a_semantic_descriptor_orders_by_centroid_not_by_exemplar(self, mods, tmp_path):
+        from PIL import Image
+
+        TestSiglipAuditVectors._cache(
+            tmp_path,
+            self._items(["a", "a", "b"]),
+            [[1.0, 0.0], [1.0, 0.0], [0.0, 1.0]],
+        )
+        # Identical exemplars: a phash ordering would call these distance 0.
+        # The cache says the classes are orthogonal, and the cache is what a
+        # semantic descriptor is being asked for.
+        images = [Image.new("RGB", (40, 40), "white") for _ in range(2)]
+        dist = mods["slate"].class_distances(["a", "b"], images, "siglip2_l", tmp_path)
+        assert dist[0, 1] == pytest.approx(1.0, abs=1e-5)
+
+    def test_a_cache_from_another_embedder_is_refused_not_used(self, mods, tmp_path):
+        from PIL import Image
+
+        TestSiglipAuditVectors._cache(tmp_path, self._items(["a", "b"]), [[1.0, 0.0], [0.0, 1.0]], embedder="siglip")
+        images = [Image.new("RGB", (40, 40), "white") for _ in range(2)]
+        with pytest.raises(SystemExit, match="siglip2_l"):
+            mods["slate"].class_distances(["a", "b"], images, "siglip2_l", tmp_path)
+
+    def test_a_class_missing_from_the_cache_is_refused_not_dropped(self, mods, tmp_path):
+        from PIL import Image
+
+        TestSiglipAuditVectors._cache(tmp_path, self._items(["a"]), [[1.0, 0.0]])
+        images = [Image.new("RGB", (40, 40), "white") for _ in range(2)]
+        with pytest.raises(SystemExit, match="no vectors"):
+            mods["slate"].class_distances(["a", "b"], images, "siglip2_l", tmp_path)
+
+    def test_phash_proposes_no_subgroups_about_its_own_output(self, mods, tmp_path):
+        assert mods["slate"].subgroups(tmp_path, "phash", 0.2) == {}
+
+    def test_subgroups_are_numbered_largest_first(self, mods, tmp_path):
+        items = [
+            {"class_id": "a", "page_id": "p0", "kind": "instance"},
+            {"class_id": "a", "page_id": "p1", "kind": "instance"},
+            {"class_id": "a", "page_id": "p2", "kind": "instance"},
+            {"class_id": "a", "page_id": "p3", "kind": "instance"},
+        ]
+        TestSiglipAuditVectors._cache(tmp_path, items, [[1.0, 0.0], [1.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
+        groups = mods["slate"].subgroups(tmp_path, "siglip2_l", 0.5)["a"]
+        assert groups["p0"] == groups["p1"] == groups["p2"] == 1
+        assert groups["p3"] == 2

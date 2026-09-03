@@ -166,6 +166,21 @@ bash launch_docmarks.sh slate           # ~minutes, CPU, no refetch
 scp $GRID:$VTS_DOCMARKS_OUT/audit/docmarks-audit-<date>.tar.gz .
 ```
 
+**Then the second opinion, on a GPU**, which re-renders both similarity passes
+against a semantic embedder (see README's *The descriptor the audit asks with is
+not the one it was built with*):
+
+```bash
+bash launch_docmarks.sh siglip          # ~minutes, GPU, embeds ~1.3k crops once
+scp $GRID:$VTS_DOCMARKS_OUT/audit/docmarks-audit-siglip-<date>.tar.gz .
+```
+
+It re-numbers the slate, so a `merges.txt` written against the `phash` sheets no
+longer refers to the same classes — the job keeps the old answer beside the new
+one as `merges.phash.txt` rather than overwriting it. Work the `phash` slate
+only if no GPU is available; the appendix it produces spends most of its 120
+pairs on classes that are not confusable (#3600).
+
 Rendering happens on the GRID because that is where the pages are: the sheets
 crop from full-resolution scans that live under `$VTS_DOCMARKS_OUT`, and pulling
 200k pages to a laptop to make four contact sheets is the wrong direction. The
