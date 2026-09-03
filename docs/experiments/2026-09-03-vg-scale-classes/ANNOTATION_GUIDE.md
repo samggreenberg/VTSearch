@@ -25,7 +25,10 @@ cost us the `book` pass.
   number instead of a hope.
 - **The rule travels in the dataset name.** The name in the app is the whole
   rule you are voting under. If the name and this document ever disagree,
-  the name is what you actually voted, and this document is wrong.
+  the name is what you actually voted, and this document is wrong. The name is
+  *display only* — a detector's `text_query` is seeded with the bare COCO class
+  (`import_slates.py`), so a long rule never reaches SigLIP and never drags the
+  text sort.
 - **When several objects qualify, box the single biggest one — not the
   collection.** A box around six plates measures the group, and the band is a
   claim about the size of *an object*. One plate, the largest, is the answer.
@@ -162,15 +165,26 @@ Count bowls, plates (a **paper plate is a plate**), saucers, shallow serving
 dishes, serving pots, baskets that hold food, and **disposable food containers**
 — a yogurt pot counts.
 
+A **dog's water bowl is a bowl** — the vessel is what is being judged, and it
+holds food or drink for an animal that eats from it.
+
 Do not count:
 
-- **Paper wrappers and trays**, even ones with walls. A hotdog tray is a wrapper,
-  not a vessel. (Costs `tray`, 19 boxes.)
+- **Flat paper wrappers.** A sleeve or a sheet folded round a hotdog is a
+  wrapper. But a **paper food boat with turned-up sides is a bowl**, flimsy or
+  not — the test is whether it has walls that contain, not what it is made of.
+  (`tray`, 19 boxes, splits across this line.)
 - **A cup or mug** — that is `cup`, and it is the single largest thing excluded
   here (120 boxes), so expect to reject it often.
-- **A sink basin** (`sink`), an **ashtray**, a **blender or coffee carafe**, and
-  a **vase** — a vase is not a food container. None of the last three is a
-  systematic fold-in, so excluding them costs almost nothing.
+- **A toilet bowl.** The word is not the object; nothing about it holds food.
+- **A feed trough.** Built for animals, but it is a fixture rather than a
+  vessel, and COCO does not fold troughs in.
+- **A plant bowl or planter** — that is `vase`, and a plant is not food.
+- **A sink basin** (`sink`), an **ashtray**, and a **blender or coffee carafe**.
+  None is a systematic fold-in, so excluding them costs almost nothing.
+
+**Open:** a 5-gallon bucket of apples. `bucket` is a real fold-in (19 boxes) and
+a bucket does hold food, but it stretches "vessel" a long way. Unruled.
 
 Judge the **vessel, not the food**: an empty plate counts, and a pile of food on
 a bare table does not — which matters because VG names 163 of these boxes `food`
