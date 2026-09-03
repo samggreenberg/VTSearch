@@ -327,7 +327,6 @@ class UserSettingsStore:
         user_path: Callable[[str], Path],
         apply_settings: Callable[[dict[str, Any], Container[str] | None], None],
         server_default_source: Callable[[], dict[str, Any] | None],
-        server_keys: frozenset[str],
         sanitize: Callable[[dict[str, Any], str], dict[str, Any]],
         exclude_from_source_export: set[str],
         freshness_check_interval: float = 1.0,
@@ -343,7 +342,6 @@ class UserSettingsStore:
         self._user_path = user_path
         self._apply_settings = apply_settings
         self._server_default_source = server_default_source
-        self._server_keys = server_keys
         self._sanitize = sanitize
         self._exclude_from_source_export = exclude_from_source_export
         self._freshness_check_interval = freshness_check_interval
