@@ -29,9 +29,19 @@ cost us the `book` pass.
   *display only* — a detector's `text_query` is seeded with the bare COCO class
   (`import_slates.py`), so a long rule never reaches SigLIP and never drags the
   text sort.
-- **When several objects qualify, box the single biggest one — not the
-  collection.** A box around six plates measures the group, and the band is a
-  claim about the size of *an object*. One plate, the largest, is the answer.
+- **On an image with no box, when several objects qualify, box the single
+  biggest one — not the collection.** A box around six plates measures the
+  group, and a band is a claim about the size of *an object*. One plate, the
+  largest, is the answer.
+- **On an image that arrives WITH a box, judge the object in the box.** The
+  question is "is *this* a bowl?", not "is there a bowl here?" — that image was
+  drawn into a specific size band *because of* that box. Redraw only to correct
+  the extent of the **same** object; if a different, more prominent one is a
+  better example, that is not a reason to move the box, because moving it moves
+  the image into another band and out of the cell it was sampled to fill. Across
+  the first four classes, 13 boxed positives were redrawn and **6 changed
+  band** (#3616). If the boxed object is not a member, the answer is Bad —
+  remembering that Bad on a boxed positive reads as *not confirmed*.
 - **Vote on the object, not a depiction of it.** A car on a billboard, cutlery
   printed on a menu, a bottle in a logo — all Bad, for every class here. So is
   a *pictogram*: the bicycle on a BIKE ROUTE sign is a sign, not a bicycle. Note
