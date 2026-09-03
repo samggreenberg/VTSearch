@@ -23,6 +23,7 @@ def _resolve_unmatched(unresolved: list, md5_lookup: dict[str, list[int]]) -> in
     """
     import logging
 
+    from vtscore.datasets.vote_provenance import read_provenance
     from vtscore.detectors.resolver import resolve_file_context
     from vtscore.state import apply_label
 
@@ -48,7 +49,13 @@ def _resolve_unmatched(unresolved: list, md5_lookup: dict[str, list[int]]) -> in
             cids = md5_lookup.get(resolved_md5, [])
             if cids:
                 for cid in cids:
-                    apply_label(cid, elem.label, silent=True, region_box=elem.region_box)
+                    apply_label(
+                        cid,
+                        elem.label,
+                        silent=True,
+                        region_box=elem.region_box,
+                        provenance=read_provenance(elem.metadata),
+                    )
                 restored += 1
             else:
                 _log.debug(
@@ -74,14 +81,18 @@ def restore_labels_from_detector(det_data: dict) -> int:
     votes.  The good/bad counts still reflect restored labels, so autopilot's
     initial Find Goods / Find Bads gates can skip ahead.
 
-    A Good element's ``region_box`` rides along into ``vote_region_boxes``.
-    Dropping it here used to erase the drawn region the moment the next vote
-    resynced the labelset back to disk - the restored vote was image-level, so
-    the element it re-emitted was too.
+    A Good element's ``region_box`` rides along into ``vote_region_boxes``,
+    and any recorded surfacing provenance rides along into ``vote_provenance``.
+    Dropping either here erases it the moment the next vote resyncs the
+    labelset back to disk - the restored vote would be image-level and
+    context-free, so the element it re-emits would be too.  (That is exactly
+    the bug ``region_box`` had; provenance shares the hazard because the sync
+    rebuilds the whole labelset from live vote state on every vote.)
 
     Returns the number of labels successfully restored.
     """
     from vtscore.datasets.labelset import LabeledElement, LabelSet
+    from vtscore.datasets.vote_provenance import read_provenance
     from vtscore.state import (
         apply_label,
         cached_media_lookups,
@@ -111,7 +122,13 @@ def restore_labels_from_detector(det_data: dict) -> int:
         cids = resolve_media_ids(elem.to_dict(), origin_lookup, md5_lookup, name_lookup)
         if cids:
             for cid in cids:
-                apply_label(cid, elem.label, silent=True, region_box=elem.region_box)
+                apply_label(
+                    cid,
+                    elem.label,
+                    silent=True,
+                    region_box=elem.region_box,
+                    provenance=read_provenance(elem.metadata),
+                )
             restored += 1
         else:
             unresolved.append(elem)

@@ -897,6 +897,12 @@ class DetectorContext:
         "label_history",
         "vote_click_times",
         "vote_region_boxes",
+        # Per-vote surfacing provenance (which flow / phase / sort / rank
+        # surfaced the item).  Recorded at click time because none of it is
+        # re-derivable later: the ranking is client-side ephemeral state and
+        # the score's model is overwritten by the next retrain.  See
+        # ``vtscore/datasets/vote_provenance.py``.
+        "vote_provenance",
         "click_counter",
         # True when this detector's in-memory votes are find/scoring output
         # (set by /api/find-label) rather than genuine training labels.  While
@@ -1039,6 +1045,9 @@ class DetectorContext:
         # the user drew a region as part of a yes-vote; absent for image-level
         # yes-votes and for every no-vote.  Patch-embedder v2.
         self.vote_region_boxes: dict[int, tuple[float, float, float, float]] = {}
+        # Per-vote surfacing provenance, keyed by media id.  See the slot
+        # comment and :mod:`vtscore.datasets.vote_provenance`.
+        self.vote_provenance: dict[int, dict[str, object]] = {}
         self.click_counter: int = 0
         # See the slot comment: True while these votes are find/scoring output.
         self.find_mode: bool = False

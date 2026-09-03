@@ -1221,7 +1221,8 @@ full materialization rather than lazy resolution.
 A `LabelSet` extends the dataset concept: each element carries its origin,
 its name within that origin, its label (`"good"` / `"bad"`), and optional
 `metadata` (arbitrary key-value dict for round-tripping extra data like
-`contentID`, `mediaID`, etc.).
+`contentID`, `mediaID`, etc., plus the reserved `"vt:provenance"` key —
+see below).
 
 ```python
 from vtscore.datasets.labelset import LabelSet
@@ -1236,6 +1237,37 @@ ls = LabelSet.from_results(results_dict, medias=medias)
 data = ls.to_dict()   # {"labels": [{"md5": ..., "label": ..., "origin": ..., ...}]}
 ls2 = LabelSet.from_dict(data)
 ```
+
+#### Vote surfacing provenance (`"vt:provenance"`)
+
+One key inside `metadata` is reserved: `"vt:provenance"` records **how each
+vote was surfaced** — which UI flow drove it, which autopilot phase (if any),
+how the item was drawn off the ranking, which ranking that was, and the item's
+rank and score at click time. `vtscore/datasets/vote_provenance.py` owns the
+vocabulary and the validation; `DetectorContext.vote_provenance` carries it in
+memory, threaded exactly like `vote_region_boxes`.
+
+It is recorded at click time because it is **not re-derivable later**: the
+ranking is client-side ephemeral state and the model behind the score is
+overwritten by the next retrain. Scalars only — the no-persisted-vectors rule
+is untouched.
+
+The four categorical fields are independent axes, not one fused enum, because
+the calibration bias this exists to measure tracks *how the item was drawn*
+(`select_mode`) rather than *who was driving* (`flow`). The two come apart at
+both edges: a user can pick the `hard` select mode by hand and get autopilot's
+exact margin-sampled draw, and autopilot's own `good` phase is mechanically a
+top-of-list draw.
+
+Recording only — nothing reads these values back to change behaviour. The
+consumer (partitioning the conformal calibration set by trustworthy surfacing
+context) is gated on the experiment pre-registered in
+[`docs/plans/provenance-partitioned-calibration.md`](plans/provenance-partitioned-calibration.md).
+Two rules keep the record honest: it is written **only on a vote-state change**
+(an idempotent re-apply keeps what the original click recorded, so a stale tab
+cannot rewrite it), and `restore_labels_from_detector` carries it back into
+vote state on load — without that, the next vote's labelset resync would erase
+every recorded vote's provenance, the bug `region_box` shipped with.
 
 The `GET /api/labels/export` endpoint returns a `LabelSet` serialised
 as JSON.  The format is backward-compatible: old consumers that only

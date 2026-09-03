@@ -2340,8 +2340,12 @@
         "type": "object"
       },
       "DetectorLabelVoteRequest": {
-        "additionalProperties": false,
         "properties": {
+          "provenance": {
+            "$ref": "#/components/schemas/VoteProvenance",
+            "description": "Optional surfacing context; see :class:`VoteProvenanceSchema`.",
+            "nullable": true
+          },
           "target": {
             "enum": [
               "good",
@@ -4864,6 +4868,11 @@
             },
             "type": "array"
           },
+          "provenance": {
+            "$ref": "#/components/schemas/VoteProvenance",
+            "description": "Optional surfacing context applied to every id in the batch. Defaults to ``{\"flow\": \"bulk\"}`` when omitted.",
+            "nullable": true
+          },
           "target": {
             "description": "Absolute target state applied to every id: ``good``, ``bad``, or ``none``. Idempotent.",
             "enum": [
@@ -4907,6 +4916,11 @@
       },
       "MediaVoteRequest": {
         "properties": {
+          "provenance": {
+            "$ref": "#/components/schemas/VoteProvenance",
+            "description": "Optional surfacing context for this vote. Recorded only when the call actually changes the vote state, so an idempotent re-send from a stale tab cannot overwrite what the original click recorded.",
+            "nullable": true
+          },
           "region_box": {
             "description": "Optional 4-element ``[x0, y0, x1, y1]`` in normalised image coordinates ``[0, 1]``. Only valid when ``target`` is ``good``.",
             "items": {
@@ -6117,6 +6131,73 @@
         "required": [
           "version"
         ],
+        "type": "object"
+      },
+      "VoteProvenance": {
+        "properties": {
+          "flow": {
+            "description": "Which UI flow drove the vote.",
+            "enum": [
+              "autopilot",
+              "bulk",
+              "find_verify",
+              "import",
+              "labelset_review",
+              "list_review",
+              "seed_example",
+              "undo",
+              "unknown",
+              null
+            ],
+            "nullable": true,
+            "type": "string"
+          },
+          "phase": {
+            "description": "Autopilot phase at click time. Ignored unless ``flow`` is ``autopilot``.",
+            "enum": [
+              "bad",
+              "good",
+              "hard",
+              "new",
+              null
+            ],
+            "nullable": true,
+            "type": "string"
+          },
+          "rank_at_vote": {
+            "description": "Zero-based position of the item in the sort the user was looking at.",
+            "minimum": 0,
+            "nullable": true,
+            "type": "integer"
+          },
+          "score_at_vote": {
+            "description": "The item's model score when it was surfaced, if the client has one.",
+            "nullable": true,
+            "type": "number"
+          },
+          "select_mode": {
+            "description": "How the item was drawn off the ranking: ``top`` (head of the sort), ``hard`` (margin sampling near the cutoff), or ``new`` (diverse exploration).",
+            "enum": [
+              "hard",
+              "new",
+              "top",
+              null
+            ],
+            "nullable": true,
+            "type": "string"
+          },
+          "sort_kind": {
+            "description": "Which ranking the user was looking at.",
+            "enum": [
+              "learned",
+              "load",
+              "text",
+              null
+            ],
+            "nullable": true,
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "VotesResponse": {
@@ -10779,7 +10860,7 @@
         }
       ],
       "post": {
-        "description": "Body: ``{\"target\": \"good\"}``, ``{\"target\": \"bad\"}``, or\n``{\"target\": \"remove\"}``.\n\nAbsolute-target semantics mirror :func:`~vtsearch.state.set_vote`:\n``\"good\"`` / ``\"bad\"`` set the element's label (a re-assert of the\ncurrent label is an idempotent no-op), ``\"remove\"`` drops the element.\nWhen the element resolves into the active dataset, the detector's\nin-memory ``good_votes`` / ``bad_votes`` are kept in sync so MLP\nretraining and learned-sort see the change.",
+        "description": "Body: ``{\"target\": \"good\"}``, ``{\"target\": \"bad\"}``, or\n``{\"target\": \"remove\"}``.\n\nAbsolute-target semantics mirror :func:`~vtsearch.state.set_vote`:\n``\"good\"`` / ``\"bad\"`` set the element's label (a re-assert of the\ncurrent label is an idempotent no-op), ``\"remove\"`` drops the element.\nWhen the element resolves into the active dataset, the detector's\nin-memory ``good_votes`` / ``bad_votes`` are kept in sync so MLP\nretraining and learned-sort see the change.\n\nAn optional ``provenance`` block records how the element was surfaced,\ndefaulting to ``{\"flow\": \"labelset_review\"}`` - this route is the\ndashboard's review of already-saved labels, not a draw off any ranking.\nIt is written only when the label actually flips.",
         "operationId": "vote_detector_label",
         "requestBody": {
           "content": {
@@ -10801,6 +10882,9 @@
               }
             },
             "description": "OK"
+          },
+          "400": {
+            "description": "provenance is malformed."
           },
           "404": {
             "description": "Detector or label element not found."
@@ -12649,7 +12733,7 @@
             "description": "OK"
           },
           "400": {
-            "description": "No ids supplied."
+            "description": "No ids supplied, or provenance is malformed."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
@@ -13054,7 +13138,7 @@
         }
       ],
       "post": {
-        "description": "``target`` is one of:\n\n- ``\"good\"``: set to good (overrides ``bad`` if present).\n- ``\"bad\"``: set to bad (overrides ``good`` if present).\n- ``\"none\"``: un-vote (remove any existing vote).\n\nBehaviour is **idempotent**: sending the current state is a no-op\nthat does not append to ``label_history``, does not credit\nachievements, and returns the existing click-time.  This is the\nfix for logical-bug-audit H1; two stale-view tabs that race the\nsame media no longer alternate ADD/REMOVE on the server, so the\nachievement counter no longer inflates beyond the number of real\nlabeling decisions.\n\nYes-targets may carry ``\"region_box\": [x0, y0, x1, y1]`` (normalised\nimage coords in ``[0, 1]``) to designate the good region.\n``\"bad\"`` and ``\"none\"`` targets must not include ``region_box``; by\ndesign no-votes are image-level always (patch-embedder v2).\n\nReturns ``{\"ok\": true, \"state\": <new state>, \"click_time\": <int|null>}``\nso the client can reconcile its optimistic view directly from the\nresponse.",
+        "description": "``target`` is one of:\n\n- ``\"good\"``: set to good (overrides ``bad`` if present).\n- ``\"bad\"``: set to bad (overrides ``good`` if present).\n- ``\"none\"``: un-vote (remove any existing vote).\n\nBehaviour is **idempotent**: sending the current state is a no-op\nthat does not append to ``label_history``, does not credit\nachievements, and returns the existing click-time.  This is the\nfix for logical-bug-audit H1; two stale-view tabs that race the\nsame media no longer alternate ADD/REMOVE on the server, so the\nachievement counter no longer inflates beyond the number of real\nlabeling decisions.\n\nYes-targets may carry ``\"region_box\": [x0, y0, x1, y1]`` (normalised\nimage coords in ``[0, 1]``) to designate the good region.\n``\"bad\"`` and ``\"none\"`` targets must not include ``region_box``; by\ndesign no-votes are image-level always (patch-embedder v2).\n\nAn optional ``provenance`` block records how the item was surfaced\n(flow / autopilot phase / select mode / sort / rank / score).  It is\nstored only when the call actually changes the vote state, so an\nidempotent re-send from a stale tab cannot overwrite what the original\nclick recorded.  See :mod:`vtscore.datasets.vote_provenance`.\n\nReturns ``{\"ok\": true, \"state\": <new state>, \"click_time\": <int|null>}``\nso the client can reconcile its optimistic view directly from the\nresponse.",
         "operationId": "vote_media",
         "requestBody": {
           "content": {
@@ -13078,7 +13162,7 @@
             "description": "OK"
           },
           "400": {
-            "description": "region_box is malformed, or a non-good target carries a region_box."
+            "description": "region_box or provenance is malformed, or a non-good target carries a region_box."
           },
           "404": {
             "description": "Media not found."

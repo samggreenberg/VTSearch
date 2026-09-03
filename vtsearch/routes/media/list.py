@@ -28,6 +28,7 @@ from vtscore.media.audio.ffmpeg import get_ffmpeg_exe
 from vtscore.media.base import MediaResponse
 from vtscore.security.path_validation import resolve_media_file_path
 from vtscore.utils.hashing import content_md5
+from vtscore.datasets.vote_provenance import normalize_provenance
 from vtscore.utils.hits import hit_custom_metadata
 from vtsearch.schemas.media import (
     MediaAddToPileResponseSchema,
@@ -946,7 +947,9 @@ def media_generic(query: dict, media_id: int):
 @medias_bp.route("/api/medias/<int:media_id>/vote", methods=["POST"])
 @medias_bp.arguments(MediaVoteRequestSchema)
 @medias_bp.response(200, MediaVoteResponseSchema)
-@medias_bp.alt_response(400, description="region_box is malformed, or a non-good target carries a region_box.")
+@medias_bp.alt_response(
+    400, description="region_box or provenance is malformed, or a non-good target carries a region_box."
+)
 @medias_bp.alt_response(404, description="Media not found.")
 @require_dataset_header
 @require_detector_header
@@ -972,6 +975,12 @@ def vote_media(body: dict, media_id: int):
     ``"bad"`` and ``"none"`` targets must not include ``region_box``; by
     design no-votes are image-level always (patch-embedder v2).
 
+    An optional ``provenance`` block records how the item was surfaced
+    (flow / autopilot phase / select mode / sort / rank / score).  It is
+    stored only when the call actually changes the vote state, so an
+    idempotent re-send from a stale tab cannot overwrite what the original
+    click recorded.  See :mod:`vtscore.datasets.vote_provenance`.
+
     Returns ``{"ok": true, "state": <new state>, "click_time": <int|null>}``
     so the client can reconcile its optimistic view directly from the
     response.
@@ -988,7 +997,12 @@ def vote_media(body: dict, media_id: int):
     if target != "good" and region_box is not None:
         abort(400, message="region_box is only valid on 'good' targets")
 
-    _old, new_state, click_time = set_vote(media_id, target, region_box=region_box)
+    try:
+        provenance = normalize_provenance(body.get("provenance"))
+    except ValueError as exc:
+        abort(400, message=str(exc))
+
+    _old, new_state, click_time = set_vote(media_id, target, region_box=region_box, provenance=provenance)
 
     # Persist the resulting labelset.  A failure here (e.g. ``os.replace``
     # EBUSY/ENOSPC under ``_write_detector``) used to bubble as an
@@ -1024,7 +1038,7 @@ def vote_media(body: dict, media_id: int):
 @medias_bp.route("/api/medias/vote-bulk", methods=["POST"])
 @medias_bp.arguments(MediaVoteBulkRequestSchema)
 @medias_bp.response(200, MediaVoteBulkResponseSchema)
-@medias_bp.alt_response(400, description="No ids supplied.")
+@medias_bp.alt_response(400, description="No ids supplied, or provenance is malformed.")
 @require_dataset_header
 @require_detector_header
 def vote_media_bulk(body: dict):
@@ -1047,6 +1061,14 @@ def vote_media_bulk(body: dict):
     if not ids:
         abort(400, message="No ids supplied")
 
+    # A batch action over a hand-selected set is its own surfacing flow; the
+    # client may refine it (with the sort it was selecting from), but never
+    # has to.
+    try:
+        provenance = normalize_provenance(body.get("provenance") or {"flow": "bulk"})
+    except ValueError as exc:
+        abort(400, message=str(exc))
+
     changed = 0
     missing: list[int] = []
     for media_id in ids:
@@ -1056,7 +1078,7 @@ def vote_media_bulk(body: dict):
         # Bulk "Verified Good/Bad" over a hand-selected set is not an
         # individual hand-click, so it must not build a Marathoner streak;
         # count_streak=False still credits the other vote achievements.
-        old, new, _click_time = set_vote(media_id, target, count_streak=False)
+        old, new, _click_time = set_vote(media_id, target, count_streak=False, provenance=provenance)
         if old != new:
             changed += 1
 
@@ -1241,7 +1263,7 @@ def add_media_to_pile():
 
     if existing_cids:
         for cid in existing_cids:
-            apply_label(cid, label)
+            apply_label(cid, label, provenance={"flow": "seed_example"})
         _sync_pile_label_to_storage()
         return {"ok": True, "media_id": existing_cids[0], "is_new": False}
 
@@ -1285,7 +1307,7 @@ def add_media_to_pile():
     target_cids, target_id, is_new = _insert_or_collide(new_media, file_md5)
 
     for cid in target_cids:
-        apply_label(cid, label)
+        apply_label(cid, label, provenance={"flow": "seed_example"})
     _sync_pile_label_to_storage()
 
     if is_new:

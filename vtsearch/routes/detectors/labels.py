@@ -48,6 +48,7 @@ from pathlib import Path
 from flask import jsonify, send_file
 from flask_smorest import Blueprint, abort
 
+from vtscore.datasets.vote_provenance import normalize_provenance
 from vtscore.detectors.store import (
     _detector_path,
     _read_detector,
@@ -159,6 +160,7 @@ def save_detector_labels(name: str):
             snap.bad_votes,
             expand_dupes=False,
             vote_region_boxes=snap.vote_region_boxes,
+            vote_provenance=snap.vote_provenance,
         )
 
         # Existing labelset entries that resolve into the active dataset are
@@ -643,6 +645,7 @@ def thumbnail_detector_label(name: str, element_id: str):
 )
 @detectors_labels_bp.arguments(DetectorLabelVoteRequestSchema)
 @detectors_labels_bp.response(200, DetectorLabelVoteResponseSchema)
+@detectors_labels_bp.alt_response(400, description="provenance is malformed.")
 @detectors_labels_bp.alt_response(404, description="Detector or label element not found.")
 def vote_detector_label(body: dict, name: str, element_id: str):
     """Set a saved labelset element's label to an absolute target.
@@ -656,6 +659,11 @@ def vote_detector_label(body: dict, name: str, element_id: str):
     When the element resolves into the active dataset, the detector's
     in-memory ``good_votes`` / ``bad_votes`` are kept in sync so MLP
     retraining and learned-sort see the change.
+
+    An optional ``provenance`` block records how the element was surfaced,
+    defaulting to ``{"flow": "labelset_review"}`` - this route is the
+    dashboard's review of already-saved labels, not a draw off any ranking.
+    It is written only when the label actually flips.
     """
     from vtscore.detectors.labelset_elements import (
         apply_element_vote_in_data,
@@ -663,6 +671,11 @@ def vote_detector_label(body: dict, name: str, element_id: str):
     )
 
     target = body["target"]
+
+    try:
+        provenance = normalize_provenance(body.get("provenance") or {"flow": "labelset_review"})
+    except ValueError as exc:
+        abort(400, message=str(exc))
 
     from vtscore.datasets.labelset import LabelSet
     from vtscore.detectors.labelset_elements import find_element_by_id
@@ -684,7 +697,7 @@ def vote_detector_label(body: dict, name: str, element_id: str):
 
         cid_before = resolve_current_dataset_cid(pre_elem)
 
-        changed, _updated, action = apply_element_vote_in_data(data, element_id, target)
+        changed, _updated, action = apply_element_vote_in_data(data, element_id, target, provenance=provenance)
         if not changed:
             return {"ok": True, "action": action}
 
@@ -697,7 +710,7 @@ def vote_detector_label(body: dict, name: str, element_id: str):
     if cid_before is not None:
         from vtsearch.state import set_vote
 
-        set_vote(cid_before, "none" if target == "remove" else target)
+        set_vote(cid_before, "none" if target == "remove" else target, provenance=provenance)
 
     from vtscore.detectors.registry import find_by_name, update_detector
 
