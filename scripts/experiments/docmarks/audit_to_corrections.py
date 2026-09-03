@@ -502,6 +502,8 @@ def resplit_classes(
     *,
     backend: str,
     threshold: float,
+    corpus: Path,
+    min_mark_px: int = cfg.MIN_MARK_PX,
     factor: float = 0.5,
 ) -> list[str]:
     """Re-cluster each over-merged class alone, at a tighter threshold.
@@ -509,7 +511,17 @@ def resplit_classes(
     Only that class's own instances are touched, so re-splitting one class can
     never disturb another's already-confirmed membership.  The resulting pieces
     come back as fresh candidate classes for the next ``cluster`` sheet.
+
+    The pieces are **registered in** ``classes``, not merely written onto the
+    marks.  ``assign_class_ids`` relabels the manifest, but the slate, the
+    roster, the embedder and the report all read ``classes.json``; the only
+    other thing that writes it is ``build_corpus.py``, which rebuilds from the
+    sources and would discard this split along with every other audit verdict.
+    Popping the parent without adding its pieces therefore does not defer the
+    decision to the next sheet -- it deletes the class from everything
+    downstream while leaving its marks pointing at ids nothing knows.
     """
+    from build_corpus import admit_classes, write_query_crops
     from cluster_marks import assign_class_ids, describe_marks, distance_matrix, single_linkage
 
     notes: list[str] = []
@@ -528,7 +540,21 @@ def resplit_classes(
         provenance = "clustered_band" if meta.get("located_by") == "band" else "clustered"
         pieces = assign_class_ids(pages, refs, labels, source=source, provenance=provenance)
         classes.pop(class_id, None)
-        notes.append(f"{class_id}: re-clustered at {tighter:.3f} into {len(pieces)} piece(s)")
+
+        # `min_instances=1`: the reviewer said this class holds more than one
+        # mark, so every piece is a finding.  Sizing them out here would drop
+        # the small ones silently; the roster is where a piece too small to
+        # search gets excluded, and it can only exclude what it can see.
+        inventory = {cid: [(r.page_index, r.mark_index) for r in group] for cid, group in pieces.items()}
+        fresh, rejected = admit_classes(pages, inventory, min_instances=1, min_mark_px=min_mark_px, roster=None)
+        for cid, fresh_meta in fresh.items():
+            fresh_meta["audit"]["notes"] = f"re-clustered out of {class_id} at {tighter:.3f}"
+            classes[cid] = fresh_meta
+        write_query_crops(pages, inventory, fresh, corpus / "queries")
+        note = f"{class_id}: re-clustered at {tighter:.3f} into {len(pieces)} piece(s)"
+        if rejected:
+            note += f", {len(rejected)} not admitted ({'; '.join(sorted(rejected.values()))})"
+        notes.append(note)
     return notes
 
 
@@ -554,6 +580,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--apply", action="store_true", help="write the changes (default is a dry run)")
     ap.add_argument("--cluster-backend", default=cfg.CLUSTER_BACKEND, choices=("phash", "siglip"))
     ap.add_argument("--cluster-threshold", type=float, default=cfg.CLUSTER_THRESHOLD)
+    ap.add_argument("--min-mark-px", type=int, default=cfg.MIN_MARK_PX)
     args = ap.parse_args(argv)
 
     classes_path = args.corpus / "classes.json"
@@ -606,7 +633,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     if resplit:
         for note in resplit_classes(
-            pages, classes, resplit, backend=args.cluster_backend, threshold=args.cluster_threshold
+            pages,
+            classes,
+            resplit,
+            backend=args.cluster_backend,
+            threshold=args.cluster_threshold,
+            corpus=args.corpus,
+            min_mark_px=args.min_mark_px,
         ):
             print(f"  {note}")
         print("  re-run make_audit_slate.py --task cluster to review the new pieces")

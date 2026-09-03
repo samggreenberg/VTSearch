@@ -1196,6 +1196,125 @@ class TestClustering:
 # ---------------------------------------------------------------- synthesis
 
 
+class TestResplitRegistersItsPieces:
+    """A ``split`` verdict must leave the pieces somewhere the corpus can see.
+
+    ``resplit_classes`` relabels the marks and pops the parent.  Everything
+    downstream -- the slate, the roster, the embedder, the report -- reads
+    ``classes.json``, and the only other writer is ``build_corpus.py``, which
+    rebuilds from the sources and would discard the split.  So a piece that is
+    not registered here is not "deferred to the next sheet"; it is gone, with
+    its marks pointing at an id nothing knows.
+    """
+
+    def _two_marks_one_class(self, mods, tmp_path):
+        """Two visibly different stamps sharing one class id, on real pages."""
+        from PIL import Image
+
+        pages = []
+        for i in range(6):
+            arr = np.full((_PAGE_H, _PAGE_W), 255, dtype=np.uint8)
+            if i < 4:
+                arr[200:260, 200:400] = 0  # a solid bar
+            else:
+                for k in range(12):  # a comb, nothing like the bar
+                    arr[200:260, 200 + k * 16 : 204 + k * 16] = 0
+            path = tmp_path / f"p{i}.png"
+            Image.fromarray(arr).save(path)
+            pages.append(
+                _page(
+                    mods,
+                    f"src/{i:05d}",
+                    "src",
+                    marks=[("stamp", (200, 200, 200, 60), "src/stamp_00000_0", "clustered")],
+                    path=str(path),
+                )
+            )
+        return pages
+
+    def test_every_piece_lands_in_classes_and_keeps_all_instances(self, mods, tmp_path):
+        pages = self._two_marks_one_class(mods, tmp_path)
+        inventory = mods["build"].class_inventory(pages)
+        classes, _ = mods["build"].admit_classes(pages, inventory, min_instances=1, min_mark_px=1)
+        assert set(classes) == {"src/stamp_00000_0"}
+
+        notes = mods["audit"].resplit_classes(
+            pages,
+            classes,
+            ["src/stamp_00000_0"],
+            backend="phash",
+            threshold=0.20,
+            corpus=tmp_path,
+            min_mark_px=1,
+        )
+
+        # A piece takes its id from its own smallest page id, so the parent's id
+        # comes back as the id of whichever piece kept page 00000 -- what must
+        # not survive is the parent's *entry*, with all six instances on it.
+        assert len(classes) >= 2, f"pieces were not registered: {notes}"
+        assert classes["src/stamp_00000_0"]["n_instances"] == 4
+        assert sum(m["n_instances"] for m in classes.values()) == 6
+        assert sorted(m["n_instances"] for m in classes.values()) == [2, 4]
+        # Every relabelled mark resolves to a registered class.
+        for page in pages:
+            for mark in page.marks:
+                assert mark.class_id in classes
+
+    def test_a_singleton_piece_is_registered_rather_than_sized_out(self, mods, tmp_path):
+        # The reviewer already said this class holds more than one mark, so a
+        # one-instance piece is a finding.  Dropping it here would hide it from
+        # the roster, which is the only place that should decide it is too
+        # small to search.
+        pages = self._two_marks_one_class(mods, tmp_path)
+        pages = pages[:4] + pages[4:5]  # 4 bars, 1 comb
+        inventory = mods["build"].class_inventory(pages)
+        classes, _ = mods["build"].admit_classes(pages, inventory, min_instances=1, min_mark_px=1)
+        mods["audit"].resplit_classes(
+            pages,
+            classes,
+            ["src/stamp_00000_0"],
+            backend="phash",
+            threshold=0.20,
+            corpus=tmp_path,
+            min_mark_px=1,
+        )
+        sizes = sorted(m["n_instances"] for m in classes.values())
+        assert sizes == [1, 4], sizes
+
+
+class TestSiglipClusterBackend:
+    """The ``siglip`` cluster backend named symbols that do not exist.
+
+    It imported ``SiglipEmbedder`` (the class is ``ImageSiglipEmbedder``) and
+    then called ``embed_images`` (the in-memory entry point is
+    ``embed_pil_image``), so ``--cluster-backend siglip`` raised ImportError on
+    every path that reached it, from the corpus builder's first commit onward.
+    Both names are checked here rather than the clustering itself, because the
+    failure was never in the maths -- it was in code no test had executed.
+    """
+
+    def test_the_backend_names_the_embedder_that_exists(self, mods):
+        import inspect
+
+        src = inspect.getsource(mods["cluster"].describe_marks)
+        assert "ImageSiglipEmbedder" in src
+        assert "import SiglipEmbedder" not in src
+
+    def test_the_embedder_exposes_the_method_the_backend_calls(self, mods):
+        import inspect
+
+        from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
+
+        src = inspect.getsource(mods["cluster"].describe_marks)
+        assert "embed_pil_image" in src
+        assert hasattr(ImageSiglipEmbedder, "embed_pil_image")
+        assert not hasattr(ImageSiglipEmbedder, "embed_images")
+
+    def test_an_unknown_backend_still_says_so(self, mods):
+        with pytest.raises(ValueError, match="unknown cluster backend"):
+            mods["cluster"].describe_marks([], [], backend="nope")
+
+
 class TestSynthesis:
     def _artwork(self, size=(120, 60)):
         from PIL import Image, ImageDraw
