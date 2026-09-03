@@ -138,6 +138,11 @@ export CALIB_SIM_FRACTION="${CALIB_SIM_FRACTION:-0.5}"
 # over cells whose tail is flat because they ran OUT of positives.  That is
 # exactly the failure #3319 shipped, and it is the reason this study exists.
 export CALIB_MIN_SIM_POSITIVES="${CALIB_MIN_SIM_POSITIVES:-400}"
+# Preflight's floor FOLLOWS the tripwire rather than repeating it. Written as a
+# literal `400` it silently contradicts any run that lowers the tripwire on
+# purpose -- which the H2 control does, since its whole job is to re-run this
+# grid on the SHALLOW pile where 150 sim positives is the fact under test.
+# A number restated beside a constant goes stale; #3319 hit that three times.
 
 # Seed-major, and DECLARED at 24 while the study runs a prefix of 16.
 export CALIB_CELL_ORDER=seed
@@ -307,7 +312,7 @@ case "$MODE" in
 
       if [[ -x "$WT/scripts/experiments/preflight.sh" ]]; then
         bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --need-gb 40 \
-          --require-min-positives 400 \
+          --require-min-positives "${ACQ_MIN_POSITIVES:-$CALIB_MIN_SIM_POSITIVES}" \
           --reuse-prepare "$PREP" \
           "${DIV[@]}" \
           --job-name "$JOB_NAME" --mem "$CALIB_MEM" --conc "$study_conc" || {
