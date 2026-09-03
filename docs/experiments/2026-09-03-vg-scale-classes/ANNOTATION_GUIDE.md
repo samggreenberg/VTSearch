@@ -26,6 +26,9 @@ cost us the `book` pass.
 - **The rule travels in the dataset name.** The name in the app is the whole
   rule you are voting under. If the name and this document ever disagree,
   the name is what you actually voted, and this document is wrong.
+- **When several objects qualify, box the single biggest one — not the
+  collection.** A box around six plates measures the group, and the band is a
+  claim about the size of *an object*. One plate, the largest, is the answer.
 - **Vote on the object, not a depiction of it.** A car on a billboard, cutlery
   printed on a menu, a bottle in a logo — all Bad, for every class here. So is
   a *pictogram*: the bicycle on a BIKE ROUTE sign is a sign, not a bicycle. Note
@@ -147,18 +150,33 @@ glasses or pints all count. **Stemware does not**: COCO has a separate
 flute, martini glass, snifter — is Bad here. Measuring cups and trophy cups
 count. When in doubt, ask: does it hold a drink and lack a stem? Then Good.
 
-### `bowl incl plates and dishes`
+### `bowl incl plates and food containers not wrappers`
 
 **COCO has no `plate` class, so its annotators put plates in `bowl`** — 212 VG
-`plate` boxes and 146 `dish` boxes land on COCO bowl boxes. Take the wide
-reading: bowls, plates, saucers, shallow serving dishes, food containers, and
-serving pots and baskets that hold food all count. A cup or mug does not (that
-is `cup`), and a sink basin does not (that is `sink`). Judge the **vessel, not
-the food**: an empty plate counts, and a pile of food on a bare table does not
-— which matters because VG names 163 of these boxes `food` and 51 `salad`.
-Note that `plate` cannot be a class of its own here because it is polysemous
-(dinner plate / licence plate), and that is precisely why it lives inside
-`bowl`.
+`plate` boxes and 146 `dish` boxes land on COCO bowl boxes. But the name `bowl`
+undersells the class badly, which is why the dataset is not called that: the
+**fourth-largest fold-in is `container` (143 boxes)**, ahead of `pot` (79) and
+`basket` (69). The class is really *rigid open vessels that hold food*.
+
+Count bowls, plates (a **paper plate is a plate**), saucers, shallow serving
+dishes, serving pots, baskets that hold food, and **disposable food containers**
+— a yogurt pot counts.
+
+Do not count:
+
+- **Paper wrappers and trays**, even ones with walls. A hotdog tray is a wrapper,
+  not a vessel. (Costs `tray`, 19 boxes.)
+- **A cup or mug** — that is `cup`, and it is the single largest thing excluded
+  here (120 boxes), so expect to reject it often.
+- **A sink basin** (`sink`), an **ashtray**, a **blender or coffee carafe**, and
+  a **vase** — a vase is not a food container. None of the last three is a
+  systematic fold-in, so excluding them costs almost nothing.
+
+Judge the **vessel, not the food**: an empty plate counts, and a pile of food on
+a bare table does not — which matters because VG names 163 of these boxes `food`
+and 51 `salad`. Note that `plate` cannot be a class of its own here because it
+is polysemous (dinner plate / licence plate), and that is precisely why it lives
+inside `bowl`.
 
 ### `bottle incl jars`
 
@@ -206,8 +224,9 @@ ledge, a low wall, a kerb or a platform (`wall` 16, `concrete` 6, `platform` 5,
 `rail`/`railing` 10). The test is intent of manufacture, not affordance.
 
 Together these narrow the class by roughly 3% of COCO's bench boxes, which the
-supply absorbs. **Still open:** a rowboat's *thwart* — the crosswise plank that
-is genuinely built to sit on — falls under `seat` and has not been ruled on.
+supply absorbs. A rowboat's **thwart** — the crosswise plank built to sit on —
+**counts**: it is seating, and it was built as seating, so it passes both tests
+even though it is part of a boat.
 
 ### `chair incl stools not couches`
 
