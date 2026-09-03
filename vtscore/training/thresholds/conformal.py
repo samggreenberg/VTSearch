@@ -846,12 +846,35 @@ def threshold_from_fold_orderings(
     """Apply the conformal inclusion rule to the pooled fold orderings.
 
     Cheap: pools every fold's cached held-out ``(scores, labels)`` and runs
-    :func:`conformal_threshold` once - no fold refits.  Pooling (rather than
-    averaging per-fold thresholds) is deliberate: the knob's resolution is
-    bounded by the number of calibration scores the quantiles are taken over,
-    and per-fold quantiles on a handful of votes each would waste the other
-    folds' scores.  All folds' scores live on the same sigmoid scale, so the
-    pool is exchangeable enough for the quantile rule.
+    :func:`conformal_threshold` once - no fold refits.
+
+    **Pooling is deliberate, and only one of its two historical justifications
+    survived measurement** (issue #3115, run 2026-08-25,
+    ``docs/experiments/2026-08-25-calibration-fold-combine/REPORT.md``):
+
+    * *Resolution* - "the knob's resolution is bounded by the number of
+      calibration scores the quantiles are taken over, and per-fold quantiles
+      on a handful of votes each would waste the other folds' scores" - **holds,
+      and it is what keeps this rule shipped.**  Below roughly 45 votes on the
+      run's single-vector cell (roughly 15 on its patch cell), averaging the
+      folds' own cuts is *worse* than pooling, by as much as +0.03 paired regret
+      around 20 votes.  Each fold's cut is then a quantile over a handful of
+      held-out points, and averaging K coarse cuts loses to one quantile over
+      the pool.
+    * *Exchangeability* - "all folds' scores live on the same sigmoid scale, so
+      the pool is exchangeable enough for the quantile rule" - **is refuted in
+      the deep regime.**  Past ~100 votes, averaging the per-fold conformal cuts
+      in score space beats pooling by −0.0078 ± 0.0015 and −0.016 ± 0.003 on the
+      run's two cells.
+
+    The two regimes point opposite ways and the rule is not switched, because
+    every path that still reaches this function is a *haystack-less* one - the
+    Inclusion slider's re-cut for a detector whose anchored fit degenerated, and
+    the library-tier re-derivation entry points - none of which has any reason to
+    sit in the deep regime.  A detector with a haystack is cut by
+    :func:`~vtscore.training.thresholds.fold_anchored_gmm_threshold` and never
+    arrives here.  :func:`combined_fold_conformal_threshold` is the measured
+    challenger, kept eval-only for exactly this reason.
 
     Callers must pass a non-empty ``fold_orderings`` (the empty case is
     handled via the ``fallback`` from :func:`compute_fold_orderings`);
@@ -879,8 +902,19 @@ def threshold_from_fold_orderings(
 #: same sigmoid scale".  :meth:`FoldAnchoredCut._combined_fold_quantile` takes
 #: one cut per fold and averages them in **quantile** space specifically so that
 #: no cross-scale averaging of raw cuts ever happens - i.e. it is built on the
-#: premise that fold scores are *not* directly comparable.  Both cannot be right,
-#: and nobody has measured which.
+#: premise that fold scores are *not* directly comparable.
+#:
+#: **Both were measured, and each is right in a different regime** (#3115, run
+#: 2026-08-25; see :func:`threshold_from_fold_orderings` for the numbers and
+#: ``docs/experiments/2026-08-25-calibration-fold-combine/REPORT.md`` for the
+#: run).  Averaging beats pooling past ~100 votes in both of the run's cells and
+#: loses to it in the cold start; the *quantile*-space step flips sign between
+#: the cells outright.  That sign flip is **not attributable to the voting
+#: mode**: the run's two cells confounded mode with the embedder, and #3310
+#: later filled the missing corner on the same grid and found the neighbouring
+#: fold-count effect follows the **embedder**, not the mode (as #3287's
+#: calibration-fraction optimum also did).  So there is no measured licence for a
+#: mode-dependent rule, and issue #3258, which proposed one, was closed unbuilt.
 #:
 #: The four rules here are the challengers, and they factor the disagreement
 #: rather than confounding it.  Against the pooled control they decompose as:
@@ -938,9 +972,16 @@ def combined_fold_conformal_threshold(
     """Combine the folds' *own* conformal cuts instead of pooling their scores.
 
     The challenger to :func:`threshold_from_fold_orderings` (issue #3115); see
-    :data:`FOLD_CONFORMAL_COMBINES` for what each rule isolates.  **Eval-only**
-    - nothing in the app calls this, and the run it exists for is what would
-    license changing that.
+    :data:`FOLD_CONFORMAL_COMBINES` for what each rule isolates.
+
+    **Still eval-only, now by verdict rather than by default.**  The run this
+    exists for happened (2026-08-25) and did resolve the combine leg above its
+    pre-registered margin - but in the *deep* regime only, and every path that
+    still reaches the pooled rule is a haystack-less fallback with no reason to
+    be deep.  :func:`threshold_from_fold_orderings` carries the regimes and the
+    numbers; the short version is that promoting ``tmean`` would trade a
+    −0.008/−0.016 deep-regime gain for a cold-start loss up to +0.03 on exactly
+    the paths that remain.
 
     ``"tmean"`` / ``"tmedian"`` average the per-fold cuts in **score** space.
     This is the rule that presumes the folds' sigmoid scales are comparable, and
