@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 from vtscore.config import DATA_DIR
 from vtscore.io import atomic_write_json, read_server_json
+from vtscore.labels.json_format import extract_labels, require_label_object
 from vtscore.labels.sources.base import LabelsetSource, PluginField
 
 if TYPE_CHECKING:
@@ -41,10 +42,7 @@ class ServerFileLabelsetSource(LabelsetSource):
         data = read_server_json(field_values["filepath"], missing_ok=True)
         if data is None:
             return []
-        labels = data.get("labels") if isinstance(data, dict) else None
-        if not isinstance(labels, list):
-            raise ValueError("JSON must contain a top-level 'labels' list.")
-        return [entry for entry in labels if isinstance(entry, dict)]
+        return extract_labels(data)
 
     def _do_load_full(self, field_values: dict[str, Any]) -> LabelSet:
         """Read labels *and* any ``detector_meta`` block into a :class:`LabelSet`."""
@@ -53,11 +51,7 @@ class ServerFileLabelsetSource(LabelsetSource):
         data = read_server_json(field_values["filepath"], missing_ok=True)
         if data is None:
             return _LabelSet()
-        if not isinstance(data, dict):
-            raise ValueError("JSON must contain an object at the top level.")
-        if not isinstance(data.get("labels"), list):
-            raise ValueError("JSON must contain a top-level 'labels' list.")
-        return _LabelSet.from_dict(data)
+        return _LabelSet.from_dict(require_label_object(data))
 
     def _do_save(self, labelset: LabelSet, field_values: dict[str, Any]) -> None:
         """Write labels to a JSON file on the server."""

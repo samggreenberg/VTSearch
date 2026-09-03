@@ -28,6 +28,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from vtscore.io import atomic_write_stream
+
 COLUMNS = (
     "media_id",
     "filename",
@@ -50,12 +52,12 @@ def write_prediction_dump(
 ) -> None:
     """Write one row per media in *ids* to *path* (created via a temp rename).
 
-    *scores* and *labels* must be positionally aligned with *ids*; the write is
-    atomic so a reader never sees a half-written dump from a re-run in flight.
+    *scores* and *labels* must be positionally aligned with *ids*; the write goes
+    through :func:`~vtscore.io.atomic_write_stream`, so a reader never sees a
+    half-written dump from a re-run in flight and two arms dumping the same path
+    can't collide on the temp file.
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".csv.tmp")
-    with tmp.open("w", newline="") as fh:
+    with atomic_write_stream(path) as fh:
         writer = csv.writer(fh)
         writer.writerow(COLUMNS)
         for media_id, score, label in zip(ids, scores, labels, strict=True):
@@ -72,7 +74,6 @@ def write_prediction_dump(
                     "|".join(str(c) for c in categories),
                 ]
             )
-    tmp.replace(path)
 
 
 def maybe_dump_predictions(

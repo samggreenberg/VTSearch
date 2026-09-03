@@ -13,14 +13,12 @@ from __future__ import annotations
 import csv
 import io
 import json
-import os
-import uuid
 from pathlib import Path
 from typing import Any, Iterator
 
 from vtscore.config import DATA_DIR
 from vtscore.exporters.base import PluginField, ResultsExporter
-from vtscore.io import atomic_write_text, sanitize_csv_cell as _sanitize_csv_cell
+from vtscore.io import atomic_write_stream, atomic_write_text, sanitize_csv_cell as _sanitize_csv_cell
 
 _DEFAULT_CSV_PATH = f"{DATA_DIR}/autodetect_results_{{YYYYMMDD-HHMMSS}}.csv"
 
@@ -116,52 +114,41 @@ class ServerCsvResultsExporter(ResultsExporter):
 
         Uses a fixed column superset (see :attr:`_STREAM_COLUMNS`) because a
         streaming writer cannot look ahead to decide which optional clip
-        columns are present.  The file is built at a per-writer-unique sibling
-        ``.tmp`` path and atomically renamed on success, so two concurrent
-        exports to the same path can't clobber each other's temp file.
+        columns are present.  :func:`~vtscore.io.atomic_write_stream` owns the
+        tmp-file/``fsync``/rename ritual, so a run that dies mid-stream leaves
+        no half-written export and two concurrent exports to the same path
+        can't clobber each other's temp file.
         """
         from vtscore.datasets.origin import Origin  # noqa: PLC0415
 
         filepath = Path(field_values["filepath"])
-        filepath.parent.mkdir(parents=True, exist_ok=True)
-        # Per-writer unique suffix (pid + uuid) so two threads/processes racing
-        # to export the same path can't truncate each other's in-flight tmp or
-        # chase one already renamed away.  Matches vtscore.io.atomic_write_text.
-        tmp_path = filepath.with_name(f"{filepath.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
 
         thresholds = {d.get("detector_name", ""): d.get("threshold", "") for d in header.get("detectors", [])}
 
         total_hits = 0
-        try:
-            with open(tmp_path, "w", encoding="utf-8", newline="") as f:
-                writer = csv.writer(f)
-                writer.writerow(self._STREAM_COLUMNS)
-                for detector_name, hit in records:
-                    origin = hit.get("origin")
-                    origin_str = Origin.from_dict(origin).display() if origin else ""
-                    clip_box = hit.get("clip_box")
-                    writer.writerow(
-                        [
-                            _sanitize_csv_cell(str(detector_name)),
-                            thresholds.get(detector_name, ""),
-                            _sanitize_csv_cell(hit.get("filename", "")),
-                            _sanitize_csv_cell(hit.get("category", "")),
-                            hit.get("score", ""),
-                            _sanitize_csv_cell(hit.get("label", "")),
-                            hit.get("clip_start", ""),
-                            hit.get("clip_end", ""),
-                            ",".join(str(v) for v in clip_box) if clip_box else "",
-                            _sanitize_csv_cell(origin_str),
-                            _sanitize_csv_cell(hit.get("origin_name", "")),
-                        ]
-                    )
-                    total_hits += 1
-                f.flush()
-                os.fsync(f.fileno())
-            os.replace(tmp_path, filepath)
-        finally:
-            if tmp_path.exists():
-                tmp_path.unlink()
+        with atomic_write_stream(filepath) as f:
+            writer = csv.writer(f)
+            writer.writerow(self._STREAM_COLUMNS)
+            for detector_name, hit in records:
+                origin = hit.get("origin")
+                origin_str = Origin.from_dict(origin).display() if origin else ""
+                clip_box = hit.get("clip_box")
+                writer.writerow(
+                    [
+                        _sanitize_csv_cell(str(detector_name)),
+                        thresholds.get(detector_name, ""),
+                        _sanitize_csv_cell(hit.get("filename", "")),
+                        _sanitize_csv_cell(hit.get("category", "")),
+                        hit.get("score", ""),
+                        _sanitize_csv_cell(hit.get("label", "")),
+                        hit.get("clip_start", ""),
+                        hit.get("clip_end", ""),
+                        ",".join(str(v) for v in clip_box) if clip_box else "",
+                        _sanitize_csv_cell(origin_str),
+                        _sanitize_csv_cell(hit.get("origin_name", "")),
+                    ]
+                )
+                total_hits += 1
 
         return {
             "message": (
