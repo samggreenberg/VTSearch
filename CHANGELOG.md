@@ -33,6 +33,24 @@ not list every commit. Use `git log` for the full history.
   the dashboard and toasts read it as a red failure; both import paths now
   share one exception taxonomy and a cancel reads as `Cancelled` either side.
 
+- **Autopilot opens on the detector you already trained, instead of on its text
+  hint.** Whether a detector arrives already trained -- and so whether Autopilot
+  ranks with the model from its first screen instead of seeding from the text or
+  example hint -- was decided the instant the Autopilot panel mounted. On entry
+  to the Train window that instant is always two round trips before
+  `/api/votes` can answer (the window ends any live Find session before it reads
+  the votes), so the labelset counts it read were the not-yet-loaded zeroes and
+  the answer was always "untrained", however trained the detector was. Only the
+  Manual -> Autopilot tab switch, which rebuilds the panel with the counts
+  already loaded, ever got it right. The mount-time reading is now a guess that
+  the run's first *real* reading of the labelset corrects, and the ranking
+  follows that correction. It matters most for a detector trained on one dataset
+  and opened on another, where there are no votes to move the phase and so
+  nothing else would ever have corrected it. Two smaller things read the same
+  flag and were deciding from a value that was false for reasons of timing
+  rather than of fact: the re-sort prompt, and the sort mode Autopilot leaves
+  selected when you stop it.
+
 - **Find now calibrates each detector against the corpus it is searching, and
   scores each head the way that head was trained.** Two independent faults met
   in the cross-dataset Find route. A detector that is not loaded against the
