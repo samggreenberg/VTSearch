@@ -397,15 +397,11 @@ def _convert_one_pickle_media(
         # threshold is fitted on, so the cut moves too (issue #3556).  Keep the
         # inline payload for these entries; the memory thin would have saved
         # here was never available without losing data.
-        media_bytes, media_string, _path, _missing = _load_pickle_media_payload(
-            media_type, media_info, data, dir_keys
-        )
+        media_bytes, media_string, _path, _missing = _load_pickle_media_payload(media_type, media_info, data, dir_keys)
         if media_bytes is None:
             return _build_pickle_thin_media(new_id, media_info, media_type, media_path, extra_fields), False
         return (
-            _build_pickle_full_media(
-                new_id, media_info, media_type, media_bytes, media_string, None, extra_fields
-            ),
+            _build_pickle_full_media(new_id, media_info, media_type, media_bytes, media_string, None, extra_fields),
             False,
         )
 
