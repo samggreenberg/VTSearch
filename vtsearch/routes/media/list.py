@@ -42,12 +42,8 @@ from vtsearch.schemas.media import (
     MediaVoteRequestSchema,
     MediaVoteResponseSchema,
 )
-from vtsearch.routes._shared import (
-    cached_thumbnail_response,
-    image_thumbnail_response,
-    require_dataset_header,
-    require_detector_header,
-)
+from vtsearch.routes._context import require_dataset_header, require_detector_header
+from vtsearch.routes._media_response import cached_thumbnail_response, image_thumbnail_response
 from vtsearch.state import (
     _state_lock,
     apply_label,

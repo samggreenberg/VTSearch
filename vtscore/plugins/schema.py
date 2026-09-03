@@ -182,7 +182,7 @@ def make_plugin_arg_schema(plugin: PluginBase) -> type[Schema]:
     alongside the plugin-declared fields (e.g. ``converters``,
     ``source_specs``, ``clipper``, ``embedder``, ``dataset_name``,
     ``name``) declare them explicitly via the ``extra_keys`` argument to
-    :func:`vtsearch.routes._shared.validate_plugin_args`.
+    :func:`vtsearch.routes._plugins.validate_plugin_args`.
     """
     attrs: dict = {}
     for pf in plugin.fields:

@@ -19,7 +19,7 @@ from vtscore.plugins import PluginField
 # the UI), so users filling the form top-down have already entered the
 # fields that feed the auto-derived default name by the time they reach
 # it.  Routed through the per-plugin marshmallow schema as a regular field
-# (see :func:`vtsearch.routes._shared.validate_plugin_args`) and read
+# (see :func:`vtsearch.routes._plugins.validate_plugin_args`) and read
 # downstream by :meth:`ImporterBase.resolve_display_name`.
 DATASET_NAME_FIELD_KEY = "dataset_name"
 

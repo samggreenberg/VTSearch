@@ -19,7 +19,7 @@ from vtsearch.schemas.labels import (
     LabelsImportResponseSchema,
 )
 from vtscore.detectors.dataset_sync import validated_vote_snapshot
-from vtsearch.routes._shared import require_dataset_header, require_detector_header
+from vtsearch.routes._context import require_dataset_header, require_detector_header
 from vtsearch.state import (
     apply_label,
     apply_label_with_click_time,

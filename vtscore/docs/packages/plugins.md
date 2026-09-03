@@ -182,7 +182,7 @@ process CWD, so consuming the raw string can read another user's
 directory even though the check passed.
 
 Both ingress points run the pass, so HTTP and CLI behave identically:
-`vtsearch/routes/_shared.py`'s `validate_plugin_args()` and
+`vtsearch/routes/_plugins.py`'s `validate_plugin_args()` and
 `validate_exporter_field_values()` on the web path,
 `PluginBase.validate_cli_field_values()` on the CLI path, and
 `SyncSource.load()` / `save()` / `peek_version()` for sync sources (see

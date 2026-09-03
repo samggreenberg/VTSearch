@@ -23,11 +23,10 @@ from pathlib import Path
 from flask import request
 from flask_smorest import Blueprint, abort
 
-from vtsearch.routes._shared import (
-    format_exception_detail,
-    require_detector_header,
-    windowed_sort_response,
-)
+from vtsearch.routes._context import require_detector_header
+from vtsearch.routes._http import format_exception_detail
+from vtsearch.routes._progress import sort_idle
+from vtsearch.routes._sort_window import windowed_sort_response
 
 from vtscore.config import DATA_DIR
 from vtscore.embedding import embed_text_query
@@ -95,11 +94,6 @@ _SORT_STEPS = 3
 _SORT_TASK = "text_sort"
 
 
-def _sort_idle() -> None:
-    """Reset the sort progress bar to idle, clearing the whole-job step frame."""
-    update_sort_progress("idle", "", step=None, total_steps=None)
-
-
 _embedder_load_lock = threading.Lock()
 
 
@@ -158,12 +152,12 @@ def sort_clips(body: dict):
     """Return medias sorted by cosine similarity to a text query."""
     text = body.get("text", "").strip()
     if not text:
-        _sort_idle()
+        sort_idle()
         abort(400, message="text is required")
 
     snap = snapshot_medias()
     if not snap:
-        _sort_idle()
+        sort_idle()
         abort(400, message="No medias loaded")
 
     first = next(iter(snap.values()))
@@ -179,7 +173,7 @@ def sort_clips(body: dict):
     ctx = get_active_context()
     embedder_name = ctx.routed_embedder("text")
     if embedder_name is None:
-        _sort_idle()
+        sort_idle()
         primary = first.get("embedder", "") or "this dataset's embedder"
         abort(
             400,
@@ -194,7 +188,7 @@ def sort_clips(body: dict):
         timing.step_weights(_SORT_TASK, media_type=media_type, embedder=embedder_name, n=len(snap))
     )
     # Every exit below — success and abort alike — parks the tracker at "idle"
-    # via ``_sort_idle()``, which is what closes the recorder.
+    # via ``sort_idle()``, which is what closes the recorder.
     recorder = timing.record_task(
         sort_progress, _SORT_TASK, media_type=media_type, embedder=embedder_name, auto_finish=True
     )
@@ -209,12 +203,12 @@ def sort_clips(body: dict):
         enrich = settings.get_enrich_descriptions()
         text_vec = embed_text_query(text, media_type, enrich=enrich, embedder_name=embedder_name)
         if text_vec is None:
-            _sort_idle()
+            sort_idle()
             abort(500, message=f"Could not embed text for media type {media_type}")
 
         update_sort_progress("sorting", "Computing similarities…", 0, 0, step=3, total_steps=_SORT_STEPS)
         results, threshold = cosine_sort_active(text_vec, role="text", snap=snap)
-        _sort_idle()
+        sort_idle()
         return windowed_sort_response(results, threshold)
     except Exception as exc:
         recorder.finish(ok=False)
@@ -226,7 +220,7 @@ def sort_clips(body: dict):
             # in a 500.
             raise
         logging.getLogger(__name__).exception("text sort failed")
-        _sort_idle()
+        sort_idle()
         abort(500, message=f"Text sort failed: {format_exception_detail(exc)}")
 
 

@@ -26,12 +26,8 @@ from vtscore.detectors.training import (
     score_rows_with_model,
     scoring_rows_for_snap,
 )
-from vtsearch.routes._shared import (
-    find_idle,
-    find_idle_on_crash,
-    require_dataset_header,
-    require_detector_header,
-)
+from vtsearch.routes._context import require_dataset_header, require_detector_header
+from vtsearch.routes._progress import find_idle, find_idle_on_crash
 from vtsearch.schemas.detectors import (
     FindBoundaryNextQuerySchema,
     FindBoundaryNextResponseSchema,

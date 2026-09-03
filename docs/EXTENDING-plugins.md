@@ -206,7 +206,7 @@ Both ingress points run the pass, so HTTP and CLI behave identically:
 
 | Path | Where it runs |
 |------|---------------|
-| HTTP, flat body | `validate_plugin_args()` in `vtsearch/routes/_shared.py`, after the marshmallow load and file-upload population |
+| HTTP, flat body | `validate_plugin_args()` in `vtsearch/routes/_plugins.py`, after the marshmallow load and file-upload population |
 | HTTP, nested `{"..._name", "field_values"}` body | `validate_exporter_field_values()` in the same module |
 | CLI  | `PluginBase.validate_cli_field_values()`, after the presence check |
 | Sync sources | `SyncSource.load()` / `save()` / `peek_version()` normalize a **copy** of `field_values` before dispatching to your `_do_*` hook (`vtscore/sync/__init__.py`) |

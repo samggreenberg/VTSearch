@@ -25,7 +25,7 @@ from pathlib import Path
 
 from flask_smorest import Blueprint, abort
 
-from vtsearch.routes._shared import format_mtime
+from vtsearch.routes._http import format_mtime
 from vtsearch.schemas.file_browser import BrowseQuerySchema, BrowseResponseSchema
 
 import vtscore.security.path_validation as _paths

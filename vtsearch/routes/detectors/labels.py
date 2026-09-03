@@ -56,7 +56,8 @@ from vtscore.detectors.store import (
 )
 from vtscore.detectors.workflow import apply_and_retrain as _apply_and_retrain
 from vtsearch.errors import error_response
-from vtsearch.routes._shared import image_thumbnail_response, require_dataset_header, require_detector_header
+from vtsearch.routes._context import require_dataset_header, require_detector_header
+from vtsearch.routes._media_response import image_thumbnail_response
 from vtsearch.schemas.detectors import (
     DetectorLabelsDetailResponseSchema,
     DetectorLabelVoteRequestSchema,
@@ -332,11 +333,7 @@ def import_labels_into_detector(name: str, importer_name: str):
         return error_response(f"Detector '{name}' not found", 404)
 
     from vtscore.labels.importers import get_label_importer, list_label_importers
-    from vtsearch.routes._shared import (
-        get_plugin_or_404,
-        run_plugin_or_error,
-        validate_plugin_args,
-    )
+    from vtsearch.routes._plugins import get_plugin_or_404, run_plugin_or_error, validate_plugin_args
 
     importer, err = get_plugin_or_404(get_label_importer, list_label_importers, importer_name, "label importer")
     if err:

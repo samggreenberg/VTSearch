@@ -18,7 +18,8 @@ from flask_smorest import Blueprint, abort
 from werkzeug.exceptions import HTTPException
 
 from vtscore.config import DATA_DIR
-from vtsearch.routes._shared import format_exception_detail, image_thumbnail_response
+from vtsearch.routes._http import format_exception_detail
+from vtsearch.routes._media_response import image_thumbnail_response
 from vtsearch.schemas.media import (
     ExampleSortByIdRequestSchema,
     ExampleSortOriginRequestSchema,

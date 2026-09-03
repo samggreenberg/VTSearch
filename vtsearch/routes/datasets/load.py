@@ -40,11 +40,9 @@ from vtscore.datasets.load_pipeline import (
     _run_origin_load_in_background,
 )
 from vtscore.datasets.registry import remove_loaded_id as _reg_remove_loaded
-from vtsearch.routes._shared import (
-    abort_if_semantic_only_embedders,
-    format_exception_detail,
-    require_dataset_header,
-)
+from vtsearch.routes._context import require_dataset_header
+from vtsearch.routes._http import format_exception_detail
+from vtsearch.routes._policy import abort_if_semantic_only_embedders
 from vtsearch.routes.datasets._helpers import _safe_relative_upload_path
 from vtsearch.schemas.datasets import (
     DatasetClearResponseSchema,

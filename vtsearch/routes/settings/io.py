@@ -37,7 +37,7 @@ from flask_smorest import Blueprint, abort
 
 from vtsearch.errors import error_response
 from vtsearch import settings
-from vtsearch.routes._shared import (
+from vtsearch.routes._plugins import (
     get_plugin_or_404,
     run_plugin_or_error,
     validate_exporter_field_values,

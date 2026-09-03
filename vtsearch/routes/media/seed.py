@@ -29,11 +29,7 @@ from __future__ import annotations
 from flask_smorest import Blueprint, abort
 
 from vtscore.seed_importers import get_seed_importer, list_seed_importers
-from vtsearch.routes._shared import (
-    get_plugin_or_404,
-    plugin_field_options,
-    validate_plugin_args,
-)
+from vtsearch.routes._plugins import get_plugin_or_404, plugin_field_options, validate_plugin_args
 from vtsearch.schemas.datasets import (
     ImporterFieldOptionsRequestSchema,
     ImporterFieldOptionsResponseSchema,

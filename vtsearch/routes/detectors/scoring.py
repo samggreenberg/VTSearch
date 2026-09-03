@@ -19,13 +19,9 @@ from flask_smorest import Blueprint, abort
 from vtscore.concurrency.memory_budget import cap_workers_by_memory
 from vtscore.concurrency.progress import CancelledError, find_progress, update_find_progress
 from vtscore.detectors.model_loading import resolve_or_train_detector
-from vtsearch.routes._shared import (
-    find_idle,
-    find_idle_on_crash,
-    media_info_for_response,
-    require_dataset_header,
-    require_detector_header,
-)
+from vtsearch.routes._context import require_dataset_header, require_detector_header
+from vtsearch.routes._media_response import media_info_for_response
+from vtsearch.routes._progress import find_idle, find_idle_on_crash
 from vtsearch.schemas.detectors import (
     AutoDetectRequestSchema,
     AutoDetectResponseSchema,

@@ -178,7 +178,7 @@ validators by hand keeps working; it is simply doing no additional work.
 
 | Ingress | Hook |
 |---------|------|
-| HTTP, flat plugin body | `validate_plugin_args()` (`vtsearch/routes/_shared.py`) |
+| HTTP, flat plugin body | `validate_plugin_args()` (`vtsearch/routes/_plugins.py`) |
 | HTTP, `{"..._name", "field_values"}` body | `validate_exporter_field_values()` (same module) |
 | CLI | `PluginBase.validate_cli_field_values()` |
 | Sync sources | `SyncSource.load()` / `save()` / `peek_version()` normalize a copy before dispatching to `_do_load` / `_do_save` / `_do_peek_version` ([`vtscore/sync/__init__.py`](../../sync/__init__.py)) |
