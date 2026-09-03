@@ -147,6 +147,10 @@ LABEL_RIGHT = 6.6
 TICKS_LEFT, TICKS_RIGHT = 7.6, 18.3
 ROW_TOP, ROW_PITCH = 6.75, 0.72
 
+#: The most gaps a column may have and still have them marked — see
+#: `_mark_holes`. Two, which picks out `script` and `red` and nothing else.
+MARKED_HOLES = 2
+
 
 def _col_x(index: int) -> float:
     """The centre of attribute column *index*, evenly spread across the ticks."""
@@ -215,35 +219,44 @@ def _hits_stage(stage: int) -> plt.Figure:
                 ax.text(_col_x(index), y, "●", ha="center", va="center", fontsize=17, color=INK)
 
     # ── stage 3: the reading — every column has a hole in it ─────────────────
-    # The two nearly-full columns are the ones worth marking: they are the two
-    # attributes anybody would name if asked what a Coke logo *is*, and each of
-    # them is missing from a result the search returned as one.
     if stage >= HITS_STAGES:
-        for index, heading in enumerate(HIT_ATTRS):
-            missing = [row for row, (_, attrs) in enumerate(HITS) if heading not in attrs]
-            if len(missing) > 2:
-                continue
-            for row in missing:
-                ax.text(
-                    _col_x(index),
-                    ROW_TOP - row * ROW_PITCH,
-                    "✗",
-                    ha="center",
-                    va="center",
-                    fontsize=19,
-                    color=RED,
-                    fontweight="bold",
-                )
-        ax.text(
-            TICKS_LEFT,
-            ROW_TOP - (len(HITS) - 1) * ROW_PITCH - 0.95,
-            "no attribute is in all eight",
-            ha="left",
-            va="top",
-            fontsize=17,
-            color=RED,
-        )
+        _mark_holes(ax)
     return fig
+
+
+def _mark_holes(ax: plt.Axes) -> None:
+    """Mark the gaps in the columns that come *closest* to being full.
+
+    Only those: `script` and `red` are the two attributes anybody would name if
+    asked what a Coke logo is, and each of them is missing from a result the
+    search returned as one. Marking every gap in every column would draw
+    thirty-odd crosses and say "this matrix is sparse", which is not the claim
+    — the claim is that the two columns you would have bet on have a hole too.
+    """
+    for index, heading in enumerate(HIT_ATTRS):
+        missing = [row for row, (_, attrs) in enumerate(HITS) if heading not in attrs]
+        if len(missing) > MARKED_HOLES:
+            continue
+        for row in missing:
+            ax.text(
+                _col_x(index),
+                ROW_TOP - row * ROW_PITCH,
+                "✗",
+                ha="center",
+                va="center",
+                fontsize=19,
+                color=RED,
+                fontweight="bold",
+            )
+    ax.text(
+        TICKS_LEFT,
+        ROW_TOP - (len(HITS) - 1) * ROW_PITCH - 0.95,
+        "no attribute is in all eight",
+        ha="left",
+        va="top",
+        fontsize=17,
+        color=RED,
+    )
 
 
 # ── figure 2: four jobs, and the four different answers they want ────────────
