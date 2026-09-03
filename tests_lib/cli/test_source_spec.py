@@ -36,6 +36,7 @@ class TestDescribe:
             "chunk_size": None,
             "stream_results": False,
             "keep_negatives": False,
+            "reference_files": False,
         }
 
     def test_pickle_chunked_carries_chunk_size_and_flags(self):
@@ -46,6 +47,7 @@ class TestDescribe:
             "chunk_size": 250,
             "stream_results": True,
             "keep_negatives": True,
+            "reference_files": False,
         }
 
     def test_importer_carries_params(self):
@@ -58,6 +60,7 @@ class TestDescribe:
             "chunk_size": None,
             "stream_results": False,
             "keep_negatives": False,
+            "reference_files": False,
         }
 
     @pytest.mark.parametrize(
@@ -90,3 +93,47 @@ class TestLoad:
         source = spec.load()
         with pytest.raises(ValueError, match="Unknown importer"):
             next(iter(source))
+
+
+class TestReferenceFiles:
+    """``--reference-files`` decides thin mode; it used to be forced on.
+
+    The CLI hardcoded ``thin=True`` on all four loader paths while the GUI
+    passed the user's "Reference files in place" choice, so the same source
+    ingested differently in the two - and any media whose bytes could not be
+    re-read from outside the source was dropped in the CLI alone (issue #3556).
+    """
+
+    def test_defaults_off_so_the_cli_ingests_like_the_gui(self):
+        assert _SourceSpec(kind="pickle", dataset_path="/data/ds.pkl").reference_files is False
+
+    def test_describe_reports_the_choice(self):
+        spec = _SourceSpec(kind="importer", importer_name="server_folder", reference_files=True)
+        assert spec.describe(stream_results=False, keep_negatives=False)["reference_files"] is True
+
+    @pytest.mark.parametrize("reference_files", [False, True])
+    @pytest.mark.parametrize("chunk_size", [None, 250])
+    def test_pickle_load_forwards_the_choice_as_thin(self, monkeypatch, chunk_size, reference_files):
+        seen: dict[str, object] = {}
+
+        def _fake(path, medias, thin=False):
+            seen["thin"] = thin
+            medias[1] = {"id": 1}
+
+        def _fake_chunked(path, size, thin=False):
+            seen["thin"] = thin
+            yield {1: {"id": 1}}
+
+        monkeypatch.setattr("vtscore.datasets.loader.load_dataset_from_pickle", _fake, raising=False)
+        monkeypatch.setattr("vtscore.cli.load_dataset_from_pickle", _fake, raising=False)
+        monkeypatch.setattr("vtscore.datasets.loader.load_dataset_from_pickle_chunked", _fake_chunked, raising=False)
+        monkeypatch.setattr("pathlib.Path.exists", lambda self: True)
+
+        spec = _SourceSpec(
+            kind="pickle",
+            dataset_path="/data/ds.pkl",
+            chunk_size=chunk_size,
+            reference_files=reference_files,
+        )
+        list(spec.load())
+        assert seen["thin"] is reference_files

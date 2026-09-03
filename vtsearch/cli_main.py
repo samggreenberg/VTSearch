@@ -184,6 +184,20 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--reference-files",
+        action="store_true",
+        dest="reference_files",
+        help=(
+            "Reference media in place instead of loading their payloads: the "
+            "CLI twin of the Add-Dataset importer's 'Reference files in place' "
+            "checkbox. Saves memory when every item is re-readable from its "
+            "original location (a folder of files on disk). Omit it - the "
+            "default - to ingest exactly as the GUI does, so a source whose "
+            "bytes live only inside it (a self-contained pickle, a remote "
+            "importer with no local file) keeps every item scoreable."
+        ),
+    )
+    parser.add_argument(
         "--stream-results",
         action="store_true",
         dest="stream_results",
@@ -305,7 +319,8 @@ def _maybe_run_pipeline(args, parser, remaining) -> None:
     # `--pipeline pipeline.yaml` declares an autodetect run in YAML instead
     # of flags. It is mutually exclusive with the rest of the autodetect
     # CLI: any extra autodetect flag (importer/dataset/exporter/settings/
-    # chunk-size/import-labels-into) belongs in the YAML, not on the command
+    # chunk-size/reference-files/import-labels-into) belongs in the YAML, not
+    # on the command
     # line.
     if args.pipeline:
         for conflicting in (
@@ -315,6 +330,7 @@ def _maybe_run_pipeline(args, parser, remaining) -> None:
             "exporter",
             "settings",
             "chunk_size",
+            "reference_files",
             "import_labels_into",
             "label_importer_file",
             "dry_run",
@@ -533,6 +549,7 @@ def _dispatch_autodetect(
     dry_run,
     stream_results,
     keep_negatives,
+    reference_files,
 ) -> None:
     """Run the autodetect workflow via the importer- or pickle-file code path."""
     from vtscore.cli import (
@@ -568,6 +585,7 @@ def _dispatch_autodetect(
         dry_run=dry_run,
         stream_results=stream_results,
         keep_negatives=keep_negatives,
+        reference_files=reference_files,
     )
 
 
@@ -605,6 +623,7 @@ def _run_autodetect(args, parser, importer, exporter) -> None:
 
     stream_results = bool(getattr(args, "stream_results", False))
     keep_negatives = bool(getattr(args, "keep_negatives", False))
+    reference_files = bool(getattr(args, "reference_files", False))
     if stream_results and not chunk_size:
         parser.error("--stream-results requires --chunk-size N (it streams chunk by chunk)")
     if keep_negatives and not stream_results:
@@ -623,6 +642,7 @@ def _run_autodetect(args, parser, importer, exporter) -> None:
         dry_run,
         stream_results,
         keep_negatives,
+        reference_files,
     )
 
 

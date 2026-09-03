@@ -23,6 +23,7 @@ _TOP_LEVEL_KEYS = {
     "chunk_size",
     "stream_results",
     "keep_negatives",
+    "reference_files",
     "import_labels",
     "exporter",
 }
@@ -99,6 +100,10 @@ def load_pipeline_file(path: str | Path) -> dict[str, Any]:  # noqa: C901
     if keep_negatives and not stream_results:
         raise ValueError("'keep_negatives:' only applies with 'stream_results:'.")
 
+    reference_files = raw.get("reference_files", False)
+    if not isinstance(reference_files, bool):
+        raise ValueError("'reference_files:' must be a boolean.")
+
     import_labels = raw.get("import_labels")
     parsed_import_labels: dict[str, str] | None = None
     if import_labels is not None:
@@ -121,6 +126,7 @@ def load_pipeline_file(path: str | Path) -> dict[str, Any]:  # noqa: C901
         "chunk_size": chunk_size,
         "stream_results": stream_results,
         "keep_negatives": keep_negatives,
+        "reference_files": reference_files,
         "import_labels": parsed_import_labels,
         "exporter": exporter_name,
         "exporter_fields": exporter_fields,
@@ -267,19 +273,21 @@ def _dispatch(config: dict[str, Any]) -> None:
         )
 
     chunk_size = config["chunk_size"]
+    ref = config.get("reference_files", False)
     if config["importer"]:
         if chunk_size:
-            source = _load_importer_chunked(config["importer"], config["importer_fields"], chunk_size)
-            empty_error = f"No medias loaded by importer '{config['importer']}'"
+            source = _load_importer_chunked(
+                config["importer"], config["importer_fields"], chunk_size, reference_files=ref
+            )
         else:
-            source = _load_importer_whole(config["importer"], config["importer_fields"])
-            empty_error = f"No medias loaded by importer '{config['importer']}'"
+            source = _load_importer_whole(config["importer"], config["importer_fields"], reference_files=ref)
+        empty_error = f"No medias loaded by importer '{config['importer']}'"
     else:
         dataset_path = config["dataset"]
         if chunk_size:
-            source = _load_pickle_chunked(dataset_path, chunk_size)
+            source = _load_pickle_chunked(dataset_path, chunk_size, reference_files=ref)
         else:
-            source = _load_pickle_whole(dataset_path)
+            source = _load_pickle_whole(dataset_path, reference_files=ref)
         empty_error = f"No medias loaded from dataset: {dataset_path}"
 
     _run_pipeline(
