@@ -279,7 +279,7 @@ def example_sort_server(body: dict):
         abort(400, message="crop_params applies to a single example; omit it when passing multiple filenames")
 
     try:
-        from vtsearch.routes.sorting import _apply_crop_or_keep, _example_sort_from_paths
+        from vtscore.training.query_sort import apply_crop_or_keep, example_sort_from_paths
 
         if crop_params:
             # Crop into a temp file so the saved server-side example is unchanged.
@@ -292,12 +292,12 @@ def example_sort_server(body: dict):
             tmp = DATA_DIR / f"temp_example_{uuid.uuid4().hex}{file_path.suffix or '.bin'}"
             tmp.write_bytes(file_path.read_bytes())
             try:
-                _apply_crop_or_keep(tmp, crop_params)
-                results, thresh = _example_sort_from_paths([tmp])
+                apply_crop_or_keep(tmp, crop_params)
+                results, thresh = example_sort_from_paths([tmp])
             finally:
                 tmp.unlink(missing_ok=True)
         else:
-            results, thresh = _example_sort_from_paths(file_paths)
+            results, thresh = example_sort_from_paths(file_paths)
         return {"results": results, "threshold": thresh}
     except HTTPException:
         raise
@@ -382,16 +382,16 @@ def example_sort_origin(body: dict):
         if fetched.path is None and fetched.embedding is not None:
             if crop_params:
                 abort(400, message="Cannot crop an archive-member example (no extracted bytes)")
-            from vtsearch.routes.sorting import _cosine_sort
+            from vtscore.training.query_sort import cosine_sort_active
 
-            results, thresh = _cosine_sort(fetched.embedding)
+            results, thresh = cosine_sort_active(fetched.embedding)
             return {"results": results, "threshold": thresh}
 
         file_path = fetched.path
         if file_path is None:
             abort(404, message=f"File not found: {key}")
 
-        from vtsearch.routes.sorting import _apply_crop_or_keep, _example_sort_from_paths
+        from vtscore.training.query_sort import apply_crop_or_keep, example_sort_from_paths
 
         if crop_params:
             import uuid
@@ -402,12 +402,12 @@ def example_sort_origin(body: dict):
             tmp = DATA_DIR / f"temp_example_{uuid.uuid4().hex}{file_path.suffix or '.bin'}"
             tmp.write_bytes(file_path.read_bytes())
             try:
-                _apply_crop_or_keep(tmp, crop_params)
-                results, thresh = _example_sort_from_paths([tmp])
+                apply_crop_or_keep(tmp, crop_params)
+                results, thresh = example_sort_from_paths([tmp])
             finally:
                 tmp.unlink(missing_ok=True)
         else:
-            results, thresh = _example_sort_from_paths([file_path])
+            results, thresh = example_sort_from_paths([file_path])
         return {"results": results, "threshold": thresh}
     except HTTPException:
         raise
@@ -505,10 +505,10 @@ def example_sort_by_id(body: dict):
     crop_params = body.get("crop_params") if isinstance(body.get("crop_params"), dict) else None
 
     try:
-        from vtsearch.routes.sorting import (
-            _apply_crop_or_keep,
-            _cosine_sort,
-            _example_sort_from_paths,
+        from vtscore.training.query_sort import (
+            apply_crop_or_keep,
+            cosine_sort_active,
+            example_sort_from_paths,
         )
 
         if crop_params:
@@ -522,14 +522,14 @@ def example_sort_by_id(body: dict):
             tmp = DATA_DIR / f"temp_example_{uuid.uuid4().hex}{_media_extension(media)}"
             tmp.write_bytes(media_bytes)
             try:
-                _apply_crop_or_keep(tmp, crop_params)
-                results, thresh = _example_sort_from_paths([tmp])
+                apply_crop_or_keep(tmp, crop_params)
+                results, thresh = example_sort_from_paths([tmp])
             finally:
                 tmp.unlink(missing_ok=True)
         else:
             # Sort by this media's own vector in the score embedder's space
             # (patch-else-text; the v3 routing table), so the query matches the
-            # haystack _cosine_sort scores against.
+            # haystack cosine_sort_active scores against.
             from vtscore.embedding.media_vectors import media_embedding
             from vtscore.state.core import get_active_context
 
@@ -537,7 +537,7 @@ def example_sort_by_id(body: dict):
             embedding = media_embedding(media, score_name)
             if embedding is None:
                 abort(400, message="Media has no embedding (cannot sort)")
-            results, thresh = _cosine_sort(embedding)
+            results, thresh = cosine_sort_active(embedding)
         return {"results": results, "threshold": thresh}
     except HTTPException:
         raise

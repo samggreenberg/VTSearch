@@ -630,20 +630,6 @@ def windowed_sort_response(
     }
 
 
-def get_embedder_for_medias(media_dict: dict):
-    """Return the appropriate embedder for the given medias, or ``None``.
-
-    Thin alias for :func:`vtscore.media.embedder_for_medias`, kept so route
-    code can keep importing it from here.  The implementation moved to the
-    library tier because the dataset-load pipeline needs it too, and
-    reaching back into ``vtsearch.routes`` for it made a library code path
-    hard-require Flask (issue #2931).
-    """
-    from vtscore.media import embedder_for_medias  # noqa: PLC0415
-
-    return embedder_for_medias(media_dict)
-
-
 #: Message used by both Semantic-lock guards below, so the API surfaces one
 #: consistent explanation whichever route the request hit.
 SEMANTIC_ONLY_MESSAGE = (
