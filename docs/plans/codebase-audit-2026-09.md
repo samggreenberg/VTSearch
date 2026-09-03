@@ -110,7 +110,6 @@ care.
 ## Eval harness & experiments
 
 - [ ] #3407 — Eight hand-rolled `load_cells` copies, and the live `bench_cells._SIDECARS` regression (Sonnet 5)
-- [ ] #3408 — `run_autopilot_sweep.py` re-implements the harness vote loop against a retired configuration (Sonnet 5)
 - [ ] #3411 — Experiment runners: `_neutralise_editable_finder` forked four ways (Sonnet 5)
 - [ ] #3414 — The Smart-indicator FP/FN cost loop is a mirror that doesn't need to be one (Opus 4.8)
 

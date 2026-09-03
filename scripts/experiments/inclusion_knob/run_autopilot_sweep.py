@@ -1,44 +1,71 @@
-"""Selection-bias sweep, driven by the **canonical Autopilot** vote order.
+"""Selection-bias sweep: does the conformal Inclusion budget survive real voting?
 
-Supersedes the ``toplist`` arm of :mod:`run_selection_sweep`, which hand-rolled
-a greedy top-of-sort labeling loop.  That was not what VTSearch does: real
-Autopilot votes the top of the ranking only for its first few Goods, takes its
-Bads from the *bottom*, and then spends every remaining vote alternating
-**Hard** (the item nearest the decision threshold) and **New** (the coverage
-atlas's next under-explored region).  Margin-plus-diversity sampling biases
-the calibration positives in the opposite direction from top-greedy, so the
-earlier arm could not answer the question it was built for.
+Asks whether ``alpha(k) = 0.25 * 2^-k`` — a **split-conformal** guarantee, so it
+assumes the calibration votes are exchangeable with the inference set — still
+holds when the votes are chosen by the detector's own sort.  The comparison the
+concluded study made (Autopilot vs. exchangeable random voting) is recorded in
+[`SELECTION-BIAS.md`](../../../docs/experiments/2026-07-27-inclusion-knob/SELECTION-BIAS.md);
+what this script is *for* now is measuring that budget under the **shipped**
+detector, which is what the open items in
+``docs/plans/inclusion-calibration-bias.md`` need.
 
-This stage mirrors the production simulation loop in
-:func:`vtscore.eval.voting_iterations.simulate_voting_iterations` and picks
-every vote with the repo's own selector
-(:func:`vtscore.eval.al_strategies.select_next`, strategy ``autopilot``) over a
-real :class:`~vtscore.coverage.atlas.CoverageAtlas`, so the vote order is
-the app's by construction rather than by imitation.
+**This is a driver, not a simulation.**  Every vote, fit, calibration and cut is
+:func:`vtscore.eval.voting_iterations.simulate_voting_iterations`'s; this file
+only builds a media dict from an arm's vectors, calls it once per (arm, seed),
+and writes the two frames out.  That is deliberate and is the whole point of
+issue #3408: the previous version hand-rebuilt the vote loop, and by the time
+anyone looked it was measuring a detector nobody ships — the pre-#2877
+parity-interleaved Hard/New order instead of the app's phase machine, the
+retired ``"mlp"`` head instead of ``linear_svm``, no
+``ACQUISITION_INCLUSION_OFFSET``, and a hardcoded ``calibration_fraction=0.5``
+where production resolves 0.3 in a single-vector space.  Nothing under
+``scripts/`` is covered by ``scripts/check-eval-app-sync.py``, so none of that
+drift tripped a gate.  A driver cannot drift: it has no copy to go stale.
 
-Policies compared:
+Consequently **this script does not reproduce the committed
+``autopilot_sweep.csv``**, which is the 2026-07-30 run's record and stays as it
+is.  The new frames are written under the ``autopilot_prod_`` prefix.
 
-* ``autopilot`` - the canonical selector: text-sort seed for the first
-  ``_GOOD_TARGET`` Goods (AG News gets a genuine E5 ``"query: ..."`` embedding;
-  synthetic arms have no text, so the selector takes its designed
-  random-known-good seed path), lowest-scored items for the first
-  ``_BAD_TARGET`` Bads, then the Hard/New interleave.  One model fit +
-  cross-calibration per vote, exactly as the app retrains per vote.
-* ``uniform`` - stratified random votes: the exchangeable reference the
-  conformal rule assumes.
+What the harness resolves, that the old loop got wrong (all of it by *not*
+passing an argument — every default below is the app's):
 
-Unlike the earlier sweep, votes are drawn from a **simulation half** and every
-metric is measured on a held-out **test half** (``SIM_FRACTION``, as the eval
-framework does), so removing high-scoring items by voting on them can no
-longer depress the evaluation set's own positive quantiles.
+* the Autopilot phase machine (``autopilot_fidelity``), via
+  :class:`vtscore.eval.autopilot_flow.AutopilotFlow`;
+* the shipped head, :data:`vtscore.eval.step_model.PRODUCTION_HEAD`;
+* the acquisition cut, taken
+  :data:`~vtscore.training.thresholds.ACQUISITION_INCLUSION_OFFSET` inclusion
+  steps below the reporting cut, so the Hard phase measures ``|p - t|`` against
+  the threshold the app actually selects on;
+* ``calibration_fraction=None`` → ``production_split_for(patch_space=False)``;
+* the safe blend, on by default since #3400.
 
-Designs scored at each checkpoint: production ``conformal``, the production
-safe-``blend``, and an ``oracle`` (the same rule fed the test half's true
-scores and labels) that isolates threshold placement from model quality.
+Arms are the study's own: 4 AG News one-vs-rest categories on real E5 passage
+embeddings (text-seeded, as a user typing a query would seed Autopilot) plus 3
+synthetic separability levels (no text, so the selector takes its designed
+random-known-good seed path).  ``whole_image`` is passed explicitly because both
+side frames are gated on a resolved style; it *is* the binary geometry these
+single-vector arms train in, and it is the same arm the calibration study runs
+its binary cells under.
+
+Two frames are written:
+
+* ``autopilot_prod_steps.csv`` — one row per (arm, seed, step) at the reporting
+  inclusion, from :data:`~vtscore.eval.voting_columns.CALIBRATION_COLUMNS`
+  (filtered to the base ``gmm_variant``).  Carries ``threshold``,
+  ``xcal_threshold``, ``oracle_threshold``, ``phase`` and the operating point.
+* ``autopilot_prod_budget.csv`` — one row per (arm, seed, step, ``k``), from
+  :data:`~vtscore.eval.voting_columns.INCLUSION_SWEEP_COLUMNS`.  ``alpha``,
+  ``sweep_fnr`` and ``excess_fnr`` are this study's headline metric, computed by
+  the harness rather than restated here.
+
+Every step is emitted, not just the checkpoints: one trajectory yields them all
+now that the loop is not being re-simulated per vote count, and the cold-start
+question in ``docs/plans/inclusion-calibration-bias.md`` lives in the steps the
+old checkpoint grid skipped.
 
 Usage::
 
-    python run_autopilot_sweep.py [--quick] [--out CSV]
+    python run_autopilot_sweep.py [--quick] [--steps-out CSV] [--budget-out CSV]
 """
 
 from __future__ import annotations
@@ -53,15 +80,17 @@ common.setup_env()
 import numpy as np  # noqa: E402
 
 SEEDS = range(4)
-CHECKPOINTS = (12, 24, 50, 100)
-POLICIES = ("uniform", "autopilot")
-DESIGNS = ("conformal", "blend", "oracle")
+#: Inclusion stops the budget frame is swept at.  The study's own set, kept so
+#: the new frames stay readable against the committed tables.
 INCLUSIONS = (-10, -7, -5, -3, -1, 0, 1, 3, 5, 7, 10)
-CALIBRATE_COUNT = 2
-CALIBRATION_FRACTION = 0.5
-VOTE_POS_FRACTION = 1 / 3  # uniform arm only; autopilot's ratio is emergent
+MAX_VOTES = 100
+QUICK_MAX_VOTES = 24
 SIM_FRACTION = 0.5  # half the items votable, half held out for metrics
-ATLAS_MIN_NODE_SIZE = 20  # production floor; sim halves here are >= 1200 items
+#: The binary geometry.  Passed explicitly because both side frames are gated on
+#: a resolved style, and a single-vector pool resolves none on its own.
+STYLE = "whole_image"
+#: The positive/negative category names the binarised arms are relabelled to.
+TARGET, OTHER = "target", "other"
 #: Text a user would plausibly type per AG News category, embedded with E5's
 #: ``"query: "`` prefix to seed the Autopilot text sort (mirrors
 #: :func:`vtscore.eval.seed_scores.build_seed_scores`).
@@ -89,13 +118,36 @@ def _load_arms() -> dict[str, tuple[np.ndarray, np.ndarray] | str]:
     return arms
 
 
+def _clips(X: np.ndarray, y: np.ndarray) -> dict[int, dict]:
+    """A media dict over *X* — one single-vector media per row, ids from 1.
+
+    The minimum a media needs to be votable: an embedder name, that embedder's
+    vector, and the ``category`` the ground truth is read from.  No
+    ``patch_grid``, so the harness resolves the single-vector production
+    defaults (``whole_image`` geometry, the 0.3 Train/Calibrate split, the
+    binary blend schedule).
+    """
+    return {
+        i + 1: {
+            "id": i + 1,
+            "embedder": "e5",
+            "embeddings": {"e5": X[i]},
+            "category": TARGET if y[i] == 1 else OTHER,
+        }
+        for i in range(len(X))
+    }
+
+
 #: Per-arm text-sort ranking cache: the query embedding depends only on the
 #: arm's category, so every seed reuses it instead of reloading E5.
 _SEED_SCORE_CACHE: dict[str, dict[int, float]] = {}
 
 
 def _agnews_seed_scores(X: np.ndarray, arm: str) -> dict[int, float] | None:
-    """Cosine of every item to a real E5-embedded text query, or ``None``.
+    """Cosine of every media to a real E5-embedded text query, or ``None``.
+
+    Keyed by media id (``row + 1``, matching :func:`_clips`), which is what
+    ``simulate_voting_iterations``' ``seed_scores`` is indexed by.
 
     Only AG News arms get a text sort: they are a text dataset, so a typed
     query is exactly how a user seeds Autopilot.  Synthetic arms have no text,
@@ -113,272 +165,69 @@ def _agnews_seed_scores(X: np.ndarray, arm: str) -> dict[int, float] | None:
     model = SentenceTransformer(E5_MODEL_ID)
     q = model.encode(f"query: {AGNEWS_QUERIES[category]}", normalize_embeddings=True)
     sims = X @ np.asarray(q, dtype=np.float32)
-    _SEED_SCORE_CACHE[arm] = {int(i): float(s) for i, s in enumerate(sims)}
+    _SEED_SCORE_CACHE[arm] = {int(i) + 1: float(s) for i, s in enumerate(sims)}
     return _SEED_SCORE_CACHE[arm]
-
-
-def _split_sim_test(y: np.ndarray, seed: int) -> tuple[np.ndarray, np.ndarray]:
-    """Stratified sim/test halves, so both carry positives at pool prevalence."""
-    rng = np.random.default_rng(1000 + seed)
-    sim, test = [], []
-    for cls in (0, 1):
-        idx = np.flatnonzero(y == cls)
-        idx = rng.permutation(idx)
-        cut = int(round(len(idx) * SIM_FRACTION))
-        sim.append(idx[:cut])
-        test.append(idx[cut:])
-    return np.concatenate(sim), np.concatenate(test)
-
-
-def _votes_uniform(y: np.ndarray, sim_ids: np.ndarray, n_votes: int, seed: int) -> list[int]:
-    """Stratified random votes from the simulation half: ~1/3 positive."""
-    rng = np.random.default_rng(seed)
-    n_pos = max(2, round(n_votes * VOTE_POS_FRACTION))
-    pos = sim_ids[y[sim_ids] == 1]
-    neg = sim_ids[y[sim_ids] == 0]
-    return [
-        int(i)
-        for i in np.concatenate(
-            [
-                rng.choice(pos, size=min(n_pos, len(pos)), replace=False),
-                rng.choice(neg, size=min(n_votes - n_pos, len(neg)), replace=False),
-            ]
-        )
-    ]
-
-
-def _threshold_for_votes(
-    X: np.ndarray,
-    y: np.ndarray,
-    votes: list[int],
-    inclusion: int,
-    hidden_dim: int,
-) -> float:
-    """Production cross-calibration threshold over *votes* (fresh RandomState(42))."""
-    from vtscore.training.thresholds import compute_fold_orderings, threshold_from_fold_orderings
-
-    orderings, fallback = compute_fold_orderings(
-        list(np.asarray(X[votes], dtype=np.float32)),
-        [float(v) for v in y[votes]],
-        X.shape[1],
-        rng=np.random.RandomState(42),
-        calibrate_count=CALIBRATE_COUNT,
-        calibration_fraction=CALIBRATION_FRACTION,
-        hidden_dim=hidden_dim,
-    )
-    if fallback is not None:
-        return fallback
-    return threshold_from_fold_orderings(orderings, inclusion)
-
-
-def _votes_autopilot(
-    X: np.ndarray,
-    y: np.ndarray,
-    sim_ids: np.ndarray,
-    seed: int,
-    seed_scores: dict[int, float] | None,
-    max_votes: int,
-    checkpoints: tuple[int, ...],
-) -> dict[int, list[int]]:
-    """Run the canonical Autopilot vote order; snapshot the vote set per checkpoint.
-
-    Mirrors :func:`vtscore.eval.voting_iterations.simulate_voting_iterations`'s
-    loop: the selector picks from the *current* detector's scores, the ground
-    truth is revealed, the atlas is labelled so the New phase advances, and a
-    fresh model + production threshold are computed for the next pick.  One run
-    to ``max_votes`` yields every checkpoint, so the trajectory is shared
-    (as a real session's is) instead of re-simulated per vote count.
-    """
-    import torch
-
-    from vtscore.eval.al_strategies import ALContext, select_next
-    from vtscore.eval.step_trainers import _build_eval_atlas
-    from vtscore.training.mlp import _auto_hidden_dim, train_model
-    from vtscore.utils.scores import sigmoid_to_finite_array
-
-    rng = np.random.RandomState(seed)
-    sim_embeddings = {int(i): X[i] for i in sim_ids}
-    pool_labels = {int(i): float(y[i]) for i in sim_ids}
-    atlas = _build_eval_atlas(sim_embeddings, ATLAS_MIN_NODE_SIZE)
-
-    pool = sorted(int(i) for i in sim_ids)
-    votes: list[int] = []
-    labeled: dict[int, float] = {}
-    pool_scores: dict[int, float] = {}
-    model = None
-    threshold = 0.5
-    snapshots: dict[int, list[int]] = {}
-
-    while len(votes) < max_votes and pool:
-        ctx = ALContext(
-            pool_ids=pool,
-            embeddings=sim_embeddings,
-            labeled=labeled,
-            scores=pool_scores,
-            model=model,
-            threshold=threshold,
-            atlas=atlas,
-            rng=rng,
-            pool_labels=pool_labels,
-            seed_scores=seed_scores,
-        )
-        cid = select_next("autopilot", ctx)
-        pool.remove(cid)
-        is_positive = pool_labels[cid] == 1.0
-        votes.append(cid)
-        labeled[cid] = 1.0 if is_positive else 0.0
-        if atlas is not None and cid in atlas.vector_to_leaf:
-            atlas.label(cid, good=is_positive)
-
-        n_good = sum(1 for v in labeled.values() if v == 1.0)
-        if n_good and n_good < len(labeled):
-            hidden_dim = _auto_hidden_dim(len(votes))
-            X_t = torch.from_numpy(np.ascontiguousarray(X[votes], dtype=np.float32))
-            y_t = torch.tensor([labeled[i] for i in votes], dtype=torch.float32).unsqueeze(1)
-            model = train_model(X_t, y_t, X.shape[1], hidden_dim=hidden_dim)
-            # The Hard phase measures |p - threshold|, so the threshold driving
-            # the next pick must be the production one at the user's inclusion
-            # (0 = the default the app ships).
-            threshold = _threshold_for_votes(X, y, votes, 0, hidden_dim)
-            with torch.no_grad():
-                X_pool = torch.from_numpy(np.ascontiguousarray(X[pool], dtype=np.float32))
-                X_pool = X_pool.to(next(model.parameters()).device)
-                scores = sigmoid_to_finite_array(model(X_pool)).astype(np.float64)
-            pool_scores = {int(i): float(s) for i, s in zip(pool, scores, strict=True)}
-        if len(votes) in checkpoints:
-            snapshots[len(votes)] = list(votes)
-    return snapshots
-
-
-def _composition_stats(
-    orderings: list[tuple[list[float], list[float]]],
-    test_scores: np.ndarray,
-    test_truth: np.ndarray,
-    y_votes: np.ndarray,
-) -> dict[str, float]:
-    """Calibration-vs-population diagnostics: where the k=0 cut is read from."""
-    cal_pos = np.array([s for ss, ll in orderings for s, lb in zip(ss, ll, strict=True) if lb == 1.0])
-    test_pos = test_scores[test_truth == 1]
-    return {
-        "vote_pos_frac": float(np.mean(y_votes == 1)),
-        "n_cal_pos": int(len(cal_pos)),
-        "cal_pos_q25": float(np.quantile(cal_pos, 0.25)) if len(cal_pos) else float("nan"),
-        "test_pos_q25": float(np.quantile(test_pos, 0.25)) if len(test_pos) else float("nan"),
-        "cal_pos_min": float(cal_pos.min()) if len(cal_pos) else float("nan"),
-    }
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run the autopilot selection-bias sweep.")
-    parser.add_argument("--quick", action="store_true", help="1 seed, checkpoints up to 24 (smoke test)")
-    parser.add_argument("--out", default=str(common.RESULTS / "autopilot_sweep.csv"))
+    parser.add_argument("--quick", action="store_true", help=f"1 seed, {QUICK_MAX_VOTES} votes (smoke test)")
+    parser.add_argument("--steps-out", default=str(common.RESULTS / "autopilot_prod_steps.csv"))
+    parser.add_argument("--budget-out", default=str(common.RESULTS / "autopilot_prod_budget.csv"))
     args = parser.parse_args(argv)
 
     import pandas as pd
-    import torch
 
-    import knobs
     import synthetic
     from vtscore.embedding.loader import ensure_torch_configured
-    from vtscore.training.mlp import _auto_hidden_dim, train_model
-    from vtscore.training.thresholds import (
-        CONFORMAL_BASE_BUDGET,
-        calculate_safe_threshold,
-        compute_fold_orderings,
-        conformal_threshold,
-        threshold_from_fold_orderings,
-    )
-    from vtscore.utils.scores import sigmoid_to_finite_array
+    from vtscore.eval.voting_iterations import simulate_voting_iterations
 
     ensure_torch_configured()
 
     seeds = [0] if args.quick else list(SEEDS)
-    checkpoints = (12, 24) if args.quick else CHECKPOINTS
+    max_votes = QUICK_MAX_VOTES if args.quick else MAX_VOTES
 
     arms = _load_arms()
-    rows: list[dict] = []
+    step_rows: list[dict] = []
+    budget_rows: list[dict] = []
     cells = list(itertools.product(sorted(arms), seeds))
     for ci, (arm, seed) in enumerate(cells):
         spec = arms[arm]
         X, y = synthetic.make_synthetic(spec, seed) if isinstance(spec, str) else spec
-        sim_ids, test_ids = _split_sim_test(y, seed)
-        seed_scores = _agnews_seed_scores(X, arm)
-        test_truth = y[test_ids].astype(np.int8)
-
-        # One Autopilot trajectory per (arm, seed) yields every checkpoint.
-        auto_snapshots = _votes_autopilot(X, y, sim_ids, seed, seed_scores, max(checkpoints), checkpoints)
-
-        for policy, n_votes in itertools.product(POLICIES, checkpoints):
-            votes = (
-                _votes_uniform(y, sim_ids, n_votes, seed) if policy == "uniform" else auto_snapshots.get(n_votes, [])
+        sweep_sink: list[dict] = []
+        with common.timed(f"{arm} seed={seed}"):
+            rows = simulate_voting_iterations(
+                _clips(X, y),
+                target_category=TARGET,
+                seed=seed,
+                dataset_name=arm,
+                sim_fraction=SIM_FRACTION,
+                max_steps=max_votes,
+                seed_scores=_agnews_seed_scores(X, arm),
+                style=STYLE,
+                emit_calibration_metrics=True,
+                inclusion_sweep_ks=list(INCLUSIONS),
+                sweep_sink=sweep_sink,
             )
-            y_votes = y[votes].astype(np.float64) if votes else np.array([])
-            if len(votes) < 4 or min(np.sum(y_votes == 1), np.sum(y_votes == 0)) < 2:
-                common.log(f"  {arm} seed={seed} {policy} n={n_votes}: SKIPPED (not calibratable)")
-                continue
+        # The base row is the shipped cut; the other `gmm_variant`s are #2799's
+        # alternative safe-threshold arms, which ride along whenever calibration
+        # metrics are emitted and are not this study's question.
+        base = [r for r in rows if not r.get("gmm_variant")]
+        step_rows.extend(base)
+        budget_rows.extend(sweep_sink)
+        last = base[-1] if base else {}
+        common.log(
+            f"[{ci + 1}/{len(cells)}] {arm} seed={seed}: {len(base)} steps, {len(sweep_sink)} budget rows, "
+            f"final phase={last.get('phase', '-')} good/bad={last.get('n_good', '-')}/{last.get('n_bad', '-')} "
+            f"recall={last.get('recall', float('nan')):.3f}"
+        )
 
-            hidden_dim = _auto_hidden_dim(len(votes))
-            X_t = torch.from_numpy(np.ascontiguousarray(X[votes], dtype=np.float32))
-            y_t = torch.tensor(y_votes, dtype=torch.float32).unsqueeze(1)
-            model = train_model(X_t, y_t, X.shape[1], hidden_dim=hidden_dim)
-            with torch.no_grad():
-                X_test = torch.from_numpy(np.ascontiguousarray(X[test_ids], dtype=np.float32))
-                X_test = X_test.to(next(model.parameters()).device)
-                test_scores = sigmoid_to_finite_array(model(X_test)).astype(np.float64)
-
-            orderings, fallback = compute_fold_orderings(
-                list(np.asarray(X[votes], dtype=np.float32)),
-                [float(v) for v in y_votes],
-                X.shape[1],
-                rng=np.random.RandomState(42),
-                calibrate_count=CALIBRATE_COUNT,
-                calibration_fraction=CALIBRATION_FRACTION,
-                hidden_dim=hidden_dim,
-            )
-            comp = (
-                _composition_stats(orderings, test_scores, test_truth, y_votes)
-                if fallback is None
-                else {"vote_pos_frac": float(np.mean(y_votes == 1))}
-            )
-
-            for design in DESIGNS:
-                for k in INCLUSIONS:
-                    if design == "oracle":
-                        threshold = conformal_threshold(test_scores.tolist(), test_truth.astype(np.float64).tolist(), k)
-                    elif fallback is not None:
-                        threshold = fallback
-                    else:
-                        threshold = threshold_from_fold_orderings(orderings, k)
-                        if design == "blend":
-                            threshold = calculate_safe_threshold(threshold, test_scores.tolist(), len(votes))
-                    m = knobs.pool_metrics(test_scores, test_truth, threshold)
-                    alpha = min(1.0, CONFORMAL_BASE_BUDGET * 2.0**-k)
-                    rows.append(
-                        {
-                            "arm": arm,
-                            "seed": seed,
-                            "n_votes": n_votes,
-                            "policy": policy,
-                            "design": design,
-                            "inclusion": k,
-                            "threshold": threshold,
-                            "alpha_cap": alpha,
-                            "fnr_excess": max(0.0, m["fnr"] - alpha) if np.isfinite(m["fnr"]) else float("nan"),
-                            "seed_mode": "text" if seed_scores is not None else "known_good",
-                            **m,
-                            **comp,
-                        }
-                    )
-            common.log(
-                f"[{ci + 1}/{len(cells)}] {arm} seed={seed} {policy} n={n_votes}: "
-                f"pos_frac={comp['vote_pos_frac']:.2f} "
-                f"cal_q25={comp.get('cal_pos_q25', float('nan')):.3f} "
-                f"test_q25={comp.get('test_pos_q25', float('nan')):.3f}"
-            )
-
-    df = pd.DataFrame(rows)
-    df.to_csv(args.out, index=False)
-    common.log(f"wrote {args.out}: {len(df)} rows")
+    for frame, path, label in (
+        (pd.DataFrame(step_rows), args.steps_out, "steps"),
+        (pd.DataFrame(budget_rows), args.budget_out, "budget"),
+    ):
+        frame.to_csv(path, index=False)
+        common.log(f"wrote {path}: {len(frame)} {label} rows")
     return 0
 
 

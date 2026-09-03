@@ -31,7 +31,12 @@ REPO = Path(__file__).resolve().parents[3]
 EXP = Path(os.environ.get("INCKNOB_EXP", str(Path.home() / ".cache" / "incknob-exp")))
 DATADIR = EXP / "datadir"
 CACHE = EXP / "cache"
-RESULTS = REPO / "docs" / "experiments" / "inclusion-knob"
+#: The study directory every stage reads its committed inputs from and writes
+#: its outputs to.  Dated, matching the rest of ``docs/experiments/`` since
+#: #3328 — this constant kept the pre-#3328 undated spelling until #3408, so
+#: every stage's default ``--csv``/``--out`` pointed at a directory that did not
+#: exist and ``setup_env`` silently created it empty.
+RESULTS = REPO / "docs" / "experiments" / "2026-07-27-inclusion-knob"
 
 
 def setup_env() -> None:
