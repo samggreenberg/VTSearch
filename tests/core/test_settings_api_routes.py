@@ -44,15 +44,17 @@ class TestSettingsAPI:
         assert res.status_code == 200
         assert res.get_json()["browse_colormap"] == {}
 
-    def test_legacy_boolean_show_animations_migrates_on_read_and_save(self, client, isolated_settings):
-        """Pre-enum ``show_animations`` values must not wedge settings saves.
+    def test_pre_enum_boolean_show_animations_reads_as_default(self, client, isolated_settings):
+        """A pre-enum boolean ``show_animations`` is dropped, not migrated.
 
-        Until a3a37106 the setting was a boolean; a settings file carrying
+        Until a3a37106 the setting was a boolean. A settings file carrying
         ``"True"`` used to leak verbatim out of GET /api/settings (blank
         pulldown in the UI) and then fail the ``OneOf`` validator when the
         frontend echoed the whole blob back into PUT - every settings save
-        422ed until the file was hand-edited. Legacy True-ish values now read
-        as ``"show"`` and save cleanly.
+        422ed until the file was hand-edited. That was fixed with a pair of
+        coercion shims, which issue #3413 removed as a
+        backwards-compatibility violation: the value is now dropped on load
+        and the pydantic default applies, so GET is clean and the echo saves.
         """
         import json as _json
 
@@ -60,31 +62,27 @@ class TestSettingsAPI:
 
         isolated_settings._user.parent.mkdir(parents=True, exist_ok=True)
         isolated_settings._user.write_text(_json.dumps({"show_animations": "True"}) + "\n")
-        settings_mod.reset()  # re-read the legacy file
+        settings_mod.reset()  # re-read the unmigrated file
 
         res = client.get("/api/settings")
         assert res.status_code == 200
         assert res.get_json()["show_animations"] == "show"
 
-        # A stale client echoing the legacy value back must still save.
-        res = client.put("/api/settings", json={"show_animations": "True"})
+        # The value the client echoes back is the sanitized one, so the save
+        # round-trips rather than 422ing.
+        res = client.put("/api/settings", json={"show_animations": "show"})
         assert res.status_code == 200
         assert settings_mod.get_show_animations() == "show"
 
-    def test_legacy_false_show_animations_maps_to_hide(self, client, isolated_settings):
-        """False-ish legacy values keep their meaning (animations off)."""
-        import json as _json
+    def test_pre_enum_boolean_show_animations_is_rejected_on_put(self, client):
+        """The legacy shape is no longer accepted as *input* either.
 
-        from vtsearch import settings as settings_mod
-
-        isolated_settings._user.parent.mkdir(parents=True, exist_ok=True)
-        isolated_settings._user.write_text(_json.dumps({"show_animations": False}) + "\n")
-        settings_mod.reset()
-
-        res = client.get("/api/settings")
-        assert res.status_code == 200
-        assert res.get_json()["show_animations"] == "hide"
-        assert settings_mod.get_show_animations() == "hide"
+        The schema's ``@pre_load`` coercion went with the model's validator
+        (#3413), so a stale client sending the boolean gets a loud 422 rather
+        than a silent rewrite.
+        """
+        res = client.put("/api/settings", json={"show_animations": "True"})
+        assert res.status_code == 422
 
     def test_update_volume(self, client):
         res = client.put(
