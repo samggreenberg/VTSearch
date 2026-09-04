@@ -27,7 +27,9 @@ that step's slot.
 before the profile existed, so an instance with no ``VTSEARCH_TIMING_PROFILE``
 paces exactly as it did. They are *pseudo-seconds*: only their ratios are
 meaningful, because nobody measured them. A profile replaces them with real
-seconds, which is what makes the ETA stop drifting.
+seconds, which is what makes the ETA stop drifting. One vector is no longer a
+transcription — ``dataset_stage``'s was re-derived from measured rows once its
+step boundary was corrected (#3593); its comment below says from which.
 """
 
 from __future__ import annotations
@@ -152,11 +154,24 @@ TASKS: dict[str, TaskSpec] = {
     # teach that finalize is free. No byte-scaled phases here — the staging path
     # is never told an archive size, so a per-MB rate would have nothing to
     # divide by.
+    #
+    # These are the one set of default terms not transcribed from a pre-profile
+    # hand-tuned vector. The shipped ``(0.30, 0.60, 0.10)`` budgeted 60 % of the
+    # bar to a step that measured 0.000–0.002 s on every run ever recorded,
+    # because the importer's embedding was landing under ``acquire``
+    # (``_STAGE_STATUS_TO_STEP`` in ``vtscore/datasets/load_pipeline.py`` is the
+    # fix). Re-derived from #3521 §5's image rows, reading the old ``acquire``
+    # slope as the embed it actually was: embed ``0.0136 s/item``, serialize
+    # ``~0.0042 s/item`` — 76:24, which is the 0.72:0.23 below. Acquire measured
+    # near zero there (a demo's acquisition is a cached local read, and its fresh
+    # rows leave no residual once the embed line is subtracted); it gets 0.05
+    # rather than 0.02 because the only importer these rows cover is the demo
+    # one, and a server-folder or upload import spends real I/O in that step.
     "dataset_stage": _linear(
         "dataset_stage",
         ("acquire", "embed", "serialize"),
         "media items staged",
-        (0.30, 0.60, 0.10),
+        (0.05, 0.72, 0.23),
         loads_encoder=True,
     ),
     # Loading a saved detector: read its labelset, pull the label examples back

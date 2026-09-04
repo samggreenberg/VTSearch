@@ -457,9 +457,16 @@ def drive_dataset_stage(demo_ids: list[str], reps: int, *, cold_embed: bool = Tr
     """Measure staging demo datasets (acquire, embed, serialize; no registry).
 
     Staging reads the same demo embeddings pkl a full import writes, so a
-    staging leg run after a load leg against a shared data dir measures nothing
-    at all — that is the 0.000-0.002 s #3345 recorded across all four image
-    tiers. *cold_embed* clears the cache before each rep.
+    staging leg run after a load leg against a shared data dir re-reads what the
+    load just cached rather than embedding; *cold_embed* clears the cache before
+    each rep so the ``fresh`` branch is the one measured.
+
+    That cache is *not* what made #3345's ``embed`` read 0.000-0.002 s across
+    all four image tiers: #3521 §5 cleared it and the step still read zero,
+    because a demo importer embeds inside ``run()`` and the staging flow was
+    recording that under ``acquire``. Fixed in #3593, so these rows now split
+    acquisition from embedding — and a profile fitted from rows recorded
+    *before* that fix prices ``embed`` at nothing.
     """
     from vtscore.concurrency.progress import loading_tasks  # noqa: PLC0415
     from vtscore.datasets.config import DEMO_DATASETS  # noqa: PLC0415
