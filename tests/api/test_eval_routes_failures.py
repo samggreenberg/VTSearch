@@ -124,9 +124,7 @@ class TestContextErrorsAreNot500:
         self._assert_detector_409(client.post("/api/labeling-progress", headers=self.UNLOADED))
 
     def test_indicator_score_history_returns_409(self, client):
-        self._assert_detector_409(
-            client.get("/api/indicator-score-history?metric=smart", headers=self.UNLOADED)
-        )
+        self._assert_detector_409(client.get("/api/indicator-score-history?metric=smart", headers=self.UNLOADED))
 
     def test_unloaded_dataset_returns_409(self, client):
         resp = client.get("/api/labeling-status", headers={"X-Dataset-Id": "no-such-dataset"})
