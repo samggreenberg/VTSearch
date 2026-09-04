@@ -264,6 +264,28 @@ The seasoning and condiment shelf belongs here as a whole: shakers, `condiment`
 `salt` (7) and `pepper` (9) all land on COCO bottle boxes — **181 boxes for the
 family, against 42 on cup and 51 on bowl.**
 
+**A squeezable tube is a bottle** — toothpaste, suntan lotion, hand cream,
+shower gel, ointment. It is made for what is in it, nothing owns it, and it is
+not a single serving, so every test in this guide sends it here. Note also that
+*material and rigidity are already rejected as tests*: `bowl` counts a flimsy
+paper boat on the strength of its walls, so a tube cannot be excluded for being
+soft.
+
+**This one is reasoned, not measured, and it is the only bottle rule that is.**
+The toiletries family as a whole is emphatically bottle's — `soap` 47,
+`lotion` 12, `dish soap` 11, `hand soap` 10, `shampoo` 7, `spray bottle` 6,
+`spray` 4, `conditioner` 3, `detergent` 3, **110 boxes, and not one of them on
+`cup`, `bowl` or `vase`**. But the *tube shape specifically* barely appears:
+`tube` 1, `toothpaste tube` 1, `tooth paste tube` 1, `toothpaste` 1,
+`caulking tube` 1, `shower gel` 1. Six boxes cannot tell you whether COCO's
+annotators declined to call a tube a bottle or simply never met one, and the
+fold-in cannot separate those — the same blindness that made the depiction count
+useless (#3614). Treat this as the rule that would be cheapest to reverse.
+
+It is the same shape as the jerry can: pool consistency says Bad, since COCO has
+no tube class and such an image sits in the negative pool, while manufacture
+says Good. That was already settled in favour of manufacture.
+
 **The exception proves the rule about contents.** `sauce` goes the other way —
 38 boxes on `bowl`, 18 on bottle, 16 on cup — because it names what is *in* the
 vessel, not the vessel. A squeeze bottle of sauce is a bottle; a dipping dish of
