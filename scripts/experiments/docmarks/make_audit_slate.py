@@ -8,6 +8,12 @@
     python make_audit_slate.py --task confusable   # are these two the same mark?
     python make_audit_slate.py --task distinctive  # is this a mark or a shape?
 
+Every task that ranks or groups by similarity takes ``--descriptor``.  The
+default ``phash`` is the corpus's own descriptor and needs nothing; naming the
+audit embedder instead reads the vector cache ``siglip_audit.py --embed``
+writes, which is what #3600 asks for -- ``phash`` ranked the slate's one literal
+duplicate 83rd of 120.
+
 Each task writes PNG sheets plus a ``verdicts.jsonl`` template into
 ``<out>/audit/<task>/``.  Fill in the verdict field, then fold the answers back
 with ``audit_to_corrections.py``.
@@ -68,6 +74,7 @@ instead prevented by construction — see ``CONTAMINATES`` in
 from __future__ import annotations
 
 import argparse
+import collections
 import json
 import random
 import re
@@ -125,33 +132,85 @@ def _crop(page: Page, box: tuple[int, int, int, int], pad_frac: float = 0.08) ->
         )
 
 
-def task_cluster(pages: list[Page], classes: dict[str, Any], out: Path, *, max_per_class: int = 24) -> list[dict]:
-    """One sheet per derived class: every instance, so a bad merge is obvious."""
+def subgroups(corpus: Path, descriptor: str, threshold: float) -> dict[str, dict[str, int]]:
+    """Where each class's instances fall apart, per the cached vectors.
+
+    Returns ``{class_id: {page_id: group}}``, groups numbered from 1 in
+    descending size.  ``phash`` returns nothing: the corpus was clustered with
+    it, so it has no second opinion to offer about its own output.
+    """
+    if descriptor == "phash":
+        return {}
+
+    import siglip_audit  # noqa: PLC0415  -- optional: only this path needs it
+
+    items, vecs = siglip_audit.load_cache(corpus)
+    by_class: dict[str, list[int]] = {}
+    for i, item in enumerate(items):
+        if item["kind"] == "instance":
+            by_class.setdefault(item["class_id"], []).append(i)
+
+    proposals: dict[str, dict[str, int]] = {}
+    for class_id, idx in by_class.items():
+        labels = siglip_audit.split_class(vecs[idx], threshold)
+        sizes = sorted(((int((labels == k).sum()), int(k)) for k in set(labels.tolist())), reverse=True)
+        rank = {raw: n + 1 for n, (_size, raw) in enumerate(sizes)}
+        proposals[class_id] = {items[i]["page_id"]: rank[int(label)] for i, label in zip(idx, labels)}
+    return proposals
+
+
+def task_cluster(
+    pages: list[Page],
+    classes: dict[str, Any],
+    out: Path,
+    *,
+    max_per_class: int = 24,
+    proposals: Optional[dict[str, dict[str, int]]] = None,
+) -> list[dict]:
+    """One sheet per derived class: every instance, so a bad merge is obvious.
+
+    With *proposals* the crops are grouped and captioned by the sub-group a
+    semantic descriptor puts them in, so the sheet says *where* the reviewer
+    thinks the boundary is instead of asking them to find it. The verdict
+    vocabulary is unchanged: the proposal is a hypothesis on a contact sheet,
+    and ``split`` still means a person looked.
+    """
     by_id = {p.page_id: p for p in pages}
     verdicts = []
     derived = {k: v for k, v in classes.items() if any(p.startswith("clustered") for p in v.get("provenance", []))}
+    proposals = proposals or {}
 
     for class_id, meta in sorted(derived.items(), key=lambda kv: -kv[1]["n_instances"]):
+        groups = proposals.get(class_id, {})
+        page_ids = meta["page_ids"][:max_per_class]
+        if groups:
+            page_ids = sorted(page_ids, key=lambda pid: (groups.get(pid, 99), pid))
         crops, caps = [], []
-        for page_id in meta["page_ids"][:max_per_class]:
+        for page_id in page_ids:
             page = by_id.get(page_id)
             if page is None:
                 continue
             for mark in page.marks:
                 if mark.class_id == class_id:
                     crops.append(_crop(page, mark.box))
-                    caps.append(page_id.split("/")[-1])
+                    tag = f"g{groups[page_id]} " if page_id in groups else ""
+                    caps.append(f"{tag}{page_id.split('/')[-1]}")
                     break
         if not crops:
             continue
+        proposed = sorted(collections.Counter(groups.values()).values(), reverse=True)
+        headline = f"{class_id}  —  {meta['n_instances']} instances  —  all one mark?"
+        if len(proposed) > 1:
+            headline += f"   [proposes {len(proposed)} groups: {', '.join(str(s) for s in proposed)}]"
         name = class_id.replace("/", "__")
-        _sheet(crops, f"{class_id}  —  {meta['n_instances']} instances  —  all one mark?", out / f"{name}.png", caps)
+        _sheet(crops, headline, out / f"{name}.png", caps)
         verdicts.append(
             {
                 "task": "cluster",
                 "class_id": class_id,
                 "n_instances": meta["n_instances"],
                 "sheet": f"{name}.png",
+                "proposed_groups": proposed,
                 # one of:
                 #   ok                     every crop on the sheet is one mark
                 #   merge_into:<class_id>  this and that class are the same mark
@@ -289,6 +348,56 @@ def seriate(dist: np.ndarray) -> list[int]:
     return order
 
 
+def phash_distances(exemplars: Sequence[Any]) -> np.ndarray:
+    """Normalised Hamming distance between the exemplars' perceptual hashes."""
+    desc = np.array([_cluster.phash(im) for im in exemplars], dtype=bool)
+    bits = desc.astype(np.uint8)
+    inv = 1 - bits
+    dist = (bits @ inv.T + inv @ bits.T).astype(float) / desc.shape[1]
+    np.fill_diagonal(dist, 0.0)
+    return dist
+
+
+def class_distances(class_ids: Sequence[str], exemplars: Sequence[Any], descriptor: str, corpus: Path) -> np.ndarray:
+    """The class-to-class distances the slate is ordered and paired by.
+
+    ``phash`` hashes each class's **query crop**, which is what the corpus was
+    clustered with and needs neither a card nor a cache.  Any other descriptor
+    reads the vector cache ``siglip_audit.py --embed`` writes and uses each
+    class's **centroid** over its instances -- centroids rather than exemplars
+    because #3599 is the case where one unrepresentative query crop placed a
+    whole class, and a semantic descriptor good enough to be worth running is
+    good enough to be worth pointing at the instances.
+
+    A missing or incomplete cache is an error, never a silent fall back to
+    ``phash``: the appendix's whole meaning is which pairs were ranked closest,
+    so a slate ordered by a descriptor other than the one asked for is a slate
+    whose ``REVIEWED-ALL`` records something nobody intended.
+    """
+    if descriptor == "phash":
+        return phash_distances(exemplars)
+
+    import siglip_audit  # noqa: PLC0415  -- optional: only this path needs it
+
+    items, vecs = siglip_audit.load_cache(corpus)
+    cached = json.loads((corpus / siglip_audit.ITEMS).read_text(encoding="utf-8"))
+    if cached.get("embedder") != descriptor:
+        raise SystemExit(
+            f"vector cache holds {cached.get('embedder')!r}, not {descriptor!r} — "
+            f"re-run siglip_audit.py --embed --embedder {descriptor}"
+        )
+    order, centroids = siglip_audit.class_centroids(items, vecs)
+    position = {class_id: i for i, class_id in enumerate(order)}
+    missing = [c for c in class_ids if c not in position]
+    if missing:
+        raise SystemExit(
+            f"{len(missing)} class(es) have no vectors in the cache (first: {missing[0]}) — "
+            "re-run siglip_audit.py --embed against this corpus"
+        )
+    rows = centroids[[position[c] for c in class_ids]]
+    return siglip_audit.cosine_distance(rows)
+
+
 def near_pairs(dist: np.ndarray, k: int) -> list[tuple[float, int, int]]:
     """The *k* closest class pairs, nearest first, ties broken by index."""
     n = dist.shape[0]
@@ -297,8 +406,13 @@ def near_pairs(dist: np.ndarray, k: int) -> list[tuple[float, int, int]]:
     return pairs[:k]
 
 
-def _cell(strip: Sequence[Any], index: int, label: str, *, thumb: int = 120) -> Any:
-    """One class as a numbered horizontal strip of its own instances."""
+def _cell(strip: Sequence[Any], index: int, label: str, *, thumb: int = 120, divide_after: Optional[int] = None) -> Any:
+    """One class as a numbered horizontal strip of its own instances.
+
+    *divide_after* draws a rule after that many thumbs, for the pair sheets,
+    where one cell carries instances of two different classes and the reader
+    has to be able to tell which are which without counting.
+    """
     from PIL import Image, ImageDraw
 
     slots = max(1, len(strip))
@@ -317,6 +431,10 @@ def _cell(strip: Sequence[Any], index: int, label: str, *, thumb: int = 120) -> 
         x = 4 + i * (thumb + 4) + (thumb - t.width) // 2
         y = head + 3 + (thumb - t.height) // 2
         cell.paste(t, (x, y))
+
+    if divide_after:
+        x = 2 + divide_after * (thumb + 4)
+        draw.line([x, head + 2, x, cell.height - 3], fill="#0b3d91", width=2)
     return cell
 
 
@@ -370,6 +488,8 @@ def task_merge(
     out: Path,
     *,
     top_pairs: int = cfg.MERGE_SLATE_NEAR_PAIRS,
+    descriptor: str = cfg.SLATE_DESCRIPTOR,
+    corpus: Optional[Path] = None,
 ) -> dict[str, Any]:
     """Every class on a few numbered sheets; the answer is a list of index sets.
 
@@ -405,6 +525,7 @@ def task_merge(
 
     by_id = {p.page_id: p for p in pages}
     pool = {k: v for k, v in classes.items() if v.get("on_roster")} or classes
+    corpus = corpus if corpus is not None else out.parent.parent
 
     exemplars: list[tuple[str, Any]] = []
     for class_id, meta in sorted(pool.items()):
@@ -414,20 +535,18 @@ def task_merge(
     if len(exemplars) < 2:
         return {"classes": [], "near_pairs": [], "sheets": []}
 
-    desc = np.array([_cluster.phash(im) for _cid, im in exemplars], dtype=bool)
-    bits = desc.astype(np.uint8)
-    inv = 1 - bits
-    dist = (bits @ inv.T + inv @ bits.T).astype(float) / desc.shape[1]
-    np.fill_diagonal(dist, 0.0)
+    dist = class_distances([cid for cid, _im in exemplars], [im for _cid, im in exemplars], descriptor, corpus)
 
     order = seriate(dist)
     slate_index = {orig: slot for slot, orig in enumerate(order)}
 
     cells, index_rows = [], []
+    strips: dict[int, list[Any]] = {}
     for slot, orig in enumerate(order):
         class_id, exemplar = exemplars[orig]
         meta = pool[class_id]
         strip = _class_strip(meta.get("page_ids", []), by_id, class_id, cfg.MERGE_SLATE_INSTANCES) or [exemplar]
+        strips[orig] = strip
         cells.append(_cell(strip, slot, f"{class_id}  ({int(meta.get('n_instances', len(strip)))}x)"))
         index_rows.append(
             {
@@ -472,7 +591,21 @@ def task_merge(
         pair_cells = []
         for d, i, j in chunk:
             li, ri = slate_index[i], slate_index[j]
-            pair_cells.append(_cell([exemplars[i][1], exemplars[j][1]], li, f"vs [{ri}]   distance {d:.3f}", thumb=150))
+            # Instances, not query crops, on both sides of the rule: the pair
+            # sheets are where a wrong call writes a permanent separation, and
+            # #3599 is the case where a class's query crop was a mark that
+            # appears nowhere in it.
+            left = strips.get(i, [exemplars[i][1]])[:2]
+            right = strips.get(j, [exemplars[j][1]])[:2]
+            pair_cells.append(
+                _cell(
+                    [*left, *right],
+                    li,
+                    f"vs [{ri}]   distance {d:.3f}",
+                    thumb=132,
+                    divide_after=len(left),
+                )
+            )
         _paste_grid(
             pair_cells,
             f"DocMarks — the {len(pairs)} closest pairs, {start}..{start + len(chunk) - 1} — "
@@ -702,6 +835,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         default=400,
         help="confusable: cap on pairs; a 24-class roster's full 276-pair matrix fits under the default",
     )
+    ap.add_argument(
+        "--descriptor",
+        default=cfg.SLATE_DESCRIPTOR,
+        help="merge: what the slate is ordered and paired by; cluster: what proposes the sub-groups. "
+        "'phash' is the corpus's own descriptor and needs nothing; anything else reads the vector "
+        "cache from siglip_audit.py --embed (see #3600)",
+    )
+    ap.add_argument(
+        "--split-threshold",
+        type=float,
+        default=cfg.AUDIT_SPLIT_SWEEP[len(cfg.AUDIT_SPLIT_SWEEP) // 2],
+        help="cluster: cosine distance at which a class's instances stop being one mark; "
+        "siglip_audit.py --analyze records the whole sweep to choose from",
+    )
     args = ap.parse_args(argv)
 
     pages = list(read_manifest(args.corpus / "corpus.jsonl"))
@@ -712,17 +859,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     out.mkdir(parents=True, exist_ok=True)
 
     if args.task == "merge":
-        payload = task_merge(pages, classes, out, top_pairs=args.near_pairs)
+        payload = task_merge(
+            pages, classes, out, top_pairs=args.near_pairs, descriptor=args.descriptor, corpus=args.corpus
+        )
         print(f"merge: {len(payload['classes'])} class(es) on {len(payload['sheets'])} slate sheet(s)")
         print(f"  slate    {out}/slate_*.png")
         print(f"  pairs    {out}/pairs_*.png   ({len(payload['near_pairs'])} nearest pairs)")
         print(f"  answer   {out}/merges.txt  (one line per group of same-mark indices)")
+        print(f"  ordered by {args.descriptor}")
         return 0
 
     if args.task == "membership":
         verdicts = task_membership(pages, classes, out)
     elif args.task == "cluster":
-        verdicts = task_cluster(pages, classes, out)
+        verdicts = task_cluster(
+            pages, classes, out, proposals=subgroups(args.corpus, args.descriptor, args.split_threshold)
+        )
     elif args.task == "confusable":
         verdicts = task_confusable(pages, classes, out, top_n=args.top_pairs)
     elif args.task == "distinctive":

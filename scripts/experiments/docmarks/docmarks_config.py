@@ -370,3 +370,44 @@ MERGE_SLATE_NEAR_PAIRS = int(os.environ.get("VTS_DOCMARKS_MERGE_NEAR_PAIRS", "12
 
 #: Pairs per appendix sheet.
 MERGE_PAIRS_PER_SHEET = 12
+
+# --------------------------------------------------------------------------- #
+# The audit's second opinion
+# --------------------------------------------------------------------------- #
+#
+# `phash` is the right descriptor for *clustering* 200k pages and the wrong one
+# for *auditing* the result, and #3600 measured the gap: on corpus v2 the one
+# literal duplicate on the slate ranked 83rd of 120 in the near-pair appendix,
+# behind 82 pairs of stamps nobody would confuse, while two internally-mixed
+# classes took 37% of the appendix between them.  A perceptual hash of a blue
+# rubber stamp on white paper measures ink layout, and two different stamps of
+# the same size in the same typeface have nearly the same ink layout -- the
+# failure already on record for UCSF letterhead bands.
+#
+# The audit can afford what the build cannot: it runs over ~1.5k crops, not
+# 200k pages, so a GPU embedder is minutes.  Vectors are cached, so only the
+# embed step needs a card and every render afterwards stays on `cpu`.
+
+#: The embedder the audit's similarity questions are asked with.  Not the
+#: clustering's descriptor: changing that would change what the corpus *is*,
+#: and the roster's classes were admitted under `phash`.
+AUDIT_EMBEDDER = os.environ.get("VTS_DOCMARKS_AUDIT_EMBEDDER", "siglip2_l")
+
+#: Instances embedded per class.  A centroid stops moving long before a class's
+#: 30th instance, and the cap is recorded beside the vectors so a later reader
+#: knows the centroid is over a sample.
+AUDIT_MAX_PER_CLASS = int(os.environ.get("VTS_DOCMARKS_AUDIT_MAX_PER_CLASS", "24"))
+
+#: Cosine-distance thresholds the within-class split proposal is swept over.
+#: Reported as a sweep and never as a single verdict: the operating point is a
+#: property of this corpus and this embedder, and quietly picking one is how
+#: `CLUSTER_THRESHOLD`'s 0.16 outlived the mark decomposition it was measured
+#: on (#3366).
+AUDIT_SPLIT_SWEEP = (0.10, 0.15, 0.20, 0.25, 0.30, 0.40)
+
+#: Which descriptor the slate orders itself by.  `phash` stays the default so a
+#: slate renders with no cache and no card; `siglip2_l` requires
+#: `siglip_audit.py --embed` to have run, and refuses rather than silently
+#: falling back -- a slate whose ordering is not the one asked for is a slate
+#: whose appendix means something other than it says.
+SLATE_DESCRIPTOR = os.environ.get("VTS_DOCMARKS_SLATE_DESCRIPTOR", "phash")

@@ -4,6 +4,7 @@
 #   bash launch_docmarks.sh probe          # can I reach every source?
 #   bash launch_docmarks.sh build          # stage 1: sources + clustering (CPU)
 #   bash launch_docmarks.sh slate          # stage 2: the human audit bundle (CPU)
+#   bash launch_docmarks.sh siglip         # stage 2b: the audit's second opinion (GPU)
 #   bash launch_docmarks.sh status         # queue + the real signal on disk
 #   bash launch_docmarks.sh embed s        # stage 5: cells for one tier (GPU)
 #
@@ -146,6 +147,56 @@ RUNNER_EOF
     --wrap="bash $RUNNER"
   ;;
 
+siglip)
+  # The audit's second opinion, on a semantic embedder (#3600).  One GPU job,
+  # because it is the only part of the audit that needs a card: it embeds every
+  # class instance once and caches the vectors, after which the re-render, the
+  # analysis and every later slate read the cache on `cpu`.
+  #
+  # ~1.5k crops of a few hundred pixels is minutes on any card here, so this
+  # does not get a type pin -- but VTS_GPU in the grid ~/.bashrc would silently
+  # supply one, so it is cleared for the same reason `embed` clears it.
+  if [ -n "${VTS_DOCMARKS_GPU:-}" ]; then
+    GRES="gpu:$VTS_DOCMARKS_GPU:1"
+  else
+    GRES="gpu:$(env -u VTS_GPU python3 "$WT/scripts/slurm/pick_gpu.py"):1"
+  fi
+  echo "gres: $GRES"
+  RUNNER="/exp/$USER/.docmarks-siglip.$$.sh"
+  cat > "$RUNNER" <<RUNNER_EOF
+#!/usr/bin/env bash
+set -uo pipefail
+source "$WT/gridenv.sh"
+source "$WT/scripts/experiments/pile/pile_env.sh"
+export VTS_REPO="$WT"
+export VTS_DOCMARKS_OUT="$VTS_DOCMARKS_OUT"
+cd "$HERE"
+echo "node=\$(hostname) job=\$SLURM_JOB_ID start=\$(date -Is)"
+python -u siglip_audit.py --embed   --corpus "$VTS_DOCMARKS_OUT" || exit 1
+python -u siglip_audit.py --analyze --corpus "$VTS_DOCMARKS_OUT" || exit 1
+# Re-render both similarity passes against the cache, on the same node while it
+# is already warm.  The merge slate is re-ordered and re-numbered, so the old
+# merges.txt no longer refers to the same classes -- it is kept beside the new
+# one rather than overwritten.
+[ -f "$VTS_DOCMARKS_OUT/audit/merge/merges.txt" ] && \
+  cp "$VTS_DOCMARKS_OUT/audit/merge/merges.txt" "$VTS_DOCMARKS_OUT/audit/merge/merges.phash.txt"
+DESC="\${VTS_DOCMARKS_AUDIT_EMBEDDER:-siglip2_l}"
+python -u make_audit_slate.py --task merge   --corpus "$VTS_DOCMARKS_OUT" --descriptor "\$DESC" || exit 1
+python -u make_audit_slate.py --task cluster --corpus "$VTS_DOCMARKS_OUT" --descriptor "\$DESC" || exit 1
+cd "$VTS_DOCMARKS_OUT" && tar czf "audit/docmarks-audit-siglip-\$(date +%Y%m%d).tar.gz" \
+  audit/merge audit/cluster audit/siglip/pairs.json audit/siglip/splits.json audit/siglip/query_check.json
+echo "bundle: $VTS_DOCMARKS_OUT/audit/docmarks-audit-siglip-\$(date +%Y%m%d).tar.gz"
+echo "exit=\$? end=\$(date -Is)"
+RUNNER_EOF
+  chmod +x "$RUNNER"
+
+  sbatch --job-name="docmarks-siglip" --partition=gpu --gres="$GRES" \
+    --mem="${VTS_DOCMARKS_SIGLIP_MEM:-32G}" --cpus-per-task=4 \
+    --time="${VTS_DOCMARKS_SIGLIP_TIME:-02:00:00}" \
+    --output="$LOGS/siglip-%j.out" --error="$LOGS/siglip-%j.out" \
+    --wrap="bash $RUNNER"
+  ;;
+
 status)
   squeue -u "$USER" -n "$JOB_NAME" -o "%.10i %.16j %.8T %.12M %.12l %R"
   echo
@@ -193,5 +244,5 @@ RUNNER_EOF
   ;;
 
 *)
-  echo "usage: $0 {probe|build|slate|status|embed <tier>}" >&2; exit 2 ;;
+  echo "usage: $0 {probe|build|slate|siglip|status|embed <tier>}" >&2; exit 2 ;;
 esac

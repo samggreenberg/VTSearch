@@ -308,6 +308,53 @@ scanning and not a guarantee. The guarantee is `pairs_*.png`: the
 `MERGE_SLATE_NEAR_PAIRS` closest pairs, explicitly side by side, so no pair
 where a wrong call costs anything depends on the layout having been kind.
 
+### The descriptor the audit asks with is not the one it was built with
+
+`phash` clusters 200k pages for nothing and is the reason the corpus exists at
+this size. It is a poor judge of its own output. Measured on v2 (#3600): the one
+literal duplicate on the slate — two classes of the same `DY.Secretary` rubber
+stamp — ranked **83rd of 120** in the near-pair appendix, behind 82 pairs of
+stamps nobody would confuse, while two internally-mixed classes took 37% of the
+appendix between them. A perceptual hash of blue ink on white paper measures ink
+layout, and two different stamps in the same typeface at the same size have
+nearly the same ink layout. The identical failure is on record for UCSF
+letterhead bands, where no threshold produced classes at all.
+
+The audit can afford what the build cannot — it runs over ~1,300 crops, not
+200k pages — so `siglip_audit.py --embed` embeds every class instance once with
+`siglip2_l` and caches the vectors. Only that step needs a card; the slate
+render, the analysis and every re-render afterwards read the cache on `cpu`:
+
+```bash
+bash launch_docmarks.sh siglip                                   # GPU, ~7 min
+python make_audit_slate.py --task merge   --descriptor siglip2_l # re-ordered slate
+python make_audit_slate.py --task cluster --descriptor siglip2_l # split proposals
+```
+
+Three questions get better answers, and each was checked against a human verdict
+before being trusted rather than after:
+
+- **Which classes are nearest** — by class *centroid*, not by one query crop, so
+  an unrepresentative exemplar cannot place a whole class (#3599). On v2 the
+  closest pair went from 0.11 (two unrelated stamps) to 0.030 (two scans of the
+  same B&W wordmark).
+- **Which classes hold more than one mark** — each class's own instances
+  clustered by average linkage, swept over `AUDIT_SPLIT_SWEEP` and reported as a
+  sweep, never as a single verdict. Average linkage rather than single: single
+  linkage's failure mode is one ambiguous crop bridging two marks, which is the
+  defect the pass exists to find. On v2 it proposed `15 / 8 / 1` for the StaVer
+  class and `22 / 2` for `spods/stamp_00489_1` — both exactly the boundaries the
+  reviewer had already drawn by eye, and both found without being told.
+- **Whether a class's query crop retrieves its own class** — the question the
+  eval will ask, stated as the *rank* of the class's own centroid rather than a
+  distance whose scale nobody knows. It flags 3 of 59 on v2, including the one
+  `phash` scored second-*best* of 60.
+
+The proposals are hypotheses on a contact sheet. The verdict vocabulary does not
+change, `split` still means a person looked, and a false proposal is expected:
+on v2 two of the four proposed splits were scan quality varying more than the
+mark does, which is obvious on the sheet and invisible in the number.
+
 ### `REVIEWED-ALL` is the closed world, and it is deliberately narrow
 
 A partition asserts both directions at once: within a group is `same`, across
