@@ -282,7 +282,8 @@ def cheap_branch_only(samples: list[dict]) -> bool:
     reading of 0.008-0.016 s is not "the atlas costs 10 ms here", it is "this
     sweep never saw one built". Both are correct measurements; only one of them
     is a cost model, and ``tasks.py`` weights that step at 0.85 of the bar
-    precisely because the branch nobody measured is the minutes-long one.
+    precisely because the branch nobody measured is the one that does the work:
+    a rebuild costs 0.0026 s/item, ~700x the restore at n = 2954 (#3595).
     """
     dear, cheap, unmarked = branch_split(samples)
     return bool(cheap) and not dear and not unmarked
@@ -755,7 +756,7 @@ def coverage_report(rows: Iterable[dict], profile: dict[str, Any]) -> list[str]:
     A third thing a count cannot say is *which branch* the runs took. A step
     whose every run read a cache is not a well-covered step; it is an unmeasured
     one wearing a full sample count, and it is the state that made #3345's sweep
-    price a minutes-long atlas rebuild at 2 % of the bar. :func:`_branch_lines`
+    price a 7.7 s atlas rebuild at 2 % of the bar. :func:`_branch_lines`
     names those explicitly (#3521).
     """
     rows = list(rows)
