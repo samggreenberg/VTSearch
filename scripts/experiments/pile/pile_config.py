@@ -920,12 +920,25 @@ SCALE_CANDIDATE_VG_NAMES: dict[str, tuple[str, ...]] = {
     # The stemware half of the merged `cup` (see SCALE_CLASS_MERGES). Measured
     # against COCO `wine glass` boxes: `wine glasses` 16, `wineglass` 9,
     # `goblet` 8, `champagne glass` 5, `champagne flute` 5; `mug` 238 is the
-    # cup half's own missing spelling. `glass` is deliberately ABSENT -- it is
-    # the largest name on both halves (1,136 on cup, 841 on wine glass) and
-    # also means a windowpane and eyeglasses, so it belongs in
-    # SCALE_VG_AMBIGUOUS or in a measurement, not here.
+    # cup half's own missing spelling.
+    #
+    # `glass` IS here. It was briefly left out because it also means a windowpane
+    # and eyeglasses -- an English argument where a measurement was available,
+    # and the wrong test. The right one is fold-out, which put `bike` in
+    # SCALE_VG_AMBIGUOUS at 40.1%: of 3,224 VG `glass` boxes, 1,146 land on COCO
+    # `cup` and 861 on `wine glass`, so 62.2% land on the merged class -- against
+    # self-match rates of 72.1% (cup), 71.2% (bowl), 72.8% (bottle) and 74.2%
+    # (vase) for the class names themselves. Ten points under the names, twenty
+    # above `bike`.
+    #
+    # The merge is what makes it usable, which is an argument for the merge that
+    # was not made when the merge was decided: unmerged, `glass` split 35.5% cup
+    # and 26.7% wine glass with neither dominant -- ambiguity between two classes
+    # rather than about the world. `mug` self-matches at 81.7%, the highest of
+    # any name measured here.
     "cup": (
         "cup",
+        "glass",
         "mug",
         "wine glass",
         "wine glasses",
