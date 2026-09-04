@@ -1,69 +1,78 @@
-# #3547 — state at 2026-09-02 16:45 EDT, written before a disconnect
+# #3547 — state at 2026-09-03 13:40 EDT
 
-Branch `claude/acq-deep-3547` @ `f2d0d687b`, **pushed**. Base dev `ba0c193cc`.
-Worktree `/exp/sgreenberg/projects/vts-acq-3547`. Study `/expscratch/sgreenberg/acq-3547`.
+**COMPLETE.** Both waves are in, the control settled H2, and the verdicts are
+written up in [`REPORT_3547.md`](REPORT_3547.md). Nothing is running.
 
-## Verdict on the premise: AGREED, with three corrections
+Branch `claude/acq-deep-3547`, PR **#3598** (open); PR #3584 already MERGED to
+dev (the `vg_scale_deep` pile). Worktree `/exp/sgreenberg/projects/vts-acq-3547`.
 
-All three are in the commit message and in `PLAN_3547.md`. Short version:
-prevalence must be held while positives grow (else k* moves 1.6 bits); the
-scarcity was in the band split, not in VG (band-free designation gives 1006 on
-the binding class against 414 banded); and the deeper cell needs a new name
-because six studies stand on `vg_scale_any`.
+## What was measured
 
-## DONE and verified
+| wave | pile | cells | where |
+|---|---|---:|---|
+| deep grid, 7 arms | `vg_scale_deep` | 1344 | `/expscratch/sgreenberg/acq-3547` |
+| H2 control, 2 arms | `vg_scale_any` | 384 | `/expscratch/sgreenberg/acq-3547-ctrl` |
 
-* **The ceiling reproduces.** Recomputed from #3319's own cells: median harvest
-  `prod` 14.7%, `-1` 24.0%, `-3` 82.0%, `-4` 85.3%; 29.2% of `-4` cells above
-  90%. (`scripts/experiments/calibration/harvest_3547.py`)
-* **Supply measured** over the full COCO-anchored label pass, not a pilot:
-  band-free min **1006** (`stop sign`), median 1952, max 3455; thinnest single
-  band 138 (`bus@small`). (`scripts/experiments/pile/measure_supply.py`)
-* **Prefix-determinism CONFIRMED empirically** — 6336 cells per arm, all four
-  arms identical at t=100 across #3319's two independent waves, on cost,
-  n_good, thresholds and `acq_pool_percentile`. So ONE 400-step wave gives both
-  horizons, paired within the cell. (`check_prefix_3547.py`)
-* **`vg_scale_deep` BUILT**: `vg_scale_deep__siglip.pkl`, 75 MB, 22,363 medias,
-  10,800 positives over 12 cells + 11,700 negatives + 300 spares, prevalence
-  **0.071429** (identical to `vg_scale`'s, asserted at build time). 258s on a
-  V100S. It is `on_request`, so it stays out of the pile's default sweep.
-* Harness wired: `experiment_config.py` gives `vg_scale_deep` the same texts,
-  `CALIB_VGSCALE_DEEP_EMBEDDERS` (default `siglip` alone), and the boxed flag.
+0 failures, 0 header-only cells in either.
 
-## RUNNING right now (chained GRID-side, survives a disconnect)
+## Verdicts
 
-    609831  acq3547-verify   -> 609832 acq3547-prep -> 609833 acq3547-size
+* **H3 — the plateau REPLICATES.** Δcost vs `prod` @100: `-1` −0.019, `-3`
+  −0.038, `-4` −0.039, `-5` −0.030, `-6` −0.023. The anchor holds, so H1/H2 are
+  readable. Falsifier behaved (`+2`, −11 positives).
+* **H1 — the optimum does NOT move.** Clean `-4` vs `-3` DiD: cost +0.006
+  [−0.002, +0.013], AUC +0.003 [−0.001, +0.007], CTT +2.8 [−5.9, +12]. All
+  nulls. **The knob is a CONSTANT, not a schedule.** `-5`/`-6` lean "shallower"
+  but are COMPRESSED and excluded as one-sided.
+* **H2 — EXHAUSTION, confirmed by the control.** The shallow pile re-run on THIS
+  commit reproduced #3319 exactly: 82% harvest, **5.7%** incidence, **all 11
+  first-spikes after t=100** (median t=258). The deep pile at the same
+  aggression: 1.0%, and **zero of 1344 cells spike after t=100**. Dev drift is
+  ruled out; #3319's deep guardrail is an artefact of its own ceiling.
+* **The ship is vindicated at depth**: `-4` reaches `prod`'s 400-click answer in
+  44 clicks vs 154 (3.5×, matching #3319's 3.2×), now where its tail is NOT
+  compressed.
 
-`size` times ONE cell of the **deepest** arm (`k=-6`, index 0). Read it with
+## The mechanism, refined
 
-    sacct -j 609833 --format=JobID,JobName%18,MaxRSS,Elapsed,State
-    tail /expscratch/sgreenberg/acq-3547/sizing/logs/size-609833.out
+A deep spike is what a threshold does when it is fit with too few positives, and
+there are **two entry points**: too few *yet* (`acq_p2`, first-spike quartiles
+21/36/47, `n_good`≈3) and none *left* (control `-3`, quartiles 193/258/276,
+`n_good`≈88 and flat). Harvest fraction alone catches only the second.
 
-Driver: `/exp/sgreenberg/chain_3547.sh` (it carries the pinned environment).
+## Tooling added this session
 
-## NOT done — the next session's first two jobs
+All committed, all with `--base`/`--csv` so they can be pointed at either study:
 
-1. **`launch_acq_3547.sh` does not exist yet.** The grid was deliberately not
-   submitted. `PLAN_3547.md` pre-registers cell cost as *measured*, and the
-   measurement (609833) had not landed; a 1344-cell array launched on an
-   unreviewed launcher I could not watch is the wrong trade. Adapt
-   `launch_acq_3319.sh`: `bin` half only, `CALIB_DATASETS=vg_scale_deep`,
-   `CALIB_VGSCALE_DEEP_EMBEDDERS`, arms
-   `prod,acq_m1,acq_m3,acq_m4,acq_m5,acq_m6,acq_p2`, `CALIB_MAX_STEPS=400`,
-   `CALIB_MIN_SIM_POSITIVES=400`, job names `acq3547-*`, and `CALIB_TIME` set
-   from 609833 rather than from #3319's 10m20s (the sim half is 3x deeper).
-2. **Analyzer additions** `analyze_acq.py` needs for this plan: realised harvest
-   as a first-class per-arm column, and the H1 difference-in-differences
-   (`[m(deep,400) - m(shallow,400)] - [m(deep,100) - m(shallow,100)]`, paired
-   per cell) rather than an argmin over a plateau.
+* `frontier_3547.py --csv <dir>` — writes 5 tidy CSVs beside the markdown, so
+  the figures and the tables cannot drift apart. **Verified output-neutral**:
+  regenerating `GENERATED_TABLES_3547.md` after the patch is byte-identical
+  apart from a trailing newline.
+* `spike_timing_3547.py --base/--arms/--csv` — was hardcoded to the main study.
+  Re-run on the main base after parametrising and it reproduced the committed
+  `spike_timing_3547.txt` exactly.
+* `harvest_3547.py --base/--arms` — was hardcoded to #3319's pile.
+* `spike_examples_3547.py` — NEW, prints the literal trajectory rows around a
+  cell's first spike. This is where the `n_good`-frozen-at-88 evidence came from.
+* `figures_3547.py` — NEW, the five report figures.
 
-## Traps already paid for
+## Follow-ups filed
 
-* **`git commit` exit code.** The first commit FAILED (rc=1) on `ruff` +
-  `ruff-format`; the hook rewrote 5 files. Run `ruff check --fix` and
-  `ruff format` first, and read the commit's own rc — a piped `tail` hides it.
-* `scancel --name=acq3547-analyze` before reading any analysis: #3319's
-  launcher-chained analyze silently clobbered a hand-run one with a
-  default-scoped table that parsed cleanly and had lost half the arms.
-* A pilot answers questions about the MACHINE, never about the DATA. `size` is
-  for wall clock and memory only; harvest came from the full supply pass.
+* **#3602** — `analyze_acq.py:218` computes `positives_100` as the trajectory's
+  LAST row, not t=100. #3319's "Δ positives@100 = +90.1" is really t=400.
+* **#3611** — size a deep grid from its DEEPEST arm; 900 was a supply bound
+  checked against a horizon bound, and neither bounds aggression.
+
+## Traps paid for in this session
+
+* `git commit` FAILS rc=1 on ruff/ruff-format **and** on `end-of-file-fixer`;
+  read the commit's own rc.
+* Never write a `|| git commit -C ORIG_HEAD` fallback — it silently reuses the
+  PREVIOUS commit's message. One commit here landed stale and needed `--amend`.
+* Preflight refuses a launch with uncommitted tracked changes — commit BEFORE
+  launching.
+* **Run long analyses under `sbatch`/`nohup`, not a foreground ssh** — a killed
+  watcher takes the ssh with it, and 20 min of pandas on a login node is bad
+  citizenship. `spike_timing_3547.py` over 7 arms is ~10 minutes.
+* Do NOT read `analysis/REPORT_acq.md` as the verdict — its default arm table
+  covers 5 of 7 arms and silently drops `acq_m5`/`acq_m6`. Use `frontier_3547.py`.
