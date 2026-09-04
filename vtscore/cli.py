@@ -783,6 +783,71 @@ def _reference_files_choice(field_values: dict[str, Any]) -> bool:
     return parse_checkbox(field_values.pop("reference_files", False))
 
 
+def _embed_loaded_medias(medias: dict[int, dict[str, Any]]) -> dict[int, dict[str, Any]]:
+    """Run the framework's embed stage over freshly-imported *medias*.
+
+    Importers never call an embedder - that is the contract on
+    :class:`~vtscore.datasets.importers.base.core.DataSourceImporter`.  They emit
+    media dicts with ``embedding=None`` and the framework's
+    :func:`~vtscore.datasets.stages.embedding.embed_missing` stage embeds
+    everything still at ``None`` once the importer returns.  The GUI's
+    ``load_pipeline`` runs that stage; the CLI ran *none* of the post-import
+    stages and let the vectors appear incidentally at scoring time, inside
+    ``route_and_embed``'s per-detector-group embed pass.
+
+    That ordering is what issue #3556 cost, because the first thing to read the
+    haystack is not scoring but **threshold calibration**: ``train_from_labelset``
+    fits the cut on ``scoring_rows_for_snap(snap)``, which drops every media with
+    no vector.  An import whose items were still unembedded therefore calibrated
+    the detector against a strict subset of the dataset - a lower cut over fewer
+    items - and only afterwards did ``route_and_embed`` fill the vectors in.
+    Same dataset, same detector, a different threshold and different hits in the
+    CLI than in the GUI.
+
+    Media are embedded in groups sharing a ``media_type`` so each group resolves
+    its own embedder: a mixed-type import (a folder of videos and PDFs) must not
+    have every item pushed through the first item's model, which a single
+    whole-dict call would do - ``embed_missing`` resolves one embedder from the
+    first media type it finds.
+
+    Nothing is dropped.  The GUI's ``_drop_none_embeddings_stage`` can drop what
+    stays at ``None`` because its dataset is scored in the space it was loaded
+    in; the CLI's is not.  An item with no native vector - no embedder
+    registered for its type, an unreadable file - may still be scoreable through
+    the one-hop converter route ``route_and_embed`` applies later, so dropping it
+    here would lose hits the CLI finds today.  The count is announced instead, on
+    the same event stream as the scoring-time skips.
+    """
+    from collections import defaultdict  # noqa: PLC0415
+
+    from vtscore.datasets.stages.embedding import embed_missing  # noqa: PLC0415
+    from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
+
+    by_type: dict[str, dict[int, dict[str, Any]]] = defaultdict(dict)
+    for mid, media in medias.items():
+        by_type[media.get("media_type") or ""][mid] = media
+    for group in by_type.values():
+        # Empty name = the framework's own resolution order (the embedder the
+        # media already carry, else the media-type default).  The CLI has no
+        # embedder pick to forward; ``--solo-embedder`` narrows the registry
+        # that resolution reads rather than naming a pick here.
+        embed_missing(group, "", on_progress=cli_progress.progress_callback)
+
+    unembedded = [mid for mid in sorted(medias) if media_embedding(medias[mid]) is None]
+    if unembedded:
+        cli_progress.emit(
+            "medias_unembedded",
+            text=(
+                f"{len(unembedded)} media carry no embedding after the load embed pass "
+                f"and will only score through a converter route: "
+                f"{unembedded[:10]}{'…' if len(unembedded) > 10 else ''}"
+            ),
+            unembedded=len(unembedded),
+            unembedded_ids=unembedded[:100],
+        )
+    return medias
+
+
 def _load_importer_whole(importer_name: str, field_values: dict[str, Any]) -> Iterator[dict[int, dict[str, Any]]]:
     """Yield a single medias dict loaded via a named importer."""
     from vtscore.datasets.importers import get_importer
@@ -799,7 +864,7 @@ def _load_importer_whole(importer_name: str, field_values: dict[str, Any]) -> It
     importer.run_cli(field_values, medias, thin=thin)
     if not medias:
         raise ValueError(f"No medias loaded by importer '{importer_name}'")
-    yield medias
+    yield _embed_loaded_medias(medias)
 
 
 def _load_importer_chunked(
@@ -815,7 +880,11 @@ def _load_importer_chunked(
 
     importer.validate_cli_field_values(field_values)
     thin = _reference_files_choice(field_values)
-    yield from _renumber_chunks(importer.run_chunked_cli(field_values, chunk_size, thin=thin))
+    for chunk in _renumber_chunks(importer.run_chunked_cli(field_values, chunk_size, thin=thin)):
+        # Per chunk, not once at the end: the chunked path exists so a dataset
+        # too big to hold at once is scored a chunk at a time, and each chunk is
+        # calibrated and scored on its own before the next is loaded.
+        yield _embed_loaded_medias(chunk)
 
 
 @dataclass(frozen=True)

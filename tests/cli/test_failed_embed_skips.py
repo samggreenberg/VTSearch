@@ -145,8 +145,9 @@ class TestTrainAndThresholdOverAPartlyEmbeddedHaystack:
         assert calls == []
 
     def test_wholly_unembedded_haystack_falls_back_to_the_no_snap_threshold(self, client):
-        """The CLI importer path: the chunk is embedded later, per detector
-        group, so at train time nothing in it is scoreable."""
+        """A haystack in which nothing is scoreable - every media reachable
+        only through a converter route, embedded later by ``route_and_embed``
+        in the detector's target space - fits on no distribution at all."""
         from vtscore.detectors.training import train_and_threshold
 
         snap = {1: _media(1, None), 2: _media(2, None)}
