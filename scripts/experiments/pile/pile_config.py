@@ -794,6 +794,7 @@ SCALE_CANDIDATE_VG_NAMES: dict[str, tuple[str, ...]] = {
     "cell phone": ("cell phone", "phone", "cellphone"),
 }
 
+
 def scale_class_dataset_name(category: str) -> str:
     """The dataset/detector name *category* is reviewed under.
 
