@@ -35,6 +35,12 @@ The fit itself is deliberately plain. Per ``(task, cell, step)``:
   same code path; a cached run is a measurement of a different one, and the two
   populations have no common mean worth reporting. See :func:`cheap_branch_only`
   and :data:`vtscore.timing.tasks.CHEAP_BRANCHES` (#3521).
+- **A step measured on both paths is additionally priced per branch**, under the
+  step's own ``branches`` key, so a caller that knows which path it is taking
+  gets that branch's coefficients instead of the other's. The step's top-level
+  coefficients are unchanged — still the dear branch — because that is what a
+  caller who cannot say gets, and what every existing reader sees. See
+  :func:`fit_branches` (#3594).
 
 Cells are emitted at three specificities — exact ``(device, media, embedder)``,
 then ``(device, media, *)``, then ``(device, *, *)``. The rollups are what make a
@@ -288,6 +294,43 @@ def cheap_branch_only(samples: list[dict]) -> bool:
     return bool(cheap) and not dear and not unmarked
 
 
+def fit_branches(samples: list[dict], byte_scaled: bool) -> dict[str, StepCoeffs]:
+    """Fit one step's coefficients **per branch**, when its runs took more than one.
+
+    :func:`fit_step` answers "what does this step cost?" with one number, which
+    it can only do by choosing a branch — it prices from the runs that did the
+    work and lets the cheap ones go. That is the right single answer, and #3521
+    measured how far it is from the other one: a coverage atlas restores in
+    0.011 s and rebuilds in 7.7 s on the same 2954-item dataset, and a bar paced
+    by either number is ~0.5-0.94 of a bar wrong on the other branch.
+
+    So the branches are also fitted separately and stored beside the step, for
+    the lookup that knows which path it is about to take. Each branch is fitted
+    by :func:`fit_step` over its own rows alone — the cold/warm holdout and the
+    median fallback apply within a branch exactly as they do without one.
+
+    Returns ``{}`` for a byte-scaled step (a per-MB rate has no fork to split)
+    and for a step whose runs all took one branch, where a per-branch entry
+    would only restate the step's own coefficients. A single branch measured is
+    not evidence about the branch nobody ran, and writing it as though it were a
+    split would suggest the profile knows something it does not.
+    """
+    if byte_scaled:
+        return {}
+    named: dict[str, list[dict]] = defaultdict(list)
+    for sample in samples:
+        if sample.get("branch"):
+            named[sample["branch"]].append(sample)
+    if len(named) < 2:
+        return {}
+    out: dict[str, StepCoeffs] = {}
+    for branch, group in named.items():
+        coeffs = fit_step(group, byte_scaled=False)
+        if coeffs is not None:
+            out[branch] = coeffs
+    return out
+
+
 def fit_step(samples: list[dict], byte_scaled: bool) -> Optional[StepCoeffs]:
     """Fit one step's coefficients from its samples, or ``None`` if unusable."""
     if not samples:
@@ -511,7 +554,11 @@ def _fit_task_cells(spec, cells: _CellSamples, slots: _CellSlots, min_samples: i
                 continue
             coeffs = fit_step(samples, byte_scaled)
             if coeffs is not None:
-                steps_out[step] = coeffs.to_json()
+                entry_json: dict[str, Any] = dict(coeffs.to_json())
+                forks = fit_branches(samples, byte_scaled)
+                if forks:
+                    entry_json["branches"] = {name: c.to_json() for name, c in forks.items()}
+                steps_out[step] = entry_json
         if not steps_out:
             continue
         entry: dict[str, Any] = {"samples": runs, "steps": steps_out}
@@ -730,6 +777,30 @@ def _branch_lines(spec, samples_by_step: dict[str, list[dict]]) -> list[str]:
     return lines
 
 
+def _priced_branch_lines(cells: dict[str, Any]) -> list[str]:
+    """Name every step this task priced **per branch**, and with which branches.
+
+    The counterpart to :func:`_branch_lines`. That one reports the step nobody
+    measured on the dear path; this one reports the step measured on *both*, and
+    so the step whose pacing now depends on the caller naming its branch. An
+    admin reading a sweep needs to be able to tell the two apart, since the
+    remedy for one (drive the other branch) is exactly what produces the other.
+    """
+    priced: dict[str, set[str]] = defaultdict(set)
+    counts: dict[str, int] = defaultdict(int)
+    for cell in cells.values():
+        for step, coeffs in cell.get("steps", {}).items():
+            forks = coeffs.get("branches") if isinstance(coeffs, dict) else None
+            if isinstance(forks, dict) and forks:
+                priced[step].update(str(b) for b in forks)
+                counts[step] += 1
+    return [
+        f"  {'':<16} {step}: priced per branch in {counts[step]} cell{'' if counts[step] == 1 else 's'} "
+        f"({', '.join(sorted(branches))}) — a caller that names its branch is paced from that branch alone"
+        for step, branches in sorted(priced.items())
+    ]
+
+
 def coverage_report(rows: Iterable[dict], profile: dict[str, Any]) -> list[str]:
     """Human-readable lines describing what the sweep did and did not cover.
 
@@ -756,7 +827,9 @@ def coverage_report(rows: Iterable[dict], profile: dict[str, Any]) -> list[str]:
     whose every run read a cache is not a well-covered step; it is an unmeasured
     one wearing a full sample count, and it is the state that made #3345's sweep
     price a minutes-long atlas rebuild at 2 % of the bar. :func:`_branch_lines`
-    names those explicitly (#3521).
+    names those explicitly (#3521), and :func:`_priced_branch_lines` names the
+    steps measured on *both* paths, whose pacing now depends on the caller
+    saying which one it is taking (#3594).
     """
     rows = list(rows)
     normalized = [n for n in (normalize_row(r) for r in rows) if n is not None]
@@ -774,6 +847,7 @@ def coverage_report(rows: Iterable[dict], profile: dict[str, Any]) -> list[str]:
             lines.append(f"  {task:<16} {len(cells)} cells, {samples} step-samples")
             lines.extend(_specificity_lines(TASKS[task], cells, by_cell.get(task, {})))
             lines.extend(_branch_lines(TASKS[task], by_step.get(task, {})))
+            lines.extend(_priced_branch_lines(cells))
         elif task in seen_tasks:
             branch_lines = _branch_lines(TASKS[task], by_step.get(task, {}))
             if branch_lines:

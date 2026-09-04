@@ -10,6 +10,27 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **A timing profile can price a forked step per branch** (issue #3594).
+  `vtscore.timing.step_weights` and `step_terms` take an optional `branch=` -
+  a branch name from `CHEAP_BRANCHES` / `DEAR_BRANCHES`, or a `{step: branch}`
+  mapping - and price any step the profile measured on that branch from its own
+  coefficients. `vtscore.timing.fit.fit_branches` produces them, stored under
+  the step's new `branches` key, and `TimingProfile` gained a parallel
+  `branches` table to hold them.
+
+  Purely additive in both directions. The step's top-level coefficients still
+  describe the dear branch, so a caller that passes no `branch` (every existing
+  call site), a profile written before this existed, and a build that has never
+  heard of `branches` all behave exactly as they did - which is also why the
+  profile schema version did not move. A step whose runs all took one branch
+  gets no split at all.
+
+  The problem it solves is that a profile cell is keyed
+  `(device, media_type, embedder)`, so a step that forks on a cache had one set
+  of coefficients for two code paths measured 110-700x apart: an admin picking a
+  profile was picking which branch to be wrong about, at up to 0.94 of a
+  progress bar.
+
 - **`slot_embedders_for_snap(snap)` and `keying_embedder_for_type(type, snap)`
   on `vtscore.embedding.binding`** (issue #3386). Purely additive companions to
   the two existing snapshot resolvers, added so the near-synonymous private

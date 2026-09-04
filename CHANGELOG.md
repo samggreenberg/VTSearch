@@ -15,6 +15,20 @@ not list every commit. Use `git log` for the full history.
 
 ## Unreleased
 
+### Changed
+
+- **Opening a saved dataset paces its progress bar for the branch its coverage
+  atlas actually takes.** That step either restores the atlas cached in the
+  dataset's pickle (milliseconds) or rebuilds a hierarchical k-means from
+  scratch (up to minutes) - measured 110-700x apart on the same datasets - and a
+  timing profile could hold only one number for both, so whichever it held made
+  the other case's bar up to 0.94 of a bar wrong. A profile can now carry
+  coefficients for each branch, and the load route names the branch it is taking
+  as soon as it knows, before the expensive part starts. It also remembers on
+  the registry entry which branch that dataset took last time, so the weights
+  are right from the first update rather than from the middle of the load.
+  Pacing only: nothing about what is loaded or stored changes.
+
 ### Fixed
 
 - **CLI autodetect no longer drops media the GUI keeps, and its detector
