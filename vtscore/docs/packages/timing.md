@@ -47,6 +47,37 @@ That granularity is the point. The same step costs wildly different
 amounts on a V100 versus a laptop CPU, and on 200-character texts versus
 30-second videos; a single global constant cannot be right for both.
 
+A step that **forks** carries a second set of coefficients per branch,
+nested under the step's own `branches` key:
+
+```json
+"coverage": {
+  "a": 0.2, "b": 0.0026,
+  "branches": {
+    "restored": {"a": 0.009},
+    "rebuilt":  {"a": 0.2, "b": 0.0026}
+  }
+}
+```
+
+The cell is not keyed by branch, because the branch is not a property of
+the environment - it is a property of the run, decided while the job is
+already under way. So the split lives inside the step, and a caller that
+knows which path it is on passes `branch=` to `step_weights` /
+`step_terms` to be priced from it. #3521 measured a coverage atlas
+restoring in 0.011 s and rebuilding in 7.7 s on the same 2954-item
+dataset; held out against each other, a profile fitted from restores
+alone put **0.94 of the bar** in the wrong step on a rebuild, and one
+fitted from rebuilds put 0.49 in the wrong step on a restore. No single
+number wins both columns, which is why there are two (#3594).
+
+The step's top-level coefficients are unchanged - still the dear branch
+- so a caller that cannot say which path it is on, a hand-written
+profile, and an older build all behave exactly as before. That is also
+why the schema version did not move: `branches` is additive and safely
+ignorable, and bumping it would have made every new profile unreadable
+to the builds that can still use it.
+
 ## The three-layer resolution
 
 A cell resolves most-specific-first:
@@ -157,13 +188,39 @@ weights = step_weights(
 This needs no measurement and no branch axis in the profile format - a
 step that does not run costs nothing, and that is knowable in advance
 where a step's *cost* is not. Steps whose cost merely varies by branch
-(a coverage atlas restored versus rebuilt) are a different problem and
-are not what this parameter is for.
+(a coverage atlas restored versus rebuilt) are the other half of the
+problem, and they do need that axis - see below.
+
+### Steps whose cost varies by branch
+
+A step that runs either way but costs two different things cannot be
+skipped, and no coefficient describes both. Name the branch instead and
+it is priced from that branch's own
+[coefficients](#the-cost-model):
+
+```python
+weights = step_weights(
+    "dataset_open",
+    media_type=media_type, embedder=embedder, n=len(medias),
+    branch="restored",          # or a {step: branch} mapping
+)
+```
+
+**A task whose expensive step forks this way should call `step_weights`
+twice**: once on the way in with whatever it can guess, and again the
+moment it knows, before the expensive part runs. The dataset-open route
+is the worked example - it weights the bar from the branch the *last*
+open of that dataset took (remembered on the registry entry, since
+whether a pickle carries a restorable atlas is a durable fact about the
+file), then re-weights the moment `restore_coverage_atlas_from_cache`
+has answered. Re-weighting mid-job only ever moves the bar forward; the
+tracker clamps its overall fraction to be monotonic.
 
 | Function | Description |
 |----------|-------------|
-| `step_weights(task, *, device, media_type, embedder, n, size_mb, skip_steps, fallback)` | Normalised per-tracker-step weights, or *fallback* |
-| `step_terms(...)` | The same prediction before normalisation - raw predicted seconds per phase (takes `skip_steps` too) |
+| `step_weights(task, *, device, media_type, embedder, n, size_mb, skip_steps, branch, fallback)` | Normalised per-tracker-step weights, or *fallback* |
+| `step_terms(...)` | The same prediction before normalisation - raw predicted seconds per phase (takes `skip_steps` and `branch` too) |
+| `branch=` (on both) | Which path a forking step is taking on *this* run: a branch name, or a `{step: branch}` mapping. Sharpens the answer where the profile has that branch and changes nothing where it does not, so a caller that knows should always say |
 | `slot_shares(task, step, ...)` | Measured sub-stage shares *within* one step, for steps that pace several ordered sub-stages behind one number (today only the dataset load's `finalize`). Raw weights; the consumer normalises |
 | `profile_covers(task)` | Whether the active profile has any measured cell for *task*. Public API with no in-repo caller - for out-of-tree callers that want to branch on coverage before asking for weights |
 | `active_profile()` / `reload_profile(path=None)` | The parsed profile; re-read it |
@@ -208,11 +265,13 @@ chooses them (`note_branch`):
 | `dataset_load` / `dataset_stage` · `embed` | `cached` (the demo embeddings pkl) | `fresh` |
 
 The vocabulary is `CHEAP_BRANCHES` / `DEAR_BRANCHES` in `tasks.py`, and
-the fitter reads it: a forked step is priced from the runs that did the
-work, and a step whose runs *all* read a cache withholds its whole cell
-so the task keeps its shipped defaults. A row without the field is not
-a claim that the step never forks - unmarked rows fit as they always
-did.
+both the fitter and the lookup read it: a forked step is priced from the
+runs that did the work, a step whose runs *all* read a cache withholds
+its whole cell so the task keeps its shipped defaults, and a step
+measured on both paths additionally carries
+[per-branch coefficients](#the-cost-model) for a caller that can name
+its own branch. A row without the field is not a claim that the step
+never forks - unmarked rows fit as they always did.
 
 This exists because #3345's sweep opened 16 datasets and restored the
 cached atlas on every one, recording 0.008-0.016 s at every `n` from
@@ -290,6 +349,14 @@ The fit is deliberately plain. Per `(task, cell, step)`:
   slope (noise beating signal on a short step), collapses to the median
   seconds with no slope. A confidently wrong slope extrapolates badly at
   sizes the sweep never visited; a flat median merely stops improving.
+- **A step measured on both paths is also fitted per branch** and stored
+  under the step's `branches` key, each branch fitted from its own rows
+  by the same `fit_step` (so the cold/warm holdout and the median
+  fallback apply within a branch as they do without one). A step whose
+  runs all took *one* branch gets no split: one branch measured is not
+  evidence about the branch nobody ran, and writing it as a split would
+  suggest the profile knows something it does not. `--cold-atlas` is
+  what produces both branches for `dataset_open` in a single sweep.
 
 ### Is the fit any good?
 
