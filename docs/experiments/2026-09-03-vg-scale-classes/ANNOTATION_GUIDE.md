@@ -370,7 +370,21 @@ plain bowl.
 
 **"Vote the vessel, not the plant" does not mean "find whatever holds the
 flowers."** A table with a pile of flowers on it is not a vase. A basket of them
-is not a vase. Both hold flowers; neither was made to, which is the
+is not a vase. Neither is the **florist's bucket** holding three dozen
+individually wrapped roses — a bucket is made as a bucket, which is the same
+call `bowl` makes about a bucket of apples (`bucket` lands on vase twice).
+
+**A planter built into the pavement is not a planter.** A freestanding pot,
+planter or urn is a vase; a concrete bed cast into the sidewalk and holding
+trees or bushes is part of the street, and *an integral component of a larger
+object is not an instance of a container class* — the fuel-tank rule from
+`bottle`, arriving here. This narrows the plain word "planters" above, so read
+the two together: **freestanding** planter yes, **built-in** no.
+
+The ladder agrees independently, which is worth noticing because it was measured
+for a different purpose: a sidewalk bed is low and broad, so its box is wider
+than tall and lands in `bowl` territory rather than vase's. Two unrelated tests
+giving one answer is the strongest signal this guide offers. Both hold flowers; neither was made to, which is the
 containing-is-not-being rule from the protocol arriving here. Unlike the
 borrowed-vessel narrowing below, this one costs nothing measured — COCO's
 annotators never do it, putting `table` on 1 vase box and `basket` on 1, out of
