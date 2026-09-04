@@ -88,7 +88,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import cluster_marks as _cluster  # noqa: E402
 import docmarks_config as cfg  # noqa: E402
-from sources._common import Page, read_manifest  # noqa: E402
+from sources._common import Page, read_manifest, spread  # noqa: E402
 
 THUMB = 180
 COLS = 8
@@ -182,9 +182,15 @@ def task_cluster(
 
     for class_id, meta in sorted(derived.items(), key=lambda kv: -kv[1]["n_instances"]):
         groups = proposals.get(class_id, {})
-        page_ids = meta["page_ids"][:max_per_class]
         if groups:
-            page_ids = sorted(page_ids, key=lambda pid: (groups.get(pid, 99), pid))
+            # Render exactly the instances the proposal covers.  The proposal is
+            # what this sheet exists to adjudicate, and the two samples are
+            # drawn by different code paths -- showing a crop the clusterer
+            # never saw would put an untagged cell on the sheet and invite a
+            # verdict about it.
+            page_ids = sorted(groups, key=lambda pid: (groups[pid], pid))
+        else:
+            page_ids = spread(meta["page_ids"], max_per_class)
         crops, caps = [], []
         for page_id in page_ids:
             page = by_id.get(page_id)
@@ -463,17 +469,15 @@ def _paste_grid(cells: Sequence[Any], title: str, out_path: Path, *, cols: int) 
 def _class_strip(page_ids: Sequence[str], by_id: dict[str, Page], class_id: str, limit: int) -> list[Any]:
     """Up to *limit* instance crops of *class_id*, evenly spread over the class.
 
-    Spread rather than the first *limit*: page ids sort by source and number, so
-    the head of the list is whatever the scanner did first, and a class whose
-    later instances drifted (a re-inked stamp, a second printing) would look
-    homogeneous on the slate for no better reason than alphabetical order.
+    Spread rather than the first *limit*, via the shared ``spread`` — see its
+    docstring for why the head of a class is the wrong sample and why a plain
+    stride is not enough to avoid it.
     """
     crops: list[Any] = []
     resolved = [pid for pid in page_ids if pid in by_id]
     if not resolved:
         return crops
-    step = max(1, len(resolved) // max(1, limit))
-    for page_id in resolved[::step][:limit]:
+    for page_id in spread(resolved, limit):
         page = by_id[page_id]
         for mark in page.marks:
             if mark.class_id == class_id:

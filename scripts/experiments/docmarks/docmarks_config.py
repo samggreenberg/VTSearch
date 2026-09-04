@@ -405,6 +405,21 @@ AUDIT_MAX_PER_CLASS = int(os.environ.get("VTS_DOCMARKS_AUDIT_MAX_PER_CLASS", "24
 #: on (#3366).
 AUDIT_SPLIT_SWEEP = (0.10, 0.15, 0.20, 0.25, 0.30, 0.40)
 
+#: The within-class spread at which a class is reported as internally **mixed**.
+#:
+#: The rank of a class's own centroid answers "is this query crop an outlier",
+#: and #3610 is the case where nothing answered "is this class more than one
+#: mark": `staver/stamp_stampds-00156_0` holds five marks and scores rank 0,
+#: distance 0.078 -- correctly, because its query crop is a good instance of the
+#: 16-strong mark it is drawn from.  A rank cannot see the other four.
+#:
+#: Not a fresh magic number: it is the loosest threshold in `AUDIT_SPLIT_SWEEP`,
+#: so "mixed" means *the class's two most distant instances sit further apart
+#: than the loosest cut we would ever call one mark*.  Tying it to the sweep is
+#: what stops it drifting away from the sweep the way `CLUSTER_THRESHOLD`'s 0.16
+#: drifted away from its decomposition (#3366).
+AUDIT_MIXED_MAX_WITHIN = float(os.environ.get("VTS_DOCMARKS_AUDIT_MIXED_MAX_WITHIN", str(max(AUDIT_SPLIT_SWEEP))))
+
 #: Which descriptor the slate orders itself by.  `phash` stays the default so a
 #: slate renders with no cache and no card; `siglip2_l` requires
 #: `siglip_audit.py --embed` to have run, and refuses rather than silently
