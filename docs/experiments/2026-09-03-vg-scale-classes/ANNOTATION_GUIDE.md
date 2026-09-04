@@ -337,6 +337,15 @@ a vase here, even though COCO separately has a `potted plant` class for the
 greenery above it. A cooking pot on a stove does not count, and neither does a
 plain bowl.
 
+**"Vote the vessel, not the plant" does not mean "find whatever holds the
+flowers."** A table with a pile of flowers on it is not a vase. A basket of them
+is not a vase. Both hold flowers; neither was made to, which is the
+containing-is-not-being rule from the protocol arriving here. Unlike the
+borrowed-vessel narrowing below, this one costs nothing measured — COCO's
+annotators never do it, putting `table` on 1 vase box and `basket` on 1, out of
+2,328. It is written down not to correct COCO but to stop a reviewer
+over-reading our own rule.
+
 **A borrowed vessel is not a vase**, however it is being used in the picture. A
 jar of cut flowers is a `bottle`; a drinking glass of them is a `cup`. This is
 the ruling that keeps `jar` from meaning two things at once — see `bottle` — and
