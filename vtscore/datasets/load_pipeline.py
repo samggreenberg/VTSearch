@@ -73,6 +73,28 @@ _download_gate = ConcurrencyGate(lambda: CoreConfig.from_settings().max_concurre
 _embed_gate = ConcurrencyGate(lambda: CoreConfig.from_settings().max_concurrent_dataset_embeddings)
 
 
+def reset_load_gates_for_tests() -> None:
+    """Rebind both load gates to fresh instances.  For test isolation.
+
+    The gates are process globals, so under ``pytest -n auto`` every test in a
+    worker shares them.  A test that leaves a background load thread running
+    leaves that thread holding a permit, and the next test in the process sees
+    a gate that is already partly full — which is how ``TestLoadingGates``
+    became a lottery over xdist worker assignment (issue #3613).
+
+    Rebinding rather than zeroing the counters is what makes this safe in the
+    presence of a thread we could not stop: the leaked thread still holds — and
+    eventually releases — the *old* gate object, so it cannot drive the new
+    gate's count negative.  :class:`_LoadGateController` cooperates by
+    remembering the gate object it acquired instead of re-resolving these
+    globals at release time.
+    """
+    global _download_gate, _embed_gate
+
+    _download_gate = ConcurrencyGate(lambda: CoreConfig.from_settings().max_concurrent_dataset_downloads)
+    _embed_gate = ConcurrencyGate(lambda: CoreConfig.from_settings().max_concurrent_dataset_embeddings)
+
+
 # ---------------------------------------------------------------------------
 # App-side persistence hook
 # ---------------------------------------------------------------------------
@@ -350,6 +372,12 @@ class _LoadGateController:
         self._tracker = tracker
         self._total_steps = total_steps
         self._held: str | None = None
+        #: The gate object :meth:`acquire` last took a permit from.  Held as an
+        #: object rather than re-resolved from the module global at release
+        #: time so a controller always releases *the gate it acquired*, even if
+        #: the global has since been rebound (which is what
+        #: :func:`reset_load_gates_for_tests` does between tests).
+        self._held_gate: ConcurrencyGate | None = None
 
     @property
     def held(self) -> str | None:
@@ -358,11 +386,13 @@ class _LoadGateController:
     def acquire(self, gate: ConcurrencyGate, name: str, wait_msg: str) -> None:
         if gate.acquire(blocking=False):
             self._held = name
+            self._held_gate = gate
             return
         self._tracker.update("loading", wait_msg, 0, 0, step=1, total_steps=self._total_steps)
         while not gate.acquire(timeout=0.5):
             self._tracker.check_cancelled()
         self._held = name
+        self._held_gate = gate
 
     def acquire_download(self) -> None:
         self.acquire(_download_gate, "download", "Waiting for other datasets to finish downloading…")
@@ -371,16 +401,14 @@ class _LoadGateController:
         if self._held == "embed":
             return
         if self._held == "download":
-            _download_gate.release()
-            self._held = None
+            self.release()
         self.acquire(_embed_gate, "embed", "Waiting for other datasets to finish embedding…")
 
     def release(self) -> None:
-        if self._held == "download":
-            _download_gate.release()
-        elif self._held == "embed":
-            _embed_gate.release()
+        if self._held_gate is not None:
+            self._held_gate.release()
         self._held = None
+        self._held_gate = None
 
 
 def _make_stepped_progress(controller: _LoadGateController, pacer):
