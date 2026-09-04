@@ -406,6 +406,125 @@ class ClassRule(NamedTuple):
 #: not be in :data:`SCALE_CLASSES` to appear here: `cell phone` is a #3588
 #: candidate whose first slate is already voted.
 SCALE_CLASS_RULES: dict[str, ClassRule] = {
+    # Candidates from #3588, each rule measured with `coco_folds.py` before it
+    # was written: the fold-in names the boundary case a reviewer will actually
+    # meet. Long form, with the counts, in the annotation guide.
+    "truck": ClassRule(
+        name="truck incl vans not SUVs",
+        test=(
+            "Good: pickups, box trucks, semis and tractor units, flatbeds, tow, fire and "
+            "food trucks, full-size cargo and panel vans. Bad: SUVs, crossovers and "
+            "passenger minivans (those are `car`), and a detached trailer with no cab. "
+            "Use the body, not the badge -- COCO splits `van` roughly evenly between "
+            "truck and car, so disagreement there is a known cost, not a mistake."
+        ),
+    ),
+    "car": ClassRule(
+        name="car incl SUVs and minivans",
+        test=(
+            "Good: sedans, hatchbacks, coupes, estates, SUVs, crossovers, passenger "
+            "minivans, taxis and cabs -- COCO folds every passenger body into `car`. "
+            "Bad: pickups and cargo vans, which are `truck`."
+        ),
+    ),
+    "fork": ClassRule(
+        name="fork incl plastic",
+        test=(
+            "Good: metal, plastic and disposable forks, and serving, carving and fondue "
+            "forks. Bad: spatulas, tongs, whisks, skewers. Vote Good only when the boxed "
+            "object IS a fork, not when a fork sits somewhere inside a `silverware` or "
+            "`utensil` box covering a whole place setting."
+        ),
+    ),
+    "spoon": ClassRule(
+        name="spoon incl plastic not spatulas",
+        test=(
+            "Good: teaspoons, tablespoons, soup, wooden, plastic, disposable and serving "
+            "spoons, and ladles -- a ladle is a spoon with a deep bowl. Bad: spatulas, "
+            "slotted turners, scoops, whisks, tongs. Judge the object, not the drawer."
+        ),
+    ),
+    "cup": ClassRule(
+        name="cup incl mugs and glasses not stemware",
+        test=(
+            "Good: a plain drinking glass IS a cup, as are mugs, teacups, paper and "
+            "plastic cups, tumblers and pints. Bad: stemware -- anything with a stem and "
+            "a foot is `wine glass`. Does it hold a drink and lack a stem?"
+        ),
+    ),
+    # `bowl` is the class whose plain name misleads most: `container` is its
+    # fourth-largest fold-in (143 boxes), ahead of `pot` and `basket`, and the
+    # first name -- "incl plates and dishes" -- said nothing about it. Renamed
+    # mid-slate once that showed up.
+    "bowl": ClassRule(
+        name="bowl incl plates and food containers not wrappers",
+        test=(
+            "Good: bowls, plates (a paper plate is a plate), saucers, dishes, serving "
+            "pots, baskets that hold food, disposable food containers, and a dog's water "
+            "bowl. A paper food boat with turned-up sides is a bowl, flimsy or not. "
+            "Bad: flat wrappers and sleeves, cups and mugs (`cup`), sink basins (`sink`), "
+            "toilet bowls, feed troughs, planters (`vase`), ashtrays and carafes. "
+            "Judge the vessel, not the food."
+        ),
+    ),
+    "bottle": ClassRule(
+        name="bottle incl jars",
+        test=(
+            "Good: water, wine, beer, soda and spirit bottles, jars, soap and shampoo "
+            "dispensers, spray bottles, baby bottles, condiment bottles, vacuum flasks. "
+            "Bad: cans, cartons, boxes, and a stemmed glass of wine. Judge the container, "
+            "not its contents."
+        ),
+    ),
+    "vase": ClassRule(
+        name="vase incl pots and planters",
+        test=(
+            "Good: vases, flower pots, planters, urns and decorative jars; a potted "
+            "plant's pot is a vase here, and so is a glass holding cut flowers. Bad: a "
+            "cooking pot on a stove, and a plain bowl. Vote the vessel, not the plant."
+        ),
+    ),
+    # The guide first named `chair` (53 boxes) as this class's confusion. It is
+    # third: `seat` (64) and `table` (58) both outrank it, and each turns on a
+    # question COCO's annotators do not ask.
+    "bench": ClassRule(
+        name="bench not chairs",
+        test=(
+            "Good: any backed or backless seat BUILT AS SEATING for two or more -- park, "
+            "bus-stop and station benches, church pews, picnic-table benches, and a "
+            "rowboat's thwart. Bad: a single chair, a sofa, a judge's bench (that is a "
+            "table; the seating is the chairs behind it), and a concrete planter wall or "
+            "ledge people merely sit on. Two tests: seating or surface, and built as "
+            "seating or merely sittable."
+        ),
+    ),
+    "chair": ClassRule(
+        name="chair incl stools not couches",
+        test=(
+            "Good: dining, office, folding and deck chairs, armchairs, high chairs, "
+            "stools and bar stools, and one seat within a row of stadium or theatre "
+            "seating. Bad: couches and sofas, which are `couch`, and benches."
+        ),
+    ),
+    "sink": ClassRule(
+        name="sink basin not counter",
+        test=(
+            "Good: kitchen sinks, bathroom sinks, pedestal basins, utility sinks, vessel "
+            "basins; a double sink in one unit is one sink. Bad: bathtubs, showers, "
+            "toilets, urinals. This class's risk is the BOX, not membership: box the "
+            "basin and its tap, never the vanity or the run of counter."
+        ),
+    ),
+    "fire hydrant": ClassRule(
+        name="fire hydrant not standpipes",
+        test=(
+            "Good: street fire hydrants in any colour or design, including ones wrapped, "
+            "repainted or half-buried in snow. Bad: building standpipes and wall-mounted "
+            "siamese connections, bollards, water valves, parking meters, utility posts. "
+            "The cleanest class measured -- a call that feels hard here usually means the "
+            "object is something else."
+        ),
+    ),
     # COCO has no magazine class, so its annotators put magazines in `book`
     # while the human pass applied the narrower English reading -- leaving 21
     # verdicts on one definition and 49 on another. The dataset takes COCO's,
@@ -767,48 +886,13 @@ SCALE_CANDIDATE_VG_NAMES: dict[str, tuple[str, ...]] = {
     "cell phone": ("cell phone", "phone", "cellphone"),
 }
 
-#: The definition each class is reviewed under, and the name that definition
-#: travels on.
-#:
-#: **This is the `book` failure made structural.** COCO has no magazine class,
-#: so COCO's annotators put magazines in `book`; the human pass applied the
-#: narrower English reading; and the class became two definitions wearing one
-#: name -- 21 verdicts on one, 49 on the other, with every structural check
-#: passing (`make_definition_reslate.py`). A reviewer cannot see a manifest
-#: while voting, so the rule has to travel on the one string the app shows:
-#: the dataset and detector name.
-#:
-#: The rules are **measured, not drafted**. `coco_folds.py` asks which VG names
-#: land on a COCO class's boxes over the ~51k-image overlap, which enumerates
-#: the boundary cases before a human meets one -- run against `book` it prints
-#: `magazine` (79) and `magazines` (30). Each entry below names the boundary
-#: case that measurement found, and the long form is in the annotation guide.
-#:
-#: Keyed by class; the value is the dataset/detector name. Deliberately a
-#: literal rather than a formatting of the class name: the whole point is that
-#: it says something the class name does not.
-SCALE_CLASS_RULES: dict[str, str] = {
-    "truck": "truck incl vans not SUVs",
-    "car": "car incl SUVs and minivans",
-    "fork": "fork incl plastic",
-    "spoon": "spoon incl plastic not spatulas",
-    "cup": "cup incl mugs and glasses not stemware",
-    "bowl": "bowl incl plates and dishes",
-    "bottle": "bottle incl jars",
-    "vase": "vase incl pots and planters",
-    "bench": "bench not chairs",
-    "chair": "chair incl stools not couches",
-    "sink": "sink basin not counter",
-    "cell phone": "cell phone not landlines",
-    "fire hydrant": "fire hydrant not standpipes",
-}
-
 
 def scale_class_dataset_name(category: str) -> str:
-    """The dataset/detector name *category* is reviewed under.
+    """Deprecated alias for :func:`review_name`.
 
-    Falls back to the bare class name, which is correct for a class with no
-    boundary case worth stating -- and wrong to invent one for, since a rule
-    nobody needs is a rule a reviewer will misread.
+    Kept because `make_class_slate.py` prints and names with it. Both spellings
+    must resolve through ONE table: when they did not, a second
+    ``SCALE_CLASS_RULES`` shadowed the first and `review_name` raised
+    ``AttributeError`` on every class that had a rule.
     """
-    return SCALE_CLASS_RULES.get(category, category)
+    return review_name(category)

@@ -68,7 +68,13 @@ def test_rule_names_are_usable_as_a_detector_and_a_folder(pc):
     for cls, rule in pc.SCALE_CLASS_RULES.items():
         assert rule.name == rule.name.strip() and rule.name
         assert not set(rule.name) & set("/\\"), f"{cls}: path separator in {rule.name!r}"
-        assert re.fullmatch(r"[a-z0-9 ]+", rule.name), f"{cls}: {rule.name!r} is not plain lowercase"
+        # Letters of either case: the constraint that matters is "usable as a
+        # path segment and readable at a glance", and two live rules carry an
+        # acronym (`truck incl vans not SUVs`, `car incl SUVs and minivans`)
+        # whose datasets are already registered under that exact spelling.
+        # Lower-casing them would desync the table from the app, the slate
+        # folders and the manifests` detector column, for no functional gain.
+        assert re.fullmatch(r"[A-Za-z0-9 ]+", rule.name), f"{cls}: {rule.name!r} is not plain alphanumeric"
         # `ingest_slate.py` attributes an export by matching the slate folder in
         # the origin path, and a human has to recognise the class at a glance.
         assert rule.name.startswith(cls), f"{cls}: {rule.name!r} does not name its class"
