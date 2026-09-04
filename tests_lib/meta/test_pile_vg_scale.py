@@ -179,6 +179,38 @@ class TestAnchorToCoco:
         assert box_dims == {7: (500, 375), 8: (600, 400)} and n_anchored == 0
 
 
+class TestBandFor:
+    """The banding rule itself, split out of :func:`band_candidates` for #3616.
+
+    ``audit_band_drift.py`` re-bands the same images off COCO's annotation to
+    measure how often VG's own boxes put one in too small a band. A second copy
+    of the rule would answer that drift question with a drift of its own, so
+    both callers go through this one.
+    """
+
+    def _square(self, frac: float) -> list[float]:
+        """A box covering *frac* of a 100x100 frame."""
+        side = (frac * 10000) ** 0.5
+        return [0.0, 0.0, side, side]
+
+    def test_each_band_claims_the_range_it_declares(self, vgs, pc):
+        for band, (lo, hi) in pc.BOX_BANDS.items():
+            assert vgs.band_for([self._square((lo + hi) / 2)], 100, 100) == band
+
+    def test_scattered_instances_say_so_rather_than_banding(self, vgs):
+        """The union describes the scatter, not an object anyone would drag."""
+        assert vgs.band_for([[0.0, 0.0, 1.0, 1.0], [99.0, 99.0, 100.0, 100.0]], 100, 100) == vgs.SCATTERED
+
+    def test_a_box_bigger_than_a_region_says_so_rather_than_banding(self, vgs, pc):
+        """Above ``MAX_VOTED_AREA`` a box is not a region, it is the image."""
+        assert vgs.band_for([self._square(pc.MAX_VOTED_AREA + 0.05)], 100, 100) == vgs.OVERSIZE
+
+    def test_neither_refusal_can_be_mistaken_for_a_band(self, vgs, pc):
+        """`band_candidates` filters on exactly this, and so does the audit."""
+        assert vgs.SCATTERED not in pc.BOX_BANDS
+        assert vgs.OVERSIZE not in pc.BOX_BANDS
+
+
 class TestBandCandidates:
     def _labels_with_area_fraction(self, pc, frac: float):
         """One image whose single ``bus`` box covers *frac* of a 100x100 frame."""

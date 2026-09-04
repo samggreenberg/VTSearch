@@ -246,6 +246,45 @@ def apply_corrections(
     return unbanded
 
 
+#: What :func:`band_for` returns for boxes that fall in no band. Named because
+#: they are two different facts about an image and an audit has to tell them
+#: apart: ``SCATTERED`` means several instances too far apart to be one region,
+#: ``OVERSIZE`` means one box bigger than :data:`pile_config.MAX_VOTED_AREA` --
+#: not a region, the image.
+SCATTERED = "scattered"
+OVERSIZE = "oversize"
+
+
+def band_for(boxes: list[list[float]], W: int, H: int) -> str:
+    """The band one class's boxes put an image in, or why they put it in none.
+
+    Returns a key of :data:`pile_config.BOX_BANDS`, or :data:`SCATTERED` /
+    :data:`OVERSIZE`. Split out of :func:`band_candidates` so that anything
+    asking "what band would these boxes imply?" -- the builder, and
+    ``audit_band_drift.py``, which re-bands the same images off a second
+    annotation source -- asks it of one implementation. A second copy of this
+    rule would answer a drift question with its own drift.
+
+    *boxes* must be non-empty and in the pixel space of ``(W, H)``.
+    """
+    area = float(W * H)
+    ux0 = min(b[0] for b in boxes)
+    uy0 = min(b[1] for b in boxes)
+    ux1 = max(b[2] for b in boxes)
+    uy1 = max(b[3] for b in boxes)
+    union = max(0.0, ux1 - ux0) * max(0.0, uy1 - uy0) / area
+    largest = max((b[2] - b[0]) * (b[3] - b[1]) for b in boxes) / area
+    # Scattered instances in *this* image: the union box describes the scatter
+    # rather than the object, so the image is excluded from every band of this
+    # class rather than banded by a box no user would drag.
+    if union > largest * pc.BAND_MAX_INFLATION:
+        return SCATTERED
+    for band, (lo, hi) in pc.BOX_BANDS.items():
+        if lo <= union < hi:
+            return band
+    return OVERSIZE
+
+
 def band_candidates(
     labels: dict[int, dict[str, list[list[float]]]],
     box_dims: dict[int, tuple[int, int]],
@@ -266,30 +305,17 @@ def band_candidates(
 
     for iid, by_name in labels.items():
         W, H = box_dims[iid]
-        area = float(W * H)
         if not by_name:
             # Only a true negative for every class in C may join the shared pool.
             if not any((iid, c) in unbanded for c in pc.SCALE_CLASSES):
                 clean.append(iid)
             continue
         for name, bs in by_name.items():
-            ux0 = min(b[0] for b in bs)
-            uy0 = min(b[1] for b in bs)
-            ux1 = max(b[2] for b in bs)
-            uy1 = max(b[3] for b in bs)
-            union = max(0.0, ux1 - ux0) * max(0.0, uy1 - uy0) / area
-            largest = max((b[2] - b[0]) * (b[3] - b[1]) for b in bs) / area
-            # Scattered instances in *this* image: the union box describes the
-            # scatter rather than the object, so the image is excluded from
-            # every band of this class rather than banded by a box no user
-            # would drag.
-            if union > largest * pc.BAND_MAX_INFLATION:
+            band = band_for(bs, W, H)
+            if band not in pc.BOX_BANDS:  # scattered, or bigger than a region
                 continue
-            for band, (lo, hi) in pc.BOX_BANDS.items():
-                if lo <= union < hi:
-                    supply[name][band].append(iid)
-                    boxes_for[(iid, pc.scale_cell(name, band))] = bs
-                    break
+            supply[name][band].append(iid)
+            boxes_for[(iid, pc.scale_cell(name, band))] = bs
     return supply, boxes_for, clean
 
 

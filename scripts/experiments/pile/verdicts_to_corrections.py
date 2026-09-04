@@ -24,6 +24,17 @@ builder therefore drops it from every cell of that class: not a positive, and no
 longer a negative either. That is the whole point of the three-valued design --
 the alternative is inventing a box to keep the arithmetic tidy.
 
+**A rebox can move an image between bands, and that is reported, not refused.**
+An image entered a `class@band` cell because of the box it arrived with, so a
+reviewer who retargets the box to a different instance of the same class moves
+the image to the band the new box implies and vacates the cell it was sampled to
+fill -- 6 of the first 13 redrawn boxes did (#3616). The move is a *correction*,
+not a defect: VG is not exhaustive, so an image holding a small annotated bowl
+and a large unannotated one was mis-banded from the start, and the reviewer is
+the first person to have seen it. What was wrong is that it happened silently,
+so the run now prints every band-changing rebox. `audit_band_drift.py` measures
+how much of the same error the un-reviewed half is still hiding.
+
 **A rejection is not a deletion in the small band -- unless it is definitional.**
 Boxed review confirms only ~2/3 of sub-patch positives even when the box is drawn
 for the reviewer, and the same objects defeat the model, so "not confirmed" there
@@ -67,6 +78,23 @@ def _cell_band(cell: str) -> str:
     return cell.rsplit("@", 1)[1] if "@" in cell else ""
 
 
+def _box_band(box: list[float]) -> str:
+    """The band a NORMALISED correction box falls in, or ``""`` outside them all.
+
+    A band is a fraction of the frame and a normalised box's area already *is*
+    that fraction, so this needs no image dimensions -- which is the whole reason
+    the drift can be reported here rather than only at build time. The builder's
+    banding (``pilebuild.loaders.vg_scale.band_for``) additionally rejects a
+    scattered *union* of several boxes; a correction carries exactly one box, so
+    there is no scatter to reject and the two agree by construction.
+    """
+    area = max(0.0, box[2] - box[0]) * max(0.0, box[3] - box[1])
+    for band, (lo, hi) in pc.BOX_BANDS.items():
+        if lo <= area < hi:
+            return band
+    return ""
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     base = pc.PILE.parent / "vgscale-3156"
@@ -93,6 +121,8 @@ def main() -> int:
 
     out: dict[tuple[int, str], dict] = {}
     stats: Counter = Counter()
+    # (class, image_id, band sampled, band the redrawn box implies) -- #3616.
+    moves: list[tuple[str, int, str, str]] = []
 
     # --- adjudications first, so a later source cannot silently overrule them
     adj = {}
@@ -145,6 +175,19 @@ def main() -> int:
                         "source": "human_rebox",
                     }
                     stats["positive_reboxed"] += 1
+                    # The redrawn box decides the band, so a rebox can move the
+                    # image out of the cell it was sampled to fill. The move is
+                    # kept -- see the module docstring -- but it is named here,
+                    # because a cell that quietly rebalances is how the small
+                    # band erodes without anyone deciding that it should.
+                    new_band = _box_band(box)
+                    if not band:
+                        stats["positive_reboxed_UNSAMPLED"] += 1
+                    elif new_band == band:
+                        stats["positive_reboxed_band_kept"] += 1
+                    else:
+                        stats["positive_reboxed_band_moved"] += 1
+                        moves.append((key[1], key[0], band, new_band or "oversize"))
                 else:
                     stats["positive_confirmed"] += 1
                 continue
@@ -223,7 +266,28 @@ def main() -> int:
     boxed = sum(1 for r in rows if r["boxes"])
     print(f"\n   {'of which carry a box':<32}{boxed:>6}  (can move an image between bands)")
     print(f"   {'excluded, no box':<32}{len(rows) - boxed:>6}  (dropped from every cell of that class)")
+    _report_moves(moves, stats)
     return 0
+
+
+def _report_moves(moves: list[tuple[str, int, str, str]], stats: Counter) -> None:
+    """Name every rebox that left the cell it was sampled into (#3616)."""
+    if not moves:
+        return
+    reboxed = stats["positive_reboxed_band_moved"] + stats["positive_reboxed_band_kept"]
+    print(f"\n=== {len(moves)} of {reboxed} redrawn boxes LEAVE the cell they were sampled into ===")
+    print("   Kept, not refused: VG is not exhaustive, so an image holding an unannotated")
+    print("   larger instance was mis-banded before the reviewer ever saw it. Printed")
+    print("   because it rebalances the cells, and the small band is the binding")
+    print("   constraint on supply (#3603). `audit_band_drift.py` measures the same")
+    print("   error on the images nobody has reviewed.\n")
+    print("   %-14s %-10s %-8s    %s" % ("class", "image_id", "sampled", "redrawn"))
+    for cls, iid, was, now in sorted(moves):
+        print("   %-14s %-10d %-8s -> %s" % (cls, iid, was, now))
+    per_class: Counter = Counter(m[0] for m in moves)
+    vacated: Counter = Counter(m[2] for m in moves)
+    print("\n   by class:      " + ", ".join(f"{c}={n}" for c, n in sorted(per_class.items())))
+    print("   band vacated:  " + ", ".join(f"{b}={n}" for b, n in sorted(vacated.items())))
 
 
 if __name__ == "__main__":
