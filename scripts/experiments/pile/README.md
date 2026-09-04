@@ -67,6 +67,28 @@ because "no spelling is listed" and "no spelling exists" are the same empty
 table. A build names the classes that have not, since a rebuild is the moment
 the fix is cheap.
 
+**A class's review rule is part of its definition, so it lives in the config
+too.** A reviewer votes on bare images — the slates name files by image id
+alone — which makes the dataset name the entire brief. For a class whose plain
+English name does not settle the question, `pile_config.SCALE_CLASS_RULES`
+carries both halves of the rule, and `review_name(cls, pass)` is what every
+slate maker builds its `detector` column from:
+
+| field | meaning |
+|---|---|
+| `name` | the few words the reviewer reads (`cell phone not landlines`) |
+| `test` | what that abbreviates — the near-misses two words cannot settle |
+
+Both are recorded because a name is not a definition. `book` split on the half
+that was never written down: COCO annotates magazines as `book`, the human pass
+read it narrowly, and 21 verdicts landed on one meaning against 49 on another.
+`cell phone`'s first slate then split on the `test` rather than the `name` — it
+read "anything with a cord or a base station is Bad", which discriminates on a
+base being *present* when what it means is that the handset is not itself the
+whole device, and so rejected a mobile phone sitting in a charging dock (#3612).
+A class absent from the table is its own definition and keeps the bare class
+name, which is what the manifests held before the table existed.
+
 ## Why this exists
 
 Before it, each study embedded its own datadir and then later studies
