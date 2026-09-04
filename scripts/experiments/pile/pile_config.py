@@ -383,7 +383,12 @@ class ClassRule(NamedTuple):
     #: The full wording the name abbreviates: what counts as Good, what counts
     #: as Bad, and the near-miss the short name does not settle. Read by whoever
     #: builds the slate and whoever adjudicates it, so both apply one definition.
-    test: str
+    #:
+    #: Empty means *not written down yet*, not *no boundary case*: the rule was
+    #: measured as a name before :class:`ClassRule` existed and its wording has
+    #: never been recorded. Fill one in when a slate of that class is issued --
+    #: an unwritten test is the state #3612 exists to end.
+    test: str = ""
 
 
 #: Per-class review definitions, for the classes whose plain English name is not
@@ -432,6 +437,28 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "or cradle is still Good."
         ),
     ),
+    # The remaining rules were measured as names before ``test`` existed
+    # (#3588): `coco_folds.py` asks which VG names land on a COCO class's boxes
+    # over the ~51k-image overlap, which enumerates a class's boundary cases
+    # before a human meets one -- run against `book` it prints `magazine` (79)
+    # and `magazines` (30). Each name below states the boundary case that
+    # measurement found; the long form is in the annotation guide, and belongs
+    # in ``test`` the next time one of these is slated.
+    #
+    # Deliberately literals rather than a formatting of the class name: the
+    # whole point is that they say something the class name does not.
+    "truck": ClassRule(name="truck incl vans not SUVs"),
+    "car": ClassRule(name="car incl SUVs and minivans"),
+    "fork": ClassRule(name="fork incl plastic"),
+    "spoon": ClassRule(name="spoon incl plastic not spatulas"),
+    "cup": ClassRule(name="cup incl mugs and glasses not stemware"),
+    "bowl": ClassRule(name="bowl incl plates and dishes"),
+    "bottle": ClassRule(name="bottle incl jars"),
+    "vase": ClassRule(name="vase incl pots and planters"),
+    "bench": ClassRule(name="bench not chairs"),
+    "chair": ClassRule(name="chair incl stools not couches"),
+    "sink": ClassRule(name="sink basin not counter"),
+    "fire hydrant": ClassRule(name="fire hydrant not standpipes"),
 }
 
 
@@ -767,48 +794,18 @@ SCALE_CANDIDATE_VG_NAMES: dict[str, tuple[str, ...]] = {
     "cell phone": ("cell phone", "phone", "cellphone"),
 }
 
-#: The definition each class is reviewed under, and the name that definition
-#: travels on.
-#:
-#: **This is the `book` failure made structural.** COCO has no magazine class,
-#: so COCO's annotators put magazines in `book`; the human pass applied the
-#: narrower English reading; and the class became two definitions wearing one
-#: name -- 21 verdicts on one, 49 on the other, with every structural check
-#: passing (`make_definition_reslate.py`). A reviewer cannot see a manifest
-#: while voting, so the rule has to travel on the one string the app shows:
-#: the dataset and detector name.
-#:
-#: The rules are **measured, not drafted**. `coco_folds.py` asks which VG names
-#: land on a COCO class's boxes over the ~51k-image overlap, which enumerates
-#: the boundary cases before a human meets one -- run against `book` it prints
-#: `magazine` (79) and `magazines` (30). Each entry below names the boundary
-#: case that measurement found, and the long form is in the annotation guide.
-#:
-#: Keyed by class; the value is the dataset/detector name. Deliberately a
-#: literal rather than a formatting of the class name: the whole point is that
-#: it says something the class name does not.
-SCALE_CLASS_RULES: dict[str, str] = {
-    "truck": "truck incl vans not SUVs",
-    "car": "car incl SUVs and minivans",
-    "fork": "fork incl plastic",
-    "spoon": "spoon incl plastic not spatulas",
-    "cup": "cup incl mugs and glasses not stemware",
-    "bowl": "bowl incl plates and dishes",
-    "bottle": "bottle incl jars",
-    "vase": "vase incl pots and planters",
-    "bench": "bench not chairs",
-    "chair": "chair incl stools not couches",
-    "sink": "sink basin not counter",
-    "cell phone": "cell phone not landlines",
-    "fire hydrant": "fire hydrant not standpipes",
-}
-
 
 def scale_class_dataset_name(category: str) -> str:
     """The dataset/detector name *category* is reviewed under.
 
-    Falls back to the bare class name, which is correct for a class with no
-    boundary case worth stating -- and wrong to invent one for, since a rule
-    nobody needs is a rule a reviewer will misread.
+    A thin spelling of :func:`review_name` with no pass suffix, kept because
+    ``make_class_slate.py`` bands a *candidate* rather than issuing a voted
+    slate and so has no pass to name.
+
+    This used to read a second ``SCALE_CLASS_RULES`` of its own, declared later
+    in this module and therefore shadowing the first: #3588 and #3612 each gave
+    the same table the same name from opposite ends of one branch, and the
+    survivor -- the string one -- left :func:`review_name` reading ``.name`` off
+    a ``str``. Both rule sets now live in the one table above.
     """
-    return SCALE_CLASS_RULES.get(category, category)
+    return review_name(category)

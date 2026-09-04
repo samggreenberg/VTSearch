@@ -2,8 +2,8 @@
 
 Opening a saved dataset is two tracker steps: read the pickle, then the coverage
 atlas.  The second one **forks** — it restores the atlas cached in the pickle in
-milliseconds, or rebuilds a hierarchical k-means that can run for minutes — and
-#3521 measured the two 110-700x apart on the same datasets.  A profile cell is
+~10 ms, or rebuilds a hierarchical k-means at 0.0026 s/item — and #3521 measured
+the two 110-700x apart on the same datasets.  A profile cell is
 keyed ``(device, media_type, embedder)``, so before #3594 it could hold only one
 answer for both, and whichever one it held made the other's bar up to 0.94 of a
 bar wrong.
@@ -102,9 +102,9 @@ class TestDatasetOpenBranchPacing:
         """A pickle with no cached atlas rebuilds, and the route says so twice.
 
         The second ``set_step_weights`` lands *before* ``build_coverage_atlas``
-        runs, which is what makes it worth making: on a real dataset that call
-        is the minutes-long one, and a bar that learns the branch afterwards
-        would have already spent the whole rebuild paced for a restore.
+        runs, which is what makes it worth making: that call is the whole cost
+        of the branch, and a bar that learned the branch afterwards would have
+        already spent the entire rebuild paced for a restore.
         """
         from vtscore.datasets.registry import get_dataset, register_dataset, unregister_dataset
         from vtsearch.settings import get_saved_datasets_dir

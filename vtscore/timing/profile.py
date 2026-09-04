@@ -76,8 +76,9 @@ import logging
 import math
 import os
 import threading
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Optional, Union
+from typing import Any, Optional, Union
 
 from vtscore.timing.tasks import TASKS, task_spec
 
@@ -563,6 +564,7 @@ def step_terms(
     embedder: str = "",
     n: float = 0.0,
     size_mb: float = 0.0,
+    skip_steps: Iterable[str] = (),
     branch: Optional[Union[str, Mapping[str, str]]] = None,
 ) -> Optional[dict[str, float]]:
     """Predicted seconds per step for *task*, keyed by step name.
@@ -577,6 +579,12 @@ def step_terms(
     is the archive size for byte-scaled phases. Both may be zero, which simply
     collapses their terms.
 
+    *skip_steps* names steps **this invocation will not enter at all**, and
+    prices them at zero regardless of what the profile or the defaults say. It
+    is not a cost model and needs no measurement: a step that does not run
+    costs nothing, and that is knowable in advance where a step's cost is not.
+    See :func:`step_weights` for why a task reaches for it.
+
     ``branch`` names the path a forking step is taking on *this* run — a branch
     name from :data:`~vtscore.timing.tasks.CHEAP_BRANCHES` /
     :data:`~vtscore.timing.tasks.DEAR_BRANCHES`, or a ``{step: branch}`` mapping.
@@ -584,6 +592,9 @@ def step_terms(
     other step, and every profile that carries no branch split, prices exactly as
     it does with ``branch=None``. So passing a branch can only ever *sharpen* the
     answer, never blank it: a caller that knows its branch should always say so.
+    It answers the question *skip_steps* cannot — a step that runs either way but
+    costs two different things — so a run that skips a step names it there and a
+    run that takes the cheap path of one names it here.
     """
     spec = task_spec(task)
     if spec is None:
@@ -592,8 +603,12 @@ def step_terms(
     defaults = dict(zip(spec.steps, spec.default_terms)) if spec.default_terms else {}
     if not measured and not defaults:
         return None
+    skipped = frozenset(skip_steps)
     terms: dict[str, float] = {}
     for step in spec.steps:
+        if step in skipped:
+            terms[step] = 0.0
+            continue
         coeffs = forks.get(step, {}).get(_branch_name(step, branch)) or measured.get(step)
         terms[step] = coeffs.seconds(n, size_mb) if coeffs is not None else max(0.0, defaults.get(step, 0.0))
     if sum(terms.values()) <= 0:
@@ -611,6 +626,7 @@ def step_weights(
     embedder: str = "",
     n: float = 0.0,
     size_mb: float = 0.0,
+    skip_steps: Iterable[str] = (),
     branch: Optional[Union[str, Mapping[str, str]]] = None,
     fallback: Optional[list[float]] = None,
 ) -> Optional[list[float]]:
@@ -622,14 +638,39 @@ def step_weights(
     Phases that share a tracker step have their predicted seconds summed into
     that step's slot.
 
-    ``branch`` is passed through to :func:`step_terms`. A task whose expensive
-    step forks should call this **twice**: once on the way in with whatever it
-    can guess, and again the moment it knows — the two vectors differ by up to
-    the whole bar (#3594).
+    **Steps this run will skip.** A cost model answers "how long does this step
+    take"; it cannot answer "does this step happen at all", and for a step that
+    forks on process state the second question decides the bar. A text sort's
+    ``load_model`` is seconds on the first sort of a process and *exactly zero*
+    on every later one, so no single coefficient paces both: fitted from the
+    warm runs it is free (and gets floored back up, see
+    :data:`vtscore.timing.fit._ONCE_PER_PROCESS_FLOOR_S`), fitted from the cold
+    one it eats a bar that will not move. #3596 measured every arm of #3521's
+    study — two fitted profiles and the shipped defaults alike — at 0.80–0.85
+    bar error on ``text_sort`` for exactly this reason.
+
+    The caller usually *knows*: the sort route can ask whether the encoder is
+    already resident before it starts. Naming the step in *skip_steps* prices it
+    at zero for this run, which needs no measurement and no branch axis in the
+    profile format — a step that does not run costs nothing.
+
+    **Steps whose cost merely varies by branch** are the other half, and they do
+    need the profile's branch axis: ``branch`` is passed through to
+    :func:`step_terms`, which prices such a step from that branch's own
+    coefficients. A task whose expensive step forks that way should call this
+    **twice**: once on the way in with whatever it can guess, and again the
+    moment it knows — the two vectors differ by up to the whole bar (#3594).
     """
     spec = task_spec(task)
     terms = step_terms(
-        task, device=device, media_type=media_type, embedder=embedder, n=n, size_mb=size_mb, branch=branch
+        task,
+        device=device,
+        media_type=media_type,
+        embedder=embedder,
+        n=n,
+        size_mb=size_mb,
+        skip_steps=skip_steps,
+        branch=branch,
     )
     if spec is None or terms is None:
         return fallback

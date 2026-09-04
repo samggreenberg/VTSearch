@@ -873,7 +873,7 @@ lookup walks from the most specific key to the least:
 ```
 
 A step whose cost **forks** — the coverage atlas of a dataset open is restored
-from the pickle in milliseconds or rebuilt from scratch in minutes — carries a
+from the pickle in ~10 ms or rebuilt from scratch at 0.0026 s/item — carries a
 set of coefficients per branch, nested under the step:
 
 ```json

@@ -7,8 +7,8 @@ the same sweep's ``dataset_stage`` leg read the embeddings pkl the
 ``dataset_load`` leg had just written and recorded 0.000-0.002 s of embedding
 across all four image tiers, in a separate interpreter. Every one of those
 numbers is correct. None of them is a cost model, because the branch a user
-waits on — the minutes-long hierarchical-k-means rebuild, the real embed — was
-never run (#3521, measured in
+waits on — the hierarchical-k-means rebuild (0.0026 s/item, ~700× the restore
+at n = 2954), the real embed — was never run (#3521, measured in
 ``docs/experiments/2026-09-02-timing-r2-3345/REPORT.md``).
 
 These tests pin the four halves of the answer: the recorder carries the branch

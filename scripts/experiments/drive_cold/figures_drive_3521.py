@@ -6,8 +6,8 @@ Three, because the study makes three claims.
 1. **branch_cost.png** — what the fork is actually worth: the coverage step's
    seconds against ``n``, restored versus rebuilt, on a log axis. This is the
    mechanism figure. Everything else in the study is a consequence of the gap it
-   shows, and it is also where the shipped comment's "minutes-long" claim gets
-   checked against a measurement.
+   shows, and it is also where the shipped comment's then-"minutes-long" claim
+   got checked against a measurement, and corrected (#3595).
 2. **bar_error_by_branch.png** — the fraction of the progress bar each arm
    budgets to the wrong step, from the **within-leg holdout**, which is the only
    split in which all three arms meet all the branches. Combinations an arm was
