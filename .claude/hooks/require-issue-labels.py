@@ -32,6 +32,36 @@ The hook has a second job at the other end of an issue's life: the `solved` labe
 so it must come off in the write that closes the issue -- that close *is* the
 last merge landing. See `_close_problems`.
 
+That job had the same one-road problem (#3634): the MCP rule is "restate the
+label set, minus `solved`", and `gh issue close` has no `--label` flag at all,
+so it has no text-only translation. The three candidates each fail somewhere --
+demanding a chained `--remove-label solved` fires on the majority of closes
+whose issue never carried the label; leaving it to
+`scripts/reconcile-solved-labels.py` repairs the state only when someone
+remembers to run it, which is the "no session is around to observe it" problem
+`solved` was invented to dodge. So this path asks GitHub instead: a
+command-position `gh issue close` triggers one `gh issue view --json labels`
+lookup, and the close is blocked only when `solved` is *provably* on the issue.
+See `_gh_close_problems`.
+
+That is the one place this hook does I/O, and it is deliberately bounded:
+
+* it runs for `gh issue close` alone, so the cost lands on a handful of calls
+  rather than on every `Bash` command in every session;
+* it is skipped entirely when the command already chains the fix, so following
+  the denial message costs no second lookup;
+* **any** failure -- `gh` absent, unauthenticated, offline, slow, an
+  unparseable answer -- returns "could not tell" and allows, per the contract
+  below. A network blip must not wedge a close.
+
+So this half of the guard is a catch, not a guarantee, and it is worth knowing
+where it is awake: on the laptop, where `gh auth login` has run and where the
+`gh issue close` commands in the transcripts were actually typed. A Claude Code
+on the web container has no `gh` at all, and the ambient `GH_TOKEN` there 403s
+on REST and GraphQL alike, so a close issued from one is allowed unexamined.
+`scripts/reconcile-solved-labels.py` remains the thing that guarantees the
+strip; this hook is what makes the repair unnecessary most of the time.
+
 Contract: read the PreToolUse payload on stdin, exit 2 to block (stderr is fed
 back to Claude as the reason), exit 0 to allow. Anything unexpected -- a
 payload we cannot parse, a tool we do not police -- allows, because a hook that
@@ -45,7 +75,9 @@ than letting the check be dodged by rewording the body.
 
 from __future__ import annotations
 
+import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -72,8 +104,19 @@ GH_ISSUE_CREATE = re.compile(r"(?<![\w./-])gh\s+issue\s+create\b")
 # separator inside it (`ssh grid 'gh issue create ...'`), which reads
 # identically to a quoted mention; erring toward the miss there is deliberate,
 # since every such form observed in practice chains through `&&` first.
+#
+# A bare backtick is deliberately NOT a separator here, though it opens command
+# substitution in shell. It was, and it false-blocked an ordinary edit in the
+# first session after this hook shipped: markdown-quoting the command name --
+# `` `gh issue create` `` in a commit message, a PR body, a docstring, a line of
+# CLAUDE.md -- is overwhelmingly the common meaning of a backtick in this repo's
+# commands, and every one of those is work *about* the rule rather than a call
+# that files anything. Nothing is lost by dropping it: the closing backtick
+# lands inside the arguments, so a real `` `gh issue create ...` `` substitution
+# was never parsed correctly anyway, and the modern spelling `$(...)` is still
+# matched below.
 GH_COMMAND_POSITION = re.compile(
-    r"(?:^|[\n;|&(){}`]|\$\(|\b(?:timeout\s+[\d.]+[smhd]?|nohup|sudo|env|command|exec|time))\s*$"
+    r"(?:^|[\n;|&(){}]|\$\(|\b(?:timeout\s+[\d.]+[smhd]?|nohup|sudo|env|command|exec|time))\s*$"
 )
 
 # `--label x`, `--label=x`, `-l x`; repeated flags and comma-separated values
@@ -92,7 +135,44 @@ GH_BODY_FILE_FLAG = re.compile(r"""(?<![\w-])(?:--body-file[=\s]+|-F\s+)(['"]?)(
 # where the CLI's flags do not apply.
 GH_NON_FILING = re.compile(r"(?<![\w-])(?:--help|-h|--web|-w)(?=\s|$)")
 
+# `--help` on any subcommand does nothing but print usage, and it is exactly
+# what someone types *after* a denial tells them which flag to add.
+GH_HELP = re.compile(r"(?<![\w-])(?:--help|-h)(?=\s|$)")
+
 MAX_BODY_FILE_BYTES = 256 * 1024
+
+# `gh issue close`, wherever it sits in a compound command -- the transcripts
+# have it bare, chained after a `gh issue comment`, and inside `ssh grid '...'`.
+GH_ISSUE_CLOSE = re.compile(r"(?<![\w./-])gh\s+issue\s+close\b")
+
+# Where one command's arguments stop and the next command begins. Used to bound
+# the flag parsing to the close's own arguments, so a chained
+# `gh issue edit N --repo other/repo` cannot be read as the close's `--repo`.
+GH_SEGMENT_END = re.compile(r"&&|\|\||[;\n|&]")
+
+# The chained fix the denial message asks for. `gh issue edit` spells it
+# `--remove-label` with no short form, so there is only the one shape to match.
+GH_REMOVE_LABEL_FLAG = re.compile(r"""(?<![\w-])--remove-label[=\s]+(['"]?)([A-Za-z0-9_,\- ]+?)\1(?=\s|$)""")
+
+# `--repo owner/name`, `-R owner/name`. Absent, `gh` resolves the repo from the
+# working directory's git remote -- which is what the close itself would do, so
+# the lookup and the close always agree on which issue is meant.
+GH_REPO_FLAG = re.compile(r"""(?<![\w-])(?:--repo[=\s]+|-R\s+)(['"]?)([A-Za-z0-9_.\-]+/[A-Za-z0-9_.\-]+)\1""")
+
+# What `gh issue close` accepts as its target: a number, `#number`, or an
+# issue URL. Anything else is something this hook does not understand, and "does not
+# understand" always means allow.
+GH_ISSUE_TARGET = re.compile(r"^#?(\d+)$|^https?://[^\s]*/issues/(\d+)/?$")
+
+# Flags of `gh issue close` that swallow the next token, so a numeric value
+# (`--comment 3`) is never mistaken for the issue number.
+GH_CLOSE_VALUE_FLAGS = frozenset({"-c", "--comment", "-r", "--reason", "-R", "--repo"})
+
+# Seconds to wait for the label lookup. A hook runs in front of the user's
+# command, so a slow answer must be abandoned rather than waited out; the
+# override exists for a slow link, and any value that does not parse falls back.
+GH_LOOKUP_TIMEOUT_ENV = "VTSEARCH_GH_LOOKUP_TIMEOUT"
+GH_LOOKUP_TIMEOUT_DEFAULT = 5.0
 
 OPT_OUT = re.compile(r"<!--\s*not-an-experiment\s*:", re.IGNORECASE)
 
@@ -265,6 +345,145 @@ def _gh_create_problems(command: str) -> list[str]:
     return _label_problems(_gh_labels(command), _gh_issue_text(command))
 
 
+def _gh_close_segments(command: str) -> list[str]:
+    """The argument text of every `gh issue close` actually *invoked* here.
+
+    Same command-position rule as `_runs_gh_issue_create`, for the same reason:
+    a commit message, a doc line, or the body of an issue about this very rule
+    all mention the string without running it, and blocking those would be a
+    false block on ordinary work rather than a caught mistake.
+
+    Each segment stops at the next command separator, so the flags parsed out of
+    it belong to the close and not to whatever is chained after it.
+    """
+    segments = []
+    for match in GH_ISSUE_CLOSE.finditer(command):
+        if not GH_COMMAND_POSITION.search(command[: match.start()]):
+            continue
+        tail = command[match.end() :]
+        cut = GH_SEGMENT_END.search(tail)
+        segments.append(tail[: cut.start()] if cut else tail)
+    return segments
+
+
+def _removes_solved(command: str) -> bool:
+    """Does the command already strip `solved` itself?
+
+    This is the fix the denial message asks for, so recognising it is what makes
+    that message actionable in one round-trip -- and it short-circuits before
+    the lookup, so following the advice costs no second call to GitHub.
+    """
+    for _quote, raw in GH_REMOVE_LABEL_FLAG.findall(command):
+        if any(piece.strip().lower() == SOLVED_LABEL for piece in raw.split(",")):
+            return True
+    return False
+
+
+def _gh_close_target(segment: str) -> str | None:
+    """The issue `gh issue close` was pointed at, or `None` if it cannot be read.
+
+    `gh issue close` takes exactly one positional, so the answer is the one
+    token that is shaped like an issue reference and is not some flag's value.
+    Requiring it to be the *only* such token is what makes a misread impossible
+    rather than merely unlikely: this reads a shell command without running a
+    shell, so a quoted value splits into tokens the way no shell would --
+    `--comment "fixed 3 bugs" 3319` offers up both `3` and `3319`, and an
+    earliest-wins scan picks `3`. That is not a miss, it is a *wrong* answer:
+    the hook would go on to judge this close against a different issue's labels
+    and block it by name. Two candidates therefore mean "could not tell", which
+    allows, in line with the contract.
+    """
+    candidates = []
+    skip_next = False
+    for token in segment.split():
+        if skip_next:
+            skip_next = False
+            continue
+        if token.startswith("-"):
+            skip_next = "=" not in token and token in GH_CLOSE_VALUE_FLAGS
+            continue
+        target = token.strip("'\"")
+        if GH_ISSUE_TARGET.match(target):
+            candidates.append(target)
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def _gh_repo(segment: str) -> str | None:
+    match = GH_REPO_FLAG.search(segment)
+    return match.group(2) if match else None
+
+
+def _gh_lookup_timeout() -> float:
+    raw = os.environ.get(GH_LOOKUP_TIMEOUT_ENV)
+    try:
+        timeout = float(raw) if raw else GH_LOOKUP_TIMEOUT_DEFAULT
+    except ValueError:
+        return GH_LOOKUP_TIMEOUT_DEFAULT
+    return timeout if timeout > 0 else GH_LOOKUP_TIMEOUT_DEFAULT
+
+
+def _issue_labels(target: str, repo: str | None) -> set[str] | None:
+    """The issue's labels right now, or `None` for "could not tell".
+
+    `None` is not an error path to be tightened later -- it is the contract.
+    The hook's promise is that anything unexpected allows, and here "unexpected"
+    covers a laptop without `gh`, an unauthenticated one, a dropped link, and a
+    slow answer. Blocking on any of those would wedge a close over a network
+    blip, which is a far worse failure than the stale label
+    `scripts/reconcile-solved-labels.py` would go on to catch anyway.
+
+    `gh issue view` (rather than `gh api`) is deliberate: with no `--repo` it
+    resolves the repository from the working directory's git remote, exactly as
+    the `gh issue close` being judged would, so the two cannot disagree about
+    which issue is meant.
+    """
+    args = ["gh", "issue", "view", target, "--json", "labels", "--jq", ".labels[].name"]
+    if repo:
+        args += ["--repo", repo]
+    try:
+        proc = subprocess.run(  # noqa: S603,S607  # fixed argv, no shell; `gh` is resolved from PATH by design
+            args, capture_output=True, text=True, timeout=_gh_lookup_timeout(), check=False
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    return {line.strip().lower() for line in proc.stdout.splitlines() if line.strip()}
+
+
+def _gh_close_problems(command: str) -> list[str]:
+    """Police `gh issue close` -- the path closes here actually take.
+
+    Every close is checked, not only `--reason completed`. A bare
+    `gh issue close 3319` closes as *completed* (that is GitHub's default
+    `state_reason`), so a rule keyed on the literal flag would miss the shortest
+    spelling of the very case it exists for. And the invariant is uniform
+    anyway: CLAUDE.md says a closed issue must never carry `solved`, and the MCP
+    path already blocks it on a `not_planned` close too. Scoping the lookup to
+    `gh issue close` is what keeps it cheap; scoping it further would only make
+    it wrong.
+    """
+    segments = _gh_close_segments(command)
+    if not segments or _removes_solved(command):
+        return []
+
+    found: list[str] = []
+    for segment in segments:
+        if GH_HELP.search(segment):
+            continue
+        target = _gh_close_target(segment)
+        if target is None:
+            continue
+        labels = _issue_labels(target, _gh_repo(segment))
+        if labels is None or SOLVED_LABEL not in labels:
+            continue
+        number = GH_ISSUE_TARGET.match(target)
+        problem = SOLVED_SURVIVES_CLOSE.format(number=number.group(1) or number.group(2))
+        if problem not in found:
+            found.append(problem)
+    return found
+
+
 CREATE_FOOTER = (
     "\nDecide BOTH labels now and re-issue the call, so this takes one round-trip:\n"
     "  `claude`     -> always, on every issue you file.\n"
@@ -278,9 +497,24 @@ GH_CREATE_FOOTER = (
     "  `--label claude,experiment` sets both in one flag."
 )
 
+SOLVED_SURVIVES_CLOSE = (
+    "CLOSE LEAVES `{solved}` ON A CLOSED ISSUE: #{{number}} carries `{solved}` right now, and this "
+    'close does not take it off. `{solved}` means "solved, waiting only on merges"; closing the issue '
+    "is the act of landing the last of those merges, so the label is about to become false.\n"
+    "  `gh issue close` has no `--label` flag, so strip it in the same motion:\n"
+    "    gh issue edit {{number}} --remove-label {solved} && <your close command>\n"
+    "  Unlike the MCP path, this is not a guess: the hook asked GitHub, and the label is there."
+).format(solved=SOLVED_LABEL)
+
 CLOSE_FOOTER = (
     "\nSee docs/RELEASE.md step 6. `solved` is a transient status, not a historical fact:\n"
     "  it goes ON when the fix PR is opened, and comes OFF in the write that closes the issue."
+)
+
+GH_CLOSE_FOOTER = (
+    "\nSee docs/RELEASE.md step 6. `solved` is a transient status, not a historical fact:\n"
+    "  it goes ON when the fix PR is opened, and comes OFF when the issue closes.\n"
+    "  While you are there, step 6 clears the assignee too: `gh issue edit <n> --remove-assignee samggreenberg`."
 )
 
 
@@ -297,14 +531,22 @@ def main() -> int:
 
     bash_args = tool_arguments(payload, BASH_TOOL, bare_keys=("command",))
     if bash_args is not None:
-        found = _gh_create_problems(str(bash_args.get("command") or ""))
-        if not found:
-            return 0
-        return _deny(
-            "BLOCKED: this `gh issue create` is missing a required label (CLAUDE.md, 'Label every issue you file').",
-            found,
-            GH_CREATE_FOOTER,
-        )
+        command = str(bash_args.get("command") or "")
+        found = _gh_create_problems(command)
+        if found:
+            return _deny(
+                "BLOCKED: this `gh issue create` is missing a required label (CLAUDE.md, 'Label every issue you file').",
+                found,
+                GH_CREATE_FOOTER,
+            )
+        found = _gh_close_problems(command)
+        if found:
+            return _deny(
+                f"BLOCKED: this `gh issue close` mishandles the `{SOLVED_LABEL}` label.",
+                found,
+                GH_CLOSE_FOOTER,
+            )
+        return 0
 
     args = tool_arguments(payload, TOOL_SUFFIX, bare_keys=("method", "repo"))
     if args is None:
