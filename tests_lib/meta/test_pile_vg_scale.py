@@ -1,6 +1,6 @@
 """The ``vg_scale`` build's passes, exercised without the 100 GB of VG source.
 
-``build_pile.py`` assembles this dataset in six passes over the Visual Genome
+``build_pile.py`` assembles this dataset in eight passes over the Visual Genome
 source. Two of them are where this pile's expensive bugs have actually lived:
 
 * :func:`apply_corrections` is the single point at which a human verdict's box
@@ -211,6 +211,119 @@ class TestBandCandidates:
         cls = pc.SCALE_CLASSES[0]
         _, _, clean = vgs.band_candidates({7: {}}, {7: (100, 100)}, {(7, cls)})
         assert clean == []
+
+
+class TestVgNameTables:
+    """#3605: a class built from one VG spelling turns its own instances into negatives."""
+
+    def test_the_read_set_covers_every_declared_spelling(self, pc):
+        """A spelling missing from the read is invisible, not merely unmatched."""
+        wanted = pc.scale_vg_wanted()
+        assert set(pc.SCALE_CLASSES) <= wanted
+        for table in (pc.SCALE_VG_NAMES, pc.SCALE_VG_AMBIGUOUS):
+            for names in table.values():
+                assert set(names) <= wanted
+
+    def test_both_tables_only_name_classes_in_c(self, pc):
+        for table in (pc.SCALE_VG_NAMES, pc.SCALE_VG_AMBIGUOUS, {c: () for c in pc.SCALE_VG_NAMES_AUDITED}):
+            assert set(table) <= set(pc.SCALE_CLASSES)
+
+    def test_a_spelling_is_never_both_an_alias_and_ambiguous(self, pc):
+        """The two tables mean opposite things; a name in both has no defined outcome."""
+        alias = {n for names in pc.SCALE_VG_NAMES.values() for n in names}
+        ambiguous = {n for names in pc.SCALE_VG_AMBIGUOUS.values() for n in names}
+        assert not (alias & ambiguous)
+
+    def test_bike_is_declared_ambiguous_for_bicycle(self, pc):
+        """Not merged: 59.6% of VG `bike` boxes land on no COCO class (#3605)."""
+        assert "bike" in pc.SCALE_VG_AMBIGUOUS["bicycle"]
+        assert "bike" not in pc.SCALE_VG_NAMES.get("bicycle", ())
+
+
+class TestCanonicalise:
+    def test_an_alternate_spelling_folds_onto_the_class_name(self, vgs):
+        labels = {7: {"hydrant": [[0.0, 0.0, 1.0, 1.0]]}}
+        folded = vgs.canonicalise(labels, {"fire hydrant": ("fire hydrant", "hydrant")})
+
+        assert labels[7] == {"fire hydrant": [[0.0, 0.0, 1.0, 1.0]]}
+        assert folded == {"fire hydrant": 1}
+
+    def test_boxes_under_both_spellings_are_kept_together(self, vgs):
+        labels = {7: {"fire hydrant": [[0.0, 0.0, 1.0, 1.0]], "hydrant": [[2.0, 2.0, 3.0, 3.0]]}}
+        vgs.canonicalise(labels, {"fire hydrant": ("fire hydrant", "hydrant")})
+
+        assert len(labels[7]["fire hydrant"]) == 2
+
+    def test_a_merge_that_folds_nothing_reports_zero(self, vgs):
+        """Reported rather than silent: a mis-spelled entry looks exactly like this."""
+        labels = {7: {"bus": [[0.0, 0.0, 1.0, 1.0]]}}
+        assert vgs.canonicalise(labels, {"fire hydrant": ("hydrant",)}) == {"fire hydrant": 0}
+
+    def test_an_empty_table_is_a_no_op(self, vgs):
+        labels = {7: {"bus": [[0.0, 0.0, 1.0, 1.0]]}}
+        assert vgs.canonicalise(labels, {}) == {}
+        assert labels == {7: {"bus": [[0.0, 0.0, 1.0, 1.0]]}}
+
+
+class TestLiftAmbiguous:
+    AMBIG = {"bicycle": ("bike",)}
+
+    def test_the_boxes_are_dropped_and_the_pair_returned(self, vgs):
+        labels = {7: {"bike": [[0.0, 0.0, 1.0, 1.0]]}}
+        assert vgs.lift_ambiguous(labels, self.AMBIG, set()) == {(7, "bicycle")}
+        assert labels[7] == {}
+
+    def test_the_lifted_pair_keeps_the_image_out_of_the_negative_pool(self, vgs):
+        """The whole point: a `bike` image is not evidence that there is no bicycle."""
+        labels = {7: {"bike": [[0.0, 0.0, 1.0, 1.0]]}}
+        pairs = vgs.lift_ambiguous(labels, self.AMBIG, set())
+        _, _, clean = vgs.band_candidates(labels, {7: (100, 100)}, pairs)
+
+        assert clean == []
+
+    def test_without_the_lift_that_image_would_be_a_negative(self, vgs):
+        """The defect, stated as a test: an unmatched spelling reads as an empty image."""
+        _, _, clean = vgs.band_candidates({7: {}}, {7: (100, 100)}, set())
+        assert clean == [7]
+
+    def test_an_ambiguous_box_never_becomes_a_positive(self, vgs, pc):
+        labels = {7: {"bike": [[0.0, 0.0, 50.0, 50.0]]}}
+        pairs = vgs.lift_ambiguous(labels, self.AMBIG, set())
+        supply, boxes_for, _ = vgs.band_candidates(labels, {7: (100, 100)}, pairs)
+
+        assert all(not ids for band in supply.values() for ids in band.values())
+        assert boxes_for == {}
+
+    def test_a_confirmed_class_on_the_same_image_is_not_discarded(self, vgs, pc):
+        """`bicycle` is there under a box we trust; the ambiguous one only blurs its extent."""
+        band, (lo, hi) = next(iter(pc.BOX_BANDS.items()))
+        side = (((lo + hi) / 2) * 10000) ** 0.5
+        labels = {7: {"bicycle": [[0.0, 0.0, side, side]], "bike": [[0.0, 0.0, 99.0, 99.0]]}}
+        pairs = vgs.lift_ambiguous(labels, self.AMBIG, set())
+        supply, _, _ = vgs.band_candidates(labels, {7: (100, 100)}, pairs)
+
+        assert pairs == set()
+        assert supply["bicycle"][band] == [7]
+
+    def test_it_touches_only_the_ambiguous_name(self, vgs):
+        labels = {7: {"bike": [[0.0, 0.0, 1.0, 1.0]], "bus": [[2.0, 2.0, 3.0, 3.0]]}}
+        vgs.lift_ambiguous(labels, self.AMBIG, set())
+        assert labels[7] == {"bus": [[2.0, 2.0, 3.0, 3.0]]}
+
+    def test_an_exhaustively_labelled_image_is_not_suppressed(self, vgs):
+        """COCO already answered; the image stays a usable negative."""
+        labels = {7: {"bike": [[0.0, 0.0, 1.0, 1.0]]}}
+        assert vgs.lift_ambiguous(labels, self.AMBIG, {7}) == set()
+        assert labels[7] == {}
+
+        _, _, clean = vgs.band_candidates(labels, {7: (100, 100)}, set())
+        assert clean == [7]
+
+    def test_the_boxes_go_either_way(self, vgs):
+        """`band_candidates` bands by category name and has no cell for a `bike`."""
+        labels = {7: {"bike": [[0.0, 0.0, 1.0, 1.0]]}}
+        vgs.lift_ambiguous(labels, self.AMBIG, {7})
+        assert "bike" not in labels[7]
 
 
 class TestDesignateCells:
