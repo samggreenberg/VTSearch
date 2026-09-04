@@ -158,8 +158,9 @@ anywhere in this set: 1,136 VG `glass` boxes — 13.8% of every COCO `cup` box o
 the overlap — are COCO cups, more than ten times the size of the `magazine`
 fold-in that broke `book`. Mugs (238 `mug`, 67 `coffee mug`), teacups, paper and
 disposable coffee cups (120 `coffee cup`), plastic cups, tumblers and beer
-glasses or pints all count. Measuring cups and trophy cups count. When in doubt,
-ask: does it hold a drink and lack a stem? Then Good.
+glasses or pints all count, and so do measuring cups (9). **A cup is hand-held
+and a single serving** — that, not shape, is the test, and it is what separates
+this class from `bottle` on the pouring vessels below.
 
 **A drinking glass holding cut flowers is still a cup**, not a vase — `vase` is
 reserved for vessels made as vases, so a borrowed one stays with whatever it was
@@ -174,6 +175,17 @@ Bad here:
   come up.
 - **A can** (21 boxes), a **tin**, a **carton**. As in `bottle`, the container
   is judged, and none of these is a cup.
+- **Anything that serves more than one.** A **pitcher** (30), a **jug**, a
+  carafe, a teapot, a thermos (5), a dispenser (2) — these are `bottle`.
+  Together with the jars, cans and bottles above, the whole not-a-cup family is
+  **146 boxes, 1.8% of COCO cup**, so the narrowing is cheap.
+- **A bucket** (13) is not a cup either, but do not send it to `bottle`: COCO
+  puts buckets in `bowl` more than anywhere else (19 vs 13 here and 3 in
+  bottle), and whether a bucket is a bowl is the open question over there.
+- **A trophy cup.** Named a cup and nothing else about it is one: it serves no
+  drink, so it is not a single serving of anything. Flagged because an earlier
+  draft of this guide counted it, and that claim was never measured — VG uses
+  the word `trophy` on **zero** of COCO's 8,242 cup boxes.
 
 ### `bowl incl plates and food containers not wrappers`
 
@@ -219,7 +231,9 @@ inside `bowl`.
 Water, wine, beer, soda and spirit bottles count; so do **jars — always, and
 whatever is in them** (120 VG `jar` boxes are COCO bottles), soap and shampoo
 dispensers (47 `soap`), jugs (28), shakers (21), spray bottles, baby bottles,
-condiment bottles, vacuum flasks, and carafes (6 — `bowl` sends them here).
+condiment bottles, vacuum flasks, carafes (6 — `bowl` sends them here), and
+**pitchers and jugs**. A pouring vessel that serves more than one person is a
+bottle: `cup` is reserved for what is hand-held and a single serving.
 
 **A jar of cut flowers is still a bottle.** `jar` has no COCO class of its own,
 so COCO's annotators sent it both ways — 120 boxes to `bottle` and 41 to `vase`
@@ -257,9 +271,18 @@ Do **not** reach for a neck-and-cap test instead. `jar` (120), `jug` (28) and
 `dispenser` (20) all fold in and barely have a neck, so shape would throw out
 more than it saves.
 
-**Open:** a *standalone* fuel container — a jerry can, a propane cylinder off
-the barbecue. The component test does not exclude it (nothing owns it) and the
-pool test does (COCO has no class for it). Unruled until someone meets one.
+**A standalone fuel container is a bottle** — a jerry can, a propane cylinder
+off the barbecue. Nothing owns it, so the component test that excludes a
+motorcycle's tank does not reach it, and what is left is a free-standing vessel
+made to store and pour a liquid. The tank and the can are the two sides of that
+line, and they are the clearest illustration of it in this guide.
+
+Worth knowing what this costs, because it is the first ruling here where the
+component test **beats** pool consistency rather than agreeing with it: COCO has
+no class for a jerry can, so an image holding only one sits in the shared
+negative pool, and a Good vote contradicts it exactly as a toy would. The saving
+grace is frequency — `tank`, `fuel`, `gas`, `propane`, `barrel`, `drum` and
+`keg` appear **zero** times in 9,169 bottle boxes, so you will rarely be asked.
 
 ### `vase incl pots and planters`
 
@@ -276,12 +299,12 @@ the ruling that keeps `jar` from meaning two things at once — see `bottle` —
 it is applied on *intent of manufacture*, the same test that keeps a planter
 wall out of `bench`.
 
-**Open — a pitcher or jug of flowers.** Not a vase either way, but COCO cannot
-say which class it *is*: `pitcher` lands on `cup` 30 times and `vase` 18, while
-`jug` lands on `bottle` 28 and `cup` 0. Two names for nearly one object, sent to
-two different classes. Treating both as `bottle` is the consistent reading of
-manufacture-intent — they are made to store and pour — and costs the 30
-`pitcher` boxes COCO called a cup. Unruled.
+**A pitcher or jug of flowers is a `bottle`.** COCO could not say which class
+either belongs to — `pitcher` lands on `cup` 30 times and `vase` 18, while `jug`
+lands on `bottle` 28 and `cup` 0, two names for nearly one object sent to two
+classes — so the split is made on portion instead: a cup is hand-held and a
+single serving, and a pouring vessel that serves several is a bottle. It costs
+the 30 `pitcher` boxes COCO called a cup and the 18 it called a vase.
 
 **Its price is measured, and it is the largest narrowing in this guide.** COCO's
 annotators do use vase for a borrowed vessel: `glass` 42, `jar` 41, `bottle` 28,

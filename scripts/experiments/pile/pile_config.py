@@ -451,8 +451,11 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "plastic cups, tumblers and pints -- and a glass holding cut flowers is still "
             "a cup, since `vase` is only a vessel made as one. Bad: stemware (anything "
             "with a stem and a foot is `wine glass`), a JAR however it is drunk from "
-            "(a jar is a `bottle`; 25 jar boxes are COCO cups), a can, a tin, a carton. "
-            "Does it hold a drink, lack a stem, and was it made as a cup?"
+            "(a jar is a `bottle`; 25 jar boxes are COCO cups), a can, a tin, a carton, "
+            "and anything that serves MORE THAN ONE -- a pitcher, jug, carafe, teapot or "
+            "thermos is a `bottle`; a bucket is not a cup but is mostly a `bowl` (19 vs "
+            "13 here), which is open there. The test is portion, not shape: A CUP IS "
+            "HAND-HELD AND A SINGLE SERVING."
         ),
     ),
     # `bowl` is the class whose plain name misleads most: `container` is its
@@ -474,7 +477,8 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
         name="bottle incl jars",
         test=(
             "Good: water, wine, beer, soda and spirit bottles, jars ALWAYS and whatever is "
-            "in them (a jar of flowers is a bottle, not a vase), jugs, soap and "
+            "in them (a jar of flowers is a bottle, not a vase), jugs and pitchers -- a "
+            "pouring vessel serving more than one is a bottle, not a cup -- soap and "
             "shampoo dispensers, shakers, spray bottles, baby bottles, condiment bottles, "
             "vacuum flasks. Bad: cans, cartons, boxes, a stemmed glass of wine, and a "
             "FUEL TANK. An integral component of a larger object is not an instance of a "
@@ -491,8 +495,8 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "pottery. A potted plant's pot is a vase; vote the vessel, not the plant. "
             "Bad: a cooking pot on a stove, a plain bowl, and any BORROWED vessel however "
             "it is used -- a jar of cut flowers is a `bottle`, a glass of them a `cup`. "
-            "A pitcher or jug of them is not a vase either, though which class it IS is "
-            "unruled: COCO sends `pitcher` to cup (30) and `jug` to bottle (28). "
+            "A pitcher or jug of them is a `bottle`: COCO split them (pitcher to cup 30, "
+            "jug to bottle 28), so the call is made on portion instead. "
             "Costs 192 boxes, 8.2% of COCO vase, which is the largest narrowing here."
         ),
     ),
