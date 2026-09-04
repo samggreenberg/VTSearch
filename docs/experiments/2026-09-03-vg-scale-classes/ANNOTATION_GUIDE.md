@@ -168,6 +168,21 @@ sticking out of food all count. `fork` is one of the two cleanest classes here
 (13.3% unmatched, at the mechanical floor), so a genuinely hard call is rare
 and usually means the object is a spoon or a knife.
 
+**A held fork is often gripped to stab; a spoon never is.** When only the handle
+shows and the food gives nothing away, the grip does: a fist closed over the
+handle with the business end pointing down and away is a fork. This is the
+second rule here that reads the surroundings rather than the object — see the
+handle-in-the-food rule under `spoon` — and it arrived after `spoon` was
+reviewed, so it applies from `fork` onward rather than retroactively.
+
+**The literal error to expect: image 2322780 is a steam locomotive, and its
+cow-catcher is a boxed `fork` positive.** COCO annotated the slatted triangular
+pilot at the front of the engine as cutlery — tine-like, at a glance, and
+somebody clicked it. It is worth knowing this is in the slate, because it is a
+`fork@medium` box, which puts it *above* the small-band guard: rejecting it
+actually removes it, unlike the `bicycle@small` pictograms that needed #3614.
+The `positive_boxed` stratum exists exactly to catch this.
+
 ### `spoon incl plastic not spatulas`
 
 Teaspoons, tablespoons, soup spoons, wooden spoons, plastic and disposable

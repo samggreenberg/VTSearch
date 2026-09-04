@@ -433,7 +433,10 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "Good: metal, plastic and disposable forks, and serving, carving and fondue "
             "forks. Bad: spatulas, tongs, whisks, skewers. Vote Good only when the boxed "
             "object IS a fork, not when a fork sits somewhere inside a `silverware` or "
-            "`utensil` box covering a whole place setting."
+            "`utensil` box covering a whole place setting. When only the handle shows and "
+            "the food gives nothing away, read the GRIP: a fist closed to stab is a fork, "
+            "a spoon is never held that way. Known bad positive: 2322780 boxes a steam "
+            "locomotive's cow-catcher as a fork (fork@medium, so rejectable)."
         ),
     ),
     "spoon": ClassRule(
