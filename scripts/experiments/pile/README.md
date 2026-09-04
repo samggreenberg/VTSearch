@@ -240,6 +240,36 @@ labels with a perfectly healthy media count. It now stamps a digest of the
 parent's labels, `--verify` compares that against the live parent, and a run
 that rebuilds `vg_scale` pulls the derived dataset in with it.
 
+## A rebox can change the band, and that is a correction
+
+An image sits in `class@band` because of the box it arrived with, so a reviewer
+who redraws that box onto a different, more prominent instance of the same class
+moves it to another cell and vacates the one it was sampled to fill. Six of the
+first thirteen redrawn boxes did, two of them leaving `small` (#3616).
+
+The move is **kept**. VG's recall over *C* is 0.61, so an image holding a small
+annotated bowl and a large unannotated one was banded by the only box anyone had
+written down, and the reviewer is the first person to have seen the other one —
+the sampled band was the error, not the redraw. What was wrong is that it
+happened silently, so `verdicts_to_corrections.py` now prints every
+band-changing rebox with the band it left and the band it lands in.
+
+`audit_band_drift.py` asks how much of the same error the *un*-reviewed half is
+still hiding, without spending a human on it. The COCO-anchored half has both
+readings available — VG's boxes and COCO's exhaustive ones — so banding each
+anchored image twice and counting the disagreements measures the rate directly,
+and the roster says how many un-anchored seats that rate applies to:
+
+```
+python audit_band_drift.py                          # small + medium
+python audit_band_drift.py --bands small --out drift_small.json
+```
+
+Only the bottom bands are audited by default: the defect can only push an image
+*up* (a band can hide a larger instance), and `large` has nowhere to go. A
+disagreement in the other direction is an extent error in VG's box, which is a
+different problem and is counted separately.
+
 ## Voted-box scale bands (`--bands`)
 
 Orthogonal to the `_s`/`_m`/`_l` suffix, which is a **dataset size tier** (a
