@@ -39,7 +39,15 @@ _T = TypeVar("_T")
 # ``file_lock``; this lock only serialises threads within one process.
 _lock = threading.RLock()
 
+# In-memory cache - refreshed from disk on every mutation (see
+# :func:`_read_modify_write`) and whenever the manifest on disk no longer
+# matches the stamp the cache was built from (see :func:`_ensure_loaded`).
 _entries: list[dict[str, Any]] | None = None
+
+# ``(mtime_ns, size)`` of the manifest the cache was built from, or ``None``
+# when the file did not exist.  Compared on every read so a write by another
+# process is picked up immediately.
+_entries_stamp: tuple[int, int] | None = None
 
 # Set of detector IDs currently loaded in memory (each has a DetectorContext).
 _loaded_ids: set[str] = set()
@@ -71,10 +79,36 @@ def _save(entries: list[dict[str, Any]]) -> None:
     atomic_write_json(REGISTRY_PATH, entries)
 
 
+def _manifest_stamp() -> tuple[int, int] | None:
+    """Return ``(mtime_ns, size)`` for the manifest, or ``None`` if absent."""
+    try:
+        stat = REGISTRY_PATH.stat()
+    except OSError:
+        return None
+    return (stat.st_mtime_ns, stat.st_size)
+
+
 def _ensure_loaded() -> list[dict[str, Any]]:
-    global _entries
-    if _entries is None:
+    """Return the in-memory cache, re-reading it whenever disk has moved on.
+
+    Mirrors :func:`vtscore.datasets.registry._ensure_loaded`.  The cache used
+    to be filled once and thereafter refreshed only by this process's own
+    mutations, which made every *read* blind to a write by anyone else — a CLI
+    run against the same data dir (the very case :func:`_read_modify_write`
+    takes a cross-process lock for), a second server, a hand-edited manifest.
+    Detectors deleted by a sibling then kept showing up in
+    ``GET /api/detectors/registry`` — the view a person is actually looking at
+    — until the process was restarted, while ``GET /api/detectors`` (which
+    reads the detector *files*) reported the truth (#3627).
+
+    A stat per read is cheap next to the JSON parse it usually skips, and the
+    stamp makes the re-read happen exactly when the file has actually changed.
+    """
+    global _entries, _entries_stamp
+    stamp = _manifest_stamp()
+    if _entries is None or stamp != _entries_stamp:
         _entries = _load()
+        _entries_stamp = stamp
     return _entries
 
 
@@ -86,15 +120,17 @@ def _read_modify_write(mutator: Callable[[list[dict[str, Any]]], _T]) -> _T:
     race so a mutation merges into the current on-disk state instead of
     clobbering entries a sibling process committed since this process last read.
     ``_load`` starts from disk truth (not the possibly-stale cache); the result
-    is always persisted and swapped into ``_entries``.
+    is always persisted and swapped into ``_entries``, and the freshness stamp
+    is taken from the file we just wrote so the next read skips a re-parse.
     """
-    global _entries
+    global _entries, _entries_stamp
     with file_lock(REGISTRY_PATH):
         entries = _load()
         result = mutator(entries)
         _save(entries)
         with _lock:
             _entries = entries
+            _entries_stamp = _manifest_stamp()
     return result
 
 
@@ -235,7 +271,7 @@ def record_detector_embedder(detector_id: str, embedder_name: str) -> None:
     """
     if not detector_id or not embedder_name:
         return
-    global _entries
+    global _entries, _entries_stamp
     try:
         # Inline read-modify-write (not the shared helper) so an already-stamped
         # embedder skips the disk write - this runs on every training cycle.
@@ -252,6 +288,7 @@ def record_detector_embedder(detector_id: str, embedder_name: str) -> None:
                 _save(entries)
             with _lock:
                 _entries = entries
+                _entries_stamp = _manifest_stamp()
     except Exception as exc:
         logger.warning("Failed to persist embedder for detector %s: %s", detector_id, exc)
 
@@ -421,8 +458,9 @@ def set_find_mode(enabled: bool = True) -> None:
 
 def reset_for_tests() -> None:
     """Reset the in-memory cache (for test isolation)."""
-    global _entries
+    global _entries, _entries_stamp
     with _lock:
         _entries = None
+        _entries_stamp = None
         _loaded_ids.clear()
         _loading_ids.clear()
