@@ -31,6 +31,24 @@ If you see one, **stop**: that sentence is an `AskUserQuestion` call you almost 
 
 This rule has **no exceptions for "quick" yes/no follow-ups.** Yes/no offers belong in the tool too (with `["Yes", "No"]` options); they are exactly the case where a one-click reply beats a typed reply. A pure progress update with no question at the end is fine; an update that ends in an offer is not.
 
+## A bare `#N` prompt is a complete instruction (CRITICAL)
+
+When the user's whole prompt is just a number — `#3421`, or bare `3421` — it names a GitHub issue or pull request **in this repo**, and it is already a full instruction. Do not ask what to do with it; do not answer with a summary of the issue and stop. Resolve the number first (GitHub draws issues and PRs from one sequence, so a given number is one or the other, never both), then follow the matching workflow below.
+
+**This applies on every surface.** Claude Code on the web, the desktop app, the laptop CLI — the convention is repo policy, not a per-session preference, so it holds wherever this file is loaded.
+
+### If `#N` is an issue
+
+1. **Read it, then evaluate it.** Decide whether the premise is correct and whether you agree with the solution it proposes. This is a real gate, not a formality: an issue can be stale, already fixed, based on a misreading, or right about the symptom and wrong about the fix.
+2. **If you disagree — or the right scope is unclear — stop and ask** via `AskUserQuestion` before writing any code. Say what the issue claims, what you found instead, and what you'd do differently.
+3. **If you agree, do the work off a fresh `dev`:** `git fetch origin --prune && git checkout -B <branch> origin/dev`. Never build on whatever the branch happened to be pointing at.
+4. **If the issue carries the `experiment` label, do the work entirely on the GRID, on a fresh worktree.** See the `grid-experiments` skill for how those runs are launched and monitored.
+5. **Run the whole issue lifecycle**, per the sections below: assign `samggreenberg` before the first edit; open the PR with `base=dev` and a closing keyword; comment `Addressed in #M` on the issue; add `solved` and clear the assignee; leave the issue open for the `dev`→`main` sweep to close.
+
+### If `#N` is a pull request
+
+It is conflicted, and the ask is to **resolve the conflicts so the PR can merge into `dev`** — nothing more. Fetch, merge `origin/dev` into the PR's head branch, resolve, run the tests, and push. Do not rewrite the branch's history (no rebase, amend, or force-push) and do not fold in unrelated changes while you are there; a reviewer should see conflict resolution and nothing else.
+
 ## Branch Policy (CRITICAL)
 
 - **Always base work on `dev`.** The `.claude/hooks/session-start.sh` SessionStart hook fetches `origin --prune` and then lands the working branch on `origin/dev` automatically in remote sessions. The harness cuts the working branch off `main` (the GitHub default), so this is required to pick up work already merged to `dev`. The GitHub default stays `main` so new users land on the stable branch: `dev` is Claude's starting point, not the public default.
