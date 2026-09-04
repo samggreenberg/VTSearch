@@ -288,8 +288,9 @@ def drive_dataset_open(client, datasets: list[dict], reps: int, *, cold_atlas: b
     through ``POST /api/datasets/registry/<id>/coverage-atlas``. Every ordinary
     open restores the atlas cached in the pickle at import time, so without this
     a sweep measures the coverage step's millisecond branch however many times
-    it repeats and never once the minutes-long one the shipped weights are
-    paced for. The endpoint rebuilds in memory and leaves the pickle alone,
+    it repeats and never once the rebuild the shipped weights are paced for --
+    seconds rather than milliseconds, ~700x the restore at n = 2954 (#3595).
+    The endpoint rebuilds in memory and leaves the pickle alone,
     which is what keeps ``dataset_open`` a read-only family.
     """
     from vtscore.concurrency.progress import loading_tasks  # noqa: PLC0415
@@ -457,9 +458,16 @@ def drive_dataset_stage(demo_ids: list[str], reps: int, *, cold_embed: bool = Tr
     """Measure staging demo datasets (acquire, embed, serialize; no registry).
 
     Staging reads the same demo embeddings pkl a full import writes, so a
-    staging leg run after a load leg against a shared data dir measures nothing
-    at all — that is the 0.000-0.002 s #3345 recorded across all four image
-    tiers. *cold_embed* clears the cache before each rep.
+    staging leg run after a load leg against a shared data dir re-reads what the
+    load just cached rather than embedding; *cold_embed* clears the cache before
+    each rep so the ``fresh`` branch is the one measured.
+
+    That cache is *not* what made #3345's ``embed`` read 0.000-0.002 s across
+    all four image tiers: #3521 §5 cleared it and the step still read zero,
+    because a demo importer embeds inside ``run()`` and the staging flow was
+    recording that under ``acquire``. Fixed in #3593, so these rows now split
+    acquisition from embedding — and a profile fitted from rows recorded
+    *before* that fix prices ``embed`` at nothing.
     """
     from vtscore.concurrency.progress import loading_tasks  # noqa: PLC0415
     from vtscore.datasets.config import DEMO_DATASETS  # noqa: PLC0415

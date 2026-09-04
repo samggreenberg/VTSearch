@@ -36,9 +36,13 @@ The second exists because the first cannot see the caches that are not the
 encoder, and those are on **disk**, so they outlive the process a cold/warm
 ledger is scoped to. #3345 measured two: a ``dataset_open`` whose coverage step
 restored the atlas cached in its pickle on all 16 opens and never once rebuilt
-it, and a ``dataset_stage`` whose embed step read the embeddings pkl the
-``dataset_load`` leg before it had just written — 0.000–0.002 s across all four
-image tiers, in a different process (#3521).
+it, and a ``dataset_load``/``dataset_stage`` embed that read the demo
+embeddings pkl instead of embedding. (The ``dataset_stage`` half of that second
+one turned out to be a misdiagnosis: its embed step read 0.000–0.002 s across
+all four image tiers because the importer's embedding was being recorded under
+``acquire``, not because a cache was hit. #3521 §5 cleared the cache and the
+step still read zero; #3593 moved the boundary. The branch marker is what made
+that legible in one look.)
 
 **Cold vs warm.** Every row also carries ``cold_model``: whether this run was
 the first in the process to need its ``(media_type, embedder)`` encoder, and so

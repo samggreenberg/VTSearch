@@ -58,6 +58,48 @@ def test_scale_class_rules_is_defined_exactly_once():
     assert _module_level_assignments()["SCALE_CLASS_RULES"] == 1
 
 
+def _duplicate_dict_keys() -> dict[str, list[str]]:
+    """``{table: [key repeated, ...]}`` for every module-level dict literal here."""
+    tree = ast.parse(_PILE_CONFIG.read_text())
+    out: dict[str, list[str]] = {}
+    for node in tree.body:
+        target, value = None, None
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            target, value = node.target.id, node.value
+        elif isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            target, value = node.targets[0].id, node.value
+        if not isinstance(value, ast.Dict):
+            continue
+        seen: set = set()
+        dupes: list[str] = []
+        for k in value.keys:
+            if isinstance(k, ast.Constant):
+                if k.value in seen:
+                    dupes.append(str(k.value))
+                seen.add(k.value)
+        if dupes:
+            out[target] = dupes
+    return out
+
+
+def test_no_dict_literal_repeats_a_key():
+    """A repeated key keeps the LAST value, which is how a merge eats a rule.
+
+    The sibling test above catches a whole table being declared twice. This
+    catches the same shadowing one level down, and it is the form that actually
+    bit: #3588 filled every candidate's ``test`` while another branch added the
+    same twelve classes as name-only stubs, and git merged both sets into one
+    literal. The file parsed, the dict had the right number of *keys*, and every
+    rule written during the review had been silently replaced by an empty one.
+    """
+    dupes = _duplicate_dict_keys()
+    assert not dupes, (
+        "these module-level dicts repeat a key, so only the last value survives: "
+        f"{dupes}. Two branches adding the same entry is the usual cause, and the "
+        "merge is clean because the keys are on different lines."
+    )
+
+
 @pytest.fixture(scope="module")
 def pc():
     import sys

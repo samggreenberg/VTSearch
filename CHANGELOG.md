@@ -15,7 +15,38 @@ not list every commit. Use `git log` for the full history.
 
 ## Unreleased
 
+### Changed
+
+- **Opening a saved dataset paces its progress bar for the branch its coverage
+  atlas actually takes.** That step either restores the atlas cached in the
+  dataset's pickle (~10 ms) or rebuilds a hierarchical k-means from scratch
+  (0.0026 s/item, so seconds at the sizes anybody has swept and minutes only
+  near the auto-build threshold) - measured 110-700x apart on the same
+  datasets - and a
+  timing profile could hold only one number for both, so whichever it held made
+  the other case's bar up to 0.94 of a bar wrong. A profile can now carry
+  coefficients for each branch, and the load route names the branch it is taking
+  as soon as it knows, before the expensive part starts. It also remembers on
+  the registry entry which branch that dataset took last time, so the weights
+  are right from the first update rather than from the middle of the load.
+  Pacing only: nothing about what is loaded or stored changes.
+
 ### Fixed
+
+- **The text-sort progress bar no longer reserves most of itself for a model
+  load that has already happened.** `text_sort` paces three steps -- load the
+  embedder, embed the query, score every media -- and the first one is either
+  seconds (the first sort a server process runs) or *exactly zero* (every sort
+  after it, since the encoder stays resident). One static weight vector cannot
+  serve both, and every vector the app has ever shipped or measured was the
+  cold one: [#3521](docs/experiments/2026-09-03-drive-cold-3521/REPORT.md)
+  scored both fitted timing profiles and the shipped defaults at 0.80-0.85
+  *bar error* on this task -- the fraction of the bar budgeted to the wrong
+  step -- while their per-step predictions were off by only ~20 %. So the most
+  frequently run bar in the app spent three quarters of itself parked on a step
+  that was already over. The sort route now asks whether the encoder is
+  resident (it is a lookup, not a guess) and drops the load step out of the
+  pacing when it is, which is the overwhelmingly common case.
 
 - **CLI autodetect no longer drops media the GUI keeps, and its detector
   threshold no longer moves as a result.** The CLI forced *thin* loading on

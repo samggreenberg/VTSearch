@@ -35,6 +35,12 @@ The fit itself is deliberately plain. Per ``(task, cell, step)``:
   same code path; a cached run is a measurement of a different one, and the two
   populations have no common mean worth reporting. See :func:`cheap_branch_only`
   and :data:`vtscore.timing.tasks.CHEAP_BRANCHES` (#3521).
+- **A step measured on both paths is additionally priced per branch**, under the
+  step's own ``branches`` key, so a caller that knows which path it is taking
+  gets that branch's coefficients instead of the other's. The step's top-level
+  coefficients are unchanged — still the dear branch — because that is what a
+  caller who cannot say gets, and what every existing reader sees. See
+  :func:`fit_branches` (#3594).
 
 Cells are emitted at three specificities — exact ``(device, media, embedder)``,
 then ``(device, media, *)``, then ``(device, *, *)``. The rollups are what make a
@@ -282,10 +288,48 @@ def cheap_branch_only(samples: list[dict]) -> bool:
     reading of 0.008-0.016 s is not "the atlas costs 10 ms here", it is "this
     sweep never saw one built". Both are correct measurements; only one of them
     is a cost model, and ``tasks.py`` weights that step at 0.85 of the bar
-    precisely because the branch nobody measured is the minutes-long one.
+    precisely because the branch nobody measured is the one that does the work:
+    a rebuild costs 0.0026 s/item, ~700x the restore at n = 2954 (#3595).
     """
     dear, cheap, unmarked = branch_split(samples)
     return bool(cheap) and not dear and not unmarked
+
+
+def fit_branches(samples: list[dict], byte_scaled: bool) -> dict[str, StepCoeffs]:
+    """Fit one step's coefficients **per branch**, when its runs took more than one.
+
+    :func:`fit_step` answers "what does this step cost?" with one number, which
+    it can only do by choosing a branch — it prices from the runs that did the
+    work and lets the cheap ones go. That is the right single answer, and #3521
+    measured how far it is from the other one: a coverage atlas restores in
+    0.011 s and rebuilds in 7.7 s on the same 2954-item dataset, and a bar paced
+    by either number is ~0.5-0.94 of a bar wrong on the other branch.
+
+    So the branches are also fitted separately and stored beside the step, for
+    the lookup that knows which path it is about to take. Each branch is fitted
+    by :func:`fit_step` over its own rows alone — the cold/warm holdout and the
+    median fallback apply within a branch exactly as they do without one.
+
+    Returns ``{}`` for a byte-scaled step (a per-MB rate has no fork to split)
+    and for a step whose runs all took one branch, where a per-branch entry
+    would only restate the step's own coefficients. A single branch measured is
+    not evidence about the branch nobody ran, and writing it as though it were a
+    split would suggest the profile knows something it does not.
+    """
+    if byte_scaled:
+        return {}
+    named: dict[str, list[dict]] = defaultdict(list)
+    for sample in samples:
+        if sample.get("branch"):
+            named[sample["branch"]].append(sample)
+    if len(named) < 2:
+        return {}
+    out: dict[str, StepCoeffs] = {}
+    for branch, group in named.items():
+        coeffs = fit_step(group, byte_scaled=False)
+        if coeffs is not None:
+            out[branch] = coeffs
+    return out
 
 
 def fit_step(samples: list[dict], byte_scaled: bool) -> Optional[StepCoeffs]:
@@ -511,7 +555,11 @@ def _fit_task_cells(spec, cells: _CellSamples, slots: _CellSlots, min_samples: i
                 continue
             coeffs = fit_step(samples, byte_scaled)
             if coeffs is not None:
-                steps_out[step] = coeffs.to_json()
+                entry_json: dict[str, Any] = dict(coeffs.to_json())
+                forks = fit_branches(samples, byte_scaled)
+                if forks:
+                    entry_json["branches"] = {name: c.to_json() for name, c in forks.items()}
+                steps_out[step] = entry_json
         if not steps_out:
             continue
         entry: dict[str, Any] = {"samples": runs, "steps": steps_out}
@@ -697,6 +745,89 @@ def _withheld_by_specificity(spec, cells: _CellSamples) -> dict[str, int]:
     return dict(out)
 
 
+#: A task whose whole run is shorter than this, at the sizes the sweep visited,
+#: cannot be usefully paced. The bar is then decided by the ranking of a handful
+#: of tiny numbers, and an absolute error far too small to fit reorders them —
+#: which is the state #3596 measured on ``text_sort``: three steps totalling
+#: 0.9 s, all three profiles ranking them differently, and every arm sitting at
+#: 0.80-0.85 bar error while its *step* error stayed near 0.2.
+#:
+#: One second is where a bar stops being a bar: below it the job is a flash, and
+#: whatever slice each step drew never rendered at a size anybody read. It is a
+#: reporting threshold only — nothing branches on it — so it is deliberately a
+#: round number rather than a measured one.
+_UNPACEABLE_TOTAL_SECONDS = 1.0
+
+
+def _typical_seconds(samples: list[dict]) -> float:
+    """Median seconds this step took, over the population a fit would price.
+
+    Warm runs when there are any, mirroring :func:`fit_step`'s holdout, because
+    the warm population is what a served process spends nearly all of its runs
+    in. Raw: the deferred floor is reported separately, since conflating "this
+    step measured zero" with "the profile stores 0.5 for it" is the confusion
+    these lines exist to undo.
+    """
+    warm = [s["seconds"] for s in samples if not s.get("cold")]
+    seconds = warm or [s["seconds"] for s in samples]
+    return statistics.median(seconds) if seconds else 0.0
+
+
+def _pace_lines(spec, samples_by_step: dict[str, list[dict]]) -> list[str]:
+    """Say when a task's own measurements cannot pace its bar.
+
+    Two things a sample count actively misreports, both measured on
+    ``text_sort`` in #3521's sweep, where 288 step-samples read as the
+    best-covered task in the report:
+
+    **The whole task is too short.** Its three steps total 0.9 s warm, so the
+    bar is settled by which of three sub-second numbers comes out largest, and
+    the fitted profiles disagreed with each other about that ordering while
+    predicting each step to within ~20 %. Coefficients cannot fix an ordering
+    that noise decides; the line says so rather than letting a full sample count
+    imply the opposite.
+
+    **A step measured free is not priced free.** When the warm runs measure a
+    step at exactly zero and a cold run measured it as real,
+    :func:`_deferred_cost_floor` keeps a floor for it — right for a step that
+    might yet be paid, and on a short task it is most of the predicted total,
+    so it redistributes the bar for every warm run. Naming the floor beside the
+    measurement is what makes that visible; a task whose caller can tell the
+    two branches apart should pass the step to
+    :func:`vtscore.timing.step_weights` as skipped instead (``text_sort`` now
+    does).
+    """
+    steps = {step: samples for step, samples in samples_by_step.items() if step in spec.steps}
+    if not steps:
+        return []
+    lines: list[str] = []
+    typical = {step: _typical_seconds(samples) for step, samples in steps.items()}
+    total = sum(typical.values())
+    if 0 < total < _UNPACEABLE_TOTAL_SECONDS:
+        breakdown = ", ".join(f"{step} {typical[step]:.2f}" for step in spec.steps if step in typical)
+        lines.append(
+            f"  {'':<16} TOO SHORT TO PACE: a typical run totals {total:.2f} s at the swept "
+            f"sizes ({breakdown}) — the bar is decided by which of these is largest, which "
+            f"is below the error any fit of them carries"
+        )
+    for step in spec.steps:
+        samples = steps.get(step)
+        if not samples or step in spec.byte_scaled:
+            continue
+        cold = [s for s in samples if s.get("cold")]
+        floor = _deferred_cost_floor(typical[step], cold)
+        if floor <= typical[step]:
+            continue
+        warm_zero = sum(1 for s in samples if not s.get("cold") and s["seconds"] <= 0)
+        share = floor / (total - typical[step] + floor) if total - typical[step] + floor > 0 else 1.0
+        lines.append(
+            f"  {'':<16} {step}: measured 0.00 s on {warm_zero} of {len(samples)} runs and real on "
+            f"{len(cold)} — deferred, so it is priced at the {floor:.2f} s floor, {share:.0%} of "
+            f"the predicted total; a caller that knows the step will be skipped should say so"
+        )
+    return lines
+
+
 def _branch_lines(spec, samples_by_step: dict[str, list[dict]]) -> list[str]:
     """Name every step whose runs only ever took a cached path.
 
@@ -730,6 +861,30 @@ def _branch_lines(spec, samples_by_step: dict[str, list[dict]]) -> list[str]:
     return lines
 
 
+def _priced_branch_lines(cells: dict[str, Any]) -> list[str]:
+    """Name every step this task priced **per branch**, and with which branches.
+
+    The counterpart to :func:`_branch_lines`. That one reports the step nobody
+    measured on the dear path; this one reports the step measured on *both*, and
+    so the step whose pacing now depends on the caller naming its branch. An
+    admin reading a sweep needs to be able to tell the two apart, since the
+    remedy for one (drive the other branch) is exactly what produces the other.
+    """
+    priced: dict[str, set[str]] = defaultdict(set)
+    counts: dict[str, int] = defaultdict(int)
+    for cell in cells.values():
+        for step, coeffs in cell.get("steps", {}).items():
+            forks = coeffs.get("branches") if isinstance(coeffs, dict) else None
+            if isinstance(forks, dict) and forks:
+                priced[step].update(str(b) for b in forks)
+                counts[step] += 1
+    return [
+        f"  {'':<16} {step}: priced per branch in {counts[step]} cell{'' if counts[step] == 1 else 's'} "
+        f"({', '.join(sorted(branches))}) — a caller that names its branch is paced from that branch alone"
+        for step, branches in sorted(priced.items())
+    ]
+
+
 def coverage_report(rows: Iterable[dict], profile: dict[str, Any]) -> list[str]:
     """Human-readable lines describing what the sweep did and did not cover.
 
@@ -755,8 +910,16 @@ def coverage_report(rows: Iterable[dict], profile: dict[str, Any]) -> list[str]:
     A third thing a count cannot say is *which branch* the runs took. A step
     whose every run read a cache is not a well-covered step; it is an unmeasured
     one wearing a full sample count, and it is the state that made #3345's sweep
-    price a minutes-long atlas rebuild at 2 % of the bar. :func:`_branch_lines`
-    names those explicitly (#3521).
+    price a 7.7 s atlas rebuild at 2 % of the bar. :func:`_branch_lines`
+    names those explicitly (#3521), and :func:`_priced_branch_lines` names the
+    steps measured on *both* paths, whose pacing now depends on the caller
+    saying which one it is taking (#3594).
+
+    A fourth is whether the task is long enough for *any* coefficients to pace.
+    ``text_sort``'s 288 step-samples are the largest count in #3521's report and
+    describe a 0.9 s job whose bar every arm of that study got 0.80-0.85 wrong;
+    :func:`_pace_lines` says that outright, along with the deferred floor that
+    causes most of it (#3596).
     """
     rows = list(rows)
     normalized = [n for n in (normalize_row(r) for r in rows) if n is not None]
@@ -774,6 +937,8 @@ def coverage_report(rows: Iterable[dict], profile: dict[str, Any]) -> list[str]:
             lines.append(f"  {task:<16} {len(cells)} cells, {samples} step-samples")
             lines.extend(_specificity_lines(TASKS[task], cells, by_cell.get(task, {})))
             lines.extend(_branch_lines(TASKS[task], by_step.get(task, {})))
+            lines.extend(_priced_branch_lines(cells))
+            lines.extend(_pace_lines(TASKS[task], by_step.get(task, {})))
         elif task in seen_tasks:
             branch_lines = _branch_lines(TASKS[task], by_step.get(task, {}))
             if branch_lines:

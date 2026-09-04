@@ -68,6 +68,16 @@ the text. That is the discipline the goal requires: not "does COCO agree" but
   the first four classes, 13 boxed positives were redrawn and **6 changed
   band** (#3616). If the boxed object is not a member, the answer is Bad —
   remembering that Bad on a boxed positive reads as *not confirmed*.
+- **Even when the box is plainly wrong and a real one is elsewhere, the answer
+  is still Bad.** This is the case the rule above did not spell out. Image
+  2334634 arrives as a `cup@large` positive with its box on a *windowpane*, and
+  the photo does contain two real drinking glasses lower down. Re-boxing one of
+  them keeps a positive, but it moves the image from `large` to `medium`: the
+  `large` cell stays short — correctly, because its supply was overstated by an
+  annotation error — while `medium` gains an image nothing sampled it for. **A
+  wrong box is a finding about the band, not an inconvenience to route around.**
+  Reject it, and the real glass is simply not recruited from this stratum; the
+  cost is one positive, against a band structure that stays honest.
 - **Vote on the object, not a depiction of it.** A car on a billboard, cutlery
   printed on a menu, a bottle in a logo — all Bad, for every class here. So is
   a *pictogram*: the bicycle on a BIKE ROUTE sign is a sign, not a bicycle. Note
@@ -328,7 +338,11 @@ Do not count:
   not — the test is whether it has walls that contain, not what it is made of.
   (`tray`, 19 boxes, splits across this line.)
 - **A cup or mug** — that is `cup`, and it is the single largest thing excluded
-  here (120 boxes), so expect to reject it often.
+  here (120 boxes), so expect to reject it often. **A ramekin is a bowl**, not a
+  cup: it is hand-held and single-serving, but it holds *food*, and the ladder
+  agrees — a ramekin is wider than tall. COCO splits it 5 to bowl and 3 to cup,
+  too thin to settle alone, which is why the drink test and the geometry carry
+  it.
 - **A toilet bowl.** The word is not the object; nothing about it holds food.
 - **A feed trough.** Built for animals, but it is a fixture rather than a
   vessel, and COCO does not fold troughs in.

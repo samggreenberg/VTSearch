@@ -206,22 +206,47 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
     )
     # Pace the unified bar against the real phase split. Step 1 (pickle read +
     # convert + the near-instant exact-dedup) is seconds at most; step 2 is the
-    # coverage atlas, which is instant when the cached atlas restores but a
-    # minutes-long hierarchical-k-means rebuild when it doesn't. Weighting step 2
-    # as the dominant slice keeps a rebuild advancing the bar across its whole
-    # span instead of the old equal split, where the instant dedup drove step 2
+    # coverage atlas, ~10 ms when the cached atlas restores and a hierarchical
+    # k-means rebuild when it doesn't. That rebuild measures 0.0026 s/item
+    # (r^2 0.95) over n = 412..2954, so it is 1-8 s at the sizes swept and only
+    # approaches minutes near COVERAGE_ATLAS_AUTO_THRESHOLD, where the same fit
+    # extrapolates to ~131 s at n = 50 000 (#3595). Weighting step 2 as the
+    # dominant slice keeps a rebuild advancing the bar across its whole span
+    # instead of the old equal split, where the instant dedup drove step 2
     # to ~100% and the bar then sat frozen there through the entire rebuild.
     # That reasoning is the *fallback*; an admin ``VTSEARCH_TIMING_PROFILE``
     # replaces it with the split this host's disk and clustering backend
     # actually produce at this dataset's size.
+    #
+    # Which of those two the atlas step will be is worth up to the whole bar
+    # (#3521 measured a restore and a rebuild of the same 2954-item dataset at
+    # 0.011 s and 7.7 s), and it is not knowable here — the pickle has not been
+    # read yet. ``coverage_branch`` is what the *last* open of this dataset
+    # found, written back below: whether a pickle carries a restorable atlas is
+    # a durable fact about the file, so the cheapest way to have it before the
+    # read is to remember it from the read before. Absent (a dataset opened for
+    # the first time since the memo existed) means "no claim", and the lookup
+    # paces as it did before — the dear branch, which is the safe direction.
     from vtscore import timing
 
     _open_media_type = entry.get("media_type", "")
     _open_embedder = entry.get("embedder", "") or ""
     _open_n = int(entry.get("num_items") or 0)
-    tracker.set_step_weights(
-        timing.step_weights("dataset_open", media_type=_open_media_type, embedder=_open_embedder, n=_open_n)
-    )
+    _remembered_branch = str(entry.get("coverage_branch") or "") or None
+
+    def _pace_open(branch: str | None, n: int) -> None:
+        """(Re)weight the open's bar for the branch its atlas step is taking."""
+        tracker.set_step_weights(
+            timing.step_weights(
+                "dataset_open",
+                media_type=_open_media_type,
+                embedder=_open_embedder,
+                n=n,
+                branch=branch,
+            )
+        )
+
+    _pace_open(_remembered_branch, _open_n)
     timing_recorder = timing.record_task(tracker, "dataset_open", media_type=_open_media_type, embedder=_open_embedder)
     timing_recorder.start()
     timing_recorder.set_scale(n=_open_n)
@@ -310,15 +335,25 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
                 # one, and produced a profile pricing the atlas at 2 % of a bar
                 # whose shipped default gives it 85 % — both correct about
                 # different branches, with nothing recording which (#3521).
-                if not restore_coverage_atlas_from_cache(ctx, cached_coverage_atlas):
-                    if should_auto_build_coverage_atlas(len(ctx.medias)):
-                        timing_recorder.mark_branch("coverage", "rebuilt")
-                        _coverage_progress(0, 0)
-                        build_coverage_atlas_for_context(ctx, on_progress=_coverage_progress)
-                    else:
-                        timing_recorder.mark_branch("coverage", "deferred")
+                if restore_coverage_atlas_from_cache(ctx, cached_coverage_atlas):
+                    coverage_branch = "restored"
+                elif should_auto_build_coverage_atlas(len(ctx.medias)):
+                    coverage_branch = "rebuilt"
                 else:
-                    timing_recorder.mark_branch("coverage", "restored")
+                    coverage_branch = "deferred"
+                timing_recorder.mark_branch("coverage", coverage_branch)
+                # Now the branch is known — and, for a rebuild, known *before*
+                # the build itself. Re-pace against it (and against the
+                # exact post-dedup count, which the registry's ``num_items``
+                # only approximates) so the profile's per-branch coefficients
+                # are used rather than the branch-agnostic ones the first call
+                # had to settle for. Re-weighting mid-job only ever moves the
+                # bar forward: the tracker clamps its overall fraction to be
+                # monotonic.
+                _pace_open(coverage_branch, len(ctx.medias))
+                if coverage_branch == "rebuilt":
+                    _coverage_progress(0, 0)
+                    build_coverage_atlas_for_context(ctx, on_progress=_coverage_progress)
                 # Fill the coverage slice to completion in every branch (cache
                 # restore, rebuild, or deferred-above-threshold) so the unified
                 # bar reaches 100% cleanly instead of stalling at the step-1
@@ -335,7 +370,16 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
                     for m in ctx.medias.values()
                     if isinstance(m.get("origin"), dict) and m["origin"].get("importer") == "dupe_set"
                 )
-                _reg_update(dataset_id, num_items=len(ctx.medias), num_dupes=num_dupes)
+                # ``coverage_branch`` rides along with the counts rather than
+                # taking its own read-modify-write of the registry file: it is a
+                # pacing memo for the next open (see ``_pace_open``), never a
+                # fact anyone waits on.
+                _reg_update(
+                    dataset_id,
+                    num_items=len(ctx.medias),
+                    num_dupes=num_dupes,
+                    coverage_branch=coverage_branch,
+                )
                 ctx.dataset_display_name = entry.get("name", "")
 
                 # Embedder warm-up runs fire-and-forget so the dashboard row

@@ -10,6 +10,49 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **A timing profile can price a forked step per branch** (issue #3594).
+  `vtscore.timing.step_weights` and `step_terms` take an optional `branch=` -
+  a branch name from `CHEAP_BRANCHES` / `DEAR_BRANCHES`, or a `{step: branch}`
+  mapping - and price any step the profile measured on that branch from its own
+  coefficients. `vtscore.timing.fit.fit_branches` produces them, stored under
+  the step's new `branches` key, and `TimingProfile` gained a parallel
+  `branches` table to hold them.
+
+  Purely additive in both directions. The step's top-level coefficients still
+  describe the dear branch, so a caller that passes no `branch` (every existing
+  call site), a profile written before this existed, and a build that has never
+  heard of `branches` all behave exactly as they did - which is also why the
+  profile schema version did not move. A step whose runs all took one branch
+  gets no split at all.
+
+  The problem it solves is that a profile cell is keyed
+  `(device, media_type, embedder)`, so a step that forks on a cache had one set
+  of coefficients for two code paths measured 110-700x apart: an admin picking a
+  profile was picking which branch to be wrong about, at up to 0.94 of a
+  progress bar.
+
+  The sibling of `skip_steps` below, and the half of the problem it does not
+  cover: a step that does not run costs nothing and needs no measurement, while
+  a step that runs either way and costs two different things needs one
+  measurement per path.
+
+- **`skip_steps` on `vtscore.timing.step_weights()` / `step_terms()`, and
+  `MediaEmbedder.models_loaded()`** (issue #3596). A timing profile prices how
+  long a step takes; it has no way to say a step will not run at all. That gap
+  is what left `text_sort` unpaced by anything: its `load_model` step is
+  seconds on a process's first sort and exactly zero on the next 47, so every
+  profile fitted for it - and the shipped defaults - put 0.80-0.85 of the bar
+  in the wrong step. `skip_steps` names the steps this particular run will
+  skip and prices them at zero, which needs no measurement; the remaining
+  steps share the whole bar. Purely additive - an omitted `skip_steps` paces
+  exactly as before.
+
+  `models_loaded()` is the accompanying public read on `MediaEmbedder`: "would
+  `load_models()` do any work?", answered without doing it. The default reads
+  the same private model attribute `load_models()` and `loaded_backbone()`
+  already rely on, so an embedder built the usual way needs no change; one
+  that holds its backbone elsewhere should override both together.
+
 - **`slot_embedders_for_snap(snap)` and `keying_embedder_for_type(type, snap)`
   on `vtscore.embedding.binding`** (issue #3386). Purely additive companions to
   the two existing snapshot resolvers, added so the near-synonymous private

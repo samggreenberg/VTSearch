@@ -383,7 +383,12 @@ class ClassRule(NamedTuple):
     #: The full wording the name abbreviates: what counts as Good, what counts
     #: as Bad, and the near-miss the short name does not settle. Read by whoever
     #: builds the slate and whoever adjudicates it, so both apply one definition.
-    test: str
+    #:
+    #: Empty means *not written down yet*, not *no boundary case*: the rule was
+    #: measured as a name before :class:`ClassRule` existed and its wording has
+    #: never been recorded. Fill one in when a slate of that class is issued --
+    #: an unwritten test is the state #3612 exists to end.
+    test: str = ""
 
 
 #: Per-class review definitions, for the classes whose plain English name is not
@@ -587,6 +592,13 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "or cradle is still Good."
         ),
     ),
+    # The remaining rules were measured as names before ``test`` existed
+    # (#3588): `coco_folds.py` asks which VG names land on a COCO class's boxes
+    # over the ~51k-image overlap, which enumerates a class's boundary cases
+    # before a human meets one -- run against `book` it prints `magazine` (79)
+    # and `magazines` (30). Each name below states the boundary case that
+    # measurement found, and the long form now lives in each entry's ``test``
+    # above -- filled in as each class was slated (#3588).
 }
 
 
@@ -984,9 +996,14 @@ def coco_classes_for(cls: str) -> set[str]:
 def scale_class_dataset_name(category: str) -> str:
     """Deprecated alias for :func:`review_name`.
 
-    Kept because `make_class_slate.py` prints and names with it. Both spellings
-    must resolve through ONE table: when they did not, a second
-    ``SCALE_CLASS_RULES`` shadowed the first and `review_name` raised
-    ``AttributeError`` on every class that had a rule.
+    A thin spelling of :func:`review_name` with no pass suffix, kept because
+    ``make_class_slate.py`` bands a *candidate* rather than issuing a voted
+    slate and so has no pass to name.
+
+    This used to read a second ``SCALE_CLASS_RULES`` of its own, declared later
+    in this module and therefore shadowing the first: #3588 and #3612 each gave
+    the same table the same name from opposite ends of one branch, and the
+    survivor -- the string one -- left :func:`review_name` reading ``.name`` off
+    a ``str``. Both rule sets now live in the one table above.
     """
     return review_name(category)

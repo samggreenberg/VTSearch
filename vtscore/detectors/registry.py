@@ -40,6 +40,8 @@ _T = TypeVar("_T")
 _lock = threading.RLock()
 
 _entries: list[dict[str, Any]] | None = None
+#: ``(mtime_ns, size)`` of the registry file the cache was filled from.
+_entries_stamp: tuple[int, int] | None = None
 
 # Set of detector IDs currently loaded in memory (each has a DetectorContext).
 _loaded_ids: set[str] = set()
@@ -71,10 +73,39 @@ def _save(entries: list[dict[str, Any]]) -> None:
     atomic_write_json(REGISTRY_PATH, entries)
 
 
+def _manifest_stamp() -> tuple[int, int] | None:
+    """Return ``(mtime_ns, size)`` for the registry file, or ``None`` if absent."""
+    try:
+        stat = REGISTRY_PATH.stat()
+    except OSError:
+        return None
+    return (stat.st_mtime_ns, stat.st_size)
+
+
 def _ensure_loaded() -> list[dict[str, Any]]:
-    global _entries
-    if _entries is None:
+    """Return the in-memory cache, re-reading it whenever disk has moved on.
+
+    The dataset registry was fixed for this in #3167 and its twin here was not,
+    so every *read* stayed blind to a write by anyone else. A detector could be
+    unregistered on disk while ``GET /api/detectors/registry`` went on listing
+    it until the process restarted -- which is what happened when six finished
+    slates were cleared from a running app: the file said nine, that endpoint
+    said fifteen, and ``GET /api/detectors`` (which reads the detector files
+    rather than the registry) said nine, so two views of one dashboard
+    disagreed.
+
+    Mutations were never at risk -- :func:`_read_modify_write` re-reads under
+    the lock before mutating -- so this is a read-path staleness, but a
+    convincing one: the stale view is the one a person is looking at.
+
+    A stat per read is cheap next to the JSON parse it usually skips, and the
+    stamp makes the re-read happen exactly when the file has actually changed.
+    """
+    global _entries, _entries_stamp
+    stamp = _manifest_stamp()
+    if _entries is None or stamp != _entries_stamp:
         _entries = _load()
+        _entries_stamp = stamp
     return _entries
 
 
@@ -95,6 +126,9 @@ def _read_modify_write(mutator: Callable[[list[dict[str, Any]]], _T]) -> _T:
         _save(entries)
         with _lock:
             _entries = entries
+            # Stamp what we just wrote, so the next read does not re-parse it.
+            global _entries_stamp
+            _entries_stamp = _manifest_stamp()
     return result
 
 
