@@ -205,12 +205,40 @@ inside `bowl`.
 ### `bottle incl jars`
 
 Water, wine, beer, soda and spirit bottles count; so do **jars** (120 VG `jar`
-boxes are COCO bottles), soap and shampoo dispensers (47 `soap`), spray
-bottles, baby bottles, condiment bottles, and vacuum flasks. Cans, cartons and
-boxes do not. Bottles behind fridge glass or ranked on a bar shelf count.
-Judge the container, not its contents: VG names 124 of these boxes `wine`, 90
-`water` and 87 `beer`, and the box is on a bottle in every case. A stemmed
-glass of wine is not a bottle (it is `wine glass`, and not a class here).
+boxes are COCO bottles), soap and shampoo dispensers (47 `soap`), jugs (28),
+shakers (21), spray bottles, baby bottles, condiment bottles, and vacuum
+flasks. Cans, cartons and boxes do not. Bottles behind fridge glass or ranked
+on a bar shelf count. Judge the container, not its contents: VG names 124 of
+these boxes `wine`, 90 `water` and 87 `beer`, and the box is on a bottle in
+every case. A stemmed glass of wine is not a bottle (it is `wine glass`, and
+not a class here).
+
+**A fuel tank is not a bottle**, a motorcycle's included, and the reason is not
+its shape. Two hold:
+
+- *An integral component of a larger object is not an instance of a container
+  class.* **A mouth is not a food container; a stomach is not a bottle.** Both
+  hold their contents, and neither is the thing. A fuel tank is part of the
+  machine in exactly that way. This is the general form of the test that keeps
+  a feed trough out of `bench` and a toilet bowl out of `bowl`, and it is the
+  one to reach for first, because it decides without appeal to shape or size.
+- *The pool would contradict itself.* COCO has no fuel-tank class, so an image
+  whose only vessel-like object is a tank is annotated as holding no bottle and
+  sits in the shared negative pool. Voting it Good makes the same content a
+  positive here and a negative there, exactly as with toys.
+
+The measurement agrees, emphatically: across **9,169 COCO bottle boxes and 515
+distinct VG names, `tank`, `fuel tank`, `gas tank`, `propane`, `barrel`, `drum`
+and `keg` appear zero times.** The only near neighbours are `canister` (7) and
+`cylinder` (2), and `soap canister` (1) says what kind those are.
+
+Do **not** reach for a neck-and-cap test instead. `jar` (120), `jug` (28) and
+`dispenser` (20) all fold in and barely have a neck, so shape would throw out
+more than it saves.
+
+**Open:** a *standalone* fuel container — a jerry can, a propane cylinder off
+the barbecue. The component test does not exclude it (nothing owns it) and the
+pool test does (COCO has no class for it). Unruled until someone meets one.
 
 ### `vase incl pots and planters`
 

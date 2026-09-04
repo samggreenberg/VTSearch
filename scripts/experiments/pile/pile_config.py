@@ -470,10 +470,14 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
     "bottle": ClassRule(
         name="bottle incl jars",
         test=(
-            "Good: water, wine, beer, soda and spirit bottles, jars, soap and shampoo "
-            "dispensers, spray bottles, baby bottles, condiment bottles, vacuum flasks. "
-            "Bad: cans, cartons, boxes, and a stemmed glass of wine. Judge the container, "
-            "not its contents."
+            "Good: water, wine, beer, soda and spirit bottles, jars, jugs, soap and "
+            "shampoo dispensers, shakers, spray bottles, baby bottles, condiment bottles, "
+            "vacuum flasks. Bad: cans, cartons, boxes, a stemmed glass of wine, and a "
+            "FUEL TANK. An integral component of a larger object is not an instance of a "
+            "container class: a mouth is not a food container and a stomach is not a "
+            "bottle. Same test as the feed trough in `bench`. "
+            "Judge the container, not its contents; do not judge it by its neck, since "
+            "`jar` (120) and `jug` (28) fold in and barely have one."
         ),
     ),
     "vase": ClassRule(
