@@ -68,7 +68,7 @@ def _duplicate_dict_keys() -> dict[str, list[str]]:
             target, value = node.target.id, node.value
         elif isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
             target, value = node.targets[0].id, node.value
-        if not isinstance(value, ast.Dict):
+        if target is None or not isinstance(value, ast.Dict):
             continue
         seen: set = set()
         dupes: list[str] = []

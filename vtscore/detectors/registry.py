@@ -269,7 +269,7 @@ def record_detector_embedder(detector_id: str, embedder_name: str) -> None:
     """
     if not detector_id or not embedder_name:
         return
-    global _entries
+    global _entries, _entries_stamp
     try:
         # Inline read-modify-write (not the shared helper) so an already-stamped
         # embedder skips the disk write - this runs on every training cycle.
@@ -286,6 +286,9 @@ def record_detector_embedder(detector_id: str, embedder_name: str) -> None:
                 _save(entries)
             with _lock:
                 _entries = entries
+                # Same reason as in `_read_modify_write`: stamp what we just
+                # read/wrote so the next read does not re-parse it.
+                _entries_stamp = _manifest_stamp()
     except Exception as exc:
         logger.warning("Failed to persist embedder for detector %s: %s", detector_id, exc)
 
@@ -455,8 +458,9 @@ def set_find_mode(enabled: bool = True) -> None:
 
 def reset_for_tests() -> None:
     """Reset the in-memory cache (for test isolation)."""
-    global _entries
+    global _entries, _entries_stamp
     with _lock:
         _entries = None
+        _entries_stamp = None
         _loaded_ids.clear()
         _loading_ids.clear()
