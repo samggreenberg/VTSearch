@@ -323,41 +323,124 @@ SCALE_CLASSES: tuple[str, ...] = (
 #: silently drops every other. That is not merely a supply loss: on the ~52% of
 #: VG that COCO does not annotate, VG's silence is the only evidence of absence,
 #: so an instance annotated under an unlisted spelling becomes a **negative** for
-#: its own class (#3605).
+#: its own class (#3605). There is no cheaper fix available in the reader --
+#: every one of the 2,516,939 objects in this release of VG carries a ``names``
+#: list of length **one**, and of the 18,897 objects named by an entry in either
+#: table below, **zero** carry the class name further down that list (#3618).
 #:
-#: Only merges MEASURED as aliases belong here -- two names on the same pixels,
-#: both ways, at high IoU (``scan_name_overlap.py``). A name that merely looks
-#: related goes in :data:`SCALE_VG_AMBIGUOUS` or nowhere: `bus`/`bush` matched 80
-#: images by string containment and is the reason this table is measured rather
-#: than drafted.
+#: Every entry is measured, and folding one makes two claims, so two things are
+#: measured (``name_evidence.py``):
 #:
-#: Empty for the current twelve. `bicycle`, the one class of the twelve whose
-#: names have been measured, has an alternate spelling that is NOT an alias --
-#: see :data:`SCALE_VG_AMBIGUOUS`.
-SCALE_VG_NAMES: dict[str, tuple[str, ...]] = {}
+#: 1. **the class is present** when this name is its only evidence -- the
+#:    *repair precision*: over the VG-COCO overlap, the share of images carrying
+#:    the name and NOT the class name where COCO says the class is there anyway.
+#:    Read it as a price: ``1 / precision`` is how many images leave the shared
+#:    negative pool per contaminated negative removed. The cut is 1/3 -- three
+#:    withheld per repair -- taken on the **Wilson lower bound**, so a name
+#:    measured on five images cannot outrank one measured on two thousand.
+#: 2. **this box is the object**: at least half of the name's boxes land on a
+#:    COCO box of the class, over at least 20 boxes. A band is a claim about one
+#:    object's size (#3616), so a name that passes (1) and fails (2) goes to
+#:    :data:`SCALE_VG_AMBIGUOUS` instead -- the safe side, since a wrong
+#:    ambiguous costs a few pool images and a wrong alias injects a mis-banded
+#:    positive.
+#:
+#: **Box overlap between two names is not the instrument here** and cannot be.
+#: ``scan_name_overlap.py`` needs the two names on one image, and an annotator
+#: who writes `back pack` does not also write `backpack`: 846 of 1,740
+#: class-vs-candidate pairs never co-occur at all, and where a singular and its
+#: plural do co-occur they are deliberately different boxes -- `backpack` /
+#: `backpacks` scores **0.000 both ways** over 10 co-images and is called
+#: *distinct*. That test keeps its own job, which is the case where two names
+#: really do sit on one box (`clock`/`clock face`, 0.562/0.701 over 286) and
+#: refuting a lookalike, which is how `bus` survived matching 80 images
+#: annotated `bush`.
+SCALE_VG_NAMES: dict[str, tuple[str, ...]] = {
+    "backpack": ("back pack",),
+    "bicycle": ("bicycles",),
+    # COCO annotates ducks, geese and gulls as `bird`, and so does VG under its
+    # own species names: each of these is above the cut on both tests.
+    "bird": ("duck", "goose", "ostrich", "owl", "parrot", "pigeon", "seagull", "swan"),
+    "boat": ("boats", "canoe", "kayak", "raft", "sailboats", "ship"),
+    # COCO has no magazine class and annotates magazines as `book`, which is the
+    # reading this dataset already took -- see SCALE_CLASS_RULES["book"].
+    "book": ("magazine",),
+    "bus": ("buses", "school bus"),
+    # The face is the clock: 89% of `clock face` boxes land on COCO's clock box,
+    # the highest box agreement in the study.
+    "clock": ("clock face", "clocks"),
+    "dog": ("black dog", "brown dog", "dogs", "puppy"),
+    # COCO's `kite` covers parasails and parachutes, and VG names them so.
+    "kite": ("kites", "parachute", "parasail"),
+    "knife": ("butter knife",),
+    "umbrella": ("blue umbrella", "parasol", "red umbrella"),
+}
 
-#: VG spellings that MAY denote a class in *C* but also denote something else.
+#: VG spellings that are evidence the class MAY be present, and cannot be its box.
 #:
 #: `bike` is the case that named this table. Over the 51,411-image VG-COCO
 #: overlap it carries **638 of COCO's 3,683 `bicycle` boxes** against the
 #: `bicycle` spelling's 775 -- so `bicycle` built from one spelling is missing
 #: roughly half its positives on the non-COCO half. It cannot simply be merged:
-#: `bike` is a measured alias of `motorcycle` too (box IoU 0.38 over 388
-#: co-images), and fold-out puts only 40.1% of `bike` boxes on a COCO `bicycle`
-#: while 59.6% land on no COCO class at all (``coco_folds.py``, #3606).
+#: on the images where it is the only evidence, COCO finds a bicycle **47%** of
+#: the time, and `bike` is a measured alias of `motorcycle` too (box IoU 0.38
+#: over 388 co-images).
 #:
-#: So a box under one of these names is treated as **evidence of neither
-#: presence nor absence**: it is not a positive (we cannot say the object is
-#: there) and it bars the image from the shared negative pool (we cannot say it
-#: is not). That is the ``excluded`` third state the construction already has --
-#: see :func:`pilebuild.loaders.vg_scale.lift_ambiguous`. It removes the
-#: contaminated negatives; recovering the missing positives needs a human pass.
+#: A box under one of these names is treated as **evidence of neither presence
+#: nor absence**: it is not a positive (we cannot say the object is there) and it
+#: bars the image from the shared negative pool (we cannot say it is not). That
+#: is the ``excluded`` third state the construction already has -- see
+#: :func:`pilebuild.loaders.vg_scale.lift_ambiguous`. It removes the contaminated
+#: negatives; recovering the missing positives needs a human pass.
+#:
+#: **Three kinds of name land here, and they share one treatment because they
+#: share one answer** -- *this image cannot serve as a negative, and this box
+#: cannot serve as a positive* (#3618):
+#:
+#: * a spelling that may denote something else: `bike` (47% precision),
+#:   `tricycle`, `silverware`.
+#: * a **collective**: `books` (89% precision, 34% box agreement), `birds`,
+#:   `umbrellas`, `knives`. The box is a pile; a band is a claim about one
+#:   object's size.
+#: * a **part or container**, whose box is not the object at all: `beak` (86%),
+#:   `bookshelf` (81%), `knife block` (79%), `stop` (70% -- the lettering on the
+#:   sign). Named apart in the report because they cost differently: a spelling
+#:   withholds the images that spell one class oddly, while a scene word
+#:   withholds a whole scene type from **every** class's pool.
 #:
 #: Suppression applies only where it is the sole evidence. On an image COCO
 #: annotates, or one a reviewer has ruled on, the answer is already known and
 #: the ambiguous spelling is ignored.
 SCALE_VG_AMBIGUOUS: dict[str, tuple[str, ...]] = {
-    "bicycle": ("bike",),
+    "backpack": ("black backpack", "black bag", "bookbag", "duffle bag"),
+    "bicycle": ("bicyclist", "bike", "bike tire", "bikes", "tricycle"),
+    "bird": ("beak", "birds", "dove", "ducks", "feather", "feathers", "geese", "peacock", "seagulls"),
+    "boat": ("barge", "bouy", "sail boat", "sailboat"),
+    "book": (
+        "binder",
+        "book case",
+        "book shelf",
+        "bookcase",
+        "books",
+        "bookshelf",
+        "dvd",
+        "dvds",
+        "games",
+        "library",
+        "magazines",
+        "notebook",
+    ),
+    "bus": ("blue bus",),
+    "clock": ("alarm clock", "numeral", "roman numerals"),
+    "dog": ("bulldog", "poodle"),
+    "knife": ("butterknife", "knife block", "knives", "silverware"),
+    # `sign` is the largest fold-in column anywhere in C -- 473 of COCO's 1,016
+    # `stop sign` boxes, 46.6% -- and it is NOT here, because a VG `sign` box is
+    # a stop sign 7.9% of the time: listing it would withhold 12.7 images from
+    # the pool per contaminated negative removed. This class's missing positives
+    # need a human pass, not a name (#3618).
+    "stop sign": ("octagon", "stop"),
+    "umbrella": ("an umbrella", "black umbrella", "pink umbrella", "umbrellas"),
 }
 
 #: Classes in *C* whose VG-name coverage has actually been measured.
@@ -365,12 +448,33 @@ SCALE_VG_AMBIGUOUS: dict[str, tuple[str, ...]] = {
 #: Written down because "no alternate spelling is listed" and "no alternate
 #: spelling exists" are the same empty table, and the first is what shipped:
 #: `bicycle` was built from one spelling for the whole of #3156 with every
-#: structural check passing. A class is added here once ``coco_folds.py`` has
-#: been run against it and its fold-in column read.
+#: structural check passing. A class is added here once its names have been
+#: adjudicated against COCO -- ``coco_folds.py`` for the fold-in column,
+#: ``vg_name_families.py`` for the spellings COCO's half barely sees, and
+#: ``name_evidence.py`` for the verdict.
 #:
-#: :func:`pilebuild.loaders.vg_scale.load` names the unaudited classes on every
-#: build, because the rebuild is when this stops being cheap to fix (#3605).
-SCALE_VG_NAMES_AUDITED: frozenset[str] = frozenset({"bicycle"})
+#: All twelve as of #3618. Listed one by one rather than derived from
+#: :data:`SCALE_CLASSES`, because deriving it would mark a *newly added* class
+#: audited without anyone having looked -- which is the exact failure this flag
+#: exists to make visible. :func:`pilebuild.loaders.vg_scale.load` names the
+#: unaudited classes on every build, since the rebuild is when this stops being
+#: cheap to fix (#3605).
+SCALE_VG_NAMES_AUDITED: frozenset[str] = frozenset(
+    {
+        "backpack",
+        "bicycle",
+        "bird",
+        "boat",
+        "book",
+        "bus",
+        "clock",
+        "dog",
+        "kite",
+        "knife",
+        "stop sign",
+        "umbrella",
+    }
+)
 
 
 class ClassRule(NamedTuple):

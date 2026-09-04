@@ -81,8 +81,19 @@ holds the ones it missed (#3605). The builder now withholds `bike` images from
 both — `bike` cannot simply be merged, since only 40.1% of its boxes land on a
 COCO `bicycle` and it is a measured alias of `motorcycle` too — but **the
 published cells predate that**, so any per-class reading of `bicycle` in the
-#3156 grid carries it. The other eleven classes have not been measured for the
-same defect.
+#3156 grid carries it.
+
+**All twelve are built from one VG spelling, and the published pickle still is.**
+#3618 measured the other eleven and every one of them had something: 32 spellings
+now fold onto their class and 50 more are withheld from it, which on the 56,579
+VG images COCO does not annotate **repairs 860 images that were negatives for
+their own class** and withholds 2,664 more. `bird` gains the most (+18% on the
+images it could already see), then `book` (+12%) and `boat` (+11%); `stop sign`
+gains nothing, because the VG name carrying 46.6% of its COCO boxes is `sign`,
+which is a stop sign 7.9% of the time (#3635). **None of this is in the published
+cells** — the tables were empty when they were built — so a per-class reading of
+any of the twelve carries the same defect `bicycle` does, in smaller measure. See
+[`2026-09-04-vg-name-coverage/`](../2026-09-04-vg-name-coverage/REPORT.md).
 
 **A class's definition is part of its label, and it now has a home.** A reviewer
 votes on bare images — files are named by image id — so the dataset name is the

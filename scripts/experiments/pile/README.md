@@ -48,24 +48,57 @@ only** — so a class is built from one spelling out of several, and on the ~52%
 VG that COCO does not annotate the others become *negatives* for their own class,
 because there VG's silence is the only evidence of absence. `bicycle` shipped
 that way: the VG name `bike` carries 638 of COCO's 3,683 `bicycle` boxes against
-the `bicycle` spelling's 775 (#3605). Two config tables decide what happens to a
-spelling, and both are measured rather than drafted (`scan_name_overlap.py`,
-`coco_folds.py` — string similarity is not evidence about objects, which is how
-`bus` once matched 80 images annotated `bush`):
+the `bicycle` spelling's 775 (#3605). There is no cheaper fix in the reader —
+every one of VG's 2,516,939 objects carries a `names` list of length **one**, so
+there is no synonym to read instead (#3618).
+
+Two config tables decide what happens to a spelling:
 
 | table | meaning | effect (`vg_scale.py`) |
 |---|---|---|
-| `SCALE_VG_NAMES` | measured alias — same object, other spelling | `canonicalise` folds the boxes onto the class name |
-| `SCALE_VG_AMBIGUOUS` | may be the class, may be something else | `lift_ambiguous` withholds the image from the class's bands **and** from the shared negative pool |
+| `SCALE_VG_NAMES` | the name is the class, **and its box is the object** | `canonicalise` folds the boxes onto the class name |
+| `SCALE_VG_AMBIGUOUS` | the class may be present; this box cannot be its positive | `lift_ambiguous` withholds the image from the class's bands **and** from the shared negative pool |
 
 Suppression applies only where the spelling is the last word: an image COCO
 annotates, or one a reviewer has ruled on, already answers the question. That is
 why `lift_ambiguous` runs after `anchor_to_coco` and `apply_corrections`.
 
+**Both tables are measured, and by the test that matches what the entry claims**
+(#3618). Which table a name goes in is *derived* by `name_evidence.py` from two
+numbers, not drafted:
+
+| number | what it decides | how it is measured |
+|---|---|---|
+| **repair precision** | act on this name at all | over the VG∩COCO overlap, take the images carrying the name and **not** the class name — the state that becomes a false negative on the other half — and ask COCO whether the class is present. Read it as a price: `1 / precision` is images withheld from the shared pool per contaminated negative removed. Cut at 1/3, on the **Wilson lower bound**. |
+| **box agreement** | fold it, or only withhold it | the share of the name's boxes landing on a COCO box of the class (`coco_folds.py`'s fold-in, per name). Cut at 0.5 over ≥ 20 boxes, because folding claims *every* box under the name is the object and a band is a claim about one object's size (#3616). |
+
+The candidates come from two searches, and neither finds what the other does:
+`coco_folds.py` finds names that land on COCO's boxes, and `vg_name_families.py`
+enumerates a class's **head-noun family** over the whole of VG, which is where a
+spelling used mostly off the COCO half shows up. A family is a list of names to
+*measure*, never a list to fold: the largest member of `dog`'s is **`hot dog`**,
+405 images, which scores 0 of 181.
+
+**Box overlap between two names (`scan_name_overlap.py`) is not the instrument
+for this and cannot be.** It needs both names on one image, and an annotator who
+writes `back pack` does not also write `backpack`: 846 of 1,740 candidate pairs
+never co-occur, and `backpack`/`backpacks` scores **0.000 both ways**. It keeps
+its own job — the case where two names really do sit on one box
+(`clock`/`clock face`, 0.562/0.701) and refuting a lookalike, which is how `bus`
+survived matching 80 images annotated `bush`.
+
+`name_coverage.py` then prices a proposed table before it ships: coverage against
+COCO, images repaired and withheld on the non-COCO half, and the **band ledger** —
+a fold merges boxes, so it can push an image the class already banded past the
+scatter guard and out of every band (248 across *C*; `clock` nets −16, #3637).
+
 `SCALE_VG_NAMES_AUDITED` records which classes have actually had this measured,
 because "no spelling is listed" and "no spelling exists" are the same empty
-table. A build names the classes that have not, since a rebuild is the moment
-the fix is cheap.
+table. All twelve as of #3618, listed one by one rather than derived from
+`SCALE_CLASSES` so that a newly added class is not marked audited by arithmetic.
+A build names the classes that have not been, since a rebuild is the moment the
+fix is cheap. Full study:
+[`docs/experiments/2026-09-04-vg-name-coverage/`](../../../docs/experiments/2026-09-04-vg-name-coverage/REPORT.md).
 
 **A class's review rule is part of its definition, so it lives in the config
 too.** A reviewer votes on bare images — the slates name files by image id
@@ -397,6 +430,24 @@ python make_class_slate.py --supply-only                         # what a build 
 python make_class_slate.py --out .../slates                      # the review material
 python import_slates.py --slates .../slates                      # datasets + empty detectors
 ```
+
+## Auditing a class's VG names (#3618)
+
+Four scripts, in the order they answer questions. The first two search, the
+third decides, the fourth prices what it decided.
+
+```bash
+python coco_folds.py --min-count 1 --out folds.json               # names on the class's COCO boxes
+python vg_name_families.py --min-images 3 --out families.json     # names sharing its head noun
+python name_evidence.py --candidates cands.json \
+    --propose-out proposal.json --out evidence.json               # precision, box, verdict
+python name_coverage.py --propose proposal.json --out cov.json    # repaired, withheld, band ledger
+```
+
+Run `name_coverage.py` with no `--propose` to score the tables that are actually
+shipped, which is what says whether `pile_config` still does what its comment
+claims. Every cut is a flag (`--min-precision`, `--min-box`, `--min-sole`), so a
+different appetite for withheld negatives is a re-run, not a re-argument.
 
 **`coco_folds.py` is the one that is easy to skip and should not be.** It asks,
 over the ~51k images that are both VG and COCO, which VG names land on a COCO
