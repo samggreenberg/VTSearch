@@ -363,6 +363,12 @@ That rule then travels in `pile_config.SCALE_CLASS_RULES`, whose value is the
 **dataset and detector name** — the only string the app shows while voting. A
 rule in a manifest is a rule the reviewer never reads.
 
+A candidate's measured spellings go in `SCALE_CANDIDATE_VG_NAMES`, not in the
+`SCALE_VG_NAMES` table above: that one widens the `vg_scale` **read** and is
+folded on every build, so an entry there for a class outside *C* would change the
+built dataset before anything has been decided. A candidate promoted into *C*
+moves its row across.
+
 `make_class_slate.py` differs from `make_audit_slate.py` in what it can assume:
 the audit slate reads a class the pickle already holds, while a candidate has
 neither banded positives nor a checked negative pool. Positives come from the VG

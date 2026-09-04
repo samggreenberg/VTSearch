@@ -665,7 +665,7 @@ SCALE_CANDIDATES_3588: tuple[str, ...] = (
     "fire hydrant",
 )
 
-#: VG names that denote one of the candidates. VG's vocabulary is free text and
+#: VG names that denote one of the CANDIDATES. VG's vocabulary is free text and
 #: :func:`pilebuild.vgsource.vg_boxes_by_name` matches the PRIMARY name only, so
 #: a class built from one spelling silently drops the others.
 #:
@@ -675,7 +675,18 @@ SCALE_CANDIDATES_3588: tuple[str, ...] = (
 #: overlap -- taking `fire hydrant` alone would throw away a third of the class.
 #: `phone` is listed for `cell phone` on the same evidence (541 boxes) **and is
 #: the single riskiest entry here**: see `SCALE_CLASS_RULES`.
-SCALE_VG_NAMES: dict[str, tuple[str, ...]] = {
+#:
+#: **Deliberately not :data:`SCALE_VG_NAMES`**, which is the same measurement for
+#: a class already in *C*. The two cannot share a table because they are read at
+#: different times by different code: `SCALE_VG_NAMES` widens the ``vg_scale``
+#: READ and is folded by :func:`pilebuild.loaders.vg_scale.canonicalise` on every
+#: build, so an entry there for a class outside *C* would change the built
+#: dataset -- and nothing here has been decided yet (#3604). This table is read
+#: only by `make_class_slate.py`, which bands a candidate without touching the
+#: pickle. A candidate promoted into *C* moves its row across, minus the class
+#: name itself: the entries here list the class name too, because the slate
+#: builder has no separate class-name read to add it to.
+SCALE_CANDIDATE_VG_NAMES: dict[str, tuple[str, ...]] = {
     "fire hydrant": ("fire hydrant", "hydrant"),
     "cell phone": ("cell phone", "phone", "cellphone"),
 }

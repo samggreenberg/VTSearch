@@ -13,7 +13,8 @@ not a second implementation: the scatter filter, the band edges and the
 class that looks well-supplied here is well-supplied there. Boxes are anchored
 to COCO first, and every box is normalised by the dimensions of the image its
 coordinates were measured on -- VG ships downscaled copies of the COCO
-originals, and mixing the two spaces is #3281.
+originals, and mixing the two spaces is #3281. The alternate-spelling fold is
+the loader's ``canonicalise`` for the same reason (#3605).
 
 **Negatives come from the built pickle.** The shared pool is the same 4,200
 images for every cell, which is what makes classes comparable, and they are
@@ -53,26 +54,17 @@ import pile_config as pc
 pc.setup_env()
 
 from make_positive_slate import draw_with_inset  # noqa: E402
-from pilebuild.loaders.vg_scale import anchor_to_coco, band_candidates, read_vg_labels  # noqa: E402
+from pilebuild.loaders.vg_scale import (  # noqa: E402
+    anchor_to_coco,
+    band_candidates,
+    canonicalise,
+    read_vg_labels,
+)
 from pilebuild.vgsource import vg_source  # noqa: E402
 
 
 def log(msg: str) -> None:
     print(f"[cslate] {msg}", flush=True)
-
-
-def canonicalise(labels: dict[int, dict[str, list[list[float]]]], vg_names: dict[str, tuple[str, ...]]) -> None:
-    """Fold each class's VG spellings onto the class name, in place.
-
-    ``vg_boxes_by_name`` matches VG's PRIMARY name only, so `hydrant` and
-    `fire hydrant` arrive as two categories of one object. Merging after the
-    read (rather than aliasing during it) keeps the merge visible and reversible
-    -- and keeps it out of the shared reader every other build uses.
-    """
-    reverse = {n: cls for cls, names in vg_names.items() for n in names}
-    for by_name in labels.values():
-        for vg_name in [n for n in by_name if n in reverse and reverse[n] != n]:
-            by_name.setdefault(reverse[vg_name], []).extend(by_name.pop(vg_name))
 
 
 def main() -> int:
@@ -102,12 +94,15 @@ def main() -> int:
     log(f"{len(classes)} candidate classes: {', '.join(classes)}")
 
     # ---- positives, from the VG source through the loader's own passes -----
-    vg_names = {c: pc.SCALE_VG_NAMES.get(c, (c,)) for c in classes}
+    vg_names = {c: pc.SCALE_CANDIDATE_VG_NAMES.get(c, (c,)) for c in classes}
     wanted_vg = {n for names in vg_names.values() for n in names}
     log(f"reading VG source for {len(wanted_vg)} names")
     paths, records, dims = vg_source()
     labels = read_vg_labels(records, paths, dims, wanted_vg)
-    canonicalise(labels, {c: vg_names[c] for c in classes})
+    folded = canonicalise(labels, {c: vg_names[c] for c in classes})
+    for c, n in sorted(folded.items()):
+        if vg_names[c] != (c,):
+            log(f"folded {n} boxes onto {c!r} from {[n_ for n_ in vg_names[c] if n_ != c]}")
 
     anchor = Path(pc.PILE / "coco_anchor")
     image_data, instances = ensure_sources(anchor, False)
