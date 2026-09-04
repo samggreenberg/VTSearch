@@ -697,6 +697,89 @@ def _withheld_by_specificity(spec, cells: _CellSamples) -> dict[str, int]:
     return dict(out)
 
 
+#: A task whose whole run is shorter than this, at the sizes the sweep visited,
+#: cannot be usefully paced. The bar is then decided by the ranking of a handful
+#: of tiny numbers, and an absolute error far too small to fit reorders them —
+#: which is the state #3596 measured on ``text_sort``: three steps totalling
+#: 0.9 s, all three profiles ranking them differently, and every arm sitting at
+#: 0.80-0.85 bar error while its *step* error stayed near 0.2.
+#:
+#: One second is where a bar stops being a bar: below it the job is a flash, and
+#: whatever slice each step drew never rendered at a size anybody read. It is a
+#: reporting threshold only — nothing branches on it — so it is deliberately a
+#: round number rather than a measured one.
+_UNPACEABLE_TOTAL_SECONDS = 1.0
+
+
+def _typical_seconds(samples: list[dict]) -> float:
+    """Median seconds this step took, over the population a fit would price.
+
+    Warm runs when there are any, mirroring :func:`fit_step`'s holdout, because
+    the warm population is what a served process spends nearly all of its runs
+    in. Raw: the deferred floor is reported separately, since conflating "this
+    step measured zero" with "the profile stores 0.5 for it" is the confusion
+    these lines exist to undo.
+    """
+    warm = [s["seconds"] for s in samples if not s.get("cold")]
+    seconds = warm or [s["seconds"] for s in samples]
+    return statistics.median(seconds) if seconds else 0.0
+
+
+def _pace_lines(spec, samples_by_step: dict[str, list[dict]]) -> list[str]:
+    """Say when a task's own measurements cannot pace its bar.
+
+    Two things a sample count actively misreports, both measured on
+    ``text_sort`` in #3521's sweep, where 288 step-samples read as the
+    best-covered task in the report:
+
+    **The whole task is too short.** Its three steps total 0.9 s warm, so the
+    bar is settled by which of three sub-second numbers comes out largest, and
+    the fitted profiles disagreed with each other about that ordering while
+    predicting each step to within ~20 %. Coefficients cannot fix an ordering
+    that noise decides; the line says so rather than letting a full sample count
+    imply the opposite.
+
+    **A step measured free is not priced free.** When the warm runs measure a
+    step at exactly zero and a cold run measured it as real,
+    :func:`_deferred_cost_floor` keeps a floor for it — right for a step that
+    might yet be paid, and on a short task it is most of the predicted total,
+    so it redistributes the bar for every warm run. Naming the floor beside the
+    measurement is what makes that visible; a task whose caller can tell the
+    two branches apart should pass the step to
+    :func:`vtscore.timing.step_weights` as skipped instead (``text_sort`` now
+    does).
+    """
+    steps = {step: samples for step, samples in samples_by_step.items() if step in spec.steps}
+    if not steps:
+        return []
+    lines: list[str] = []
+    typical = {step: _typical_seconds(samples) for step, samples in steps.items()}
+    total = sum(typical.values())
+    if 0 < total < _UNPACEABLE_TOTAL_SECONDS:
+        breakdown = ", ".join(f"{step} {typical[step]:.2f}" for step in spec.steps if step in typical)
+        lines.append(
+            f"  {'':<16} TOO SHORT TO PACE: a typical run totals {total:.2f} s at the swept "
+            f"sizes ({breakdown}) — the bar is decided by which of these is largest, which "
+            f"is below the error any fit of them carries"
+        )
+    for step in spec.steps:
+        samples = steps.get(step)
+        if not samples or step in spec.byte_scaled:
+            continue
+        cold = [s for s in samples if s.get("cold")]
+        floor = _deferred_cost_floor(typical[step], cold)
+        if floor <= typical[step]:
+            continue
+        warm_zero = sum(1 for s in samples if not s.get("cold") and s["seconds"] <= 0)
+        share = floor / (total - typical[step] + floor) if total - typical[step] + floor > 0 else 1.0
+        lines.append(
+            f"  {'':<16} {step}: measured 0.00 s on {warm_zero} of {len(samples)} runs and real on "
+            f"{len(cold)} — deferred, so it is priced at the {floor:.2f} s floor, {share:.0%} of "
+            f"the predicted total; a caller that knows the step will be skipped should say so"
+        )
+    return lines
+
+
 def _branch_lines(spec, samples_by_step: dict[str, list[dict]]) -> list[str]:
     """Name every step whose runs only ever took a cached path.
 
@@ -757,6 +840,12 @@ def coverage_report(rows: Iterable[dict], profile: dict[str, Any]) -> list[str]:
     one wearing a full sample count, and it is the state that made #3345's sweep
     price a minutes-long atlas rebuild at 2 % of the bar. :func:`_branch_lines`
     names those explicitly (#3521).
+
+    A fourth is whether the task is long enough for *any* coefficients to pace.
+    ``text_sort``'s 288 step-samples are the largest count in #3521's report and
+    describe a 0.9 s job whose bar every arm of that study got 0.80-0.85 wrong;
+    :func:`_pace_lines` says that outright, along with the deferred floor that
+    causes most of it (#3596).
     """
     rows = list(rows)
     normalized = [n for n in (normalize_row(r) for r in rows) if n is not None]
@@ -774,6 +863,7 @@ def coverage_report(rows: Iterable[dict], profile: dict[str, Any]) -> list[str]:
             lines.append(f"  {task:<16} {len(cells)} cells, {samples} step-samples")
             lines.extend(_specificity_lines(TASKS[task], cells, by_cell.get(task, {})))
             lines.extend(_branch_lines(TASKS[task], by_step.get(task, {})))
+            lines.extend(_pace_lines(TASKS[task], by_step.get(task, {})))
         elif task in seen_tasks:
             branch_lines = _branch_lines(TASKS[task], by_step.get(task, {}))
             if branch_lines:
