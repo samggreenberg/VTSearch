@@ -36,12 +36,36 @@ entirely intact. A new dataset kind therefore adds one module carrying both, and
 a kind with no module fails at dispatch instead of falling through to the demo
 loader. `tests_lib/meta/test_pile_loaders.py` pins that.
 
-The `vg_scale` build is six named passes rather than one long function, because
+The `vg_scale` build is eight named passes rather than one long function, because
 two of them are where this pile's expensive bugs have lived — `apply_corrections`
 (the single normalised→pixel crossing, #3281) and `designate_cells` (whether a
 rebuild keeps the images a human reviewed). Both are ordinary functions taking
 what they read and returning what they produce, so
 `tests_lib/meta/test_pile_vg_scale.py` exercises them without the VG source.
+
+**VG's vocabulary is free text, and the read matches an object's primary name
+only** — so a class is built from one spelling out of several, and on the ~52% of
+VG that COCO does not annotate the others become *negatives* for their own class,
+because there VG's silence is the only evidence of absence. `bicycle` shipped
+that way: the VG name `bike` carries 638 of COCO's 3,683 `bicycle` boxes against
+the `bicycle` spelling's 775 (#3605). Two config tables decide what happens to a
+spelling, and both are measured rather than drafted (`scan_name_overlap.py`,
+`coco_folds.py` — string similarity is not evidence about objects, which is how
+`bus` once matched 80 images annotated `bush`):
+
+| table | meaning | effect (`vg_scale.py`) |
+|---|---|---|
+| `SCALE_VG_NAMES` | measured alias — same object, other spelling | `canonicalise` folds the boxes onto the class name |
+| `SCALE_VG_AMBIGUOUS` | may be the class, may be something else | `lift_ambiguous` withholds the image from the class's bands **and** from the shared negative pool |
+
+Suppression applies only where the spelling is the last word: an image COCO
+annotates, or one a reviewer has ruled on, already answers the question. That is
+why `lift_ambiguous` runs after `anchor_to_coco` and `apply_corrections`.
+
+`SCALE_VG_NAMES_AUDITED` records which classes have actually had this measured,
+because "no spelling is listed" and "no spelling exists" are the same empty
+table. A build names the classes that have not, since a rebuild is the moment
+the fix is cheap.
 
 ## Why this exists
 

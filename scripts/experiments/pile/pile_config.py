@@ -315,6 +315,77 @@ SCALE_CLASSES: tuple[str, ...] = (
     "stop sign",
 )
 
+#: VG spellings that ARE a class in *C*, beyond the class name itself.
+#:
+#: VG's vocabulary is free text and :func:`pilebuild.vgsource.vg_boxes_by_name`
+#: matches an object's PRIMARY name only, so a class built from one spelling
+#: silently drops every other. That is not merely a supply loss: on the ~52% of
+#: VG that COCO does not annotate, VG's silence is the only evidence of absence,
+#: so an instance annotated under an unlisted spelling becomes a **negative** for
+#: its own class (#3605).
+#:
+#: Only merges MEASURED as aliases belong here -- two names on the same pixels,
+#: both ways, at high IoU (``scan_name_overlap.py``). A name that merely looks
+#: related goes in :data:`SCALE_VG_AMBIGUOUS` or nowhere: `bus`/`bush` matched 80
+#: images by string containment and is the reason this table is measured rather
+#: than drafted.
+#:
+#: Empty for the current twelve. `bicycle`, the one class of the twelve whose
+#: names have been measured, has an alternate spelling that is NOT an alias --
+#: see :data:`SCALE_VG_AMBIGUOUS`.
+SCALE_VG_NAMES: dict[str, tuple[str, ...]] = {}
+
+#: VG spellings that MAY denote a class in *C* but also denote something else.
+#:
+#: `bike` is the case that named this table. Over the 51,411-image VG-COCO
+#: overlap it carries **638 of COCO's 3,683 `bicycle` boxes** against the
+#: `bicycle` spelling's 775 -- so `bicycle` built from one spelling is missing
+#: roughly half its positives on the non-COCO half. It cannot simply be merged:
+#: `bike` is a measured alias of `motorcycle` too (box IoU 0.38 over 388
+#: co-images), and fold-out puts only 40.1% of `bike` boxes on a COCO `bicycle`
+#: while 59.6% land on no COCO class at all (``coco_folds.py``, #3606).
+#:
+#: So a box under one of these names is treated as **evidence of neither
+#: presence nor absence**: it is not a positive (we cannot say the object is
+#: there) and it bars the image from the shared negative pool (we cannot say it
+#: is not). That is the ``excluded`` third state the construction already has --
+#: see :func:`pilebuild.loaders.vg_scale.lift_ambiguous`. It removes the
+#: contaminated negatives; recovering the missing positives needs a human pass.
+#:
+#: Suppression applies only where it is the sole evidence. On an image COCO
+#: annotates, or one a reviewer has ruled on, the answer is already known and
+#: the ambiguous spelling is ignored.
+SCALE_VG_AMBIGUOUS: dict[str, tuple[str, ...]] = {
+    "bicycle": ("bike",),
+}
+
+#: Classes in *C* whose VG-name coverage has actually been measured.
+#:
+#: Written down because "no alternate spelling is listed" and "no alternate
+#: spelling exists" are the same empty table, and the first is what shipped:
+#: `bicycle` was built from one spelling for the whole of #3156 with every
+#: structural check passing. A class is added here once ``coco_folds.py`` has
+#: been run against it and its fold-in column read.
+#:
+#: :func:`pilebuild.loaders.vg_scale.load` names the unaudited classes on every
+#: build, because the rebuild is when this stops being cheap to fix (#3605).
+SCALE_VG_NAMES_AUDITED: frozenset[str] = frozenset({"bicycle"})
+
+
+def scale_vg_wanted() -> set[str]:
+    """Every VG name the ``vg_scale`` read must match, spellings included.
+
+    The class names themselves plus both name tables. Read with this rather than
+    ``set(SCALE_CLASSES)``: a spelling absent from the read is invisible later,
+    since an image holding it then looks like an image holding nothing.
+    """
+    wanted = set(SCALE_CLASSES)
+    for table in (SCALE_VG_NAMES, SCALE_VG_AMBIGUOUS):
+        for names in table.values():
+            wanted.update(names)
+    return wanted
+
+
 #: Images per ``(class, band)`` cell, and the shared negative pool every cell
 #: draws from. The pool is the whole of VG, labelled by VG and repaired from
 #: COCO where an exhaustive reference exists, so the binding supply is the union
