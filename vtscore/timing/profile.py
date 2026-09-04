@@ -55,6 +55,7 @@ import logging
 import math
 import os
 import threading
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -478,6 +479,7 @@ def step_terms(
     embedder: str = "",
     n: float = 0.0,
     size_mb: float = 0.0,
+    skip_steps: Iterable[str] = (),
 ) -> Optional[dict[str, float]]:
     """Predicted seconds per step for *task*, keyed by step name.
 
@@ -490,6 +492,12 @@ def step_terms(
     ``n`` is the task's scale variable (see :attr:`TaskSpec.scale`); ``size_mb``
     is the archive size for byte-scaled phases. Both may be zero, which simply
     collapses their terms.
+
+    *skip_steps* names steps **this invocation will not enter at all**, and
+    prices them at zero regardless of what the profile or the defaults say. It
+    is not a cost model and needs no measurement: a step that does not run
+    costs nothing, and that is knowable in advance where a step's cost is not.
+    See :func:`step_weights` for why a task reaches for it.
     """
     spec = task_spec(task)
     if spec is None:
@@ -498,8 +506,12 @@ def step_terms(
     defaults = dict(zip(spec.steps, spec.default_terms)) if spec.default_terms else {}
     if not measured and not defaults:
         return None
+    skipped = frozenset(skip_steps)
     terms: dict[str, float] = {}
     for step in spec.steps:
+        if step in skipped:
+            terms[step] = 0.0
+            continue
         coeffs = measured.get(step)
         terms[step] = coeffs.seconds(n, size_mb) if coeffs is not None else max(0.0, defaults.get(step, 0.0))
     if sum(terms.values()) <= 0:
@@ -517,6 +529,7 @@ def step_weights(
     embedder: str = "",
     n: float = 0.0,
     size_mb: float = 0.0,
+    skip_steps: Iterable[str] = (),
     fallback: Optional[list[float]] = None,
 ) -> Optional[list[float]]:
     """Normalized per-tracker-step weights for *task*, or *fallback*.
@@ -526,9 +539,35 @@ def step_weights(
     :meth:`~vtscore.concurrency.progress.ProgressTracker.set_step_weights`.
     Phases that share a tracker step have their predicted seconds summed into
     that step's slot.
+
+    **Steps this run will skip.** A cost model answers "how long does this step
+    take"; it cannot answer "does this step happen at all", and for a step that
+    forks on process state the second question decides the bar. A text sort's
+    ``load_model`` is seconds on the first sort of a process and *exactly zero*
+    on every later one, so no single coefficient paces both: fitted from the
+    warm runs it is free (and gets floored back up, see
+    :data:`vtscore.timing.fit._ONCE_PER_PROCESS_FLOOR_S`), fitted from the cold
+    one it eats a bar that will not move. #3596 measured every arm of #3521's
+    study — two fitted profiles and the shipped defaults alike — at 0.80–0.85
+    bar error on ``text_sort`` for exactly this reason.
+
+    The caller usually *knows*: the sort route can ask whether the encoder is
+    already resident before it starts. Naming the step in *skip_steps* prices it
+    at zero for this run, which needs no measurement and no branch axis in the
+    profile format — a step that does not run costs nothing. Steps whose cost
+    merely *varies* by branch are a different problem and are not this
+    parameter's job (#3594).
     """
     spec = task_spec(task)
-    terms = step_terms(task, device=device, media_type=media_type, embedder=embedder, n=n, size_mb=size_mb)
+    terms = step_terms(
+        task,
+        device=device,
+        media_type=media_type,
+        embedder=embedder,
+        n=n,
+        size_mb=size_mb,
+        skip_steps=skip_steps,
+    )
     if spec is None or terms is None:
         return fallback
     weights = [0.0] * spec.tracker_steps

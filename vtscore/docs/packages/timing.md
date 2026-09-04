@@ -130,10 +130,40 @@ The vector has one entry per tracker step and sums to 1, ready for
 `set_step_weights`. Pass a `fallback` - `step_weights` returns it when
 the task is unknown or nothing resolves.
 
+### Steps this run will skip
+
+A cost model answers "how long does this step take". It cannot answer
+"does this step happen at all", and where a step forks on process state
+the second question is the one that decides the bar. A text sort's
+`load_model` is seconds on a process's first sort and **exactly zero**
+on every later one, so no single coefficient paces both branches: fitted
+from the warm runs the step is free (and gets floored back up, below),
+fitted from the cold one it eats a bar that will not move. #3596
+measured every arm of #3521's study - two fitted profiles and the
+shipped defaults alike - at 0.80-0.85 bar error on `text_sort` for
+exactly this reason, while their *step* error stayed near 0.2.
+
+The caller usually knows which branch it is on before it starts. Name
+the steps that will not run and they are priced at zero for this run:
+
+```python
+weights = step_weights(
+    "text_sort",
+    media_type="image", embedder="siglip", n=len(medias),
+    skip_steps=() if encoder_is_cold else ("load_model",),
+)
+```
+
+This needs no measurement and no branch axis in the profile format - a
+step that does not run costs nothing, and that is knowable in advance
+where a step's *cost* is not. Steps whose cost merely varies by branch
+(a coverage atlas restored versus rebuilt) are a different problem and
+are not what this parameter is for.
+
 | Function | Description |
 |----------|-------------|
-| `step_weights(task, *, device, media_type, embedder, n, size_mb, fallback)` | Normalised per-tracker-step weights, or *fallback* |
-| `step_terms(...)` | The same prediction before normalisation - raw predicted seconds per phase |
+| `step_weights(task, *, device, media_type, embedder, n, size_mb, skip_steps, fallback)` | Normalised per-tracker-step weights, or *fallback* |
+| `step_terms(...)` | The same prediction before normalisation - raw predicted seconds per phase (takes `skip_steps` too) |
 | `slot_shares(task, step, ...)` | Measured sub-stage shares *within* one step, for steps that pace several ordered sub-stages behind one number (today only the dataset load's `finalize`). Raw weights; the consumer normalises |
 | `profile_covers(task)` | Whether the active profile has any measured cell for *task*. Public API with no in-repo caller - for out-of-tree callers that want to branch on coverage before asking for weights |
 | `active_profile()` / `reload_profile(path=None)` | The parsed profile; re-read it |
@@ -251,7 +281,11 @@ The fit is deliberately plain. Per `(task, cell, step)`:
   sweep's first run is always the cold one. When the warm runs then
   measure a step as *exactly* free while a cold one measured it as real,
   the step is not free here but deferred, and it keeps a small floor
-  rather than 0 so the bar still shows a slice for it.
+  rather than 0 so the bar still shows a slice for it. The floor is a
+  guard against a confident zero, not a cost model, and on a short task
+  it is most of the predicted total - which is why a caller that can
+  tell the branches apart should pass the step as
+  [skipped](#steps-this-run-will-skip) rather than lean on it.
 - A fit with no spread in `n`, or one that comes back with a **negative**
   slope (noise beating signal on a short step), collapses to the median
   seconds with no slope. A confidently wrong slope extrapolates badly at
@@ -325,3 +359,22 @@ and is kept; a rollup with one group behind it is a rename of the cell it
 backs up and is never suppressed. The withheld count is printed in the
 coverage report, because a step the profile does *not* contain is invisible
 to anything that reads the profile.
+
+### When the task is too short to pace at all
+
+A sample count is also silent about whether there is anything to pace. The
+coverage report says it directly:
+
+```
+  text_sort        3 cells, 288 step-samples
+                   TOO SHORT TO PACE: a typical run totals 0.90 s at the swept sizes (load_model 0.00, embed_query 0.05, score 0.85) — the bar is decided by which of these is largest, which is below the error any fit of them carries
+                   load_model: measured 0.00 s on 47 of 48 runs and real on 1 — deferred, so it is priced at the 0.50 s floor, 36% of the predicted total; a caller that knows the step will be skipped should say so
+```
+
+Those 288 step-samples were the largest count in #3521's report and describe
+a job whose bar every arm of that study got 0.80-0.85 wrong. The first line
+is why coefficients cannot fix it: when the whole run is under a second, the
+ranking of three tiny numbers decides the bar and an absolute error far too
+small to fit reorders them. The second names the mechanism behind most of it
+and the remedy - the deferred floor, and the
+[skip](#steps-this-run-will-skip) that makes it moot on the warm branch.

@@ -17,6 +17,21 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **The text-sort progress bar no longer reserves most of itself for a model
+  load that has already happened.** `text_sort` paces three steps -- load the
+  embedder, embed the query, score every media -- and the first one is either
+  seconds (the first sort a server process runs) or *exactly zero* (every sort
+  after it, since the encoder stays resident). One static weight vector cannot
+  serve both, and every vector the app has ever shipped or measured was the
+  cold one: [#3521](docs/experiments/2026-09-03-drive-cold-3521/REPORT.md)
+  scored both fitted timing profiles and the shipped defaults at 0.80-0.85
+  *bar error* on this task -- the fraction of the bar budgeted to the wrong
+  step -- while their per-step predictions were off by only ~20 %. So the most
+  frequently run bar in the app spent three quarters of itself parked on a step
+  that was already over. The sort route now asks whether the encoder is
+  resident (it is a lookup, not a guess) and drops the load step out of the
+  pacing when it is, which is the overwhelmingly common case.
+
 - **CLI autodetect no longer drops media the GUI keeps, and its detector
   threshold no longer moves as a result.** The CLI forced *thin* loading on
   every import -- storing a path reference in place of each media's bytes --
