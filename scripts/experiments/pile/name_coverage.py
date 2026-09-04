@@ -98,7 +98,7 @@ def main() -> int:
             wanted.update(ns)
     log(f"{len(classes)} classes; {len(wanted)} VG names to match")
 
-    cboxes, cdims, _ = cf.coco_boxes(Path(args.anchor_dir), set(classes))
+    cboxes, cdims, _ = cf.coco_boxes(Path(args.anchor_dir))
 
     log("loading VG image_data.json")
     with (Path(args.anchor_dir) / "image_data.json").open() as fh:
@@ -195,7 +195,13 @@ def main() -> int:
         if abs((vd[0] / vd[1]) - (cd[0] / cd[1])) > pc.MAX_ASPECT_DRIFT:
             skipped_aspect += 1
             continue
-        for c, boxes in cboxes.get(cid, {}).items():
+        # `coco_boxes` carries the whole COCO vocabulary (#3640); only the
+        # classes under proposal are scored, and the counters are keyed on them.
+        on_image = cboxes.get(cid, {})
+        for c in classes:
+            boxes = on_image.get(c, [])
+            if not boxes:
+                continue
             own = by_name.get(c, [])
             folded = [b for n in alias.get(c, ()) for b in by_name.get(n, [])]
             amb = [b for n in ambig.get(c, ()) for b in by_name.get(n, [])]
