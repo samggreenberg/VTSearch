@@ -19,6 +19,8 @@ makes mid-``run()``.
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 from vtscore.concurrency.progress import ProgressTracker
 from vtscore.datasets.load_pipeline import _TOTAL_STAGE_STEPS, _make_staging_progress
 
@@ -41,7 +43,9 @@ def _make(held: str | None = "download"):
     tracker = ProgressTracker(extra_fields=dict(_STAGE_EXTRAS))
     tracker.update("loading", "Preparing dataset…", 0, 0, step=1, total_steps=_TOTAL_STAGE_STEPS)
     controller = _StubController(held)
-    return tracker, controller, _make_staging_progress(controller, tracker)
+    # ``_make_staging_progress`` is annotated for the real controller; the stub
+    # is the two members it touches.
+    return tracker, controller, _make_staging_progress(cast(Any, controller), tracker)
 
 
 def _step(tracker) -> int:
