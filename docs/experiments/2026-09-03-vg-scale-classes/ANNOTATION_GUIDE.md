@@ -8,6 +8,31 @@ reviewer meets one. Run against `book` it prints `magazine` (79 boxes) and
 `magazines` (30) — so this is the check that would have caught the split that
 cost us the `book` pass.
 
+## What we are optimising
+
+**The goal is the best final dataset, not fidelity to COCO.** Merging, splitting,
+renaming and redefining are all allowed. We build on COCO because starting from
+200k annotated images is easier than starting from nothing, not because its
+taxonomy is right — it has no `plate` class, files magazines under `book`, puts
+bicycle pictograms in `bicycle`, and splits vans between `truck` and `car`.
+Where a different boundary makes a more coherent class, take it.
+
+So *"judge by COCO's reading"*, below, is a **default with a reason**, not the
+objective. The reason is the scored subset: a fifth of every slate carries a COCO
+answer, and that is the only thing turning a reviewer's residual error into a
+number instead of a hope. What matters is not agreeing with COCO but staying
+**expressible** against it. Three cases, and they cost very differently:
+
+| kind of change | example | what happens to the reference |
+|---|---|---|
+| **Union** of COCO classes | `cup` ∪ `wine glass` | Derivable — "COCO annotated a cup or a wine glass here". Calibration intact. **Free.** |
+| **Narrowing** inside one | a judge's bench is not a `bench` | COCO is a superset, so disagreement is visible and priced. Calibration works, and shows a known rate. **Cheap, if recorded.** |
+| **Extending beyond** COCO | a jerry can is a `bottle` | No reference for the new part; those images sit in the shared negative pool and the calibration cannot see them. **Expensive — and the only one that can silently corrupt the pool.** |
+
+Every ruling in this guide is one of those three, and each carries its cost in
+the text. That is the discipline the goal requires: not "does COCO agree" but
+"if it does not, do we know what that costs us".
+
 ## The protocol, once
 
 - **Good = the object is present.** Drag a box on it. **Bad = not present.**
@@ -17,7 +42,8 @@ cost us the `book` pass.
   the small band from being deleted by the review protocol rather than by the
   data (the reviewer rejected 43% of small-band positives in #3156, a clean
   function of object size, i.e. a property of the protocol).
-- **Judge by COCO's reading, not by narrow English.** About a fifth of what you
+- **Judge by COCO's reading, not by narrow English** — *unless a ruling above
+  says otherwise, and several do.* About a fifth of what you
   see has a known answer — COCO annotated those images exhaustively over exactly
   these classes — and they are indistinguishable from the rest at voting time
   (every file is named by image id alone). They correct nothing; they score the
@@ -42,6 +68,16 @@ cost us the `book` pass.
   the first four classes, 13 boxed positives were redrawn and **6 changed
   band** (#3616). If the boxed object is not a member, the answer is Bad —
   remembering that Bad on a boxed positive reads as *not confirmed*.
+- **Even when the box is plainly wrong and a real one is elsewhere, the answer
+  is still Bad.** This is the case the rule above did not spell out. Image
+  2334634 arrives as a `cup@large` positive with its box on a *windowpane*, and
+  the photo does contain two real drinking glasses lower down. Re-boxing one of
+  them keeps a positive, but it moves the image from `large` to `medium`: the
+  `large` cell stays short — correctly, because its supply was overstated by an
+  annotation error — while `medium` gains an image nothing sampled it for. **A
+  wrong box is a finding about the band, not an inconvenience to route around.**
+  Reject it, and the real glass is simply not recruited from this stratum; the
+  cost is one positive, against a band structure that stays honest.
 - **Vote on the object, not a depiction of it.** A car on a billboard, cutlery
   printed on a menu, a bottle in a logo — all Bad, for every class here. So is
   a *pictogram*: the bicycle on a BIKE ROUTE sign is a sign, not a bicycle. Note
@@ -54,6 +90,13 @@ cost us the `book` pass.
   the object is physically in the scene, and the reflection is how you can tell.
   Good. The line is whether the thing itself is there, not whether you are
   looking straight at it.
+- **Containing a thing does not make it a container *for* that thing.** A
+  5-gallon bucket of apples is not a food container; nor is a shopping cart, a
+  grocery store, or a car boot with the shopping in it. Each holds food and none
+  was made to. The vessel has to be *for* the contents — which is the same
+  intent-of-manufacture test as the one above, pointed at contents instead of at
+  ownership, and it is what keeps "judge the vessel, not the food" from
+  swallowing the whole scene.
 - **Obvious toys and models are Bad.** A toddler's plastic Cinderella phone is
   not a cell phone; a die-cast car is not a car. The reason is not English but
   consistency: the shared negative pool was drawn as *images COCO says hold none
@@ -135,6 +178,21 @@ sticking out of food all count. `fork` is one of the two cleanest classes here
 (13.3% unmatched, at the mechanical floor), so a genuinely hard call is rare
 and usually means the object is a spoon or a knife.
 
+**A held fork is often gripped to stab; a spoon never is.** When only the handle
+shows and the food gives nothing away, the grip does: a fist closed over the
+handle with the business end pointing down and away is a fork. This is the
+second rule here that reads the surroundings rather than the object — see the
+handle-in-the-food rule under `spoon` — and it arrived after `spoon` was
+reviewed, so it applies from `fork` onward rather than retroactively.
+
+**The literal error to expect: image 2322780 is a steam locomotive, and its
+cow-catcher is a boxed `fork` positive.** COCO annotated the slatted triangular
+pilot at the front of the engine as cutlery — tine-like, at a glance, and
+somebody clicked it. It is worth knowing this is in the slate, because it is a
+`fork@medium` box, which puts it *above* the small-band guard: rejecting it
+actually removes it, unlike the `bicycle@small` pictograms that needed #3614.
+The `positive_boxed` stratum exists exactly to catch this.
+
 ### `spoon incl plastic not spatulas`
 
 Teaspoons, tablespoons, soup spoons, wooden spoons, plastic and disposable
@@ -147,7 +205,52 @@ As with `fork`, the common trap is a generic box — 73 `utensil` and 34
 spoon standing in a cup, bowl or jar counts if any part of it is visible; a
 spoon-shaped handle on something that is not a spoon does not.
 
+**When only the handle shows, read the food.** A utensil buried in a dish with
+its business end out of sight is the common case here, and it has a good answer:
+what it is in tells you what it is. A handle out of cereal is a spoon; a handle
+out of a salad is a fork, so Bad.
+
+This is the one rule in the guide that licenses **inference from the
+surroundings rather than from the object**, and it is worth being explicit that
+it does, because everything else here insists on judging the thing itself. The
+justification is the alternative: with no skip, an unreadable utensil has to be
+voted Bad, so a blanket "can't see the end, say no" would delete every partly
+buried spoon in the class — the review deciding the data rather than the data
+deciding, which is exactly the failure the small-band guard exists for (#3156's
+43%). Context is weaker evidence than sight, and it beats discarding the image.
+
 ---
+
+## The vessel ladder: an empty vase against an ornamental bowl
+
+Four of these classes are open vessels and the words run out fast — an empty
+large vase and an ornamental bowl are both decorative, both made as themselves,
+and neither is holding anything to judge. **Their boxes separate almost
+completely on one number.** Measured over every non-crowd COCO box:
+
+| class | n | h/w p25 | median | p75 | taller than wide | median area |
+|---|---:|---:|---:|---:|---:|---:|
+| `bottle` | 25,081 | 1.84 | **2.52** | 3.22 | 94% | 0.0036 |
+| `vase` | 6,849 | 1.16 | **1.58** | 2.16 | 84% | 0.0095 |
+| `cup` | 21,458 | 0.95 | **1.26** | 1.61 | 71% | 0.0054 |
+| `bowl` | 14,944 | 0.49 | **0.66** | 0.86 | 13% | 0.0139 |
+
+**A vase is taller than it is wide; a bowl is wider than it is tall.** 84%
+against 13%, and vase's p25 (1.16) sits above bowl's p75 (0.86) — the middle
+halves do not overlap at all. That is the discriminator, and size is not: bowl's
+median box is *larger* than vase's, so "large" does not push a vessel towards
+`vase`.
+
+The ladder is worth carrying whole, because the four classes sit on it in order
+and the near-misses are always neighbours: **bowl 0.66 → cup 1.26 → vase 1.58 →
+bottle 2.52.** Cup and vase are the closest pair, which is why a tall tumbler and
+a squat bud vase are genuinely hard, and why `glass` folds 42 times into vase.
+
+**This does not license shape tests generally.** A neck-and-cap test for `bottle`
+was rejected two sections down precisely because the data refused it — `jar`
+(120) and `jug` (28) fold in without necks. The difference is that this shape
+test *is* the measurement rather than a guess about it. Reach for geometry only
+where it has been checked.
 
 ## Tier C — objects whose surroundings *are* the negative pool
 
@@ -158,10 +261,60 @@ anywhere in this set: 1,136 VG `glass` boxes — 13.8% of every COCO `cup` box o
 the overlap — are COCO cups, more than ten times the size of the `magazine`
 fold-in that broke `book`. Mugs (238 `mug`, 67 `coffee mug`), teacups, paper and
 disposable coffee cups (120 `coffee cup`), plastic cups, tumblers and beer
-glasses or pints all count. **Stemware does not**: COCO has a separate
-`wine glass` class, so anything with a stem and a foot — wine glass, champagne
-flute, martini glass, snifter — is Bad here. Measuring cups and trophy cups
-count. When in doubt, ask: does it hold a drink and lack a stem? Then Good.
+glasses or pints all count, and so do measuring cups (9). **A cup is hand-held
+and a single serving** — that, not shape, is the test, and it is what separates
+this class from `bottle` on the pouring vessels below.
+
+**A drinking glass holding cut flowers is still a cup**, not a vase — `vase` is
+reserved for vessels made as vases, so a borrowed one stays with whatever it was
+made as.
+
+Bad here:
+
+- ~~**Stemware.**~~ **Stemware now COUNTS** — `cup` was merged with COCO's
+  `wine glass` class on 2026-09-04, so a wine glass, champagne flute, martini
+  glass or snifter is Good here. The dataset name says so:
+  `cup incl mugs glasses and stemware`. Everything below is the argument that
+  was made for keeping them apart, kept because it is the measurement, not the
+  decision.
+
+  *Is stemware not a kind of glass?* In English yes, and that is the trap. The
+  class is not "glass": VG's `glass` folds **1,136** boxes into `cup` because
+  most glasses are tumblers, while every stemware word together —
+  `wine glass` 6, `wine` 6, `cocktail` 2, `wine glasses`, `goblet`, `flute`,
+  `champagne` — folds in **18 times in 8,242, 0.22%**. A 63:1 ratio. COCO cuts
+  exactly where this rule cuts, and does it more cleanly than any other boundary
+  measured in this guide.
+
+  **Merging them IS available** — this guide said otherwise for one commit and
+  was wrong. `wine glass` is itself one of COCO's exhaustively annotated 80, so
+  the reference for a merged class is simply *"COCO annotated a cup or a wine
+  glass here"*: well defined, and the scored subset survives untouched. A union
+  of two COCO classes is not the same thing as a class COCO does not have, which
+  is what the toy and fuel-tank arguments turn on.
+
+  What a merge would actually buy and cost, measured: **+8,180 boxes (+38%),
+  +1,469 images, and +35% in the small band** — which is the binding constraint
+  on class supply everywhere in this project (#3603). Against that, 1,469 images
+  holding stemware but no cup would have to leave the shared negative pool at
+  build time, and the class would be the first here that is not a plain COCO
+  class. Deliberately left as a decision rather than a rule, because it is one.
+- **A jar**, however it is being drunk from. A jar is a `bottle` unconditionally
+  (see there), and COCO does put 25 VG `jar` boxes on cups, so this one will
+  come up.
+- **A can** (21 boxes), a **tin**, a **carton**. As in `bottle`, the container
+  is judged, and none of these is a cup.
+- **Anything that serves more than one.** A **pitcher** (30), a **jug**, a
+  carafe, a teapot, a thermos (5), a dispenser (2) — these are `bottle`.
+  Together with the jars, cans and bottles above, the whole not-a-cup family is
+  **146 boxes, 1.8% of COCO cup**, so the narrowing is cheap.
+- **A bucket** (13). Not a cup, and not a `bottle` or a `bowl` either — a bucket
+  is a general-purpose container that was made for nothing in particular. COCO
+  puts buckets on bowls 19 times and cups 13; both are rejected.
+- **A trophy cup.** Named a cup and nothing else about it is one: it serves no
+  drink, so it is not a single serving of anything. Flagged because an earlier
+  draft of this guide counted it, and that claim was never measured — VG uses
+  the word `trophy` on **zero** of COCO's 8,242 cup boxes.
 
 ### `bowl incl plates and food containers not wrappers`
 
@@ -185,7 +338,11 @@ Do not count:
   not — the test is whether it has walls that contain, not what it is made of.
   (`tray`, 19 boxes, splits across this line.)
 - **A cup or mug** — that is `cup`, and it is the single largest thing excluded
-  here (120 boxes), so expect to reject it often.
+  here (120 boxes), so expect to reject it often. **A ramekin is a bowl**, not a
+  cup: it is hand-held and single-serving, but it holds *food*, and the ladder
+  agrees — a ramekin is wider than tall. COCO splits it 5 to bowl and 3 to cup,
+  too thin to settle alone, which is why the drink test and the geometry carry
+  it.
 - **A toilet bowl.** The word is not the object; nothing about it holds food.
 - **A feed trough.** Built for animals, but it is a fixture rather than a
   vessel, and COCO does not fold troughs in.
@@ -193,8 +350,12 @@ Do not count:
 - **A sink basin** (`sink`), an **ashtray**, and a **blender or coffee carafe**.
   None is a systematic fold-in, so excluding them costs almost nothing.
 
-**Open:** a 5-gallon bucket of apples. `bucket` is a real fold-in (19 boxes) and
-a bucket does hold food, but it stretches "vessel" a long way. Unruled.
+**A 5-gallon bucket of apples is not a bowl**, and neither is a shopping cart, a
+grocery store, or a car boot with the shopping in it. Holding food is not the
+test; being made to hold food is. `bucket` is a genuine fold-in — 19 boxes COCO
+called a bowl — so this one is a real disagreement rather than a hypothetical,
+but it is a cheap one, and the alternative has no floor: each of those four
+holds food, and nothing in "it contains food" stops at the first.
 
 Judge the **vessel, not the food**: an empty plate counts, and a pile of food on
 a bare table does not — which matters because VG names 163 of these boxes `food`
@@ -204,23 +365,145 @@ inside `bowl`.
 
 ### `bottle incl jars`
 
-Water, wine, beer, soda and spirit bottles count; so do **jars** (120 VG `jar`
-boxes are COCO bottles), soap and shampoo dispensers (47 `soap`), spray
-bottles, baby bottles, condiment bottles, and vacuum flasks. Cans, cartons and
-boxes do not. Bottles behind fridge glass or ranked on a bar shelf count.
-Judge the container, not its contents: VG names 124 of these boxes `wine`, 90
-`water` and 87 `beer`, and the box is on a bottle in every case. A stemmed
-glass of wine is not a bottle (it is `wine glass`, and not a class here).
+Water, wine, beer, soda and spirit bottles count; so do **jars — always, and
+whatever is in them** (120 VG `jar` boxes are COCO bottles), soap and shampoo
+dispensers (47 `soap`), jugs (28), shakers (21) — **salt (16) and pepper (11) shakers included** — spray bottles,
+baby bottles, condiment bottles, vacuum flasks, carafes (6 — `bowl` sends them
+here), and **pitchers and jugs**. A pouring vessel that serves more than one person is a
+bottle: `cup` is reserved for what is hand-held and a single serving.
+
+**A jar of cut flowers is still a bottle.** `jar` has no COCO class of its own,
+so COCO's annotators sent it both ways — 120 boxes to `bottle` and 41 to `vase`
+— and a reviewer meeting the same jar in two slates would otherwise record two
+incompatible truths (87 of the 300 bottle images are also in the vase slate).
+The rule is decided on manufacture, not use: a jar is a storage vessel, so it is
+a bottle, and `vase` is reserved for vessels made as vases. This is what "judge
+the container, not its contents" actually buys — it was doing no work while the
+contents could still move a jar into another class. Cans, cartons and boxes do not. Bottles behind fridge glass or ranked
+on a bar shelf count. Judge the container, not its contents: VG names 124 of
+these boxes `wine`, 90 `water` and 87 `beer`, and the box is on a bottle in
+every case. A stemmed glass of wine is not a bottle (it is `wine glass`, and
+not a class here).
+
+The seasoning and condiment shelf belongs here as a whole: shakers, `condiment`
+(17), `ketchup` (17), `mustard` (17), `dispenser` (20), `oil` (9), `spice` (8),
+`salt` (7) and `pepper` (9) all land on COCO bottle boxes — **181 boxes for the
+family, against 42 on cup and 51 on bowl.**
+
+**A squeezable tube is a bottle** — toothpaste, suntan lotion, hand cream,
+shower gel, ointment. It is made for what is in it, nothing owns it, and it is
+not a single serving, so every test in this guide sends it here. Note also that
+*material and rigidity are already rejected as tests*: `bowl` counts a flimsy
+paper boat on the strength of its walls, so a tube cannot be excluded for being
+soft.
+
+**This one is reasoned, not measured, and it is the only bottle rule that is.**
+The toiletries family as a whole is emphatically bottle's — `soap` 47,
+`lotion` 12, `dish soap` 11, `hand soap` 10, `shampoo` 7, `spray bottle` 6,
+`spray` 4, `conditioner` 3, `detergent` 3, **110 boxes, and not one of them on
+`cup`, `bowl` or `vase`**. But the *tube shape specifically* barely appears:
+`tube` 1, `toothpaste tube` 1, `tooth paste tube` 1, `toothpaste` 1,
+`caulking tube` 1, `shower gel` 1. Six boxes cannot tell you whether COCO's
+annotators declined to call a tube a bottle or simply never met one, and the
+fold-in cannot separate those — the same blindness that made the depiction count
+useless (#3614). Treat this as the rule that would be cheapest to reverse.
+
+It is the same shape as the jerry can: pool consistency says Bad, since COCO has
+no tube class and such an image sits in the negative pool, while manufacture
+says Good. That was already settled in favour of manufacture.
+
+**The exception proves the rule about contents.** `sauce` goes the other way —
+38 boxes on `bowl`, 18 on bottle, 16 on cup — because it names what is *in* the
+vessel, not the vessel. A squeeze bottle of sauce is a bottle; a dipping dish of
+it is a `bowl`. That is "judge the container, not its contents" doing visible
+work: the same word, three classes, decided every time by the vessel.
+
+**A fuel tank is not a bottle**, a motorcycle's included, and the reason is not
+its shape. Two hold:
+
+- *An integral component of a larger object is not an instance of a container
+  class.* **A mouth is not a food container; a stomach is not a bottle.** Both
+  hold their contents, and neither is the thing. A fuel tank is part of the
+  machine in exactly that way. This is the general form of the test that keeps
+  a feed trough out of `bench` and a toilet bowl out of `bowl`, and it is the
+  one to reach for first, because it decides without appeal to shape or size.
+- *The pool would contradict itself.* COCO has no fuel-tank class, so an image
+  whose only vessel-like object is a tank is annotated as holding no bottle and
+  sits in the shared negative pool. Voting it Good makes the same content a
+  positive here and a negative there, exactly as with toys.
+
+The measurement agrees, emphatically: across **9,169 COCO bottle boxes and 515
+distinct VG names, `tank`, `fuel tank`, `gas tank`, `propane`, `barrel`, `drum`
+and `keg` appear zero times.** The only near neighbours are `canister` (7) and
+`cylinder` (2), and `soap canister` (1) says what kind those are.
+
+Do **not** reach for a neck-and-cap test instead. `jar` (120), `jug` (28) and
+`dispenser` (20) all fold in and barely have a neck, so shape would throw out
+more than it saves.
+
+**A standalone fuel container is a bottle** — a jerry can, a propane cylinder
+off the barbecue. Nothing owns it, so the component test that excludes a
+motorcycle's tank does not reach it, and what is left is a free-standing vessel
+made to store and pour a liquid. The tank and the can are the two sides of that
+line, and they are the clearest illustration of it in this guide.
+
+Worth knowing what this costs, because it is the first ruling here where the
+component test **beats** pool consistency rather than agreeing with it: COCO has
+no class for a jerry can, so an image holding only one sits in the shared
+negative pool, and a Good vote contradicts it exactly as a toy would. The saving
+grace is frequency — `tank`, `fuel`, `gas`, `propane`, `barrel`, `drum` and
+`keg` appear **zero** times in 9,169 bottle boxes, so you will rarely be asked.
 
 ### `vase incl pots and planters`
 
-Vases, flower pots, planters, urns and decorative jars all count — COCO folds
-them together, with 105 VG `pot`, 19 `planter`, 19 `flower vase` and 18 `urn`
-boxes landing on COCO vase boxes. Vote on the **vessel, not the plant**: a
-potted plant's pot is a vase here, even though COCO separately has a
-`potted plant` class for the greenery above it. A pitcher used as a vase counts
-(18 `pitcher` boxes are COCO vases), and so does a drinking glass holding cut
-flowers. A cooking pot on a stove does not, and neither does a plain bowl.
+**Only a vessel made as one.** Vases, flower pots, planters, urns and pottery
+count — 105 VG `pot`, 19 `planter`, 19 `flower vase` and 18 `urn` boxes land on
+COCO vase boxes. Vote on the **vessel, not the plant**: a potted plant's pot is
+a vase here, even though COCO separately has a `potted plant` class for the
+greenery above it. A cooking pot on a stove does not count, and neither does a
+plain bowl.
+
+**"Vote the vessel, not the plant" does not mean "find whatever holds the
+flowers."** A table with a pile of flowers on it is not a vase. A basket of them
+is not a vase. Neither is the **florist's bucket** holding three dozen
+individually wrapped roses — a bucket is made as a bucket, which is the same
+call `bowl` makes about a bucket of apples (`bucket` lands on vase twice).
+
+**A planter built into the pavement is not a planter.** A freestanding pot,
+planter or urn is a vase; a concrete bed cast into the sidewalk and holding
+trees or bushes is part of the street, and *an integral component of a larger
+object is not an instance of a container class* — the fuel-tank rule from
+`bottle`, arriving here. This narrows the plain word "planters" above, so read
+the two together: **freestanding** planter yes, **built-in** no.
+
+The ladder agrees independently, which is worth noticing because it was measured
+for a different purpose: a sidewalk bed is low and broad, so its box is wider
+than tall and lands in `bowl` territory rather than vase's. Two unrelated tests
+giving one answer is the strongest signal this guide offers. Both hold flowers; neither was made to, which is the
+containing-is-not-being rule from the protocol arriving here. Unlike the
+borrowed-vessel narrowing below, this one costs nothing measured — COCO's
+annotators never do it, putting `table` on 1 vase box and `basket` on 1, out of
+2,328. It is written down not to correct COCO but to stop a reviewer
+over-reading our own rule.
+
+**A borrowed vessel is not a vase**, however it is being used in the picture. A
+jar of cut flowers is a `bottle`; a drinking glass of them is a `cup`. This is
+the ruling that keeps `jar` from meaning two things at once — see `bottle` — and
+it is applied on *intent of manufacture*, the same test that keeps a planter
+wall out of `bench`.
+
+**A pitcher or jug of flowers is a `bottle`.** COCO could not say which class
+either belongs to — `pitcher` lands on `cup` 30 times and `vase` 18, while `jug`
+lands on `bottle` 28 and `cup` 0, two names for nearly one object sent to two
+classes — so the split is made on portion instead: a cup is hand-held and a
+single serving, and a pouring vessel that serves several is a bottle. It costs
+the 30 `pitcher` boxes COCO called a cup and the 18 it called a vase.
+
+**Its price is measured, and it is the largest narrowing in this guide.** COCO's
+annotators do use vase for a borrowed vessel: `glass` 42, `jar` 41, `bottle` 28,
+`container` 20, `pitcher` 18, `bowl` 16, `cup` 11, `jug` 9, and a few more —
+**192 boxes, 8.2% of all COCO vase boxes**, against ~3% for the bench narrowing.
+Expect to reject a vase COCO annotated roughly one time in twelve.
 
 ### `bench not chairs`
 
@@ -285,9 +568,16 @@ and smartphones count, including one held to an ear, lying face-down on a table,
 or in a hand turned away. Landline handsets, desk phones, payphones, wall phones
 and intercoms do **not**. Tablets, cameras, remotes, calculators and music
 players do not either — COCO's own annotators put 39 `camera` and 12 `ipod`
-boxes on cell-phone boxes, and those are their errors. The test: a handheld slab
-with a screen and no cord is Good; anything with a cord or a base station is
-Bad.
+boxes on cell-phone boxes, and those are their errors. The test: **Bad if the
+handset needs the base to work.** A mobile phone resting in a charging dock or
+cradle is still Good.
+
+The first wording was *"anything with a cord or a base station is Bad"*, which
+discriminates on a base being **present** when what it means is that the handset
+is not itself the whole device — and it rejected 2387021, a mobile in a charging
+dock (#3612). `pile_config.SCALE_CLASS_RULES` carried the correction before this
+paragraph did; where the two ever disagree again, the config is the one the
+slate builder reads.
 
 ### `fire hydrant not standpipes`
 

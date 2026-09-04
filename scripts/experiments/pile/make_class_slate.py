@@ -106,7 +106,25 @@ def main() -> int:
 
     anchor = Path(pc.PILE / "coco_anchor")
     image_data, instances = ensure_sources(anchor, False)
-    truth = coco_truth(instances, set(classes))
+    # A merged class needs both halves out of COCO, folded onto the primary
+    # name before anything downstream keys on it -- `anchor_to_coco` and
+    # `band_candidates` both take a flat {image: {class: boxes}}.
+    coco_wanted = {n for c in classes for n in pc.coco_classes_for(c)}
+    truth = coco_truth(instances, coco_wanted)
+    for c in classes:
+        extra = pc.coco_classes_for(c) - {c}
+        if not extra:
+            continue
+        folded_boxes = 0
+        for per_class in truth.values():
+            merged = list(per_class.get(c, []))
+            for other in extra:
+                got = per_class.pop(other, [])
+                merged += got
+                folded_boxes += len(got)
+            if merged or c in per_class:
+                per_class[c] = merged
+        log(f"merged {folded_boxes} COCO boxes from {sorted(extra)} onto {c!r}")
     with image_data.open() as fh:
         meta = json.load(fh)
     coco_of = {int(m["image_id"]): int(m["coco_id"]) for m in meta if m.get("coco_id")}
