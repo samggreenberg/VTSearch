@@ -158,10 +158,22 @@ anywhere in this set: 1,136 VG `glass` boxes — 13.8% of every COCO `cup` box o
 the overlap — are COCO cups, more than ten times the size of the `magazine`
 fold-in that broke `book`. Mugs (238 `mug`, 67 `coffee mug`), teacups, paper and
 disposable coffee cups (120 `coffee cup`), plastic cups, tumblers and beer
-glasses or pints all count. **Stemware does not**: COCO has a separate
-`wine glass` class, so anything with a stem and a foot — wine glass, champagne
-flute, martini glass, snifter — is Bad here. Measuring cups and trophy cups
-count. When in doubt, ask: does it hold a drink and lack a stem? Then Good.
+glasses or pints all count. Measuring cups and trophy cups count. When in doubt,
+ask: does it hold a drink and lack a stem? Then Good.
+
+**A drinking glass holding cut flowers is still a cup**, not a vase — `vase` is
+reserved for vessels made as vases, so a borrowed one stays with whatever it was
+made as.
+
+Bad here:
+
+- **Stemware.** COCO has a separate `wine glass` class, so anything with a stem
+  and a foot — wine glass, champagne flute, martini glass, snifter.
+- **A jar**, however it is being drunk from. A jar is a `bottle` unconditionally
+  (see there), and COCO does put 25 VG `jar` boxes on cups, so this one will
+  come up.
+- **A can** (21 boxes), a **tin**, a **carton**. As in `bottle`, the container
+  is judged, and none of these is a cup.
 
 ### `bowl incl plates and food containers not wrappers`
 
@@ -207,7 +219,7 @@ inside `bowl`.
 Water, wine, beer, soda and spirit bottles count; so do **jars — always, and
 whatever is in them** (120 VG `jar` boxes are COCO bottles), soap and shampoo
 dispensers (47 `soap`), jugs (28), shakers (21), spray bottles, baby bottles,
-condiment bottles, and vacuum flasks.
+condiment bottles, vacuum flasks, and carafes (6 — `bowl` sends them here).
 
 **A jar of cut flowers is still a bottle.** `jar` has no COCO class of its own,
 so COCO's annotators sent it both ways — 120 boxes to `bottle` and 41 to `vase`
@@ -259,10 +271,17 @@ greenery above it. A cooking pot on a stove does not count, and neither does a
 plain bowl.
 
 **A borrowed vessel is not a vase**, however it is being used in the picture. A
-jar of cut flowers is a `bottle`; a drinking glass of them is a `cup`; a pitcher
-of them is neither. This is the ruling that keeps `jar` from meaning two things
-at once — see `bottle` — and it is applied on *intent of manufacture*, the same
-test that keeps a planter wall out of `bench`.
+jar of cut flowers is a `bottle`; a drinking glass of them is a `cup`. This is
+the ruling that keeps `jar` from meaning two things at once — see `bottle` — and
+it is applied on *intent of manufacture*, the same test that keeps a planter
+wall out of `bench`.
+
+**Open — a pitcher or jug of flowers.** Not a vase either way, but COCO cannot
+say which class it *is*: `pitcher` lands on `cup` 30 times and `vase` 18, while
+`jug` lands on `bottle` 28 and `cup` 0. Two names for nearly one object, sent to
+two different classes. Treating both as `bottle` is the consistent reading of
+manufacture-intent — they are made to store and pour — and costs the 30
+`pitcher` boxes COCO called a cup. Unruled.
 
 **Its price is measured, and it is the largest narrowing in this guide.** COCO's
 annotators do use vase for a borrowed vessel: `glass` 42, `jar` 41, `bottle` 28,

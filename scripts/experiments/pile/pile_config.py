@@ -448,8 +448,11 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
         name="cup incl mugs and glasses not stemware",
         test=(
             "Good: a plain drinking glass IS a cup, as are mugs, teacups, paper and "
-            "plastic cups, tumblers and pints. Bad: stemware -- anything with a stem and "
-            "a foot is `wine glass`. Does it hold a drink and lack a stem?"
+            "plastic cups, tumblers and pints -- and a glass holding cut flowers is still "
+            "a cup, since `vase` is only a vessel made as one. Bad: stemware (anything "
+            "with a stem and a foot is `wine glass`), a JAR however it is drunk from "
+            "(a jar is a `bottle`; 25 jar boxes are COCO cups), a can, a tin, a carton. "
+            "Does it hold a drink, lack a stem, and was it made as a cup?"
         ),
     ),
     # `bowl` is the class whose plain name misleads most: `container` is its
@@ -488,6 +491,8 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "pottery. A potted plant's pot is a vase; vote the vessel, not the plant. "
             "Bad: a cooking pot on a stove, a plain bowl, and any BORROWED vessel however "
             "it is used -- a jar of cut flowers is a `bottle`, a glass of them a `cup`. "
+            "A pitcher or jug of them is not a vase either, though which class it IS is "
+            "unruled: COCO sends `pitcher` to cup (30) and `jug` to bottle (28). "
             "Costs 192 boxes, 8.2% of COCO vase, which is the largest narrowing here."
         ),
     ),
