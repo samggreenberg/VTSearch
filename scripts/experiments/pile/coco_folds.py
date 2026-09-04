@@ -138,7 +138,9 @@ def main() -> int:
     anchor = Path(args.anchor_dir)
 
     cboxes, cdims, _ = coco_boxes(anchor)
-    log(f"  {len(cdims)} COCO images; {sum(len(v) for v in cboxes.values())} class-groups over the full COCO vocabulary")
+    log(
+        f"  {len(cdims)} COCO images; {sum(len(v) for v in cboxes.values())} class-groups over the full COCO vocabulary"
+    )
 
     log("loading VG image_data.json")
     with (anchor / "image_data.json").open() as fh:

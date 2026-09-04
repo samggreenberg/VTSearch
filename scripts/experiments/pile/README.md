@@ -462,6 +462,13 @@ mechanical floor is ~7-15%; `book`, the class that actually broke, scores 43%.
 Anything near that is a class whose rule has to be settled before review, not
 during it.
 
+`--classes` scopes the *question*, never the COCO vocabulary the answer is read
+against: fold-out always tests a VG box against every COCO class, so the score
+for a name does not move when you ask about it alongside different company. It
+did once — a class nobody named carried no boxes, so `bike` read 100% "means
+nothing" against a recorded 40.1% (#3640) — and 100% is the reading that sends a
+good spelling to `SCALE_VG_AMBIGUOUS` and costs the class half its positives.
+
 That rule then travels in `pile_config.SCALE_CLASS_RULES`, whose value is the
 **dataset and detector name** — the only string the app shows while voting. A
 rule in a manifest is a rule the reviewer never reads.

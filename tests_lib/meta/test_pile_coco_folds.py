@@ -87,12 +87,7 @@ def _stage(root: Path) -> tuple[Path, dict[str, str]]:
     (anchor / "instances_val2017.json").write_text(json.dumps(_coco_annotations()))
     # An absent train split is a supported state: the loader logs and skips it.
     (anchor / "image_data.json").write_text(
-        json.dumps(
-            [
-                {"image_id": 2000 + i, "coco_id": 1000 + i, "width": _W, "height": _H}
-                for i in range(_N_IMAGES)
-            ]
-        )
+        json.dumps([{"image_id": 2000 + i, "coco_id": 1000 + i, "width": _W, "height": _H} for i in range(_N_IMAGES)])
     )
 
     demo = root / "demos"
