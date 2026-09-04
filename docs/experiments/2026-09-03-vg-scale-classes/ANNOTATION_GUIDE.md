@@ -241,9 +241,9 @@ inside `bowl`.
 
 Water, wine, beer, soda and spirit bottles count; so do **jars — always, and
 whatever is in them** (120 VG `jar` boxes are COCO bottles), soap and shampoo
-dispensers (47 `soap`), jugs (28), shakers (21), spray bottles, baby bottles,
-condiment bottles, vacuum flasks, carafes (6 — `bowl` sends them here), and
-**pitchers and jugs**. A pouring vessel that serves more than one person is a
+dispensers (47 `soap`), jugs (28), shakers (21) — **salt (16) and pepper (11) shakers included** — spray bottles,
+baby bottles, condiment bottles, vacuum flasks, carafes (6 — `bowl` sends them
+here), and **pitchers and jugs**. A pouring vessel that serves more than one person is a
 bottle: `cup` is reserved for what is hand-held and a single serving.
 
 **A jar of cut flowers is still a bottle.** `jar` has no COCO class of its own,
@@ -258,6 +258,17 @@ on a bar shelf count. Judge the container, not its contents: VG names 124 of
 these boxes `wine`, 90 `water` and 87 `beer`, and the box is on a bottle in
 every case. A stemmed glass of wine is not a bottle (it is `wine glass`, and
 not a class here).
+
+The seasoning and condiment shelf belongs here as a whole: shakers, `condiment`
+(17), `ketchup` (17), `mustard` (17), `dispenser` (20), `oil` (9), `spice` (8),
+`salt` (7) and `pepper` (9) all land on COCO bottle boxes — **181 boxes for the
+family, against 42 on cup and 51 on bowl.**
+
+**The exception proves the rule about contents.** `sauce` goes the other way —
+38 boxes on `bowl`, 18 on bottle, 16 on cup — because it names what is *in* the
+vessel, not the vessel. A squeeze bottle of sauce is a bottle; a dipping dish of
+it is a `bowl`. That is "judge the container, not its contents" doing visible
+work: the same word, three classes, decided every time by the vessel.
 
 **A fuel tank is not a bottle**, a motorcycle's included, and the reason is not
 its shape. Two hold:
