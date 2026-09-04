@@ -8,6 +8,31 @@ reviewer meets one. Run against `book` it prints `magazine` (79 boxes) and
 `magazines` (30) — so this is the check that would have caught the split that
 cost us the `book` pass.
 
+## What we are optimising
+
+**The goal is the best final dataset, not fidelity to COCO.** Merging, splitting,
+renaming and redefining are all allowed. We build on COCO because starting from
+200k annotated images is easier than starting from nothing, not because its
+taxonomy is right — it has no `plate` class, files magazines under `book`, puts
+bicycle pictograms in `bicycle`, and splits vans between `truck` and `car`.
+Where a different boundary makes a more coherent class, take it.
+
+So *"judge by COCO's reading"*, below, is a **default with a reason**, not the
+objective. The reason is the scored subset: a fifth of every slate carries a COCO
+answer, and that is the only thing turning a reviewer's residual error into a
+number instead of a hope. What matters is not agreeing with COCO but staying
+**expressible** against it. Three cases, and they cost very differently:
+
+| kind of change | example | what happens to the reference |
+|---|---|---|
+| **Union** of COCO classes | `cup` ∪ `wine glass` | Derivable — "COCO annotated a cup or a wine glass here". Calibration intact. **Free.** |
+| **Narrowing** inside one | a judge's bench is not a `bench` | COCO is a superset, so disagreement is visible and priced. Calibration works, and shows a known rate. **Cheap, if recorded.** |
+| **Extending beyond** COCO | a jerry can is a `bottle` | No reference for the new part; those images sit in the shared negative pool and the calibration cannot see them. **Expensive — and the only one that can silently corrupt the pool.** |
+
+Every ruling in this guide is one of those three, and each carries its cost in
+the text. That is the discipline the goal requires: not "does COCO agree" but
+"if it does not, do we know what that costs us".
+
 ## The protocol, once
 
 - **Good = the object is present.** Drag a box on it. **Bad = not present.**
@@ -17,7 +42,8 @@ cost us the `book` pass.
   the small band from being deleted by the review protocol rather than by the
   data (the reviewer rejected 43% of small-band positives in #3156, a clean
   function of object size, i.e. a property of the protocol).
-- **Judge by COCO's reading, not by narrow English.** About a fifth of what you
+- **Judge by COCO's reading, not by narrow English** — *unless a ruling above
+  says otherwise, and several do.* About a fifth of what you
   see has a known answer — COCO annotated those images exhaustively over exactly
   these classes — and they are indistinguishable from the rest at voting time
   (every file is named by image id alone). They correct nothing; they score the
