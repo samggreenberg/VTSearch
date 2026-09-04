@@ -500,7 +500,11 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
         name="vase incl pots and planters",
         test=(
             "Good: only a vessel MADE as one -- vases, flower pots, planters, urns, "
-            "pottery. A potted plant's pot is a vase; vote the vessel, not the plant. "
+            "pottery. Against an ornamental BOWL, use the box: a vase is TALLER THAN "
+            "WIDE (median h/w 1.58, 84% of boxes) and a bowl is wider than tall (0.66, "
+            "13%); the middle halves do not overlap. Size does not help -- bowl's median "
+            "box is the larger. "
+            "A potted plant's pot is a vase; vote the vessel, not the plant. "
             "Bad: a cooking pot on a stove, a plain bowl, and any BORROWED vessel however "
             "it is used -- a jar of cut flowers is a `bottle`, a glass of them a `cup`. "
             "A pitcher or jug of them is a `bottle`: COCO split them (pitcher to cup 30, "

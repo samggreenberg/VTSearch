@@ -156,6 +156,37 @@ spoon-shaped handle on something that is not a spoon does not.
 
 ---
 
+## The vessel ladder: an empty vase against an ornamental bowl
+
+Four of these classes are open vessels and the words run out fast — an empty
+large vase and an ornamental bowl are both decorative, both made as themselves,
+and neither is holding anything to judge. **Their boxes separate almost
+completely on one number.** Measured over every non-crowd COCO box:
+
+| class | n | h/w p25 | median | p75 | taller than wide | median area |
+|---|---:|---:|---:|---:|---:|---:|
+| `bottle` | 25,081 | 1.84 | **2.52** | 3.22 | 94% | 0.0036 |
+| `vase` | 6,849 | 1.16 | **1.58** | 2.16 | 84% | 0.0095 |
+| `cup` | 21,458 | 0.95 | **1.26** | 1.61 | 71% | 0.0054 |
+| `bowl` | 14,944 | 0.49 | **0.66** | 0.86 | 13% | 0.0139 |
+
+**A vase is taller than it is wide; a bowl is wider than it is tall.** 84%
+against 13%, and vase's p25 (1.16) sits above bowl's p75 (0.86) — the middle
+halves do not overlap at all. That is the discriminator, and size is not: bowl's
+median box is *larger* than vase's, so "large" does not push a vessel towards
+`vase`.
+
+The ladder is worth carrying whole, because the four classes sit on it in order
+and the near-misses are always neighbours: **bowl 0.66 → cup 1.26 → vase 1.58 →
+bottle 2.52.** Cup and vase are the closest pair, which is why a tall tumbler and
+a squat bud vase are genuinely hard, and why `glass` folds 42 times into vase.
+
+**This does not license shape tests generally.** A neck-and-cap test for `bottle`
+was rejected two sections down precisely because the data refused it — `jar`
+(120) and `jug` (28) fold in without necks. The difference is that this shape
+test *is* the measurement rather than a guess about it. Reach for geometry only
+where it has been checked.
+
 ## Tier C — objects whose surroundings *are* the negative pool
 
 ### `cup incl mugs and glasses not stemware`
