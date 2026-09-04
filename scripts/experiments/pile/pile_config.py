@@ -695,3 +695,120 @@ def setup_env() -> None:
     # editable-install finder, so `import vtscore` resolves to this checkout
     # rather than whichever clone that install points at.
     _expcommon.setup_env(repo=repo, datadir=DATADIR, models_dir=MODELS, hf_home=MODELS)
+
+
+# --------------------------------------------------------------------------
+# #3588: candidate additions to C, and the definition each is reviewed under
+# --------------------------------------------------------------------------
+
+#: Candidates for an expanded *C*, measured rather than proposed.
+#:
+#: Issue #3588 asks for the class list to sample *context exclusivity* on
+#: purpose instead of by accident. Its own proposal does not survive the gate
+#: it correctly specifies: of the classes it names, `airplane` (85 small),
+#: `train` (34), `zebra` (27), `elephant` (20), `giraffe` (14), `cat` (44),
+#: `suitcase` (54) and `potted plant` (1) all miss the 100-per-band floor, and
+#: `motorcycle`, `surfboard`, `snowboard` and `skateboard` each carry a
+#: measured alias partner (`bike` 0.38; `board` 0.45/0.50/0.52 --
+#: `scan_name_overlap.py`). `traffic light` fails twice: 58 in the large band,
+#: and its head noun `light` is already barred by :func:`scale_study_exclusion`.
+#:
+#: What survives is listed here. It is *not* the symmetric design the issue
+#: asked for, and the asymmetry is structural rather than a sampling accident:
+#: every scene-exclusive class the issue wanted (train, zebra, giraffe,
+#: elephant) fails on the SMALL band specifically, because an animal or vehicle
+#: that owns its scene is photographed filling the frame -- `giraffe` has 14
+#: small-band images against 1,279 large. Context exclusivity and small-band
+#: supply are anti-correlated in VG, so the easy end of the axis cannot be
+#: widened with this source at this floor. These additions widen the hard end
+#: and add same-scene partners; see the report for what that costs the design.
+SCALE_CANDIDATES_3588: tuple[str, ...] = (
+    # Tier A -- a habitat partner of a class already in C, so the negative pool
+    # is shared and the contrast is same-scene, different-object.
+    "truck",  # partner of `bus`      -- street, large vehicle
+    "car",  # partner of `bus`/`truck` -- street, and the generic-clutter end
+    "fork",  # partner of `knife`     -- table setting
+    "spoon",  # partner of `knife`    -- table setting
+    # Tier C -- objects whose surroundings ARE the negative pool.
+    "cup",
+    "bowl",
+    "bottle",
+    "vase",
+    "bench",
+    "chair",
+    "sink",
+    "cell phone",
+    "fire hydrant",
+)
+
+#: VG names that denote one of the CANDIDATES. VG's vocabulary is free text and
+#: :func:`pilebuild.vgsource.vg_boxes_by_name` matches the PRIMARY name only, so
+#: a class built from one spelling silently drops the others.
+#:
+#: Only merges measured as aliases are listed. `fire hydrant` / `hydrant` is one
+#: object under two spellings (box IoU 0.77/0.74, `scan_name_overlap.py`), and
+#: `hydrant` accounts for 266 of the 835 COCO `fire hydrant` boxes on the
+#: overlap -- taking `fire hydrant` alone would throw away a third of the class.
+#: `phone` is listed for `cell phone` on the same evidence (541 boxes) **and is
+#: the single riskiest entry here**: see `SCALE_CLASS_RULES`.
+#:
+#: **Deliberately not :data:`SCALE_VG_NAMES`**, which is the same measurement for
+#: a class already in *C*. The two cannot share a table because they are read at
+#: different times by different code: `SCALE_VG_NAMES` widens the ``vg_scale``
+#: READ and is folded by :func:`pilebuild.loaders.vg_scale.canonicalise` on every
+#: build, so an entry there for a class outside *C* would change the built
+#: dataset -- and nothing here has been decided yet (#3604). This table is read
+#: only by `make_class_slate.py`, which bands a candidate without touching the
+#: pickle. A candidate promoted into *C* moves its row across, minus the class
+#: name itself: the entries here list the class name too, because the slate
+#: builder has no separate class-name read to add it to.
+SCALE_CANDIDATE_VG_NAMES: dict[str, tuple[str, ...]] = {
+    "fire hydrant": ("fire hydrant", "hydrant"),
+    "cell phone": ("cell phone", "phone", "cellphone"),
+}
+
+#: The definition each class is reviewed under, and the name that definition
+#: travels on.
+#:
+#: **This is the `book` failure made structural.** COCO has no magazine class,
+#: so COCO's annotators put magazines in `book`; the human pass applied the
+#: narrower English reading; and the class became two definitions wearing one
+#: name -- 21 verdicts on one, 49 on the other, with every structural check
+#: passing (`make_definition_reslate.py`). A reviewer cannot see a manifest
+#: while voting, so the rule has to travel on the one string the app shows:
+#: the dataset and detector name.
+#:
+#: The rules are **measured, not drafted**. `coco_folds.py` asks which VG names
+#: land on a COCO class's boxes over the ~51k-image overlap, which enumerates
+#: the boundary cases before a human meets one -- run against `book` it prints
+#: `magazine` (79) and `magazines` (30). Each entry below names the boundary
+#: case that measurement found, and the long form is in the annotation guide.
+#:
+#: Keyed by class; the value is the dataset/detector name. Deliberately a
+#: literal rather than a formatting of the class name: the whole point is that
+#: it says something the class name does not.
+SCALE_CLASS_RULES: dict[str, str] = {
+    "truck": "truck incl vans not SUVs",
+    "car": "car incl SUVs and minivans",
+    "fork": "fork incl plastic",
+    "spoon": "spoon incl plastic not spatulas",
+    "cup": "cup incl mugs and glasses not stemware",
+    "bowl": "bowl incl plates and dishes",
+    "bottle": "bottle incl jars",
+    "vase": "vase incl pots and planters",
+    "bench": "bench not chairs",
+    "chair": "chair incl stools not couches",
+    "sink": "sink basin not counter",
+    "cell phone": "cell phone not landlines",
+    "fire hydrant": "fire hydrant not standpipes",
+}
+
+
+def scale_class_dataset_name(category: str) -> str:
+    """The dataset/detector name *category* is reviewed under.
+
+    Falls back to the bare class name, which is correct for a class with no
+    boundary case worth stating -- and wrong to invent one for, since a rule
+    nobody needs is a rule a reviewer will misread.
+    """
+    return SCALE_CLASS_RULES.get(category, category)
