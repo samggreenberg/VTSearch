@@ -344,11 +344,42 @@ before being trusted rather than after:
   linkage's failure mode is one ambiguous crop bridging two marks, which is the
   defect the pass exists to find. On v2 it proposed `15 / 8 / 1` for the StaVer
   class and `22 / 2` for `spods/stamp_00489_1` — both exactly the boundaries the
-  reviewer had already drawn by eye, and both found without being told.
+  reviewer had already drawn by eye, and both found without being told. A class
+  whose two most distant instances sit further apart than the loosest threshold
+  in the sweep (`AUDIT_MIXED_MAX_WITHIN`) is flagged `mixed`.
 - **Whether a class's query crop retrieves its own class** — the question the
   eval will ask, stated as the *rank* of the class's own centroid rather than a
   distance whose scale nobody knows. It flags 3 of 59 on v2, including the one
-  `phash` scored second-*best* of 60.
+  `phash` scored second-*best* of 60. Beside the rank, **how many of the class's
+  own instances that crop reaches** before the nearest other class's centroid,
+  which is the part a rank cannot see.
+
+#### A screen for a crop is not a screen for a class
+
+Both query-crop numbers are properties of one *crop*; `mixed` is a property of a
+*class*, and #3610 is the case that separates them.
+`staver/stamp_stampds-00156_0` holds **five** marks across 27 instances — a
+16-strong blue routing box, eight `DFKI Empfang`, and three singletons — and the
+rank scores it 0 at distance 0.078, the healthiest tier of all 59 classes. That
+score is *correct on its own terms*: its query crop is a good instance of the
+16-strong mark, so it retrieves its own class first, and nothing about a rank is
+sensitive to the class being five marks in a trench coat. Its `max_within` is
+0.433, second worst of 59. Gate on both, or the mixed classes the `cluster`
+sheets exist to adjudicate arrive pre-certified healthy.
+
+And the sample the questions are asked of is **spread** over the class, not
+taken off the head of its page-id list. Page ids sort by source and number, so a
+head sample is the scanner's order: the two classes #3610 was filed over are 27
+and 30 instances against `AUDIT_MAX_PER_CLASS` = 24, and between them five marks
+live only in the tail. Note that a plain `[::step]` stride does not fix this —
+`27 // 24` is 1, so the stride hands back the first 24 — which is why
+`sources/_common.spread` spaces indices over the whole range instead.
+
+One caveat for the reviewer working these sheets: a **wide crop catches
+neighbouring page furniture**, and at 150 px that is indistinguishable from a
+second mark. Two crops in the StaVer class show the routing box with a black
+`EINGEGANGEN AM 05. JAN. 2011` stamp above it; others catch `* Artikel mit 7%`
+or `Bankverbindung:`. Check at full size before splitting.
 
 The proposals are hypotheses on a contact sheet. The verdict vocabulary does not
 change, `split` still means a person looked, and a false proposal is expected:

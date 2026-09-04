@@ -2445,6 +2445,174 @@ class TestSiglipAuditVectors:
         assert rows[0]["sweep"]["0.90"] == [4]
 
 
+class TestClassSamplingIsSpread:
+    """Which instances of a class the audit actually looks at (#3610).
+
+    Every pass that samples a class capped the sample by taking the head of the
+    page-id list, so a split proposal for a class larger than the cap was a
+    statement about its first ``max_per_class`` pages.  Page ids sort by source
+    and number, so that is the scanner's order: the two classes #3610 was filed
+    over are 27 and 30 instances against a cap of 24, and five of their marks
+    live only in the tail.
+    """
+
+    def test_a_short_sequence_is_taken_whole(self, mods):
+        assert mods["common"].spread(list(range(5)), 24) == list(range(5))
+
+    def test_the_sample_always_reaches_the_tail(self, mods):
+        # The regression that matters.  A `[::step]` stride computes
+        # `step = 27 // 24 == 1` and hands back the first 24 -- the head sample
+        # it was reached for to avoid.
+        picked = mods["common"].spread(list(range(27)), 24)
+        assert len(picked) == 24
+        assert picked[0] == 0
+        assert picked[-1] == 26
+
+    def test_the_sample_is_spread_and_ordered_and_distinct(self, mods):
+        picked = mods["common"].spread(list(range(30)), 24)
+        assert len(set(picked)) == 24
+        assert picked == sorted(picked)
+        assert max(b - a for a, b in zip(picked, picked[1:])) <= 2
+
+    def test_degenerate_limits(self, mods):
+        assert mods["common"].spread([], 5) == []
+        assert mods["common"].spread([1, 2, 3], 0) == []
+        assert mods["common"].spread([1, 2, 3], 1) == [1]
+
+    def test_collect_items_spreads_over_the_class_not_its_head(self, mods):
+        pages = [
+            _page(
+                mods,
+                f"spods/p{i:03d}",
+                "spods",
+                marks=(("stamp", (10, 10, 20, 20), "spods/c", ("clustered",)),),
+            )
+            for i in range(27)
+        ]
+        classes = {"spods/c": {"page_ids": [p.page_id for p in pages], "n_instances": 27}}
+        items = mods["siglip"].collect_items(pages, classes, max_per_class=24)
+        sampled = [it["page_id"] for it in items if it["kind"] == "instance"]
+        assert len(sampled) == 24
+        assert "spods/p026" in sampled
+
+    def test_the_cluster_sheet_renders_exactly_what_the_proposal_covers(self, mods, tmp_path):
+        # The sheet exists to adjudicate the proposal, and the two samples are
+        # drawn by different code paths -- an untagged cell would invite a
+        # verdict about a crop the clusterer never saw.
+        from PIL import Image
+
+        img = tmp_path / "p.png"
+        Image.new("RGB", (200, 200), "white").save(img)
+        pages = [
+            _page(
+                mods,
+                f"spods/p{i:03d}",
+                "spods",
+                marks=(("stamp", (10, 10, 20, 20), "spods/c", ("clustered",)),),
+                path=str(img),
+            )
+            for i in range(6)
+        ]
+        classes = {
+            "spods/c": {
+                "page_ids": [p.page_id for p in pages],
+                "n_instances": 6,
+                "provenance": ["clustered"],
+            }
+        }
+        proposals = {"spods/c": {"spods/p000": 1, "spods/p005": 2}}
+        verdicts = mods["slate"].task_cluster(pages, classes, tmp_path, proposals=proposals)
+        assert verdicts[0]["proposed_groups"] == [1, 1]
+
+
+class TestMixedClassScreen:
+    """The screen for a mixed *class*, beside the screens for an odd *crop*.
+
+    #3610: `staver/stamp_stampds-00156_0` holds five marks, and the query-crop
+    rank scores it in the healthiest tier of all 59 classes -- correctly, since
+    its query crop is a good instance of the 16-strong mark it was drawn from.
+    A rank of a crop cannot see the other four marks; nothing did.
+    """
+
+    @staticmethod
+    def _mixed(n_close=3, n_far=3):
+        # Two tight groups a right angle apart: max within-class distance 1.0,
+        # wider than any threshold in the sweep.
+        near, far = [1.0, 0.0], [0.0, 1.0]
+        items = [{"class_id": "a", "page_id": f"p{i}", "kind": "instance"} for i in range(n_close + n_far)]
+        vecs = np.array([near] * n_close + [far] * n_far, dtype=np.float32)
+        return items, vecs
+
+    def test_a_class_wider_than_the_loosest_sweep_threshold_is_flagged(self, mods):
+        items, vecs = self._mixed()
+        (row,) = mods["siglip"].split_report(items, vecs, (0.1, 0.4))
+        assert row["max_within"] == pytest.approx(1.0, abs=1e-3)
+        assert row["mixed"] is True
+
+    def test_a_tight_class_is_not(self, mods):
+        items = [{"class_id": "a", "page_id": f"p{i}", "kind": "instance"} for i in range(3)]
+        vecs = np.tile(np.array([1.0, 0.0], dtype=np.float32), (3, 1))
+        (row,) = mods["siglip"].split_report(items, vecs, (0.1, 0.4))
+        assert row["mixed"] is False
+
+    def test_the_flag_defaults_to_the_loosest_threshold_in_the_sweep(self, mods):
+        # Tied to the sweep on purpose: an independent number is one that can
+        # drift away from the sweep, which is how CLUSTER_THRESHOLD's 0.16
+        # outlived its decomposition (#3366).
+        assert mods["cfg"].AUDIT_MIXED_MAX_WITHIN == max(mods["cfg"].AUDIT_SPLIT_SWEEP)
+
+    def test_the_flag_records_the_threshold_it_was_taken_at(self, mods):
+        items, vecs = self._mixed()
+        (row,) = mods["siglip"].split_report(items, vecs, (0.4,), mixed_at=1.5)
+        assert row["mixed"] is False
+        assert row["mixed_at"] == 1.5
+
+    def test_a_query_crop_can_rank_first_and_still_reach_only_part_of_its_class(self, mods):
+        # The #3610 case in miniature: the crop is a good instance of the
+        # majority mark, so the centroid rank is 0 and says nothing about the
+        # instances that are a different mark.
+        items = [
+            {"class_id": "a", "page_id": "p0", "kind": "instance"},
+            {"class_id": "a", "page_id": "p1", "kind": "instance"},
+            {"class_id": "a", "page_id": "p2", "kind": "instance"},
+            {"class_id": "b", "page_id": "p3", "kind": "instance"},
+            {"class_id": "a", "page_id": "q", "kind": "query"},
+        ]
+        # `other` sits half-way to the query, so the cut-off the reach is
+        # measured against falls between the two marks inside class "a".
+        near, far, other = [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.5, 0.0, 3**0.5 / 2]
+        vecs = np.array([near, near, far, other, near], dtype=np.float32)
+        order, centroids = mods["siglip"].class_centroids(items, vecs)
+        (row,) = mods["siglip"].query_check(items, vecs, order, centroids)
+        assert row["rank_of_own_class"] == 0
+        assert row["own_instances"] == 3
+        assert row["own_instances_reached"] == 2
+        assert row["nearest_other_class"] == "b"
+
+    def test_a_representative_query_crop_reaches_its_whole_class(self, mods):
+        items = [
+            {"class_id": "a", "page_id": "p0", "kind": "instance"},
+            {"class_id": "a", "page_id": "p1", "kind": "instance"},
+            {"class_id": "b", "page_id": "p2", "kind": "instance"},
+            {"class_id": "a", "page_id": "q", "kind": "query"},
+        ]
+        vecs = np.array([[1.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 0.0]], dtype=np.float32)
+        order, centroids = mods["siglip"].class_centroids(items, vecs)
+        (row,) = mods["siglip"].query_check(items, vecs, order, centroids)
+        assert row["own_instances_reached"] == row["own_instances"] == 2
+
+    def test_the_query_crop_is_not_counted_as_one_of_its_own_instances(self, mods):
+        items = [
+            {"class_id": "a", "page_id": "p0", "kind": "instance"},
+            {"class_id": "b", "page_id": "p1", "kind": "instance"},
+            {"class_id": "a", "page_id": "q", "kind": "query"},
+        ]
+        vecs = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 0.0]], dtype=np.float32)
+        order, centroids = mods["siglip"].class_centroids(items, vecs)
+        (row,) = mods["siglip"].query_check(items, vecs, order, centroids)
+        assert row["own_instances"] == 1
+
+
 class TestSlateDescriptorChoice:
     """Which descriptor the slate is ordered by, and what it refuses."""
 
