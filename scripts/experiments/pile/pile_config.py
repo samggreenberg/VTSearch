@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import NamedTuple
 
 USER = os.environ.get("USER", "sgreenberg")
 
@@ -370,6 +371,81 @@ SCALE_VG_AMBIGUOUS: dict[str, tuple[str, ...]] = {
 #: :func:`pilebuild.loaders.vg_scale.load` names the unaudited classes on every
 #: build, because the rebuild is when this stops being cheap to fix (#3605).
 SCALE_VG_NAMES_AUDITED: frozenset[str] = frozenset({"bicycle"})
+
+
+class ClassRule(NamedTuple):
+    """One class's review definition: the ``name`` a reviewer sees, and the ``test``."""
+
+    #: What the slate's dataset/detector is called. This is the ONLY thing a
+    #: reviewer sees while voting -- files are named by image id alone -- so it
+    #: has to carry the discrimination on its own, in a few words.
+    name: str
+    #: The full wording the name abbreviates: what counts as Good, what counts
+    #: as Bad, and the near-miss the short name does not settle. Read by whoever
+    #: builds the slate and whoever adjudicates it, so both apply one definition.
+    test: str
+
+
+#: Per-class review definitions, for the classes whose plain English name is not
+#: the whole question.
+#:
+#: A class whose meaning differs between the halves of a dataset is not noisy, it
+#: is two classes wearing one name (``make_definition_reslate.py``). The rule
+#: that separates them travels in the **dataset name**, because a reviewer
+#: cannot see a manifest while voting -- and until this table existed the rule
+#: was typed by hand at slate time and written down nowhere, so the wording a
+#: re-review used was whatever the next person remembered.
+#:
+#: Two things are therefore recorded, not one. The ``name`` is what the reviewer
+#: reads; the ``test`` is what the name abbreviates, and is what settles the
+#: near-misses a two-word name cannot. A rule whose ``test`` lives only in a
+#: session transcript is a rule that will be re-derived differently.
+#:
+#: Classes absent from this table are their own definition, and
+#: :func:`review_name` falls back to the bare class name for them. A class need
+#: not be in :data:`SCALE_CLASSES` to appear here: `cell phone` is a #3588
+#: candidate whose first slate is already voted.
+SCALE_CLASS_RULES: dict[str, ClassRule] = {
+    # COCO has no magazine class, so its annotators put magazines in `book`
+    # while the human pass applied the narrower English reading -- leaving 21
+    # verdicts on one definition and 49 on another. The dataset takes COCO's,
+    # since that is the half with an exhaustive reference.
+    "book": ClassRule(
+        name="book incl magazines",
+        test=(
+            "Good: a bound book, and also a magazine -- COCO has no magazine class and "
+            "annotates magazines as `book`, which is the reading this dataset uses. "
+            "Bad: newspapers, loose paper, a screen showing text."
+        ),
+    ),
+    # The class's whole risk is landlines: VG `phone` lands on no COCO class
+    # 46.2% of the time, worse than `book`'s 43.3%. The first slate's test read
+    # "anything with a cord or a base station is Bad", which discriminates on a
+    # base being PRESENT when what it means is that the handset is not itself
+    # the whole device -- so it rejected 2387021, a mobile phone in a charging
+    # dock (#3612).
+    "cell phone": ClassRule(
+        name="cell phone not landlines",
+        test=(
+            "Bad if the handset needs the base to work -- landline handsets, desk phones, "
+            "payphones, wall phones, intercoms. A mobile phone resting in a charging dock "
+            "or cradle is still Good."
+        ),
+    ),
+}
+
+
+def review_name(cls: str, suffix: str = "") -> str:
+    """The dataset/detector name a slate of *cls* is reviewed under.
+
+    The class's rule name where it has one, else the bare class name, plus an
+    optional *suffix* naming the pass (``positives``, ``audit``). Every slate
+    maker builds its ``detector`` column from this, so a class's rule reaches
+    the reviewer whichever pass they are voting -- the first pass included,
+    which is where a definition split does its damage.
+    """
+    rule = SCALE_CLASS_RULES.get(cls)
+    return f"{rule.name if rule else cls}{f' {suffix}' if suffix else ''}"
 
 
 def scale_vg_wanted() -> set[str]:

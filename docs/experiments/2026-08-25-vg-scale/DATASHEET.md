@@ -84,6 +84,18 @@ published cells predate that**, so any per-class reading of `bicycle` in the
 #3156 grid carries it. The other eleven classes have not been measured for the
 same defect.
 
+**A class's definition is part of its label, and it now has a home.** A reviewer
+votes on bare images — files are named by image id — so the dataset name is the
+whole brief, and for a class whose plain English name does not settle the
+question that name is where the rule has to live. `book` is what taught this:
+COCO has no magazine class and annotates magazines as `book`, the human pass
+applied the narrower English reading, and 21 verdicts landed on one definition
+against 49 on another. The wordings now live in
+`pile_config.SCALE_CLASS_RULES` and every slate maker builds its dataset name
+from them, so a first pass and a re-review of one class ask the same question
+(#3612). Only `book` of the twelve carries a rule; the published cells were
+reviewed before the table existed.
+
 **The small band is at the limit of verification, and this is a property of the
 data, not a defect to hide.** A sub-patch object is under 1/196 of the frame;
 reviewing bare thumbnails rejected 43% of small-band positives against 10% of
