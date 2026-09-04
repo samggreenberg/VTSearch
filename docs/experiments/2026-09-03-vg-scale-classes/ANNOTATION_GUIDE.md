@@ -313,9 +313,16 @@ and smartphones count, including one held to an ear, lying face-down on a table,
 or in a hand turned away. Landline handsets, desk phones, payphones, wall phones
 and intercoms do **not**. Tablets, cameras, remotes, calculators and music
 players do not either — COCO's own annotators put 39 `camera` and 12 `ipod`
-boxes on cell-phone boxes, and those are their errors. The test: a handheld slab
-with a screen and no cord is Good; anything with a cord or a base station is
-Bad.
+boxes on cell-phone boxes, and those are their errors. The test: **Bad if the
+handset needs the base to work.** A mobile phone resting in a charging dock or
+cradle is still Good.
+
+The first wording was *"anything with a cord or a base station is Bad"*, which
+discriminates on a base being **present** when what it means is that the handset
+is not itself the whole device — and it rejected 2387021, a mobile in a charging
+dock (#3612). `pile_config.SCALE_CLASS_RULES` carried the correction before this
+paragraph did; where the two ever disagree again, the config is the one the
+slate builder reads.
 
 ### `fire hydrant not standpipes`
 
