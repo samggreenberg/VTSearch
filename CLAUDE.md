@@ -132,7 +132,9 @@ This is why closing an issue by hand didn't previously "trickle back": the item 
 
 ## Label every issue you file (CRITICAL)
 
-**Every GitHub issue you create must carry the `claude` label**, and the `experiment` label when it applies. Apply them at creation time (`labels: ["claude", …]`), not as a follow-up edit. If a label is missing from the repo, applying it via the issues API creates it automatically — do not skip a label because it doesn't exist yet.
+**Every GitHub issue you create must carry the `claude` label**, and the `experiment` label when it applies. Apply them at creation time — `labels: ["claude", …]` through the MCP tool, or `--label claude,experiment` through the `gh` CLI — not as a follow-up edit. If a label is missing from the repo, applying it creates it automatically — do not skip a label because it doesn't exist yet.
+
+**Both spellings matter, because both get used.** The rule reads as if there were one way to file an issue; in practice sessions here file through `gh issue create` far more often than through the MCP tool. A `PreToolUse` hook enforces the rule on both paths (`.claude/hooks/require-issue-labels.py`) — it watched only the MCP tool for its first weeks, during which 29 unlabeled issues went through the `gh` path it could not see.
 
 A third label, **`solved`**, is a *status* rather than something you choose when filing — it goes on when a fix PR exists. Read its section below before closing any issue.
 
