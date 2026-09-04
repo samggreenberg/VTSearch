@@ -38,7 +38,7 @@ def drift():
     """``audit_band_drift``, imported without ``pile_config.setup_env()``.
 
     The audit keeps its ``coco_anchor`` import inside ``main`` precisely so that
-    importing the module does not edit ``sys.meta_path`` and ``os.environ`` for
+    importing the module does not rewrite the import machinery and ``os.environ`` for
     the whole test process; if that import ever moves back to module scope this
     fixture is what fails.
     """

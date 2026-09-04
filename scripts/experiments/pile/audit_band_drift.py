@@ -103,9 +103,9 @@ def main() -> int:
     args = ap.parse_args()
 
     # Imported here, not at module scope: `coco_anchor` runs `setup_env()` at
-    # import, which edits `os.environ` and `sys.meta_path` process-wide. Keeping
-    # it inside `main` is what lets the banding helpers above be imported and
-    # tested without doing that to the caller (the loader does the same).
+    # import, which rewrites `os.environ` and the process-wide import machinery.
+    # Keeping it inside `main` is what lets the banding helpers above be imported
+    # and tested without doing that to the caller (the loader does the same).
     import coco_anchor as ca  # noqa: PLC0415
 
     order = list(pc.BOX_BANDS)
