@@ -39,11 +39,12 @@ When the user's whole prompt is just a number — `#3421`, or bare `3421` — it
 
 ### If `#N` is an issue
 
-1. **Read it, then evaluate it.** Decide whether the premise is correct and whether you agree with the solution it proposes. This is a real gate, not a formality: an issue can be stale, already fixed, based on a misreading, or right about the symptom and wrong about the fix.
-2. **If you disagree — or the right scope is unclear — stop and ask** via `AskUserQuestion` before writing any code. Say what the issue claims, what you found instead, and what you'd do differently.
-3. **If you agree, do the work off a fresh `dev`:** `git fetch origin --prune && git checkout -B <branch> origin/dev`. Never build on whatever the branch happened to be pointing at.
-4. **If the issue carries the `experiment` label, do the work entirely on the GRID, on a fresh worktree.** See the `grid-experiments` skill for how those runs are launched and monitored.
-5. **Run the whole issue lifecycle**, per the sections below: assign `samggreenberg` before the first edit; open the PR with `base=dev` and a closing keyword; comment `Addressed in #M` on the issue; add `solved` and clear the assignee; leave the issue open for the `dev`→`main` sweep to close.
+1. **Assign `samggreenberg` immediately.** The moment the number resolves to an issue — before you read it, before you evaluate it, before any analysis — write `assignees: ["samggreenberg"]`. Evaluation is itself work on the issue, and it is exactly the window in which a second session picks up the same number. Do this even if you go on to disagree with the issue; if you end up walking away, clear the assignee then.
+2. **Read it, then evaluate it.** Decide whether the premise is correct and whether you agree with the solution it proposes. This is a real gate, not a formality: an issue can be stale, already fixed, based on a misreading, or right about the symptom and wrong about the fix.
+3. **If you disagree — or the right scope is unclear — stop and ask** via `AskUserQuestion` before writing any code. Say what the issue claims, what you found instead, and what you'd do differently.
+4. **If you agree, do the work off a fresh `dev`:** `git fetch origin --prune && git checkout -B <branch> origin/dev`. Never build on whatever the branch happened to be pointing at.
+5. **If the issue carries the `experiment` label, do the work entirely on the GRID, on a fresh worktree.** See the `grid-experiments` skill for how those runs are launched and monitored.
+6. **Run the rest of the issue lifecycle**, per the sections below: open the PR with `base=dev` and a closing keyword; comment `Addressed in #M` on the issue; add `solved` and clear the assignee; leave the issue open for the `dev`→`main` sweep to close.
 
 ### If `#N` is a pull request
 
@@ -202,7 +203,7 @@ Assignment is writable exactly like labels: `issue_write` with `method: "update"
 
 Three rules bind you directly:
 
-- **Assign at the start.** When you begin work on an issue — before the first edit, not after the PR — write `assignees: ["samggreenberg"]`. Do this even when you filed the issue yourself in the same session, and even for issues filed by someone else: the assignee names who is *doing* the work, not who reported it, and every Claude session here works through the owner's account.
+- **Assign at the start.** When you begin work on an issue, write `assignees: ["samggreenberg"]`. "The start" means the moment you know which issue you are on — **before you read and evaluate it**, not before the first edit and not after the PR. Investigating an issue *is* working it, and it is the longest window in which someone else could start the same one. (For a bare `#N` prompt this is step 1 of the issue workflow above, ahead of the evaluation gate.) Do this even when you filed the issue yourself in the same session, and even for issues filed by someone else: the assignee names who is *doing* the work, not who reported it, and every Claude session here works through the owner's account. If evaluation ends with you walking away — you disagree, or the user redirects you — clear the assignee so the issue reads as free.
 - **Unassign when you apply `solved`.** In the same motion as the `solved` label and the `Addressed in #M` comment, write `assignees: []`. Once the issue is solved, nobody is working it — only merges remain — so an assignee would assert something false. (These are two separate fields on one `issue_write` call; set both.)
 - **Re-assign if the fix falls through and you pick it back up.** Stripping `solved` (per the rule above) puts the issue back in the human queue. If you are the one resuming it, assign again; if you are walking away, leave it unassigned so someone else can take it.
 
