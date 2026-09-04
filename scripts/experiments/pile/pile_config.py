@@ -470,7 +470,8 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
     "bottle": ClassRule(
         name="bottle incl jars",
         test=(
-            "Good: water, wine, beer, soda and spirit bottles, jars, jugs, soap and "
+            "Good: water, wine, beer, soda and spirit bottles, jars ALWAYS and whatever is "
+            "in them (a jar of flowers is a bottle, not a vase), jugs, soap and "
             "shampoo dispensers, shakers, spray bottles, baby bottles, condiment bottles, "
             "vacuum flasks. Bad: cans, cartons, boxes, a stemmed glass of wine, and a "
             "FUEL TANK. An integral component of a larger object is not an instance of a "
@@ -483,9 +484,11 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
     "vase": ClassRule(
         name="vase incl pots and planters",
         test=(
-            "Good: vases, flower pots, planters, urns and decorative jars; a potted "
-            "plant's pot is a vase here, and so is a glass holding cut flowers. Bad: a "
-            "cooking pot on a stove, and a plain bowl. Vote the vessel, not the plant."
+            "Good: only a vessel MADE as one -- vases, flower pots, planters, urns, "
+            "pottery. A potted plant's pot is a vase; vote the vessel, not the plant. "
+            "Bad: a cooking pot on a stove, a plain bowl, and any BORROWED vessel however "
+            "it is used -- a jar of cut flowers is a `bottle`, a glass of them a `cup`. "
+            "Costs 192 boxes, 8.2% of COCO vase, which is the largest narrowing here."
         ),
     ),
     # The guide first named `chair` (53 boxes) as this class's confusion. It is

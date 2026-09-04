@@ -204,10 +204,19 @@ inside `bowl`.
 
 ### `bottle incl jars`
 
-Water, wine, beer, soda and spirit bottles count; so do **jars** (120 VG `jar`
-boxes are COCO bottles), soap and shampoo dispensers (47 `soap`), jugs (28),
-shakers (21), spray bottles, baby bottles, condiment bottles, and vacuum
-flasks. Cans, cartons and boxes do not. Bottles behind fridge glass or ranked
+Water, wine, beer, soda and spirit bottles count; so do **jars — always, and
+whatever is in them** (120 VG `jar` boxes are COCO bottles), soap and shampoo
+dispensers (47 `soap`), jugs (28), shakers (21), spray bottles, baby bottles,
+condiment bottles, and vacuum flasks.
+
+**A jar of cut flowers is still a bottle.** `jar` has no COCO class of its own,
+so COCO's annotators sent it both ways — 120 boxes to `bottle` and 41 to `vase`
+— and a reviewer meeting the same jar in two slates would otherwise record two
+incompatible truths (87 of the 300 bottle images are also in the vase slate).
+The rule is decided on manufacture, not use: a jar is a storage vessel, so it is
+a bottle, and `vase` is reserved for vessels made as vases. This is what "judge
+the container, not its contents" actually buys — it was doing no work while the
+contents could still move a jar into another class. Cans, cartons and boxes do not. Bottles behind fridge glass or ranked
 on a bar shelf count. Judge the container, not its contents: VG names 124 of
 these boxes `wine`, 90 `water` and 87 `beer`, and the box is on a bottle in
 every case. A stemmed glass of wine is not a bottle (it is `wine glass`, and
@@ -242,13 +251,24 @@ pool test does (COCO has no class for it). Unruled until someone meets one.
 
 ### `vase incl pots and planters`
 
-Vases, flower pots, planters, urns and decorative jars all count — COCO folds
-them together, with 105 VG `pot`, 19 `planter`, 19 `flower vase` and 18 `urn`
-boxes landing on COCO vase boxes. Vote on the **vessel, not the plant**: a
-potted plant's pot is a vase here, even though COCO separately has a
-`potted plant` class for the greenery above it. A pitcher used as a vase counts
-(18 `pitcher` boxes are COCO vases), and so does a drinking glass holding cut
-flowers. A cooking pot on a stove does not, and neither does a plain bowl.
+**Only a vessel made as one.** Vases, flower pots, planters, urns and pottery
+count — 105 VG `pot`, 19 `planter`, 19 `flower vase` and 18 `urn` boxes land on
+COCO vase boxes. Vote on the **vessel, not the plant**: a potted plant's pot is
+a vase here, even though COCO separately has a `potted plant` class for the
+greenery above it. A cooking pot on a stove does not count, and neither does a
+plain bowl.
+
+**A borrowed vessel is not a vase**, however it is being used in the picture. A
+jar of cut flowers is a `bottle`; a drinking glass of them is a `cup`; a pitcher
+of them is neither. This is the ruling that keeps `jar` from meaning two things
+at once — see `bottle` — and it is applied on *intent of manufacture*, the same
+test that keeps a planter wall out of `bench`.
+
+**Its price is measured, and it is the largest narrowing in this guide.** COCO's
+annotators do use vase for a borrowed vessel: `glass` 42, `jar` 41, `bottle` 28,
+`container` 20, `pitcher` 18, `bowl` 16, `cup` 11, `jug` 9, and a few more —
+**192 boxes, 8.2% of all COCO vase boxes**, against ~3% for the bench narrowing.
+Expect to reject a vase COCO annotated roughly one time in twelve.
 
 ### `bench not chairs`
 
