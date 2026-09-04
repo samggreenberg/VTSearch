@@ -128,8 +128,24 @@ TASKS: dict[str, TaskSpec] = {
     ),
     # Re-opening an already-imported dataset from its pkl. Step 1 (pickle read +
     # convert + the near-instant exact-dedup) is seconds at most; step 2 is the
-    # coverage atlas, instant when the cached atlas restores but a minutes-long
-    # hierarchical-k-means rebuild when it does not.
+    # coverage atlas, ~10 ms when the cached atlas restores and a hierarchical
+    # k-means rebuild when it does not.
+    #
+    # That rebuild is *seconds*, not minutes, at every size anybody has swept.
+    # Driven cold on a V100 with cuML active it fits 0.0026 s/item (r^2 0.95)
+    # over n = 412..2954 -- 0.98 s to 7.7 s. The same fit reaches ~26 s at
+    # n = 10 000 and ~131 s (2.2 min) only near COVERAGE_ATLAS_AUTO_THRESHOLD
+    # (50 000), so "minutes" is true near the threshold and off by two orders
+    # of magnitude below ~3000 items. Both of those figures extrapolate a fit
+    # whose largest point is 2954, across a 17x gap nothing has measured, and
+    # hierarchical k-means need not be linear there
+    # (docs/experiments/2026-09-03-drive-cold-3521/REPORT.md section 2, #3595).
+    #
+    # The 0.85 below is a direction, not a measurement: the rebuild does
+    # dominate step 1 whenever it runs, but the weight was never fitted and is
+    # roughly 100x too generous at the small end. Re-deriving it waits on a
+    # sweep past 2954 (#3595) -- and no single weight can pace both branches
+    # anyway, since the restore is ~700x cheaper at n = 2954 (#3594).
     "dataset_open": _linear(
         "dataset_open",
         ("items", "coverage"),

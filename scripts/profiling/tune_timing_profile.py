@@ -288,8 +288,9 @@ def drive_dataset_open(client, datasets: list[dict], reps: int, *, cold_atlas: b
     through ``POST /api/datasets/registry/<id>/coverage-atlas``. Every ordinary
     open restores the atlas cached in the pickle at import time, so without this
     a sweep measures the coverage step's millisecond branch however many times
-    it repeats and never once the minutes-long one the shipped weights are
-    paced for. The endpoint rebuilds in memory and leaves the pickle alone,
+    it repeats and never once the rebuild the shipped weights are paced for --
+    seconds rather than milliseconds, ~700x the restore at n = 2954 (#3595).
+    The endpoint rebuilds in memory and leaves the pickle alone,
     which is what keeps ``dataset_open`` a read-only family.
     """
     from vtscore.concurrency.progress import loading_tasks  # noqa: PLC0415
