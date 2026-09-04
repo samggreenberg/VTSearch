@@ -206,8 +206,26 @@ made as.
 
 Bad here:
 
-- **Stemware.** COCO has a separate `wine glass` class, so anything with a stem
-  and a foot — wine glass, champagne flute, martini glass, snifter.
+- **Stemware.** COCO has a separate `wine glass` class — one of its 80 — so
+  anything with a stem and a foot is that, not this: wine glass, champagne
+  flute, martini glass, snifter.
+
+  *Is stemware not a kind of glass?* In English yes, and that is the trap. The
+  class is not "glass": VG's `glass` folds **1,136** boxes into `cup` because
+  most glasses are tumblers, while every stemware word together —
+  `wine glass` 6, `wine` 6, `cocktail` 2, `wine glasses`, `goblet`, `flute`,
+  `champagne` — folds in **18 times in 8,242, 0.22%**. A 63:1 ratio. COCO cuts
+  exactly where this rule cuts, and does it more cleanly than any other boundary
+  measured in this guide.
+
+  **Merging them is not available, even if we wanted it.** The scored subset —
+  the fifth of every slate that has a COCO answer, and the only reason a
+  reviewer's residual error is a number rather than a hope — works *because* our
+  classes are COCO's. Widen `cup` over `wine glass` and an image holding only
+  stemware, which COCO annotates as holding no cup and which therefore sits in
+  the shared negative pool, becomes a positive here and a negative there. That
+  is the toy contradiction again, and this time it would also take the
+  calibration column with it.
 - **A jar**, however it is being drunk from. A jar is a `bottle` unconditionally
   (see there), and COCO does put 25 VG `jar` boxes on cups, so this one will
   come up.
