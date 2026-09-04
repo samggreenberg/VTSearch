@@ -154,6 +154,20 @@ As with `fork`, the common trap is a generic box — 73 `utensil` and 34
 spoon standing in a cup, bowl or jar counts if any part of it is visible; a
 spoon-shaped handle on something that is not a spoon does not.
 
+**When only the handle shows, read the food.** A utensil buried in a dish with
+its business end out of sight is the common case here, and it has a good answer:
+what it is in tells you what it is. A handle out of cereal is a spoon; a handle
+out of a salad is a fork, so Bad.
+
+This is the one rule in the guide that licenses **inference from the
+surroundings rather than from the object**, and it is worth being explicit that
+it does, because everything else here insists on judging the thing itself. The
+justification is the alternative: with no skip, an unreadable utensil has to be
+voted Bad, so a blanket "can't see the end, say no" would delete every partly
+buried spoon in the class — the review deciding the data rather than the data
+deciding, which is exactly the failure the small-band guard exists for (#3156's
+43%). Context is weaker evidence than sight, and it beats discarding the image.
+
 ---
 
 ## The vessel ladder: an empty vase against an ornamental bowl
@@ -206,9 +220,12 @@ made as.
 
 Bad here:
 
-- **Stemware.** COCO has a separate `wine glass` class — one of its 80 — so
-  anything with a stem and a foot is that, not this: wine glass, champagne
-  flute, martini glass, snifter.
+- ~~**Stemware.**~~ **Stemware now COUNTS** — `cup` was merged with COCO's
+  `wine glass` class on 2026-09-04, so a wine glass, champagne flute, martini
+  glass or snifter is Good here. The dataset name says so:
+  `cup incl mugs glasses and stemware`. Everything below is the argument that
+  was made for keeping them apart, kept because it is the measurement, not the
+  decision.
 
   *Is stemware not a kind of glass?* In English yes, and that is the trap. The
   class is not "glass": VG's `glass` folds **1,136** boxes into `cup` because

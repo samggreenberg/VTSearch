@@ -441,23 +441,26 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
         test=(
             "Good: teaspoons, tablespoons, soup, wooden, plastic, disposable and serving "
             "spoons, and ladles -- a ladle is a spoon with a deep bowl. Bad: spatulas, "
-            "slotted turners, scoops, whisks, tongs. Judge the object, not the drawer."
+            "slotted turners, scoops, whisks, tongs. Judge the object, not the drawer. "
+            "When only the HANDLE shows, read the food: a handle out of cereal is a "
+            "spoon, a handle out of a salad is a fork. The one rule here that infers "
+            "from surroundings rather than the object, because the alternative deletes "
+            "every partly buried spoon."
         ),
     ),
     "cup": ClassRule(
-        name="cup incl mugs and glasses not stemware",
+        name="cup incl mugs glasses and stemware",
         test=(
             "Good: a plain drinking glass IS a cup, as are mugs, teacups, paper and "
-            "plastic cups, tumblers and pints -- and a glass holding cut flowers is still "
-            "a cup, since `vase` is only a vessel made as one. Bad: stemware (anything "
-            "with a stem and a foot is `wine glass`, one of COCO's own 80 -- stemware "
-            "folds into cup only 18 times in 8,242 while plain `glass` folds in 1,136, "
-            "merging them is possible but is a decision, not a rule -- see the guide), a JAR however it is drunk from "
-            "(a jar is a `bottle`; 25 jar boxes are COCO cups), a can, a tin, a carton, "
-            "and anything that serves MORE THAN ONE -- a pitcher, jug, carafe, teapot or "
-            "thermos is a `bottle`; a bucket is nothing here -- a general-purpose container "
-            "made for nothing in particular. The test is portion, not shape: A CUP IS "
-            "HAND-HELD AND A SINGLE SERVING."
+            "plastic cups, tumblers, pints -- and STEMWARE, which this class was merged "
+            "with (see SCALE_CLASS_MERGES): a wine glass, champagne flute, martini glass "
+            "or snifter counts. A glass holding cut flowers is still a cup, since `vase` "
+            "is only a vessel made as one. Bad: a JAR however it is drunk from (a jar is "
+            "a `bottle`; 25 jar boxes are COCO cups), a can, a tin, a carton, and "
+            "anything that serves MORE THAN ONE -- a pitcher, jug, carafe, teapot or "
+            "thermos is a `bottle`; a bucket is a general-purpose container made for "
+            "nothing in particular. The test is portion, not shape: A CUP IS HAND-HELD "
+            "AND A SINGLE SERVING."
         ),
     ),
     # `bowl` is the class whose plain name misleads most: `container` is its
@@ -914,7 +917,52 @@ SCALE_CANDIDATES_3588: tuple[str, ...] = (
 SCALE_CANDIDATE_VG_NAMES: dict[str, tuple[str, ...]] = {
     "fire hydrant": ("fire hydrant", "hydrant"),
     "cell phone": ("cell phone", "phone", "cellphone"),
+    # The stemware half of the merged `cup` (see SCALE_CLASS_MERGES). Measured
+    # against COCO `wine glass` boxes: `wine glasses` 16, `wineglass` 9,
+    # `goblet` 8, `champagne glass` 5, `champagne flute` 5; `mug` 238 is the
+    # cup half's own missing spelling. `glass` is deliberately ABSENT -- it is
+    # the largest name on both halves (1,136 on cup, 841 on wine glass) and
+    # also means a windowpane and eyeglasses, so it belongs in
+    # SCALE_VG_AMBIGUOUS or in a measurement, not here.
+    "cup": (
+        "cup",
+        "mug",
+        "wine glass",
+        "wine glasses",
+        "wineglass",
+        "goblet",
+        "champagne glass",
+        "champagne flute",
+    ),
 }
+
+#: Classes this project defines as the UNION of several COCO classes.
+#:
+#: Distinct from every other table here, and the distinction is the whole point:
+#: an alias merge (:data:`SCALE_CANDIDATE_VG_NAMES`) says two *names* denote one
+#: object, which is a measurement. This says we are choosing a class boundary
+#: COCO did not draw, which is a decision.
+#:
+#: It is available at all only because both halves are COCO classes. The scored
+#: subset -- the fifth of each slate carrying a COCO answer, and the only reason
+#: a reviewer's residual error is a number rather than a hope -- survives a union
+#: of exhaustively annotated classes, since "COCO annotated a cup or a wine glass
+#: here" is as well defined as either half. That is NOT true of a category COCO
+#: lacks entirely, which is what the toy and fuel-tank rulings turn on; running
+#: the two together is a mistake this file made for one commit.
+#:
+#: `cup` ∪ `wine glass` buys +8,180 boxes (+38%), +1,469 images, and **+35% in
+#: the small band** -- the binding constraint on class supply everywhere here
+#: (#3603). It costs a negative-pool redraw at build time for those 1,469, and
+#: it makes `cup` the first class in this study that is not a plain COCO class.
+SCALE_CLASS_MERGES: dict[str, tuple[str, ...]] = {
+    "cup": ("cup", "wine glass"),
+}
+
+
+def coco_classes_for(cls: str) -> set[str]:
+    """The COCO classes whose boxes count as *cls*, merges applied."""
+    return set(SCALE_CLASS_MERGES.get(cls, (cls,)))
 
 
 def scale_class_dataset_name(category: str) -> str:
