@@ -206,10 +206,13 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
     )
     # Pace the unified bar against the real phase split. Step 1 (pickle read +
     # convert + the near-instant exact-dedup) is seconds at most; step 2 is the
-    # coverage atlas, which is instant when the cached atlas restores but a
-    # minutes-long hierarchical-k-means rebuild when it doesn't. Weighting step 2
-    # as the dominant slice keeps a rebuild advancing the bar across its whole
-    # span instead of the old equal split, where the instant dedup drove step 2
+    # coverage atlas, ~10 ms when the cached atlas restores and a hierarchical
+    # k-means rebuild when it doesn't. That rebuild measures 0.0026 s/item
+    # (r^2 0.95) over n = 412..2954, so it is 1-8 s at the sizes swept and only
+    # approaches minutes near COVERAGE_ATLAS_AUTO_THRESHOLD, where the same fit
+    # extrapolates to ~131 s at n = 50 000 (#3595). Weighting step 2 as the
+    # dominant slice keeps a rebuild advancing the bar across its whole span
+    # instead of the old equal split, where the instant dedup drove step 2
     # to ~100% and the bar then sat frozen there through the entire rebuild.
     # That reasoning is the *fallback*; an admin ``VTSEARCH_TIMING_PROFILE``
     # replaces it with the split this host's disk and clustering backend

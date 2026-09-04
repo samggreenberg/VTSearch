@@ -988,6 +988,70 @@ STAGING_DIR = DATA_DIR / "staging"
 _STAGE_TASK = "dataset_stage"
 _TOTAL_STAGE_STEPS = 3  # acquire, embed, serialize
 
+#: Maps the status strings an importer emits onto ``dataset_stage``'s steps, the
+#: way :data:`_STATUS_TO_STEP` does for a load. Staging folds the load's four
+#: steps into three, so every pre-embed status shares the acquire slice.
+#:
+#: This map is what makes the ``embed`` step measure an embed. An importer that
+#: embeds *inside* ``run()`` — every demo source does, and the demo importer is
+#: what the combine flow stages — used to report stepless, so the tracker kept
+#: step 1 and the whole embedding leg was recorded as ``acquire``. #3521 §5
+#: fitted that step at ``b = 0.0136 s/item, r² 0.9995`` — an embed curve under
+#: the wrong name — beside an ``embed`` at ``b = 7.2e-07``, on a sweep that
+#: cleared the embeddings cache before every rep. Clearing the cache moved
+#: 11–40 s of real embedding into the run and ``embed`` did not move, because
+#: the boundary, not the cache, was what put it there (#3593).
+_STAGE_STATUS_TO_STEP = {
+    "downloading": 1,
+    "extracting": 1,
+    "loading": 1,
+    "converting": 1,
+    "embedding": 2,
+}
+
+
+def _make_staging_progress(controller: _LoadGateController, tracker):
+    """Build the importer-side progress callback for a staging run.
+
+    Mirrors :func:`_make_stepped_progress`: it stamps the step each status
+    belongs to — so the timing recorder labels a duration with the phase that
+    actually ran — and swaps the download gate for the embed gate on the first
+    ``"embedding"``, so a queued import can start fetching while this one holds
+    only the embed slot. Staging used to swap only after ``run()`` returned,
+    which meant a demo staging did its embedding under the *download* gate.
+
+    Two deliberate differences from the load pipeline's version, both because
+    staging has no :class:`AdaptiveLoadPacer` between the importer and the
+    tracker:
+
+    - a status the map does not know leaves ``step`` **unset** rather than
+      passing ``None``, so the tracker keeps the step it was last told instead
+      of nulling the whole-job fraction for that update;
+    - the step never moves backwards. A demo's clipper reports its clip
+      embedding under a plain ``"loading"`` status, which would otherwise walk
+      the bar back to acquire after the embed slice had already started.
+    """
+
+    def stepped(status: str, message: str = "", current: int = 0, total: int = 0, **kwargs) -> None:
+        # An importer signalling *its* completion is not the staging job's:
+        # serialization still has to run, and the terminal update is the one at
+        # the bottom of ``stage_task``. A failure riding along is another
+        # matter and is forwarded. (``load_demo_dataset`` ends with exactly such
+        # an ``"idle"``, which used to park the whole staging task at idle
+        # mid-run.)
+        if status == "idle" and "error" not in kwargs:
+            return
+        if status == "embedding" and controller.held != "embed":
+            controller.swap_to_embed()
+        if "step" not in kwargs:
+            step = _STAGE_STATUS_TO_STEP.get(status)
+            if step is not None and step >= (tracker.get().get("step") or 0):
+                kwargs["step"] = step
+        kwargs.setdefault("total_steps", _TOTAL_STAGE_STEPS)
+        tracker.update(status, message, current, total, **kwargs)
+
+    return stepped
+
 
 def _stage_importer_in_background(importer, field_values: dict, label: str = "") -> str:
     """Run *importer*.run() in a daemon thread, saving the result to a staging pkl.
@@ -1026,9 +1090,11 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
     # Staging reports the same step structure every other long-running family
     # does, which is what earns it a whole-job bar and an ETA — and what lets the
     # timing recorder label each measured duration with the phase it belongs to.
-    # The importer's own progress calls come through stepless, and the tracker
-    # keeps the last step it was told, so stamping the boundaries below is
-    # enough.
+    # The boundaries stamped below mark the steps this function drives; the
+    # importer's own progress calls are mapped onto the same three steps by
+    # ``_make_staging_progress``, because an importer that embeds inside
+    # ``run()`` is embedding whatever step number the last stamp left behind
+    # (#3593).
     task = _start_import_task(
         prefix="_staging_",
         family=_STAGE_TASK,
@@ -1043,23 +1109,25 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
     tracker.update("loading", "Preparing dataset…", 0, 0, step=1, total_steps=_TOTAL_STAGE_STEPS)
 
     def stage_task():
+        controller = _LoadGateController(tracker, task.total_steps)
         # Route the importer's own progress calls (and embedding progress)
-        # into this task's tracker instead of the global singleton.
-        set_thread_progress(tracker.update)
+        # into this task's tracker instead of the global singleton, mapped onto
+        # this task's steps on the way.
+        set_thread_progress(_make_staging_progress(controller, tracker))
         # A staging import of a demo reads the same embeddings pkl a full import
         # writes, so it forks on the same cache and must record which branch it
-        # took. #3345 measured this leg at 0.000-0.002 s across all four image
-        # tiers for exactly that reason (#3521).
+        # took.
         timing_recorder.bind_thread()
-        controller = _LoadGateController(tracker, task.total_steps)
         try:
             controller.acquire_download()
             temp_medias: dict = {}
             importer.run(field_values, temp_medias)
             apply_custom_metadata_md5(temp_medias)
-            # Hand the download gate back before the embed so a queued import
-            # can start fetching while this one holds only the embed slot —
-            # the same download→embed handoff the load pipeline makes.
+            # Backstop for the handoff ``_make_staging_progress`` normally makes
+            # on the importer's first ``"embedding"`` status: an importer that
+            # embeds nothing itself (every non-demo source) never fires one, and
+            # would otherwise hold the download gate through the embed below.
+            # No-op when the swap already happened mid-run.
             controller.swap_to_embed()
             tracker.update("embedding", "Embedding…", 0, 0, step=2, total_steps=_TOTAL_STAGE_STEPS)
             embed_missing(temp_medias, field_values.get("embedder", "") or "", on_progress=tracker.update)
