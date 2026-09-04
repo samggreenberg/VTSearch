@@ -218,14 +218,19 @@ Bad here:
   exactly where this rule cuts, and does it more cleanly than any other boundary
   measured in this guide.
 
-  **Merging them is not available, even if we wanted it.** The scored subset —
-  the fifth of every slate that has a COCO answer, and the only reason a
-  reviewer's residual error is a number rather than a hope — works *because* our
-  classes are COCO's. Widen `cup` over `wine glass` and an image holding only
-  stemware, which COCO annotates as holding no cup and which therefore sits in
-  the shared negative pool, becomes a positive here and a negative there. That
-  is the toy contradiction again, and this time it would also take the
-  calibration column with it.
+  **Merging them IS available** — this guide said otherwise for one commit and
+  was wrong. `wine glass` is itself one of COCO's exhaustively annotated 80, so
+  the reference for a merged class is simply *"COCO annotated a cup or a wine
+  glass here"*: well defined, and the scored subset survives untouched. A union
+  of two COCO classes is not the same thing as a class COCO does not have, which
+  is what the toy and fuel-tank arguments turn on.
+
+  What a merge would actually buy and cost, measured: **+8,180 boxes (+38%),
+  +1,469 images, and +35% in the small band** — which is the binding constraint
+  on class supply everywhere in this project (#3603). Against that, 1,469 images
+  holding stemware but no cup would have to leave the shared negative pool at
+  build time, and the class would be the first here that is not a plain COCO
+  class. Deliberately left as a decision rather than a rule, because it is one.
 - **A jar**, however it is being drunk from. A jar is a `bottle` unconditionally
   (see there), and COCO does put 25 VG `jar` boxes on cups, so this one will
   come up.

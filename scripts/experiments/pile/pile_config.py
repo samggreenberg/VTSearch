@@ -452,7 +452,7 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "a cup, since `vase` is only a vessel made as one. Bad: stemware (anything "
             "with a stem and a foot is `wine glass`, one of COCO's own 80 -- stemware "
             "folds into cup only 18 times in 8,242 while plain `glass` folds in 1,136, "
-            "and merging them would break the scored subset), a JAR however it is drunk from "
+            "merging them is possible but is a decision, not a rule -- see the guide), a JAR however it is drunk from "
             "(a jar is a `bottle`; 25 jar boxes are COCO cups), a can, a tin, a carton, "
             "and anything that serves MORE THAN ONE -- a pitcher, jug, carafe, teapot or "
             "thermos is a `bottle`; a bucket is nothing here -- a general-purpose container "
