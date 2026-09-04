@@ -33,6 +33,20 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **The Dashboard's `⋯` › Export labels now exports the detector whose row you
+  clicked.** It exported the *active* pair's live labels instead - whatever the
+  top-bar pulldown was on, which the row's checkbox does not change - so the
+  same row gave three different answers depending only on where the app had
+  been: the right labels when the pulldown happened to agree, nothing at all
+  after a refresh left no detector active, and the entire dataset after a Find
+  run, because Find fills that pair's votes with the detector's own call for
+  every item (they are presumptions, deliberately kept out of the labelset, and
+  the export was reading them as labels). The row action now names its detector
+  and reads that detector's persisted labelset - the exact artefact that
+  re-imports as the detector - so it is right whatever else the app is pointed
+  at. The Find and Train windows' exports are unchanged: there the live session
+  *is* what you are exporting.
+
 - **The text-sort progress bar no longer reserves most of itself for a model
   load that has already happened.** `text_sort` paces three steps -- load the
   embedder, embed the query, score every media -- and the first one is either

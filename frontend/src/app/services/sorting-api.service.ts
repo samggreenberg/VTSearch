@@ -134,14 +134,21 @@ export class SortingApiService {
     );
   }
 
+  /** Fetch labels for export.
+   *
+   *  ``detectorName`` switches the read from the active pair's live labels to
+   *  that detector's *persisted* labelset, which is what a caller naming a
+   *  detector in a list (the Dashboard row action) means — see the route's
+   *  ``detector_name`` param. */
   exportLabels(
     goodsOnly?: boolean,
-    options?: { enrich?: boolean; labelFilter?: ServerLabelFilter },
+    options?: { enrich?: boolean; labelFilter?: ServerLabelFilter; detectorName?: string },
   ): Observable<LabelsExportResponse> {
     return exportLabels(this.http, this.config.rootUrl, {
       goods_only: goodsOnly || undefined,
       enrich: options?.enrich || undefined,
       label_filter: options?.labelFilter || undefined,
+      detector_name: options?.detectorName || undefined,
     }).pipe(map((r) => r.body));
   }
 
