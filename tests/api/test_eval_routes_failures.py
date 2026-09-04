@@ -4,9 +4,10 @@ The happy paths for these routes live in ``tests/sorting/test_sorting.py``
 (``TestEvalTrainAndScoreAsync``), ``tests/api/test_api_contracts.py``, and
 ``tests/core/test_votes.py``.  This module covers the error branches those
 suites skip: precondition rejects (missing votes / history), internal
-computation failures surfacing as 500, schema rejects (422), and the
-job-lifecycle branches of the poll/cancel endpoints (missing job → 404,
-errored job → 500, cancelled job → ``"cancelled"``).
+computation failures surfacing as 500, schema rejects (422), context-
+resolution rejects (409), and the job-lifecycle branches of the poll/cancel
+endpoints (missing job → 404, errored job → 500, cancelled job →
+``"cancelled"``).
 """
 
 from __future__ import annotations
@@ -90,6 +91,64 @@ class TestIndicatorScoreHistoryFailures:
             resp = client.get("/api/indicator-score-history?metric=smart")
         assert resp.status_code == 500
         assert "score history" in resp.get_json()["message"].lower()
+
+
+class TestContextErrorsAreNot500:
+    """A not-yet-loaded pair must keep its 409, not be masked as a 500.
+
+    Regression for issue #3644.  Every route in this blueprint reads the
+    request-scoped proxies, which raise ``DetectorNotLoadedError`` /
+    ``DatasetNotLoadedError`` when the client names a pair the backend has not
+    finished loading - the app-wide 409 contract that ``vtsearch/hooks.py``
+    hands off to the global error handlers.  These handlers each wrap their
+    body in ``except Exception`` and abort 500, which used to swallow that
+    contract and report a poll landing inside a detector's load window as an
+    opaque "computation failed" 500.  The reviewer in #3644 saw it as a red
+    toast over an empty panel that cleared on its own once the load landed;
+    because the 500 carried no detail, it read as a bug in the empty-labelset
+    branch (the failing detectors were the ones just opened, so also the ones
+    with no labels yet) rather than as a detector still loading.
+    """
+
+    UNLOADED = {"X-Detector-Id": "no-such-detector"}
+
+    def _assert_detector_409(self, resp):
+        assert resp.status_code == 409, resp.get_json()
+        body = resp.get_json()
+        assert body["error_code"] == "detector_not_loaded"
+
+    def test_labeling_status_returns_409(self, client):
+        self._assert_detector_409(client.get("/api/labeling-status", headers=self.UNLOADED))
+
+    def test_labeling_progress_returns_409(self, client):
+        self._assert_detector_409(client.post("/api/labeling-progress", headers=self.UNLOADED))
+
+    def test_indicator_score_history_returns_409(self, client):
+        self._assert_detector_409(
+            client.get("/api/indicator-score-history?metric=smart", headers=self.UNLOADED)
+        )
+
+    def test_unloaded_dataset_returns_409(self, client):
+        resp = client.get("/api/labeling-status", headers={"X-Dataset-Id": "no-such-dataset"})
+        assert resp.status_code == 409, resp.get_json()
+        assert resp.get_json()["error_code"] == "dataset_not_loaded"
+
+    def test_loaded_detector_with_no_labels_still_returns_200(self, client):
+        """The other half of #3644: an empty labelset is *not* the fault.
+
+        Once the pair is loaded, zero votes and zero label history take the
+        inline branch and answer 200 with an honest red/red - which is why the
+        issue's proposed "treat no labels as the placeholder case" fix would
+        have masked the load-window 409 while replacing a true status with a
+        transient "Computing indicators..." placeholder.
+        """
+        resp = client.get("/api/labeling-status")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["total_count"] == 0
+        assert data["stale"] is False
+        assert data["smart"]["status"] == "red"
+        assert data["stable"]["status"] == "red"
 
 
 class TestIndicatorScoreHistoryIsReadOnly:
