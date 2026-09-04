@@ -33,6 +33,24 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **A CLI Auto-Find run that converts or re-clips its dataset now calibrates the
+  threshold on what it actually scores.** The cut was fitted on the loaded
+  medias while scoring read the converted frames, pages or clips those medias
+  fan out into - and those are systematically different populations, because a
+  media's score is the *max* over its sub-items and is therefore never below its
+  own whole-item score. A cut chosen as a quantile of the first distribution
+  lands far lower in the second, so the run reported more hits than the
+  algorithm ever chose, with nothing in the output looking wrong. On a dataset
+  the detector needs no conversion or re-clip for - the common case, and the
+  only one anyone had noticed - the two populations are the same set and
+  thresholds are unchanged. Everywhere else the threshold moves, generally up.
+  A pure converter route was the sharper edge of the same bug: none of the
+  loaded medias carried a vector in the detector's space yet, so the population
+  estimator saw an empty haystack and silently did not run at all, shipping the
+  plain cross-calibration cut. Both now read the routed snapshot, which is
+  prepared once and shared between calibration and scoring rather than built
+  twice.
+
 - **The Dashboard's `⋯` › Export labels now exports the detector whose row you
   clicked.** It exported the *active* pair's live labels instead - whatever the
   top-bar pulldown was on, which the row's checkbox does not change - so the

@@ -180,6 +180,19 @@ media by the same **max** rule as converter fan-out. A dataset already loaded
 with the matching clipper is scored as-is (no redundant re-clip), and a detector
 with no `input_spec.clipper` scores whole media.
 
+**The threshold is calibrated on whatever the run ends up scoring.** Converting
+and re-clipping change the population, not just the item count: the max over a
+media's clips is never below the media's own whole-item score, so a cut fitted
+on the loaded medias and applied to the routed ones sits systematically lower in
+the distribution it decides — more hits than the algorithm chose, in a run whose
+numbers all look reasonable. So the routing pass happens **before** calibration,
+and each detector's cut is realized on the converted, re-clipped, re-embedded
+snapshot its own scoring pass will read (issue #3647). On a natively-typed
+dataset needing no re-clip the two are the same set and nothing changes; on a
+converter-routed or re-clipped one the threshold moves, and moving it is the
+fix. The first chunk is prepared once and handed to both passes, so the
+correction costs no extra conversion or embedding work.
+
 **How to get the files:**
 
 - **Dataset file**: Export from the web UI via the dataset menu ("Export dataset"), or use a cached `.pkl` file from the `data/embeddings/` directory after loading a demo dataset.

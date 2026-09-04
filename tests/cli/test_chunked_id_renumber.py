@@ -139,7 +139,7 @@ def _stub_detector_training(monkeypatch):
 
     import vtscore.cli as cli_mod
 
-    def _fake_load_and_train(detector_names, media_type, first_chunk_medias):
+    def _fake_load_and_train(detector_names, media_type, first_chunk_medias, routed=None):
         # Tiny linear "MLP" that always returns 0.5 logit → 0.62 sigmoid.
         linear = nn.Linear(2, 1)
         with torch.no_grad():
