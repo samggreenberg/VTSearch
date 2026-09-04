@@ -323,41 +323,124 @@ SCALE_CLASSES: tuple[str, ...] = (
 #: silently drops every other. That is not merely a supply loss: on the ~52% of
 #: VG that COCO does not annotate, VG's silence is the only evidence of absence,
 #: so an instance annotated under an unlisted spelling becomes a **negative** for
-#: its own class (#3605).
+#: its own class (#3605). There is no cheaper fix available in the reader --
+#: every one of the 2,516,939 objects in this release of VG carries a ``names``
+#: list of length **one**, and of the 18,897 objects named by an entry in either
+#: table below, **zero** carry the class name further down that list (#3618).
 #:
-#: Only merges MEASURED as aliases belong here -- two names on the same pixels,
-#: both ways, at high IoU (``scan_name_overlap.py``). A name that merely looks
-#: related goes in :data:`SCALE_VG_AMBIGUOUS` or nowhere: `bus`/`bush` matched 80
-#: images by string containment and is the reason this table is measured rather
-#: than drafted.
+#: Every entry is measured, and folding one makes two claims, so two things are
+#: measured (``name_evidence.py``):
 #:
-#: Empty for the current twelve. `bicycle`, the one class of the twelve whose
-#: names have been measured, has an alternate spelling that is NOT an alias --
-#: see :data:`SCALE_VG_AMBIGUOUS`.
-SCALE_VG_NAMES: dict[str, tuple[str, ...]] = {}
+#: 1. **the class is present** when this name is its only evidence -- the
+#:    *repair precision*: over the VG-COCO overlap, the share of images carrying
+#:    the name and NOT the class name where COCO says the class is there anyway.
+#:    Read it as a price: ``1 / precision`` is how many images leave the shared
+#:    negative pool per contaminated negative removed. The cut is 1/3 -- three
+#:    withheld per repair -- taken on the **Wilson lower bound**, so a name
+#:    measured on five images cannot outrank one measured on two thousand.
+#: 2. **this box is the object**: at least half of the name's boxes land on a
+#:    COCO box of the class, over at least 20 boxes. A band is a claim about one
+#:    object's size (#3616), so a name that passes (1) and fails (2) goes to
+#:    :data:`SCALE_VG_AMBIGUOUS` instead -- the safe side, since a wrong
+#:    ambiguous costs a few pool images and a wrong alias injects a mis-banded
+#:    positive.
+#:
+#: **Box overlap between two names is not the instrument here** and cannot be.
+#: ``scan_name_overlap.py`` needs the two names on one image, and an annotator
+#: who writes `back pack` does not also write `backpack`: 846 of 1,740
+#: class-vs-candidate pairs never co-occur at all, and where a singular and its
+#: plural do co-occur they are deliberately different boxes -- `backpack` /
+#: `backpacks` scores **0.000 both ways** over 10 co-images and is called
+#: *distinct*. That test keeps its own job, which is the case where two names
+#: really do sit on one box (`clock`/`clock face`, 0.562/0.701 over 286) and
+#: refuting a lookalike, which is how `bus` survived matching 80 images
+#: annotated `bush`.
+SCALE_VG_NAMES: dict[str, tuple[str, ...]] = {
+    "backpack": ("back pack",),
+    "bicycle": ("bicycles",),
+    # COCO annotates ducks, geese and gulls as `bird`, and so does VG under its
+    # own species names: each of these is above the cut on both tests.
+    "bird": ("duck", "goose", "ostrich", "owl", "parrot", "pigeon", "seagull", "swan"),
+    "boat": ("boats", "canoe", "kayak", "raft", "sailboats", "ship"),
+    # COCO has no magazine class and annotates magazines as `book`, which is the
+    # reading this dataset already took -- see SCALE_CLASS_RULES["book"].
+    "book": ("magazine",),
+    "bus": ("buses", "school bus"),
+    # The face is the clock: 89% of `clock face` boxes land on COCO's clock box,
+    # over 184 of them -- the best-supported fold in the study.
+    "clock": ("clock face", "clocks"),
+    "dog": ("black dog", "brown dog", "dogs", "puppy"),
+    # COCO's `kite` covers parasails and parachutes, and VG names them so.
+    "kite": ("kites", "parachute", "parasail"),
+    "knife": ("butter knife",),
+    "umbrella": ("blue umbrella", "parasol", "red umbrella"),
+}
 
-#: VG spellings that MAY denote a class in *C* but also denote something else.
+#: VG spellings that are evidence the class MAY be present, and cannot be its box.
 #:
 #: `bike` is the case that named this table. Over the 51,411-image VG-COCO
 #: overlap it carries **638 of COCO's 3,683 `bicycle` boxes** against the
 #: `bicycle` spelling's 775 -- so `bicycle` built from one spelling is missing
 #: roughly half its positives on the non-COCO half. It cannot simply be merged:
-#: `bike` is a measured alias of `motorcycle` too (box IoU 0.38 over 388
-#: co-images), and fold-out puts only 40.1% of `bike` boxes on a COCO `bicycle`
-#: while 59.6% land on no COCO class at all (``coco_folds.py``, #3606).
+#: on the images where it is the only evidence, COCO finds a bicycle **47%** of
+#: the time, and `bike` is a measured alias of `motorcycle` too (box IoU 0.38
+#: over 388 co-images).
 #:
-#: So a box under one of these names is treated as **evidence of neither
-#: presence nor absence**: it is not a positive (we cannot say the object is
-#: there) and it bars the image from the shared negative pool (we cannot say it
-#: is not). That is the ``excluded`` third state the construction already has --
-#: see :func:`pilebuild.loaders.vg_scale.lift_ambiguous`. It removes the
-#: contaminated negatives; recovering the missing positives needs a human pass.
+#: A box under one of these names is treated as **evidence of neither presence
+#: nor absence**: it is not a positive (we cannot say the object is there) and it
+#: bars the image from the shared negative pool (we cannot say it is not). That
+#: is the ``excluded`` third state the construction already has -- see
+#: :func:`pilebuild.loaders.vg_scale.lift_ambiguous`. It removes the contaminated
+#: negatives; recovering the missing positives needs a human pass.
+#:
+#: **Three kinds of name land here, and they share one treatment because they
+#: share one answer** -- *this image cannot serve as a negative, and this box
+#: cannot serve as a positive* (#3618):
+#:
+#: * a spelling that may denote something else: `bike` (47% precision),
+#:   `tricycle`, `silverware`.
+#: * a **collective**: `books` (89% precision, 34% box agreement), `birds`,
+#:   `umbrellas`, `knives`. The box is a pile; a band is a claim about one
+#:   object's size.
+#: * a **part or container**, whose box is not the object at all: `beak` (86%),
+#:   `bookshelf` (81%), `knife block` (79%), `stop` (70% -- the lettering on the
+#:   sign). Named apart in the report because they cost differently: a spelling
+#:   withholds the images that spell one class oddly, while a scene word
+#:   withholds a whole scene type from **every** class's pool.
 #:
 #: Suppression applies only where it is the sole evidence. On an image COCO
 #: annotates, or one a reviewer has ruled on, the answer is already known and
 #: the ambiguous spelling is ignored.
 SCALE_VG_AMBIGUOUS: dict[str, tuple[str, ...]] = {
-    "bicycle": ("bike",),
+    "backpack": ("black backpack", "black bag", "bookbag", "duffle bag"),
+    "bicycle": ("bicyclist", "bike", "bike tire", "bikes", "tricycle"),
+    "bird": ("beak", "birds", "dove", "ducks", "feather", "feathers", "geese", "peacock", "seagulls"),
+    "boat": ("barge", "bouy", "sail boat", "sailboat"),
+    "book": (
+        "binder",
+        "book case",
+        "book shelf",
+        "bookcase",
+        "books",
+        "bookshelf",
+        "dvd",
+        "dvds",
+        "games",
+        "library",
+        "magazines",
+        "notebook",
+    ),
+    "bus": ("blue bus",),
+    "clock": ("alarm clock", "numeral", "roman numerals"),
+    "dog": ("bulldog", "poodle"),
+    "knife": ("butterknife", "knife block", "knives", "silverware"),
+    # `sign` is the largest fold-in column anywhere in C -- 473 of COCO's 1,016
+    # `stop sign` boxes, 46.6% -- and it is NOT here, because a VG `sign` box is
+    # a stop sign 7.9% of the time: listing it would withhold 12.7 images from
+    # the pool per contaminated negative removed. This class's missing positives
+    # need a human pass, not a name (#3618).
+    "stop sign": ("octagon", "stop"),
+    "umbrella": ("an umbrella", "black umbrella", "pink umbrella", "umbrellas"),
 }
 
 #: Classes in *C* whose VG-name coverage has actually been measured.
@@ -365,12 +448,33 @@ SCALE_VG_AMBIGUOUS: dict[str, tuple[str, ...]] = {
 #: Written down because "no alternate spelling is listed" and "no alternate
 #: spelling exists" are the same empty table, and the first is what shipped:
 #: `bicycle` was built from one spelling for the whole of #3156 with every
-#: structural check passing. A class is added here once ``coco_folds.py`` has
-#: been run against it and its fold-in column read.
+#: structural check passing. A class is added here once its names have been
+#: adjudicated against COCO -- ``coco_folds.py`` for the fold-in column,
+#: ``vg_name_families.py`` for the spellings COCO's half barely sees, and
+#: ``name_evidence.py`` for the verdict.
 #:
-#: :func:`pilebuild.loaders.vg_scale.load` names the unaudited classes on every
-#: build, because the rebuild is when this stops being cheap to fix (#3605).
-SCALE_VG_NAMES_AUDITED: frozenset[str] = frozenset({"bicycle"})
+#: All twelve as of #3618. Listed one by one rather than derived from
+#: :data:`SCALE_CLASSES`, because deriving it would mark a *newly added* class
+#: audited without anyone having looked -- which is the exact failure this flag
+#: exists to make visible. :func:`pilebuild.loaders.vg_scale.load` names the
+#: unaudited classes on every build, since the rebuild is when this stops being
+#: cheap to fix (#3605).
+SCALE_VG_NAMES_AUDITED: frozenset[str] = frozenset(
+    {
+        "backpack",
+        "bicycle",
+        "bird",
+        "boat",
+        "book",
+        "bus",
+        "clock",
+        "dog",
+        "kite",
+        "knife",
+        "stop sign",
+        "umbrella",
+    }
+)
 
 
 class ClassRule(NamedTuple):
@@ -411,6 +515,161 @@ class ClassRule(NamedTuple):
 #: not be in :data:`SCALE_CLASSES` to appear here: `cell phone` is a #3588
 #: candidate whose first slate is already voted.
 SCALE_CLASS_RULES: dict[str, ClassRule] = {
+    # Candidates from #3588, each rule measured with `coco_folds.py` before it
+    # was written: the fold-in names the boundary case a reviewer will actually
+    # meet. Long form, with the counts, in the annotation guide.
+    "truck": ClassRule(
+        name="truck incl vans not SUVs",
+        test=(
+            "Good: pickups, box trucks, semis and tractor units, flatbeds, tow, fire and "
+            "food trucks, full-size cargo and panel vans. Bad: SUVs, crossovers and "
+            "passenger minivans (those are `car`), and a detached trailer with no cab. "
+            "Use the body, not the badge -- COCO splits `van` roughly evenly between "
+            "truck and car, so disagreement there is a known cost, not a mistake."
+        ),
+    ),
+    "car": ClassRule(
+        name="car incl SUVs and minivans",
+        test=(
+            "Good: sedans, hatchbacks, coupes, estates, SUVs, crossovers, passenger "
+            "minivans, taxis and cabs -- COCO folds every passenger body into `car`. "
+            "Bad: pickups and cargo vans, which are `truck`."
+        ),
+    ),
+    "fork": ClassRule(
+        name="fork incl plastic",
+        test=(
+            "Good: metal, plastic and disposable forks, and serving, carving and fondue "
+            "forks. Bad: spatulas, tongs, whisks, skewers. Vote Good only when the boxed "
+            "object IS a fork, not when a fork sits somewhere inside a `silverware` or "
+            "`utensil` box covering a whole place setting. When only the handle shows and "
+            "the food gives nothing away, read the GRIP: a fist closed to stab is a fork, "
+            "a spoon is never held that way. Known bad positive: 2322780 boxes a steam "
+            "locomotive's cow-catcher as a fork (fork@medium, so rejectable)."
+        ),
+    ),
+    "spoon": ClassRule(
+        name="spoon incl plastic not spatulas",
+        test=(
+            "Good: teaspoons, tablespoons, soup, wooden, plastic, disposable and serving "
+            "spoons, and ladles -- a ladle is a spoon with a deep bowl. Bad: spatulas, "
+            "slotted turners, scoops, whisks, tongs. Judge the object, not the drawer. "
+            "When only the HANDLE shows, read the food: a handle out of cereal is a "
+            "spoon, a handle out of a salad is a fork. The one rule here that infers "
+            "from surroundings rather than the object, because the alternative deletes "
+            "every partly buried spoon."
+        ),
+    ),
+    "cup": ClassRule(
+        name="cup incl mugs glasses and stemware",
+        test=(
+            "Good: a plain drinking glass IS a cup, as are mugs, teacups, paper and "
+            "plastic cups, tumblers, pints -- and STEMWARE, which this class was merged "
+            "with (see SCALE_CLASS_MERGES): a wine glass, champagne flute, martini glass "
+            "or snifter counts. A glass holding cut flowers is still a cup, since `vase` "
+            "is only a vessel made as one. Bad: a JAR however it is drunk from (a jar is "
+            "a `bottle`; 25 jar boxes are COCO cups), a can, a tin, a carton, and "
+            "anything that serves MORE THAN ONE -- a pitcher, jug, carafe, teapot or "
+            "thermos is a `bottle`; a bucket is a general-purpose container made for "
+            "nothing in particular. The test is portion, not shape: A CUP IS HAND-HELD "
+            "AND A SINGLE SERVING."
+        ),
+    ),
+    # `bowl` is the class whose plain name misleads most: `container` is its
+    # fourth-largest fold-in (143 boxes), ahead of `pot` and `basket`, and the
+    # first name -- "incl plates and dishes" -- said nothing about it. Renamed
+    # mid-slate once that showed up.
+    "bowl": ClassRule(
+        name="bowl incl plates and food containers not wrappers",
+        test=(
+            "Good: bowls, plates (a paper plate is a plate), saucers, dishes, serving "
+            "pots, baskets that hold food, disposable food containers, and a dog's water "
+            "bowl. A paper food boat with turned-up sides is a bowl, flimsy or not. "
+            "CONTAINING food does not make something a food container: a 5-gallon bucket "
+            "of apples is not a bowl, nor is a shopping cart, a grocery store, or a car "
+            "boot with the shopping in it. It has to be MADE to hold food. "
+            "Bad: flat wrappers and sleeves, cups and mugs (`cup`), sink basins (`sink`), "
+            "toilet bowls, feed troughs, planters (`vase`), ashtrays and carafes. "
+            "Judge the vessel, not the food."
+        ),
+    ),
+    "bottle": ClassRule(
+        name="bottle incl jars",
+        test=(
+            "Good: water, wine, beer, soda and spirit bottles, jars ALWAYS and whatever is "
+            "in them (a jar of flowers is a bottle, not a vase), jugs and pitchers -- a "
+            "pouring vessel serving more than one is a bottle, not a cup -- soap and "
+            "shampoo dispensers, shakers, spray bottles, baby bottles, condiment bottles, "
+            "vacuum flasks, and the seasoning shelf -- shakers including SALT (16) and "
+            "PEPPER (11) shakers, condiment, ketchup, mustard and oil bottles "
+            "(181 boxes for the family), and a SQUEEZABLE TUBE -- toothpaste, suntan "
+            "lotion, shower gel -- which is reasoned rather than measured (the toiletries "
+            "family is 110 boxes but the tube shape itself only ~6). Bad: cans, cartons, boxes, a stemmed "
+            "glass of wine, and a "
+            "FUEL TANK. An integral component of a larger object is not an instance of a "
+            "container class: a mouth is not a food container and a stomach is not a "
+            "bottle. Same test as the feed trough in `bench`. "
+            "Judge the container, not its contents; do not judge it by its neck, since "
+            "`jar` (120) and `jug` (28) fold in and barely have one."
+        ),
+    ),
+    "vase": ClassRule(
+        name="vase incl pots and planters",
+        test=(
+            "Good: only a vessel MADE as one -- vases, flower pots, planters, urns, "
+            "pottery. Against an ornamental BOWL, use the box: a vase is TALLER THAN "
+            "WIDE (median h/w 1.58, 84% of boxes) and a bowl is wider than tall (0.66, "
+            "13%); the middle halves do not overlap. Size does not help -- bowl's median "
+            "box is the larger. "
+            "A potted plant's pot is a vase; vote the vessel, not the plant. "
+            "Bad: a cooking pot on a stove, a plain bowl, and any BORROWED vessel however "
+            "it is used -- a jar of cut flowers is a `bottle`, a glass of them a `cup`. "
+            "A pitcher or jug of them is a `bottle`: COCO split them (pitcher to cup 30, "
+            "jug to bottle 28), so the call is made on portion instead. "
+            "Costs 192 boxes, 8.2% of COCO vase, which is the largest narrowing here."
+        ),
+    ),
+    # The guide first named `chair` (53 boxes) as this class's confusion. It is
+    # third: `seat` (64) and `table` (58) both outrank it, and each turns on a
+    # question COCO's annotators do not ask.
+    "bench": ClassRule(
+        name="bench not chairs",
+        test=(
+            "Good: any backed or backless seat BUILT AS SEATING for two or more -- park, "
+            "bus-stop and station benches, church pews, picnic-table benches, and a "
+            "rowboat's thwart. Bad: a single chair, a sofa, a judge's bench (that is a "
+            "table; the seating is the chairs behind it), and a concrete planter wall or "
+            "ledge people merely sit on. Two tests: seating or surface, and built as "
+            "seating or merely sittable."
+        ),
+    ),
+    "chair": ClassRule(
+        name="chair incl stools not couches",
+        test=(
+            "Good: dining, office, folding and deck chairs, armchairs, high chairs, "
+            "stools and bar stools, and one seat within a row of stadium or theatre "
+            "seating. Bad: couches and sofas, which are `couch`, and benches."
+        ),
+    ),
+    "sink": ClassRule(
+        name="sink basin not counter",
+        test=(
+            "Good: kitchen sinks, bathroom sinks, pedestal basins, utility sinks, vessel "
+            "basins; a double sink in one unit is one sink. Bad: bathtubs, showers, "
+            "toilets, urinals. This class's risk is the BOX, not membership: box the "
+            "basin and its tap, never the vanity or the run of counter."
+        ),
+    ),
+    "fire hydrant": ClassRule(
+        name="fire hydrant not standpipes",
+        test=(
+            "Good: street fire hydrants in any colour or design, including ones wrapped, "
+            "repainted or half-buried in snow. Bad: building standpipes and wall-mounted "
+            "siamese connections, bollards, water valves, parking meters, utility posts. "
+            "The cleanest class measured -- a call that feels hard here usually means the "
+            "object is something else."
+        ),
+    ),
     # COCO has no magazine class, so its annotators put magazines in `book`
     # while the human pass applied the narrower English reading -- leaving 21
     # verdicts on one definition and 49 on another. The dataset takes COCO's,
@@ -442,23 +701,8 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
     # over the ~51k-image overlap, which enumerates a class's boundary cases
     # before a human meets one -- run against `book` it prints `magazine` (79)
     # and `magazines` (30). Each name below states the boundary case that
-    # measurement found; the long form is in the annotation guide, and belongs
-    # in ``test`` the next time one of these is slated.
-    #
-    # Deliberately literals rather than a formatting of the class name: the
-    # whole point is that they say something the class name does not.
-    "truck": ClassRule(name="truck incl vans not SUVs"),
-    "car": ClassRule(name="car incl SUVs and minivans"),
-    "fork": ClassRule(name="fork incl plastic"),
-    "spoon": ClassRule(name="spoon incl plastic not spatulas"),
-    "cup": ClassRule(name="cup incl mugs and glasses not stemware"),
-    "bowl": ClassRule(name="bowl incl plates and dishes"),
-    "bottle": ClassRule(name="bottle incl jars"),
-    "vase": ClassRule(name="vase incl pots and planters"),
-    "bench": ClassRule(name="bench not chairs"),
-    "chair": ClassRule(name="chair incl stools not couches"),
-    "sink": ClassRule(name="sink basin not counter"),
-    "fire hydrant": ClassRule(name="fire hydrant not standpipes"),
+    # measurement found, and the long form now lives in each entry's ``test``
+    # above -- filled in as each class was slated (#3588).
 }
 
 
@@ -792,11 +1036,69 @@ SCALE_CANDIDATES_3588: tuple[str, ...] = (
 SCALE_CANDIDATE_VG_NAMES: dict[str, tuple[str, ...]] = {
     "fire hydrant": ("fire hydrant", "hydrant"),
     "cell phone": ("cell phone", "phone", "cellphone"),
+    # The stemware half of the merged `cup` (see SCALE_CLASS_MERGES). Measured
+    # against COCO `wine glass` boxes: `wine glasses` 16, `wineglass` 9,
+    # `goblet` 8, `champagne glass` 5, `champagne flute` 5; `mug` 238 is the
+    # cup half's own missing spelling.
+    #
+    # `glass` IS here. It was briefly left out because it also means a windowpane
+    # and eyeglasses -- an English argument where a measurement was available,
+    # and the wrong test. The right one is fold-out, which put `bike` in
+    # SCALE_VG_AMBIGUOUS at 40.1%: of 3,224 VG `glass` boxes, 1,146 land on COCO
+    # `cup` and 861 on `wine glass`, so 62.2% land on the merged class -- against
+    # self-match rates of 72.1% (cup), 71.2% (bowl), 72.8% (bottle) and 74.2%
+    # (vase) for the class names themselves. Ten points under the names, twenty
+    # above `bike`.
+    #
+    # The merge is what makes it usable, which is an argument for the merge that
+    # was not made when the merge was decided: unmerged, `glass` split 35.5% cup
+    # and 26.7% wine glass with neither dominant -- ambiguity between two classes
+    # rather than about the world. `mug` self-matches at 81.7%, the highest of
+    # any name measured here.
+    "cup": (
+        "cup",
+        "glass",
+        "mug",
+        "wine glass",
+        "wine glasses",
+        "wineglass",
+        "goblet",
+        "champagne glass",
+        "champagne flute",
+    ),
+}
+
+#: Classes this project defines as the UNION of several COCO classes.
+#:
+#: Distinct from every other table here, and the distinction is the whole point:
+#: an alias merge (:data:`SCALE_CANDIDATE_VG_NAMES`) says two *names* denote one
+#: object, which is a measurement. This says we are choosing a class boundary
+#: COCO did not draw, which is a decision.
+#:
+#: It is available at all only because both halves are COCO classes. The scored
+#: subset -- the fifth of each slate carrying a COCO answer, and the only reason
+#: a reviewer's residual error is a number rather than a hope -- survives a union
+#: of exhaustively annotated classes, since "COCO annotated a cup or a wine glass
+#: here" is as well defined as either half. That is NOT true of a category COCO
+#: lacks entirely, which is what the toy and fuel-tank rulings turn on; running
+#: the two together is a mistake this file made for one commit.
+#:
+#: `cup` ∪ `wine glass` buys +8,180 boxes (+38%), +1,469 images, and **+35% in
+#: the small band** -- the binding constraint on class supply everywhere here
+#: (#3603). It costs a negative-pool redraw at build time for those 1,469, and
+#: it makes `cup` the first class in this study that is not a plain COCO class.
+SCALE_CLASS_MERGES: dict[str, tuple[str, ...]] = {
+    "cup": ("cup", "wine glass"),
 }
 
 
+def coco_classes_for(cls: str) -> set[str]:
+    """The COCO classes whose boxes count as *cls*, merges applied."""
+    return set(SCALE_CLASS_MERGES.get(cls, (cls,)))
+
+
 def scale_class_dataset_name(category: str) -> str:
-    """The dataset/detector name *category* is reviewed under.
+    """Deprecated alias for :func:`review_name`.
 
     A thin spelling of :func:`review_name` with no pass suffix, kept because
     ``make_class_slate.py`` bands a *candidate* rather than issuing a voted

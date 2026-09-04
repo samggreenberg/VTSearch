@@ -271,6 +271,44 @@ class TestVgNameTables:
         assert "bike" in pc.SCALE_VG_AMBIGUOUS["bicycle"]
         assert "bike" not in pc.SCALE_VG_NAMES.get("bicycle", ())
 
+    def test_every_class_in_c_has_had_its_names_audited(self, pc):
+        """The flag is only worth having if something checks it.
+
+        A class added to *C* without an audit ships the #3605 defect silently:
+        `bicycle` did, for the whole of #3156, with every structural check
+        passing. The audit is four scripts and a few CPU-minutes.
+        """
+        missing = sorted(set(pc.SCALE_CLASSES) - set(pc.SCALE_VG_NAMES_AUDITED))
+        assert not missing, (
+            f"VG-name coverage unmeasured for {missing}. Run coco_folds.py and "
+            "vg_name_families.py to find the candidates, name_evidence.py to adjudicate them, "
+            "then add the class to SCALE_VG_NAMES_AUDITED whatever the verdict -- an audit that "
+            "found nothing is the result the flag exists to record."
+        )
+
+    def test_a_class_with_nothing_measured_is_absent_rather_than_empty(self, pc):
+        """`()` and "not looked at" would read the same; SCALE_VG_NAMES_AUDITED says which."""
+        for table in (pc.SCALE_VG_NAMES, pc.SCALE_VG_AMBIGUOUS):
+            assert all(names for names in table.values()), f"empty tuple in {table}"
+
+    def test_every_spelling_is_written_the_way_the_read_matches_it(self, pc):
+        """`vg_boxes_by_name` lowercases and strips; a stray capital folds nothing, silently."""
+        for table in (pc.SCALE_VG_NAMES, pc.SCALE_VG_AMBIGUOUS):
+            for names in table.values():
+                for name in names:
+                    assert name == name.strip().lower(), name
+
+    def test_sign_is_not_listed_for_stop_sign(self, pc):
+        """The largest fold-in column in C, and the one that must not be acted on.
+
+        `sign` carries 46.6% of COCO's `stop sign` boxes and is a stop sign 7.9%
+        of the time, so listing it would withhold 12.7 images from the *shared*
+        pool -- a cost paid by all twelve classes -- per contaminated negative
+        removed (#3618, #3635).
+        """
+        assert "sign" not in pc.SCALE_VG_AMBIGUOUS.get("stop sign", ())
+        assert "sign" not in pc.SCALE_VG_NAMES.get("stop sign", ())
+
 
 class TestCanonicalise:
     def test_an_alternate_spelling_folds_onto_the_class_name(self, vgs):
