@@ -103,7 +103,9 @@ Anything else stays open — a genuinely partial `Refs` is doing its job.
 
 Run it right after step 6 to confirm nothing was left behind. It is also worth running **between** releases — the views it keeps honest (`is:issue is:open -label:solved`, what a human should pick up next) matter most while the release is still weeks away.
 
-The script is a pure function from data to plan — it does no network I/O, because the GitHub REST API is unreachable from a Claude session (`GITHUB_TOKEN` is present but returns 403; GitHub access is intermediated by the MCP server). So gather the data first, then pipe it in:
+The script is a pure function from data to plan — it does no network I/O of its own, so gather the data first and pipe it in.
+
+**Use the `gh` CLI to gather it.** This paragraph used to say the GitHub REST API was unreachable from a Claude session and that access was intermediated by the MCP server. That was only ever true of a raw `GITHUB_TOKEN` (which 403s, and is not even set in a session); `gh` carries its own authenticated token and `gh api` works normally. Writing it as "unreachable" made the MCP server look load-bearing, and this recipe became unrunnable the moment that server was removed from a machine — which has now happened. `gh api` and `gh pr list`/`gh issue list` are the path; the MCP tools are an equivalent alternative where they happen to be configured, not a prerequisite.
 
 1. List the PRs merged into `dev` since the last release — the same `origin/main..origin/dev` window as step 3 — and read each one's **body**. These are `release_prs`.
 2. List the PRs currently **open** against `dev` (`open_prs`) and those **closed without merging** since the last release (`abandoned_prs`), with their bodies. The open ones are why an issue can be labelled before any merge; the abandoned ones are the only way a label comes off outside a close.
