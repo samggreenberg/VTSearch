@@ -35,8 +35,6 @@ This rule has **no exceptions for "quick" yes/no follow-ups.** Yes/no offers bel
 
 When the user's whole prompt is just a number — `#3421`, or bare `3421` — it names a GitHub issue or pull request **in this repo**, and it is already a full instruction. Do not ask what to do with it; do not answer with a summary of the issue and stop. Resolve the number first (GitHub draws issues and PRs from one sequence, so a given number is one or the other, never both), then follow the matching workflow below.
 
-**The number is always literal.** A `#1234` appearing in a *description* of this convention is a placeholder standing in for "any number". Only a number the user actually types is work to do — never invent one, and never go look up a number nobody gave you.
-
 **This applies on every surface.** Claude Code on the web, the desktop app, the laptop CLI — the convention is repo policy, not a per-session preference, so it holds wherever this file is loaded.
 
 ### If `#N` is an issue
