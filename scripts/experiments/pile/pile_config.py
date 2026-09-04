@@ -367,7 +367,7 @@ SCALE_VG_NAMES: dict[str, tuple[str, ...]] = {
     "book": ("magazine",),
     "bus": ("buses", "school bus"),
     # The face is the clock: 89% of `clock face` boxes land on COCO's clock box,
-    # the highest box agreement in the study.
+    # over 184 of them -- the best-supported fold in the study.
     "clock": ("clock face", "clocks"),
     "dog": ("black dog", "brown dog", "dogs", "puppy"),
     # COCO's `kite` covers parasails and parachutes, and VG names them so.

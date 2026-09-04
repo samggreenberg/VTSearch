@@ -10,7 +10,7 @@ It is the wrong test for the **negative pool**, and the pool is where the defect
 of #3605 actually lives. An image is unusable as a negative for *c* the moment
 *c* is present on it, however the box is drawn. `grandfather clock` scores 0 of
 6 on box agreement -- correctly, since the box is the cabinet and COCO's is the
-dial -- and every one of those images holds a clock.
+dial -- and COCO finds a clock on every image where it is the only evidence.
 
 So this asks the image question instead, and asks COCO to answer it:
 

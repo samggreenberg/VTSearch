@@ -1,6 +1,6 @@
 """Figures for the VG-name coverage study (#3618).
 
-Reads the two JSONs committed beside this script in `measurements/`, so a re-plot needs nothing
+Reads the JSONs committed beside this script in `measurements/`, so a re-plot needs nothing
 from the cluster:
 
     python figures.py                      # -> figures/*.png

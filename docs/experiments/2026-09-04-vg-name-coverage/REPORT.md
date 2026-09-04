@@ -25,7 +25,7 @@ not a decision:
 | name | class | fold-in | the box test says | what is actually true |
 |---|---|---|---|---|
 | `sign` | `stop sign` | **473 boxes, 46.6%** — the largest fold-in column anywhere in *C* | the strongest candidate in the study | a VG `sign` box is a stop sign **7.9%** of the time |
-| `grandfather clock` | `clock` | 0 of 6 boxes, 0.0% | not a clock | every one of those images holds a clock — the VG box is the cabinet and COCO's is the dial |
+| `grandfather clock` | `clock` | 0 of 6 boxes, 0.0% | not a clock | COCO finds a clock on all three images where it is the class's only evidence — the VG box is the cabinet, COCO's is the dial |
 
 Both errors have one cause: **fold-in is conditioned the wrong way round.** A
 high share says *stop signs are usually annotated `sign`*, which is a fact about
@@ -83,7 +83,7 @@ them — that is a human pass or a different source (**#3635**).
 ### 4. The alias test cannot see a spelling split, and says so plainly
 
 #3618 asks that an alias reading be confirmed with `scan_name_overlap.py` (box
-IoU both ways) rather than on a fold-in count. Run over 129 candidate names it
+IoU both ways) rather than on a fold-in count. Run over 157 candidate names it
 returns **1,740** class-vs-candidate pairs and calls **11** of them aliases:
 
 | verdict | pairs |
@@ -108,7 +108,9 @@ deliberately *different* boxes — the annotator drew one book and then the pile
 | `clock` / `clock face` | 286 | **0.562** | **0.701** | **alias** |
 
 The last row is the case the test is for — two names genuinely on one box — and
-it is also the highest box agreement in the study (89%). So the box-overlap test
+it is the best-supported fold in the study: **89%** box agreement over 184
+boxes, where the only higher scores (`butter knife` 100%, `blue umbrella` 93%)
+rest on 32 and 30. So the box-overlap test
 keeps its job, which is that case and refuting a lookalike (it is how `bus`
 survived matching 80 images annotated `bush`, and how #3588 refuted
 `motorcycle`/`bike` and the whole `board` family). It is not the instrument for
@@ -166,9 +168,12 @@ this box cannot be a positive*:
 | a **collective** | `books` — 89% precision, 34% box | the box is a pile, and a band is a claim about one object's size |
 | a **part or container** | `beak` 86%, `bookshelf` 81%, `knife block` 79%, `stop` 70% | the class is there; this box is not it |
 
-Only **7** names are of the third kind, so the worry that scene words would
-strip whole scene types out of the shared pool did not materialise: including
-them costs 237 extra withheld images out of 56,579.
+Only **7** names are of the third kind, so the worry that a scene word would
+strip a whole scene type out of the shared pool — which every class pays for,
+not just its own — did not materialise. Priced both ways: leaving them out
+withholds 2,384 images, putting them in withholds **2,664**, and the repaired
+count is 860 either way. 280 images out of 56,579 is not a reason to leave a
+measured negative in the pool.
 
 ### What the tables say
 
@@ -243,12 +248,13 @@ images.
 
 **76 candidate names could not be adjudicated at all** — fewer than five images
 where the name is the class's only evidence. They carry **312** non-COCO images
-between them and pool to **58%** precision, or **74%** with `stop sign`'s dead
-`sign` family excluded. So there is roughly another 200 images of real repair
-behind names like `yacht`, `rowboat`, `beach umbrella`, `ferry` and `white dog`
-that English says are obviously the class and the data cannot confirm one at a
-time. Pooling them by construction — every `<colour> <class>` compound as one
-hypothesis — is the measurable way to reach them, and is filed as **#3636**.
+between them and pool to **58%** precision; setting aside `stop sign`'s dead
+`sign` family (0 of 37, 90 images) the other eleven classes' 222 images pool to
+**74%**. So there are roughly **160 more images of real repair** behind names
+like `yacht`, `rowboat`, `beach umbrella`, `ferry` and `white dog` — names
+English calls obviously the class, and the data cannot confirm one at a time. Pooling them by construction — every
+`<colour> <class>` compound as one hypothesis — is the measurable way to reach
+them, and is filed as **#3636**.
 
 Three limits of the method itself, stated rather than hidden:
 
@@ -268,7 +274,7 @@ Three limits of the method itself, stated rather than hidden:
 | issue | what it is |
 |---|---|
 | **#3635** | `stop sign` cannot be repaired by any name: 496 VG images, 18.7% self-match, and its 19,148-image `sign` family refuted at 7.9%. Needs a human pass or a different source. |
-| **#3636** | Adjudicate head-noun compounds as one hypothesis, to reach the 312 images behind the 76 names that are individually unmeasurable. |
+| **#3636** | Adjudicate head-noun compounds as one hypothesis, to reach the ~160 repaired images behind the 76 names that are individually unmeasurable. |
 | **#3637** | A fold can un-band an image the class already saw, via the scatter guard — 248 across the twelve, and `clock` nets −16. Decide whether a scattered fold should keep the class's own band. |
 | **#3604** | Already open, and this is now part of its price: a rebuild is what makes any of the above real. |
 
@@ -278,9 +284,10 @@ Three limits of the method itself, stated rather than hidden:
 
 Run on the HLTCOE GRID, 2026-09-04, against the VG∩COCO overlap of **51,411**
 image pairs (87 skipped on aspect drift) and the **56,579** VG images COCO does
-not annotate. Artifacts in `/expscratch/sgreenberg/names-3618/`; the two JSONs
-the figures are drawn from are committed beside them in
-[`measurements/`](measurements/), so `python figures.py` re-plots with nothing from the cluster.
+not annotate. Artifacts in `/expscratch/sgreenberg/names-3618/`; the JSONs the
+figures and the shipped tables are drawn from are committed in
+[`measurements/`](measurements/), so `python figures.py` re-plots with nothing
+from the cluster.
 
 | script | what it answers |
 |---|---|
