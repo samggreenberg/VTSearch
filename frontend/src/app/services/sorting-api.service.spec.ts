@@ -100,6 +100,20 @@ describe('SortingApiService', () => {
     req.flush({ labels: [] });
   });
 
+  it('exportLabels with detectorName should scope to that detector', () => {
+    service.exportLabels(false, { detectorName: 'My Detector' }).subscribe();
+    const req = httpMock.expectOne(r => r.url === '/api/labels/export');
+    expect(req.request.params.get('detector_name')).toBe('My Detector');
+    req.flush({ labels: [] });
+  });
+
+  it('exportLabels omits detector_name when no detector is named', () => {
+    service.exportLabels(false, { enrich: true }).subscribe();
+    const req = httpMock.expectOne(r => r.url === '/api/labels/export');
+    expect(req.request.params.has('detector_name')).toBe(false);
+    req.flush({ labels: [] });
+  });
+
   it('importLabels should POST', () => {
     service.importLabels({ labels: [{ md5: 'abc', label: 'good' }] }).subscribe(data => {
       expect(data.applied).toBe(1);
