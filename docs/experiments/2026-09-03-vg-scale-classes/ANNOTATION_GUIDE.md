@@ -54,6 +54,13 @@ cost us the `book` pass.
   the object is physically in the scene, and the reflection is how you can tell.
   Good. The line is whether the thing itself is there, not whether you are
   looking straight at it.
+- **Containing a thing does not make it a container *for* that thing.** A
+  5-gallon bucket of apples is not a food container; nor is a shopping cart, a
+  grocery store, or a car boot with the shopping in it. Each holds food and none
+  was made to. The vessel has to be *for* the contents — which is the same
+  intent-of-manufacture test as the one above, pointed at contents instead of at
+  ownership, and it is what keeps "judge the vessel, not the food" from
+  swallowing the whole scene.
 - **Obvious toys and models are Bad.** A toddler's plastic Cinderella phone is
   not a cell phone; a die-cast car is not a car. The reason is not English but
   consistency: the shared negative pool was drawn as *images COCO says hold none
@@ -179,9 +186,9 @@ Bad here:
   carafe, a teapot, a thermos (5), a dispenser (2) — these are `bottle`.
   Together with the jars, cans and bottles above, the whole not-a-cup family is
   **146 boxes, 1.8% of COCO cup**, so the narrowing is cheap.
-- **A bucket** (13) is not a cup either, but do not send it to `bottle`: COCO
-  puts buckets in `bowl` more than anywhere else (19 vs 13 here and 3 in
-  bottle), and whether a bucket is a bowl is the open question over there.
+- **A bucket** (13). Not a cup, and not a `bottle` or a `bowl` either — a bucket
+  is a general-purpose container that was made for nothing in particular. COCO
+  puts buckets on bowls 19 times and cups 13; both are rejected.
 - **A trophy cup.** Named a cup and nothing else about it is one: it serves no
   drink, so it is not a single serving of anything. Flagged because an earlier
   draft of this guide counted it, and that claim was never measured — VG uses
@@ -217,8 +224,12 @@ Do not count:
 - **A sink basin** (`sink`), an **ashtray**, and a **blender or coffee carafe**.
   None is a systematic fold-in, so excluding them costs almost nothing.
 
-**Open:** a 5-gallon bucket of apples. `bucket` is a real fold-in (19 boxes) and
-a bucket does hold food, but it stretches "vessel" a long way. Unruled.
+**A 5-gallon bucket of apples is not a bowl**, and neither is a shopping cart, a
+grocery store, or a car boot with the shopping in it. Holding food is not the
+test; being made to hold food is. `bucket` is a genuine fold-in — 19 boxes COCO
+called a bowl — so this one is a real disagreement rather than a hypothetical,
+but it is a cheap one, and the alternative has no floor: each of those four
+holds food, and nothing in "it contains food" stops at the first.
 
 Judge the **vessel, not the food**: an empty plate counts, and a pile of food on
 a bare table does not — which matters because VG names 163 of these boxes `food`

@@ -453,8 +453,8 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "with a stem and a foot is `wine glass`), a JAR however it is drunk from "
             "(a jar is a `bottle`; 25 jar boxes are COCO cups), a can, a tin, a carton, "
             "and anything that serves MORE THAN ONE -- a pitcher, jug, carafe, teapot or "
-            "thermos is a `bottle`; a bucket is not a cup but is mostly a `bowl` (19 vs "
-            "13 here), which is open there. The test is portion, not shape: A CUP IS "
+            "thermos is a `bottle`; a bucket is nothing here -- a general-purpose container "
+            "made for nothing in particular. The test is portion, not shape: A CUP IS "
             "HAND-HELD AND A SINGLE SERVING."
         ),
     ),
@@ -468,6 +468,9 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "Good: bowls, plates (a paper plate is a plate), saucers, dishes, serving "
             "pots, baskets that hold food, disposable food containers, and a dog's water "
             "bowl. A paper food boat with turned-up sides is a bowl, flimsy or not. "
+            "CONTAINING food does not make something a food container: a 5-gallon bucket "
+            "of apples is not a bowl, nor is a shopping cart, a grocery store, or a car "
+            "boot with the shopping in it. It has to be MADE to hold food. "
             "Bad: flat wrappers and sleeves, cups and mugs (`cup`), sink basins (`sink`), "
             "toilet bowls, feed troughs, planters (`vase`), ashtrays and carafes. "
             "Judge the vessel, not the food."
