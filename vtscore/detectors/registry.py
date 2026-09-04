@@ -39,14 +39,8 @@ _T = TypeVar("_T")
 # ``file_lock``; this lock only serialises threads within one process.
 _lock = threading.RLock()
 
-# In-memory cache - refreshed from disk on every mutation (see
-# :func:`_read_modify_write`) and whenever the manifest on disk no longer
-# matches the stamp the cache was built from (see :func:`_ensure_loaded`).
 _entries: list[dict[str, Any]] | None = None
-
-# ``(mtime_ns, size)`` of the registry file the cache was filled from, or
-# ``None`` when the file did not exist.  Compared on every read so a write by
-# another process is picked up immediately.
+#: ``(mtime_ns, size)`` of the registry file the cache was filled from.
 _entries_stamp: tuple[int, int] | None = None
 
 # Set of detector IDs currently loaded in memory (each has a DetectorContext).
@@ -123,10 +117,9 @@ def _read_modify_write(mutator: Callable[[list[dict[str, Any]]], _T]) -> _T:
     race so a mutation merges into the current on-disk state instead of
     clobbering entries a sibling process committed since this process last read.
     ``_load`` starts from disk truth (not the possibly-stale cache); the result
-    is always persisted and swapped into ``_entries``, and the freshness stamp
-    is taken from the file we just wrote so the next read skips a re-parse.
+    is always persisted and swapped into ``_entries``.
     """
-    global _entries, _entries_stamp
+    global _entries
     with file_lock(REGISTRY_PATH):
         entries = _load()
         result = mutator(entries)
@@ -134,6 +127,7 @@ def _read_modify_write(mutator: Callable[[list[dict[str, Any]]], _T]) -> _T:
         with _lock:
             _entries = entries
             # Stamp what we just wrote, so the next read does not re-parse it.
+            global _entries_stamp
             _entries_stamp = _manifest_stamp()
     return result
 
@@ -292,6 +286,8 @@ def record_detector_embedder(detector_id: str, embedder_name: str) -> None:
                 _save(entries)
             with _lock:
                 _entries = entries
+                # Same reason as in `_read_modify_write`: stamp what we just
+                # read/wrote so the next read does not re-parse it.
                 _entries_stamp = _manifest_stamp()
     except Exception as exc:
         logger.warning("Failed to persist embedder for detector %s: %s", detector_id, exc)

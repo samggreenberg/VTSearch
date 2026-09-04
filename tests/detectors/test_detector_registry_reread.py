@@ -89,3 +89,23 @@ def test_this_process_own_mutation_stays_visible(registry):
 
     registry._read_modify_write(mutate)
     assert {d["name"] for d in registry.list_detectors()} == {"alpha", "gamma"}
+
+
+def test_recording_an_embedder_stamps_the_cache_it_swapped_in(registry):
+    """The same courtesy `_read_modify_write` does, on the path that runs most.
+
+    ``record_detector_embedder`` is an inline read-modify-write rather than a
+    call to the shared helper, and it fires on *every* training cycle. It
+    swapped the cache without stamping it, so the write it had just made left
+    the stamp behind and the next read re-parsed a file this process already
+    held in memory.
+    """
+    _write(registry, ["alpha"])
+    registry.list_detectors()
+
+    registry.record_detector_embedder("id0", "clip-vit-base")
+    cached = registry._entries
+
+    registry.list_detectors()
+    assert registry._entries is cached, "re-parsed a registry this process had just written"
+    assert registry.find_by_name("alpha")["embedder"] == "clip-vit-base"
