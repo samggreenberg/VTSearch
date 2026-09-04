@@ -122,7 +122,7 @@ def _prepare_info(root: Path, per_class: int, *, categories=_CATEGORIES) -> Path
     return path
 
 
-def _run(hh, *args: str) -> tuple[int, str]:
+def _run(hh, *args: str | Path) -> tuple[int, str]:
     """`main()` in-process, returning (exit status, the verdict line)."""
     import io
     from contextlib import redirect_stdout
@@ -245,7 +245,7 @@ class TestArguments:
 class TestPreflightWiring:
     """Check 16c: the verdict has to reach the launch gate, not just stdout."""
 
-    def _preflight(self, tmp_path: Path, *args: str, steps: str = "400", **env: str) -> str:
+    def _preflight(self, tmp_path: Path, *args: str | Path, steps: str = "400", **env: str) -> str:
         exp = tmp_path / "exp" / "results"
         exp.mkdir(parents=True)
         (exp / "prepare_info.json").write_text((_prepare_info(tmp_path, 900)).read_text())
