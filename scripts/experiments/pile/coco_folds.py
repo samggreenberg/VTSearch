@@ -69,12 +69,22 @@ def iou(a: list[float], b: list[float]) -> float:
     return inter / ua if ua > 0 else 0.0
 
 
-def coco_boxes(anchor: Path, classes: set[str]) -> tuple[dict, dict, dict]:
+def coco_boxes(anchor: Path) -> tuple[dict, dict, dict]:
     """``({coco_id: {class: [norm boxes]}}, {coco_id: (W, H)}, {coco_id: set(all classes)})``.
 
-    The third return is every COCO class present on the image, not just the
-    wanted ones: fold-out needs to say "this VG box sits on a COCO *bench*",
-    which is only possible if the whole vocabulary was read.
+    **Every COCO class is loaded**, not just the ones the caller asked about.
+    Fold-out needs to say "this VG box sits on a COCO *bench*", and it can only
+    say that if `bench`'s boxes are here to be tested against.
+
+    This used to take a `classes` filter and keep only those boxes, which made
+    fold-out answer with the caller's own question: a class nobody named had no
+    boxes, so every VG box over it fell through to `(no COCO class)`. `bike`
+    read 100% "means nothing" against a recorded 40.1%, because `bicycle` was
+    not in the set -- and 100% is exactly the reading that banishes a good
+    spelling to :data:`pile_config.SCALE_VG_AMBIGUOUS` and costs the class half
+    its positives (#3640, the #3605 failure again). The filter saved nothing
+    worth having: the boxes are small beside `objects.json`, which every caller
+    of this function also loads.
     """
     zip_path = anchor / "annotations_trainval2017.zip"
     files = [anchor / "instances_val2017.json", anchor / "instances_train2017.json"]
@@ -106,8 +116,6 @@ def coco_boxes(anchor: Path, classes: set[str]) -> tuple[dict, dict, dict]:
                 continue
             iid = int(ann["image_id"])
             present[iid].add(name)
-            if name not in classes:
-                continue
             x, y, w, h = (float(v) for v in ann["bbox"])
             if w <= 0 or h <= 0:
                 continue
@@ -129,8 +137,10 @@ def main() -> int:
     classes = set(c.strip() for c in args.classes.split(",") if c.strip()) or set(pc.SCALE_CLASSES)
     anchor = Path(args.anchor_dir)
 
-    cboxes, cdims, cpresent = coco_boxes(anchor, classes)
-    log(f"  {len(cdims)} COCO images; {sum(len(v) for v in cboxes.values())} class-groups over {len(classes)} classes")
+    cboxes, cdims, _ = coco_boxes(anchor)
+    log(
+        f"  {len(cdims)} COCO images; {sum(len(v) for v in cboxes.values())} class-groups over the full COCO vocabulary"
+    )
 
     log("loading VG image_data.json")
     with (anchor / "image_data.json").open() as fh:
@@ -181,8 +191,11 @@ def main() -> int:
                 continue
             vg_named.append((name, [x / W, y / H, (x + w) / W, (y + h) / H]))
 
-        for c, boxes in cboxes.get(cid, {}).items():
-            for cb in boxes:
+        # fold-in is asked only of the classes the caller named; fold-out below
+        # is asked of the whole vocabulary, which is why `cboxes` carries it.
+        on_image = cboxes.get(cid, {})
+        for c in classes:
+            for cb in on_image.get(c, []):
                 n_coco_boxes[c] += 1
                 hits = {n for n, vb in vg_named if iou(cb, vb) >= args.iou}
                 if hits:
@@ -197,10 +210,9 @@ def main() -> int:
                 continue
             n_vg_boxes[n] += 1
             under = set()
-            for c2 in cpresent.get(cid, set()):
-                for cb in cboxes.get(cid, {}).get(c2, []):
-                    if iou(cb, vb) >= args.iou:
-                        under.add(c2)
+            for c2, cbs in on_image.items():
+                if any(iou(cb, vb) >= args.iou for cb in cbs):
+                    under.add(c2)
             if not under:
                 fold_out[n]["(no COCO class)"] += 1
             for c2 in under:

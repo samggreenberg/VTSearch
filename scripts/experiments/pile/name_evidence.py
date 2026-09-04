@@ -149,7 +149,7 @@ def main() -> int:
     wanted = set(classes) | {n for ns in cands.values() for n in ns}
     log(f"{len(classes)} classes; {len(wanted)} VG names")
 
-    cboxes, cdims, cpresent = cf.coco_boxes(Path(args.anchor_dir), set(classes))
+    cboxes, cdims, cpresent = cf.coco_boxes(Path(args.anchor_dir))
 
     log("loading VG image_data.json")
     with (Path(args.anchor_dir) / "image_data.json").open() as fh:
