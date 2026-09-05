@@ -321,6 +321,19 @@ So the recommendation is the boring one, and the numbers are why it is right:
 Nothing here blocks #3604: `stop sign` changes nothing about that rebuild, which
 was the one thing #3635 wanted settled before it.
 
+### The ruling, 2026-09-05
+
+Sam took the recommendation as written: **keep `stop sign`, do not list `sign`,
+and fix the contamination through the shared negative-pool review**. `pile_config`
+is unchanged by this study.
+
+The review pass is scheduled **after** #3588's remaining four class slates
+(`chair`, `car`, `truck`, `fire hydrant`) and **before** #3604's rebuild — class
+definition stays coherent, and a pool review is worth most immediately before the
+rebuild it is protecting. Filed as **#3660**, with the priority order the table in
+§2 gives: `backpack`, `book`, `knife`, `stop sign` carry 285 of the ~470 expected
+contaminants between them.
+
 ## Follow-ups filed
 
 | issue | what it is |
@@ -328,6 +341,7 @@ was the one thing #3635 wanted settled before it.
 | **#3655** | `vg_scale`'s ambiguous exclusion is global when `evaluable_categories` could make it per-class — 2,200-3,941 pool images per class. §5. |
 | **#3656** | `measure_supply.py` skips `canonicalise` and `lift_ambiguous`, so it reports the pre-#3638 supply. §1. |
 | **#3657** | `MAX_ASPECT_DRIFT` is applied as a *relative* drift in the loader and an *absolute* one in three analysis scripts, against the same constant. |
+| **#3660** | Extend the shared negative-pool review before #3604's rebuild — the ruling's actual work item. §2, §6. |
 
 Not filed, because it is one sentence in a docstring rather than a task:
 `name_evidence.py` should say that `1 / precision` counts **good hard negatives
