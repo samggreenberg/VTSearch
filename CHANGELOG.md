@@ -33,6 +33,18 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **A mixed-media dataset is no longer scored against another embedding space's
+  vectors.** Asking the matrix layer for a specific embedder checked only the
+  *first* media to decide whether that name was the dataset's primary - and if
+  it was, every media then contributed whatever vector it happened to carry.
+  On a dataset holding, say, native images in one space and videos in another,
+  that stacked the videos' vectors into the images' matrix and scored them
+  through the images' detector head: no error, plausible-looking numbers, and a
+  different answer if the same items were loaded in a different order. It was
+  reachable whenever the two spaces share a dimension, which is common. The
+  check now requires every media to agree, so a request for one space reads
+  only that space and reports the media it had to leave out.
+
 - **A CLI Auto-Find run that converts or re-clips its dataset now calibrates the
   threshold on what it actually scores.** The cut was fitted on the loaded
   medias while scoring read the converted frames, pages or clips those medias

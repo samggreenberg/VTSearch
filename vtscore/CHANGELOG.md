@@ -335,6 +335,40 @@ instead, since every commit on `dev` is effectively a new app release.)
   for you, since the callbacks the load pipeline binds check cancellation
   before recording each tick.
 
+### Fixed
+
+- **A matrix built for one embedding space can no longer be filled with
+  another space's vectors** (issue #3650). `scoreable_snapshot()`,
+  `get_embedding_matrix()` and `get_embedding_matrix_for_snap()` decide whether
+  an explicitly named embedder *is* the snapshot's primary - and so may reuse
+  the cached primary path, which reads whatever vector each media happens to
+  carry. That test sampled **one** media. On a homogeneous snapshot that is
+  right and is the single-embedder optimisation it was written for; on a
+  mixed-type snapshot it was a sampling error, because media #1's primary
+  picked the path for all N.
+
+  Ask for space `A` on a snapshot whose first media is an `A` media and whose
+  rest are `B` media, and every media contributed its own vector: `B`-space
+  rows stacked into an `A`-space matrix and scored through an `A`-space head.
+  Nothing raised - the only guard was the width check, so this was reachable
+  whenever the two spaces share a dimension, which 512-d and 768-d encoders
+  routinely do. Reordering the same snapshot flipped the answer between "all N
+  rows, some of them wrong" and "only the `A` rows".
+
+  The collapse now requires **every** media to share that primary (a
+  short-circuiting scan, memoised per `media_revision` on `DatasetContext` so
+  the cached hot path stays O(1)). A snapshot whose medias disagree keeps the
+  name and takes the named path, which reads each media's vector *in the
+  requested space* - so `scoreable_snapshot()` drops the media that have none
+  and `get_embedding_matrix*()` raises on them, per their existing contracts.
+  Homogeneous snapshots are byte-for-byte unchanged.
+
+  `scoreable_snapshot()` additionally logs one `WARNING` per call naming the
+  requested embedder, the spaces the dropped media live in, and how many were
+  dropped. Dropping stays the policy - a mixed dataset scored for one space
+  *should* leave out the media that live in another - but a silently short
+  haystack is what hid this.
+
 ### Added
 
 - **`ProgressCallback`, `noop_progress()` and `resolve_progress_callback()` are
