@@ -317,8 +317,41 @@ tow. It also keeps the existing ruling that a **cab-only tractor unit counts** �
 it is the powered half — while the trailer alone does not.
 
 **Not "does it have a cab", though, and the difference matters.** A cab is a
-proxy that fails on a forklift (COCO: 2 → Truck) and on anything with an open
-driving position. Self-propulsion is the property actually being tracked.
+proxy that fails on anything with an open driving position. Self-propulsion is
+the property actually being tracked.
+
+### A third test, for the machines: does the body carry, or does it work?
+
+Being a self-propelled road vehicle is not sufficient either. A **crane is not a
+Truck**; a **fire engine is**. Neither is settled by the goods-or-people test, so
+there is one more question, and it is the last:
+
+> **Does the body carry a load down a road, or does it perform work at a site?**
+> Carries → Truck. Works → neither Car nor Truck.
+
+- **Carries — Truck.** A fire engine hauls water, hose, ladders and crew, and
+  the journey is the whole point (`fire truck` 35, `fire engine` 11, `firetruck`
+  12 — **58 boxes, none on car**). Also an ambulance (19), a dump truck (18),
+  a tow truck (7, it carries the car), a garbage truck (4), a cement mixer (3).
+- **Works — excluded.** A crane lifts; nothing is transported and the job
+  finishes where the machine is standing. Also a tractor (24), a forklift (2), a
+  bulldozer, an excavator, a backhoe (1 each).
+
+**This is the same shape as built-as-beats-used-as**, one level up: there we
+asked what a body was made to be, here we ask what it was made to *do*. A vehicle
+is a Truck when transport is the purpose, not merely the means of arrival.
+
+**It also repairs a rationale this guide already had.** Tractors and forklifts
+were excluded under the heading of "towed and pushed things" — which is simply
+wrong about a tractor, and was doing no work beyond gesturing at the list. Plant
+machinery is the real category, and the exclusion now has one reason instead of a
+misfiled one.
+
+**The genuine edge is a crane on a lorry chassis** — a truck-mounted crane or a
+bucket truck, where a road-going body carries a machine. Read the chassis: road
+wheels and a cab in a normal truck body → **Truck**; tracks, outriggers or a
+lattice boom → not. Do not labour it: `crane` appears **2** times in the entire
+overlap, so the cost of getting it wrong is two boxes.
 
 **A tuk-tuk is a vehicle, so the cargo test decides it** — passenger cabin →
 Car, flatbed or box → Truck. Note this is entirely unmeasured: `tuk tuk`,
@@ -328,8 +361,16 @@ Treat it as a principled call on a case you will probably never meet.
 
 **What this narrowing costs, honestly.** COCO is looser here than we are:
 `trailer` lands on a COCO `truck` box **63** times and `cart` **35**, plus
-`tractor` 24, `forklift` 2, `dolly` 1. So excluding towed and pushed things is a
-real disagreement, not a free one — of the same order as the vase narrowing.
+`tractor` 24, `forklift` 2, `dolly` 1, plus `crane` 2, `bulldozer`, `excavator`
+and `backhoe` 1 each. So excluding towed things *and* plant machinery is a real
+disagreement, not a free one — of the same order as the vase narrowing, and
+about 100 boxes all told.
+
+**The fire-engine ruling, by contrast, costs nothing:** all 58 of its boxes are
+already COCO trucks and none is a COCO car, so agreeing with COCO here is free.
+Two rulings made in one breath, one of them a narrowing and one of them a
+confirmation — worth separating in the writeup, because only the first can
+create disagreement in the scored subset.
 
 And a correction to this guide: it previously said COCO boxes trailers as truck
 *"only when the cab is attached"*. **Those 63 boxes do not support that** — it
