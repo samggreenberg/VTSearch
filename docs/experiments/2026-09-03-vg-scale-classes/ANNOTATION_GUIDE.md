@@ -627,10 +627,18 @@ harder call and much rarer.
 
 ### Someone is clearly sitting, and the Chair is invisible
 
-Vote **Good, and draw no box.**
+Vote **Good, and draw no box** — on an image that arrived **without** one.
 
-This is the one place the three-valued design is reachable from the voting UI,
-and it is exactly right here. A Good *with* a box says "present, and this is its
+**The stratum decides what "no box drawn" means, and the two meanings are
+opposite.** On a `positive_boxed` image a box already arrived, so a Good that
+draws nothing *confirms that box* (`positive_confirmed`) — which is the normal
+action, and what happened for 27 of every 30 positives confirmed so far.
+Drawing on a pre-boxed image is the exceptional case (`positive_reboxed`), and
+it is the one that moves bands. Everything below is about a **bare** image, from
+the `boundary` or `random` stratum, where no box arrived at all.
+
+There, it is the one place the three-valued design is reachable from the voting
+UI, and it is exactly right. A Good *with* a box says "present, and this is its
 size". A Good *without* one says **"present, but no size was measured"** — and
 `verdicts_to_corrections` files it as `negative_excluded`: `present: True`,
 `boxes: []`. The image is taken **out of the shared negative pool**, because a
