@@ -268,6 +268,20 @@ lands on bus 29 times and `bus` on truck **60**, while **`van` lands on bus 37**
 a minibus shuttle. `cab` (22 Truck / 45 Car) and `van` are the two words in this
 whole vocabulary that name genuinely different vehicles, and `van` names three.
 
+**A taxi is not the hard case either, despite feeling like one.** `taxi` lands on
+a COCO bus box **once**, against 62 on car; `cab` once against 45; `taxi cab`
+never, against 11. Being for hire does not move a saloon anywhere.
+
+**Because service is not a property of the object — and this is the jar rule
+again.** A jar holding cut flowers is a Bottle, because `Vase` is reserved for a
+vessel *made as one* and a borrowed vessel keeps the class it was built as. A
+minibus running as a shared taxi is a **Bus** for exactly the same reason, and a
+saloon with a roof sign and a meter is a **Car**. Livery, fare and route are
+borrowings; **built-as beats used-as**, here as everywhere else in this guide.
+
+So the taxi question collapses into the minibus one: it is the *body* that was
+ever in doubt, and the taxi livery was never the variable.
+
 The case that needs a call is therefore the **minibus or shuttle**, not the
 saloon. The visible cue, consistent with everything else here: a Bus is boarded —
 **a passenger door separate from the driver's position, and rows of side windows
