@@ -334,10 +334,14 @@ SCALE_CLASSES: tuple[str, ...] = (
 #: 1. **the class is present** when this name is its only evidence -- the
 #:    *repair precision*: over the VG-COCO overlap, the share of images carrying
 #:    the name and NOT the class name where COCO says the class is there anyway.
-#:    Read it as a price: ``1 / precision`` is how many images leave the shared
-#:    negative pool per contaminated negative removed. The cut is 1/3 -- three
-#:    withheld per repair -- taken on the **Wilson lower bound**, so a name
-#:    measured on five images cannot outrank one measured on two thousand.
+#:    Read it as a price, in the right units: ``1 / precision - 1`` is how many
+#:    **good hard negatives are destroyed per contaminated negative retired**.
+#:    Not pool membership -- 77,119 images are eligible against a 4,200-image
+#:    draw -- but the images a name withholds are the ones hardest to tell from
+#:    the class, which is what makes the ratio the thing to cut on (#3635). The
+#:    cut is 1/3 -- two destroyed per repair -- taken on the **Wilson lower
+#:    bound**, so a name measured on five images cannot outrank one measured on
+#:    two thousand.
 #: 2. **this box is the object**: at least half of the name's boxes land on a
 #:    COCO box of the class, over at least 20 boxes. A band is a claim about one
 #:    object's size (#3616), so a name that passes (1) and fails (2) goes to
@@ -666,7 +670,19 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
         test=(
             "Good: dining, office, folding and deck chairs, armchairs, high chairs, "
             "stools and bar stools, and one seat within a row of stadium or theatre "
-            "seating. Bad: couches and sofas, which are `couch`, and benches."
+            "seating; `seat`/`seats` (269) is the third largest fold-in here. One seat "
+            "is a Chair, two or more a couch -- upholstered is NOT the test, so a club "
+            "chair or recliner counts. A lifeguard station counts (built as seating for "
+            "one). Bad: couches and sofas (`couch`), benches, a TOILET (separate COCO "
+            "class, zero confusions), and a CAR SEAT -- a component is not an instance, "
+            "and counting them would fire on every street scene. A car seat REMOVED from "
+            "the car is free-standing, so it counts; so do a motorcycle's seat and a "
+            "saddle NOT (both are part of the vehicle or the tack, and both are zero "
+            "boxes in COCO). Someone clearly sitting on an INVISIBLE chair: vote Good and "
+            "draw NO box -- present, no size measured, which excludes the image from the "
+            "negative pool without making it a positive. A PART INHERITS THE RULING OF ITS "
+            "WHOLE: a chair back or leg is evidence of a Chair and you box the Chair, but "
+            "a headrest in a car is part of a car seat, so it is not one."
         ),
     ),
     "sink": ClassRule(
@@ -1059,23 +1075,21 @@ SCALE_CANDIDATE_VG_NAMES: dict[str, tuple[str, ...]] = {
     # `goblet` 8, `champagne glass` 5, `champagne flute` 5; `mug` 238 is the
     # cup half's own missing spelling.
     #
-    # `glass` IS here. It was briefly left out because it also means a windowpane
-    # and eyeglasses -- an English argument where a measurement was available,
-    # and the wrong test. The right one is fold-out, which put `bike` in
-    # SCALE_VG_AMBIGUOUS at 40.1%: of 3,224 VG `glass` boxes, 1,146 land on COCO
-    # `cup` and 861 on `wine glass`, so 62.2% land on the merged class -- against
-    # self-match rates of 72.1% (cup), 71.2% (bowl), 72.8% (bottle) and 74.2%
-    # (vase) for the class names themselves. Ten points under the names, twenty
-    # above `bike`.
+    # `glass` is NOT here, and the reasoning that briefly put it here is worth
+    # keeping because it was subtly wrong. Its fold-out is 62.2% onto the merged
+    # class (1,146 of 3,224 VG boxes on COCO `cup`, 861 on `wine glass`), well
+    # clear of `bike`'s 40.1%, which reads as a usable alias.
     #
-    # The merge is what makes it usable, which is an argument for the merge that
-    # was not made when the merge was decided: unmerged, `glass` split 35.5% cup
-    # and 26.7% wine glass with neither dominant -- ambiguity between two classes
-    # rather than about the world. `mug` self-matches at 81.7%, the highest of
-    # any name measured here.
+    # But a fold-out rate is NOT a positive-precision rate. Fold-out is measured
+    # only on the COCO-annotated half, where a reference exists; POSITIVES are
+    # drawn from all of VG, including the half with no check, and there the 35%
+    # of `glass` boxes that land on no COCO class -- windowpanes, eyeglasses --
+    # arrive as positives unexamined. The review measured the damage: the merged
+    # `cup` slate rejected 9 of 30 boxed positives, 30%, against 0-17% for every
+    # other class, and worst in the LARGE band at 40%, which is where a
+    # windowpane lands. `glass` is in SCALE_CANDIDATE_VG_AMBIGUOUS instead.
     "cup": (
         "cup",
-        "glass",
         "mug",
         "wine glass",
         "wine glasses",
@@ -1085,6 +1099,24 @@ SCALE_CANDIDATE_VG_NAMES: dict[str, tuple[str, ...]] = {
         "champagne flute",
     ),
 }
+
+#: Candidate-class spellings that MAY denote the class but also denote something
+#: else -- :data:`SCALE_VG_AMBIGUOUS` for classes not yet in *C*.
+#:
+#: Same three-valued treatment, for the same reason: a box under one of these is
+#: evidence in neither direction, so it is dropped from the bands *and* bars its
+#: image from the shared negative pool. :func:`pilebuild.loaders.vg_scale.lift_ambiguous`
+#: does both, and exempts any image COCO annotates exhaustively or a reviewer has
+#: ruled on -- there the question is already answered and the spelling is ignored.
+#:
+#: `glass` is the entry that named this table. It is 62.2% good by fold-out, which
+#: is why it was first tried as a plain alias, and the 35% that is windowpanes and
+#: eyeglasses still cost `cup` 30% of its boxed positives -- the measurement is in
+#: the comment on that table above.
+SCALE_CANDIDATE_VG_AMBIGUOUS: dict[str, tuple[str, ...]] = {
+    "cup": ("glass",),
+}
+
 
 #: Classes this project defines as the UNION of several COCO classes.
 #:

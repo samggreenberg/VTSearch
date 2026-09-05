@@ -69,7 +69,7 @@ numbers, not drafted:
 
 | number | what it decides | how it is measured |
 |---|---|---|
-| **repair precision** | act on this name at all | over the VG∩COCO overlap, take the images carrying the name and **not** the class name — the state that becomes a false negative on the other half — and ask COCO whether the class is present. Read it as a price: `1 / precision` is images withheld from the shared pool per contaminated negative removed. Cut at 1/3, on the **Wilson lower bound**. |
+| **repair precision** | act on this name at all | over the VG∩COCO overlap, take the images carrying the name and **not** the class name — the state that becomes a false negative on the other half — and ask COCO whether the class is present. Read it as a price, in the units of #3635: `1 / precision - 1` is **good hard negatives destroyed per contaminated negative retired** — not images withheld from the pool, which is 18x over-subscribed. Cut at 1/3, on the **Wilson lower bound**. |
 | **box agreement** | fold it, or only withhold it | the share of the name's boxes landing on a COCO box of the class (`coco_folds.py`'s fold-in, per name). Cut at 0.5 over ≥ 20 boxes, because folding claims *every* box under the name is the object and a band is a claim about one object's size (#3616). |
 
 The candidates come from two searches, and neither finds what the other does:
@@ -86,6 +86,24 @@ never co-occur, and `backpack`/`backpacks` scores **0.000 both ways**. It keeps
 its own job — the case where two names really do sit on one box
 (`clock`/`clock face`, 0.562/0.701) and refuting a lookalike, which is how `bus`
 survived matching 80 images annotated `bush`.
+
+**What a name withholds is never a random slice of the pool, and that is what
+the price is really counting** (#3635). `pool_contamination.py` measures the
+unconditioned question a name-conditioned rate cannot reach — *of the images that
+would enter the shared negative pool on VG's evidence alone, what share actually
+hold the class?* — by running the loader's own passes over the overlap with
+`exhaustive=set()`, i.e. as if those images were off-COCO, and holding COCO back
+as the answer key. It also prices the two exclusion rules against each other:
+today one ambiguous name costs **all twelve** classes the image, though
+`evaluable_categories` could make it cost one (#3655).
+
+`withheld_difficulty.py` then asks whether the withheld images are the pool's
+*hard* negatives, by ranking the drawn pool with the class's own text query. The
+answer is yes — for **every** ambiguous name, which is why concentration cannot
+discriminate between a good entry and a bad one and the ratio above must. `bike`
+takes 17.9x its base rate of the top 50 and `sign` 6.8x; what separates them is
+that `bike` destroys 31 good negatives to retire 30, and `sign` destroys 435 to
+retire 37.
 
 `name_coverage.py` then prices a proposed table before it ships: coverage against
 COCO, images repaired and withheld on the non-COCO half, and the **band ledger** —
@@ -451,6 +469,22 @@ python name_evidence.py --candidates cands.json \
     --propose-out proposal.json --out evidence.json               # precision, box, verdict
 python name_coverage.py --propose proposal.json --out cov.json    # repaired, withheld, band ledger
 ```
+
+Two more when the question is the **pool** rather than a name (#3635) — the first
+needs no proposal at all, and the shipped tables are worth scoring with it about
+once a rebuild:
+
+```bash
+python pool_contamination.py --out contam.json                    # per-class pool false-negative rate
+python pool_contamination.py --propose prop.json --out c2.json    # what a proposed name buys and costs
+python pool_contamination.py --drop bicycle:bike --out c3.json    # the counterfactual for an entry that SHIPS
+python withheld_difficulty.py --class "stop sign" --names sign \
+    --out hard.json                                               # are the withheld images the hard ones?
+```
+
+`--drop` exists because `--propose` can only add: scoring `bike` means comparing
+the pool *without* it against the shipped pool, and without that the control in
+#3635 would have been an estimate rather than a measurement.
 
 Run `name_coverage.py` with no `--propose` to score the tables that are actually
 shipped, which is what says whether `pile_config` still does what its comment

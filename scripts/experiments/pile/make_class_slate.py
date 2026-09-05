@@ -57,6 +57,7 @@ from make_positive_slate import draw_with_inset  # noqa: E402
 from pilebuild.loaders.vg_scale import (  # noqa: E402
     anchor_to_coco,
     band_candidates,
+    lift_ambiguous,
     canonicalise,
     read_vg_labels,
 )
@@ -95,7 +96,14 @@ def main() -> int:
 
     # ---- positives, from the VG source through the loader's own passes -----
     vg_names = {c: pc.SCALE_CANDIDATE_VG_NAMES.get(c, (c,)) for c in classes}
+    # Ambiguous spellings must be READ even though they are never folded: their
+    # whole job is to bar an image from the shared negative pool, and a name that
+    # was not read is invisible to `lift_ambiguous` -- it suppresses nothing and
+    # the contaminated negative stays. `pile_config.scale_vg_wanted` reads both
+    # tables for the built classes; this is the candidate-side equivalent.
+    ambiguous_names = {c: pc.SCALE_CANDIDATE_VG_AMBIGUOUS.get(c, ()) for c in classes}
     wanted_vg = {n for names in vg_names.values() for n in names}
+    wanted_vg |= {n for names in ambiguous_names.values() for n in names}
     log(f"reading VG source for {len(wanted_vg)} names")
     paths, records, dims = vg_source()
     labels = read_vg_labels(records, paths, dims, wanted_vg)
@@ -136,7 +144,17 @@ def main() -> int:
     )
     log(f"anchored {n_anchored} images to COCO ({n_reframed} skipped as re-framed copies)")
 
-    supply, boxes_for, _clean = band_candidates(labels, box_dims, set(), classes=classes)
+    # An ambiguous spelling is evidence in neither direction, so it is dropped
+    # from the bands and its image barred from the shared negative pool -- the
+    # same `lift_ambiguous` pass the built classes get, which is why this runs
+    # AFTER `anchor_to_coco`: on the COCO-annotated half the answer is already
+    # known and suppressing there would discard good negatives to fix nothing.
+    ambiguous = {c: names for c, names in ambiguous_names.items() if names}
+    unbanded = lift_ambiguous(labels, ambiguous, exhaustive) if ambiguous else set()
+    if ambiguous:
+        log(f"suppressed {len(unbanded)} (image, class) pairs on {sorted(ambiguous)}")
+
+    supply, boxes_for, _clean = band_candidates(labels, box_dims, unbanded, classes=classes)
 
     print(f"\n{'class':<16}{'small':>8}{'medium':>8}{'large':>8}   name the reviewer sees")
     print("-" * 78)

@@ -33,6 +33,46 @@ Every ruling in this guide is one of those three, and each carries its cost in
 the text. That is the discipline the goal requires: not "does COCO agree" but
 "if it does not, do we know what that costs us".
 
+### And when two definitions are both defensible, take the one that labels clean
+
+The table above prices a change against the *reference*. It says nothing about
+the other cost, which is usually the larger one: **a definition that is hard to
+apply produces noisy labels, and noisy labels are worse than an odd boundary.**
+So where the taxonomy leaves a choice — and it usually does — the tie-break is
+*which definition can a reviewer apply quickly and repeatably at three in the
+afternoon on the two-hundredth image*.
+
+That is the thread through most of what is here, and it is worth seeing as one
+idea rather than nine separate rulings:
+
+- **A car seat is not a Chair** partly because otherwise every street scene
+  becomes an agonised judgement call.
+- **A part inherits the ruling of its whole** replaces "is this fragment enough?"
+  with a lookup.
+- **The vessel ladder** turns an unanswerable semantic question — empty Vase or
+  ornamental Bowl? — into a glance at proportions.
+- **Judge the object in the box** removes the standing invitation to hunt for a
+  better example.
+- **"Neither", for a handle with no evidence either way**, is cleaner than a
+  coin-flip carrying a 4:1 prior.
+
+**The scored subset is the measurement of this.** Agreement against COCO on the
+fifth of each slate that has an answer is not only a check on the reviewer; it is
+a check on the *definition*, because a rule that is hard to apply shows up as
+disagreement. A class that scores 98% is telling you its rule is mechanical. One
+that scores 89% is telling you something is still being decided image by image —
+which is exactly what `bottle` was doing while its boundaries were being widened.
+Read that column as a labelability score and it earns its keep twice.
+
+## A note on names
+
+**A capitalised name means the class; a lowercase one means the English word.**
+A Chair is whatever this guide says it is; a chair is what you would call a
+chair. The two come apart constantly — a judge's bench is not a Bench, a toilet
+bowl is not a Bowl, a jar of flowers is a Bottle — and most of the rulings here
+exist precisely at that gap. Code keeps the lowercase form, because `"chair"` is
+the COCO key and a string is not prose.
+
 ## The protocol, once
 
 - **Good = the object is present.** Drag a box on it. **Bad = not present.**
@@ -539,10 +579,92 @@ even though it is part of a boat.
 
 Dining chairs, office chairs, folding and deck chairs, armchairs, high chairs,
 and **stools and bar stools** all count — 98 VG `stool` and 42 `armchair` boxes
-land on COCO chair boxes. Couches and sofas do **not**: COCO has a separate
-`couch` class, and the 37 `couch` boxes sitting on COCO chairs are its errors,
-not its rule. Benches do not count either. A single seat within a row of
-stadium, theatre or waiting-room seating counts as a chair. Like `car`, this
+land on COCO chair boxes, with 8 more under `arm chair` and 7 under `recliner`.
+Benches do not count. A single seat within a row of stadium, theatre or
+waiting-room seating counts, and `seat` (206) plus `seats` (63) is the third
+largest fold-in here, so that case is common.
+
+**One seat, one Chair; two or more, a couch.** COCO has a separate `couch`
+class, and the 37 `couch` and 16 `sofa` boxes on COCO chairs are its errors, not
+its rule. But *upholstered* is not the test — a single-seat upholstered piece,
+club chair or recliner, is a Chair, which is what `armchair` (50 across both
+spellings) and `recliner` (7) already say. A true two-seat loveseat is a couch by
+the same head-count that separates Chair from Bench. `love seat` appears once in
+15,868 boxes, so this is a rule for the reviewer's benefit rather than a
+measured boundary.
+
+**A lifeguard station is a Chair** — built as seating for one, which is the test
+`bench` already uses. Measured at exactly 1 box, so it is decided by the
+principle, not the data.
+
+**A toilet is not a Chair.** COCO has a separate `toilet` class and the two are
+never confused: `toilet`, `commode` and `urinal` appear **zero** times in 15,868
+chair boxes. Free.
+
+**A car seat is not a Chair, and that is the important one.** Sam's argument is
+the reductio: *every* car almost certainly has seats inside, so counting them
+makes Chair a class that fires on every street scene, stops discriminating, and
+poisons the shared negative pool everywhere a car appears. Three things agree:
+
+- **COCO never does it** — `car seat` 2, `child seat` 1, `car` 1, out of 15,868.
+- **A component is not an instance.** A car seat is part of the car, the same
+  test that keeps a concrete bed cast into the pavement out of `vase` and a fuel
+  tank out of `bottle`.
+- **The pool.** Cars are everywhere in VG, so this is the one exclusion here
+  whose absence would be catastrophic rather than merely wrong.
+
+**The same goes for a motorcycle's seat, and for a saddle.** A motorcycle
+almost always shows a little single-person seat, so admitting them would do to
+motorcycles what car seats would do to cars; and a saddle is tack, part of the
+horse's kit rather than free-standing furniture. Free, as with the toilet: the
+whole family — `saddle`, `motorcycle seat`, `bike seat`, `motorcycle` — appears
+**zero** times in 15,868 chair boxes, with a single stray `scooter`.
+
+The corollary, as with the jerry can: **a car seat removed from the car** —
+sitting in a garage, a scrapyard, a skip — is free-standing, nothing owns it,
+and it is a Chair. The same for a saddle on a rack in a tack room, which is a
+harder call and much rarer.
+
+### Someone is clearly sitting, and the Chair is invisible
+
+Vote **Good, and draw no box** — on an image that arrived **without** one.
+
+**The stratum decides what "no box drawn" means, and the two meanings are
+opposite.** On a `positive_boxed` image a box already arrived, so a Good that
+draws nothing *confirms that box* (`positive_confirmed`) — which is the normal
+action, and what happened for 27 of every 30 positives confirmed so far.
+Drawing on a pre-boxed image is the exceptional case (`positive_reboxed`), and
+it is the one that moves bands. Everything below is about a **bare** image, from
+the `boundary` or `random` stratum, where no box arrived at all.
+
+There, it is the one place the three-valued design is reachable from the voting
+UI, and it is exactly right. A Good *with* a box says "present, and this is its
+size". A Good *without* one says **"present, but no size was measured"** — and
+`verdicts_to_corrections` files it as `negative_excluded`: `present: True`,
+`boxes: []`. The image is taken **out of the shared negative pool**, because a
+Chair really is there and scoring a detector wrong for finding it would be
+absurd, and it is **not made a positive**, because a band is a claim about size
+and you did not measure one. Neither, precisely.
+
+Do **not** box where you think the Chair is. An invented box is an invented
+size, in a study whose entire subject is size.
+
+**One caveat, and it is a real one.** A boxless Good cannot distinguish *"I
+could not see it"* from *"I forgot to draw"*. Both land in the same state. On
+2026-09-03 eight boxless Goods in `cell phone` were the second kind and had to
+be re-issued to recover them (#3616 neighbourhood); here they are the first kind
+and want no recovery at all. The pipeline cannot tell, so the reviewer has to —
+which is the argument in #3643 for making the third state something you can say
+out loud.
+
+**A headrest is not a Chair either — and the reason is not that it is small.**
+Seeing part of a thing is normally good evidence of the thing: a chair back over
+a table, a leg under it, and you box the Chair. VG names COCO chair boxes by a
+part often enough to matter — `back` 57, `cushion` 34, `legs` 13, `backrest` 7.
+So the rule is **a part inherits the ruling of its whole**: a headrest on a
+dining chair is evidence of a Chair and you box the Chair; a headrest in a car is
+part of a car seat, which is part of a car, and neither of those is a Chair, so
+neither is the headrest. (`headrest` itself: 2 boxes in 15,868.) Like `car`, this
 class is prevalent — 6.3% of VG — so its negative pool is thin and the boundary
 stratum will hold many genuine chairs rather than near-misses.
 
