@@ -397,6 +397,28 @@ called a bowl — so this one is a real disagreement rather than a hypothetical,
 but it is a cheap one, and the alternative has no floor: each of those four
 holds food, and nothing in "it contains food" stops at the first.
 
+### Cup against Bowl
+
+**No single object is both.** An image can hold one of each — and two do, in the
+completed slates, with the boxes disjoint at IoU 0.000 — but a given vessel is a
+Cup or a Bowl and never both.
+
+**If it is full of soup, it is a Bowl**, whatever its silhouette. **If it is
+empty, the geometry decides**: the ladder puts Bowl at a median h/w of 0.66 and
+Cup at 1.26, with the middle halves not overlapping, so "best judgement" on an
+empty vessel is really "is it wider than tall".
+
+**This does not contradict "judge the vessel, not the food" — the two answer
+different questions.** *Judge the vessel* answers **what to box**: the vessel,
+never the contents, so an empty plate counts and a pile of food on a bare table
+does not. *Soup means Bowl* answers **which class**, in the case where the
+vessel alone underdetermines it. Contents never make something a member; they
+only break a tie between two classes it could belong to.
+
+It is the same move as `spoon`'s handle-in-the-cereal and `fork`'s stab-grip:
+**when the object's own features run out, read what is around it.** Three rules,
+one idea, and all three exist because the alternative is a coin-flip.
+
 Judge the **vessel, not the food**: an empty plate counts, and a pile of food on
 a bare table does not — which matters because VG names 163 of these boxes `food`
 and 51 `salad`. Note that `plate` cannot be a class of its own here because it

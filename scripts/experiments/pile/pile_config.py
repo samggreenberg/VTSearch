@@ -590,7 +590,10 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "boot with the shopping in it. It has to be MADE to hold food. "
             "Bad: flat wrappers and sleeves, cups and mugs (`cup`), sink basins (`sink`), "
             "toilet bowls, feed troughs, planters (`vase`), ashtrays and carafes. "
-            "Judge the vessel, not the food."
+            "Judge the vessel, not the food -- which answers WHAT TO BOX. Contents "
+            "answer WHICH CLASS when the vessel alone is ambiguous: full of soup is a "
+            "Bowl whatever its shape; empty, the ladder decides (Bowl 0.66 h/w, Cup 1.26). "
+            "No single object is both a Cup and a Bowl, though an image may hold one of each."
         ),
     ),
     "bottle": ClassRule(
