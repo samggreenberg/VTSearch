@@ -369,15 +369,40 @@ SCALE_VG_NAMES: dict[str, tuple[str, ...]] = {
     # COCO has no magazine class and annotates magazines as `book`, which is the
     # reading this dataset already took -- see SCALE_CLASS_RULES["book"].
     "book": ("magazine",),
-    "bus": ("buses", "school bus"),
+    # The subtype family pools to 83% over 18 sole images and 82% over 74 boxes,
+    # which carries the four route/deck spellings no one of which reached the
+    # five-image floor on its own (#3636).
+    "bus": ("buses", "city bus", "double-decker bus", "passenger bus", "school bus", "tour bus"),
     # The face is the clock: 89% of `clock face` boxes land on COCO's clock box,
-    # over 184 of them -- the best-supported fold in the study.
-    "clock": ("clock face", "clocks"),
-    "dog": ("black dog", "brown dog", "dogs", "puppy"),
+    # over 184 of them -- the best-supported fold in the study. `clockface` is
+    # the same word without the space, and pooled with it scores 89% over 19
+    # sole images and 89% over 194 boxes (#3636).
+    "clock": ("clock face", "clockface", "clocks"),
+    # `dalmation` (VG's spelling) and `lab` come from the breed group, `white dog`
+    # from the colour one: 74% and 91% pooled, both folding on box agreement (#3636).
+    "dog": ("black dog", "brown dog", "dalmation", "dogs", "lab", "puppy", "white dog"),
     # COCO's `kite` covers parasails and parachutes, and VG names them so.
-    "kite": ("kites", "parachute", "parasail"),
+    # `para sail` is `parasail` with a space; the pair scores 83% over 24 sole
+    # images and 84% over 74 boxes (#3636).
+    "kite": ("kites", "para sail", "parachute", "parasail"),
     "knife": ("butter knife",),
-    "umbrella": ("blue umbrella", "parasol", "red umbrella"),
+    # Two groups, both folding (#3636). The colour family -- eight spellings, one
+    # hypothesis -- pools to 97% over 35 sole images and 80% over 122 boxes, so
+    # the four nobody could measure alone join the two that could. The subtype
+    # family (`beach`, `patio`, `closed`, `open`) pools to 88% and 69%.
+    "umbrella": (
+        "beach umbrella",
+        "blue umbrella",
+        "closed umbrella",
+        "green umbrella",
+        "open umbrella",
+        "orange umbrella",
+        "parasol",
+        "patio umbrella",
+        "red umbrella",
+        "white umbrella",
+        "yellow umbrella",
+    ),
 }
 
 #: What :func:`pilebuild.loaders.vg_scale.canonicalise` does when an alias box
@@ -436,10 +461,28 @@ SCALE_FOLD_MODE = os.environ.get("VTS_SCALE_FOLD_MODE", "fold")
 SCALE_VG_AMBIGUOUS: dict[str, tuple[str, ...]] = {
     "backpack": ("black backpack", "black bag", "bookbag", "duffle bag"),
     "bicycle": ("bicyclist", "bike", "bike tire", "bikes", "tricycle"),
-    "bird": ("beak", "birds", "dove", "ducks", "feather", "feathers", "geese", "peacock", "seagulls"),
+    # `black bird` / `white bird` pool to 100% over 6 sole images but only 15
+    # boxes -- above the precision cut, below the box floor, which is the safe
+    # side. `pigeons` inherits from `pigeon`, not from the species family:
+    # a plural is a collective whatever its singular does (#3636).
+    "bird": (
+        "beak",
+        "birds",
+        "black bird",
+        "dove",
+        "ducks",
+        "feather",
+        "feathers",
+        "geese",
+        "peacock",
+        "pigeons",
+        "seagulls",
+        "white bird",
+    ),
     "boat": ("barge", "bouy", "sail boat", "sailboat"),
     "book": (
         "binder",
+        "black book",
         "book case",
         "book shelf",
         "bookcase",
@@ -451,9 +494,14 @@ SCALE_VG_AMBIGUOUS: dict[str, tuple[str, ...]] = {
         "library",
         "magazines",
         "notebook",
+        "white book",
     ),
-    "bus": ("blue bus",),
-    "clock": ("alarm clock", "numeral", "roman numerals"),
+    # `busses` is VG's other plural of `bus`. `buses` folds on its own measured
+    # box agreement; `busses` has none of its own, and a plural with no
+    # measurement behind it is a collective until shown otherwise (#3636).
+    "bus": ("blue bus", "busses"),
+    # `numerals` and `clock faces` each inherit from their own singular (#3636).
+    "clock": ("alarm clock", "clock faces", "numeral", "numerals", "roman numerals"),
     "dog": ("bulldog", "poodle"),
     "knife": ("butterknife", "knife block", "knives", "silverware"),
     # `sign` is the largest fold-in column anywhere in C -- 473 of COCO's 1,016
