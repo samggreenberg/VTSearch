@@ -99,7 +99,7 @@ def main() -> int:
     log(f"reading VG source for {len(wanted_vg)} names")
     paths, records, dims = vg_source()
     labels = read_vg_labels(records, paths, dims, wanted_vg)
-    folded = canonicalise(labels, {c: vg_names[c] for c in classes})
+    folded, _ = canonicalise(labels, {c: vg_names[c] for c in classes})
     for c, n in sorted(folded.items()):
         if vg_names[c] != (c,):
             log(f"folded {n} boxes onto {c!r} from {[n_ for n_ in vg_names[c] if n_ != c]}")

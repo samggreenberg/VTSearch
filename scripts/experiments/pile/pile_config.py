@@ -376,6 +376,13 @@ SCALE_VG_NAMES: dict[str, tuple[str, ...]] = {
     "umbrella": ("blue umbrella", "parasol", "red umbrella"),
 }
 
+#: What :func:`pilebuild.loaders.vg_scale.canonicalise` does when an alias box
+#: lands on an image where the class already has one of its own -- see that
+#: function's ``FOLD_MODES``.
+#:
+#: MEASURED IN #3637 -- this comment is rewritten with the verdict.
+SCALE_FOLD_MODE = os.environ.get("VTS_SCALE_FOLD_MODE", "fold")
+
 #: VG spellings that are evidence the class MAY be present, and cannot be its box.
 #:
 #: `bike` is the case that named this table. Over the 51,411-image VG-COCO

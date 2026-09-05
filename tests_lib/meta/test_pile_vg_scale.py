@@ -311,9 +311,15 @@ class TestVgNameTables:
 
 
 class TestCanonicalise:
+    #: A class box and an alias box far enough apart that their union is more
+    #: than BAND_MAX_INFLATION times either one -- i.e. the population of #3637.
+    SCATTER = {7: {"clock": [[0.0, 0.0, 10.0, 10.0]], "clocks": [[90.0, 90.0, 100.0, 100.0]]}}
+    DIMS = {7: (100, 100)}
+    NAMES = {"clock": ("clock", "clocks")}
+
     def test_an_alternate_spelling_folds_onto_the_class_name(self, vgs):
         labels = {7: {"hydrant": [[0.0, 0.0, 1.0, 1.0]]}}
-        folded = vgs.canonicalise(labels, {"fire hydrant": ("fire hydrant", "hydrant")})
+        folded, _ = vgs.canonicalise(labels, {"fire hydrant": ("fire hydrant", "hydrant")})
 
         assert labels[7] == {"fire hydrant": [[0.0, 0.0, 1.0, 1.0]]}
         assert folded == {"fire hydrant": 1}
@@ -327,12 +333,103 @@ class TestCanonicalise:
     def test_a_merge_that_folds_nothing_reports_zero(self, vgs):
         """Reported rather than silent: a mis-spelled entry looks exactly like this."""
         labels = {7: {"bus": [[0.0, 0.0, 1.0, 1.0]]}}
-        assert vgs.canonicalise(labels, {"fire hydrant": ("hydrant",)}) == {"fire hydrant": 0}
+        assert vgs.canonicalise(labels, {"fire hydrant": ("hydrant",)})[0] == {"fire hydrant": 0}
 
     def test_an_empty_table_is_a_no_op(self, vgs):
         labels = {7: {"bus": [[0.0, 0.0, 1.0, 1.0]]}}
-        assert vgs.canonicalise(labels, {}) == {}
+        assert vgs.canonicalise(labels, {}) == ({}, {})
         assert labels == {7: {"bus": [[0.0, 0.0, 1.0, 1.0]]}}
+
+    def test_two_alias_spellings_on_one_image_are_one_merge(self, vgs):
+        """Judged together, or the guard is asked about a union that never exists."""
+        labels = {
+            7: {
+                "clock": [[0.0, 0.0, 10.0, 10.0]],
+                "clocks": [[11.0, 0.0, 20.0, 10.0]],
+                "clock face": [[90.0, 90.0, 100.0, 100.0]],
+            }
+        }
+        _, contested = vgs.canonicalise(labels, {"clock": ("clocks", "clock face")}, {7: (100, 100)}, "guarded")
+
+        assert contested == {"clock": 1}
+        assert labels[7] == {"clock": [[0.0, 0.0, 10.0, 10.0]]}
+
+
+class TestFoldModes:
+    """#3637: what a fold does to an image the class had already banded."""
+
+    SCATTER = TestCanonicalise.SCATTER
+    DIMS = TestCanonicalise.DIMS
+    NAMES = TestCanonicalise.NAMES
+
+    def _labels(self):
+        return {iid: {n: [list(b) for b in bs] for n, bs in by.items()} for iid, by in self.SCATTER.items()}
+
+    def test_fold_merges_and_lets_the_guard_un_band_the_image(self, vgs, pc):
+        labels = self._labels()
+        _, contested = vgs.canonicalise(labels, self.NAMES, self.DIMS, "fold")
+
+        assert contested == {"clock": 1}
+        assert len(labels[7]["clock"]) == 2
+        assert vgs.band_for(labels[7]["clock"], 100, 100) == vgs.SCATTERED
+
+    def test_guarded_keeps_the_class_s_own_band(self, vgs, pc):
+        labels = self._labels()
+        folded, contested = vgs.canonicalise(labels, self.NAMES, self.DIMS, "guarded")
+
+        assert contested == {"clock": 1}
+        assert folded == {"clock": 0}
+        assert labels[7] == {"clock": [[0.0, 0.0, 10.0, 10.0]]}
+        assert vgs.band_for(labels[7]["clock"], 100, 100) in pc.BOX_BANDS
+
+    def test_guarded_still_merges_when_the_union_stays_in_a_band(self, vgs):
+        labels = {7: {"clock": [[0.0, 0.0, 10.0, 10.0]], "clocks": [[10.0, 0.0, 13.0, 10.0]]}}
+        folded, contested = vgs.canonicalise(labels, self.NAMES, self.DIMS, "guarded")
+
+        assert (folded, contested) == ({"clock": 1}, {"clock": 0})
+        assert len(labels[7]["clock"]) == 2
+
+    def test_additive_never_re_describes_an_image_the_class_already_sees(self, vgs):
+        labels = {7: {"clock": [[0.0, 0.0, 10.0, 10.0]], "clocks": [[10.0, 0.0, 13.0, 10.0]]}}
+        folded, _ = vgs.canonicalise(labels, self.NAMES, self.DIMS, "additive")
+
+        assert folded == {"clock": 0}
+        assert labels[7] == {"clock": [[0.0, 0.0, 10.0, 10.0]]}
+
+    def test_every_mode_still_adds_an_image_the_class_cannot_see(self, vgs):
+        """The repair is the point of the table, and no mode may cost it."""
+        for mode in vgs.FOLD_MODES:
+            labels = {7: {"clocks": [[0.0, 0.0, 10.0, 10.0]]}}
+            folded, contested = vgs.canonicalise(labels, self.NAMES, self.DIMS, mode)
+
+            assert (folded, contested) == ({"clock": 1}, {"clock": 0}), mode
+            assert labels[7] == {"clock": [[0.0, 0.0, 10.0, 10.0]]}, mode
+
+    def test_without_dims_the_count_is_zero_and_the_fold_is_unconditional(self, vgs):
+        labels = self._labels()
+        folded, contested = vgs.canonicalise(labels, self.NAMES, None, "fold")
+
+        assert (folded, contested) == ({"clock": 1}, {"clock": 0})
+        assert len(labels[7]["clock"]) == 2
+
+    def test_guarded_without_dims_is_refused_rather_than_degraded_into_fold(self, vgs):
+        """Silently folding under the name `guarded` is the failure this raises over."""
+        with pytest.raises(ValueError, match="needs box_dims"):
+            vgs.canonicalise(self._labels(), self.NAMES, None, "guarded")
+
+    def test_additive_needs_no_dims_because_it_asks_no_question_about_size(self, vgs):
+        labels = self._labels()
+        folded, _ = vgs.canonicalise(labels, self.NAMES, None, "additive")
+
+        assert folded == {"clock": 0}
+        assert labels[7] == {"clock": [[0.0, 0.0, 10.0, 10.0]]}
+
+    def test_an_unknown_mode_is_refused_rather_than_treated_as_the_default(self, vgs):
+        with pytest.raises(ValueError, match="unknown mode"):
+            vgs.canonicalise({}, self.NAMES, self.DIMS, "keep")
+
+    def test_the_shipped_mode_is_one_of_them(self, vgs, pc):
+        assert pc.SCALE_FOLD_MODE in vgs.FOLD_MODES
 
 
 class TestLiftAmbiguous:
