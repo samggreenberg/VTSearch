@@ -33,6 +33,37 @@ Every ruling in this guide is one of those three, and each carries its cost in
 the text. That is the discipline the goal requires: not "does COCO agree" but
 "if it does not, do we know what that costs us".
 
+### And when two definitions are both defensible, take the one that labels clean
+
+The table above prices a change against the *reference*. It says nothing about
+the other cost, which is usually the larger one: **a definition that is hard to
+apply produces noisy labels, and noisy labels are worse than an odd boundary.**
+So where the taxonomy leaves a choice — and it usually does — the tie-break is
+*which definition can a reviewer apply quickly and repeatably at three in the
+afternoon on the two-hundredth image*.
+
+That is the thread through most of what is here, and it is worth seeing as one
+idea rather than nine separate rulings:
+
+- **A car seat is not a Chair** partly because otherwise every street scene
+  becomes an agonised judgement call.
+- **A part inherits the ruling of its whole** replaces "is this fragment enough?"
+  with a lookup.
+- **The vessel ladder** turns an unanswerable semantic question — empty Vase or
+  ornamental Bowl? — into a glance at proportions.
+- **Judge the object in the box** removes the standing invitation to hunt for a
+  better example.
+- **"Neither", for a handle with no evidence either way**, is cleaner than a
+  coin-flip carrying a 4:1 prior.
+
+**The scored subset is the measurement of this.** Agreement against COCO on the
+fifth of each slate that has an answer is not only a check on the reviewer; it is
+a check on the *definition*, because a rule that is hard to apply shows up as
+disagreement. A class that scores 98% is telling you its rule is mechanical. One
+that scores 89% is telling you something is still being decided image by image —
+which is exactly what `bottle` was doing while its boundaries were being widened.
+Read that column as a labelability score and it earns its keep twice.
+
 ## A note on names
 
 **A capitalised name means the class; a lowercase one means the English word.**
