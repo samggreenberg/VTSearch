@@ -1018,7 +1018,60 @@ which is all this measurement needs. Boxing would additionally promote it into
 that class's positives — worth doing, but it is a different job with a different
 cost, and it should be designed after we know the rate.
 
-### The checklist is six items, not thirteen
+### Do the previous twelve need excluding too? No.
+
+The shipped twelve are `clock`, `bird`, `boat`, `umbrella`, `kite`, `book`,
+`dog`, `backpack`, `knife`, `bicycle`, **`bus`** and `stop sign`. **A bus in the
+frame is fine.** So is a dog, a book, a knife. The pool was built to hold none of
+them, and on the 1,845 pool images COCO scored, COCO agrees: **zero** carry a
+shipped class.
+
+**That zero is by construction, not evidence.** Pool membership is defined by
+their absence, so the check can only ever come back clean. Its real content is
+the coverage: the guarantee is airtight for the **43.9%** of the pool COCO
+scored, and for the other 56.1% it rests on VG names — the exact mechanism this
+study spent thirteen slates showing to be unreliable, at 0.0% to 7.1% per class.
+Nobody has measured pool error for the shipped twelve the way we just did for
+the thirteen. Filed as a follow-up; out of scope here.
+
+A related fact worth recording, since it was surprising: `categories` on a pile
+media holds **cells** (`book@medium`), not class names, and it is a *post-banding*
+field. On annotated non-pool images it matches COCO's shipped set exactly 70.1%
+of the time, and of the mismatches **29.7% are COCO seeing more against 0.2%
+the other way** — banding drops an object COCO annotated (oversize, scattered)
+without dropping the image. Reading `categories` as "what is in this image" is
+therefore wrong in one specific direction, and reading it as a set of class names
+is wrong outright.
+
+### The checklist, ordered for THIS pass
+
+**A correction to the ordering first given here.** The six-item list below was
+originally ranked by per-class pool error — measured on each class's *own*
+negative pool. That is the wrong population for this pass, which draws from the
+*shared* pool after eviction. On the 1,256 COCO-scored images the slate actually
+draws from, the ranking is different, and two classes dismissed as "never
+appeared" are mid-table:
+
+| class | COCO count | class | COCO count |
+|---|---|---|---|
+| **chair** | 42 | **bowl** | 16 |
+| **car** | 41 | **cell phone** | 15 |
+| **truck** | 25 | **bottle** | 13 |
+| **bench** | 23 | vase, fork, spoon, sink, hydrant | tail |
+| **cup** | 18 | | |
+
+**`chair` is the single most common contaminant here, and `bench` is fourth** —
+both were in the "ignore-ish" column when the ranking came from per-class pool
+error. `cell phone`, also dismissed, is eighth. The two rankings disagree because
+they are measured on different populations, and this one is the population you
+are actually looking at.
+
+**COCO's prediction for this slate: 12.7%** of images hold at least one of the
+thirteen. That is a checkable number — when the pass is labelled, the random
+stratum's rate should land near it, and a large gap in either direction is
+itself a finding.
+
+### The old ordering, kept for the record
 
 The worry about this pass was holding a thirteen-way conjunction in your head.
 The class slates already answered it. Ordered by **measured pool error**:
