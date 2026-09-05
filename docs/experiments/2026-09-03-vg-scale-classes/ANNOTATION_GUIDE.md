@@ -999,3 +999,101 @@ The second and third file the image as a confirmed negative, which is stronger
 than the reviewer means, and that is the cost recorded in #3643. A sheared
 hydrant under a plume is a real thing and the pool will now say there was none —
 but no vote available today says otherwise honestly.
+
+## The negative pass: "none of the 13"
+
+All thirteen class slates are labelled. This pass asks the remaining question,
+and it is about the **pool**, not about any class: an image sits in the shared
+negative pool because no VG name on it matches a candidate — but the whole
+finding of this study is that **a missing name is not an absent object**. Each
+class slate measured its own pool error, from 0.0% to 7.1%. Nobody has measured
+the *joint* rate: the share of pool images holding **at least one** of the
+thirteen. That number is what a negative in this benchmark is worth.
+
+**Polarity, stated positively on purpose.** The question is *"do you see NONE of
+the thirteen?"* → **Good = clean.** Bad = you found one.
+
+**Do not draw boxes in this pass.** A Bad vote removes the image from the pool,
+which is all this measurement needs. Boxing would additionally promote it into
+that class's positives — worth doing, but it is a different job with a different
+cost, and it should be designed after we know the rate.
+
+### The checklist is six items, not thirteen
+
+The worry about this pass was holding a thirteen-way conjunction in your head.
+The class slates already answered it. Ordered by **measured pool error**:
+
+| scan first | rate | then | rate | ignore-ish | rate |
+|---|---|---|---|---|---|
+| **car** | 7.1% | fork | 1.4% | spoon | 0.0% |
+| **bowl** | 5.7% | bottle | 1.4% | sink | 0.0% |
+| **chair** | 2.9% | | | bench | 0.0% |
+| **cup** | 2.9% | | | cell phone | 0.0% |
+| **vase** | 2.9% | | | fire hydrant | 0.0% |
+| **truck** | 2.9% | | | | |
+
+**Five classes contributed zero errors across 350 uniform draws.** They are not
+impossible, but they are not what to scan for. Six classes — car, bowl, chair,
+cup, vase, truck — account for **every** pool error observed in the whole study.
+Read an image for those six; the rest will announce themselves if present.
+
+Note the boundary stratum is ranked by text score and its top rows are driven by
+`sink`, `bench` and `truck` — the ranker's idea of a near-miss is not the pool's
+idea of a real one. That mismatch is exactly why the **random** stratum is the
+only row that estimates anything.
+
+### The thirteen, in one line each
+
+- **Car** — built to carry people. SUVs, minivans, taxis, sportscars. Not a
+  motorcycle, a train car, a picture of a car, or the car you are sitting in.
+- **Truck** — built to carry goods down a road. Pickups, box trucks, semis
+  (including bobtail), fire engines, ambulances. Not an SUV, a passenger
+  minivan, a detached trailer, or plant machinery (crane, tractor, forklift).
+- **Chair** — single-person seating with a back. Not a toilet, a car seat, a
+  saddle, or a bench.
+- **Bench** — built as seating for more than one, without individual backs. Not
+  a planter wall, and not a judge's bench (that is a table).
+- **Bowl** — *made* to hold food, with walls. Plates, pots, dog bowls,
+  disposable and paper containers. Not a wrapper, an ashtray, a carafe, a
+  trough, a bucket, or a toilet bowl.
+- **Cup** — a drinking vessel: mugs, glasses, stemware. Full of soup → Bowl.
+- **Bottle** — a narrow-necked vessel for liquid: jars, shakers, jugs, squeeze
+  tubes. A jar holding flowers is still a Bottle.
+- **Vase/Planter** — a vessel *made as one* for cut flowers or a plant. Not a
+  table of flowers, a flower basket, a rose bucket, or a built-in sidewalk
+  planter.
+- **Fork** — eating or serving utensil with tines.
+- **Spoon** — eating or serving utensil with a bowl; ladles and serving spoons
+  count.
+- **Sink** — the basin, not the counter.
+- **Cell phone** — a mobile phone. Not a landline, not a toy.
+- **Fire hydrant** — a hydrant. Not a standpipe, a fire truck, or busted
+  plumbing.
+
+### Rules that carry over unchanged
+
+- **A depiction is not the object** — a billboard car, a bike-crossing sign, a
+  photo of a bowl. A **reflection is** evidence of the object.
+- **An obvious toy is not the object.**
+- **A part is evidence of the whole**, but there is nothing to box here, so a
+  visible chair leg makes the image Bad.
+- **Cannot tell → Good.** Same asymmetric regret as everywhere else: wrongly
+  dropping an image costs one image of supply, while wrongly certifying a
+  contaminated one puts a falsehood into the pool that scores every model built
+  on it afterwards.
+
+### What the pilot is sized for
+
+200 images: 100 uniform (the estimator) and 100 ranked (finds contamination
+cheaply). **81 of the 200 carry a COCO answer — 40%, double the 20% of a class
+slate**, because COCO annotates all eighty of its classes on any image it
+annotates at all, so one exhaustive flag settles the whole thirteen-way
+conjunction at once. The scored subset is free here in a way it never was
+per-class.
+
+Before a human sees anything, **31.8% of the shared pool is already
+known-contaminated**: 1,335 of 4,200 images carry a VG name for one of the
+thirteen outright, and another 56 carry an ambiguous spelling and are barred
+rather than counted clean. A thirteen-class expansion loses a third of its
+negative pool to bookkeeping alone — and this pass measures how much of the
+*remaining* two-thirds is contaminated too.
