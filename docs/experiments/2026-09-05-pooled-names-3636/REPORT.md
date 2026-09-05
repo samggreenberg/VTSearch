@@ -183,9 +183,13 @@ construction. Overlap box coverage barely moves because the names added are
 rare *by definition* — they are the ones too rare to measure alone.
 
 The scatter-guard cost is the #3637 hazard and behaves as that study predicted:
-+14 images un-banded against +41 gained, so the trade is 3:1 in favour and
-every class is net positive. `clock`, which was net **−16** under #3618's
-tables, is net **−11** here — still negative, still the only one.
+**+14** images un-banded against **+41** gained, a 2.9:1 trade in favour. Four
+of the five classes that move are net positive on the delta — `umbrella` +15,
+`dog` +4, `bus` +4, `clock` +5 — and **`kite` is net −1**: `para sail` repairs
+no non-COCO image at all (its supply is on the COCO half) and un-bands one, so
+folding it is a small loss taken for a correct table. In absolute terms `clock`
+remains the only class whose fold is net negative overall, and pooling improves
+it: **−16** under #3618's tables, **−11** here.
 
 ### What the tables gained
 

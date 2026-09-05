@@ -211,12 +211,23 @@ def refuted(tmp_path_factory) -> dict:
 
 @pytest.fixture(scope="module")
 def box_dissent(tmp_path_factory) -> dict:
-    """The thin member's own boxes are on a bench: present, but not the object."""
-    return _evidence(
-        tmp_path_factory.mktemp("boxes"),
-        _colour_family(thin_total=12, thin_hits=12, thin_box_on_class=False),
-        _CANDS,
-    )
+    """The thin member's own boxes are on a bench: present, but not the object.
+
+    It must stay *below* the sole floor -- four adjudicable images -- or it
+    acquires a verdict of its own and never reaches the inheritance path at
+    all. The boxes it needs to be vetoed on come from stacking five of them on
+    each of those four images, not from adding images.
+    """
+    o = _Overlap()
+    for _ in range(30):
+        o.add([("blue umbrella", _UMBRELLA_BOX)], present=True)
+    for _ in range(4):
+        o.add([("green umbrella", _BENCH_BOX)] * 5, present=True)
+    for _ in range(6):
+        o.add([("green umbrella", _UMBRELLA_BOX)], present=False, on_coco=False)
+    for _ in range(10):
+        o.add([("umbrella", _UMBRELLA_BOX)], present=True)
+    return _evidence(tmp_path_factory.mktemp("boxes"), o, _CANDS)
 
 
 def _group(payload: dict, cls: str, key: str) -> dict:
@@ -310,9 +321,16 @@ class TestAnIndividualMeasurementAlwaysWins:
         """
         o = _Overlap()
         for k in range(30):
-            o.add([("blue umbrella", _BENCH_BOX)], present=True)
+            # One box on the umbrella and two off it: 33% agreement, which is
+            # above `--context-box` and below `--min-box`, so `blue umbrella`
+            # is `ambiguous` when measured alone.
+            o.add(
+                [("blue umbrella", _UMBRELLA_BOX), ("blue umbrella", _BENCH_BOX), ("blue umbrella", _BENCH_BOX)],
+                present=True,
+            )
             if k < 20:
-                o.add([("pink umbrella", _UMBRELLA_BOX)], present=True)
+                # `pink umbrella` carries the group over the box cut on its own.
+                o.add([("pink umbrella", _UMBRELLA_BOX)] * 4, present=True)
         for _ in range(4):
             o.add([("green umbrella", _UMBRELLA_BOX)], present=True)
         for _ in range(10):
@@ -322,13 +340,21 @@ class TestAnIndividualMeasurementAlwaysWins:
         blue = _name(payload, "umbrella", "blue umbrella")
         assert blue["verdict"] == "ambiguous"
         assert blue["final"] == "ambiguous"
+        assert blue["inherited_from"] == []
 
 
 class TestAGroupWhoseMembersDisagreeIsNotOneHypothesis:
-    def test_the_gate_names_the_dissenter(self, heterogeneous: dict) -> None:
+    def test_the_gate_names_the_dissenters(self, heterogeneous: dict) -> None:
+        """`blue umbrella` is 30 of 30 and `pink umbrella` 0 of 30.
+
+        Both are named, and that is right rather than a quirk: the reference is
+        the rate the members jointly imply, which lands between them, so a
+        two-sided disagreement has two sides. What the gate has to get right is
+        that the group is refused, not which member is "at fault".
+        """
         grp = _group(heterogeneous, "umbrella", "colour")
         assert grp["verdict"] == "heterogeneous"
-        assert grp["dissent"] == ["pink umbrella"]
+        assert set(grp["dissent"]) == {"blue umbrella", "pink umbrella"}
 
     def test_and_nothing_is_inherited(self, heterogeneous: dict) -> None:
         row = _name(heterogeneous, "umbrella", "green umbrella")
@@ -401,8 +427,11 @@ class TestFoldingIsVetoedByTheMemberSOwnBoxes:
         so a folded name whose box frames something else injects a mis-banded
         positive. Withholding it costs a few pool images instead.
         """
-        assert _group(box_dissent, "umbrella", "colour")["verdict"] == "alias"
+        grp = _group(box_dissent, "umbrella", "colour")
+        assert grp["verdict"] == "alias", "fixture check: the group itself clears the box cut"
         row = _name(box_dissent, "umbrella", "green umbrella")
+        assert row["verdict"] == "unmeasured", "fixture check: it has no verdict of its own"
+        assert row["boxes"] == 20 and row["boxes_on_class"] == 0
         assert row["final"] == "ambiguous"
         assert row["inherited_from"] == ["colour"]
 
