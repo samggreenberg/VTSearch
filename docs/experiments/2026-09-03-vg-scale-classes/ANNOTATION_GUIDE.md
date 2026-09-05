@@ -236,6 +236,39 @@ read from both ends.
 another guise: replace an unanswerable naming argument with one thing you can
 see, from outside, without squinting.
 
+### The cargo test assumes a vehicle. Check that first.
+
+A bike trailer has a cargo compartment and is not a Truck; so does a handcart, a
+skip, a wheelie bin. The cargo test only runs **after** a prior one:
+
+> **Is it a self-propelled road vehicle, or the powered unit of one?**
+> No → neither Car nor Truck, whatever it is carrying.
+
+That covers a bike trailer, a detached semi-trailer, a handcart, a caravan under
+tow. It also keeps the existing ruling that a **cab-only tractor unit counts** —
+it is the powered half — while the trailer alone does not.
+
+**Not "does it have a cab", though, and the difference matters.** A cab is a
+proxy that fails on a forklift (COCO: 2 → Truck) and on anything with an open
+driving position. Self-propulsion is the property actually being tracked.
+
+**A tuk-tuk is a vehicle, so the cargo test decides it** — passenger cabin →
+Car, flatbed or box → Truck. Note this is entirely unmeasured: `tuk tuk`,
+`rickshaw`, `three wheeler` and `moped` appear **nowhere** in the overlap, and
+COCO's own `motorcycle` class may well be where its annotators would put one.
+Treat it as a principled call on a case you will probably never meet.
+
+**What this narrowing costs, honestly.** COCO is looser here than we are:
+`trailer` lands on a COCO `truck` box **63** times and `cart` **35**, plus
+`tractor` 24, `forklift` 2, `dolly` 1. So excluding towed and pushed things is a
+real disagreement, not a free one — of the same order as the vase narrowing.
+
+And a correction to this guide: it previously said COCO boxes trailers as truck
+*"only when the cab is attached"*. **Those 63 boxes do not support that** — it
+was an interpretation, and the measurement cannot tell an attached trailer from
+a detached one. The ruling stands on the vehicle test above; the claim about
+COCO's reasons has been withdrawn.
+
 Expect to disagree with COCO on vans regardless, because half its own `van`
 boxes went the other way. That is a known, priced cost of this class, not a
 mistake — and it is why the disagreement column for `truck` will read worse than
@@ -251,8 +284,9 @@ measurable: 261 VG `van` boxes sit on COCO `truck` boxes and 318 sit on COCO
 `car` boxes, so COCO's annotators split vans roughly evenly. Use the body, not
 the badge: a separate cargo box, or no rear side windows, makes it a truck; a
 passenger minivan with seats and windows all round is a car. A cab-only tractor
-unit counts; a detached trailer with no cab does not (VG names 63 of those
-`trailer`, and COCO boxes them as truck only when the cab is attached). Expect
+unit counts, as the powered half; a detached trailer does not, and neither does
+a handcart or a bike trailer — see the vehicle test above, and note it costs us
+the 63 `trailer` and 35 `cart` boxes COCO does call trucks. Expect
 disagreement with COCO on vans specifically — that is a known cost of this
 class, not a mistake.
 
