@@ -616,6 +616,26 @@ SCALE_VG_CONSTRUCTIONS: tuple[Construction, ...] = (
         foldable=True,
         why="one word typed two ways: same letters, different whitespace",
     ),
+    #: Also not a lexicon: one group per singular form, so `pigeon`/`pigeons`
+    #: is a hypothesis and `pigeons`/`ducks` is not. That is the pairwise
+    #: question worth asking -- *does this plural denote what its own singular
+    #: denotes* -- and for `pigeons` it is far better evidence than the species
+    #: group, which knows only that a pigeon is a bird.
+    #:
+    #: **Never foldable**, and that is the shipped rule rather than caution:
+    #: `books`, `birds`, `umbrellas`, `knives`, `ducks`, `geese` and `seagulls`
+    #: are all in :data:`SCALE_VG_AMBIGUOUS` because the box is a pile. The
+    #: plurals #3618 *did* fold (`boats`, `clocks`, `dogs`, `kites`) each earned
+    #: it on their own measured box agreement, which an individual measurement
+    #: still delivers -- inheritance is for names that have none, and a plural
+    #: with no measurement of its own is a collective until shown otherwise.
+    #: `buses` keeps the alias it earned; `busses` inherits withheld.
+    Construction(
+        key="plural",
+        modifiers=frozenset(),
+        foldable=False,
+        why="a plural names a SET: the box is a pile, so a member can be evidence but never a band",
+    ),
 )
 
 
@@ -656,6 +676,24 @@ class NameGroup(NamedTuple):
 #: adjudicated before anything is inherited; and a member measurable on its own
 #: keeps its own verdict either way (``name_evidence.py``).
 SCALE_VG_GROUPS: dict[str, tuple[NameGroup, ...]] = {
+    "bicycle": (
+        NameGroup(
+            key="part",
+            criterion="a VG name for a part of a bicycle",
+            names=(
+                "bars",
+                "bicycle tire",
+                "bike tire",
+                "frame",
+                "front wheel",
+                "rack",
+                "tire",
+                "tires",
+                "wheel",
+                "wheels",
+            ),
+        ),
+    ),
     "bird": (
         NameGroup(
             key="species",
@@ -712,12 +750,34 @@ SCALE_VG_GROUPS: dict[str, tuple[NameGroup, ...]] = {
                 "yacht",
             ),
         ),
+        NameGroup(
+            key="mooring",
+            criterion="a VG name for a place where vessels are moored (not open water or a shoreline)",
+            names=("dock", "harbor", "marina"),
+        ),
+        NameGroup(
+            key="part",
+            criterion="a VG name for a part of a vessel",
+            names=("bow", "cabin", "hull", "mast", "oar", "sail", "sails"),
+        ),
+    ),
+    "book": (
+        NameGroup(
+            key="part",
+            criterion="a VG name for a part of a book",
+            names=("binding", "book cover", "cover", "page", "pages", "spine", "title"),
+        ),
     ),
     "bus": (
         NameGroup(
             key="subtype",
             criterion="a VG name for a kind of bus, by its route or its deck",
             names=("city bus", "double decker", "double-decker bus", "passenger bus", "school bus", "tour bus"),
+        ),
+        NameGroup(
+            key="part",
+            criterion="a VG name for a part of a bus specifically (not a part any vehicle has)",
+            names=("bus front", "top level", "upper level"),
         ),
     ),
     "clock": (
@@ -731,6 +791,16 @@ SCALE_VG_GROUPS: dict[str, tuple[NameGroup, ...]] = {
             criterion="a VG name for a clock's dial taken as a whole (not a marking on it)",
             names=("clock face", "clock faces", "clockface", "dial", "dials"),
         ),
+        NameGroup(
+            key="marking",
+            criterion="a VG name for a marking on a clock face",
+            names=("black numbers", "numeral", "numerals", "roman numerals"),
+        ),
+        NameGroup(
+            key="part",
+            criterion="a VG name for a part of a clock other than its dial or its markings",
+            names=("clock frame", "hands"),
+        ),
     ),
     "dog": (
         NameGroup(
@@ -738,12 +808,29 @@ SCALE_VG_GROUPS: dict[str, tuple[NameGroup, ...]] = {
             criterion="a VG name for a dog breed or life stage",
             names=("bulldog", "dalmation", "lab", "poodle", "puppy"),
         ),
+        NameGroup(
+            key="part",
+            criterion="a VG name for a part of a dog",
+            names=("dog's head", "fur"),
+        ),
+    ),
+    "kite": (
+        NameGroup(
+            key="part",
+            criterion="a VG name for a part of a kite",
+            names=("kite tail", "long tail", "string", "strings", "tail", "tails"),
+        ),
     ),
     "knife": (
         NameGroup(
             key="subtype",
             criterion="a VG name for a kind of knife, by what it cuts",
             names=("butter knife", "butterknife", "cake server", "cutter"),
+        ),
+        NameGroup(
+            key="part",
+            criterion="a VG name for a part of a knife",
+            names=("blade", "handle", "handles", "knife blade", "tip"),
         ),
     ),
     "stop sign": (
@@ -811,6 +898,19 @@ def scale_vg_groups_for(cls: str, candidates: list[str]) -> dict[str, list[str]]
     for skel, ns in sorted(skeletons.items()):
         if len(ns) > 1:
             out[f"spelling:{skel}"] = sorted(ns)
+
+    # `plural`: group by singular form, the same shape as `spelling`. A name's
+    # key is the shortest of its own singular forms that is itself a candidate
+    # (or the class name), so `ducks` keys on `duck`, `buses` and `busses` both
+    # key on `bus`, and `clock faces` on `clock face`.
+    known = set(candidates) | {cls}
+    by_singular: dict[str, list[str]] = {}
+    for n in candidates:
+        forms = sorted(name_singulars(n) & known, key=len)
+        by_singular.setdefault(forms[0] if forms else n, []).append(n)
+    for key, ns in sorted(by_singular.items()):
+        if len(ns) > 1:
+            out[f"plural:{key}"] = sorted(ns)
 
     for grp in SCALE_VG_GROUPS.get(cls, ()):
         members = sorted(set(grp.names) & set(candidates))
