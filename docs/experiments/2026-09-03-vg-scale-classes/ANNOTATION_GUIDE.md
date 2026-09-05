@@ -253,6 +253,28 @@ the vehicle:
 - **Motorcycle** — no enclosed body at all, and COCO has its own `motorcycle`
   class. Neither.
 
+### Car against Bus — barely a boundary
+
+`bus` is one of COCO's 80 and one of the shipped twelve, so it is a live class,
+but Car and Bus hardly touch: `car` lands on a COCO bus box **15** times out of
+3,074, and `bus` lands on a COCO car box **19** out of 21,945. Around half a
+percent each way. **Do not spend time here.**
+
+Bus's real confusions are elsewhere, and one of them matters to us: `truck`
+lands on bus 29 times and `bus` on truck **60**, while **`van` lands on bus 37**.
+
+**Which makes `van` a three-way word, not a two-way one.** It splits 261 → Truck,
+318 → Car, and 37 → Bus, because it names a cargo van, a passenger minivan *and*
+a minibus shuttle. `cab` (22 Truck / 45 Car) and `van` are the two words in this
+whole vocabulary that name genuinely different vehicles, and `van` names three.
+
+The case that needs a call is therefore the **minibus or shuttle**, not the
+saloon. The visible cue, consistent with everything else here: a Bus is boarded —
+**a passenger door separate from the driver's position, and rows of side windows
+running down a body longer than any car's** — where a Car is entered, with a door
+per seating row. Unmeasured beyond the 37 boxes above, so treat a genuinely
+borderline shuttle as the coin-flip it is rather than agonising.
+
 **One more two-vehicles-one-word case, for the same reason as `van`:** `cab`
 splits 22 → Truck and 45 → Car, because it names both a taxi and the tractor
 half of an articulated lorry. Read the body, as ever.
