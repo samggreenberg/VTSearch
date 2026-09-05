@@ -24,7 +24,8 @@ rebuild would contain, and what the build says while it does it.
 
 **Keep it scattered.** On the half of VG where an exhaustive reference exists,
 the fold's verdict is right **88%** of the time and the alternative's is right
-**7%**, and the images it removes are ones the class really is scattered across.
+**6.7%**, and the images it removes are ones the class really is scattered
+across.
 The `clock` ledger is correct and it costs nothing: the scarcest of the 36 cells
 still has 44 more candidates than the 100 seats it fills.
 
@@ -44,14 +45,20 @@ anchored image is discarded in the next pass. The overlap can therefore be asked
 what the fold *would* have decided and what is *actually* true, on the same
 image, with no effect on anything built.
 
-Three arms, one function, so the scoring cannot drift from the builder —
-`FOLD_MODES` in `vg_scale.py`, driven by `pile_config.SCALE_FOLD_MODE`:
+Three arms, one definition — `FOLD_MODES` in `vg_scale.py`, selected by
+`pile_config.SCALE_FOLD_MODE`:
 
 | mode | what it does when the class already has a box of its own |
 |---|---|
 | **`fold`** | merge unconditionally; the scatter guard judges the union (the shipped reading) |
 | **`guarded`** | merge, but keep the class's own boxes when the merge would push a cleanly-banded image out of every band |
 | **`additive`** | merge only where the class has no box at all, so a fold can add an image but never re-describe one |
+
+The supply half of the study runs the builder's own `canonicalise` under each
+mode, so it cannot drift from what a rebuild would do. The truth half re-derives
+the same three verdicts from `band_for` over the same two box sets, because
+"what band would this image have had" is a question about boxes and there is no
+`labels` dict to mutate — one function, `mode_bands`, and it is three lines.
 
 Scored over **51,411** overlap images (87 skipped on aspect drift), restricted to
 the **9,996** image-class pairs where the class's own spelling bands the image
