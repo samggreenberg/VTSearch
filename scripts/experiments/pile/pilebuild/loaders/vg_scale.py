@@ -69,17 +69,20 @@ def read_vg_labels(
 
 
 #: How :func:`canonicalise` reconciles an alias box with a class box that is
-#: already on the image. The three are the readings of #3637, and they differ
-#: only where the class had a box of its own AND the merged union trips
-#: :data:`pile_config.BAND_MAX_INFLATION`:
+#: already on the image. The three are the readings of #3637. All three behave
+#: identically where the class has no box of its own, which is the repair the
+#: name table exists for; they differ only in what an alias box may do to an
+#: image the class already sees:
 #:
 #: * ``fold`` -- always merge. The scatter guard then judges the union, so an
 #:   image the class already banded can leave every band on the strength of a
 #:   second spelling.
-#: * ``guarded`` -- merge, but keep the class's own boxes when the merge would
-#:   push a cleanly-banded image out of every band.
-#: * ``additive`` -- merge only where the class has no box of its own, so a
-#:   fold can add an image but never re-describe one.
+#: * ``guarded`` -- merge, but keep the class's own boxes on the images where
+#:   the merge would push a cleanly-banded one out of every band. Differs from
+#:   ``fold`` on those images alone.
+#: * ``additive`` -- merge only where the class has no box of its own, so a fold
+#:   can add an image but never re-describe one. Differs from ``fold`` wherever
+#:   both spellings appear, whether or not a band changes.
 FOLD_MODES = ("fold", "guarded", "additive")
 
 
@@ -569,7 +572,8 @@ def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
         # before anyone printed the second number (#3637).
         verb = "un-bands" if pc.SCALE_FOLD_MODE == "fold" else "rescues"
         log(
-            f"  merged VG spellings ({pc.SCALE_FOLD_MODE}, {verb} a banded image where the union scatters): "
+            f"  merged VG spellings (mode={pc.SCALE_FOLD_MODE}) as `class+boxes folded/images it {verb}` -- "
+            "a merged union that scatters, or outgrows a region, leaves every band: "
             + ", ".join(f"{c}+{n}/{contested[c]}" for c, n in sorted(folded.items()))
         )
     if suppressed:
