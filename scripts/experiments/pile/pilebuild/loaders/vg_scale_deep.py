@@ -167,8 +167,12 @@ def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
     # `bicycle` negative while `vg_scale` excludes it, which is precisely the
     # "only depth changed" premise breaking.
     labels = read_vg_labels(records, paths, dims, pc.scale_vg_wanted())
-    canonicalise(labels, pc.SCALE_VG_NAMES)
     box_dims, exhaustive, n_anchored, n_reframed = anchor_to_coco(labels, dims, coco_of, truth, ca.COCO_DIMS, wanted)
+    # After the anchor and with the pixel space, exactly as `vg_scale` runs it:
+    # the fold's treatment of a scattered union is part of "what a positive is",
+    # so a sibling that folded differently would break the only-depth-changed
+    # premise as surely as a missing spelling would (#3637).
+    canonicalise(labels, pc.SCALE_VG_NAMES, box_dims, pc.SCALE_FOLD_MODE)
     unbanded = apply_corrections(labels, corrections, box_dims, exhaustive)
     unbanded |= lift_ambiguous(labels, pc.SCALE_VG_AMBIGUOUS, exhaustive)
     log(

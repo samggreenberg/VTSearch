@@ -108,7 +108,15 @@ retire 37.
 `name_coverage.py` then prices a proposed table before it ships: coverage against
 COCO, images repaired and withheld on the non-COCO half, and the **band ledger** —
 a fold merges boxes, so it can push an image the class already banded past the
-scatter guard and out of every band (248 across *C*; `clock` nets −16, #3637).
+scatter guard and out of every band (248 across *C*; `clock` nets −16).
+
+**That is the right outcome, and the build now says so.** #3637 scored the three
+readings of it against COCO's exhaustive boxes: on the images they disagree
+about, the class really is scattered 88% of the time, and no cell is anywhere
+near needing the images back. `canonicalise` reports the count on the same line
+as the boxes folded, `SCALE_FOLD_MODE` selects the arm, and `band_fold.py`
+re-measures it. Full study:
+[`docs/experiments/2026-09-05-band-fold-3637/`](../../../docs/experiments/2026-09-05-band-fold-3637/REPORT.md).
 
 `SCALE_VG_NAMES_AUDITED` records which classes have actually had this measured,
 because "no spelling is listed" and "no spelling exists" are the same empty

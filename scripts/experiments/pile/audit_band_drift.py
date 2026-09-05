@@ -127,7 +127,7 @@ def main() -> int:
     # is: a VG spelling absent from it makes an image holding only that spelling
     # look like an image holding nothing (#3605).
     labels = read_vg_labels(records, paths, dims, pc.scale_vg_wanted())
-    canonicalise(labels, pc.SCALE_VG_NAMES)
+    canonicalise(labels, pc.SCALE_VG_NAMES)  # the drift control reads VG's own bands, before any anchor
 
     # VG's own reading, taken before `anchor_to_coco` replaces it. `lift_ambiguous`
     # is applied with an EMPTY exhaustive set on purpose: that is what makes this

@@ -206,6 +206,11 @@ def main() -> int:
         loader passes edit it in place.
         """
         labels = read_labels(records, vdims, read_wanted)
+        # No dims and no mode, deliberately (#3637): pool membership asks only
+        # whether a class NAME survives on the image, never what band its boxes
+        # imply, and all three fold modes agree on that -- an image the class
+        # already names is disqualified whether or not the alias box merges. The
+        # returned counters are about bands and mean nothing here.
         canonicalise(labels, pc.SCALE_VG_NAMES)
         suppressed = lift_ambiguous(labels, {c: tuple(ns) for c, ns in table.items()}, set())
         sup_by_image: dict[int, set[str]] = defaultdict(set)

@@ -380,6 +380,24 @@ SCALE_VG_NAMES: dict[str, tuple[str, ...]] = {
     "umbrella": ("blue umbrella", "parasol", "red umbrella"),
 }
 
+#: What :func:`pilebuild.loaders.vg_scale.canonicalise` does when an alias box
+#: lands on an image where the class already has one of its own -- see that
+#: function's ``FOLD_MODES``.
+#:
+#: ``fold`` is the reading #3637 measured and kept, and the margin is not close:
+#: over the VG-COCO overlap, on the 225 images where the three modes disagree,
+#: COCO's exhaustive boxes say the class is **not** a single-band positive on 199
+#: of them, and folding names the right answer 88% of the time against 6.7% for
+#: keeping the class's own band. The structural reason is bigger than that
+#: number: the COCO half is already banded off COCO's own exhaustive box set, so
+#: ``anchor_to_coco`` un-bands 17% of the cleanly-banded images there on evidence
+#: of exactly the same kind. A mode that protected the un-anchored half from it
+#: would make the two halves of one dataset disagree about what a positive is.
+#:
+#: The alternatives are kept so the arm can be re-measured (``band_fold.py``),
+#: not because either is a candidate default.
+SCALE_FOLD_MODE = os.environ.get("VTS_SCALE_FOLD_MODE", "fold")
+
 #: VG spellings that are evidence the class MAY be present, and cannot be its box.
 #:
 #: `bike` is the case that named this table. Over the 51,411-image VG-COCO
