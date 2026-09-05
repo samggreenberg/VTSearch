@@ -12,6 +12,7 @@ supply.  Writes nothing; in particular it does NOT touch the roster.
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 
@@ -33,6 +34,10 @@ import coco_anchor as ca  # noqa: E402
 
 
 def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--out", default="", help="write the supply table as JSON, for a report to plot from")
+    args = ap.parse_args()
+
     wanted = set(pc.SCALE_CLASSES)
     paths = vg_image_paths()
     _, records, dims = vg_source()
@@ -60,6 +65,26 @@ def main() -> None:
     print("%-12s %7s %7s %7s | %7s" % ("class", "small", "medium", "large", "union"))
     for c, pb, union in rows:
         print("%-12s %7d %7d %7d | %7d" % (c, pb["small"], pb["medium"], pb["large"], union))
+
+    if args.out:
+        pc.Path(args.out).write_text(
+            json.dumps(
+                {
+                    "meta": {
+                        "n_pos": pc.SCALE_N_POS,
+                        "n_neg": pc.SCALE_N_NEG,
+                        "vg_images": len(labels),
+                        "anchored": n_anchored,
+                        "reframed": n_reframed,
+                        "clean": len(clean),
+                    },
+                    "supply": {c: {"bands": pb, "union": u} for c, pb, u in rows},
+                },
+                indent=1,
+            )
+            + "\n"
+        )
+        log(f"  wrote {args.out}")
 
     unions = sorted(u for _, _, u in rows)
     per_band_min = min(v for _, pb, _ in rows for v in pb.values())
