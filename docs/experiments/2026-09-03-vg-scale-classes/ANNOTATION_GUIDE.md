@@ -178,6 +178,42 @@ for reading this column.
 
 ## Tier A — habitat partners of a class already in *C*
 
+### Van against SUV — the only hard boundary left
+
+**An SUV is not the problem. `van` is.** The measurement separates them cleanly:
+
+| VG name | → `truck` | → `car` | reading |
+|---|---:|---:|---|
+| `van` | **261** | **318** | **45/55 — a coin flip** |
+| `suv` | 62 | **222** | 78% Car |
+| `minivan` | 5 | **51** | 91% Car |
+| `mini van` | 1 | **17** | 94% Car |
+| `jeep` | 25 | 44 | 64% Car |
+| `pickup` / `pickup truck` | **51** | 15 | 77% Truck |
+
+`suv` is not ambiguous, just noisy — an SUV is a **Car**, and so is a minivan.
+Nothing in the data supports agonising over them.
+
+**`van` splits because the word names two different vehicles.** A passenger
+minivan and a panel cargo van share a noun and nothing else, so COCO's
+annotators land 45/55 not because the boundary is unknowable but because they
+were not applying one test. We are.
+
+> **Windows all round with seats behind the driver → Car.
+> Panel sides, no rear side windows, or a separate cargo box → Truck.**
+
+Run the three cases through it and the ambiguity disappears: an SUV always has
+windows all round, so it is always a Car; a passenger minivan likewise; a cargo
+van has blank panels where the rear windows would be, so it is a Truck. **The
+word was never the question — the body is.** This is the geometry trick from the
+vessel ladder in another guise: replace an unanswerable naming argument with one
+thing you can see.
+
+Expect to disagree with COCO on vans regardless, because half its own `van`
+boxes went the other way. That is a known, priced cost of this class, not a
+mistake — and it is why the disagreement column for `truck` will read worse than
+`fire hydrant`'s without meaning the reviewer did worse.
+
 ### `truck incl vans not SUVs`
 
 Pickups, box trucks, semis and tractor units, flatbeds, tow trucks, fire trucks

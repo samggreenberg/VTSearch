@@ -524,8 +524,11 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "Good: pickups, box trucks, semis and tractor units, flatbeds, tow, fire and "
             "food trucks, full-size cargo and panel vans. Bad: SUVs, crossovers and "
             "passenger minivans (those are `car`), and a detached trailer with no cab. "
-            "Use the body, not the badge -- COCO splits `van` roughly evenly between "
-            "truck and car, so disagreement there is a known cost, not a mistake."
+            "Use the BODY, not the badge: windows all round with seats behind the driver "
+            "is a Car, panel sides or no rear side windows or a separate cargo box is a "
+            "Truck. `van` names two vehicles and COCO splits it 261 truck / 318 car; `suv` "
+            "does not (62 / 222, an SUV is a Car) and neither does `minivan` (5 / 51). "
+            "Disagreement on vans is a known cost of this class, not a mistake."
         ),
     ),
     "car": ClassRule(
