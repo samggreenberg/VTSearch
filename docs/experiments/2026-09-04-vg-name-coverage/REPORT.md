@@ -275,7 +275,7 @@ Three limits of the method itself, stated rather than hidden:
 |---|---|
 | **#3635** | `stop sign` cannot be repaired by any name: 496 VG images, 18.7% self-match, and its 19,148-image `sign` family refuted at 7.9%. Needs a human pass or a different source. |
 | **#3636** | Adjudicate head-noun compounds as one hypothesis, to reach the ~160 repaired images behind the 76 names that are individually unmeasurable. |
-| **#3637** | A fold can un-band an image the class already saw, via the scatter guard — 248 across the twelve, and `clock` nets −16. Decide whether a scattered fold should keep the class's own band. |
+| **#3637** | A fold can un-band an image the class already saw, via the scatter guard — 248 across the twelve, and `clock` nets −16. **Answered:** keep it scattered — [`2026-09-05-band-fold-3637/`](../2026-09-05-band-fold-3637/REPORT.md). |
 | **#3604** | Already open, and this is now part of its price: a rebuild is what makes any of the above real. |
 
 ---
