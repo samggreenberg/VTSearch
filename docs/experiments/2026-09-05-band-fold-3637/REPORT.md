@@ -313,9 +313,12 @@ exist to be re-measured.
 ## Reproducing
 
 ```bash
-cd scripts/experiments/pile && source ./pile_env.sh
-python band_fold.py --out band-fold.json --examples-out unbanded.json
-python band_fold.py --examples unbanded.json --sheet clock --sheet-out clock-unbanded.jpg
+# on the GRID, where VG's and COCO's sources are
+(cd scripts/experiments/pile && source ./pile_env.sh &&
+ python band_fold.py --out /tmp/band-fold.json --examples-out /tmp/unbanded.json &&
+ python band_fold.py --examples /tmp/unbanded.json --sheet clock --sheet-out /tmp/clock-unbanded.jpg)
+
+# anywhere, from the JSONs committed beside this report
 python docs/experiments/2026-09-05-band-fold-3637/figures.py
 ```
 

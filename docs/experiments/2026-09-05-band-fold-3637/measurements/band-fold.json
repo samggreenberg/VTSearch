@@ -227,224 +227,261 @@
      "kept": 99,
      "dropped": 1,
      "dropped_reviewed": 0,
-     "added": 1
+     "added": 1,
+     "reviewed_designations": 0
     },
     "clock@medium": {
      "kept": 98,
      "dropped": 2,
      "dropped_reviewed": 0,
-     "added": 2
+     "added": 2,
+     "reviewed_designations": 0
     },
     "clock@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "bird@small": {
      "kept": 97,
      "dropped": 3,
      "dropped_reviewed": 0,
-     "added": 3
+     "added": 3,
+     "reviewed_designations": 9
     },
     "bird@medium": {
      "kept": 99,
      "dropped": 1,
      "dropped_reviewed": 0,
-     "added": 1
+     "added": 1,
+     "reviewed_designations": 14
     },
     "bird@large": {
      "kept": 99,
      "dropped": 1,
      "dropped_reviewed": 0,
-     "added": 1
+     "added": 1,
+     "reviewed_designations": 19
     },
     "boat@small": {
      "kept": 92,
      "dropped": 8,
      "dropped_reviewed": 0,
-     "added": 8
+     "added": 8,
+     "reviewed_designations": 1
     },
     "boat@medium": {
      "kept": 96,
      "dropped": 4,
      "dropped_reviewed": 0,
-     "added": 4
+     "added": 4,
+     "reviewed_designations": 1
     },
     "boat@large": {
      "kept": 96,
      "dropped": 4,
      "dropped_reviewed": 0,
-     "added": 4
+     "added": 4,
+     "reviewed_designations": 0
     },
     "umbrella@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "umbrella@medium": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 1
     },
     "umbrella@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 1
     },
     "kite@small": {
      "kept": 97,
      "dropped": 3,
      "dropped_reviewed": 0,
-     "added": 3
+     "added": 3,
+     "reviewed_designations": 0
     },
     "kite@medium": {
      "kept": 97,
      "dropped": 3,
      "dropped_reviewed": 0,
-     "added": 3
+     "added": 3,
+     "reviewed_designations": 1
     },
     "kite@large": {
      "kept": 98,
      "dropped": 2,
      "dropped_reviewed": 0,
-     "added": 2
+     "added": 2,
+     "reviewed_designations": 1
     },
     "book@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "book@medium": {
      "kept": 97,
      "dropped": 3,
      "dropped_reviewed": 0,
-     "added": 3
+     "added": 3,
+     "reviewed_designations": 0
     },
     "book@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 2
     },
     "dog@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "dog@medium": {
      "kept": 98,
      "dropped": 2,
      "dropped_reviewed": 0,
-     "added": 2
+     "added": 2,
+     "reviewed_designations": 1
     },
     "dog@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "backpack@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 8
     },
     "backpack@medium": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 25
     },
     "backpack@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 11
     },
     "knife@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "knife@medium": {
      "kept": 99,
      "dropped": 1,
      "dropped_reviewed": 0,
-     "added": 1
+     "added": 1,
+     "reviewed_designations": 0
     },
     "knife@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "bicycle@small": {
      "kept": 98,
      "dropped": 2,
      "dropped_reviewed": 0,
-     "added": 2
+     "added": 2,
+     "reviewed_designations": 12
     },
     "bicycle@medium": {
      "kept": 99,
      "dropped": 1,
      "dropped_reviewed": 0,
-     "added": 1
+     "added": 1,
+     "reviewed_designations": 12
     },
     "bicycle@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 10
     },
     "bus@small": {
      "kept": 99,
      "dropped": 1,
      "dropped_reviewed": 0,
-     "added": 1
+     "added": 1,
+     "reviewed_designations": 1
     },
     "bus@medium": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "bus@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "stop sign@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "stop sign@medium": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "stop sign@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     }
    },
    "churn_total": {
     "kept": 3558,
     "dropped": 42,
     "dropped_reviewed": 0,
-    "added": 42
+    "added": 42,
+    "reviewed_designations": 130
    }
   },
   "guarded": {
@@ -543,224 +580,261 @@
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "clock@medium": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "clock@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "bird@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 9
     },
     "bird@medium": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 14
     },
     "bird@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 19
     },
     "boat@small": {
      "kept": 99,
      "dropped": 1,
      "dropped_reviewed": 0,
-     "added": 1
+     "added": 1,
+     "reviewed_designations": 1
     },
     "boat@medium": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 1
     },
     "boat@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "umbrella@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "umbrella@medium": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 1
     },
     "umbrella@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 1
     },
     "kite@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "kite@medium": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 1
     },
     "kite@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 1
     },
     "book@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "book@medium": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "book@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 2
     },
     "dog@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "dog@medium": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 1
     },
     "dog@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "backpack@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 8
     },
     "backpack@medium": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 25
     },
     "backpack@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 11
     },
     "knife@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "knife@medium": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "knife@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "bicycle@small": {
      "kept": 99,
      "dropped": 1,
      "dropped_reviewed": 0,
-     "added": 1
+     "added": 1,
+     "reviewed_designations": 12
     },
     "bicycle@medium": {
      "kept": 99,
      "dropped": 1,
      "dropped_reviewed": 0,
-     "added": 1
+     "added": 1,
+     "reviewed_designations": 12
     },
     "bicycle@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 10
     },
     "bus@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 1
     },
     "bus@medium": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "bus@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "stop sign@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "stop sign@medium": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "stop sign@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     }
    },
    "churn_total": {
     "kept": 3597,
     "dropped": 3,
     "dropped_reviewed": 0,
-    "added": 3
+    "added": 3,
+    "reviewed_designations": 130
    }
   },
   "additive": {
@@ -859,224 +933,261 @@
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "clock@medium": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "clock@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "bird@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 9
     },
     "bird@medium": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 14
     },
     "bird@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 19
     },
     "boat@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 1
     },
     "boat@medium": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 1
     },
     "boat@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "umbrella@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "umbrella@medium": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 1
     },
     "umbrella@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 1
     },
     "kite@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "kite@medium": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 1
     },
     "kite@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 1
     },
     "book@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "book@medium": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "book@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 2
     },
     "dog@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "dog@medium": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 1
     },
     "dog@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "backpack@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 8
     },
     "backpack@medium": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 25
     },
     "backpack@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 11
     },
     "knife@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "knife@medium": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "knife@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "bicycle@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 12
     },
     "bicycle@medium": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 12
     },
     "bicycle@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 10
     },
     "bus@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 1
     },
     "bus@medium": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "bus@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "stop sign@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "stop sign@medium": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "stop sign@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     }
    },
    "churn_total": {
     "kept": 3600,
     "dropped": 0,
     "dropped_reviewed": 0,
-    "added": 0
+    "added": 0,
+    "reviewed_designations": 130
    }
   },
   "fold@legacy-order": {
@@ -1175,224 +1286,261 @@
      "kept": 99,
      "dropped": 1,
      "dropped_reviewed": 0,
-     "added": 1
+     "added": 1,
+     "reviewed_designations": 0
     },
     "clock@medium": {
      "kept": 98,
      "dropped": 2,
      "dropped_reviewed": 0,
-     "added": 2
+     "added": 2,
+     "reviewed_designations": 0
     },
     "clock@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "bird@small": {
      "kept": 97,
      "dropped": 3,
      "dropped_reviewed": 0,
-     "added": 3
+     "added": 3,
+     "reviewed_designations": 9
     },
     "bird@medium": {
      "kept": 99,
      "dropped": 1,
      "dropped_reviewed": 0,
-     "added": 1
+     "added": 1,
+     "reviewed_designations": 14
     },
     "bird@large": {
      "kept": 99,
      "dropped": 1,
      "dropped_reviewed": 0,
-     "added": 1
+     "added": 1,
+     "reviewed_designations": 19
     },
     "boat@small": {
      "kept": 92,
      "dropped": 8,
      "dropped_reviewed": 0,
-     "added": 8
+     "added": 8,
+     "reviewed_designations": 1
     },
     "boat@medium": {
      "kept": 96,
      "dropped": 4,
      "dropped_reviewed": 0,
-     "added": 4
+     "added": 4,
+     "reviewed_designations": 1
     },
     "boat@large": {
      "kept": 96,
      "dropped": 4,
      "dropped_reviewed": 0,
-     "added": 4
+     "added": 4,
+     "reviewed_designations": 0
     },
     "umbrella@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "umbrella@medium": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 1
     },
     "umbrella@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 1
     },
     "kite@small": {
      "kept": 97,
      "dropped": 3,
      "dropped_reviewed": 0,
-     "added": 3
+     "added": 3,
+     "reviewed_designations": 0
     },
     "kite@medium": {
      "kept": 97,
      "dropped": 3,
      "dropped_reviewed": 0,
-     "added": 3
+     "added": 3,
+     "reviewed_designations": 1
     },
     "kite@large": {
      "kept": 98,
      "dropped": 2,
      "dropped_reviewed": 0,
-     "added": 2
+     "added": 2,
+     "reviewed_designations": 1
     },
     "book@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "book@medium": {
      "kept": 97,
      "dropped": 3,
      "dropped_reviewed": 0,
-     "added": 3
+     "added": 3,
+     "reviewed_designations": 0
     },
     "book@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 2
     },
     "dog@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "dog@medium": {
      "kept": 98,
      "dropped": 2,
      "dropped_reviewed": 0,
-     "added": 2
+     "added": 2,
+     "reviewed_designations": 1
     },
     "dog@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "backpack@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 8
     },
     "backpack@medium": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 25
     },
     "backpack@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 11
     },
     "knife@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "knife@medium": {
      "kept": 99,
      "dropped": 1,
      "dropped_reviewed": 0,
-     "added": 1
+     "added": 1,
+     "reviewed_designations": 0
     },
     "knife@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "bicycle@small": {
      "kept": 98,
      "dropped": 2,
      "dropped_reviewed": 0,
-     "added": 2
+     "added": 2,
+     "reviewed_designations": 12
     },
     "bicycle@medium": {
      "kept": 99,
      "dropped": 1,
      "dropped_reviewed": 0,
-     "added": 1
+     "added": 1,
+     "reviewed_designations": 12
     },
     "bicycle@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 10
     },
     "bus@small": {
      "kept": 99,
      "dropped": 1,
      "dropped_reviewed": 0,
-     "added": 1
+     "added": 1,
+     "reviewed_designations": 1
     },
     "bus@medium": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "bus@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "stop sign@small": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "stop sign@medium": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     },
     "stop sign@large": {
      "kept": 100,
      "dropped": 0,
      "dropped_reviewed": 0,
-     "added": 0
+     "added": 0,
+     "reviewed_designations": 0
     }
    },
    "churn_total": {
     "kept": 3558,
     "dropped": 42,
     "dropped_reviewed": 0,
-    "added": 42
+    "added": 42,
+    "reviewed_designations": 130
    }
   },
   "reorder_is_a_no_op": true
