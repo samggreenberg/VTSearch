@@ -36,9 +36,13 @@ moves a cell off its designated 100.
 
 Usage::
 
-    python band_fold.py --out band-fold.json          # both phases
+    python band_fold.py --out band-fold.json --examples-out unbanded.json
     python band_fold.py --phase truth
     python band_fold.py --phase supply --inflation 1.5,2.0,3.0
+    python band_fold.py --examples unbanded.json --sheet clock --sheet-out clock.jpg
+
+The last form re-renders a sheet from a finished run and measures nothing, which
+is what makes a figure cheap to redraw.
 """
 
 from __future__ import annotations
@@ -117,7 +121,7 @@ def norm(rec: dict, wanted: set[str], W: int, H: int) -> dict[str, list[list[flo
 # ---------------------------------------------------------------- phase: truth
 
 
-def phase_truth(anchor: Path, records: list, inflations: list[float]) -> dict:
+def phase_truth(anchor: Path, records: list, inflations: list[float], examples: list | None = None) -> dict:
     """Score every mode against COCO on the overlap.
 
     Restricted to images where **COCO says the class is there**: where it is
@@ -206,6 +210,23 @@ def phase_truth(anchor: Path, records: list, inflations: list[float]) -> dict:
             if bands["fold"] not in pc.BOX_BANDS and bands["additive"] in pc.BOX_BANDS:
                 here.append("unband")
                 unband_by_class[c][b_truth] += 1
+                if examples is not None:
+                    # Every one of them, not a sample: 225 rows is small enough
+                    # to keep whole, and a sampled population cannot be counted
+                    # from afterwards.
+                    examples.append(
+                        {
+                            "image_id": iid,
+                            "class": c,
+                            "alias_names": sorted(n for n in alias.get(c, ()) if n in by_name),
+                            "own": own,
+                            "folded": folded,
+                            "coco": truth_boxes,
+                            "band_own": b_own,
+                            "band_fold": bands["fold"],
+                            "band_coco": b_truth,
+                        }
+                    )
             elif bands["fold"] in pc.BOX_BANDS and bands["fold"] != bands["additive"]:
                 here.append("move")
             for sc in here:
@@ -344,6 +365,89 @@ def phase_supply(anchor: Path) -> dict:
     return out
 
 
+# ----------------------------------------------------------------------- sheet
+
+
+def sheet(examples: list, cls: str, out: Path, n: int) -> None:
+    """The un-banded images as pictures, because the claim is about geometry.
+
+    A band is a claim about one object's size, and "these two boxes are a
+    scatter, not an object" is exactly the kind of claim a table cannot settle
+    and a picture settles at a glance -- the argument #3281 lost for three
+    studies. Each tile is the full frame with the class's own box in green, the
+    box the alias spelling adds in purple, and COCO's exhaustive boxes dashed
+    white over both.
+
+    Pixels come from :func:`pilebuild.vgsource.vg_image_paths`, the loader's own
+    resolver, so a sheet cannot point at a different copy of VG than the build.
+    """
+    import matplotlib  # noqa: PLC0415
+
+    matplotlib.use("Agg")
+    import matplotlib.patches as mpatches  # noqa: PLC0415
+    import matplotlib.pyplot as plt  # noqa: PLC0415
+    from PIL import Image  # noqa: PLC0415
+
+    rows = [e for e in examples if e["class"] == cls]
+    if not rows:
+        raise SystemExit(f"no un-banded examples for {cls!r}")
+    # Widest union first: the biggest scatters are the clearest cases, and a
+    # sheet that opens on a marginal one argues against itself.
+    rows.sort(key=lambda e: -_union_area(e["own"] + e["folded"]))
+    rows = rows[:n]
+
+    paths = vg_image_paths()
+    cols = 4
+    nrow = (len(rows) + cols - 1) // cols
+    fig, axes = plt.subplots(nrow, cols, figsize=(3.2 * cols, 3.0 * nrow), squeeze=False)
+    for ax in axes.flat:
+        ax.axis("off")
+    for ax, e in zip(axes.flat, rows, strict=False):
+        path = paths.get(e["image_id"])
+        if path is None:
+            continue
+        with Image.open(path) as im:
+            ax.imshow(im.convert("RGB"))
+            W, H = im.size
+        for boxes, colour, style in (
+            (e["coco"], "white", "--"),
+            (e["own"], "#1b7837", "-"),
+            (e["folded"], "#762a83", "-"),
+        ):
+            for b in boxes:
+                ax.add_patch(
+                    mpatches.Rectangle(
+                        (b[0] * W, b[1] * H),
+                        (b[2] - b[0]) * W,
+                        (b[3] - b[1]) * H,
+                        fill=False,
+                        edgecolor=colour,
+                        lw=2.0,
+                        linestyle=style,
+                    )
+                )
+        ax.set_title(
+            f"{e['image_id']}  +{'/'.join(e['alias_names'])}\n"
+            f"own {e['band_own']} -> fold {e['band_fold']} · COCO {e['band_coco']}",
+            fontsize=8,
+        )
+    fig.suptitle(
+        f"`{cls}`: what the fold un-bands. green = the class's own box, "
+        f"purple = the alias box, dashed = COCO's exhaustive boxes",
+        fontsize=10,
+    )
+    fig.tight_layout()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out, dpi=110)
+    log(f"wrote {out}")
+
+
+def _union_area(boxes: list[list[float]]) -> float:
+    if not boxes:
+        return 0.0
+    return (max(b[2] for b in boxes) - min(b[0] for b in boxes)) * (max(b[3] for b in boxes) - min(b[1] for b in boxes))
+
+
 # ---------------------------------------------------------------------- report
 
 
@@ -440,20 +544,40 @@ def main() -> int:
     ap.add_argument("--anchor-dir", default=str(pc.PILE / "coco_anchor"))
     ap.add_argument("--inflation", default="1.2,1.5,2.0,3.0,5.0")
     ap.add_argument("--out", default="")
+    ap.add_argument("--examples-out", default="", help="every un-banded image, with its boxes and all three verdicts")
+    ap.add_argument(
+        "--sheet", default="", help="render that class's un-banded images (needs --examples-out or --examples)"
+    )
+    ap.add_argument("--examples", default="", help="read the examples file instead of re-measuring")
+    ap.add_argument("--sheet-n", type=int, default=8)
+    ap.add_argument("--sheet-out", default="")
     args = ap.parse_args()
 
     anchor = Path(args.anchor_dir)
     inflations = [float(x) for x in args.inflation.split(",") if x.strip()]
     payload: dict = {"meta": {"inflation": inflations, "band_max_inflation": pc.BAND_MAX_INFLATION}}
 
-    if args.phase in ("truth", "both"):
+    examples: list = []
+    if args.examples:
+        examples = json.loads(Path(args.examples).read_text())
+    elif args.phase in ("truth", "both"):
         log(f"loading VG objects.json ({(VG_ROOT / 'objects.json').stat().st_size / 1e6:.0f} MB)")
         with (VG_ROOT / "objects.json").open() as fh:
             records = json.load(fh)
         log(f"  {len(records)} VG records")
-        payload["truth"] = phase_truth(anchor, records, inflations)
+        payload["truth"] = phase_truth(anchor, records, inflations, examples)
         report_truth(payload["truth"])
         del records
+        if args.examples_out:
+            Path(args.examples_out).write_text(json.dumps(examples, indent=1) + "\n")
+            print(f"wrote {args.examples_out} ({len(examples)} rows)")
+
+    if args.sheet:
+        sheet(examples, args.sheet, Path(args.sheet_out or f"{args.sheet}-unbanded.jpg"), args.sheet_n)
+
+    # A sheet asked for off a finished run is a re-render, not a measurement.
+    if args.sheet and args.examples:
+        return 0
 
     if args.phase in ("supply", "both"):
         payload["supply"] = phase_supply(anchor)
