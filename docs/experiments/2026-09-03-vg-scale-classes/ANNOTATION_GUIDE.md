@@ -736,3 +736,29 @@ the 835 COCO hydrant boxes, so taking either spelling by itself would throw away
 a third of the class. At 7.1% unmatched and 81% of COCO boxes carrying a VG box,
 this is the cleanest class measured — so a call that feels hard here is a good
 sign the object is something else.
+
+**A fire truck is not a Hydrant.** Obvious said aloud, easy to slip when the
+whole slate is red street furniture, and a fire truck is a `Truck` — one of the
+thirteen — so the image is very likely a positive for a *different* class here.
+
+**Busted street plumbing, gushing water, and you cannot see what broke, is not a
+Hydrant.** This is the third distinct kind of "cannot tell" in the guide, and
+they resolve differently. The rule that separates them:
+
+> **Good-with-no-box requires certainty of PRESENCE.** It says *"it is there, I
+> cannot measure it"*. It never means *"something might be there"*.
+
+- **Sure it is present, cannot measure it** — a person clearly sitting on an
+  unseen Chair. → **Good, no box.** Excluded from the class: not a positive, and
+  out of the negative pool.
+- **Cannot tell whether it is present at all** — a sheared pipe under a plume of
+  water. → **Bad.** You cannot confirm what you cannot see, and Bad is what the
+  protocol has.
+- **Sure something is present, cannot tell which class** — a buried utensil
+  handle with no cereal or salad to read. → **Bad for both**, which is Sam's
+  "neither".
+
+The second and third file the image as a confirmed negative, which is stronger
+than the reviewer means, and that is the cost recorded in #3643. A sheared
+hydrant under a plume is a real thing and the pool will now say there was none —
+but no vote available today says otherwise honestly.

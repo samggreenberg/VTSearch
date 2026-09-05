@@ -681,6 +681,10 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "Good: street fire hydrants in any colour or design, including ones wrapped, "
             "repainted or half-buried in snow. Bad: building standpipes and wall-mounted "
             "siamese connections, bollards, water valves, parking meters, utility posts. "
+            "Also Bad: a FIRE TRUCK (that is a `Truck`, another of the thirteen), and "
+            "busted street plumbing whose break is hidden under water -- you cannot "
+            "confirm what you cannot see. Good-with-no-box requires certainty of "
+            "PRESENCE; unsure whether anything is there at all is Bad. "
             "The cleanest class measured -- a call that feels hard here usually means the "
             "object is something else."
         ),
