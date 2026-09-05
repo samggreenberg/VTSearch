@@ -613,9 +613,41 @@ poisons the shared negative pool everywhere a car appears. Three things agree:
 - **The pool.** Cars are everywhere in VG, so this is the one exclusion here
   whose absence would be catastrophic rather than merely wrong.
 
+**The same goes for a motorcycle's seat, and for a saddle.** A motorcycle
+almost always shows a little single-person seat, so admitting them would do to
+motorcycles what car seats would do to cars; and a saddle is tack, part of the
+horse's kit rather than free-standing furniture. Free, as with the toilet: the
+whole family — `saddle`, `motorcycle seat`, `bike seat`, `motorcycle` — appears
+**zero** times in 15,868 chair boxes, with a single stray `scooter`.
+
 The corollary, as with the jerry can: **a car seat removed from the car** —
 sitting in a garage, a scrapyard, a skip — is free-standing, nothing owns it,
-and it is a Chair.
+and it is a Chair. The same for a saddle on a rack in a tack room, which is a
+harder call and much rarer.
+
+### Someone is clearly sitting, and the Chair is invisible
+
+Vote **Good, and draw no box.**
+
+This is the one place the three-valued design is reachable from the voting UI,
+and it is exactly right here. A Good *with* a box says "present, and this is its
+size". A Good *without* one says **"present, but no size was measured"** — and
+`verdicts_to_corrections` files it as `negative_excluded`: `present: True`,
+`boxes: []`. The image is taken **out of the shared negative pool**, because a
+Chair really is there and scoring a detector wrong for finding it would be
+absurd, and it is **not made a positive**, because a band is a claim about size
+and you did not measure one. Neither, precisely.
+
+Do **not** box where you think the Chair is. An invented box is an invented
+size, in a study whose entire subject is size.
+
+**One caveat, and it is a real one.** A boxless Good cannot distinguish *"I
+could not see it"* from *"I forgot to draw"*. Both land in the same state. On
+2026-09-03 eight boxless Goods in `cell phone` were the second kind and had to
+be re-issued to recover them (#3616 neighbourhood); here they are the first kind
+and want no recovery at all. The pipeline cannot tell, so the reviewer has to —
+which is the argument in #3643 for making the third state something you can say
+out loud.
 
 **A headrest is not a Chair either — and the reason is not that it is small.**
 Seeing part of a thing is normally good evidence of the thing: a chair back over

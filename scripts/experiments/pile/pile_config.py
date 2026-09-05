@@ -654,7 +654,11 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "one). Bad: couches and sofas (`couch`), benches, a TOILET (separate COCO "
             "class, zero confusions), and a CAR SEAT -- a component is not an instance, "
             "and counting them would fire on every street scene. A car seat REMOVED from "
-            "the car is free-standing, so it counts. A PART INHERITS THE RULING OF ITS "
+            "the car is free-standing, so it counts; so do a motorcycle's seat and a "
+            "saddle NOT (both are part of the vehicle or the tack, and both are zero "
+            "boxes in COCO). Someone clearly sitting on an INVISIBLE chair: vote Good and "
+            "draw NO box -- present, no size measured, which excludes the image from the "
+            "negative pool without making it a positive. A PART INHERITS THE RULING OF ITS "
             "WHOLE: a chair back or leg is evidence of a Chair and you box the Chair, but "
             "a headrest in a car is part of a car seat, so it is not one."
         ),
