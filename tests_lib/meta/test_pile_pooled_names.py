@@ -340,6 +340,50 @@ class TestAGroupWhoseMembersDisagreeIsNotOneHypothesis:
         assert grp["verdict"] == "neither"
         assert _name(refuted, "umbrella", "green umbrella")["final"] == "unmeasured"
 
+    def test_members_that_all_agree_exactly_are_not_dissent(self, tmp_path) -> None:
+        """The p = 1 case, which fired the gate on a group with no disagreement.
+
+        At 100% the Wilson upper end is analytically 1 and evaluates to
+        0.9999999999999999, so `butter knife` (23 of 23) was recorded as
+        dissenting from a pooled rate of exactly 1.0 -- and `spelling:butterknife`,
+        two spellings of one word both perfect, came out `heterogeneous`.
+        """
+        payload = _evidence(
+            tmp_path,
+            _colour_family(dissenter_hits=30),  # blue 30/30, pink 30/30, green 4/4
+            _CANDS,
+        )
+        grp = _group(payload, "umbrella", "colour")
+        assert grp["sole_present"] == grp["sole"], "fixture check: every adjudicable image is a hit"
+        assert grp["dissent"] == []
+        assert grp["verdict"] == "alias"
+
+    def test_the_reference_rate_is_member_weighted_not_image_weighted(self, tmp_path) -> None:
+        """A member must be compared against a denominator it is part of.
+
+        The group's own `sole` is a union over images, so a member sharing an
+        image with another is counted once there and once in each member. Tested
+        against that union, `paper` and `papers` BOTH dissented from a rate
+        lying between them -- an impossible verdict that is an artefact of the
+        mismatch, not a disagreement.
+        """
+        o = _Overlap()
+        for k in range(40):
+            # Every image carries both members, so the union is half the
+            # member-weighted denominator.
+            o.add(
+                [("blue umbrella", _UMBRELLA_BOX), ("pink umbrella", _UMBRELLA_BOX)],
+                present=k < 20,
+            )
+        for _ in range(10):
+            o.add([("umbrella", _UMBRELLA_BOX)], present=True)
+        payload = _evidence(tmp_path, o, _CANDS)
+        grp = _group(payload, "umbrella", "colour")
+        assert grp["sole"] == 40
+        assert grp["member_sole"] == 80, "each member sees all 40 images"
+        assert grp["member_rate"] == grp["sole_present"] / grp["sole"]
+        assert grp["dissent"] == [], "two members with identical rates never disagree"
+
     def test_the_gate_is_adjusted_for_how_many_members_it_tests(self, clean: dict) -> None:
         """Un-adjusted, a ten-member group fires on nothing 40% of the time.
 

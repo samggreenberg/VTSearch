@@ -381,14 +381,27 @@ def main() -> int:
         live = [n for n in members if vg_images[n]]
         n_sole, n_hit = gsole[c, g], gsole_hit[c, g]
         nb, nbh = gboxes[c, g], gboxes_hit[c, g]
-        pooled = n_hit / n_sole if n_sole else 0.0
         # The homogeneity gate, over the members that have a rate of their own.
+        #
+        # Its reference is the MEMBER-weighted rate, not the image-level one
+        # above: the two differ whenever members share an image (counted once in
+        # the union and once per member), and comparing a member against a
+        # denominator it is not part of is how `paper` and `papers` both came
+        # out dissenting from a pool that lies between them. The union rate stays
+        # the group's verdict statistic, because the price is per image.
+        m_sole = sum(sole[c, n] for n in live)
+        m_hit = sum(sole_hit[c, n] for n in live)
+        member_rate = m_hit / m_sole if m_sole else 0.0
         measured = [n for n in live if sole[c, n] >= args.min_sole]
         z = bonferroni_z(len(measured), args.homogeneity_alpha)
         dissent = []
         for n in measured:
             lo, hi = wilson_interval(sole_hit[c, n], sole[c, n], z)
-            if not (lo <= pooled <= hi):
+            # The tolerance is not cosmetic: at p = 1 the Wilson upper end is
+            # analytically 1 and evaluates to 0.9999999999999999, so a group
+            # whose every member is 23 of 23 and 6 of 6 was declared
+            # heterogeneous against a pooled rate of exactly 1.0.
+            if not (lo - 1e-9 <= member_rate <= hi + 1e-9):
                 dissent.append(n)
         foldable = pc.scale_vg_group_foldable(c, g)
         if n_sole < args.min_sole:
@@ -410,6 +423,8 @@ def main() -> int:
             "dissent": dissent,
             "sole": n_sole,
             "sole_present": n_hit,
+            "member_sole": m_sole,
+            "member_rate": member_rate,
             "precision_lower": wilson_lower(n_hit, n_sole),
             "boxes": nb,
             "boxes_on_class": nbh,
@@ -495,7 +510,7 @@ def main() -> int:
                 f"{wilson_lower(residual[1], residual[0]):>7.2f}{'':>7}{'':>6}{residual[2]:>10}  residual"
             )
         for g, row in sorted(group_rows.get(c, {}).items()):
-            got = [n for n in row["members"] if (c, n) in inherited]
+            got = [n for n in row["members"] if g in inherit_from.get((c, n), [])]
             print(
                 f"    [{g}]{'':<21}{'':>8}{row['sole']:>7}{pct(row['sole_present'], row['sole']):>6}"
                 f"{row['precision_lower']:>7.2f}{row['boxes']:>7}{pct(row['boxes_on_class'], row['boxes']):>6}"
@@ -515,7 +530,10 @@ def main() -> int:
                 continue
             print(f"\n{c}")
             for g, row in sorted(group_rows[c].items()):
-                got = [n for n in row["members"] if (c, n) in inherited]
+                # Only the names this group actually granted a verdict to. Keyed
+                # on `inherited` alone, a heterogeneous group listed names that
+                # a sibling group had settled -- which reads as the gate failing.
+                got = [n for n in row["members"] if g in inherit_from.get((c, n), [])]
                 print(
                     f"    [{g}]  {row['why']}\n"
                     f"        {len(row['members'])} names"
