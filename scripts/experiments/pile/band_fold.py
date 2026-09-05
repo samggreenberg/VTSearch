@@ -60,6 +60,10 @@ from pilebuild.vgsource import vg_image_paths, vg_source  # noqa: E402
 
 VG_ROOT = pc.DEMO_CACHE / "visual_genome"
 
+#: `dev`'s pass order -- fold BEFORE the anchor, with no dims -- carried as a
+#: fourth supply arm so "the reorder changes nothing" is a measurement.
+LEGACY = "fold@legacy-order"
+
 #: What ``band_for`` is asked of, per mode, for an image the class already sees.
 #: Kept beside the modes it mirrors rather than inside the loop, because the
 #: whole question is which of these three descriptions of one image is true.
@@ -274,16 +278,24 @@ def phase_supply(anchor: Path) -> dict:
     roster = json.loads(pc.ROSTER.read_text()) if pc.ROSTER.exists() else {}
     log(f"{len(corrections)} human verdicts; roster pins {len(roster.get('cells', {}))} cells")
 
+    # The fourth arm is not a mode: it is `dev`'s pass ORDER, folding before the
+    # anchor with no dims, exactly as the loader ran it until #3637. It is here
+    # to prove the claim the reorder rests on -- that folding an image COCO is
+    # about to overwrite changes nothing -- rather than to leave it asserted.
     out: dict[str, dict] = {}
-    for mode in vs.FOLD_MODES:
+    for mode in (*vs.FOLD_MODES, LEGACY):
         # A fresh read per mode: `canonicalise` and every pass after it edit in
         # place, so a second mode over the first's labels would measure the two
         # composed. The read is ~90 s and the alternative is a deep copy of a
         # 100k-image dict, which is not cheaper.
         log(f"--- mode {mode}")
         labels = vs.read_vg_labels(records, paths, dims, wanted_vg)
-        box_dims, exhaustive, _, _ = vs.anchor_to_coco(labels, dims, coco_of, truth, ca.COCO_DIMS, wanted)
-        folded, contested = vs.canonicalise(labels, pc.SCALE_VG_NAMES, box_dims, mode)
+        if mode == LEGACY:
+            folded, contested = vs.canonicalise(labels, pc.SCALE_VG_NAMES)
+            box_dims, exhaustive, _, _ = vs.anchor_to_coco(labels, dims, coco_of, truth, ca.COCO_DIMS, wanted)
+        else:
+            box_dims, exhaustive, _, _ = vs.anchor_to_coco(labels, dims, coco_of, truth, ca.COCO_DIMS, wanted)
+            folded, contested = vs.canonicalise(labels, pc.SCALE_VG_NAMES, box_dims, mode)
         unbanded = vs.apply_corrections(labels, corrections, box_dims, exhaustive)
         unbanded |= vs.lift_ambiguous(labels, pc.SCALE_VG_AMBIGUOUS, exhaustive)
         supply, _, clean = vs.band_candidates(labels, box_dims, unbanded)
@@ -305,6 +317,11 @@ def phase_supply(anchor: Path) -> dict:
     # What each mode does to work a human already did, and to the shipped
     # designations. A positive nobody has looked at is replaceable; a reviewed
     # one is not, and that is the whole of #3616's hazard.
+    # The reorder is a no-op or it is not, and this is the whole test: same
+    # supply, same designated ids, cell by cell.
+    same = out[LEGACY]["supply"] == out["fold"]["supply"] and out[LEGACY]["chosen"] == out["fold"]["chosen"]
+    log(f"reorder is a no-op on the built dataset: {same}")
+
     reviewed = {iid for iid, _name in corrections}
     pinned = {cell: set(ids) for cell, ids in roster.get("cells", {}).items()}
     for mode, d in out.items():
@@ -323,6 +340,7 @@ def phase_supply(anchor: Path) -> dict:
             k: sum(v[k] for v in churn.values()) for k in ("kept", "dropped", "dropped_reviewed", "added")
         }
         del d["chosen"]
+    out["reorder_is_a_no_op"] = same
     return out
 
 
@@ -385,13 +403,14 @@ def report_supply(s: dict) -> None:
     print("\n" + "=" * 92)
     print("SUPPLY -- the real build passes under each mode, to designation and no further")
     print("=" * 92)
-    print(f"{'mode':<12}{'clean pool':>12}{'cells < N_POS':>15}{'boxes folded':>14}{'contested':>11}")
-    for m in modes:
+    print(f"{'mode':<20}{'clean pool':>12}{'cells < N_POS':>15}{'boxes folded':>14}{'contested':>11}")
+    for m in (*modes, LEGACY):
         d = s[m]
         print(
-            f"{m:<12}{d['clean']:>12}{len(d['under_supplied']):>15}"
+            f"{m:<20}{d['clean']:>12}{len(d['under_supplied']):>15}"
             f"{sum(d['folded'].values()):>14}{sum(d['contested'].values()):>11}"
         )
+    print(f"\n`{LEGACY}` designates exactly what `fold` does: {s['reorder_is_a_no_op']}")
 
     print("\nPositive supply per cell, and what the mode changes (vs `fold`):")
     base = s["fold"]["supply"]
