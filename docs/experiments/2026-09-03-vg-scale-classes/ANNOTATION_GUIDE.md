@@ -199,15 +199,42 @@ minivan and a panel cargo van share a noun and nothing else, so COCO's
 annotators land 45/55 not because the boundary is unknowable but because they
 were not applying one test. We are.
 
-> **Windows all round with seats behind the driver → Car.
-> Panel sides, no rear side windows, or a separate cargo box → Truck.**
+> **Does it have a cargo compartment?
+> No → Car. Yes — panelled sides, a box body, or an open bed → Truck.**
 
-Run the three cases through it and the ambiguity disappears: an SUV always has
-windows all round, so it is always a Car; a passenger minivan likewise; a cargo
-van has blank panels where the rear windows would be, so it is a Truck. **The
-word was never the question — the body is.** This is the geometry trick from the
-vessel ladder in another guise: replace an unanswerable naming argument with one
-thing you can see.
+An earlier draft of this said *"windows all round **with seats behind the
+driver**"*, and that was wrong twice over. It threw out every two-seater — a
+sportscar has no back seat and is obviously a Car — and it asked the reviewer to
+squint through glass to count rows, which is the opposite of a usable test. The
+data is unanimous on the first point: `sports car` 0 → Truck and 3 → Car,
+`convertible` 0/4, `coupe` 0/2, `hatchback` 0/6, `limousine` 0/1. **Not one
+two-seater body in the whole overlap is a Truck.**
+
+So the question is not seats, it is **cargo**, and it is answered from outside
+the vehicle:
+
+- **Sportscar, coupe, convertible** — the body simply ends behind the cabin.
+  No cargo compartment. **Car.**
+- **SUV, estate, passenger minivan** — glazed passenger body all the way back.
+  No cargo compartment. **Car.**
+- **Cargo or panel van** — blank metal where the rear side windows would be.
+  **Truck.** (`cargo van` 1/0, `delivery van` 2/0.)
+- **Pickup** — separate open bed. **Truck.** (`pickup` + `pickup truck`, 51/15.)
+- **Ambulance** — a box body behind the cab. **Truck**, and emphatically so:
+  19 → Truck, 0 → Car.
+- **Motorcycle** — no enclosed body at all, and COCO has its own `motorcycle`
+  class. Neither.
+
+**Yes: the same shell is a Car with glass and a Truck with panels.** That is
+exactly what we are saying about a minivan, and it is not a quirk of our rule —
+it is why COCO's own `van` splits 261/318. A passenger minivan and a panel van
+are two vehicles built for two jobs, and the rear side panel is the one place
+that difference is visible. `minivan` 5/51 and `cargo van` 1/0 are the same fact
+read from both ends.
+
+**The word was never the question — the body is.** This is the vessel ladder in
+another guise: replace an unanswerable naming argument with one thing you can
+see, from outside, without squinting.
 
 Expect to disagree with COCO on vans regardless, because half its own `van`
 boxes went the other way. That is a known, priced cost of this class, not a
