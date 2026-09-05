@@ -33,6 +33,15 @@ Every ruling in this guide is one of those three, and each carries its cost in
 the text. That is the discipline the goal requires: not "does COCO agree" but
 "if it does not, do we know what that costs us".
 
+## A note on names
+
+**A capitalised name means the class; a lowercase one means the English word.**
+A Chair is whatever this guide says it is; a chair is what you would call a
+chair. The two come apart constantly — a judge's bench is not a Bench, a toilet
+bowl is not a Bowl, a jar of flowers is a Bottle — and most of the rulings here
+exist precisely at that gap. Code keeps the lowercase form, because `"chair"` is
+the COCO key and a string is not prose.
+
 ## The protocol, once
 
 - **Good = the object is present.** Drag a box on it. **Bad = not present.**
@@ -539,10 +548,52 @@ even though it is part of a boat.
 
 Dining chairs, office chairs, folding and deck chairs, armchairs, high chairs,
 and **stools and bar stools** all count — 98 VG `stool` and 42 `armchair` boxes
-land on COCO chair boxes. Couches and sofas do **not**: COCO has a separate
-`couch` class, and the 37 `couch` boxes sitting on COCO chairs are its errors,
-not its rule. Benches do not count either. A single seat within a row of
-stadium, theatre or waiting-room seating counts as a chair. Like `car`, this
+land on COCO chair boxes, with 8 more under `arm chair` and 7 under `recliner`.
+Benches do not count. A single seat within a row of stadium, theatre or
+waiting-room seating counts, and `seat` (206) plus `seats` (63) is the third
+largest fold-in here, so that case is common.
+
+**One seat, one Chair; two or more, a couch.** COCO has a separate `couch`
+class, and the 37 `couch` and 16 `sofa` boxes on COCO chairs are its errors, not
+its rule. But *upholstered* is not the test — a single-seat upholstered piece,
+club chair or recliner, is a Chair, which is what `armchair` (50 across both
+spellings) and `recliner` (7) already say. A true two-seat loveseat is a couch by
+the same head-count that separates Chair from Bench. `love seat` appears once in
+15,868 boxes, so this is a rule for the reviewer's benefit rather than a
+measured boundary.
+
+**A lifeguard station is a Chair** — built as seating for one, which is the test
+`bench` already uses. Measured at exactly 1 box, so it is decided by the
+principle, not the data.
+
+**A toilet is not a Chair.** COCO has a separate `toilet` class and the two are
+never confused: `toilet`, `commode` and `urinal` appear **zero** times in 15,868
+chair boxes. Free.
+
+**A car seat is not a Chair, and that is the important one.** Sam's argument is
+the reductio: *every* car almost certainly has seats inside, so counting them
+makes Chair a class that fires on every street scene, stops discriminating, and
+poisons the shared negative pool everywhere a car appears. Three things agree:
+
+- **COCO never does it** — `car seat` 2, `child seat` 1, `car` 1, out of 15,868.
+- **A component is not an instance.** A car seat is part of the car, the same
+  test that keeps a concrete bed cast into the pavement out of `vase` and a fuel
+  tank out of `bottle`.
+- **The pool.** Cars are everywhere in VG, so this is the one exclusion here
+  whose absence would be catastrophic rather than merely wrong.
+
+The corollary, as with the jerry can: **a car seat removed from the car** —
+sitting in a garage, a scrapyard, a skip — is free-standing, nothing owns it,
+and it is a Chair.
+
+**A headrest is not a Chair either — and the reason is not that it is small.**
+Seeing part of a thing is normally good evidence of the thing: a chair back over
+a table, a leg under it, and you box the Chair. VG names COCO chair boxes by a
+part often enough to matter — `back` 57, `cushion` 34, `legs` 13, `backrest` 7.
+So the rule is **a part inherits the ruling of its whole**: a headrest on a
+dining chair is evidence of a Chair and you box the Chair; a headrest in a car is
+part of a car seat, which is part of a car, and neither of those is a Chair, so
+neither is the headrest. (`headrest` itself: 2 boxes in 15,868.) Like `car`, this
 class is prevalent — 6.3% of VG — so its negative pool is thin and the boundary
 stratum will hold many genuine chairs rather than near-misses.
 
