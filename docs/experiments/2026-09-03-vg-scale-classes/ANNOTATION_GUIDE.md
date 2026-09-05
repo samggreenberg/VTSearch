@@ -199,8 +199,34 @@ minivan and a panel cargo van share a noun and nothing else, so COCO's
 annotators land 45/55 not because the boundary is unknowable but because they
 were not applying one test. We are.
 
-> **Does it have a cargo compartment?
-> No → Car. Yes — panelled sides, a box body, or an open bed → Truck.**
+> **Was it built to carry goods, or to carry people?**
+> Goods → Truck. People → Car.
+
+**Cargo space is the cue, not the definition** — a distinction that matters,
+because it fails at both ends. A **bobtail tractor unit**, cab with no trailer,
+has no cargo compartment at all and is plainly a Truck; that is what it was
+built to do, and the fifth-wheel coupling behind the cab says so. A **car with a
+tow hitch** can haul and is still a Car; a hitch is an accessory, not a purpose.
+The cargo test as first written got both backwards, and it contradicted a rule
+sitting six lines below it — *"a cab-only tractor unit counts"* — which should
+have been the tell.
+
+**This is intent of manufacture, the same test as everywhere else in this
+guide** — a Vase is a vessel *made as one*, a Bench is *built as seating*, a Bowl
+is *made to hold food*. Vehicles are no different, and reaching for a visible
+proxy instead of the principle is what produced two wrong drafts in a row.
+
+What to look for, still from outside and without squinting:
+
+| built for goods → **Truck** | built for people → **Car** |
+|---|---|
+| open bed, box body, panelled sides | glazed passenger body all the way back |
+| fifth-wheel coupling behind the cab | body that simply ends behind the cabin |
+| tipper, tanker, flatbed, ambulance | seats and windows, any number of rows |
+
+**Accessories change nothing either way.** A tow hitch, a roof rack, a bike
+carrier or a loaded roof box on an estate leave it a Car. A tractor unit with
+its trailer dropped is still a Truck.
 
 An earlier draft of this said *"windows all round **with seats behind the
 driver**"*, and that was wrong twice over. It threw out every two-seater — a
@@ -213,8 +239,10 @@ two-seater body in the whole overlap is a Truck.**
 So the question is not seats, it is **cargo**, and it is answered from outside
 the vehicle:
 
-- **Sportscar, coupe, convertible** — the body simply ends behind the cabin.
-  No cargo compartment. **Car.**
+- **Sportscar, coupe, convertible** — built to carry people; the body ends
+  behind the cabin. **Car.**
+- **Bobtail tractor unit** — no trailer, no cargo space, built for nothing but
+  hauling. **Truck** (`semi` 9 → Truck, 0 → Car).
 - **SUV, estate, passenger minivan** — glazed passenger body all the way back.
   No cargo compartment. **Car.**
 - **Cargo or panel van** — blank metal where the rear side windows would be.
@@ -224,6 +252,10 @@ the vehicle:
   19 → Truck, 0 → Car.
 - **Motorcycle** — no enclosed body at all, and COCO has its own `motorcycle`
   class. Neither.
+
+**One more two-vehicles-one-word case, for the same reason as `van`:** `cab`
+splits 22 → Truck and 45 → Car, because it names both a taxi and the tractor
+half of an articulated lorry. Read the body, as ever.
 
 **Yes: the same shell is a Car with glass and a Truck with panels.** That is
 exactly what we are saying about a minivan, and it is not a quirk of our rule —
