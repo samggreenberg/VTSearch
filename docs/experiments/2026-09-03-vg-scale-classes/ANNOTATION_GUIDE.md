@@ -923,6 +923,21 @@ they resolve differently. The rule that separates them:
   handle with no cereal or salad to read. → **Bad for both**, which is Sam's
   "neither".
 
+- **Shot from inside the object** — a photo taken from a car's passenger seat,
+  with a sun visor or a wing mirror at the edge of frame. → **Good, no box.**
+  The Car is unquestionably present; you are *in* it. But it has no box: it
+  contains the camera. Boxing the visor would be boxing a **part**, and the band
+  would then be a claim about the visor's size rather than the car's — the Chair
+  rule from the other side, where a part is evidence of the whole but it is the
+  *whole* you box.
+
+  **The band structure says the same thing independently.** `pile_config` sets
+  `MAX_VOTED_AREA = 0.80` because *"a box covering >80% of the image is not a
+  region, it is the image"*, and anything above it is `OVERSIZE` — outside all
+  three bands by construction. A car containing the camera is the limiting case
+  of exactly that rule. Two unrelated tests, one answer, as with the sidewalk
+  planter.
+
 - **Sure something was there, but it has no locatable extent** — a long-exposure
   night shot where traffic is nothing but streaks of headlight. → **Good, no
   box.** New in kind: the object is not occluded and not ambiguous, it is
