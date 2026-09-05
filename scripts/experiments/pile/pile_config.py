@@ -334,10 +334,14 @@ SCALE_CLASSES: tuple[str, ...] = (
 #: 1. **the class is present** when this name is its only evidence -- the
 #:    *repair precision*: over the VG-COCO overlap, the share of images carrying
 #:    the name and NOT the class name where COCO says the class is there anyway.
-#:    Read it as a price: ``1 / precision`` is how many images leave the shared
-#:    negative pool per contaminated negative removed. The cut is 1/3 -- three
-#:    withheld per repair -- taken on the **Wilson lower bound**, so a name
-#:    measured on five images cannot outrank one measured on two thousand.
+#:    Read it as a price, in the right units: ``1 / precision - 1`` is how many
+#:    **good hard negatives are destroyed per contaminated negative retired**.
+#:    Not pool membership -- 77,119 images are eligible against a 4,200-image
+#:    draw -- but the images a name withholds are the ones hardest to tell from
+#:    the class, which is what makes the ratio the thing to cut on (#3635). The
+#:    cut is 1/3 -- two destroyed per repair -- taken on the **Wilson lower
+#:    bound**, so a name measured on five images cannot outrank one measured on
+#:    two thousand.
 #: 2. **this box is the object**: at least half of the name's boxes land on a
 #:    COCO box of the class, over at least 20 boxes. A band is a claim about one
 #:    object's size (#3616), so a name that passes (1) and fails (2) goes to
