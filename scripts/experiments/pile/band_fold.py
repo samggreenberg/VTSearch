@@ -343,22 +343,30 @@ def phase_supply(anchor: Path) -> dict:
     same = out[LEGACY]["supply"] == out["fold"]["supply"] and out[LEGACY]["chosen"] == out["fold"]["chosen"]
     log(f"reorder is a no-op on the built dataset: {same}")
 
-    reviewed = {iid for iid, _name in corrections}
+    # Keyed on the PAIR, not the image: a human verdict on `(2409, backpack)`
+    # says nothing about that image's `bird` seat, and counting it would report
+    # reviewed work protected that nobody reviewed.
     pinned = {cell: set(ids) for cell, ids in roster.get("cells", {}).items()}
     for mode, d in out.items():
         churn = {}
         for cell, ids in d["chosen"].items():
+            cls = cell.rsplit("@", 1)[0]
             was = pinned.get(cell, set())
             now = set(ids)
             churn[cell] = {
                 "kept": len(was & now),
                 "dropped": len(was - now),
-                "dropped_reviewed": len({i for i in was - now if i in reviewed}),
+                "dropped_reviewed": len({i for i in was - now if (i, cls) in corrections}),
                 "added": len(now - was),
+                # The denominator, without which `dropped_reviewed: 0` says
+                # nothing: a cell nobody has reviewed cannot lose reviewed work,
+                # and 18 of the 36 cells are in that position.
+                "reviewed_designations": len({i for i in was if (i, cls) in corrections}),
             }
         d["churn"] = churn
         d["churn_total"] = {
-            k: sum(v[k] for v in churn.values()) for k in ("kept", "dropped", "dropped_reviewed", "added")
+            k: sum(v[k] for v in churn.values())
+            for k in ("kept", "dropped", "dropped_reviewed", "added", "reviewed_designations")
         }
         del d["chosen"]
     out["reorder_is_a_no_op"] = same
@@ -528,10 +536,13 @@ def report_supply(s: dict) -> None:
             print(row + flag)
 
     print("\nDesignated membership against the shipped roster (what a rebuild would do):")
-    print(f"{'mode':<12}{'kept':>8}{'dropped':>10}{'of which reviewed':>19}{'added':>8}")
+    print(f"{'mode':<12}{'kept':>8}{'dropped':>10}{'of which reviewed':>19}{'added':>8}{'reviewed seats':>16}")
     for m in modes:
         t = s[m]["churn_total"]
-        print(f"{m:<12}{t['kept']:>8}{t['dropped']:>10}{t['dropped_reviewed']:>19}{t['added']:>8}")
+        print(
+            f"{m:<12}{t['kept']:>8}{t['dropped']:>10}{t['dropped_reviewed']:>19}"
+            f"{t['added']:>8}{t['reviewed_designations']:>16}"
+        )
 
 
 def _pct(a: int, b: int) -> str:

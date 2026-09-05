@@ -207,12 +207,17 @@ Two things follow, and they are what turn a −16 into a non-event:
   three cells hold 1,338 / 1,602 / 507. Losing 34 images from a class with 3,447
   candidates changes what any cell contains only through the hash rank, not
   through scarcity.
-- **No mode drops a single reviewed image.** `designate_cells` already ranks
-  reviewed images ahead of unreviewed ones for a seat, so the 42 designations the
-  fold retires are all images nobody has looked at, replaced by 42 others nobody
-  has looked at. The failure #3616 and #3614 circled — *a reviewed positive lost
-  to a config edit* — has **zero instances here**, and that is a measurement, not
-  an argument.
+- **No mode drops a reviewed image**, and here is the denominator that number is
+  worthless without: **130 of the 3,600 designations carry a human verdict for
+  their own class**, across 18 of the 36 cells (`backpack@medium` 25,
+  `bird@large` 19, `bicycle@small` 12). None of them is among the 42 the fold
+  retires. **Read this as consistent-with rather than proof:** 130 in 3,600 is
+  3.6%, so a blind draw of 42 would be expected to take ~1.5 reviewed seats and
+  taking none is unremarkable on its own. What makes it structural is
+  `designate_cells`, which ranks reviewed images ahead of unreviewed ones for a
+  seat — so a reviewed image can only be lost by becoming **ineligible**, i.e.
+  by being one of the 248 the fold un-bands. That is the failure #3616 and #3614
+  circled, it remains possible, and this rebuild has **zero instances of it**.
 
 `contested` is **248** under every mode and matches #3618's count name for name
 (`clock` 34, `boat` 74, `bird` 38, `kite` 34, `bicycle` 19, `book` 14, `dog` 14,
