@@ -887,6 +887,22 @@ they resolve differently. The rule that separates them:
   handle with no cereal or salad to read. → **Bad for both**, which is Sam's
   "neither".
 
+- **Sure something was there, but it has no locatable extent** — a long-exposure
+  night shot where traffic is nothing but streaks of headlight. → **Good, no
+  box.** New in kind: the object is not occluded and not ambiguous, it is
+  *smeared across the frame*, so no box could be correct even in principle. A
+  band is a claim about an object's size and a three-second trail has none.
+
+That last one looks like it should be Bad — you cannot say whether any given
+streak was a Car or a Truck, which is the third case above. It goes the other way
+on **asymmetric regret**, and the principle is worth stating on its own:
+
+> **When the two errors cost very different amounts, take the third state.**
+> Wrongly excluding an image costs one image of supply. Wrongly filing a
+> photograph of traffic as *confirmed no-Car* puts a falsehood into the shared
+> pool that will score every model built on it afterwards — and a detector that
+> fires on a night traffic shot is not obviously wrong.
+
 The second and third file the image as a confirmed negative, which is stronger
 than the reviewer means, and that is the cost recorded in #3643. A sheared
 hydrant under a plume is a real thing and the pool will now say there was none —
