@@ -22,6 +22,15 @@ Images VG already labels with a candidate are evicted first: they are known
 contamination, they are counted by `make_class_slate.py` as `evicted.json`, and
 asking a reviewer about them measures nothing.
 
+**The pass covers all TWENTY-FIVE classes, not just the thirteen.** The shipped
+twelve were never reviewed either -- same construction, same VG-silence
+negatives, same unmeasured error (#3666) -- and treating the two halves
+differently would leave the benchmark with two tiers of label quality that
+any cross-class comparison would confound. Since the reviewer is looking at
+the image anyway, the twelve cost one extra group rather than twelve extra
+passes: `knife` and `book` fall in the table group, `bus`, `bicycle` and
+`stop sign` in the street group, and the six that fit neither form their own.
+
 **So are images the thirteen class passes already found the object in, and
 missing that was a real bug.** The first build of this slate sampled the
 PRE-CORRECTION pool: 69% of its 200 rows already carried a verdict, and 44 of
@@ -80,7 +89,8 @@ from pilebuild.loaders.vg_scale import read_vg_labels, vg_source  # noqa: E402
 #: time, a truck image holds a bowl 0% -- which is what makes two passes cheap:
 #: for most images one of them is an instant "this is not that kind of scene".
 GROUPS: dict[str, tuple[str, ...]] = {
-    "none of the table 9": (
+    "none of the table 12": (
+        # the thirteen's tabletop cluster...
         "bowl",
         "cup",
         "bottle",
@@ -90,8 +100,34 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "sink",
         "chair",
         "cell phone",
+        # ...and the shipped classes that live on the same surface. `knife` sits
+        # with a table item in 75% of its images and `book` in 62%, so they cost
+        # the reviewer nothing here and everything as a separate pass.
+        "knife",
+        "book",
+        "clock",
     ),
-    "none of the street 4": ("car", "truck", "bench", "fire hydrant"),
+    "none of the street 7": (
+        "car",
+        "truck",
+        "bench",
+        "fire hydrant",
+        # `bus` is with a street item 74% of the time, `bicycle` and `stop sign` 52%.
+        "bus",
+        "bicycle",
+        "stop sign",
+    ),
+    "none of the outdoors 6": (
+        # Neither cluster claims these: umbrella 29/33, dog 17/22, backpack 27/38
+        # table-vs-street. What they share is being the SUBJECT of an outdoor
+        # photo -- bird is the only thing present in 48% of its images, kite 50%.
+        "bird",
+        "kite",
+        "boat",
+        "dog",
+        "umbrella",
+        "backpack",
+    ),
 }
 
 #: Every class, for the frame and the ranking.
@@ -125,7 +161,10 @@ def main() -> int:
     # and `SCALE_VG_NAMES` would silently fall back to the bare class name for
     # every one of them -- reading `cup` while ignoring mug, goblet and the
     # rest, which is exactly the spelling-split blindness this study found.
-    vg_names = {c: pc.SCALE_CANDIDATE_VG_NAMES.get(c, (c,)) for c in classes}
+    # Two tables, because the candidates and the shipped twelve keep their
+    # measured aliases in different places; falling back to the bare class name
+    # for either is the spelling-split blindness this study found.
+    vg_names = {c: (pc.SCALE_CANDIDATE_VG_NAMES.get(c) or pc.SCALE_VG_NAMES.get(c) or (c,)) for c in classes}
     ambiguous = {c: pc.SCALE_CANDIDATE_VG_AMBIGUOUS.get(c, ()) for c in classes}
     wanted = {n for names in vg_names.values() for n in names}
     wanted |= {n for names in ambiguous.values() for n in names}
