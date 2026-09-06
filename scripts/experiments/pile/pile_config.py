@@ -843,10 +843,20 @@ SCALE_N_NEG = int(os.environ.get("VTS_SCALE_N_NEG", "3900"))
 #: is a relabel, while drawing a fresh one would mean re-embedding every cell.
 SCALE_N_NEG_SPARE = int(os.environ.get("VTS_SCALE_N_NEG_SPARE", "300"))
 
-#: The designed prevalence of a `vg_scale` cell: 100 positives per band x 3
+#: The **designed** prevalence of a `vg_scale` cell: 100 positives per band x 3
 #: bands against 3900 shared negatives. Named because `vg_scale_deep` has to
 #: REPRODUCE it rather than re-derive it, and because every k* this family of
 #: studies quotes is computed from it (`-log2((1-pi)/pi) = -3.71`).
+#:
+#: DESIGNED, not realised, and since #3667 the two differ. The harness scores
+#: the *evaluable pool*, which grew ~45% when each class gained the other
+#: eleven's COCO-exhaustive positives as negatives -- no positive was added, so
+#: prevalence fell: `vg_scale_any` to **4.99%** and `vg_scale_deep` to **5.09%**
+#: (k* -4.25 and -4.22, against the -3.70 this constant gives). The two cells
+#: moved TOGETHER, 0.03 bits apart, so the "only depth changed" premise below
+#: survives; what does not survive is quoting -3.71 as the dataset's own
+#: optimum. See #3681 and
+#: `docs/experiments/2026-09-06-cross-class-negatives-3667/REPORT.md`.
 SCALE_PREVALENCE = (3 * SCALE_N_POS) / (3 * SCALE_N_POS + SCALE_N_NEG)
 
 #: `vg_scale_deep`'s positives per class (#3547). 900 is the deepest value all

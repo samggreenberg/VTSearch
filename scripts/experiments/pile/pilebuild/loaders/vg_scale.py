@@ -2,17 +2,31 @@
 
 The construction, in one paragraph: one image pool and one class list
 (:data:`pile_config.SCALE_CLASSES`); for a class *c* and band *B* an image is a
-**positive** when its compact union box for *c* falls in *B*, a **negative**
-when it holds no instance of any class in *C*, and **excluded** otherwise -- it
-holds *c* at some other size, so scoring it as a negative would penalise a
+**positive** when its compact union box for *c* falls in *B*, and a **negative**
+when it does not hold *c* at all. It is **excluded** from *c*'s cells only when
+it holds *c* at some other size -- scoring it as a negative would penalise a
 detector for finding a real bus, which is what #3156 is about. Exclusion is
 carried per media as ``evaluable_categories`` and honoured by
 ``vtscore.eval.labels.evaluable_pool``.
 
+That "does not hold *c*" is a claim about the image, and it is only free on the
+COCO-annotated half, where all eighty classes are answered at once; off COCO it
+would be VG's silence. So :func:`_evaluable` gates the cross-class half of the
+rule on ``labels_exhaustive`` (#3667), and until that issue an image was
+evaluable **only in its own cells** -- an image holding a book and no bus was
+neither a bus positive nor a bus negative, and 41.9% of the pile fell out of
+every class's evaluation.
+
 Cells are *designated* rather than inferred: exactly ``SCALE_N_POS`` positives
-and one shared pool of ``SCALE_N_NEG`` negatives each. Every cell therefore has
-identical prevalence and identical negatives, so a small-vs-large difference is
-a paired contrast on one class rather than two datasets of different difficulty.
+and one shared pool of ``SCALE_N_NEG`` negatives each, so **within a class the
+three bands are scored against identical negatives** -- a small-vs-large
+difference is a paired contrast on one class rather than two datasets of
+different difficulty. Across classes they are no longer identical, which is the
+trade #3667 made deliberately: the shared pool is still shared, but each class
+also gets the positives of the other eleven as negatives, and how many of those
+there are depends on the class. :data:`pile_config.SCALE_PREVALENCE` is
+therefore the **designed** prevalence, not the realised one -- see
+``docs/experiments/2026-09-06-cross-class-negatives-3667/REPORT.md``.
 
 **The labels are COCO's, and the pool is the half of VG that can carry them.**
 VG's own annotation is not exhaustive and measurably fails this construction --
@@ -458,6 +472,20 @@ def draw_negatives(clean: list[int], roster: dict) -> tuple[list[int], list[int]
     return drawn[: pc.SCALE_N_NEG], drawn[pc.SCALE_N_NEG :]
 
 
+def _cells_by_class(cells: list[str]) -> dict[str, set[str]]:
+    """``{class: {cell, ...}}`` for a cell list, whatever its keying.
+
+    ``vg_scale`` cells are ``class@band`` and ``vg_scale_deep`` cells are the
+    bare class, so the split is on the suffix separator :func:`pile_config.scale_cell`
+    writes. A class name never contains it -- `stop sign` has a space, not an
+    `@` -- so the head of the split is the class in both spellings.
+    """
+    out: dict[str, set[str]] = defaultdict(set)
+    for cell in cells:
+        out[cell.split("@", 1)[0]].add(cell)
+    return dict(out)
+
+
 def _evaluable(
     iid: int,
     cats: list[str],
@@ -484,15 +512,25 @@ def _evaluable(
     wrong 0.5-2.5% of the time, and importing that into the negatives is a
     separate decision -- ``SCALE_CROSS_CLASS_NEGATIVES`` turns the whole thing
     off rather than pretending the two halves are alike.
+
+    **The cells a class owns are read off ``cells``, never spelled.** This
+    function serves two datasets that name their cells differently --
+    ``vg_scale`` keys on ``class@band`` and ``vg_scale_deep`` on the bare class
+    -- and the first cut of #3667 spelled ``scale_cell(c, band)`` inline. On the
+    deep sibling that wrote 36 band-suffixed names that are not cells of that
+    dataset into every COCO-exhaustive positive, including the image's **own**
+    class at other bands: inert, because nothing matches them, but it is the
+    #3156 guarantee stated backwards in a shipped pickle. Deriving the map from
+    the caller's own cell list is what makes the rule dataset-agnostic.
     """
     if not cats:
         return list(cells) if iid in neg_set else []
     out = set(cats)
     if pc.SCALE_CROSS_CLASS_NEGATIVES and iid in exhaustive:
         held = set(labels.get(iid, {}))
-        for c in pc.SCALE_CLASSES:
+        for c, owned in _cells_by_class(cells).items():
             if c not in held:
-                out |= {pc.scale_cell(c, band) for band in pc.BOX_BANDS}
+                out |= owned
     return sorted(out)
 
 
@@ -507,9 +545,17 @@ def _emit_medias(
     exhaustive: set[int],
     cells: list[str],
     embedder_name: str,
-    labels: dict[int, dict[str, list[list[float]]]] | None = None,
+    labels: dict[int, dict[str, list[list[float]]]],
 ) -> None:
-    """Read the pixels and write one media dict per designated image."""
+    """Read the pixels and write one media dict per designated image.
+
+    ``labels`` is REQUIRED, and was an optional ``None`` for exactly one commit.
+    An absent label read is not an image that holds nothing -- it is no answer
+    at all -- and the two were spellable as the same value, which is how the
+    deep sibling silently got #3667's rule with an empty world (:func:`_evaluable`).
+    A missing measurement must not be expressible as a measurement of zero; the
+    ``vg_box_*`` picker lost a day to the same shape (#3299).
+    """
     from PIL import Image  # noqa: PLC0415
 
     # media id -> the cells it is a positive for. Negatives get every cell.
@@ -556,7 +602,7 @@ def _emit_medias(
             # A designated cell membership, not a closed world: a positive is
             # scorable only in the cells it was drawn for, and the shared
             # negatives are scorable everywhere.
-            "evaluable_categories": _evaluable(iid, cats, cells, neg_set, labels or {}, exhaustive),
+            "evaluable_categories": _evaluable(iid, cats, cells, neg_set, labels, exhaustive),
             # Whether this image's labels rest on an exhaustive reference (COCO,
             # or a human who looked). False means VG's silence is the only
             # evidence of absence -- which is what the review slates target.

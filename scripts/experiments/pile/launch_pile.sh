@@ -5,9 +5,19 @@
 #   bash launch_pile.sh              # prefetch + submit all three dataset jobs
 #   bash launch_pile.sh coco_val     # just one dataset's job
 #   VTS_GPU_NODE=rack7n03 bash launch_pile.sh visual_genome_m   # pin the device
+#   VTS_BUILD_ARGS=--force bash launch_pile.sh vg_scale         # REBUILD, not fill
 #
 # Weights are prefetched in a separate CPU step because parallel GPU jobs would
 # otherwise race to populate the same shared HF cache (see prefetch_models.py).
+#
+# `VTS_BUILD_ARGS` is passed through to `build_pile.py` verbatim, and it exists
+# for one job: `--force`. Filling a gap and *rebuilding a cell that already
+# exists* are different operations with different risks -- the second replaces a
+# file other studies are reading -- and until #3667 the second had no launcher
+# at all, so a rebuild meant hand-writing an sbatch that skipped the canary and
+# the CPU-dispatch pin this script exists to apply. A rebuild is exactly the run
+# that must not skip them: a cell rebuilt without ATEN_CPU_CAPABILITY is a cell
+# whose vectors no longer match its own fingerprint (#3160).
 set -euo pipefail
 
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -55,6 +65,12 @@ BUILDENV="$BUILDENV ATEN_CPU_CAPABILITY=${VTS_CPU_CAPABILITY:-avx2}"
 DATASETS=("${@:-visual_genome_m caltech101_m coco_val}")
 read -r -a DATASETS <<< "${DATASETS[@]}"
 DS_CSV="$(IFS=,; echo "${DATASETS[*]}")"
+
+# Word-split on purpose: this is a flag list, not one argument.
+read -r -a BUILD_ARGS <<< "${VTS_BUILD_ARGS:-}"
+if [[ ${#BUILD_ARGS[@]} -gt 0 ]]; then
+  echo "build args: ${BUILD_ARGS[*]}"
+fi
 
 # --- Stage 1: rebuild canary, then weights (CPU, blocking) ----------------
 # The canary runs in front of every launch because that is the only thing that
@@ -132,7 +148,7 @@ for ds in "${DATASETS[@]}"; do
     --mem="$MEM" \
     --time="$TIME" \
     --output="$LOGS/pile-$ds-%j.out" \
-    --wrap "bash -lc '$BUILDENV && python build_pile.py --datasets $ds'")
+    --wrap "bash -lc '$BUILDENV && python build_pile.py --datasets $ds ${BUILD_ARGS[*]}'")
   # An empty job id means sbatch silently refused the request -- treat it as a
   # failure rather than reporting a launch that never happened (LESSONS.md).
   if [[ -z "$jid" ]]; then

@@ -14,6 +14,25 @@ python build_pile.py --rebuildable            # check every cell could be REBUIL
 python build_pile.py --bands                  # voted-box scale bands (boxed datasets)
 ```
 
+**Rebuilding a cell that already exists is a different operation from filling a
+gap**, and it goes through the launcher so it keeps the rebuild canary and the
+`ATEN_CPU_CAPABILITY` pin — a cell rebuilt without the pin no longer matches its
+own fingerprint (#3160):
+
+```bash
+VTS_BUILD_ARGS=--force VTS_GPU_NODE=<node> bash launch_pile.sh vg_scale
+```
+
+Pin the node from the cell's own provenance (`--provenance`). Two things to know
+before you do it, both learned in #3667:
+
+- **A rebuild is from `dev`, not from the commit that built the cell.** It picks
+  up every `pile_config` ruling merged in between, so the membership can move
+  even when you changed nothing relevant. `vg_scale`'s September rebuild dropped
+  41 positives and 40 came in, across five merged rulings.
+- **Copy the cells first, and check your glob.** `vg_scale__*` does not match
+  `vg_scale_deep__*`.
+
 ## Where the code lives
 
 `build_pile.py` is the CLI and the per-cell build loop; everything it does
@@ -507,6 +526,25 @@ and whether the class's own names would ever have admitted it. Six of nine
 were boundary calls on rules that do not exist for the shipped twelve (#3673),
 which at a 1% rate moves the estimate further than another 3,000 draws per class
 would.
+
+Four when the question is **what a change to the evaluation frame is worth**
+(#3667). They are ordered by what they can answer, and the order matters — each
+can only be checked by the next:
+
+```bash
+python cross_class_negatives_effect.py                            # PRICE it, off the shipped cell, before any GPU
+python cross_class_negatives_rebuilt.py --json out.json           # what the rebuild actually moved, vs that price
+python cross_class_negatives_difficulty.py --json d.json          # are the new negatives nearer the class?
+python cross_class_negatives_shortcut.py --json s.json            # ...or was the OLD contrast a shortcut?
+```
+
+The *price* reads `categories`, because that is all a cell pickle carries; the
+*build* reads the labels, and an image can hold a class without being designated
+a positive for it, so the two disagree by design (0.8% here). The last two are a
+pair on purpose: a **text query cannot learn a shortcut** and a **trained head
+can**, so the difference between what each loses on the new negatives is the
+size of the shortcut. Running only one of them halves the effect and invites the
+wrong conclusion.
 
 Run `name_coverage.py` with no `--propose` to score the tables that are actually
 shipped, which is what says whether `pile_config` still does what its comment

@@ -26,6 +26,15 @@ negative pool left at 3900 would read as "a deeper haystack" while moving the
 answer by a full bit.  At 900 x 11700 the prevalence is 7.143%, the same 7.14%
 ``vg_scale`` designs for and the same number ``-3.71`` is computed from.
 
+That equality is between two **designed** counts, and the assertion below
+compares them -- which is why it passed unchanged through #3667's rebuild while
+the number a harness actually sees moved.  Scoring happens over the *evaluable
+pool*, and #3667 grew it ~45% without adding a positive: realised prevalence is
+**5.09%** here against **4.99%** on ``vg_scale_any``.  The premise holds, and
+holds for the right reason -- the two moved together, 0.03 bits apart, because
+the mechanism adding the negatives is the same on both -- but both are now
+about half a bit from ``SCALE_PREVALENCE``.  See #3681.
+
 **Why not just rebuild ``vg_scale_any`` deeper.**  Five studies (#3115, #3196,
 #3287, #3290, #3318, #3319) ran on that cell, and ``pile_config`` already warns
 that a rebuild silently changes what it is.  A deeper cell under the same name
@@ -209,7 +218,15 @@ def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
             "the deep cell would not be comparable to the shallow one"
         )
 
-    _emit_medias(medias, paths, chosen, negatives, spares, boxes_for, box_dims, exhaustive, cells, embedder_name)
+    # `labels` is not optional here, whatever the signature's default says: it
+    # is how #3667 knows which classes an image HOLDS, and omitting it reads as
+    # "holds nothing", which turns the cross-class rule into "scorable
+    # everywhere" -- including the image's own class. This call passed it for
+    # the first time in #3667's rebuild; before that the deep cell got the
+    # exclusion semantics of a dataset with no labels at all.
+    _emit_medias(
+        medias, paths, chosen, negatives, spares, boxes_for, box_dims, exhaustive, cells, embedder_name, labels
+    )
     for d in medias.values():
         d["origin"] = {
             "importer": "vg_scale_deep",
