@@ -48,9 +48,16 @@ from _cells_io import load_medias  # noqa: E402  (calibration/)
 BEFORE_DIR = Path("/expscratch/sgreenberg/archive/pre-3667-vg_scale")
 
 
+#: Datasets whose cells are the bare class. `vg_scale` is the only one of the
+#: three keyed `class@band`; `vg_scale_any` collapses the band away (#3115) and
+#: `vg_scale_deep` never designates on it (#3547). Spelling this wrong is the
+#: same mistake #3672 made inside `_evaluable`, one level up.
+BARE_KEYED = {"vg_scale_any", "vg_scale_deep"}
+
+
 def cells_of(dataset: str) -> list[str]:
     """The cell names that dataset's loader designates, in its own keying."""
-    if dataset == "vg_scale_deep":
+    if dataset in BARE_KEYED:
         return list(pc.SCALE_CLASSES)
     return [pc.scale_cell(c, b) for c in pc.SCALE_CLASSES for b in pc.BOX_BANDS]
 
@@ -225,6 +232,7 @@ def main() -> int:
     print(f"{name}: {len(before)} medias before, {len(after)} after\n")
 
     failures: list[str] = []
+    same_vec = False
 
     # --- 1. only the labels moved -------------------------------------------
     print("=== what moved ===")
@@ -342,6 +350,9 @@ def main() -> int:
     mean_before = sum(r["before"] for r in rows) / len(rows)
     mean_after = sum(r["actual"] for r in rows) / len(rows)
     mean_priced = sum(r["priced"] for r in rows) / len(rows)
+    if not sum(r["before"] for r in rows):
+        print("\nno cell of this dataset matched a single evaluable name -- wrong keying?", file=sys.stderr)
+        return 1
     prev_b = 100 * sum(r["positives"] for r in rows) / sum(r["before"] for r in rows)
     prev_a = 100 * sum(r["positives"] for r in rows) / sum(r["actual"] for r in rows)
     print(f"\nmean evaluable per cell: {mean_before:.0f} -> {mean_after:.0f} (priced {mean_priced:.0f})")
