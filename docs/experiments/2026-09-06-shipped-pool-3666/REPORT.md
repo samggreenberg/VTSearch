@@ -54,7 +54,7 @@ is what §4's second figure is.
 
 | class | asked as | uniform stratum | 95% CI | admissible | ranked | #3635 predicted |
 |---|---|---:|---|---:|---:|---:|
-| `clock` | per-class | 3/100 = 3.0% | [1.0, 8.5] | 0–1 | 0 | 1.10% |
+| `clock` | per-class | 3/100 = 3.0% | [1.0, 8.5] | 0 | 0 | 1.10% |
 | `book` | per-class | 2/100 = 2.0% | [0.6, 7.0] | 2 | 0 | 1.65% |
 | `backpack` | per-class | 2/100 = 2.0% | [0.6, 7.0] | 1–2 | 0 | 2.87% |
 | `umbrella` | per-class | 0/100 = 0.0% | [0.0, 3.7] | 0 | 1 | 0.71% |
@@ -68,7 +68,7 @@ is what §4's second figure is.
 | `kite` | group of 4 | 0/100 = 0.0% | [0.0, 3.7] | 0 | 0 | 0.28% |
 
 *`admissible` is §4's column: the finds the class's own name tables would have
-accepted as a positive, given as a range because two of the nine are
+accepted as a positive, given as a range where one of the class's finds is
 unverifiable from the pixels. `ranked` is the text-ranked stratum, which is
 chosen to be wrong and estimates nothing — it is reported because what it found
 is the subject of §5.*
@@ -238,8 +238,9 @@ uniform draw lands on a row already settled, so the same 70 judgements buy about
 
 The negative pass already spent 100. #3666's 70 would *lower* the precision it
 already has. And the comparison that decides it is the one drawn on the figure:
-**a single ruling on whether a wristwatch is a `clock` moved that class by
-3.0 pp** — more than 3,000 extra draws per class would buy at this rate.
+**one ruling — is a wristwatch a `clock`? — took that class from 3.0% to 0.0%**,
+a 3.0 pp move, which is more than 3,000 extra draws per class would buy at this
+rate.
 
 > At a 1% rate, the definition is the measurement. Buy the ruling first.
 
