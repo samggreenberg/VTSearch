@@ -159,6 +159,33 @@ def check_invariants(medias: dict, cells: list[str]) -> list[str]:
     return bad
 
 
+def reconstruct_before(after: dict, cells: list[str]) -> dict:
+    """The pre-#3667 cell, derived from the rebuilt one by re-applying the old rule.
+
+    Used for ``vg_scale_deep``, whose cell was overwritten without a copy being
+    taken -- the backup glob was ``vg_scale__*``, which does not match
+    ``vg_scale_deep__*``.
+
+    This is a RECONSTRUCTION, not a measurement, and it is exact for every media
+    the two builds share, because the rule it inverts reads nothing the rebuilt
+    pickle does not carry:
+
+        evaluable = categories or (all cells if in the shared pool else [])
+
+    and "in the shared pool" is "no categories, but evaluable somewhere". What
+    it cannot show is the medias the two builds do not share, or the 36 stray
+    band-suffixed names the old deep cell also carried -- so the counts below
+    are the old rule's, not necessarily the old file's. Say so wherever they
+    appear.
+    """
+    out = {}
+    for iid, d in after.items():
+        cats = list(d.get("categories") or [])
+        in_pool = not cats and bool(d.get("evaluable_categories"))
+        out[iid] = {**d, "evaluable_categories": cats if cats else (list(cells) if in_pool else [])}
+    return out
+
+
 def n_pos_img_exh(medias: dict) -> int:
     """Positives whose labels rest on COCO -- the only ones the rule can touch."""
     return sum(1 for d in medias.values() if d.get("categories") and d.get("labels_exhaustive"))
@@ -183,20 +210,28 @@ def main() -> int:
     after_dir = args.after_dir or pc.EMBEDDINGS
     name = f"{args.dataset}__{args.embedder}.pkl"
     before_p, after_p = args.before_dir / name, after_dir / name
-    for p in (before_p, after_p):
-        if not p.exists():
-            print(f"missing {p}", file=sys.stderr)
-            return 2
-
+    if not after_p.exists():
+        print(f"missing {after_p}", file=sys.stderr)
+        return 2
     cells = cells_of(args.dataset)
-    before, after = load_medias(before_p), load_medias(after_p)
+    after = load_medias(after_p)
+    reconstructed = not before_p.exists()
+    if reconstructed:
+        print(f"NOTE: no copy of {name} was taken; reconstructing the pre-#3667 rule from the rebuilt cell.")
+        print("      Membership and vector comparisons are unavailable; label counts are exact.\n")
+        before = reconstruct_before(after, cells)
+    else:
+        before = load_medias(before_p)
     print(f"{name}: {len(before)} medias before, {len(after)} after\n")
 
     failures: list[str] = []
 
     # --- 1. only the labels moved -------------------------------------------
     print("=== what moved ===")
-    if set(before) != set(after):
+    if reconstructed:
+        print("  media ids       n/a (reconstructed from the rebuilt cell)")
+        print("  vectors         n/a")
+    elif set(before) != set(after):
         gone, new = sorted(set(before) - set(after)), sorted(set(after) - set(before))
         failures.append(f"media set changed: {len(gone)} dropped, {len(new)} added")
         print(f"  media ids       CHANGED ({len(gone)} dropped, {len(new)} added)")
@@ -212,45 +247,46 @@ def main() -> int:
         print(f"  media ids       identical ({len(after)})")
 
     shared = set(before) & set(after)
-    n_cat = sum(1 for i in shared if (before[i].get("categories") or []) != (after[i].get("categories") or []))
-    print(f"  designation     {'identical' if not n_cat else f'CHANGED on {n_cat} images'}")
-    if n_cat:
-        failures.append(f"{n_cat} images changed which cells they are a positive for")
+    if not reconstructed:
+        n_cat = sum(1 for i in shared if (before[i].get("categories") or []) != (after[i].get("categories") or []))
+        print(f"  designation     {'identical' if not n_cat else f'CHANGED on {n_cat} images'}")
+        if n_cat:
+            failures.append(f"{n_cat} images changed which cells they are a positive for")
 
-    fb, fa = fingerprint(before_p), fingerprint(after_p)
-    sb = fb.get("fingerprint", {}).get("vectors_sha256")
-    sa = fa.get("fingerprint", {}).get("vectors_sha256")
-    same_vec = bool(sb) and sb == sa
-    print(f"  vectors_sha256  {'identical' if same_vec else 'DIFFER'}  {(sb or '?')[:16]} -> {(sa or '?')[:16]}")
-    print(
-        f"  built on        {fb.get('device', {}).get('hostname')} ({fb.get('device', {}).get('gpu_name')})"
-        f" -> {fa.get('device', {}).get('hostname')} ({fa.get('device', {}).get('gpu_name')})"
-    )
-    # The sha is over the WHOLE cell, so it moves when the membership moves --
-    # and a rebuild runs against `dev`, which carries every `pile_config` ruling
-    # merged since the cell was built, not only the one being tested. The
-    # question that separates "the pile changed" from "the machine changed" is
-    # whether the images present in BOTH cells got the same vectors, which is
-    # what #3160's ATEN_CPU_CAPABILITY pin is supposed to guarantee.
-    import numpy as np  # noqa: PLC0415
+        fb, fa = fingerprint(before_p), fingerprint(after_p)
+        sb = fb.get("fingerprint", {}).get("vectors_sha256")
+        sa = fa.get("fingerprint", {}).get("vectors_sha256")
+        same_vec = bool(sb) and sb == sa
+        print(f"  vectors_sha256  {'identical' if same_vec else 'DIFFER'}  {(sb or '?')[:16]} -> {(sa or '?')[:16]}")
+        print(
+            f"  built on        {fb.get('device', {}).get('hostname')} ({fb.get('device', {}).get('gpu_name')})"
+            f" -> {fa.get('device', {}).get('hostname')} ({fa.get('device', {}).get('gpu_name')})"
+        )
+        # The sha is over the WHOLE cell, so it moves when the membership moves --
+        # and a rebuild runs against `dev`, which carries every `pile_config` ruling
+        # merged since the cell was built, not only the one being tested. The
+        # question that separates "the pile changed" from "the machine changed" is
+        # whether the images present in BOTH cells got the same vectors, which is
+        # what #3160's ATEN_CPU_CAPABILITY pin is supposed to guarantee.
+        import numpy as np  # noqa: PLC0415
 
-    def vec(d: dict) -> "np.ndarray":
-        emb = d.get("embeddings") or {}
-        return np.asarray(next(iter(emb.values())), dtype=np.float64)
+        def vec(d: dict) -> "np.ndarray":
+            emb = d.get("embeddings") or {}
+            return np.asarray(next(iter(emb.values())), dtype=np.float64)
 
-    worst, n_cmp = 0.0, 0
-    for i in shared:
-        a, b = vec(before[i]), vec(after[i])
-        if a.shape == b.shape:
-            worst = max(worst, float(np.abs(a - b).max()))
-            n_cmp += 1
-    print(f"  shared vectors  max |Δ| = {worst:.3g} over {n_cmp} images present in both")
-    if worst > 1e-6:
-        failures.append(f"vectors of shared images differ by up to {worst:.3g}; the rebuild is not reproducible")
-    if not same_vec and worst <= 1e-6:
-        print("                  (the whole-cell sha moved with the membership, not with the arithmetic)")
-    elif not same_vec:
-        failures.append("vectors changed: this is not a relabel")
+        worst, n_cmp = 0.0, 0
+        for i in shared:
+            a, b = vec(before[i]), vec(after[i])
+            if a.shape == b.shape:
+                worst = max(worst, float(np.abs(a - b).max()))
+                n_cmp += 1
+        print(f"  shared vectors  max |Δ| = {worst:.3g} over {n_cmp} images present in both")
+        if worst > 1e-6:
+            failures.append(f"vectors of shared images differ by up to {worst:.3g}; the rebuild is not reproducible")
+        if not same_vec and worst <= 1e-6:
+            print("                  (the whole-cell sha moved with the membership, not with the arithmetic)")
+        elif not same_vec:
+            failures.append("vectors changed: this is not a relabel")
 
     n_ev = sum(
         1
