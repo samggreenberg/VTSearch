@@ -401,9 +401,13 @@ two separate reasons, which should not be conflated:
 1. **#3667 itself**, which changed 27.6% of the medias' `evaluable_categories`
    and moved every cell's prevalence. Any absolute cost/AP/FPR from before
    2026-09-06 was measured against a pool that is now 45% larger.
-2. **The five merged rulings** the rebuild also picked up (§1), which moved 129
-   pool images and 3 designations. Small, but it is a second reason and it was
-   already true before this work started.
+2. **The five merged rulings** the rebuild also picked up (§1): 41 positives out
+   and 40 in, 3 more moved between cells, and 82 pool images replaced. Small,
+   but it is a second reason, it is not #3667's, and it was already owed before
+   this work started.
+3. **The vectors of `siglip2_l` and `dinov3_patch`** (§7), which moved by 3e-04
+   on a few images because the membership moved. Smaller than either of the
+   above and mentioned only so it is not later mistaken for one of them.
 
 `analyze_calfrac.py`'s report line — "one dataset (`vg_scale_any`), 12 classes
 at identical prevalence" — was true of the cell that study ran on and has been
@@ -417,9 +421,11 @@ backup glob was `vg_scale__*`, which does not match `vg_scale_deep__*`. Its
 pre-#3667 labels are exactly reconstructable from the old rule and the rebuilt
 pickle, which is how §5's deep numbers were produced, and that reconstruction is
 marked as such wherever it appears. What is unrecoverable is its membership and
-its vectors — no consequence here, since the cell rebuilds deterministically,
-but it was an avoidable mistake and the glob is named in the script's docstring
-so the next person does not repeat it.
+its vectors — and §7 is the reason that is not quite free: a rebuild reproduces
+vectors bit-for-bit only at *fixed* membership, and the membership is exactly
+what was lost. It was an avoidable mistake; the glob is named in the script's
+docstring and in `scripts/experiments/lessons/` so the next person does not
+repeat it.
 
 ## 10. Follow-ups
 
@@ -429,3 +435,4 @@ so the next person does not repeat it.
 | **#3679** | Re-run #3156's scale study on the rebuilt cell. The shortcut is 2.50 at `@small` and 1.25 at `@large`, so the published band effect is a lower bound by construction. |
 | **#3680** | `knife` and `book` find the cross-class negatives *easier* than the shared pool (ratio 0.15 and 0.49). The shared pool is doing different work for different classes, and nobody has looked. |
 | **#3681** | Realised prevalence moved 7.14% → ~5.0% on `_any` and `_deep`, so the dataset's `k*` moved about half a bit. `SCALE_PREVALENCE` is now the designed number; every `k* = -3.71` in the tree is quoting it. |
+| **#3683** | A cell's vectors reproduce bit-for-bit at fixed membership and to 3e-07 across hosts and devices — but not across a membership change, where batch composition moves a few images by 1e-4. `VTSEARCH_EMBED_BATCH_SIZE` changes the output and is absent from the provenance. |
