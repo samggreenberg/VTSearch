@@ -20,7 +20,7 @@ It prices the fix at **840 uniform draws**, 70 per shipped class.
 | "nobody has ever measured its error the same way" | the negative pass did, at **100 uniform draws per class** against the thirteen's 70. Five of the twelve were asked as their own question; the other seven needed an **attribution**, not another pass |
 | the cheap version is 70 uniform draws per shipped class (840 judgements) | the attribution cost **9 images**: COCO settles every group find on its own half for free, and only the off-COCO ones need an eye |
 | "if shipped pool error is of the same order, every vg_scale number carries an unquantified bias" | it is of the same order and *slightly lower*: **1.40%** [0.68, 2.86] pooled against the candidates' **2.09%** [1.34, 3.24] — a difference of **−0.69 ± 1.39** pp. The two tiers are not separable |
-| the worry is that the twelve are dirtier than the thirteen | the finds are **6 of 9 boundary calls on definitions that do not exist for these classes** (3 the class provably cannot hold, 3 the pixels do not settle) — a wristwatch, a clock drawn on a monitor, a station departure board, a pop-up canopy, the blank back of a sign. Ruling those out moves the union from **7.0%** to **3.0–5.0%** |
+| the worry is that the twelve are dirtier than the thirteen | the finds are **6 of 9 boundary calls on definitions that do not exist for these classes** (2 neither vocabulary admits, 2 where COCO and our name tables *already disagree*, 2 the pixels do not settle) — a wristwatch, a clock drawn on a monitor, a station departure board, a pop-up canopy, the blank back of a sign. Ruling those out moves the union from **7.0%** to **3.0–5.0%** |
 | — (not asked) | on the **45%** of the pool COCO scores, COCO reports a shipped class present in **0 of 1,888** images and a *candidate* class in **692**. The shipped 0.0% there is by construction, so a uniform draw spends 45% of a reviewer's attention on rows already settled |
 
 **Recommendation: do not buy the 840 draws.** At a 1% rate, 380 extra uniform
@@ -120,15 +120,24 @@ colour is not the reviewer's verdict — it is a mechanical question asked of
 
 | find | what it is | does the class admit it? |
 |---|---|---|
-| `clock` 2408671 | a wristwatch on a bystander's wrist | **no** — `clock` reads `clock`, `clock face`, `clocks`; `watch` is in neither table |
-| `clock` 2392807 | the digital time on a railway departure board | **no** — VG names that `sign` or `board` |
-| `clock` 2393325 | an analog clock *widget* drawn on a monitor | unverifiable — a depiction; the guide rules on pictograms for `bicycle` and says nothing about screens |
-| `umbrella` 2398287 | square pop-up canopy tents at a skate park | **no** — `umbrella` reads `parasol` and four umbrella spellings, no canopy or tent |
-| `stop sign` 2343839 | the blank aluminium **back** of a sign | unverifiable — a sign seen from behind has no shape to read |
+| `clock` 2408671 | a wristwatch on a bystander's wrist | **split** — no VG name the class reads denotes a watch, and COCO's annotators box one as a `clock` **35 times** |
+| `clock` 2392807 | the digital time on a railway departure board | **no** — VG names that `sign` or `board`, and COCO has no class for it |
+| `clock` 2393325 | an analog clock *widget* drawn on a monitor | **no** — #3588's guide already rules on depictions for every class: *vote on the object, not a depiction of it* |
+| `umbrella` 2398287 | square pop-up canopy tents at a skate park | **split** — `umbrella` reads `parasol` and four umbrella spellings and no canopy; COCO folds `canopy` (**32**) and `tent` (**26**) in, together more than `parasol` (38) |
+| `stop sign` 2343839 | the blank aluminium **back** of a sign | unverifiable — COCO's annotators do box backs (VG `back`, 11 boxes), so the question is the pixels, not the vocabulary |
 | `backpack` 2315796 | a pack or back-protector under a motorcyclist's leathers | unverifiable |
 | `backpack` 2368984 | a black backpack worn on a passenger's back | **yes** — the one find of the nine that needs no ruling |
 | `book` 2327535 | an open magazine on a desk | **yes** — `magazine` is a *shipped fold-in* for `book`, because COCO has no magazine class |
 | `book` 1593184 | a printed booklet standing in an open box | **yes** — same fold-in, and COCO scored this image and missed it |
+
+**Two of the six are worse than a missing ruling: the two vocabularies already
+answer differently.** COCO's annotators fold a wristwatch into `clock` and a
+canopy or tent into `umbrella` — 35, and 32 + 26 against `parasol`'s 38 — while
+neither name is in the class's VG tables, so on the COCO half those objects are
+positives and on the other half they are invisible. That is the `book`/magazine
+split exactly, two classes further on, and it is measurable before anyone
+labels: the fold-in counts above are `coco_folds.py` output, produced for #3673
+after this pass rather than before it.
 
 `book` is the instructive pair. Its two finds look like the softest calls in the
 table and are the two hardest: `SCALE_VG_NAMES["book"]` contains `magazine`
@@ -144,9 +153,10 @@ claimed a wristwatch.
 This has a concrete consequence before anything is rebuilt. A boxless *present*
 verdict is ingested as `negative_excluded` — the image leaves that class's pool
 without becoming a positive (`verdicts_to_corrections.py`). Ingesting these nine
-as they stand would therefore spend three good negatives on a watch, a departure
-board and a canopy — objects their classes provably cannot hold — and a fourth
-on the back of a sign nobody can read. Filed as **#3676**.
+as they stand would spend two good negatives on a departure board and a clock
+drawn on a monitor, which neither vocabulary admits, and three more on cases
+where the answer is owed rather than known — a watch, a canopy, and the back of
+a sign nobody can read. Filed as **#3676**.
 
 ## 5. The ranked stratum finds a different *kind* of contamination
 
@@ -254,8 +264,8 @@ touched here:
 - **#3675** — draw the next shipped-class negative slate from the off-COCO half
   only; 45% of a uniform draw is spent on rows COCO already settles.
 - **#3676** — `verdicts_to_corrections.py` should not spend a negative on a find
-  the class's own name tables would never have admitted; three of these nine
-  provably would, and a fourth is unreadable either way.
+  neither vocabulary admits; two of these nine are that, and three more are
+  owed a ruling before they can be scored either way.
 - **#3677** — `suite.sbatch` ran the stale local branch after a force-push and
   reported it as a test failure, twice, during this study; recorded in
   [`LESSONS.md`](../../../scripts/experiments/LESSONS.md) and mechanically

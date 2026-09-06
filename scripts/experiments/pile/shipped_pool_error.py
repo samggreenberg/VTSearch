@@ -79,11 +79,16 @@ PREDICTED_3635 = Path("/expscratch/sgreenberg/stopsign-3635/contam-sign.json")
 #: here -- `admits` answers a different question, which nobody had asked:
 #: *would this object have become a positive?*
 #:
-#: `admits` is read off `pile_config`, not off English:
-#:   yes         -- a VG name the class reads, or COCO's own box, covers it
-#:   no          -- the object has no name in SCALE_VG_NAMES/_AMBIGUOUS for the
-#:                  class, so an image holding it is a negative by construction
-#:                  and finding it cannot be an error in the pool
+#: `admits` is read off `pile_config` and off what COCO's annotators actually
+#: did (`coco_folds.py`, run over the twelve for #3673) -- never off English:
+#:   yes          -- a VG name the class reads, or COCO's own box, covers it
+#:   split        -- the two halves of the dataset ALREADY disagree: COCO's
+#:                   annotators fold the object in, and no VG name the class
+#:                   reads denotes it, so it is a positive on the COCO half and
+#:                   invisible on the other. This is the `book`/magazine failure
+#:                   shape, and it is what #3673 has to rule on
+#:   no           -- neither vocabulary admits it, so an image holding it is a
+#:                   negative by construction and finding it cannot be an error
 #:   unverifiable -- the pixels do not settle it
 ADJUDICATION: dict[int, dict] = {
     # ---- asked as their own question -------------------------------------
@@ -91,19 +96,21 @@ ADJUDICATION: dict[int, dict] = {
         "cls": "clock",
         "what": "a wristwatch on a bystander's wrist, at a skate spot",
         "crop": (0.60, 0.55, 0.80, 0.95),
-        "admits": "no",
-        "why": "`watch` is not in clock's names or its ambiguous list, so a watch never "
-        "becomes a clock positive; COCO, which annotated this image exhaustively, "
-        "also declined it",
+        "admits": "split",
+        "why": "`watch` is not in clock's names or its ambiguous list, so on the VG half a "
+        "watch never becomes a clock positive -- but COCO's annotators land `watch` on a "
+        "COCO clock box 35 times (1.1% of the class), so on the COCO half it sometimes "
+        "is one. The halves already disagree; COCO declined this particular watch",
     },
     2393325: {
         "cls": "clock",
         "what": "an analog clock WIDGET drawn on a computer monitor's desktop",
         "crop": (0.70, 0.10, 0.85, 0.28),
-        "admits": "unverifiable",
-        "why": "a depiction, not an object; the guide rules on pictograms for `bicycle` "
-        "(#3588) and says nothing about screens, and COCO annotated the image and "
-        "listed no clock",
+        "admits": "no",
+        "why": "a depiction, and #3588's guide already rules on those for every class -- "
+        "`vote on the object, not a depiction of it`, which it applies to a car on a "
+        "billboard and cutlery printed on a menu. COCO annotated the image and listed "
+        "no clock",
     },
     2392807: {
         "cls": "clock",
@@ -148,16 +155,20 @@ ADJUDICATION: dict[int, dict] = {
         "cls": "umbrella",
         "what": "square pop-up canopy tents along the rail of a skate park",
         "crop": (0.55, 0.25, 1.00, 0.52),
-        "admits": "no",
-        "why": "umbrella reads `parasol` and four umbrella spellings; no canopy or tent "
-        "name is in either table, and COCO annotated this image and listed none",
+        "admits": "split",
+        "why": "umbrella reads `parasol` and four umbrella spellings and no canopy or tent "
+        "name -- but COCO's annotators land `canopy` on a COCO umbrella box 32 times and "
+        "`tent` 26, together more than `parasol`'s 38. So a canopy is an umbrella on the "
+        "COCO half and nothing on the other: the same gap `book`/magazine was (#3673)",
     },
     2343839: {
         "cls": "stop sign",
         "what": "the blank aluminium BACK of a sign, on the pole carrying the street signs",
         "crop": (0.18, 0.62, 0.52, 1.00),
         "admits": "unverifiable",
-        "why": "a sign seen from behind has no shape to read; `sign` is deliberately not "
+        "why": "a sign seen from behind has no shape to read. COCO's annotators do box "
+        "them -- VG `back` lands on a COCO stop-sign box 11 times, 1.1% of the class -- "
+        "so the question is the pixels, not the vocabulary; `sign` is deliberately not "
         "listed for this class (#3618) and COCO listed no stop sign here",
     },
     # ---- asked inside a group: the attribution the group verdict owes ------
@@ -407,7 +418,7 @@ def main() -> int:
         kr = len(finds & rand)
         kb = len(finds & bound)
         ok = len({i for i in finds & rand if admits.get(i) == "yes"})
-        maybe = len({i for i in finds & rand if admits.get(i) == "unverifiable"})
+        maybe = len({i for i in finds & rand if admits.get(i) in ("unverifiable", "split")})
         lo, hi = wilson(kr, len(rand))
         p3635 = 100 * pred.get(c, {}).get("per_class", {}).get("rate", float("nan")) if pred else float("nan")
         print(
@@ -465,7 +476,7 @@ def main() -> int:
         v = passes[carrier[c]]
         union |= v["present"] if len(v["members"]) == 1 else adj_for.get(c, set()) & v["present"]
     yes = {i for i in union if admits.get(i) == "yes"}
-    unv = {i for i in union if admits.get(i) == "unverifiable"}
+    unv = {i for i in union if admits.get(i) in ("unverifiable", "split")}
     scored = {i for i, e in exhaustive.items() if e}
     for label, frame in (
         ("whole uniform stratum", rand),
