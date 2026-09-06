@@ -458,6 +458,44 @@ def draw_negatives(clean: list[int], roster: dict) -> tuple[list[int], list[int]
     return drawn[: pc.SCALE_N_NEG], drawn[pc.SCALE_N_NEG :]
 
 
+def _evaluable(
+    iid: int,
+    cats: list[str],
+    cells: list[str],
+    neg_set: set[int],
+    labels: dict[int, dict[str, list[list[float]]]],
+    exhaustive: set[int],
+) -> list[str]:
+    """Which cells this image can be SCORED in -- positive or negative.
+
+    ``categories`` says what an image *is* a positive for; this says where it is
+    allowed to be judged at all. A shared negative is judged everywhere. A
+    positive was, until #3667, judged **only in its own cells** -- so an image
+    holding a book and no bus was neither a bus positive nor a bus negative, and
+    41.9% of the pile fell out of every class's evaluation.
+
+    The exclusion is right for the same class at another size and wrong for
+    every other class, so it is now applied per class: a class this image does
+    not hold contributes all of its cells, and the image scores there as the
+    negative it is.
+
+    Gated on ``exhaustive``. On a COCO-annotated image "holds no bus" is a fact
+    about all eighty classes. Off COCO it is VG's silence, which #3588 measured
+    wrong 0.5-2.5% of the time, and importing that into the negatives is a
+    separate decision -- ``SCALE_CROSS_CLASS_NEGATIVES`` turns the whole thing
+    off rather than pretending the two halves are alike.
+    """
+    if not cats:
+        return list(cells) if iid in neg_set else []
+    out = set(cats)
+    if pc.SCALE_CROSS_CLASS_NEGATIVES and iid in exhaustive:
+        held = set(labels.get(iid, {}))
+        for c in pc.SCALE_CLASSES:
+            if c not in held:
+                out |= {pc.scale_cell(c, band) for band in pc.BOX_BANDS}
+    return sorted(out)
+
+
 def _emit_medias(
     medias: dict[int, dict],
     paths: dict,
@@ -469,6 +507,7 @@ def _emit_medias(
     exhaustive: set[int],
     cells: list[str],
     embedder_name: str,
+    labels: dict[int, dict[str, list[list[float]]]] | None = None,
 ) -> None:
     """Read the pixels and write one media dict per designated image."""
     from PIL import Image  # noqa: PLC0415
@@ -517,7 +556,7 @@ def _emit_medias(
             # A designated cell membership, not a closed world: a positive is
             # scorable only in the cells it was drawn for, and the shared
             # negatives are scorable everywhere.
-            "evaluable_categories": cats if cats else (list(cells) if iid in neg_set else []),
+            "evaluable_categories": _evaluable(iid, cats, cells, neg_set, labels or {}, exhaustive),
             # Whether this image's labels rest on an exhaustive reference (COCO,
             # or a human who looked). False means VG's silence is the only
             # evidence of absence -- which is what the review slates target.
@@ -611,7 +650,19 @@ def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
         f"{len(negatives)} shared negatives + {len(spares)} spares (from {len(clean)} clean images)"
     )
 
-    _emit_medias(medias, paths, chosen, negatives, spares, boxes_for, box_dims, exhaustive, cells, embedder_name)
+    _emit_medias(
+        medias,
+        paths,
+        chosen,
+        negatives,
+        spares,
+        boxes_for,
+        box_dims,
+        exhaustive,
+        cells,
+        embedder_name,
+        labels,
+    )
 
     # Refuse to embed a pickle whose boxes are impossible. `--verify` runs the
     # same check, but only after the GPU hours are spent and the cell is on

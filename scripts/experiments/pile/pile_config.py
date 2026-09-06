@@ -135,6 +135,24 @@ DATASETS: dict[str, dict] = {
 #: embedder's geometry (the same anchors the calibration harness bands on):
 #: one DINOv3 patch is 1/196 of the image and the smallest HAC leaf is 1/12.
 #: ``small`` is therefore "below what the patch grid can resolve at all".
+#: Whether an image that is a positive for one class may serve as a NEGATIVE
+#: for a class it does not hold (#3667).
+#:
+#: The construction originally said: positive for its own cells, negative only
+#: if it holds nothing in *C*, excluded otherwise. The "excluded otherwise" is
+#: right for the SAME class at another size -- scoring a large-bus image as a
+#: small-bus negative penalises a detector for finding a real bus -- but it was
+#: applied to every OTHER class too, where the reason does not hold. The cost
+#: was 41.9% of the pile dropped from every class's evaluation, and negatives
+#: that contain none of twelve common objects while positives contain one, so a
+#: detector could score by learning "is this a scene with stuff in it".
+#:
+#: Gated on ``labels_exhaustive``: COCO annotates all eighty of its classes on
+#: any image it annotates, so absence is a fact there. On the other half absence
+#: is VG's silence, measured wrong 0.5-2.5% of the time per class (#3588), and
+#: importing that into the negatives is a different decision from this one.
+SCALE_CROSS_CLASS_NEGATIVES = True
+
 #: The upper cut mirrors ``MAX_VOTED_AREA``: a box covering >80% of the image
 #: is not a region, it is the image.
 PATCH_AREA = 1 / 196
