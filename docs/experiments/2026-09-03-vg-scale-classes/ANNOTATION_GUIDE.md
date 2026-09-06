@@ -1000,6 +1000,66 @@ than the reviewer means, and that is the cost recorded in #3643. A sheared
 hydrant under a plume is a real thing and the pool will now say there was none —
 but no vote available today says otherwise honestly.
 
+## The negative pass, second framing: FIND the thing
+
+**The pass was originally framed as certification — "do you see none of these?"
+— and that was the wrong way round.** The reviewer:
+
+> Shouldn't we just frame this as FINDING each of the above? We have a dataset
+> where they probably aren't, but that shouldn't change the annotation task.
+
+He is right, and it repairs a complaint he had made himself earlier in the same
+study: a "not clean" vote **records one bit and throws twelve away**. Under
+find-the-thing a Good vote **can carry a box**, so a found object becomes a
+positive with a band rather than a bare exclusion. Supply goes up instead of
+down.
+
+**The UI had been saying so the whole time.** It will not let you submit a box
+for the thing you are *not* looking for, which is exactly right and which the
+first framing was fighting.
+
+> **Good = the class is present. Draw a box on it.**
+> **Bad = it is not there.**
+
+This also makes the pass identical in shape to every other slate in the study,
+so nothing downstream needs a special case — and the manifest already agrees:
+`reference` is `present` when COCO says the class is there.
+
+### Three passes ran under the old polarity and must be read inverted
+
+`Vehicles`, `Outdoor Objects` and `Bench` were labelled as *"Good = clean"*.
+They are banked and recorded in `polarity.json`; ingest must invert them. They
+also carry **no boxes**, so the twelve images they found are exclusions rather
+than positives — a small, cheap slate would recover them.
+
+| pass | found | agreement vs COCO |
+|---|---|---|
+| Vehicles | 4 / 200 (2.0%) | **100.0%** (92 scored) |
+| Outdoor Objects | 5 / 200 (2.5%) | **100.0%** (92 scored) |
+| Bench | 4 / 200 (2.0%) | 95.7% (92 scored) |
+
+**Two perfect passes, and the third is more interesting than its number.** All
+four of Bench's disagreements run one way — COCO saw a bench, the reviewer did
+not — and their box sizes say they are mostly not misses:
+
+| image | largest bench box | band |
+|---|---|---|
+| 2396098 | **99.61% of frame** | **OVERSIZE** |
+| 2388314 | 54.54% | large |
+| 2315792 | 39.40% | large |
+| 2382828 | 2.99% | medium |
+
+The first is excluded by our own rule — *"a box covering >80% of the image is
+not a region, it is the image"* — so it cannot be a miss against a benchmark
+that never bands it. Two more fill 39% and 55% of the frame, which is not
+something a reviewer overlooks; the likely cause is the Bench definition itself,
+which rules that a **concrete seating ledge is not a Bench** while COCO appears
+to box one. Only the 2.99% box is a plausible ordinary miss.
+
+**So a raw miss rate against COCO overstates reviewer error** wherever our
+definition is deliberately narrower or our bands deliberately exclude. Report it
+with the box sizes attached, not alone.
+
 ## The negative pass: "none of the 13"
 
 All thirteen class slates are labelled. This pass asks the remaining question,
