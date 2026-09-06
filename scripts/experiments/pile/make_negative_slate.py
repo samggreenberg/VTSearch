@@ -60,26 +60,42 @@ import pile_config as pc  # noqa: E402
 from make_class_slate import canonicalise, log  # noqa: E402
 from pilebuild.loaders.vg_scale import read_vg_labels, vg_source  # noqa: E402
 
-#: Ordered by measured pool error from the thirteen class slates, so the
-#: reviewer scans in the order objects actually turn up rather than
-#: alphabetically. The tail contributed ZERO errors in 350 uniform draws.
-CHECKLIST = (
-    "car",
-    "bowl",
-    "chair",
-    "cup",
-    "vase",
-    "truck",
-    "fork",
-    "bottle",
-    "spoon",
-    "sink",
-    "bench",
-    "cell phone",
-    "fire hydrant",
-)
+#: The pass is split into scene groups, and the split is measured rather than
+#: guessed. Asking for thirteen disparate classes at once is taxing and a tired
+#: reviewer misses things, which biases the estimate DOWNWARD -- the one failure
+#: mode that is invisible in the result. Grouping also deletes the hardest
+#: decisions outright: for a NEGATIVE pass the within-group boundary is
+#: irrelevant, so cup-or-bowl, fork-or-spoon and car-or-truck stop being
+#: questions at all.
+#:
+#: The groups come from COCO co-occurrence over the pile (`cooccur.py`), not
+#: from semantics, and the data disagrees with the obvious reading in one place:
+#: `bench` belongs with the STREET, not with `chair`. A bench co-occurs with a
+#: car 25% of the time and with a chair 6%, while `vase` co-occurs with a chair
+#: 43% and `chair` with a cup 22%. Tabletop objects form one tight cluster at
+#: 2-5x independence (spoon+bowl 5.0x, fork+spoon 4.9x, cup+bowl 3.0x) and
+#: street objects another (truck+car 2.1x, and 72% of truck images hold a car).
+#:
+#: The two groups are nearly disjoint -- a car image holds a fork 1% of the
+#: time, a truck image holds a bowl 0% -- which is what makes two passes cheap:
+#: for most images one of them is an instant "this is not that kind of scene".
+GROUPS: dict[str, tuple[str, ...]] = {
+    "none of the table 9": (
+        "bowl",
+        "cup",
+        "bottle",
+        "vase",
+        "fork",
+        "spoon",
+        "sink",
+        "chair",
+        "cell phone",
+    ),
+    "none of the street 4": ("car", "truck", "bench", "fire hydrant"),
+}
 
-DETECTOR = "none of the 13"
+#: Every class, for the frame and the ranking.
+CHECKLIST = tuple(c for g in GROUPS.values() for c in g)
 
 
 def main() -> int:
@@ -172,8 +188,11 @@ def main() -> int:
     rng = random.Random(args.seed)
     uniform = rng.sample(rest, min(args.n_random, len(rest)))
 
-    cdir = Path(args.out) / DETECTOR.replace(" ", "_")
-    cdir.mkdir(parents=True, exist_ok=True)
+    # One slate per group, over the SAME sampled images: the strata are drawn
+    # once so the two passes are two looks at one sample, not two samples.
+    rows_by_group: dict[str, list[dict]] = {g: [] for g in GROUPS}
+    for group in GROUPS:
+        (Path(args.out) / group.replace(" ", "_")).mkdir(parents=True, exist_ok=True)
     rows = []
     for stratum, items in (("boundary", boundary), ("random", uniform)):
         for n in items:
@@ -181,7 +200,9 @@ def main() -> int:
             src = paths.get(i)
             if src is None:
                 continue
-            (cdir / f"{i}.jpg").write_bytes(src.read_bytes())
+            data = src.read_bytes()
+            for group in GROUPS:
+                (Path(args.out) / group.replace(" ", "_") / f"{i}.jpg").write_bytes(data)
             # COCO annotates all 80 of its classes on an image it annotates at
             # all, so one exhaustive flag settles the whole conjunction at once
             # -- a scored subset for the negative pass, free.
@@ -195,15 +216,23 @@ def main() -> int:
                     "reference": "present" if medias[i].get("labels_exhaustive") else "",
                     "exhaustive": "yes" if medias[i].get("labels_exhaustive") else "no",
                     "n_boxes": 0,
-                    "detector": DETECTOR,
+                    "detector": "",
                     "driver": driver[n],
                 }
             )
+            for group in GROUPS:
+                r = dict(rows[-1])
+                r["detector"] = group
+                r["class"] = group
+                rows_by_group[group].append(r)
 
-    with (cdir / "manifest.csv").open("w", newline="") as fh:
-        w = csv.DictWriter(fh, fieldnames=list(rows[0]))
-        w.writeheader()
-        w.writerows(rows)
+    for group, grows in rows_by_group.items():
+        gdir = Path(args.out) / group.replace(" ", "_")
+        with (gdir / "manifest.csv").open("w", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(grows[0]))
+            w.writeheader()
+            w.writerows(grows)
+        log(f"  {group}: {len(grows)} rows -> {gdir}")
     (Path(args.out) / "negative_pass.json").write_text(
         json.dumps(
             {
@@ -220,7 +249,7 @@ def main() -> int:
     )
 
     n_exh = sum(1 for r in rows if r["exhaustive"] == "yes")
-    log(f"wrote {len(rows)} rows to {cdir} ({n_exh} scored, {100 * n_exh / len(rows):.0f}%)")
+    log(f"sampled {len(rows)} images ({n_exh} scored, {100 * n_exh / len(rows):.0f}%) into {len(GROUPS)} group slates")
     from collections import Counter
 
     log(f"boundary drivers: {dict(Counter(r['driver'] for r in rows if r['stratum'] == 'boundary').most_common(6))}")
