@@ -178,6 +178,211 @@ for reading this column.
 
 ## Tier A — habitat partners of a class already in *C*
 
+### Van against SUV — the only hard boundary left
+
+**An SUV is not the problem. `van` is.** The measurement separates them cleanly:
+
+| VG name | → `truck` | → `car` | reading |
+|---|---:|---:|---|
+| `van` | **261** | **318** | **45/55 — a coin flip** |
+| `suv` | 62 | **222** | 78% Car |
+| `minivan` | 5 | **51** | 91% Car |
+| `mini van` | 1 | **17** | 94% Car |
+| `jeep` | 25 | 44 | 64% Car |
+| `pickup` / `pickup truck` | **51** | 15 | 77% Truck |
+
+`suv` is not ambiguous, just noisy — an SUV is a **Car**, and so is a minivan.
+Nothing in the data supports agonising over them.
+
+**`van` splits because the word names two different vehicles.** A passenger
+minivan and a panel cargo van share a noun and nothing else, so COCO's
+annotators land 45/55 not because the boundary is unknowable but because they
+were not applying one test. We are.
+
+> **Was it built to carry goods, or to carry people?**
+> Goods → Truck. People → Car.
+
+**Cargo space is the cue, not the definition** — a distinction that matters,
+because it fails at both ends. A **bobtail tractor unit**, cab with no trailer,
+has no cargo compartment at all and is plainly a Truck; that is what it was
+built to do, and the fifth-wheel coupling behind the cab says so. A **car with a
+tow hitch** can haul and is still a Car; a hitch is an accessory, not a purpose.
+The cargo test as first written got both backwards, and it contradicted a rule
+sitting six lines below it — *"a cab-only tractor unit counts"* — which should
+have been the tell.
+
+**This is intent of manufacture, the same test as everywhere else in this
+guide** — a Vase is a vessel *made as one*, a Bench is *built as seating*, a Bowl
+is *made to hold food*. Vehicles are no different, and reaching for a visible
+proxy instead of the principle is what produced two wrong drafts in a row.
+
+What to look for, still from outside and without squinting:
+
+| built for goods → **Truck** | built for people → **Car** |
+|---|---|
+| open bed, box body, panelled sides | glazed passenger body all the way back |
+| fifth-wheel coupling behind the cab | body that simply ends behind the cabin |
+| tipper, tanker, flatbed, ambulance | seats and windows, any number of rows |
+
+**Accessories change nothing either way.** A tow hitch, a roof rack, a bike
+carrier or a loaded roof box on an estate leave it a Car. A tractor unit with
+its trailer dropped is still a Truck.
+
+An earlier draft of this said *"windows all round **with seats behind the
+driver**"*, and that was wrong twice over. It threw out every two-seater — a
+sportscar has no back seat and is obviously a Car — and it asked the reviewer to
+squint through glass to count rows, which is the opposite of a usable test. The
+data is unanimous on the first point: `sports car` 0 → Truck and 3 → Car,
+`convertible` 0/4, `coupe` 0/2, `hatchback` 0/6, `limousine` 0/1. **Not one
+two-seater body in the whole overlap is a Truck.**
+
+So the question is not seats, it is **cargo**, and it is answered from outside
+the vehicle:
+
+- **Sportscar, coupe, convertible** — built to carry people; the body ends
+  behind the cabin. **Car.**
+- **Bobtail tractor unit** — no trailer, no cargo space, built for nothing but
+  hauling. **Truck** (`semi` 9 → Truck, 0 → Car).
+- **SUV, estate, passenger minivan** — glazed passenger body all the way back.
+  No cargo compartment. **Car.**
+- **Cargo or panel van** — blank metal where the rear side windows would be.
+  **Truck.** (`cargo van` 1/0, `delivery van` 2/0.)
+- **Pickup** — separate open bed. **Truck.** (`pickup` + `pickup truck`, 51/15.)
+- **Ambulance** — a box body behind the cab. **Truck**, and emphatically so:
+  19 → Truck, 0 → Car.
+- **Motorcycle** — no enclosed body at all, and COCO has its own `motorcycle`
+  class. Neither.
+
+### Car against Bus — barely a boundary
+
+`bus` is one of COCO's 80 and one of the shipped twelve, so it is a live class,
+but Car and Bus hardly touch: `car` lands on a COCO bus box **15** times out of
+3,074, and `bus` lands on a COCO car box **19** out of 21,945. Around half a
+percent each way. **Do not spend time here.**
+
+Bus's real confusions are elsewhere, and one of them matters to us: `truck`
+lands on bus 29 times and `bus` on truck **60**, while **`van` lands on bus 37**.
+
+**Which makes `van` a three-way word, not a two-way one.** It splits 261 → Truck,
+318 → Car, and 37 → Bus, because it names a cargo van, a passenger minivan *and*
+a minibus shuttle. `cab` (22 Truck / 45 Car) and `van` are the two words in this
+whole vocabulary that name genuinely different vehicles, and `van` names three.
+
+**A taxi is not the hard case either, despite feeling like one.** `taxi` lands on
+a COCO bus box **once**, against 62 on car; `cab` once against 45; `taxi cab`
+never, against 11. Being for hire does not move a saloon anywhere.
+
+**Because service is not a property of the object — and this is the jar rule
+again.** A jar holding cut flowers is a Bottle, because `Vase` is reserved for a
+vessel *made as one* and a borrowed vessel keeps the class it was built as. A
+minibus running as a shared taxi is a **Bus** for exactly the same reason, and a
+saloon with a roof sign and a meter is a **Car**. Livery, fare and route are
+borrowings; **built-as beats used-as**, here as everywhere else in this guide.
+
+So the taxi question collapses into the minibus one: it is the *body* that was
+ever in doubt, and the taxi livery was never the variable.
+
+The case that needs a call is therefore the **minibus or shuttle**, not the
+saloon. The visible cue, consistent with everything else here: a Bus is boarded —
+**a passenger door separate from the driver's position, and rows of side windows
+running down a body longer than any car's** — where a Car is entered, with a door
+per seating row. Unmeasured beyond the 37 boxes above, so treat a genuinely
+borderline shuttle as the coin-flip it is rather than agonising.
+
+**One more two-vehicles-one-word case, for the same reason as `van`:** `cab`
+splits 22 → Truck and 45 → Car, because it names both a taxi and the tractor
+half of an articulated lorry. Read the body, as ever.
+
+**Yes: the same shell is a Car with glass and a Truck with panels.** That is
+exactly what we are saying about a minivan, and it is not a quirk of our rule —
+it is why COCO's own `van` splits 261/318. A passenger minivan and a panel van
+are two vehicles built for two jobs, and the rear side panel is the one place
+that difference is visible. `minivan` 5/51 and `cargo van` 1/0 are the same fact
+read from both ends.
+
+**The word was never the question — the body is.** This is the vessel ladder in
+another guise: replace an unanswerable naming argument with one thing you can
+see, from outside, without squinting.
+
+### The cargo test assumes a vehicle. Check that first.
+
+A bike trailer has a cargo compartment and is not a Truck; so does a handcart, a
+skip, a wheelie bin. The cargo test only runs **after** a prior one:
+
+> **Is it a self-propelled road vehicle, or the powered unit of one?**
+> No → neither Car nor Truck, whatever it is carrying.
+
+That covers a bike trailer, a detached semi-trailer, a handcart, a caravan under
+tow. It also keeps the existing ruling that a **cab-only tractor unit counts** —
+it is the powered half — while the trailer alone does not.
+
+**Not "does it have a cab", though, and the difference matters.** A cab is a
+proxy that fails on anything with an open driving position. Self-propulsion is
+the property actually being tracked.
+
+### A third test, for the machines: does the body carry, or does it work?
+
+Being a self-propelled road vehicle is not sufficient either. A **crane is not a
+Truck**; a **fire engine is**. Neither is settled by the goods-or-people test, so
+there is one more question, and it is the last:
+
+> **Does the body carry a load down a road, or does it perform work at a site?**
+> Carries → Truck. Works → neither Car nor Truck.
+
+- **Carries — Truck.** A fire engine hauls water, hose, ladders and crew, and
+  the journey is the whole point (`fire truck` 35, `fire engine` 11, `firetruck`
+  12 — **58 boxes, none on car**). Also an ambulance (19), a dump truck (18),
+  a tow truck (7, it carries the car), a garbage truck (4), a cement mixer (3).
+- **Works — excluded.** A crane lifts; nothing is transported and the job
+  finishes where the machine is standing. Also a tractor (24), a forklift (2), a
+  bulldozer, an excavator, a backhoe (1 each).
+
+**This is the same shape as built-as-beats-used-as**, one level up: there we
+asked what a body was made to be, here we ask what it was made to *do*. A vehicle
+is a Truck when transport is the purpose, not merely the means of arrival.
+
+**It also repairs a rationale this guide already had.** Tractors and forklifts
+were excluded under the heading of "towed and pushed things" — which is simply
+wrong about a tractor, and was doing no work beyond gesturing at the list. Plant
+machinery is the real category, and the exclusion now has one reason instead of a
+misfiled one.
+
+**The genuine edge is a crane on a lorry chassis** — a truck-mounted crane or a
+bucket truck, where a road-going body carries a machine. Read the chassis: road
+wheels and a cab in a normal truck body → **Truck**; tracks, outriggers or a
+lattice boom → not. Do not labour it: `crane` appears **2** times in the entire
+overlap, so the cost of getting it wrong is two boxes.
+
+**A tuk-tuk is a vehicle, so the cargo test decides it** — passenger cabin →
+Car, flatbed or box → Truck. Note this is entirely unmeasured: `tuk tuk`,
+`rickshaw`, `three wheeler` and `moped` appear **nowhere** in the overlap, and
+COCO's own `motorcycle` class may well be where its annotators would put one.
+Treat it as a principled call on a case you will probably never meet.
+
+**What this narrowing costs, honestly.** COCO is looser here than we are:
+`trailer` lands on a COCO `truck` box **63** times and `cart` **35**, plus
+`tractor` 24, `forklift` 2, `dolly` 1, plus `crane` 2, `bulldozer`, `excavator`
+and `backhoe` 1 each. So excluding towed things *and* plant machinery is a real
+disagreement, not a free one — of the same order as the vase narrowing, and
+about 100 boxes all told.
+
+**The fire-engine ruling, by contrast, costs nothing:** all 58 of its boxes are
+already COCO trucks and none is a COCO car, so agreeing with COCO here is free.
+Two rulings made in one breath, one of them a narrowing and one of them a
+confirmation — worth separating in the writeup, because only the first can
+create disagreement in the scored subset.
+
+And a correction to this guide: it previously said COCO boxes trailers as truck
+*"only when the cab is attached"*. **Those 63 boxes do not support that** — it
+was an interpretation, and the measurement cannot tell an attached trailer from
+a detached one. The ruling stands on the vehicle test above; the claim about
+COCO's reasons has been withdrawn.
+
+Expect to disagree with COCO on vans regardless, because half its own `van`
+boxes went the other way. That is a known, priced cost of this class, not a
+mistake — and it is why the disagreement column for `truck` will read worse than
+`fire hydrant`'s without meaning the reviewer did worse.
+
 ### `truck incl vans not SUVs`
 
 Pickups, box trucks, semis and tractor units, flatbeds, tow trucks, fire trucks
@@ -188,8 +393,9 @@ measurable: 261 VG `van` boxes sit on COCO `truck` boxes and 318 sit on COCO
 `car` boxes, so COCO's annotators split vans roughly evenly. Use the body, not
 the badge: a separate cargo box, or no rear side windows, makes it a truck; a
 passenger minivan with seats and windows all round is a car. A cab-only tractor
-unit counts; a detached trailer with no cab does not (VG names 63 of those
-`trailer`, and COCO boxes them as truck only when the cab is attached). Expect
+unit counts, as the powered half; a detached trailer does not, and neither does
+a handcart or a bike trailer — see the vehicle test above, and note it costs us
+the 63 `trailer` and 35 `cart` boxes COCO does call trucks. Expect
 disagreement with COCO on vans specifically — that is a known cost of this
 class, not a mistake.
 
@@ -396,6 +602,28 @@ test; being made to hold food is. `bucket` is a genuine fold-in — 19 boxes COC
 called a bowl — so this one is a real disagreement rather than a hypothetical,
 but it is a cheap one, and the alternative has no floor: each of those four
 holds food, and nothing in "it contains food" stops at the first.
+
+### Cup against Bowl
+
+**No single object is both.** An image can hold one of each — and two do, in the
+completed slates, with the boxes disjoint at IoU 0.000 — but a given vessel is a
+Cup or a Bowl and never both.
+
+**If it is full of soup, it is a Bowl**, whatever its silhouette. **If it is
+empty, the geometry decides**: the ladder puts Bowl at a median h/w of 0.66 and
+Cup at 1.26, with the middle halves not overlapping, so "best judgement" on an
+empty vessel is really "is it wider than tall".
+
+**This does not contradict "judge the vessel, not the food" — the two answer
+different questions.** *Judge the vessel* answers **what to box**: the vessel,
+never the contents, so an empty plate counts and a pile of food on a bare table
+does not. *Soup means Bowl* answers **which class**, in the case where the
+vessel alone underdetermines it. Contents never make something a member; they
+only break a tie between two classes it could belong to.
+
+It is the same move as `spoon`'s handle-in-the-cereal and `fork`'s stab-grip:
+**when the object's own features run out, read what is around it.** Three rules,
+one idea, and all three exist because the alternative is a coin-flip.
 
 Judge the **vessel, not the food**: an empty plate counts, and a pile of food on
 a bare table does not — which matters because VG names 163 of these boxes `food`
@@ -714,3 +942,397 @@ the 835 COCO hydrant boxes, so taking either spelling by itself would throw away
 a third of the class. At 7.1% unmatched and 81% of COCO boxes carrying a VG box,
 this is the cleanest class measured — so a call that feels hard here is a good
 sign the object is something else.
+
+**A fire truck is not a Hydrant.** Obvious said aloud, easy to slip when the
+whole slate is red street furniture, and a fire truck is a `Truck` — one of the
+thirteen — so the image is very likely a positive for a *different* class here.
+
+**Busted street plumbing, gushing water, and you cannot see what broke, is not a
+Hydrant.** This is the third distinct kind of "cannot tell" in the guide, and
+they resolve differently. The rule that separates them:
+
+> **Good-with-no-box requires certainty of PRESENCE.** It says *"it is there, I
+> cannot measure it"*. It never means *"something might be there"*.
+
+- **Sure it is present, cannot measure it** — a person clearly sitting on an
+  unseen Chair. → **Good, no box.** Excluded from the class: not a positive, and
+  out of the negative pool.
+- **Cannot tell whether it is present at all** — a sheared pipe under a plume of
+  water. → **Bad.** You cannot confirm what you cannot see, and Bad is what the
+  protocol has.
+- **Sure something is present, cannot tell which class** — a buried utensil
+  handle with no cereal or salad to read. → **Bad for both**, which is Sam's
+  "neither".
+
+- **Shot from inside the object** — a photo taken from a car's passenger seat,
+  with a sun visor or a wing mirror at the edge of frame. → **Good, no box.**
+  The Car is unquestionably present; you are *in* it. But it has no box: it
+  contains the camera. Boxing the visor would be boxing a **part**, and the band
+  would then be a claim about the visor's size rather than the car's — the Chair
+  rule from the other side, where a part is evidence of the whole but it is the
+  *whole* you box.
+
+  **The band structure says the same thing independently.** `pile_config` sets
+  `MAX_VOTED_AREA = 0.80` because *"a box covering >80% of the image is not a
+  region, it is the image"*, and anything above it is `OVERSIZE` — outside all
+  three bands by construction. A car containing the camera is the limiting case
+  of exactly that rule. Two unrelated tests, one answer, as with the sidewalk
+  planter.
+
+- **Sure something was there, but it has no locatable extent** — a long-exposure
+  night shot where traffic is nothing but streaks of headlight. → **Good, no
+  box.** New in kind: the object is not occluded and not ambiguous, it is
+  *smeared across the frame*, so no box could be correct even in principle. A
+  band is a claim about an object's size and a three-second trail has none.
+
+That last one looks like it should be Bad — you cannot say whether any given
+streak was a Car or a Truck, which is the third case above. It goes the other way
+on **asymmetric regret**, and the principle is worth stating on its own:
+
+> **When the two errors cost very different amounts, take the third state.**
+> Wrongly excluding an image costs one image of supply. Wrongly filing a
+> photograph of traffic as *confirmed no-Car* puts a falsehood into the shared
+> pool that will score every model built on it afterwards — and a detector that
+> fires on a night traffic shot is not obviously wrong.
+
+The second and third file the image as a confirmed negative, which is stronger
+than the reviewer means, and that is the cost recorded in #3643. A sheared
+hydrant under a plume is a real thing and the pool will now say there was none —
+but no vote available today says otherwise honestly.
+
+### `Chair` — no vehicle seating, and now for a better reason
+
+A train seat is **not** a Chair. Neither is a bus, coach, aeroplane or boat seat.
+This extends the existing car ruling to every vehicle, and the extension needed
+checking rather than assuming, because **the original justification does not
+survive the move**.
+
+Car seats were ruled out partly on labelability: you would be squinting through
+a windscreen to count them, and every car on a street would otherwise become a
+Chair. A train interior is the opposite case — the seats fill the frame in rows,
+plainly visible, and nothing about them is hard to label. So the convenience
+argument is gone and the ruling has to stand on something else.
+
+**It does. COCO's annotators do not box vehicle seating as `chair`, and the
+signal is not weak:**
+
+| vehicle in the image | images | also hold a `chair` | rate | vs base |
+|---|---|---|---|---|
+| airplane | 3,083 | 48 | 1.6% | **0.14x** |
+| train | 3,745 | 70 | 1.9% | **0.17x** |
+| bus | 4,141 | 91 | 2.2% | **0.20x** |
+| truck | 6,377 | 232 | 3.6% | 0.34x |
+| car | 12,786 | 577 | 4.5% | 0.42x |
+| boat | 3,146 | 191 | 6.1% | 0.56x |
+
+Base rate: 13,354 of 123,287 COCO images hold a chair, **10.8%**.
+
+Every vehicle class is *below* the base rate — a train image is **six times less
+likely** to hold a chair than a random image, not merely no more likely. That is
+not annotators overlooking seats; it is annotators treating a vehicle interior as
+containing none. And **only 24 of 3,745 train images carry 4+ chair boxes**, so
+even the unambiguous interiors are not being labelled that way.
+
+> **Fixed seating that is part of a vehicle is not a Chair.** Train, bus,
+> aeroplane, boat, car, saddle.
+
+This sits consistently with what the class pass already ruled: a **lifeguard
+station is a Chair** (fixed, but not part of a vehicle), a **saddle is not**, and
+a **single-seat couch is**. A bench on a station platform is a Bench, which is a
+different class and a different pass.
+
+**Worth noting what happened here.** The rule was originally justified by how
+hard it would be to label, and the labelability argument evaporated on the first
+case where the seats were easy to see. The conclusion survived only because the
+measurement backed it independently. A rule resting on convenience should be
+re-checked the moment the inconvenience disappears.
+
+### `Book` — a newspaper is not one, a magazine is
+
+The first definitional ruling for any of the shipped twelve, made because the
+find-the-thing pass needs it and #3666 records that these classes never got one.
+
+> **Is it BOUND?** Bound along a spine → **Book**. Folded or loose sheets →
+> not.
+
+Magazines, notebooks and pamphlets are bound and count. **Newspapers are folded,
+not bound, and do not.** Neither do loose paper, letters, posters, menus or
+printouts.
+
+**Measured, and the ratios are what matter here.** `book` itself lands on a COCO
+`book` box only 13% of the time — the baseline is low because VG often boxes a
+whole shelf where COCO boxes each volume, so a 0.5 IoU rarely fires. Every rate
+below is deflated by that same factor, so read each against the 13%:
+
+| VG name | boxes | on a COCO `book` box | rate | vs `book` |
+|---|---|---|---|---|
+| `book` | 1,524 | 191 | **13%** | baseline |
+| `magazines` | 65 | 7 | 11% | **same** |
+| `magazine` | 152 | 15 | 10% | **same** |
+| `notebook` | 96 | 10 | 10% | **same** |
+| **`newspaper`** | **164** | **5** | **3%** | **a quarter** |
+| `binder` | 61 | 2 | 3% | a quarter |
+| `menu` | 172 | 1 | 1% | ~nothing |
+| `paper` | 1,863 | 16 | 1% | ~nothing |
+| `poster` · `flyer` · `print` · `letter` | 4,856 | 1 | 0% | nothing |
+
+**COCO's annotators call a magazine a book and do not call a newspaper one** —
+at the same rate as `book` itself for the first, at a quarter of it for the
+second. The bound/unbound test is what separates those two groups, and it is
+visible from outside without opening anything, which is the property every test
+in this guide is chosen for.
+
+It is also the **built-as** rule again, the one that makes a jar of flowers a
+Bottle and a fire engine a Truck: a book is *manufactured bound*, and a
+newspaper is manufactured as folded sheets, whatever either is being used for.
+
+**In the find-the-thing pass:** a newspaper is **Bad**. A magazine, notebook or
+bound pamphlet is **Good**, with a box.
+
+Note `book` is this study's own calibration failure — 43.3% of its boxes land on
+no COCO class at all, worse than any of the thirteen candidates. This ruling
+narrows it slightly and does not repair that.
+
+## The negative pass, second framing: FIND the thing
+
+**The pass was originally framed as certification — "do you see none of these?"
+— and that was the wrong way round.** The reviewer:
+
+> Shouldn't we just frame this as FINDING each of the above? We have a dataset
+> where they probably aren't, but that shouldn't change the annotation task.
+
+He is right, and it repairs a complaint he had made himself earlier in the same
+study: a "not clean" vote **records one bit and throws twelve away**. Under
+find-the-thing a Good vote **can carry a box**, so a found object becomes a
+positive with a band rather than a bare exclusion. Supply goes up instead of
+down.
+
+**The UI had been saying so the whole time.** It will not let you submit a box
+for the thing you are *not* looking for, which is exactly right and which the
+first framing was fighting.
+
+> **Good = the class is present. Draw a box on it.**
+> **Bad = it is not there.**
+
+This also makes the pass identical in shape to every other slate in the study,
+so nothing downstream needs a special case — and the manifest already agrees:
+`reference` is `present` when COCO says the class is there.
+
+### Three passes ran under the old polarity and must be read inverted
+
+`Vehicles`, `Outdoor Objects` and `Bench` were labelled as *"Good = clean"*.
+They are banked and recorded in `polarity.json`; ingest must invert them. They
+also carry **no boxes**, so the twelve images they found are exclusions rather
+than positives — a small, cheap slate would recover them.
+
+| pass | found | agreement vs COCO |
+|---|---|---|
+| Vehicles | 4 / 200 (2.0%) | **100.0%** (92 scored) |
+| Outdoor Objects | 5 / 200 (2.5%) | **100.0%** (92 scored) |
+| Bench | 4 / 200 (2.0%) | 95.7% (92 scored) |
+
+**Two perfect passes, and the third is more interesting than its number.** All
+four of Bench's disagreements run one way — COCO saw a bench, the reviewer did
+not — and their box sizes say they are mostly not misses:
+
+| image | largest bench box | band |
+|---|---|---|
+| 2396098 | **99.61% of frame** | **OVERSIZE** |
+| 2388314 | 54.54% | large |
+| 2315792 | 39.40% | large |
+| 2382828 | 2.99% | medium |
+
+The first is excluded by our own rule — *"a box covering >80% of the image is
+not a region, it is the image"* — so it cannot be a miss against a benchmark
+that never bands it. Two more fill 39% and 55% of the frame, which is not
+something a reviewer overlooks; the likely cause is the Bench definition itself,
+which rules that a **concrete seating ledge is not a Bench** while COCO appears
+to box one. Only the 2.99% box is a plausible ordinary miss.
+
+**So a raw miss rate against COCO overstates reviewer error** wherever our
+definition is deliberately narrower or our bands deliberately exclude. Report it
+with the box sizes attached, not alone.
+
+## The negative pass: "none of the 13"
+
+All thirteen class slates are labelled. This pass asks the remaining question,
+and it is about the **pool**, not about any class: an image sits in the shared
+negative pool because no VG name on it matches a candidate — but the whole
+finding of this study is that **a missing name is not an absent object**. Each
+class slate measured its own pool error, from 0.0% to 7.1%. Nobody has measured
+the *joint* rate: the share of pool images holding **at least one** of the
+thirteen. That number is what a negative in this benchmark is worth.
+
+**Polarity, stated positively on purpose.** The question is *"do you see NONE of
+the thirteen?"* → **Good = clean.** Bad = you found one.
+
+**Do not draw boxes in this pass.** A Bad vote removes the image from the pool,
+which is all this measurement needs. Boxing would additionally promote it into
+that class's positives — worth doing, but it is a different job with a different
+cost, and it should be designed after we know the rate.
+
+### Why you will recognise images — and why it is not a re-check
+
+**The first build of this slate was wrong and the reviewer caught it.** It
+sampled the pool as it stood *before* the thirteen class passes were applied:
+69% of its 200 rows already carried a verdict, and **44 were images the reviewer
+had personally marked `present`** — nine trucks, seven bowls, six sinks, six
+vases. Those images do not survive `verdicts_to_corrections.py`; they leave the
+pool as `negative_fixed` or `negative_excluded`. Re-asking about them measures a
+pool that no longer exists and asks the reviewer to rediscover their own
+findings. The frame now excludes them: **1,335** evicted for a VG label, **56**
+for an ambiguous spelling, **138** because a class pass already found the object.
+2,671 remain, and **zero** already-found images are in the slate.
+
+**Reviewed-and-absent images stay in the frame on purpose**, and they are why a
+lot of this will still look familiar:
+
+| the shared pool | 4,200 images |
+|---|---|
+| reviewed for **at least one** class | 1,997 (48%) |
+| never reviewed at all | 2,203 (52%) |
+| **reviewed for all thirteen** | **0** |
+
+The most-covered image in the entire pool has **10** of the thirteen answered,
+and exactly one image is that well covered; 1,140 images have exactly one class
+answered. **Not a single image in the pool is certified clean.** "No vase here"
+says nothing about the other twelve, so a familiar image is still a live
+question — this pass asks all thirteen at once, which no class pass ever did.
+
+Dropping every previously-seen image would also bias the estimate *downward*:
+the reviewed set is enriched in contamination by the boundary ranking that chose
+it, so removing it removes disproportionately many of the pool's real positives.
+The correct frame keeps them.
+
+### Do the previous twelve need excluding too? No.
+
+The shipped twelve are `clock`, `bird`, `boat`, `umbrella`, `kite`, `book`,
+`dog`, `backpack`, `knife`, `bicycle`, **`bus`** and `stop sign`. **A bus in the
+frame is fine.** So is a dog, a book, a knife. The pool was built to hold none of
+them, and on the 1,845 pool images COCO scored, COCO agrees: **zero** carry a
+shipped class.
+
+**That zero is by construction, not evidence.** Pool membership is defined by
+their absence, so the check can only ever come back clean. Its real content is
+the coverage: the guarantee is airtight for the **43.9%** of the pool COCO
+scored, and for the other 56.1% it rests on VG names — the exact mechanism this
+study spent thirteen slates showing to be unreliable, at 0.0% to 7.1% per class.
+Nobody has measured pool error for the shipped twelve the way we just did for
+the thirteen. Filed as a follow-up; out of scope here.
+
+A related fact worth recording, since it was surprising: `categories` on a pile
+media holds **cells** (`book@medium`), not class names, and it is a *post-banding*
+field. On annotated non-pool images it matches COCO's shipped set exactly 70.1%
+of the time, and of the mismatches **29.7% are COCO seeing more against 0.2%
+the other way** — banding drops an object COCO annotated (oversize, scattered)
+without dropping the image. Reading `categories` as "what is in this image" is
+therefore wrong in one specific direction, and reading it as a set of class names
+is wrong outright.
+
+### The checklist, ordered for THIS pass
+
+**A correction to the ordering first given here.** The six-item list below was
+originally ranked by per-class pool error — measured on each class's *own*
+negative pool. That is the wrong population for this pass, which draws from the
+*shared* pool after eviction. On the 1,256 COCO-scored images the slate actually
+draws from, the ranking is different, and two classes dismissed as "never
+appeared" are mid-table:
+
+| class | COCO count | class | COCO count |
+|---|---|---|---|
+| **chair** | 42 | **bowl** | 16 |
+| **car** | 41 | **cell phone** | 15 |
+| **truck** | 25 | **bottle** | 13 |
+| **bench** | 23 | vase, fork, spoon, sink, hydrant | tail |
+| **cup** | 18 | | |
+
+**`chair` is the single most common contaminant here, and `bench` is fourth** —
+both were in the "ignore-ish" column when the ranking came from per-class pool
+error. `cell phone`, also dismissed, is eighth. The two rankings disagree because
+they are measured on different populations, and this one is the population you
+are actually looking at.
+
+**COCO's prediction for this slate: 12.7%** of images hold at least one of the
+thirteen. That is a checkable number — when the pass is labelled, the random
+stratum's rate should land near it, and a large gap in either direction is
+itself a finding.
+
+### The old ordering, kept for the record
+
+The worry about this pass was holding a thirteen-way conjunction in your head.
+The class slates already answered it. Ordered by **measured pool error**:
+
+| scan first | rate | then | rate | ignore-ish | rate |
+|---|---|---|---|---|---|
+| **car** | 7.1% | fork | 1.4% | spoon | 0.0% |
+| **bowl** | 5.7% | bottle | 1.4% | sink | 0.0% |
+| **chair** | 2.9% | | | bench | 0.0% |
+| **cup** | 2.9% | | | cell phone | 0.0% |
+| **vase** | 2.9% | | | fire hydrant | 0.0% |
+| **truck** | 2.9% | | | | |
+
+**Five classes contributed zero errors across 350 uniform draws.** They are not
+impossible, but they are not what to scan for. Six classes — car, bowl, chair,
+cup, vase, truck — account for **every** pool error observed in the whole study.
+Read an image for those six; the rest will announce themselves if present.
+
+Note the boundary stratum is ranked by text score and its top rows are driven by
+`sink`, `bench` and `truck` — the ranker's idea of a near-miss is not the pool's
+idea of a real one. That mismatch is exactly why the **random** stratum is the
+only row that estimates anything.
+
+### The thirteen, in one line each
+
+- **Car** — built to carry people. SUVs, minivans, taxis, sportscars. Not a
+  motorcycle, a train car, a picture of a car, or the car you are sitting in.
+- **Truck** — built to carry goods down a road. Pickups, box trucks, semis
+  (including bobtail), fire engines, ambulances. Not an SUV, a passenger
+  minivan, a detached trailer, or plant machinery (crane, tractor, forklift).
+- **Chair** — single-person seating with a back. Not a toilet, a car seat, a
+  saddle, or a bench.
+- **Bench** — built as seating for more than one, without individual backs. Not
+  a planter wall, and not a judge's bench (that is a table).
+- **Bowl** — *made* to hold food, with walls. Plates, pots, dog bowls,
+  disposable and paper containers. Not a wrapper, an ashtray, a carafe, a
+  trough, a bucket, or a toilet bowl.
+- **Cup** — a drinking vessel: mugs, glasses, stemware. Full of soup → Bowl.
+- **Bottle** — a narrow-necked vessel for liquid: jars, shakers, jugs, squeeze
+  tubes. A jar holding flowers is still a Bottle.
+- **Vase/Planter** — a vessel *made as one* for cut flowers or a plant. Not a
+  table of flowers, a flower basket, a rose bucket, or a built-in sidewalk
+  planter.
+- **Fork** — eating or serving utensil with tines.
+- **Spoon** — eating or serving utensil with a bowl; ladles and serving spoons
+  count.
+- **Sink** — the basin, not the counter.
+- **Cell phone** — a mobile phone. Not a landline, not a toy.
+- **Fire hydrant** — a hydrant. Not a standpipe, a fire truck, or busted
+  plumbing.
+
+### Rules that carry over unchanged
+
+- **A depiction is not the object** — a billboard car, a bike-crossing sign, a
+  photo of a bowl. A **reflection is** evidence of the object.
+- **An obvious toy is not the object.**
+- **A part is evidence of the whole**, but there is nothing to box here, so a
+  visible chair leg makes the image Bad.
+- **Cannot tell → Good.** Same asymmetric regret as everywhere else: wrongly
+  dropping an image costs one image of supply, while wrongly certifying a
+  contaminated one puts a falsehood into the pool that scores every model built
+  on it afterwards.
+
+### What the pilot is sized for
+
+200 images: 100 uniform (the estimator) and 100 ranked (finds contamination
+cheaply). **81 of the 200 carry a COCO answer — 40%, double the 20% of a class
+slate**, because COCO annotates all eighty of its classes on any image it
+annotates at all, so one exhaustive flag settles the whole thirteen-way
+conjunction at once. The scored subset is free here in a way it never was
+per-class.
+
+Before a human sees anything, **31.8% of the shared pool is already
+known-contaminated**: 1,335 of 4,200 images carry a VG name for one of the
+thirteen outright, and another 56 carry an ambiguous spelling and are barred
+rather than counted clean. A thirteen-class expansion loses a third of its
+negative pool to bookkeeping alone — and this pass measures how much of the
+*remaining* two-thirds is contaminated too.

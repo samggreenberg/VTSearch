@@ -135,6 +135,24 @@ DATASETS: dict[str, dict] = {
 #: embedder's geometry (the same anchors the calibration harness bands on):
 #: one DINOv3 patch is 1/196 of the image and the smallest HAC leaf is 1/12.
 #: ``small`` is therefore "below what the patch grid can resolve at all".
+#: Whether an image that is a positive for one class may serve as a NEGATIVE
+#: for a class it does not hold (#3667).
+#:
+#: The construction originally said: positive for its own cells, negative only
+#: if it holds nothing in *C*, excluded otherwise. The "excluded otherwise" is
+#: right for the SAME class at another size -- scoring a large-bus image as a
+#: small-bus negative penalises a detector for finding a real bus -- but it was
+#: applied to every OTHER class too, where the reason does not hold. The cost
+#: was 41.9% of the pile dropped from every class's evaluation, and negatives
+#: that contain none of twelve common objects while positives contain one, so a
+#: detector could score by learning "is this a scene with stuff in it".
+#:
+#: Gated on ``labels_exhaustive``: COCO annotates all eighty of its classes on
+#: any image it annotates, so absence is a fact there. On the other half absence
+#: is VG's silence, measured wrong 0.5-2.5% of the time per class (#3588), and
+#: importing that into the negatives is a different decision from this one.
+SCALE_CROSS_CLASS_NEGATIVES = True
+
 #: The upper cut mirrors ``MAX_VOTED_AREA``: a box covering >80% of the image
 #: is not a region, it is the image.
 PATCH_AREA = 1 / 196
@@ -1072,8 +1090,41 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "Good: pickups, box trucks, semis and tractor units, flatbeds, tow, fire and "
             "food trucks, full-size cargo and panel vans. Bad: SUVs, crossovers and "
             "passenger minivans (those are `car`), and a detached trailer with no cab. "
-            "Use the body, not the badge -- COCO splits `van` roughly evenly between "
-            "truck and car, so disagreement there is a known cost, not a mistake."
+            "Three tests, in order. (1) Is it a self-propelled road vehicle, or the "
+            "powered unit of one? No -> neither Car nor Truck, whatever it is carrying: "
+            "that excludes a detached trailer, a bike trailer, a handcart, a caravan "
+            "under tow, and it keeps a bobtail tractor unit as the powered half. Not "
+            "`does it have a cab`, which fails on any open driving position. "
+            "(2) Does the body CARRY a load down a road, or PERFORM WORK at a site? "
+            "Carrying is a Truck -- fire engine (fire truck 35 / fire engine 11 / "
+            "firetruck 12, none on car), ambulance 19, dump truck 18, tow truck 7, "
+            "garbage truck 4, cement mixer 3. Working is neither: a CRANE, and likewise "
+            "tractor 24, forklift 2, bulldozer, excavator, backhoe. Plant machinery is "
+            "the real reason those are excluded; the old `towed and pushed things` "
+            "rationale was wrong about a tractor. A crane on a road-going lorry chassis "
+            "is a Truck, a tracked or lattice-boom one is not, and `crane` occurs twice "
+            "in the whole overlap. (3) Use the BODY, not the badge, and ask what it was "
+            "BUILT FOR: goods is a Truck, people is a Car. Cargo space is the cue, not "
+            "the definition -- a bobtail tractor has no cargo space and is a Truck (its "
+            "fifth wheel says so), while a car with a tow hitch is still a Car. A "
+            "two-seater sportscar is a Car (sports car/coupe/convertible/hatchback are "
+            "0 Truck to 15 Car). Accessories change nothing. Never squint inside to "
+            "count rows. A long-exposure night shot where traffic is only headlight "
+            "streaks has no locatable instance at all: vote Good with NO box, which "
+            "excludes the image rather than filing a photograph of traffic as confirmed "
+            "no-Car. Same for a photo taken from INSIDE a car -- the Car contains the "
+            "camera, so it has no box, and boxing the sun visor would band the visor; "
+            "MAX_VOTED_AREA says the same thing, over 80% is not a region but the image. "
+            "Car vs BUS is barely a boundary (car->bus 15, bus->car 19, ~0.5% each way) "
+            "-- do not spend time there; the case that needs a call is a minibus, which "
+            "is boarded through its own door rather than entered by row. A TAXI is not "
+            "the hard case either: `taxi` lands on bus ONCE against 62 on car. Service "
+            "is a borrowing, not a property -- built-as beats used-as, the same rule "
+            "that makes a jar of flowers a Bottle -- so a saloon cab is a Car and a "
+            "minibus running as a shared taxi is a Bus. `van` names THREE vehicles and "
+            "COCO splits it 261 truck / 318 car / 37 bus; `suv` "
+            "does not (62 / 222, an SUV is a Car) and neither does `minivan` (5 / 51). "
+            "Disagreement on vans is a known cost of this class, not a mistake."
         ),
     ),
     "car": ClassRule(
@@ -1138,7 +1189,10 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "boot with the shopping in it. It has to be MADE to hold food. "
             "Bad: flat wrappers and sleeves, cups and mugs (`cup`), sink basins (`sink`), "
             "toilet bowls, feed troughs, planters (`vase`), ashtrays and carafes. "
-            "Judge the vessel, not the food."
+            "Judge the vessel, not the food -- which answers WHAT TO BOX. Contents "
+            "answer WHICH CLASS when the vessel alone is ambiguous: full of soup is a "
+            "Bowl whatever its shape; empty, the ladder decides (Bowl 0.66 h/w, Cup 1.26). "
+            "No single object is both a Cup and a Bowl, though an image may hold one of each."
         ),
     ),
     "bottle": ClassRule(
@@ -1226,6 +1280,10 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "Good: street fire hydrants in any colour or design, including ones wrapped, "
             "repainted or half-buried in snow. Bad: building standpipes and wall-mounted "
             "siamese connections, bollards, water valves, parking meters, utility posts. "
+            "Also Bad: a FIRE TRUCK (that is a `Truck`, another of the thirteen), and "
+            "busted street plumbing whose break is hidden under water -- you cannot "
+            "confirm what you cannot see. Good-with-no-box requires certainty of "
+            "PRESENCE; unsure whether anything is there at all is Bad. "
             "The cleanest class measured -- a call that feels hard here usually means the "
             "object is something else."
         ),
