@@ -50,10 +50,16 @@ against its own head-noun family (``vg_name_families.py``).
 this script measures:
 
 * ``precision`` decides whether the name is worth acting on at all, and the
-  right way to read it is as a **price**: ``1 / precision`` is how many images
-  leave the shared negative pool per contaminated negative removed. At 0.85 that
-  is 1.2 images; at `sign`'s 0.04 it is 25, which is why the biggest fold-in
-  column in *C* is not actionable. The cut is on the **Wilson lower bound**, so
+  right way to read it is as a **price**, and the units are not pool membership:
+  ``1 / precision - 1`` is how many **good hard negatives are destroyed per
+  contaminated negative retired**. Pool membership is not the scarce thing --
+  77,119 images are eligible and only 4,200 are drawn -- but what a name
+  withholds is never a random slice of them. Ranked by the class's own text
+  query, `sign` takes 82% of the drawn pool's fifty hardest negatives and
+  `bike` takes even more sharply, so *withholding hard negatives* is what every
+  ambiguous name does and cannot discriminate between them; the ratio can.
+  Measured over the 3,900-image pool (#3635): `bike` destroys 31 to retire 30,
+  and `sign` destroys 435 to retire 37. The cut is on the **Wilson lower bound**, so
   a name with four supporting images does not outrank one with four hundred.
 * ``box_agree`` then decides which table. Above ``--min-box`` the name's box is
   the object, so it can be folded and banded: **alias**. Below it the class is

@@ -68,9 +68,30 @@ def read_vg_labels(
     return labels
 
 
+#: How :func:`canonicalise` reconciles an alias box with a class box that is
+#: already on the image. The three are the readings of #3637. All three behave
+#: identically where the class has no box of its own, which is the repair the
+#: name table exists for; they differ only in what an alias box may do to an
+#: image the class already sees:
+#:
+#: * ``fold`` -- always merge. The scatter guard then judges the union, so an
+#:   image the class already banded can leave every band on the strength of a
+#:   second spelling.
+#: * ``guarded`` -- merge, but keep the class's own boxes on the images where
+#:   the merge would push a cleanly-banded one out of every band. Differs from
+#:   ``fold`` on those images alone.
+#: * ``additive`` -- merge only where the class has no box of its own, so a fold
+#:   can add an image but never re-describe one. Differs from ``fold`` wherever
+#:   both spellings appear, whether or not a band changes.
+FOLD_MODES = ("fold", "guarded", "additive")
+
+
 def canonicalise(
-    labels: dict[int, dict[str, list[list[float]]]], vg_names: dict[str, tuple[str, ...]]
-) -> dict[str, int]:
+    labels: dict[int, dict[str, list[list[float]]]],
+    vg_names: dict[str, tuple[str, ...]],
+    box_dims: dict[int, tuple[int, int]] | None = None,
+    mode: str = "fold",
+) -> tuple[dict[str, int], dict[str, int]]:
     """Fold each class's alternate VG spellings onto the class name, in place.
 
     ``vg_boxes_by_name`` matches VG's PRIMARY name only, so `hydrant` and
@@ -78,19 +99,53 @@ def canonicalise(
     -- rather than aliasing during it -- keeps the merge visible and reversible,
     and keeps it out of the shared reader every other VG build uses.
 
-    Returns ``{class: boxes folded in}``, which is the number the build reports:
-    a merge that folds nothing has either been mis-spelled or is not needed, and
-    both are worth seeing.
+    Returns ``(folded, contested)``, the two numbers the build reports per class:
+
+    * ``folded`` -- boxes actually merged onto the class name. A merge that
+      folds nothing has either been mis-spelled or is not needed, and both are
+      worth seeing.
+    * ``contested`` -- images where the class had a box of its own, that box put
+      the image in a band, and the merged union does not land in one. Under
+      ``fold`` that is the count of images the fold **un-bands**; under the other
+      two modes it is the count it rescues. Either way it is the price of the
+      table, and #3637 is the issue that it went unmeasured for a release.
+
+    *box_dims* is what makes ``contested`` measurable, since a band is a share of
+    image area. Without it the count is zero and ``guarded`` -- whose whole
+    decision *is* the count -- is refused rather than silently degraded into
+    ``fold``; ``additive`` does not consult it and is unaffected.
+    **Run this after :func:`anchor_to_coco`**, which is where
+    ``box_dims`` comes from and which makes the count exact: on an anchored image
+    COCO's labels replace VG's wholesale, so a fold there is discarded and
+    counting it would report a price the build never pays.
     """
+    if mode not in FOLD_MODES:
+        raise ValueError(f"canonicalise: unknown mode {mode!r} (want one of {FOLD_MODES})")
+    if mode == "guarded" and box_dims is None:
+        raise ValueError("canonicalise: mode 'guarded' needs box_dims; a band is a share of image area")
     reverse = {n: cls for cls, names in vg_names.items() for n in names if n != cls}
     folded: dict[str, int] = {c: 0 for c in vg_names}
-    for by_name in labels.values():
+    contested: dict[str, int] = {c: 0 for c in vg_names}
+    for iid, by_name in labels.items():
+        # Every alias of one class is collected before any of them is judged: two
+        # spellings on one image are one merge, and deciding them one at a time
+        # would ask the scatter guard about a union that never exists.
+        hits: dict[str, list[list[float]]] = {}
         for vg_name in [n for n in by_name if n in reverse]:
-            cls = reverse[vg_name]
-            boxes = by_name.pop(vg_name)
+            hits.setdefault(reverse[vg_name], []).extend(by_name.pop(vg_name))
+        for cls, boxes in hits.items():
+            own = by_name.get(cls)
+            if own and box_dims is not None:
+                W, H = box_dims[iid]
+                if band_for(own, W, H) in pc.BOX_BANDS and band_for(own + boxes, W, H) not in pc.BOX_BANDS:
+                    contested[cls] += 1
+                    if mode == "guarded":
+                        continue
+            if own and mode == "additive":
+                continue
             by_name.setdefault(cls, []).extend(boxes)
             folded[cls] += len(boxes)
-    return folded
+    return folded, contested
 
 
 def lift_ambiguous(
@@ -496,8 +551,13 @@ def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
     log(f"  {len(coco_of)} VG images carry a coco_id; {len(corrections)} human verdicts on file")
 
     labels = read_vg_labels(records, paths, dims, wanted_vg)
-    folded = canonicalise(labels, pc.SCALE_VG_NAMES)
     box_dims, exhaustive, n_anchored, n_reframed = anchor_to_coco(labels, dims, coco_of, truth, ca.COCO_DIMS, wanted)
+    # The fold runs AFTER the anchor, not before it. On an anchored image COCO's
+    # labels replace VG's wholesale, so folding there was always discarded --
+    # the order is a no-op on what gets built (verified cell-by-cell in #3637)
+    # and is what lets `contested` be counted against the real pixel space, and
+    # only on the images that actually pay it.
+    folded, contested = canonicalise(labels, pc.SCALE_VG_NAMES, box_dims, pc.SCALE_FOLD_MODE)
     unbanded = apply_corrections(labels, corrections, box_dims, exhaustive)
     suppressed = lift_ambiguous(labels, pc.SCALE_VG_AMBIGUOUS, exhaustive)
     unbanded |= suppressed
@@ -506,7 +566,16 @@ def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
         f"{len(exhaustive)} with a verified pair, {n_reframed} skipped as re-framed copies"
     )
     if folded:
-        log("  merged VG spellings: " + ", ".join(f"{c}+{n}" for c, n in sorted(folded.items())))
+        # Both halves of the ledger on one line. A class whose fold contests more
+        # images than it repairs is being made worse by its own name table, and
+        # `clock` was exactly that (+18 banded, -34 un-banded) for a release
+        # before anyone printed the second number (#3637).
+        verb = "un-bands" if pc.SCALE_FOLD_MODE == "fold" else "rescues"
+        log(
+            f"  merged VG spellings (mode={pc.SCALE_FOLD_MODE}) as `class+boxes folded/images it {verb}` -- "
+            "a merged union that scatters, or outgrows a region, leaves every band: "
+            + ", ".join(f"{c}+{n}/{contested[c]}" for c, n in sorted(folded.items()))
+        )
     if suppressed:
         by_class: dict[str, int] = defaultdict(int)
         for _iid, c in suppressed:
