@@ -2,17 +2,31 @@
 
 The construction, in one paragraph: one image pool and one class list
 (:data:`pile_config.SCALE_CLASSES`); for a class *c* and band *B* an image is a
-**positive** when its compact union box for *c* falls in *B*, a **negative**
-when it holds no instance of any class in *C*, and **excluded** otherwise -- it
-holds *c* at some other size, so scoring it as a negative would penalise a
+**positive** when its compact union box for *c* falls in *B*, and a **negative**
+when it does not hold *c* at all. It is **excluded** from *c*'s cells only when
+it holds *c* at some other size -- scoring it as a negative would penalise a
 detector for finding a real bus, which is what #3156 is about. Exclusion is
 carried per media as ``evaluable_categories`` and honoured by
 ``vtscore.eval.labels.evaluable_pool``.
 
+That "does not hold *c*" is a claim about the image, and it is only free on the
+COCO-annotated half, where all eighty classes are answered at once; off COCO it
+would be VG's silence. So :func:`_evaluable` gates the cross-class half of the
+rule on ``labels_exhaustive`` (#3667), and until that issue an image was
+evaluable **only in its own cells** -- an image holding a book and no bus was
+neither a bus positive nor a bus negative, and 41.9% of the pile fell out of
+every class's evaluation.
+
 Cells are *designated* rather than inferred: exactly ``SCALE_N_POS`` positives
-and one shared pool of ``SCALE_N_NEG`` negatives each. Every cell therefore has
-identical prevalence and identical negatives, so a small-vs-large difference is
-a paired contrast on one class rather than two datasets of different difficulty.
+and one shared pool of ``SCALE_N_NEG`` negatives each, so **within a class the
+three bands are scored against identical negatives** -- a small-vs-large
+difference is a paired contrast on one class rather than two datasets of
+different difficulty. Across classes they are no longer identical, which is the
+trade #3667 made deliberately: the shared pool is still shared, but each class
+also gets the positives of the other eleven as negatives, and how many of those
+there are depends on the class. :data:`pile_config.SCALE_PREVALENCE` is
+therefore the **designed** prevalence, not the realised one -- see
+``docs/experiments/2026-09-06-cross-class-negatives-3667/REPORT.md``.
 
 **The labels are COCO's, and the pool is the half of VG that can carry them.**
 VG's own annotation is not exhaustive and measurably fails this construction --
