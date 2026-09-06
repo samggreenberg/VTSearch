@@ -1000,6 +1000,53 @@ than the reviewer means, and that is the cost recorded in #3643. A sheared
 hydrant under a plume is a real thing and the pool will now say there was none —
 but no vote available today says otherwise honestly.
 
+### `Chair` — no vehicle seating, and now for a better reason
+
+A train seat is **not** a Chair. Neither is a bus, coach, aeroplane or boat seat.
+This extends the existing car ruling to every vehicle, and the extension needed
+checking rather than assuming, because **the original justification does not
+survive the move**.
+
+Car seats were ruled out partly on labelability: you would be squinting through
+a windscreen to count them, and every car on a street would otherwise become a
+Chair. A train interior is the opposite case — the seats fill the frame in rows,
+plainly visible, and nothing about them is hard to label. So the convenience
+argument is gone and the ruling has to stand on something else.
+
+**It does. COCO's annotators do not box vehicle seating as `chair`, and the
+signal is not weak:**
+
+| vehicle in the image | images | also hold a `chair` | rate | vs base |
+|---|---|---|---|---|
+| airplane | 3,083 | 48 | 1.6% | **0.14x** |
+| train | 3,745 | 70 | 1.9% | **0.17x** |
+| bus | 4,141 | 91 | 2.2% | **0.20x** |
+| truck | 6,377 | 232 | 3.6% | 0.34x |
+| car | 12,786 | 577 | 4.5% | 0.42x |
+| boat | 3,146 | 191 | 6.1% | 0.56x |
+
+Base rate: 13,354 of 123,287 COCO images hold a chair, **10.8%**.
+
+Every vehicle class is *below* the base rate — a train image is **six times less
+likely** to hold a chair than a random image, not merely no more likely. That is
+not annotators overlooking seats; it is annotators treating a vehicle interior as
+containing none. And **only 24 of 3,745 train images carry 4+ chair boxes**, so
+even the unambiguous interiors are not being labelled that way.
+
+> **Fixed seating that is part of a vehicle is not a Chair.** Train, bus,
+> aeroplane, boat, car, saddle.
+
+This sits consistently with what the class pass already ruled: a **lifeguard
+station is a Chair** (fixed, but not part of a vehicle), a **saddle is not**, and
+a **single-seat couch is**. A bench on a station platform is a Bench, which is a
+different class and a different pass.
+
+**Worth noting what happened here.** The rule was originally justified by how
+hard it would be to label, and the labelability argument evaporated on the first
+case where the seats were easy to see. The conclusion survived only because the
+measurement backed it independently. A rule resting on convenience should be
+re-checked the moment the inconvenience disappears.
+
 ### `Book` — a newspaper is not one, a magazine is
 
 The first definitional ruling for any of the shipped twelve, made because the
