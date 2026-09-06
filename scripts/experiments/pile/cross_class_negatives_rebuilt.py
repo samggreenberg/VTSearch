@@ -192,8 +192,17 @@ def main() -> int:
     # --- 1. only the labels moved -------------------------------------------
     print("=== what moved ===")
     if set(before) != set(after):
-        failures.append(f"media set changed: {len(set(before) ^ set(after))} ids differ")
-        print(f"  media ids       CHANGED ({len(set(before) ^ set(after))} differ)")
+        gone, new = sorted(set(before) - set(after)), sorted(set(after) - set(before))
+        failures.append(f"media set changed: {len(gone)} dropped, {len(new)} added")
+        print(f"  media ids       CHANGED ({len(gone)} dropped, {len(new)} added)")
+        # Name them. A rebuild is from `dev`, not from the commit that built the
+        # cell it replaces, so it also carries every `pile_config` ruling merged
+        # in between -- and the difference between "one image left" and "the
+        # designation moved" is the difference between a footnote and a redo.
+        for iid in gone[:10]:
+            print(f"    dropped {iid}: was {before[iid].get('categories') or 'pool'}")
+        for iid in new[:10]:
+            print(f"    added   {iid}: now {after[iid].get('categories') or 'pool'}")
     else:
         print(f"  media ids       identical ({len(after)})")
 
