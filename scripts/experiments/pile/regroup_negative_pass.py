@@ -14,11 +14,10 @@ S = Path("/expscratch/sgreenberg/classes-3588/slates")
 DATASET = "negative pass 200"
 
 GROUPS = {
-    "Table Objects": ("bowl", "cup", "bottle", "vase", "fork", "spoon", "sink", "knife"),
+    "Table Objects": ("bowl", "cup", "bottle", "vase", "fork", "spoon", "sink", "knife", "chair"),
     "Handheld Objects": ("cell phone", "book", "umbrella", "backpack"),
-    "Furniture": ("chair", "bench"),
     "Vehicles": ("car", "truck", "bus", "bicycle"),
-    "Street Objects": ("fire hydrant", "stop sign", "clock"),
+    "Street Objects": ("fire hydrant", "stop sign", "clock", "bench"),
     "Outdoor Objects": ("bird", "kite", "boat", "dog"),
 }
 assert sum(len(v) for v in GROUPS.values()) == 25, sum(len(v) for v in GROUPS.values())

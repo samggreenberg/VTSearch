@@ -69,37 +69,47 @@ import pile_config as pc  # noqa: E402
 from make_class_slate import canonicalise, log  # noqa: E402
 from pilebuild.loaders.vg_scale import read_vg_labels, vg_source  # noqa: E402
 
-#: Six groups over the same 200 images, chosen by the reviewer for how they sit
-#: in a human head rather than for how they sit in a scene. An earlier three-group
-#: split was measured from COCO co-occurrence and he rejected it as still too
-#: taxing -- which is the right call to give him, because the cost of a group
-#: that is hard to hold is a MISSED positive, and a missed positive biases the
-#: pool estimate DOWNWARD, the one failure mode invisible in the result.
+#: Five groups over the same 200 images, arrived at by the reviewer and matching
+#: the co-occurrence data exactly -- which it did not at first.
 #:
-#: What grouping buys, beyond load: for a NEGATIVE pass the within-group boundary
-#: does not exist. Cup-or-bowl, fork-or-spoon and van-or-SUV all stop being
-#: questions, because either answer makes the image not clean. Every boundary
-#: that cost this study days is out of scope once the group is the unit.
+#: The route there is worth keeping. A measured three-group split was rejected as
+#: too taxing; a semantic six-group split followed; then `Furniture` dissolved,
+#: `chair` going to the table and `bench` to the street. That last move is what
+#: the images had said all along: `chair` sits with a cup in 22% of its images
+#: and `vase` sits with a chair in 43%, while `bench` sits with a car in 25%, a
+#: bicycle in 16%, and a chair in only 6%. Chair is a dining-room object and
+#: bench is a street object, whatever the word "furniture" suggests.
 #:
-#: Two placements are worth knowing about while scanning.
+#: So the grouping is both easy to hold AND scene-coherent, and it costs one
+#: fewer pass than the version that was only the first of those. Grouping by
+#: what a reviewer can hold and grouping by what a camera sees turned out to
+#: agree once the semantic category was dropped as the organising idea.
 #:
-#: `clock` moved here from Handheld to Street. It is the most scattered class of
-#: the twenty-five -- 38% of its images hold nothing else, and its top partners
-#: are chair 17%, book 14%, car 13% -- so no group has a real claim on it.
-#: "Handheld" would have been actively harmful: a clock TOWER or a wall clock is
-#: not handheld, and a mnemonic that excludes them invites skipping them.
+#: `clock` is the one placement no data supports, because none can: it is the
+#: most scattered class of the twenty-five, with 38% of its images holding
+#: nothing else. Street is a choice, not a finding -- and better than Handheld,
+#: which would have invited skipping clock towers and wall clocks.
 #:
-#: `bench` sits in Furniture on the reviewer's reading, against the co-occurrence
-#: data, which puts it outdoors: 25% of bench images hold a car, 20% a backpack,
-#: 16% a bicycle, and only 6% a chair. The grouping is fine; the reminder it
-#: implies is not optional. SCAN OUTDOOR SCENES IN THE FURNITURE PASS -- most
-#: benches in this pool are in parks and streets, not rooms.
+#: What grouping buys beyond load: for a NEGATIVE pass the within-group boundary
+#: does not exist. Cup-or-bowl, fork-or-spoon and van-or-SUV stop being
+#: questions, because either answer makes the image not clean. The cost of a
+#: group that is hard to hold is a MISSED positive, and a missed positive biases
+#: the pool estimate DOWNWARD -- the one failure mode invisible in the result.
 GROUPS: dict[str, tuple[str, ...]] = {
-    "Table Objects": ("bowl", "cup", "bottle", "vase", "fork", "spoon", "sink", "knife"),
+    "Table Objects": (
+        "bowl",
+        "cup",
+        "bottle",
+        "vase",
+        "fork",
+        "spoon",
+        "sink",
+        "knife",
+        "chair",
+    ),
     "Handheld Objects": ("cell phone", "book", "umbrella", "backpack"),
-    "Furniture": ("chair", "bench"),
     "Vehicles": ("car", "truck", "bus", "bicycle"),
-    "Street Objects": ("fire hydrant", "stop sign", "clock"),
+    "Street Objects": ("fire hydrant", "stop sign", "clock", "bench"),
     "Outdoor Objects": ("bird", "kite", "boat", "dog"),
 }
 
