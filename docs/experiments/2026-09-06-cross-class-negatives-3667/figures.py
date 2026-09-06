@@ -159,6 +159,84 @@ def fig_prevalence(rebuilt: dict) -> None:
     plt.close(fig)
 
 
+def fig_shortcut(short: dict, diff: dict) -> None:
+    """The headline: how much of the old contrast was scene clutter?
+
+    Two probes, one difference. A text query has no shortcut available to it, so
+    what it loses on the added negatives is how much nearer they sit to the
+    class *semantically*. A trained head can learn a shortcut, so what IT loses
+    is that plus the shortcut. The gap between the two bars is the shortcut.
+    """
+    s_by = {r["cell"]: r for r in short["cells"]}
+    d_by = {r["cell"]: r for r in diff["cells"]}
+    both = [c for c in s_by if c in d_by]
+
+    fig, (ax1, ax0, ax2) = plt.subplots(1, 3, figsize=(15.5, 4.8), gridspec_kw={"width_ratios": [1, 1, 1.9]})
+
+    text_d = [d_by[c]["auc_added_only"] - d_by[c]["auc_old"] for c in both]
+    head_d = [s_by[c]["auc_added"] - s_by[c]["auc_old"] for c in both]
+    parts = ax1.violinplot([text_d, head_d], showmeans=True, widths=0.7)
+    for pc_, col in zip(parts["bodies"], ["#7f8fa6", "#c0392b"], strict=True):
+        pc_.set_facecolor(col)
+        pc_.set_alpha(0.55)
+    ax1.axhline(0, color="#444", lw=1)
+    ax1.set_xticks([1, 2])
+    ax1.set_xticklabels(
+        [
+            f"text query\n(cannot learn one)\n{diff['d_auc_added_mean']:+.3f} ± {diff['d_auc_added_se']:.3f}",
+            f"trained head\n(can)\n{short['d_auc_mean']:+.3f} ± {short['d_auc_se']:.3f}",
+        ],
+        fontsize=8,
+    )
+    ax1.set_ylabel("ΔAUC on the added negatives, vs the old pool")
+    ax1.grid(axis="y", alpha=0.25)
+    ax1.set_title(f"Paired over {len(both)} cells", fontsize=10)
+
+    # The shortcut runs along the band -- which is the axis this dataset exists
+    # to measure (#3156), so the bias was largest exactly where its own question
+    # is decided.
+    bands = ["small", "medium", "large"]
+    mean, err = [], []
+    for band in bands:
+        cs = [c for c in both if c.endswith("@" + band)]
+        v = [s_by[c]["ratio"] for c in cs]
+        mean.append(sum(v) / len(v))
+        err.append((sum((x - mean[-1]) ** 2 for x in v) / (len(v) - 1)) ** 0.5 / len(v) ** 0.5)
+    ax0.errorbar(range(3), mean, yerr=err, marker="o", color="#c0392b", capsize=4, lw=2)
+    ax0.axhline(1.0, color="#444", lw=1.2, ls="--")
+    ax0.set_xticks(range(3))
+    ax0.set_xticklabels([f"@{b}\n(n=12)" for b in bands], fontsize=8)
+    ax0.set_ylim(0.8, max(m + e for m, e in zip(mean, err, strict=True)) + 0.3)
+    ax0.set_ylabel("FPR ratio")
+    ax0.grid(axis="y", alpha=0.25)
+    ax0.set_title("...and it runs along the band", fontsize=10)
+
+    order = sorted(both, key=lambda c: -s_by[c]["ratio"])
+    ax2.bar(
+        range(len(order)),
+        [s_by[c]["ratio"] for c in order],
+        color=["#c0392b" if s_by[c]["ratio"] > 1 else "#2e8b57" for c in order],
+    )
+    ax2.axhline(1.0, color="#444", lw=1.2, ls="--")
+    ax2.set_xticks(range(len(order)))
+    ax2.set_xticklabels(order, rotation=75, ha="right", fontsize=6)
+    ax2.set_ylabel("false positives on the added negatives\n÷ on the old pool")
+    ax2.grid(axis="y", alpha=0.25)
+    ax2.set_title(
+        f"At a threshold pinned to 5% FPR on the old pool. Mean {short['ratio_mean']:.2f} ± {short['ratio_se']:.2f}",
+        fontsize=10,
+    )
+
+    fig.suptitle(
+        "The old benchmark scored a bus detector against nothing that held a book. "
+        "It counted about half the false positives it should have.",
+        fontsize=10,
+    )
+    fig.tight_layout()
+    fig.savefig(FIGS / "scene-clutter-shortcut.png", dpi=DPI)
+    plt.close(fig)
+
+
 def main() -> None:
     FIGS.mkdir(exist_ok=True)
     rebuilt = json.loads((MEAS / "rebuilt-siglip.json").read_text())
@@ -166,8 +244,11 @@ def main() -> None:
     fig_shortfall(rebuilt)
     fig_prevalence(rebuilt)
     diff_p = MEAS / "difficulty-siglip.json"
+    short_p = MEAS / "shortcut-siglip.json"
     if diff_p.exists():
         fig_difficulty(json.loads(diff_p.read_text()))
+    if diff_p.exists() and short_p.exists():
+        fig_shortcut(json.loads(short_p.read_text()), json.loads(diff_p.read_text()))
     print(f"wrote figures into {FIGS}")
 
 
