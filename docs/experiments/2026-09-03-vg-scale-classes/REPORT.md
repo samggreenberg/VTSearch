@@ -10,6 +10,13 @@ can: 13 slates, 13 datasets, 13 empty detectors and an
 and `vg_scale` is not rebuilt. What is added is the candidate list, the rules
 they would be reviewed under, and the tooling behind them.
 
+**Update, 2026-09-06.** The review ran. One reviewer produced **5,904
+judgements** over four days — 3,900 across the thirteen candidate slates and
+2,000 in a negative pass covering all twenty-five classes. All thirteen
+candidates clear the bar; the results and their cost are in
+[The review ran](#the-review-ran-5904-judgements) below, and six issues came out
+of it.
+
 ## Three results, in order of how much they change the plan
 
 ### 1. The issue's own proposal does not survive the gate the issue specifies
@@ -179,6 +186,144 @@ Vote Good (drag a box) / Bad, export with `server_json_file`, then
   spaces are disjoint; had they overlapped it would have produced a full,
   plausible, wrong slate for twelve of thirteen classes.
 
+## The review ran: 5,904 judgements
+
+### Verdict: all thirteen can join
+
+Every candidate was reviewed at 300 images — 30 pre-boxed COCO positives, 200
+top-ranked negatives, 70 uniform negatives — with about a fifth of each slate
+carrying an exhaustive COCO answer that scores the reviewer rather than
+correcting the data.
+
+| class | agreement | pool error | boundary | narrow / widen | reading |
+|---|---|---|---|---|---|
+| `fire hydrant` | 99% | 0.0% | 4.5% | 1 / 0 | cleanest measured |
+| `fork` | 99% | 1.4% | 5.0% | 1 / 0 | |
+| `spoon` | 99% | 0.0% | 5.5% | 1 / 0 | |
+| `bench` | 99% | 0.0% | 5.0% | 0 / 1 | |
+| `chair` | 96% | 2.9% | 12% | 3 / 0 | cars and saddles ruled out |
+| `cup` | 96% | 2.9% | 14% | 0 / 3 | stemware merged in |
+| `sink` | 96% | 0.0% | 11% | 2 / 1 | |
+| `cell phone` | 96% | 0.0% | 4.5% | 2 / 1 | |
+| `truck` | 93% | 2.9% | 20% | **5 / 0** | a pure narrowing |
+| `bowl` | 93% | 5.7% | 19% | 1 / 4 | plates and food containers merged in |
+| `car` | 93% | **7.1%** | **23%** | 2 / 3 | the contaminated one |
+| `vase` | 91% | 2.9% | 14% | 1 / 5 | pots and planters merged in |
+| `bottle` | **89%** | 1.4% | 21% | **0 / 8** | a pure widening |
+
+### Agreement is not the quality ranking, and reading it as one inverts the answer
+
+![agreement is not quality](figures/agreement-vs-pool-error.png)
+
+The two axes are close to independent, and the **narrow / widen** column says
+why. A disagreement where COCO said *present* and the reviewer said *absent* is
+us **narrowing** a class on purpose; the reverse is us **widening** it. Both
+lower agreement while doing exactly what was intended.
+
+`bottle` is last on agreement at 89%, and **all eight of its disagreements are
+us accepting something COCO did not call a bottle** — the jar, shaker and jug
+merge working. Its pool error is 1.4%: the class is clean. `car` scores better
+at 93% and is the one with a real problem, at **7.1% pool error** — roughly one
+in fourteen images we would have filed as a confirmed no-Car has one.
+
+> **Agreement measures how far we moved from COCO. Pool error measures whether
+> we are right. Only the second is a quality bar.**
+
+`truck` at 5 narrow / 0 widen is the cleanest signature in the table: every
+scored disagreement is us rejecting a COCO truck, exactly as the
+detached-trailer and plant-machinery rulings predict. A narrowing that shows up
+as a one-directional column is a narrowing that did what it said.
+
+### What the definitions became
+
+Four classes were deliberately widened and are no longer COCO's class of the
+same name:
+
+| class | now includes | cost |
+|---|---|---|
+| `cup` | mugs, glasses **and stemware** | a *union* of two COCO classes — reference derivable, free |
+| `bowl` | plates, pots, dog bowls, disposable and paper containers | union, free |
+| `bottle` | jars (120 boxes), shakers (21), jugs (28), squeeze tubes | union, free |
+| `vase` | pots and planters made as such | narrowing on the other side — a built-in sidewalk planter is out |
+
+Merging stemware into `cup` was initially refused as unavailable and that was
+wrong: `wine glass` is itself exhaustively annotated, so the reference for a
+union is derivable and the scored subset survives. **The merge doubled cup's
+discoveries** (13 → 27) while its positive rejections fell from 30% to 7%.
+
+The narrowings are priced honestly. Excluding towed things and plant machinery
+from `Truck` costs the 63 `trailer`, 35 `cart`, 24 `tractor`, 2 `forklift` and 2
+`crane` boxes COCO does call trucks — about 100 boxes, the same order as the
+vase narrowing.
+
+### The negative pass: the pool is 17% contaminated
+
+![the negative pass](figures/negative-pass.png)
+
+The thirteen slates each measured one class against its own negatives. The
+negative pass asked the question nobody had asked about the **pool**: an image
+sits in it because no VG name on it matches a class, and this study's whole
+finding is that a missing name is not an absent object.
+
+200 images from the corrected pool, all twenty-five classes, five to twelve
+scene-grouped passes:
+
+**33 of 200 hold at least one — 17%.** COCO predicted 13% on the 46% of the
+sample it can score. **The reviewer found 30% more contamination than COCO's
+half could see**, which is precisely the value of labelling the other half: a
+stop sign and three clocks turned up in the 54% nothing else can reach.
+
+Per class the rate is 0.5–2.5%, and that is the figure that bears on a
+single-class evaluation — 20 to 100 wrong negatives out of 3,900. The 17% is the
+rate for "holds any of the twenty-five", and it prices a different ambition: a
+pool provably clean of everything is 83% the size of the current one.
+
+**Two perfect passes.** `Vehicles` and `Outdoor Objects` each scored **100%**
+against COCO on 92 scored rows — zero misses, zero false alarms. Both were
+semantically tight four-class groups.
+
+### A miss rate against COCO overstates reviewer error
+
+`Bench` scored 96%, and all four disagreements ran one way. Their box sizes say
+most are not misses:
+
+| image | largest bench box | band |
+|---|---|---|
+| `2396098` | **99.61% of frame** | **OVERSIZE** |
+| `2388314` | 55% | large |
+| `2315792` | 39% | large |
+| `2382828` | 3.0% | medium |
+
+The first is excluded by our own rule — *a box covering >80% of the image is not
+a region, it is the image* — so it cannot be a miss against a benchmark that
+never bands it. Two more fill 39% and 55% of the frame, which nobody overlooks;
+the likely cause is the Bench definition, which rules a concrete seating ledge
+out where COCO appears to box one. Only the 3.0% box is a plausible ordinary
+miss.
+
+> **Report a miss rate with the box sizes attached, or a deliberate narrowing
+> reads as reviewer error.**
+
+### Errors worth naming
+
+- **A fold-out rate is not a positive-precision rate.** `glass` was admitted to
+  `cup` on 62% fold-out and it was the wrong statistic: fold-out is measured only
+  on the COCO-annotated half while positives are drawn from all of VG. Cup then
+  rejected 9 of 30 pre-boxed positives — 30%, against 0–17% everywhere else.
+  `glass` is now barred as ambiguous, and removing it from the alias tuple first
+  suppressed **zero** pairs, because a name that is never *read* is invisible to
+  `lift_ambiguous`.
+- **One polysemous word sinks sixteen good ones.** `vessel` folds in across
+  bowl, cup, vase and bottle and means something different in each.
+- **A boxing rule has to be split by stratum.** "Box the single biggest one" was
+  written without distinguishing pre-boxed positives from discoveries; 13
+  positives were redrawn across 4 classes and **6 changed band**, two of them
+  leaving `small` (#3616).
+- **Literal boundary cases the reviewer hit**, all now in the guide: a train
+  cow-catcher boxed as a fork; green-and-white *bike crossing* signs boxed as
+  Bike; a toddler's pink Cinderella toy phone; a paper hotdog tray, which is a
+  Bowl on the second reading; a jar of cut flowers, which stays a Bottle.
+
 ## Follow-ups
 
 - **#3603** — the easy end of the context axis needs a source where
@@ -188,3 +333,33 @@ Vote Good (drag a box) / Bad, export with `server_json_file`, then
 - **#3605** — `bicycle` is built from the VG name `bicycle` alone, but `bike`
   accounts for 638 of COCO's 3,683 bicycle boxes against `bicycle`'s 775. On
   the non-COCO half the current class is missing roughly half its positives.
+
+Raised by the review itself, in the order they were found:
+
+- **#3665** — deleting a detector out-of-process is silently undone when the
+  running app writes its cached registry back; a bulk delete through the API
+  loses a surviving entry the other way.
+- **#3666** — **pool error for the shipped twelve has never been measured.** The
+  negative pass now covers them, but their positives have had no review and
+  their definitions no guide. Adding thirteen reviewed classes to twelve
+  unreviewed ones would give the benchmark two tiers of label quality, and any
+  cross-class result would be confounded by which tier a class sits in.
+- **#3667** — **`vg_scale` never scores a class against images holding a
+  *different* class.** `evaluable_categories` is `cats if cats else …`, so an
+  image that is a positive for any class is scorable only in its own cells:
+  **41.9%** of the pile is dropped from every class's evaluation. Positives are
+  images containing a labelled object and negatives contain none of twelve
+  common classes, so a detector can score well by learning *"is this a scene
+  with stuff in it"*. About 1,850 hard negatives per class have an exact COCO
+  answer already — a 42–45% gain at no labelling cost.
+- **#3668** — a fully provable benchmark is not reachable at the current
+  designation: 20 of 36 shipped cells and 17 of 39 candidate cells fall short of
+  300 COCO-anchored positives (`dog@small` 114, `spoon@large` 106). The non-COCO
+  half stays, so its error rate is load-bearing — which is what made the
+  negative pass worth running.
+- **#3669** — slate import re-embeds images whose vectors are already in the
+  pile pickle, once per slate, at ~1.2 s/image on whatever device the caller
+  happens to have.
+- **#3670** — **1% prevalence is available.** 18,986 images outside the pile
+  are COCO-confirmed to hold none of the twenty-five; matching the positives'
+  57/43 COCO split needs 5,700 new images embedded and no human labelling.
