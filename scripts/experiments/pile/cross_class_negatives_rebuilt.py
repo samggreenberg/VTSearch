@@ -226,7 +226,30 @@ def main() -> int:
         f"  built on        {fb.get('device', {}).get('hostname')} ({fb.get('device', {}).get('gpu_name')})"
         f" -> {fa.get('device', {}).get('hostname')} ({fa.get('device', {}).get('gpu_name')})"
     )
-    if not same_vec:
+    # The sha is over the WHOLE cell, so it moves when the membership moves --
+    # and a rebuild runs against `dev`, which carries every `pile_config` ruling
+    # merged since the cell was built, not only the one being tested. The
+    # question that separates "the pile changed" from "the machine changed" is
+    # whether the images present in BOTH cells got the same vectors, which is
+    # what #3160's ATEN_CPU_CAPABILITY pin is supposed to guarantee.
+    import numpy as np  # noqa: PLC0415
+
+    def vec(d: dict) -> "np.ndarray":
+        emb = d.get("embeddings") or {}
+        return np.asarray(next(iter(emb.values())), dtype=np.float64)
+
+    worst, n_cmp = 0.0, 0
+    for i in shared:
+        a, b = vec(before[i]), vec(after[i])
+        if a.shape == b.shape:
+            worst = max(worst, float(np.abs(a - b).max()))
+            n_cmp += 1
+    print(f"  shared vectors  max |Δ| = {worst:.3g} over {n_cmp} images present in both")
+    if worst > 1e-6:
+        failures.append(f"vectors of shared images differ by up to {worst:.3g}; the rebuild is not reproducible")
+    if not same_vec and worst <= 1e-6:
+        print("                  (the whole-cell sha moved with the membership, not with the arithmetic)")
+    elif not same_vec:
         failures.append("vectors changed: this is not a relabel")
 
     n_ev = sum(
