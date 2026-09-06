@@ -159,6 +159,11 @@ def check_invariants(medias: dict, cells: list[str]) -> list[str]:
     return bad
 
 
+def n_pos_img_exh(medias: dict) -> int:
+    """Positives whose labels rest on COCO -- the only ones the rule can touch."""
+    return sum(1 for d in medias.values() if d.get("categories") and d.get("labels_exhaustive"))
+
+
 def fingerprint(path: Path) -> dict:
     side = path.with_suffix("").with_suffix(".provenance.json")
     if not side.exists():
@@ -283,6 +288,38 @@ def main() -> int:
     print(f"\nmean evaluable per cell: {mean_before:.0f} -> {mean_after:.0f} (priced {mean_priced:.0f})")
     print(f"mean gain: {mean_gain:.1f}%  (priced {100 * (mean_priced - mean_before) / mean_before:.1f}%)")
     print(f"prevalence: {prev_b:.2f}% -> {prev_a:.2f}%")
+
+    # --- the shortfall, named ------------------------------------------------
+    # The price and the rebuild disagree per IMAGE, and the disagreement has a
+    # single cause: an image can HOLD a class without being DESIGNATED a
+    # positive for it (its box fell outside every band, the cell was already
+    # full, or the spelling was withheld as ambiguous). The price read
+    # `categories` and saw "does not hold"; the rebuild read the labels and saw
+    # "holds, undesignated". Print the images, not just the rate.
+    print("\n=== images the price counted as negatives and the rebuild refused ===")
+    by_class: dict[str, set[str]] = defaultdict(set)
+    for cell in cells:
+        by_class[klass(cell)].add(cell)
+    withheld: Counter = Counter()
+    examples = []
+    for iid, d in after.items():
+        cats = list(d.get("categories") or [])
+        if not cats or not d.get("labels_exhaustive"):
+            continue
+        mine = {klass(c) for c in cats}
+        got = set(d.get("evaluable_categories") or [])
+        refused = sorted(c for c in by_class if c not in mine and not (by_class[c] & got))
+        if refused:
+            withheld[len(refused)] += 1
+            if len(examples) < 8:
+                examples.append((iid, cats, refused))
+    for iid, cats, refused in examples:
+        print(f"  {iid}: designated {cats} -- also holds {refused}, so it is not their negative")
+    n_aff = sum(withheld.values())
+    print(
+        f"  {n_aff} of {n_pos_img_exh(after)} COCO-exhaustive positives hold at least one "
+        f"undesignated class ({100 * n_aff / max(1, n_pos_img_exh(after)):.1f}%)"
+    )
 
     n_exh = sum(1 for d in after.values() if d.get("labels_exhaustive"))
     n_pos_img = sum(1 for d in after.values() if d.get("categories"))
