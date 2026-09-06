@@ -89,9 +89,13 @@ tested it **in union** (14% ± 7 measured against 12.7% predicted). This tests i
 Class by class the intervals are far too wide to rank anything — at 100 draws a
 1% rate and a 3% rate are two photographs apart — so the pooled agreement is the
 result, and the per-class column is an existence proof rather than a ranking.
-`backpack`, the class #3660 singles out as the worst at 2.87% predicted, comes
-back at 2.0% as read and 1–2 admissible: real, and not the outlier the
-prediction made it.
+`backpack`, the class #3660 singles out as the worst, comes back at 2.0% as read
+and 1–2 admissible: real, and not the outlier the prediction made it. (Its
+prediction is quoted here as **2.87%**, the *per-class* exclusion rule, because
+that is the counterfactual for one class's own pool. #3660's table prints
+**2.77%**, the global rule, beside an expected-false-negative column computed
+from the per-class one — the two rates differ for `backpack` alone, and only in
+the second digit.)
 
 ## 3. The two tiers #3666 worried about are not separable
 
