@@ -75,3 +75,51 @@ def test_never_evaluable_in_a_cell_of_a_class_it_holds(held):
         if c == "bus":
             continue
         assert not (out & {pc.scale_cell(c, b) for b in pc.BOX_BANDS})
+
+
+#: `vg_scale_deep` keys its cells on the bare class (its loader sets
+#: `cells = list(pc.SCALE_CLASSES)`), and shares `_emit_medias` with `vg_scale`.
+#: Every test above uses the banded keying only, which is how the first cut of
+#: #3667 shipped a rule that spelled `class@band` inline.
+DEEP_CELLS: list[str] = list(pc.SCALE_CLASSES)
+
+
+class TestTheCellKeyingIsReadRatherThanSpelled:
+    """One rule, two datasets that name their cells differently."""
+
+    @pytest.mark.parametrize("cells", [CELLS, DEEP_CELLS], ids=["banded", "bare"])
+    def test_no_name_outside_the_caller_s_own_cells_is_ever_emitted(self, cells):
+        out = _evaluable(1, [cells[0]], cells, set(), {1: {"bus": BOX}}, {1})
+        assert not set(out) - set(cells), "a cell of some other dataset's keying"
+
+    def test_a_bare_cell_list_gets_bare_cross_class_negatives(self):
+        out = _evaluable(1, ["bus"], DEEP_CELLS, set(), {1: {"bus": BOX}}, {1})
+        assert "book" in out, "#3667 must reach the deep sibling too"
+        assert not [c for c in out if "@" in c]
+
+    def test_the_deep_keying_still_honours_the_class_it_holds(self):
+        """The #3156 guarantee, stated in the spelling `vg_scale_deep` uses.
+
+        Band-suffixed junk is inert on a dataset with no such cells, which is
+        exactly why it survived: `bus@small` on a bare-keyed pickle matches
+        nothing, so the guarantee was written backwards and nothing failed.
+        """
+        out = _evaluable(1, ["bus"], DEEP_CELLS, set(), {1: {"bus": BOX, "book": BOX}}, {1})
+        assert "book" not in out
+        assert [c for c in out if c.startswith("bus")] == ["bus"]
+
+
+def test_emit_medias_will_not_accept_an_absent_label_read():
+    """`labels` must have no default: absent is not the same as "holds nothing".
+
+    An optional `labels` reads a missing argument as an empty world, and an
+    empty world makes the cross-class rule fire for *every* class -- the image's
+    own included. `vg_scale_deep` called it that way for one commit. A missing
+    measurement must not be spellable as a measurement of zero (#3299).
+    """
+    import inspect
+
+    from pilebuild.loaders.vg_scale import _emit_medias
+
+    param = inspect.signature(_emit_medias).parameters["labels"]
+    assert param.default is inspect.Parameter.empty

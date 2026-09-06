@@ -458,6 +458,20 @@ def draw_negatives(clean: list[int], roster: dict) -> tuple[list[int], list[int]
     return drawn[: pc.SCALE_N_NEG], drawn[pc.SCALE_N_NEG :]
 
 
+def _cells_by_class(cells: list[str]) -> dict[str, set[str]]:
+    """``{class: {cell, ...}}`` for a cell list, whatever its keying.
+
+    ``vg_scale`` cells are ``class@band`` and ``vg_scale_deep`` cells are the
+    bare class, so the split is on the suffix separator :func:`pile_config.scale_cell`
+    writes. A class name never contains it -- `stop sign` has a space, not an
+    `@` -- so the head of the split is the class in both spellings.
+    """
+    out: dict[str, set[str]] = defaultdict(set)
+    for cell in cells:
+        out[cell.split("@", 1)[0]].add(cell)
+    return dict(out)
+
+
 def _evaluable(
     iid: int,
     cats: list[str],
@@ -484,15 +498,25 @@ def _evaluable(
     wrong 0.5-2.5% of the time, and importing that into the negatives is a
     separate decision -- ``SCALE_CROSS_CLASS_NEGATIVES`` turns the whole thing
     off rather than pretending the two halves are alike.
+
+    **The cells a class owns are read off ``cells``, never spelled.** This
+    function serves two datasets that name their cells differently --
+    ``vg_scale`` keys on ``class@band`` and ``vg_scale_deep`` on the bare class
+    -- and the first cut of #3667 spelled ``scale_cell(c, band)`` inline. On the
+    deep sibling that wrote 36 band-suffixed names that are not cells of that
+    dataset into every COCO-exhaustive positive, including the image's **own**
+    class at other bands: inert, because nothing matches them, but it is the
+    #3156 guarantee stated backwards in a shipped pickle. Deriving the map from
+    the caller's own cell list is what makes the rule dataset-agnostic.
     """
     if not cats:
         return list(cells) if iid in neg_set else []
     out = set(cats)
     if pc.SCALE_CROSS_CLASS_NEGATIVES and iid in exhaustive:
         held = set(labels.get(iid, {}))
-        for c in pc.SCALE_CLASSES:
+        for c, owned in _cells_by_class(cells).items():
             if c not in held:
-                out |= {pc.scale_cell(c, band) for band in pc.BOX_BANDS}
+                out |= owned
     return sorted(out)
 
 
@@ -507,9 +531,17 @@ def _emit_medias(
     exhaustive: set[int],
     cells: list[str],
     embedder_name: str,
-    labels: dict[int, dict[str, list[list[float]]]] | None = None,
+    labels: dict[int, dict[str, list[list[float]]]],
 ) -> None:
-    """Read the pixels and write one media dict per designated image."""
+    """Read the pixels and write one media dict per designated image.
+
+    ``labels`` is REQUIRED, and was an optional ``None`` for exactly one commit.
+    An absent label read is not an image that holds nothing -- it is no answer
+    at all -- and the two were spellable as the same value, which is how the
+    deep sibling silently got #3667's rule with an empty world (:func:`_evaluable`).
+    A missing measurement must not be expressible as a measurement of zero; the
+    ``vg_box_*`` picker lost a day to the same shape (#3299).
+    """
     from PIL import Image  # noqa: PLC0415
 
     # media id -> the cells it is a positive for. Negatives get every cell.
@@ -556,7 +588,7 @@ def _emit_medias(
             # A designated cell membership, not a closed world: a positive is
             # scorable only in the cells it was drawn for, and the shared
             # negatives are scorable everywhere.
-            "evaluable_categories": _evaluable(iid, cats, cells, neg_set, labels or {}, exhaustive),
+            "evaluable_categories": _evaluable(iid, cats, cells, neg_set, labels, exhaustive),
             # Whether this image's labels rest on an exhaustive reference (COCO,
             # or a human who looked). False means VG's silence is the only
             # evidence of absence -- which is what the review slates target.

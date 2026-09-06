@@ -209,7 +209,15 @@ def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
             "the deep cell would not be comparable to the shallow one"
         )
 
-    _emit_medias(medias, paths, chosen, negatives, spares, boxes_for, box_dims, exhaustive, cells, embedder_name)
+    # `labels` is not optional here, whatever the signature's default says: it
+    # is how #3667 knows which classes an image HOLDS, and omitting it reads as
+    # "holds nothing", which turns the cross-class rule into "scorable
+    # everywhere" -- including the image's own class. This call passed it for
+    # the first time in #3667's rebuild; before that the deep cell got the
+    # exclusion semantics of a dataset with no labels at all.
+    _emit_medias(
+        medias, paths, chosen, negatives, spares, boxes_for, box_dims, exhaustive, cells, embedder_name, labels
+    )
     for d in medias.values():
         d["origin"] = {
             "importer": "vg_scale_deep",
