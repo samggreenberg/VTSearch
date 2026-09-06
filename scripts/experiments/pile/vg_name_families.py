@@ -42,47 +42,17 @@ pc.setup_env()
 
 VG_ROOT = pc.DEMO_CACHE / "visual_genome"
 
-#: Trailing characters VG annotators leave on a name (`umbrella.`, `"clock"`).
-PUNCT = ".,;:!?'\"()[]"
-
 
 def log(msg: str) -> None:
     print(f"[families] {msg}", flush=True)
 
 
-def head(name: str) -> str:
-    """The final token of *name*, stripped of punctuation and a possessive.
-
-    `umbrella's` and `umbrella.` are the same word as `umbrella` with an
-    annotator's typing on the end, and there is no sense in which they denote
-    something else.
-    """
-    tokens = name.replace("-", " ").split()
-    if not tokens:
-        return ""
-    tok = tokens[-1].strip(PUNCT)
-    return tok[:-2] if tok.endswith("'s") else tok
-
-
-def singulars(token: str) -> set[str]:
-    """Candidate singular forms of *token*, over-generating on purpose.
-
-    Over-generation is safe here because the result is only ever used to *test*
-    membership against one known class name -- `buses` proposing both `bus` and
-    `buse` costs nothing, and missing `bus` would cost a whole spelling.
-    """
-    out = {token}
-    if token.endswith("ies"):
-        out.add(token[:-3] + "y")
-    if token.endswith("ves"):
-        out.update({token[:-3] + "fe", token[:-3] + "f"})
-    if token.endswith("ses"):  # busses -> bus
-        out.add(token[:-3])
-    if token.endswith("es"):
-        out.add(token[:-2])
-    if token.endswith("s"):
-        out.add(token[:-1])
-    return out
+#: The head noun and its plurals are :mod:`pile_config`'s, not this module's.
+#: `name_evidence.py --pooled` matches a construction against the same head, and
+#: two implementations of "what is this name's head noun" would drift silently.
+head = pc.name_head
+singulars = pc.name_singulars
+PUNCT = pc.NAME_PUNCT
 
 
 def main() -> int:

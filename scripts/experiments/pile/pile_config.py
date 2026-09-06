@@ -387,15 +387,40 @@ SCALE_VG_NAMES: dict[str, tuple[str, ...]] = {
     # COCO has no magazine class and annotates magazines as `book`, which is the
     # reading this dataset already took -- see SCALE_CLASS_RULES["book"].
     "book": ("magazine",),
-    "bus": ("buses", "school bus"),
+    # The subtype family pools to 83% over 18 sole images and 82% over 74 boxes,
+    # which carries the four route/deck spellings no one of which reached the
+    # five-image floor on its own (#3636).
+    "bus": ("buses", "city bus", "double-decker bus", "passenger bus", "school bus", "tour bus"),
     # The face is the clock: 89% of `clock face` boxes land on COCO's clock box,
-    # over 184 of them -- the best-supported fold in the study.
-    "clock": ("clock face", "clocks"),
-    "dog": ("black dog", "brown dog", "dogs", "puppy"),
+    # over 184 of them -- the best-supported fold in the study. `clockface` is
+    # the same word without the space, and pooled with it scores 89% over 19
+    # sole images and 89% over 194 boxes (#3636).
+    "clock": ("clock face", "clockface", "clocks"),
+    # `dalmation` (VG's spelling) and `lab` come from the breed group, `white dog`
+    # from the colour one: 74% and 91% pooled, both folding on box agreement (#3636).
+    "dog": ("black dog", "brown dog", "dalmation", "dogs", "lab", "puppy", "white dog"),
     # COCO's `kite` covers parasails and parachutes, and VG names them so.
-    "kite": ("kites", "parachute", "parasail"),
+    # `para sail` is `parasail` with a space; the pair scores 83% over 24 sole
+    # images and 84% over 74 boxes (#3636).
+    "kite": ("kites", "para sail", "parachute", "parasail"),
     "knife": ("butter knife",),
-    "umbrella": ("blue umbrella", "parasol", "red umbrella"),
+    # Two groups, both folding (#3636). The colour family -- eight spellings, one
+    # hypothesis -- pools to 97% over 35 sole images and 80% over 122 boxes, so
+    # the four nobody could measure alone join the two that could. The subtype
+    # family (`beach`, `patio`, `closed`, `open`) pools to 88% and 69%.
+    "umbrella": (
+        "beach umbrella",
+        "blue umbrella",
+        "closed umbrella",
+        "green umbrella",
+        "open umbrella",
+        "orange umbrella",
+        "parasol",
+        "patio umbrella",
+        "red umbrella",
+        "white umbrella",
+        "yellow umbrella",
+    ),
 }
 
 #: What :func:`pilebuild.loaders.vg_scale.canonicalise` does when an alias box
@@ -454,10 +479,28 @@ SCALE_FOLD_MODE = os.environ.get("VTS_SCALE_FOLD_MODE", "fold")
 SCALE_VG_AMBIGUOUS: dict[str, tuple[str, ...]] = {
     "backpack": ("black backpack", "black bag", "bookbag", "duffle bag"),
     "bicycle": ("bicyclist", "bike", "bike tire", "bikes", "tricycle"),
-    "bird": ("beak", "birds", "dove", "ducks", "feather", "feathers", "geese", "peacock", "seagulls"),
+    # `black bird` / `white bird` pool to 100% over 6 sole images but only 15
+    # boxes -- above the precision cut, below the box floor, which is the safe
+    # side. `pigeons` inherits from `pigeon`, not from the species family:
+    # a plural is a collective whatever its singular does (#3636).
+    "bird": (
+        "beak",
+        "birds",
+        "black bird",
+        "dove",
+        "ducks",
+        "feather",
+        "feathers",
+        "geese",
+        "peacock",
+        "pigeons",
+        "seagulls",
+        "white bird",
+    ),
     "boat": ("barge", "bouy", "sail boat", "sailboat"),
     "book": (
         "binder",
+        "black book",
         "book case",
         "book shelf",
         "bookcase",
@@ -469,9 +512,14 @@ SCALE_VG_AMBIGUOUS: dict[str, tuple[str, ...]] = {
         "library",
         "magazines",
         "notebook",
+        "white book",
     ),
-    "bus": ("blue bus",),
-    "clock": ("alarm clock", "numeral", "roman numerals"),
+    # `busses` is VG's other plural of `bus`. `buses` folds on its own measured
+    # box agreement; `busses` has none of its own, and a plural with no
+    # measurement behind it is a collective until shown otherwise (#3636).
+    "bus": ("blue bus", "busses"),
+    # `numerals` and `clock faces` each inherit from their own singular (#3636).
+    "clock": ("alarm clock", "clock faces", "numeral", "numerals", "roman numerals"),
     "dog": ("bulldog", "poodle"),
     "knife": ("butterknife", "knife block", "knives", "silverware"),
     # `sign` is the largest fold-in column anywhere in C -- 473 of COCO's 1,016
@@ -482,6 +530,484 @@ SCALE_VG_AMBIGUOUS: dict[str, tuple[str, ...]] = {
     "stop sign": ("octagon", "stop"),
     "umbrella": ("an umbrella", "black umbrella", "pink umbrella", "umbrellas"),
 }
+
+
+#: How a name is written, once, so ``vg_name_families.py`` and the grouping
+#: below cannot drift apart on what a name's head noun is.
+#:
+#: Trailing characters VG annotators leave on a name (`umbrella.`, `"clock"`).
+NAME_PUNCT = ".,;:!?'\"()[]"
+
+
+def name_head(name: str) -> str:
+    """The final token of *name*, stripped of punctuation and a possessive.
+
+    `umbrella's` and `umbrella.` are the same word as `umbrella` with an
+    annotator's typing on the end, and there is no sense in which they denote
+    something else.
+    """
+    tokens = name.replace("-", " ").split()
+    if not tokens:
+        return ""
+    tok = tokens[-1].strip(NAME_PUNCT)
+    return tok[:-2] if tok.endswith("'s") else tok
+
+
+def name_singulars(token: str) -> set[str]:
+    """Candidate singular forms of *token*, over-generating on purpose.
+
+    Over-generation is safe here because the result is only ever used to *test*
+    membership against one known class name -- `buses` proposing both `bus` and
+    `buse` costs nothing, and missing `bus` would cost a whole spelling.
+    """
+    out = {token}
+    if token.endswith("ies"):
+        out.add(token[:-3] + "y")
+    if token.endswith("ves"):
+        out.update({token[:-3] + "fe", token[:-3] + "f"})
+    if token.endswith("ses"):  # busses -> bus
+        out.add(token[:-3])
+    if token.endswith("es"):
+        out.add(token[:-2])
+    if token.endswith("s"):
+        out.add(token[:-1])
+    return out
+
+
+def name_skeleton(name: str) -> str:
+    """*name* with whitespace, hyphens and annotator punctuation removed.
+
+    Two names with one skeleton are one word typed two ways -- `back pack` /
+    `backpack`, `clock face` / `clockface`, `row boat` / `rowboat`. This is what
+    the ``spelling`` construction groups on, and it is an equivalence relation
+    rather than a lexicon, so it needs no vocabulary to maintain.
+    """
+    return "".join(ch for ch in name.lower() if ch.isalnum())
+
+
+class Construction(NamedTuple):
+    """A productive way of writing a name that does not change what it denotes.
+
+    ``modifiers`` is the vocabulary that may stand in front of the class's head
+    noun. It is a **declared list, not a regex**: which words leave a denotation
+    alone is exactly the judgement #3636 is about, so it is written down here
+    beside the tables it fills rather than inferred at run time.
+
+    ``foldable`` is whether a member may reach :data:`SCALE_VG_NAMES` at all. A
+    ``count`` compound never can, however well it scores: `two birds` names a
+    *set* of that many, and a band is a claim about one object's size -- the
+    same reason `books` and `umbrellas` sit in the ambiguous table (#3618).
+    """
+
+    key: str
+    modifiers: frozenset[str]
+    foldable: bool
+    why: str
+
+
+#: The constructions ``name_evidence.py --pooled`` adjudicates as one hypothesis.
+#:
+#: #3618 scored every candidate name alone, against a floor of five images where
+#: the name is the class's only evidence, and **76 of 626 fell below it** --
+#: recorded `unmeasured`, neither acted on nor refuted. They are not noise: they
+#: carry 312 non-COCO images between them.
+#:
+#: Most are not independent hypotheses. `blue umbrella`, `red umbrella`,
+#: `green umbrella`, `orange umbrella` and `yellow umbrella` are one hypothesis
+#: five times over -- *a colour word in front of the class name does not change
+#: what the name denotes* -- and that hypothesis is testable at the sample size
+#: of the whole family rather than one colour at a time.
+#:
+#: A name joins a construction for class *c* when its head noun is *c*'s head
+#: noun (a plural allowed) and every remaining token is in the vocabulary. So
+#: `black clock` is a `clock` colour compound and `black face` is not, which is
+#: the distinction that keeps the group measuring one thing.
+SCALE_VG_CONSTRUCTIONS: tuple[Construction, ...] = (
+    Construction(
+        key="colour",
+        modifiers=frozenset(
+            {
+                "beige",
+                "black",
+                "blue",
+                "brown",
+                "colorful",
+                "colourful",
+                "dark",
+                "gold",
+                "golden",
+                "gray",
+                "green",
+                "grey",
+                "multicolored",
+                "orange",
+                "pink",
+                "purple",
+                "red",
+                "silver",
+                "tan",
+                "white",
+                "yellow",
+            }
+        ),
+        foldable=True,
+        why="a colour word does not change what the name denotes",
+    ),
+    Construction(
+        key="size",
+        modifiers=frozenset({"big", "giant", "huge", "large", "little", "long", "small", "tall", "tiny"}),
+        foldable=True,
+        why="a size word does not change what the name denotes; the band is read off the box, not the word",
+    ),
+    Construction(
+        key="typing",
+        modifiers=frozenset({"a", "an", "the"}),
+        foldable=True,
+        why="a determiner is the annotator typing, not a distinction",
+    ),
+    Construction(
+        key="count",
+        modifiers=frozenset(
+            {"two", "three", "four", "five", "six", "several", "many", "some", "multiple", "group", "bunch", "pair"}
+        ),
+        foldable=False,
+        why="a numeral names a SET of that many: the box is a pile, so a member can be evidence but never a band",
+    ),
+    #: Not a lexicon -- membership is the equivalence class under
+    #: :func:`name_skeleton`, so `back pack`/`backpack` and `clock face`/`clockface`
+    #: group with no vocabulary to keep current.
+    Construction(
+        key="spelling",
+        modifiers=frozenset(),
+        foldable=True,
+        why="one word typed two ways: same letters, different whitespace",
+    ),
+    #: Also not a lexicon: one group per singular form, so `pigeon`/`pigeons`
+    #: is a hypothesis and `pigeons`/`ducks` is not. That is the pairwise
+    #: question worth asking -- *does this plural denote what its own singular
+    #: denotes* -- and for `pigeons` it is far better evidence than the species
+    #: group, which knows only that a pigeon is a bird.
+    #:
+    #: **Never foldable**, and that is the shipped rule rather than caution:
+    #: `books`, `birds`, `umbrellas`, `knives`, `ducks`, `geese` and `seagulls`
+    #: are all in :data:`SCALE_VG_AMBIGUOUS` because the box is a pile. The
+    #: plurals #3618 *did* fold (`boats`, `clocks`, `dogs`, `kites`) each earned
+    #: it on their own measured box agreement, which an individual measurement
+    #: still delivers -- inheritance is for names that have none, and a plural
+    #: with no measurement of its own is a collective until shown otherwise.
+    #: `buses` keeps the alias it earned; `busses` inherits withheld.
+    Construction(
+        key="plural",
+        modifiers=frozenset(),
+        foldable=False,
+        why="a plural names a SET: the box is a pile, so a member can be evidence but never a band",
+    ),
+)
+
+
+class NameGroup(NamedTuple):
+    """A set of names a human asserts denote the same kind of thing.
+
+    Where a :class:`Construction` is productive -- a vocabulary that applies to
+    every class -- a group is a judgement about *this* class's vocabulary, and
+    the judgement is the ``criterion``. That string is load-bearing, not a
+    comment: it is what makes membership auditable, and it is the only defence
+    against fitting the group to the answer. **Every candidate name meeting the
+    criterion is listed, including the ones known to score badly** -- `crane`
+    (the machine) is in `bird`/`species` and `jet ski` is in `boat`/`vessel`,
+    because a group whose losers were quietly left out is not a measurement.
+
+    ``foldable=False`` marks a group whose members may be evidence the class is
+    present but can never carry a band, exactly as for a construction.
+    """
+
+    key: str
+    criterion: str
+    names: tuple[str, ...]
+    foldable: bool = True
+
+
+#: Hand-declared groups, per class, each with the criterion that defines it.
+#:
+#: These reach what a construction cannot. #3618's residue is mostly *hyponyms*
+#: -- `yacht`, `ferry`, `flamingo`, `grandfather clock` -- and no modifier
+#: vocabulary groups those, because the whole name is different. What groups
+#: them is a person saying "these all name a kind of watercraft", which is a
+#: hypothesis with a sample size like any other.
+#:
+#: This is **not** the head-noun fold #3618 refuted. That was mechanical: every
+#: name sharing a head noun, which puts `hot dog` (405 images, 0 of 181) in with
+#: `puppy`. Three things separate a group from it: the criterion is stated and
+#: excludes `hot dog` on meaning rather than on its score; the group is
+#: adjudicated before anything is inherited; and a member measurable on its own
+#: keeps its own verdict either way (``name_evidence.py``).
+SCALE_VG_GROUPS: dict[str, tuple[NameGroup, ...]] = {
+    "bicycle": (
+        NameGroup(
+            key="part",
+            criterion="a VG name for a part of a bicycle",
+            names=(
+                "bars",
+                "bicycle tire",
+                "bike tire",
+                "frame",
+                "front wheel",
+                "rack",
+                "tire",
+                "tires",
+                "wheel",
+                "wheels",
+            ),
+        ),
+    ),
+    "bird": (
+        NameGroup(
+            key="species",
+            criterion="a VG name denoting a species or kind of bird",
+            names=(
+                "chicken",
+                "chickens",
+                "crane",
+                "dove",
+                "duck",
+                "ducks",
+                "eagle",
+                "flamingo",
+                "geese",
+                "goose",
+                "hen",
+                "ostrich",
+                "owl",
+                "parrot",
+                "peacock",
+                "pelican",
+                "penguin",
+                "pigeon",
+                "pigeons",
+                "rooster",
+                "seagull",
+                "seagulls",
+                "swan",
+                "turkey",
+            ),
+        ),
+    ),
+    "boat": (
+        NameGroup(
+            key="vessel",
+            criterion="a VG name denoting a kind of watercraft",
+            names=(
+                "barge",
+                "boats",
+                "canoe",
+                "cruise ship",
+                "ferry",
+                "jet ski",
+                "kayak",
+                "motorboat",
+                "raft",
+                "row boat",
+                "rowboat",
+                "sail boat",
+                "sailboat",
+                "sailboats",
+                "ship",
+                "vessel",
+                "yacht",
+            ),
+        ),
+        NameGroup(
+            key="mooring",
+            criterion="a VG name for a place where vessels are moored (not open water or a shoreline)",
+            names=("dock", "harbor", "marina"),
+        ),
+        NameGroup(
+            key="part",
+            criterion="a VG name for a part of a vessel",
+            names=("bow", "cabin", "hull", "mast", "oar", "sail", "sails"),
+        ),
+    ),
+    "book": (
+        NameGroup(
+            key="part",
+            criterion="a VG name for a part of a book",
+            names=("binding", "book cover", "cover", "page", "pages", "spine", "title"),
+        ),
+    ),
+    "bus": (
+        NameGroup(
+            key="subtype",
+            criterion="a VG name for a kind of bus, by its route or its deck",
+            names=("city bus", "double decker", "double-decker bus", "passenger bus", "school bus", "tour bus"),
+        ),
+        NameGroup(
+            key="part",
+            criterion="a VG name for a part of a bus specifically (not a part any vehicle has)",
+            names=("bus front", "top level", "upper level"),
+        ),
+    ),
+    "clock": (
+        NameGroup(
+            key="subtype",
+            criterion="a VG name for a kind of clock, by its mechanism or its mounting",
+            names=("alarm clock", "digital clock", "grandfather clock"),
+        ),
+        NameGroup(
+            key="dial",
+            criterion="a VG name for a clock's dial taken as a whole (not a marking on it)",
+            names=("clock face", "clock faces", "clockface", "dial", "dials"),
+        ),
+        NameGroup(
+            key="marking",
+            criterion="a VG name for a marking on a clock face",
+            names=("black numbers", "numeral", "numerals", "roman numerals"),
+        ),
+        NameGroup(
+            key="part",
+            criterion="a VG name for a part of a clock other than its dial or its markings",
+            names=("clock frame", "hands"),
+        ),
+    ),
+    "dog": (
+        NameGroup(
+            key="breed",
+            criterion="a VG name for a dog breed or life stage",
+            names=("bulldog", "dalmation", "lab", "poodle", "puppy"),
+        ),
+        NameGroup(
+            key="part",
+            criterion="a VG name for a part of a dog",
+            names=("dog's head", "fur"),
+        ),
+    ),
+    "kite": (
+        NameGroup(
+            key="part",
+            criterion="a VG name for a part of a kite",
+            names=("kite tail", "long tail", "string", "strings", "tail", "tails"),
+        ),
+    ),
+    "knife": (
+        NameGroup(
+            key="subtype",
+            criterion="a VG name for a kind of knife, by what it cuts",
+            names=("butter knife", "butterknife", "cake server", "cutter"),
+        ),
+        NameGroup(
+            key="part",
+            criterion="a VG name for a part of a knife",
+            names=("blade", "handle", "handles", "knife blade", "tip"),
+        ),
+    ),
+    "stop sign": (
+        NameGroup(
+            key="sign-type",
+            criterion="a VG name for a kind of road or street sign, by what it says",
+            names=(
+                "arrow sign",
+                "construction sign",
+                "direction sign",
+                "dollar sign",
+                "electric sign",
+                "handicapped sign",
+                "no parking sign",
+                "number sign",
+                "one way sign",
+                "street sign",
+            ),
+        ),
+    ),
+    "umbrella": (
+        NameGroup(
+            key="subtype",
+            criterion="a VG name for a kind of umbrella, by its use or its state",
+            names=("beach umbrella", "closed umbrella", "open umbrella", "parasol", "patio umbrella"),
+        ),
+    ),
+}
+
+
+def scale_vg_groups_for(cls: str, candidates: list[str]) -> dict[str, list[str]]:
+    """Which pooled groups *cls*'s *candidates* fall into, keyed by group.
+
+    Constructions are matched here rather than in the caller so that the
+    vocabularies above are the only place the rule is written. A name may belong
+    to at most one construction (the first that accepts it) and to any declared
+    group, so `parasol` is both `umbrella`/`subtype` and -- were it spelled two
+    ways -- a ``spelling`` member.
+    """
+    head_wanted = name_head(cls)
+    skeletons: dict[str, list[str]] = {}
+    for n in candidates:
+        skeletons.setdefault(name_skeleton(n), []).append(n)
+
+    out: dict[str, list[str]] = {}
+    for con in SCALE_VG_CONSTRUCTIONS:
+        if con.key == "spelling":
+            continue
+        members = []
+        for n in candidates:
+            tokens = n.replace("-", " ").split()
+            if len(tokens) < 2 or head_wanted not in name_singulars(name_head(n)):
+                continue
+            if all(t.strip(NAME_PUNCT) in con.modifiers for t in tokens[:-1]):
+                members.append(n)
+        if members:
+            out[con.key] = sorted(members)
+
+    # `spelling` is ONE GROUP PER SKELETON, not one per class. The hypothesis is
+    # "`clockface` denotes what `clock face` denotes", and it is pairwise: pooling
+    # every respelt name in a class would ask instead whether bookcase-ish images
+    # are book images, which is a different question with a different answer. A
+    # skeleton shared with the class name alone is dropped -- there is no second
+    # rate to pool with, since the class name is never its own sole evidence.
+    for skel, ns in sorted(skeletons.items()):
+        if len(ns) > 1:
+            out[f"spelling:{skel}"] = sorted(ns)
+
+    # `plural`: group by singular form, the same shape as `spelling`. A name's
+    # key is the shortest of its own singular forms that is itself a candidate
+    # (or the class name), so `ducks` keys on `duck`, `buses` and `busses` both
+    # key on `bus`, and `clock faces` on `clock face`.
+    known = set(candidates) | {cls}
+    by_singular: dict[str, list[str]] = {}
+    for n in candidates:
+        forms = sorted(name_singulars(n) & known, key=len)
+        by_singular.setdefault(forms[0] if forms else n, []).append(n)
+    for key, ns in sorted(by_singular.items()):
+        if len(ns) > 1:
+            out[f"plural:{key}"] = sorted(ns)
+
+    for grp in SCALE_VG_GROUPS.get(cls, ()):
+        members = sorted(set(grp.names) & set(candidates))
+        if members:
+            out[grp.key] = members
+    return out
+
+
+def scale_vg_group_foldable(cls: str, key: str) -> bool:
+    """Whether a member of group *key* may reach :data:`SCALE_VG_NAMES`."""
+    base = key.split(":", 1)[0]
+    for con in SCALE_VG_CONSTRUCTIONS:
+        if con.key == base:
+            return con.foldable
+    for grp in SCALE_VG_GROUPS.get(cls, ()):
+        if grp.key == key:
+            return grp.foldable
+    return True
+
+
+def scale_vg_group_why(cls: str, key: str) -> str:
+    """The declared reason group *key* is one hypothesis -- printed with it."""
+    base = key.split(":", 1)[0]
+    for con in SCALE_VG_CONSTRUCTIONS:
+        if con.key == base:
+            return con.why
+    for grp in SCALE_VG_GROUPS.get(cls, ()):
+        if grp.key == key:
+            return grp.criterion
+    return ""
+
 
 #: Classes in *C* whose VG-name coverage has actually been measured.
 #:
