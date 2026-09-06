@@ -338,10 +338,10 @@ Bit-identical. So the embed pass is deterministic, and the August→September
 divergence has to come from something that differed between those two builds.
 The only thing that did is the **membership**: 7,747 images then, 7,746 now.
 
-**Batch composition is sufficient to produce it.** One image leaving the pile
+**Batch composition reproduces the signature.** One image leaving the pile
 shifts every later image's position in the batch stream. Rebuilding `siglip2_l`
 at batch **31** instead of its configured 32 — same images, same node, same
-everything else — reproduces the same signature:
+everything else — perturbs it the same way:
 
 | | |
 |---|---|
@@ -349,10 +349,15 @@ everything else — reproduces the same signature:
 | median difference | 0 |
 | **max difference** | **1.6e-04** |
 
-A handful of images move, by about the observed amount. That is the mechanism in
-kind: a per-image embedding is *supposed* to be independent of what it was
-batched with, and for most images it is, but the batched GEMM's reduction order
-is not, and a few images land on the wrong side of it.
+That is the mechanism *in kind*, not a quantitative match: the observed
+August→September maximum is 3.2e-04, twice this, and a one-image membership
+change is a different perturbation from a batch-size change, so the two were
+never going to agree exactly. What it establishes is that **a per-image
+embedding is not independent of what it was batched with** — it is supposed to
+be, and for 7,719 of 7,746 images it is, but the batched GEMM's reduction order
+is not, and a few images land on the wrong side of it. Everything else that
+could explain the divergence has been ruled out by measurement rather than by
+argument.
 
 **What this costs.** The pile's premise is that scratch is purgeable because
 every cell rebuilds from source. That holds for the labels, and it holds for the
