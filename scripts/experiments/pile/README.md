@@ -486,6 +486,28 @@ python withheld_difficulty.py --class "stop sign" --names sign \
 the pool *without* it against the shipped pool, and without that the control in
 #3635 would have been an estimate rather than a measurement.
 
+What a **human** says about the same pool is `shipped_pool_error.py` (#3666),
+which reads the negative pass back out per class and scores it against
+`pool_contamination.py`'s prediction:
+
+```bash
+python shipped_pool_error.py                  # the twelve, from the committed verdicts
+python shipped_pool_error.py --rebank         # re-distil verdicts.csv from the passes on scratch
+python shipped_pool_error.py --figures        # + the report's figures (needs the VG pixels)
+```
+
+**A group pass is not a per-class rate**, and that is the whole reason this
+script is not three lines. A *clean* verdict on "none of these four" is a
+negative for every member; a *present* verdict names no member. Attributing the
+group finds is what turns one pass into twelve numbers, and it cost 9 images
+because COCO settles every find on its own half for free.
+
+Its `ADJUDICATION` table carries the study's actual result: what each find is,
+and whether the class's own names would ever have admitted it. Six of nine
+were boundary calls on rules that do not exist for the shipped twelve (#3673),
+which at a 1% rate moves the estimate further than another 3,000 draws per class
+would.
+
 Run `name_coverage.py` with no `--propose` to score the tables that are actually
 shipped, which is what says whether `pile_config` still does what its comment
 claims. Every cut is a flag (`--min-precision`, `--min-box`, `--min-sole`), so a
