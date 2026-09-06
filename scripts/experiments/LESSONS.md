@@ -72,6 +72,8 @@ correct union of the two branches with no judgement involved.
 
 | Date | Lesson | Issue |
 |---|---|---|
+| 2026-09-06 | [a backup glob that did not match the sibling](lessons/2026-09-06-a-backup-glob-that-did-not-match-the-sibling.md) | #3667 |
+| 2026-09-06 | [a truncating pipe killed the script before it wrote its output](lessons/2026-09-06-a-truncating-pipe-killed-the-json-write.md) | #3667 |
 | 2026-09-05 | [a commit made while the suite job held the worktree detached was orphaned, and the push said nothing](lessons/2026-09-05-a-commit-made-during-the-suite-job-was-orphaned.md) | #3635 |
 | 2026-09-05 | [a counter placed before the pass that discards its work](lessons/2026-09-05-a-counter-placed-before-the-pass-that-discards-its-work.md) | #3637 |
 | 2026-09-03 | [a deep grid sized from its shipped arm, not its deepest](lessons/2026-09-03-a-deep-grid-sized-from-its-shipped-arm.md) | #3547 |

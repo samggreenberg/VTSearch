@@ -21,7 +21,7 @@ per image into it.
 | Not scored at all, per cell | **3,746 → 1,940** (48.4% → 25.0% of the pile) |
 | Prevalence | `vg_scale` 2.50% → **1.72%**; `_any` 7.14% → **4.99%**; `_deep` 7.14% → **5.09%** |
 | Shortcut removed (FPR ratio) | **1.88 ± 0.19** overall; **2.50 ± 0.42** at `@small`, **1.25 ± 0.20** at `@large` |
-| Vectors, on images in both builds | **max abs diff 2.98e-08** over 7,618 — a relabel, not a re-embed |
+| Vectors, on images in both builds | 3 of 5 embedders reproduce (3e-08 to 3e-07); **`siglip2_l` and `dinov3_patch` do not** (3e-04), on the same node — §7 |
 
 Scripts: [`cross_class_negatives_rebuilt.py`](../../../scripts/experiments/pile/cross_class_negatives_rebuilt.py)
 (what moved, the invariants, the price),
@@ -48,38 +48,73 @@ issue quotes 41.9% for this; that is the figure per **class** (3,247 of 7,747).
 Per **cell** it is 48.4%, because a class's own other two bands are excluded too.
 Both are the same fact counted at different granularity.*
 
-**Only the labels were supposed to move, and almost only the labels did.** The
-provenance sidecar's `vectors_sha256` did change — which says nothing on its
-own, because that digest covers the whole cell and the cell's membership moved.
-The question that separates "the pile changed" from "the machine changed" is
-whether images present in *both* builds got the same vectors:
+`evaluable_categories` changed on **2,106 of the 7,618 images present in both
+builds (27.6%)**. That is the intended change. Two other things moved with it,
+and they are worth separating.
 
-| | |
+### The membership moved, and not because of #3667
+
+**129 medias left the pile and 128 joined.** A rebuild runs against `dev`, not
+against the commit that built the cell it replaces, and `dev` had gained **five
+merged rulings** over `pile_config` since 2026-08-27: #3605 (stop building a
+class from one VG spelling), #3618's name tables, #3635, #3637 (the fold mode)
+and #3671's vehicle and vessel rulings. Each changes which images are *clean* or
+which spellings count, so both the positives and the pool moved:
+
+| | before | after |
+|---|---|---|
+| positives | 3,547 | 3,546 |
+| shared negative pool | 3,900 | 3,900 |
+| spares | 300 | 300 |
+| **designation slots filled** | **3,600 / 3,600** | **3,600 / 3,600** |
+
+| churn | |
 |---|---|
-| Images in both builds | 7,618 |
-| **max abs vector difference** | **2.98e-08** |
-| Designations changed | **3** of 3,546 positives |
-| `evaluable_categories` changed | 2,106 of 7,618 (27.6%) |
+| positives dropped / added | **41 / 40** |
+| positives that changed cell in place | 3 |
+| pool images dropped, backfilled from spares | 82 |
+| human-**reviewed** positives still designated | **314 of 360 (87.2%)** |
 
-2.98e-08 is float32 rounding. #3160's `ATEN_CPU_CAPABILITY=avx2` pin holds: a
-rebuild on the same node reproduces the vectors.
+So **81 of 3,547 positive images (2.3%) are not the images the old cell had**,
+and the roster held the rest. The last row is the one to watch: `--verify`'s
+review-coverage gate passes at ≥85% and this is 87.2%, so a rebuild has quietly
+spent **46 human judgements** and stayed inside its tolerance. Every cell is
+still exactly full at `SCALE_N_POS`.
 
-**The membership moved for a reason that is not #3667, and that is the more
-useful finding.** 129 medias left the pile and 128 joined — every one of the
-first ten a shared-pool image, none of them a positive. A rebuild runs against
-`dev`, not against the commit that built the cell it replaces, and `dev` had
-gained **five merged rulings** over `pile_config` since 2026-08-27: #3605
-(stop building a class from one VG spelling), #3618's name tables, #3635, #3637
-(the fold mode), and #3671's vehicle and vessel rulings. Those change which
-images count as *clean*, so the negative pool churned by 3.1%.
-
-The roster did exactly its job — it pins designated positives across a rule
-change, and only 3 of 3,546 moved. But the shipped `vg_scale__*.pkl` had been
-**ten days and five rulings stale**, and nothing in the pile could say so:
-`--verify` asks whether the cells on disk are usable and `--rebuildable` asks
-whether they could be produced again. Neither asks whether a rebuild would
+None of that is #3667. All of it is the shipped `vg_scale__*.pkl` having been
+**ten days and five merged rulings stale**, with nothing in the pile able to say
+so: `--verify` asks whether the cells on disk are usable and `--rebuildable`
+asks whether they could be produced again. Neither asks whether a rebuild would
 produce *this*. `vg_box_*` has exactly that check (`_band_vocab_drift`, #3299);
 `vg_scale` has none. Filed as **#3678**.
+
+### The vectors mostly reproduced, and where they did not is not the node
+
+The provenance sidecar's `vectors_sha256` changed for every cell — which says
+nothing on its own, because that digest covers the whole cell and the membership
+moved. The question that separates "the pile changed" from "the machine changed"
+is whether images present in *both* builds got the same vectors. Measured
+elementwise over the 7,618 shared images:
+
+| embedder | old node → new node | max abs difference |
+|---|---|---|
+| `siglip` | `rack4n01` → `rack4n01` (same L40S) | **2.98e-08** |
+| `clip` | `rack7n06` → `rack7n04` (**different device**) | 2.53e-07 |
+| `clip_l` | `rack7n06` → `rack7n04` (**different device**) | 3.16e-07 |
+| `siglip2_l` | `rack4n01` → `rack4n01` (same L40S) | **3.21e-04** |
+| `dinov3_patch` | `rack4n01` → `rack4n01` (same L40S) | **3.03e-04** |
+
+**That splits the wrong way.** The two cells rebuilt on a *different* GPU model —
+the two devices #3143 warned hide behind one `gres/gpu:v100` — agree to 3e-07,
+which is #3160's `ATEN_CPU_CAPABILITY=avx2` pin working across hosts and
+across devices, down from the 1.3e-04 that issue measured before it. The two
+that diverge by **3e-04** were rebuilt on the *same node, in the same job*, and
+their provenance sidecars are identical to the originals' in every recorded
+field: host, GPU, CPU capability, requested capability, torch 2.6.0+cu124,
+transformers 5.12.1, fp32/fp32, `matmul_allow_tf32` false.
+
+3e-04 is twice the 1.5e-04 that #3160 called significant, and **nothing the
+provenance records explains it**. See §7.
 
 ## 2. The price was nearly right, and where it was wrong is interesting
 
@@ -152,6 +187,11 @@ only how much *nearer the class* they sit semantically. It loses
 problem: positives against the **old shared pool only**, 5-fold, and then scores
 the added negatives it never saw. It loses **−0.027 ± 0.007** — more than twice
 as much. A trained head *can* learn the shortcut, and it did.
+
+*The head is a balanced logistic regression on the unit-normalised vectors,
+standing in for the shipped linear SVM (#2683). The claim here is about the
+**dataset**, not the head — but a different head would give a different
+magnitude, and nothing below should be read as a number the app would produce.*
 
 Read as false positives, which is the unit that matters: at a threshold pinned
 to **5.0%** FPR on held-out old-pool negatives, the same head fires on the added

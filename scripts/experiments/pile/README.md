@@ -14,6 +14,25 @@ python build_pile.py --rebuildable            # check every cell could be REBUIL
 python build_pile.py --bands                  # voted-box scale bands (boxed datasets)
 ```
 
+**Rebuilding a cell that already exists is a different operation from filling a
+gap**, and it goes through the launcher so it keeps the rebuild canary and the
+`ATEN_CPU_CAPABILITY` pin — a cell rebuilt without the pin no longer matches its
+own fingerprint (#3160):
+
+```bash
+VTS_BUILD_ARGS=--force VTS_GPU_NODE=<node> bash launch_pile.sh vg_scale
+```
+
+Pin the node from the cell's own provenance (`--provenance`). Two things to know
+before you do it, both learned in #3667:
+
+- **A rebuild is from `dev`, not from the commit that built the cell.** It picks
+  up every `pile_config` ruling merged in between, so the membership can move
+  even when you changed nothing relevant. `vg_scale`'s September rebuild dropped
+  41 positives and 40 came in, across five merged rulings.
+- **Copy the cells first, and check your glob.** `vg_scale__*` does not match
+  `vg_scale_deep__*`.
+
 ## Where the code lives
 
 `build_pile.py` is the CLI and the per-cell build loop; everything it does
