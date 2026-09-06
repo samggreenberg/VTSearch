@@ -69,65 +69,38 @@ import pile_config as pc  # noqa: E402
 from make_class_slate import canonicalise, log  # noqa: E402
 from pilebuild.loaders.vg_scale import read_vg_labels, vg_source  # noqa: E402
 
-#: The pass is split into scene groups, and the split is measured rather than
-#: guessed. Asking for thirteen disparate classes at once is taxing and a tired
-#: reviewer misses things, which biases the estimate DOWNWARD -- the one failure
-#: mode that is invisible in the result. Grouping also deletes the hardest
-#: decisions outright: for a NEGATIVE pass the within-group boundary is
-#: irrelevant, so cup-or-bowl, fork-or-spoon and car-or-truck stop being
-#: questions at all.
+#: Six groups over the same 200 images, chosen by the reviewer for how they sit
+#: in a human head rather than for how they sit in a scene. An earlier three-group
+#: split was measured from COCO co-occurrence and he rejected it as still too
+#: taxing -- which is the right call to give him, because the cost of a group
+#: that is hard to hold is a MISSED positive, and a missed positive biases the
+#: pool estimate DOWNWARD, the one failure mode invisible in the result.
 #:
-#: The groups come from COCO co-occurrence over the pile (`cooccur.py`), not
-#: from semantics, and the data disagrees with the obvious reading in one place:
-#: `bench` belongs with the STREET, not with `chair`. A bench co-occurs with a
-#: car 25% of the time and with a chair 6%, while `vase` co-occurs with a chair
-#: 43% and `chair` with a cup 22%. Tabletop objects form one tight cluster at
-#: 2-5x independence (spoon+bowl 5.0x, fork+spoon 4.9x, cup+bowl 3.0x) and
-#: street objects another (truck+car 2.1x, and 72% of truck images hold a car).
+#: What grouping buys, beyond load: for a NEGATIVE pass the within-group boundary
+#: does not exist. Cup-or-bowl, fork-or-spoon and van-or-SUV all stop being
+#: questions, because either answer makes the image not clean. Every boundary
+#: that cost this study days is out of scope once the group is the unit.
 #:
-#: The two groups are nearly disjoint -- a car image holds a fork 1% of the
-#: time, a truck image holds a bowl 0% -- which is what makes two passes cheap:
-#: for most images one of them is an instant "this is not that kind of scene".
+#: Two placements are worth knowing about while scanning.
+#:
+#: `clock` moved here from Handheld to Street. It is the most scattered class of
+#: the twenty-five -- 38% of its images hold nothing else, and its top partners
+#: are chair 17%, book 14%, car 13% -- so no group has a real claim on it.
+#: "Handheld" would have been actively harmful: a clock TOWER or a wall clock is
+#: not handheld, and a mnemonic that excludes them invites skipping them.
+#:
+#: `bench` sits in Furniture on the reviewer's reading, against the co-occurrence
+#: data, which puts it outdoors: 25% of bench images hold a car, 20% a backpack,
+#: 16% a bicycle, and only 6% a chair. The grouping is fine; the reminder it
+#: implies is not optional. SCAN OUTDOOR SCENES IN THE FURNITURE PASS -- most
+#: benches in this pool are in parks and streets, not rooms.
 GROUPS: dict[str, tuple[str, ...]] = {
-    "none of the table 12": (
-        # the thirteen's tabletop cluster...
-        "bowl",
-        "cup",
-        "bottle",
-        "vase",
-        "fork",
-        "spoon",
-        "sink",
-        "chair",
-        "cell phone",
-        # ...and the shipped classes that live on the same surface. `knife` sits
-        # with a table item in 75% of its images and `book` in 62%, so they cost
-        # the reviewer nothing here and everything as a separate pass.
-        "knife",
-        "book",
-        "clock",
-    ),
-    "none of the street 7": (
-        "car",
-        "truck",
-        "bench",
-        "fire hydrant",
-        # `bus` is with a street item 74% of the time, `bicycle` and `stop sign` 52%.
-        "bus",
-        "bicycle",
-        "stop sign",
-    ),
-    "none of the outdoors 6": (
-        # Neither cluster claims these: umbrella 29/33, dog 17/22, backpack 27/38
-        # table-vs-street. What they share is being the SUBJECT of an outdoor
-        # photo -- bird is the only thing present in 48% of its images, kite 50%.
-        "bird",
-        "kite",
-        "boat",
-        "dog",
-        "umbrella",
-        "backpack",
-    ),
+    "Table Objects": ("bowl", "cup", "bottle", "vase", "fork", "spoon", "sink", "knife"),
+    "Handheld Objects": ("cell phone", "book", "umbrella", "backpack"),
+    "Furniture": ("chair", "bench"),
+    "Vehicles": ("car", "truck", "bus", "bicycle"),
+    "Street Objects": ("fire hydrant", "stop sign", "clock"),
+    "Outdoor Objects": ("bird", "kite", "boat", "dog"),
 }
 
 #: Every class, for the frame and the ranking.
@@ -227,8 +200,15 @@ def main() -> int:
     rng = random.Random(args.seed)
     uniform = rng.sample(rest, min(args.n_random, len(rest)))
 
-    # One slate per group, over the SAME sampled images: the strata are drawn
-    # once so the two passes are two looks at one sample, not two samples.
+    # One slate per group, over the SAME sampled images: the passes are N looks
+    # at one sample, not N samples.
+    #
+    # Images are written ONCE, into the first group's directory, and the other
+    # groups get a manifest alone. The negative set is identical every time and
+    # only the question changes -- a question is a DETECTOR, not a dataset. The
+    # earlier version copied the JPEGs per group and let `import_slates.py` build
+    # a dataset from each, which embedded the same 200 images once per group.
+    # See #3669.
     rows_by_group: dict[str, list[dict]] = {g: [] for g in GROUPS}
     for group in GROUPS:
         (Path(args.out) / group.replace(" ", "_")).mkdir(parents=True, exist_ok=True)
@@ -239,9 +219,8 @@ def main() -> int:
             src = paths.get(i)
             if src is None:
                 continue
-            data = src.read_bytes()
-            for group in GROUPS:
-                (Path(args.out) / group.replace(" ", "_") / f"{i}.jpg").write_bytes(data)
+            first = next(iter(GROUPS))
+            (Path(args.out) / first.replace(" ", "_") / f"{i}.jpg").write_bytes(src.read_bytes())
             # COCO annotates all 80 of its classes on an image it annotates at
             # all, so one exhaustive flag settles the whole conjunction at once
             # -- a scored subset for the negative pass, free.
