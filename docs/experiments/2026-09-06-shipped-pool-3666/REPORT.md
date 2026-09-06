@@ -205,7 +205,8 @@ Four of the seven uniform finds sit on a COCO-scored image, where the pool label
 *is* COCO's — a find there is the reviewer's English measured against COCO's
 boxes, not an inconsistency inside the benchmark. Exactly one survives as a
 genuine COCO miss: `book` 1593184, the booklet, which COCO's own vocabulary
-should have caught. **1 in 41** is the measured reliability of the anchored half.
+should have caught — **1 in 41** uniform draws, which is the anchored half's
+measured miss rate for these twelve classes.
 
 The practical consequence is a sampling one. For the shipped twelve, 45% of any
 uniform draw lands on a row already settled, so the same 70 judgements buy about
@@ -253,5 +254,9 @@ touched here:
 - **#3675** — draw the next shipped-class negative slate from the off-COCO half
   only; 45% of a uniform draw is spent on rows COCO already settles.
 - **#3676** — `verdicts_to_corrections.py` should not spend a negative on a find
-  the class's own name tables would never have admitted; four of these nine
-  would do exactly that.
+  the class's own name tables would never have admitted; three of these nine
+  provably would, and a fourth is unreadable either way.
+- **#3677** — `suite.sbatch` ran the stale local branch after a force-push and
+  reported it as a test failure, twice, during this study; recorded in
+  [`LESSONS.md`](../../../scripts/experiments/LESSONS.md) and mechanically
+  checkable.
