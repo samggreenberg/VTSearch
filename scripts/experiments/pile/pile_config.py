@@ -908,8 +908,8 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "the van: `van` names three different vehicles and COCO splits it 261 truck / "
             "318 car / 37 bus, so read the BODY -- rows of seats and a passenger door is a "
             "Bus, a cargo box is a Truck. Two VG words are traps for a NAME and not for a "
-            "reviewer: `coach` is a person 85 times out of 85 (0% precision) and `trolley` "
-            "is usually a shopping cart (31%)."
+            "reviewer: `coach` is usually a person -- 0% precision over its 50 sole images -- "
+            "and `trolley` is usually a shopping cart (31% over 32)."
         ),
     ),
     "bicycle": ClassRule(
