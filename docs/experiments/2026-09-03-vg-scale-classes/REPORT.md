@@ -13,9 +13,9 @@ they would be reviewed under, and the tooling behind them.
 **Update, 2026-09-06.** The review ran. One reviewer produced **5,904
 judgements** over four days — 3,900 across the thirteen candidate slates and
 2,000 in a negative pass covering all twenty-five classes. All thirteen
-candidates clear the bar; the results and their cost are in
-[The review ran](#the-review-ran-5904-judgements) below, and six issues came out
-of it.
+candidates clear the bar. The negative pass puts union contamination of the
+shared pool at **14% ± 7**, which *confirms* the extrapolation #3635 rests on
+rather than overturning it. Six issues came out of the review.
 
 ## Three results, in order of how much they change the plan
 
@@ -256,27 +256,47 @@ from `Truck` costs the 63 `trailer`, 35 `cart`, 24 `tractor`, 2 `forklift` and 2
 `crane` boxes COCO does call trucks — about 100 boxes, the same order as the
 vase narrowing.
 
-### The negative pass: the pool is 17% contaminated
+### The negative pass: the pool is 14% ± 7 contaminated, and the extrapolation holds
 
 ![the negative pass](figures/negative-pass.png)
 
 The thirteen slates each measured one class against its own negatives. The
-negative pass asked the question nobody had asked about the **pool**: an image
-sits in it because no VG name on it matches a class, and this study's whole
-finding is that a missing name is not an absent object.
+negative pass asked about the **pool** itself: an image sits in it because no VG
+name on it matches a class, and this study's whole finding is that a missing
+name is not an absent object.
 
-200 images from the corrected pool, all twenty-five classes, five to twelve
-scene-grouped passes:
+200 images from the corrected pool, all twenty-five classes, five scene-grouped
+passes over one sample.
 
-**33 of 200 hold at least one — 17%.** COCO predicted 13% on the 46% of the
-sample it can score. **The reviewer found 30% more contamination than COCO's
-half could see**, which is precisely the value of labelling the other half: a
-stop sign and three clocks turned up in the 54% nothing else can reach.
+**The estimate has to come from the random stratum alone**, and getting this
+wrong is easy: half the sample is the boundary stratum, chosen by text rank to
+be suspicious, so a rate over all 200 estimates nothing.
+
+| stratum | holds one of the 25 | |
+|---|---|---|
+| **random** | **14 / 100 = 14%** | **the estimate** |
+| boundary | 19 / 100 = 19% | ranked, biased by design |
+| all 200 | 33 / 200 = 16.5% | not an estimate of anything |
+
+> **Union contamination of the shared negative pool: 14% ± 7 (95% CI, n=100).**
+
+**This confirms #3635 rather than overturning it.** `pool_contamination.py`
+measures per-class contamination on the COCO overlap with COCO held back as the
+answer key, then extrapolates to the off-COCO half — an extrapolation its own
+docstring flags as *"assumes the two halves have the same prevalence"*. Applied
+to this frame it predicts **12.7%**, which sits comfortably inside the
+interval. **The assumption had never been tested against a human on the half it
+extrapolates to; it survives.**
+
+The two halves of the sample came out at 22% (COCO-scored, n=92) and 12%
+(off-COCO, n=108). That looks like a large gap and is **1.8σ** — not a
+difference this sample can establish, and pointing the opposite way from the
+worry, so it argues against the off-COCO half being dirtier rather than for it.
 
 Per class the rate is 0.5–2.5%, and that is the figure that bears on a
-single-class evaluation — 20 to 100 wrong negatives out of 3,900. The 17% is the
+single-class evaluation — 20 to 100 wrong negatives out of 3,900. The 14% is the
 rate for "holds any of the twenty-five", and it prices a different ambition: a
-pool provably clean of everything is 83% the size of the current one.
+pool provably clean of everything is about 86% the size of the current one.
 
 **Two perfect passes.** `Vehicles` and `Outdoor Objects` each scored **100%**
 against COCO on 92 scored rows — zero misses, zero false alarms. Both were
