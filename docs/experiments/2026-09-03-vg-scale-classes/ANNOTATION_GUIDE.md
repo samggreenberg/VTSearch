@@ -1018,6 +1018,39 @@ which is all this measurement needs. Boxing would additionally promote it into
 that class's positives — worth doing, but it is a different job with a different
 cost, and it should be designed after we know the rate.
 
+### Why you will recognise images — and why it is not a re-check
+
+**The first build of this slate was wrong and the reviewer caught it.** It
+sampled the pool as it stood *before* the thirteen class passes were applied:
+69% of its 200 rows already carried a verdict, and **44 were images the reviewer
+had personally marked `present`** — nine trucks, seven bowls, six sinks, six
+vases. Those images do not survive `verdicts_to_corrections.py`; they leave the
+pool as `negative_fixed` or `negative_excluded`. Re-asking about them measures a
+pool that no longer exists and asks the reviewer to rediscover their own
+findings. The frame now excludes them: **1,335** evicted for a VG label, **56**
+for an ambiguous spelling, **138** because a class pass already found the object.
+2,671 remain, and **zero** already-found images are in the slate.
+
+**Reviewed-and-absent images stay in the frame on purpose**, and they are why a
+lot of this will still look familiar:
+
+| the shared pool | 4,200 images |
+|---|---|
+| reviewed for **at least one** class | 1,997 (48%) |
+| never reviewed at all | 2,203 (52%) |
+| **reviewed for all thirteen** | **0** |
+
+The most-covered image in the entire pool has **10** of the thirteen answered,
+and exactly one image is that well covered; 1,140 images have exactly one class
+answered. **Not a single image in the pool is certified clean.** "No vase here"
+says nothing about the other twelve, so a familiar image is still a live
+question — this pass asks all thirteen at once, which no class pass ever did.
+
+Dropping every previously-seen image would also bias the estimate *downward*:
+the reviewed set is enriched in contamination by the boundary ranking that chose
+it, so removing it removes disproportionately many of the pool's real positives.
+The correct frame keeps them.
+
 ### Do the previous twelve need excluding too? No.
 
 The shipped twelve are `clock`, `bird`, `boat`, `umbrella`, `kite`, `book`,

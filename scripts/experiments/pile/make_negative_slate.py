@@ -22,6 +22,21 @@ Images VG already labels with a candidate are evicted first: they are known
 contamination, they are counted by `make_class_slate.py` as `evicted.json`, and
 asking a reviewer about them measures nothing.
 
+**So are images the thirteen class passes already found the object in, and
+missing that was a real bug.** The first build of this slate sampled the
+PRE-CORRECTION pool: 69% of its 200 rows already carried a verdict, and 44 of
+them were images the reviewer had personally marked `present`. Those images do
+not survive `verdicts_to_corrections.py` -- they leave the pool as
+`negative_fixed` or `negative_excluded` -- so putting them back in asks the
+reviewer to rediscover their own findings and measures a pool that no longer
+exists. The question this pass answers is about the pool **after** the thirteen
+passes are applied.
+
+Reviewed-and-ABSENT images stay in the frame on purpose. "No vase here" says
+nothing about the other twelve, so the image is still a live unknown, and
+dropping every reviewed image would bias the estimate downward: the reviewed set
+is enriched in contamination by the boundary ranking that chose it.
+
 **Polarity is stated positively on purpose.** The reviewer's question is "do you
 see NONE of the thirteen?", so Good means clean. A conjunction of thirteen
 negatives is not something anyone can hold in their head, which is why the
@@ -74,6 +89,12 @@ def main() -> int:
     ap.add_argument("--out", default=str(pc.PILE.parent / "classes-3588" / "slates"))
     ap.add_argument("--boundary", type=int, default=100)
     ap.add_argument("--random", dest="n_random", type=int, default=100)
+    ap.add_argument(
+        "--verdicts",
+        default="",
+        help="banked class-pass verdicts; images "
+        "found POSITIVE there are corrected out of the pool and must not be re-asked",
+    )
     ap.add_argument("--seed", type=int, default=20260905)
     args = ap.parse_args()
 
@@ -111,11 +132,21 @@ def main() -> int:
     # as clean -- the same three-valued treatment `lift_ambiguous` gives bands.
     amb_names = {n for names in ambiguous.values() for n in names}
     amb = {i for i in pool if i not in holds and amb_names & set(labels.get(i, {}))}
-    clean_pool = [i for i in pool if i not in holds and i not in amb]
+    # Images a class pass already found the object in are corrected out of the
+    # pool. Sampling them re-asks a question that has an answer and measures the
+    # pool as it was before the thirteen passes ran.
+    found: set[int] = set()
+    if args.verdicts:
+        for v in json.loads(Path(args.verdicts).read_text()):
+            if v.get("human") == "present":
+                found.add(int(v["image_id"]))
+    clean_pool = [i for i in pool if i not in holds and i not in amb and i not in found]
+    in_pool = found & {i for i in pool if i not in holds and i not in amb}
     log(
         f"evicted {len(holds)} images VG already labels with a candidate "
-        f"({100 * len(holds) / len(pool):.1f}%) and {len(amb)} carrying an "
-        f"ambiguous spelling; {len(clean_pool)} remain"
+        f"({100 * len(holds) / len(pool):.1f}%), {len(amb)} carrying an "
+        f"ambiguous spelling, and {len(in_pool)} the class passes already found "
+        f"the object in; {len(clean_pool)} remain"
     )
 
     mat = np.stack([np.asarray(media_embedding(medias[i]), dtype=np.float32) for i in clean_pool])
@@ -180,6 +211,7 @@ def main() -> int:
                 "pool": len(pool),
                 "clean_pool": len(clean_pool),
                 "evicted_ambiguous": len(amb),
+                "evicted_already_found": len(in_pool),
                 "checklist": list(classes),
                 "rows": len(rows),
             },
