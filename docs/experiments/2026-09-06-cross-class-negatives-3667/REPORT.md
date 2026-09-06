@@ -9,10 +9,11 @@ resolvable from 1. So the contamination #3667 describes was real, it was
 concentrated at the small end, and the small end is the axis this dataset exists
 to measure (#3156).
 
-Eleven cells rebuilt across three SLURM jobs; three datasets, five embedders.
-Every invariant holds on all 7,746 built medias. On the way, the merged fix
-turned out to be a no-op on `vg_scale_deep` and to be writing 36 junk cell names
-per image into it.
+Eleven cells over three build jobs — three datasets, five embedders — plus two
+diagnostic builds that answer a question the rebuild raised (§7). Every
+invariant holds on all 7,746 built medias. On the way, the merged fix turned out
+to be a no-op on `vg_scale_deep` and to be writing 36 junk cell names per image
+into it.
 
 | | |
 |---|---|
@@ -318,7 +319,57 @@ Note the shipped acquisition offset is −4, chosen empirically. It is closer to
 the realised −4.25 than to the designed −3.70. That is an observation, not a
 result: nothing here re-derives an offset.
 
-## 7. Documentation that described the construction it used to have
+## 7. The vectors are bit-exact on a repeat, and not across a membership change
+
+§1 left this open: on the *same node in the same job*, `siglip` reproduced to
+2.98e-08 while `siglip2_l` and `dinov3_patch` moved by **3e-04** — twice what
+#3160 called significant — with identical provenance in every recorded field.
+Two further builds settle what it is not, and name what it is.
+
+**It is not the machine, and it is not run-to-run noise.** Both cells were built
+a *second* time, same node, same code, same membership, nothing changed:
+
+| | max abs difference |
+|---|---|
+| `siglip2_l`, consecutive rebuilds | **0** (0 of 7,746 images differ) |
+| `dinov3_patch`, consecutive rebuilds | **0** (0 of 7,746 images differ) |
+
+Bit-identical. So the embed pass is deterministic, and the August→September
+divergence has to come from something that differed between those two builds.
+The only thing that did is the **membership**: 7,747 images then, 7,746 now.
+
+**Batch composition is sufficient to produce it.** One image leaving the pile
+shifts every later image's position in the batch stream. Rebuilding `siglip2_l`
+at batch **31** instead of its configured 32 — same images, same node, same
+everything else — reproduces the same signature:
+
+| | |
+|---|---|
+| images whose vector changed | **27 of 7,746** |
+| median difference | 0 |
+| **max difference** | **1.6e-04** |
+
+A handful of images move, by about the observed amount. That is the mechanism in
+kind: a per-image embedding is *supposed* to be independent of what it was
+batched with, and for most images it is, but the batched GEMM's reduction order
+is not, and a few images land on the wrong side of it.
+
+**What this costs.** The pile's premise is that scratch is purgeable because
+every cell rebuilds from source. That holds for the labels, and it holds for the
+vectors to 3e-07 — as long as *nothing else moved*. When a merged ruling
+changes the pile by one image, some embedders' cells shift by 1e-4 on a few
+images, which is 400× the same-node floor and larger than the fp16 difference
+#3143 rejected. Nothing records the batch size in the provenance, and nothing
+warns. Filed as **#3683**.
+
+*One thing to know if you reproduce this: the diagnostic build was pointed at a
+scratch `VTSEARCH_DATA_DIR` so it could not touch the pile, and it wrote to the
+pile anyway — `pc.EMBEDDINGS` follows `VTS_PILE`, not `VTSEARCH_DATA_DIR`. The
+cell was rebuilt at its configured batch size afterwards and checked
+bit-identical against a copy taken beforehand. Isolate by pointing `VTS_PILE`
+somewhere else, or do not isolate at all and keep a copy.*
+
+## 8. Documentation that described the construction it used to have
 
 #3672 rewrote `_evaluable` and left the two most-read docstrings describing the
 rule it replaced. Corrected here:
@@ -336,7 +387,7 @@ rule it replaced. Corrected here:
   within-class and survive; the prevalence and the scope of "identical" did not.
 - **`pile_config.SCALE_PREVALENCE`** now says it is the designed prevalence.
 
-## 8. What this means for work holding results off the old cell
+## 9. What this means for work holding results off the old cell
 
 Nothing published is invalidated by this rebuild — but nothing published is
 directly comparable to a number computed on the new cell either, and there are
@@ -365,7 +416,7 @@ its vectors — no consequence here, since the cell rebuilds deterministically,
 but it was an avoidable mistake and the glob is named in the script's docstring
 so the next person does not repeat it.
 
-## 9. Follow-ups
+## 10. Follow-ups
 
 | | |
 |---|---|
