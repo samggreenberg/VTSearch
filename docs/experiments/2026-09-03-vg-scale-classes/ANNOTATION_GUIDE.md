@@ -1000,6 +1000,52 @@ than the reviewer means, and that is the cost recorded in #3643. A sheared
 hydrant under a plume is a real thing and the pool will now say there was none —
 but no vote available today says otherwise honestly.
 
+### `Book` — a newspaper is not one, a magazine is
+
+The first definitional ruling for any of the shipped twelve, made because the
+find-the-thing pass needs it and #3666 records that these classes never got one.
+
+> **Is it BOUND?** Bound along a spine → **Book**. Folded or loose sheets →
+> not.
+
+Magazines, notebooks and pamphlets are bound and count. **Newspapers are folded,
+not bound, and do not.** Neither do loose paper, letters, posters, menus or
+printouts.
+
+**Measured, and the ratios are what matter here.** `book` itself lands on a COCO
+`book` box only 13% of the time — the baseline is low because VG often boxes a
+whole shelf where COCO boxes each volume, so a 0.5 IoU rarely fires. Every rate
+below is deflated by that same factor, so read each against the 13%:
+
+| VG name | boxes | on a COCO `book` box | rate | vs `book` |
+|---|---|---|---|---|
+| `book` | 1,524 | 191 | **13%** | baseline |
+| `magazines` | 65 | 7 | 11% | **same** |
+| `magazine` | 152 | 15 | 10% | **same** |
+| `notebook` | 96 | 10 | 10% | **same** |
+| **`newspaper`** | **164** | **5** | **3%** | **a quarter** |
+| `binder` | 61 | 2 | 3% | a quarter |
+| `menu` | 172 | 1 | 1% | ~nothing |
+| `paper` | 1,863 | 16 | 1% | ~nothing |
+| `poster` · `flyer` · `print` · `letter` | 4,856 | 1 | 0% | nothing |
+
+**COCO's annotators call a magazine a book and do not call a newspaper one** —
+at the same rate as `book` itself for the first, at a quarter of it for the
+second. The bound/unbound test is what separates those two groups, and it is
+visible from outside without opening anything, which is the property every test
+in this guide is chosen for.
+
+It is also the **built-as** rule again, the one that makes a jar of flowers a
+Bottle and a fire engine a Truck: a book is *manufactured bound*, and a
+newspaper is manufactured as folded sheets, whatever either is being used for.
+
+**In the find-the-thing pass:** a newspaper is **Bad**. A magazine, notebook or
+bound pamphlet is **Good**, with a box.
+
+Note `book` is this study's own calibration failure — 43.3% of its boxes land on
+no COCO class at all, worse than any of the thirteen candidates. This ruling
+narrows it slightly and does not repair that.
+
 ## The negative pass, second framing: FIND the thing
 
 **The pass was originally framed as certification — "do you see none of these?"
