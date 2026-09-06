@@ -232,7 +232,12 @@ def main() -> int:
     print(f"{name}: {len(before)} medias before, {len(after)} after\n")
 
     failures: list[str] = []
+    # Defined up here because the whole "what moved" block is skipped when the
+    # before-cell is a reconstruction, and the JSON at the bottom reports them
+    # either way.
     same_vec = False
+    sb = sa = None
+    n_cat = 0
 
     # --- 1. only the labels moved -------------------------------------------
     print("=== what moved ===")
