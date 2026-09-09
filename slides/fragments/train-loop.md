@@ -28,27 +28,30 @@
 
 <!-- **c** — Second. Watch the middle as much as the right: the item changed,
      and it changed because the model that just retrained went looking for what
-     it could least call. Which is why it is now showing you teddy bears in
-     front of a shelf of DVD box sets. -->
+     it could least call. Which is why it is now showing you three teddy bears
+     in front of a shelf of DVD box sets — **the frame from slide 2**, the one
+     the room could not agree about. It did not come up by accident: it is the
+     nearest thing this corpus has to the edge of the concept. -->
 
-<!-- **d** — Third. Same again. There is no second mode to learn, no threshold
-     to set, nothing to configure between answers — the rhythm is the whole
-     product and it does not develop. -->
+<!-- **d** — Third, and the first **No**. Box sets are not books to the person
+     doing the asking, so the answer is Bad and the piles now have two halves.
+     Say it out loud, because it is the whole argument of slide 2 arriving as a
+     click: nothing in the data settled that — COCO's own annotators called
+     those spines books — and nothing had to. The concept ends where this user
+     says it ends, and the only place they get to say so is here. -->
 
-<!-- **e** — Fourth, and the first **No**: that cat in front of a television was
-     a Bad, and the pile on the right now has two halves. This is the loop
-     working rather than failing. A corpus with magazine racks, DVD cases and
-     spiral notebooks in it is full of items nobody can call from the seed
-     phrase, and those are precisely the ones worth spending a question on. -->
+<!-- **e** — Fourth, and back to a Good: someone reading in bed, which nobody
+     needs to think about. That is the rhythm — most answers are instant and the
+     occasional one is the whole point of the exercise — and there is no second
+     mode to learn, no threshold to set, nothing to configure between answers. -->
 
-<!-- **f** — And here it is twenty-three questions in — twelve Good, eleven Bad,
-     a few minutes, which is the whole budget this task was ever going to get.
-     Note what it is asking about *now*: a heart-shaped glass jar packed with
-     paper cranes. Nobody would call that a book, and that is exactly the
-     point — the obvious ones are long since settled, so the questions left are
-     the ones where the *picture* is close and the answer is not: a jumble of
-     small bright rectangles on a surface, which is what a shelf looks like to
-     an embedding. -->
+<!-- **f** — And here it is twenty-eight questions in — twelve Good, sixteen
+     Bad, a few minutes, which is the whole budget this task was ever going to
+     get. Note what it is asking about *now*: a man on an exercise bike in a
+     living room, with a bookcase over his shoulder. The obvious ones are long
+     since settled, so what is left is the frames where the books are *present*
+     and the picture is not about them — which is exactly the line the rest of
+     the talk is about. -->
 
 <!-- If someone asks where the rest of the corpus went: there is a manual mode
      with the whole pile in a grid, sort controls and a threshold slider. That

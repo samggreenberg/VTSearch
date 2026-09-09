@@ -710,6 +710,25 @@ def _next_question(
     return int(np.argmin(d))
 
 
+#: How far from the item just answered the *next* question has to be, in figure
+#: units. Without it the two are neighbours — the retrained curve bulges around
+#: the vote it just took in, so the item nearest the new line is almost always
+#: the one beside the old one — and the page reads as the loop worrying at one
+#: corner of the field rather than moving on (#3779). Comfortably more than
+#: `ITEM_APART`, so "somewhere else entirely" is the obvious reading.
+NEXT_QUESTION_APART = 3.2
+
+
+def _elsewhere(pts: np.ndarray, asked: int) -> np.ndarray:
+    """The items far enough from `asked` to be a question about somewhere else.
+
+    Returned as an index array, ready to hand to `_next_question`'s `among`.
+    """
+    away = np.flatnonzero(np.hypot(*(pts - pts[asked]).T) >= NEXT_QUESTION_APART)
+    assert len(away), "every item is within reach of the one just answered"
+    return away
+
+
 def _notch_gap(points: np.ndarray) -> float:
     """How far the nearest of `points` stays clear of the slide's title reserve."""
     x0, y0, x1, y1 = _notch_rect()
@@ -1030,21 +1049,24 @@ def _scene() -> tuple[np.ndarray, SVC, SVC, np.ndarray, np.ndarray, int, int, tu
     first = _fit(pts, seed_good, seed_bad)
     asked = _next_question(_contour(first), pts, labeled, among=matches)
     second = _fit(pts, seed_good + (asked,), seed_bad)
-    asked_again = _next_question(_contour(second), pts, labeled + (asked,))
+    asked_again = _next_question(_contour(second), pts, labeled + (asked,), among=_elsewhere(pts, asked))
 
     for _ in range(12):
-        # Only the item the user is about to answer is pinned. The one the app
-        # would ask about *next* is not: it is picked as nearest the retrained
-        # boundary from the settled field, so it is nearest by construction,
-        # and the question mark on it says which item it is without the drawing
-        # having to win an argument about a tenth of a unit. Pinning it as well
-        # over-constrains the corridor where the two boundaries run close
-        # together, which is a fight no layout wins.
-        pins = {asked: (0, -1)}
+        # Both singled-out items are pinned, each to its own curve and each on
+        # the outside of it: the one the user answers to the first boundary, the
+        # one the app asks about next to the retrained one. Pinning the second
+        # used to over-constrain the corridor where the two curves run close
+        # together — a fight no layout wins — and it no longer does, because
+        # `_elsewhere` now keeps that item `NEXT_QUESTION_APART` from the first
+        # and so out of the corridor entirely. It has to be pinned: settled
+        # merely *clear* it sits at `CURVE_ROOM`, nearly twice as far off the
+        # line as the item on the previous page, and "this one is on the line"
+        # is a claim the drawing has to make rather than nearly make.
+        pins = {asked: (0, -1), asked_again: (1, -1)}
         pts, first, second, curve, curve_after = _settle(pts, seed_good, seed_bad, asked, pins)
         settled = (
             _next_question(curve, pts, labeled, among=matches),
-            _next_question(curve_after, pts, labeled + (asked,)),
+            _next_question(curve_after, pts, labeled + (asked,), among=_elsewhere(pts, asked)),
         )
         if settled == (asked, asked_again):
             break
@@ -1075,7 +1097,20 @@ def _scene() -> tuple[np.ndarray, SVC, SVC, np.ndarray, np.ndarray, int, int, tu
     assert int(np.argmin(gaps)) == asked, "some other item ended up nearer the line than the one it asks about"
     after, _ = _gap(curve_after, pts)
     after[list(labeled) + [asked]] = np.inf
-    assert int(np.argmin(after)) == asked_again, "the next question is not the item nearest the retrained line"
+    elsewhere = _elsewhere(pts, asked)
+    assert asked_again in elsewhere, "the next question is not on the far side of the loop"
+    assert int(np.argmin(after[elsewhere])) == int(np.flatnonzero(elsewhere == asked_again)[0]), (
+        "the next question is not the nearest item to the retrained line away from the one just answered"
+    )
+    # Nearer the line than the room every *other* item is settled to, which is
+    # the claim the page makes. Not the pinned `CURVE_CLEAR` exactly: the pin is
+    # damped and the neighbours push back, so it lands a little short of its
+    # target, and asserting the target would be asserting that the settling
+    # converged rather than that the drawing says the right thing.
+    assert after[asked_again] < CURVE_ROOM - SETTLED, (
+        f"the next question sits {after[asked_again]:.2f} units off the retrained line — no nearer it than "
+        f"the field's own {CURVE_ROOM:.2f} of room, so nothing marks it as the one on the line"
+    )
     shift = _shift(curve, curve_after)
     assert shift >= BOUNDARY_SHIFT, f"the retrained boundary barely moved ({shift:.2f} units) — nothing to see"
     # And the other half of the same claim: everywhere the vote does not reach,

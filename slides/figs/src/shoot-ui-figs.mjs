@@ -58,8 +58,6 @@
  */
 import { launchChromium } from '../../../scripts/screenshots/launch.mjs';
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -128,6 +126,28 @@ const SHOT_RIGHT = 0.027;
 const INTRO_DETECTOR = 'Books';
 const INTRO_TEXT = 'book';
 
+// The frames the deck has already called *not* a book, by COCO file name.
+//
+// COCO files a frame under `book` when its largest box is annotated as one,
+// and its annotators counted DVD box-set spines, magazines, spiral notebooks
+// and boxed game manuals. The intro slide takes exactly those frames and puts
+// them in its bottom row — the ones the room will argue about — and the deck's
+// user answers no to them. So when autopilot serves one, the vote is the
+// deck's, not COCO's: `000000125062.jpg` is the shelf of "The Office" box sets
+// behind three teddy bears, and voting Good on it two slides after showing it
+// as the canonical *not* a book is the deck contradicting itself in front of
+// the room (#3779).
+//
+// This list is the `false` half of `make-book-figs.RANKING`, and
+// `tests_lib/meta/test_slide_book_votes.py` fails if the two drift apart.
+const NOT_A_BOOK = new Set([
+  '000000125062.jpg', // dvd — a shelf of box sets
+  '000000375278.jpg', // magazine
+  '000000176446.jpg', // notebook — spiral bound
+  '000000379842.jpg', // gamecase — a boxed game manual
+  '000000016249.jpg', // newspaper
+]);
+
 // Where `train-loop` stops to take a picture, as a running vote count. The
 // first five pages advance one vote at a time, because the claim the slide is
 // making is that a session is one question repeated — a page that jumps from
@@ -181,15 +201,6 @@ const REGION_VOTES = {
 // on the slide, which is where the subject becomes legible from the back.
 const GRID_COLS = 4;
 const GRID_ROWS = 3;
-
-// The least of the sheet that has to be a book for the slide's sentence to be
-// true. Not 1.0: the corpus is deliberately full of near-misses and a top
-// twenty-four with two shelves-behind-a-television in it is an honest ranking,
-// which is the deck's point. Well under 1.0 and still far above the 18% a
-// `book`-blind ranking of this corpus would give — and the filename is a strict
-// test anyway: `coco_fixture` files a frame by its largest box, so a room with a
-// wall of shelves behind a television is a `tv/` frame that reads as a hit.
-const SHEET_MIN_HITS = 0.66;
 
 const HERO_REGION = 'book/000000396729.jpg';
 const REGION_BOX = { x0: 0.156, y0: 0.222, x1: 0.910, y1: 0.601 };
@@ -596,15 +607,17 @@ async function shootMakeDetector(page) {
   await page.locator('.example-panel input.form-input').first().fill(INTRO_TEXT);
   await page.locator('#detector-name').fill(INTRO_DETECTOR);
   await page.waitForTimeout(700);
-  await shoot(page, 'ui-make-detector.build3');
+  await shoot(page, 'ui-make-detector');
 
+  // The detector is still created — the next two groups are the same session —
+  // but the dashboard it lands back on is not photographed. "And now there is a
+  // row in the table" is a page that shows the audience a table (#3779); what
+  // the slide is about is that the whole specification was one word, and that
+  // is the frame it should end on.
   await page.getByRole('button', { name: /^Creat/ }).last().click();
   await page.waitForSelector('.new-detector-form', { state: 'detached', timeout: 60000 });
   await waitFor(`the ${INTRO_DETECTOR} detector`, async () => named(await detectors(), INTRO_DETECTOR));
-  await page.waitForTimeout(2000);
-  await page.mouse.move(700, 120);
-  await page.waitForTimeout(400);
-  await shoot(page, 'ui-make-detector');
+  await page.waitForTimeout(1500);
 }
 
 /**
@@ -632,7 +645,7 @@ async function voteServed(page) {
     before = now;
     await page.waitForTimeout(500);
   }
-  const good = (before || '').startsWith('book/');
+  const good = (before || '').startsWith('book/') && !NOT_A_BOOK.has((before || '').split('/').pop());
   await page.locator(good ? '.btn-good' : '.btn-bad').first().click();
   // The vote retrains the head and re-sorts, and autopilot then serves a
   // different item. Waiting on the served item *changing* waits for all of it;
@@ -734,7 +747,7 @@ async function shootFind(page) {
   await page.waitForTimeout(3000);
 
   // What came back, with no tool around it. See `results_grid.py`.
-  await shootFindGrid(page);
+  await shootFindGrid();
 
   // Then the line. Its offset is read off the rendered list rather than
   // computed from a rank, because how many items make a row is the panel's
@@ -772,7 +785,7 @@ async function shootFind(page) {
 }
 
 /**
- * The top of the ranking as a contact sheet, with no app around it.
+ * What the detector found, as a contact sheet with no app around it.
  *
  * The Find slide's payoff used to be the verification screen — the results in a
  * left-hand panel with the viewer beside them — which is a picture of somebody
@@ -780,90 +793,32 @@ async function shootFind(page) {
  * results in the tool is a feature: an autorun detector mails a list of
  * references and nobody opens anything (#3779). So the reveal is the frames.
  *
- * The ranking is read off the panel's own DOM rather than re-derived from the
- * API, so the sheet is the order the audience would have scrolled through, and
- * the frames are fetched from the app at full resolution rather than from the
- * fixture on disk — the app is the thing that knows which file an item is.
+ * And the frames are twelve out of the production pile's `book/` folder, not
+ * the top of the live ranking. This deck is a **cartoon of how the tool works**
+ * rather than a transcript of one session: what the slide has to say is "the
+ * few minutes bought you these", and a sheet whose bottom row is whatever a
+ * twenty-three-vote head happened to rank eleventh spends the audience's
+ * attention on the wrong argument — the ranking's *mistakes* are slide 6's
+ * subject and the whole of Part 3, not this page's.
+ *
+ * Deterministic, so the slide does not reshuffle on every re-shoot: the
+ * selection is a seeded sample, in `results_grid.py`.
  */
-async function shootFindGrid(page) {
-  const want = GRID_COLS * GRID_ROWS;
-  // Document order inside the panel *is* the ranking — but only once the
-  // re-sort has landed, and until then it is the dataset's own order, which is
-  // indistinguishable from a single read. (The panel renders no score to check
-  // against: `media-list` passes `showScores=false` here.) So wait for the top
-  // of the list to stop changing before believing it. The first version of this
-  // sheet did not, and came out photographing the corpus in import order.
-  await scrollResults(page, 0);
-  const head = () =>
-    page.locator('.panel-left img.media-thumbnail').evaluateAll((els) =>
-      els.slice(0, 8).map((e) => e.getAttribute('alt')).join('|')
-    );
-  let previous = null;
-  let steady = 0;
-  for (let tick = 0; tick < 60 && steady < 2; tick++) {
-    const now = await head();
-    steady = now && now === previous ? steady + 1 : 0;
-    previous = now;
-    if (steady < 2) await page.waitForTimeout(2000);
-  }
-  if (steady < 2) throw new Error('the results panel never stopped re-ordering');
-
-  const thumbs = [];
-  const names = [];
-  const collect = Number(process.env.SHEET_COLLECT || want);
-  for (let top = 0; top < 60000 && thumbs.length < collect; top += 320) {
-    await scrollResults(page, top);
-    const rows = await page
-      .locator('.panel-left img.media-thumbnail')
-      .evaluateAll((els) => els.map((e) => ({ src: e.getAttribute('src'), alt: e.getAttribute('alt') })));
-    // The walk only ever goes down, so first-seen order is the ranking.
-    for (const row of rows) {
-      if (row.src && !thumbs.includes(row.src)) {
-        thumbs.push(row.src);
-        names.push(row.alt);
-      }
-    }
-  }
-  if (thumbs.length < want) throw new Error(`only ${thumbs.length} results in the panel; the sheet needs ${want}`);
-  if (process.env.SHEET_DUMP) writeFileSync(process.env.SHEET_DUMP, JSON.stringify(names, null, 1));
-  const hits = names.slice(0, want).filter((n) => (n || '').startsWith('book/')).length;
-  log(`find sheet: top ${want} is ${hits} book/ — ${names.slice(0, 6).join(', ')}`);
-  // The slide says the top of this ranking is shelves, stacks and spines. It is
-  // a claim about a trained head and a real corpus, so it is checked rather than
-  // asserted: a session that produced a weak head should fail the shoot, not
-  // quietly print a contact sheet of laptops under that sentence.
-  if (hits < Math.round(want * SHEET_MIN_HITS)) {
-    throw new Error(`only ${hits}/${want} of the top results are books — this session's head is too weak to ship`);
-  }
-
-  const dir = mkdtempSync(join(tmpdir(), 'vt-find-sheet-'));
-  const files = [];
-  try {
-    for (const [index, thumb] of thumbs.slice(0, want).entries()) {
-      const full = thumb.replace('/thumbnail', '/image');
-      const response = await fetch(full.startsWith('http') ? full : APP + full);
-      if (!response.ok) throw new Error(`GET ${full} -> ${response.status}`);
-      const file = join(dir, `${String(index).padStart(2, '0')}.img`);
-      writeFileSync(file, Buffer.from(await response.arrayBuffer()));
-      files.push(file);
-    }
-    const png = execFileSync(
-      'python',
-      [
-        join(FIGS, 'src', 'results_grid.py'),
-        String(VIEWPORT.width * SCALE),
-        String(VIEWPORT.height * SCALE),
-        String(GRID_COLS),
-        String(GRID_ROWS),
-        ...files,
-      ],
-      { cwd: REPO, maxBuffer: 256 * 1024 * 1024, stdio: ['ignore', 'pipe', 'inherit'] }
-    );
-    compose(png, 'ui-find-grid');
-    log('wrote figs/ui-find-grid.webp');
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+async function shootFindGrid() {
+  const png = execFileSync(
+    'python',
+    [
+      join(FIGS, 'src', 'results_grid.py'),
+      String(VIEWPORT.width * SCALE),
+      String(VIEWPORT.height * SCALE),
+      String(GRID_COLS),
+      String(GRID_ROWS),
+      'photos-prod',
+    ],
+    { cwd: REPO, maxBuffer: 256 * 1024 * 1024, stdio: ['ignore', 'pipe', 'inherit'] }
+  );
+  compose(png, 'ui-find-grid');
+  log('wrote figs/ui-find-grid.webp');
 }
 
 

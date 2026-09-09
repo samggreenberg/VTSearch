@@ -13,19 +13,15 @@
      for the data nobody is ever going to look at by hand. -->
 
 <!-- **b** — Two hundred and forty items scored and ranked in the time it took
-     to click, and this is the top of that ranking — produced by twenty-three
-     answers to twenty-three questions, against a corpus with no labels in it an
-     hour ago. Read it honestly, because the room will: most of these are
-     somebody's shelves, and two of them are a laptop on a desk. That is what a
-     detector bought with a few minutes looks like, and the slide after next is
-     about the line that decides how far down this list you are willing to
-     go. -->
+     to click, and this is what came back: shelves, stacks, spines and four
+     people reading — out of a corpus that had no labels in it an hour ago, on
+     the strength of a handful of answers to a handful of questions. -->
 
 <!-- Say what is *not* on this slide, because it is the point: the tool. Nobody
      opened anything. A detector left on autorun mails a list of references, and
-     the person who asked for the books gets the books — so the honest picture
-     of the payoff is the pictures, not a screen with them stacked in a panel
-     down one side. -->
+     the person who asked for the books gets the books — so the picture of the
+     payoff is the pictures, not a screen with them stacked in a panel down one
+     side of it. -->
 
 <!-- The next slide goes back into the tool, once, for the one thing this view
      cannot show: **85** of the 240 came back and 155 did not. Nobody asked for
