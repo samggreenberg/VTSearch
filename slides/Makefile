@@ -3,6 +3,7 @@
 #   make                      every deck -> _out/*.pdf
 #   make hold-the-line        one deck   -> _out/hold-the-line.pdf
 #   make speaker              every deck -> _out/*.speaker.pdf (notes visible)
+#   make unnumbered           every deck -> _out/*.unnumbered.pdf (no page numbers)
 #   make html FMT=html        every deck -> _out/*.html
 #   make watch DECK=hold-the-line   live preview in a browser
 #   make check                preflight every manifest, build nothing
@@ -21,7 +22,7 @@ DEPS  := $(wildcard fragments/*.md) $(wildcard figs/*) themes/vtsearch.css build
 # through `make` reproduced exactly the hang render.sh was written to prevent
 # (#3434). Every target below therefore delegates.
 
-.PHONY: all speaker check list clean watch $(DECKS)
+.PHONY: all speaker unnumbered check list clean watch $(DECKS)
 
 all: $(addprefix _out/,$(addsuffix .$(FMT),$(DECKS)))
 
@@ -29,6 +30,11 @@ all: $(addprefix _out/,$(addsuffix .$(FMT),$(DECKS)))
 # presenter notes. Two-pass (audience slides -> PNGs -> speaker deck).
 speaker:
 	@for d in $(DECKS); do ./render.sh $$d $(FMT) --speaker || exit 1; done
+
+# The handover cut: no page numbers, written beside the numbered deck rather
+# than over it.
+unnumbered:
+	@for d in $(DECKS); do ./render.sh $$d $(FMT) --no-pageno || exit 1; done
 
 # Bare deck name builds that one deck, e.g. `make hold-the-line`.
 $(DECKS): %: _out/%.$(FMT)

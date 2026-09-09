@@ -41,9 +41,18 @@ Needs node and python3. Nothing to install — `npx` fetches Marp on first run
 ./render.sh hold-the-line           # -> _out/hold-the-line.pdf
 ./render.sh hold-the-line html      # or html / pptx
 ./render.sh hold-the-line pdf --speaker  # -> _out/hold-the-line.speaker.pdf
+./render.sh hold-the-line pptx --no-pageno  # -> _out/hold-the-line.unnumbered.pptx
 ./build.py --check                  # preflight all manifests, build nothing
 ./build.py --list                   # decks, slide counts, unused fragments
 ```
+
+`--no-pageno` is the handover cut: same deck, no page numbers drawn, written
+to `_out/<deck>.unnumbered.<fmt>` so the numbered one is still there beside it.
+The numbers are how a question from the room names a slide, so this is an
+export option rather than a style choice — the numbering is still *computed*,
+and a page's address is the same whether or not it is printed on it. It is
+refused together with `--speaker`, whose contact sheet is navigated by exactly
+those numbers.
 
 There's also a `Makefile` (`make`, `make FMT=html`, `make watch DECK=…`) but
 **`make` is not installed on the laptop** — `render.sh` is the working path

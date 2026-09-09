@@ -520,12 +520,21 @@ def lay_out(
     return showings, texts, group
 
 
-def audience_bodies(showings: list[Showing], texts: dict[str, str], group: dict[str, list[int]]) -> list[str]:
+def audience_bodies(
+    showings: list[Showing], texts: dict[str, str], group: dict[str, list[int]], pageno: bool = True
+) -> list[str]:
     """The audience deck's slides, each carrying its page number and letter.
 
     A slide's number is claimed by its fragment's first showing and reused by
     the rest; a fragment marked `_paginate: false` — the title slide — takes no
     number and does not consume one, so the first real slide is 1 rather than 2.
+
+    `pageno=False` draws neither, for a deck being handed over rather than
+    presented. The numbers are earned — they are how a question from the room
+    names a slide, and how this repo's own review comments do — so this is an
+    export option and not a style choice: nothing else about the deck changes,
+    and the numbering is still computed, so a page's *address* is the same
+    whether or not it is printed on it.
     """
     numbers: dict[str, int] = {}
     bodies: list[str] = []
@@ -535,7 +544,7 @@ def audience_bodies(showings: list[Showing], texts: dict[str, str], group: dict[
             numbers[name] = len(numbers) + 1
         for offset, stage in enumerate(stages):
             marks = ""
-            if numbered:
+            if numbered and pageno:
                 marks = "\n\n" + PAGENO_DIV.format(numbers[name])
                 if len(group[name]) > 1:
                     marks += "\n\n" + LETTER_DIV.format(stage_letter(group[name].index(pages[offset])))
@@ -570,8 +579,8 @@ def speaker_bodies(
     return bodies
 
 
-def assemble(deck: str, write: bool, speaker: bool = False) -> list[str]:
-    """Preflight one deck; write _build/<deck>[.speaker].md unless write=False.
+def assemble(deck: str, write: bool, speaker: bool = False, pageno: bool = True) -> list[str]:
+    """Preflight one deck; write _build/<deck>[.speaker|.unnumbered].md unless write=False.
 
     Returns the list of problems found (empty means the deck is clean).
     """
@@ -589,7 +598,7 @@ def assemble(deck: str, write: bool, speaker: bool = False) -> list[str]:
     if speaker:
         bodies = speaker_bodies(deck, showings, texts, group, write, problems)
     else:
-        bodies = audience_bodies(showings, texts, group)
+        bodies = audience_bodies(showings, texts, group, pageno)
 
     if problems or not write:
         return problems
@@ -599,7 +608,8 @@ def assemble(deck: str, write: bool, speaker: bool = False) -> list[str]:
     header = "\n".join(f"{k}: {yaml_scalar(v)}" for k, v in merged.items())
 
     BUILD.mkdir(exist_ok=True)
-    out = BUILD / (f"{deck}.speaker.md" if speaker else f"{deck}.md")
+    suffix = ".speaker" if speaker else ("" if pageno else ".unnumbered")
+    out = BUILD / f"{deck}{suffix}.md"
     body = rewrite_images("\n\n---\n\n".join(bodies))
     out.write_text(f"---\n{header}\n---\n\n{body}\n")
 
@@ -662,6 +672,12 @@ def main() -> int:
         action="store_true",
         help="render presenter notes visibly; writes _build/<deck>.speaker.md",
     )
+    parser.add_argument(
+        "--no-pageno",
+        dest="pageno",
+        action="store_false",
+        help="draw no page numbers; writes _build/<deck>.unnumbered.md",
+    )
     parser.add_argument("--all", action="store_true", help="build every deck")
     parser.add_argument("--check", action="store_true", help="preflight only")
     parser.add_argument("--list", action="store_true", help="show decks and orphans")
@@ -671,6 +687,13 @@ def main() -> int:
         cmd_list()
         return 0
 
+    if args.speaker and not args.pageno:
+        parser.error(
+            "--no-pageno and --speaker are mutually exclusive: the speaker view is "
+            "navigated by those numbers — its contact sheet labels every frame with "
+            "the letter the audience deck prints beside them."
+        )
+
     targets = all_decks() if (args.all or args.check) else [args.deck] if args.deck else []
     if not targets:
         parser.error("give a deck name, --all, --check, or --list")
@@ -678,7 +701,7 @@ def main() -> int:
     problems: list[str] = []
     for deck in targets:
         try:
-            problems += assemble(deck, write=not args.check, speaker=args.speaker)
+            problems += assemble(deck, write=not args.check, speaker=args.speaker, pageno=args.pageno)
         except DeckError as exc:
             problems.append(str(exc))
 

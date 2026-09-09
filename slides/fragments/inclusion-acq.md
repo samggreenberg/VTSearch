@@ -12,7 +12,7 @@
 
 <!-- build: figs/calib-acq-flow.build4.png -->
 
-<!-- The last figure, and it closes the loop back to Rock the Vote: the
+<!-- The last figure, and it closes the loop back to Pics on a Plane: the
      threshold decides twice. Everything since has been the first job; this is
      the second. -->
 
