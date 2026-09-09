@@ -1,0 +1,78 @@
+{
+ "bad": [
+  {
+   "cid": null,
+   "filename": "2352930.jpg",
+   "id": "36278b5eed471ec9",
+   "label": "bad",
+   "md5": "3375d41f038978b3567c626308cc985c",
+   "media_type": "image",
+   "name": "2352930.jpg",
+   "origin_name": "2352930.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  }
+ ],
+ "class": "bench",
+ "detector_name": "bench not chairs (confirm the box)",
+ "exported": "2026-09-09",
+ "good": [
+  {
+   "cid": null,
+   "filename": "2376085.jpg",
+   "id": "284919a6a444cd8b",
+   "label": "good",
+   "md5": "e83070aa8419b736fac275e58c4b4ff2",
+   "media_type": "image",
+   "name": "2376085.jpg",
+   "origin_name": "2376085.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "cid": null,
+   "filename": "2334216.jpg",
+   "id": "9ff5ec2402f8db3a",
+   "label": "good",
+   "md5": "1f7664bdfbf4b46f5f9517e6affb7b3c",
+   "media_type": "image",
+   "name": "2334216.jpg",
+   "origin_name": "2334216.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "cid": null,
+   "filename": "2342870.jpg",
+   "id": "baa5527e5e821483",
+   "label": "good",
+   "md5": "00f64113c1445906e9ca556bab4d26be",
+   "media_type": "image",
+   "name": "2342870.jpg",
+   "origin_name": "2342870.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "cid": null,
+   "filename": "2348196.jpg",
+   "id": "1bbef712927aa230",
+   "label": "good",
+   "md5": "089619116e6b935be9ca3dd06c900ba3",
+   "media_type": "image",
+   "name": "2348196.jpg",
+   "origin_name": "2348196.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  }
+ ],
+ "kind": "slate",
+ "question": "is this box one?",
+ "rule": "bench not chairs (confirm the box)",
+ "source": "OWLv2-screened per-class review, exported from the live app"
+}
