@@ -41,11 +41,14 @@
      spiral notebooks in it is full of items nobody can call from the seed
      phrase, and those are precisely the ones worth spending a question on. -->
 
-<!-- **f** — And here it is fourteen questions in — eight Good, six Bad, a few
-     minutes, which is the whole budget this task was ever going to get. Note
-     what it is asking about *now*: a desk flat-lay with a laptop, a phone,
-     keys, coins and one paperback in the middle of them. Nobody in this room
-     agrees on that one either, which is the point. -->
+<!-- **f** — And here it is twenty-three questions in — twelve Good, eleven Bad,
+     a few minutes, which is the whole budget this task was ever going to get.
+     Note what it is asking about *now*: a heart-shaped glass jar packed with
+     paper cranes. Nobody would call that a book, and that is exactly the
+     point — the obvious ones are long since settled, so the questions left are
+     the ones where the *picture* is close and the answer is not: a jumble of
+     small bright rectangles on a surface, which is what a shelf looks like to
+     an embedding. -->
 
 <!-- If someone asks where the rest of the corpus went: there is a manual mode
      with the whole pile in a grid, sort controls and a threshold slider. That

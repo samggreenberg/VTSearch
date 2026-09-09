@@ -141,7 +141,16 @@ const TRAIN_STAGES = [0, 1, 2, 3, 4];
 // with twelve Good votes and a head that has never seen a negative. Vote until
 // both piles are worth showing (and the detector is trainable at all), with a
 // hard stop so a pathological ranking cannot loop forever.
-const TRAIN_FINAL = { good: 8, bad: 3, maxVotes: 24 };
+//
+// The targets used to be 8 and 3, which stopped the session at sixteen votes.
+// That was enough while the Find slide's payoff was a screen with the ranking
+// in a panel down one side; it is not enough now the payoff is the frames
+// themselves at 198px each (`shootFindGrid`). A 4x lift over the base rate
+// looks like a good detector in a column of 60px thumbnails and like a pile of
+// laptops on a contact sheet, and the honest fix is to answer more questions
+// rather than to photograph fewer of the results (#3779). Still inside the
+// twenty minutes the deck says the whole task is worth.
+const TRAIN_FINAL = { good: 12, bad: 8, maxVotes: 32 };
 
 const REGION_VOTES = {
   good: [
@@ -165,11 +174,22 @@ const REGION_VOTES = {
 // `book` annotation on that frame, as a fraction of the displayed image, which
 // is why it is tight on the object rather than eyeballed round it.
 // The contact sheet on the Find slide: how many frames, and how they are laid
-// out. Six by four fills the box a screenshot occupies at very nearly square
-// cells, and twenty-four is enough that the sheet reads as "what came back"
-// rather than as a shortlist somebody curated.
-const GRID_COLS = 6;
-const GRID_ROWS = 4;
+// out. Four by three, not six by four: this corpus's books are *rooms with
+// shelves in them* — COCO files a frame by its largest box — so at 24 frames
+// the cells are small enough that a wall of spines reads as a wall, and the
+// sheet stops looking like a set of results. Twelve puts each frame at ~198px
+// on the slide, which is where the subject becomes legible from the back.
+const GRID_COLS = 4;
+const GRID_ROWS = 3;
+
+// The least of the sheet that has to be a book for the slide's sentence to be
+// true. Not 1.0: the corpus is deliberately full of near-misses and a top
+// twenty-four with two shelves-behind-a-television in it is an honest ranking,
+// which is the deck's point. Well under 1.0 and still far above the 18% a
+// `book`-blind ranking of this corpus would give — and the filename is a strict
+// test anyway: `coco_fixture` files a frame by its largest box, so a room with a
+// wall of shelves behind a television is a `tv/` frame that reads as a hit.
+const SHEET_MIN_HITS = 0.66;
 
 const HERO_REGION = 'book/000000396729.jpg';
 const REGION_BOX = { x0: 0.156, y0: 0.222, x1: 0.910, y1: 0.601 };
@@ -484,6 +504,31 @@ async function resetIntroDetector() {
   }
 }
 
+/**
+ * Un-register the production pile, so the dashboard build opens on one dataset.
+ *
+ * The same decision as `resetIntroDetector`, and for the same reason: the
+ * make-detector build's whole subject is a user who has *nothing* yet, and a
+ * dashboard already holding a second pile makes the audience carry a thing the
+ * story does not use for three more slides (#3779). Ordering the import after
+ * that group is enough on a cold box and not on a warm one — the pickle is on
+ * disk and the app registers it at startup — so the shot has to be made
+ * unconditional rather than left to depend on what the last run happened to
+ * leave behind.
+ *
+ * It costs one re-embed of 240 frames per run, which is the price of a
+ * reproducible first frame. The corpus itself stays on disk; only the vectors
+ * are recomputed, and `No Persisted Vectors` (see `CLAUDE.md`) is why they are
+ * not something that could have been kept anyway.
+ */
+async function resetProdDataset() {
+  for (const row of await datasets()) {
+    if (row.name !== 'photos-prod') continue;
+    await api(`/api/datasets/registry/${row.id}`, { method: 'DELETE' });
+    log('removed the previous photos-prod dataset');
+  }
+}
+
 /** Untick every row of *tag*, so the dashboard shows a clean card. */
 async function deselectAll(page, tag) {
   const checked = `${tag} .select-checkbox[aria-checked="true"]`;
@@ -574,7 +619,19 @@ async function shootMakeDetector(page) {
  */
 async function voteServed(page) {
   const viewer = page.locator('img.image-element').first();
-  const before = await viewer.getAttribute('alt');
+  // Read the served item only once the viewer has stopped changing. The button
+  // is chosen from this alt, so a read taken mid-swap decides the vote from one
+  // item and casts it on another — which is how a stack of paperbacks ended up
+  // in the Bad pile of a session the slide describes as truthful (#3779). The
+  // wait after the previous vote is a *change* plus a fixed delay, and a fixed
+  // delay is exactly the thing that is right until the box is busy.
+  let before = null;
+  for (let tick = 0; tick < 40; tick++) {
+    const now = await viewer.getAttribute('alt');
+    if (now && now === before) break;
+    before = now;
+    await page.waitForTimeout(500);
+  }
   const good = (before || '').startsWith('book/');
   await page.locator(good ? '.btn-good' : '.btn-bad').first().click();
   // The vote retrains the head and re-sorts, and autopilot then serves a
@@ -730,17 +787,54 @@ async function shootFind(page) {
  */
 async function shootFindGrid(page) {
   const want = GRID_COLS * GRID_ROWS;
+  // Document order inside the panel *is* the ranking — but only once the
+  // re-sort has landed, and until then it is the dataset's own order, which is
+  // indistinguishable from a single read. (The panel renders no score to check
+  // against: `media-list` passes `showScores=false` here.) So wait for the top
+  // of the list to stop changing before believing it. The first version of this
+  // sheet did not, and came out photographing the corpus in import order.
+  await scrollResults(page, 0);
+  const head = () =>
+    page.locator('.panel-left img.media-thumbnail').evaluateAll((els) =>
+      els.slice(0, 8).map((e) => e.getAttribute('alt')).join('|')
+    );
+  let previous = null;
+  let steady = 0;
+  for (let tick = 0; tick < 60 && steady < 2; tick++) {
+    const now = await head();
+    steady = now && now === previous ? steady + 1 : 0;
+    previous = now;
+    if (steady < 2) await page.waitForTimeout(2000);
+  }
+  if (steady < 2) throw new Error('the results panel never stopped re-ordering');
+
   const thumbs = [];
-  for (let top = 0; top < 20000 && thumbs.length < want; top += 320) {
+  const names = [];
+  const collect = Number(process.env.SHEET_COLLECT || want);
+  for (let top = 0; top < 60000 && thumbs.length < collect; top += 320) {
     await scrollResults(page, top);
-    const srcs = await page
+    const rows = await page
       .locator('.panel-left img.media-thumbnail')
-      .evaluateAll((els) => els.map((e) => e.getAttribute('src')));
-    // Document order inside the virtual viewport *is* rank order, and the walk
-    // only ever goes down, so first-seen order is the ranking.
-    for (const src of srcs) if (src && !thumbs.includes(src)) thumbs.push(src);
+      .evaluateAll((els) => els.map((e) => ({ src: e.getAttribute('src'), alt: e.getAttribute('alt') })));
+    // The walk only ever goes down, so first-seen order is the ranking.
+    for (const row of rows) {
+      if (row.src && !thumbs.includes(row.src)) {
+        thumbs.push(row.src);
+        names.push(row.alt);
+      }
+    }
   }
   if (thumbs.length < want) throw new Error(`only ${thumbs.length} results in the panel; the sheet needs ${want}`);
+  if (process.env.SHEET_DUMP) writeFileSync(process.env.SHEET_DUMP, JSON.stringify(names, null, 1));
+  const hits = names.slice(0, want).filter((n) => (n || '').startsWith('book/')).length;
+  log(`find sheet: top ${want} is ${hits} book/ — ${names.slice(0, 6).join(', ')}`);
+  // The slide says the top of this ranking is shelves, stacks and spines. It is
+  // a claim about a trained head and a real corpus, so it is checked rather than
+  // asserted: a session that produced a weak head should fail the shoot, not
+  // quietly print a contact sheet of laptops under that sentence.
+  if (hits < Math.round(want * SHEET_MIN_HITS)) {
+    throw new Error(`only ${hits}/${want} of the top results are books — this session's head is too weak to ship`);
+  }
 
   const dir = mkdtempSync(join(tmpdir(), 'vt-find-sheet-'));
   const files = [];
@@ -870,6 +964,7 @@ try {
     });
   }, STILL_CSS);
   if (intro) {
+    await resetProdDataset();
     await resetIntroDetector();
     await shootMakeDetector(page);
     // The pile the detector has never seen, imported *after* the dashboard has

@@ -28,6 +28,6 @@
      slide on the votes take over and the phrase stops mattering. -->
 
 <!-- **d** — And it exists. Note what the table says about it: training data
-     *Empty*, last trained *never*. A detector is a name, a seed, and — from
+     *Empty*, last trained *never* — one dataset, one detector, nothing else. A detector is a name, a seed, and — from
      here on — a growing pile of answers. It cost one sentence, which is the
      point: the expensive part of this was never supposed to be the setup. -->

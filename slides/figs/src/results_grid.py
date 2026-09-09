@@ -35,10 +35,12 @@ GUTTER = 0.045
 
 def sheet(width: int, height: int, cols: int, rows: int, paths: list[str]) -> Image.Image:
     canvas = Image.new("RGB", (width, height), "white")
-    cell = (width - round(GUTTER * width / cols) * (cols - 1)) // cols
     gutter = round(GUTTER * width / cols)
-    grid_h = rows * cell + (rows - 1) * gutter
-    top = (height - grid_h) // 2
+    # Square cells, so the binding axis decides the size — the box is wider than
+    # 3:2 and a 4x3 sheet is taller than it, so which one binds is not a
+    # constant and cannot be assumed.
+    cell = min((width - (cols - 1) * gutter) // cols, (height - (rows - 1) * gutter) // rows)
+    top = (height - (rows * cell + (rows - 1) * gutter)) // 2
     left = (width - (cols * cell + (cols - 1) * gutter)) // 2
     for index, path in enumerate(paths[: cols * rows]):
         with Image.open(path) as frame:

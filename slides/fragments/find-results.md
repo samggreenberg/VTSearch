@@ -13,9 +13,13 @@
      for the data nobody is ever going to look at by hand. -->
 
 <!-- **b** — Two hundred and forty items scored and ranked in the time it took
-     to click, and this is the top of that ranking: shelves, stacks and spines,
-     produced by fourteen answers to fourteen questions against a corpus with no
-     labels in it an hour ago. -->
+     to click, and this is the top of that ranking — produced by twenty-three
+     answers to twenty-three questions, against a corpus with no labels in it an
+     hour ago. Read it honestly, because the room will: most of these are
+     somebody's shelves, and two of them are a laptop on a desk. That is what a
+     detector bought with a few minutes looks like, and the slide after next is
+     about the line that decides how far down this list you are willing to
+     go. -->
 
 <!-- Say what is *not* on this slide, because it is the point: the tool. Nobody
      opened anything. A detector left on autorun mails a list of references, and
