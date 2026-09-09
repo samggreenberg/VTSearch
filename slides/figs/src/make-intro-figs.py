@@ -5,8 +5,12 @@ Run from the repo root:
 
     python slides/figs/src/make-intro-figs.py
 
-One figure lives here: `vote-boundary`, the picture of what a threshold
-actually *does*. The deck's other mechanism figures are drawn in score space —
+Two figures live here. `embed-flow` is the short one — photographs in, dots
+out, so the room knows what the dots on the next slide are before it is asked
+to reason about them; see `embed_flow_fig`. The rest of this module is
+`vote-boundary`, the picture of what a threshold actually *does*.
+
+The deck's other mechanism figures are drawn in score space —
 a number line with a cut on it — which is the right space for a talk about
 where the cut goes, and the wrong one for a talk about what the cut is *for*,
 because it cannot show why the item the user is asked about next is the one it
@@ -19,26 +23,29 @@ trains a linear SVM in embedding space, where the boundary is a hyperplane, and
 a hyperplane in two dimensions is a straight line that cannot enclose anything.
 An RBF SVM on two dimensions is the same object with the curvature the audience
 would otherwise have to imagine, so that is what is fitted here: the boundary on
-every stage is a real `sklearn` decision contour over the votes shown, the
-looser and tighter cuts are real level sets of that same decision function, and
-the item selected next is really the unlabeled point nearest the boundary — the
+every stage is a real `sklearn` decision contour over the votes shown, and the
+item selected next is really the unlabeled point nearest the boundary — the
 app's own `Hard` rule.
 
-**With one exception, and it is deliberate.** The retrained boundary is the two
-real fits *spliced*: the new one where the answered vote reaches, the old one
-everywhere else, crossfaded between (`_Blended`). A plain refit moves the far
-side of the loop as well, by an amount that is the solver rebalancing its
+**With two exceptions, and both are deliberate.** The retrained boundary is the
+two real fits *spliced*: the new one where the answered vote reaches, the old
+one everywhere else, crossfaded between (`_Blended`). A plain refit moves the
+far side of the loop as well, by an amount that is the solver rebalancing its
 intercept rather than anything the vote means, and a page whose whole job is
 "watch the curve reach out and take that item in" cannot afford a second thing
-moving at the same time (#3763).
+moving at the same time (#3763). And the looser and tighter cuts are *geometric
+offsets* of the shipped curve rather than two more level sets of the decision
+function, because an RBF level set bulges where the votes are and the three
+curves have to read as one curve cut three ways (`_band`, #3779).
 
-**The slide carries the whole argument, so the figure carries seven stages.**
-The pile; the votes and the detector they imply; the same detector cut looser
-and tighter, which is the threshold's first job — what comes back; the two
-items nobody should be asked about; the one item that is worth a question,
-which is the threshold's second job; the answer, and the boundary redrawn; and
-the next question, which exists only because the boundary moved. Slides 7 and 8
-of the deck used to make the "one line, two jobs" point in the abstract, on a
+**The slide carries the whole argument, so the figure carries ten stages.**
+The pile; the votes and the detector they imply; the two items nobody should be
+asked about; the one item that is worth a question, which is what the threshold
+decides for the loop; the answer; the boundary redrawn to take it in; the next
+question, which exists only because the boundary moved; and then the
+threshold's other job — the same detector cut looser and tighter, twice, once
+on the retrained detector and once back on the first. Slides 7 and 8 of the
+deck used to make the "one line, two jobs" point in the abstract, on a
 schematic and then on a sentence. Made here, on the field, it costs no slides
 at all (#3246).
 
@@ -72,7 +79,7 @@ tight cuts are scaffolding for one beat and leave once the argument has moved
 on from what comes back to what gets asked; and the boundary moves once the
 retrain has happened (the previous boundary stays on the slide, faded, so what
 the audience sees is where it went, not a curve teleporting). Everything else —
-the window, the crop, every item's position — is pinned across all seven pages.
+the window, the crop, every item's position — is pinned across all ten pages.
 """
 
 import functools
@@ -722,7 +729,9 @@ def _band_width(model: SVC, pts: np.ndarray, votes: tuple[int, ...]) -> float:
     the curve, because the two cuts are geometric offsets of it (`_band`).
     """
     curve = _contour(model)
-    edge = np.minimum(np.minimum(curve[:, 0], CANVAS[0] - curve[:, 0]), np.minimum(curve[:, 1], CANVAS[1] - curve[:, 1]))
+    edge = np.minimum(
+        np.minimum(curve[:, 0], CANVAS[0] - curve[:, 0]), np.minimum(curve[:, 1], CANVAS[1] - curve[:, 1])
+    )
     return min(
         BAND_WIDTH,
         BAND_MARGIN_CAP * float(_gap(curve, pts[list(votes)])[0].min()),
@@ -1270,9 +1279,7 @@ def _band(ax: plt.Axes, model: SVC, width: float) -> None:
     """
     xx, yy, field = _signed_distance(model)
     ax.contourf(xx, yy, field, levels=[-width, width], colors=[BAND], zorder=0)
-    ax.contour(
-        xx, yy, field, levels=[-width, width], colors=[BLUE], linewidths=1.6, linestyles=[(0, (5, 4))], zorder=1
-    )
+    ax.contour(xx, yy, field, levels=[-width, width], colors=[BLUE], linewidths=1.6, linestyles=[(0, (5, 4))], zorder=1)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1593,7 +1600,11 @@ def _photo_stack(ax: plt.Axes, x0: float, y0: float) -> None:
     top = y0 + CARD_H - inset
     ax.add_patch(
         plt.Polygon(
-            [(left, base), (left + 0.72 * (right - left), base), (left + 0.34 * (right - left), base + 0.62 * (top - base))],
+            [
+                (left, base),
+                (left + 0.72 * (right - left), base),
+                (left + 0.34 * (right - left), base + 0.62 * (top - base)),
+            ],
             closed=True,
             facecolor="none",
             edgecolor=SOFT,
@@ -1603,7 +1614,11 @@ def _photo_stack(ax: plt.Axes, x0: float, y0: float) -> None:
     )
     ax.add_patch(
         plt.Polygon(
-            [(left + 0.44 * (right - left), base), (right, base), (right - 0.22 * (right - left), base + 0.46 * (top - base))],
+            [
+                (left + 0.44 * (right - left), base),
+                (right, base),
+                (right - 0.22 * (right - left), base + 0.46 * (top - base)),
+            ],
             closed=True,
             facecolor="white",
             edgecolor=SOFT,
@@ -1652,7 +1667,7 @@ def _block_arrow(ax: plt.Axes, x0: float, x1: float, y: float, label: str) -> No
 def _wire_cube(ax: plt.Axes, x0: float, y0: float) -> None:
     """A wire-frame box: the front face, the back face, and the four struts.
 
-    Drawn in `SOFT` so the dots inside it stay the darkest thing in the box —
+    Drawn in `WIRE` so the dots inside it stay the darkest thing in the box —
     the cube is the room the items live in, not an object in its own right.
     """
     d = CUBE_DEPTH

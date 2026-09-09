@@ -267,6 +267,12 @@ cd scripts/screenshots && npm install     # once — playwright lives here
 node ../../slides/figs/src/shoot-ui-figs.mjs
 ```
 
+One of those files is not a screenshot: `figs/ui-find-grid.webp` is a contact
+sheet of the top of the ranking with no app around it, built by
+`figs/src/results_grid.py` from the frames the results panel listed. It is
+composed into the same box a screenshot occupies, so the Find slide's build
+reveals into the same frame rather than moving it.
+
 The first three groups are **one session**, shot in the order a user works:
 create the detector through the modal, answer what autopilot serves until the
 Good and Bad piles have something in them, then run the trained head over

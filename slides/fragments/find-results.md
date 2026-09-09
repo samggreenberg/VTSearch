@@ -1,6 +1,6 @@
 <!-- _class: full -->
 
-![bg fit](figs/ui-find.webp)
+![bg fit](figs/ui-find-grid.webp)
 
 ## Read All About It
 
@@ -12,11 +12,17 @@
      actually matters: the few minutes bought a detector, and the detector is
      for the data nobody is ever going to look at by hand. -->
 
-<!-- **b** — Two hundred and forty items, scored and ranked, in the time it took
-     to click. The top of that ranking is on the left and it is shelves, stacks
-     and spines — and it was produced by fourteen answers to fourteen questions,
-     against a corpus with no labels in it an hour ago. -->
+<!-- **b** — Two hundred and forty items scored and ranked in the time it took
+     to click, and this is the top of that ranking: shelves, stacks and spines,
+     produced by fourteen answers to fourteen questions against a corpus with no
+     labels in it an hour ago. -->
 
-<!-- Worth naming what the right-hand panel is already saying: **85** of the 240
-     are called a match and 155 are not. Nobody asked for that split and nothing
-     in the votes specified it. -->
+<!-- Say what is *not* on this slide, because it is the point: the tool. Nobody
+     opened anything. A detector left on autorun mails a list of references, and
+     the person who asked for the books gets the books — so the honest picture
+     of the payoff is the pictures, not a screen with them stacked in a panel
+     down one side. -->
+
+<!-- The next slide goes back into the tool, once, for the one thing this view
+     cannot show: **85** of the 240 came back and 155 did not. Nobody asked for
+     that split and nothing in the votes specified it. -->
