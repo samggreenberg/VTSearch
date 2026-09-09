@@ -42,6 +42,7 @@ Needs node and python3. Nothing to install — `npx` fetches Marp on first run
 ./render.sh hold-the-line html      # or html / pptx
 ./render.sh hold-the-line pdf --speaker  # -> _out/hold-the-line.speaker.pdf
 ./render.sh hold-the-line pptx --no-pageno  # -> _out/hold-the-line.unnumbered.pptx
+./render.sh hold-the-line pptx --editable   # -> _out/hold-the-line.editable.pptx
 ./build.py --check                  # preflight all manifests, build nothing
 ./build.py --list                   # decks, slide counts, unused fragments
 ```
@@ -310,6 +311,40 @@ rather than adding it to `requirements/` for a figure's sake.
 ## Exporting to PowerPoint
 
 `make FMT=pptx` produces one full-slide image per slide — fine for handing over
-a read-only deck, not editable. Marp's `--pptx-editable` emits real shapes but
-needs LibreOffice installed. If a co-presenter must edit slides in PowerPoint,
-export once at the end and don't commit the result.
+a read-only deck, not editable.
+
+**`--editable` gives real PowerPoint shapes**: headlines and lists arrive as
+text you can retype, figures as pictures you can move or replace.
+
+```bash
+./render.sh hold-the-line pptx --editable              # -> _out/hold-the-line.editable.pptx
+./render.sh hold-the-line pptx --editable --no-pageno  # ...editable.unnumbered.pptx
+make editable                                          # every deck
+```
+
+It needs **LibreOffice** on `PATH` — `brew install --cask libreoffice` on macOS,
+`apt-get install libreoffice-impress` on Debian/Ubuntu, and about 230 MB on
+disk. `render.sh` checks for `soffice` and says so rather than failing inside
+Marp. The full deck takes ~90 seconds.
+
+Marp builds it by rendering the deck to PDF and having Impress import that with
+`impress_pdf_import`, which reconstructs shapes from the PDF's drawing
+operators — and that reconstruction is why `--editable` builds its **own cut of
+the deck** (`build.py --editable`, which adds `EDITABLE_STYLE`) rather than
+exporting the same one:
+
+- **A CSS text shadow imports as one extra text frame *and* a greyscale bitmap
+  of the glyphs, per shadow layer.** The headline's white halo has four, so
+  every full-bleed title used to arrive as five stacked copies of itself behind
+  four alpha masks. `EDITABLE_STYLE` drops the halo, which this deck can afford:
+  it exists to separate the headline from a screenshot's own chrome, and the
+  screenshots are composed with the app's left edge at 375px against a title
+  notch that ends at 360, so the headline already sits on plain white.
+- Everything else survives intact. Figures land full-bleed at exactly
+  13.333 x 7.5in, and the exported deck renders indistinguishably from the
+  image export.
+
+If you add a CSS effect that Chromium rasterises — a text shadow, an outline, a
+blur — check the editable export, and add the override to `EDITABLE_STYLE` if
+it comes back as a pile of bitmaps. Export at the end and don't commit the
+result; `_out/` is gitignored.

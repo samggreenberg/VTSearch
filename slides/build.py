@@ -89,6 +89,24 @@ DIRECTIVE_LINE_RE = re.compile(
 # Front-matter keys we default when a manifest doesn't set them.
 DEFAULT_FRONTMATTER = {"marp": "true", "theme": "vtsearch", "paginate": "false"}
 
+# Extra CSS for the editable-PowerPoint cut, injected as a `style:` front-matter
+# key so the theme itself is untouched.
+#
+# Marp builds an editable `.pptx` by rendering the deck to PDF and importing it
+# into Impress with `impress_pdf_import`; that importer reconstructs shapes from
+# the PDF's drawing operators, and it reconstructs a **CSS text shadow** as one
+# more text frame plus a greyscale bitmap of the glyphs, per shadow layer. The
+# headline's white halo has four layers, so every full-bleed title arrived in
+# PowerPoint as five stacked copies of itself behind four alpha masks — which
+# is what made the editable export look broken, and the only thing that did:
+# the figures themselves import at exactly the right size and position (#3779).
+#
+# Dropping the halo costs this deck almost nothing. It exists to separate the
+# headline from a screenshot's own chrome, and the screenshots are composed with
+# the app's left edge at 375px while the title notch ends at 360 — so on every
+# slide in this deck the headline already sits on plain white.
+EDITABLE_STYLE = "section.full h2 { text-shadow: none; }"
+
 
 class DeckError(Exception):
     pass
@@ -579,8 +597,8 @@ def speaker_bodies(
     return bodies
 
 
-def assemble(deck: str, write: bool, speaker: bool = False, pageno: bool = True) -> list[str]:
-    """Preflight one deck; write _build/<deck>[.speaker|.unnumbered].md unless write=False.
+def assemble(deck: str, write: bool, speaker: bool = False, pageno: bool = True, editable: bool = False) -> list[str]:
+    """Preflight one deck; write _build/<deck>[.speaker|.editable|.unnumbered].md unless write=False.
 
     Returns the list of problems found (empty means the deck is clean).
     """
@@ -605,10 +623,13 @@ def assemble(deck: str, write: bool, speaker: bool = False, pageno: bool = True)
 
     merged = dict(DEFAULT_FRONTMATTER)
     merged.update(front)
+    if editable:
+        merged["style"] = EDITABLE_STYLE
     header = "\n".join(f"{k}: {yaml_scalar(v)}" for k, v in merged.items())
 
     BUILD.mkdir(exist_ok=True)
-    suffix = ".speaker" if speaker else ("" if pageno else ".unnumbered")
+    parts = [""] if speaker else [p for p, on in ((".editable", editable), (".unnumbered", not pageno)) if on]
+    suffix = ".speaker" if speaker else "".join(parts)
     out = BUILD / f"{deck}{suffix}.md"
     body = rewrite_images("\n\n---\n\n".join(bodies))
     out.write_text(f"---\n{header}\n---\n\n{body}\n")
@@ -673,6 +694,11 @@ def main() -> int:
         help="render presenter notes visibly; writes _build/<deck>.speaker.md",
     )
     parser.add_argument(
+        "--editable",
+        action="store_true",
+        help="build the cut Marp's --pptx-editable imports cleanly; writes _build/<deck>.editable.md",
+    )
+    parser.add_argument(
         "--no-pageno",
         dest="pageno",
         action="store_false",
@@ -686,6 +712,9 @@ def main() -> int:
     if args.list:
         cmd_list()
         return 0
+
+    if args.speaker and args.editable:
+        parser.error("--editable and --speaker are mutually exclusive: the speaker view is a PDF, not a deck to edit")
 
     if args.speaker and not args.pageno:
         parser.error(
@@ -701,7 +730,9 @@ def main() -> int:
     problems: list[str] = []
     for deck in targets:
         try:
-            problems += assemble(deck, write=not args.check, speaker=args.speaker, pageno=args.pageno)
+            problems += assemble(
+                deck, write=not args.check, speaker=args.speaker, pageno=args.pageno, editable=args.editable
+            )
         except DeckError as exc:
             problems.append(str(exc))
 

@@ -4,6 +4,7 @@
 #   make hold-the-line        one deck   -> _out/hold-the-line.pdf
 #   make speaker              every deck -> _out/*.speaker.pdf (notes visible)
 #   make unnumbered           every deck -> _out/*.unnumbered.pdf (no page numbers)
+#   make editable             every deck -> _out/*.editable.pptx (real shapes; needs LibreOffice)
 #   make html FMT=html        every deck -> _out/*.html
 #   make watch DECK=hold-the-line   live preview in a browser
 #   make check                preflight every manifest, build nothing
@@ -22,7 +23,7 @@ DEPS  := $(wildcard fragments/*.md) $(wildcard figs/*) themes/vtsearch.css build
 # through `make` reproduced exactly the hang render.sh was written to prevent
 # (#3434). Every target below therefore delegates.
 
-.PHONY: all speaker unnumbered check list clean watch $(DECKS)
+.PHONY: all speaker unnumbered editable check list clean watch $(DECKS)
 
 all: $(addprefix _out/,$(addsuffix .$(FMT),$(DECKS)))
 
@@ -35,6 +36,11 @@ speaker:
 # than over it.
 unnumbered:
 	@for d in $(DECKS); do ./render.sh $$d $(FMT) --no-pageno || exit 1; done
+
+# Real PowerPoint shapes rather than one image per slide. Needs LibreOffice;
+# see README.md for what the import does and does not survive.
+editable:
+	@for d in $(DECKS); do ./render.sh $$d pptx --editable || exit 1; done
 
 # Bare deck name builds that one deck, e.g. `make hold-the-line`.
 $(DECKS): %: _out/%.$(FMT)
