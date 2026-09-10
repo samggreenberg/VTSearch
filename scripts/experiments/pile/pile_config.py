@@ -1742,7 +1742,7 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
     # first name -- "incl plates and dishes" -- said nothing about it. Renamed
     # mid-slate once that showed up.
     "bowl": ClassRule(
-        name="bowl incl plates and food containers not wrappers",
+        name="bowl incl plates not planters or wrappers",
         test=(
             "Good: bowls, plates (a paper plate is a plate), saucers, dishes, serving "
             "pots, baskets that hold food, disposable food containers, and a dog's water "
@@ -1751,7 +1751,7 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "of apples is not a bowl, nor is a shopping cart, a grocery store, or a car "
             "boot with the shopping in it. It has to be MADE to hold food. "
             "Bad: flat wrappers and sleeves, cups and mugs (`cup`), sink basins (`sink`), "
-            "toilet bowls, feed troughs, planters (`vase`), ashtrays and carafes. "
+            "toilet bowls, feed troughs, planters (out of C, not `vase`), ashtrays and carafes. "
             "Judge the vessel, not the food -- which answers WHAT TO BOX. Contents "
             "answer WHICH CLASS when the vessel alone is ambiguous: full of soup is a "
             "Bowl whatever its shape; empty, the ladder decides (Bowl 0.66 h/w, Cup 1.26). "
@@ -1778,15 +1778,44 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "`jar` (120) and `jug` (28) fold in and barely have one."
         ),
     ),
+    # Until 2026-09-09 `vase` claimed "flower pots, planters" and "a potted
+    # plant's pot is a vase", and `bowl` pointed planters AT `vase`. The reviewer
+    # rejected planters through the whole finished vase slate and reported the
+    # line as "a little weak", judging on proportions and ornateness instead --
+    # which is the shape of a rule nobody can apply twice the same way.
+    #
+    # COCO disagrees with the old wording in two independent ways. `potted plant`
+    # is a class of its own: 69% of its images carry no `vase` at all, and only
+    # 82 of 2,500 potted plants reach IoU>0.5 with a vase box. And of 445 COCO
+    # `vase` crops taken from images with NO potted plant, 82.0% look like a vase
+    # and 4.1% like a flower pot or potted plant. (The first pass of that
+    # measurement normalised COCO's boxes by the VG file's dimensions and read
+    # 47.4%/3.6%; 88% of anchored pairs are a uniform ~1.28x rescale of each
+    # other, which aspect-ratio gating cannot see -- the trap `anchor_to_coco`
+    # documents and this analysis walked into anyway.)
+    #
+    # So a planter is not a vase, and `bowl` already refused it on its own
+    # principle -- "it has to be MADE to hold food" -- which a planter fails
+    # whatever its shape. Both doors shut, and `potted plant` is not in C, so the
+    # object is out of C. The plant is not the operative fact; being made to hold
+    # one is, which is why an EMPTY planter is out too.
+    #
+    # Sized before ruling: 167 of the 278 vase rejects score `potted plant` or
+    # `flower pot` above `vase`, against 18 of the 116 accepts. Applying the old
+    # wording literally would have roughly doubled vase's positives, so this
+    # keeps the 394 verdicts as cast rather than voiding them.
     "vase": ClassRule(
-        name="vase incl pots and planters",
+        name="vase not planters",
         test=(
-            "Good: only a vessel MADE as one -- vases, flower pots, planters, urns, "
-            "pottery. Against an ornamental BOWL, use the box: a vase is TALLER THAN "
+            "Good: only a vessel MADE as one -- vases, urns, decorative pottery. "
+            "Against an ornamental BOWL, use the box: a vase is TALLER THAN "
             "WIDE (median h/w 1.58, 84% of boxes) and a bowl is wider than tall (0.66, "
             "13%); the middle halves do not overlap. Size does not help -- bowl's median "
             "box is the larger. "
-            "A potted plant's pot is a vase; vote the vessel, not the plant. "
+            "A VESSEL MADE TO HOLD A GROWING PLANT is neither a vase nor a bowl -- a "
+            "flower pot, planter or window box is out of C entirely, whether or not a "
+            "plant is in it, because the plant is not what decides it. If you cannot "
+            "tell a planter from a vase and it is empty, use the shape test above. "
             "Bad: a cooking pot on a stove, a plain bowl, and any BORROWED vessel however "
             "it is used -- a jar of cut flowers is a `bottle`, a glass of them a `cup`. "
             "A pitcher or jug of them is a `bottle`: COCO split them (pitcher to cup 30, "
