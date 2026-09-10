@@ -2017,18 +2017,41 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "narrows it without repairing that."
         ),
     ),
+    # Ruled 2026-09-10 (#3789). The rule said "any LIVE bird" and the reviewer hit
+    # a case it did not reach: a dead robin held in another bird's beak, at least
+    # twice in the queue. Not live, so it failed the Good clause; not cooked, not a
+    # part, not a depiction, so nothing in the Bad list caught it either.
+    #
+    # "live" was doing accidental work. Every entry on the Bad list carries a
+    # principle -- it is food, it is a part not a whole, it is a representation not
+    # an instance -- and prey satisfies none of them. The rule's own rationale is
+    # entirely about VG naming (`chicken`, `turkey` usually mean dinner), which is
+    # about food and never about death.
+    #
+    # Owner's ruling: whole dead birds are Birds, and taxidermy mounts are too. A
+    # mount is the animal, not a figurine of one. "Prepared as food" replaces
+    # "cooked", which also closes a hole nobody had hit: a raw plucked chicken in a
+    # butcher's window is not cooked and is plainly not wanted here.
+    #
+    # Costs nothing to apply: the bird pass had not started (0 of 645), so no
+    # verdict was cast under either reading.
     "bird": ClassRule(
-        name="bird any species not cooked",
+        name="bird incl dead not food",
         test=(
-            "Good: any live bird, wild or domestic, of any species -- ducks, geese, gulls, "
+            "Good: any WHOLE bird, wild or domestic, of any species, ALIVE OR DEAD -- a bird "
+            "carried as prey, one lying dead, and a taxidermy mount, which is the animal "
+            "itself and not a depiction of it. Ducks, geese, gulls, "
             "pigeons, swans, parrots, ostriches, owls, eagles, flamingos, peacocks, hens "
-            "and roosters. Bad: a COOKED bird on a plate, a feather or a wing on its own, a "
-            "bird figurine, a bird on a sign or a logo. The cooked clause is not "
+            "and roosters. Bad: a bird PREPARED AS FOOD -- cooked, plucked or butchered, on "
+            "a plate, in a pan or in a display case -- a feather or a wing on its own, a "
+            "bird figurine, a bird on a sign or a logo. The food clause is not "
             "hypothetical: `chicken` names 428 overlap images and COCO finds a bird on 10% "
             "of them, `turkey` 53 images at 12% -- in VG both words are usually food. "
             "`crane` is the other trap and it is a machine: 308 images, 2%. None of the "
-            "three can be a name for this class, but a reviewer looking at a live one "
-            "should vote Good."
+            "three can be a name for this class, but a reviewer looking at an actual "
+            "bird should vote Good. DEATH IS NOT THE TEST, food is: the exclusion exists "
+            "because VG uses bird words to mean dinner, not because a dead bird stops "
+            "being one."
         ),
     ),
     "dog": ClassRule(
