@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build one deck without make:  ./render.sh hold-the-line [pdf|html|pptx] [--speaker|--watch]
+# Build one deck without make:  ./render.sh hold-the-line [pdf|html|pptx|png] [--speaker|--watch]
 # --speaker builds the speaker view -> _out/<deck>.speaker.<fmt>: each page is
 # a miniature of the real rendered slide beside its presenter notes. It renders
 # the audience deck to per-slide PNGs first, so it is a two-pass build.
@@ -11,6 +11,10 @@
 # --editable (pptx only) exports real PowerPoint shapes instead of one image per
 # slide -> _out/<deck>.editable[.unnumbered].pptx. Needs LibreOffice on PATH:
 # Marp renders the deck to PDF and has Impress import it. See README.md.
+# The `png` format dumps one image per page and zips the pile
+# -> _out/<deck>[.unnumbered]-pngs*.zip, for dropping the slides into somebody
+# else's template as pictures. PNG_SCALE sets the resolution (default 2, i.e.
+# 2560x1440); PNG_MAX_MB caps one zip. See pack_pngs.py.
 #
 # This is the single Marp wrapper: slides/Makefile delegates every target here
 # rather than invoking Marp itself, so the --no-stdin and PIPESTATUS fixes below
@@ -31,7 +35,7 @@ for arg in "$@"; do
         --watch) watch=1 ;;
         --no-pageno) pageno=--no-pageno ;;
         --editable) editable=1 ;;
-        pdf|html|pptx) fmt=$arg ;;
+        pdf|html|pptx|png) fmt=$arg ;;
         *) echo "unknown argument: $arg" >&2; exit 1 ;;
     esac
 done
@@ -65,6 +69,14 @@ fi
 
 MARP=(npx --yes @marp-team/marp-cli@4)
 mkdir -p _out
+
+# How many times 1280x720 each page image is rendered at, and the ceiling on
+# one zip. Two is presentation grade without being wasteful: 2560x1440 is over
+# a 1080p projector's pixels and comfortably over what any deck displays a
+# full-bleed picture at, and going to three doubles the bytes to buy resolution
+# the room cannot resolve.
+PNG_SCALE=${PNG_SCALE:-2}
+PNG_MAX_MB=${PNG_MAX_MB:-25}
 
 # Marp warns but exits 0 when a figure path doesn't resolve, producing a deck
 # with holes where the figures should be. Treat that warning as fatal.
@@ -127,6 +139,17 @@ if [[ -n $speaker ]]; then
     out="_out/$deck.speaker.$fmt"
     run_marp "_build/$deck.speaker.md" -o "$out" \
         || { rm -f "$out"; echo "ERROR: speaker deck removed." >&2; exit 1; }
+elif [[ $fmt == png ]]; then
+    # One PNG per page into a directory of its own, then packed. Marp numbers
+    # the files itself (`<stem>.001.png`), which is the order they have to be
+    # dragged in, so the names are left exactly as it writes them.
+    pile="_out/$stem-png"
+    rm -rf "$pile"
+    mkdir -p "$pile"
+    run_marp "_build/$stem.md" --images png --image-scale "$PNG_SCALE" -o "$pile/$stem.png" \
+        || { rm -rf "$pile"; echo "ERROR: page images removed." >&2; exit 1; }
+    ./pack_pngs.py "$pile" "$stem" --max-mb "$PNG_MAX_MB"
+    out="_out/$stem-pngs*.zip"
 else
     out="_out/$stem.$fmt"
     run_marp "_build/$stem.md" ${marp_args[@]+"${marp_args[@]}"} -o "$out" \

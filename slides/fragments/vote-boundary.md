@@ -22,9 +22,12 @@
 
 <!-- build: figs/vote-boundary.build9.png -->
 
-<!-- **a** — One circle per item: a photo, a clip, a document. The square from
-     the last slide, zoomed in until the dots are items again. Nothing
-     labelled, nothing known — and it is a drawing, not a plot. -->
+<!-- **a** — One circle per item: a photo, a clip, a document — the contents of
+     the last slide's cube, with the box taken off. Nothing labelled, nothing
+     known, and it is a **drawing rather than a plot**: the space those points
+     live in has 768 dimensions and nothing that fits on a slide does. What is
+     true in the drawing is what is true in the space — near means similar, and
+     the detector is a boundary drawn through it. -->
 
 <!-- **b** — Five Good, five Bad: two minutes of clicking. Ten marks against
      eighty-eight circles, and that ratio is the situation. -->

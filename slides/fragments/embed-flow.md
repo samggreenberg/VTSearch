@@ -8,30 +8,39 @@
 
 <!-- build: figs/embed-flow.build2.png -->
 
-<!-- The one sentence the deck has been assuming and never said. The room has
-     just spent four slides looking at photographs, and the next slide opens on
-     a field of circles; nothing so far has told them that the second is what
-     became of the first. -->
+<!-- build: figs/embed-flow.build3.png -->
+
+<!-- The sentence the deck has been assuming and never said. Slide 3 had the
+     user type one word, and nothing since has explained why a *word* is
+     allowed to seed a ranking over *pictures*. This slide is the answer, and
+     it is the only machine-learning claim the talk actually needs. -->
 
 <!-- **a** — Where it starts, and it is what they have already been shown: a
-     pile of pictures. Nothing has been done to them yet. -->
+     pile of photographs. Nothing has been done to them yet. -->
 
 <!-- **b** — Every one of them goes through **SigLIP** once, at import, and
      comes out as a point in a 768-dimensional space. That is the only time the
-     heavy network runs — it is why a vote retrains the detector in a fraction
-     of a second, which they watched happen four slides ago without being told
-     why. The cube is a lie of scale and worth naming as one: 768 dimensions do
-     not fit on a slide, so three stands in for them. What survives the lie is
-     the part that matters — items a person would call similar land near each
-     other, and nothing but the network decided that. -->
+     heavy network runs — which is why a vote retrains the detector in a
+     fraction of a second, something they watched happen four slides ago
+     without being told why. The cube is a lie of scale and worth naming as
+     one: 768 dimensions do not fit on a slide, so three stand in for them.
+     What survives the lie is the part that matters — items a person would call
+     similar come out near each other, and nothing but the network decided
+     that. -->
 
-<!-- **c** — **UMAP** then squashes the cloud flat, keeping neighbours
-     neighbours. Point at the two boxes rather than describing it: every dot is
-     exactly where the cube's own shadow already had it, and the only thing the
-     arrow takes away is the dimension. That is a drawing convenience rather
-     than part of the product — the detector works in the 768-d space, and the
-     2-d square exists so the next twenty minutes can be *shown* rather than
-     described. -->
+<!-- **c** — Now the other input, and the word on the arrow is the same word.
+     The phrase the user typed goes through the **same network** — one model,
+     two kinds of input — which is the property the whole seed depends on and
+     the one thing on this slide worth saying slowly. -->
 
-<!-- So the field on the next slide is that square, zoomed in. Same circles,
-     one per item — which is the only thing anyone has to carry forward. -->
+<!-- **d** — And it lands *in there*, with the pictures. That is the answer to
+     "why does typing `book` do anything at all": the phrase is a point in the
+     same space as the photographs, so "which items are near it?" is a question
+     with an actual answer, and that ranking is what the first question is
+     drawn from. Be honest about the drawing, though — the square is at the
+     middle of the cube because the middle claims nothing. Where it *really*
+     sits, and which items really fall near it, is the next twenty minutes. -->
+
+<!-- If someone asks: no, the detector is not this. This is the seed, used once
+     — from the next slide on the votes take over and the phrase stops
+     mattering. -->
