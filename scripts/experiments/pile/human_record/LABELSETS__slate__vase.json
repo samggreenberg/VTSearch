@@ -5130,6 +5130,6 @@
  ],
  "kind": "slate",
  "question": "is this box one?",
- "rule": "vase incl pots and planters (confirm the box)",
+ "rule": "vase incl pots and planters",
  "source": "OWLv2-screened per-class review, exported from the live app"
 }
