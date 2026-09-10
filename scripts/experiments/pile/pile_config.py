@@ -1698,11 +1698,32 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "Bad: pickups and cargo vans, which are `truck`."
         ),
     ),
+    # Ruled 2026-09-10 by the owner, on finishing the fork slate. Three cases the
+    # enumeration did not cover, and one principle that decides all of them: a
+    # SPORK is a fork (it has tines); a PASTA STRAINER is not, even the kind with
+    # protruding fingers, because those are for separating pasta from water rather
+    # than piercing; a CARVING FORK is, on two tines, so the count never mattered.
+    #
+    # Written as a test rather than three more list entries, because the list was
+    # what let these through. `spoon` is amended in the same change to disclaim the
+    # spork: leaving both rules silent about one object is how `vase` and `bowl`
+    # came to contradict each other about planters (#3784), found only when a
+    # reviewer hit it mid-pass.
+    #
+    # The fork pass was already complete (396 of 396, 134 good) when this was
+    # ruled. The verdicts stand: no spork or strainer case was reported as
+    # contested, and the ruling names what was already being done.
     "fork": ClassRule(
-        name="fork incl plastic",
+        name="fork incl sporks not strainers",
         test=(
-            "Good: metal, plastic and disposable forks, and serving, carving and fondue "
-            "forks. Bad: spatulas, tongs, whisks, skewers. Vote Good only when the boxed "
+            "Good: metal, plastic and disposable forks, serving, carving and fondue forks, "
+            "and SPORKS. THE TEST IS THE TINES: prongs meant to PIERCE OR HOLD FOOD make a "
+            "fork, and how many there are does not matter -- a carving fork has two. A "
+            "spork has them, so it is a Fork and not a Spoon; where an object could be "
+            "read as either, the tines decide. "
+            "Bad: spatulas, tongs, whisks, skewers, and a PASTA STRAINER even the kind with "
+            "protruding fingers, because those fingers separate pasta from water and are "
+            "not meant to pierce anything. Vote Good only when the boxed "
             "object IS a fork, not when a fork sits somewhere inside a `silverware` or "
             "`utensil` box covering a whole place setting. When only the handle shows and "
             "the food gives nothing away, read the GRIP: a fist closed to stab is a fork, "
@@ -1711,11 +1732,12 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
         ),
     ),
     "spoon": ClassRule(
-        name="spoon incl plastic not spatulas",
+        name="spoon incl plastic not spatulas or sporks",
         test=(
             "Good: teaspoons, tablespoons, soup, wooden, plastic, disposable and serving "
             "spoons, and ladles -- a ladle is a spoon with a deep bowl. Bad: spatulas, "
-            "slotted turners, scoops, whisks, tongs. Judge the object, not the drawer. "
+            "slotted turners, scoops, whisks, tongs, and a SPORK, which is a Fork -- "
+            "tines decide, and no single object is both. Judge the object, not the drawer. "
             "When only the HANDLE shows, read the food: a handle out of cereal is a "
             "spoon, a handle out of a salad is a fork. The one rule here that infers "
             "from surroundings rather than the object, because the alternative deletes "
