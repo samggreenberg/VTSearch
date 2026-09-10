@@ -29,6 +29,9 @@
      them. That shipped as "safe thresholds", and it is the single biggest win
      in the line. -->
 
-<!-- Say what the figure does not: the average is **weighted**, and how the
-     weight moves as votes accumulate is the next slide. The first version was
-     one hard-coded line with three unmeasured choices baked into it. -->
+<!-- Say what the figure does not: the average is **weighted**, and the weight
+     moves as votes accumulate — all mixture at the start, handing over to the
+     folds as the labels arrive, and never handing over completely, because a
+     fold estimator that has seen enough votes is still one sample of them.
+     The schedule is worth a question if anyone asks; the move on this slide
+     is the average itself. -->

@@ -36,6 +36,6 @@
 <!-- **g** — Average the two cuts and hand θ₀ to M₀. Green is Good media, red
      is Bad. -->
 
-<!-- The shipped code has refined this since — pooled scores, a quantile the
-     Inclusion knob can bias, redrawn splits. Polish, not the idea. The next
-     slide is what happens *before* "enough labels". -->
+<!-- The shipped code has refined this since — pooled scores, redrawn splits,
+     a quantile the reporting threshold can bias. Polish, not the idea. The
+     next slide is what happens *before* "enough labels". -->

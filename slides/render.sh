@@ -4,6 +4,13 @@
 # a miniature of the real rendered slide beside its presenter notes. It renders
 # the audience deck to per-slide PNGs first, so it is a two-pass build.
 # --watch starts Marp's live-reloading browser preview instead of writing a file.
+# --no-pageno draws no page numbers -> _out/<deck>.unnumbered.<fmt>, for a deck
+# being handed over rather than presented. It writes to its own file so the
+# numbered deck — the one a question from the room can name a slide in — is
+# still there beside it.
+# --editable (pptx only) exports real PowerPoint shapes instead of one image per
+# slide -> _out/<deck>.editable[.unnumbered].pptx. Needs LibreOffice on PATH:
+# Marp renders the deck to PDF and has Impress import it. See README.md.
 #
 # This is the single Marp wrapper: slides/Makefile delegates every target here
 # rather than invoking Marp itself, so the --no-stdin and PIPESTATUS fixes below
@@ -16,16 +23,43 @@ shift
 fmt=pdf
 speaker=
 watch=
+pageno=
+editable=
 for arg in "$@"; do
     case "$arg" in
         --speaker) speaker=1 ;;
         --watch) watch=1 ;;
+        --no-pageno) pageno=--no-pageno ;;
+        --editable) editable=1 ;;
         pdf|html|pptx) fmt=$arg ;;
         *) echo "unknown argument: $arg" >&2; exit 1 ;;
     esac
 done
 if [[ -n $speaker && -n $watch ]]; then
     echo "--speaker and --watch are mutually exclusive" >&2
+    exit 1
+fi
+# build.py refuses these pairs too; catching them here keeps the message next to
+# the flags that caused it rather than under a stack of build output.
+if [[ -n $speaker && -n $pageno ]]; then
+    echo "--speaker and --no-pageno are mutually exclusive: the speaker view is navigated by those numbers" >&2
+    exit 1
+fi
+if [[ -n $speaker && -n $editable ]]; then
+    echo "--speaker and --editable are mutually exclusive: the speaker view is a PDF, not a deck to edit" >&2
+    exit 1
+fi
+if [[ -n $editable && -n $watch ]]; then
+    echo "--editable and --watch are mutually exclusive: --watch is a live preview, not an export" >&2
+    exit 1
+fi
+if [[ -n $editable && $fmt != pptx ]]; then
+    echo "--editable only applies to pptx (got $fmt): it is what makes PowerPoint shapes instead of slide images" >&2
+    exit 1
+fi
+if [[ -n $editable ]] && ! command -v soffice >/dev/null 2>&1; then
+    echo "--editable needs LibreOffice on PATH (soffice): Marp has Impress import the rendered PDF." >&2
+    echo "  macOS: brew install --cask libreoffice     Debian/Ubuntu: apt-get install libreoffice-impress" >&2
     exit 1
 fi
 
@@ -59,13 +93,28 @@ run_marp() {
     rm -f "$log"
 }
 
-./build.py "$deck"
+# Which assembled deck this render is of. build.py writes the unnumbered cut to
+# its own file so the two never overwrite each other.
+stem=$deck
+build_args=("$deck")
+marp_args=()
+if [[ -n $editable ]]; then
+    build_args+=(--editable)
+    marp_args+=(--pptx --pptx-editable)
+    stem="$stem.editable"
+fi
+if [[ -n $pageno ]]; then
+    build_args+=(--no-pageno)
+    stem="$stem.unnumbered"
+fi
+
+./build.py "${build_args[@]}"
 
 # Live preview: Marp stays resident and re-renders on save, so it never reaches
 # the exit-status/figure checks in run_marp. --no-stdin still matters -- without
 # it Marp blocks on stdin before the watcher ever starts.
 if [[ -n $watch ]]; then
-    exec "${MARP[@]}" "_build/$deck.md" --theme-set themes/ --allow-local-files \
+    exec "${MARP[@]}" "_build/$stem.md" --theme-set themes/ --allow-local-files \
         --no-stdin -w --preview
 fi
 
@@ -79,8 +128,8 @@ if [[ -n $speaker ]]; then
     run_marp "_build/$deck.speaker.md" -o "$out" \
         || { rm -f "$out"; echo "ERROR: speaker deck removed." >&2; exit 1; }
 else
-    out="_out/$deck.$fmt"
-    run_marp "_build/$deck.md" -o "$out" \
+    out="_out/$stem.$fmt"
+    run_marp "_build/$stem.md" ${marp_args[@]+"${marp_args[@]}"} -o "$out" \
         || { rm -f "$out"; echo "ERROR: deck removed." >&2; exit 1; }
 fi
 echo "-> $out"

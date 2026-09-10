@@ -165,11 +165,16 @@ is the standard working, not failing.
 for the deck's *longest* headline and most slides carry a shorter one. Pass the
 rectangle to `save(notch=...)`, with the height measured — by the recipe above,
 on the slide the figure actually appears on — rather than guessed, and re-take
-that measurement if the headline changes. `vote-boundary` is the one figure
-that does it: "Rock the Vote" is one line and measures 56.8px, and the 100px of
-unused reserve left a band under the title with no title in it and no items
-either. Do not trim x, y or width; the notch's *position* is the standard, and
-a figure whose ink reaches the top-left corner still carries no title.
+that measurement if the headline changes. Two figures do it, and both for the
+same reason — a drawing that fills its slot has nowhere to spend the slack.
+`vote-boundary`: "Pics on a Plane" is one line and measures 56.8px, and the
+100px of unused reserve left a band under the title with no title in it and no
+items either. `embed-flow`: "Embed-time Stories" is two lines and measures
+101.6px, and holding back the other 70 pushed the pipeline down until its own
+names crowded the bottom edge. Both take the measured box plus one
+`OBJECT_GAP_PT`. Do not trim x, y or width; the notch's *position* is the
+standard, and a figure whose ink reaches the top-left corner still carries no
+title.
 
 Three rules follow.
 

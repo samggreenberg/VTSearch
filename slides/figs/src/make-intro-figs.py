@@ -5,8 +5,12 @@ Run from the repo root:
 
     python slides/figs/src/make-intro-figs.py
 
-One figure lives here: `vote-boundary`, the picture of what a threshold
-actually *does*. The deck's other mechanism figures are drawn in score space —
+Two figures live here. `embed-flow` is the short one — photographs in, dots
+out, so the room knows what the dots on the next slide are before it is asked
+to reason about them; see `embed_flow_fig`. The rest of this module is
+`vote-boundary`, the picture of what a threshold actually *does*.
+
+The deck's other mechanism figures are drawn in score space —
 a number line with a cut on it — which is the right space for a talk about
 where the cut goes, and the wrong one for a talk about what the cut is *for*,
 because it cannot show why the item the user is asked about next is the one it
@@ -19,26 +23,29 @@ trains a linear SVM in embedding space, where the boundary is a hyperplane, and
 a hyperplane in two dimensions is a straight line that cannot enclose anything.
 An RBF SVM on two dimensions is the same object with the curvature the audience
 would otherwise have to imagine, so that is what is fitted here: the boundary on
-every stage is a real `sklearn` decision contour over the votes shown, the
-looser and tighter cuts are real level sets of that same decision function, and
-the item selected next is really the unlabeled point nearest the boundary — the
+every stage is a real `sklearn` decision contour over the votes shown, and the
+item selected next is really the unlabeled point nearest the boundary — the
 app's own `Hard` rule.
 
-**With one exception, and it is deliberate.** The retrained boundary is the two
-real fits *spliced*: the new one where the answered vote reaches, the old one
-everywhere else, crossfaded between (`_Blended`). A plain refit moves the far
-side of the loop as well, by an amount that is the solver rebalancing its
+**With two exceptions, and both are deliberate.** The retrained boundary is the
+two real fits *spliced*: the new one where the answered vote reaches, the old
+one everywhere else, crossfaded between (`_Blended`). A plain refit moves the
+far side of the loop as well, by an amount that is the solver rebalancing its
 intercept rather than anything the vote means, and a page whose whole job is
 "watch the curve reach out and take that item in" cannot afford a second thing
-moving at the same time (#3763).
+moving at the same time (#3763). And the looser and tighter cuts are *geometric
+offsets* of the shipped curve rather than two more level sets of the decision
+function, because an RBF level set bulges where the votes are and the three
+curves have to read as one curve cut three ways (`_band`, #3779).
 
-**The slide carries the whole argument, so the figure carries seven stages.**
-The pile; the votes and the detector they imply; the same detector cut looser
-and tighter, which is the threshold's first job — what comes back; the two
-items nobody should be asked about; the one item that is worth a question,
-which is the threshold's second job; the answer, and the boundary redrawn; and
-the next question, which exists only because the boundary moved. Slides 7 and 8
-of the deck used to make the "one line, two jobs" point in the abstract, on a
+**The slide carries the whole argument, so the figure carries ten stages.**
+The pile; the votes and the detector they imply; the two items nobody should be
+asked about; the one item that is worth a question, which is what the threshold
+decides for the loop; the answer; the boundary redrawn to take it in; the next
+question, which exists only because the boundary moved; and then the
+threshold's other job — the same detector cut looser and tighter, twice, once
+on the retrained detector and once back on the first. Slides 7 and 8 of the
+deck used to make the "one line, two jobs" point in the abstract, on a
 schematic and then on a sentence. Made here, on the field, it costs no slides
 at all (#3246).
 
@@ -72,7 +79,7 @@ tight cuts are scaffolding for one beat and leave once the argument has moved
 on from what comes back to what gets asked; and the boundary moves once the
 retrain has happened (the previous boundary stays on the slide, faded, so what
 the audience sees is where it went, not a curve teleporting). Everything else —
-the window, the crop, every item's position — is pinned across all seven pages.
+the window, the crop, every item's position — is pinned across all ten pages.
 """
 
 import functools
@@ -91,11 +98,12 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.font_manager import FontProperties
+from matplotlib.patches import FancyArrow
 from matplotlib.textpath import TextPath
 from sklearn.svm import SVC
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from slide_figure import FULL_BLEED, notch_box, save  # noqa: E402
+from slide_figure import FULL_BLEED, OBJECT_GAP_PT, notch_box, save  # noqa: E402
 
 OUT = Path(__file__).resolve().parent.parent
 
@@ -106,6 +114,7 @@ BAND = "#dce7f2"  # the strip between the loose and the tight cut
 RED = "#b91c1c"  # the Bad side
 GREEN = "#0d8a5f"  # the Good side
 GHOST = "#aab3c0"  # the boundary as it was before the retrain
+WIRE = "#98a2b0"  # the box and the plane the items are drawn inside
 
 plt.rcParams.update(
     {
@@ -255,16 +264,20 @@ KERNEL_SCALE = 1.30
 #: three, and the choice is the user's.
 BAND_WIDTH = 0.62
 
-#: The most of the votes' margin a band cut may spend, as a fraction of the
-#: smallest margin any vote has, and of how far the decision function falls
-#: away from every training point. The first keeps the checks and crosses on
-#: the sides they were voted onto; the second keeps the loose cut a closed
-#: curve rather than a level the far field also clears.
+#: The most of the votes' room a band cut may spend, as a fraction of the
+#: distance from the shipped curve to the nearest vote. Keeps the checks and
+#: crosses on the sides they were voted onto, which is the whole point of the
+#: pair: the calibration data cannot choose between the three cuts.
 BAND_MARGIN_CAP = 0.85
+
+#: How much room the loosened cut leaves between itself and the canvas edge —
+#: and between itself and the title reserve — in figure units. The offset is
+#: geometric, so a cap on it is just the curve's own clearance minus this.
+BAND_EDGE_ROOM = 0.25
 
 #: This figure's own title reserve, in slide pixels — the deck standard's
 #: rectangle with its *height* trimmed to the headline this slide actually
-#: carries. "Rock the Vote" is one line and its box measures 56.8px, so
+#: carries. "Pics on a Plane" is one line and its box measures 56.8px, so
 #: `slide_figure.TITLE_NOTCH_PX`'s 200px reserve — sized for the deck's
 #: longest, four-line headline — left 100px of band under the title with no
 #: title in it and, because the field is rejected from the whole reserve, no
@@ -276,15 +289,15 @@ BAND_MARGIN_CAP = 0.85
 #: recipe is in `slides/STYLE.md`.
 VOTE_NOTCH_PX = (60.0, 42.0, 300.0, 88.0)
 
-#: The nine pages of the build. See `vote_boundary_fig`.
-VOTE_BOUNDARY_STAGES = 9
+#: The ten pages of the build. See `vote_boundary_fig`.
+VOTE_BOUNDARY_STAGES = 10
 
 #: The page that goes *back*: the flashback re-draws stage 5's picture — the
 #: first boundary, the item it cannot call — with the loose and tight cuts
 #: added, to say that the threshold was already choosing the question that got
 #: us here. Held as a constant because two functions have to agree on which
 #: page is not simply "the first N steps".
-FLASHBACK_STAGE = 9
+FLASHBACK_STAGE = 10
 #: The step the flashback re-draws.
 FLASHBACK_OF = 5
 
@@ -408,23 +421,63 @@ def _obvious_spot(pts: np.ndarray, ring: np.ndarray) -> np.ndarray:
     return grid[int(np.argmax(room))]
 
 
+#: The corridor the filler item is looked for in, and the room a candidate must
+#: have on every side to count as a gap worth filling — both in figure units.
+#: `FILLER_ROOM` is well over `ITEM_APART`, so the filler is only ever dropped
+#: into a hole the field genuinely left, and never used to thin out somewhere
+#: merely sparse. The obvious match is *placed* into the middle
+#: of the Good votes, and the blue noise it is dropped into knows nothing about
+#: it — so the void it opens due north of itself is a void the field would
+#: never have produced on its own. The eye reads a hole that size as a claim
+#: (`_blue_noise`), and on the two pages that draw the band it is the most
+#: conspicuous thing on the slide (#3779).
+FILLER_CORRIDOR = 0.85
+FILLER_ROOM = 0.70
+
+
+def _north_filler(pts: np.ndarray, spot: np.ndarray) -> np.ndarray | None:
+    """The middle of the empty column directly above `spot`, if there is one.
+
+    Same rule as `_obvious_spot` — the roomiest candidate — restricted to a
+    corridor straight up from the placed item, so the filler lands in the hole
+    the eye actually stops on rather than merely somewhere sparse.
+    """
+    axes = (
+        np.linspace(spot[0] - FILLER_CORRIDOR, spot[0] + FILLER_CORRIDOR, 40),
+        np.linspace(spot[1] + FILLER_ROOM, spot[1] + 3.0, 90),
+    )
+    grid = np.stack(np.meshgrid(*axes, indexing="ij"), axis=-1).reshape(-1, 2)
+    grid = grid[[not _in_notch(p, R + 0.22) for p in grid]]
+    if not len(grid):
+        return None
+    room = np.hypot(*(np.vstack([pts, spot])[:, None, :] - grid[None, :, :]).transpose(2, 0, 1)).min(axis=0)
+    best = int(np.argmax(room))
+    return grid[best] if room[best] >= FILLER_ROOM else None
+
+
 @functools.lru_cache(maxsize=1)
 def _field() -> np.ndarray:
-    """The blue-noise field, plus the obvious match the figure draws on purpose.
+    """The blue-noise field, plus the two items the figure draws on purpose.
 
-    Appended rather than mixed in, so every index into the field is the index
-    it was before this item existed — and, more to the point, so `_seed_votes`
-    (which runs on the noise alone) cannot pick it. Seeding a vote on an item
-    placed at the middle of the votes would be circular, and would silently
-    restart the whole story from five different items.
+    The obvious match, and then a plain unlabeled item in the void the obvious
+    match opens above itself. Both appended rather than mixed in, so every index
+    into the field is the index it was before they existed — and, more to the
+    point, so `_seed_votes` (which runs on the noise alone) cannot pick either.
+    Seeding a vote on an item placed at the middle of the votes would be
+    circular, and would silently restart the whole story from five different
+    items.
     """
     base = _blue_noise()
     good, _bad = _seed_votes()
-    return np.vstack([base, _obvious_spot(base, base[list(good)])])
+    spot = _obvious_spot(base, base[list(good)])
+    filler = _north_filler(base, spot)
+    if filler is None:
+        raise SystemExit("no gap north of the obvious match — drop the filler rather than forcing one")
+    return np.vstack([base, spot, filler])
 
 
 def _obvious() -> int:
-    """The index of that placed item — the last one in the field."""
+    """The index of the placed obvious match — the last item but one."""
     return len(_blue_noise())
 
 
@@ -657,31 +710,53 @@ def _next_question(
     return int(np.argmin(d))
 
 
-def _band_level(model: SVC, pts: np.ndarray, votes: tuple[int, ...]) -> float:
-    """How far off zero the looser and tighter cuts sit, in decision units.
+#: How far from the item just answered the *next* question has to be, in figure
+#: units. Without it the two are neighbours — the retrained curve bulges around
+#: the vote it just took in, so the item nearest the new line is almost always
+#: the one beside the old one — and the page reads as the loop worrying at one
+#: corner of the field rather than moving on (#3779). Comfortably more than
+#: `ITEM_APART`, so "somewhere else entirely" is the obvious reading.
+NEXT_QUESTION_APART = 3.2
 
-    Solved so the loosened curve sits `BAND_WIDTH` off the shipped one — the
-    strip has to read as a strip — and capped so neither cut can put a check
-    outside or a cross inside. That cap is the whole claim of the stage: three
-    different answers, none of which the votes on screen can rule out.
+
+def _elsewhere(pts: np.ndarray, asked: int) -> np.ndarray:
+    """The items far enough from `asked` to be a question about somewhere else.
+
+    Returned as an index array, ready to hand to `_next_question`'s `among`.
     """
-    ceiling = BAND_MARGIN_CAP * float(np.abs(model.decision_function(pts[list(votes)])).min())
-    # Far from every support vector the decision function flattens out at the
-    # model's own bias. A level past that is not a bigger loop, it is no loop:
-    # the whole plane clears it and the "cut" runs off the slide.
-    away = np.array([[-60.0, -60.0], [CANVAS[0] + 60, CANVAS[1] + 60]])
-    ceiling = min(ceiling, BAND_MARGIN_CAP * float(np.abs(model.decision_function(away)).min()))
+    away = np.flatnonzero(np.hypot(*(pts - pts[asked]).T) >= NEXT_QUESTION_APART)
+    assert len(away), "every item is within reach of the one just answered"
+    return away
 
-    zero = _contour(model)
-    low, high = 0.0, ceiling
-    for _ in range(24):
-        level = (low + high) / 2
-        loose = _contour(model, -level)
-        # A level the far field also clears stops being one closed loop; treat
-        # it as too wide whatever its measured distance says.
-        spread = float(np.inf) if not len(loose) else float(_gap(zero, loose)[0].mean())
-        low, high = (level, high) if spread < BAND_WIDTH else (low, level)
-    return (low + high) / 2
+
+def _notch_gap(points: np.ndarray) -> float:
+    """How far the nearest of `points` stays clear of the slide's title reserve."""
+    x0, y0, x1, y1 = _notch_rect()
+    dx = np.maximum(np.maximum(x0 - points[:, 0], points[:, 0] - x1), 0.0)
+    dy = np.maximum(np.maximum(y0 - points[:, 1], points[:, 1] - y1), 0.0)
+    return float(np.hypot(dx, dy).min())
+
+
+def _band_width(model: SVC, pts: np.ndarray, votes: tuple[int, ...]) -> float:
+    """How far off the shipped curve the looser and tighter cuts sit, in figure units.
+
+    `BAND_WIDTH` unless the drawing cannot afford it: capped so neither cut can
+    put a check outside or a cross inside — that cap is the whole claim of the
+    stage, three different answers none of which the votes on screen can rule
+    out — and capped again so the loose curve stays on the canvas and out of the
+    title reserve. Both are *geometric* caps now, and can be read straight off
+    the curve, because the two cuts are geometric offsets of it (`_band`).
+    """
+    curve = _contour(model)
+    edge = np.minimum(
+        np.minimum(curve[:, 0], CANVAS[0] - curve[:, 0]), np.minimum(curve[:, 1], CANVAS[1] - curve[:, 1])
+    )
+    return min(
+        BAND_WIDTH,
+        BAND_MARGIN_CAP * float(_gap(curve, pts[list(votes)])[0].min()),
+        float(edge.min()) - BAND_EDGE_ROOM,
+        _notch_gap(curve) - BAND_EDGE_ROOM,
+    )
 
 
 def _obvious_pair(curve: np.ndarray, model: SVC, pts: np.ndarray, labeled: tuple[int, ...]) -> tuple[int, int]:
@@ -974,21 +1049,24 @@ def _scene() -> tuple[np.ndarray, SVC, SVC, np.ndarray, np.ndarray, int, int, tu
     first = _fit(pts, seed_good, seed_bad)
     asked = _next_question(_contour(first), pts, labeled, among=matches)
     second = _fit(pts, seed_good + (asked,), seed_bad)
-    asked_again = _next_question(_contour(second), pts, labeled + (asked,))
+    asked_again = _next_question(_contour(second), pts, labeled + (asked,), among=_elsewhere(pts, asked))
 
     for _ in range(12):
-        # Only the item the user is about to answer is pinned. The one the app
-        # would ask about *next* is not: it is picked as nearest the retrained
-        # boundary from the settled field, so it is nearest by construction,
-        # and the question mark on it says which item it is without the drawing
-        # having to win an argument about a tenth of a unit. Pinning it as well
-        # over-constrains the corridor where the two boundaries run close
-        # together, which is a fight no layout wins.
-        pins = {asked: (0, -1)}
+        # Both singled-out items are pinned, each to its own curve and each on
+        # the outside of it: the one the user answers to the first boundary, the
+        # one the app asks about next to the retrained one. Pinning the second
+        # used to over-constrain the corridor where the two curves run close
+        # together — a fight no layout wins — and it no longer does, because
+        # `_elsewhere` now keeps that item `NEXT_QUESTION_APART` from the first
+        # and so out of the corridor entirely. It has to be pinned: settled
+        # merely *clear* it sits at `CURVE_ROOM`, nearly twice as far off the
+        # line as the item on the previous page, and "this one is on the line"
+        # is a claim the drawing has to make rather than nearly make.
+        pins = {asked: (0, -1), asked_again: (1, -1)}
         pts, first, second, curve, curve_after = _settle(pts, seed_good, seed_bad, asked, pins)
         settled = (
             _next_question(curve, pts, labeled, among=matches),
-            _next_question(curve_after, pts, labeled + (asked,)),
+            _next_question(curve_after, pts, labeled + (asked,), among=_elsewhere(pts, asked)),
         )
         if settled == (asked, asked_again):
             break
@@ -1019,7 +1097,20 @@ def _scene() -> tuple[np.ndarray, SVC, SVC, np.ndarray, np.ndarray, int, int, tu
     assert int(np.argmin(gaps)) == asked, "some other item ended up nearer the line than the one it asks about"
     after, _ = _gap(curve_after, pts)
     after[list(labeled) + [asked]] = np.inf
-    assert int(np.argmin(after)) == asked_again, "the next question is not the item nearest the retrained line"
+    elsewhere = _elsewhere(pts, asked)
+    assert asked_again in elsewhere, "the next question is not on the far side of the loop"
+    assert int(np.argmin(after[elsewhere])) == int(np.flatnonzero(elsewhere == asked_again)[0]), (
+        "the next question is not the nearest item to the retrained line away from the one just answered"
+    )
+    # Nearer the line than the room every *other* item is settled to, which is
+    # the claim the page makes. Not the pinned `CURVE_CLEAR` exactly: the pin is
+    # damped and the neighbours push back, so it lands a little short of its
+    # target, and asserting the target would be asserting that the settling
+    # converged rather than that the drawing says the right thing.
+    assert after[asked_again] < CURVE_ROOM - SETTLED, (
+        f"the next question sits {after[asked_again]:.2f} units off the retrained line — no nearer it than "
+        f"the field's own {CURVE_ROOM:.2f} of room, so nothing marks it as the one on the line"
+    )
     shift = _shift(curve, curve_after)
     assert shift >= BOUNDARY_SHIFT, f"the retrained boundary barely moved ({shift:.2f} units) — nothing to see"
     # And the other half of the same claim: everywhere the vote does not reach,
@@ -1037,15 +1128,16 @@ def _scene() -> tuple[np.ndarray, SVC, SVC, np.ndarray, np.ndarray, int, int, tu
     # false. And there has to be something in the strip for the choice to be
     # about. Checked on *both* detectors: the build draws the band on the
     # retrained one and then, as a flashback, on the first.
-    for model, votes in ((first, labeled), (second, labeled + (asked,))):
-        level = _band_level(model, pts, votes)
-        for side in (-level, level):
-            drawn = _contour(model, side)
+    for model, drawn_curve, votes in ((first, curve, labeled), (second, curve_after, labeled + (asked,))):
+        width = _band_width(model, pts, votes)
+        assert width > BAND_WIDTH / 2, f"the band collapsed to {width:.2f} units — there is no strip to look at"
+        for side in (-width, width):
+            drawn = _offset_contour(model, side)
             assert len(drawn), "the loosened or tightened cut is not a curve at all"
             assert drawn[:, 0].min() > 0.2 and drawn[:, 0].max() < CANVAS[0] - 0.2, "a band cut runs off the side"
             assert drawn[:, 1].min() > 0.2 and drawn[:, 1].max() < CANVAS[1] - 0.2, "a band cut runs off the top"
             assert not any(_in_notch(p, 0.0) for p in drawn), "a band cut runs into the title reserve"
-        swung = np.abs(model.decision_function(pts)) < level
+        swung = _gap(drawn_curve, pts)[0] < width
         assert not swung[list(votes)].any(), "a vote falls inside the band — the two cuts are not equally defensible"
         swung[list(votes)] = False
         assert swung.sum() >= 5, f"only {swung.sum()} unlabeled items change hands between the two cuts"
@@ -1057,44 +1149,53 @@ def _scene() -> tuple[np.ndarray, SVC, SVC, np.ndarray, np.ndarray, int, int, tu
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-#: Type size of the "?" an item under consideration carries.
+#: Type size of the mark an item of interest carries inside it.
 QUERY_PT = 13
 
 
-@functools.lru_cache(maxsize=1)
-def _query_drop() -> float:
-    """How far above its baseline to set the "?" so its ink straddles the centre."""
-    box = TextPath((0, 0), "?", size=QUERY_PT, prop=FontProperties(family="DejaVu Sans", weight="bold")).get_extents()
+@functools.lru_cache(maxsize=None)
+def _glyph_drop(glyph: str) -> float:
+    """How far above its baseline to set `glyph` so its ink straddles the centre."""
+    box = TextPath((0, 0), glyph, size=QUERY_PT, prop=FontProperties(family="DejaVu Sans", weight="bold")).get_extents()
     return -(box.y0 + box.y1) / 2 / UNIT_PT
 
 
-def _circle(ax: plt.Axes, p: np.ndarray, *, asking: bool = False) -> None:
-    """An item: a hollow circle, with a question mark in it while it is being asked.
+def _circle(ax: plt.Axes, p: np.ndarray, *, glyph: str | None = None) -> None:
+    """An item: a hollow circle, with a mark in it while the slide is about it.
+
+    Two marks, and they are drawn the same way on purpose. **?** is the item the
+    app is asking about; **!** is an item it is already sure of, which is the
+    stage's argument for why *that* question and not this one. They are the same
+    kind of thing — an item the slide is pointing at — so they are the same
+    picture with a different character in it, bolder and filled against the
+    hollow field around them (#3779).
 
     The item under consideration used to be filled solid black. Nothing else in
     the deck is solid black, so it read as a different kind of object rather
     than as the same object in a different state — and "the app is asking about
-    this one" is exactly what a question mark says without a legend (#3246).
+    this one" is exactly what a question mark says without a legend (#3246). The
+    two already-sure items used to carry a pair of concentric rings instead,
+    which says "look here" and nothing whatever about *why*.
     """
     ax.add_patch(
         plt.Circle(
             tuple(p),
             R,
-            facecolor="white" if asking else "none",
+            facecolor="white" if glyph else "none",
             edgecolor=INK,
-            linewidth=2.6 if asking else 1.7,
-            zorder=5 if asking else 3,
+            linewidth=2.6 if glyph else 1.7,
+            zorder=5 if glyph else 3,
         )
     )
-    if asking:
-        # `va="center"` centres the font's *box*, not the glyph, and a "?" has
-        # no descender to fill the bottom of that box — so it sat visibly high
-        # in a circle it is supposed to be centred in (#3301). Measured off the
-        # outline instead and set from its baseline.
+    if glyph:
+        # `va="center"` centres the font's *box*, not the glyph, and neither "?"
+        # nor "!" has a descender to fill the bottom of that box — so it sat
+        # visibly high in a circle it is supposed to be centred in (#3301).
+        # Measured off the outline instead and set from its baseline.
         ax.text(
             p[0],
-            p[1] + _query_drop(),
-            "?",
+            p[1] + _glyph_drop(glyph),
+            glyph,
             color=INK,
             fontsize=QUERY_PT,
             fontweight="bold",
@@ -1130,6 +1231,11 @@ def _cross(ax: plt.Axes, p: np.ndarray) -> None:
         )
 
 
+#: `_signed_distance` per model, keyed by identity: `_scene` is cached, so the
+#: two fits are the same objects on every call.
+_SDF_CACHE: dict[int, tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
+
+
 def _grid(model: SVC) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     xx, yy = np.meshgrid(np.linspace(-1.5, CANVAS[0] + 1.5, 420), np.linspace(-1.5, CANVAS[1] + 1.5, 300))
     return xx, yy, model.decision_function(np.c_[xx.ravel(), yy.ravel()]).reshape(xx.shape)
@@ -1150,31 +1256,65 @@ def _boundary(ax: plt.Axes, model: SVC, *, ghost: bool = False) -> None:
     )
 
 
-def _band(ax: plt.Axes, model: SVC, level: float) -> None:
+def _signed_distance(model: SVC) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Distance to the detector's own curve on `_grid`'s mesh: negative inside.
+
+    The field the looser and tighter cuts are contours of. Cached per model,
+    because it costs a distance from every grid node to every point of a densely
+    sampled curve and both models are asked for it more than once.
+    """
+    cached = _SDF_CACHE.get(id(model))
+    if cached is not None:
+        return cached
+    xx, yy, zz = _grid(model)
+    # Every third sample is plenty for a drawing: `CONTOUR_STEP` is set by what
+    # the *settling loop* measures against, and this only decides where a dashed
+    # line goes.
+    curve = _contour(model)[::3]
+    flat = np.c_[xx.ravel(), yy.ravel()]
+    near = np.empty(len(flat))
+    for lo in range(0, len(flat), 4096):
+        block = flat[lo : lo + 4096]
+        near[lo : lo + 4096] = np.hypot(*(block[:, None, :] - curve[None, :, :]).transpose(2, 0, 1)).min(axis=1)
+    field = np.where(zz.ravel() > 0, -near, near).reshape(xx.shape)
+    _SDF_CACHE[id(model)] = (xx, yy, field)
+    return xx, yy, field
+
+
+def _offset_contour(model: SVC, width: float) -> np.ndarray:
+    """The detector's curve pushed `width` units outward (or inward, if negative)."""
+    xx, yy, field = _signed_distance(model)
+    fig, ax = plt.subplots()
+    try:
+        segments = ax.contour(xx, yy, field, levels=[width]).allsegs[0]
+    finally:
+        plt.close(fig)
+    return np.vstack(segments) if segments else np.empty((0, 2))
+
+
+def _band(ax: plt.Axes, model: SVC, width: float) -> None:
     """The same detector, cut looser and cut tighter.
 
-    Two more level sets of the one decision function, so they are *parallel* to
-    the shipped curve in the only sense that matters: they are the same
-    detector read at a different threshold, not a different detector. The strip
-    between them is shaded, because what the slide is asking the room to look
-    at is the items inside it — every one of them is admitted by the loose cut
-    and rejected by the tight one, and no vote on screen can say which is
-    right.
+    Drawn as **geometric offsets** of the shipped curve — the set of points a
+    fixed distance outside it, and the set a fixed distance inside — so the
+    three read as what the slide calls them: one curve, cut three ways. That is
+    the figure's second deliberate departure from the shipped mechanism, and it
+    is the same trade the first one makes (see `_Blended`). Two more *level
+    sets* of the decision function would be the honest object, and they are not
+    concentric: an RBF level set bulges where the votes are, so the loose cut
+    grew a lobe the middle curve does not have and the page asked the room to
+    account for a bend that means nothing (#3779). Nothing on this slide turns
+    on the cuts' exact shape — what it turns on is which items fall between
+    them, and `_band_width` still caps the offset so that no vote does.
+
+    The strip between them is shaded, because what the slide is asking the room
+    to look at is the items inside it: every one of them is admitted by the
+    loose cut and rejected by the tight one, and no vote on screen can say
+    which is right.
     """
-    xx, yy, zz = _grid(model)
-    ax.contourf(xx, yy, zz, levels=[-level, level], colors=[BAND], zorder=0)
-    ax.contour(xx, yy, zz, levels=[-level, level], colors=[BLUE], linewidths=1.6, linestyles=[(0, (5, 4))], zorder=1)
-
-
-def _halo(ax: plt.Axes, p: np.ndarray) -> None:
-    """A second, wider ring: "the detector is already sure about this one".
-
-    Drawn rather than written because the figure carries no text at all beyond
-    the one question mark — the presenter narrates it, which is what keeps
-    every mark on the field at a size the back row can resolve.
-    """
-    ax.add_patch(plt.Circle(tuple(p), R + 0.20, facecolor="none", edgecolor=SOFT, linewidth=1.6, zorder=2))
-    ax.add_patch(plt.Circle(tuple(p), R + 0.38, facecolor="none", edgecolor=SOFT, linewidth=1.1, zorder=2))
+    xx, yy, field = _signed_distance(model)
+    ax.contourf(xx, yy, field, levels=[-width, width], colors=[BAND], zorder=0)
+    ax.contour(xx, yy, field, levels=[-width, width], colors=[BLUE], linewidths=1.6, linestyles=[(0, (5, 4))], zorder=1)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1185,16 +1325,23 @@ def _halo(ax: plt.Axes, p: np.ndarray) -> None:
 def vote_boundary_fig() -> None:
     """One line, both of its jobs, drawn in the space the items live in.
 
-    Nine pages. The first seven are the loop, in order: the corpus; the votes
-    so far; the detector they imply; the two items nobody should be asked
-    about; the one item that is worth a question, which is what the threshold
-    decides for the loop; that item answered and the boundary redrawn; and the
-    next question, which exists only because the boundary moved.
+    Ten pages. The first eight are the loop, in order: the corpus; the votes so
+    far; the detector they imply; the two items nobody should be asked about;
+    the one item that is worth a question, which is what the threshold decides
+    for the loop; **that item answered**; **the boundary redrawn to take it in**;
+    and the next question, which exists only because the boundary moved.
+
+    The answer and the redraw are two pages rather than one (#3779). They are
+    two things that happen in the app a moment apart — the user clicks, and then
+    the head retrains — and running them together asks the room to watch a mark
+    change and a curve move on the same advance, which is exactly the "one
+    reveal, one step" rule `slides/STYLE.md` states. Split, the second page has
+    one thing moving on it and the eye has somewhere to be.
 
     The last two are the threshold's *other* job, deliberately held back to the
-    end (#3254). Page 8 cuts the retrained detector looser and tighter — three
+    end (#3254). Page 9 cuts the retrained detector looser and tighter — three
     concentric curves, all of them consistent with every vote on screen, so
-    what comes back is still the user's call and not the data's. Page 9 then
+    what comes back is still the user's call and not the data's. Page 10 then
     goes back and draws the same three cuts on the *first* detector, at the
     moment it was choosing what to ask. That is the point the pair exists to
     make: a threshold is not only how you cut now, it is which questions got
@@ -1243,23 +1390,23 @@ def _vote_boundary_stage(stage: int) -> plt.Figure:
         **({i: "bad" for i in seed_bad} if step >= 2 else {}),
         **({asked: "good"} if step >= 6 else {}),
     }
-    # Page g asks the next question; page h does not. Page h has moved on from
+    # Page h asks the next question; page i does not. Page i has moved on from
     # *what gets asked* to *what comes back*: it is the same detector cut two
     # ways, and both cuts agree with every vote on screen, so there is nothing
-    # being asked on it. Page i is the one that puts the question back, because
+    # being asked on it. Page j is the one that puts the question back, because
     # its whole point is that those cuts were on offer when the question was
     # picked (#3301).
-    asking = {asked} if step == 5 else ({asked_again} if step == 7 else set())
+    asking = {asked} if step == 5 else ({asked_again} if step == 8 else set())
 
-    # ── stages 8 and 9: the same detector, cut looser and cut tighter ─────────
+    # ── stages 9 and 10: the same detector, cut looser and cut tighter ───────
     # Drawn under the items, and only on the two pages that are about it: page
-    # 8 on the retrained detector — what comes back, now — and page 9 back on
+    # 9 on the retrained detector — what comes back, now — and page 10 back on
     # the first one, where the same three cuts were already deciding what to
     # ask. Which detector the band belongs to is the whole content of the pair.
     if stage == FLASHBACK_STAGE:
-        _band(ax, first, _band_level(first, pts, labeled))
+        _band(ax, first, _band_width(first, pts, labeled))
     elif stage == VOTE_BOUNDARY_STAGES - 1:
-        _band(ax, second, _band_level(second, pts, labeled + (asked,)))
+        _band(ax, second, _band_width(second, pts, labeled + (asked,)))
 
     for i, p in enumerate(pts):
         mark = voted.get(i)
@@ -1268,26 +1415,408 @@ def _vote_boundary_stage(stage: int) -> plt.Figure:
         elif mark == "bad":
             _cross(ax, p)
         else:
-            _circle(ax, p, asking=i in asking)
+            _circle(ax, p, glyph="?" if i in asking else None)
 
     # ── stage 3: the detector the votes imply ────────────────────────────────
-    if 3 <= step <= 6:
-        _boundary(ax, first, ghost=step == 6)
+    # It stays the *solid* curve through stage 6, the page on which the user has
+    # only answered: the retrain has not happened yet, so nothing about the line
+    # has changed. It goes ghosted on stage 7, where the new one arrives.
+    if 3 <= step <= 7:
+        _boundary(ax, first, ghost=step == 7)
 
     # ── stage 4: the two it is already sure about — the wrong ones to ask ────
     if step == 4:
         for i in _obvious_pair(curve, first, pts, labeled):
-            _halo(ax, pts[i])
+            _circle(ax, pts[i], glyph="!")
 
     # ── stage 5: the question mark — the one item it cannot guess ────────────
-    # ── stage 6: the answer, and the boundary the retrain draws instead ──────
-    if step >= 6:
+    # ── stage 6: the answer. Just the answer: the curve has not moved yet. ───
+    # ── stage 7: and now the retrain, reaching out to take that item in ──────
+    if step >= 7:
         _boundary(ax, second)
 
-    # ── stage 7: which puts a different item on the new line. Repeat. ────────
+    # ── stage 8: which puts a different item on the new line. Repeat. ────────
+    return fig
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Embed-time Stories — how a photograph becomes a dot
+# ──────────────────────────────────────────────────────────────────────────────
+
+#: The row of five objects, in the canvas's own units: a stack of photographs,
+#: a block arrow, a wire-frame cube of dots, a second block arrow, and the same
+#: dots on a square. Laid out left to right with one `FLOW_GAP` between
+#: neighbours, so the drawing reads as a pipeline rather than as five things.
+FLOW_GAP = OBJECT_GAP_PT / UNIT_PT
+
+#: The photograph stack: one card's size, how far each card behind it is
+#: offset, and how many there are. Four rather than three because three cards
+#: read as "a few" and the claim on this slide is "all of them".
+CARD_W, CARD_H = 2.38, 1.72
+CARD_STEP = 0.22
+CARDS = 4
+
+#: The cube: the side of its front face and the axonometric offset of the back
+#: one. Equal in x and y, so the depth edges run at 45° and the box reads as a
+#: box without any of the foreshortening a real projection would need.
+CUBE_SIDE = 2.40
+CUBE_DEPTH = 0.64
+
+#: The square the dots land on after the projection: exactly the cube's
+#: bounding box, so the flattened cloud can keep the page positions its own
+#: shadow already gave it. See `_flow_field_flat`.
+PLANE_SIDE = CUBE_SIDE + CUBE_DEPTH
+
+#: How many items the pipeline carries. The *same* count in the cube and on
+#: the square, because they are the same items — that is the whole content of
+#: the second arrow, and a different number of dots either side of it would
+#: quietly say the projection loses some.
+FLOW_ITEMS = 36
+
+#: How many candidate positions each dot of the flow figure is chosen from.
+#: Far more than `FIELD_CANDIDATES`, because the cube's cloud is filtered as
+#: well as ranked — a candidate whose projection collides is thrown away
+#: before it is scored, so most of a draw is spent on rejects once the box is
+#: two-thirds full.
+FLOW_CANDIDATES = 600
+
+#: Item radius in the cube and on the square, and the minimum centre-to-centre
+#: spacing of the cloud's *projection* — which is the spacing the square gets,
+#: at full radius and with no depth left to thin the crowding. Smaller than `R` and packed tighter, because
+#: the next slide takes this square and fills the whole 16:9 slot with it: what
+#: the room should recognise is the same hollow circle, seen from further away.
+FLOW_R = 0.105
+FLOW_APART = 0.31
+
+#: How much smaller a dot at the back of the cube is drawn than one at the
+#: front. The only depth cue the drawing has — the dots are hollow circles like
+#: every other item in the deck, so they cannot be shaded — and enough of one
+#: that the cloud reads as filling a volume rather than as a flat scatter
+#: pasted over a box.
+FLOW_DEPTH_SHRINK = 0.30
+
+#: Type sizes: the word written inside a block arrow, and the name under each
+#: object. The names are the larger of the two because they are what a
+#: question from the room will use ("the 768-d one").
+FLOW_ARROW_PT = 18.0
+FLOW_NAME_PT = 22.0
+
+#: The words written inside the two block arrows. The second is "smoosh"
+#: rather than "smooth" — what UMAP does to the cloud is squash it flat, and
+#: "smooth" reads as a filter applied to something that stays where it was.
+EMBED_WORD = "embed"
+FLATTEN_WORD = "smoosh"
+
+#: The three pages of the build. See `embed_flow_fig`.
+EMBED_FLOW_STAGES = 3
+
+#: The block arrows' shaft width and head, in units.
+FLOW_ARROW_W, FLOW_HEAD_W, FLOW_HEAD_L = 0.52, 0.82, 0.38
+
+#: Where the row of objects is centred vertically, and where the names under it
+#: sit. The band — objects, then a gap, then the names — is centred on the
+#: slide rather than hung off the top, which is what leaves equal white above
+#: the cube and below the names. The headline does not push it down: the
+#: headline is 300px wide and the only object under it is the photo stack,
+#: which is the shortest thing in the row.
+FLOW_MID_Y = 5.08
+FLOW_NAME_Y = 2.40
+
+#: This figure's own title reserve, in slide pixels — the deck standard's
+#: rectangle with its *height* trimmed to the headline this slide carries.
+#: "Embed-time Stories" wraps to two lines and its box measures 101.6px
+#: (measured by `slides/STYLE.md`'s recipe, on this slide), so 130 is that box
+#: plus one `OBJECT_GAP_PT` — 16pt renders at 27.8px on this figure — and the
+#: cube's top-left corner clears the headline by the deck's own standard gap
+#: rather than by the 200px reserve the deck's *longest* headline needs.
+#: Re-measure if the headline changes.
+EMBED_NOTCH_PX = (60.0, 42.0, 300.0, 130.0)
+
+#: The shortest a block arrow may be drawn, whatever its word measures. The
+#: assertion in `_block_arrow` only stops an arrow printing over its own head;
+#: this is the *design* floor, and it is what is left of the width once the row
+#: has given the three objects everything else. The row is width-bound — five
+#: things across a 16:9 slide — so every unit spent on an arrow comes straight
+#: out of the cube.
+FLOW_ARROW_MIN = 2.06
+
+
+def _flow_arrow_len(label: str) -> float:
+    """The shortest block arrow whose whole word fits clear of its own head."""
+    width = TextPath((0, 0), label, size=FLOW_ARROW_PT, prop=FontProperties(family="DejaVu Sans")).get_extents().width
+    return width / UNIT_PT + 2 * FLOW_HEAD_L
+
+
+def _cube_project(p: np.ndarray) -> np.ndarray:
+    """Where a point of the unit cube lands on the page, in the figure's units.
+
+    The same 45° axonometric the wire-frame itself is drawn with — depth runs
+    up and to the right by `CUBE_DEPTH` over the whole box — so a dot at the
+    back of the cloud sits exactly on the back face the box draws.
+    """
+    return np.array([p[0] * CUBE_SIDE + p[2] * CUBE_DEPTH, p[1] * CUBE_SIDE + p[2] * CUBE_DEPTH])
+
+
+def _flow_field_flat() -> np.ndarray:
+    """The dots on the square, in the cube's own drawing units.
+
+    Not a second field: the *same* points, at the *same* page positions the
+    cube's projection put them at. The square is exactly the cube's bounding
+    box (`PLANE_SIDE` is `CUBE_SIDE + CUBE_DEPTH`), so a dot does not move
+    across the second arrow at all — every one of them is where the cube's
+    shadow already had it, drawn at full size now that it has no depth left to
+    stand for. That is what makes the arrow read as a projection rather than as
+    a redraw: the only thing UMAP takes away is the dimension, and the picture
+    should not take away anything else (#3779).
+    """
+    return np.array([_cube_project(point) for point in _flow_field_3d()])
+
+
+@functools.lru_cache(maxsize=1)
+def _flow_field_3d() -> np.ndarray:
+    """The dots in the cube, in [0, 1]³ — the same items, before the projection.
+
+    Spread through the *volume* rather than over a face: the point the cube is
+    making is that the embedding has room the picture cannot show, so a cloud
+    that reads as a flat sheet would be arguing the opposite.
+
+    Best-candidate on the 3D distance, as `_blue_noise` is on the 2D one — but
+    with a second, flat rule laid over it: a candidate whose **projection**
+    lands on top of one already placed is rejected outright. Spreading a cloud
+    evenly in the volume says nothing about what the page shows, and two items
+    a unit apart in depth draw as one smudge; the figure is read in 2D whatever
+    it is claiming about dimensions.
+    """
+    rng = np.random.default_rng(23)
+    pad = 0.07
+    pts: list[np.ndarray] = []
+    flat: list[np.ndarray] = []
+    for _ in range(FLOW_ITEMS):
+        best, best_flat, best_gap = None, None, -1.0
+        for _ in range(FLOW_CANDIDATES):
+            p = rng.uniform(pad, 1.0 - pad, size=3)
+            q = _cube_project(p)
+            if any(float(np.hypot(*(q - r))) < FLOW_APART for r in flat):
+                continue
+            gap = min((float(np.linalg.norm(p - o)) for o in pts), default=float("inf"))
+            if gap > best_gap:
+                best, best_flat, best_gap = p, q, gap
+        if best is None:
+            raise SystemExit("no candidate cleared the cloud's own projection — the cube is too full")
+        pts.append(best)
+        flat.append(best_flat)
+    return np.array(pts)
+
+
+def _photo_stack(ax: plt.Axes, x0: float, y0: float) -> None:
+    """A stack of photographs: `CARDS` offset cards, the front one with a scene in it.
+
+    The scene — a horizon, two hills and a sun — is the one piece of
+    representational drawing in the deck, and it earns its place: a bare stack
+    of rectangles is a stack of *documents*, and the pipeline's first stage has
+    to say "pictures" before the word "SigLIP" under it means anything.
+    """
+    for k in range(CARDS - 1, -1, -1):
+        ax.add_patch(
+            plt.Rectangle(
+                (x0 + k * CARD_STEP, y0 + k * CARD_STEP),
+                CARD_W,
+                CARD_H,
+                facecolor="white",
+                edgecolor=INK,
+                linewidth=1.6,
+                zorder=3 + (CARDS - k),
+            )
+        )
+    z = 3 + CARDS
+    inset = 0.13
+    left, right = x0 + inset, x0 + CARD_W - inset
+    base = y0 + inset
+    top = y0 + CARD_H - inset
+    ax.add_patch(
+        plt.Polygon(
+            [
+                (left, base),
+                (left + 0.72 * (right - left), base),
+                (left + 0.34 * (right - left), base + 0.62 * (top - base)),
+            ],
+            closed=True,
+            facecolor="none",
+            edgecolor=SOFT,
+            linewidth=1.4,
+            zorder=z,
+        )
+    )
+    ax.add_patch(
+        plt.Polygon(
+            [
+                (left + 0.44 * (right - left), base),
+                (right, base),
+                (right - 0.22 * (right - left), base + 0.46 * (top - base)),
+            ],
+            closed=True,
+            facecolor="white",
+            edgecolor=SOFT,
+            linewidth=1.4,
+            zorder=z + 0.1,
+        )
+    )
+    ax.add_patch(
+        plt.Circle(
+            (left + 0.78 * (right - left), base + 0.76 * (top - base)),
+            0.15,
+            facecolor="none",
+            edgecolor=SOFT,
+            linewidth=1.4,
+            zorder=z + 0.2,
+        )
+    )
+
+
+def _block_arrow(ax: plt.Axes, x0: float, x1: float, y: float, label: str) -> None:
+    """A hollow block arrow with `label` written inside it."""
+    needed = _flow_arrow_len(label)
+    assert x1 - x0 >= needed - 1e-9, (
+        f"the {label!r} arrow is {x1 - x0:.3f} units long and its own word needs "
+        f"{needed:.3f} — it would print over its own head."
+    )
+    ax.add_patch(
+        FancyArrow(
+            x0,
+            y,
+            x1 - x0,
+            0.0,
+            width=FLOW_ARROW_W,
+            head_width=FLOW_HEAD_W,
+            head_length=FLOW_HEAD_L,
+            length_includes_head=True,
+            facecolor="white",
+            edgecolor=INK,
+            linewidth=1.5,
+            zorder=3,
+        )
+    )
+    ax.text((x0 + x1) / 2, y, label, ha="center", va="center", fontsize=FLOW_ARROW_PT, color=INK, zorder=4)
+
+
+def _wire_cube(ax: plt.Axes, x0: float, y0: float) -> None:
+    """A wire-frame box: the front face, the back face, and the four struts.
+
+    Drawn in `WIRE` so the dots inside it stay the darkest thing in the box —
+    the cube is the room the items live in, not an object in its own right.
+    """
+    d = CUBE_DEPTH
+    s = CUBE_SIDE
+    front = [(x0, y0), (x0 + s, y0), (x0 + s, y0 + s), (x0, y0 + s)]
+    back = [(x + d, y + d) for x, y in front]
+    for face in (front, back):
+        ax.add_patch(plt.Polygon(face, closed=True, facecolor="none", edgecolor=WIRE, linewidth=1.3, zorder=2))
+    for (fx, fy), (bx, by) in zip(front, back):
+        ax.plot([fx, bx], [fy, by], color=WIRE, linewidth=1.3, zorder=2)
+
+
+def _flow_dot(ax: plt.Axes, x: float, y: float, radius: float, z: float) -> None:
+    ax.add_patch(plt.Circle((x, y), radius, facecolor="white", edgecolor=INK, linewidth=1.3, zorder=z))
+
+
+def embed_flow_fig() -> None:
+    """Photographs in, dots out — the one thing the deck has been assuming.
+
+    Slide 6 leaves the room looking at photographs and slide 8 opens on a field
+    of circles, and nothing between them ever says that the second is what
+    became of the first. This is that sentence, drawn: a stack of pictures,
+    embedded into a cloud in a space too big to draw, then flattened onto the
+    plane the next slide spends ten pages on. The dots are deliberately the
+    same hollow circles, packed tighter — what changes between this slide and
+    the next is the zoom, and that is the whole point of drawing them alike.
+
+    Three pages, one per step of the sentence, because the sentence has three
+    steps and a room that is shown all of it at once reads the end of it first.
+    Every page is the final drawing with the later steps removed; nothing moves
+    between them (`slides/STYLE.md`), which the shared untrimmed canvas gets for
+    free.
+    """
+    for stage in range(1, EMBED_FLOW_STAGES):
+        save(
+            _embed_flow_stage(stage),
+            OUT,
+            f"embed-flow.build{stage}.png",
+            column=FULL_BLEED,
+            tight=False,
+            notch=EMBED_NOTCH_PX,
+        )
+    save(
+        _embed_flow_stage(EMBED_FLOW_STAGES),
+        OUT,
+        "embed-flow.png",
+        column=FULL_BLEED,
+        tight=False,
+        notch=EMBED_NOTCH_PX,
+    )
+
+
+def _embed_flow_stage(stage: int) -> plt.Figure:
+    """Draw the first `stage` steps of the pipeline (1-based, cumulative)."""
+    fig, ax = plt.subplots(figsize=tuple(c * UNIT_PT / 72 for c in CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, CANVAS[0])
+    ax.set_ylim(0, CANVAS[1])
+    ax.set_aspect("equal")
+    ax.set_axis_off()
+
+    stack_w = CARD_W + (CARDS - 1) * CARD_STEP
+    cube_w = CUBE_SIDE + CUBE_DEPTH
+    embed_len = max(_flow_arrow_len(EMBED_WORD), FLOW_ARROW_MIN)
+    flatten_len = max(_flow_arrow_len(FLATTEN_WORD), FLOW_ARROW_MIN)
+    span = stack_w + cube_w + PLANE_SIDE + embed_len + flatten_len + 4 * FLOW_GAP
+    x = (CANVAS[0] - span) / 2
+
+    stack_x = x
+    x += stack_w + FLOW_GAP
+    embed_x = x
+    x += embed_len + FLOW_GAP
+    cube_x = x
+    x += cube_w + FLOW_GAP
+    flatten_x = x
+    x += flatten_len + FLOW_GAP
+    plane_x = x
+
+    # ── stage 1: the corpus, as the user has it — a pile of photographs ──────
+    stack_h = CARD_H + (CARDS - 1) * CARD_STEP
+    _photo_stack(ax, stack_x, FLOW_MID_Y - stack_h / 2)
+    names = [(stack_x + stack_w / 2, "Photos")]
+
+    # ── stage 2: embedded once, at import, into a space too big to draw ──────
+    cube_y = FLOW_MID_Y - cube_w / 2
+    if stage >= 2:
+        _block_arrow(ax, embed_x, embed_x + embed_len, FLOW_MID_Y, EMBED_WORD)
+        _wire_cube(ax, cube_x, cube_y)
+        for point in _flow_field_3d():
+            dx, dy = _cube_project(point)
+            _flow_dot(
+                ax, cube_x + dx, cube_y + dy, FLOW_R * (1.0 - FLOW_DEPTH_SHRINK * point[2]), 5 + 2 * (1.0 - point[2])
+            )
+        names += [(embed_x + embed_len / 2, "SigLIP"), (cube_x + cube_w / 2, "768-d")]
+
+    # ── stage 3: flattened onto the plane the rest of the talk is drawn on ───
+    if stage >= 3:
+        _block_arrow(ax, flatten_x, flatten_x + flatten_len, FLOW_MID_Y, FLATTEN_WORD)
+        plane_y = FLOW_MID_Y - PLANE_SIDE / 2
+        ax.add_patch(
+            plt.Rectangle(
+                (plane_x, plane_y), PLANE_SIDE, PLANE_SIDE, facecolor="none", edgecolor=WIRE, linewidth=1.3, zorder=2
+            )
+        )
+        for dx, dy in _flow_field_flat():
+            _flow_dot(ax, plane_x + dx, plane_y + dy, FLOW_R, 5)
+        names += [(flatten_x + flatten_len / 2, "UMAP"), (plane_x + PLANE_SIDE / 2, "2-d")]
+
+    for cx, name in names:
+        ax.text(cx, FLOW_NAME_Y, name, ha="center", va="baseline", fontsize=FLOW_NAME_PT, color=INK, zorder=4)
     return fig
 
 
 if __name__ == "__main__":
     vote_boundary_fig()
+    embed_flow_fig()
     print("wrote figures to", OUT)
