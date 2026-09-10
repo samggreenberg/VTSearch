@@ -1504,7 +1504,16 @@ FLOW_DEPTH_SHRINK = 0.30
 #: corpus, three pages before anything explains it — and a hole that is waiting
 #: for something is worse than a square that arrives somewhere crowded, which
 #: is what a real embedding space is.
-QUERY_SIDE = 0.42
+#:
+#: Its size is *derived*, not chosen: the phrase is one more thing in the space,
+#: not a landmark, so it is drawn at the weight of an item sitting where it
+#: sits — a dot at the cube's own mid-depth, which `FLOW_DEPTH_SHRINK` has
+#: already made smaller than a front-row one. `QUERY_MATCH` then takes a little
+#: more off, because these dots are hollow and the square is filled: matched
+#: area for area, solid ink reads heavier and the mark starts to loom
+#: (#3779).
+QUERY_MATCH = 0.92
+QUERY_SIDE = QUERY_MATCH * 2 * FLOW_R * (1 - FLOW_DEPTH_SHRINK * 0.5)
 
 #: Type sizes: the word written inside a block arrow, the name under each
 #: object, and the query phrase itself. The phrase is set at the name size and
