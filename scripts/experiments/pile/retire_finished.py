@@ -58,9 +58,13 @@ def main() -> int:
             continue
 
         # re-verify the bank against live, right now
-        anyq = ("any in image" in name) or ("below-cut" in name)
-        kind = "belowcut" if anyq else "slate"
-        cls = t.get("text_query") or name.split(" [")[0].split(" (")[0].split()[0]
+        if "-- recheck" in name:
+            kind = "recheck"
+        elif ("any in image" in name) or ("below-cut" in name):
+            kind = "belowcut"
+        else:
+            kind = "slate"
+        cls = t.get("text_query") or name.split(" [")[0].split(" (")[0].split(" -- ")[0].split()[0]
         f = REPO / f"LABELSETS__{kind}__{cls.replace(' ', '_')}.json"
         live = api(f"/api/detectors/{urllib.parse.quote(name)}/labels-detail")[1]
         lg = {r["filename"] for r in live.get("good", [])}

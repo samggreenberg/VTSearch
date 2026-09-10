@@ -32,17 +32,32 @@ def get(p):
     return json.load(urllib.request.urlopen(BASE + p, timeout=120))  # noqa: S310 - our own app
 
 
+QUESTION = {
+    "slate": "is this box one?",
+    "belowcut": "is there one anywhere in this image?",
+    "recheck": "does this photo contain one under the revised rule?",
+}
+
 written: dict[pathlib.Path, str] = {}
 fail = False
 for d in sorted(get("/api/detectors/registry")["detectors"], key=lambda x: x["name"]):
     if not (d.get("num_training") or 0):
         continue
     name = d["name"]
-    # "(any in image, no box)" and the older "[below-cut: ...]" are the same
-    # question; "[slate]" and "(confirm the box)" are the other one.
-    anyq = ("any in image" in name) or ("below-cut" in name)
-    kind = "belowcut" if anyq else "slate"
-    rule = name.split(" [")[0].split(" (")[0]
+    # Three questions live in this dashboard and they must never share a file.
+    # "(any in image, no box)" and the older "[below-cut: ...]" ask whether the
+    # class is anywhere in the image; "-- recheck:" re-asks the class question of
+    # an OLD positive after a definition change; everything else is the slate's
+    # "is this box one?". The first version of this script keyed off a substring
+    # the dashboard rename had already removed, and silently overwrote one file
+    # with another -- so the mapping is explicit and a collision is fatal.
+    if "-- recheck" in name:
+        kind = "recheck"
+    elif ("any in image" in name) or ("below-cut" in name):
+        kind = "belowcut"
+    else:
+        kind = "slate"
+    rule = name.split(" [")[0].split(" (")[0].split(" -- ")[0]
     cls = d.get("text_query") or rule.split()[0]
     live = get(f"/api/detectors/{urllib.parse.quote(name)}/labels-detail")
     good, bad = live.get("good", []), live.get("bad", [])
@@ -59,7 +74,7 @@ for d in sorted(get("/api/detectors/registry")["detectors"], key=lambda x: x["na
                 "rule": rule,
                 "class": cls,
                 "kind": kind,
-                "question": "is there one anywhere in this image?" if anyq else "is this box one?",
+                "question": QUESTION[kind],
                 "source": "OWLv2-screened per-class review, exported from the live app",
                 "exported": "2026-09-09",
                 "good": good,
