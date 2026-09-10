@@ -43,9 +43,37 @@ Needs node and python3. Nothing to install — `npx` fetches Marp on first run
 ./render.sh hold-the-line pdf --speaker  # -> _out/hold-the-line.speaker.pdf
 ./render.sh hold-the-line pptx --no-pageno  # -> _out/hold-the-line.unnumbered.pptx
 ./render.sh hold-the-line pptx --editable   # -> _out/hold-the-line.editable.pptx
+./render.sh hold-the-line png --no-pageno  # -> _out/hold-the-line.unnumbered-pngs*.zip
 ./build.py --check                  # preflight all manifests, build nothing
 ./build.py --list                   # decks, slide counts, unused fragments
 ```
+
+## Exporting a pile of images
+
+`./render.sh <deck> png` renders one PNG per page and zips the pile:
+
+```bash
+./render.sh scale-readout png --no-pageno   # -> _out/scale-readout.unnumbered-pngs*.zip
+PNG_SCALE=3 ./render.sh hold-the-line png   # 3840x2160 instead of 2560x1440
+```
+
+This is the export for **somebody else's template**: the slides go in as
+pictures, the receiving deck owns the layout, and this one owns nothing but the
+pixels. Every page comes out at the same size — 1280x720 times `PNG_SCALE`,
+which defaults to 2 — because that is what lets them be placed with one drag
+instead of per-picture fiddling. `pack_pngs.py` asserts it rather than assuming
+it; a set that came out ragged would be a render bug, not something to work
+around downstream.
+
+Pair it with `--no-pageno` unless you have a reason not to. A number from
+*this* deck landing in a deck that does its own numbering is the one thing the
+receiving template is guaranteed to disagree with.
+
+The pile is dealt into **complete, independent zips** of at most `PNG_MAX_MB`
+(default 25, the smallest attachment limit these decks meet in practice), not
+one split archive: `zip -s` is fewer lines and produces `.z01`, `.z02`, … that
+cannot be opened without every sibling present, which is a bad trade for a file
+whose whole purpose is being emailed to somebody.
 
 `--no-pageno` is the handover cut: same deck, no page numbers drawn, written
 to `_out/<deck>.unnumbered.<fmt>` so the numbered one is still there beside it.
