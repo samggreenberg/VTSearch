@@ -1440,53 +1440,42 @@ def _vote_boundary_stage(stage: int) -> plt.Figure:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Embed-time Stories — how a photograph becomes a dot
+# Embed-time Stories — how a photograph and a phrase become the same kind of thing
 # ──────────────────────────────────────────────────────────────────────────────
 
-#: The row of five objects, in the canvas's own units: a stack of photographs,
-#: a block arrow, a wire-frame cube of dots, a second block arrow, and the same
-#: dots on a square. Laid out left to right with one `FLOW_GAP` between
-#: neighbours, so the drawing reads as a pipeline rather than as five things.
+#: The deck's own object gap, in this canvas's units.
 FLOW_GAP = OBJECT_GAP_PT / UNIT_PT
 
 #: The photograph stack: one card's size, how far each card behind it is
 #: offset, and how many there are. Four rather than three because three cards
 #: read as "a few" and the claim on this slide is "all of them".
-CARD_W, CARD_H = 2.38, 1.72
-CARD_STEP = 0.22
+CARD_W, CARD_H = 2.28, 1.64
+CARD_STEP = 0.20
 CARDS = 4
 
 #: The cube: the side of its front face and the axonometric offset of the back
 #: one. Equal in x and y, so the depth edges run at 45° and the box reads as a
-#: box without any of the foreshortening a real projection would need.
-CUBE_SIDE = 2.40
-CUBE_DEPTH = 0.64
+#: box without any of the foreshortening a real projection would need. It is
+#: the biggest thing on the slide by a distance, because it is the *only* thing
+#: on it that both arrows are about.
+CUBE_SIDE = 4.60
+CUBE_DEPTH = 1.20
 
-#: The square the dots land on after the projection: exactly the cube's
-#: bounding box, so the flattened cloud can keep the page positions its own
-#: shadow already gave it. See `_flow_field_flat`.
-PLANE_SIDE = CUBE_SIDE + CUBE_DEPTH
+#: How many items the cube holds, and how many candidate positions each is
+#: chosen from. Far more candidates than `FIELD_CANDIDATES`, because the cloud
+#: is filtered as well as ranked — a candidate whose *projection* collides with
+#: one already placed is thrown away before it is scored, so most of a draw is
+#: spent on rejects once the box is two-thirds full.
+FLOW_ITEMS = 60
+FLOW_CANDIDATES = 900
 
-#: How many items the pipeline carries. The *same* count in the cube and on
-#: the square, because they are the same items — that is the whole content of
-#: the second arrow, and a different number of dots either side of it would
-#: quietly say the projection loses some.
-FLOW_ITEMS = 36
-
-#: How many candidate positions each dot of the flow figure is chosen from.
-#: Far more than `FIELD_CANDIDATES`, because the cube's cloud is filtered as
-#: well as ranked — a candidate whose projection collides is thrown away
-#: before it is scored, so most of a draw is spent on rejects once the box is
-#: two-thirds full.
-FLOW_CANDIDATES = 600
-
-#: Item radius in the cube and on the square, and the minimum centre-to-centre
-#: spacing of the cloud's *projection* — which is the spacing the square gets,
-#: at full radius and with no depth left to thin the crowding. Smaller than `R` and packed tighter, because
-#: the next slide takes this square and fills the whole 16:9 slot with it: what
-#: the room should recognise is the same hollow circle, seen from further away.
-FLOW_R = 0.105
-FLOW_APART = 0.31
+#: Item radius, and the minimum centre-to-centre spacing of the cloud's
+#: projection — the page is flat whatever the cube is claiming, so the spacing
+#: that matters is the spacing after the projection. Smaller than `R`, because
+#: the next slide draws these same items filling the whole slot: what the room
+#: should recognise is the same hollow circle, seen from further away.
+FLOW_R = 0.145
+FLOW_APART = 0.42
 
 #: How much smaller a dot at the back of the cube is drawn than one at the
 #: front. The only depth cue the drawing has — the dots are hollow circles like
@@ -1495,50 +1484,82 @@ FLOW_APART = 0.31
 #: pasted over a box.
 FLOW_DEPTH_SHRINK = 0.30
 
-#: Type sizes: the word written inside a block arrow, and the name under each
-#: object. The names are the larger of the two because they are what a
-#: question from the room will use ("the 768-d one").
+#: The text query's mark: a filled green square at the centre of the cube, and
+#: the room the cloud leaves around it.
+#:
+#: A **square**, because the one thing this slide has to say is that the phrase
+#: lands in the same space as the pictures without *being* one of them — same
+#: place, different kind of thing — and a green circle would read as one more
+#: item. Green because that is the deck's positive hue and the phrase is the
+#: direction the user is asking for (`slides/STYLE.md`).
+#:
+#: At the centre because the drawing has to choose somewhere and the centre is
+#: the one position that says nothing else: an embedding of "book" does not sit
+#: in the middle of the corpus, and any *other* placement would be a claim
+#: about which items it lands near, which is the next slide's argument and not
+#: this one's.
+#:
+#: It is drawn **over** the cloud rather than into a gap kept clear for it. A
+#: reserved gap is visible from the first page — a hole in the middle of a
+#: corpus, three pages before anything explains it — and a hole that is waiting
+#: for something is worse than a square that arrives somewhere crowded, which
+#: is what a real embedding space is.
+QUERY_SIDE = 0.42
+
+#: Type sizes: the word written inside a block arrow, the name under each
+#: object, and the query phrase itself. The phrase is set at the name size and
+#: in bold, because it is an *object* on this slide rather than a caption —
+#: the thing the second arrow carries.
 FLOW_ARROW_PT = 18.0
 FLOW_NAME_PT = 22.0
+FLOW_QUERY_PT = 26.0
 
-#: The words written inside the two block arrows. The second is "smoosh"
-#: rather than "smooth" — what UMAP does to the cloud is squash it flat, and
-#: "smooth" reads as a filter applied to something that stays where it was.
+#: The word written inside both block arrows. One word, twice, and the same
+#: word: that the two inputs go through the *same* network is the whole slide.
 EMBED_WORD = "embed"
-FLATTEN_WORD = "smoosh"
 
-#: The three pages of the build. See `embed_flow_fig`.
-EMBED_FLOW_STAGES = 3
+#: The phrase the user typed on slide 3, quoted, because the quotes are what
+#: say it is a string and not a label the corpus carries.
+QUERY_TEXT = '"book"'
+
+#: The four pages of the build. See `embed_flow_fig`.
+EMBED_FLOW_STAGES = 4
 
 #: The block arrows' shaft width and head, in units.
 FLOW_ARROW_W, FLOW_HEAD_W, FLOW_HEAD_L = 0.52, 0.82, 0.38
 
-#: Where the row of objects is centred vertically, and where the names under it
-#: sit. The band — objects, then a gap, then the names — is centred on the
-#: slide rather than hung off the top, which is what leaves equal white above
-#: the cube and below the names. The headline does not push it down: the
-#: headline is 300px wide and the only object under it is the photo stack,
-#: which is the shortest thing in the row.
-FLOW_MID_Y = 5.08
-FLOW_NAME_Y = 2.40
+#: The layout, in canvas units. The two inputs stack down the left and the cube
+#: sits centre-right, so both arrows run into the same face of the same box —
+#: which is the shape of the claim. A row of alternating objects and arrows,
+#: which is what this figure used to be, cannot draw two things arriving at
+#: one.
+STACK_LEFT, STACK_BOTTOM = 0.95, 4.51
+QUERY_XY = (2.39, 2.45)
+CUBE_XY = (8.80, 1.80)
+
+#: How far under an object its name sits, and where the two arrows stop short
+#: of the cube. Both arrows run **flat**, each at the height of the thing it
+#: leaves, and the cube is sized to catch both: a horizontal arrow says "this
+#: goes through that" and nothing else, while a pair angled to meet draws a
+#: junction — and there is no junction here. Two things go into the same box;
+#: they do not combine on the way in.
+NAME_DROP = 0.53
+QUERY_NAME_EXTRA = 0.18
+ARROW_CLEAR = FLOW_GAP
+
+#: Where the shared "SigLIP" label goes: in the band between the two arrows, at
+#: the horizontal middle of the pair. It names both of them, so it sits nearer
+#: to both than either arrow sits to anything else (`slides/STYLE.md`).
+SIGLIP_XY = (6.30, 4.10)
 
 #: This figure's own title reserve, in slide pixels — the deck standard's
 #: rectangle with its *height* trimmed to the headline this slide carries.
 #: "Embed-time Stories" wraps to two lines and its box measures 101.6px
 #: (measured by `slides/STYLE.md`'s recipe, on this slide), so 130 is that box
 #: plus one `OBJECT_GAP_PT` — 16pt renders at 27.8px on this figure — and the
-#: cube's top-left corner clears the headline by the deck's own standard gap
-#: rather than by the 200px reserve the deck's *longest* headline needs.
-#: Re-measure if the headline changes.
+#: photo stack, the only object under the headline, clears it by the deck's own
+#: standard gap. Re-measure if the headline changes.
 EMBED_NOTCH_PX = (60.0, 42.0, 300.0, 130.0)
-
-#: The shortest a block arrow may be drawn, whatever its word measures. The
-#: assertion in `_block_arrow` only stops an arrow printing over its own head;
-#: this is the *design* floor, and it is what is left of the width once the row
-#: has given the three objects everything else. The row is width-bound — five
-#: things across a 16:9 slide — so every unit spent on an arrow comes straight
-#: out of the cube.
-FLOW_ARROW_MIN = 2.06
 
 
 def _flow_arrow_len(label: str) -> float:
@@ -1557,35 +1578,19 @@ def _cube_project(p: np.ndarray) -> np.ndarray:
     return np.array([p[0] * CUBE_SIDE + p[2] * CUBE_DEPTH, p[1] * CUBE_SIDE + p[2] * CUBE_DEPTH])
 
 
-def _flow_field_flat() -> np.ndarray:
-    """The dots on the square, in the cube's own drawing units.
-
-    Not a second field: the *same* points, at the *same* page positions the
-    cube's projection put them at. The square is exactly the cube's bounding
-    box (`PLANE_SIDE` is `CUBE_SIDE + CUBE_DEPTH`), so a dot does not move
-    across the second arrow at all — every one of them is where the cube's
-    shadow already had it, drawn at full size now that it has no depth left to
-    stand for. That is what makes the arrow read as a projection rather than as
-    a redraw: the only thing UMAP takes away is the dimension, and the picture
-    should not take away anything else (#3779).
-    """
-    return np.array([_cube_project(point) for point in _flow_field_3d()])
-
-
 @functools.lru_cache(maxsize=1)
 def _flow_field_3d() -> np.ndarray:
-    """The dots in the cube, in [0, 1]³ — the same items, before the projection.
+    """The dots in the cube, in [0, 1]³.
 
     Spread through the *volume* rather than over a face: the point the cube is
     making is that the embedding has room the picture cannot show, so a cloud
     that reads as a flat sheet would be arguing the opposite.
 
     Best-candidate on the 3D distance, as `_blue_noise` is on the 2D one — but
-    with a second, flat rule laid over it: a candidate whose **projection**
-    lands on top of one already placed is rejected outright. Spreading a cloud
-    evenly in the volume says nothing about what the page shows, and two items
-    a unit apart in depth draw as one smudge; the figure is read in 2D whatever
-    it is claiming about dimensions.
+    with a second, flat rule laid over it, because the figure is read in 2D
+    whatever it is claiming about dimensions: a candidate whose **projection**
+    lands on top of one already placed is rejected, since two items a unit
+    apart in depth draw as one smudge.
     """
     rng = np.random.default_rng(23)
     pad = 0.07
@@ -1613,8 +1618,8 @@ def _photo_stack(ax: plt.Axes, x0: float, y0: float) -> None:
 
     The scene — a horizon, two hills and a sun — is the one piece of
     representational drawing in the deck, and it earns its place: a bare stack
-    of rectangles is a stack of *documents*, and the pipeline's first stage has
-    to say "pictures" before the word "SigLIP" under it means anything.
+    of rectangles is a stack of *documents*, and this slide's first stage has to
+    say "pictures" before the word "SigLIP" beside it means anything.
     """
     for k in range(CARDS - 1, -1, -1):
         ax.add_patch(
@@ -1631,8 +1636,7 @@ def _photo_stack(ax: plt.Axes, x0: float, y0: float) -> None:
     z = 3 + CARDS
     inset = 0.13
     left, right = x0 + inset, x0 + CARD_W - inset
-    base = y0 + inset
-    top = y0 + CARD_H - inset
+    base, top = y0 + inset, y0 + CARD_H - inset
     ax.add_patch(
         plt.Polygon(
             [
@@ -1673,19 +1677,27 @@ def _photo_stack(ax: plt.Axes, x0: float, y0: float) -> None:
     )
 
 
-def _block_arrow(ax: plt.Axes, x0: float, x1: float, y: float, label: str) -> None:
-    """A hollow block arrow with `label` written inside it."""
+def _block_arrow(ax: plt.Axes, start: tuple[float, float], end: tuple[float, float], label: str) -> None:
+    """A hollow block arrow with `label` written along it, at any angle.
+
+    The label sits at the centre of the *whole* arrow, head included, and turns
+    with it — centring it in the shaft alone reads as a word shoved towards the
+    tail, because the eye counts the head as space like everything else.
+    """
+    (x0, y0), (x1, y1) = start, end
+    dx, dy = x1 - x0, y1 - y0
+    length = float(np.hypot(dx, dy))
     needed = _flow_arrow_len(label)
-    assert x1 - x0 >= needed - 1e-9, (
-        f"the {label!r} arrow is {x1 - x0:.3f} units long and its own word needs "
+    assert length >= needed - 1e-9, (
+        f"the {label!r} arrow is {length:.3f} units long and its own word needs "
         f"{needed:.3f} — it would print over its own head."
     )
     ax.add_patch(
         FancyArrow(
             x0,
-            y,
-            x1 - x0,
-            0.0,
+            y0,
+            dx,
+            dy,
             width=FLOW_ARROW_W,
             head_width=FLOW_HEAD_W,
             head_length=FLOW_HEAD_L,
@@ -1696,7 +1708,21 @@ def _block_arrow(ax: plt.Axes, x0: float, x1: float, y: float, label: str) -> No
             zorder=3,
         )
     )
-    ax.text((x0 + x1) / 2, y, label, ha="center", va="center", fontsize=FLOW_ARROW_PT, color=INK, zorder=4)
+    angle = float(np.degrees(np.arctan2(dy, dx)))
+    if angle < -90 or angle > 90:  # keep the word reading left to right
+        angle += 180
+    ax.text(
+        x0 + dx / 2,
+        y0 + dy / 2,
+        label,
+        rotation=angle,
+        rotation_mode="anchor",
+        ha="center",
+        va="center",
+        fontsize=FLOW_ARROW_PT,
+        color=INK,
+        zorder=4,
+    )
 
 
 def _wire_cube(ax: plt.Axes, x0: float, y0: float) -> None:
@@ -1705,14 +1731,13 @@ def _wire_cube(ax: plt.Axes, x0: float, y0: float) -> None:
     Drawn in `WIRE` so the dots inside it stay the darkest thing in the box —
     the cube is the room the items live in, not an object in its own right.
     """
-    d = CUBE_DEPTH
-    s = CUBE_SIDE
-    front = [(x0, y0), (x0 + s, y0), (x0 + s, y0 + s), (x0, y0 + s)]
+    d, side = CUBE_DEPTH, CUBE_SIDE
+    front = [(x0, y0), (x0 + side, y0), (x0 + side, y0 + side), (x0, y0 + side)]
     back = [(x + d, y + d) for x, y in front]
     for face in (front, back):
-        ax.add_patch(plt.Polygon(face, closed=True, facecolor="none", edgecolor=WIRE, linewidth=1.3, zorder=2))
+        ax.add_patch(plt.Polygon(face, closed=True, facecolor="none", edgecolor=WIRE, linewidth=1.4, zorder=2))
     for (fx, fy), (bx, by) in zip(front, back):
-        ax.plot([fx, bx], [fy, by], color=WIRE, linewidth=1.3, zorder=2)
+        ax.plot([fx, bx], [fy, by], color=WIRE, linewidth=1.4, zorder=2)
 
 
 def _flow_dot(ax: plt.Axes, x: float, y: float, radius: float, z: float) -> None:
@@ -1720,21 +1745,24 @@ def _flow_dot(ax: plt.Axes, x: float, y: float, radius: float, z: float) -> None
 
 
 def embed_flow_fig() -> None:
-    """Photographs in, dots out — the one thing the deck has been assuming.
+    """A photograph and a phrase, into one space — the deck's missing sentence.
 
-    Slide 6 leaves the room looking at photographs and slide 8 opens on a field
-    of circles, and nothing between them ever says that the second is what
-    became of the first. This is that sentence, drawn: a stack of pictures,
-    embedded into a cloud in a space too big to draw, then flattened onto the
-    plane the next slide spends ten pages on. The dots are deliberately the
-    same hollow circles, packed tighter — what changes between this slide and
-    the next is the zoom, and that is the whole point of drawing them alike.
+    Slide 3 has the user type a word and slide 8 opens on a field of circles,
+    and nothing between them says how either got there, or why a *word* is
+    allowed to seed a ranking over *pictures*. This is that sentence, drawn:
+    the corpus goes through SigLIP once and comes out as points in a
+    768-dimensional space, and the phrase goes through the same network and
+    comes out as a point in the same space. That is the whole reason the seed
+    works, and the deck had been assuming it.
 
-    Three pages, one per step of the sentence, because the sentence has three
-    steps and a room that is shown all of it at once reads the end of it first.
-    Every page is the final drawing with the later steps removed; nothing moves
-    between them (`slides/STYLE.md`), which the shared untrimmed canvas gets for
-    free.
+    Four pages, one per beat, because the last beat is the one that carries the
+    argument and it needs the room looking at the cube when it arrives. Every
+    page is the final drawing with the later beats removed, and nothing moves
+    between them (`slides/STYLE.md`) — the shared untrimmed canvas gets that
+    for free. The last page does *cover* a little of the cloud, which is the
+    one thing it is allowed to do: the square lands in a crowded space because
+    the space is crowded, and a gap left open for it three pages early is a
+    hole the room would spend those pages wondering about.
     """
     for stage in range(1, EMBED_FLOW_STAGES):
         save(
@@ -1756,7 +1784,7 @@ def embed_flow_fig() -> None:
 
 
 def _embed_flow_stage(stage: int) -> plt.Figure:
-    """Draw the first `stage` steps of the pipeline (1-based, cumulative)."""
+    """Draw the first `stage` beats (1-based, cumulative)."""
     fig, ax = plt.subplots(figsize=tuple(c * UNIT_PT / 72 for c in CANVAS))
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
     ax.set_xlim(0, CANVAS[0])
@@ -1765,54 +1793,79 @@ def _embed_flow_stage(stage: int) -> plt.Figure:
     ax.set_axis_off()
 
     stack_w = CARD_W + (CARDS - 1) * CARD_STEP
-    cube_w = CUBE_SIDE + CUBE_DEPTH
-    embed_len = max(_flow_arrow_len(EMBED_WORD), FLOW_ARROW_MIN)
-    flatten_len = max(_flow_arrow_len(FLATTEN_WORD), FLOW_ARROW_MIN)
-    span = stack_w + cube_w + PLANE_SIDE + embed_len + flatten_len + 4 * FLOW_GAP
-    x = (CANVAS[0] - span) / 2
-
-    stack_x = x
-    x += stack_w + FLOW_GAP
-    embed_x = x
-    x += embed_len + FLOW_GAP
-    cube_x = x
-    x += cube_w + FLOW_GAP
-    flatten_x = x
-    x += flatten_len + FLOW_GAP
-    plane_x = x
-
-    # ── stage 1: the corpus, as the user has it — a pile of photographs ──────
     stack_h = CARD_H + (CARDS - 1) * CARD_STEP
-    _photo_stack(ax, stack_x, FLOW_MID_Y - stack_h / 2)
-    names = [(stack_x + stack_w / 2, "Photos")]
+    cube_w = CUBE_SIDE + CUBE_DEPTH
+    cube_x, cube_y = CUBE_XY
+    # Both arrows stop one object gap short of the cube's own left edge and run
+    # flat from whatever they leave, so the cube has to be tall enough to catch
+    # both — which is what sets `CUBE_SIDE` rather than any wish about the box.
+    tip_x = cube_x - ARROW_CLEAR
+    photo_y = STACK_BOTTOM + stack_h / 2
+    query_arrow_y = QUERY_XY[1] + 0.12
+    assert cube_y < query_arrow_y and photo_y < cube_y + CUBE_SIDE, (
+        f"an arrow at y={photo_y:.2f} or y={query_arrow_y:.2f} misses the cube's front face "
+        f"({cube_y:.2f}-{cube_y + CUBE_SIDE:.2f}) — make the cube taller or move the inputs together"
+    )
 
-    # ── stage 2: embedded once, at import, into a space too big to draw ──────
-    cube_y = FLOW_MID_Y - cube_w / 2
+    def name(x: float, bottom: float, text: str) -> None:
+        ax.text(x, bottom - NAME_DROP, text, ha="center", va="baseline", fontsize=FLOW_NAME_PT, color=INK, zorder=4)
+
+    # ── beat 1: the corpus, as the user has it — a pile of photographs ───────
+    _photo_stack(ax, STACK_LEFT, STACK_BOTTOM)
+    name(STACK_LEFT + stack_w / 2, STACK_BOTTOM, "Photos")
+
+    # ── beat 2: embedded once, at import, into a space too big to draw ───────
     if stage >= 2:
-        _block_arrow(ax, embed_x, embed_x + embed_len, FLOW_MID_Y, EMBED_WORD)
+        _block_arrow(ax, (STACK_LEFT + stack_w + FLOW_GAP, photo_y), (tip_x, photo_y), EMBED_WORD)
         _wire_cube(ax, cube_x, cube_y)
         for point in _flow_field_3d():
             dx, dy = _cube_project(point)
             _flow_dot(
-                ax, cube_x + dx, cube_y + dy, FLOW_R * (1.0 - FLOW_DEPTH_SHRINK * point[2]), 5 + 2 * (1.0 - point[2])
+                ax, cube_x + dx, cube_y + dy, FLOW_R * (1.0 - FLOW_DEPTH_SHRINK * point[2]), 5 + 2 * (1 - point[2])
             )
-        names += [(embed_x + embed_len / 2, "SigLIP"), (cube_x + cube_w / 2, "768-d")]
+        name(cube_x + cube_w / 2, cube_y, "768-d")
+        ax.text(*SIGLIP_XY, "SigLIP", ha="center", va="center", fontsize=FLOW_NAME_PT, color=INK, zorder=4)
 
-    # ── stage 3: flattened onto the plane the rest of the talk is drawn on ───
+    # ── beat 3: the phrase, through the same network ─────────────────────────
+    query_x, query_y = QUERY_XY
     if stage >= 3:
-        _block_arrow(ax, flatten_x, flatten_x + flatten_len, FLOW_MID_Y, FLATTEN_WORD)
-        plane_y = FLOW_MID_Y - PLANE_SIDE / 2
+        ax.text(
+            query_x,
+            query_y,
+            QUERY_TEXT,
+            ha="center",
+            va="baseline",
+            fontsize=FLOW_QUERY_PT,
+            fontweight="bold",
+            color=GREEN,
+            zorder=4,
+        )
+        # The query's "bottom" is a baseline rather than an edge, so the same
+        # `NAME_DROP` under it reads tighter than it does under the stack.
+        name(query_x, query_y - QUERY_NAME_EXTRA, "Text")
+        query_half = (
+            TextPath((0, 0), QUERY_TEXT, size=FLOW_QUERY_PT, prop=FontProperties(family="DejaVu Sans", weight="bold"))
+            .get_extents()
+            .width
+            / UNIT_PT
+            / 2
+        )
+        _block_arrow(ax, (query_x + query_half + FLOW_GAP, query_arrow_y), (tip_x, query_arrow_y), EMBED_WORD)
+
+    # ── beat 4: and it lands in there, with the pictures ─────────────────────
+    if stage >= 4:
+        centre = _cube_project(np.array([0.5, 0.5, 0.5]))
         ax.add_patch(
             plt.Rectangle(
-                (plane_x, plane_y), PLANE_SIDE, PLANE_SIDE, facecolor="none", edgecolor=WIRE, linewidth=1.3, zorder=2
+                (cube_x + centre[0] - QUERY_SIDE / 2, cube_y + centre[1] - QUERY_SIDE / 2),
+                QUERY_SIDE,
+                QUERY_SIDE,
+                facecolor=GREEN,
+                edgecolor=GREEN,
+                linewidth=1.4,
+                zorder=8,
             )
         )
-        for dx, dy in _flow_field_flat():
-            _flow_dot(ax, plane_x + dx, plane_y + dy, FLOW_R, 5)
-        names += [(flatten_x + flatten_len / 2, "UMAP"), (plane_x + PLANE_SIDE / 2, "2-d")]
-
-    for cx, name in names:
-        ax.text(cx, FLOW_NAME_Y, name, ha="center", va="baseline", fontsize=FLOW_NAME_PT, color=INK, zorder=4)
     return fig
 
 
