@@ -117,15 +117,32 @@ export CALIB_CELL_ORDER="${CALIB_CELL_ORDER:-calibration_seed}"
 export CALIB_PARTITION=cpu
 export CALIB_GRES=none
 
-# --- resources ---------------------------------------------------------------
-# MEASURED on THIS pile by `size`, not carried from #3287.  #3287's 21.8-min /
-# 7.7-GB region cell ran `vg_scale_any` at 4,200 medias; the 2026-09-08 rebuild
-# put 18,049 in it, and #3679 measured the same change as 4.4 -> 19.1 min per
-# cell.  Never carry a per-cell cost across a pile rebuild.
-export CALIB_MEM="${CALIB_MEM:-32G}"
-export CALIB_CONC="${CALIB_CONC:-24}"
+# --- resources: MEASURED on THIS pile by `size`, not carried from #3287 -------
+# #3287's region cell was 21.8 min at 7.71 GB on a `vg_scale_any` of 4,200
+# medias.  The 2026-09-08 rebuild put 18,049 in it, and both numbers moved:
+#
+#   cell 0  siglip / whole_image                  6m45s   1.60 GB   (job 640468)
+#   cell 5  siglip+dinov3_patch / both styles    35m52s  16.05 GB   (job 640469)
+#
+# So the #3287 pins would have been 2.1x too short and, worse, **would have
+# OOM-killed every region cell**: its 12G floor is under this cell's measured
+# peak.  #3679 hit the same rebuild as 4.4 -> 19.1 min.  Never carry a per-cell
+# cost, or a memory limit, across a pile rebuild.
+#
+# 24G against a 16.05 GB peak is 50% headroom, the margin #3287 chose for the
+# same reason: an OOM is a LOST cell, not a slow one, and a zero-byte output is
+# a cell `resume` then skips (preflight check 9 exists because that happened).
+#
+# %40 x 24G = 960G of the 1074G per-user allowance under QOS `cpu_limit` (89%),
+# just inside preflight check 8's 90% line.  ONE array, so the study's footprint
+# and the array's are the same number - the #3287 five-array trap, where %16 per
+# arm read as 18% while the study sat at 89%, cannot arise here.
+export CALIB_MEM="${CALIB_MEM:-24G}"
+export CALIB_CONC="${CALIB_CONC:-40}"
 export CALIB_CPUS=1
-export CALIB_TIME="${CALIB_TIME:-12:00:00}"
+# 3h is 5x the measured region cell.  A 12h request is not free: it is what the
+# backfill scheduler has to find a hole for.
+export CALIB_TIME="${CALIB_TIME:-3:00:00}"
 # The analyzer reads every step of every cell.  #3679 needed 96G for 8.7M rows
 # off 1,875 cells and was OOM-killed at 16G.
 export CALIB_ANALYZE_MEM="${CALIB_ANALYZE_MEM:-96G}"
