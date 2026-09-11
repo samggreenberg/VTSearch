@@ -85,6 +85,7 @@ files here are how it was produced.
 | **#3312 Voted-media exclusion floor** — [plan](../../../docs/experiments/2026-08-28-voted-exclusion-3308/PLAN.md) (no report yet) | `launch_exclusion_3308.sh`, `analyze_exclusion.py`, `selftest_analyze_exclusion.py` |
 | **#3196 Inclusion knob under the linear SVM head** — [report](../../../docs/experiments/2026-08-29-inclusion-knob-3196/REPORT.md) | `launch_incl_3196.sh`, `analyze_incl_3196.py`, `selftest_analyze_incl_3196.py`, `figures_incl_3196.py` |
 | **#3329 Is the 2-component mixture a good fit?** — [report](../../../docs/experiments/2026-08-30-fit-quality-3329/REPORT.md) | `launch_fitq_3329.sh`, `analyze_fitq_3329.py`, `selftest_analyze_fitq_3329.py`, `figures_fitq_3329.py`, `worked_cell_3329.py` |
+| **#3796 Calibration-split noise floor** — [plan](../../../docs/experiments/2026-09-11-calibration-seed-3796/PLAN.md) | `launch_calseed_3796.sh`, `analyze_calseed_3796.py`, `selftest_analyze_calseed_3796.py`. The grid is inverted — the cell seed is HELD and the Train/Calibrate split is redrawn — so the draws are a cell axis (`CALIB_CALIBRATION_SEEDS`) rather than the arm-per-value shape #3287 needed: #3794 put a `calibration_seed` column on every row, and an arm per draw would be twenty arrays whose only difference is already written down |
 
 <!-- END INDEX -->
 
