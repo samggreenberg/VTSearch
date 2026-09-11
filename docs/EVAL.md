@@ -342,6 +342,30 @@ Rounds appear in the `phase` column as `s0`, `s1`, …, and `app_trained` is `0`
 
 `@k` and `@q` are not redundant. `@k` is the arm that could *ship* — the app has an Inclusion knob and no rank-position knob — but how far a given inclusion moves the pick is a property of the fitted mixture, so on a steep sort the whole usable range can land inside a couple of rank percent. `@q` names the position directly, which is what establishes whether *position* is the mechanism before asking whether `k` is a usable handle on it.
 
+#### The calibration draw (`calibration_seed`, default: the app's own pin)
+
+The cell `seed` moves the **data** — which media are voted, in what order, and which half is held out — and nothing else. Everything downstream of the votes is pinned, and deliberately so: production splits Train/Calibrate off a fresh `RandomState(CALIBRATION_SPLIT_SEED)` (42), because issue #2934 fixed the unseeded global draw that let one detector's verdicts move between two runs on identical votes. The harness pins the same 42 so that the default arm is the app, per [The Eval Default Arm IS the App](#the-eval-default-arm-is-the-app) below.
+
+That pin has a cost the harness could not previously report. Every number this eval quotes is one draw of that split, and nothing says how wide the distribution around it is. `calibration_seed` (issue #3794) is the measurement:
+
+```python
+# The usual grid sweeps data at a pinned split.  This sweeps the split at pinned
+# data — one cell seed, many draws — which is the only arrangement that isolates it.
+frames = [
+    run_voting_iterations_eval({"vg": medias}, seeds=[7], calibration_seed=c)
+    for c in range(20)
+]
+```
+
+Read the spread across those runs as the noise floor: a contrast smaller than it is not a finding. Every row records the resolved value in the **`calibration_seed`** column (42 on a default run), so the frames concatenate and stay tellable apart.
+
+Two things it is *not*:
+
+- **Not extra realism.** "Simulate the app's randomness here" has nothing to simulate — the app is pinned at these sites too. Reseeding them on a default run would measure a detector nobody ships, which is exactly the failure the drift gate below exists to prevent.
+- **Not a knob on the model fit.** The shipped head is a convex liblinear solve, so its `seed=42` permutes the solver's path and not its answer; reseeding *it* is measurably a no-op. The Train/Calibrate split is the one place a seed still decides something. (The retired MLP head was the opposite — its weight-init seed moved the ranking, which is part of why it is retired; see [`docs/ML.md`](ML.md#the-three-heads-which-one-is-shipped-and-why).)
+
+`tests_lib/detectors/test_calibration_seed_arm.py` pins both halves: an unset knob reproduces a default run row for row, and an explicit one actually redraws the split.
+
 #### What every step measures
 
 Each metric row carries the operating point at that step's threshold — `cost` (the inclusion-weighted `FPR + FNR`), `fpr`, `fnr`, `precision`, `recall` and `f1` — plus the counts they come from (`n_test_pos`, `n_test_neg`, `n_flagged`) and the two threshold-independent ranking metrics, `auroc` and `average_precision`, which isolate "how good is the ranking" from "how good is the threshold".

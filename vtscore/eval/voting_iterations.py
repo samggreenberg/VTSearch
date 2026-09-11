@@ -83,6 +83,7 @@ from vtscore.eval.voting_columns import (
 from vtscore.training.blend_schedules import BlendContext
 from vtscore.training.thresholds import (
     ACQUISITION_INCLUSION_OFFSET,
+    CALIBRATION_SPLIT_SEED,
     apply_vote_exclusion,
     FOLD_ANCHOR_QTILT_STEP,
     NO_GOOD_THRESHOLD,
@@ -958,6 +959,7 @@ class _RunKnobs:
     skyline_arms: list[str]
     head: str
     trainer: str
+    calibration_seed: int
 
 
 def _resolve_head(head: Optional[str], trainer: str) -> str:
@@ -1036,6 +1038,7 @@ def _resolve_run_knobs(
     head: Optional[str],
     trainer: str,
     style: Optional[str],
+    calibration_seed: Optional[int],
 ) -> _RunKnobs:
     """Validate a cell's pre-registered knobs and resolve the defaults among them.
 
@@ -1095,12 +1098,24 @@ def _resolve_run_knobs(
         raise ValueError(
             f"detection styles only apply to trainer={APP_TRAINER!r} (the app's own pipeline); got trainer={trainer!r}"
         )
+    # **The default arm must be the app's default.**  Production always splits
+    # Train/Calibrate off a fresh ``RandomState(CALIBRATION_SPLIT_SEED)`` - the
+    # pin is deliberate (issue #2934 fixed the unseeded global draw that made
+    # thresholds move run to run), so an unspecified *calibration_seed* resolves
+    # to that same 42 and a default run is byte-for-byte what it was.  An
+    # explicit value is the #3794 measurement arm: held at one cell seed, it
+    # redraws *only* the calibration split, which is the run-to-run noise a
+    # single-seed number hides.  It is not a way to "add randomness" to the
+    # default arm - the app has none here to simulate.
+    if calibration_seed is not None and not isinstance(calibration_seed, int):
+        raise ValueError(f"calibration_seed must be an int or None; got {calibration_seed!r}")
     return _RunKnobs(
         fold_schedule=_fold_schedule,
         startup_state=startup_state,
         skyline_arms=skyline_arms,
         head=head,
         trainer=trainer,
+        calibration_seed=CALIBRATION_SPLIT_SEED if calibration_seed is None else calibration_seed,
     )
 
 
@@ -1210,6 +1225,7 @@ def simulate_voting_iterations(  # noqa: C901
     pick_sink: Optional[list[dict[str, Any]]] = None,
     exclusion_min_remainder: Optional[float] = None,
     skyline_arms: Optional[list[str]] = None,
+    calibration_seed: Optional[int] = None,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -1427,6 +1443,18 @@ def simulate_voting_iterations(  # noqa: C901
             published studies reproduce byte-for-byte; see ``docs/EVAL.md``.
             Metrics are recorded at every trainable step in both modes — only
             the *vote order* and the ``app_trained`` flag differ.
+        calibration_seed: Seed of the Train/Calibrate fold splits (issue #3794).
+            ``None`` (default) resolves to the app's own
+            :data:`~vtscore.training.thresholds.CALIBRATION_SPLIT_SEED`, so the
+            default arm's calibration is byte-for-byte production's.  An
+            explicit value is a **measurement** arm, not extra realism: hold
+            *seed* fixed so the data — which media are voted, in what order, the
+            held-out split — cannot move, sweep this instead, and the spread
+            across the sweep is the noise the pinned draw hides.  Reseeding it
+            on a *default* run would measure a detector nobody ships, because
+            production pins the split too (issue #2934 pinned it on purpose).
+            Recorded verbatim in the ``calibration_seed`` column, so a pooled
+            frame says which draw each row came from.
 
     Returns:
         List of row dicts.  Keys: ``seed, dataset, category, strategy, trainer,
@@ -1467,11 +1495,15 @@ def simulate_voting_iterations(  # noqa: C901
         head=head,
         trainer=trainer,
         style=style,
+        calibration_seed=calibration_seed,
     )
     _fold_schedule = knobs.fold_schedule
     startup_state = knobs.startup_state
     skyline_arms = knobs.skyline_arms
     head = knobs.head
+    # Resolved to the app's pinned split seed unless this cell is a #3794
+    # calibration-noise arm; from here on it is an int, never ``None``.
+    calibration_seed = knobs.calibration_seed
     # Normalised once, at the top: the retired ``"mlp"`` spelling never reaches
     # the dispatch, the guards, or the result rows (issue #3764).
     trainer = knobs.trainer
@@ -1779,6 +1811,7 @@ def simulate_voting_iterations(  # noqa: C901
             style_obj=style_obj,
             emit_calibration_metrics=emit_calibration_metrics,
             fold_count_variants=fold_count_variants,
+            calibration_seed=calibration_seed,
         )
 
         # Apply the shipped safe threshold if enabled
@@ -1957,6 +1990,7 @@ def simulate_voting_iterations(  # noqa: C901
             "span_depth": flow.span_depth if flow is not None else -1,
             "app_trained": 1 if (flow is None or app_has_detector(flow.phase)) else 0,
             "startup_schedule": startup_schedule or "",
+            "calibration_seed": calibration_seed,
             "acq_threshold": round(float(acq_threshold), 6),
             # Measured against the pool the selector ranks, not the test set, so
             # the pair answers "how much did the sampling position move".
@@ -2193,6 +2227,7 @@ def simulate_voting_iterations(  # noqa: C901
             "span_depth": -1,
             "app_trained": 0,
             "startup_schedule": startup_schedule or "",
+            "calibration_seed": calibration_seed,
             "acq_threshold": float("nan"),
             "acq_pool_percentile": float("nan"),
             "report_pool_percentile": float("nan"),
@@ -2226,6 +2261,7 @@ def run_voting_iterations_eval(
     styles: Optional[list[Optional[str]]] = None,
     autopilot_fidelity: bool = True,
     startup_schedule: Optional[str] = None,
+    calibration_seed: Optional[int] = None,
 ) -> pd.DataFrame:
     """Run the voting-iterations evaluation over multiple seeds/datasets/categories.
 
@@ -2286,6 +2322,13 @@ def run_voting_iterations_eval(
         startup_schedule: A parameterised Autopilot opening (issue #3267); see
             :func:`simulate_voting_iterations`.  ``None`` (default) is the app's
             own opening.  Requires a *seed_scores* entry for every cell run.
+        calibration_seed: Seed of the Train/Calibrate fold splits (issue #3794);
+            see :func:`simulate_voting_iterations`.  ``None`` (default) is the
+            app's own pinned split, which is what every ordinary study wants.
+            A calibration-noise arm sweeps it the other way round from the usual
+            grid - one *seeds* entry, many calls, one *calibration_seed* each -
+            so that the data is held while the split is redrawn; the frames
+            concatenate and the ``calibration_seed`` column tells them apart.
 
     Returns:
         A :class:`~pandas.DataFrame` with the columns listed in
@@ -2339,6 +2382,7 @@ def run_voting_iterations_eval(
                                     style=style,
                                     autopilot_fidelity=autopilot_fidelity,
                                     startup_schedule=startup_schedule,
+                                    calibration_seed=calibration_seed,
                                 )
                                 all_rows.extend(rows)
 

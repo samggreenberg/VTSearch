@@ -45,6 +45,7 @@ from vtscore.eval.step_model import (
 from vtscore.eval.sweep_trainers import _cross_calibrated_threshold, _parse_trainer_spec
 from vtscore.training.mlp import train_model
 from vtscore.training.thresholds import (
+    CALIBRATION_SPLIT_SEED,
     calibration_folds,
     classify_threshold_provenance,
     compute_fold_orderings,
@@ -228,6 +229,7 @@ def _train_and_calibrate(
     style_obj: Any = None,
     emit_calibration_metrics: bool = False,
     fold_count_variants: list[int] | None = None,
+    calibration_seed: int = CALIBRATION_SPLIT_SEED,
 ) -> tuple[StepModel, float, int, dict[str, float], dict[str, Any]]:
     """Train the step's ranker and calibrate its threshold from the current votes.
 
@@ -271,6 +273,7 @@ def _train_and_calibrate(
             head=head,
             emit_calibration_metrics=emit_calibration_metrics,
             fold_count_variants=fold_count_variants,
+            calibration_seed=calibration_seed,
         )
     if trainer == APP_TRAINER:
         return _app_train_and_calibrate(
@@ -284,6 +287,7 @@ def _train_and_calibrate(
             calibrate_count=calibrate_count,
             calibration_fraction=calibration_fraction,
             head=head,
+            calibration_seed=calibration_seed,
         )
     return _svm_train_and_calibrate(
         trainer,
@@ -294,6 +298,7 @@ def _train_and_calibrate(
         inclusion=inclusion,
         calibrate_count=calibrate_count,
         calibration_fraction=calibration_fraction,
+        calibration_seed=calibration_seed,
     )
 
 
@@ -309,6 +314,7 @@ def _app_train_and_calibrate(
     calibrate_count: int,
     calibration_fraction: float,
     head: str = PRODUCTION_HEAD,
+    calibration_seed: int = CALIBRATION_SPLIT_SEED,
 ) -> tuple[StepModel, float, int, dict[str, float], dict[str, Any]]:
     """The app-pipeline arm on single-vector data — the ``trainer="app"`` default.
 
@@ -344,12 +350,18 @@ def _app_train_and_calibrate(
       ``cross_calibration_threshold_cached``).  Letting each fold auto-size to
       its own smaller train split would train narrower fold nets and report a
       threshold no single-architecture pipeline ever produces.
-    * the fold splits use a fresh ``RandomState(42)`` - the fixed seed
+    * the fold splits use a fresh ``RandomState(calibration_seed)``, and
+      *calibration_seed* defaults to :data:`~vtscore.training.thresholds.
+      CALIBRATION_SPLIT_SEED` - the fixed seed
       ``cross_calibration_threshold_cached`` always calibrates with - rather than
-      the shared per-seed simulation RNG, so the calibration is byte-for-byte
-      what production runs for this vote set.  The eval seed still varies the
-      data (which media are voted, in what order, and the held-out test split);
-      only the calibration folds are pinned, as they are in production.
+      the shared per-seed simulation RNG, so the default arm's calibration is
+      byte-for-byte what production runs for this vote set.  The eval seed still
+      varies the data (which media are voted, in what order, and the held-out
+      test split); the calibration folds are pinned, as they are in production.
+      An explicit *calibration_seed* is the #3794 measurement arm: it redraws
+      the Train/Calibrate split at **fixed** data, which is the only way to read
+      how much of a single-seed number is the pinned draw rather than the
+      pipeline.  It is study-only and never set on a default run.
     """
     import numpy as np  # noqa: PLC0415
     import torch  # noqa: PLC0415
@@ -379,7 +391,7 @@ def _app_train_and_calibrate(
         calibrate_count=calibrate_count,
         calibration_fraction=calibration_fraction,
         hidden_dim=hidden_dim,
-        rng=np.random.RandomState(42),
+        rng=np.random.RandomState(calibration_seed),
     )
     threshold = threshold_from_folds(folds, inclusion)
     xcal_seconds = time.monotonic() - t_xcal
@@ -426,6 +438,7 @@ def _style_train_and_calibrate(
     head: str = PRODUCTION_HEAD,
     emit_calibration_metrics: bool = False,
     fold_count_variants: list[int] | None = None,
+    calibration_seed: int = CALIBRATION_SPLIT_SEED,
 ) -> tuple[StepModel, float, int, dict[str, float], dict[str, Any]]:
     """Style-driven torch path (the Max-Patch experiment arms).
 
@@ -491,6 +504,7 @@ def _style_train_and_calibrate(
             cal_groups=cal_groups,
             score_rows_by_group=score_rows_by_group if cal_groups is not None else None,
             fold_count_variants=fold_count_variants,
+            calibration_seed=calibration_seed,
         )
         # Bad-voted bags' inference row stacks: the final model scores these to
         # form the pnorm null (F_neg) at test time (see _calibration_metric_rows).
@@ -506,7 +520,7 @@ def _style_train_and_calibrate(
             calibrate_count=calibrate_count,
             calibration_fraction=calibration_fraction,
             hidden_dim=hidden_dim,
-            rng=np.random.RandomState(42),
+            rng=np.random.RandomState(calibration_seed),
             groups=cal_groups,
             score_rows_by_group=score_rows_by_group if cal_groups is not None else None,
         )
@@ -559,6 +573,7 @@ def _calibrate_with_details(
     cal_groups: list | None,
     score_rows_by_group: dict | None,
     fold_count_variants: list[int] | None = None,
+    calibration_seed: int = CALIBRATION_SPLIT_SEED,
 ) -> tuple[float, dict[str, Any]]:
     """Compute the trained threshold **and** the calibration study's provenance.
 
@@ -629,7 +644,7 @@ def _calibrate_with_details(
             y_list,
             input_dim,
             groups=cal_groups,
-            rng=np.random.RandomState(42),
+            rng=np.random.RandomState(calibration_seed),
             calibrate_count=k_max,
             calibration_fraction=calibration_fraction,
             hidden_dim=hidden_dim,
@@ -666,7 +681,7 @@ def _calibrate_with_details(
         X_list,
         y_list,
         input_dim,
-        rng=np.random.RandomState(42),
+        rng=np.random.RandomState(calibration_seed),
         calibrate_count=k_max,
         calibration_fraction=calibration_fraction,
         hidden_dim=hidden_dim,
@@ -705,6 +720,7 @@ def _svm_train_and_calibrate(
     inclusion: int,
     calibrate_count: int,
     calibration_fraction: float,
+    calibration_seed: int = CALIBRATION_SPLIT_SEED,
 ) -> tuple[StepModel, float, int, dict[str, float], dict[str, Any]]:
     """Standalone-SVM path — single-vector only (the experiment never region-votes an SVM).
 
@@ -720,7 +736,12 @@ def _svm_train_and_calibrate(
     honours the ambient backend (cuML on a GPU unless ``VTSEARCH_DISABLE_CUML``
     forces sklearn), and that backend is what the row records and what produces
     the scores.  The SVM fit seed is pinned to 42, mirroring the MLP's fixed
-    calibration seed; the eval seed still varies which items are voted.
+    calibration seed; the eval seed still varies which items are voted.  The
+    fold splits take *calibration_seed* (the app's pinned
+    :data:`~vtscore.training.thresholds.CALIBRATION_SPLIT_SEED` unless the
+    #3794 measurement arm overrides it); on this path that one seed drives the
+    fold *fits* as well as the splits, which for a convex SVM solve is the
+    split in all but name.
     """
     import numpy as np  # noqa: PLC0415
 
@@ -744,7 +765,7 @@ def _svm_train_and_calibrate(
         X,
         y,
         fold_trainer,
-        42,
+        calibration_seed,
         inclusion_value=inclusion,
         calibrate_count=calibrate_count,
         cal_fraction=calibration_fraction,

@@ -113,6 +113,15 @@ IDENT_COLUMNS: tuple[str, ...] = (
     #: directory it was read out of.  Empty on every run that took the app's
     #: own opening, which is every study before #3267.
     "startup_schedule",
+    #: Seed of the Train/Calibrate fold splits this run calibrated with (issue
+    #: #3794).  42 on every default run - the app pins the split too, so the
+    #: default arm reports production's own draw - and a swept value only in a
+    #: calibration-noise arm, where the cell seed is held fixed so the *data*
+    #: cannot move and this is the one thing that does.  Recorded rather than
+    #: assumed because the spread across such a sweep is the error bar on every
+    #: single-seed number in every other study, and a pooled frame cannot say
+    #: which rows carry it otherwise.
+    "calibration_seed",
     # --- Acquisition/reporting decoupling (docs/ML.md, threshold calibration).
     #: The threshold handed to the *selector* this step - cut
     #: ``acq_inclusion_offset`` inclusion steps below ``threshold``.  Equal to it
