@@ -1747,6 +1747,7 @@ def simulate_voting_iterations(  # noqa: C901
                     "dataset": dataset_name,
                     "category": target_category,
                     "startup_schedule": startup_schedule or "",
+                    "calibration_seed": calibration_seed,
                     "style": style or "",
                     "t": t,
                     "phase": phase or "",

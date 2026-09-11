@@ -220,6 +220,14 @@ PICK_COLUMNS: tuple[str, ...] = (
     "dataset",
     "category",
     "startup_schedule",
+    #: The Train/Calibrate split this trajectory calibrated with, for the same
+    #: reason the main frame carries it (issue #3794): a pooled pick log cannot
+    #: otherwise say which draw a click belongs to.  It earns its place here
+    #: rather than only there because the *pick* is where the closed loop shows:
+    #: two draws that cut differently pick differently from the step after they
+    #: first disagree, and the click at which that starts is not recoverable
+    #: from a metric column.
+    "calibration_seed",
     "style",
     "t",
     "phase",
