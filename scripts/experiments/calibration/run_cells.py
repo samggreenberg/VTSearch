@@ -249,6 +249,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     cell = cells[idx]
     ds, emb, cat, seed = cell["dataset"], cell["embedder"], cell["category"], cell["seed"]
+    # `None` on every grid but #3796's, where it is the swept axis.  Passed
+    # through as-is: `simulate_voting_iterations` resolves None to the app's own
+    # CALIBRATION_SPLIT_SEED, so the harness never writes that constant down.
+    cal_seed = cell.get("calibration_seed")
     styles = cfg.styles_for(ds, emb)
     region_voting = cfg.region_voting_for(ds, emb)
     common.log(
@@ -261,7 +265,8 @@ def main(argv: list[str] | None = None) -> int:
         f"cut_incl_ks={cfg.CUT_INCLUSION_KS or 'off'} "
         f"skyline_arms={cfg.SKYLINE_ARMS or 'off'} "
         f"acq_inclusion_offset={cfg.ACQ_INCLUSION_OFFSET} acq_rank_percentile={cfg.ACQ_RANK_PERCENTILE} "
-        f"startup_schedule={cfg.STARTUP_SCHEDULE or 'app default'}"
+        f"startup_schedule={cfg.STARTUP_SCHEDULE or 'app default'} "
+        f"calibration_seed={cal_seed if cal_seed is not None else 'app pin'}"
     )
 
     import pandas as pd
@@ -361,6 +366,7 @@ def main(argv: list[str] | None = None) -> int:
             acq_rank_percentile=cfg.ACQ_RANK_PERCENTILE,
             startup_schedule=cfg.STARTUP_SCHEDULE,
             pick_sink=picks_local,
+            calibration_seed=cal_seed,
         )
         # The recorded fraction is the one the run actually used: an explicit
         # CALIB_CALIBRATION_FRACTION pin verbatim, else the per-space default
