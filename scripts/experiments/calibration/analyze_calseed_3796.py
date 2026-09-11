@@ -137,6 +137,24 @@ def load(results: Path) -> tuple[pd.DataFrame, dict]:
     return frame, prov
 
 
+def coverage(prov: dict) -> str:
+    """`describe_load`'s sentence, plus the count `load_arm` renames out of it.
+
+    `load_arm` moves `header_only` to `no_positive_found` - a starved cell is a
+    legitimate result rather than data loss, and the rename says so - but
+    `describe_load` still looks for the old key, so calling it on `load_arm`'s
+    provenance reports *zero* starved cells however many there were.  Naming the
+    count here is the smaller change: six studies across the tree read that
+    shared sentence, and it is the sentence that makes "N of M cells" mean the
+    same thing in two reports.  Filed as a follow-up rather than fixed in place.
+    """
+    line = _cells_io.describe_load(prov)
+    starved = len(prov.get("no_positive_found") or ())
+    if starved:
+        line += f", {starved} header-only (no positive found)"
+    return line
+
+
 def resolve_pin(results: Path, frame: pd.DataFrame) -> int:
     """The draw production actually ships, taken from the APP, not from the grid.
 
@@ -236,6 +254,23 @@ def variance_components(bb: pd.DataFrame) -> pd.DataFrame:
     draw did - but a negative variance has no square root, so the clip is
     recorded in ``seed_var_was_negative`` rather than hidden.
     """
+    # Named, so an empty result is still a frame with these columns.  A study
+    # whose grid holds one cell seed legitimately produces no decomposition, and
+    # a bare `DataFrame([])` then has no `geometry` to filter on - which turns a
+    # missing deliverable into a KeyError three functions later.
+    columns = [
+        "geometry",
+        "mode",
+        "category",
+        "band",
+        "metric",
+        "n_seeds",
+        "n_draws",
+        "sd_draw",
+        "sd_seed",
+        "seed_var_was_negative",
+        "share_draw",
+    ]
     rows: list[dict] = []
     for (geom, mode, cat, band), g in bb.groupby(["geometry", "mode", "category", "band"], dropna=False):
         for metric in (m for m in METRICS if m in bb.columns):
@@ -266,7 +301,7 @@ def variance_components(bb: pd.DataFrame) -> pd.DataFrame:
                     ),
                 }
             )
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows, columns=pd.Index(columns))
 
 
 def spread_by_step(frame: pd.DataFrame, metric: str = HEADLINE) -> pd.DataFrame:
@@ -371,7 +406,7 @@ def implications(spread: pd.DataFrame, vc: pd.DataFrame, n_cells_per_arm: int = 
     rows: list[dict] = []
     for (geom, band), g in spread[spread["metric"] == HEADLINE].groupby(["geometry", "band"], dropna=False):
         sd = float(g["sd"].median())
-        share = vc[(vc["geometry"] == geom) & (vc["band"] == band) & (vc["metric"] == HEADLINE)]["share_draw"]
+        share = vc.loc[(vc["geometry"] == geom) & (vc["band"] == band) & (vc["metric"] == HEADLINE), "share_draw"]
         rows.append(
             {
                 "geometry": geom,
@@ -571,7 +606,7 @@ def write_report(out: Path, *, pin, prov, spread, vc, by_step, onset, impl, figs
     )
     lines.append("## What ran\n")
     lines.append("```\n" + json.dumps(shape, indent=2) + "\n```\n")
-    lines.append(f"Cells read: {_cells_io.describe_load(prov)}\n")
+    lines.append(f"Cells read: {coverage(prov)}\n")
     lines.append(f"Production's pinned split seed: **{pin}**\n")
     lines.append("## 1. The spread across calibration draws (headline: `cost`)\n")
     lines.append(_md(by_geo_band))
@@ -643,7 +678,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     out.mkdir(parents=True, exist_ok=True)
 
     frame, prov = load(results)
-    print(f"cells: {_cells_io.describe_load(prov)}")
+    print(f"cells: {coverage(prov)}")
     pin = resolve_pin(results, frame)
 
     shape_path = results / "grid_shape.json"
