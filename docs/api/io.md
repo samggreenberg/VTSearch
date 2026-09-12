@@ -305,6 +305,26 @@ GET /api/settings-importers
 
 → JSON array of settings importer objects.
 
+### Dynamic field options (settings importers)
+
+```
+POST /api/settings-importers/field-options/{importer_name}
+```
+
+**Body:** `{"field_key": "...", "values": {...}}` (`values` is a snapshot of
+the form's current field values)
+
+Returns the dropdown options for a `dynamic_options` field on a settings
+importer, for an importer whose option list is only knowable at runtime.
+Used by the Import Settings modal.
+
+→ `{"options": [{"value": "...", "label": "..."}, ...]}` (same shape as the
+results-exporter and label-importer routes above).
+
+Errors: 400 (unknown/non-dynamic field key), 404 (unknown importer),
+501 (importer does not implement `get_field_options`),
+502 (remote service backing dynamic options failed).
+
 ### Run settings import
 
 ```
@@ -322,6 +342,16 @@ GET /api/settings-exporters
 ```
 
 → JSON array of settings exporter objects.
+
+### Dynamic field options (settings exporters)
+
+```
+POST /api/settings-exporters/field-options/{exporter_name}
+```
+
+Same contract as the settings-importer route above, for the Export Settings
+modal's field form. Note that the exporter is named in the **path** here even
+though `POST /api/settings-exporters/export` names it in the body.
 
 ### Run settings export
 
