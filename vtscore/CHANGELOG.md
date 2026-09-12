@@ -376,6 +376,32 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Fixed
 
+- **`embed_missing()` leaves a partially pre-embedded import keyed under one
+  embedder name** (issue #3798). Nameless pre-computed vectors (an importer's
+  `content_vectors` / `custom_metadata_map` entries, or an `.npz` manifest
+  without `embedder_name`) sit under the blank `UNKNOWN_EMBEDDER_KEY` sentinel,
+  and the stage re-keyed them to the load's embedder only when the caller
+  *named* one. A no-pick load - `vtscore.cli` always, `load_pipeline` when the
+  request carried no `embedder` - resolved the media-type default, embedded the
+  vector-less items under it, and left the shipped vectors nameless: two names
+  for one space, and `get_embedding_matrix(ctx, ctx.routed_embedder(...))`
+  raised `has no embedding for embedder` on every shipped media once #3650
+  stopped collapsing that request to the primary path on the first media's
+  say-so. The resolved embedder is now stamped whenever leaving the sentinel
+  would split the dataset - at least one nameless vector alongside at least one
+  media that is about to be, or already is, keyed under that embedder - with
+  the same width check the named path applies (`MismatchedVectorError` naming
+  both widths). A dataset that is nameless throughout with nothing to embed is
+  left exactly as it arrived, so a manifest of vectors from an unregistered
+  model still loads slot-less. Named-pick loads are unchanged.
+
+  Two silences in the same stage are now log `WARNING`s: an
+  `embed_media_bulk` that returns `None` for some inputs (naming the embedder
+  and the count), or a list of the wrong length (nothing is attached, since
+  `zip` would have paired vectors with the wrong media), and a media type with
+  no registered embedder at all. `_drop_none_embeddings_stage` additionally
+  publishes a warning `notify()` so the shrink reaches the user.
+
 - **A matrix built for one embedding space can no longer be filled with
   another space's vectors** (issue #3650). `scoreable_snapshot()`,
   `get_embedding_matrix()` and `get_embedding_matrix_for_snap()` decide whether

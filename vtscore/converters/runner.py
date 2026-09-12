@@ -4,7 +4,7 @@ This module provides :func:`run_converters_on_folder`, a reusable utility
 that any dataset importer can call to scan a directory for source media
 files, convert them via one or more :class:`MediaConverter` instances,
 and append them to an existing medias dict.  The converter outputs are
-left with ``embedding=None``; the framework
+left with no vector (``embeddings={}``); the framework
 :func:`vtscore.datasets.stages.embedding.embed_missing` stage fills them
 in after the importer returns.
 """
@@ -122,7 +122,7 @@ def _build_converted_media_dict(
 ) -> dict[str, Any]:
     """Build the media dict for one converter output.
 
-    ``embedding`` is left at ``None``; the framework
+    ``embeddings`` is left empty; the framework
     :func:`~vtscore.datasets.stages.embedding.embed_missing` stage embeds
     converter outputs via ``media_bytes`` / ``media_string`` after the
     importer returns.
@@ -237,7 +237,7 @@ def _emit_converted_outputs(
     to hand one shared origin dict to all N outputs of a source, leaving lazy
     replay and label re-resolution unable to tell page 3 from page 7.
 
-    Outputs leave with ``embedding=None``; the framework embed stage
+    Outputs leave with no vector (``embeddings={}``); the framework embed stage
     embeds them from ``media_bytes`` / ``media_string``.
 
     When *lazy_source* is given (reference / *thin* mode) each output keeps
@@ -404,7 +404,7 @@ def apply_converter_to_demo(
     After conversion, *medias* contains the converted outputs (target type)
     instead of the original source-type medias.  Each converted media's
     origin records the demo dataset and the converter used.  Outputs
-    leave with ``embedding=None``; the framework embed stage fills them
+    leave with no vector (``embeddings={}``); the framework embed stage fills them
     in.
 
     :param embedder_name: **Accepted and ignored.**  Conversion changes the

@@ -761,9 +761,12 @@ Two related checks you will hit:
   embedder's declared `embedding_dim`.  Declaring `siglip2_l` while shipping
   768-dim rows is a self-contradiction, and it is rejected at import.
 - **Nameless vectors.** A vector supplied with no embedder name is stored under
-  a sentinel key and re-keyed to the embedder the load actually picked.  That
-  re-keying asserts the vector lives in that embedder's space, so it is
-  width-checked too — supply the name yourself if you know it.
+  a sentinel key and re-keyed to the embedder the load actually picked — the
+  user's pick, or, when nothing was picked and the framework had items of
+  yours to embed, the media-type default it resolved.  That re-keying asserts
+  the vector lives in that embedder's space, so it is width-checked too —
+  supply the name yourself if you know it.  A fully pre-computed nameless
+  import with nothing left to embed keeps the sentinel and is never re-keyed.
 
 When building dicts directly, the importer should also override
 `build_origin()` to return an empty origin (since the default

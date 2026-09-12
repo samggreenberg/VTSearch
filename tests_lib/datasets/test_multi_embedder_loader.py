@@ -165,8 +165,11 @@ class TestRequestedEmbedderStamping:
             np.testing.assert_array_equal(media_embedding(m, "siglip"), vecs[i])
 
     def test_blank_name_left_blank_when_no_pick(self):
-        # No explicit pick → the blank sentinel key is left untouched (the
+        # No explicit pick, nothing to embed and no media already keyed under
+        # the resolved embedder → the blank sentinel key is left untouched (the
         # nameless vector still resolves as the primary via media_embedding).
+        # When a no-pick load *does* embed something, the resolved embedder is
+        # stamped instead - see tests_lib/datasets/test_partial_precomputed_import.py.
         emb = _fake_embedder("audio_default", dim=4)
         rng = np.random.default_rng(2)
         vecs = {i: rng.standard_normal(4).astype(np.float32) for i in range(1, 4)}
