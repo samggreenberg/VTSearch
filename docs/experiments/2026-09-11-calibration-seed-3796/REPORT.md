@@ -27,13 +27,13 @@ from [`agg/`](agg/), written by
   of draw pairs inside a single block differ by more than 0.013** — the headline
   #3287 reported as its result.
 - **Most of it is not the cut.** `cost = oracle_cost + regret` telescopes, and the
-  *ranking* term carries **0.59–1.15** of the variance against **0.13–0.73** for the
+  *ranking* term carries **0.39–1.15** of the variance against **0.13–0.73** for the
   cut. A redrawn split moves the threshold a little (sd **0.011–0.019**), the
   threshold moves the next pick, and **75 of 75 blocks are voting on different
   media by click 8**. Reseeding a *calibration* split mostly changes the data the
   session goes on to collect, not the decision made on it.
 - **It shrinks with votes, and does not close.** Median sd falls from **0.050–0.081**
-  at 20 votes to **0.029–0.036** at 150 — still **12–17%** of the cost level there.
+  at 20 votes to **0.029–0.036** at 150 — still **11–17%** of the cost level there.
 - **42 is an ordinary sample.** Its percentile among its own block's draws is
   **0.52 ± 0.02** over 75 blocks (z = 1.2); two SE bounds any bias at 0.04. It is
   the best of twenty in some blocks and the worst in others.
@@ -180,7 +180,7 @@ then falls.
 *Median across 25 blocks per geometry, IQR shaded.*
 
 Against the cost levels in the deep band — 0.19 (`max_patch`), 0.25
-(`siglip/whole`), 0.34 (`dinov3/whole`) — the sd at 150 votes is still **12–17%**
+(`siglip/whole`), 0.34 (`dinov3/whole`) — the sd at 150 votes is still **11–17%**
 of what is being measured. #3794's synthetic probe predicted a comparable
 starting size (F1 sd ≈ 0.03 at 20 labels) but expected it to halve by 60 labels;
 on real embeddings with the shipped GMM fusion it takes the full 150.
@@ -212,7 +212,7 @@ Three measurements agree:
 
 - `threshold` sd across draws is **0.011–0.019**, the smallest spread of any
   metric reported.
-- `auroc` — a property of the ranking alone — has sd **0.008–0.019**, which cannot
+- `auroc` — a property of the ranking alone — has sd **0.008–0.018**, which cannot
   happen unless the trajectories diverged.
 - The pick log settles it outright: **75 of 75 blocks** have two draws voting on
   different media, first at a median click of **8** (min 8, max 10).
@@ -255,8 +255,11 @@ N cells per arm, no design can do better than `sqrt(2)·0.047/sqrt(N)`: **0.009*
 at N = 60, **0.007** at N = 100, **0.002** at N = 1,000. Per geometry and band:
 [`agg/implications.csv`](agg/implications.csv). This is not a criticism of any
 published SE — those bootstraps already include it — it is a statement that
-**more cells is the only lever**, because pairing, seeds and longer horizons all
-leave it standing.
+**more cells is the lever that is always available**. Pairing does not touch it,
+more cell seeds re-roll it rather than average it away, and a longer horizon
+halves it (§3) without closing it — where a study can afford 150 clicks rather
+than 20 it is buying a real reduction, and where it cannot, cells are what is
+left.
 
 **It changes what "a contrast smaller than the spread is not a finding" means.**
 That reading — which [`PLAN.md`](PLAN.md) pre-registered *against* — is wrong as
