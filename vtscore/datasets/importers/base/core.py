@@ -37,16 +37,24 @@ class ImporterBase(PluginBase):
     Embedding contract
     ------------------
     Importers do **not** call any embedder.  Emit media dicts with
-    ``embedding=None`` (and ``embedder=""``); the framework
+    ``embeddings={}`` (and ``embedder=""``); the framework
     :func:`~vtscore.datasets.stages.embedding.embed_missing` stage runs
-    after the importer returns and bulk-embeds every item still at
-    ``None`` using the user's selected embedder (or the default for the
+    after the importer returns and bulk-embeds every item still without a
+    vector using the user's selected embedder (or the default for the
     media type).  Items where the embedder returns ``None`` get dropped
-    by the next stage.
+    by the next stage.  (There is no singular ``media["embedding"]`` field:
+    ``media["embeddings"]`` - a ``{embedder_name: vector}`` dict - is the
+    only per-media vector store.)
 
     If your importer ships pre-computed vectors (e.g. an NPZ archive),
     use :attr:`content_vectors` or :attr:`custom_metadata_map` (below)
-    so the framework treats them as already-embedded and skips them.
+    so the framework treats them as already-embedded and skips them.  A
+    partially pre-embedded import is fine: the items you leave without a
+    vector are embedded by the framework, and the vectors you shipped are
+    re-keyed under that same embedder so the dataset stays one space by
+    name (issue #3798) - which also means they must *be* that embedder's
+    vectors; a width that disagrees with its declared ``embedding_dim``
+    is rejected at import.
 
     Custom metadata
     ---------------

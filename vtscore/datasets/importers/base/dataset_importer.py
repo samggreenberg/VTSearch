@@ -361,9 +361,10 @@ class DatasetImporter(ImporterBase):
         """Convert a single *record* into a media dict.
 
         The returned dict should contain the standard media fields
-        (``type``, ``filename``, ``embedding``, ``md5``, ``media_bytes`` /
-        ``media_path``, etc.).  ``id`` is assigned by the framework and may
-        be omitted.  ``origin`` and ``origin_name`` may also be omitted;
+        (``type``, ``filename``, ``embeddings`` (``{}`` to let the framework
+        embed, or ``{"<embedder>": vec}`` with ``embedder="<embedder>"`` for a
+        vector you already have), ``md5``, ``media_bytes`` / ``media_path``,
+        etc.).  ``id`` is assigned by the framework and may be omitted.  ``origin`` and ``origin_name`` may also be omitted;
         :meth:`run` falls back to :meth:`build_origin` and the filename.
 
         Return ``None`` to skip the record (e.g. unsupported media type).

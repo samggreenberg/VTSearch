@@ -33,6 +33,35 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **A dataset imported with some of its vectors already computed no longer
+  fails every Browse, Train and text sort afterwards** (issue #3798). An
+  importer plugin that ships pre-computed vectors for part of a dataset
+  (`content_vectors` / `custom_metadata_map`, with no embedder name) and leaves
+  the rest for VTSearch to embed produced a dataset that was one embedding
+  space in fact and two by name: the items VTSearch embedded were keyed under
+  the embedder it resolved, the shipped vectors stayed nameless. The first
+  request for that embedder's matrix then raised
+  `media N has no embedding for embedder '<name>'` on every shipped item. This
+  happened whenever the import named no embedder - the CLI never does, and the
+  GUI need not - and became visible with the mixed-space guard added on
+  2026-09-04, which stopped reading a nameless vector as "the same space" on
+  the strength of the first media alone. The embed step now stamps the
+  embedder it resolved onto the nameless vectors whenever it embeds alongside
+  them (or the dataset already carries that embedder's name), so the dataset
+  leaves the import keyed under one name. A vector whose width contradicts
+  that embedder's declared dimension is rejected at import, naming both widths,
+  instead of surfacing later as a missing vector. A fully pre-computed nameless
+  import with nothing left to embed is unchanged.
+
+- **An import whose embedder produced nothing now says so.** Items the embedder
+  returned no vector for were dropped at the end of the load with one log line
+  and a progress message that the next stage overwrote within seconds, so a
+  dataset that silently shrank looked like a healthy one. The embed step now
+  logs which embedder declined and for how many items (and when a bulk
+  embedder returns the wrong number of vectors, or no embedder is registered
+  for the media type at all), and the drop raises a warning toast that stays
+  until dismissed.
+
 - **Startup no longer stalls for minutes on a cold NFS install** (issue #3715).
   `transformers` builds `importlib.metadata.packages_distributions()` when it is
   imported, and the stdlib version of that stats every file recorded by every

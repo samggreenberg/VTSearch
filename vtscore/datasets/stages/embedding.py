@@ -97,21 +97,90 @@ def _resolve_embedder(
     return emb
 
 
-def _stamp_requested_embedder(medias: dict[int, dict[str, Any]], embedder_name: str) -> None:
-    """Stamp the requested *embedder_name* onto pre-embedded media whose name is blank.
+def _would_leave_mixed(medias: dict[int, dict[str, Any]], embedder_name: str) -> bool:
+    """Whether leaving nameless vectors un-stamped would split *medias* by name.
 
-    An npz/sidecar importer that ships a pre-computed vector but not its
-    producing embedder stores it under the blank sentinel key
-    (:data:`UNKNOWN_EMBEDDER_KEY`) with no recorded ``media["embedder"]``.  When
-    the caller named an embedder for this load, that nameless vector *is* that
-    embedder's vector — the archive just didn't carry the name — so re-key it
+    The no-pick load path (the CLI never names an embedder; a GUI import need
+    not) resolves *embedder_name* itself and embeds every item with no vector
+    under it.  A partially pre-embedded import - an importer that shipped
+    ``content_vectors`` for some files and left the rest to the framework -
+    then holds two kinds of media: the framework-embedded ones keyed under
+    *embedder_name*, and the shipped ones under the blank sentinel with no
+    recorded ``embedder``.  One space in fact, two by name; and the first
+    request for the routed embedder's matrix (Browse, Train, text sort) raises
+    ``has no embedding for embedder`` on every shipped media (issue #3798).
+
+    ``True`` when *medias* holds at least one nameless vector **and** at least
+    one media that is (or is about to be) keyed under *embedder_name*: an item
+    with no vector at all, which this load will embed, or one already carrying
+    *embedder_name*'s vector (the same dataset reloaded from a pickle written
+    in the split shape).  ``False`` for a dataset that is nameless throughout
+    with nothing to embed - a manifest of vectors from a model this process
+    does not know is a supported import, and stamping the media-type default
+    onto it would assert a space nobody asked for.
+    """
+    has_nameless = False
+    has_named_or_missing = False
+    for m in medias.values():
+        embs = m.get(EMBEDDINGS_KEY)
+        if not m.get("embedder") and isinstance(embs, dict) and UNKNOWN_EMBEDDER_KEY in embs:
+            has_nameless = True
+        elif media_embedding(m) is None or media_embedding(m, embedder_name) is not None:
+            has_named_or_missing = True
+        if has_nameless and has_named_or_missing:
+            return True
+    return False
+
+
+def _stamp_load_embedder(medias: dict[int, dict[str, Any]], requested: str, resolved: str) -> None:
+    """Stamp the load's embedder onto nameless pre-computed vectors when it applies.
+
+    A pre-embedded media whose producing embedder the archive didn't record
+    (npz/sidecar/``content_vectors`` import → vector under the blank sentinel
+    key) is stamped with *resolved* - the embedder this load runs - so the
+    vector resolves under that name rather than being re-embedded or leaving
+    the dataset split by name.  Always when the caller *requested* a pick (the
+    pre-existing contract; *resolved* is that pick whenever it exists, else
+    the default it fell back to, which is the embedder that embeds the rest);
+    when no pick was named, only if leaving the sentinel in place would split
+    the dataset (issue #3798, :func:`_would_leave_mixed`).
+    """
+    if requested or _would_leave_mixed(medias, resolved):
+        _stamp_requested_embedder(medias, resolved)
+
+
+def _warn_no_embedder(medias: dict[int, dict[str, Any]], media_type: str) -> None:
+    """Log that no embedder resolved for *media_type* and how many items it costs.
+
+    Returning silently here is how an import "silently" shrinks: nothing
+    embeds, and the finalize stage drops every vector-less item with one
+    generic line that names neither the media type nor the reason.
+    """
+    logging.getLogger(__name__).warning(
+        "No embedder is registered for media_type=%r; %d item(s) left unembedded "
+        "(they will be dropped at the end of the load)",
+        media_type,
+        sum(1 for m in medias.values() if media_embedding(m) is None),
+    )
+
+
+def _stamp_requested_embedder(medias: dict[int, dict[str, Any]], embedder_name: str) -> None:
+    """Stamp *embedder_name* onto pre-embedded media whose embedder name is blank.
+
+    An npz/sidecar/``content_vectors`` importer that ships a pre-computed
+    vector but not its producing embedder stores it under the blank sentinel
+    key (:data:`UNKNOWN_EMBEDDER_KEY`) with no recorded ``media["embedder"]``.
+    When the load resolved an embedder - the caller's pick, or the one
+    :func:`embed_missing` resolved for a load that would otherwise be split by
+    name (see :func:`_would_leave_mixed`) - that nameless vector *is* that
+    embedder's vector, the archive just didn't carry the name, so re-key it
     under *embedder_name* and record the primary.  This lets
     ``media_embedding(m, embedder_name)`` resolve, so the named-missing check
     below won't needlessly re-embed the media and downstream binding won't fall
     back to the media-type default (a dimension mismatch when the pick differs).
 
     Only media whose embedder name is blank are touched; an importer-set name is
-    never overwritten.  A no-op when *embedder_name* is blank (no pick to stamp).
+    never overwritten.  A no-op when *embedder_name* is blank (nothing to stamp).
 
     **The stamp is checked, not assumed.**  Re-keying is an assertion that the
     nameless vector belongs to *embedder_name*'s space, and a manifest whose
@@ -225,13 +294,40 @@ def _run_embed_pass(
     if vectors is None:
         return
     embedder_id = emb.name
+    # A wrong-length answer cannot be paired with its inputs: ``zip`` would
+    # silently truncate and attach vectors to the wrong media, so attach none
+    # and say so.  The contract is one entry per input, ``None`` for a failure.
+    if len(vectors) != total:
+        logging.getLogger(__name__).warning(
+            "Embedder %r returned %d vector(s) for %d item(s) (media_type=%s); attaching none. "
+            "embed_media_bulk must return one entry per input media, None where an item could not be embedded.",
+            embedder_id,
+            len(vectors),
+            total,
+            media_type,
+        )
+        return
+    n_failed = 0
     for (mid, _), vec in zip(missing, vectors):
         if vec is None:
+            n_failed += 1
             continue
         media = medias.get(mid)
         if media is None:
             continue
         set_media_embedding(media, embedder_id, vec)
+    if n_failed:
+        # Items the embedder could not embed stay at ``None`` and are dropped
+        # by the finalize stage; that drop is announced there, but this is the
+        # only place that knows *which embedder* declined and how often.
+        logging.getLogger(__name__).warning(
+            "Embedder %r produced no vector for %d of %d item(s) (media_type=%s); "
+            "they will be dropped at the end of the load",
+            embedder_id,
+            n_failed,
+            total,
+            media_type,
+        )
 
 
 def _run_backfill_pass(
@@ -291,6 +387,13 @@ def embed_missing(
     Patch-region tensors are also attached here for embedders that
     report ``supports_patch_regions``.
 
+    A partially pre-embedded import (some items shipped with a nameless
+    vector, the rest left for the framework) leaves this function keyed under
+    **one** embedder name throughout: the resolved embedder is stamped onto the
+    nameless vectors whenever leaving them un-stamped would split the dataset
+    by name (issue #3798; see :func:`_would_leave_mixed`).  A fully nameless
+    dataset with nothing to embed is left as it arrived.
+
     Multi-embedder note: "missing" and the patch / structural back-fills are
     keyed to *this* embedder's per-media vector (``media["embeddings"][name]``,
     via :func:`media_embedding`).  So a second bound embedder run over an
@@ -307,14 +410,10 @@ def embed_missing(
 
     emb = _resolve_embedder(medias, embedder_name, media_type)
     if emb is None:
+        _warn_no_embedder(medias, media_type)
         return
 
-    # A pre-embedded media whose producing embedder the archive didn't record
-    # (npz/sidecar import → vector under the blank sentinel key) carries the
-    # caller's named embedder when one was given: stamp that name so the vector
-    # resolves under it rather than being re-embedded or leaving downstream
-    # binding to fall back to the media-type default (dimension mismatch).
-    _stamp_requested_embedder(medias, embedder_name)
+    _stamp_load_embedder(medias, embedder_name, emb.name)
 
     # Which items still need *this* embedder's vector.
     missing = _missing_for_embedder(medias, emb, embedder_name)
