@@ -78,8 +78,39 @@ Production's pinned split seed: **42**
 | siglip/whole_image | late 61-100 | 25 | 0.037 | 0.064 | 0.126 | 0.438 | 0.375 |
 | siglip/whole_image | mid 26-60 | 25 | 0.031 | 0.083 | 0.108 | 0.489 | 0.375 |
 
+Fraction of draw PAIRS inside one block differing by more than 0.013 - the cost contrast #3287 reported as its headline. This is the question about a single cell, which is what a user is.
+| geometry | mode | blocks | median | q25 | q75 | margin |
+|---|---|---|---|---|---|---|
+| dinov3_patch/max_patch | region | 100 | 0.750 | 0.689 | 0.817 | 0.013 |
+| dinov3_patch/whole_image | binary | 100 | 0.826 | 0.730 | 0.895 | 0.013 |
+| siglip/whole_image | binary | 100 | 0.766 | 0.657 | 0.837 | 0.013 |
+
+### 1a. The widest and narrowest blocks (deep 101-150 votes)
+Two runs on data that could not move, named by draw so a reader can go back to the cells. Full table: `worked_blocks.csv`.
+| geometry | mode | category | seed | band | n_draws | best_draw | best | worst_draw | worst | range | pin |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| dinov3_patch/max_patch | region | bicycle | 2 | deep 101-150 | 20 | 13 | 0.192 | 14 | 0.431 | 0.239 | 0.241 |
+| dinov3_patch/max_patch | region | kite | 0 | deep 101-150 | 20 | 1 | 0.118 | 5 | 0.296 | 0.178 | 0.148 |
+| dinov3_patch/max_patch | region | fork | 3 | deep 101-150 | 20 | 5 | 0.134 | 3 | 0.183 | 0.049 | 0.179 |
+| dinov3_patch/whole_image | binary | knife | 4 | deep 101-150 | 20 | 12 | 0.232 | 14 | 0.683 | 0.451 | 0.325 |
+| dinov3_patch/whole_image | binary | knife | 1 | deep 101-150 | 20 | 8 | 0.258 | 6 | 0.644 | 0.385 | 0.387 |
+| dinov3_patch/whole_image | binary | kite | 0 | deep 101-150 | 20 | 0 | 0.103 | 10 | 0.129 | 0.026 | 0.110 |
+| siglip/whole_image | binary | knife | 1 | deep 101-150 | 20 | 0 | 0.166 | 17 | 0.618 | 0.452 | 0.225 |
+| siglip/whole_image | binary | bicycle | 4 | deep 101-150 | 20 | 1 | 0.316 | 5 | 0.508 | 0.193 | 0.349 |
+| siglip/whole_image | binary | kite | 1 | deep 101-150 | 20 | 1 | 0.074 | 9 | 0.099 | 0.025 | 0.080 |
+
 ## 2. Against the cell-seed spread — a variance decomposition
 `sd_draw` is the within-(class, cell seed) sd across calibration draws; `sd_seed` is the between-cell-seed sd with the draw variance removed. `share_draw` is `var_draw / (var_draw + var_seed)`: the fraction of a cell's variance the split owns.
+| geometry | mode | cells | sd_draw | sd_seed | share_draw | sd_seen | sd_predicted |
+|---|---|---|---|---|---|---|---|
+| dinov3_patch/max_patch | region | 20 | 0.0374 | 0.0297 | 0.6142 | 0.0479 | 0.0478 |
+| dinov3_patch/whole_image | binary | 20 | 0.0589 | 0.0317 | 0.7757 | 0.0657 | 0.0668 |
+| siglip/whole_image | binary | 20 | 0.0431 | 0.0317 | 0.6495 | 0.0529 | 0.0535 |
+| POOLED | both | 60 | 0.0473 | 0.0310 | 0.6998 | 0.0560 | 0.0566 |
+
+`sd_seen` is what a single-draw study observes - the sd across cell seeds at one draw, averaged over which draw it happened to be - and `sd_predicted` is `sqrt(var_draw + var_seed)`. They agree because the split noise is **already inside** a study's own cell-to-cell variation, which is the pre-registered reading, checked rather than asserted: restating published numbers as plus-or-minus this spread would count the same variance twice.
+
+Per (geometry, class, band):
 | geometry | band | cells | median_sd_draw | median_sd_seed | median_share_draw | n_negative_seed_var |
 |---|---|---|---|---|---|---|
 | dinov3_patch/max_patch | deep 101-150 | 5 | 0.028 | 0.014 | 0.787 | 1 |

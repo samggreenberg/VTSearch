@@ -82,6 +82,13 @@ would measure the trajectory's own wobble and report it as the split's.
 Median *range* over the 20 draws runs 0.10–0.23, with a maximum of 0.49. Full
 table: [`agg/draw_spread.csv`](agg/draw_spread.csv).
 
+The sd is a summary; the question a reader actually has is whether a contrast the
+size of a published finding fits inside one cell's noise. Fraction of draw
+**pairs** within a single block differing by more than 0.013 — median over blocks,
+IQR in [`agg/pair_exceedance.csv`](agg/pair_exceedance.csv):
+**0.77** (`siglip/whole_image`), **0.83** (`dinov3_patch/whole_image`), **0.75**
+(`dinov3_patch/max_patch`).
+
 **Literal examples**, all at clicks 101–150, all on data that could not move:
 
 | block | best draw | worst draw | the shipped pin |
@@ -90,6 +97,8 @@ table: [`agg/draw_spread.csv`](agg/draw_spread.csv).
 | `siglip/whole_image` · `knife` · seed 1 | 0 → **0.166** | 17 → **0.618** | 42 → 0.225 |
 | `dinov3_patch/max_patch` · `bicycle` · seed 2 | 13 → **0.192** | 14 → **0.431** | 42 → 0.241 |
 | `siglip/whole_image` · `kite` · seed 1 | 1 → **0.074** | 9 → **0.099** | 42 → 0.080 |
+
+Every block's ends, not only the four quoted: [`agg/worked_blocks.csv`](agg/worked_blocks.csv).
 
 The last row is there because the first three are not the whole story: on `kite`
 the twenty draws span 0.025 and the question barely exists.
@@ -149,8 +158,10 @@ draw it happened to be; "predicted" is `sqrt(var_draw + var_seed)`. They agree t
 1%, which is the identity that says **the split noise is already inside every
 bootstrap SE this repo publishes** — and must not be added to them a second time.
 
-Per-class and per-band:
-[`agg/variance_components.csv`](agg/variance_components.csv).
+This table is [`agg/study_variance.csv`](agg/study_variance.csv); per class and
+band it is [`agg/variance_components.csv`](agg/variance_components.csv). The two
+are different computations rather than one summarised — sds do not average, so
+the study-level row pools **variances** and takes the square root once.
 
 ## 3. Does it shrink with votes?
 
