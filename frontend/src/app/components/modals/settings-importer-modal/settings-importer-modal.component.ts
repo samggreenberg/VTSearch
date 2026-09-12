@@ -9,6 +9,7 @@ import { SettingsIoApiService } from '../../../services/settings-io-api.service'
 import { ImporterField } from '../../../models/api.models';
 import type { SettingsImporterEntry } from '../../../generated/api-client/models/settings-importer-entry';
 import { apiErrorMessage } from '../../../utils/api-error';
+import { DynamicFieldOptions } from '../../../utils/dynamic-field-options';
 
 type ModalView = 'picker' | 'form';
 
@@ -53,6 +54,14 @@ export class SettingsImporterModalComponent implements OnDestroy {
       (this.importersResource.error() ? 'Failed to load settings importers' : ''),
   );
   readonly successMessage = signal('');
+  /** Option lists for the selected importer's ``dynamic_options`` fields.
+   *  Without this the select rendered only the options frozen into the
+   *  plugin definition, so a settings importer that computes its options at
+   *  runtime had an empty dropdown and its ``get_field_options()`` was never
+   *  called (issue #3802). */
+  readonly fieldOptions = new DynamicFieldOptions((key, values) =>
+    this.settingsIoApi.getImporterFieldOptions(this.selectedImporter!.name, key, values),
+  );
   private closeTimer: ReturnType<typeof setTimeout> | null = null;
 
   get modalTitle(): string {
@@ -76,6 +85,7 @@ export class SettingsImporterModalComponent implements OnDestroy {
     this.selectedFileFieldKey = null;
     this.importError.set('');
     this.successMessage.set('');
+    this.fieldOptions.reset();
     const fields = (importer.fields ?? []) as ImporterField[];
     for (const field of fields) {
       if (field.default) {
@@ -89,7 +99,15 @@ export class SettingsImporterModalComponent implements OnDestroy {
         this.formValues[field.key] = field.options![0];
       }
     }
+    this.fieldOptions.refreshAll(fields, this.formValues);
     this.view = 'form';
+  }
+
+  /** Re-fetch the options of every field that depends on the one just
+   *  edited, so a ``depends_on`` chain stays consistent. */
+  onFormFieldChanged(changedKey: string): void {
+    if (!this.selectedImporter?.fields) return;
+    this.fieldOptions.refreshDependentsOf(changedKey, this.selectedImporterFields, this.formValues);
   }
 
   back(): void {
@@ -97,6 +115,7 @@ export class SettingsImporterModalComponent implements OnDestroy {
     this.selectedImporter = null;
     this.importError.set('');
     this.successMessage.set('');
+    this.fieldOptions.reset();
   }
 
   onFileSelected(event: Event, fieldName: string): void {
