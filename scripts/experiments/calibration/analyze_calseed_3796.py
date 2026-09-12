@@ -88,6 +88,12 @@ METRICS: tuple[str, ...] = ("cost", "f1", "auroc", "threshold", "oracle_cost", "
 #: The headline metric.  Named once so the report and the summary agree.
 HEADLINE = "cost"
 
+#: The contrast a reader is most likely to be holding this spread against: the
+#: cost difference #3287 reported as its result, on the shipped configuration.
+#: Not a threshold this study applies to anything - it is a yardstick, quoted so
+#: "is the spread big?" has an answer in units someone here already has.
+REFERENCE_CONTRAST = 0.013
+
 
 def geometry_of(row) -> str:
     """``dinov3_patch/max_patch``-style label for one row's (embedder, style).
@@ -455,6 +461,132 @@ def by_class(spread: pd.DataFrame) -> pd.DataFrame:
     return c.pivot_table(index="category", columns="geometry", values="sd", aggfunc="median").round(4).reset_index()
 
 
+def study_variance(bb: pd.DataFrame) -> pd.DataFrame:
+    """The report's headline table: the two components, pooled, and the identity.
+
+    :func:`variance_components` answers the question per (geometry, class, band),
+    which is where a reader checks it.  This answers it for the STUDY, and it is
+    a different computation rather than a summary of that one: sds do not average
+    and medians of sds are not the median of anything, so the components are
+    pooled as **variances** and square-rooted once at the end.
+
+    It also carries the pre-registered reading as two columns rather than as a
+    sentence.  ``sd_seen`` is what a single-draw study actually observes - the sd
+    across cell seeds at one draw, averaged over which draw it happened to be -
+    and ``sd_predicted`` is ``sqrt(var_draw + var_seed)``.  If the split noise is
+    already inside a study's own cell-to-cell variation, those two agree; if it
+    were somehow an extra term on top, they would not.  Checking it beats
+    asserting it, and it costs one column.
+    """
+    rows: list[dict] = []
+    for (geom, mode, cat, band), g in bb.groupby(["geometry", "mode", "category", "band"], dropna=False):
+        wide = g.pivot_table(index="seed", columns="calibration_seed", values=HEADLINE, aggfunc="mean")
+        wide = wide.dropna(axis=0, how="any").dropna(axis=1, how="any")
+        n_seeds, n_draws = wide.shape
+        if n_seeds < 2 or n_draws < 2:
+            continue
+        ms_within = float(wide.var(axis=1, ddof=1).mean())
+        ms_between = float(n_draws * wide.mean(axis=1).var(ddof=1))
+        rows.append(
+            {
+                "geometry": geom,
+                "mode": mode,
+                "var_draw": ms_within,
+                "var_seed": (ms_between - ms_within) / n_draws,
+                # The mean over draws of the variance across seeds: an unbiased
+                # estimate of what a study pinned to ANY one draw is resampling.
+                "var_seen": float(wide.var(axis=0, ddof=1).mean()),
+            }
+        )
+    per_cell = pd.DataFrame(rows, columns=pd.Index(["geometry", "mode", "var_draw", "var_seed", "var_seen"]))
+    if per_cell.empty:
+        return per_cell
+
+    def _summarise(d: pd.DataFrame, label: str, mode: str) -> dict:
+        vd, vs, vseen = float(d["var_draw"].mean()), float(d["var_seed"].mean()), float(d["var_seen"].mean())
+        total = vd + max(vs, 0.0)
+        return {
+            "geometry": label,
+            "mode": mode,
+            "cells": int(len(d)),
+            "sd_draw": float(np.sqrt(max(vd, 0.0))),
+            "sd_seed": float(np.sqrt(max(vs, 0.0))),
+            "share_draw": float(vd / total) if total > 0 else np.nan,
+            "sd_seen": float(np.sqrt(max(vseen, 0.0))),
+            "sd_predicted": float(np.sqrt(max(total, 0.0))),
+        }
+
+    out = [_summarise(d, str(geom), str(d["mode"].iloc[0])) for geom, d in per_cell.groupby("geometry")]
+    out.append(_summarise(per_cell, "POOLED", "both"))
+    return pd.DataFrame(out)
+
+
+def pair_exceedance(bb: pd.DataFrame, margin: float) -> pd.DataFrame:
+    """How often two draws of ONE block differ by more than *margin*.
+
+    An sd is a summary; this is the question a reader actually has, which is
+    whether a contrast the size of a published finding is inside the noise of a
+    single cell.  Every unordered pair of the block's draws is compared, and the
+    fraction exceeding *margin* is summarised over blocks - so the answer is
+    about a cell, not about a grid mean, and it does not depend on the metric
+    being normally distributed, which #3329 gives no reason to assume.
+    """
+    rows: list[dict] = []
+    for (geom, mode, band, cat, seed), k in bb.groupby(["geometry", "mode", "band", "category", "seed"], dropna=False):
+        v = pd.to_numeric(k[HEADLINE], errors="coerce").dropna().to_numpy(dtype=float)
+        if v.size < 2:
+            continue
+        iu = np.triu_indices(v.size, 1)
+        diff = np.abs(v[:, None] - v[None, :])[iu]
+        rows.append({"geometry": geom, "mode": mode, "band": band, "frac_over": float((diff > margin).mean())})
+    per_block = pd.DataFrame(rows, columns=pd.Index(["geometry", "mode", "band", "frac_over"]))
+    if per_block.empty:
+        return per_block
+    out = (
+        per_block.groupby(["geometry", "mode"], dropna=False)["frac_over"]
+        .agg(blocks="size", median="median", q25=lambda s: s.quantile(0.25), q75=lambda s: s.quantile(0.75))
+        .reset_index()
+    )
+    out["margin"] = margin
+    return out
+
+
+def worked_blocks(bb: pd.DataFrame, pin: int, band: str) -> pd.DataFrame:
+    """Every block's best draw, worst draw and the shipped pin, in one band.
+
+    The report owes literal examples, and for a study whose subject is a spread
+    the literal example IS the pair of draws at the ends of one: two runs on data
+    that could not move, named by draw number so a reader can go back to the
+    cells.  Emitted for every block rather than for the few the prose quotes, so
+    the quoted ones can be checked against the ones that were not.
+    """
+    rows: list[dict] = []
+    for (geom, mode, cat, seed), k in bb[bb["band"] == band].groupby(
+        ["geometry", "mode", "category", "seed"], dropna=False
+    ):
+        k = k.dropna(subset=[HEADLINE]).sort_values(HEADLINE)
+        if len(k) < 2:
+            continue
+        pin_rows = k[k["calibration_seed"] == pin]
+        rows.append(
+            {
+                "geometry": geom,
+                "mode": mode,
+                "category": cat,
+                "seed": seed,
+                "band": band,
+                "n_draws": int(len(k)),
+                "best_draw": int(k.iloc[0]["calibration_seed"]),
+                "best": float(k.iloc[0][HEADLINE]),
+                "worst_draw": int(k.iloc[-1]["calibration_seed"]),
+                "worst": float(k.iloc[-1][HEADLINE]),
+                "range": float(k.iloc[-1][HEADLINE] - k.iloc[0][HEADLINE]),
+                "pin": float(pin_rows[HEADLINE].iloc[0]) if len(pin_rows) == 1 else np.nan,
+            }
+        )
+    return pd.DataFrame(rows).sort_values(["geometry", "range"], ascending=[True, False])
+
+
 def spread_vs_positives(spread: pd.DataFrame, bb: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Does the spread fall as the calibration set grows?  The portability handle.
 
@@ -678,7 +810,24 @@ def _md(df: pd.DataFrame, digits: int = 3) -> str:
 
 
 def write_report(
-    out: Path, *, pin, prov, spread, vc, by_step, onset, impl, figs, shape, decomp, cls, corr, pos_table
+    out: Path,
+    *,
+    pin,
+    prov,
+    spread,
+    vc,
+    by_step,
+    onset,
+    impl,
+    figs,
+    shape,
+    decomp,
+    study,
+    pairs,
+    worked,
+    cls,
+    corr,
+    pos_table,
 ) -> None:
     head = spread[spread["metric"] == HEADLINE]
     by_geo_band = (
@@ -723,12 +872,35 @@ def write_report(
     lines.append(f"Production's pinned split seed: **{pin}**\n")
     lines.append("## 1. The spread across calibration draws (headline: `cost`)\n")
     lines.append(_md(by_geo_band))
+    lines.append(
+        f"\nFraction of draw PAIRS inside one block differing by more than {REFERENCE_CONTRAST} - "
+        "the cost contrast #3287 reported as its headline. This is the question about a single cell, "
+        "which is what a user is.\n"
+    )
+    lines.append(_md(pairs))
+    lines.append(f"\n### 1a. The widest and narrowest blocks ({BANDS[-1][0]} votes)\n")
+    lines.append(
+        "Two runs on data that could not move, named by draw so a reader can go back to the cells. "
+        "Full table: `worked_blocks.csv`.\n"
+    )
+    if not worked.empty:
+        ends = pd.concat([worked.groupby("geometry").head(2), worked.groupby("geometry").tail(1)])
+        lines.append(_md(ends.sort_values(["geometry", "range"], ascending=[True, False])))
     lines.append("\n## 2. Against the cell-seed spread — a variance decomposition\n")
     lines.append(
         "`sd_draw` is the within-(class, cell seed) sd across calibration draws; `sd_seed` is the "
         "between-cell-seed sd with the draw variance removed. `share_draw` is "
         "`var_draw / (var_draw + var_seed)`: the fraction of a cell's variance the split owns.\n"
     )
+    lines.append(_md(study, digits=4))
+    lines.append(
+        "\n`sd_seen` is what a single-draw study observes - the sd across cell seeds at one draw, averaged "
+        "over which draw it happened to be - and `sd_predicted` is `sqrt(var_draw + var_seed)`. They agree "
+        "because the split noise is **already inside** a study's own cell-to-cell variation, which is the "
+        "pre-registered reading, checked rather than asserted: restating published numbers as plus-or-minus "
+        "this spread would count the same variance twice.\n"
+    )
+    lines.append("\nPer (geometry, class, band):\n")
     lines.append(_md(vc_pool))
     lines.append("\n## 3. Does it shrink with votes?\n")
     lines.append(f"Median across blocks of the across-draw sd of `{HEADLINE}`, at four click counts.\n")
@@ -833,6 +1005,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     by_step = spread_by_step(frame)
     onset = divergence_onset(results, pin)
     decomp = cost_decomposition(bb)
+    study = study_variance(bb)
+    pairs = pair_exceedance(bb, REFERENCE_CONTRAST)
+    worked = worked_blocks(bb, pin, BANDS[-1][0])
     cls = by_class(spread)
     corr, pos_table = spread_vs_positives(spread, bb)
     impl = implications(spread, vc, n_cells_per_arm=args.n_cells_per_arm)
@@ -845,6 +1020,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         onset.to_csv(out / "divergence_onset.csv", index=False)
     impl.to_csv(out / "implications.csv", index=False)
     decomp.to_csv(out / "cost_decomposition.csv", index=False)
+    study.to_csv(out / "study_variance.csv", index=False)
+    pairs.to_csv(out / "pair_exceedance.csv", index=False)
+    worked.to_csv(out / "worked_blocks.csv", index=False)
     cls.to_csv(out / "spread_by_class.csv", index=False)
     if not pos_table.empty:
         corr.to_csv(out / "spread_vs_positives_corr.csv", index=False)
@@ -869,6 +1047,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         figs=figs,
         shape=shape,
         decomp=decomp,
+        study=study,
+        pairs=pairs,
+        worked=worked,
         cls=cls,
         corr=corr,
         pos_table=pos_table,

@@ -92,8 +92,27 @@ def planted_cost(style: str, draw: int, seed: int, t: int, rng: np.random.Genera
     )
 
 
-def build(cells: Path, draws=DRAWS, pin_effect_shift: float = 0.0) -> None:
-    """Write one `task_*.csv` (+ pick log) per (geometry, class, seed, draw)."""
+def build(cells: Path, draws=DRAWS, pin_effect_shift: float = 0.0, scramble: bool = False) -> None:
+    """Write one `task_*.csv` (+ pick log) per (geometry, class, seed, draw).
+
+    *scramble* decides **which of the two worlds** the fixture is in, and the
+    distinction is the whole subject of the `sd_seen` check below.
+
+    Unscrambled, draw *d* shifts every block by the same ``DRAW_EFFECT[d]``. That
+    is a systematic effect, and it makes 42 the exact median of every block - the
+    only way to plant the pin percentile as a known 0.5 - but it also makes the
+    draw a *constant offset* across cell seeds, so it cancels out of the variance
+    taken across them. In that world ``var_seen`` is ``var_seed``, full stop.
+
+    Scrambled, each block draws its own permutation of the same effect multiset.
+    Every block's across-draw sd is identical to before (a permutation does not
+    move a multiset's spread), but the draw is now **idiosyncratic per cell**,
+    which is what it is in reality: one seed never means one split, because each
+    block's labelset is different and 42 slices each of them differently. Only
+    here does ``var_seen = var_draw + var_seed`` hold - and that identity is the
+    report's pre-registered reading, so it gets its own fixture rather than an
+    assertion that the other fixture happens to satisfy.
+    """
     rng = np.random.default_rng(11)
     cells.mkdir(parents=True, exist_ok=True)
     idx = 0
@@ -103,8 +122,15 @@ def build(cells: Path, draws=DRAWS, pin_effect_shift: float = 0.0) -> None:
                 for seed in SEEDS:
                     rows = []
                     picks = []
+                    # The block's own permutation of the draw labels, if asked
+                    # for.  Deterministic in the block, so the two runs of this
+                    # fixture in one selftest agree with each other.
+                    eff_draw = draw
+                    if scramble:
+                        perm = np.random.default_rng(abs(hash((style, cat, seed))) % (2**32)).permutation(list(DRAWS))
+                        eff_draw = int(perm[list(DRAWS).index(draw)])
                     for t in range(1, STEPS + 1):
-                        cost = planted_cost(style, draw, seed, t, rng)
+                        cost = planted_cost(style, eff_draw, seed, t, rng)
                         if draw == PIN:
                             cost += pin_effect_shift
                         rows.append(
@@ -119,7 +145,7 @@ def build(cells: Path, draws=DRAWS, pin_effect_shift: float = 0.0) -> None:
                                 "gmm_variant": "",
                                 "schedule": "",
                                 "pool_variant": "",
-                                "threshold": 0.5 + 0.05 * DRAW_EFFECT[draw],
+                                "threshold": 0.5 + 0.05 * DRAW_EFFECT[eff_draw],
                                 "cost": cost,
                                 # The RANKING metrics do not move with the draw
                                 # at all here, which is the null for "did the
@@ -260,6 +286,33 @@ def main() -> int:
         if abs(float(dec["share_cut"].min()) - 1.0) > 1e-6:
             failures.append(f"share_cut {float(dec['share_cut'].min()):.4f} should be exactly 1")
 
+        # The study-level table is a different computation from the per-cell one,
+        # so it gets its own check: pooled variances must recover the same two
+        # planted sds, and `sd_seen` must equal `sd_predicted` - the identity the
+        # report's pre-registered reading rests on, which would be exactly as
+        # plausible-looking if it were wired up wrong.
+        st = pd.read_csv(out / "study_variance.csv")
+        pooled = st[st["geometry"] == "POOLED"].iloc[0]
+        if abs(float(pooled["sd_seed"]) - want_seed) > max(5e-4, 0.1 * want_seed):
+            failures.append(f"POOLED sd_seed {float(pooled['sd_seed']):.5f} != planted {want_seed:.5f}")
+        # On THIS fixture the draw is a constant offset across seeds, so it
+        # cancels and `sd_seen` must come back as `sd_seed` alone.  Asserting the
+        # degenerate value is what proves the column is taken across SEEDS; the
+        # identity itself is checked on the scrambled fixture below.
+        if abs(float(pooled["sd_seen"]) - want_seed) > max(5e-4, 0.1 * want_seed):
+            failures.append(
+                f"sd_seen {float(pooled['sd_seen']):.5f} should equal the planted seed sd {want_seed:.5f} "
+                "on a fixture whose draw effect is a shared constant"
+            )
+
+        # The worked-block table's ends must BE the ends: the pin was planted at
+        # the median, so it can never be the best or the worst draw of a block.
+        wb = pd.read_csv(out / "worked_blocks.csv")
+        if (wb["best"] > wb["worst"]).any():
+            failures.append("worked_blocks has a best draw costing more than its worst")
+        if (wb["best_draw"] == PIN).any() or (wb["worst_draw"] == PIN).any():
+            failures.append("the pin was planted at the median and cannot be a block's best or worst draw")
+
         # (4b) the percentile is not pinned to 0.5 by a bug: shift the pin below
         # every other draw and it must go to the bottom.
         shifted = tmp / "shifted" / "results"
@@ -270,6 +323,31 @@ def main() -> int:
         pct2 = sp2[sp2["metric"] == "cost"]["pin_percentile"].dropna()
         if float(pct2.max()) > 0.1:
             failures.append(f"a pin planted below every draw came back at percentile {float(pct2.max()):.3f}")
+
+        # The identity the report's pre-registered reading rests on, on the
+        # fixture where it is supposed to hold: with the draw idiosyncratic per
+        # block, what a single-draw study SEES across cell seeds must equal
+        # `sqrt(var_draw + var_seed)`.  The per-block spread is unchanged by the
+        # permutation, so this is the same planted answer read a second way.
+        scr = tmp / "scrambled" / "results"
+        build(scr / "cells", scramble=True)
+        if A.main(["--results", str(scr), "--out", str(tmp / "out_scr"), "--no-figures"]) != 0:
+            raise SystemExit("analyze_calseed_3796 failed on the scrambled fixture")
+        st2 = pd.read_csv(tmp / "out_scr" / "study_variance.csv")
+        p2 = st2[st2["geometry"] == "POOLED"].iloc[0]
+        if abs(float(p2["sd_seen"]) - float(p2["sd_predicted"])) > 0.03 * float(p2["sd_predicted"]):
+            failures.append(
+                f"scrambled: sd_seen {float(p2['sd_seen']):.5f} != sd_predicted "
+                f"{float(p2['sd_predicted']):.5f}; they are the same variance"
+            )
+        sp2 = pd.read_csv(tmp / "out_scr" / "draw_spread.csv")
+        scr_sd = float(sp2[sp2["metric"] == "cost"]["sd"].median())
+        flat_sd = float(cost["sd"].median())
+        if abs(scr_sd - flat_sd) > 0.05 * flat_sd:
+            failures.append(
+                f"scrambling moved the across-draw spread ({flat_sd:.5f} -> {scr_sd:.5f}); "
+                "a permutation cannot change a multiset's sd, so the spread is being taken on the wrong axis"
+            )
 
         # (6) a single-draw run is a DEFAULT run and must be refused.
         one = tmp / "one" / "results"

@@ -1,0 +1,4 @@
+geometry,mode,n,spearman
+dinov3_patch/max_patch,region,100.0,-0.14359435943594356
+dinov3_patch/whole_image,binary,100.0,-0.33754575457545744
+siglip/whole_image,binary,100.0,-0.13332133213321332
