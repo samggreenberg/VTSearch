@@ -1,0 +1,102 @@
+{
+  "pin": 42,
+  "shape": {
+    "n_cells": 1000,
+    "job": "640527",
+    "datasets": "vg_scale_any",
+    "embedders": "siglip,siglip+dinov3_patch",
+    "styles": "whole_image,max_patch",
+    "n_categories": 5,
+    "n_seeds": 5,
+    "calibration_seeds": [
+      42,
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18
+    ],
+    "max_steps": 150,
+    "cell_order": "calibration_seed",
+    "note": "#3796: cell seed HELD, Train/Calibrate split REDRAWN. Draw 42 is production's pin and is first.",
+    "draws_seen": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      42
+    ],
+    "blocks_seen": 75
+  },
+  "cells": {
+    "n_files": 1000,
+    "n_read": 1000,
+    "unreadable": 0,
+    "zero_byte": 0,
+    "no_positive_found": 0,
+    "no_base_rows": 0,
+    "n_rows_all": 7294118,
+    "n_rows": 221100
+  },
+  "median_sd_cost": 0.034232863145002214,
+  "median_range_cost": 0.12688534500000004,
+  "by_geometry": {
+    "dinov3_patch/max_patch": {
+      "median_sd_cost": 0.030928319185598366,
+      "median_range_cost": 0.11899116999999998,
+      "median_pin_percentile": 0.675
+    },
+    "dinov3_patch/whole_image": {
+      "median_sd_cost": 0.04806957632783482,
+      "median_range_cost": 0.18114581477272734,
+      "median_pin_percentile": 0.6
+    },
+    "siglip/whole_image": {
+      "median_sd_cost": 0.030137471488059942,
+      "median_range_cost": 0.10851299740259743,
+      "median_pin_percentile": 0.425
+    }
+  },
+  "figures": [
+    "spread_vs_votes.png",
+    "draw_fan.png",
+    "pin_percentile.png",
+    "cost_vs_clicks.png",
+    "cost_vs_clicks_runs__vg_scale_any \u00b7 dinov3_patch-max_patch.png",
+    "cost_vs_clicks_runs__vg_scale_any \u00b7 dinov3_patch-whole_image.png",
+    "cost_vs_clicks_runs__vg_scale_any \u00b7 siglip-whole_image.png",
+    "average_precision_vs_clicks.png",
+    "average_precision_vs_clicks_runs__vg_scale_any \u00b7 dinov3_patch-max_patch.png",
+    "average_precision_vs_clicks_runs__vg_scale_any \u00b7 dinov3_patch-whole_image.png",
+    "average_precision_vs_clicks_runs__vg_scale_any \u00b7 siglip-whole_image.png"
+  ]
+}
