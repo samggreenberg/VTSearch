@@ -1,15 +1,19 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 
-import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../modal/modal.component';
 import { IconComponent } from '../icon/icon.component';
 import { VtDialogService } from '../../services/dialog.service';
 
+// Deliberately does NOT import FormsModule.  This host is rendered
+// unconditionally by AppComponent, so it sits on the EAGER path: importing it
+// here pulled all of @angular/forms (~37kB) into the initial bundle for the
+// single prompt() text field.  `[value]` + `(input)` is equivalent here; see
+// the bundle-budget note in angular.json and #3811.
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-dialog-host',
   standalone: true,
-  imports: [FormsModule, ModalComponent, IconComponent],
+  imports: [ModalComponent, IconComponent],
   templateUrl: './dialog-host.component.html',
   styleUrl: './dialog-host.component.scss',
 })
