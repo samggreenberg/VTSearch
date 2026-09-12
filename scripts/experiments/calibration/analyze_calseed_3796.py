@@ -77,7 +77,13 @@ CHECKPOINTS: tuple[int, ...] = (20, 50, 100, 150)
 #:   the cut rule's rather than the ranking's, per step.
 #: * `f1` is there because the #3794 probe quoted its answer in F1 and a
 #:   comparison needs the same unit.
-METRICS: tuple[str, ...] = ("cost", "f1", "auroc", "threshold", "oracle_cost", "regret")
+#: * `n_good` is not a quality metric at all - it is how many positives the
+#:   trajectory had found by that band.  It rides along because it is the one
+#:   thing that makes the answer PORTABLE: a threshold is a quantile of the
+#:   calibration set, so the spread should fall as the set that sets it grows,
+#:   and a reader in a different environment needs that relation rather than
+#:   this grid's constant.
+METRICS: tuple[str, ...] = ("cost", "f1", "auroc", "threshold", "oracle_cost", "regret", "n_good")
 
 #: The headline metric.  Named once so the report and the summary agree.
 HEADLINE = "cost"
@@ -380,6 +386,111 @@ def divergence_onset(results: Path, pin: int) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def cost_decomposition(bb: pd.DataFrame) -> pd.DataFrame:
+    """Was it the CUT the split was drawn for, or the run the cut then steered?
+
+    ``cost = oracle_cost + regret`` holds row by row - the oracle is the best cut
+    available on *this* trajectory's ranking, so the first term is a property of
+    what the run FOUND and the second of what the rule then did with it.  Across
+    draws inside a block that gives a variance identity:
+
+        Var(cost) = Var(oracle_cost) + Var(regret) + 2 Cov(oracle_cost, regret)
+
+    which is the only form worth reporting.  **The terms are sum-pinned and they
+    slide against each other** - the covariance here is negative everywhere - so
+    reading one alone manufactures an effect, the trap #2897 fell into and #3287
+    quantified.  Shares are therefore POOLED (summed variances over blocks, then
+    divided) rather than averaged per block: pooled shares sum to exactly 1 and
+    a median of shares does not, and a share above 1 is then legible as what it
+    is, the other side of a negative covariance.
+    """
+    rows: list[dict] = []
+    for (geom, mode, band, cat, seed), k in bb.groupby(["geometry", "mode", "band", "category", "seed"], dropna=False):
+        if len(k) < 2 or not {"oracle_cost", "regret"} <= set(k.columns):
+            continue
+        rows.append(
+            {
+                "geometry": geom,
+                "mode": mode,
+                "band": band,
+                "var_cost": float(k["cost"].var(ddof=1)),
+                "var_ranking": float(k["oracle_cost"].var(ddof=1)),
+                "var_cut": float(k["regret"].var(ddof=1)),
+                "cov2": float(2.0 * k["oracle_cost"].cov(k["regret"])),
+            }
+        )
+    per_block = pd.DataFrame(
+        rows, columns=pd.Index(["geometry", "mode", "band", "var_cost", "var_ranking", "var_cut", "cov2"])
+    )
+    if per_block.empty:
+        return per_block
+    agg = per_block.groupby(["geometry", "mode", "band"], dropna=False).agg(
+        blocks=("var_cost", "size"),
+        var_cost=("var_cost", "sum"),
+        var_ranking=("var_ranking", "sum"),
+        var_cut=("var_cut", "sum"),
+        cov2=("cov2", "sum"),
+    )
+    out = pd.DataFrame(
+        {
+            "blocks": agg["blocks"],
+            "rms_sd_cost": np.sqrt(agg["var_cost"] / agg["blocks"]),
+            "share_ranking": agg["var_ranking"] / agg["var_cost"],
+            "share_cut": agg["var_cut"] / agg["var_cost"],
+            "share_cov": agg["cov2"] / agg["var_cost"],
+        }
+    ).reset_index()
+    return out
+
+
+def by_class(spread: pd.DataFrame) -> pd.DataFrame:
+    """The spread per class, because it is not one number.
+
+    A single median over five classes would be quoted as "the noise floor"; the
+    classes differ by a factor of several, and a reader deciding whether a
+    contrast of theirs survives needs the spread of the class they are working
+    on, not the grid's average.
+    """
+    c = spread[spread["metric"] == HEADLINE]
+    return c.pivot_table(index="category", columns="geometry", values="sd", aggfunc="median").round(4).reset_index()
+
+
+def spread_vs_positives(spread: pd.DataFrame, bb: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Does the spread fall as the calibration set grows?  The portability handle.
+
+    A conformal threshold is a quantile of the held-out half of the votes, and
+    the anchors that fix it are the POSITIVES among them.  So the mechanism
+    predicts the spread falls with the positive count, and if it does, a reader
+    in a different environment can carry that relation across rather than
+    carrying this grid's constant - which is the thing a number measured at one
+    prevalence cannot do.
+
+    Returns ``(per-geometry rank correlation, a table by tercile of positives)``.
+    Rank correlation rather than Pearson: the relation is expected to go like
+    one over a square root, and nothing here needs it to be a line.
+    """
+    c = spread[spread["metric"] == HEADLINE][["geometry", "mode", "category", "seed", "band", "sd"]]
+    pos = bb.groupby(["geometry", "category", "seed", "band"], dropna=False)["n_good"].mean().reset_index()
+    j = c.merge(pos, on=["geometry", "category", "seed", "band"], how="inner").dropna(subset=["sd", "n_good"])
+    if j.empty:
+        return pd.DataFrame(), pd.DataFrame()
+    corr = (
+        j.groupby(["geometry", "mode"], dropna=False)
+        .apply(lambda d: pd.Series({"n": len(d), "spearman": d["sd"].corr(d["n_good"], method="spearman")}))
+        .reset_index()
+    )
+    j = j.copy()
+    j["positives"] = j.groupby("geometry")["n_good"].transform(
+        lambda v: pd.qcut(v, 3, labels=["fewest", "middle", "most"], duplicates="drop")
+    )
+    table = (
+        j.groupby(["geometry", "positives"], dropna=False, observed=True)
+        .agg(cells=("sd", "size"), median_positives=("n_good", "median"), median_sd=("sd", "median"))
+        .reset_index()
+    )
+    return corr, table
+
+
 def implications(spread: pd.DataFrame, vc: pd.DataFrame, n_cells_per_arm: int = 60) -> pd.DataFrame:
     """What the measured spread does to a study that never varies the split.
 
@@ -566,7 +677,9 @@ def _md(df: pd.DataFrame, digits: int = 3) -> str:
     return f"{head}\n{rule}\n{body}\n"
 
 
-def write_report(out: Path, *, pin, prov, spread, vc, by_step, onset, impl, figs, shape) -> None:
+def write_report(
+    out: Path, *, pin, prov, spread, vc, by_step, onset, impl, figs, shape, decomp, cls, corr, pos_table
+) -> None:
     head = spread[spread["metric"] == HEADLINE]
     by_geo_band = (
         head.groupby(["geometry", "band"], dropna=False)
@@ -626,13 +739,30 @@ def write_report(out: Path, *, pin, prov, spread, vc, by_step, onset, impl, figs
         "A median near 0.5 means the pin is an ordinary sample; a systematic offset would be the one "
         "error no per-cell bootstrap could ever see.\n"
     )
-    pct = head["pin_percentile"].dropna()
-    if len(pct):
-        se = float(np.sqrt(1.0 / 12.0 / len(pct)))
+    # Per BLOCK, not per (block, band): the four bands of one block are four
+    # readings of one trajectory pair, so an SE over 300 of them would be an SE
+    # over 75 things counted four times.  The SE is the OBSERVED one rather than
+    # the uniform null's, because the bands within a block are not independent
+    # and the data knows how much they are not.
+    pct_block = head.dropna(subset=["pin_percentile"]).groupby(list(BLOCK_KEYS))["pin_percentile"].mean()
+    if len(pct_block):
+        se = float(pct_block.std(ddof=1) / np.sqrt(len(pct_block)))
+        z = (float(pct_block.mean()) - 0.5) / se if se > 0 else float("nan")
         lines.append(
-            f"- n = {len(pct)} (block, band) cells; mean percentile **{_fmt(pct.mean())}** "
-            f"(uniform expects 0.50 ± {_fmt(se)}), median {_fmt(pct.median())}\n"
+            f"- n = {len(pct_block)} blocks (the four bands of a block averaged first); mean percentile "
+            f"**{_fmt(pct_block.mean())}** against the 0.50 an unbiased pin gives, SE {_fmt(se)} "
+            f"(z = {_fmt(z, 1)}). Two SE bounds any bias at {_fmt(2 * se)} in percentile terms.\n"
         )
+    lines.append("\n### 1b. The spread is a property of the CLASS, not a constant\n")
+    lines.append(_md(cls))
+    lines.append("\n### 1c. Does it fall as the calibration set grows?\n")
+    lines.append(
+        "A conformal threshold is a quantile of the held-out votes and the positives are its anchors, so "
+        "the mechanism predicts the spread falls with the positive count. This is the relation a reader in "
+        "another environment can carry across; the constant above is not.\n"
+    )
+    lines.append(_md(corr))
+    lines.append(_md(pos_table))
     lines.append("\n## 5. Did the trajectories diverge, or only the cut?\n")
     lines.append(
         "`auroc` and `oracle_cost` are properties of the ranking, so an sd above zero on them is the "
@@ -640,6 +770,14 @@ def write_report(out: Path, *, pin, prov, spread, vc, by_step, onset, impl, figs
         "and the run went on to vote on different media.\n"
     )
     lines.append(_md(by_metric))
+    lines.append(
+        "\n`cost = oracle_cost + regret` row by row - the oracle is the best cut available on **this** "
+        "trajectory's ranking - so across draws the variance telescopes. Shares are pooled (variances "
+        "summed over blocks, then divided), so they sum to exactly 1; the terms are sum-pinned and slide "
+        "against each other, so a share above 1 is the other side of the negative covariance beside it and "
+        "**no term may be read alone** (#2897's trap, #3287's measurement of it).\n"
+    )
+    lines.append(_md(decomp))
     if not onset.empty:
         never = int(onset["never_diverged"].sum())
         first = onset["first_divergent_click"].dropna()
@@ -694,6 +832,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     vc = variance_components(bb)
     by_step = spread_by_step(frame)
     onset = divergence_onset(results, pin)
+    decomp = cost_decomposition(bb)
+    cls = by_class(spread)
+    corr, pos_table = spread_vs_positives(spread, bb)
     impl = implications(spread, vc, n_cells_per_arm=args.n_cells_per_arm)
 
     bb.to_csv(out / "block_band_means.csv", index=False)
@@ -703,6 +844,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not onset.empty:
         onset.to_csv(out / "divergence_onset.csv", index=False)
     impl.to_csv(out / "implications.csv", index=False)
+    decomp.to_csv(out / "cost_decomposition.csv", index=False)
+    cls.to_csv(out / "spread_by_class.csv", index=False)
+    if not pos_table.empty:
+        corr.to_csv(out / "spread_vs_positives_corr.csv", index=False)
+        pos_table.to_csv(out / "spread_vs_positives.csv", index=False)
 
     figs: list[str] = []
     if not args.no_figures:
@@ -722,6 +868,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         impl=impl,
         figs=figs,
         shape=shape,
+        decomp=decomp,
+        cls=cls,
+        corr=corr,
+        pos_table=pos_table,
     )
     head = spread[spread["metric"] == HEADLINE]
     summary = {

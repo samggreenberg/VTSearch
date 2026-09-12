@@ -249,6 +249,17 @@ def main() -> int:
         if not (pd.isna(auroc) or auroc < 1e-9):
             failures.append(f"auroc spread {auroc:.3g} should be exactly zero on data where the ranking is fixed")
 
+        # The decomposition's planted null: `oracle_cost` is a constant in the
+        # fabricated data and `regret` carries the whole of `cost`, so the cut
+        # must own all of the variance and the ranking none of it.  This is what
+        # says a non-zero ranking share in the real run is the closed loop and
+        # not the two terms being wired up backwards.
+        dec = pd.read_csv(out / "cost_decomposition.csv")
+        if float(dec["share_ranking"].abs().max()) > 1e-6:
+            failures.append(f"share_ranking {float(dec['share_ranking'].abs().max()):.3g} should be 0")
+        if abs(float(dec["share_cut"].min()) - 1.0) > 1e-6:
+            failures.append(f"share_cut {float(dec['share_cut'].min()):.4f} should be exactly 1")
+
         # (4b) the percentile is not pinned to 0.5 by a bug: shift the pin below
         # every other draw and it must go to the bottom.
         shifted = tmp / "shifted" / "results"
