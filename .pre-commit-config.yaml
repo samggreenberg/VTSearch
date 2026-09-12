@@ -35,6 +35,22 @@ repos:
       - id: check-yaml
       - id: check-toml
       - id: check-json
+        # These files are JSONC, not JSON.  Angular, TypeScript, pyright and
+        # VS Code all document comment support in their own config files, and
+        # this repo depends on it: the bundle-budget rationale lives in an
+        # angular.json comment precisely because the Angular schema rejects
+        # extra keys (08c17ca7).  The hook parses with a strict json.load, so
+        # it rejects all eight of them.  That stayed invisible because
+        # pre-commit only passes STAGED files -- editing one of these is rare,
+        # and when it happens the hook blocks the commit outright with
+        # "Failed to json decode" (#3795).  The hook is kept for real .json.
+        exclude: |
+          (?x)^(
+            frontend/\.vscode/.*\.json|
+            frontend/angular\.json|
+            frontend/tsconfig(\.\w+)?\.json|
+            pyrightconfig\.json
+          )$
       - id: check-merge-conflict
       - id: check-added-large-files
         # 4 MB, not the default 500 KB.  This hook exists to keep datasets and
