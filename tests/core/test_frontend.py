@@ -10,6 +10,9 @@ Covers:
 
 from __future__ import annotations
 
+import pathlib
+import re
+
 import pytest
 
 # Tests below hit the Angular SPA shell or its bundle artefacts
@@ -212,6 +215,67 @@ class TestFrontendContentIntegrity:
         text = resp.data.decode("utf-8")
         # Angular global styles contain layout and panel classes
         assert "panel" in text or "grid" in text or "--bg-body" in text
+
+
+class TestEagerBundleComposition:
+    """Guards on what is allowed into the INITIAL (eager) bundle.
+
+    The eager path is framework-dominated and deliberately carries headroom
+    for Angular's own patch releases; the rationale lives next to
+    `maximumWarning` in frontend/angular.json.  The budget alone cannot police
+    this: #3811 reclaimed ~38kB, so a re-added FormsModule would still fit
+    under the number while silently spending the margin that exists so a
+    framework bump does not turn the gate red for everyone (#3795).
+    """
+
+    @staticmethod
+    def _eager_bundle_text() -> str:
+        """`main.js` plus every chunk it imports STATICALLY, concatenated.
+
+        `from"./chunk-X.js"` is a static import and keeps that chunk on the
+        eager path.  `import("./chunk-Y.js")` is the `@defer` / lazy-route
+        boundary and is deliberately NOT followed: following it would walk the
+        whole app and make every assertion here vacuous.
+        """
+        static_dir = pathlib.Path("static")
+        static_import = re.compile(r'from"\./(chunk-[A-Z0-9]+\.js)"')
+        seen: set[str] = set()
+        queue = ["main.js"]
+        parts: list[str] = []
+        while queue:
+            name = queue.pop()
+            if name in seen:
+                continue
+            path = static_dir / name
+            if not path.exists():
+                continue
+            seen.add(name)
+            text = path.read_text(encoding="utf-8")
+            parts.append(text)
+            queue.extend(static_import.findall(text))
+        return "".join(parts)
+
+    def test_eager_bundle_resolves(self):
+        """Fail loudly if the walk above stops matching the build output."""
+        text = self._eager_bundle_text()
+        assert len(text) > 100_000, (
+            "Could not resolve the eager bundle from static/main.js. The build "
+            "output's import syntax probably changed, which would make the "
+            "FormsModule guard below silently vacuous -- fix the regex."
+        )
+
+    def test_forms_module_is_not_eager(self):
+        # `ngNoForm` comes from NgForm's selector (`form:not([ngNoForm])`) and
+        # appears nowhere outside @angular/forms, so it is a precise marker for
+        # the package landing in the initial bundle.
+        assert "ngNoForm" not in self._eager_bundle_text(), (
+            "@angular/forms (~37kB) is back in the EAGER bundle.\n"
+            "Something on the eager path imports FormsModule -- most likely a new\n"
+            "`ngModel` in vt-login or vt-dialog-host, the two eager components that\n"
+            "used to pull it (#3811). A single uncontrolled input does not need it:\n"
+            "use `[value]` + `(input)` instead. If the import is genuinely required,\n"
+            "re-audit the budget in frontend/angular.json rather than deleting this."
+        )
 
 
 class TestVersionEndpoint:
