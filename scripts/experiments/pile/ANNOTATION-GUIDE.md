@@ -98,9 +98,12 @@ The full wording is in `SCALE_CLASS_RULES`; these are the discriminations.
 - **Clock** — a device whose job is showing the time and which stands, hangs or
   is mounted. **Not a wristwatch**, not a departure board, not a clock drawn on
   a screen.
-- **Bird** — any live bird of any species. **Not a cooked one**: in VG,
-  `chicken` (428 images, 10%) and `turkey` (53, 12%) are usually food, and
-  `crane` (308, 2%) is a machine.
+- **Bird** — any **whole** bird of any species, **alive or dead**: prey in
+  another bird's beak, one lying dead, and a taxidermy mount, which is the
+  animal itself rather than a figurine of one (#3789). **Death is not the test,
+  food is** — a bird **prepared as food**, cooked or plucked or butchered, is
+  not one, because in VG `chicken` (428 images, 10%) and `turkey` (53, 12%) are
+  usually food. `crane` (308, 2%) is a machine.
 - **Boat** — anything built to travel on water. On a trailer still counts. Not a
   surfboard, which is COCO's own class.
 - **Umbrella** — one central pole carrying a round canopy: hand-held, parasol,
