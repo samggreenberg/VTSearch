@@ -147,22 +147,52 @@ def load_cells(
     return df, prov
 
 
+#: What :func:`describe_load` counts as **data loss**, and every spelling each
+#: count goes by.  Two loaders write these dicts and they do not agree on the
+#: names: ``load_arm`` renames ``filtered_out`` to ``no_base_rows`` (and
+#: ``header_only`` to ``no_positive_found``; see :data:`STARVED_KEYS`) because
+#: its filter is its own contract rather than the reader's.  Accepting both
+#: spellings here is what keeps the shared sentence shared -- it used to read
+#: only the ``load_cells`` names, so any caller handing it ``load_arm``'s
+#: provenance reported *zero* of these however many there were (#3808).
+LOSS_KEYS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("zero-byte", ("zero_byte",)),
+    ("unreadable", ("unreadable",)),
+    ("no rows after filter", ("filtered_out", "no_base_rows")),
+)
+
+#: The starved count, under both loaders' spellings.  Held apart from
+#: :data:`LOSS_KEYS` because it is **not** a loss: the simulator emits no row
+#: until one Good and one Bad vote coexist, so a cell that never found a
+#: positive legitimately writes none.  That distinction is the whole reason
+#: ``load_arm`` renamed the key, and the sentence now says it too.
+STARVED_KEYS: tuple[str, ...] = ("header_only", "no_positive_found")
+
+#: Every provenance key the sentence knows how to name.  A loader that invents
+#: a key outside this set drops silently out of the coverage line, which is the
+#: failure #3808 was; ``tests_lib/meta/test_calibration_cells_io.py`` holds both
+#: loaders to it.
+DESCRIBED_KEYS: frozenset[str] = frozenset([key for _label, keys in LOSS_KEYS for key in keys] + list(STARVED_KEYS))
+
+
 def describe_load(prov: dict) -> str:
     """One line naming everything a load dropped, for a study's coverage block.
 
     Every study prints this differently and several printed nothing; a shared
     sentence is what makes "N of M cells" mean the same thing in two reports.
+
+    Accepts the provenance of **either** loader -- see :data:`LOSS_KEYS`.  The
+    starved cells are reported last and worded apart from the losses above
+    them, because they are a result of the experiment rather than a hole in it.
     """
     parts = [f"{prov['n_read']}/{prov['n_files']} cells with data", f"{prov.get('n_rows', 0):,} rows"]
-    for label, key in (
-        ("zero-byte", "zero_byte"),
-        ("unreadable", "unreadable"),
-        ("header-only (starved)", "header_only"),
-        ("no rows after filter", "filtered_out"),
-    ):
-        n = len(prov.get(key) or ())
+    for label, keys in LOSS_KEYS:
+        n = sum(len(prov.get(key) or ()) for key in keys)
         if n:
             parts.append(f"{n} {label}")
+    starved = sum(len(prov.get(key) or ()) for key in STARVED_KEYS)
+    if starved:
+        parts.append(f"{starved} starved (header-only; not data loss)")
     return ", ".join(parts)
 
 
@@ -199,6 +229,11 @@ def load_arm(arm_dir: Path) -> tuple[pd.DataFrame, dict]:
         # votes never turned up a positive legitimately writes none.  That is
         # the extreme of the positive-starvation regime #2847 is about, and it
         # differs per arm, which is why paired tests lose those cells.
+        #
+        # These two keys are renames of `load_cells`' `header_only` /
+        # `filtered_out`.  `describe_load` reads both spellings (see
+        # `LOSS_KEYS` / `STARVED_KEYS`); a THIRD spelling would fall out of its
+        # sentence silently, so add it there in the same commit.
         "no_positive_found": base["header_only"],
         #: Wrote rows, none of them base rows.  A tag-column bug, never a
         #: legitimate result, so it is named apart from the cells above.

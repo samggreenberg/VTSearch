@@ -1,9 +1,12 @@
-"""The calibration analyzers must read their cells through one loader.
+"""The calibration analyzers must read their cells through one loader, and
+that loader must describe what it dropped in one vocabulary.
 
-Static text checks over ``scripts/experiments/calibration/`` — nothing here
-imports the analyzers (they need pandas, matplotlib and a results tree), and
-nothing here tests shipped ``vtsearch``/``vtscore`` behaviour, which is why it
-lives in the ``meta`` group.
+Checks over ``scripts/experiments/calibration/`` — mostly static text, plus a
+handful that load ``_cells_io`` itself by path and run both loaders over a
+four-file fixture.  Nothing here imports an *analyzer* (they need matplotlib
+and a real results tree), and nothing here tests shipped
+``vtsearch``/``vtscore`` behaviour, which is why it lives in the ``meta``
+group.
 
 The failure this guards is the one that produced #3407 twice.  ``run_cells.py``
 writes one **main** metric frame per cell (``task_NNNN.csv``) and five **side**
@@ -27,7 +30,9 @@ Two independent guards, because the two ways in are independent:
 
 from __future__ import annotations
 
+import importlib.util
 import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -155,4 +160,126 @@ def test_shell_cell_counts_exclude_side_frames(script: Path) -> None:
         '`"__" not in p.stem`) or match the digits positively '
         "(`-name 'task_[0-9][0-9][0-9][0-9].csv'`).  Never by listing the side "
         "frames by name — that list is what went stale in #3407."
+    )
+
+
+# --- The coverage sentence ---------------------------------------------------
+#
+# Not static: these load real (tiny) cell trees through both loaders and read
+# the sentence they produce.  The bug they exist for (#3808) was invisible to
+# every static check, because both halves were individually correct -- the
+# renamed keys and the sentence's key table just never agreed.
+
+
+def _load_cells_io():
+    """Import ``_cells_io`` by path, with its own directory importable.
+
+    The calibration scripts import each other by bare name (``from
+    _cells_paths import ...``) because they run as ``python analyze_foo.py``
+    from their own directory.  Added and removed around the load rather than
+    left in place: ``common``, ``curves`` and friends are generic enough that
+    leaving the directory importable would shadow real modules.
+    """
+    spec = importlib.util.spec_from_file_location("_calib_cells_io_coverage", CALIB / "_cells_io.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.path.insert(0, str(CALIB))
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path.remove(str(CALIB))
+    return module
+
+
+#: The columns ``_base_rows`` filters on, so a fabricated cell survives it.
+_ROW = "dataset,embedder,category,t,gmm_variant,schedule,pool_variant\nd,e,c,0.5,,,max\n"
+
+
+@pytest.fixture
+def arm(tmp_path: Path) -> Path:
+    """One arm holding a cell of each kind the loaders count separately."""
+    cells = tmp_path / "results" / "cells"
+    cells.mkdir(parents=True)
+    (cells / "task_0000.csv").write_text(_ROW)  # readable, one base row
+    (cells / "task_0001.csv").write_bytes(b"")  # zero-byte: died mid-write
+    (cells / "task_0002.csv").write_bytes(b"a,b\n\xff\xfe,2\n")  # unreadable: undecodable
+    (cells / "task_0003.csv").write_text(_ROW.splitlines()[0] + "\n")  # header-only: starved
+    return tmp_path / "results"
+
+
+def test_both_loaders_count_the_same_four_cells(arm: Path) -> None:
+    """The fixture is only worth reading if both loaders see it the same way."""
+    cells_io = _load_cells_io()
+    _frame, by_cells = cells_io.load_cells(arm / "cells")
+    _arm_frame, by_arm = cells_io.load_arm(arm)
+    for prov in (by_cells, by_arm):
+        assert (prov["n_files"], prov["n_read"]) == (4, 1)
+        assert len(prov["zero_byte"]) == 1
+        assert len(prov["unreadable"]) == 1
+    assert len(by_cells["header_only"]) == 1
+    assert len(by_arm["no_positive_found"]) == 1, "load_arm renamed the starved count again?"
+
+
+def test_the_coverage_sentence_is_the_same_for_either_loader(arm: Path) -> None:
+    """#3808: ``describe_load`` read only ``load_cells``' spellings.
+
+    ``load_arm`` renames ``header_only`` to ``no_positive_found`` on purpose --
+    a starved cell is a result, not data loss -- but the shared sentence still
+    looked for the old key, so ``prov.get("header_only")`` was ``None``,
+    ``len(None or ())`` was 0, and every caller on ``load_arm``'s provenance
+    reported *zero* starved cells however many there were.
+    """
+    cells_io = _load_cells_io()
+    _f1, by_cells = cells_io.load_cells(arm / "cells")
+    _f2, by_arm = cells_io.load_arm(arm)
+    said_by_cells = cells_io.describe_load(by_cells)
+    said_by_arm = cells_io.describe_load(by_arm)
+    for said in (said_by_cells, said_by_arm):
+        assert "1 zero-byte" in said
+        assert "1 unreadable" in said
+        assert "1 starved" in said, f"the starved cell vanished from the sentence: {said!r}"
+    assert said_by_cells == said_by_arm, (
+        "the two loaders describe the same four cells differently:\n"
+        f"  load_cells: {said_by_cells}\n  load_arm:   {said_by_arm}\n"
+        "`describe_load` is the sentence that makes 'N of M cells' mean the same thing "
+        "in two reports; it has to read both loaders' key spellings."
+    )
+
+
+def test_the_starved_count_does_not_read_as_a_loss(arm: Path) -> None:
+    """It is the extreme of the regime these studies measure, not a hole in them."""
+    cells_io = _load_cells_io()
+    _frame, prov = cells_io.load_arm(arm)
+    said = cells_io.describe_load(prov)
+    starved = said.split(", ")[-1]
+    assert starved.startswith("1 starved"), said
+    assert "not data loss" in starved, (
+        f"the starved count reads like the loss counts beside it: {starved!r}.  "
+        "That distinction is the whole reason `load_arm` renamed the key."
+    )
+
+
+@pytest.mark.parametrize("loader", ["load_cells", "load_arm"])
+def test_every_key_a_loader_writes_is_one_the_sentence_knows(arm: Path, loader: str) -> None:
+    """The guard against the *next* rename, in either direction.
+
+    A loader that invents a key outside ``DESCRIBED_KEYS`` drops out of the
+    coverage line silently -- the count does not go wrong, it goes *missing*,
+    and the sentence still reads like a complete accounting.  Checked against
+    what the loaders actually return rather than against a hand-kept list, so
+    a third spelling fails here rather than in six studies' reports.
+    """
+    cells_io = _load_cells_io()
+    prov = (cells_io.load_cells(arm / "cells") if loader == "load_cells" else cells_io.load_arm(arm))[1]
+    #: The scalar bookkeeping the sentence names positionally, not by key.
+    counted_elsewhere = {"cells_dir", "n_files", "n_read", "n_rows", "n_rows_all"}
+    unnamed = sorted(
+        key
+        for key, value in prov.items()
+        if key not in counted_elsewhere and isinstance(value, list) and key not in cells_io.DESCRIBED_KEYS
+    )
+    assert not unnamed, (
+        f"`{loader}` reports {unnamed}, which `describe_load` does not look for, so those cells "
+        "vanish from every study's coverage line.  Add the spelling to `LOSS_KEYS` or "
+        "`STARVED_KEYS` in `_cells_io.py` in the same commit as the rename (#3808)."
     )
