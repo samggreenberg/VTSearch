@@ -98,6 +98,7 @@ class TestSameEstimator:
     def test_deterministic(self):
         x = _bimodal(seed=5)
         first, second = fit_score_gmm(x), fit_score_gmm(x)
+        assert first is not None and second is not None
         assert (first.w_lo, first.mu_lo, first.var_lo) == (second.w_lo, second.mu_lo, second.var_lo)
         assert (first.w_hi, first.mu_hi, first.var_hi) == (second.w_hi, second.mu_hi, second.var_hi)
 
