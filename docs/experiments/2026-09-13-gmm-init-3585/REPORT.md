@@ -18,9 +18,106 @@ replayed against it, and the two numbers the issue named — the distribution of
 — plus the trajectory A/B that the issue's own decision rule calls for once the
 answer to the second one is "not zero".
 
-<!-- SHORT VERSION -->
+## The short version
 
-<!-- BODY -->
+**Ship it.** The replacement is *more* faithful to the incumbent than
+re-initialising the incumbent is, it is 7.3x cheaper per fit, and 114 paired
+cells of simulated clicking cannot resolve a difference in what the detector is
+worth.
+
+1. **The admitted set changes, so this is not an optimisation — but the scale
+   that matters is the control.** On 2,258 real fold cases the new fit changes
+   the admitted set on **7.0%** of them, by a median of **2 medias**. Keeping
+   sklearn and changing only `init_params="k-means++"` — three characters, same
+   estimator — changes **16.1%**, by a median of **11.5**. On 195 sorts the same
+   comparison is **0.96%** of the haystack against **3.9%**. A fit of this model
+   moves when you touch it; this one moves less than the smallest thing you
+   could touch.
+
+2. **And it moves in a different *place*.** The fold cases that move by more
+   than 1% of the haystack (34 of 2,258) are concentrated where the mixture is
+   not identifiable: **26 of 34 at click ≤ 10**, and **26 of 34 in one
+   environment** — `caltech101_m`/`dinov3_patch`, a 400-media haystack with one
+   broad mode. The control's 148 are spread evenly over all six environments.
+   Where the two components are real, the two fits agree; where they are not,
+   nothing agrees with anything — see [the worked case](#the-worked-case-three-fits-of-one-haystack-admitting-80-256-and-393-of-400).
+
+3. **What made it faithful was the stopping rule, not the init.** This branch
+   first reused the anchored loop's parameter-delta rule at 1e-8. On real cosine
+   sorts that is **2.8x slower** than the sklearn call it replaced and moves
+   **7.0%** of the haystack, because a text sort is barely bimodal and EM crawls
+   a flat ridge to buy 0.002 nats. Stopping where sklearn stops — an iteration
+   improving the mean log-likelihood by less than 1e-3 — is the whole difference
+   between an arm that is 0.70x and one that is 7.6x.
+
+4. **At that tolerance the two are the same estimator, and neither is the better
+   fit.** Over 4,516 fold haystacks the native fit wins the log-likelihood 2,369
+   times and loses it 2,146 — a coin flip, median difference **+5e-7 nats**.
+   Running it further *does* find a better fit (+0.0019 nats, 4,501 of 4,516),
+   and that better fit is exactly the one that moves the admitted set most. This
+   is the least comfortable finding here and it is the one that generalises:
+   **on these samples, "fits better" and "cuts the same" pull in opposite
+   directions.**
+
+5. **The cost, measured rather than projected.** 7.3x per fit at the corpus's own
+   sizes, 10.1x at 20k and 12.3x at 50k. A whole cosine/text sort — the app's
+   own `cosine_sort_with_boxes` plus the cut, both timed in one process — goes
+   from 52.5 ms to 30.0 ms at 4,952 medias, **1.7x**. That also **corrects the
+   issue's own headline**: the fit was 91-95% of a sort by a reconstruction that
+   priced a matmul and a dict comprehension; against the function the route
+   actually calls it is **48.5%** before this change and **11.2%** after.
+
+6. **The trajectory A/B resolves nothing, in the candidate's favour.** Two
+   84-cell grids, identical but for the fit, paired on 114 cells: Δcost
+   **−0.0054 ± 0.0050**, ΔAP **+0.0040 ± 0.0045**, ΔFNR **−0.0055 ± 0.0035**,
+   ΔFPR **+0.00003 ± 0.0053**. Every one is inside twice its own standard error.
+   Every one points the candidate's way, which is worth exactly nothing on its
+   own and is said here so nobody has to re-derive it from the table.
+
+7. **Two follow-ups the measurement handed over, both larger than this issue.**
+   The anchored loop now *is* the cost of a fold's fit and it **exits on
+   `max_iter`** rather than converging (97-200 iterations, against the init's
+   ~15) — #FOLLOWUP_A. And the incumbent's cut on a typed query is barely
+   identifiable at all: re-initialising it moves 6.5% of the verdicts, which is
+   a fact about what shipped, not about this change — #FOLLOWUP_B.
+
+
+
+---
+
+## The worked case: three fits of one haystack, admitting 80, 256 and 393 of 400
+
+Before the aggregates, the thing they are aggregates of.
+
+`caltech101_m` / `dinov3_patch` / `airplanes`, seed 0, the first captured step
+(9 votes). Fold 0's haystack is 400 scores with **one** mode: 80% of the mass
+sits between 0.59 and 0.66, with a thin left tail down to 0.40.
+
+| deciles of the haystack | 0.401 | 0.593 | 0.602 | 0.610 | 0.615 | 0.621 | 0.627 | 0.633 | 0.655 | 0.696 | 0.730 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+
+Three fits of those 400 numbers:
+
+| | `w_lo` | `mu_lo` | `mu_hi` | mean log-lik | threshold | admitted |
+|---|---|---|---|---|---|---|
+| `baseline` (sklearn) | 0.885 | 0.617 | 0.706 | +1.775 | 0.685 | **80** / 400 |
+| `native` | 0.017 | 0.441 | 0.631 | +1.829 | 0.517 | **393** / 400 |
+| `sklearn_kmeanspp` | 0.664 | 0.615 | 0.652 | **+1.960** | 0.631 | **256** / 400 |
+
+sklearn splits the right shoulder off the mode. The native fit calls the left
+tail a component and the mode the other one. k-means++ splits the mode down the
+middle — and finds the **highest likelihood of the three**, which is to say the
+incumbent's answer is not even the best available one. Three local optima of the
+same objective on the same data, and the "midpoint between the component means"
+is a different place in each.
+
+This is what the tail of every distribution in this report is made of, and it is
+worth being clear about what it is *not*: it is not a defect this change
+introduces. It is the estimator being asked a question the sample cannot answer,
+which was true before #3585 and stays true after. What the gate can say is that
+the new fit does this **less often and in fewer places** than the smallest
+possible perturbation of the old one.
+
 
 ---
 
@@ -77,3 +174,321 @@ candidate. Without it the gate can only say "the new fit moves the admitted set
 by X" with nothing to compare X against. With it, X has a scale: *this is what
 re-initialising the estimator we already ship does.*
 
+
+---
+
+## 1. The gate: does the admitted set change?
+
+It does, so this is not an optimisation, and the issue's decision rule sends it
+to the trajectory A/B (section 4). What the rest of this section is for is the
+**scale** of the change, because "not zero" is not a quantity.
+
+### The fold path — 2,258 cases from 84 cells
+
+| arm | cases changed | | median &#124;Δadmitted&#124; when changed | moved > 1% of the haystack | provenance changed | median speedup of the whole chain |
+|---|---|---|---|---|---|---|
+| **`native`** | **158** | **7.0%** | **2** | **34** | 3 | **1.47x** |
+| `native_ll1e-4` | 234 | 10.4% | 2 | 42 | 10 | 1.40x |
+| `native_ll1e-5` | 285 | 12.6% | 4 | — | 15 | 1.30x |
+| `native_iter50` | 301 | 13.3% | 4 | — | 13 | 1.16x |
+| `native_param1e-8` | 325 | 14.4% | 9 | 103 | 17 | 0.76x |
+| `sklearn_kmeanspp` *(control)* | **364** | **16.1%** | **11.5** | **148** | 41 | 0.95x |
+| `sklearn_spherical` | 0 | 0% | — | 0 | 0 | 1.04x |
+
+Read the first and last data rows together. `sklearn_spherical` is the issue's
+"if the gate passes it is the answer" option: it is bit-identical on all 2,258
+cases, confirming the measurement already on the issue thread, and it buys 4%.
+`sklearn_kmeanspp` is the other end — the *smallest possible* perturbation of
+the incumbent, three characters, same library, same estimator, same tolerance —
+and it moves **twice as many** admitted sets as the whole rewrite does, by five
+times as much when it moves them.
+
+The whole-chain speedup is only 1.47x because the anchored refit, which this
+branch does not touch, is now ~90% of a fold's fit. That is
+[#FOLLOWUP_A](#follow-ups).
+
+### Where the fold changes are
+
+They are not spread out. Of `native`'s 34 cases that move more than 1% of the
+haystack:
+
+- **26 of 34 are at click ≤ 10**, out of a 100-click horizon;
+- **26 of 34 are in one environment**, `caltech101_m`/`dinov3_patch` — a
+  400-media haystack whose fold scores are a single broad mode (the [worked
+  case](#the-worked-case-three-fits-of-one-haystack-admitting-80-256-and-393-of-400)
+  is one of them).
+
+The control's 148 are spread over **all six** environments (51 in
+`visual_genome_m`/`dinov3_patch`, 40 in `visual_genome_m`/`siglip`, 21 in
+`coco_val`/`dinov3_patch`, …). So the difference between the candidate and the
+control is not only "how much" but "where": the candidate agrees with the
+incumbent wherever the mixture is identifiable and parts company where nothing
+identifies it, while re-initialising the incumbent parts company everywhere.
+
+![The arms](figures/arms.png)
+
+*One point per arm: median speedup against the mean percentage of the haystack
+whose verdict changes. Bottom right is faster and more faithful; the dashed line
+is the incumbent's own speed. `sklearn_kmeanspp` is the scale — it is what
+touching the incumbent's init costs. What this figure does **not** show: the
+distribution behind each mean, which is the next one.*
+
+![How often, and by how much](figures/change_ecdf.png)
+
+*The distribution behind those means: the fraction of cases (y) whose verdict
+change is at or below a given size (x, log). A curve that reaches 1.0 at the
+left edge changes nothing on any case. Read the left edge for "how often does
+anything change at all" and the right tail for "how bad is the worst case" —
+they are different questions and the arms do not order the same way on both.*
+
+---
+
+## 2. The estimator: which fit is better?
+
+"The thresholds differ" does not say which one is right, and both arms are
+maximising the same objective, so the mean log-likelihood of the fit on the
+sample it was fitted to settles it — or, here, declines to.
+
+Over **4,516 fold haystacks**, each fitted by every arm:
+
+| arm | better | tied | worse | median Δ log-lik | median seconds |
+|---|---|---|---|---|---|
+| **`native`** | 2,369 | 1 | 2,146 | **+5e-7** | **0.0017** |
+| `native_ll1e-4` | 4,442 | 0 | 74 | +0.0014 | 0.0032 |
+| `native_ll1e-5` | 4,488 | 0 | 28 | +0.0018 | 0.0061 |
+| `native_param1e-8` | 4,501 | 0 | 15 | +0.0019 | 0.0337 |
+| `sklearn_kmeanspp` | 1,651 | 631 | 2,234 | 0.0 | 0.0135 |
+| `baseline` | — | — | — | — | 0.0133 |
+
+**At the shipped tolerance the two are the same estimator.** `native` wins the
+likelihood on 52% of haystacks and loses on 48%, with a median difference of
+5e-7 nats — six orders of magnitude below the 1e-3 improvement threshold both
+arms stop at. Neither is the better fit; they are the same fit stopped in the
+same place by the same rule, from two different starting points.
+
+**And the arms that *are* better fits are the ones that move the cut most.**
+`native_param1e-8` beats sklearn's likelihood on 4,501 of 4,516 haystacks — it is
+unambiguously the better estimate — and it is also the arm that changes the most
+admitted sets (14.4% against 7.0%) and the only one slower than what it replaces.
+Running EM further finds a better optimum of a model that, on these samples, is
+frequently not identified; a better fit of an unidentified model is a
+*differently placed* cut, not a more correct one.
+
+That is the finding this report would least like to have and the one most worth
+carrying forward: **on real score distributions, "fits better" and "cuts the
+same" pull in opposite directions**, and #3329's conclusion — that distance to
+the fitted CDF does not measure whether a model is doing its job — shows up here
+from the other side.
+
+---
+
+## 3. What it costs
+
+Every timing below is one `cpu`-partition GRID node with BLAS pinned to one
+thread, min-of-5.
+
+### Per fit
+
+`bench_3585.py`, 168 arrays drawn two per captured cell, each fitted at its own
+size and again at two sizes the app fits on:
+
+| scores | `baseline` | **`native`** | speedup | `native_10k` | `sklearn_kmeanspp` | `native_param1e-8` |
+|---|---|---|---|---|---|---|
+| 1k-5k (measured) | 13.2 ms | **1.8 ms** | **7.5x** | 1.8 ms | 12.6 ms (1.05x) | 34 ms (0.39x) |
+| 20,000 (resampled) | 55 ms | **4.9 ms** | **10.1x** | 3.4 ms (14.4x) | 54 ms (0.89x) | 84 ms (0.77x) |
+| 50,000 (resampled) | 143 ms | **10.5 ms** | **12.3x** | 3.5 ms (37.5x) | 161 ms (0.87x) | 168 ms (1.01x) |
+
+The speedup grows with *n* because the k-means init sklearn pays per call grows
+with it and the 2-means init does not. `native_10k` is the `_GMM_MAX_SAMPLES`
+lever measured beside the others rather than proposed: at 50k it is another 3x
+on top, for a change of a different kind — it changes what the fit *sees* — and
+it is [#FOLLOWUP_C](#follow-ups), not this issue.
+
+Two arms are *slower than the incumbent*: the parameter-delta stopping rule at
+every size, and — at 20k and 50k — the issue's own `k-means++` suggestion, whose
+5-6x on a synthetic corpus does not survive contact with a real one.
+
+### Per sort
+
+The whole of a cosine/text sort is `cosine_sort_with_boxes` plus
+`calculate_gmm_threshold`. Both were timed **in the same process on the same
+node**, min-of-5, because a fit timed in one job against a sort timed in another
+puts a cross-node difference straight into the ratio (#3160):
+
+| | ms | share of the sort |
+|---|---|---|
+| the rest of the sort (scoring, result dicts, the sort itself) | 27.1 | — |
+| `baseline` fit | 27.0 | **48.5%** |
+| **`native` fit** | **3.7** | **11.2%** |
+
+**A sort goes from 52.5 ms to 30.0 ms — 1.7x** at the median size in the corpus
+(4,952 medias).
+
+That table also corrects this issue's own §1. It reported the fit at **91-95%**
+of a sort from a reconstruction — a matmul, a result-dict build and a sort —
+rather than from the function the route calls, and noted the real share would be
+"somewhat below" it. Measured against `cosine_sort_with_boxes`, it is **48.5%**,
+and the gap is not a rounding difference: the reconstruction under-counts the
+per-media Python work that dominates the non-GMM side. The saving is real and
+the multiplier on a whole sort is 1.7x, not 10x.
+
+![Cost against sample size](figures/cost_vs_n.png)
+
+*Cost per fit against the size of the sample, log-log, one line per arm. Solid:
+measured on a real sort or fold haystack of that size. Dotted: the same array
+bootstrap-resampled up to 20k and 50k — a projection of the sample's **shape**,
+which is what drives iteration count, and not a measurement. What to read: the
+gap widens with n, and two arms cross the incumbent's line from below.*
+
+---
+
+## 4. The trajectory A/B
+
+The gate holds everything but the fit fixed, which is the right instrument for
+"does the admitted set change" and the wrong one for "is the detector better or
+worse". The threshold is not output-only: Autopilot's Hard phase picks the
+unlabelled item nearest the decision boundary, so two arms are asked to vote on
+different items from their second Hard pick onward and their trajectories
+diverge. Only two whole runs can price that.
+
+Two 84-cell grids, identical in every knob but the fit, paired on
+(dataset, embedder, style, category, seed) — 114 paired cells over 8 arms:
+
+| metric | Δ (native − sklearn) | SE | resolvable? |
+|---|---|---|---|
+| `cost` | **−0.0054** | 0.0050 | no |
+| `average_precision` | **+0.0040** | 0.0045 | no |
+| `fnr` | **−0.0055** | 0.0035 | no |
+| `fpr` | **+0.00003** | 0.0053 | no |
+
+Every difference is inside twice its own standard error. Every one points the
+candidate's way; that is worth nothing on its own and is stated so nobody has to
+re-derive it from the table.
+
+Per environment, `cost`, all steps:
+
+| arm | cells | Δ cost | SE |
+|---|---|---|---|
+| `caltech101_m`/`dinov3_patch`/`whole_image` | 12 | −0.0092 | 0.031 |
+| `caltech101_m`/`siglip`/`whole_image` | 12 | +0.0019 | 0.0015 |
+| `coco_val`/`dinov3_patch`/`max_patch` | 14 | −0.0005 | 0.0039 |
+| `coco_val`/`dinov3_patch`/`whole_image` | 14 | +0.0008 | 0.020 |
+| `coco_val`/`siglip`/`whole_image` | 14 | **−0.0317** | 0.014 |
+| `visual_genome_m`/`dinov3_patch`/`max_patch` | 16 | −0.0052 | 0.0087 |
+| `visual_genome_m`/`dinov3_patch`/`whole_image` | 16 | +0.0063 | 0.0087 |
+| `visual_genome_m`/`siglip`/`whole_image` | 16 | −0.0067 | 0.013 |
+
+One arm resolves on its own — `coco_val`/`siglip`/`whole_image`, −0.032 with
+Wilcoxon p = 0.005, AP +0.031 (p = 0.017), FNR −0.029 (p = 0.028). **Do not
+read that as a win.** It is one of 32 arm × metric comparisons in this table's
+family; at 32 tests a p of 0.005 is roughly what chance produces, and no
+mechanism predicts that this environment in particular should benefit. It is
+reported because leaving it out would be worse, and it is not being banked.
+
+![Cost over clicks, averaged](figures/cost_vs_clicks.png)
+
+*The mandatory quality-over-clicks pair, averaged: one panel per dataset, one
+line per arm, over every seed and category, with the inter-quartile band. Click
+0 is the free text sort — the level a clicked detector has to beat. Crossovers:
+`visual_genome_m` at click 7 for both arms, `coco_val` at 15 (native) against 16
+(sklearn), `caltech101_m` at 34 against 26 — on `caltech101_m` the text sort is
+already at cost 0.059, so the crossing is late and noisy for both. What this
+figure does **not** license: reading a gap between two lines that the paired
+table above says is inside its own error bar.*
+
+The per-run panels — one file per dataset, every seed as its own line — are
+[`figures/cost_vs_clicks_runs__visual_genome_m.png`](figures/cost_vs_clicks_runs__visual_genome_m.png),
+[`…__coco_val.png`](figures/cost_vs_clicks_runs__coco_val.png) and
+[`…__caltech101_m.png`](figures/cost_vs_clicks_runs__caltech101_m.png), and the
+interactive [`viewer.html`](viewer.html) carries every other slice (any dataset,
+any category, any metric the run emitted, seeds pooled or drawn individually).
+
+---
+
+## What this does not license
+
+**It is not a bit-equality claim, and no amount of measurement would make it
+one.** #3558 could assert bit-for-bit because it reassociated nothing. This
+changes where EM starts and where it stops; the gate says how often that reaches
+a user, not that it never does. A future change that needs the fold-anchored
+cut to be reproducible against a pre-#3585 run cannot get that from here — it
+has to re-run.
+
+**The corpus is the pile's datasets, and the app's haystacks are bigger.** The
+largest sort here is 18,050 medias; a GUI Find subsamples ~250k down to
+`_GMM_MAX_SAMPLES` = 50,000, and a CLI Find can start from 2M. The 50k rows in
+the cost table are a **bootstrap resample** of a real sort, so they carry the
+shape and not the granularity. What that leaves un-measured is whether the
+admitted-set agreement holds at 50k, where the fitted components are estimated
+from more data and both arms should agree *more*, not less — an expectation, not
+a measurement.
+
+**The fold path is measured at `calibrate_count = 2`**, the shipped value. The
+per-fold anchored fit is unchanged by this branch, so nothing here says what
+happens to the gate at K = 6; it says only that the init in front of it moved.
+
+**Two seeds per cell.** The trajectory A/B pairs 84 cells on (dataset, embedder,
+style, category, seed), which is enough to resolve a difference of the size the
+window tables report and not enough to resolve a smaller one. Where the paired
+difference is inside twice its standard error the table says so rather than
+reporting a direction.
+
+**One machine.** Every timing is a `cpu`-partition GRID node with BLAS pinned to
+one thread, min-of-5. The *ratios* are what this report reads; absolute
+milliseconds on another machine will differ, and the issue's own numbers (from a
+4-vCPU cloud container) already differ from these by more than a factor of two
+in places.
+
+---
+
+## Follow-ups
+
+Three, all filed, all pointed at from the prose above:
+
+- **#FOLLOWUP_A — the anchored EM is now the whole cost of a fold's fit, and it
+  exits on `max_iter`.** Measured here at 97-200 iterations per fold (200 is the
+  cap) and 21-48 ms against the init's 2-4 ms. The same log-likelihood rule is
+  the obvious fix and `_anchored_em` already takes it as an argument; unlike this
+  issue there is no second estimator between that fit and the cut, so the gate
+  has to be run again. The corpus is captured and needs no re-run.
+- **#FOLLOWUP_B — the cut on a typed query is barely identifiable.**
+  Re-initialising the *incumbent* moves 6.5% of a text sort's verdicts and up to
+  27% on one query. That is a fact about what shipped, not about this change,
+  and it asks whether a mixture midpoint is the right rule for a sort at all.
+- **#FOLLOWUP_C — `_GMM_MAX_SAMPLES` is the third lever and it is still
+  unpriced at the size it binds.** `native_10k` is another 3x at 50k, but every
+  sort in this corpus is under 50,000 scores, so the arm is never exercised
+  where the constant actually does something.
+
+---
+
+## Reproducing this
+
+Everything is in [`scripts/experiments/gmm_init/`](../../../scripts/experiments/gmm_init/),
+whose README is the map. On the GRID, from a worktree of this branch:
+
+```bash
+bash scripts/experiments/gmm_init/launch_gmm_3585.sh capture   # 84 cells -> corpus/*.npz
+bash scripts/experiments/gmm_init/launch_gmm_3585.sh sorts     # 62 cosine/text sorts
+bash scripts/experiments/gmm_init/launch_gmm_3585.sh gate      # replay every arm
+bash scripts/experiments/gmm_init/launch_gmm_3585.sh bench     # min-of-5 per-call cost
+bash scripts/experiments/gmm_init/launch_gmm_3585.sh analyse   # the tables and figures
+bash scripts/experiments/gmm_init/launch_gmm_3585.sh ab        # the two trajectory grids
+bash scripts/experiments/gmm_init/launch_gmm_3585.sh baseline abfigures abanalyze
+```
+
+`DEP=afterany:<jobid>` chains a stage behind a running one, which is how this
+run was driven: a waiter on the laptop dies with the VPN.
+
+Results root: `/expscratch/sgreenberg/gmm-3585` — `corpus/` (290 MB of captured
+arrays), `analysis/` (the gate frames and the tables below), `ab_native/` and
+`ab_baseline/` (the trajectory grids). Scratch is purgeable; the corpus rebuilds
+from the pile with one `capture`, and every table here rebuilds from the corpus
+with one `gate` + `analyse`.
+
+**The corpus outlives the candidates in it.** That is the reason it is arrays on
+disk rather than a comparison computed in place, and the reason
+`fit_score_gmm_sklearn` stays in the tree: the next candidate — the anchored
+loop's own stopping rule (#FOLLOWUP_A) is the obvious one — can be gated against
+exactly these inputs, against exactly this baseline, without re-running a single
+cell.
