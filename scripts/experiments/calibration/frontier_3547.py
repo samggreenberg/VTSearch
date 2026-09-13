@@ -171,7 +171,9 @@ for arm in ARM_K:
     per_arm[arm] = summarise(raw)
     prov_lines.append(
         f"| `{arm}` | {prov['n_files']} | {prov['n_read']} | {len(prov['zero_byte'])} | "
-        f"{len(prov['unreadable'])} | {prov.get('header_only', prov.get('headless', 'n/a'))} |"
+        # `load_arm` spells the starved count `no_positive_found`; asking for
+        # `header_only` here printed `n/a` in every row of this table (#3808).
+        f"{len(prov['unreadable'])} | {len(prov.get('no_positive_found') or ())} |"
     )
 
 if CONTROL not in per_arm:

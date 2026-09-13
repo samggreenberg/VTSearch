@@ -149,24 +149,6 @@ def load(results: Path) -> tuple[pd.DataFrame, dict]:
     return frame, prov
 
 
-def coverage(prov: dict) -> str:
-    """`describe_load`'s sentence, plus the count `load_arm` renames out of it.
-
-    `load_arm` moves `header_only` to `no_positive_found` - a starved cell is a
-    legitimate result rather than data loss, and the rename says so - but
-    `describe_load` still looks for the old key, so calling it on `load_arm`'s
-    provenance reports *zero* starved cells however many there were.  Naming the
-    count here is the smaller change: six studies across the tree read that
-    shared sentence, and it is the sentence that makes "N of M cells" mean the
-    same thing in two reports.  Filed as a follow-up rather than fixed in place.
-    """
-    line = _cells_io.describe_load(prov)
-    starved = len(prov.get("no_positive_found") or ())
-    if starved:
-        line += f", {starved} header-only (no positive found)"
-    return line
-
-
 def resolve_pin(results: Path, frame: pd.DataFrame) -> int:
     """The draw production actually ships, taken from the APP, not from the grid.
 
@@ -868,7 +850,7 @@ def write_report(
     )
     lines.append("## What ran\n")
     lines.append("```\n" + json.dumps(shape, indent=2) + "\n```\n")
-    lines.append(f"Cells read: {coverage(prov)}\n")
+    lines.append(f"Cells read: {_cells_io.describe_load(prov)}\n")
     lines.append(f"Production's pinned split seed: **{pin}**\n")
     lines.append("## 1. The spread across calibration draws (headline: `cost`)\n")
     lines.append(_md(by_geo_band))
@@ -988,7 +970,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     out.mkdir(parents=True, exist_ok=True)
 
     frame, prov = load(results)
-    print(f"cells: {coverage(prov)}")
+    print(f"cells: {_cells_io.describe_load(prov)}")
     pin = resolve_pin(results, frame)
 
     shape_path = results / "grid_shape.json"
