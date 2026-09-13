@@ -1,0 +1,217 @@
+#!/usr/bin/env python
+"""Turn the #3585 gate frames into the two tables the decision needs.
+
+    python analyze_3585.py --analysis <dir>
+
+**Table 1, the gate.** Per arm and per path (fold cut vs cosine/text sort): how
+often does the candidate admit a different set of medias than the baseline
+does?  That is the issue's stated criterion - not the size of the threshold
+move, which the ``snap_cut_to_sample`` canonicalisation makes uninformative on
+its own, but whether any media crosses the line.  ``|delta threshold|`` rides
+along because a change with a large threshold move and no admitted-set change is
+a different situation from one with neither.
+
+**Table 2, the estimator.** When the two do differ, which one is the better fit?
+Both arms maximise the same mean log-likelihood, so the sign of its difference
+says whether the swap moved the cut toward the data or merely elsewhere.  A
+candidate that changed 3% of admitted sets while winning the likelihood
+comparison 3% of the time and losing it 0% is a different verdict from one that
+changed 3% and split them evenly.
+
+Pairing is exact: every arm sees the identical captured input, so a row pairs
+with its baseline on ``(cell, kind, case)`` with nothing to match approximately.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+#: The inclusion whose columns the gate turns on: the shipped default.
+GATE_INCLUSION = 0
+
+#: Below this many paired cases an arm's rate is not reported as a rate.  A
+#: "0% of 12" reads like a result and is not one.
+MIN_CASES = 30
+
+
+def _pair(df: pd.DataFrame, keys: list[str], value_cols: list[str]) -> pd.DataFrame:
+    """Join every arm's rows to the baseline's on *keys*."""
+    base = df[df["arm"] == "baseline"][keys + value_cols].rename(columns={c: f"base_{c}" for c in value_cols})
+    out = df[df["arm"] != "baseline"].merge(base, on=keys, how="inner", validate="many_to_one")
+    return out
+
+
+def gate_table(cuts: pd.DataFrame) -> pd.DataFrame:
+    """Per (arm, kind): admitted-set changes and the threshold moves behind them."""
+    tcol, acol = f"threshold_i{GATE_INCLUSION}", f"n_admitted_i{GATE_INCLUSION}"
+    df = cuts.copy()
+    df[tcol] = pd.to_numeric(df[tcol], errors="coerce")
+    df[acol] = pd.to_numeric(df[acol], errors="coerce")
+    df["seconds"] = pd.to_numeric(df["seconds"], errors="coerce")
+    paired = _pair(df, ["cell", "kind", "case"], [tcol, acol, "seconds", "provenance"])
+    paired["d_threshold"] = (paired[tcol] - paired[f"base_{tcol}"]).abs()
+    paired["d_admitted"] = (paired[acol] - paired[f"base_{acol}"]).abs()
+    paired["changed"] = paired["d_admitted"] > 0
+    paired["prov_changed"] = paired["provenance"] != paired["base_provenance"]
+    paired["speedup"] = paired["base_seconds"] / paired["seconds"].replace(0.0, np.nan)
+
+    rows = []
+    for (arm, kind), g in paired.groupby(["arm", "kind"], sort=False):
+        n = len(g)
+        changed = int(g["changed"].sum())
+        rows.append(
+            {
+                "arm": arm,
+                "kind": kind,
+                "cases": n,
+                "changed": changed,
+                "changed_pct": 100.0 * changed / n if n else float("nan"),
+                "rate_reportable": n >= MIN_CASES,
+                "prov_changed": int(g["prov_changed"].sum()),
+                "d_thr_median": g["d_threshold"].median(),
+                "d_thr_p90": g["d_threshold"].quantile(0.90),
+                "d_thr_max": g["d_threshold"].max(),
+                "d_adm_median_of_changed": g.loc[g["changed"], "d_admitted"].median(),
+                "d_adm_max": g["d_admitted"].max(),
+                "d_adm_frac_max": (g["d_admitted"] / g["n"]).max(),
+                "speedup_median": g["speedup"].median(),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def gate_by_env(cuts: pd.DataFrame) -> pd.DataFrame:
+    """The same rate, split by the environment - which is where it varies."""
+    tcol, acol = f"threshold_i{GATE_INCLUSION}", f"n_admitted_i{GATE_INCLUSION}"
+    df = cuts.copy()
+    df[acol] = pd.to_numeric(df[acol], errors="coerce")
+    df[tcol] = pd.to_numeric(df[tcol], errors="coerce")
+    paired = _pair(df, ["cell", "kind", "case"], [tcol, acol])
+    paired["changed"] = (paired[acol] - paired[f"base_{acol}"]).abs() > 0
+    paired["d_threshold"] = (paired[tcol] - paired[f"base_{tcol}"]).abs()
+    g = paired.groupby(["arm", "kind", "dataset", "embedder", "style"], sort=False)
+    return (
+        g.agg(
+            cases=("changed", "size"), changed=("changed", "sum"), d_thr_p90=("d_threshold", lambda s: s.quantile(0.9))
+        )
+        .assign(changed_pct=lambda d: 100.0 * d["changed"] / d["cases"])
+        .reset_index()
+    )
+
+
+def fit_table(fits: pd.DataFrame) -> pd.DataFrame:
+    """Per (arm, kind): who wins the likelihood the two arms are both maximising."""
+    df = fits.copy()
+    df["loglik"] = pd.to_numeric(df["loglik"], errors="coerce")
+    df["seconds"] = pd.to_numeric(df["seconds"], errors="coerce")
+    df["midpoint"] = pd.to_numeric(df["midpoint"], errors="coerce")
+    paired = _pair(df, ["cell", "kind", "case", "sample"], ["loglik", "seconds", "midpoint"])
+    paired["d_loglik"] = paired["loglik"] - paired["base_loglik"]
+    paired["speedup"] = paired["base_seconds"] / paired["seconds"].replace(0.0, np.nan)
+    # A tie is a difference below what float64 resolves on a mean over ~1e4
+    # points; calling those "wins" would inflate every arm equally.
+    tie = 1e-9
+    rows = []
+    for (arm, kind), g in paired.groupby(["arm", "kind"], sort=False):
+        d = g["d_loglik"]
+        rows.append(
+            {
+                "arm": arm,
+                "kind": kind,
+                "samples": len(g),
+                "better": int((d > tie).sum()),
+                "tied": int(d.abs().le(tie).sum()),
+                "worse": int((d < -tie).sum()),
+                "failed_here_only": int(g["loglik"].isna().sum() - g["base_loglik"].isna().sum()),
+                "d_loglik_median": d.median(),
+                "d_loglik_min": d.min(),
+                "speedup_median": g["speedup"].median(),
+                "seconds_median": g["seconds"].median(),
+                "base_seconds_median": g["base_seconds"].median(),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def bench_table(bench: pd.DataFrame) -> pd.DataFrame:
+    """Per (arm, n): min-of-k seconds and the speedup over the baseline."""
+    df = bench.copy()
+    df["seconds"] = pd.to_numeric(df["seconds"], errors="coerce")
+    df["n_bucket"] = df["n"].astype(int)
+    base = (
+        df[df["arm"] == "baseline"]
+        .groupby(["sample", "n_bucket"], sort=False)["seconds"]
+        .median()
+        .rename("base_seconds")
+        .reset_index()
+    )
+    merged = df.merge(base, on=["sample", "n_bucket"], how="left")
+    merged["speedup"] = merged["base_seconds"] / merged["seconds"].replace(0.0, np.nan)
+    g = merged.groupby(["arm", "n_bucket", "resampled"], sort=False)
+    return (
+        g.agg(
+            samples=("seconds", "size"),
+            seconds_median=("seconds", "median"),
+            seconds_p90=("seconds", lambda s: s.quantile(0.9)),
+            speedup_median=("speedup", "median"),
+            speedup_min=("speedup", "min"),
+        )
+        .reset_index()
+        .sort_values(["n_bucket", "arm"])
+    )
+
+
+def _md(df: pd.DataFrame, floats: int = 3) -> str:
+    """A markdown table at two significant digits by default (see the skill)."""
+    return df.to_markdown(index=False, floatfmt=f".{floats}g")
+
+
+def main(argv: "list[str] | None" = None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--analysis", required=True, help="directory holding gate_cuts.csv / gate_fits.csv")
+    ap.add_argument("--out", default=None, help="where the aggregates go (default: <analysis>/agg)")
+    args = ap.parse_args(list(argv) if argv is not None else None)
+
+    analysis = Path(args.analysis)
+    out = Path(args.out) if args.out else analysis / "agg"
+    out.mkdir(parents=True, exist_ok=True)
+
+    cuts = pd.read_csv(analysis / "gate_cuts.csv")
+    fits = pd.read_csv(analysis / "gate_fits.csv")
+    tables = {
+        "gate_by_arm.csv": gate_table(cuts),
+        "gate_by_env.csv": gate_by_env(cuts),
+        "fits_by_arm.csv": fit_table(fits),
+    }
+    bench_path = analysis / "bench.csv"
+    if bench_path.exists():
+        tables["bench_by_n.csv"] = bench_table(pd.read_csv(bench_path))
+    else:
+        print(f"no {bench_path} - skipping the cost table", file=sys.stderr)
+
+    lines = ["# #3585 gate tables", ""]
+    for name, df in tables.items():
+        df.to_csv(out / name, index=False)
+        lines += [f"## {name.removesuffix('.csv')}", "", _md(df), ""]
+    (out / "TABLES.md").write_text("\n".join(lines))
+
+    summary = {
+        "cells": int(cuts["cell"].nunique()),
+        "cases": int(cuts.groupby(["cell", "kind", "case"]).ngroups),
+        "arms": sorted(cuts["arm"].unique().tolist()),
+        "gate_inclusion": GATE_INCLUSION,
+    }
+    (out / "summary_3585.json").write_text(json.dumps(summary, indent=2))
+    print("\n".join(lines))
+    print(f"wrote {out}/ ({', '.join(tables)})")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

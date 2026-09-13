@@ -4,6 +4,8 @@
 #   bash launch_gmm_3585.sh list        # index -> cell map
 #   bash launch_gmm_3585.sh size 0,20   # time one binary and one region cell
 #   bash launch_gmm_3585.sh capture     # the array: real fit inputs -> corpus/*.npz
+#   bash launch_gmm_3585.sh sorts       # real cosine/text sort haystacks -> corpus/sorts*.npz
+#   bash launch_gmm_3585.sh ab          # the trajectory A/B, one grid per fit arm
 #   bash launch_gmm_3585.sh gate        # replay the corpus through every arm
 #   bash launch_gmm_3585.sh bench       # per-call cost, min-of-k, on real shapes
 #   bash launch_gmm_3585.sh status
@@ -211,6 +213,47 @@ PYSHAPE
     --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python capture_folds_3585.py --index \$SLURM_ARRAY_TASK_ID --stride $CAPTURE_STRIDE --out $CORPUS/cell_\$(printf '%04d' \$SLURM_ARRAY_TASK_ID).npz"
   ;;
 
+sorts)
+  # Two prepares, because the shapes that matter are at two SIZES: the overview
+  # grid's three datasets are 838-4952 medias, and vg_scale's cells are 18,050 -
+  # the closest thing in the pile to the ~250k a GUI Find subsamples from.
+  submit sorts --job-name="$JOB_NAME-sorts" --mem=32G --cpus-per-task=4 \
+    --time=3:00:00 --partition="$PARTITION" --export=ALL \
+    --output="$LOGS/sorts-%j.out" \
+    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python capture_sorts_3585.py --results $REUSE_PREPARE --out $CORPUS/sorts_overview.npz"
+  submit sortscale --job-name="$JOB_NAME-sortscale" --mem=32G --cpus-per-task=4 \
+    --time=3:00:00 --partition="$PARTITION" --export=ALL \
+    --output="$LOGS/sortscale-%j.out" \
+    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python capture_sorts_3585.py --results ${SCALE_PREPARE:-/expscratch/$USER/scale-3679/results} --embedders siglip,clip --max-categories 10 --out $CORPUS/sorts_vgscale.npz"
+  ;;
+
+ab)
+  # The trajectory A/B the gate cannot do: the threshold feeds Autopilot's Hard
+  # pick, so two arms diverge in WHICH ITEMS get voted on and only two whole
+  # runs can price that.  One grid per arm, paired by (category, seed) at
+  # analysis time by `analyze_ab.py`.
+  N=$(n_cells)
+  [[ "$N" =~ ^[0-9]+$ ]] || { echo "ERROR: could not determine cell count (got '$N')" >&2; exit 1; }
+  for arm in ${AB_ARMS:-native baseline}; do
+    AB_RESULTS="$CALIB_EXP/ab_$arm/results"
+    mkdir -p "$AB_RESULTS/cells"
+    ln -sfn "$REUSE_PREPARE/prepare_info.json" "$AB_RESULTS/prepare_info.json"
+    ln -sfn "$REUSE_PREPARE/crops" "$AB_RESULTS/crops"
+    submit "ab_$arm" --job-name="$JOB_NAME-ab-$arm" --array="0-$((N-1))%$CONC" \
+      --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" \
+      --partition="$PARTITION" --export=ALL \
+      --output="$LOGS/ab-$arm-%A_%a.out" \
+      --wrap="source $WT/gridenv.sh && $ENVX && export CALIB_RESULTS=$AB_RESULTS GMM_FIT_ARM=$arm && cd $HERE && python run_cells_arm_3585.py"
+  done
+  ;;
+
+abanalyze)
+  submit abanalyze --job-name="$JOB_NAME-abanalyze" --mem=32G --cpus-per-task=2 \
+    --time=2:00:00 --partition="$PARTITION" --export=ALL \
+    --output="$LOGS/abanalyze-%j.out" \
+    --wrap="source $WT/gridenv.sh && $ENVX && export CALIB_AB_ON=$CALIB_EXP/ab_native/results CALIB_AB_OFF=$CALIB_EXP/ab_baseline/results CALIB_AB_OUT=$ANALYSIS/ab && mkdir -p $ANALYSIS/ab && cd $CALIB && python analyze_ab.py"
+  ;;
+
 gate)
   submit gate --job-name="$JOB_NAME-gate" --mem="${GATE_MEM:-32G}" --cpus-per-task=2 \
     --time="${GATE_TIME:-8:00:00}" --partition="$PARTITION" --export=ALL \
@@ -231,11 +274,15 @@ status)
   echo "cells:   $(find "$CALIB_RESULTS/cells" -name 'task_*.csv' ! -name '*__*' 2>/dev/null | wc -l) main frames"
   echo "corpus:  $(find "$CORPUS" -name 'cell_*.npz' 2>/dev/null | wc -l) captures"
   echo "empty:   $(find "$CORPUS" -name 'cell_*.npz' -size 0 2>/dev/null | wc -l) zero-byte (delete before any resume)"
+  echo "sorts:   $(ls -1 "$CORPUS"/sorts*.npz 2>/dev/null | wc -l) sort captures"
   echo "gate:    $(ls -1 "$ANALYSIS"/gate_*.csv 2>/dev/null | wc -l) frames"
+  for arm in native baseline; do
+    echo "ab/$arm: $(find "$CALIB_EXP/ab_$arm/results/cells" -name 'task_*.csv' ! -name '*__*' 2>/dev/null | wc -l) cells"
+  done
   ;;
 
 *)
-  echo "usage: $0 {list|size IDXS|capture|gate|bench|status}" >&2
+  echo "usage: $0 {list|size IDXS|capture|sorts|gate|bench|ab|abanalyze|status}" >&2
   exit 1
   ;;
 esac

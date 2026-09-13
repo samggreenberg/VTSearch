@@ -102,14 +102,31 @@ def _meta(z) -> dict:
     return json.loads(bytes(z["_meta"].tobytes()).decode("utf-8"))
 
 
-def _cases(z) -> "dict[tuple[str, str, str], dict[str, np.ndarray]]":
-    """Group an npz's flat keys back into ``(kind, style, case) -> arrays``."""
-    out: dict[tuple[str, str, str], dict[str, np.ndarray]] = {}
+def _cases(z) -> "dict[tuple[str, str, str], tuple[dict[str, np.ndarray], dict[str, str]]]":
+    """Group an npz's flat keys into ``(kind, style, case) -> (arrays, overrides)``.
+
+    Two key shapes, because the two captures know different things about
+    themselves.  A cell capture is one cell, so its identity is in ``_meta`` and
+    its keys are ``kind|style|case|field``.  A sort capture walks a whole grid in
+    one process, so each key carries its own ``kind|dataset|embedder|category``
+    and *overrides* the file-level identity.
+    """
+    out: dict[tuple[str, str, str], tuple[dict[str, np.ndarray], dict[str, str]]] = {}
     for key in z.files:
         if key == "_meta":
             continue
-        kind, style, case, field = key.split("|")
-        out.setdefault((kind, style, case), {})[field] = z[key]
+        parts = key.split("|")
+        if len(parts) == 4:
+            kind, style, case, field = parts
+            override: dict[str, str] = {}
+        elif len(parts) == 5:
+            kind, dataset, embedder, case, field = parts
+            style, override = "text_sort", {"dataset": dataset, "embedder": embedder, "category": case}
+        else:
+            raise ValueError(f"unrecognised capture key {key!r}")
+        arrays, over = out.setdefault((kind, style, case), ({}, override))
+        arrays[field] = z[key]
+        over.update(override)
     return out
 
 
@@ -144,8 +161,8 @@ def _run_cell(path: Path, cut_rows: list, fit_rows: list) -> None:
         "category": meta.get("category", ""),
         "seed": meta.get("seed", ""),
     }
-    for (kind, style, case), arrays in sorted(_cases(z).items()):
-        row_base = {**base, "style": style, "kind": kind, "case": case}
+    for (kind, style, case), (arrays, override) in sorted(_cases(z).items()):
+        row_base = {**base, **override, "style": style, "kind": kind, "case": case}
         for arm, (fit_fn, _desc) in A.ARMS.items():
             with A.swap_fit(fit_fn):
                 if kind == "sort":
@@ -230,7 +247,7 @@ def main(argv: "list[str] | None" = None) -> int:
     ap.add_argument("--limit", type=int, default=0, help="stop after N cells (a smoke run)")
     args = ap.parse_args(list(argv) if argv is not None else None)
 
-    corpus = sorted(Path(args.corpus).glob("cell_*.npz"))
+    corpus = sorted(Path(args.corpus).glob("cell_*.npz")) + sorted(Path(args.corpus).glob("sorts*.npz"))
     if args.limit:
         corpus = corpus[: args.limit]
     if not corpus:

@@ -135,12 +135,20 @@ def _bindings() -> "list[tuple[Any, str]]":
     look like the baseline.  Collected by scanning the imported modules instead
     of by listing them, so a new call site cannot be forgotten here.
     """
-    out: "list[tuple[Any, str]]" = []
+    import vtscore.training.thresholds as pkg
+
+    # The two that must be patched whether or not anything has imported them
+    # yet: the definition, and the package attribute every deferred
+    # ``from vtscore.training.thresholds import fit_score_gmm`` resolves against
+    # when it finally runs.  A module imported *after* the swap therefore binds
+    # the arm rather than the default, which is what makes this usable around a
+    # whole cell run and not only around a call.
+    out: "list[tuple[Any, str]]" = [(G, "fit_score_gmm"), (pkg, "fit_score_gmm")]
     for mod in list(sys.modules.values()):
         name = getattr(mod, "__name__", "")
         if not (name.startswith("vtscore") or name.startswith("__main__")):
             continue
-        if getattr(mod, "fit_score_gmm", None) is not None:
+        if getattr(mod, "fit_score_gmm", None) is not None and not any(mod is m for m, _ in out):
             out.append((mod, "fit_score_gmm"))
     return out
 
