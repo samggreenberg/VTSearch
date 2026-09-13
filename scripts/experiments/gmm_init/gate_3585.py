@@ -102,16 +102,24 @@ def _meta(z) -> dict:
     return json.loads(bytes(z["_meta"].tobytes()).decode("utf-8"))
 
 
-def _cases(z) -> "dict[tuple[str, str, str], tuple[dict[str, np.ndarray], dict[str, str]]]":
-    """Group an npz's flat keys into ``(kind, style, case) -> (arrays, overrides)``.
+def _cases(z) -> "dict[tuple[str, ...], tuple[dict[str, np.ndarray], dict[str, str]]]":
+    """Group an npz's flat keys into ``case id -> (arrays, identity overrides)``.
 
     Two key shapes, because the two captures know different things about
     themselves.  A cell capture is one cell, so its identity is in ``_meta`` and
-    its keys are ``kind|style|case|field``.  A sort capture walks a whole grid in
-    one process, so each key carries its own ``kind|dataset|embedder|category``
-    and *overrides* the file-level identity.
+    its keys are ``kind|style|case|field``.  A sort capture walks a whole grid
+    in one process, so each key carries its own
+    ``kind|dataset|embedder|category`` and *overrides* the file-level identity.
+
+    **The case id has to carry the whole identity, not just the case name.**
+    Keying a sort capture on ``(kind, style, case)`` puts
+    ``caltech101_m|siglip|airplanes`` and ``caltech101_m|siglip2_l|airplanes``
+    in the same bucket, and the second silently overwrites the first: the first
+    run of this gate analysed 29 of the 62 captured sorts and said nothing,
+    because a dropped case looks exactly like a case that was never captured.
+    A collision now raises.
     """
-    out: dict[tuple[str, str, str], tuple[dict[str, np.ndarray], dict[str, str]]] = {}
+    out: dict[tuple[str, ...], tuple[dict[str, np.ndarray], dict[str, str]]] = {}
     for key in z.files:
         if key == "_meta":
             continue
@@ -119,12 +127,17 @@ def _cases(z) -> "dict[tuple[str, str, str], tuple[dict[str, np.ndarray], dict[s
         if len(parts) == 4:
             kind, style, case, field = parts
             override: dict[str, str] = {}
+            case_id: tuple[str, ...] = (kind, style, case)
         elif len(parts) == 5:
             kind, dataset, embedder, case, field = parts
-            style, override = "text_sort", {"dataset": dataset, "embedder": embedder, "category": case}
+            style = "text_sort"
+            override = {"dataset": dataset, "embedder": embedder, "category": case}
+            case_id = (kind, style, case, dataset, embedder)
         else:
             raise ValueError(f"unrecognised capture key {key!r}")
-        arrays, over = out.setdefault((kind, style, case), ({}, override))
+        arrays, over = out.setdefault(case_id, ({}, override))
+        if field in arrays:
+            raise ValueError(f"two captured arrays collide on {case_id!r} at field {field!r} (key {key!r})")
         arrays[field] = z[key]
         over.update(override)
     return out
@@ -161,7 +174,11 @@ def _run_cell(path: Path, cut_rows: list, fit_rows: list) -> None:
         "category": meta.get("category", ""),
         "seed": meta.get("seed", ""),
     }
-    for (kind, style, case), (arrays, override) in sorted(_cases(z).items()):
+    cases = _cases(z)
+    n_arrays = len([k for k in z.files if k != "_meta"])
+    print(f"  {path.name}: {len(cases)} cases from {n_arrays} arrays", flush=True)
+    for case_id, (arrays, override) in sorted(cases.items()):
+        kind, style, case = case_id[0], case_id[1], case_id[2]
         row_base = {**base, **override, "style": style, "kind": kind, "case": case}
         for arm, (fit_fn, _desc) in A.ARMS.items():
             with A.swap_fit(fit_fn):
