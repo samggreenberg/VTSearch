@@ -24,6 +24,14 @@ Three sources feed one file, and they are *not* interchangeable:
 * **triage flags** -- a model pass over the ranked negatives, which finds
   contaminated negatives efficiently but draws no boxes.
 
+**A human row carries the rule it was answered under; a triage row does not**
+(#3814). The stamp is *carried* from the verdict, never re-derived here -- this
+script reads August verdict files and would otherwise write September's rule onto
+them, which is the silent re-interpretation the field exists to prevent. Triage
+rows get none on purpose: no reviewer read a rule, so there is no wording to
+record, and `unknown` is the true answer rather than a gap to fill. Rows merged
+from another campaign pass through exactly as that campaign wrote them.
+
 **Boxes are written NORMALISED, and say so.** A drawn box arrives as the app's
 `region_box`, which is already in [0, 1], while VG's and COCO's are in pixels.
 The builder normalises every box it merges, so an undeclared correction box was
@@ -106,6 +114,20 @@ def log(msg: str) -> None:
 
 def _cell_band(cell: str) -> str:
     return cell.rsplit("@", 1)[1] if "@" in cell else ""
+
+
+def _rule(verdict: dict) -> dict[str, str]:
+    """The verdict's own rule stamp, CARRIED and never re-derived (#3814).
+
+    This script runs long after the votes it reads: the live file is the union of
+    two campaigns whose verdict files are dated August, and a regeneration today
+    would stamp September's rule onto every one of them. So the stamp travels
+    with the verdict from `ingest_slate.py`, which took it from the slate the
+    reviewer was actually shown, and a verdict that carries none produces a row
+    that carries none -- unknown, which is the honest answer and the only one
+    available for the rows that predate the field.
+    """
+    return {k: verdict[k] for k in ("rule", "rule_digest") if verdict.get(k)}
 
 
 def _box_band(box: list[float]) -> str:
@@ -212,6 +234,7 @@ def main() -> int:
                 out[key] = {
                     "image_id": key[0],
                     "class": key[1],
+                    **_rule(v),
                     "present": True,
                     "boxes": [box] if box else [],
                     "box_space": pc.CORRECTION_BOX_SPACE,
@@ -226,6 +249,7 @@ def main() -> int:
                     out[key] = {
                         "image_id": key[0],
                         "class": key[1],
+                        **_rule(v),
                         "present": True,
                         "boxes": [box],
                         "box_space": pc.CORRECTION_BOX_SPACE,
@@ -256,6 +280,7 @@ def main() -> int:
                     out[key] = {
                         "image_id": key[0],
                         "class": key[1],
+                        **_rule(v),
                         "present": True,
                         "boxes": [],
                         "box_space": pc.CORRECTION_BOX_SPACE,
@@ -277,6 +302,7 @@ def main() -> int:
                 out[key] = {
                     "image_id": key[0],
                     "class": key[1],
+                    **_rule(v),
                     "present": False,
                     "boxes": [],
                     "source": "human_reject+adjudicated_definition",
@@ -289,6 +315,7 @@ def main() -> int:
                 out[key] = {
                     "image_id": key[0],
                     "class": key[1],
+                    **_rule(v),
                     "present": False,
                     "boxes": [],
                     "source": "human_reject+adjudicated",

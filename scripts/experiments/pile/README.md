@@ -364,6 +364,50 @@ labels with a perfectly healthy media count. It now stamps a digest of the
 parent's labels, `--verify` compares that against the live parent, and a run
 that rebuilds `vg_scale` pulls the derived dataset in with it.
 
+## A row records the rule it was answered under
+
+The class rule *is* the question: it is the detector name a reviewer reads while
+voting (#3612), and files are named by image id alone. So when a ruling changes a
+rule, every row cast under the old wording silently starts meaning something
+else. That is not hypothetical — it cost the 80-image planter recheck. `vase`
+claimed "flower pots, planters" until #3784 withdrew the line, and nothing on the
+31 `vase` rows or the 49 `bowl` rows said which wording they were cast under, so
+all 80 had to go back in front of a human (#3778) to find the **21** that had
+actually moved.
+
+A row therefore carries two more optional fields (#3814): `rule`, the name the
+reviewer saw, and `rule_digest`, a hash of that rule's full `test` — because a
+rule can be rewritten in the body while the name stands still (#3756 did that to
+`bench`). Recording both is what separates "the reviewer read different words"
+from "the wording behind identical words moved".
+
+Three properties, and the third is the one that makes the field worth anything:
+
+- **The stamp is taken from what the reviewer was shown, never from the table.**
+  `ingest_slate.py` reads it off the slate's `detector` column; `apply_recheck.py`
+  takes it from the labelset it has just verified; `verdicts_to_corrections.py`
+  *carries* it and never re-derives one. That script reads August verdict files
+  and runs today — stamping them from `SCALE_CLASS_RULES` would write a wording
+  their reviewers never saw, which looks like a fix and is the bug.
+- **A recheck stamps both directions.** A Bad retires the row and carries the
+  rule that retired it; a **Good** changes no label and establishes the one thing
+  nothing else can — that a human looked under the rule now in force. 59 of the
+  80 planter images came back that way.
+- **Absence means unknown, and is never read as current.** The 872 rows written
+  before the field cannot be back-filled from anything, and treating them as
+  answered would be the original failure rather than a rounding of it.
+
+Asking the question is `rule_drift.py`, which sorts every row into `current` /
+`edited` / `superseded` / `unknown` and will print the superseded ids as a recheck
+slate. Every build additionally names the **superseded** count as it loads the
+file — and says nothing about `unknown`, which starts at 872, nobody can act on
+mid-run, and would train everyone to skip the line that matters.
+
+```bash
+python rule_drift.py                            # the table
+python rule_drift.py --state superseded --ids   # the slate a ruling implies
+```
+
 ## A rebox can change the band, and that is a correction
 
 An image sits in `class@band` because of the box it arrived with, so a reviewer
