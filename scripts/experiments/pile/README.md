@@ -286,9 +286,29 @@ unbounded surfaces (`sky`, `grass`, `floor`) are excluded by
 `pile_config.is_object_category`, which matches on the **head noun** so
 `blue sky` is dropped while `blue jeans` and `tennis ball` survive.
 
-Rebuild the scan behind them with `python scan_vg_boxes.py` (writes
-`vg_box_scale.json`; caches image dims, since `objects.json` stores boxes in
-pixels and carries no image dimensions).
+Rebuild the scan behind them with `python scan_vg_boxes.py` — but **read the
+next paragraph before you do**, because its default `--out` is not a safe thing
+to run.
+
+**A default-`--out` rerun silently redefines three published datasets.** The
+scanner has moved twice since `vg_box_scale.json` was written (per-image compact
+filtering in `10239c24e`, per-band supply in `fb4f4ec03`), and the two qualify
+categories differently, so rewriting the file in place changes what
+`vg_box_*@small|medium|large` *contain* while the numbers in #3129 and #3156 go
+on describing the old contents. `pilebuild/boxscan.py` reads the pre-envelope
+file deliberately for exactly that reason — the file on scratch is **meant** to
+be old. To refresh only the **dims cache** (`vg_image_dims.json`, which every
+VG-derived build reads and nothing publishes), send the scan somewhere else:
+
+```bash
+python scan_vg_boxes.py --out /expscratch/$USER/scratch-scan.json   # dims cache only
+```
+
+That cache is filled per image rather than all-or-nothing (#3822): a rerun reads
+headers only for files it has not seen — 170 of 108,245 the last time, two
+seconds — and a cache that is short does not stop being used. `objects.json`
+stores boxes in pixels and carries no image dimensions, which is why the cache
+exists at all.
 
 **Banding by median puts each category in exactly one band**, so these three
 sets carry disjoint vocabularies and a small-vs-large difference confounds box
