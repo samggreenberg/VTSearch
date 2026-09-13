@@ -96,7 +96,10 @@ def test_no_two_passes_of_one_class_share_a_detector(pc):
     seen: dict[str, str] = {}
     classes = set(pc.SCALE_CLASSES) | set(pc.SCALE_CLASS_RULES)
     for cls in sorted(classes):
-        for suffix in ("", "positives", "audit", "reviewed"):
+        # `REVIEW_SUFFIXES` rather than a copy of the list: `rule_of_review_name`
+        # undoes this join to read a past review's rule off its detector (#3814),
+        # so a suffix known to one and not the other is a silent misparse.
+        for suffix in ("", *pc.REVIEW_SUFFIXES):
             name = pc.review_name(cls, suffix)
             assert name not in seen, f"{cls}/{suffix!r} collides with {seen[name]}"
             seen[name] = f"{cls}/{suffix!r}"

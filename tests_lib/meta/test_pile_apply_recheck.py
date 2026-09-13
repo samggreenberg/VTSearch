@@ -38,11 +38,18 @@ def _verdict(iid: int) -> dict:
     return {"filename": f"{iid}.jpg", "label": "good", "md5": "x"}
 
 
-def _labelset(cls: str = "vase", good: list[int] | None = None, bad: list[int] | None = None, rule: str = RULE) -> dict:
+def _labelset(
+    cls: str = "vase",
+    good: list[int] | None = None,
+    bad: list[int] | None = None,
+    rule: str = RULE,
+    digest: str | None = None,
+) -> dict:
     return {
         "class": cls,
         "kind": "recheck",
         "rule": rule,
+        **({"rule_digest": digest} if digest else {}),
         "question": "does this photo contain one under the revised rule?",
         "good": [_verdict(i) for i in good or []],
         "bad": [_verdict(i) for i in bad or []],
@@ -83,12 +90,18 @@ class TestPlan:
 
         assert RULE in rows[0]["note"] and "3778" in rows[0]["note"]
 
-    def test_a_good_verdict_leaves_its_row_exactly_as_it_was(self, ar):
-        """Re-confirmation changes nothing: the row and its box were right all along."""
+    def test_a_good_verdict_leaves_its_ANSWER_exactly_as_it_was(self, ar):
+        """Re-confirmation changes no label: the row and its box were right all along.
+
+        It does add the one thing the row could not otherwise carry -- which rule
+        a human answered it under (#3814) -- so `rows == [before]` is no longer
+        the property. Everything that was on the row still is, unchanged.
+        """
         before = _row(7)
         rows, stats, problems = ar.plan({"vase": _labelset(good=[7])}, [before], {"vase": RULE})
 
-        assert problems == [] and rows == [before]
+        assert problems == []
+        assert {k: v for k, v in rows[0].items() if k != "rule"} == before
         assert stats["vase: re-confirmed"] == 1 and not stats["rows changed"]
 
     def test_it_touches_no_other_class(self, ar):
@@ -111,6 +124,70 @@ class TestPlan:
         rows, _, _ = ar.plan({"vase": _labelset(good=[1, 2], bad=[3])}, [_row(i) for i in (1, 2, 3)], {"vase": RULE})
 
         assert len(rows) == 3
+
+
+class TestTheRuleStamp:
+    """A recheck is the one pass that can say which rule a row was answered under.
+
+    It has just proved the labelset's rule is the one in force, so writing that
+    onto the rows it touched costs nothing and ends the question for them. The
+    Good half matters more than the Bad: 59 of the 80 planter images came back
+    re-confirmed, and nothing in the file could say so (#3778, #3814).
+    """
+
+    DIGEST = "0123456789ab"
+
+    def test_a_retired_row_carries_the_rule_that_retired_it(self, ar):
+        rows, _, _ = ar.plan({"vase": _labelset(bad=[7])}, [_row(7)], {"vase": RULE})
+
+        assert rows[0]["rule"] == RULE
+
+    def test_a_re_confirmed_row_carries_the_rule_it_was_re_confirmed_under(self, ar):
+        rows, stats, _ = ar.plan({"vase": _labelset(good=[7])}, [_row(7)], {"vase": RULE})
+
+        assert rows[0]["rule"] == RULE
+        assert stats["rows stamped"] == 1
+
+    def test_the_digest_is_recorded_when_the_labelset_pinned_one(self, ar):
+        ls = _labelset(good=[7], digest=self.DIGEST)
+        rows, _, problems = ar.plan({"vase": ls}, [_row(7)], {"vase": RULE}, {"vase": self.DIGEST})
+
+        assert problems == []
+        assert rows[0]["rule_digest"] == self.DIGEST
+
+    def test_no_digest_is_INVENTED_for_a_labelset_that_pinned_none(self, ar):
+        """A name is the weaker claim and the true one; the table's digest was never checked."""
+        rows, _, _ = ar.plan({"vase": _labelset(good=[7])}, [_row(7)], {"vase": RULE}, {"vase": self.DIGEST})
+
+        assert rows[0]["rule"] == RULE
+        assert "rule_digest" not in rows[0]
+
+    def test_a_row_nobody_re_answered_is_left_unstamped(self, ar):
+        """The law: only an actual answer moves a row out of `unknown`."""
+        other = _row(8)
+        rows, _, _ = ar.plan({"vase": _labelset(good=[7])}, [_row(7), other], {"vase": RULE})
+
+        assert other in rows
+
+    def test_an_already_retired_row_is_back_filled_on_a_re_run(self, ar):
+        """The 21 rows this pass retired before the field existed.
+
+        The one back-fill the design permits, and it is not really one: the
+        evidence is the labelset beside the file, not a guess about what someone
+        was shown.
+        """
+        retired = {**_row(7, present=False), "source": ar.SOURCE_RECHECK}
+        rows, stats, _ = ar.plan({"vase": _labelset(bad=[7])}, [retired], {"vase": RULE})
+
+        assert rows[0]["rule"] == RULE
+        assert stats["already retired"] == 1 and stats["rows stamped"] == 1
+
+    def test_stamping_is_idempotent(self, ar):
+        once, _, _ = ar.plan({"vase": _labelset(good=[7], bad=[8])}, [_row(7), _row(8)], {"vase": RULE})
+        twice, stats, problems = ar.plan({"vase": _labelset(good=[7], bad=[8])}, once, {"vase": RULE})
+
+        assert problems == [] and twice == once
+        assert not stats["rows stamped"] and not stats["rows changed"]
 
 
 class TestRefusals:
@@ -139,6 +216,26 @@ class TestRefusals:
         _, _, problems = ar.plan({"vase": _labelset(good=[7])}, [_row(7, present=False)], {"vase": RULE})
 
         assert any("already says absent" in p for p in problems)
+
+    def test_a_labelset_whose_rule_was_EDITED_under_its_own_name_is_refused(self, ar):
+        """The finer half of the same check: #3756 rewrote `bench`'s Bad list in place.
+
+        The reviewer read identical words off the detector and was answering
+        about a different boundary. Weaker than a rename and refused the same
+        way, because the alternative is deciding for them which edits were
+        cosmetic.
+        """
+        ls = _labelset(bad=[7], digest="0123456789ab")
+        rows, _, problems = ar.plan({"vase": ls}, [_row(7)], {"vase": RULE}, {"vase": "ffffffffffff"})
+
+        assert len(problems) == 1 and "EDITED" in problems[0]
+        assert rows == [_row(7)], "a refusal writes nothing"
+
+    def test_an_unpinned_labelset_is_NOT_refused_by_the_digest_check(self, ar):
+        """Every labelset banked before #3814 records a name and no digest."""
+        _, _, problems = ar.plan({"vase": _labelset(bad=[7])}, [_row(7)], {"vase": RULE}, {"vase": "ffffffffffff"})
+
+        assert problems == []
 
     def test_a_labelset_of_another_kind_is_refused(self, ar):
         """A slate asks "is this box one?" -- a different question with the same shape."""

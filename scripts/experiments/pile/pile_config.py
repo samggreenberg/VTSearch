@@ -26,6 +26,7 @@ mis-specification has burned three studies (#2877, #2897, #2905), so
 
 from __future__ import annotations
 
+import hashlib
 import os
 from pathlib import Path
 from typing import NamedTuple
@@ -2183,6 +2184,70 @@ def review_name(cls: str, suffix: str = "") -> str:
     """
     rule = SCALE_CLASS_RULES.get(cls)
     return f"{rule.name if rule else cls}{f' {suffix}' if suffix else ''}"
+
+
+#: The pass suffixes :func:`review_name` appends. Listed so the join can be
+#: undone: a slate's ``detector`` column is the only place a *past* review's rule
+#: name survives, and reading it back is what lets a verdict be stamped with the
+#: wording its reviewer saw rather than the wording in force today.
+REVIEW_SUFFIXES = ("positives", "audit", "reviewed")
+
+
+def rule_of_review_name(detector: str) -> str:
+    """The rule name inside a slate's ``detector``, with the pass suffix removed.
+
+    The inverse of :func:`review_name`, and it has to be an inverse rather than a
+    guess: a detector name is *evidence about the past*. ``make_class_recheck.py``
+    additionally appends a ``" -- ..."`` tail naming the question, which
+    ``bank_verdicts.py`` already strips the same way.
+
+    ``tests_lib/meta/test_pile_rule_version.py`` pins the round trip over every
+    class and every suffix, so a new suffix that is not listed above fails there
+    rather than silently reading as part of the rule.
+    """
+    name = detector.split(" -- ")[0]
+    for suffix in REVIEW_SUFFIXES:
+        if name.endswith(f" {suffix}"):
+            return name[: -len(suffix) - 1]
+    return name
+
+
+def rule_digest(cls: str) -> str:
+    """A short hash of *cls*'s rule **as written** -- the name and the test together.
+
+    The name answers "was the reviewer shown different words?". It does not
+    answer "did the rule move?", because a rule can be edited in the body while
+    the name stands still: #3756 rewrote `bench`'s Bad list and kept its name.
+    Both questions are worth asking and only one of them is readable in a diff,
+    so both are recorded -- the name because it is the wording a reviewer saw and
+    a human can check it at a glance, the digest because it is the only thing
+    that can see an edit the name hides.
+
+    Twelve hex characters, which is a hash to compare rather than a hash to
+    defend: the adversary here is a forgotten edit, not a forger.
+    """
+    rule = SCALE_CLASS_RULES.get(cls)
+    payload = f"{rule.name if rule else cls}\n{rule.test if rule else ''}"
+    return hashlib.sha256(payload.encode()).hexdigest()[:12]
+
+
+def rule_stamp(cls: str) -> dict[str, str]:
+    """The two fields a row records about the rule it was answered under (#3814).
+
+    Merge into a verdict or a correction row at the moment the answer is
+    *given*, never at the moment a file is regenerated: a row cast in August and
+    re-derived in September must carry August's rule, or the stamp asserts the
+    one thing it exists to disprove. Every writer here therefore takes its name
+    from what the reviewer was shown -- the slate's ``detector`` column, or a
+    labelset's recorded ``rule`` -- and falls back to this only when the two
+    already agree.
+
+    **Absence means unknown and must never be read as current.** The 872 rows
+    predating this field cannot be back-filled honestly: nothing on disk says
+    which wording they were cast under, which is the whole of #3814. See
+    :func:`pilebuild.corrections.rule_state`.
+    """
+    return {"rule": review_name(cls), "rule_digest": rule_digest(cls)}
 
 
 def scale_vg_wanted() -> set[str]:

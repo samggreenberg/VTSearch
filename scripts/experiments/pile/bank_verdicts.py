@@ -5,6 +5,14 @@ rename removed from every detector name -- so both kinds collapsed onto one
 filename and the later write clobbered the earlier. The question a detector asks
 is the thing that actually distinguishes them, so it is what the filename
 follows, and a collision is now an error rather than a silent overwrite.
+
+**The labelset records the rule's digest beside its name** (#3814), when and only
+when the detector's name still matches the rule in force. The name is what the
+reviewer read; the digest covers the ``test`` behind it, which can be rewritten
+without the name moving (#3756 did that to `bench`). `apply_recheck.py` refuses a
+pass whose digest has moved and stamps the surviving rows with it, so the pair is
+what lets a later reader tell "voted under this rule" from "voted under a rule
+spelt this way".
 """
 
 import json
@@ -14,6 +22,9 @@ import subprocess
 import sys
 import urllib.parse
 import urllib.request
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import pile_config as pc  # noqa: E402
 
 _SQUEUE = shutil.which("squeue") or "/usr/bin/squeue"
 _ARGS = [_SQUEUE, "-u", "sgreenberg", "-h", "-n", "vtsearch", "-o", "%N"]
@@ -67,11 +78,18 @@ for d in sorted(get("/api/detectors/registry")["detectors"], key=lambda x: x["na
         fail = True
         continue
     written[p] = name
+    # Only when the detector still names the rule in force. A detector left over
+    # from before a ruling names the OLD rule, and there is nothing on the
+    # cluster that can reconstruct the body that rule used to have -- so the
+    # labelset records the name it really asked and stays silent about the
+    # wording, which is the weaker claim and the true one.
+    digest = {"rule_digest": pc.rule_digest(cls)} if rule == pc.review_name(cls) else {}
     p.write_text(
         json.dumps(
             {
                 "detector_name": name,
                 "rule": rule,
+                **digest,
                 "class": cls,
                 "kind": kind,
                 "question": QUESTION[kind],
