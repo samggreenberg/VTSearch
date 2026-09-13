@@ -86,18 +86,18 @@ rather than counted.
 `BAND_MAX_INFLATION` = 1.5x its largest single instance, because the union then
 describes the scatter rather than the object (#3156). The median dropped image is
 at **3.3x** (quartiles 2.1 / 3.3 / 5.4, max 68x), and 47 of the 77 carry just two
-instances. Only **15 of 77** sit within 2x of the cut, and of those 15 only
-**two** have a union small enough to land anywhere but `large` — so even a
-deliberate loosening of the guard buys two images, in cells with 500 to 2,000
-spare candidates. The ratio is scale-free and that is a real property worth
+instances. Only **15 of 77** sit below 2x, and of those 15 only **two** have a
+union small enough to land anywhere but `large` — so even a deliberate loosening
+of the guard buys two images, in cells with 500 to 2,000 spare candidates. The ratio is scale-free and that is a real property worth
 knowing (two small instances a little apart trip it while their union is still a
 perfectly draggable region — `sink` 2317970 is 1.94x on a union covering 0.3% of
 the frame), but it is not costing this dataset supply.
 
 **Oversize (9).** These are boxes covering **80.2% to 98.5%** of the frame, against
-a `MAX_VOTED_AREA` of 80%. Eight of the nine are 82% or more. A box that size is
-not a region, it is the image, which is the entire content of the rule; one image
-at 80.2% is a genuine near-miss and one image is not a reason to move a cut.
+a `MAX_VOTED_AREA` of 80%. Exactly one is within a point of the cut; the other
+eight run from 81.8% to 98.5%. A box that size is not a region, it is the image,
+which is the entire content of the rule, and one near-miss is not a reason to move
+a cut.
 
 ## Every cell is over-subscribed
 
