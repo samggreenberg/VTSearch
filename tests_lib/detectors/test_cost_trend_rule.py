@@ -233,7 +233,10 @@ class TestAppIndicatorPlumbing:
             lambda cache, eval_set, inclusion_value, indices=None: [{"error_cost": c} for c in costs],
         )
         steps = list(range(len(costs))) if model_steps is None else model_steps
-        return labeling_progress._smart_status_uncached(None, steps, None, 0, good, bad)
+        # The cache is only ever handed on to ``_eval_cached_models``, stubbed
+        # above, so an empty one carries everything this branch reads.
+        cache = labeling_progress._ProgressCache(key=("dataset", "detector"))
+        return labeling_progress._smart_status_uncached(cache, steps, None, 0, good, bad)
 
     def test_red_below_five_per_class(self, monkeypatch):
         result = self._status(monkeypatch, [0.3] * SMART_WINDOW, good=MIN_PER_CLASS - 1)
