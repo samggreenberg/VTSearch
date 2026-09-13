@@ -10,6 +10,7 @@
 #   bash launch_gmm_3585.sh abfigures   # quality-over-clicks + the interactive viewer
 #   bash launch_gmm_3585.sh gate        # replay the corpus through every arm
 #   bash launch_gmm_3585.sh bench       # per-call cost, min-of-k, on real shapes
+#   bash launch_gmm_3585.sh analyse     # the gate tables and the report's figures
 #   bash launch_gmm_3585.sh status
 #
 # THE QUESTION.  `fit_score_gmm` is 91-95% of a cosine/text sort and the larger
@@ -256,6 +257,13 @@ ab)
   done
   ;;
 
+analyse)
+  submit analyse --job-name="$JOB_NAME-analyse" "${DEP_ARG[@]}" --mem=32G --cpus-per-task=2 \
+    --time=1:00:00 --partition="$PARTITION" --export=ALL \
+    --output="$LOGS/analyse-%j.out" \
+    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python analyze_3585.py --analysis $ANALYSIS --corpus $CORPUS && python figures_3585.py --analysis $ANALYSIS"
+  ;;
+
 baseline)
   # Click 0 is the free text sort, and `curves.py` refuses to draw without it.
   submit baseline --job-name="$JOB_NAME-baseline" "${DEP_ARG[@]}" --mem=16G --cpus-per-task=2 \
@@ -317,7 +325,7 @@ status)
   ;;
 
 *)
-  echo "usage: $0 {list|size IDXS|capture|sorts|gate|bench|ab|baseline|abfigures|abanalyze|status}" >&2
+  echo "usage: $0 {list|size IDXS|capture|sorts|gate|bench|analyse|ab|baseline|abfigures|abanalyze|status}" >&2
   exit 1
   ;;
 esac
