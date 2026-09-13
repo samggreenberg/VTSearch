@@ -107,12 +107,25 @@ be the ones that make the point). Full list in
 | sink | 67 | coverage | 21 | leg of a chair, an outlet, l shaped counter top, ceiling, picture frame, flowers |
 | stop sign | 3833 | **withheld** | 67 | street, road, car, grass, sidewalk, leaves, tree, line |
 
-Two things a reader should take from these. `bench 56` carries **eight** names
-for the whole photo — VG's annotation density, not its vocabulary, is what
-misses that bench. And `bench 75` is the same image as `book 75`: a kitchen
-described in 32 names, holding a confirmed seat *and* a confirmed book, neither
-of which VG names. Dense scenes are not exhaustively described, which is exactly
-the property `vg_scale` was built to work around.
+Three things a reader should take from these.
+
+**Density, not vocabulary, is the usual cause.** `bench 56` carries eight object
+annotations spanning **two distinct words** — `window` and `building` — for the
+whole photo. No name table reaches a bench nobody wrote down.
+
+**One image can be silent about several classes at once.** `bench 75` and
+`book 75` are the same picture: a kitchen with 32 annotations over 14 distinct
+names, holding a confirmed bench *and* a confirmed book, neither named. Dense
+scenes are not exhaustively described, which is the property `vg_scale` exists
+to work around.
+
+**`coverage` is itself an upper bound, and that image shows why.** Among those
+14 names are `seat` and `white cushion`. Neither is in `bench`'s tables, so the
+classifier calls the pair coverage — correctly, since the tables are the only
+authority on what counts as the same object and a resemblance rule here would
+manufacture findings out of `bike rack`. But it means the coverage bucket still
+holds some vocabulary misses under names nobody has audited (#3618's loop), and
+the true VG-silence rate is at or below 1.0% rather than at it.
 
 ## What the rate is, and is not
 

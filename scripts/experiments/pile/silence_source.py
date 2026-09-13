@@ -14,8 +14,11 @@ So this reads VG's own `objects.json` and splits every confirmed error three
 ways:
 
 * **coverage** -- no name on the image belongs to the class under any spelling
-  the tables know. VG genuinely did not describe it, and no name table can
-  repair that;
+  the tables know. This is the reading that matters, and it is itself an upper
+  bound: a name nobody has audited yet (`seat` for a bench) lands here, because
+  the tables are the only authority on what counts as the same object and a
+  resemblance rule would manufacture findings out of `bike rack`. #3618 is the
+  loop that shrinks it;
 * **withheld** -- VG used a name `SCALE_VG_AMBIGUOUS` deliberately refuses
   (`bike`, `stop`, `sailboat`). VG spoke; the build declined to listen, which is
   a ruling and not an error;
