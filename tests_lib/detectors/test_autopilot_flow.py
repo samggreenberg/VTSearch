@@ -18,12 +18,14 @@ import math
 import numpy as np
 import pytest
 
+from vtscore.detectors.cost_trend import smart_status_from_costs
 from vtscore.eval.al_strategies import ALContext, select_next
 from vtscore.eval.autopilot_flow import (
     BAD_TARGET,
     GOOD_TARGET,
     MIN_PER_CLASS,
     SMART_FLAT_THRESHOLD,
+    SMART_SLOPE_T,
     SPAN_YELLOW,
     STABLE_MAX_THRESHOLD,
     STABLE_RATE_THRESHOLD,
@@ -35,6 +37,11 @@ from vtscore.eval.autopilot_flow import (
     span_status,
     stable_status,
 )
+
+
+#: A real plateaued window from the #3832 dice reproduction; see
+#: ``tests_lib/detectors/test_cost_trend_rule.py``.
+PLATEAU_WINDOW = [0.861, 0.832, 0.861, 0.861, 0.861, 0.887, 0.755, 0.669, 0.699, 0.857]
 
 
 def _sim_clips(n=160, dim=16):
@@ -95,11 +102,13 @@ class TestPortedConstants:
 
     def test_indicator_gates_match_labeling_progress(self):
         # _compute_smart_status / _compute_stable_status: "Need at least 5 good
-        # and 5 bad"; FLAT_THRESHOLD -0.015; stable rate/max 0.005 / 0.01
-        # (of the whole pool, confident flips only - see
-        # vtscore.detectors.stability, which both sides now call).
+        # and 5 bad"; flat threshold -0.015 and a slope worth 2 standard errors
+        # (see vtscore.detectors.cost_trend); stable rate/max 0.005 / 0.01 (of
+        # the whole pool, confident flips only - see vtscore.detectors.stability).
+        # Both rules are now called by the app as well as re-exported here.
         assert MIN_PER_CLASS == 5
         assert SMART_FLAT_THRESHOLD == -0.015
+        assert SMART_SLOPE_T == 2.0
         assert STABLE_RATE_THRESHOLD == 0.005
         assert STABLE_MAX_THRESHOLD == 0.01
         assert SPAN_YELLOW == 10
@@ -174,6 +183,8 @@ class TestDetectorVisibility:
 
 
 class TestSmartStatus:
+    """The wrapper only; the rule is pinned in ``test_cost_trend_rule.py``."""
+
     def test_red_below_five_per_class(self):
         assert smart_status([0.5, 0.4, 0.3], MIN_PER_CLASS - 1, 9) == "red"
         assert smart_status([0.5, 0.4, 0.3], 9, MIN_PER_CLASS - 1) == "red"
@@ -189,6 +200,15 @@ class TestSmartStatus:
 
     def test_green_when_the_cost_is_rising(self):
         assert smart_status([0.2, 0.3, 0.4, 0.5], 9, 9) == "green"
+
+    def test_it_is_the_shared_rule_and_not_a_copy_of_it(self):
+        """Same inputs, same light as ``/api/labeling-status`` shows the user."""
+        for costs in ([0.9, 0.7, 0.5, 0.3], [0.3] * 6, PLATEAU_WINDOW):
+            assert smart_status(costs, 9, 9) == smart_status_from_costs(costs, 9, 9)["status"]
+
+    def test_a_noisy_plateau_does_not_hold_the_simulated_user_in_hard(self):
+        """The #3832 flap, at the level the harness reads it."""
+        assert smart_status(PLATEAU_WINDOW, 9, 9) == "green"
 
 
 def _entry(flips: int, confident: int | None = None, *, unlabeled: int = 500, pool: int = 1000) -> dict:

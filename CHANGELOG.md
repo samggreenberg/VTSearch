@@ -17,6 +17,21 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The Smart indicator no longer flaps on a category that has plateaued**
+  (#3832). Smart called the error cost "still declining" whenever a line
+  fitted through the last ten models sloped down by more than 1.5% of the mean
+  per step - with no notion of how much that cost bounces around between
+  retrains. On a category the embedding cannot resolve the cost is flat on
+  average but noisy, so the test fired on a quarter to a third of windows with
+  nothing having changed about the detector, and Autopilot's phase display
+  bounced between Done and Boundary with it. A decline now has to be bigger
+  than the window's own scatter (the slope at least two standard errors below
+  zero) before it holds the light yellow. A genuine improvement still does:
+  a run losing 5% of its cost per step reads yellow on 99% of windows, and the
+  synthetic dice reproduction's cleanly separable control reaches Done on the
+  same click it did before and never leaves. The indicator's tooltip says
+  which kind of green it is, and the status carries `slope_t` beside `slope`.
+
 - **The Stable indicator no longer waits for a category the embedding cannot
   separate, and no longer degenerates as the haystack fills up** (#3831). It
   now counts only *confident* flips - items that sat clear of the cut under

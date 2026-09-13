@@ -11,10 +11,11 @@ can be diffed against its two sources by eye:
 * :func:`smart_status`, :func:`stable_status`, and :func:`span_status` mirror
   ``_compute_smart_status`` / ``_compute_stable_status`` / ``_compute_span_status``
   in :mod:`vtscore.detectors.labeling_progress`, which is what the app's
-  ``/api/labeling-status`` poll feeds into the phase machine.  Stable is the
-  one that is not a copy: both the app and this module call
-  :mod:`vtscore.detectors.stability` for the flip counting and the rule, so
-  that pair cannot drift (issue #3831).
+  ``/api/labeling-status`` poll feeds into the phase machine.  Only Span is
+  still a copy: Smart and Stable are one-line wrappers over
+  :mod:`vtscore.detectors.cost_trend` (issue #3832) and
+  :mod:`vtscore.detectors.stability` (issue #3831), which the app calls too, so
+  neither rule can drift from the light the user reads.
 
 Why a port rather than a call: the phase machine itself lives in TypeScript, so
 there is nothing to import; and the indicator functions in
@@ -49,6 +50,13 @@ from __future__ import annotations
 
 from typing import Any, Literal, Optional
 
+from vtscore.detectors.cost_trend import (
+    SMART_FLAT_THRESHOLD,
+    SMART_MIN_POINTS,
+    SMART_SLOPE_T,
+    SMART_WINDOW,
+    smart_status_from_costs,
+)
 from vtscore.detectors.stability import (
     MIN_PER_CLASS,
     STABLE_MAX_THRESHOLD,
@@ -75,18 +83,23 @@ BAD_TARGET = 4
 # is owned by ``vtscore.detectors.stability`` and re-exported here, with the
 # Stable constants below, so a study can name every gate from one place.
 
-# ``_compute_smart_status``: window of recent steps the error-cost trend is
-# regressed over, the minimum number of points that makes a trend meaningful,
-# and the relative-slope cutoff below which the cost is still falling.
-SMART_WINDOW = 10
-SMART_MIN_POINTS = 3
-SMART_FLAT_THRESHOLD = -0.015
+# ``_compute_smart_status``: the window of recent models the error-cost trend
+# is regressed over, the minimum number of points that makes a trend
+# meaningful, the relative-slope cutoff below which the cost is still falling,
+# and how many standard errors below zero that slope must sit before the
+# decline is believed rather than read as noise (issue #3832).  All four are
+# owned by ``vtscore.detectors.cost_trend`` and re-exported here, with the
+# Stable constants below, so a study can name every gate from one place.
 
 # ``_compute_stable_status``: the flip-rate window and its two cutoffs — the
 # confident-flip average must be under 0.5% of the pool and no single recent
 # step at 1%.  Re-exported from ``vtscore.detectors.stability``.
 __all__ = [
     "MIN_PER_CLASS",
+    "SMART_FLAT_THRESHOLD",
+    "SMART_MIN_POINTS",
+    "SMART_SLOPE_T",
+    "SMART_WINDOW",
     "STABLE_MAX_THRESHOLD",
     "STABLE_MIN_ENTRIES",
     "STABLE_RATE_THRESHOLD",
@@ -100,30 +113,16 @@ SPAN_GREEN_DEFAULT = 40
 
 
 def smart_status(recent_error_costs: list[float], good: int, bad: int) -> Status:
-    """Port of ``_compute_smart_status``: has the error cost levelled off?
+    """The app's ``_compute_smart_status``: has the error cost levelled off?
 
     *recent_error_costs* are the per-step costs of the last :data:`SMART_WINDOW`
     cached models, each scored against the **current** labelset (never the
     held-out test split — the app has no test labels, and using them here would
-    leak into the vote order).  Green once the least-squares slope, normalised
-    by the mean cost, stops falling faster than :data:`SMART_FLAT_THRESHOLD`.
+    leak into the vote order).  Not a port: the rule is
+    :func:`~vtscore.detectors.cost_trend.smart_status_from_costs`, which the app
+    calls too, so the harness reads the same light as the user.
     """
-    if good < MIN_PER_CLASS or bad < MIN_PER_CLASS:
-        return "red"
-    costs = list(recent_error_costs)[-SMART_WINDOW:]
-    if len(costs) < SMART_MIN_POINTS:
-        return "yellow"
-
-    n_pts = len(costs)
-    x_vals = list(range(n_pts))
-    x_mean = sum(x_vals) / n_pts
-    y_mean = sum(costs) / n_pts
-    numer = sum((x_vals[i] - x_mean) * (costs[i] - y_mean) for i in range(n_pts))
-    denom = sum((x_vals[i] - x_mean) ** 2 for i in range(n_pts))
-    slope = numer / denom if denom != 0 else 0.0
-    relative_slope = slope / y_mean if y_mean > 0 else slope
-
-    return "yellow" if relative_slope < SMART_FLAT_THRESHOLD else "green"
+    return smart_status_from_costs(recent_error_costs, good, bad)["status"]  # type: ignore[return-value]
 
 
 def stable_status(stability_entries: list[dict[str, Any]], good: int, bad: int) -> Status:

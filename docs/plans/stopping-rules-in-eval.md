@@ -93,9 +93,11 @@ issue. No study gets slower for reporting a stopping point.
     Span, which if it reproduces means the stopping rule is in practice a
     prediction-flip rule with two decorations.
   - **Does the rule flap because the rule is noisy, or because the detector
-    is?** `n_done_episodes` above 1 is common. Whether the fix is hysteresis in
-    the app's indicator (a real product change, not an eval one) depends on
-    which.
+    is?** `n_done_episodes` above 1 is common. Answered for Smart in #3832 - the
+    rule was - and the fix went into the app's indicator rather than the eval:
+    a decline now has to clear the cost window's own scatter (see
+    `vtscore.detectors.cost_trend`), not a fixed slope. Still open for Stable
+    and Span, and still the question to ask of any `n_done_episodes` above 1.
 
 <!-- item-sep -->
 

@@ -77,6 +77,7 @@ from typing import TYPE_CHECKING, Any, Optional
 import numpy as np
 
 from vtscore.concurrency.async_jobs import check_job_cancelled
+from vtscore.detectors.cost_trend import MIN_PER_CLASS, SMART_MIN_POINTS, SMART_WINDOW, smart_status_from_costs
 from vtscore.detectors.stability import ScoredSnapshot, stability_entry, stable_status_from_entries
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.training.thresholds import inclusion_cost_weights, weighted_error_cost
@@ -196,8 +197,9 @@ _progress_lock = threading.RLock()
 # label-history steps: most steps carry none (see the module docstring), so a
 # step-counted window would silently shrink to a handful of points - or to
 # fewer than the three the regression needs - exactly when sorts are slowest
-# and the coalescing is heaviest.
-_SMART_WINDOW_MODELS = 10
+# and the coalescing is heaviest.  The width itself is the shared rule's
+# (:mod:`vtscore.detectors.cost_trend`), which the harness reads too.
+_SMART_WINDOW_MODELS = SMART_WINDOW
 
 # How long :func:`cached_indicator_history` will wait for ``_progress_lock``
 # before declaring the cache unreadable.  Long enough to ride out the brief
@@ -1008,48 +1010,24 @@ def _smart_status_uncached(
     good: int,
     bad: int,
 ) -> dict[str, Any]:
-    """The body of :func:`_compute_smart_status`, before memoisation."""
-    if good < 5 or bad < 5:
-        return {
-            "status": "red",
-            "reason": f"Need at least 5 good and 5 bad. Currently {good}g, {bad}b.",
-        }
+    """The body of :func:`_compute_smart_status`, before memoisation.
 
-    if len(model_steps) < 3:
+    Only the plumbing lives here: which models are in the window, and what they
+    cost against the current labelset.  The rule itself is
+    :func:`vtscore.detectors.cost_trend.smart_status_from_costs`, which the
+    eval harness calls too, so the pair cannot drift (issue #3832).
+    """
+    if good < MIN_PER_CLASS or bad < MIN_PER_CLASS:
+        return smart_status_from_costs([], good, bad)
+
+    if len(model_steps) < SMART_MIN_POINTS:
         return {
             "status": "yellow",
             "reason": "Not enough trained detectors yet to assess trend. Sort to train one.",
         }
 
     recent_entries = _eval_cached_models(cache, eval_set, inclusion_value, model_steps[-_SMART_WINDOW_MODELS:])
-    recent_error_costs = [e["error_cost"] for e in recent_entries]
-
-    if len(recent_error_costs) < 3:
-        return {"status": "yellow", "reason": "Not enough valid model steps in recent history to assess trend."}
-
-    # Linear regression slope over the recent error-cost values
-    n_pts = len(recent_error_costs)
-    x_vals = list(range(n_pts))
-    x_mean = sum(x_vals) / n_pts
-    y_mean = sum(recent_error_costs) / n_pts
-
-    numer = sum((x_vals[i] - x_mean) * (recent_error_costs[i] - y_mean) for i in range(n_pts))
-    denom = sum((x_vals[i] - x_mean) ** 2 for i in range(n_pts))
-    slope = numer / denom if denom != 0 else 0.0
-    relative_slope = slope / y_mean if y_mean > 0 else slope
-
-    FLAT_THRESHOLD = -0.015
-    if relative_slope < FLAT_THRESHOLD:
-        return {
-            "status": "yellow",
-            "reason": "Error cost is still declining. Keep labeling.",
-            "slope": round(relative_slope, 4),
-        }
-    return {
-        "status": "green",
-        "reason": "Error cost has leveled off. You can likely stop labeling.",
-        "slope": round(relative_slope, 4),
-    }
+    return smart_status_from_costs([e["error_cost"] for e in recent_entries], good, bad)
 
 
 def _compute_stable_status(

@@ -10,6 +10,18 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`vtscore.detectors.cost_trend`** (issue #3832) - the Smart indicator's
+  arithmetic as a pure module: `cost_trend()` (the fitted `relative_slope` and
+  its `t_stat`) and `smart_status_from_costs()`, plus its constants
+  (`SMART_WINDOW`, `SMART_MIN_POINTS`, `SMART_FLAT_THRESHOLD`,
+  `SMART_SLOPE_T`). Both `labeling_progress._compute_smart_status` and the eval
+  harness's `autopilot_flow.smart_status` delegate to it, so the two can no
+  longer drift. The rule changed with the move: a decline must now also be
+  larger than the window's own step-to-step scatter - the regression slope at
+  or below `-SMART_SLOPE_T` standard errors - before it counts as "still
+  falling". The status dict gained `slope_t` beside `slope`. The harness's
+  `SMART_*` constants are re-exports of this module's and keep their names.
+
 - **`vtscore.detectors.stability`** (issue #3831) - the Stable indicator's
   arithmetic as a pure module: `ScoredSnapshot`, `count_flips`,
   `stability_entry` and `stable_status_from_entries`, plus its constants.
