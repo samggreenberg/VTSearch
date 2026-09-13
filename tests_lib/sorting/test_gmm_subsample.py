@@ -69,23 +69,24 @@ class TestGmmSubsample:
     def test_large_input_is_bounded(self):
         """A 1M-point fit never hands the GMM more than ``_GMM_MAX_SAMPLES`` rows.
 
-        Spy on ``GaussianMixture.fit`` and assert the row count it receives is
-        capped by the subsample. This asserts the cap directly instead of timing
-        the call, so it stays deterministic under xdist load (a wall-clock bound
-        is flaky on a busy machine).
+        Spy on the EM loop itself and assert the sample it receives is capped by
+        the subsample. This asserts the cap directly instead of timing the call,
+        so it stays deterministic under xdist load (a wall-clock bound is flaky
+        on a busy machine).  The spy sits on ``_plain_em`` because that is the
+        fit since #3585; it used to sit on ``GaussianMixture.fit``.
         """
-        from sklearn.mixture import GaussianMixture  # noqa: PLC0415
+        from vtscore.training.thresholds import gmm as gmm_mod  # noqa: PLC0415
 
         scores = _bimodal_scores(1_000_000, seed=5)
         seen_rows: list[int] = []
-        original_fit = GaussianMixture.fit
+        original_em = gmm_mod._plain_em
 
-        def spy_fit(self, X, *args, **kwargs):
-            seen_rows.append(np.asarray(X).shape[0])
-            return original_fit(self, X, *args, **kwargs)
+        def spy_em(x, init):
+            seen_rows.append(int(np.asarray(x).size))
+            return original_em(x, init)
 
-        with mock.patch.object(GaussianMixture, "fit", spy_fit):
+        with mock.patch.object(gmm_mod, "_plain_em", spy_em):
             calculate_gmm_threshold(scores)
 
-        assert seen_rows, "GaussianMixture.fit was never called"
+        assert seen_rows, "the EM loop was never called"
         assert all(n <= _GMM_MAX_SAMPLES for n in seen_rows)

@@ -426,12 +426,172 @@ def snap_cut_to_sample(cut: float, sorted_scores: np.ndarray) -> float:
     return (float(sorted_scores[i - 1]) + float(sorted_scores[i])) / 2.0
 
 
+#: Iteration budget and convergence tolerance for the unanchored EM
+#: (:func:`fit_score_gmm`).  Deliberately the same pair
+#: :func:`fit_anchored_score_gmm` defaults to, because the two are the *same
+#: loop* (see :func:`_plain_em`): a fit that stopped in a different place
+#: depending on whether anchors were about to follow it would be a second,
+#: hidden estimator.
+_EM_MAX_ITER = 200
+_EM_TOL = 1e-8
+
+#: Iteration cap for the 2-means init below.  Lloyd's on a sorted 1-D sample
+#: converges in a handful of boundary moves and each one costs a binary search,
+#: so this is a runaway guard rather than a budget.
+_KMEANS_MAX_ITER = 100
+
+#: The empty anchor arrays :func:`_plain_em` hands :func:`_anchored_em`.  Module
+#: level so a fit does not allocate two throwaway arrays; never written to (the
+#: loop only reads ``.sum()`` and ``(a - mu) ** 2`` off them).
+_NO_ANCHORS = np.empty(0, dtype=np.float64)
+
+
+def _two_means_init(xs: np.ndarray) -> GmmFit1D | None:
+    """Deterministic 2-means split of the **sorted** sample *xs*, as EM's start.
+
+    Exact Lloyd's algorithm for ``k = 2`` in one dimension.  A 2-means
+    assignment in 1-D is an *interval* split, so an iteration is a
+    :func:`numpy.searchsorted` for the midpoint of the two centres followed by
+    two O(1) prefix-sum means - not a pass over the data.  The whole
+    initialiser is therefore one sort and one pair of cumulative sums, and its
+    cost does not grow with the iteration count the way sklearn's
+    ``init_params="kmeans"`` does, where a third of the initialiser's time went
+    at 50k scores (issue #3585).
+
+    Started from the sample's **min and max** rather than from sampled points,
+    so it is deterministic without an RNG - no ``random_state`` to thread
+    through, and the same scores give the same init on every machine.  Scores
+    are bounded (a sigmoid or a cosine), so the pair is not an outlier artefact,
+    and it is the start that survives a *saturated* distribution: quartiles
+    coincide as soon as one class holds under 25% of the sample, which on the
+    #3166 shape is exactly the case the split has to find.
+
+    Returns ``None`` only when there is nothing to fit at all: fewer than two
+    scores, or a non-finite sample.  A **constant** sample has no split to find,
+    but it does have an answer - two identical components sitting on the value -
+    and that is what it gets, because the anchored fit initialises from here and
+    its anchors are what pull such a haystack apart.  (sklearn's initialiser
+    answered a constant sample with a phantom second component at zero, so
+    ``calculate_gmm_threshold`` on a haystack of 0.3s returned 0.15.)
+    """
+    n = int(xs.size)
+    if n < 2:
+        return None
+    lo_c, hi_c = float(xs[0]), float(xs[-1])
+    if not (math.isfinite(lo_c) and math.isfinite(hi_c)) or not math.isfinite(float(xs.sum())):
+        return None
+    if hi_c <= lo_c:
+        return GmmFit1D(w_lo=0.5, mu_lo=lo_c, var_lo=1e-12, w_hi=0.5, mu_hi=lo_c, var_hi=1e-12)
+
+    csum = np.concatenate(([0.0], np.cumsum(xs)))
+    csq = np.concatenate(([0.0], np.cumsum(xs * xs)))
+    var_all = max(float(csq[n] / n - (csum[n] / n) ** 2), 0.0)
+    floor = max(1e-12, _ANCHOR_VAR_FLOOR_FRAC * var_all)
+
+    split = 0
+    for _ in range(_KMEANS_MAX_ITER):
+        # Everything below the midpoint of the two centres belongs to the low
+        # cluster.  ``side="left"`` ties with the E-step's ``>=`` convention.
+        new_split = int(np.searchsorted(xs, 0.5 * (lo_c + hi_c), side="left"))
+        # A boundary that empties a cluster is not a 2-means solution; keep the
+        # previous centres and stop rather than divide by zero.
+        if new_split <= 0 or new_split >= n or new_split == split:
+            split = new_split if 0 < new_split < n else split
+            break
+        split = new_split
+        lo_c = float(csum[split] / split)
+        hi_c = float((csum[n] - csum[split]) / (n - split))
+    if not 0 < split < n:
+        # Lloyd's never found a non-degenerate boundary (two distinct values,
+        # one of them a single point, and similar edges).  Split the sample in
+        # half instead: the EM below is what has to find the components, and an
+        # init that names two non-empty groups is all it needs.
+        split = n // 2
+
+    def _moments(a: int, b: int) -> tuple[float, float]:
+        """``(mean, variance)`` of ``xs[a:b]`` from the prefix sums."""
+        m = float(b - a)
+        mean = (csum[b] - csum[a]) / m
+        # Cancellation in ``E[x^2] - E[x]^2`` can go slightly negative on a
+        # tight cluster far from zero; the floor is what the EM applies anyway.
+        return mean, max((csq[b] - csq[a]) / m - mean * mean, floor)
+
+    mu_lo, var_lo = _moments(0, split)
+    mu_hi, var_hi = _moments(split, n)
+    return GmmFit1D(
+        w_lo=split / n,
+        mu_lo=mu_lo,
+        var_lo=var_lo,
+        w_hi=(n - split) / n,
+        mu_hi=mu_hi,
+        var_hi=var_hi,
+    )
+
+
+def _plain_em(x: np.ndarray, init: GmmFit1D) -> GmmFit1D | None:
+    """The unanchored EM: :func:`_anchored_em` with no anchors at all.
+
+    With both anchor arrays empty every anchor term in that loop vanishes
+    identically - the M-step masses are the responsibility sums, the total mass
+    is ``n``, and the anchored sums are zero - so it *is* the plain
+    two-component EM, run in the same preallocated-buffer, BLAS-free form.
+    Sharing the body is the point: the unanchored fit and the anchored refit it
+    initialises cannot drift into two different estimators of the same mixture.
+    """
+    return _anchored_em(x, _NO_ANCHORS, _NO_ANCHORS, init, 1.0, _EM_MAX_ITER, _EM_TOL)
+
+
 def fit_score_gmm(arr: np.ndarray) -> GmmFit1D | None:
     """Fit a deterministic 2-component GMM to a 1-D score array.
 
-    Returns ``None`` when the fit fails (fewer than 2 scores, or an EM
-    failure), leaving the fallback policy to the caller -
-    :func:`calculate_gmm_threshold` falls back to the median.
+    Returns ``None`` when the fit fails (fewer than 2 scores, a non-finite or
+    constant sample, or an EM failure), leaving the fallback policy to the
+    caller - :func:`calculate_gmm_threshold` falls back to the median.
+
+    **The estimator, and why it is ours** (issue #3585).  Two Gaussians over one
+    dimension, fitted by EM from a deterministic 2-means init
+    (:func:`_two_means_init`) with the same loop the anchored fit uses
+    (:func:`_plain_em`).  Until #3585 this was sklearn's
+    ``GaussianMixture(n_components=2, random_state=42)``, which is the same
+    estimator of the same model - and was measured at **91-95% of a whole
+    cosine/text sort**, because it pays ``covariance_type="full"`` machinery and
+    a k-means init per call on a problem whose covariance is a scalar.  It is
+    kept, unused by production, as :func:`fit_score_gmm_sklearn`: the swap
+    *moves the fit* (a different init lands EM in a different place within its
+    tolerance, and can land it in a different basin), so it is licensed by a
+    measured equivalence rather than by argument, and the reference has to stay
+    in the tree for that measurement to be repeatable.  What the study measured
+    is in ``docs/experiments/2026-09-13-gmm-init-3585/REPORT.md``.
+    """
+    x = np.asarray(arr, dtype=np.float64).ravel()
+    if x.size < 2:
+        return None
+    xs = np.sort(x)
+    init = _two_means_init(xs)
+    if init is None:
+        return None
+    fit = _plain_em(x, init)
+    if fit is None:
+        return None
+    # EM keeps the init's component order in every case measured, but nothing in
+    # the loop enforces it, and every caller reads ``lo``/``hi`` as an ordering.
+    if fit.mu_hi < fit.mu_lo:
+        return GmmFit1D(
+            w_lo=fit.w_hi, mu_lo=fit.mu_hi, var_lo=fit.var_hi, w_hi=fit.w_lo, mu_hi=fit.mu_lo, var_hi=fit.var_lo
+        )
+    return fit
+
+
+def fit_score_gmm_sklearn(arr: np.ndarray) -> GmmFit1D | None:
+    """The pre-#3585 sklearn fit, kept as the reference the swap is measured against.
+
+    **Not on any production path.**  This is what :func:`fit_score_gmm` was
+    until #3585 replaced it with the native EM above, and it stays so that the
+    equivalence can be re-measured rather than believed: the gate is an
+    admitted-set comparison over real fold haystacks
+    (``scripts/experiments/gmm_init/``), and a gate whose baseline lives only in
+    a git history cannot be re-run against the next candidate.
+    ``tests_lib/sorting/test_gmm_native_fit.py`` holds the standing form of it.
     """
     if arr.shape[0] < 2:
         return None
@@ -546,13 +706,14 @@ def _anchored_em(
     parameters.  **Keep that test passing rather than "tidying" this body**;
     the readable form is right there in the test to diff against.
 
-    What is *not* fixed here is the initialiser: :func:`fit_score_gmm`'s
-    sklearn ``GaussianMixture`` fit, which every anchored fit runs first, is
-    now the larger half of the remaining cost (~0.04 s of ~0.057 s per fold at
-    7,747 scores) - and it is ~12x slower per EM iteration than this loop, on
-    the same estimation problem.  It cannot be replaced without moving the
-    fit, so it is out of scope here; issue #3585 carries the measurement that
-    would have to come first.
+    The initialiser every anchored fit runs first used to be sklearn's
+    ``GaussianMixture`` - the larger half of the remaining cost, and ~5x slower
+    per EM iteration than this loop on the same estimation problem.  #3585
+    replaced it with :func:`fit_score_gmm`, which is now **this same loop with
+    no anchors** (:func:`_plain_em`), so the two halves of a fold's fit no
+    longer differ by a factor of five for no reason.  That swap moves the fit
+    and was licensed by measurement, not by argument; see
+    ``docs/experiments/2026-09-13-gmm-init-3585/REPORT.md``.
     """
     lam = float(anchor_weight)
     n = float(x.size)
@@ -677,8 +838,9 @@ def fit_anchored_score_gmm(
     *arr* is the (possibly :func:`gmm_fit_array`-subsampled) haystack score
     sample; *anchor_scores* / *anchor_labels* are the voted items' scores and
     binary labels (1.0 Good -> high component, else low).  Initialised from the
-    **unanchored** :func:`fit_score_gmm` fit (deterministic, seed-42 EM), then
-    refined by anchored EM (see :func:`_anchored_em`).
+    **unanchored** :func:`fit_score_gmm` fit (deterministic: a 2-means init and
+    this same EM loop with no anchors), then refined by anchored EM (see
+    :func:`_anchored_em`).
 
     Returns ``(fit, provenance)``.  On success the provenance is ``"anchored"``
     and the fit's components are class-identified by construction (``hi`` is
