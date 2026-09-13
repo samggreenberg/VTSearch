@@ -130,6 +130,13 @@ ENVX="$ENVX CALIB_REPOOL_VARIANTS= CALIB_SCHEDULE_VARIANTS= CALIB_FOLD_COUNTS= C
 ENVX="$ENVX CALIB_REQUIRE_OPENING=$CALIB_REQUIRE_OPENING"
 ENVX="$ENVX OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1"
 
+# Chain a stage behind another job GRID-side (DEP=afterany:<id>): a waiter on
+# the laptop dies with the VPN, and the gate is a 45-minute job whose input is
+# the array that is still running.
+DEP="${DEP:-}"
+DEP_ARG=()
+[[ -n "$DEP" ]] && DEP_ARG=(--dependency="$DEP")
+
 submit() {
   local name="$1"; shift
   local J
@@ -239,7 +246,7 @@ ab)
     mkdir -p "$AB_RESULTS/cells"
     ln -sfn "$REUSE_PREPARE/prepare_info.json" "$AB_RESULTS/prepare_info.json"
     ln -sfn "$REUSE_PREPARE/crops" "$AB_RESULTS/crops"
-    submit "ab_$arm" --job-name="$JOB_NAME-ab-$arm" --array="0-$((N-1))%$CONC" \
+    submit "ab_$arm" --job-name="$JOB_NAME-ab-$arm" "${DEP_ARG[@]}" --array="0-$((N-1))%$CONC" \
       --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" \
       --partition="$PARTITION" --export=ALL \
       --output="$LOGS/ab-$arm-%A_%a.out" \
@@ -248,21 +255,21 @@ ab)
   ;;
 
 abanalyze)
-  submit abanalyze --job-name="$JOB_NAME-abanalyze" --mem=32G --cpus-per-task=2 \
+  submit abanalyze --job-name="$JOB_NAME-abanalyze" "${DEP_ARG[@]}" --mem=32G --cpus-per-task=2 \
     --time=2:00:00 --partition="$PARTITION" --export=ALL \
     --output="$LOGS/abanalyze-%j.out" \
     --wrap="source $WT/gridenv.sh && $ENVX && export CALIB_AB_ON=$CALIB_EXP/ab_native/results CALIB_AB_OFF=$CALIB_EXP/ab_baseline/results CALIB_AB_OUT=$ANALYSIS/ab && mkdir -p $ANALYSIS/ab && cd $CALIB && python analyze_ab.py"
   ;;
 
 gate)
-  submit gate --job-name="$JOB_NAME-gate" --mem="${GATE_MEM:-32G}" --cpus-per-task=2 \
+  submit gate --job-name="$JOB_NAME-gate" "${DEP_ARG[@]}" --mem="${GATE_MEM:-32G}" --cpus-per-task=2 \
     --time="${GATE_TIME:-8:00:00}" --partition="$PARTITION" --export=ALL \
     --output="$LOGS/gate-%j.out" \
     --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python gate_3585.py --corpus $CORPUS --out $ANALYSIS"
   ;;
 
 bench)
-  submit bench --job-name="$JOB_NAME-bench" --mem=16G --cpus-per-task=2 \
+  submit bench --job-name="$JOB_NAME-bench" "${DEP_ARG[@]}" --mem=16G --cpus-per-task=2 \
     --time=2:00:00 --partition="$PARTITION" --export=ALL \
     --output="$LOGS/bench-%j.out" \
     --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python bench_3585.py --corpus $CORPUS --out $ANALYSIS/bench.csv"
