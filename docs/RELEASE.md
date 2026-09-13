@@ -103,7 +103,7 @@ Anything else stays open — a genuinely partial `Refs` is doing its job.
 
 `solved` means "the development is done; only merges remain", and the fix session applies it when it opens the PR (CLAUDE.md). So by the time you get here the label should already be right, and this step is an **audit**: `scripts/reconcile-solved-labels.py` catches issues a session forgot to label, issues whose fix PR was later abandoned, and stale labels left behind by step 6's closes. It audits the **assignee** on the same pass, for the same reason — an assignee outlives its purpose exactly when `solved` does.
 
-It also audits **`experiment`**, against a different signal: an `<!-- experiment: ... -->` marker in the issue body (CLAUDE.md). That half only ever adds, and it is the label's only backstop — nothing else notices an issue that explains why it needs the GRID while sitting in the pick-up-now queue.
+It also audits **`experiment`**, against a different signal: an `<!-- experiment: ... -->` marker in the issue body (CLAUDE.md). That half only ever adds. `.claude/hooks/require-issue-labels.py` blocks the writes that would drop the label, but only where `gh` works and only for a label the issue already has, so this audit is what notices an issue that explains why it needs the GRID while sitting in the pick-up-now queue anyway.
 
 Run it right after step 6 to confirm nothing was left behind. It is also worth running **between** releases — the views it keeps honest (`is:issue is:open -label:solved`, what a human should pick up next) matter most while the release is still weeks away.
 

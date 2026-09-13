@@ -74,16 +74,21 @@ rather than describing a topic, so it powers the companion pair of views:
     is:issue is:open -label:solved -label:experiment  # can be picked up right now
     is:issue is:open label:experiment                 # needs machine time booked
 
-The label's *front* edge is already guarded: `.claude/hooks/require-issue-labels.py`
-blocks a `create` whose title and body look like an experiment while carrying no
-label, and validates the reason on its `<!-- not-an-experiment: ... -->` opt-out.
-What nothing guards is everything after creation. `labels` **replaces the whole
-set** on an `issue_write` update, so any later label-touching write -- applying
-`solved`, adding a label, restating a set from memory -- silently drops
-`experiment`, and no hook path looks at it (`update` polices `solved` alone).
-That is what happened to #3694: its body still explained at length why the work
-needed the GRID, its label was gone, and so it sat in the pick-up-now queue
-until a container picked it up and could not do the work.
+`.claude/hooks/require-issue-labels.py` guards both ends of the label's life at
+tool-call time: it blocks a `create` whose title and body look like an
+experiment while carrying no label (validating the reason on its
+`<!-- not-an-experiment: ... -->` opt-out), and it blocks an `issue_write`
+update whose `labels` array drops `experiment` off an issue that carries it --
+`labels` replaces the whole set, so every label-touching write is a chance to
+lose a label nobody restated. That is what happened to #3694: its body still
+explained at length why the work needed the GRID, its label was gone, and so it
+sat in the pick-up-now queue until a container picked it up and could not do the
+work.
+
+This script is what catches whatever got past those guards. The update guard has
+to ask GitHub whether the label is really there, so it is awake only where `gh`
+works and allows whenever it cannot tell -- and neither guard says anything
+about a label that was never applied in the first place.
 
 The durable record is a marker comment in the issue body, which survives a
 label being dropped:

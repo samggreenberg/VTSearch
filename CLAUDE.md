@@ -215,7 +215,12 @@ The point is scheduling: `label:experiment` is the queue of work that needs mach
 
 The marker is a sentinel with a fixed form — `<!--`, the word `experiment`, a colon, your reason — and it renders as nothing. It is the affirmative twin of the `<!-- not-an-experiment: <reason> -->` opt-out that the same hook already reads, and it guards the half of the label's life that nothing else does.
 
-The **front** edge is covered: `.claude/hooks/require-issue-labels.py` blocks a `create` that looks like an experiment while carrying no label. Everything *after* creation is not. `labels` replaces the whole set on an update, so any later label-touching write — applying `solved`, adding a label, restating a set from memory — silently drops `experiment`, and the hook's `update` path polices `solved` alone. `scripts/reconcile-solved-labels.py` is the backstop for exactly that: it reads the marker and reports an `ADD experiment` bucket for any open issue carrying one without the label. #3694 is why it exists — its body explained at length why the work needed the GRID, its label was gone, and so it sat in the pick-up-now queue until a container picked it up and could not do the work.
+Two mechanisms read it, at the two ends of the label's life:
+
+- **`.claude/hooks/require-issue-labels.py` prevents the drop.** It already blocked a `create` that looks like an experiment while carrying no label; it now also blocks an `issue_write` **update** whose `labels` array drops `experiment` off an issue that carries it. That second guard exists because `labels` replaces the whole set, so every label-touching write — applying `solved`, adding a label, restating a set from memory — is a chance to lose a label nobody listed. It asks GitHub whether the label is really there, so like the `solved` close guard it is awake only where `gh` works (the laptop, not a web container) and allows whenever it cannot tell. To remove the label *deliberately*, say so: `gh issue edit <n> --remove-label experiment`.
+- **`scripts/reconcile-solved-labels.py` catches what got through.** It reads the marker and reports an `ADD experiment` bucket for any open issue carrying one without the label — a drop from a session where the hook was asleep, or a label never applied at all.
+
+#3694 is why both exist: its body explained at length why the work needed the GRID, its label was gone, and so it sat in the pick-up-now queue until a container picked it up and could not do the work.
 
 Two things follow from the marker being only a *hint*:
 
