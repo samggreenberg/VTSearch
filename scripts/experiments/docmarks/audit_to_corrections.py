@@ -550,11 +550,16 @@ def resplit_classes(
         for cid, fresh_meta in fresh.items():
             fresh_meta["audit"]["notes"] = f"re-clustered out of {class_id} at {tighter:.3f}"
             classes[cid] = fresh_meta
-        write_query_crops(pages, inventory, fresh, corpus / "queries")
+        # The pieces are fresh classes, so each needs its own exemplar -- and a
+        # piece that still holds more than one mark says so here.
+        _hand, crop_warnings = write_query_crops(
+            pages, inventory, fresh, corpus / "queries", backend=backend, threshold=tighter
+        )
         note = f"{class_id}: re-clustered at {tighter:.3f} into {len(pieces)} piece(s)"
         if rejected:
             note += f", {len(rejected)} not admitted ({'; '.join(sorted(rejected.values()))})"
         notes.append(note)
+        notes.extend(crop_warnings)
     return notes
 
 

@@ -226,6 +226,56 @@ def distance_matrix(
 
 
 # --------------------------------------------------------------------------
+# Representative instances
+# --------------------------------------------------------------------------
+
+
+def medoid_core(dist: np.ndarray, *, spread: float) -> tuple[int, list[int]]:
+    """The medoid row of a group, and the rows close enough to speak for it.
+
+    ``dist`` is the group's own square distance matrix — one class's instances,
+    not the whole corpus.  Returns ``(medoid, core)`` where *core* always holds
+    the medoid and is sorted ascending.
+
+    The cut is **relative to the group's own spread**, and that is the entire
+    point rather than an implementation detail.  Comparing a descriptor distance
+    against a fixed bar does not work on document marks and has been measured
+    not working: on the live corpus the one confirmed-wrong exemplar sat at
+    0.172 from its own class where the 60-class median was 0.28 — second
+    *lowest*, i.e. the healthiest-looking distance of nearly all of them (#3599).
+    A perceptual hash of blue ink on white paper tracks ink layout, so its
+    absolute value says how busy a stamp is and not which stamp it is.  What the
+    same number still supports is a comparison *within* one group, where paper,
+    scanner, ink and layout are held fixed: an instance that sits three of its
+    own class's median-absolute-deviations past its own class's median distance
+    is an outlier on a scale the class itself set.
+
+    The scale is a median-absolute-deviation rather than a standard deviation
+    because the thing being screened for — a handful of instances of some other
+    mark — is exactly what drags a mean and a variance out until they cover it.
+    MAD tolerates contamination up to half the group; past that there is no
+    majority mark to find, and the caller is expected to say so rather than pick
+    one.  It is rescaled by the usual 1.4826 so that *spread* is read in
+    standard deviations of the group's own distances, robustly estimated.
+    """
+    n = int(dist.shape[0])
+    if n == 0:
+        raise ValueError("medoid_core needs at least one row")
+    if n == 1:
+        return 0, [0]
+
+    # Mean distance to every *other* row; the smallest is the medoid.  argmin
+    # takes the lowest index on a tie, so the result is a pure function of the
+    # matrix and not of iteration order.
+    medoid = int(np.argmin(dist.sum(axis=1) / (n - 1)))
+    others = np.delete(dist[medoid], medoid)
+    median = float(np.median(others))
+    mad = float(np.median(np.abs(others - median)))
+    cutoff = median + spread * 1.4826 * mad
+    return medoid, [i for i in range(n) if i == medoid or dist[medoid, i] <= cutoff]
+
+
+# --------------------------------------------------------------------------
 # Clustering
 # --------------------------------------------------------------------------
 
