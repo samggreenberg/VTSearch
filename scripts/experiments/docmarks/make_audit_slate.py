@@ -162,7 +162,7 @@ def subgroups(corpus: Path, descriptor: str, threshold: float) -> dict[str, dict
 
 
 ROSTER_HINT = (
-    "no class carries `on_roster` -- the roster has not been picked yet. "
+    "no class carries `on_roster`, so the roster has not been picked yet. "
     "Run `shortlist.py --write-roster`, hand-edit roster.json, then rebuild with "
     "`build_corpus.py --roster <roster.json>`; the membership sheets come after that."
 )
