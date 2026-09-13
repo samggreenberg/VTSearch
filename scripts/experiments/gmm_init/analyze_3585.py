@@ -191,6 +191,7 @@ def sort_latency(cuts: pd.DataFrame, corpus: Path) -> pd.DataFrame:
     interesting question is what fraction it is *afterwards*.
     """
     seconds: dict[tuple[str, str, str], float] = {}
+    fits: dict[tuple[str, str, str], dict] = {}
     for path in sorted(corpus.glob("sorts*.npz")):
         with np.load(path) as z:
             if "_meta" not in z:
@@ -199,14 +200,26 @@ def sort_latency(cuts: pd.DataFrame, corpus: Path) -> pd.DataFrame:
         for key, value in (meta.get("sort_seconds") or {}).items():
             _kind, dataset, embedder, category = key.split("|")
             seconds[(dataset, embedder, category)] = float(value)
+        for key, value in (meta.get("fit_seconds") or {}).items():
+            _kind, dataset, embedder, category = key.split("|")
+            fits[(dataset, embedder, category)] = value
     if not seconds:
         return pd.DataFrame()
 
     df = cuts[cuts["kind"] == "sort"].copy()
     df["seconds"] = pd.to_numeric(df["seconds"], errors="coerce")
-    df["rest_seconds"] = [
-        seconds.get((str(d), str(e), str(c)), float("nan"))
-        for d, e, c in zip(df["dataset"], df["embedder"], df["case"], strict=True)
+    ids = list(zip(df["dataset"].astype(str), df["embedder"].astype(str), df["case"].astype(str), strict=True))
+    df["rest_seconds"] = [seconds.get(k, float("nan")) for k in ids]
+    # Prefer the timings taken in the SAME process as the sort they are a
+    # fraction of (min of 5).  Timing the fit in one job and the rest of the
+    # sort in another puts a cross-node difference straight into the ratio, and
+    # this cluster has nodes that differ (#3160).  An arm the capture did not
+    # time falls back to the gate's single call, and the column says how many
+    # rows are which rather than mixing them silently.
+    df["same_process"] = [1 if str(a) in fits.get(k, {}) else 0 for k, a in zip(ids, df["arm"], strict=True)]
+    df["seconds"] = [
+        float(fits[k][str(a)]) if str(a) in fits.get(k, {}) else sec
+        for k, a, sec in zip(ids, df["arm"], df["seconds"], strict=True)
     ]
     df = df.dropna(subset=["rest_seconds"])
     if df.empty:
@@ -221,6 +234,7 @@ def sort_latency(cuts: pd.DataFrame, corpus: Path) -> pd.DataFrame:
             {
                 "arm": arm,
                 "sorts": len(g),
+                "same_process_timing": int(g["same_process"].sum()),
                 "n_median": int(g["n"].median()),
                 "rest_ms": 1000 * g["rest_seconds"].median(),
                 "fit_ms": 1000 * g["seconds"].median(),

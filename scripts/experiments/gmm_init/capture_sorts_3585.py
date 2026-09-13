@@ -40,6 +40,22 @@ common.setup_env()
 import experiment_config as cfg  # noqa: E402
 
 
+#: Repeats behind each per-fit timing.  The minimum is reported: a fit is
+#: deterministic, so the spread is the machine's, not the estimator's.
+_TIMING_REPS = 5
+
+
+def _min_seconds(fit_fn, scores: np.ndarray) -> float:
+    """Fastest of :data:`_TIMING_REPS` runs of *fit_fn* on *scores*."""
+    fit_fn(scores)
+    best = float("inf")
+    for _ in range(_TIMING_REPS):
+        t0 = time.perf_counter()
+        fit_fn(scores)
+        best = min(best, time.perf_counter() - t0)
+    return best
+
+
 def main(argv: "list[str] | None" = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--results", required=True, help="a results dir holding prepare_info.json")
@@ -59,6 +75,8 @@ def main(argv: "list[str] | None" = None) -> int:
     from vtscore.eval.labels import evaluable_pool
     from vtscore.eval.patch_styles import resolve_style
     from vtscore.training.region_similarity import cosine_sort_with_boxes
+    from vtscore.training.thresholds import fit_score_gmm as _NATIVE
+    from vtscore.training.thresholds import fit_score_gmm_sklearn as _SKLEARN
 
     from _cells_io import load_medias  # noqa: PLC0415
 
@@ -67,8 +85,12 @@ def main(argv: "list[str] | None" = None) -> int:
     store: dict[str, np.ndarray] = {}
     # The rest of a sort, timed on this hardware.  Without it the saving on the
     # fit can only be turned into a user-visible latency by borrowing the
-    # issue's own "91-95% of a sort" from a different machine.
+    # issue's own "91-95% of a sort" from a different machine.  The two fits are
+    # timed HERE TOO, in the same process on the same node, so the ratio between
+    # them and the rest of the sort is not a comparison across two jobs that
+    # may have landed on different hardware (#3160).
     sort_seconds: dict[str, float] = {}
+    fit_seconds: dict[str, dict[str, float]] = {}
     style = resolve_style("whole_image")
     skipped: list[str] = []
 
@@ -110,6 +132,9 @@ def main(argv: "list[str] | None" = None) -> int:
                 t0 = time.perf_counter()
                 cosine_sort_with_boxes(pool, np.asarray(tvec, dtype=np.float32), text_emb, region_aware=False)
                 sort_seconds[key] = time.perf_counter() - t0
+                fit_seconds[key] = {
+                    name: _min_seconds(fn, scores) for name, fn in (("native", _NATIVE), ("baseline", _SKLEARN))
+                }
                 common.log(f"  {cat}: {scores.size} scores, {scores.min():.3f}..{scores.max():.3f}")
 
     if not store:
@@ -123,6 +148,7 @@ def main(argv: "list[str] | None" = None) -> int:
         "max_categories": args.max_categories,
         "embedders": sorted(allow),
         "sort_seconds": sort_seconds,
+        "fit_seconds": fit_seconds,
     }
     store["_meta"] = np.frombuffer(json.dumps(meta).encode("utf-8"), dtype=np.uint8)
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
