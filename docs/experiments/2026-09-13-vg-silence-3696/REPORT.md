@@ -55,10 +55,21 @@ the number:
 | **folded** | 441 | VG used the class's own name, or one `SCALE_VG_NAMES` already folds. Nothing to do with VG: the image is simply not among the class's *designated* positives — a missed band, the scatter filter, or a cell `designate_cells` filled from higher ranks before reaching it. Apportioning the three is #3818. |
 
 **Only `coverage` can contaminate a negative pool**, which is the rate's only
-live consumer. `lift_ambiguous` withholds an ambiguous name from the shared pool
-as well as from the bands, and a folded name puts the image in the class
-outright, so an image in either of the other two buckets is never drawn as a
-negative for that class at all.
+live consumer. That is enforced in one place and is stricter than it needs to be
+for this argument — `band_candidates` admits an image to `clean` only when it
+holds no instance of **any** class in *C* *and* has no pair in `unbanded`:
+
+```python
+if not by_name:
+    # Only a true negative for every class in C may join the shared pool.
+    if not any((iid, c) in unbanded for c in classes):
+        clean.append(iid)
+```
+
+A folded name leaves `by_name` non-empty, and `lift_ambiguous` puts a withheld
+pair in `unbanded` ("too weak to band as a positive, and far too strong to leave
+in the shared negative pool"). So an image in either bucket is never drawn as a
+negative for *any* class, let alone its own.
 
 Both halves of the fraction are corrected on the same test — dividing 291
 coverage errors by the uncorrected 29,414 would understate the rate by exactly
