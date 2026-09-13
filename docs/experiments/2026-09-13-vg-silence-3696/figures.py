@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""The figures for #3696, from `silence_rate.py`'s own JSON and nothing else.
+"""The figures for #3696, from the two measurement JSONs and nothing else.
 
-Deterministic and source-free: it reads `measurements/silence_rate.json`, so the
-figure and the report's table cannot disagree, and re-running it after the pass
-finishes another class needs no pile, no GPU and no cluster.
+Deterministic and source-free: it reads `measurements/silence_rate.json` and
+`measurements/silence_source.json`, so a figure and the report's tables cannot
+disagree, and redrawing after the pass finishes another class needs no pile, no
+GPU and no cluster. The source split is drawn only when its file is there, so
+the two figures that need the cheap measurement alone still render without the
+expensive one.
 
 Usage::
 
     python figures.py                       # beside this file
-    python figures.py --rate <json> --out <dir>
+    python figures.py --rate <json> --source <json> --out <dir>
 """
 
 from __future__ import annotations
@@ -65,9 +68,7 @@ def by_class(rate: dict, out: Path) -> Path:
             ax.plot([r["bound"] * 100], [y], marker="|", ms=13, color=BOUND, mew=2.2, zorder=5)
         else:
             ax.plot([limit * 0.985], [y], marker=">", ms=7, color=BOUND, zorder=5)
-            ax.text(
-                limit * 0.965, y, f"{r['bound']:.0%}", ha="right", va="center", fontsize=8, color=BOUND, zorder=6
-            )
+            ax.text(limit * 0.965, y, f"{r['bound']:.0%}", ha="right", va="center", fontsize=8, color=BOUND, zorder=6)
 
     p = rate["pooled"]
     ax.axvline(p["rate"] * 100, color=POOLED, ls="--", lw=1.1, zorder=1)
@@ -152,16 +153,71 @@ def budget(rate: dict, out: Path) -> Path:
     return path
 
 
+def source_split(src: dict, out: Path) -> Path:
+    """What the confirmed errors actually are, per class.
+
+    The correction that halves the headline twice over: most of a "silence
+    error" is not silence. Drawn as shares of each class's own error count
+    rather than as counts, because the question is *what kind* of error the
+    class makes and a count would just redraw the class-size ranking.
+    """
+    rows = sorted(src["classes"], key=lambda r: -(r["coverage"] / max(r["found_present"], 1)))
+    fig, ax = plt.subplots(figsize=(8.2, 4.6))
+    ys = range(len(rows))
+    palette = {"coverage": BOUND, "withheld": "#e0a458", "folded": "#9bb7c9"}
+    labels = {
+        "coverage": "coverage — VG named nothing (can contaminate a pool)",
+        "withheld": "withheld — VG used a name the build refuses (#3605)",
+        "folded": "folded — VG used a name the build folds; lost downstream",
+    }
+
+    for kind in ("coverage", "withheld", "folded"):
+        left = [
+            sum(r[k] for k in ("coverage", "withheld", "folded")[: ("coverage", "withheld", "folded").index(kind)])
+            / max(r["found_present"], 1)
+            * 100
+            for r in rows
+        ]
+        width = [r[kind] / max(r["found_present"], 1) * 100 for r in rows]
+        ax.barh(list(ys), width, left=left, color=palette[kind], height=0.66, label=labels[kind], zorder=2)
+
+    p = src["pooled"]
+    ax.set_yticks(list(ys))
+    ax.set_yticklabels([f"{r['class']}  ({r['found_present']})" for r in rows], fontsize=9)
+    ax.set_xlabel("share of the class's confirmed errors (%)")
+    ax.set_xlim(0, 100)
+    ax.set_title(
+        f"Most of a “silence error” is not silence\n"
+        f"{p['withheld'] + p['folded']} of {p['found_present']} are images VG DID name, so the rate falls "
+        f"{p['designation_rate']:.2%} → {p['coverage_rate']:.2%}",
+        fontsize=10.5,
+    )
+    ax.grid(axis="x", color="#e6e6e6", zorder=0)
+    ax.set_axisbelow(True)
+    for side in ("top", "right"):
+        ax.spines[side].set_visible(False)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.22), fontsize=8.5, frameon=False)
+    fig.tight_layout()
+    path = out / "fig_error_source.png"
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--rate", default=str(HERE / "measurements" / "silence_rate.json"))
+    ap.add_argument("--source", default=str(HERE / "measurements" / "silence_source.json"))
     ap.add_argument("--out", default=str(HERE))
     args = ap.parse_args()
 
     rate = json.loads(Path(args.rate).read_text())
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    for path in (by_class(rate, out), budget(rate, out)):
+    made = [by_class(rate, out), budget(rate, out)]
+    if Path(args.source).exists():
+        made.append(source_split(json.loads(Path(args.source).read_text()), out))
+    for path in made:
         print(f"wrote {path}")
     return 0
 
