@@ -25,6 +25,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -57,12 +58,17 @@ def main(argv: "list[str] | None" = None) -> int:
     from vtscore.embedding import embed_text_query
     from vtscore.eval.labels import evaluable_pool
     from vtscore.eval.patch_styles import resolve_style
+    from vtscore.training.region_similarity import cosine_sort_with_boxes
 
     from _cells_io import load_medias  # noqa: PLC0415
 
     info = json.loads(Path(args.results, "prepare_info.json").read_text())
     allow = {e for e in args.embedders.split(",") if e}
     store: dict[str, np.ndarray] = {}
+    # The rest of a sort, timed on this hardware.  Without it the saving on the
+    # fit can only be turned into a user-visible latency by borrowing the
+    # issue's own "91-95% of a sort" from a different machine.
+    sort_seconds: dict[str, float] = {}
     style = resolve_style("whole_image")
     skipped: list[str] = []
 
@@ -98,6 +104,12 @@ def main(argv: "list[str] | None" = None) -> int:
                 scores = np.asarray([float(sims[i]) for i in ids], dtype=np.float64)
                 key = f"sort|{ds}|{emb}|{cat.replace(' ', '_').replace('|', '_')}"
                 store[f"{key}|scores"] = scores
+                # `cosine_sort_active` is exactly this call plus the cut, so
+                # this is the whole of the sort that is NOT the mixture fit:
+                # the scoring pass, the result dicts and the sort itself.
+                t0 = time.perf_counter()
+                cosine_sort_with_boxes(pool, np.asarray(tvec, dtype=np.float32), text_emb, region_aware=False)
+                sort_seconds[key] = time.perf_counter() - t0
                 common.log(f"  {cat}: {scores.size} scores, {scores.min():.3f}..{scores.max():.3f}")
 
     if not store:
@@ -110,6 +122,7 @@ def main(argv: "list[str] | None" = None) -> int:
         "results": args.results,
         "max_categories": args.max_categories,
         "embedders": sorted(allow),
+        "sort_seconds": sort_seconds,
     }
     store["_meta"] = np.frombuffer(json.dumps(meta).encode("utf-8"), dtype=np.uint8)
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
