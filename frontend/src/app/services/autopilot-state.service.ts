@@ -10,6 +10,14 @@ export interface AutopilotState {
   badToStart: number;
   smartStatus: string;
   stableStatus: string;
+  /**
+   * True when Stable is green only because the flips that remain are
+   * boundary wobble that has stopped falling: the detector has stopped
+   * improving but a fringe of the pool sits in an ambiguity the embedding
+   * cannot resolve (#3831). The Done step says so instead of implying the
+   * pool converged.
+   */
+  stablePlateau: boolean;
   spanStatus: string;
   fracDiversity: number;
   /**
@@ -28,6 +36,7 @@ const INITIAL_STATE: AutopilotState = {
   badToStart: 4,
   smartStatus: '',
   stableStatus: '',
+  stablePlateau: false,
   spanStatus: '',
   fracDiversity: 0,
   retrainMode: false,
@@ -142,6 +151,7 @@ export class AutopilotStateService {
       phase: 'good',
       smartStatus: '',
       stableStatus: '',
+      stablePlateau: false,
       spanStatus: '',
       fracDiversity: 0,
       retrainMode,
@@ -158,6 +168,7 @@ export class AutopilotStateService {
       ...current,
       smartStatus: status.smart.status || '',
       stableStatus: status.stable.status || '',
+      stablePlateau: status.stable['plateau'] === true,
       spanStatus: status.span.status || '',
       fracDiversity:
         status.span['diversity_level'] != null

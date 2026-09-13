@@ -80,9 +80,27 @@ class StabilityPointSchema(Schema):
             )
         },
     )
+    num_confident_flips = fields.Integer(
+        required=True,
+        metadata={
+            "description": (
+                "How many of those flips were *confident*: the item sat clear of the cut (outside the "
+                "ambiguity band) under both the previous model and this one.  The Stable indicator "
+                "judges settling on these; the rest are boundary wobble."
+            )
+        },
+    )
     time_index = fields.Integer(metadata={"description": "Zero-based index of this step in the label history."})
     num_unlabeled = fields.Integer(
-        metadata={"description": "Size of the monitored pool the flip count was measured over."}
+        metadata={"description": "How many still-unlabeled items the two models were compared on."}
+    )
+    num_pool = fields.Integer(
+        metadata={
+            "description": (
+                "Size of the whole scored pool (labeled items included) - the denominator every flip "
+                "rate is taken over, so a rate means the same thing however much of the pool is labeled."
+            )
+        }
     )
 
 

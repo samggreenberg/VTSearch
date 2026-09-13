@@ -82,8 +82,13 @@ export class ProgressIndicatorsComponent {
     const status = this.labelingStatus();
     if (!status?.stable) return '';
     const s = status.stable;
-    if (s['flips'] != null) return `Flips: ${s['flips']}`;
+    if (s['avg_flip_rate'] != null) return `Flips: ${((s['avg_flip_rate'] as number) * 100).toFixed(1)}% of items per retrain`;
     return '';
+  }
+
+  /** Set when Stable is green only because the remaining flips are irreducible boundary wobble (#3831). */
+  get stablePlateau(): boolean {
+    return this.labelingStatus()?.stable['plateau'] === true;
   }
 
   get spanSubtext(): string {
@@ -103,7 +108,10 @@ export class ProgressIndicatorsComponent {
 
   get stableTooltip(): string {
     const meaning = 'Stable: predictions stopped shifting between retrains.';
-    return this.stableSubtext ? `${meaning} ${this.stableSubtext}.` : meaning;
+    const plateau = this.stablePlateau
+      ? ' Some items near the cutoff still change calls, but no longer fewer each retrain: the remaining ambiguity looks irreducible in this embedding.'
+      : '';
+    return this.stableSubtext ? `${meaning}${plateau} ${this.stableSubtext}.` : `${meaning}${plateau}`;
   }
 
   get spanTooltip(): string {

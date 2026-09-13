@@ -52,6 +52,19 @@ interface CompletionPrompt {
   stayLabel: string;
 }
 
+/** What the Done step says when every indicator is green and the pool converged. */
+const DONE_HELP = 'All quality indicators are green. You can continue labeling or export your results.';
+
+/**
+ * The Stable indicator went green on a plateau: the items still changing
+ * calls between retrains sit in an ambiguity the embedding cannot resolve, and
+ * their rate has stopped falling (#3831). Said plainly so the user does not
+ * read "Done" as "the detector is sure about everything".
+ */
+const PLATEAU_NOTE =
+  'All quality indicators are green, but some items near the cutoff still change calls between retrains and that is no longer improving: the remaining ambiguity looks irreducible in this embedding.';
+const DONE_PLATEAU_HELP = `${PLATEAU_NOTE} You can continue labeling or export your results.`;
+
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-autopilot-panel',
@@ -351,7 +364,7 @@ export class AutopilotPanelComponent implements OnInit {
       case 'bad': return 'Label examples that are not what you want, helping the system learn the good/bad cutoff.';
       case 'hard': return 'The system shows you items near the good/bad cutoff. Labeling these improves accuracy where it matters most.';
       case 'new': return 'Explore a broad mix of items the system is less certain about, ensuring nothing important is missed.';
-      case 'done': return 'All quality indicators are green. You can continue labeling or export your results.';
+      case 'done': return this.state.stablePlateau ? DONE_PLATEAU_HELP : DONE_HELP;
       default: return '';
     }
   }
@@ -373,7 +386,9 @@ export class AutopilotPanelComponent implements OnInit {
       case 'new':
         return `Phase ${stepNumber}: Cover a broad mix. Items from parts of your collection you haven't seen catch edge cases the cutoff phase missed.`;
       case 'done':
-        return 'Done. All quality indicators are green. Keep labeling for more accuracy, or export your results.';
+        return this.state.stablePlateau
+          ? `Done. ${PLATEAU_NOTE} Keep labeling if you want, but more votes are unlikely to change the result; or export your results.`
+          : 'Done. All quality indicators are green. Keep labeling for more accuracy, or export your results.';
       default:
         return '';
     }

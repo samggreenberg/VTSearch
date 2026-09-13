@@ -1944,7 +1944,11 @@ def simulate_voting_iterations(  # noqa: C901
                     region_aware=region_aware,
                     style_obj=style_obj,
                 ),
-                {cid: (1 if s >= threshold else 0) for cid, s in pool_scores.items()},
+                pool_scores,
+                threshold,
+                # Rates are over the haystack the votes came out of, labeled
+                # items included, as the app divides by its whole scored pool.
+                num_pool=len(sim_ids),
             )
             flow.update(
                 len(good_votes),

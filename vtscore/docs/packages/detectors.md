@@ -608,7 +608,7 @@ cache state without going through the key is not possible.
 | `inject_live_model(good, bad, model, threshold)`| Register a model produced by `train_and_score` so the cache can reuse it |
 | `recreate_model_at_time(snap, history, t, inclusion)` | Return the model + threshold + good/bad ids for step `t`           |
 | `calculate_error_cost_over_time(...)`           | Per-step FPR/FNR-weighted cost on current votes                        |
-| `calculate_prediction_stability_over_time(...)` | Per-step flip-count on unlabeled medias                                |
+| `calculate_prediction_stability_over_time(...)` | Per-step raw and confident flip counts on unlabeled medias             |
 | `calculate_diversity_level_over_time(...)`      | Per-step coverage-atlas coverage                                        |
 | `compute_labeling_status(..., span_info=None)`  | Aggregate red / yellow / green status for the Smart / Stable / Span indicators |
 | `analyze_labeling_progress(...)`                | Run the three "over-time" functions and bundle the result              |
@@ -621,9 +621,17 @@ cache state without going through the key is not possible.
 - **Smart** - fits a linear regression slope over the most recent 10
   error-cost values; green when the relative slope is above
   `-0.015` (cost has leveled off).
-- **Stable** - fraction of unlabeled predictions that flipped between
-  successive steps; green when the recent 10-step average is below
-  0.5% and no single step exceeded 1%.
+- **Stable** - prediction flips between successive detectors, counted over
+  the still-unlabeled pool with the *whole* pool as denominator. Only
+  **confident** flips count against it - items that sat clear of the cut
+  (outside an ambiguity band of a quarter of the scores' standard deviation)
+  under both detectors; an item wobbling across the cut is boundary noise.
+  Green when the recent 10-step average of confident flips is below 0.5% of
+  the pool, no single step reached 1%, and the raw flip rate has stopped
+  falling. Green with the raw rate still above 0.5% sets `plateau: true`:
+  the detector has stopped improving but the pool has an ambiguous fringe
+  the embedding cannot resolve (the `#3831` dice case). The arithmetic lives
+  in `vtscore.detectors.stability`, which the eval harness calls too.
 - **Span** - coverage-atlas coverage: the number of consecutive
   evidence-bearing nodes in BFS order. Green at
   `CoreConfig.from_settings().autopilot_goal_diversity` nodes (default

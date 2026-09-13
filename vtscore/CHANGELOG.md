@@ -10,6 +10,22 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`vtscore.detectors.stability`** (issue #3831) - the Stable indicator's
+  arithmetic as a pure module: `ScoredSnapshot`, `count_flips`,
+  `stability_entry` and `stable_status_from_entries`, plus its constants.
+  Both `labeling_progress._compute_stable_status` and the eval harness's
+  `autopilot_flow.stable_status` delegate to it, so the two can no longer
+  drift. The rule changed with the move: only *confident* flips (items clear
+  of the cut, by `STABLE_BAND_STD_FRACTION` of the score spread, under both
+  detectors) count against stability, every rate is over the whole pool
+  rather than the unlabeled remainder, and green additionally requires the
+  raw flip rate to have stopped falling. The status dict gained
+  `avg_confident_flip_rate` and `plateau`. Per-step stability records - the
+  `stability_over_time` entries and `AutopilotFlow.stability` - carry
+  `num_confident_flips` and `num_pool` beside `num_flips` / `num_unlabeled`,
+  and `AutopilotFlow.record_step` now takes the pool's scores and threshold
+  instead of a predicted-class map.
+
 - **`vtscore.utils.import_metadata`** (issue #3715) - `seed_packages_distributions()`
   installs a stat-free stand-in for `importlib.metadata.packages_distributions`,
   which `transformers` calls at module import. The stdlib version stats every
