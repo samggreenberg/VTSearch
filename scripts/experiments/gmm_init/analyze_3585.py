@@ -180,6 +180,58 @@ def _cell(v: object, sig: int) -> str:
     return str(v)
 
 
+def sort_latency(cuts: pd.DataFrame, corpus: Path) -> pd.DataFrame:
+    """What a whole cosine/text sort costs, before and after.
+
+    The gate times the fit; the sort capture times the rest of the sort
+    (``cosine_sort_with_boxes`` - the scoring pass, the result dicts and the
+    sort itself) for the same query on the same hardware.  Together they turn a
+    speedup on the fit into the number a user would feel, which is the one this
+    issue sized itself on: the fit was measured at 91-95% of a sort, so the
+    interesting question is what fraction it is *afterwards*.
+    """
+    seconds: dict[tuple[str, str, str], float] = {}
+    for path in sorted(corpus.glob("sorts*.npz")):
+        with np.load(path) as z:
+            if "_meta" not in z:
+                continue
+            meta = json.loads(bytes(z["_meta"].tobytes()).decode("utf-8"))
+        for key, value in (meta.get("sort_seconds") or {}).items():
+            _kind, dataset, embedder, category = key.split("|")
+            seconds[(dataset, embedder, category)] = float(value)
+    if not seconds:
+        return pd.DataFrame()
+
+    df = cuts[cuts["kind"] == "sort"].copy()
+    df["seconds"] = pd.to_numeric(df["seconds"], errors="coerce")
+    df["rest_seconds"] = [
+        seconds.get((str(d), str(e), str(c)), float("nan"))
+        for d, e, c in zip(df["dataset"], df["embedder"], df["case"], strict=True)
+    ]
+    df = df.dropna(subset=["rest_seconds"])
+    if df.empty:
+        return pd.DataFrame()
+    base = df[df["arm"] == "baseline"].set_index(["cell", "case"])["seconds"].rename("base_fit")
+    df = df.join(base, on=["cell", "case"])
+    df["sort_before"] = df["rest_seconds"] + df["base_fit"]
+    df["sort_after"] = df["rest_seconds"] + df["seconds"]
+    rows = []
+    for arm, g in df.groupby("arm", sort=False):
+        rows.append(
+            {
+                "arm": arm,
+                "sorts": len(g),
+                "n_median": int(g["n"].median()),
+                "rest_ms": 1000 * g["rest_seconds"].median(),
+                "fit_ms": 1000 * g["seconds"].median(),
+                "fit_share_pct": 100 * (g["seconds"] / g["sort_after"]).median(),
+                "sort_ms": 1000 * g["sort_after"].median(),
+                "sort_speedup": (g["sort_before"] / g["sort_after"]).median(),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def _md(df: pd.DataFrame, sig: int = 3) -> str:
     """A markdown table, hand-rolled.
 
@@ -203,6 +255,7 @@ def main(argv: "list[str] | None" = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--analysis", required=True, help="directory holding gate_cuts.csv / gate_fits.csv")
     ap.add_argument("--out", default=None, help="where the aggregates go (default: <analysis>/agg)")
+    ap.add_argument("--corpus", default=None, help="the capture dir, for the whole-sort latency table")
     args = ap.parse_args(list(argv) if argv is not None else None)
 
     analysis = Path(args.analysis)
@@ -216,6 +269,12 @@ def main(argv: "list[str] | None" = None) -> int:
         "gate_by_env.csv": gate_by_env(cuts),
         "fits_by_arm.csv": fit_table(fits),
     }
+    if args.corpus:
+        latency = sort_latency(cuts, Path(args.corpus))
+        if latency.empty:
+            print(f"no per-sort timings under {args.corpus} - skipping the latency table", file=sys.stderr)
+        else:
+            tables["sort_latency.csv"] = latency
     bench_path = analysis / "bench.csv"
     if bench_path.exists():
         tables["bench_by_n.csv"] = bench_table(pd.read_csv(bench_path))
