@@ -772,8 +772,8 @@ python silence_source.py --rate silence_rate.json --deep-unprovable 6264   # ~2m
 ```
 
 2026-09-13, 9 of 25 classes finished: designation-based 2.8%, **VG-silence 1.0%
-[0.90%, 1.1%], bound 1.7%** — at most 104 of deep's 6,264, and inside #3666's
-independently measured 1.40% [0.68, 2.86]. Full write-up in
+[0.90%, 1.1%], bound 1.7%** — at most 104 of deep's 6,264, and near the middle
+of #3666's independently measured 1.40% [0.68, 2.86] rather than at its top edge. Full write-up in
 [`docs/experiments/2026-09-13-vg-silence-3696/REPORT.md`](../../../docs/experiments/2026-09-13-vg-silence-3696/REPORT.md);
 re-run both as classes finish rather than quoting that page.
 

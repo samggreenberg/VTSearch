@@ -31,10 +31,13 @@ The headline to quote is **1.0%, bound 1.7%**. The uncorrected,
 designation-based reading is 2.8% [2.6%, 3.0%] with a bound of 3.5% — valid but
 loose by a factor of ~2, for the reason in "Most of it is not silence" below.
 
-**Two instruments now agree.** #3666 measured the shipped twelve's pool error at
-**1.40%** [0.68, 2.86] by a completely different route. 1.0% [0.90, 1.1] sits
-inside that interval. Before the correction the two disagreed by 2x, and the
-disagreement was ours.
+**It lands where an independent instrument already was.** #3666 measured the
+shipped twelve's pool error at **1.40%** [0.68, 2.86] by a completely different
+route. The corrected 1.0% sits near the middle of that interval; the
+designation-based 2.8% [2.6%, 3.0%] sat at the very top of it, overlapping only
+over [2.59, 2.86]. The two readings were never formally in conflict, but one of
+them agrees comfortably and the other only just, and the difference between them
+is ours rather than the data's.
 
 ## Most of it is not silence
 
@@ -47,9 +50,9 @@ the number:
 
 | | count | what it means |
 |---|---:|---|
-| **coverage** | **291** | no name on the image belongs to the class under any spelling the tables know. VG genuinely did not describe it. |
+| **coverage** | **291** | no name on the image belongs to the class under any spelling the tables know. The reading that matters — and itself an upper bound, since an unaudited name lands here (see the examples). |
 | **withheld** | 83 | VG used a name `SCALE_VG_AMBIGUOUS` refuses on purpose — `bike`, `stop`, `sailboat` (#3605). VG spoke; the build declined to listen. |
-| **folded** | 441 | VG used the class's own name, or one `SCALE_VG_NAMES` already folds. Nothing to do with VG: the image is simply not among the class's *designated* positives — a missed band, the scatter filter, or a cell `designate_cells` filled from higher ranks before reaching it. Which, is #3818. |
+| **folded** | 441 | VG used the class's own name, or one `SCALE_VG_NAMES` already folds. Nothing to do with VG: the image is simply not among the class's *designated* positives — a missed band, the scatter filter, or a cell `designate_cells` filled from higher ranks before reaching it. Apportioning the three is #3818. |
 
 **Only `coverage` can contaminate a negative pool**, which is the rate's only
 live consumer. `lift_ambiguous` withholds an ambiguous name from the shared pool
