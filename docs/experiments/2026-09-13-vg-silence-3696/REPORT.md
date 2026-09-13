@@ -49,7 +49,7 @@ the number:
 |---|---:|---|
 | **coverage** | **291** | no name on the image belongs to the class under any spelling the tables know. VG genuinely did not describe it. |
 | **withheld** | 83 | VG used a name `SCALE_VG_AMBIGUOUS` refuses on purpose — `bike`, `stop`, `sailboat` (#3605). VG spoke; the build declined to listen. |
-| **folded** | 441 | VG used the class's own name, or one `SCALE_VG_NAMES` already folds. Nothing to do with VG: the image lost its designation downstream, at banding or the scatter filter. |
+| **folded** | 441 | VG used the class's own name, or one `SCALE_VG_NAMES` already folds. Nothing to do with VG: the image is simply not among the class's *designated* positives — a missed band, the scatter filter, or a cell `designate_cells` filled from higher ranks before reaching it. Which, is #3818. |
 
 **Only `coverage` can contaminate a negative pool**, which is the rate's only
 live consumer. `lift_ambiguous` withholds an ambiguous name from the shared pool
@@ -79,8 +79,13 @@ almost entirely a numerator story.
 The correction is not uniform, and it re-ranks the classes. `bench` and
 `backpack` stay near the top because their errors really are coverage; `bus`
 drops from 2.7% to 0.51% because 73 of its 89 errors are images VG called a bus
-and the build then dropped at banding. **A class that looks dirty on the
+that never became designated positives. **A class that looks dirty on the
 designation reading can be clean on the one that matters.**
+
+Those 441 are not nothing, though: they are images a human has now confirmed hold
+a class the pile does not designate them for. Whether they are supply the build
+is leaving on the table or ordinary over-subscription is #3818; either way they
+are already safe from the negative pool.
 
 ### Literal examples
 
@@ -147,6 +152,7 @@ sporks not strainers`), `vase` (`vase incl pots and planters` → `vase not
 planters`, #3784). They are reported and kept out of the pooled figure rather
 than dropped (#3814). `vase` is the one to watch: the planter recheck retired
 **20 of 31** of the *old* positives, and it does not overlap these 394 at all.
+Rechecking all three would take the pooled figure from 9 classes to 12 — #3819.
 
 ## What was given up
 

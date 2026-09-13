@@ -168,7 +168,7 @@ def source_split(src: dict, out: Path) -> Path:
     labels = {
         "coverage": "coverage — VG named nothing (can contaminate a pool)",
         "withheld": "withheld — VG used a name the build refuses (#3605)",
-        "folded": "folded — VG used a name the build folds; lost downstream",
+        "folded": "folded — VG used a name the build folds; just not designated",
     }
 
     for kind in ("coverage", "withheld", "folded"):

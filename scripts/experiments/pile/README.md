@@ -762,8 +762,8 @@ check them (#3723).
 **Run `silence_source.py` after it, and quote that number.** A cell pickle
 carries a *designation*, not what VG named (#3678), so the rate above counts an
 image VG called a `bike` as an image VG was silent about. Measured, that is
-**64%** of the errors — 441 of 815 under a spelling the build folds and loses at
-banding, 83 under one `lift_ambiguous` refuses (#3605) — and **none of it can
+**64%** of the errors — 441 of 815 under a spelling the build folds but never
+designates (#3818), 83 under one `lift_ambiguous` refuses (#3605) — and **none of it can
 reach a negative pool**, which is the only thing the rate is for. The correction
 is a factor of two and it re-ranks the classes:
 

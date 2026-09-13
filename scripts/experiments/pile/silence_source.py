@@ -20,8 +20,13 @@ ways:
   (`bike`, `stop`, `sailboat`). VG spoke; the build declined to listen, which is
   a ruling and not an error;
 * **folded** -- VG used the class's own name or a spelling `SCALE_VG_NAMES`
-  already folds. Nothing to do with VG at all: the image lost its designation
-  downstream, at banding or the scatter filter.
+  already folds. Nothing to do with VG at all: the image is simply not among the
+  class's *designated* positives. Which of the reasons applies is not read here
+  and must not be guessed -- its box may have missed a band, the scatter filter
+  may have dropped it, or `designate_cells` may have filled the cell from higher
+  ranks and never reached it. Over-subscription is an ordinary state, not a
+  fault, which is why this bucket is reported as one count and not as a diagnosis
+  (#3818).
 
 **Only the first can contaminate a negative pool**, which is the whole reason
 the rate has a consumer. `lift_ambiguous` withholds an ambiguous name from the
