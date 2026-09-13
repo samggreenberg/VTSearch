@@ -259,12 +259,22 @@ lists from votes, caching on `DetectorContext`) sits one layer up.
 
 ### `calculate_gmm_threshold(scores)`
 
-`vtscore/training/thresholds/gmm.py`. Fits a 2-component
-`sklearn.mixture.GaussianMixture` to the score list and returns the
-**midpoint between the two component means**. Used to produce a
-reasonable operating point even when only a few labels exist - the score
-distribution still tends to be bimodal because the embedder space already
-separates "kind of like X" from "kind of not like X".
+`vtscore/training/thresholds/gmm.py`. Fits a 2-component 1-D Gaussian
+mixture to the score list and returns the **midpoint between the two
+component means**. Used to produce a reasonable operating point even when
+only a few labels exist - the score distribution still tends to be bimodal
+because the embedder space already separates "kind of like X" from "kind of
+not like X".
+
+The fit is `fit_score_gmm`: a deterministic 2-means init and EM, sharing
+its loop with the anchored refit (`_anchored_em` with no anchors) and
+stopping where sklearn's `GaussianMixture` stopped it - when an iteration
+improves the mean log-likelihood by less than 1e-3. It **was** that
+`GaussianMixture` until issue #3585, which measured the call at 91-95% of
+a whole cosine/text sort and replaced it for a 4.8x saving on that path;
+`fit_score_gmm_sklearn` is the old one, retained out of production so the
+equivalence stays re-measurable
+(`docs/experiments/2026-09-13-gmm-init-3585/REPORT.md`).
 
 Issue #2798 briefly cut instead at the **equal-density crossing** of the
 two weighted components (the root of `w_lo·N(x; μ_lo, σ²_lo) = w_hi·N(x;

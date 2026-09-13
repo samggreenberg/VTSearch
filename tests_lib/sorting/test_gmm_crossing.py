@@ -109,12 +109,18 @@ def _pooled_scores(n, mu, sd, rng, k=24):
 
 
 def _fitted_midpoint(scores: np.ndarray) -> float:
-    """The midpoint between the means of the same GMM ``calculate_gmm_threshold`` fits."""
-    from sklearn.mixture import GaussianMixture
+    """The midpoint between the means of the same GMM ``calculate_gmm_threshold`` fits.
 
-    fitted = GaussianMixture(n_components=2, random_state=42).fit(np.asarray(scores).reshape(-1, 1))
-    assert fitted.means_ is not None
-    return float(np.ravel(fitted.means_).mean())
+    Read off :func:`fit_score_gmm` rather than off a locally constructed
+    ``GaussianMixture``: since #3585 that *is* the estimator production fits, and
+    a second copy of the old one here would have been asserting that the cut rule
+    is a midpoint by comparing it against a different fit's midpoint.  What the
+    assertion below is for is the **rule** - midpoint, not crossing (#2833) - and
+    the lines after it are what keep it from being vacuous.
+    """
+    fitted = fit_score_gmm(gmm_fit_array(np.asarray(scores, dtype=np.float64)))
+    assert fitted is not None
+    return fitted.midpoint()
 
 
 class TestGmmThresholdCutRule:
