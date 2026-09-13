@@ -277,6 +277,10 @@ output means failures, not completion.
   roster and the clustering have diverged — the eval would silently shrink.
 - `separations_honoured` matches the number of adjudicated pairs.
 - `needs_hand_crop`: band-located classes still owe a hand-drawn query crop.
+- Query-crop warnings: a class whose crop "is not the class's largest
+  instance" had a bigger box rejected as unrepresentative (expected, and
+  worth a look on the slate); one with "no dominant mark" holds more than
+  one mark and owes a `--task cluster` sheet before its numbers are quoted.
 - `embed_corpus.py --verify`: every cell loads, every media has a vector.
 
 ## Growing the corpus later

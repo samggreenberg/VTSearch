@@ -251,10 +251,30 @@ In the order you run them. Only the first two are needed for a first eval.
 
 Query crops come from each class's largest boxed instance automatically (the
 prior study measured a 2.2× AP advantage for a clean query over a small in-scene
-crop). Band-located classes get none — auto-cropping the strip would hand the
-query a banner of letterhead plus address plus rule line and call it a logo,
-which is worse than no crop because it looks like ground truth. They are listed
-in `build_report.json` under `needs_hand_crop`.
+crop) — largest **among the class's core**, not largest outright. Nothing used to
+check that the largest box was a member of the class in any sense but the
+clustering's own say so, and `spods/stamp_00489_1` holds three rubber stamps
+whose largest box is a third that appears nowhere else in it, so the eval
+searched 24 instances of one stamp with a crop of `://NOT-DELIVERED//:` (#3599).
+The core is the class's medoid plus the instances that are not outliers *against
+that class's own spread*; the fixed-distance version of the same screen was
+measured and does not work, because on blue-on-white marks a perceptual hash
+tracks ink layout rather than identity — the one confirmed-wrong crop scored
+0.172 where the 60-class median was 0.28, second *lowest* of the 60.
+
+Neither half of the choice is silent. A crop that is not its class's largest
+instance reports the larger boxes it passed over, and a crop lying within the
+source's own merge threshold of fewer than half its class reports that too: that
+is a class with no dominant mark, where no rule can pick the right exemplar and
+a `--task cluster` sheet is owed before its numbers mean anything. Both are
+warnings in `build_report.json`, never refusals — a class with no crop drops out
+of the eval rather than failing it — and `classes.json` carries the evidence per
+class under `query_core`.
+
+Band-located classes get no crop — auto-cropping the strip would hand the query a
+banner of letterhead plus address plus rule line and call it a logo, which is
+worse than no crop because it looks like ground truth. They are listed in
+`build_report.json` under `needs_hand_crop`.
 
 
 ## The slate: ask for the partition, not the pairs

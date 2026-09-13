@@ -580,6 +580,178 @@ class TestClassAdmission:
         assert "ucsf" in eligible
 
 
+# -------------------------------------------------------------- query crops
+
+
+class TestQueryCropIsAMemberOfItsClass:
+    """The exemplar has to be an instance of the mark it is used to search for.
+
+    #3599: `spods/stamp_00489_1` holds three different rubber stamps, and its
+    largest box is a third one that appears nowhere else in the class -- so the
+    eval searched 24 instances of one stamp with a crop of `NOT-DELIVERED`, and
+    every resulting zero looked like a detector failure.  Nothing checked that
+    the largest box belonged to the class in any sense but the clustering's own
+    say so.
+    """
+
+    @staticmethod
+    def _stamp(kind, size):
+        """A page carrying one stamp: a bar, a comb, or a mark unlike any other.
+
+        ``kind`` is ``"bar"``, ``"comb"``, or ``"noise<n>"`` — the last being a
+        seeded random block, so a class of them holds no two alike.
+        """
+        arr = np.full((_PAGE_H, _PAGE_W), 255, dtype=np.uint8)
+        if kind == "bar":
+            arr[200 + size // 4 : 200 + 3 * size // 4, 200 : 200 + size] = 0
+        elif kind == "comb":
+            for k in range(0, size, max(2, size // 10)):
+                arr[200 : 200 + size, 200 + k : 200 + k + max(1, size // 25)] = 0
+        else:
+            rng = np.random.default_rng(int(kind.removeprefix("noise")))
+            arr[200 : 200 + size, 200 : 200 + size] = rng.integers(0, 2, (size, size)) * 255
+        return arr
+
+    def _class(self, mods, tmp_path, instances):
+        """One class over ``[(kind, size), ...]``, on real pages."""
+        from PIL import Image
+
+        tmp_path.mkdir(parents=True, exist_ok=True)
+        pages = []
+        for i, (kind, size) in enumerate(instances):
+            path = tmp_path / f"p{i}.png"
+            Image.fromarray(self._stamp(kind, size)).save(path)
+            pages.append(
+                _page(
+                    mods,
+                    f"spods/{i:05d}",
+                    "spods",
+                    marks=[("stamp", (200, 200, size, size), "spods/stamp_00000_0", "clustered")],
+                    path=str(path),
+                    w=_PAGE_W,
+                    h=_PAGE_H,
+                )
+            )
+        return pages
+
+    def _crop(self, mods, tmp_path, instances):
+        pages = self._class(mods, tmp_path, instances)
+        inventory = mods["build"].class_inventory(pages)
+        admitted, _ = mods["build"].admit_classes(pages, inventory, min_instances=1, min_mark_px=1)
+        _hand, warnings = mods["build"].write_query_crops(pages, inventory, admitted, tmp_path / "queries")
+        return admitted["spods/stamp_00000_0"], warnings
+
+    def test_the_largest_box_does_not_win_when_it_is_not_the_class_mark(self, mods, tmp_path):
+        # Eight instances of one stamp and one much larger instance of another:
+        # the shape of the live case, and the crop the old rule chose.
+        meta, _warnings = self._crop(mods, tmp_path, [("bar", 120)] * 8 + [("comb", 300)])
+        assert meta["query_page_id"] != "spods/00008"
+        assert meta["query_core"]["larger_instances_skipped"] == 1
+
+    def test_passing_over_a_larger_instance_is_reported_not_silent(self, mods, tmp_path):
+        # The crop is still written -- a class with no crop drops out of the
+        # eval rather than failing it -- so the warning is the only thing that
+        # says the exemplar is not the obvious one.
+        meta, warnings = self._crop(mods, tmp_path, [("bar", 120)] * 8 + [("comb", 300)])
+        assert Path(meta["query_crop"]).exists()
+        assert any("not the class's largest instance" in w for w in warnings)
+
+    def test_a_clean_class_still_gets_its_largest_instance(self, mods, tmp_path):
+        # The 2.2x AP advantage the largest-box rule was chosen for is not given
+        # up: the core screen only ever removes an outlier, so a class that is
+        # one mark keeps the most pixels it has.
+        meta, warnings = self._crop(mods, tmp_path, [("bar", 80 + 20 * i) for i in range(8)])
+        assert meta["query_page_id"] == "spods/00007"
+        assert meta["query_core"]["n_core"] == meta["query_core"]["n_boxed"] == 8
+        assert warnings == []
+
+    def test_a_class_with_no_dominant_mark_is_warned_about(self, mods, tmp_path):
+        # Nine mutually unlike marks: the medoid is not a majority, so no rule
+        # can pick the right exemplar and the build says so rather than choosing
+        # one and calling it ground truth.
+        instances = [(f"noise{i}", 100 + 10 * i) for i in range(9)]
+        meta, warnings = self._crop(mods, tmp_path, instances)
+        assert meta["query_core"]["reach"] < meta["query_core"]["n_boxed"] / 2
+        assert any("no dominant mark" in w for w in warnings)
+
+    def test_a_stale_crop_from_an_earlier_selection_is_overwritten(self, mods, tmp_path):
+        # The crop used to be skipped when the file was already there, so a
+        # corpus rebuilt after this rule changed would have kept the exemplar
+        # the old rule chose -- the defect, preserved.
+        pages = self._class(mods, tmp_path, [("bar", 120)] * 8 + [("comb", 300)])
+        inventory = mods["build"].class_inventory(pages)
+        admitted, _ = mods["build"].admit_classes(pages, inventory, min_instances=1, min_mark_px=1)
+        queries = tmp_path / "queries"
+        queries.mkdir()
+        stale = queries / "spods__stamp_00000_0.png"
+        stale.write_bytes(b"")
+        mods["build"].write_query_crops(pages, inventory, admitted, queries)
+        assert stale.stat().st_size > 0
+
+    def test_the_chosen_mark_does_not_depend_on_instance_order(self, mods, tmp_path):
+        instances = [("bar", 120)] * 8 + [("comb", 300)]
+        first, _ = self._crop(mods, tmp_path / "a", instances)
+        second, _ = self._crop(mods, tmp_path / "b", list(reversed(instances)))
+        # Same marks, opposite order: the odd one is page 00008 in the first
+        # corpus and page 00000 in the second, and is passed over in both.
+        assert first["query_page_id"] == "spods/00000"
+        assert second["query_page_id"] == "spods/00001"
+
+
+class TestMedoidCore:
+    """The core is found by the class's own spread, never by a fixed distance.
+
+    #3599 measured the fixed-distance screen and it does not work: the one
+    confirmed-wrong exemplar scored 0.172 against its own class where the
+    60-class median was 0.28 -- second *lowest*, i.e. healthier-looking than
+    almost all of them -- because a perceptual hash of blue ink on white paper
+    tracks ink layout rather than identity.
+    """
+
+    @staticmethod
+    def _dist(sizes, within, between, sd=0.02, seed=0):
+        rng = np.random.default_rng(seed)
+        labels = [k for k, n in enumerate(sizes) for _ in range(n)]
+        n = len(labels)
+        dist = np.zeros((n, n))
+        for i in range(n):
+            for j in range(i + 1, n):
+                base = within if labels[i] == labels[j] else between
+                dist[i, j] = dist[j, i] = abs(rng.normal(base, sd)) if sd else base
+        return dist, labels
+
+    def test_the_core_is_the_majority_mark_not_the_whole_class(self, mods):
+        # The live shape: 22 instances of one stamp, 2 of another, 1 of a third.
+        dist, labels = self._dist([22, 2, 1], within=0.08, between=0.30)
+        medoid, core = mods["cluster"].medoid_core(dist, spread=3.0)
+        assert labels[medoid] == 0
+        assert {labels[i] for i in core} == {0}
+        assert len(core) == 22
+
+    def test_a_homogeneous_group_keeps_every_member(self, mods):
+        # Excluding a good instance costs a slightly smaller crop, so the cut
+        # only ever removes an outlier -- it does not take a fixed share.
+        dist, _labels = self._dist([12], within=0.10, between=0.10, sd=0.0)
+        _medoid, core = mods["cluster"].medoid_core(dist, spread=3.0)
+        assert len(core) == 12
+
+    def test_the_cut_is_relative_so_a_scale_change_does_not_move_it(self, mods):
+        # The whole argument for a within-class comparison: doubling every
+        # distance is a differently-scaled class and the same partition, which
+        # is what a fixed bar on the descriptor cannot say.
+        dist, _labels = self._dist([9, 3], within=0.06, between=0.25)
+        _m, core = mods["cluster"].medoid_core(dist, spread=3.0)
+        _m2, scaled = mods["cluster"].medoid_core(dist * 2, spread=3.0)
+        assert core == scaled == list(range(9))
+
+    def test_a_single_instance_is_its_own_core(self, mods):
+        assert mods["cluster"].medoid_core(np.zeros((1, 1)), spread=3.0) == (0, [0])
+
+    def test_an_empty_group_is_refused(self, mods):
+        with pytest.raises(ValueError, match="at least one row"):
+            mods["cluster"].medoid_core(np.zeros((0, 0)), spread=3.0)
+
+
 # ------------------------------------------------------------------- roster
 
 
