@@ -31,10 +31,9 @@ worth.
    sklearn and changing only `init_params="k-means++"` — three characters, same
    estimator — changes **16.1%**, by a median of **11.5**. On 195 sorts the mean
    fraction of the haystack whose verdict moves is **0.89%** against **4.2%**,
-   and on the 62 that are real *text* sorts it is **0.39%** against **6.2%**, a
-   factor of sixteen. A fit of this model
-   moves when you touch it; this one moves less than the smallest thing you
-   could touch.
+   and on the 62 that are real *text* sorts it is **0.39%** against **6.2%** — a
+   factor of sixteen. A fit of this model moves when you touch it; this one
+   moves less than the smallest thing you could touch.
 
 2. **And it moves in a different *place*.** The fold cases that move by more
    than 1% of the haystack (34 of 2,258) are concentrated where the mixture is
@@ -76,12 +75,14 @@ worth.
    Every one points the candidate's way, which is worth exactly nothing on its
    own and is said here so nobody has to re-derive it from the table.
 
-7. **Two follow-ups the measurement handed over, both larger than this issue.**
-   The anchored loop now *is* the cost of a fold's fit and it **exits on
-   `max_iter`** rather than converging (97-200 iterations, against the init's
-   ~15) — #3825. And the incumbent's cut on a typed query is barely
-   identifiable at all: re-initialising it moves 6.2% of the verdicts, which is
-   a fact about what shipped, not about this change — #3826.
+7. **Three follow-ups the measurement handed over, the first two larger than
+   this issue.** The anchored loop now *is* the cost of a fold's fit and it
+   **exits on `max_iter`** rather than converging — 97-200 iterations against
+   the init's ~15 — which is #3825. The incumbent's cut on a typed query is
+   barely identifiable at all: re-initialising it moves 6.2% of the verdicts,
+   which is a fact about what shipped rather than about this change (#3826).
+   And `_GMM_MAX_SAMPLES` is worth another 3x at 50k and is still unmeasured at
+   the size where it binds (#3827).
 
 
 
@@ -187,13 +188,13 @@ to the trajectory A/B (section 4). What the rest of this section is for is the
 
 ### The fold path — 2,258 cases from 84 cells
 
-| arm | cases changed | | median &#124;Δadmitted&#124; when changed | moved > 1% of the haystack | provenance changed | median speedup of the whole chain |
+| arm | changed | of 2,258 | median &#124;Δadmitted&#124; when changed | moved > 1% of the haystack | provenance changed | median speedup of the whole chain |
 |---|---|---|---|---|---|---|
-| **`native`** | **158** | **7.0%** | **2** | **34** | 3 | **1.47x** |
-| `native_ll1e-4` | 234 | 10.4% | 2 | 42 | 10 | 1.40x |
-| `native_ll1e-5` | 285 | 12.6% | 4 | — | 15 | 1.30x |
-| `native_iter50` | 301 | 13.3% | 4 | — | 13 | 1.16x |
-| `native_param1e-8` | 325 | 14.4% | 9 | 103 | 17 | 0.76x |
+| **`native`** | **158** | **7.0%** | **2** | **34** | 3 | **1.45x** |
+| `native_ll1e-4` | 234 | 10.4% | 2 | 42 | 10 | 1.39x |
+| `native_ll1e-5` | 285 | 12.6% | 4 | 63 | 15 | 1.29x |
+| `native_iter50` | 301 | 13.3% | 4 | 57 | 13 | 1.15x |
+| `native_param1e-8` | 325 | 14.4% | 9 | 103 | 17 | 0.75x |
 | `sklearn_kmeanspp` *(control)* | **364** | **16.1%** | **11.5** | **148** | 41 | 0.95x |
 | `sklearn_spherical` | 0 | 0% | — | 0 | 0 | 1.04x |
 
@@ -205,7 +206,7 @@ the incumbent, three characters, same library, same estimator, same tolerance �
 and it moves **twice as many** admitted sets as the whole rewrite does, by five
 times as much when it moves them.
 
-The whole-chain speedup is only 1.47x because the anchored refit, which this
+The whole-chain speedup is only 1.45x because the anchored refit, which this
 branch does not touch, is now ~90% of a fold's fit. That is
 #3825.
 
@@ -250,15 +251,19 @@ cosine/text sorts** over four datasets and three text embedders, 838 to 18,050
 medias. This is where the fit's cost lives and, as it turns out, where the
 incumbent is least identifiable.
 
-| arm | cases changed | | mean % of the haystack moved | on the 62 **text** sorts | median &#124;Δadmitted&#124; when changed | median speedup of the fit |
+| arm | changed | of 195 | mean % of the haystack moved | median &#124;Δadmitted&#124; when changed | 90th pct of the change | median speedup of the fit |
 |---|---|---|---|---|---|---|
-| **`native`** | **119** | **61.0%** | **0.89%** | **0.39%** | **10** | **6.4x** |
-| `native_ll1e-4` | 160 | 82.1% | 3.9% | — | 40 | 3.9x |
-| `native_ll1e-5` | 164 | 84.1% | — | — | 117 | 2.5x |
-| `native_iter50` | 164 | 84.1% | — | — | 97 | 1.5x |
-| `native_param1e-8` | 164 | 84.1% | 7.7% | — | 215 | 0.60x |
-| `sklearn_kmeanspp` *(control)* | 156 | 80.0% | **4.2%** | **6.2%** | 78 | 0.91x |
-| `sklearn_spherical` | 0 | 0% | 0% | 0% | — | 1.12x |
+| **`native`** | **119** | **61.0%** | **0.89%** | **10** | **0.57%** | **6.4x** |
+| `native_ll1e-4` | 160 | 82.1% | 3.9% | 40 | 11% | 3.9x |
+| `native_ll1e-5` | 164 | 84.1% | — | 117 | — | 2.5x |
+| `native_iter50` | 164 | 84.1% | — | 97 | — | 1.5x |
+| `native_param1e-8` | 164 | 84.1% | 7.7% | 215 | 17% | 0.60x |
+| `sklearn_kmeanspp` *(control)* | 156 | 80.0% | **4.2%** | 78 | **9.2%** | 0.91x |
+| `sklearn_spherical` | 0 | 0% | 0% | — | 0% | 1.12x |
+
+On the 62 cases that are real **text** sorts rather than the harness's own
+acquisition cut, the same mean is **0.39%** for `native` against **6.2%** for the
+control.
 
 **"61% of sorts change" and "0.89% of the haystack moves" are both true and the
 second is the one to read.** A sort's cut sits inside a dense region of scores,
@@ -266,13 +271,11 @@ so it is *always* going to move a few medias — the median change among the cas
 that change is 10 of ~5,000. What separates the arms is the tail: `native`'s 90th
 percentile is 0.57% of the haystack, the control's is 9.2%.
 
-The text-sort column is the sharpest contrast in this report. On the 62 real
-query sorts the candidate moves **0.39%** of the verdicts and re-initialising the
-incumbent moves **6.2%** — sixteen times more, for a three-character change that
-alters no estimator. It is also the number behind
-#3826: whatever else is true, a quantity that moves by 6% of a
-haystack when you change where its optimiser starts is not carrying 6% worth of
-information.
+That text-sort split is the sharpest contrast in this report: **0.39%** against
+**6.2%**, sixteen times, for a three-character change that alters no estimator.
+It is also the number behind #3826 — whatever else is true, a quantity that
+moves by 6% of a haystack when you change where its optimiser starts is not
+carrying 6% worth of information.
 
 
 ---
@@ -303,7 +306,8 @@ same place by the same rule, from two different starting points.
 **And the arms that *are* better fits are the ones that move the cut most.**
 `native_param1e-8` beats sklearn's likelihood on 4,501 of 4,516 haystacks — it is
 unambiguously the better estimate — and it is also the arm that changes the most
-admitted sets (14.4% against 7.0%) and the only one slower than what it replaces.
+admitted sets (14.4% against 7.0%) and the only native arm slower than what it
+replaces.
 Running EM further finds a better optimum of a model that, on these samples, is
 frequently not identified; a better fit of an unidentified model is a
 *differently placed* cut, not a more correct one.
@@ -326,14 +330,18 @@ thread, min-of-5.
 `bench_3585.py`, 168 arrays drawn two per captured cell, each fitted at its own
 size and again at two sizes the app fits on:
 
-| scores | `baseline` | **`native`** | speedup | `native_10k` | `sklearn_kmeanspp` | `native_param1e-8` |
-|---|---|---|---|---|---|---|
-| 1k-5k (measured) | 13.2 ms | **1.8 ms** | **7.5x** | 1.8 ms | 12.6 ms (1.05x) | 34 ms (0.39x) |
-| 20,000 (resampled) | 55 ms | **4.9 ms** | **10.1x** | 3.4 ms (14.4x) | 54 ms (0.89x) | 84 ms (0.77x) |
-| 50,000 (resampled) | 143 ms | **10.5 ms** | **12.3x** | 3.5 ms (37.5x) | 161 ms (0.87x) | 168 ms (1.01x) |
+| scores | arrays | `baseline` | **`native`** | speedup | `native_10k` | `sklearn_kmeanspp` | `native_param1e-8` |
+|---|---|---|---|---|---|---|---|
+| < 1k (measured) | 48 | 5.4 ms | **0.54 ms** | **9.5x** | 0.54 ms | 5.6 ms (0.93x) | 0.46 ms (13x) |
+| 1k-5k (measured) | 120 | 14.2 ms | **1.8 ms** | **7.5x** | 1.8 ms | 14.4 ms (0.94x) | 29 ms (0.43x) |
+| 20,000 (resampled) | 168 | 55 ms | **4.9 ms** | **10.1x** | 3.4 ms (14.4x) | 54 ms (0.89x) | 84 ms (0.77x) |
+| 50,000 (resampled) | 168 | 143 ms | **10.5 ms** | **12.3x** | 3.5 ms (37.5x) | 161 ms (0.87x) | 168 ms (1.01x) |
 
-The speedup grows with *n* because the k-means init sklearn pays per call grows
-with it and the 2-means init does not. `native_10k` is the `_GMM_MAX_SAMPLES`
+The speedup grows with *n* from 1k upward because the k-means init sklearn pays
+per call grows with it and the 2-means init does not. (The `< 1k` row is the
+fixed per-call overhead of constructing and validating a `GaussianMixture`
+showing through: at 838 scores the parameter-delta arm is 13x too, because
+almost nothing is being iterated over.) `native_10k` is the `_GMM_MAX_SAMPLES`
 lever measured beside the others rather than proposed: at 50k it is another 3x
 on top, for a change of a different kind — it changes what the fit *sees* — and
 it is #3827, not this issue.
