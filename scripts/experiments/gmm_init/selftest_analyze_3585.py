@@ -34,11 +34,11 @@ def check(name: str, got, want) -> None:
         FAILURES.append(name)
 
 
-def _cut_row(cell, kind, case, arm, thr, adm, seconds=0.01, provenance="fold_anchored[2/2]", n=1000):
+def _cut_row(cell, kind, case, arm, thr, adm, seconds=0.01, provenance="fold_anchored[2/2]", n=1000, embedder="e"):
     return {
         "cell": cell,
         "dataset": "d",
-        "embedder": "e",
+        "embedder": embedder,
         "category": "c",
         "seed": 0,
         "style": "whole_image",
@@ -76,6 +76,13 @@ def main() -> int:
             # A sort case, and a baseline-only row that must not become a case.
             _cut_row("cell_1", "sort", "0000", "baseline", 0.30, 7, seconds=0.02),
             _cut_row("cell_1", "sort", "0000", "native", 0.30, 7, seconds=0.01),
+            # THE SAME case name in the same file under a second embedder - a
+            # sort capture walks a whole grid into one npz, so this is the
+            # normal shape and not an edge case.  Pairing on (cell, kind, case)
+            # cross-joins these four rows into eight and the merge either
+            # doubles every count or raises.
+            _cut_row("cell_1", "sort", "0000", "baseline", 0.90, 3, seconds=0.02, embedder="e2"),
+            _cut_row("cell_1", "sort", "0000", "native", 0.90, 3, seconds=0.01, embedder="e2"),
             _cut_row("cell_1", "sort", "0010", "baseline", 0.30, 7, seconds=0.02),
         ]
     )
@@ -87,10 +94,11 @@ def main() -> int:
     check("provenance changes", int(g.loc[("native", "fold"), "prov_changed"]), 1)
     check("median speedup", float(g.loc[("native", "fold"), "speedup_median"]), 4.0)
     check("a rate over 4 cases is flagged", bool(g.loc[("native", "fold"), "rate_reportable"]), False)
-    check("an unpaired baseline row is not a case", int(g.loc[("native", "sort"), "cases"]), 1)
+    check("an unpaired baseline row is not a case", int(g.loc[("native", "sort"), "cases"]), 2)
+    check("two embedders share a case name without cross-joining", int(g.loc[("native", "sort"), "changed"]), 0)
 
     env = gate_by_env(cuts)
-    check("env rows", len(env), 2)
+    check("env rows", len(env), 3)
     check("env fold changed", int(env[env["kind"] == "fold"]["changed"].iloc[0]), 1)
 
     # Likelihood: the candidate wins one, ties one, loses one.

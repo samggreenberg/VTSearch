@@ -61,11 +61,13 @@ def _paired(cuts: pd.DataFrame) -> pd.DataFrame:
     df = cuts.copy()
     for c in (tcol, acol, "seconds"):
         df[c] = pd.to_numeric(df[c], errors="coerce")
-    keys = ["cell", "kind", "case"]
+    # The same key `analyze_3585.CASE_KEYS` uses: a sort capture holds a whole
+    # grid, so a category name is not unique inside one file.
+    keys = ["cell", "dataset", "embedder", "style", "kind", "case"]
     base = df[df["arm"] == "baseline"][keys + [tcol, acol, "seconds"]].rename(
         columns={tcol: "base_t", acol: "base_a", "seconds": "base_s"}
     )
-    out = df[df["arm"] != "baseline"].merge(base, on=keys, how="inner")
+    out = df[df["arm"] != "baseline"].merge(base, on=keys, how="inner", validate="many_to_one")
     out["d_thr"] = (out[tcol] - out["base_t"]).abs()
     out["d_frac"] = (out[acol] - out["base_a"]).abs() / out["n"]
     out["speedup"] = out["base_s"] / out["seconds"].replace(0.0, np.nan)

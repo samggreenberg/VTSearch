@@ -40,6 +40,14 @@ GATE_INCLUSION = 0
 MIN_CASES = 30
 
 
+#: What identifies one captured case, and therefore what an arm's row pairs
+#: with its baseline on.  The embedder and dataset are in here because a sort
+#: capture walks a whole grid into ONE file: `caltech101_m|siglip|airplanes` and
+#: `caltech101_m|siglip2_l|airplanes` share a cell and a case name and are two
+#: different sorts, so pairing on (cell, kind, case) silently cross-joins them.
+CASE_KEYS = ["cell", "dataset", "embedder", "style", "kind", "case"]
+
+
 def _pair(df: pd.DataFrame, keys: list[str], value_cols: list[str]) -> pd.DataFrame:
     """Join every arm's rows to the baseline's on *keys*."""
     base = df[df["arm"] == "baseline"][keys + value_cols].rename(columns={c: f"base_{c}" for c in value_cols})
@@ -54,7 +62,7 @@ def gate_table(cuts: pd.DataFrame) -> pd.DataFrame:
     df[tcol] = pd.to_numeric(df[tcol], errors="coerce")
     df[acol] = pd.to_numeric(df[acol], errors="coerce")
     df["seconds"] = pd.to_numeric(df["seconds"], errors="coerce")
-    paired = _pair(df, ["cell", "kind", "case"], [tcol, acol, "seconds", "provenance"])
+    paired = _pair(df, CASE_KEYS, [tcol, acol, "seconds", "provenance"])
     paired["d_threshold"] = (paired[tcol] - paired[f"base_{tcol}"]).abs()
     paired["d_admitted"] = (paired[acol] - paired[f"base_{acol}"]).abs()
     paired["changed"] = paired["d_admitted"] > 0
@@ -92,7 +100,7 @@ def gate_by_env(cuts: pd.DataFrame) -> pd.DataFrame:
     df = cuts.copy()
     df[acol] = pd.to_numeric(df[acol], errors="coerce")
     df[tcol] = pd.to_numeric(df[tcol], errors="coerce")
-    paired = _pair(df, ["cell", "kind", "case"], [tcol, acol])
+    paired = _pair(df, CASE_KEYS, [tcol, acol])
     paired["changed"] = (paired[acol] - paired[f"base_{acol}"]).abs() > 0
     paired["d_threshold"] = (paired[tcol] - paired[f"base_{tcol}"]).abs()
     g = paired.groupby(["arm", "kind", "dataset", "embedder", "style"], sort=False)
@@ -111,7 +119,7 @@ def fit_table(fits: pd.DataFrame) -> pd.DataFrame:
     df["loglik"] = pd.to_numeric(df["loglik"], errors="coerce")
     df["seconds"] = pd.to_numeric(df["seconds"], errors="coerce")
     df["midpoint"] = pd.to_numeric(df["midpoint"], errors="coerce")
-    paired = _pair(df, ["cell", "kind", "case", "sample"], ["loglik", "seconds", "midpoint"])
+    paired = _pair(df, [*CASE_KEYS, "sample"], ["loglik", "seconds", "midpoint"])
     paired["d_loglik"] = paired["loglik"] - paired["base_loglik"]
     paired["speedup"] = paired["base_seconds"] / paired["seconds"].replace(0.0, np.nan)
     # A tie is a difference below what float64 resolves on a mean over ~1e4
@@ -235,8 +243,8 @@ def sort_latency(cuts: pd.DataFrame, corpus: Path) -> pd.DataFrame:
     df = df.dropna(subset=["rest_seconds"])
     if df.empty:
         return pd.DataFrame()
-    base = df[df["arm"] == "baseline"].set_index(["cell", "case"])["seconds"].rename("base_fit")
-    df = df.join(base, on=["cell", "case"])
+    base = df[df["arm"] == "baseline"].set_index(CASE_KEYS)["seconds"].rename("base_fit")
+    df = df.join(base, on=CASE_KEYS)
     df["sort_before"] = df["rest_seconds"] + df["base_fit"]
     df["sort_after"] = df["rest_seconds"] + df["seconds"]
     rows = []
