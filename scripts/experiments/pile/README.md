@@ -777,6 +777,32 @@ of #3666's independently measured 1.40% [0.68, 2.86] rather than at its top edge
 [`docs/experiments/2026-09-13-vg-silence-3696/REPORT.md`](../../../docs/experiments/2026-09-13-vg-silence-3696/REPORT.md);
 re-run both as classes finish rather than quoting that page.
 
+**`folded_supply.py` finishes the sentence `silence_source.py` leaves hanging.**
+Its `folded` bucket -- 441 images a human confirmed, that VG named under a
+spelling the build folds, and that the pile still does not designate -- is
+reported there as one count on purpose, because *which* reason applies is not
+readable from what that script loads. This runs the loader's front half in its
+own order and asks after each pass whether the class is still on the image, so
+the first pass to drop a pair is the answer:
+
+```bash
+python folded_supply.py --rate silence_rate.json --source silence_source.json \
+                        --per-outcome 1 --out folded_supply.json   # ~3 min CPU, no GPU
+```
+
+2026-09-13: **80% of them are `cell_full`** -- the cell took its `SCALE_N_POS`
+from a larger supply and never reached the image, in cells 1.4x to 22x
+over-subscribed -- with 17% scatter and 2.0% oversize, and **zero** in the seven
+outcomes that would mean a label was lost before the band. Nothing to repair; see
+[`docs/experiments/2026-09-13-folded-supply-3818/REPORT.md`](../../../docs/experiments/2026-09-13-folded-supply-3818/REPORT.md).
+
+`--source` is a gate rather than an option: it refuses to run unless the bucket
+it recovers matches `silence_source.py`'s published counts class for class. And
+read its **control** column before quoting any share -- the 441 are undesignated
+by construction and a scattered image can never be designated, so dividing by
+every queue image holding the class manufactures a 3.6x excess out of the
+conditioning alone.
+
 Two things it will tell you about rather than hide. A class whose slate is
 part-banked has candidates with no verdict, so they enter its bound at their
 worst case and it leaves the pooled figure — `chair` reads 25.1% at 300 of 841,
