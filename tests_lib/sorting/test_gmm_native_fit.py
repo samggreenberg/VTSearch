@@ -34,21 +34,20 @@ from vtscore.training.thresholds import (
     fit_score_gmm_sklearn,
     gmm_fit_array,
 )
-from vtscore.training.thresholds.gmm import _anchored_em, _NO_ANCHORS, _plain_em, _two_means_init
+from vtscore.training.thresholds import gmm as gmm_mod
+from vtscore.training.thresholds.gmm import (
+    _anchored_em,
+    _EM_LOGLIK_TOL,
+    _NO_ANCHORS,
+    _plain_em,
+    _two_means_init,
+)
 
 
 def _mean_loglik(fit, x: np.ndarray) -> float:
     """Mean log-likelihood of *fit* on *x* - what EM maximises, in both arms."""
-    a = (
-        math.log(fit.w_lo)
-        - 0.5 * np.log(2.0 * math.pi * fit.var_lo)
-        - (x - fit.mu_lo) ** 2 / (2.0 * fit.var_lo)
-    )
-    b = (
-        math.log(fit.w_hi)
-        - 0.5 * np.log(2.0 * math.pi * fit.var_hi)
-        - (x - fit.mu_hi) ** 2 / (2.0 * fit.var_hi)
-    )
+    a = math.log(fit.w_lo) - 0.5 * np.log(2.0 * math.pi * fit.var_lo) - (x - fit.mu_lo) ** 2 / (2.0 * fit.var_lo)
+    b = math.log(fit.w_hi) - 0.5 * np.log(2.0 * math.pi * fit.var_hi) - (x - fit.mu_hi) ** 2 / (2.0 * fit.var_hi)
     m = np.maximum(a, b)
     return float(np.mean(m + np.log(np.exp(a - m) + np.exp(b - m))))
 
@@ -56,9 +55,7 @@ def _mean_loglik(fit, x: np.ndarray) -> float:
 def _bimodal(n=8000, prevalence=0.1, separation=0.6, sd=0.05, seed=0):
     rng = np.random.default_rng(seed)
     n_hi = int(n * prevalence)
-    return np.concatenate(
-        [rng.normal(0.2, sd, n - n_hi), rng.normal(0.2 + separation, sd, n_hi)]
-    )
+    return np.concatenate([rng.normal(0.2, sd, n - n_hi), rng.normal(0.2 + separation, sd, n_hi)])
 
 
 def _saturated(n=9000, frac_pos=0.09, seed=0):
@@ -66,9 +63,7 @@ def _saturated(n=9000, frac_pos=0.09, seed=0):
     rng = np.random.default_rng(seed)
     n_pos = int(n * frac_pos)
     return np.clip(
-        np.concatenate(
-            [np.abs(rng.normal(0.0, 1e-5, n - n_pos)), 1.0 - np.abs(rng.normal(0.0, 1e-5, n_pos))]
-        ),
+        np.concatenate([np.abs(rng.normal(0.0, 1e-5, n - n_pos)), 1.0 - np.abs(rng.normal(0.0, 1e-5, n_pos))]),
         0.0,
         1.0,
     )
@@ -107,22 +102,50 @@ class TestSameEstimator:
         assert (first.w_hi, first.mu_hi, first.var_hi) == (second.w_hi, second.mu_hi, second.var_hi)
 
 
-class TestNotWorse:
-    """Where the two differ, the native fit is the better one, not a coin flip."""
+class TestTheSameConvergence:
+    """The two stop in the same place *in the same sense*, which is the point.
+
+    Both loops stop when an EM iteration improves the mean log-likelihood by
+    less than :data:`_EM_LOGLIK_TOL`, so neither is "more converged" than the
+    other and the remaining difference is only where their inits started.  That
+    equivalence is load-bearing: running our loop to a *tighter* stop finds a
+    better fit (below) but a substantially different one, and on a barely
+    bimodal sort that difference is thousands of medias (#3585's report).
+    """
 
     @pytest.mark.parametrize("prevalence", [0.02, 0.1, 0.3])
     @pytest.mark.parametrize("separation", [0.15, 0.3, 0.6])
-    def test_loglik_is_at_least_sklearns(self, prevalence, separation):
+    def test_loglik_lands_within_the_stopping_tolerance_of_sklearns(self, prevalence, separation):
         x = _bimodal(n=6000, prevalence=prevalence, separation=separation, seed=11)
         native, reference = fit_score_gmm(x), fit_score_gmm_sklearn(x)
         assert native is not None and reference is not None
-        # Both maximise this; equality is the common case and the native fit is
-        # ahead wherever sklearn's looser stopping rule left the ridge early.
+        # Two runs that stop at the same improvement threshold cannot end more
+        # than a few of those thresholds apart on the objective.
+        assert abs(_mean_loglik(native, x) - _mean_loglik(reference, x)) < 10 * _EM_LOGLIK_TOL
+
+    @pytest.mark.parametrize("prevalence", [0.02, 0.1, 0.3])
+    @pytest.mark.parametrize("separation", [0.15, 0.3, 0.6])
+    def test_run_to_convergence_it_beats_sklearn(self, prevalence, separation, monkeypatch):
+        """The loop is not the weaker optimiser; it stops early on purpose.
+
+        With the stopping rule taken off, the native EM reaches a likelihood at
+        least as high as sklearn's on every shape here - so what the shipped
+        tolerance buys is speed and *agreement with the incumbent*, not a fit
+        that could not be found.
+        """
+        monkeypatch.setattr(gmm_mod, "_EM_LOGLIK_TOL", 1e-12)
+        monkeypatch.setattr(gmm_mod, "_EM_MAX_ITER", 2000)
+        x = _bimodal(n=6000, prevalence=prevalence, separation=separation, seed=11)
+        native, reference = fit_score_gmm(x), fit_score_gmm_sklearn(x)
+        assert native is not None and reference is not None
         assert _mean_loglik(native, x) >= _mean_loglik(reference, x) - 1e-9
 
-    def test_recovers_a_rare_component_sklearn_stops_short_of(self):
-        # 2% prevalence at 0.3 separation: sklearn's default tolerance stops
-        # with the high component still spread across the gap.
+    def test_run_to_convergence_recovers_a_rare_component_sklearn_stops_short_of(self, monkeypatch):
+        # 2% prevalence at 0.3 separation: both default tolerances stop with the
+        # high component still spread across the gap; the mixture is really
+        # there, and a converged fit finds it.
+        monkeypatch.setattr(gmm_mod, "_EM_LOGLIK_TOL", 1e-12)
+        monkeypatch.setattr(gmm_mod, "_EM_MAX_ITER", 2000)
         x = _bimodal(n=50_000, prevalence=0.02, separation=0.3, seed=13)
         native = fit_score_gmm(x)
         assert native is not None
@@ -203,7 +226,7 @@ class TestOneLoop:
         x = _bimodal(n=3000, seed=23)
         init = _two_means_init(np.sort(x))
         assert init is not None
-        direct = _anchored_em(x, _NO_ANCHORS, _NO_ANCHORS, init, 1.0, 200, 1e-8)
+        direct = _anchored_em(x, _NO_ANCHORS, _NO_ANCHORS, init, 1.0, gmm_mod._EM_MAX_ITER, 1e-8, _EM_LOGLIK_TOL)
         via = _plain_em(x, init)
         assert direct is not None and via is not None
         assert (direct.w_lo, direct.mu_lo, direct.var_lo) == (via.w_lo, via.mu_lo, via.var_lo)

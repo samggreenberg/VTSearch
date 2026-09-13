@@ -432,8 +432,18 @@ def snap_cut_to_sample(cut: float, sorted_scores: np.ndarray) -> float:
 #: loop* (see :func:`_plain_em`): a fit that stopped in a different place
 #: depending on whether anchors were about to follow it would be a second,
 #: hidden estimator.
-_EM_MAX_ITER = 200
+_EM_MAX_ITER = 100
 _EM_TOL = 1e-8
+
+#: Convergence tolerance for the unanchored fit, on the **mean log-likelihood**
+#: rather than on the parameters: stop when an iteration improves the objective
+#: by less than this.  Set to sklearn's own default, so the fit this replaced
+#: and the fit that replaced it stop at the same place in the same sense -
+#: which is what lets the two be compared as implementations of one estimator
+#: instead of as two estimators.  See :func:`_anchored_em` for why the
+#: parameter-delta rule is the wrong one here (a barely bimodal sort crawls a
+#: flat ridge for 200 iterations to buy 0.004 nats).
+_EM_LOGLIK_TOL = 1e-3
 
 #: Iteration cap for the 2-means init below.  Lloyd's on a sorted 1-D sample
 #: converges in a handful of boundary moves and each one costs a binary search,
@@ -538,7 +548,7 @@ def _plain_em(x: np.ndarray, init: GmmFit1D) -> GmmFit1D | None:
     Sharing the body is the point: the unanchored fit and the anchored refit it
     initialises cannot drift into two different estimators of the same mixture.
     """
-    return _anchored_em(x, _NO_ANCHORS, _NO_ANCHORS, init, 1.0, _EM_MAX_ITER, _EM_TOL)
+    return _anchored_em(x, _NO_ANCHORS, _NO_ANCHORS, init, 1.0, _EM_MAX_ITER, _EM_TOL, _EM_LOGLIK_TOL)
 
 
 def fit_score_gmm(arr: np.ndarray) -> GmmFit1D | None:
@@ -666,6 +676,7 @@ def _anchored_em(
     anchor_weight: float,
     max_iter: int,
     tol: float,
+    loglik_tol: "float | None" = None,
 ) -> GmmFit1D | None:
     """Run the anchored EM iterations; ``None`` on numerical failure.
 
@@ -706,6 +717,26 @@ def _anchored_em(
     parameters.  **Keep that test passing rather than "tidying" this body**;
     the readable form is right there in the test to diff against.
 
+    **Two stopping rules, and which one you want depends on the sample.**  By
+    default (``loglik_tol=None``) the loop stops when no parameter moved by more
+    than *tol* - the anchored path's rule, and the right one there because an
+    anchored refit starts from an already-converged unanchored fit and has a
+    short way to go.  Passing *loglik_tol* switches to "stop when the mean
+    log-likelihood of the free sample stops improving by that much", which is
+    sklearn's rule and what :func:`fit_score_gmm` uses.
+
+    The difference is not a detail: on a **barely bimodal** sample - a cosine
+    text sort, where the query's matches are a shoulder on one broad mode rather
+    than a second mode - the likelihood surface has a flat ridge, and EM crawls
+    along it forever.  Measured on real 13k-score sorts, the parameter rule at
+    1e-8 runs the full 200 iterations to buy ~0.004 nats, while the likelihood
+    rule stops in ~25 with the same cut.  A criterion that cannot tell "still
+    converging" from "converged, and now drifting" spends all of its time in the
+    second case.  Computing the objective costs an extra reduction and an
+    in-place log per iteration, which is why it is opt-in rather than always on:
+    the anchored path would pay it for a rule it does not need, and it must stay
+    bit-for-bit what #3558 pinned.
+
     The initialiser every anchored fit runs first used to be sklearn's
     ``GaussianMixture`` - the larger half of the remaining cost, and ~5x slower
     per EM iteration than this loop on the same estimation problem.  #3585
@@ -737,6 +768,7 @@ def _anchored_em(
     r_lo = np.empty_like(x)
     r_hi = np.empty_like(x)
     scratch = np.empty_like(x)
+    prev_loglik: float | None = None
 
     for _ in range(max_iter):
         # E-step over the free sample only (anchors are clamped one-hot).
@@ -756,6 +788,9 @@ def _anchored_em(
         # their elementwise maximum), exponentiate, and normalise by the row
         # sum (likewise, their elementwise sum).
         np.maximum(r_lo, r_hi, out=scratch)
+        # The shift the log-sum-exp is taken around; its own sum is half the
+        # log-likelihood, and it is about to be overwritten.
+        max_sum = float(np.sum(scratch)) if loglik_tol is not None else 0.0
         np.subtract(r_lo, scratch, out=r_lo)
         np.subtract(r_hi, scratch, out=r_hi)
         np.exp(r_lo, out=r_lo)
@@ -763,6 +798,17 @@ def _anchored_em(
         np.add(r_lo, r_hi, out=scratch)
         np.divide(r_lo, scratch, out=r_lo)
         np.divide(r_hi, scratch, out=r_hi)
+        loglik = 0.0
+        if loglik_tol is not None:
+            # ``scratch`` still holds the row sums the responsibilities were
+            # normalised by, so the objective costs no second pass over the
+            # data: a log-sum-exp is the shift plus the log of that sum.  It is
+            # the log-likelihood at the parameters this iteration *started*
+            # from, which is exactly the quantity sklearn compares between
+            # iterations - so "converged" means the same thing in both, and the
+            # stopping decision is taken below, after the M-step, as it is there.
+            np.log(scratch, out=scratch)
+            loglik = (max_sum + float(np.sum(scratch))) / n
 
         # M-step with the anchors folded in at weight ``lam`` each.
         m_lo = float(r_lo.sum()) + lam * n_lo
@@ -805,14 +851,21 @@ def _anchored_em(
 
         if not (np.all(np.isfinite(mu_new)) and np.all(np.isfinite(var_new)) and np.all(np.isfinite(w_new))):
             return None
-        delta = max(
-            float(np.max(np.abs(mu_new - mu))),
-            float(np.max(np.abs(var_new - var))),
-            float(np.max(np.abs(w_new - w))),
-        )
-        mu, var, w = mu_new, var_new, w_new
-        if delta < tol:
-            break
+        if loglik_tol is None:
+            delta = max(
+                float(np.max(np.abs(mu_new - mu))),
+                float(np.max(np.abs(var_new - var))),
+                float(np.max(np.abs(w_new - w))),
+            )
+            mu, var, w = mu_new, var_new, w_new
+            if delta < tol:
+                break
+        else:
+            mu, var, w = mu_new, var_new, w_new
+            converged = prev_loglik is not None and abs(loglik - prev_loglik) < loglik_tol
+            prev_loglik = loglik
+            if converged:
+                break
 
     return GmmFit1D(
         w_lo=float(w[0]),

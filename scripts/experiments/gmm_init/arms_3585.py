@@ -62,21 +62,30 @@ def _sklearn_variant(**kwargs: Any) -> FitFn:
     return fit
 
 
-def _native_variant(tol: float, max_iter: int) -> FitFn:
-    """The branch's own fit, run at a named ``(tol, max_iter)`` instead of the shipped pair.
+#: The branch's own fit, bound at import.  Every arm has to reach the
+#: implementation directly, because :func:`swap_fit` rebinds
+#: ``G.fit_score_gmm`` to the arm itself while the arm is installed - an arm
+#: that looked the name up at call time would call itself.
+_NATIVE_FIT = G.fit_score_gmm
 
-    Set on the module rather than passed, because :func:`_plain_em` reads both
-    off it - which is also what lets one process run every arm without
-    re-importing anything.
+
+def _native_variant(max_iter: int, loglik_tol: "float | None", tol: float = 1e-8) -> FitFn:
+    """The branch's own fit, run at a named stopping rule instead of the shipped one.
+
+    ``loglik_tol=None`` selects the parameter-delta rule at *tol* - the rule the
+    anchored refit uses, and the one this branch started with before the sort
+    corpus showed what it costs on a barely bimodal sample.  Set on the module
+    rather than passed, because :func:`_plain_em` reads all three off it, which
+    is what lets one process run every arm without re-importing anything.
     """
 
     def fit(arr: np.ndarray) -> "GmmFit1D | None":
-        prev = (G._EM_TOL, G._EM_MAX_ITER)
-        G._EM_TOL, G._EM_MAX_ITER = tol, max_iter
+        prev = (G._EM_TOL, G._EM_MAX_ITER, G._EM_LOGLIK_TOL)
+        G._EM_TOL, G._EM_MAX_ITER, G._EM_LOGLIK_TOL = tol, max_iter, loglik_tol
         try:
-            return G.fit_score_gmm(arr)
+            return _NATIVE_FIT(arr)
         finally:
-            G._EM_TOL, G._EM_MAX_ITER = prev
+            G._EM_TOL, G._EM_MAX_ITER, G._EM_LOGLIK_TOL = prev
 
     return fit
 
@@ -103,26 +112,32 @@ def _subsampled(inner: FitFn, cap: int) -> FitFn:
 #: The gate's arms.  ``baseline`` first: every other arm is scored against it.
 ARMS: "dict[str, tuple[FitFn, str]]" = {
     "baseline": (G.fit_score_gmm_sklearn, "sklearn GaussianMixture(2, random_state=42) - what shipped before #3585"),
-    "native": (_native_variant(1e-8, 200), "2-means init + the anchored EM loop with no anchors, tol 1e-8"),
-    "native_tol1e-6": (_native_variant(1e-6, 200), "native, stopped at parameter delta 1e-6"),
-    "native_tol1e-4": (_native_variant(1e-4, 200), "native, stopped at parameter delta 1e-4"),
-    "native_tol1e-3": (_native_variant(1e-3, 200), "native, stopped at parameter delta 1e-3"),
-    "native_iter50": (_native_variant(1e-8, 50), "native at tol 1e-8, capped at 50 EM iterations"),
+    "native": (_native_variant(100, 1e-3), "2-means init + the anchored loop with no anchors, sklearn's stopping rule"),
+    "native_ll1e-4": (_native_variant(100, 1e-4), "native, stopped at a 1e-4 log-likelihood improvement"),
+    "native_ll1e-5": (_native_variant(100, 1e-5), "native, stopped at a 1e-5 log-likelihood improvement"),
+    "native_param1e-8": (
+        _native_variant(200, None, 1e-8),
+        "native, stopped on the parameter delta instead - the anchored path's rule",
+    ),
+    "native_iter50": (_native_variant(50, None, 1e-8), "the parameter rule, capped at 50 iterations"),
     "sklearn_kmeanspp": (
         _sklearn_variant(init_params="k-means++"),
-        "sklearn with the k-means++ init (5-6x, per #3585)",
+        "sklearn with the k-means++ init (5-6x, per #3585) - a re-init of the INCUMBENT",
     ),
     "sklearn_spherical": (
         _sklearn_variant(covariance_type="spherical"),
-        "sklearn with the scalar covariance (measured: 0.97x)",
+        "sklearn with the scalar covariance (measured on the issue: 0.97x)",
     ),
-    "native_10k": (_subsampled(_native_variant(1e-8, 200), 10_000), "native, fitted on at most 10k scores"),
+    "native_10k": (
+        _subsampled(_native_variant(100, 1e-3), 10_000),
+        "native, fitted on at most 10k scores - the third lever, not a candidate here",
+    ),
 }
 
 #: Arms that are candidates to *ship*.  The rest are references or diagnostics:
 #: ``baseline`` is the incumbent, ``native_10k`` changes the sample rather than
 #: the fit, and the two sklearn variants are the issue's cheap options.
-SHIPPABLE = ("native", "native_tol1e-6", "native_tol1e-4", "native_tol1e-3", "native_iter50")
+SHIPPABLE = ("native", "native_ll1e-4", "native_ll1e-5", "native_param1e-8", "native_iter50")
 
 
 def _bindings() -> "list[tuple[Any, str]]":
