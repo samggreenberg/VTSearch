@@ -32,7 +32,15 @@ the consumer that is left: deep is pinned to the pre-#3670 draw and #3723's
 able to check them, and "deep's contamination is at most X" is exactly what a
 bound supplies. Pass ``--deep-unprovable`` to have that translation printed.
 
-Three things push the other way, and each is counted rather than argued:
+**Run `silence_source.py` after this, and quote ITS number, not this one.** A
+cell pickle carries a *designation*, not what VG named (#3678), so an image VG
+called a `bike` is counted here as an image VG was silent about. Measured over
+all 815 confirmed errors, that is **64%** of them, and none of it can reach a
+negative pool -- which halves the figure that has a consumer, from 2.77% to
+1.01%, and re-ranks the classes while doing it. What is printed here is a valid
+bound on that, and a loose one.
+
+Four things push the other way, and each is counted rather than argued:
 
 * **screening.** The pass is screened, not swept (#3760): OWLv2 over the queue,
   cut per class at ~95% recall, and only what clears the cut reaches a reviewer.
