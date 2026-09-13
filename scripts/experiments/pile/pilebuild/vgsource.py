@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pile_config as pc
@@ -64,45 +65,104 @@ def vg_boxes_by_name(rec: dict, wanted: set[str]) -> dict[str, list[list[float]]
     return dict(by_name)
 
 
-def vg_source() -> tuple[dict[int, Path], list, dict[int, tuple[int, int]]]:
-    """``(image paths, objects.json records, image dims)`` for the whole VG source.
+def vg_dims_cache() -> Path:
+    """The one path the dims cache is spelled at, for the same reason as
+    :func:`vg_objects_json`: two spellings of a shared artifact is how a caller
+    ends up reporting on a file nobody else is using (#3299)."""
+    return pc.PILE / "vg_image_dims.json"
 
-    Dims come from ``scan_vg_boxes.py``'s cache when it exists (it always does
-    in practice -- the scan is what chooses the classes), and are read from the
-    JPEG headers otherwise, which costs ~30 s.
+
+def read_jpeg_dims(paths: dict[int, Path], workers: int = 16) -> tuple[dict[int, tuple[int, int]], list[int]]:
+    """``(dims, ids whose header would not read)``, from the JPEGs themselves.
+
+    Header-only reads (PIL does not decode), threaded, which is what makes 108k
+    files tractable. **The misses are returned rather than dropped**: "this file
+    is corrupt" is a fact worth caching, and losing it is what made the cache
+    unusable for a month (#3822).
     """
     from concurrent.futures import ThreadPoolExecutor  # noqa: PLC0415
 
     from PIL import Image  # noqa: PLC0415
 
+    def one(item):
+        iid, path = item
+        try:
+            with Image.open(path) as im:  # header only; no decode
+                return iid, im.size
+        except Exception:  # noqa: BLE001 - a corrupt file is a result, not an error
+            return iid, None
+
+    dims: dict[int, tuple[int, int]] = {}
+    misses: list[int] = []
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        for iid, size in ex.map(one, paths.items(), chunksize=256):
+            if size:
+                dims[iid] = size
+            else:
+                misses.append(iid)
+    return dims, misses
+
+
+def image_dims(paths: dict[int, Path], cache: Path | None = None, *, write: bool = False) -> dict[int, tuple[int, int]]:
+    """``{image_id: (w, h)}`` for *paths*, reading only the headers the cache lacks.
+
+    **Per image, not all-or-nothing, and that is the whole repair.** The cache
+    used to be accepted only when ``len(raw) >= len(paths)``, so a single file
+    appearing in ``VG_100K_2`` disabled it for every caller -- and one had. The
+    file on scratch held 108,075 entries against 108,245 JPEGs, exactly the 170
+    corrupt images an older writer dropped instead of recording, so the guard
+    had been failing since the day the cache was written and every VG build
+    silently re-read 108k headers (#3822). Filling the gaps instead means the
+    cache degrades by the number of files it has not seen rather than collapsing,
+    and a caller that writes it back repairs it in passing.
+
+    A ``null`` entry is an answer, not a gap: it says the header was read and
+    would not parse, so that image is not re-read on every run. Ids the cache
+    knows but *paths* does not are dropped -- the contract is "dims for these
+    files", which is what keeps a cache outliving its source from quietly
+    widening a build.
+
+    *write* is opt-in and only the scan (the cache's owner) passes it: a build is
+    not the right thing to have writing a shared artifact, and several run at
+    once. The write it does do is atomic, so the losing side of a race leaves a
+    whole file rather than half of one.
+    """
+    cache = cache or vg_dims_cache()
+    known: dict[int, tuple[int, int] | None] = {}
+    if cache.exists():
+        known = {int(k): (tuple(v) if v else None) for k, v in json.loads(cache.read_text()).items()}  # type: ignore[misc]
+
+    missing = {iid: p for iid, p in paths.items() if iid not in known}
+    if missing:
+        log(f"  dims: {len(paths) - len(missing)} cached, reading {len(missing)} JPEG header(s)")
+        got, bad = read_jpeg_dims(missing)
+        known.update(got)
+        known.update(dict.fromkeys(bad))
+    else:
+        log(f"  dims: all {len(paths)} from {cache.name}")
+
+    if write and missing:
+        tmp = cache.with_name(f"{cache.name}.{os.getpid()}.tmp")
+        tmp.write_text(json.dumps({str(k): (list(v) if v else None) for k, v in known.items()}))
+        os.replace(tmp, cache)
+        log(f"  dims: wrote {len(known)} entries to {cache.name}")
+
+    return {iid: wh for iid, wh in known.items() if wh and iid in paths}
+
+
+def vg_source() -> tuple[dict[int, Path], list, dict[int, tuple[int, int]]]:
+    """``(image paths, objects.json records, image dims)`` for the whole VG source.
+
+    Dims come from ``scan_vg_boxes.py``'s cache for every image it has seen and
+    from the JPEG headers for the rest -- see :func:`image_dims`. Read-only: a
+    build never rewrites the cache.
+    """
     objects_json = vg_objects_json()
     if not objects_json.exists():
         raise SystemExit(f"missing {objects_json}")
 
     paths = vg_image_paths()
-    cache = pc.PILE / "vg_image_dims.json"
-    dims: dict[int, tuple[int, int]] = {}
-    if cache.exists():
-        raw = json.loads(cache.read_text())
-        # Unreadable images are cached as null, so a complete cache has one
-        # entry per file (see scan_vg_boxes._read_dims).
-        if len(raw) >= len(paths):
-            dims = {int(k): tuple(v) for k, v in raw.items() if v}  # type: ignore[misc]
-    if not dims:
-        log("  no dims cache; reading JPEG headers")
-
-        def one(item):
-            iid, path = item
-            try:
-                with Image.open(path) as im:
-                    return iid, im.size
-            except Exception:  # noqa: BLE001 - a corrupt file just drops out
-                return iid, None
-
-        with ThreadPoolExecutor(max_workers=16) as ex:
-            for iid, size in ex.map(one, paths.items(), chunksize=256):
-                if size:
-                    dims[iid] = size
+    dims = image_dims(paths)
 
     with objects_json.open() as fh:
         records = json.load(fh)

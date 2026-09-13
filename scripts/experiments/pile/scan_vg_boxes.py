@@ -46,17 +46,18 @@ import json
 import statistics
 import time
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pile_config as pc
+
+from pilebuild.vgsource import image_dims, vg_dims_cache
 
 pc.setup_env()
 
 VG_ROOT = pc.DEMO_CACHE / "visual_genome"
 IMAGE_DIRS = [VG_ROOT / "VG_100K", VG_ROOT / "VG_100K_2"]
 OBJECTS_JSON = VG_ROOT / "objects.json"
-DIMS_CACHE = pc.PILE / "vg_image_dims.json"
+DIMS_CACHE = vg_dims_cache()
 
 
 def log(msg: str) -> None:
@@ -78,46 +79,21 @@ def _image_paths() -> dict[int, Path]:
     return out
 
 
-def _read_dims(paths: dict[int, Path], workers: int = 16) -> dict[int, tuple[int, int]]:
-    """``{image_id: (w, h)}``, cached to disk. Header-only reads, threaded.
+def _read_dims(paths: dict[int, Path]) -> dict[int, tuple[int, int]]:
+    """``{image_id: (w, h)}``, filling and rewriting the shared cache.
 
-    Unreadable images are cached as ``null`` rather than omitted. Without them
-    the cache holds fewer entries than there are files (170 of VG's 108,245 are
-    corrupt), so a "is it complete?" length check could never pass and the cache
-    was silently rebuilt on every run by every caller.
+    The scan is the cache's **owner**: it is the one caller that writes it, and
+    the one that passes ``write=True``. Everything else reads (``vg_source``).
+
+    The rule itself lives in :func:`pilebuild.vgsource.image_dims` rather than
+    here, because two implementations of "is this cache usable?" is how it broke:
+    a length check that both copies agreed on still rejected a cache 170 entries
+    short of the image directory, and every VG build re-read 108k JPEG headers
+    for a month with only a log line to say so (#3822).
     """
-    if DIMS_CACHE.exists():
-        raw = json.loads(DIMS_CACHE.read_text())
-        if len(raw) >= len(paths):
-            cached = {int(k): tuple(v) for k, v in raw.items() if v}
-            log(f"reusing cached dims for {len(cached)} images")
-            return cached  # type: ignore[return-value]
-
-    from PIL import Image  # noqa: PLC0415
-
-    def one(item):
-        iid, path = item
-        try:
-            with Image.open(path) as im:  # header only; no decode
-                return iid, im.size
-        except Exception:  # noqa: BLE001 - a corrupt file just drops out
-            return iid, None
-
     t0 = time.time()
-    dims: dict[int, tuple[int, int]] = {}
-    misses: list[int] = []
-    with ThreadPoolExecutor(max_workers=workers) as ex:
-        for i, (iid, size) in enumerate(ex.map(one, paths.items(), chunksize=256), 1):
-            if size:
-                dims[iid] = size
-            else:
-                misses.append(iid)
-            if i % 20000 == 0:
-                log(f"  dims {i}/{len(paths)} ({time.time() - t0:.0f}s)")
-    log(f"read dims for {len(dims)}/{len(paths)} images in {time.time() - t0:.0f}s")
-    on_disk: dict[str, list[int] | None] = {str(k): list(v) for k, v in dims.items()}
-    on_disk.update({str(iid): None for iid in misses})
-    DIMS_CACHE.write_text(json.dumps(on_disk))
+    dims = image_dims(paths, DIMS_CACHE, write=True)
+    log(f"dims for {len(dims)}/{len(paths)} images in {time.time() - t0:.0f}s")
     return dims
 
 
