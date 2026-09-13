@@ -167,9 +167,36 @@ def bench_table(bench: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def _md(df: pd.DataFrame, floats: int = 3) -> str:
-    """A markdown table at two significant digits by default (see the skill)."""
-    return df.to_markdown(index=False, floatfmt=f".{floats}g")
+def _cell(v: object, sig: int) -> str:
+    """One table cell: integers as integers, floats at *sig* significant digits."""
+    if v is None or (isinstance(v, float) and np.isnan(v)):
+        return ""
+    if isinstance(v, (bool, np.bool_)):
+        return "yes" if v else "no"
+    if isinstance(v, (int, np.integer)):
+        return str(int(v))
+    if isinstance(v, (float, np.floating)):
+        return f"{float(v):.{sig}g}"
+    return str(v)
+
+
+def _md(df: pd.DataFrame, sig: int = 3) -> str:
+    """A markdown table, hand-rolled.
+
+    ``DataFrame.to_markdown`` needs ``tabulate``, which this venv does not
+    have and which is not worth a dependency for four tables - and a report
+    that dies at the formatting step after an hour of analysis is the wrong
+    failure to design in.  Significant digits rather than decimal places,
+    because a fixed ``%.3f`` prints a speedup and an admitted-set fraction with
+    the same precision and only one of them can support it.
+    """
+    cols = list(df.columns)
+    rows = [[_cell(v, sig) for v in row] for row in df.itertuples(index=False, name=None)]
+    widths = [max(len(c), *(len(r[i]) for r in rows)) if rows else len(c) for i, c in enumerate(cols)]
+    out = ["| " + " | ".join(c.ljust(widths[i]) for i, c in enumerate(cols)) + " |"]
+    out.append("|" + "|".join("-" * (w + 2) for w in widths) + "|")
+    out += ["| " + " | ".join(r[i].ljust(widths[i]) for i in range(len(cols))) + " |" for r in rows]
+    return "\n".join(out)
 
 
 def main(argv: "list[str] | None" = None) -> int:
