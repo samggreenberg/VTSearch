@@ -74,32 +74,44 @@ def _paired(cuts: pd.DataFrame) -> pd.DataFrame:
 
 def fig_arms(paired: pd.DataFrame, path: Path) -> None:
     kinds = [k for k in ("sort", "fold") if k in set(paired["kind"])]
-    fig, axes = plt.subplots(1, len(kinds), figsize=(5.4 * len(kinds), 4.6), squeeze=False)
+    fig, axes = plt.subplots(1, len(kinds), figsize=(6.2 * len(kinds), 5.0), squeeze=False)
     for ax, kind in zip(axes[0], kinds, strict=True):
         g = paired[paired["kind"] == kind]
+        n_cases = g.groupby(["cell", "case"]).ngroups
         for arm, gg in g.groupby("arm"):
             colour, marker = _style(str(arm))
-            ax.scatter(
-                gg["speedup"].median(),
-                100.0 * gg["d_frac"].mean(),
-                s=140,
+            x = gg["speedup"].median()
+            y = 100.0 * gg["d_frac"].mean()
+            ax.scatter(x, y, s=150, color=colour, marker=marker, edgecolor="white", linewidth=0.8, zorder=3)
+            # Labelled in place rather than in a legend: eight arms is more than
+            # a legend can carry without the reader counting marker shapes, and
+            # the whole figure is one point per arm.
+            ax.annotate(
+                str(arm),
+                (x, y),
+                textcoords="offset points",
+                xytext=(9, 3),
+                fontsize=7.5,
                 color=colour,
-                marker=marker,
-                edgecolor="white",
-                linewidth=0.8,
-                zorder=3,
-                label=str(arm),
+                zorder=4,
             )
         ax.axvline(1.0, color="#999999", lw=1, ls="--", zorder=1)
         ax.set_xscale("log")
+        # Non-negative by construction, so the scale is log above a floor and
+        # linear below it - a symlog axis that dips under zero is drawing a
+        # region the quantity cannot reach.
         ax.set_yscale("symlog", linthresh=0.01)
+        ax.set_ylim(bottom=-0.001)
         ax.set_xlabel("median speedup over the sklearn fit  (right is faster)")
         ax.set_ylabel("mean % of the haystack whose verdict changes")
-        ax.set_title(f"{kind} path - {g['cell'].nunique()} cells, {len(g) // max(g['arm'].nunique(), 1)} cases")
+        ax.set_title(f"{kind} path — {g['cell'].nunique()} captures, {n_cases} cases")
         ax.grid(alpha=0.25, zorder=0)
-    axes[0][-1].legend(fontsize=7, loc="upper right", framealpha=0.9)
-    fig.suptitle("Faster and more faithful is the bottom right; the dashed line is the incumbent's speed", fontsize=9)
-    fig.tight_layout()
+    fig.suptitle(
+        "Faster and more faithful is the bottom right.  Dashed line: the incumbent's own speed; "
+        "`sklearn_kmeanspp` is the incumbent re-initialised, and is the scale for 'how much does a fit move'.",
+        fontsize=8.5,
+    )
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
     fig.savefig(path, dpi=130)
     plt.close(fig)
 

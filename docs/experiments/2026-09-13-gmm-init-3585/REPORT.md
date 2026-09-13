@@ -55,3 +55,25 @@ sort case runs `calculate_gmm_threshold` and reads the admitted set off the
 sorted scores. Pairing is exact — every arm sees the identical captured input —
 so there is nothing to match approximately.
 
+### The arms
+
+Every arm fits the same model — two Gaussians over one dimension — to the same
+sample. They differ only in where EM starts and where it stops, which is what
+makes this a gate and not a benchmark.
+
+| arm | what it is |
+|---|---|
+| `baseline` | `GaussianMixture(n_components=2, random_state=42)` — what shipped before #3585 |
+| **`native`** | a deterministic 2-means init, the anchored EM loop with no anchors, stopped where sklearn stops: an iteration improving the mean log-likelihood by less than 1e-3 |
+| `native_ll1e-4`, `native_ll1e-5` | the same, converged further |
+| `native_param1e-8` | the same loop stopped on the *parameters* instead — the anchored path's rule, and what this branch tried first |
+| `native_iter50` | the parameter rule, capped at 50 iterations |
+| `sklearn_kmeanspp` | **the control**: keep sklearn, change only `init_params` to `"k-means++"`. A three-character re-initialisation of the incumbent, and the yardstick for how much a fit *of the same estimator* moves when nothing but its starting point changes |
+| `sklearn_spherical` | the issue's cheap option: keep sklearn, pass `covariance_type="spherical"` |
+| `native_10k` | `native` fitted on at most 10k scores — the `_GMM_MAX_SAMPLES` lever, measured but not a candidate here |
+
+`sklearn_kmeanspp` is the most important row in that table and it is not a
+candidate. Without it the gate can only say "the new fit moves the admitted set
+by X" with nothing to compare X against. With it, X has a scale: *this is what
+re-initialising the estimator we already ship does.*
+
