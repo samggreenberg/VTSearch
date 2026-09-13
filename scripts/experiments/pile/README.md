@@ -743,6 +743,47 @@ deliver a realised **0.85%**, not the designed 1.00% (#3681).
 
 [`figures_3670.py`](figures_3670.py) draws the four of them.
 
+**The rate all four of them are about is now measured directly, and none of them
+is how you get it** (#3696). The composition they argue for is what removed the
+population it was measurable in, so `silence_rate.py` reads it off the exhaustive
+pass instead: every class VG did *not* name in a queue image is a measurement of
+its silence against a human reference, 81,363 pairs of them, at no extra labour.
+
+```bash
+python silence_rate.py --deep-unprovable 6264 --out silence_rate.json   # ~20s, login node
+```
+
+It is an **upper bound on the uniform rate**, not an estimate — the queue's
+images are selected for holding a class of *C*, and clutter correlates with
+holding more (#3667, #3679). That is the right shape for the one consumer left:
+`vg_scale_deep`'s 6,264 negatives that rest on VG's silence with nothing able to
+check them (#3723).
+
+**Run `silence_source.py` after it, and quote that number.** A cell pickle
+carries a *designation*, not what VG named (#3678), so the rate above counts an
+image VG called a `bike` as an image VG was silent about. Measured, that is
+**64%** of the errors — 441 of 815 under a spelling the build folds but never
+designates (#3818), 83 under one `lift_ambiguous` refuses (#3605) — and **none of it can
+reach a negative pool**, which is the only thing the rate is for. The correction
+is a factor of two and it re-ranks the classes:
+
+```bash
+python silence_source.py --rate silence_rate.json --deep-unprovable 6264   # ~2min, reads objects.json
+```
+
+2026-09-13, 9 of 25 classes finished: designation-based 2.8%, **VG-silence 1.0%
+[0.90%, 1.1%], bound 1.7%** — at most 104 of deep's 6,264, and near the middle
+of #3666's independently measured 1.40% [0.68, 2.86] rather than at its top edge. Full write-up in
+[`docs/experiments/2026-09-13-vg-silence-3696/REPORT.md`](../../../docs/experiments/2026-09-13-vg-silence-3696/REPORT.md);
+re-run both as classes finish rather than quoting that page.
+
+Two things it will tell you about rather than hide. A class whose slate is
+part-banked has candidates with no verdict, so they enter its bound at their
+worst case and it leaves the pooled figure — `chair` reads 25.1% at 300 of 841,
+which is the only reading that cannot be mistaken for a clean class. And a class
+whose labelset names a **superseded rule** is reported on its own line and kept
+out of the pool (#3814): `dog`, `fork` and `vase` are there today.
+
 Run `name_coverage.py` with no `--propose` to score the tables that are actually
 shipped, which is what says whether `pile_config` still does what its comment
 claims. Every cut is a flag (`--min-precision`, `--min-box`, `--min-sole`), so a
