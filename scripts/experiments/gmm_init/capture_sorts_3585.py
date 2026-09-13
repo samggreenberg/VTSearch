@@ -45,13 +45,19 @@ import experiment_config as cfg  # noqa: E402
 _TIMING_REPS = 5
 
 
-def _min_seconds(fit_fn, scores: np.ndarray) -> float:
-    """Fastest of :data:`_TIMING_REPS` runs of *fit_fn* on *scores*."""
-    fit_fn(scores)
+def _min_seconds(fn, arg) -> float:
+    """Fastest of :data:`_TIMING_REPS` runs of *fn* on *arg*.
+
+    Min-of-k for the sort as well as for the fits, because a single call was
+    not stable enough to divide by: the same 13k-media sort came back at 78 ms
+    and at 294 ms on neighbouring queries, which is the node, not the sort, and
+    it lands directly in the "what fraction of a sort is the fit" number.
+    """
+    fn(arg)
     best = float("inf")
     for _ in range(_TIMING_REPS):
         t0 = time.perf_counter()
-        fit_fn(scores)
+        fn(arg)
         best = min(best, time.perf_counter() - t0)
     return best
 
@@ -129,9 +135,10 @@ def main(argv: "list[str] | None" = None) -> int:
                 # `cosine_sort_active` is exactly this call plus the cut, so
                 # this is the whole of the sort that is NOT the mixture fit:
                 # the scoring pass, the result dicts and the sort itself.
-                t0 = time.perf_counter()
-                cosine_sort_with_boxes(pool, np.asarray(tvec, dtype=np.float32), text_emb, region_aware=False)
-                sort_seconds[key] = time.perf_counter() - t0
+                sort_seconds[key] = _min_seconds(
+                    lambda v: cosine_sort_with_boxes(pool, v, text_emb, region_aware=False),
+                    np.asarray(tvec, dtype=np.float32),
+                )
                 fit_seconds[key] = {
                     name: _min_seconds(fn, scores) for name, fn in (("native", _NATIVE), ("baseline", _SKLEARN))
                 }
