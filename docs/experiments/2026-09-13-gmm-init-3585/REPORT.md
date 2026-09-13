@@ -21,3 +21,37 @@ answer to the second one is "not zero".
 <!-- SHORT VERSION -->
 
 <!-- BODY -->
+
+---
+
+## What was measured
+
+**The corpus is real fit inputs, captured from the shipped path.** A synthetic
+sweep over (n, prevalence, separation) was already run on the issue's own
+thread, and it is not the gate: what decides whether a re-initialised EM lands
+somewhere else is the *shape* of the sample, and the shapes that matter are the
+ones the app actually produces — saturated at click 80, barely bimodal at click
+5, max-pooled and right-skewed under region voting, and — the one that turned
+out to matter most — a cosine sort, where the query's matches are a shoulder on
+one broad mode rather than a second mode.
+
+| | grid | what a case is |
+|---|---|---|
+| **fold path** | 84 cells: 3 datasets × 2 embedders × their categories × 2 seeds, 100 clicks, every 5th threshold fit captured | one call to `fit_fold_anchored_cut` — two fold haystacks, their held-out votes, and the final model's haystack |
+| **sort path** | 62 queries: 4 datasets × 3 text embedders, 838 to 18,050 medias | one whole cosine/text sort's score array, as `calculate_gmm_threshold` receives it |
+
+The three datasets span the shapes on purpose: `caltech101_m`/`siglip` is
+**saturated** (the #3166 regime, where the snap is load-bearing),
+`visual_genome_m` and `coco_val` are ordinary bimodal in two environments, and
+`dinov3_patch`/`max_patch` is **max-pooled** — the heavy right-skewed Bad mode
+region voting produces. Shipped defaults everywhere else; the contrast under
+test is the fit.
+
+**Each case is replayed through the whole production chain, not through the
+fit.** A fold case runs `fit_fold_anchored_cut` → per-fold anchored EM → per-fold
+quantile → combine → `np.quantile` on the final haystack → `snap_cut_to_sample`,
+and the admitted set is read off the haystack the threshold is applied to. A
+sort case runs `calculate_gmm_threshold` and reads the admitted set off the
+sorted scores. Pairing is exact — every arm sees the identical captured input —
+so there is nothing to match approximately.
+

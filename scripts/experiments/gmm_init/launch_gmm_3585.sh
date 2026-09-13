@@ -6,6 +6,8 @@
 #   bash launch_gmm_3585.sh capture     # the array: real fit inputs -> corpus/*.npz
 #   bash launch_gmm_3585.sh sorts       # real cosine/text sort haystacks -> corpus/sorts*.npz
 #   bash launch_gmm_3585.sh ab          # the trajectory A/B, one grid per fit arm
+#   bash launch_gmm_3585.sh baseline    # the click-0 text-sort anchor the curves need
+#   bash launch_gmm_3585.sh abfigures   # quality-over-clicks + the interactive viewer
 #   bash launch_gmm_3585.sh gate        # replay the corpus through every arm
 #   bash launch_gmm_3585.sh bench       # per-call cost, min-of-k, on real shapes
 #   bash launch_gmm_3585.sh status
@@ -254,6 +256,32 @@ ab)
   done
   ;;
 
+baseline)
+  # Click 0 is the free text sort, and `curves.py` refuses to draw without it.
+  submit baseline --job-name="$JOB_NAME-baseline" "${DEP_ARG[@]}" --mem=16G --cpus-per-task=2 \
+    --time=2:00:00 --partition="$PARTITION" --export=ALL \
+    --output="$LOGS/baseline-%j.out" \
+    --wrap="source $WT/gridenv.sh && $ENVX && cd $CALIB && python text_baseline.py --results $CALIB_RESULTS --out $ANALYSIS/text_baseline.csv"
+  ;;
+
+abfigures)
+  # `curves.py` and `viewer.py` want one directory per arm under one root, each
+  # holding a `cells/`.  The A/B writes `<exp>/ab_<arm>/results/cells`, so the
+  # arm root is a pair of symlinks rather than a copy - the cells are 100s of MB
+  # and duplicating them to satisfy a path convention is how a scratch quota
+  # goes.
+  ARMS_ROOT="$CALIB_EXP/arms"
+  mkdir -p "$ARMS_ROOT"
+  ln -sfn "$CALIB_EXP/ab_native/results" "$ARMS_ROOT/native"
+  ln -sfn "$CALIB_EXP/ab_baseline/results" "$ARMS_ROOT/sklearn"
+  BASE_ARG=""
+  [[ -f "$ANALYSIS/text_baseline.csv" ]] && BASE_ARG="--baseline $ANALYSIS/text_baseline.csv"
+  submit abfigures --job-name="$JOB_NAME-abfigures" "${DEP_ARG[@]}" --mem=32G --cpus-per-task=2 \
+    --time=2:00:00 --partition="$PARTITION" --export=ALL \
+    --output="$LOGS/abfigures-%j.out" \
+    --wrap="source $WT/gridenv.sh && $ENVX && cd $CALIB && python curves.py --results $ARMS_ROOT --arms sklearn,native --out $ANALYSIS/figures $BASE_ARG && python viewer.py --results $ARMS_ROOT --arms sklearn=sklearn,native=native --out $ANALYSIS/viewer.html --title 'The mixture fit: sklearn vs ours (#3585)' $BASE_ARG"
+  ;;
+
 abanalyze)
   submit abanalyze --job-name="$JOB_NAME-abanalyze" "${DEP_ARG[@]}" --mem=32G --cpus-per-task=2 \
     --time=2:00:00 --partition="$PARTITION" --export=ALL \
@@ -289,7 +317,7 @@ status)
   ;;
 
 *)
-  echo "usage: $0 {list|size IDXS|capture|sorts|gate|bench|ab|abanalyze|status}" >&2
+  echo "usage: $0 {list|size IDXS|capture|sorts|gate|bench|ab|baseline|abfigures|abanalyze|status}" >&2
   exit 1
   ;;
 esac
