@@ -284,17 +284,53 @@ def screening_allowance(below: dict[str, dict[int, bool]], z: float = 1.96) -> t
     return per_class, wilson(pooled_hits, pooled_n, z)[1], counts
 
 
+def classify_excluded(
+    excluded: set[int], designated: set[int], controls: set[int]
+) -> tuple[set[int], set[int], set[int]]:
+    """``(known As, controls, unexplained)`` for verdicts outside a class's silent pairs.
+
+    Three things put a verdict outside the population, and only the third is a
+    fault. The earlier `pass25` form of the pass reviewed **one dataset** rather
+    than a per-class slate, so its reviewer was shown, and voted on, images the
+    silence question does not apply to:
+
+    * a **known A** -- the queue designates this image for this class, so VG did
+      name it. It is the answer to a different question, not a silence error;
+    * a **control** -- one of `make_pass25.py`'s COCO-anchored images, mixed in
+      to score the pass against a key the reviewer cannot see. Anchored by
+      construction, so it is not in the off-COCO population at all;
+    * **anything else** -- a verdict with no pair to land on, which is the review
+      and the queue having moved apart (a rebuild orphaning reviews is the way
+      that happens here: three rebuilds once retired 577 of 743).
+
+    Measured on the shipped record, the first two account for **every** excluded
+    verdict -- 87 `bench` (60 + 27) and 187 `bicycle` (115 + 72), 0 unexplained.
+    Reporting all three as drift is what this exists to stop: an alarm that fires
+    on the designed behaviour is one nobody reads on the day it means something.
+    """
+    known_a = excluded & designated
+    control = (excluded - known_a) & controls
+    return known_a, control, excluded - known_a - control
+
+
 def measure(
     silent: dict[str, set[int]],
     answers: dict[str, dict[int, bool]],
     below_answers: dict[str, dict[int, bool]],
     above: dict[str, set[int]],
     prov: dict[str, dict],
+    designated: dict[str, set[int]] | None = None,
+    controls: set[int] | None = None,
     z: float = 1.96,
 ) -> tuple[list[dict], dict, list[str]]:
     """``(per-class rows, the pooled row, problems)``.
 
     Pure, so every guard below is testable without a pile or a GPU.
+
+    *designated* is what the queue says VG named (so a verdict there is a known
+    A) and *controls* the anchored images `make_pass25.py` mixes in. Both are
+    supplied so that a verdict falling outside the silent pairs can be
+    *classified* rather than merely counted -- see :func:`classify_excluded`.
 
     Each class's silent pairs split four ways -- answered, above the cut and
     unanswered, below the cut and unanswered, and (rarely) answered from under
@@ -309,21 +345,24 @@ def measure(
     rows: list[dict] = []
     problems: list[str] = []
 
+    designated = designated or {}
+    controls = controls or set()
+
     for cls in sorted(silent):
         pool = silent[cls]
         cand = above.get(cls, set()) & pool
 
-        # An answer about a pair that is not silent, or about an image the queue
-        # does not hold, is drift between the slate and the population -- the
-        # shape `apply_recheck` refuses. Named here rather than dropped, because
-        # a silently smaller denominator is the one error this script cannot show.
-        for label, given in (("pass", answers.get(cls, {})), ("below-cut", below_answers.get(cls, {}))):
-            stray = sorted(set(given) - pool)
-            if stray:
-                problems.append(
-                    f"{cls}: {len(stray)} {label} verdict(s) are not silent pairs of the queue "
-                    f"(e.g. {', '.join(str(i) for i in stray[:3])}) -- the slate and the queue have drifted"
-                )
+        given = set(answers.get(cls, {})) | set(below_answers.get(cls, {}))
+        known_a, control, unexplained = classify_excluded(given - pool, designated.get(cls, set()), controls)
+        if unexplained:
+            # The only one of the three that is drift. Named rather than dropped,
+            # because a silently smaller denominator is the one error this script
+            # cannot show -- the shape `apply_recheck` refuses.
+            problems.append(
+                f"{cls}: {len(unexplained)} verdict(s) are neither a known A nor a control and are not silent "
+                f"pairs of the queue (e.g. {', '.join(str(i) for i in sorted(unexplained)[:3])}) -- "
+                "the review and the queue have drifted"
+            )
 
         seen = {iid: v for iid, v in answers.get(cls, {}).items() if iid in pool}
         seen_below = {iid: v for iid, v in below_answers.get(cls, {}).items() if iid in pool}
@@ -348,6 +387,9 @@ def measure(
                 "answered_below_cut": len(seen_below),
                 "unreviewed_candidates": unreviewed_above,
                 "unreviewed_below_cut": unreviewed_below,
+                "excluded_known_a": len(known_a),
+                "excluded_control": len(control),
+                "excluded_unexplained": len(unexplained),
                 "found_present": found,
                 "rate": found / n if n else 0.0,
                 "wilson95": [lo, hi],
@@ -419,6 +461,11 @@ def main() -> int:
     ap.add_argument("--dets", default=str(base / "vlm-3720" / "owl_queue.jsonl"), help="OWLv2 over the queue")
     ap.add_argument("--slates", default=str(base / "vlm-3720" / "slates" / "slates.json"), help="for the cuts")
     ap.add_argument("--store", default=str(verdict_store.STORE), help="the committed labelsets")
+    ap.add_argument(
+        "--controls",
+        default=str(base / "vgscale-3156" / "pass25" / "controls.json"),
+        help="make_pass25.py's key, so its anchored controls read as controls rather than as drift",
+    )
     ap.add_argument("--deep-unprovable", type=int, default=0, help="translate the bound onto vg_scale_deep (#3723)")
     ap.add_argument("--out", default="", help="write the measurement as JSON")
     args = ap.parse_args()
@@ -432,10 +479,20 @@ def main() -> int:
     classes = tuple(pc.SCALE_CLASSES)
     silent = silent_pairs(queue, classes)
     above = above_cut(dets, cuts)
+    designated = {cls: {int(r["image_id"]) for r in queue if cls in r["classes"]} for cls in classes}
+    controls: set[int] = set()
+    if Path(args.controls).exists():
+        controls = {int(i) for i in json.loads(Path(args.controls).read_text()).get("controls", {})}
+        log(f"{len(controls)} anchored controls from {args.controls}")
+    else:
+        # Without the key its controls cannot be told from orphaned reviews, so
+        # they would report as drift. Say so rather than letting the alarm lie.
+        log(f"NOTE: no control key at {args.controls}; pass25's mixed-in controls will read as unexplained")
+
     rules = {c: pc.review_name(c) for c in classes}
     digests = {c: pc.rule_digest(c) for c in classes}
     answers, below, prov, problems = read_answers(Path(args.store), rules, digests)
-    rows, pooled, more = measure(silent, answers, below, above, prov)
+    rows, pooled, more = measure(silent, answers, below, above, prov, designated, controls)
     problems += more
 
     # The slates were built from these detections at these cuts, minus each
@@ -465,6 +522,13 @@ def main() -> int:
     log("CONDITIONING: an upper bound on the UNIFORM off-COCO rate, not an estimate of it -- the queue's")
     log("  images are selected for holding a class of C, and clutter correlates with holding more (#3667, #3679).")
     log("  The slates ask about the screen's best BOX, so a second instance it never boxed reads as absent.")
+    excluded = sum(r["excluded_known_a"] + r["excluded_control"] for r in rows)
+    if excluded:
+        log(
+            f"{excluded} verdict(s) sit outside the silent pairs and are not counted: "
+            f"{sum(r['excluded_known_a'] for r in rows)} known As (VG named the class) and "
+            f"{sum(r['excluded_control'] for r in rows)} anchored controls (COCO answers for them)"
+        )
 
     if args.deep_unprovable:
         log(

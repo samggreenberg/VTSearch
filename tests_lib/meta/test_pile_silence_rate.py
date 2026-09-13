@@ -255,6 +255,43 @@ class TestTheLabelsetsAreReadTheWayTheyWereWritten:
         assert any("drifted" in p and "77" in p for p in problems)
 
 
+class TestNotEveryExcludedVerdictIsDrift:
+    """The `pass25` pass reviewed one dataset, so its reviewer voted on images
+    the silence question does not apply to. Reporting those as drift is an alarm
+    that fires on the designed behaviour, which is an alarm nobody reads."""
+
+    def test_the_three_buckets_are_told_apart(self, sr):
+        known_a, control, unexplained = sr.classify_excluded({1, 2, 3}, designated={1}, controls={2})
+        assert (known_a, control, unexplained) == ({1}, {2}, {3})
+
+    def test_a_known_a_is_not_a_silence_measurement_and_is_not_an_alarm(self, sr):
+        """VG *did* name this class in this image, so it answers a different
+        question -- and it can never be a silence error."""
+        prov = {"car": {"rule_in_force": True, "labelsets": []}}
+        rows, _, problems = sr.measure(
+            {"car": {1}}, {"car": {1: True, 9: True}}, {}, {"car": {1}}, prov, designated={"car": {9}}
+        )
+        assert rows[0]["excluded_known_a"] == 1
+        assert rows[0]["found_present"] == 1  # the known A did not inflate the count
+        assert problems == []
+
+    def test_an_anchored_control_is_not_an_alarm_either(self, sr):
+        prov = {"car": {"rule_in_force": True, "labelsets": []}}
+        rows, _, problems = sr.measure(
+            {"car": {1}}, {"car": {1: True, 500: True}}, {}, {"car": {1}}, prov, controls={500}
+        )
+        assert rows[0]["excluded_control"] == 1
+        assert problems == []
+
+    def test_without_the_control_key_a_control_reads_as_drift(self, sr):
+        """Stated so the caller knows what it is buying: the key is the only
+        thing that separates a mixed-in control from an orphaned review."""
+        prov = {"car": {"rule_in_force": True, "labelsets": []}}
+        rows, _, problems = sr.measure({"car": {1}}, {"car": {1: True, 500: True}}, {}, {"car": {1}}, prov)
+        assert rows[0]["excluded_unexplained"] == 1
+        assert any("drifted" in p for p in problems)
+
+
 class TestWilson:
     def test_zero_of_six_hundred_bounds_below_one_percent(self, sr):
         lo, hi = sr.wilson(0, 600)
