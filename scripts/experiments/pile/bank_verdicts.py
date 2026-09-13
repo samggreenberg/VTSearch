@@ -15,6 +15,7 @@ what lets a later reader tell "voted under this rule" from "voted under a rule
 spelt this way".
 """
 
+import datetime
 import json
 import pathlib
 import shutil
@@ -36,6 +37,9 @@ node = (
     .split()[0]
 )
 BASE = f"http://{node}:11850"
+# The export date was a literal, so every re-run stamped the day the line was
+# last edited rather than the day the answers were read off the live app.
+_TODAY = datetime.date.today().isoformat()
 REPO = pathlib.Path("/exp/sgreenberg/projects/vts-annq-3720/scripts/experiments/pile/human_record")
 
 
@@ -94,7 +98,7 @@ for d in sorted(get("/api/detectors/registry")["detectors"], key=lambda x: x["na
                 "kind": kind,
                 "question": QUESTION[kind],
                 "source": "OWLv2-screened per-class review, exported from the live app",
-                "exported": "2026-09-09",
+                "exported": _TODAY,
                 "good": good,
                 "bad": bad,
             },
