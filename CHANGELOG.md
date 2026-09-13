@@ -17,6 +17,19 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The Stable indicator no longer waits for a category the embedding cannot
+  separate, and no longer degenerates as the haystack fills up** (#3831). It
+  now counts only *confident* flips - items that sat clear of the cut under
+  both the previous detector and this one - and divides by the whole pool
+  rather than the shrinking unlabeled remainder. A pool of dice labeled by
+  their roll used to hold Autopilot in the boundary phase for 127 of 150
+  clicks because the d8s flipped every retrain; it now reaches Done and
+  stays there for most of the run, while a cleanly separable category stops
+  at exactly the click it did before. When Stable goes green with items
+  still wobbling across the cut, the indicator tooltip and the Autopilot
+  Done step say so ("the remaining ambiguity looks irreducible in this
+  embedding") instead of implying the pool converged.
+
 - **Opening a saved dataset paces its progress bar for the branch its coverage
   atlas actually takes.** That step either restores the atlas cached in the
   dataset's pickle (~10 ms) or rebuilds a hierarchical k-means from scratch

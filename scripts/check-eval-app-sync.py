@@ -267,8 +267,11 @@ MIRRORS: list[Mirror] = [
         harness="vtscore/eval/autopilot_flow.py::stable_status",
         kind="ported",
         note=(
-            "The Stable indicator - prediction-flip rate. Re-check the per-class minimum, the "
-            "minimum history length, and both the rate and max flip thresholds."
+            "The Stable indicator - confident prediction-flip rate over the whole pool, plus the "
+            "flip-rate plateau test (issue #3831). Both sides are one-line wrappers over "
+            "`vtscore.detectors.stability.stable_status_from_entries`, so the rule itself cannot "
+            "drift; what this pin watches is the plumbing around it. If either wrapper grows a "
+            "step of its own, move that step into the shared module instead."
         ),
         divergence=(
             "Same input plumbing divergence as progress.smart_status: flip counts are passed "

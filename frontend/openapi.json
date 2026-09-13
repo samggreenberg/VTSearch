@@ -5915,6 +5915,10 @@
       "StabilityPoint": {
         "additionalProperties": false,
         "properties": {
+          "num_confident_flips": {
+            "description": "How many of those flips were *confident*: the item sat clear of the cut (outside the ambiguity band) under both the previous model and this one.  The Stable indicator judges settling on these; the rest are boundary wobble.",
+            "type": "integer"
+          },
           "num_flips": {
             "description": "How many still-unlabeled items changed predicted class between the previous step's model and this one.",
             "type": "integer"
@@ -5922,8 +5926,12 @@
           "num_labels": {
             "type": "integer"
           },
+          "num_pool": {
+            "description": "Size of the whole scored pool (labeled items included) - the denominator every flip rate is taken over, so a rate means the same thing however much of the pool is labeled.",
+            "type": "integer"
+          },
           "num_unlabeled": {
-            "description": "Size of the monitored pool the flip count was measured over.",
+            "description": "How many still-unlabeled items the two models were compared on.",
             "type": "integer"
           },
           "time_index": {
@@ -5932,6 +5940,7 @@
           }
         },
         "required": [
+          "num_confident_flips",
           "num_flips",
           "num_labels"
         ],

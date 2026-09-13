@@ -287,8 +287,20 @@ describe('AutopilotStateService', () => {
 
     expect(service.state.smartStatus).toBe('yellow');
     expect(service.state.stableStatus).toBe('green');
+    expect(service.state.stablePlateau).toBe(false);
     expect(service.state.spanStatus).toBe('red');
     expect(service.state.fracDiversity).toBe(0.75);
+  });
+
+  it('updateFromLabelingStatus should carry the Stable plateau flag', () => {
+    service.activate();
+    service.updateFromLabelingStatus(
+      makeStatus({ status: 'green' }, { status: 'green', plateau: true }, { status: 'green' }),
+    );
+    expect(service.state.stablePlateau).toBe(true);
+
+    service.updateFromLabelingStatus(makeStatus({ status: 'green' }, { status: 'green' }, { status: 'green' }));
+    expect(service.state.stablePlateau).toBe(false);
   });
 
   it('clear should reset to initial state', () => {

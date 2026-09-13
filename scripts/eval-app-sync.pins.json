@@ -12,11 +12,11 @@
     "harness": "a233c439b1759886852f5011f198c873727b3dde1e2a8b2a2f6da042f0666e9b"
   },
   "autopilot.startup_default": {
-    "app": "6b15d45162cc406b8924e37a23286950d5e5dde551cbcd0d9d4c2500cec044f9",
+    "app": "095713cd624bc097c160ead7036dc7efe30e5091efd5a9e4c48bc6633c0ec3d1",
     "harness": "5791e133a51f3ed40314f5a083621a283239a8cbcbe4387b63936515d9374239"
   },
   "autopilot.vote_targets": {
-    "app": "6b15d45162cc406b8924e37a23286950d5e5dde551cbcd0d9d4c2500cec044f9",
+    "app": "095713cd624bc097c160ead7036dc7efe30e5091efd5a9e4c48bc6633c0ec3d1",
     "harness": "44b89eef2937825af3f2467d5f3618810719dce2593fe4bdd0f91c1994aed2f6"
   },
   "progress.eval_geometry": {
@@ -32,8 +32,8 @@
     "harness": "5d09d37401c8e3fec28bc32998c5a8f17721bd4105bdc0bf27dcc03103d23af1"
   },
   "progress.stable_status": {
-    "app": "08c9182c8030b8ca62ae1ab79cc74f36245ef501f1934e15d8aebb617a67ba98",
-    "harness": "a73e1826402bbed306f0bc21dd56671051cae7db4e0ef64eee42a28e120cec75"
+    "app": "1c90ae2a074e29f58163986c6da63b5cc7b68588ca574393d13334146cbe1354",
+    "harness": "891dc2c561ca74480cc59ccd4bc5ba8e7fc62d09868ec2b1c915bb798226e130"
   },
   "thresholds.fold_anchored_fit_then_cut": {
     "app": "ae8504e0b03401743dfcb8912d804fdf3644b23cb710d43f33e4663d680da93a",
