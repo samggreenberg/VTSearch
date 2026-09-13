@@ -16,7 +16,9 @@ duplicate 83rd of 120.
 
 Each task writes PNG sheets plus a ``verdicts.jsonl`` template into
 ``<out>/audit/<task>/``.  Fill in the verdict field, then fold the answers back
-with ``audit_to_corrections.py``.
+with ``audit_to_corrections.py``.  The one task with a precondition is
+``membership``, which walks the roster: with no roster picked it renders nothing,
+says so, and exits ``EXIT_SKIPPED`` rather than writing an empty verdict file.
 
 The corpus stores **both directions** of the ground truth, because an eval needs
 both: a shared class id says what the detector must find together, and a
@@ -159,6 +161,31 @@ def subgroups(corpus: Path, descriptor: str, threshold: float) -> dict[str, dict
     return proposals
 
 
+ROSTER_HINT = (
+    "no class carries `on_roster` -- the roster has not been picked yet. "
+    "Run `shortlist.py --write-roster`, hand-edit roster.json, then rebuild with "
+    "`build_corpus.py --roster <roster.json>`; the membership sheets come after that."
+)
+
+#: Exit code for a task whose precondition is not met, so it rendered nothing.
+#: Distinct from 0 (rendered) and from 1 (failed), because a caller that renders
+#: several tasks in one job needs to tell "not yet" from "broken" -- see
+#: ``launch_docmarks.sh slate``.
+EXIT_SKIPPED = 3
+
+
+def roster_pool(classes: dict[str, Any]) -> dict[str, Any]:
+    """The classes a curated roster admits, or ``{}`` when no roster is picked.
+
+    ``build_corpus.py`` stamps ``on_roster`` only when it is given ``--roster``,
+    so this is empty on every freshly built corpus.  ``merge`` and ``confusable``
+    fall back to the whole inventory (a roster narrows them, it is not a
+    precondition); ``membership`` genuinely cannot run without one, which is what
+    ``ROSTER_HINT`` and ``EXIT_SKIPPED`` exist to say out loud (#3601).
+    """
+    return {k: v for k, v in classes.items() if v.get("on_roster")}
+
+
 def task_cluster(
     pages: list[Page],
     classes: dict[str, Any],
@@ -247,7 +274,7 @@ def task_membership(pages: list[Page], classes: dict[str, Any], out: Path) -> li
     crop is good, so the row must still be marked — ``ok`` says so explicitly.
     """
     by_id = {p.page_id: p for p in pages}
-    roster_classes = {k: v for k, v in classes.items() if v.get("on_roster")}
+    roster_classes = roster_pool(classes)
     if not roster_classes:
         return []
 
@@ -528,7 +555,7 @@ def task_merge(
     from PIL import Image
 
     by_id = {p.page_id: p for p in pages}
-    pool = {k: v for k, v in classes.items() if v.get("on_roster")} or classes
+    pool = roster_pool(classes) or classes
     corpus = corpus if corpus is not None else out.parent.parent
 
     exemplars: list[tuple[str, Any]] = []
@@ -684,7 +711,7 @@ def task_confusable(
     # half of the ground truth is complete rather than sampled. top_n only
     # bites on a candidate pool, where the count would otherwise be quadratic
     # in a few hundred classes.
-    pool = {k: v for k, v in classes.items() if v.get("on_roster")} or classes
+    pool = roster_pool(classes) or classes
     exemplars: list[tuple[str, Any]] = []
     for class_id, meta in sorted(pool.items()):
         crop = meta.get("query_crop")
@@ -858,6 +885,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     pages = list(read_manifest(args.corpus / "corpus.jsonl"))
     classes_path = args.corpus / "classes.json"
     classes = json.loads(classes_path.read_text(encoding="utf-8")) if classes_path.exists() else {}
+
+    # Ahead of the mkdir: a task that cannot run must not leave an empty
+    # directory behind for the bundle to pick up.  Membership walks only the
+    # roster, and nothing is on one until `shortlist.py --write-roster` has been
+    # hand-edited and the corpus rebuilt with `--roster`.  It used to announce
+    # that in one line of passing arithmetic ("membership: 0 item(s) to review"),
+    # write an empty verdicts.jsonl, and exit 0 -- so the slate job tarred a
+    # bundle that asserted a pass nobody had rendered (#3601).
+    if args.task == "membership" and not roster_pool(classes):
+        print(f"membership: SKIPPED -- {ROSTER_HINT}")
+        return EXIT_SKIPPED
 
     out = args.corpus / "audit" / args.task
     out.mkdir(parents=True, exist_ok=True)
