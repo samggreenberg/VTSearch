@@ -38,8 +38,10 @@ Three things push the other way, and each is counted rather than argued:
   cut per class at ~95% recall, and only what clears the cut reaches a reviewer.
   A positive below the cut is a silence error nobody was shown, so the found
   count is a floor. #3768 drew 100 below-cut images for each of six classes and
-  found **zero** positives; that sample is what sizes the allowance here, per
-  class where it exists and pooled where it does not.
+  found **zero** positives; those 600 draws are what size the allowance here.
+  They are **pooled**, for every class including the six that were sampled --
+  see :func:`screening_allowance` for why splitting them punishes measurement --
+  and ``bound_unpooled`` prices that assumption rather than hiding it.
 * **the question the reviewer was asked.** A slate asks *is this box one?* of
   the screen's best box, so a Bad is evidence about that box and not about the
   image -- a second instance the detector never boxed reads as absent. #3768's
@@ -264,24 +266,42 @@ def read_answers(
     return answers, below, prov, problems
 
 
-def screening_allowance(below: dict[str, dict[int, bool]], z: float = 1.96) -> tuple[dict[str, float], float, Counter]:
-    """``(per-class upper bound on the below-cut rate, the pooled one, counts)``.
+def screening_allowance(below: dict[str, dict[int, bool]], z: float = 1.96) -> tuple[dict, float, Counter, float]:
+    """``(the ceiling used per class, the pooled ceiling, sample sizes, the worst per-class one)``.
 
     #3768's samples are drawn at random from below each class's cut and asked the
     *image* question, so they measure what the screen let through and nothing
-    else. A class with its own sample gets its own bound; a class without one
-    gets the pooled bound, which is the assumption this makes and the reason the
-    per-class counts come back with it.
+    else.
+
+    **The pooled ceiling is used for every class that found nothing, its own
+    sample included.** The first version of this took a class's own sample where
+    it existed and the pooled one everywhere else, which is incoherent in the
+    direction that punishes measurement: 0 of 100 bounds at 3.70% and 0 of 600 at
+    0.64%, so `sink` -- which was actually sampled -- drew a *looser* allowance
+    than `bus`, which was not. Exchangeability is being assumed either way (it is
+    what lets six sampled classes speak for nineteen), and assuming it for the
+    unsampled classes while refusing it for the sampled ones is the one reading
+    that cannot be right. The screen is cut to the same ~95% target recall for
+    every class by construction and all 600 draws came back empty, so there is no
+    measured per-class variation to preserve.
+
+    A class whose own sample **found** something is the case where that stops
+    holding, and it keeps its own ceiling: hits are evidence the pooled rate does
+    not describe it, and the pooled figure would dilute them across five classes
+    that saw none.
+
+    *worst* is the loosest single per-class ceiling, returned so the caller can
+    price the assumption rather than inherit it -- see ``bound_unpooled``.
     """
     counts: Counter = Counter()
-    per_class: dict[str, float] = {}
+    own: dict[str, float] = {}
     for cls, verdicts in below.items():
-        hits = sum(1 for v in verdicts.values() if v)
-        per_class[cls] = wilson(hits, len(verdicts), z)[1]
+        own[cls] = wilson(sum(1 for v in verdicts.values() if v), len(verdicts), z)[1]
         counts[cls] = len(verdicts)
     pooled_hits = sum(1 for verdicts in below.values() for v in verdicts.values() if v)
-    pooled_n = sum(len(v) for v in below.values())
-    return per_class, wilson(pooled_hits, pooled_n, z)[1], counts
+    pooled_ub = wilson(pooled_hits, sum(len(v) for v in below.values()), z)[1]
+    used = {cls: (own[cls] if any(below[cls].values()) else pooled_ub) for cls in below}
+    return {"used": used, "own": own}, pooled_ub, counts, max([pooled_ub, *own.values()])
 
 
 def classify_excluded(
@@ -341,7 +361,7 @@ def measure(
     A class is ``eligible`` for the pooled figure only when its slate is finished
     and its verdicts answer the rule in force.
     """
-    below_ub, pooled_below_ub, below_counts = screening_allowance(below_answers, z)
+    below_ub, pooled_below_ub, below_counts, worst_below_ub = screening_allowance(below_answers, z)
     rows: list[dict] = []
     problems: list[str] = []
 
@@ -373,10 +393,14 @@ def measure(
         n = len(pool)
         unreviewed_above = len(cand - answered.keys())
         unreviewed_below = len((pool - cand) - answered.keys())
-        ub_below = below_ub.get(cls, pooled_below_ub)
+        ub_below = below_ub["used"].get(cls, pooled_below_ub)
 
         lo, hi = wilson(found, n, z)
         slack = (unreviewed_above + ub_below * unreviewed_below) / n if n else 0.0
+        # The same bound with every class held to the loosest single below-cut
+        # ceiling instead of the pooled one -- the price of assuming the six
+        # sampled classes speak for the other nineteen, rather than a claim.
+        unpooled = (unreviewed_above + worst_below_ub * unreviewed_below) / n if n else 0.0
         entry = prov.get(cls, {})
         rows.append(
             {
@@ -394,8 +418,10 @@ def measure(
                 "rate": found / n if n else 0.0,
                 "wilson95": [lo, hi],
                 "below_cut_rate_ub": ub_below,
+                "below_cut_rate_ub_own": below_ub["own"].get(cls),
                 "below_cut_sample": below_counts.get(cls, 0),
                 "bound": min(1.0, hi + slack),
+                "bound_unpooled": min(1.0, hi + unpooled),
                 "slate_complete": unreviewed_above == 0,
                 "rule_in_force": bool(entry.get("rule_in_force", False)) and bool(answered),
                 "labelsets": entry.get("labelsets", []),
@@ -407,6 +433,7 @@ def measure(
     n = sum(r["silent_pairs"] for r in eligible)
     lo, hi = wilson(k, n, z)
     slack = sum(r["below_cut_rate_ub"] * r["unreviewed_below_cut"] for r in eligible)
+    unpooled = sum(worst_below_ub * r["unreviewed_below_cut"] for r in eligible)
     pooled = {
         "classes": [r["class"] for r in eligible],
         "silent_pairs": n,
@@ -414,7 +441,9 @@ def measure(
         "rate": k / n if n else 0.0,
         "wilson95": [lo, hi],
         "bound": min(1.0, hi + (slack / n if n else 0.0)),
+        "bound_unpooled": min(1.0, hi + (unpooled / n if n else 0.0)),
         "pooled_below_cut_rate_ub": pooled_below_ub,
+        "worst_below_cut_rate_ub": worst_below_ub,
         "below_cut_sample": sum(below_counts.values()),
     }
     return rows, pooled, problems
@@ -517,7 +546,9 @@ def main() -> int:
     )
     log(
         f"below-cut allowance: {pooled['pooled_below_cut_rate_ub']:.2%} pooled, "
-        f"from {pooled['below_cut_sample']} randomly sampled below-cut images (#3768)"
+        f"from {pooled['below_cut_sample']} randomly sampled below-cut images (#3768); "
+        f"holding every class to the loosest single sample ({pooled['worst_below_cut_rate_ub']:.2%}) "
+        f"instead moves the bound to {pooled['bound_unpooled']:.2%}"
     )
     log("CONDITIONING: an upper bound on the UNIFORM off-COCO rate, not an estimate of it -- the queue's")
     log("  images are selected for holding a class of C, and clutter correlates with holding more (#3667, #3679).")

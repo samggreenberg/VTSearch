@@ -142,9 +142,9 @@ class TestAnUnfinishedSlateIsNotALowRate:
 
 
 class TestScreeningLossIsAllowedFor:
-    def test_the_below_cut_mass_draws_its_own_classs_measured_ceiling(self, sr):
-        """#3768 drew 100 below-cut images and found none; the allowance is the
-        upper end of that, not zero."""
+    def test_the_unseen_below_cut_mass_carries_a_measured_ceiling(self, sr):
+        """#3768 drew below-cut images and found none; the allowance is the upper
+        end of that, not zero."""
         silent = {"car": set(range(1000))}
         above = {"car": {0}}
         below_seen = {"car": {i: False for i in range(500, 600)}}
@@ -152,20 +152,54 @@ class TestScreeningLossIsAllowedFor:
         rows, _, _ = sr.measure(silent, {"car": {0: False}}, below_seen, above, prov)
         (row,) = rows
         assert row["below_cut_sample"] == 100
-        assert 0.03 < row["below_cut_rate_ub"] < 0.04  # 0/100, Wilson
+        assert row["below_cut_rate_ub"] > 0
         # 899 below-cut pairs are still unseen, and they carry that ceiling.
         assert row["unreviewed_below_cut"] == 899
         assert row["bound"] == pytest.approx(row["wilson95"][1] + row["below_cut_rate_ub"] * 899 / 1000, abs=1e-9)
 
-    def test_a_class_without_its_own_sample_borrows_the_pooled_one(self, sr):
-        silent = {"car": set(range(1000)), "dog": set(range(1000))}
-        above = {"car": {0}, "dog": {0}}
-        below_seen = {"car": {i: False for i in range(500, 600)}}
-        prov = {c: {"rule_in_force": True, "labelsets": []} for c in ("car", "dog")}
-        rows, _, _ = sr.measure(silent, {"car": {0: False}, "dog": {0: False}}, below_seen, above, prov)
+    def test_measuring_a_class_never_makes_its_own_allowance_worse(self, sr):
+        """The incoherence this replaced: 0 of 100 bounds at 3.70% and 0 of 600 at
+        0.64%, so taking a class's own empty sample where it existed and the
+        pooled one elsewhere gave the *sampled* class the looser ceiling. Every
+        class that found nothing gets the pooled one."""
+        silent = {c: set(range(1000)) for c in ("car", "dog", "bus")}
+        above = {c: {0} for c in silent}
+        below_seen = {c: {i: False for i in range(500, 600)} for c in ("car", "dog")}
+        prov = {c: {"rule_in_force": True, "labelsets": []} for c in silent}
+        rows, _, _ = sr.measure(silent, {c: {0: False} for c in silent}, below_seen, above, prov)
         by_class = {r["class"]: r for r in rows}
-        assert by_class["dog"]["below_cut_sample"] == 0
-        assert by_class["dog"]["below_cut_rate_ub"] == by_class["car"]["below_cut_rate_ub"]
+        assert by_class["car"]["below_cut_sample"] == 100
+        assert by_class["bus"]["below_cut_sample"] == 0  # never sampled
+        assert by_class["car"]["below_cut_rate_ub"] == by_class["bus"]["below_cut_rate_ub"]
+        # ...and the pooled ceiling is genuinely tighter than the class's own.
+        assert by_class["car"]["below_cut_rate_ub"] < by_class["car"]["below_cut_rate_ub_own"]
+
+    def test_a_class_whose_own_sample_found_something_keeps_its_own_ceiling(self, sr):
+        """Hits are evidence the pooled rate does not describe it, and pooling
+        would dilute them across the classes that saw none."""
+        silent = {c: set(range(1000)) for c in ("car", "dog")}
+        above = {c: {0} for c in silent}
+        below_seen = {
+            "car": {i: (i < 505) for i in range(500, 600)},  # 5 of 100 found
+            "dog": {i: False for i in range(500, 600)},
+        }
+        prov = {c: {"rule_in_force": True, "labelsets": []} for c in silent}
+        rows, _, _ = sr.measure(silent, {c: {0: False} for c in silent}, below_seen, above, prov)
+        by_class = {r["class"]: r for r in rows}
+        assert by_class["car"]["below_cut_rate_ub"] == by_class["car"]["below_cut_rate_ub_own"]
+        assert by_class["car"]["below_cut_rate_ub"] > by_class["dog"]["below_cut_rate_ub"]
+
+    def test_the_price_of_the_pooling_assumption_is_reported_not_hidden(self, sr):
+        """`bound_unpooled` holds every class to the loosest single sample, so a
+        reader can price the exchangeability rather than inherit it."""
+        silent = {c: set(range(1000)) for c in ("car", "dog", "bus")}
+        above = {c: {0} for c in silent}
+        below_seen = {c: {i: False for i in range(500, 600)} for c in ("car", "dog")}
+        prov = {c: {"rule_in_force": True, "labelsets": []} for c in silent}
+        rows, pooled, _ = sr.measure(silent, {c: {0: False} for c in silent}, below_seen, above, prov)
+        assert all(r["bound_unpooled"] >= r["bound"] for r in rows)
+        assert pooled["bound_unpooled"] > pooled["bound"]
+        assert pooled["worst_below_cut_rate_ub"] > pooled["pooled_below_cut_rate_ub"]
 
     def test_a_below_cut_positive_is_a_silence_error_like_any_other(self, sr):
         """The wider question proves presence as well as the box question does."""
