@@ -426,12 +426,14 @@ def snap_cut_to_sample(cut: float, sorted_scores: np.ndarray) -> float:
     return (float(sorted_scores[i - 1]) + float(sorted_scores[i])) / 2.0
 
 
-#: Iteration budget and convergence tolerance for the unanchored EM
-#: (:func:`fit_score_gmm`).  Deliberately the same pair
-#: :func:`fit_anchored_score_gmm` defaults to, because the two are the *same
-#: loop* (see :func:`_plain_em`): a fit that stopped in a different place
-#: depending on whether anchors were about to follow it would be a second,
-#: hidden estimator.
+#: Iteration cap for the unanchored EM (:func:`fit_score_gmm`), and the
+#: parameter-delta tolerance it would stop on if the likelihood rule below were
+#: switched off.  Both are sklearn's own values for the fit this replaced, so
+#: "how long may it run" did not change with the implementation.  The tolerance
+#: is inert on the shipped path - :func:`_plain_em` passes
+#: :data:`_EM_LOGLIK_TOL`, and :func:`_anchored_em` reads one rule or the other,
+#: never both - and is kept so the parameter rule stays reachable as a measured
+#: arm (``scripts/experiments/gmm_init/arms_3585.py``).
 _EM_MAX_ITER = 100
 _EM_TOL = 1e-8
 
@@ -554,18 +556,23 @@ def _plain_em(x: np.ndarray, init: GmmFit1D) -> GmmFit1D | None:
 def fit_score_gmm(arr: np.ndarray) -> GmmFit1D | None:
     """Fit a deterministic 2-component GMM to a 1-D score array.
 
-    Returns ``None`` when the fit fails (fewer than 2 scores, a non-finite or
-    constant sample, or an EM failure), leaving the fallback policy to the
-    caller - :func:`calculate_gmm_threshold` falls back to the median.
+    Returns ``None`` when the fit fails - fewer than 2 scores, a non-finite
+    sample, or an EM failure - leaving the fallback policy to the caller
+    (:func:`calculate_gmm_threshold` falls back to the median).  A **constant**
+    sample is not a failure: it comes back as two identical components sitting
+    on the value, so the cut is that value (see :func:`_two_means_init`).
 
     **The estimator, and why it is ours** (issue #3585).  Two Gaussians over one
     dimension, fitted by EM from a deterministic 2-means init
     (:func:`_two_means_init`) with the same loop the anchored fit uses
     (:func:`_plain_em`).  Until #3585 this was sklearn's
     ``GaussianMixture(n_components=2, random_state=42)``, which is the same
-    estimator of the same model - and was measured at **91-95% of a whole
-    cosine/text sort**, because it pays ``covariance_type="full"`` machinery and
-    a k-means init per call on a problem whose covariance is a scalar.  It is
+    estimator of the same model - and was measured at **48% of a whole
+    cosine/text sort** (10% after this change, and the sort as a whole 1.7x
+    faster), because it pays ``covariance_type="full"`` machinery and a k-means
+    init per call on a problem whose covariance is a scalar.  The fit itself is
+    **7.3x** cheaper at the sizes a fold sees and **12x** at
+    :data:`_GMM_MAX_SAMPLES`.  It is
     kept, unused by production, as :func:`fit_score_gmm_sklearn`: the swap
     *moves the fit* (a different init lands EM in a different place within its
     tolerance, and can land it in a different basin), so it is licensed by a

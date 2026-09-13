@@ -1,0 +1,16 @@
+{
+  "cells": 86,
+  "cases": 1792,
+  "arms": [
+    "baseline",
+    "native",
+    "native_10k",
+    "native_iter50",
+    "native_ll1e-4",
+    "native_ll1e-5",
+    "native_param1e-8",
+    "sklearn_kmeanspp",
+    "sklearn_spherical"
+  ],
+  "gate_inclusion": 0
+}

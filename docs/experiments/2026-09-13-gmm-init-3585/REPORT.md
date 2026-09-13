@@ -29,8 +29,10 @@ worth.
    that matters is the control.** On 2,258 real fold cases the new fit changes
    the admitted set on **7.0%** of them, by a median of **2 medias**. Keeping
    sklearn and changing only `init_params="k-means++"` — three characters, same
-   estimator — changes **16.1%**, by a median of **11.5**. On 195 sorts the same
-   comparison is **0.96%** of the haystack against **3.9%**. A fit of this model
+   estimator — changes **16.1%**, by a median of **11.5**. On 195 sorts the mean
+   fraction of the haystack whose verdict moves is **0.89%** against **4.2%**,
+   and on the 62 that are real *text* sorts it is **0.39%** against **6.2%**, a
+   factor of sixteen. A fit of this model
    moves when you touch it; this one moves less than the smallest thing you
    could touch.
 
@@ -43,12 +45,12 @@ worth.
    nothing agrees with anything — see [the worked case](#the-worked-case-three-fits-of-one-haystack-admitting-80-256-and-393-of-400).
 
 3. **What made it faithful was the stopping rule, not the init.** This branch
-   first reused the anchored loop's parameter-delta rule at 1e-8. On real cosine
-   sorts that is **2.8x slower** than the sklearn call it replaced and moves
-   **7.0%** of the haystack, because a text sort is barely bimodal and EM crawls
-   a flat ridge to buy 0.002 nats. Stopping where sklearn stops — an iteration
-   improving the mean log-likelihood by less than 1e-3 — is the whole difference
-   between an arm that is 0.70x and one that is 7.6x.
+   first reused the anchored loop's parameter-delta rule at 1e-8. On real sorts
+   that is **1.7x slower** than the sklearn call it replaced and moves **7.7%**
+   of the haystack on average, because a text sort is barely bimodal and EM
+   crawls a flat ridge to buy 0.002 nats. Stopping where sklearn stops — an
+   iteration improving the mean log-likelihood by less than 1e-3 — is the whole
+   difference between an arm that is 0.60x and one that is 6.4x.
 
 4. **At that tolerance the two are the same estimator, and neither is the better
    fit.** Over 4,516 fold haystacks the native fit wins the log-likelihood 2,369
@@ -62,10 +64,10 @@ worth.
 5. **The cost, measured rather than projected.** 7.3x per fit at the corpus's own
    sizes, 10.1x at 20k and 12.3x at 50k. A whole cosine/text sort — the app's
    own `cosine_sort_with_boxes` plus the cut, both timed in one process — goes
-   from 52.5 ms to 30.0 ms at 4,952 medias, **1.7x**. That also **corrects the
+   from 49.7 ms to 28.0 ms at 4,952 medias, **1.7x**. That also **corrects the
    issue's own headline**: the fit was 91-95% of a sort by a reconstruction that
    priced a matmul and a dict comprehension; against the function the route
-   actually calls it is **48.5%** before this change and **11.2%** after.
+   actually calls it is **47.8%** before this change and **10.4%** after.
 
 6. **The trajectory A/B resolves nothing, in the candidate's favour.** Two
    84-cell grids, identical but for the fit, paired on 114 cells: Δcost
@@ -77,9 +79,9 @@ worth.
 7. **Two follow-ups the measurement handed over, both larger than this issue.**
    The anchored loop now *is* the cost of a fold's fit and it **exits on
    `max_iter`** rather than converging (97-200 iterations, against the init's
-   ~15) — #FOLLOWUP_A. And the incumbent's cut on a typed query is barely
-   identifiable at all: re-initialising it moves 6.5% of the verdicts, which is
-   a fact about what shipped, not about this change — #FOLLOWUP_B.
+   ~15) — #3825. And the incumbent's cut on a typed query is barely
+   identifiable at all: re-initialising it moves 6.2% of the verdicts, which is
+   a fact about what shipped, not about this change — #3826.
 
 
 
@@ -205,7 +207,7 @@ times as much when it moves them.
 
 The whole-chain speedup is only 1.47x because the anchored refit, which this
 branch does not touch, is now ~90% of a fold's fit. That is
-[#FOLLOWUP_A](#follow-ups).
+#3825.
 
 ### Where the fold changes are
 
@@ -240,6 +242,38 @@ change is at or below a given size (x, log). A curve that reaches 1.0 at the
 left edge changes nothing on any case. Read the left edge for "how often does
 anything change at all" and the right tail for "how bad is the worst case" —
 they are different questions and the arms do not order the same way on both.*
+
+### The sort path — 195 cases
+
+133 are the acquisition cut the harness takes inside a run; **62 are real
+cosine/text sorts** over four datasets and three text embedders, 838 to 18,050
+medias. This is where the fit's cost lives and, as it turns out, where the
+incumbent is least identifiable.
+
+| arm | cases changed | | mean % of the haystack moved | on the 62 **text** sorts | median &#124;Δadmitted&#124; when changed | median speedup of the fit |
+|---|---|---|---|---|---|---|
+| **`native`** | **119** | **61.0%** | **0.89%** | **0.39%** | **10** | **6.4x** |
+| `native_ll1e-4` | 160 | 82.1% | 3.9% | — | 40 | 3.9x |
+| `native_ll1e-5` | 164 | 84.1% | — | — | 117 | 2.5x |
+| `native_iter50` | 164 | 84.1% | — | — | 97 | 1.5x |
+| `native_param1e-8` | 164 | 84.1% | 7.7% | — | 215 | 0.60x |
+| `sklearn_kmeanspp` *(control)* | 156 | 80.0% | **4.2%** | **6.2%** | 78 | 0.91x |
+| `sklearn_spherical` | 0 | 0% | 0% | 0% | — | 1.12x |
+
+**"61% of sorts change" and "0.89% of the haystack moves" are both true and the
+second is the one to read.** A sort's cut sits inside a dense region of scores,
+so it is *always* going to move a few medias — the median change among the cases
+that change is 10 of ~5,000. What separates the arms is the tail: `native`'s 90th
+percentile is 0.57% of the haystack, the control's is 9.2%.
+
+The text-sort column is the sharpest contrast in this report. On the 62 real
+query sorts the candidate moves **0.39%** of the verdicts and re-initialising the
+incumbent moves **6.2%** — sixteen times more, for a three-character change that
+alters no estimator. It is also the number behind
+#3826: whatever else is true, a quantity that moves by 6% of a
+haystack when you change where its optimiser starts is not carrying 6% worth of
+information.
+
 
 ---
 
@@ -302,7 +336,7 @@ The speedup grows with *n* because the k-means init sklearn pays per call grows
 with it and the 2-means init does not. `native_10k` is the `_GMM_MAX_SAMPLES`
 lever measured beside the others rather than proposed: at 50k it is another 3x
 on top, for a change of a different kind — it changes what the fit *sees* — and
-it is [#FOLLOWUP_C](#follow-ups), not this issue.
+it is #3827, not this issue.
 
 Two arms are *slower than the incumbent*: the parameter-delta stopping rule at
 every size, and — at 20k and 50k — the issue's own `k-means++` suggestion, whose
@@ -317,17 +351,17 @@ puts a cross-node difference straight into the ratio (#3160):
 
 | | ms | share of the sort |
 |---|---|---|
-| the rest of the sort (scoring, result dicts, the sort itself) | 27.1 | — |
-| `baseline` fit | 27.0 | **48.5%** |
-| **`native` fit** | **3.7** | **11.2%** |
+| the rest of the sort (scoring, result dicts, the sort itself) | 25.1 | — |
+| `baseline` fit | 26.2 | **47.8%** |
+| **`native` fit** | **3.7** | **10.4%** |
 
-**A sort goes from 52.5 ms to 30.0 ms — 1.7x** at the median size in the corpus
-(4,952 medias).
+**A sort goes from 49.7 ms to 28.0 ms — 1.71x** at the median size in the corpus
+(4,952 medias), over all 62 captured sorts.
 
 That table also corrects this issue's own §1. It reported the fit at **91-95%**
 of a sort from a reconstruction — a matmul, a result-dict build and a sort —
 rather than from the function the route calls, and noted the real share would be
-"somewhat below" it. Measured against `cosine_sort_with_boxes`, it is **48.5%**,
+"somewhat below" it. Measured against `cosine_sort_with_boxes`, it is **47.8%**,
 and the gap is not a rounding difference: the reconstruction under-counts the
 per-media Python work that dominates the non-GMM side. The saving is real and
 the multiplier on a whole sort is 1.7x, not 10x.
@@ -445,17 +479,17 @@ in places.
 
 Three, all filed, all pointed at from the prose above:
 
-- **#FOLLOWUP_A — the anchored EM is now the whole cost of a fold's fit, and it
+- **#3825 — the anchored EM is now the whole cost of a fold's fit, and it
   exits on `max_iter`.** Measured here at 97-200 iterations per fold (200 is the
   cap) and 21-48 ms against the init's 2-4 ms. The same log-likelihood rule is
   the obvious fix and `_anchored_em` already takes it as an argument; unlike this
   issue there is no second estimator between that fit and the cut, so the gate
   has to be run again. The corpus is captured and needs no re-run.
-- **#FOLLOWUP_B — the cut on a typed query is barely identifiable.**
-  Re-initialising the *incumbent* moves 6.5% of a text sort's verdicts and up to
-  27% on one query. That is a fact about what shipped, not about this change,
+- **#3826 — the cut on a typed query is barely identifiable.**
+  Re-initialising the *incumbent* moves 6.2% of a text sort's verdicts on
+  average and 37% on the worst one. That is a fact about what shipped, not about this change,
   and it asks whether a mixture midpoint is the right rule for a sort at all.
-- **#FOLLOWUP_C — `_GMM_MAX_SAMPLES` is the third lever and it is still
+- **#3827 — `_GMM_MAX_SAMPLES` is the third lever and it is still
   unpriced at the size it binds.** `native_10k` is another 3x at 50k, but every
   sort in this corpus is under 50,000 scores, so the arm is never exercised
   where the constant actually does something.
@@ -489,6 +523,6 @@ with one `gate` + `analyse`.
 **The corpus outlives the candidates in it.** That is the reason it is arrays on
 disk rather than a comparison computed in place, and the reason
 `fit_score_gmm_sklearn` stays in the tree: the next candidate — the anchored
-loop's own stopping rule (#FOLLOWUP_A) is the obvious one — can be gated against
+loop's own stopping rule (#3825) is the obvious one — can be gated against
 exactly these inputs, against exactly this baseline, without re-running a single
 cell.

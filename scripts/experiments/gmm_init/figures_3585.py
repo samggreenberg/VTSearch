@@ -55,15 +55,17 @@ def _style(arm: str) -> tuple[str, str]:
     return STYLE.get(arm, ("#777777", "o"))
 
 
+#: One captured case's identity - the same key ``analyze_3585.CASE_KEYS`` uses.
+_CASE_KEYS = ["cell", "dataset", "embedder", "style", "kind", "case"]
+
+
 def _paired(cuts: pd.DataFrame) -> pd.DataFrame:
     """Every arm's cases joined to the baseline's, with the two deltas."""
     tcol, acol = "threshold_i0", "n_admitted_i0"
     df = cuts.copy()
     for c in (tcol, acol, "seconds"):
         df[c] = pd.to_numeric(df[c], errors="coerce")
-    # The same key `analyze_3585.CASE_KEYS` uses: a sort capture holds a whole
-    # grid, so a category name is not unique inside one file.
-    keys = ["cell", "dataset", "embedder", "style", "kind", "case"]
+    keys = _CASE_KEYS
     base = df[df["arm"] == "baseline"][keys + [tcol, acol, "seconds"]].rename(
         columns={tcol: "base_t", acol: "base_a", "seconds": "base_s"}
     )
@@ -75,11 +77,21 @@ def _paired(cuts: pd.DataFrame) -> pd.DataFrame:
 
 
 def fig_arms(paired: pd.DataFrame, path: Path) -> None:
+    keys = _CASE_KEYS
     kinds = [k for k in ("sort", "fold") if k in set(paired["kind"])]
     fig, axes = plt.subplots(1, len(kinds), figsize=(6.2 * len(kinds), 5.0), squeeze=False)
     for ax, kind in zip(axes[0], kinds, strict=True):
         g = paired[paired["kind"] == kind]
-        n_cases = g.groupby(["cell", "case"]).ngroups
+        # Grouped on the whole identity, not (cell, case): a sort capture holds
+        # a grid, so a category name repeats inside one file and the short key
+        # under-counts the panel by a third.
+        n_cases = g.groupby(keys).ngroups
+        # The linear part of the symlog axis is sized to the data: fixed at 0.01
+        # it gave half the panel to a region holding one point (the arm that
+        # changes nothing) and squashed every other arm into the top strip.
+        means = 100.0 * g.groupby("arm")["d_frac"].mean()
+        positive = means[means > 0]
+        linthresh = max(float(positive.min()) / 3.0, 1e-3) if len(positive) else 0.01
         for arm, gg in g.groupby("arm"):
             colour, marker = _style(str(arm))
             x = gg["speedup"].median()
@@ -102,7 +114,7 @@ def fig_arms(paired: pd.DataFrame, path: Path) -> None:
         # Non-negative by construction, so the scale is log above a floor and
         # linear below it - a symlog axis that dips under zero is drawing a
         # region the quantity cannot reach.
-        ax.set_yscale("symlog", linthresh=0.01)
+        ax.set_yscale("symlog", linthresh=linthresh)
         ax.set_ylim(bottom=-0.001)
         ax.set_xlabel("median speedup over the sklearn fit  (right is faster)")
         ax.set_ylabel("mean % of the haystack whose verdict changes")
@@ -143,36 +155,52 @@ def fig_change_ecdf(paired: pd.DataFrame, path: Path) -> None:
 def fig_cost(bench: pd.DataFrame, path: Path) -> None:
     df = bench.copy()
     df["seconds"] = pd.to_numeric(df["seconds"], errors="coerce")
-    fig, ax = plt.subplots(figsize=(6.4, 4.6))
+    # Measured sizes are banded by decade before the median is taken.  Every
+    # captured array has its own n, so plotting the raw value draws one vertical
+    # spike per dataset instead of a curve - the spikes are the spread *within*
+    # a size, which is a different question from how cost scales with size.
+    edges = [0, 1_000, 5_000, 20_000, 10**9]
+    measured = df[df["resampled"] == 0].copy()
+    measured["band"] = pd.cut(measured["n"], bins=edges, right=False)
+    resampled = df[df["resampled"] == 1]
+
+    fig, ax = plt.subplots(figsize=(6.8, 4.8))
     for arm, g in df.groupby("arm"):
         colour, marker = _style(str(arm))
-        for resampled, gg in g.groupby("resampled"):
-            med = gg.groupby("n")["seconds"].median().sort_index()
-            ax.plot(
-                med.index,
-                1000.0 * med.to_numpy(),
-                marker=marker,
-                color=colour,
-                ls="-" if not resampled else ":",
-                label=str(arm) if not resampled else None,
-                alpha=1.0 if not resampled else 0.65,
-            )
+        # The incumbent is the line every other line is read against, so it is
+        # drawn heavier: at these sizes two other arms sit on top of it.
+        width = 3.0 if arm == "baseline" else 1.5
+        m = measured[measured["arm"] == arm]
+        if not m.empty:
+            by_band = m.groupby("band", observed=True).agg(n=("n", "median"), s=("seconds", "median"))
+            ax.plot(by_band["n"], 1000 * by_band["s"], marker=marker, color=colour, ls="-", lw=width, label=str(arm))
+        r = resampled[resampled["arm"] == arm]
+        if not r.empty:
+            by_n = r.groupby("n")["seconds"].median().sort_index()
+            # Joined to the last measured point so the projection reads as a
+            # continuation of the same curve rather than a second series.
+            xs = list(by_n.index)
+            ys = [1000 * v for v in by_n.to_numpy()]
+            if not m.empty:
+                xs = [float(by_band["n"].iloc[-1]), *xs]
+                ys = [1000 * float(by_band["s"].iloc[-1]), *ys]
+            ax.plot(xs, ys, marker=marker, color=colour, ls=":", lw=width, alpha=0.75)
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_xlabel("scores in the fit")
     ax.set_ylabel("milliseconds per fit (min of 5)")
     ax.set_title("Cost against sample size")
     ax.grid(alpha=0.25, which="both")
-    ax.legend(fontsize=7)
+    ax.legend(fontsize=7, loc="upper left")
     fig.text(
         0.5,
-        0.005,
-        "Solid: measured on a real sort or haystack of that size.  Dotted: the same array bootstrap-resampled "
-        "to a size the app fits on - a projection of the SHAPE, not a measurement.",
+        0.02,
+        "Solid: measured, median over the arrays in each decade band.  Dotted: the same arrays bootstrap-resampled\n"
+        "to 20k and 50k - a projection of the SHAPE, which is what drives iteration count, not a measurement.",
         ha="center",
-        fontsize=7,
+        fontsize=7.5,
     )
-    fig.tight_layout(rect=(0, 0.04, 1, 1))
+    fig.tight_layout(rect=(0, 0.08, 1, 1))
     fig.savefig(path, dpi=130)
     plt.close(fig)
 
