@@ -743,6 +743,32 @@ deliver a realised **0.85%**, not the designed 1.00% (#3681).
 
 [`figures_3670.py`](figures_3670.py) draws the four of them.
 
+**The rate all four of them are about is now measured directly, and none of them
+is how you get it** (#3696). The composition they argue for is what removed the
+population it was measurable in, so `silence_rate.py` reads it off the exhaustive
+pass instead: every class VG did *not* name in a queue image is a measurement of
+its silence against a human reference, 81,363 pairs of them, at no extra labour.
+
+```bash
+python silence_rate.py --deep-unprovable 6264 --out silence_rate.json   # ~20s, login node
+```
+
+It is an **upper bound on the uniform rate**, not an estimate — the queue's
+images are selected for holding a class of *C*, and clutter correlates with
+holding more (#3667, #3679). That is the right shape for the one consumer left:
+`vg_scale_deep`'s 6,264 negatives that rest on VG's silence with nothing able to
+check them (#3723). 2026-09-13, 9 of 25 classes finished: **2.8% [2.6%, 3.0%],
+bound 3.5%**, so at most 219 of deep's 6,264 — see
+[`docs/experiments/2026-09-13-vg-silence-3696/README.md`](../../../docs/experiments/2026-09-13-vg-silence-3696/README.md).
+Re-run it as classes finish rather than quoting that page.
+
+Two things it will tell you about rather than hide. A class whose slate is
+part-banked has candidates with no verdict, so they enter its bound at their
+worst case and it leaves the pooled figure — `chair` reads 25.1% at 300 of 841,
+which is the only reading that cannot be mistaken for a clean class. And a class
+whose labelset names a **superseded rule** is reported on its own line and kept
+out of the pool (#3814): `dog`, `fork` and `vase` are there today.
+
 Run `name_coverage.py` with no `--propose` to score the tables that are actually
 shipped, which is what says whether `pile_config` still does what its comment
 claims. Every cut is a flag (`--min-precision`, `--min-box`, `--min-sole`), so a
