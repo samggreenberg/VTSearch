@@ -99,9 +99,11 @@ Anything else stays open — a genuinely partial `Refs` is doing its job.
 
 **Report the reconciliation in chat**, briefly: which issues came from the closing bucket, which were closed after reconciliation (and under which PR keyword), and which non-closing references were deliberately left open. This is the only place a crossed wire between a PR keyword and an issue comment becomes visible, so do not collapse it to a bare count. If no qualifying issues are found, state that and do nothing.
 
-## 6b. Audit the `solved` label
+## 6b. Audit the `solved` and `experiment` labels
 
 `solved` means "the development is done; only merges remain", and the fix session applies it when it opens the PR (CLAUDE.md). So by the time you get here the label should already be right, and this step is an **audit**: `scripts/reconcile-solved-labels.py` catches issues a session forgot to label, issues whose fix PR was later abandoned, and stale labels left behind by step 6's closes. It audits the **assignee** on the same pass, for the same reason — an assignee outlives its purpose exactly when `solved` does.
+
+It also audits **`experiment`**, against a different signal: an `<!-- experiment: ... -->` marker in the issue body (CLAUDE.md). That half only ever adds, and it is the label's only backstop — nothing else notices an issue that explains why it needs the GRID while sitting in the pick-up-now queue.
 
 Run it right after step 6 to confirm nothing was left behind. It is also worth running **between** releases — the views it keeps honest (`is:issue is:open -label:solved`, what a human should pick up next) matter most while the release is still weeks away.
 
@@ -113,7 +115,7 @@ The script is a pure function from data to plan — it does no network I/O of it
 
 1. List the PRs merged into `dev` since the last release — the same `origin/main..origin/dev` window as step 3 — and read each one's **body**. These are `release_prs`.
 2. List the PRs currently **open** against `dev` (`open_prs`) and those **closed without merging** since the last release (`abandoned_prs`), with their bodies. The open ones are why an issue can be labelled before any merge; the abandoned ones are the only way a label comes off outside a close.
-3. List the repo's issues with their `labels`, `state`, and `assignees`, and fetch each one's **comments** in chronological order (the API default).
+3. List the repo's issues with their `labels`, `state`, `assignees`, and **`body`**, and fetch each one's **comments** in chronological order (the API default). The body is where the `experiment` marker lives; omit it and that half of the audit silently finds nothing, so the script says so rather than reporting a clean bucket (see the `notes` line below).
 4. Assemble them into one JSON object and run the script:
 
 ```json
@@ -124,6 +126,7 @@ The script is a pure function from data to plan — it does no network I/O of it
   "issues": [
     {"number": 3077, "state": "open", "labels": ["claude"],
      "assignees": ["samggreenberg"],
+     "body": "... <!-- experiment: needs a sweep --> ...",
      "comments": [{"body": "Addressed in #3128"}]}
   ]
 }
@@ -133,7 +136,7 @@ The script is a pure function from data to plan — it does no network I/O of it
 python scripts/reconcile-solved-labels.py --input plan-input.json
 ```
 
-It prints four action buckets (`ADD`, `REMOVE`, `NEEDS REVIEW`, `CLEAR ASSIGNEE`) plus a `no change: N issue(s)` summary line at the end. **Apply `ADD`, `REMOVE`, and `CLEAR ASSIGNEE` directly** — they are unambiguous. **Do not apply `NEEDS REVIEW`**; read those issues yourself. An issue lands there for one of three reasons, all genuinely undecidable from the outside:
+It prints five action buckets (`ADD solved`, `REMOVE solved`, `ADD experiment`, `NEEDS REVIEW`, `CLEAR ASSIGNEE`) plus a `no change: N issue(s)` summary line at the end. **Apply everything except `NEEDS REVIEW` directly** — those buckets are unambiguous. **Do not apply `NEEDS REVIEW`**; read those issues yourself. An issue lands there for one of three reasons, all genuinely undecidable from the outside:
 
 - **A fix pointer is not the newest comment.** The later comment may be a maintainer saying "thanks" or the reporter saying the fix does not work. Tagging would bury a dispute — hiding an issue that still needs solving — while skipping would leave solved work in the human queue.
 - **A comment claims a fix by commit SHA** instead of `Addressed in #M`. The script has only the JSON you piped in, so it cannot map a commit to its PR — but the claim is real, so it is surfaced. Resolve it with `git log --ancestry-path <sha>..origin/dev --first-parent --oneline | tail -1`, which names the commit that landed it — a merge commit or a squash, and either one carries its PR number. If `git merge-base --is-ancestor <sha> origin/dev` fails, the SHA is not on `dev` at all and the recipe returns nothing: its branch was **squashed** on merge, which discards the branch's own commits. Match the subject against the window instead (`python scripts/release-prs.py | grep -i '<words from the subject>'`), or open the SHA on GitHub, which still knows its PR. Then re-run with a corrected pointer.
@@ -143,7 +146,11 @@ That is the same "not silently skipped" principle step 6 applies to non-closing 
 
 `CLEAR ASSIGNEE` is orthogonal to the label buckets — an issue whose label is already correct can still owe an assignee removal, so it appears under `CLEAR ASSIGNEE` while also counting as "no change" for its label. The bucket only ever asks you to *remove* an assignee: the script cannot tell "nobody is working this" from "a session started five minutes ago", so it never proposes assigning anyone, and it leaves `NEEDS REVIEW` issues and fallen-through fixes alone.
 
-Add `--check` to make it exit non-zero when anything needs attention, and `--json` for machine-readable output.
+`ADD experiment` is likewise orthogonal to the rest: it answers "does closing this need machine time?", which is independent of whether anyone has solved it, so an issue can appear there and under `ADD solved` at once. Like `CLEAR ASSIGNEE` it moves in one direction only — a marker means the label is owed, but a *missing* marker means nothing (CLAUDE.md never requires one), so the script never proposes removing `experiment`.
+
+If the run ends with a `note:` line saying no issue carried a `body`, the `experiment` half did not run at all — regather with bodies rather than reading its empty bucket as a pass.
+
+Add `--check` to make it exit non-zero when anything needs attention, and `--json` for machine-readable output (whose `notes` key carries that same warning). The `note:` line deliberately does **not** trip `--check`: it reports that a check could not run, not that an issue needs changing.
 
 ## 7. Prune plan pointers for the closed issues
 

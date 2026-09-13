@@ -16,6 +16,14 @@ are the point of testing it:
   tracks "solved", not "merged"), while a PR closed *without* merging un-solves
   it and must take the label back off.
 
+It also reconciles the `experiment` label, which gates *scheduling* rather
+than describing a topic: an issue carrying it cannot be closed without machine
+time. The signal is an `<!-- experiment: ... -->` marker in the issue body, and
+that half only ever *adds* -- a marker is evidence the label is owed, while its
+absence is evidence of nothing, because CLAUDE.md never asks for a marker. Its
+rationale text is never parsed, since the prose reads either way (#3694's real
+marker opens "NOT because anything is measured" and is a marker regardless).
+
 It also reconciles the *assignee*, which carries the companion status "a
 session is working this right now". That half removes only: a solved or closed
 issue must end up unassigned, but nothing in this input can distinguish "nobody
@@ -56,13 +64,15 @@ def issue(
     labels: list[str] | None = None,
     comments: list[str] | None = None,
     assignees: list | None = None,
+    body: str = "",
 ):
     return {
         "number": number,
         "state": state,
         "labels": labels or [],
         "assignees": assignees or [],
-        "comments": [{"body": body} for body in (comments or [])],
+        "body": body,
+        "comments": [{"body": comment} for comment in (comments or [])],
     }
 
 
@@ -354,6 +364,137 @@ class TestRemovalAndStaleness:
         assert 3077 in plan_for(prs, [issue(3077, labels=["SOLVED"])])["none"]
 
 
+class TestExperimentMarker:
+    """The `experiment` half: an `<!-- experiment: ... -->` marker owes the label."""
+
+    MARKED = "Some prose.\n\n<!-- experiment: needs a GRID sweep -->\n"
+
+    def test_marker_without_the_label_is_planned_for_addition(self):
+        plan = plan_for([], [issue(3694, labels=["claude"], body=self.MARKED)])
+        assert 3694 in plan["label_experiment"]
+
+    def test_marker_with_the_label_needs_no_change(self):
+        plan = plan_for([], [issue(3694, labels=["claude", "experiment"], body=self.MARKED)])
+        assert plan["label_experiment"] == {}
+
+    def test_an_unmarked_issue_is_never_planned(self):
+        plan = plan_for([], [issue(3694, labels=["claude"], body="Plain prose, no marker.")])
+        assert plan["label_experiment"] == {}
+
+    def test_an_unmarked_labelled_issue_keeps_its_label(self):
+        """Add-only: a human files a research idea with the label and no marker."""
+        plan = plan_for([], [issue(3694, labels=["claude", "experiment"], body="No marker here.")])
+        assert plan["label_experiment"] == {}
+        assert all(3694 not in plan[bucket] for bucket in ("remove", "review"))
+
+    def test_a_closed_issue_with_a_marker_is_left_alone(self):
+        """A closed issue routes nothing, so its labels are nobody's queue."""
+        plan = plan_for([], [issue(3694, state="closed", labels=["claude"], body=self.MARKED)])
+        assert plan["label_experiment"] == {}
+
+    def test_the_rationale_text_is_not_parsed(self):
+        """#3694's real marker opens by denying the usual reason, and still counts."""
+        body = (
+            "<!-- experiment: NOT because anything is measured - no arms, no cells, no GPU.\n"
+            "The label is here because the work is unreachable from a container. -->\n"
+        )
+        assert 3694 in plan_for([], [issue(3694, labels=["claude"], body=body)])["label_experiment"]
+
+    def test_a_missing_body_is_quiet(self):
+        raw = mod.reconcile({"release_prs": [], "issues": [{"number": 3694, "state": "open", "labels": ["claude"]}]})
+        assert raw["label_experiment"] == []
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            "<!-- experiment: why -->",
+            "<!--experiment: why-->",
+            "<!-- Experiment: why -->",
+            "<!-- EXPERIMENT : why -->",
+            "text\n<!-- experiment:\n  a multi-line rationale\n-->\nmore text",
+        ],
+        ids=["spaced", "tight", "capitalised", "space-before-colon", "multi-line"],
+    )
+    def test_marker_forms_are_all_recognised(self, body):
+        assert 3694 in plan_for([], [issue(3694, body=body)])["label_experiment"]
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            "<!-- TODO: the experiment label is applied separately -->",
+            "<!-- experimental setup lives in scripts/ -->",
+            "This is an experiment: it needs a sweep.",
+            "<!-- experiment -->",
+        ],
+        ids=["not-leading", "experimental", "prose-not-a-comment", "no-colon"],
+    )
+    def test_near_misses_are_not_markers(self, body):
+        """The marker is a documented sentinel form, not a fuzzy match on a word."""
+        assert plan_for([], [issue(3694, body=body)])["label_experiment"] == {}
+
+    def test_the_hooks_opt_out_marker_is_not_this_marker(self):
+        """`<!-- not-an-experiment: ... -->` is the hook's opt-out -- the exact inverse.
+
+        It appears in real issue bodies (.claude/hooks/require-issue-labels.py
+        reads and validates it), so matching it would label the very issues
+        that argued they need no machine time.
+        """
+        body = "<!-- not-an-experiment: a pure docs edit, no run needed -->"
+        assert plan_for([], [issue(3694, body=body)])["label_experiment"] == {}
+
+    def test_an_affirmative_marker_wins_over_the_opt_out(self):
+        """Both markers present: take the label, which is the cheap failure.
+
+        A wrongly-labelled issue costs a reader one glance; a wrongly-unlabelled
+        one puts GRID-only work in the pick-up-now queue and costs a session.
+        That is the same bias the filing hook takes.
+        """
+        body = "<!-- not-an-experiment: stale, corrected below -->\n<!-- experiment: needs the GRID -->"
+        assert 3694 in plan_for([], [issue(3694, body=body)])["label_experiment"]
+
+    @pytest.mark.parametrize("fence", ["```", "~~~", "```markdown"], ids=["backticks", "tildes", "tagged"])
+    def test_a_marker_inside_a_code_fence_is_not_a_marker(self, fence):
+        """An issue documenting the convention must not book itself machine time."""
+        body = f"The marker form is:\n\n{fence}\n<!-- experiment: why -->\n```\n\nThat is all."
+        assert plan_for([], [issue(3694, body=body)])["label_experiment"] == {}
+
+    def test_a_marker_after_a_closed_fence_still_counts(self):
+        body = "```\ncode\n```\n\n<!-- experiment: needs the GRID -->"
+        assert 3694 in plan_for([], [issue(3694, body=body)])["label_experiment"]
+
+    def test_the_experiment_half_is_orthogonal_to_solved(self):
+        """An issue can owe a `solved` add and an `experiment` add at once."""
+        prs = [{"number": 3128, "body": "Closes #3694"}]
+        plan = plan_for(prs, [issue(3694, labels=["claude"], body=self.MARKED)])
+        assert 3694 in plan["add"]
+        assert 3694 in plan["label_experiment"]
+
+    def test_the_reason_names_the_marker(self):
+        reason = plan_for([], [issue(3694, body=self.MARKED)])["label_experiment"][3694]
+        assert "experiment:" in reason
+
+
+class TestExperimentInputNote:
+    """A payload with no issue bodies must not pass for a clean `experiment` bucket."""
+
+    def test_a_body_less_input_is_called_out(self):
+        data = {"release_prs": [], "issues": [{"number": 3077, "state": "open", "labels": []}]}
+        note = mod.experiment_input_note(data)
+        assert note and "did not run" in note
+
+    def test_bodies_present_means_no_note(self):
+        data = {"release_prs": [], "issues": [issue(3077, body="")]}
+        assert mod.experiment_input_note(data) is None
+
+    def test_one_body_among_many_is_enough(self):
+        """The note is about the recipe used, not about each issue."""
+        data = {"issues": [{"number": 1, "state": "open"}, issue(2, body="x")]}
+        assert mod.experiment_input_note(data) is None
+
+    def test_empty_input_has_nothing_to_warn_about(self):
+        assert mod.experiment_input_note({}) is None
+
+
 class TestCommandLine:
     def run(self, data: dict, *args: str) -> subprocess.CompletedProcess:
         return subprocess.run(  # noqa: S603  # interpreter + repo-local script path, no shell
@@ -398,6 +539,34 @@ class TestCommandLine:
 
     def test_empty_input_is_not_an_error(self):
         assert self.run({}).returncode == 0
+
+    MARKED = {
+        "release_prs": [],
+        "issues": [issue(3694, labels=["claude"], body="<!-- experiment: needs the GRID -->")],
+    }
+
+    def test_check_exits_nonzero_on_a_missing_experiment_label(self):
+        assert self.run(self.MARKED, "--check").returncode == 1
+
+    def test_the_experiment_bucket_is_reported(self):
+        result = self.run(self.MARKED)
+        assert "ADD `experiment`" in result.stdout
+        assert "#3694" in result.stdout
+
+    def test_the_body_less_note_is_printed(self):
+        data = {"release_prs": [], "issues": [{"number": 3077, "state": "open", "labels": []}]}
+        assert "did not run" in self.run(data).stdout
+
+    def test_the_note_alone_does_not_trip_check(self):
+        """It reports that a check could not run, not that an issue needs changing."""
+        data = {"release_prs": [], "issues": [{"number": 3077, "state": "open", "labels": []}]}
+        assert self.run(data, "--check").returncode == 0
+
+    def test_json_output_carries_the_notes_key(self):
+        data = {"release_prs": [], "issues": [{"number": 3077, "state": "open", "labels": []}]}
+        payload = json.loads(self.run(data, "--json").stdout)
+        assert len(payload["notes"]) == 1
+        assert payload["label_experiment"] == []
 
 
 class TestAssigneeRemoval:
