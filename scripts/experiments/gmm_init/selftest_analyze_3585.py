@@ -167,7 +167,9 @@ def main() -> int:
         ]
     )
     b = bench_table(bench).set_index(["arm", "n_bucket"])
-    check("bench speedup", float(b.loc[("native", 1000), "speedup_median"]), 10.0)
+    # 1000 scores lands in the "1k-5k" band; a measured size is banded by
+    # decade, only a resampled one keeps its exact n as its label.
+    check("bench speedup", float(b.loc[("native", "1k-5k"), "speedup_median"]), 10.0)
 
     print()
     if FAILURES:

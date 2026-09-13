@@ -143,7 +143,17 @@ def bench_table(bench: pd.DataFrame) -> pd.DataFrame:
     """Per (arm, n): min-of-k seconds and the speedup over the baseline."""
     df = bench.copy()
     df["seconds"] = pd.to_numeric(df["seconds"], errors="coerce")
-    df["n_bucket"] = df["n"].astype(int)
+    # Resampled sizes are exact and pool as themselves; the measured ones are
+    # whatever each dataset happens to be, so they band by decade.  Grouping
+    # those on the raw n produces one row per array and no medians worth the
+    # name.
+    edges = [0, 1_000, 5_000, 20_000, 10**9]
+    labels = ["<1k", "1k-5k", "5k-20k", ">20k"]
+    df["n_bucket"] = np.where(
+        df["resampled"] == 1,
+        df["n"].astype(int).astype(str),
+        pd.cut(df["n"], bins=edges, labels=labels, right=False).astype(str),
+    )
     base = (
         df[df["arm"] == "baseline"]
         .groupby(["sample", "n_bucket"], sort=False)["seconds"]
@@ -157,13 +167,14 @@ def bench_table(bench: pd.DataFrame) -> pd.DataFrame:
     return (
         g.agg(
             samples=("seconds", "size"),
+            n_median=("n", "median"),
             seconds_median=("seconds", "median"),
             seconds_p90=("seconds", lambda s: s.quantile(0.9)),
             speedup_median=("speedup", "median"),
             speedup_min=("speedup", "min"),
         )
         .reset_index()
-        .sort_values(["n_bucket", "arm"])
+        .sort_values(["resampled", "n_median", "arm"])
     )
 
 
