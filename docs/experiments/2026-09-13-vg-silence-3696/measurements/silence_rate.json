@@ -1,0 +1,851 @@
+{
+ "queue_images": 3397,
+ "classes": [
+  {
+   "class": "backpack",
+   "silent_pairs": 3285,
+   "candidates": 979,
+   "answered": 979,
+   "answered_below_cut": 0,
+   "unreviewed_candidates": 0,
+   "unreviewed_below_cut": 2306,
+   "excluded_known_a": 0,
+   "excluded_control": 0,
+   "excluded_unexplained": 0,
+   "found_present": 90,
+   "rate": 0.0273972602739726,
+   "wilson95": [
+    0.02234305468588694,
+    0.03355553282893894
+   ],
+   "below_cut_rate_ub": 0.006361933328210577,
+   "below_cut_rate_ub_own": null,
+   "below_cut_sample": 0,
+   "bound": 0.038021474459031354,
+   "bound_unpooled": 0.05952509935547178,
+   "slate_complete": true,
+   "rule_in_force": true,
+   "labelsets": [
+    {
+     "file": "LABELSETS__slate__backpack.json",
+     "kind": "slate",
+     "rule": "backpack not handbags or luggage",
+     "good": 90,
+     "bad": 889
+    }
+   ]
+  },
+  {
+   "class": "bench",
+   "silent_pairs": 3272,
+   "candidates": 1231,
+   "answered": 1289,
+   "answered_below_cut": 0,
+   "unreviewed_candidates": 0,
+   "unreviewed_below_cut": 1983,
+   "excluded_known_a": 60,
+   "excluded_control": 27,
+   "excluded_unexplained": 0,
+   "found_present": 178,
+   "rate": 0.054400977995110025,
+   "wilson95": [
+    0.04713900850971784,
+    0.06270806101891871
+   ],
+   "below_cut_rate_ub": 0.006361933328210577,
+   "below_cut_rate_ub_own": null,
+   "below_cut_sample": 0,
+   "bound": 0.0665637192676478,
+   "bound_unpooled": 0.08512881383826829,
+   "slate_complete": true,
+   "rule_in_force": true,
+   "labelsets": [
+    {
+     "file": "LABELSETS__pass25__bench.json",
+     "kind": "pass25",
+     "rule": "bench not chairs",
+     "good": 143,
+     "bad": 144
+    },
+    {
+     "file": "LABELSETS__slate__bench.json",
+     "kind": "slate",
+     "rule": "bench not chairs",
+     "good": 104,
+     "bad": 985
+    }
+   ]
+  },
+  {
+   "class": "bicycle",
+   "silent_pairs": 3273,
+   "candidates": 169,
+   "answered": 886,
+   "answered_below_cut": 100,
+   "unreviewed_candidates": 0,
+   "unreviewed_below_cut": 2387,
+   "excluded_known_a": 115,
+   "excluded_control": 72,
+   "excluded_unexplained": 0,
+   "found_present": 102,
+   "rate": 0.031164069660861594,
+   "wilson95": [
+    0.02573887261816402,
+    0.0376885448072007
+   ],
+   "below_cut_rate_ub": 0.006361933328210577,
+   "below_cut_rate_ub_own": 0.03699480747600191,
+   "below_cut_sample": 100,
+   "bound": 0.04232830492160297,
+   "bound_unpooled": 0.06466887033277863,
+   "slate_complete": true,
+   "rule_in_force": true,
+   "labelsets": [
+    {
+     "file": "LABELSETS__belowcut__bicycle.json",
+     "kind": "belowcut",
+     "rule": "bicycle incl trikes not motorcycles",
+     "good": 0,
+     "bad": 100
+    },
+    {
+     "file": "LABELSETS__pass25__bicycle.json",
+     "kind": "pass25",
+     "rule": "bicycle incl trikes not motorcycles",
+     "good": 204,
+     "bad": 734
+    },
+    {
+     "file": "LABELSETS__slate__bicycle.json",
+     "kind": "slate",
+     "rule": "bicycle incl trikes not motorcycles",
+     "good": 17,
+     "bad": 20
+    }
+   ]
+  },
+  {
+   "class": "bird",
+   "silent_pairs": 3254,
+   "candidates": 645,
+   "answered": 0,
+   "answered_below_cut": 0,
+   "unreviewed_candidates": 645,
+   "unreviewed_below_cut": 2609,
+   "excluded_known_a": 0,
+   "excluded_control": 0,
+   "excluded_unexplained": 0,
+   "found_present": 0,
+   "rate": 0.0,
+   "wilson95": [
+    1.0829236968635403e-19,
+    0.0011791856301423616
+   ],
+   "below_cut_rate_ub": 0.006361933328210577,
+   "below_cut_rate_ub_own": null,
+   "below_cut_sample": 0,
+   "bound": 0.204497650305404,
+   "bound_unpooled": 0.2290585503212576,
+   "slate_complete": false,
+   "rule_in_force": false,
+   "labelsets": []
+  },
+  {
+   "class": "boat",
+   "silent_pairs": 3237,
+   "candidates": 141,
+   "answered": 241,
+   "answered_below_cut": 100,
+   "unreviewed_candidates": 0,
+   "unreviewed_below_cut": 2996,
+   "excluded_known_a": 0,
+   "excluded_control": 0,
+   "excluded_unexplained": 0,
+   "found_present": 65,
+   "rate": 0.020080321285140562,
+   "wilson95": [
+    0.01578625284277323,
+    0.025512155570646296
+   ],
+   "below_cut_rate_ub": 0.006361933328210577,
+   "below_cut_rate_ub_own": 0.03699480747600191,
+   "below_cut_sample": 100,
+   "bound": 0.031400432447791456,
+   "bound_unpooled": 0.05975263848634037,
+   "slate_complete": true,
+   "rule_in_force": true,
+   "labelsets": [
+    {
+     "file": "LABELSETS__belowcut__boat.json",
+     "kind": "belowcut",
+     "rule": "boat any watercraft",
+     "good": 0,
+     "bad": 100
+    },
+    {
+     "file": "LABELSETS__slate__boat.json",
+     "kind": "slate",
+     "rule": "boat any watercraft",
+     "good": 65,
+     "bad": 76
+    }
+   ]
+  },
+  {
+   "class": "book",
+   "silent_pairs": 3271,
+   "candidates": 397,
+   "answered": 397,
+   "answered_below_cut": 0,
+   "unreviewed_candidates": 0,
+   "unreviewed_below_cut": 2874,
+   "excluded_known_a": 0,
+   "excluded_control": 0,
+   "excluded_unexplained": 0,
+   "found_present": 131,
+   "rate": 0.04004891470498319,
+   "wilson95": [
+    0.03385128834783443,
+    0.0473256455227992
+   ],
+   "below_cut_rate_ub": 0.006361933328210577,
+   "below_cut_rate_ub_own": null,
+   "below_cut_sample": 0,
+   "bound": 0.05291543347305209,
+   "bound_unpooled": 0.07983040757906013,
+   "slate_complete": true,
+   "rule_in_force": true,
+   "labelsets": [
+    {
+     "file": "LABELSETS__slate__book.json",
+     "kind": "slate",
+     "rule": "book incl magazines",
+     "good": 131,
+     "bad": 266
+    }
+   ]
+  },
+  {
+   "class": "bottle",
+   "silent_pairs": 3243,
+   "candidates": 822,
+   "answered": 0,
+   "answered_below_cut": 0,
+   "unreviewed_candidates": 822,
+   "unreviewed_below_cut": 2421,
+   "excluded_known_a": 0,
+   "excluded_control": 0,
+   "excluded_unexplained": 0,
+   "found_present": 0,
+   "rate": 0.0,
+   "wilson95": [
+    0.0,
+    0.0011831806023429043
+   ],
+   "below_cut_rate_ub": 0.006361933328210577,
+   "below_cut_rate_ub_own": null,
+   "below_cut_sample": 0,
+   "bound": 0.25940157116281093,
+   "bound_unpooled": 0.28226996102152285,
+   "slate_complete": false,
+   "rule_in_force": false,
+   "labelsets": []
+  },
+  {
+   "class": "bowl",
+   "silent_pairs": 3238,
+   "candidates": 592,
+   "answered": 0,
+   "answered_below_cut": 0,
+   "unreviewed_candidates": 592,
+   "unreviewed_below_cut": 2646,
+   "excluded_known_a": 0,
+   "excluded_control": 0,
+   "excluded_unexplained": 0,
+   "found_present": 0,
+   "rate": 0.0,
+   "wilson95": [
+    0.0,
+    0.0011850054610934723
+   ],
+   "below_cut_rate_ub": 0.006361933328210577,
+   "below_cut_rate_ub_own": null,
+   "below_cut_sample": 0,
+   "bound": 0.1892127002067529,
+   "bound_unpooled": 0.21424499946402772,
+   "slate_complete": false,
+   "rule_in_force": false,
+   "labelsets": []
+  },
+  {
+   "class": "bus",
+   "silent_pairs": 3249,
+   "candidates": 327,
+   "answered": 327,
+   "answered_below_cut": 0,
+   "unreviewed_candidates": 0,
+   "unreviewed_below_cut": 2922,
+   "excluded_known_a": 0,
+   "excluded_control": 0,
+   "excluded_unexplained": 0,
+   "found_present": 89,
+   "rate": 0.027393044013542627,
+   "wilson95": [
+    0.022314129955940287,
+    0.033588253978155985
+   ],
+   "below_cut_rate_ub": 0.006361933328210577,
+   "below_cut_rate_ub_own": null,
+   "below_cut_sample": 0,
+   "bound": 0.03930988192060945,
+   "bound_unpooled": 0.06685966901197488,
+   "slate_complete": true,
+   "rule_in_force": true,
+   "labelsets": [
+    {
+     "file": "LABELSETS__slate__bus.json",
+     "kind": "slate",
+     "rule": "bus incl coaches not trams",
+     "good": 89,
+     "bad": 238
+    }
+   ]
+  },
+  {
+   "class": "car",
+   "silent_pairs": 3206,
+   "candidates": 588,
+   "answered": 0,
+   "answered_below_cut": 0,
+   "unreviewed_candidates": 588,
+   "unreviewed_below_cut": 2618,
+   "excluded_known_a": 0,
+   "excluded_control": 0,
+   "excluded_unexplained": 0,
+   "found_present": 0,
+   "rate": 0.0,
+   "wilson95": [
+    0.0,
+    0.0011968191826039016
+   ],
+   "below_cut_rate_ub": 0.006361933328210577,
+   "below_cut_rate_ub_own": null,
+   "below_cut_sample": 0,
+   "bound": 0.18979804858162302,
+   "bound_unpooled": 0.21481266633549626,
+   "slate_complete": false,
+   "rule_in_force": false,
+   "labelsets": []
+  },
+  {
+   "class": "cell phone",
+   "silent_pairs": 3248,
+   "candidates": 687,
+   "answered": 0,
+   "answered_below_cut": 0,
+   "unreviewed_candidates": 687,
+   "unreviewed_below_cut": 2561,
+   "excluded_known_a": 0,
+   "excluded_control": 0,
+   "excluded_unexplained": 0,
+   "found_present": 0,
+   "rate": 0.0,
+   "wilson95": [
+    1.0829213379375301e-19,
+    0.0011813613553624505
+   ],
+   "below_cut_rate_ub": 0.006361933328210577,
+   "below_cut_rate_ub_own": null,
+   "below_cut_sample": 0,
+   "bound": 0.21771243009106053,
+   "bound_unpooled": 0.24186599865402036,
+   "slate_complete": false,
+   "rule_in_force": false,
+   "labelsets": []
+  },
+  {
+   "class": "chair",
+   "silent_pairs": 3212,
+   "candidates": 841,
+   "answered": 300,
+   "answered_below_cut": 0,
+   "unreviewed_candidates": 541,
+   "unreviewed_below_cut": 2371,
+   "excluded_known_a": 0,
+   "excluded_control": 0,
+   "excluded_unexplained": 0,
+   "found_present": 219,
+   "rate": 0.06818181818181818,
+   "wilson95": [
+    0.05997058887110781,
+    0.07742473557522066
+   ],
+   "below_cut_rate_ub": 0.006361933328210577,
+   "below_cut_rate_ub_own": null,
+   "below_cut_sample": 0,
+   "bound": 0.25055180404383437,
+   "bound_unpooled": 0.27316405329801036,
+   "slate_complete": false,
+   "rule_in_force": true,
+   "labelsets": [
+    {
+     "file": "LABELSETS__slate__chair.json",
+     "kind": "slate",
+     "rule": "chair incl stools not couches",
+     "good": 219,
+     "bad": 81
+    }
+   ]
+  },
+  {
+   "class": "clock",
+   "silent_pairs": 3240,
+   "candidates": 632,
+   "answered": 0,
+   "answered_below_cut": 0,
+   "unreviewed_candidates": 632,
+   "unreviewed_below_cut": 2608,
+   "excluded_known_a": 0,
+   "excluded_control": 0,
+   "excluded_unexplained": 0,
+   "found_present": 0,
+   "rate": 0.0,
+   "wilson95": [
+    0.0,
+    0.001184274842520054
+   ],
+   "below_cut_rate_ub": 0.006361933328210577,
+   "below_cut_rate_ub_own": null,
+   "below_cut_sample": 0,
+   "bound": 0.20136696685485747,
+   "bound_unpooled": 0.22602453962567223,
+   "slate_complete": false,
+   "rule_in_force": false,
+   "labelsets": []
+  },
+  {
+   "class": "cup",
+   "silent_pairs": 3246,
+   "candidates": 676,
+   "answered": 0,
+   "answered_below_cut": 0,
+   "unreviewed_candidates": 676,
+   "unreviewed_below_cut": 2570,
+   "excluded_known_a": 0,
+   "excluded_control": 0,
+   "excluded_unexplained": 0,
+   "found_present": 0,
+   "rate": 0.0,
+   "wilson95": [
+    0.0,
+    0.0011820883823999296
+   ],
+   "below_cut_rate_ub": 0.006361933328210577,
+   "below_cut_rate_ub_own": null,
+   "below_cut_sample": 0,
+   "bound": 0.21447542438163014,
+   "bound_unpooled": 0.23872880902729363,
+   "slate_complete": false,
+   "rule_in_force": false,
+   "labelsets": []
+  },
+  {
+   "class": "dog",
+   "silent_pairs": 3263,
+   "candidates": 73,
+   "answered": 173,
+   "answered_below_cut": 100,
+   "unreviewed_candidates": 0,
+   "unreviewed_below_cut": 3090,
+   "excluded_known_a": 0,
+   "excluded_control": 0,
+   "excluded_unexplained": 0,
+   "found_present": 59,
+   "rate": 0.018081520073551946,
+   "wilson95": [
+    0.014043942857468829,
+    0.023252508859075986
+   ],
+   "below_cut_rate_ub": 0.006361933328210577,
+   "below_cut_rate_ub_own": 0.03699480747600191,
+   "below_cut_sample": 100,
+   "bound": 0.02927714078802808,
+   "bound_unpooled": 0.05828589994116176,
+   "slate_complete": true,
+   "rule_in_force": false,
+   "labelsets": [
+    {
+     "file": "LABELSETS__belowcut__dog.json",
+     "kind": "belowcut",
+     "rule": "dog not wolves",
+     "good": 0,
+     "bad": 100
+    },
+    {
+     "file": "LABELSETS__slate__dog.json",
+     "kind": "slate",
+     "rule": "dog",
+     "good": 59,
+     "bad": 14
+    }
+   ]
+  },
+  {
+   "class": "fire hydrant",
+   "silent_pairs": 3247,
+   "candidates": 166,
+   "answered": 266,
+   "answered_below_cut": 100,
+   "unreviewed_candidates": 0,
+   "unreviewed_below_cut": 2981,
+   "excluded_known_a": 0,
+   "excluded_control": 0,
+   "excluded_unexplained": 0,
+   "found_present": 47,
+   "rate": 0.014474899907607022,
+   "wilson95": [
+    0.010902942704161974,
+    0.01919437117295834
+   ],
+   "below_cut_rate_ub": 0.006361933328210577,
+   "below_cut_rate_ub_own": 0.03699480747600191,
+   "below_cut_sample": 100,
+   "bound": 0.025035123637200944,
+   "bound_unpooled": 0.053158498393765755,
+   "slate_complete": true,
+   "rule_in_force": true,
+   "labelsets": [
+    {
+     "file": "LABELSETS__belowcut__fire_hydrant.json",
+     "kind": "belowcut",
+     "rule": "fire hydrant not standpipes",
+     "good": 0,
+     "bad": 100
+    },
+    {
+     "file": "LABELSETS__slate__fire_hydrant.json",
+     "kind": "slate",
+     "rule": "fire hydrant not standpipes",
+     "good": 47,
+     "bad": 119
+    }
+   ]
+  },
+  {
+   "class": "fork",
+   "silent_pairs": 3251,
+   "candidates": 396,
+   "answered": 396,
+   "answered_below_cut": 0,
+   "unreviewed_candidates": 0,
+   "unreviewed_below_cut": 2855,
+   "excluded_known_a": 0,
+   "excluded_control": 0,
+   "excluded_unexplained": 0,
+   "found_present": 134,
+   "rate": 0.04121808674254076,
+   "wilson95": [
+    0.03490854663419919,
+    0.0486106021931969
+   ],
+   "below_cut_rate_ub": 0.006361933328210577,
+   "below_cut_rate_ub_own": null,
+   "below_cut_sample": 0,
+   "bound": 0.05419759685700533,
+   "bound_unpooled": 0.08109912121626225,
+   "slate_complete": true,
+   "rule_in_force": false,
+   "labelsets": [
+    {
+     "file": "LABELSETS__slate__fork.json",
+     "kind": "slate",
+     "rule": "fork incl plastic",
+     "good": 134,
+     "bad": 262
+    }
+   ]
+  },
+  {
+   "class": "kite",
+   "silent_pairs": 3247,
+   "candidates": 423,
+   "answered": 0,
+   "answered_below_cut": 0,
+   "unreviewed_candidates": 423,
+   "unreviewed_below_cut": 2824,
+   "excluded_known_a": 0,
+   "excluded_control": 0,
+   "excluded_unexplained": 0,
+   "found_present": 0,
+   "rate": 0.0,
+   "wilson95": [
+    0.0,
+    0.0011817247570598333
+   ],
+   "below_cut_rate_ub": 0.006361933328210577,
+   "below_cut_rate_ub_own": null,
+   "below_cut_sample": 0,
+   "bound": 0.13698896212043113,
+   "bound_unpooled": 0.16363116618367807,
+   "slate_complete": false,
+   "rule_in_force": false,
+   "labelsets": []
+  },
+  {
+   "class": "knife",
+   "silent_pairs": 3279,
+   "candidates": 465,
+   "answered": 0,
+   "answered_below_cut": 0,
+   "unreviewed_candidates": 465,
+   "unreviewed_below_cut": 2814,
+   "excluded_known_a": 0,
+   "excluded_control": 0,
+   "excluded_unexplained": 0,
+   "found_present": 0,
+   "rate": 0.0,
+   "wilson95": [
+    0.0,
+    0.001170205714463957
+   ],
+   "below_cut_rate_ub": 0.006361933328210577,
+   "below_cut_rate_ub_own": null,
+   "below_cut_sample": 0,
+   "bound": 0.14844147146182127,
+   "bound_unpooled": 0.17473025092259736,
+   "slate_complete": false,
+   "rule_in_force": false,
+   "labelsets": []
+  },
+  {
+   "class": "sink",
+   "silent_pairs": 3256,
+   "candidates": 168,
+   "answered": 268,
+   "answered_below_cut": 100,
+   "unreviewed_candidates": 0,
+   "unreviewed_below_cut": 2988,
+   "excluded_known_a": 0,
+   "excluded_control": 0,
+   "excluded_unexplained": 0,
+   "found_present": 77,
+   "rate": 0.02364864864864865,
+   "wilson95": [
+    0.018963573806317902,
+    0.029456447583678474
+   ],
+   "below_cut_rate_ub": 0.006361933328210577,
+   "below_cut_rate_ub_own": 0.03699480747600191,
+   "below_cut_sample": 100,
+   "bound": 0.035294732836962626,
+   "bound_unpooled": 0.06340622790870726,
+   "slate_complete": true,
+   "rule_in_force": true,
+   "labelsets": [
+    {
+     "file": "LABELSETS__belowcut__sink.json",
+     "kind": "belowcut",
+     "rule": "sink basin not counter",
+     "good": 0,
+     "bad": 100
+    },
+    {
+     "file": "LABELSETS__slate__sink.json",
+     "kind": "slate",
+     "rule": "sink basin not counter",
+     "good": 77,
+     "bad": 91
+    }
+   ]
+  },
+  {
+   "class": "spoon",
+   "silent_pairs": 3272,
+   "candidates": 541,
+   "answered": 0,
+   "answered_below_cut": 0,
+   "unreviewed_candidates": 541,
+   "unreviewed_below_cut": 2731,
+   "excluded_known_a": 0,
+   "excluded_control": 0,
+   "excluded_unexplained": 0,
+   "found_present": 0,
+   "rate": 0.0,
+   "wilson95": [
+    0.0,
+    0.0011727062749309978
+   ],
+   "below_cut_rate_ub": 0.006361933328210577,
+   "below_cut_rate_ub_own": null,
+   "below_cut_sample": 0,
+   "bound": 0.17182504121360553,
+   "bound_unpooled": 0.1973930055466184,
+   "slate_complete": false,
+   "rule_in_force": false,
+   "labelsets": []
+  },
+  {
+   "class": "stop sign",
+   "silent_pairs": 3324,
+   "candidates": 308,
+   "answered": 408,
+   "answered_below_cut": 100,
+   "unreviewed_candidates": 0,
+   "unreviewed_below_cut": 2916,
+   "excluded_known_a": 0,
+   "excluded_control": 0,
+   "excluded_unexplained": 0,
+   "found_present": 36,
+   "rate": 0.010830324909747292,
+   "wilson95": [
+    0.007833300496908953,
+    0.01495672652841581
+   ],
+   "below_cut_rate_ub": 0.006361933328210577,
+   "below_cut_rate_ub_own": 0.03699480747600191,
+   "below_cut_sample": 100,
+   "bound": 0.02053777273330812,
+   "bound_unpooled": 0.04741065510844636,
+   "slate_complete": true,
+   "rule_in_force": true,
+   "labelsets": [
+    {
+     "file": "LABELSETS__belowcut__stop_sign.json",
+     "kind": "belowcut",
+     "rule": "stop sign not other signs",
+     "good": 0,
+     "bad": 100
+    },
+    {
+     "file": "LABELSETS__slate__stop_sign.json",
+     "kind": "slate",
+     "rule": "stop sign not other signs",
+     "good": 36,
+     "bad": 272
+    }
+   ]
+  },
+  {
+   "class": "truck",
+   "silent_pairs": 3255,
+   "candidates": 674,
+   "answered": 0,
+   "answered_below_cut": 0,
+   "unreviewed_candidates": 674,
+   "unreviewed_below_cut": 2581,
+   "excluded_known_a": 0,
+   "excluded_control": 0,
+   "excluded_unexplained": 0,
+   "found_present": 0,
+   "rate": 0.0,
+   "wilson95": [
+    1.0829240891733789e-19,
+    0.001178823788182893
+   ],
+   "below_cut_rate_ub": 0.006361933328210577,
+   "below_cut_rate_ub_own": null,
+   "below_cut_sample": 0,
+   "bound": 0.21328946892492992,
+   "bound_unpooled": 0.23757931475456104,
+   "slate_complete": false,
+   "rule_in_force": false,
+   "labelsets": []
+  },
+  {
+   "class": "umbrella",
+   "silent_pairs": 3243,
+   "candidates": 571,
+   "answered": 0,
+   "answered_below_cut": 0,
+   "unreviewed_candidates": 571,
+   "unreviewed_below_cut": 2672,
+   "excluded_known_a": 0,
+   "excluded_control": 0,
+   "excluded_unexplained": 0,
+   "found_present": 0,
+   "rate": 0.0,
+   "wilson95": [
+    0.0,
+    0.0011831806023429043
+   ],
+   "below_cut_rate_ub": 0.006361933328210577,
+   "below_cut_rate_ub_own": null,
+   "below_cut_sample": 0,
+   "bound": 0.1824964972390924,
+   "bound_unpooled": 0.2077357941009174,
+   "slate_complete": false,
+   "rule_in_force": false,
+   "labelsets": []
+  },
+  {
+   "class": "vase",
+   "silent_pairs": 3252,
+   "candidates": 394,
+   "answered": 394,
+   "answered_below_cut": 0,
+   "unreviewed_candidates": 0,
+   "unreviewed_below_cut": 2858,
+   "excluded_known_a": 0,
+   "excluded_control": 0,
+   "excluded_unexplained": 0,
+   "found_present": 116,
+   "rate": 0.03567035670356704,
+   "wilson95": [
+    0.029823954484742326,
+    0.042612493283478346
+   ],
+   "below_cut_rate_ub": 0.006361933328210577,
+   "below_cut_rate_ub_own": null,
+   "below_cut_sample": 0,
+   "bound": 0.04820363887143217,
+   "bound_unpooled": 0.07512515003821804,
+   "slate_complete": true,
+   "rule_in_force": false,
+   "labelsets": [
+    {
+     "file": "LABELSETS__slate__vase.json",
+     "kind": "slate",
+     "rule": "vase incl pots and planters",
+     "good": 116,
+     "bad": 278
+    }
+   ]
+  }
+ ],
+ "pooled": {
+  "classes": [
+   "backpack",
+   "bench",
+   "bicycle",
+   "boat",
+   "book",
+   "bus",
+   "fire hydrant",
+   "sink",
+   "stop sign"
+  ],
+  "silent_pairs": 29414,
+  "found_present": 815,
+  "rate": 0.027707894200040797,
+  "wilson95": [
+   0.025892910154966482,
+   0.02964622905910829
+  ],
+  "bound": 0.0349135222644497,
+  "bound_unpooled": 0.060275675800900444,
+  "pooled_below_cut_rate_ub": 0.006361933328210577,
+  "worst_below_cut_rate_ub": 0.03699480747600191,
+  "below_cut_sample": 600
+ },
+ "problems": [
+  "dog: LABELSETS__slate__dog.json voted under rule 'dog', but 'dog not wolves' is in force -- those verdicts answer a superseded question",
+  "fork: LABELSETS__slate__fork.json voted under rule 'fork incl plastic', but 'fork incl sporks not strainers' is in force -- those verdicts answer a superseded question",
+  "vase: LABELSETS__slate__vase.json voted under rule 'vase incl pots and planters', but 'vase not planters' is in force -- those verdicts answer a superseded question"
+ ],
+ "conditioning": {
+  "target": "uniform off-COCO silence rate",
+  "direction": "upper bound",
+  "why": "the queue's images are selected for holding a class of C (#3667, #3679)",
+  "screening": "OWLv2 cut per class at ~95% recall (#3760); below-cut allowance from #3768"
+ }
+}

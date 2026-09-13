@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Decide which issues should carry the `solved` label, and which should lose it.
+"""Reconcile the issue labels and assignees that nothing observes the moment they change.
+
+Three halves, each with its own asymmetry: `solved` (adds and removes), the
+assignee (removes only), and `experiment` (adds only). Each section below says
+why its direction is the only one its input can defend.
 
 `solved` means **the development on this issue is done** — the problem has been
 solved, a fix PR carries it, and nothing remains but git merges (into `dev`,
@@ -61,6 +65,50 @@ nobody is doing. For the same reason an issue whose label is ambiguous
 (`NEEDS REVIEW`) or whose fix fell through has its assignee left strictly
 alone -- the script has no opinion it can defend.
 
+## The `experiment` half, and why it only ever adds
+
+`experiment` marks an issue that cannot be closed without machine time — a
+GRID sweep, an eval study, a calibration run (CLAUDE.md). It gates *scheduling*
+rather than describing a topic, so it powers the companion pair of views:
+
+    is:issue is:open -label:solved -label:experiment  # can be picked up right now
+    is:issue is:open label:experiment                 # needs machine time booked
+
+`.claude/hooks/require-issue-labels.py` guards both ends of the label's life at
+tool-call time: it blocks a `create` whose title and body look like an
+experiment while carrying no label (validating the reason on its
+`<!-- not-an-experiment: ... -->` opt-out), and it blocks an `issue_write`
+update whose `labels` array drops `experiment` off an issue that carries it --
+`labels` replaces the whole set, so every label-touching write is a chance to
+lose a label nobody restated. That is what happened to #3694: its body still
+explained at length why the work needed the GRID, its label was gone, and so it
+sat in the pick-up-now queue until a container picked it up and could not do the
+work.
+
+This script is what catches whatever got past those guards. The update guard has
+to ask GitHub whether the label is really there, so it is awake only where `gh`
+works and allows whenever it cannot tell -- and neither guard says anything
+about a label that was never applied in the first place.
+
+The durable record is a marker comment in the issue body, which survives a
+label being dropped:
+
+    <!-- experiment: the file being ported lives on the GRID, so a container
+         can only invent its SBATCH headers ... -->
+
+It is the affirmative twin of the hook's opt-out marker, and the two must not be
+confused: `<!-- not-an-experiment: ... -->` is not a marker for this purpose.
+The rationale text is never parsed either way. That text is free prose and reads
+both ways -- #3694's marker opens "NOT because anything is measured" and is a
+marker regardless -- so presence is the whole signal.
+
+Addition only, which is the mirror of the assignee half above. A marker is
+positive evidence the label is owed; its absence is evidence of nothing,
+because CLAUDE.md never asks for a marker (a human filing a research idea
+applies `experiment` and writes no comment). Removing the label from an
+unmarked issue would evict correctly-labelled work from the queue that books
+machine time.
+
 ## Why it takes input instead of fetching
 
 The GitHub REST API is not reachable from a Claude session — `GITHUB_TOKEN` is
@@ -83,12 +131,18 @@ Input schema (unknown keys are ignored, so richer API payloads pipe in as-is):
       "issues": [
         {"number": 3077, "state": "open", "labels": ["claude"],
          "assignees": ["samggreenberg"],
+         "body": "... <!-- experiment: needs a sweep --> ...",
          "comments": [ {"body": "Addressed in #3128"} ]}
       ]
     }
 
 `assignees` accepts either bare logins or the GitHub API's `{"login": ...}`
 objects, so both the MCP tools' output and a raw REST payload pipe in as-is.
+
+An issue's `body` is what the `experiment` marker is read from. It is optional,
+and an input without it simply produces no `experiment` findings — but silently,
+which is the one way this half can fail while looking green, so
+`experiment_input_note` says so out loud when no issue carries the key.
 
 `release_prs` are the PRs merged into `dev` since the last release — the same
 `origin/main..origin/dev` window step 6 uses. `open_prs` are the PRs currently
@@ -106,6 +160,7 @@ import re
 import sys
 
 SOLVED_LABEL = "solved"
+EXPERIMENT_LABEL = "experiment"
 
 # Where each PR list sits on the live/dead axis. A "live" claim means a fix
 # exists and is still on its way in; a "dead" one means it fell through.
@@ -134,6 +189,14 @@ SHA_POINTER = re.compile(
     r"\b(?:in|by)\s+(?:commit\s+)?`?([0-9a-f]{7,40})`?\b",
     re.IGNORECASE,
 )
+
+
+# The `experiment` gate marker: a leading `<!-- experiment: <why> -->` comment in
+# an issue body. Anchored to the start of the comment so ordinary prose that
+# merely mentions an experiment cannot read as the marker, and `\b` keeps
+# "experimental" out. Only the opening token is matched, never the rationale
+# text -- see the module docstring for why that text is unparseable.
+EXPERIMENT_MARKER = re.compile(r"<!--\s*experiment\b\s*:", re.IGNORECASE)
 
 
 def _refs(pattern: re.Pattern[str], text: str) -> set[int]:
@@ -219,8 +282,8 @@ def _sha_pointer(issue: dict) -> str | None:
     return None
 
 
-def _is_labelled(issue: dict) -> bool:
-    return SOLVED_LABEL in {str(item).strip().lower() for item in (issue.get("labels") or [])}
+def _has_label(issue: dict, label: str) -> bool:
+    return label in {str(item).strip().lower() for item in (issue.get("labels") or [])}
 
 
 def _is_open(issue: dict) -> bool:
@@ -263,6 +326,63 @@ def _assignee_action(issue: dict, label_action: str, labelled: bool, is_open: bo
     return "none", f"assigned to {who}; not solved, so the assignment stands"
 
 
+def _outside_code_fences(body: str) -> str:
+    """Return `body` with fenced code blocks removed.
+
+    An issue *about* this convention -- or one quoting docs/RELEASE.md -- can
+    legitimately show `<!-- experiment: ... -->` inside a fence. Reading that as
+    the gate marker would book machine time for an issue that needs none, so
+    only prose counts.
+    """
+    kept: list[str] = []
+    fence: str | None = None
+    for line in body.splitlines():
+        stripped = line.lstrip()
+        if fence is None:
+            if stripped.startswith(("```", "~~~")):
+                fence = stripped[:3]
+                continue
+            kept.append(line)
+        elif stripped.startswith(fence):
+            fence = None
+    return "\n".join(kept)
+
+
+def _experiment_action(issue: dict, is_open: bool) -> tuple[str, str]:
+    """Return (action, reason) for one issue's `experiment` label: label_experiment/none.
+
+    Addition only -- see the module docstring's `experiment` section.
+    """
+    if not is_open:
+        return "none", "closed; its labels route nothing"
+    if not EXPERIMENT_MARKER.search(_outside_code_fences(issue.get("body") or "")):
+        return "none", f"no `{EXPERIMENT_LABEL}` marker in the body"
+    if _has_label(issue, EXPERIMENT_LABEL):
+        return "none", f"marker present, already labelled `{EXPERIMENT_LABEL}`"
+    return "label_experiment", (
+        f"its body carries an `<!-- {EXPERIMENT_LABEL}: ... -->` marker but the label is missing, "
+        "so it sits in the pick-up-now queue while needing machine time"
+    )
+
+
+def experiment_input_note(data: dict) -> str | None:
+    """Warn when the input carries no issue bodies, so the `experiment` half no-opped.
+
+    The marker lives in an issue *body*, a key this schema did not always carry.
+    A payload gathered by the older recipe therefore reports an empty
+    `ADD experiment` bucket for the wrong reason -- not "the labels are right"
+    but "the check never ran" -- and a clean bucket is exactly what nobody
+    re-reads. So it is said out loud rather than passing for a green result.
+    """
+    issues = data.get("issues") or []
+    if issues and not any("body" in issue for issue in issues):
+        return (
+            f"note: no issue in this input carries a `body`, so the `{EXPERIMENT_LABEL}` marker check did not "
+            "run -- gather issue bodies to include it (see docs/RELEASE.md step 6b)"
+        )
+    return None
+
+
 def _describe(pr_number: int, kind: str, issue_number: int) -> str:
     article = "open PR" if kind == "open" else "merged PR"
     return f"{article} #{pr_number} claims `Closes #{issue_number}`"
@@ -276,7 +396,7 @@ def _classify(
 ) -> tuple[str, str]:
     """Return (action, reason) for one issue. Action is add/remove/review/none."""
     number = issue.get("number")
-    labelled = _is_labelled(issue)
+    labelled = _has_label(issue, SOLVED_LABEL)
     is_open = _is_open(issue)
 
     if not is_open:
@@ -327,7 +447,14 @@ def reconcile(data: dict) -> dict[str, list[tuple[int, str]]]:
     live_numbers = {number for number, _, kind in prs if kind != DEAD_KIND}
     dead_numbers = {number for number, _, kind in prs if kind == DEAD_KIND}
 
-    plan: dict[str, list[tuple[int, str]]] = {"add": [], "remove": [], "review": [], "none": [], "unassign": []}
+    plan: dict[str, list[tuple[int, str]]] = {
+        "add": [],
+        "remove": [],
+        "review": [],
+        "none": [],
+        "unassign": [],
+        "label_experiment": [],
+    }
     for issue in data.get("issues") or []:
         action, reason = _classify(issue, closers, live_numbers, dead_numbers)
         plan[action].append((issue.get("number"), reason))
@@ -335,9 +462,17 @@ def reconcile(data: dict) -> dict[str, list[tuple[int, str]]]:
         # Orthogonal to the label buckets: an issue can be `none` for its label
         # (already correct) and still owe an assignee removal, so it lands in
         # both rather than being moved out of one.
-        assignee_action, assignee_reason = _assignee_action(issue, action, _is_labelled(issue), _is_open(issue))
+        assignee_action, assignee_reason = _assignee_action(
+            issue, action, _has_label(issue, SOLVED_LABEL), _is_open(issue)
+        )
         if assignee_action == "unassign":
             plan["unassign"].append((issue.get("number"), assignee_reason))
+
+        # Also orthogonal: `experiment` answers "does closing this need machine
+        # time?", which is independent of whether anyone has solved it.
+        experiment_action, experiment_reason = _experiment_action(issue, _is_open(issue))
+        if experiment_action == "label_experiment":
+            plan["label_experiment"].append((issue.get("number"), experiment_reason))
     for bucket in plan.values():
         bucket.sort()
     return plan
@@ -347,10 +482,11 @@ def render(plan: dict[str, list[tuple[int, str]]]) -> str:
     headings = [
         ("add", f"ADD `{SOLVED_LABEL}`"),
         ("remove", f"REMOVE `{SOLVED_LABEL}`"),
+        ("label_experiment", f"ADD `{EXPERIMENT_LABEL}` (body says it needs machine time)"),
         ("review", "NEEDS REVIEW (ambiguous — do not guess)"),
         ("unassign", "CLEAR ASSIGNEE (solved or closed; nobody is working it)"),
     ]
-    lines = ["", "solved-label reconciliation", "=" * 40]
+    lines = ["", "issue-label reconciliation", "=" * 40]
     for key, heading in headings:
         entries = plan[key]
         lines.append(f"\n{heading} ({len(entries)})")
@@ -384,12 +520,19 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     plan = reconcile(data)
+    note = experiment_input_note(data)
     if args.json:
-        print(json.dumps({k: [{"number": n, "reason": r} for n, r in v] for k, v in plan.items()}, indent=2))
+        payload: dict[str, object] = {k: [{"number": n, "reason": r} for n, r in v] for k, v in plan.items()}
+        payload["notes"] = [note] if note else []
+        print(json.dumps(payload, indent=2))
     else:
         print(render(plan))
+        if note:
+            print(f"\n{note}")
 
-    if args.check and (plan["add"] or plan["remove"] or plan["review"] or plan["unassign"]):
+    # The note deliberately does not trip `--check`: it reports that a check
+    # could not run, not that an issue needs changing.
+    if args.check and any(plan[key] for key in ("add", "remove", "review", "unassign", "label_experiment")):
         return 1
     return 0
 

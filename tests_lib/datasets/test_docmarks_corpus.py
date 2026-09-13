@@ -722,6 +722,47 @@ class TestMembershipAudit:
         assert "must be 'ok' or comma-separated indices" in problems[0]
 
 
+class TestMembershipRosterGate:
+    """`membership` walks the roster, so it cannot run before one is picked.
+
+    `build_corpus.py` stamps `on_roster` only under `--roster`, so on a freshly
+    built corpus this pass has nothing to walk.  It used to say so in one line of
+    passing arithmetic and still write an empty `verdicts.jsonl`, which
+    `launch_docmarks.sh slate` then tarred alongside the merge sheets -- a bundle
+    that asserted a pass nobody had rendered (#3601).  The distinction pinned
+    here is between *not yet* and *nothing matched*: the first renders no file at
+    all and exits `EXIT_SKIPPED`, the second is a real run that happens to be
+    empty.
+    """
+
+    def _corpus(self, tmp_path, classes):
+        (tmp_path / "corpus.jsonl").write_text("", encoding="utf-8")
+        (tmp_path / "classes.json").write_text(json.dumps(classes), encoding="utf-8")
+        return tmp_path
+
+    def test_no_roster_renders_nothing_and_says_so(self, mods, tmp_path, capsys):
+        corpus = self._corpus(tmp_path, {"spods/a": {"class_id": "spods/a", "page_ids": []}})
+        rc = mods["slate"].main(["--task", "membership", "--corpus", str(corpus)])
+        assert rc == mods["slate"].EXIT_SKIPPED
+        assert "SKIPPED" in capsys.readouterr().out
+        # Not even an empty directory: the slate job tars what is on disk, so a
+        # bare `audit/membership/` would put the same false claim in the bundle.
+        assert not (corpus / "audit" / "membership").exists()
+
+    def test_a_roster_that_matches_no_page_is_a_run_not_a_skip(self, mods, tmp_path):
+        corpus = self._corpus(tmp_path, {"spods/a": {"class_id": "spods/a", "on_roster": True, "page_ids": []}})
+        rc = mods["slate"].main(["--task", "membership", "--corpus", str(corpus)])
+        assert rc == 0
+        assert (corpus / "audit" / "membership" / "verdicts.jsonl").read_text(encoding="utf-8") == ""
+
+    def test_merge_still_runs_without_a_roster(self, mods):
+        # A roster narrows `merge`; it is not a precondition for it, which is why
+        # the slate job renders the merge half regardless.
+        classes = {"spods/a": {"class_id": "spods/a"}, "spods/b": {"class_id": "spods/b"}}
+        assert mods["slate"].roster_pool(classes) == {}
+        assert (mods["slate"].roster_pool(classes) or classes) == classes
+
+
 class TestMergeSlateOrdering:
     """The slate's numbering is what the reviewer's answer refers to."""
 

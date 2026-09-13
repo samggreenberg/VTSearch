@@ -23,6 +23,13 @@ real markers off GitHub -- four that had to be corrected by hand and three that
 are right -- rather than invented ones, because a pattern list tuned against
 invented markers proves nothing about the mistake sessions actually make.
 
+`TestExperimentDropOnUpdate` covers the third guard: an `issue_write` update
+whose `labels` array drops `experiment`. It stubs `gh` for the same reason
+`TestGhCloseSolved` does -- the check is a lookup, not a text rule, so a test
+asserting only "allowed" would pass against a deleted guard. Its companion
+`TestExperimentDropCostsNothing` watches the other half, which no exit code can
+see: the lookup must not fire for updates that cannot make the mistake.
+
 The `solved`-strip guard at the other end of an issue's life has the same two
 paths, and the `gh` half of it (`TestGhCloseSolved`) is the one place this hook
 does I/O: `gh issue close` has no `--label` flag to restate a label set with, so
@@ -852,6 +859,169 @@ class TestGhCloseCostsNothingOnOtherCommands:
         command = "gh issue edit 3319 --remove-label solved && gh issue close 3319"
         assert run_hook({"tool_name": "Bash", "tool_input": {"command": command}}, env=env).returncode == ALLOW
         assert not marker.exists()
+
+
+class TestExperimentDropOnUpdate:
+    """An `issue_write` update must not silently drop `experiment` (issue #3694).
+
+    `labels` REPLACES the whole set, so every label-touching update is a chance
+    to lose a label nobody restated. `experiment` is a *scheduling* gate, so
+    losing it puts GRID-only work back into the pick-up-now queue -- which is
+    what happened to #3694, whose body still argued for the GRID while its label
+    was gone.
+
+    Like the close guard, this one asks GitHub, so every test here stubs `gh`.
+    """
+
+    @staticmethod
+    def update(tmp_path, *current: str, **overrides) -> tuple[dict, dict]:
+        """A payload plus an env whose stubbed `gh` reports `current` as the live labels."""
+        args = {"method": "update", "owner": "samggreenberg", "repo": "vtsearch", "issue_number": 3694}
+        args.update(overrides)
+        env = TestGhCloseSolved.labelled(tmp_path, *current)
+        return {"tool_name": "mcp__github__issue_write", "tool_input": args}, env
+
+    def test_an_update_that_drops_experiment_is_blocked(self, tmp_path):
+        payload, env = self.update(tmp_path, "claude", "experiment", labels=["claude"])
+        result = run_hook(payload, env=env)
+        assert result.returncode == BLOCK
+        assert "UPDATE DROPS `experiment`" in result.stderr
+
+    def test_applying_solved_without_restating_experiment_is_the_motivating_case(self, tmp_path):
+        """The common shape: a fix session adds `solved` and restates from memory."""
+        payload, env = self.update(tmp_path, "claude", "experiment", labels=["claude", "solved"])
+        assert run_hook(payload, env=env).returncode == BLOCK
+
+    def test_an_update_that_keeps_experiment_is_allowed(self, tmp_path):
+        payload, env = self.update(tmp_path, "claude", "experiment", labels=["claude", "experiment", "solved"])
+        assert run_hook(payload, env=env).returncode == ALLOW
+
+    def test_an_issue_that_does_not_carry_experiment_is_unaffected(self, tmp_path):
+        """The majority case: the guard must not turn an ordinary label edit into a dance."""
+        payload, env = self.update(tmp_path, "claude", labels=["claude", "solved"])
+        assert run_hook(payload, env=env).returncode == ALLOW
+
+    def test_a_close_that_drops_experiment_is_blocked_too(self, tmp_path):
+        """docs/RELEASE.md step 6 keeps `experiment` across a close; only `solved` comes off."""
+        payload, env = self.update(
+            tmp_path, "claude", "experiment", "solved", state="closed", state_reason="completed", labels=["claude"]
+        )
+        result = run_hook(payload, env=env)
+        assert result.returncode == BLOCK
+        assert "UPDATE DROPS `experiment`" in result.stderr
+
+    def test_an_empty_labels_array_is_blocked(self, tmp_path):
+        """`[]` is the shape CLAUDE.md warns wipes the set -- `experiment` included."""
+        payload, env = self.update(tmp_path, "claude", "experiment", labels=[])
+        assert run_hook(payload, env=env).returncode == BLOCK
+
+    def test_the_denial_names_the_issue_and_the_explicit_removal(self, tmp_path):
+        """Deliberate removal must have a road, and `gh` provably works if we got here."""
+        payload, env = self.update(tmp_path, "experiment", labels=["claude"])
+        stderr = run_hook(payload, env=env).stderr
+        assert "#3694" in stderr
+        assert "gh issue edit 3694 --remove-label experiment" in stderr
+
+    def test_the_denial_explains_the_scheduling_cost(self, tmp_path):
+        payload, env = self.update(tmp_path, "experiment", labels=["claude"])
+        assert "pick-up-now queue" in run_hook(payload, env=env).stderr
+
+    def test_matching_is_case_insensitive_on_both_sides(self, tmp_path):
+        """A restated `EXPERIMENT` keeps the label; a live `Experiment` is still the label."""
+        kept, env = self.update(tmp_path, "Experiment", labels=["claude", "EXPERIMENT"])
+        assert run_hook(kept, env=env).returncode == ALLOW
+        dropped, env = self.update(tmp_path, "Experiment", labels=["claude"])
+        assert run_hook(dropped, env=env).returncode == BLOCK
+
+    def test_a_failed_lookup_allows(self, tmp_path):
+        """The hook's standing contract: anything it cannot verify passes."""
+        env = TestGhCloseSolved.stub_gh(tmp_path, "#!/bin/sh\nexit 1\n")
+        payload = {
+            "tool_name": "mcp__github__issue_write",
+            "tool_input": {
+                "method": "update",
+                "owner": "samggreenberg",
+                "repo": "vtsearch",
+                "issue_number": 3694,
+                "labels": ["claude"],
+            },
+        }
+        assert run_hook(payload, env=env).returncode == ALLOW
+
+    def test_a_close_mishandling_solved_keeps_the_close_wording(self, tmp_path):
+        """The pre-existing denial must not be reworded by the new guard sharing the path."""
+        payload, env = self.update(
+            tmp_path,
+            "claude",
+            "experiment",
+            state="closed",
+            state_reason="completed",
+            labels=["claude", "experiment", "solved"],
+        )
+        result = run_hook(payload, env=env)
+        assert result.returncode == BLOCK
+        assert "KEEPS `solved` ON A CLOSED ISSUE" in result.stderr
+
+
+class TestExperimentDropCostsNothing:
+    """The lookup must not fire for updates that cannot drop a label.
+
+    An exit-code assertion cannot see a wasted subprocess call, so these stub a
+    `gh` that *records* being invoked and assert the record stays empty.
+    """
+
+    @staticmethod
+    def recording_gh(tmp_path) -> tuple[dict, Path]:
+        bin_dir = tmp_path / "stub-bin"
+        bin_dir.mkdir(exist_ok=True)
+        log = tmp_path / "gh-calls.log"
+        exe = bin_dir / "gh"
+        exe.write_text(f"#!/bin/sh\necho \"$@\" >> {log}\nprintf 'claude\\nexperiment\\n'\n")
+        exe.chmod(0o755)
+        return {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}, log
+
+    def run(self, tmp_path, **overrides) -> Path:
+        env, log = self.recording_gh(tmp_path)
+        args = {"method": "update", "owner": "samggreenberg", "repo": "vtsearch", "issue_number": 3694}
+        args.update(overrides)
+        run_hook({"tool_name": "mcp__github__issue_write", "tool_input": args}, env=env)
+        return log
+
+    @pytest.mark.parametrize(
+        "overrides",
+        [
+            {"assignees": []},
+            {"assignees": ["samggreenberg"]},
+            {"body": "a revised body"},
+            {"state": "open"},
+        ],
+        ids=["unassign", "assign", "body-edit", "reopen"],
+    )
+    def test_updates_that_touch_no_labels_cost_no_lookup(self, tmp_path, overrides):
+        """Omitting `labels` leaves the set untouched -- the assignee-only write CLAUDE.md prescribes."""
+        assert not self.run(tmp_path, **overrides).exists()
+
+    def test_an_update_keeping_experiment_costs_no_lookup(self, tmp_path):
+        """Already correct, and provably so from the call alone."""
+        assert not self.run(tmp_path, labels=["claude", "experiment"]).exists()
+
+    def test_an_update_with_no_issue_number_costs_no_lookup(self, tmp_path):
+        args = {"method": "update", "owner": "samggreenberg", "repo": "vtsearch", "labels": ["claude"]}
+        env, log = self.recording_gh(tmp_path)
+        run_hook({"tool_name": "mcp__github__issue_write", "tool_input": args}, env=env)
+        assert not log.exists()
+
+    def test_a_create_costs_no_lookup(self, tmp_path):
+        """Creation is judged from the call's own text; it has no prior state."""
+        env, log = self.recording_gh(tmp_path)
+        run_hook(create(labels=["claude"]), env=env)
+        assert not log.exists()
+
+    def test_the_dropping_update_does_fire_one(self, tmp_path):
+        """The control: without this, every assertion above passes against a deleted guard."""
+        log = self.run(tmp_path, labels=["claude"])
+        assert log.exists()
+        assert len(log.read_text().strip().splitlines()) == 1
 
 
 class TestPassthrough:
