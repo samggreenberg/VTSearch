@@ -425,7 +425,9 @@ It does not check instances. `merge` fixes the *partition* — which proposals a
 one mark; `membership` fixes the *instances* — whether each crop really is that
 mark. Both are needed before the classes stop being proposals, they are one
 sitting rather than two, and `launch_docmarks.sh slate` renders both into one
-bundle for that reason.
+bundle for that reason — once there is a roster. `membership` walks only the
+classes carrying `on_roster`, so before the roster is picked it renders nothing,
+prints `membership: SKIPPED`, and the bundle holds `audit/merge` alone (#3601).
 
 ## Output
 

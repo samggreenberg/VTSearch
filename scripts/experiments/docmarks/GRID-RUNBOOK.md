@@ -166,6 +166,16 @@ bash launch_docmarks.sh slate           # ~minutes, CPU, no refetch
 scp $GRID:$VTS_DOCMARKS_OUT/audit/docmarks-audit-<date>.tar.gz .
 ```
 
+**The membership sheets come after the roster.** `membership` walks the classes
+carrying `on_roster`, and `build_corpus.py` stamps that only under `--roster` —
+so on a corpus that has not been through stage 2 there is nothing for it to
+render. `slate` renders the merge sheets, says `membership: SKIPPED`, and bundles
+`audit/merge` alone; the log's `contains:` line is the record of what is actually
+in the tarball. Pick the roster, rebuild with `--roster`, then run `slate` again
+for the membership half. Until #3601 that skip was silent — an empty
+`verdicts.jsonl` went into the tarball and the job exited 0, so a bundle that
+held one pass looked like a bundle that held two.
+
 **Then the second opinion, on a GPU**, which re-renders both similarity passes
 against a semantic embedder (see README's *The descriptor the audit asks with is
 not the one it was built with*):
