@@ -207,6 +207,26 @@ That asymmetry is the whole design. It only works if Claude is exhaustive: a Cla
 
 The point is scheduling: `label:experiment` is the queue of work that needs machine time booked, and `-label:experiment` is what can be picked up right now. See the `grid-experiments` skill for how those runs are actually launched.
 
+**When the reason isn't obvious from the title, leave a marker comment in the body**, so the gate survives the label being dropped:
+
+```markdown
+<!-- experiment: the file being ported lives on the GRID, so a container can only invent its SBATCH headers -->
+```
+
+The marker is a sentinel with a fixed form — `<!--`, the word `experiment`, a colon, your reason — and it renders as nothing. It is the affirmative twin of the `<!-- not-an-experiment: <reason> -->` opt-out that the same hook already reads, and it guards the half of the label's life that nothing else does.
+
+Two mechanisms read it, at the two ends of the label's life:
+
+- **`.claude/hooks/require-issue-labels.py` prevents the drop.** It already blocked a `create` that looks like an experiment while carrying no label; it now also blocks an `issue_write` **update** whose `labels` array drops `experiment` off an issue that carries it. That second guard exists because `labels` replaces the whole set, so every label-touching write — applying `solved`, adding a label, restating a set from memory — is a chance to lose a label nobody listed. It asks GitHub whether the label is really there, so like the `solved` close guard it is awake only where `gh` works (the laptop, not a web container) and allows whenever it cannot tell. To remove the label *deliberately*, say so: `gh issue edit <n> --remove-label experiment`.
+- **`scripts/reconcile-solved-labels.py` catches what got through.** It reads the marker and reports an `ADD experiment` bucket for any open issue carrying one without the label — a drop from a session where the hook was asleep, or a label never applied at all.
+
+#3694 is why both exist: its body explained at length why the work needed the GRID, its label was gone, and so it sat in the pick-up-now queue until a container picked it up and could not do the work.
+
+Two things follow from the marker being only a *hint*:
+
+- **It is never required.** A human filing a research idea applies `experiment` and writes no comment, so the script only ever *adds* from a marker; a missing marker is evidence of nothing and never removes the label.
+- **Its text is never parsed.** Write whatever explains the gate — #3694's marker opens "NOT because anything is measured" and is a marker regardless. Presence is the whole signal.
+
 ### `solved` — the development is done; only merges remain
 
 `solved` means **there is no problem-solving left on this issue.** It has been figured out, a fix PR carries it, and everything still owed is a git merge — into `dev`, and then into `main` at the next release. Unlike `claude` and `experiment`, it is **not applied at creation time** and is never something you decide when filing — it is a *status*.
@@ -228,7 +248,7 @@ Three rules bind you directly:
 - **Take it back off if the fix falls through.** If your PR is closed without merging, or review concludes the fix is wrong and the issue needs solving again, strip `solved` — the issue belongs back in the human queue. This is the one removal a fix session does itself.
 - **Closing an issue strips `solved`.** Pass `labels` explicitly on a `completed` close, listing every label the issue keeps (`claude`, `experiment`, …) and omitting `solved`; passing `[]` would wipe the rest. A `PreToolUse` hook blocks a close that keeps the label or omits the array. Through `gh issue close` — which has no `--label` flag to restate a set with, and is how closes here actually happen — the same hook asks GitHub for the issue's current labels and blocks only when `solved` is really there, naming the fix: `gh issue edit <n> --remove-label solved && <your close command>`. That lookup is the hook's one piece of I/O, so it fires on closes alone and allows whenever it cannot get an answer (no `gh`, unauthenticated, offline, slow) — meaning it catches the common mistake but is not a guarantee, and `scripts/reconcile-solved-labels.py` stays the backstop.
 
-`scripts/reconcile-solved-labels.py` is the backstop for all three, and for the assignee — it catches issues a session forgot to label, issues whose fix PR was abandoned, stale labels left behind by a close, and solved or closed issues still showing an assignee. It encodes `docs/RELEASE.md` step 6's resolution logic — closing keywords vs. `Refs`, `Partially addressed in #M` vs. `Addressed in #M`, and the ambiguity of a comment posted *after* a fix pointer. It is a pure function from data to plan — it does no network I/O of its own, so gather the PR and issue data with the `gh` CLI (`gh api`, `gh pr list`, `gh issue list`) and pipe it in. `gh` carries its own authenticated token and works normally; only a raw `GITHUB_TOKEN` 403s. **That is true on the laptop, and false in a Claude Code on the web container**, where `gh` is not installed at all and, once installed, authenticates with the ambient `GH_TOKEN` — which 403s on REST *and* GraphQL (`GitHub access is not enabled for this session`). So run this recipe from the laptop; from a web session, reach for the `github` MCP tools instead. See `docs/RELEASE.md` for the recipe.
+`scripts/reconcile-solved-labels.py` is the backstop for all three, for the assignee, and for the `experiment` marker above — it catches issues a session forgot to label, issues whose fix PR was abandoned, stale labels left behind by a close, solved or closed issues still showing an assignee, and open issues whose body asks for `experiment` without carrying it. It encodes `docs/RELEASE.md` step 6's resolution logic — closing keywords vs. `Refs`, `Partially addressed in #M` vs. `Addressed in #M`, and the ambiguity of a comment posted *after* a fix pointer. It is a pure function from data to plan — it does no network I/O of its own, so gather the PR and issue data with the `gh` CLI (`gh api`, `gh pr list`, `gh issue list`) and pipe it in. `gh` carries its own authenticated token and works normally; only a raw `GITHUB_TOKEN` 403s. **That is true on the laptop, and false in a Claude Code on the web container**, where `gh` is not installed at all and, once installed, authenticates with the ambient `GH_TOKEN` — which 403s on REST *and* GraphQL (`GitHub access is not enabled for this session`). So run this recipe from the laptop; from a web session, reach for the `github` MCP tools instead. See `docs/RELEASE.md` for the recipe.
 
 **A comment after the fix pointer is never guessed at.** If someone comments below an `Addressed in #M` pointer, the script reports the issue as needing review rather than tagging or skipping it. The later comment might be a maintainer saying "thanks" or the reporter saying the fix doesn't work; tagging would bury a dispute (hiding an issue that still needs solving), and skipping would leave solved work in the human queue. Ambiguity gets surfaced, not resolved by a coin flip.
 

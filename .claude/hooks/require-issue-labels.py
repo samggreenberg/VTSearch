@@ -62,6 +62,17 @@ on REST and GraphQL alike, so a close issued from one is allowed unexamined.
 `scripts/reconcile-solved-labels.py` remains the thing that guarantees the
 strip; this hook is what makes the repair unnecessary most of the time.
 
+A third job, added after #3694: an `issue_write` update whose `labels` array
+drops `experiment`. `labels` replaces the whole set, so every label-touching
+update is a chance to lose a label nobody restated -- and `experiment` is a
+*scheduling* gate, so losing it puts GRID-only work back in the pick-up-now
+queue. #3694 is the incident: its body still argued at length for the GRID, its
+label was gone, and a container took it and could not do the work. This reuses
+the same lookup as the close guard, on the same "could not tell allows"
+contract, and it is MCP-only because `gh issue edit`'s `--add-label` /
+`--remove-label` are surgical and cannot make the mistake. See
+`_experiment_drop_problems`.
+
 Contract: read the PreToolUse payload on stdin, exit 2 to block (stderr is fed
 back to Claude as the reason), exit 0 to allow. Anything unexpected -- a
 payload we cannot parse, a tool we do not police -- allows, because a hook that
@@ -107,6 +118,7 @@ TOOL_SUFFIX = "issue_write"
 BASH_TOOL = "Bash"
 
 SOLVED_LABEL = "solved"
+EXPERIMENT_LABEL = "experiment"
 
 # `gh issue create`, wherever it sits in a compound command -- these arrive as
 # `... && gh issue create ...`, inside `ssh grid '...'`, and after a heredoc
@@ -433,6 +445,53 @@ THIN_REASON = (
 )
 
 
+def _experiment_drop_problems(args: dict) -> list[str]:
+    """Block an `issue_write` update whose `labels` array silently drops `experiment`.
+
+    The label's front edge is covered by `_label_problems`, which blocks a
+    `create` that looks like an experiment while carrying no label. Nothing
+    covered the rest of its life. `labels` **replaces the whole set**, so any
+    later label-touching write -- applying `solved`, adding a label, restating a
+    set from memory -- drops `experiment` unless the caller happened to list it,
+    and `_close_problems` looks only at `solved`. That is how #3694 lost its
+    label while its body went on explaining why the work needed the GRID, and
+    it then sat in the pick-up-now queue until a container picked it up.
+
+    **MCP-only, deliberately.** The footgun is "replaces the whole set", which
+    is this path's alone: `gh issue edit --add-label` / `--remove-label` are
+    surgical, so the `gh` path cannot drop a label it did not name. Policing it
+    there would only add a lookup to commands that cannot make this mistake.
+
+    Like the `gh issue close` guard, the hook cannot see the issue's current
+    state from the call, so it asks GitHub -- and `None` ("could not tell")
+    allows, per the contract. The I/O is bounded the same way: it fires only
+    when `labels` is present *and* omits `experiment`, so an assignee-only
+    write, a body edit, or an update that keeps the label costs nothing.
+
+    One happy consequence of needing the lookup: whenever this fires, `gh` is
+    working by definition, so the `gh issue edit --remove-label` remedy the
+    denial names is always available to the caller reading it.
+    """
+    raw = args.get("labels")
+    if raw is None:
+        return []
+
+    labels = {str(item).strip().lower() for item in raw}
+    if EXPERIMENT_LABEL in labels:
+        return []
+
+    number = str(args.get("issue_number") or "").strip()
+    if not number:
+        return []
+
+    owner, repo = str(args.get("owner") or "").strip(), str(args.get("repo") or "").strip()
+    current = _issue_labels(number, f"{owner}/{repo}" if owner and repo else None)
+    if current is None or EXPERIMENT_LABEL not in current:
+        return []
+
+    return [EXPERIMENT_DROPPED.format(number=number)]
+
+
 def _label_problems(labels: set[str], text: str) -> list[str]:
     """The rule itself, shared by both call paths.
 
@@ -446,7 +505,7 @@ def _label_problems(labels: set[str], text: str) -> list[str]:
     if "claude" not in labels:
         found.append(MISSING_CLAUDE)
 
-    if "experiment" not in labels and _looks_like_an_experiment(text):
+    if EXPERIMENT_LABEL not in labels and _looks_like_an_experiment(text):
         refusal = _opt_out_refusal(text)
         if refusal is not None:
             found.append(refusal)
@@ -668,6 +727,25 @@ SOLVED_SURVIVES_CLOSE = (
     "  Unlike the MCP path, this is not a guess: the hook asked GitHub, and the label is there."
 ).format(solved=SOLVED_LABEL)
 
+EXPERIMENT_DROPPED = (
+    "UPDATE DROPS `{experiment}`: #{{number}} carries `{experiment}` right now, and this update's "
+    "`labels` array does not list it. `labels` REPLACES the whole set, so the label is about to come "
+    "off.\n"
+    "  `{experiment}` is a *scheduling* gate, so losing it is not cosmetic: the issue rejoins the "
+    "pick-up-now queue (`-label:{experiment}`), and the session that takes it gets as far as needing "
+    "machine time and stops -- or invents the measured half.\n"
+    "  If you are restating the set, list it: `labels` must name EVERY label the issue keeps.\n"
+    "  If you mean to remove it, say so explicitly instead:\n"
+    "    gh issue edit {{number}} --remove-label {experiment}\n"
+    "  This is not a guess: the hook asked GitHub, and the label is there."
+).format(experiment=EXPERIMENT_LABEL)
+
+EXPERIMENT_DROP_FOOTER = (
+    f"\nSee CLAUDE.md, '`{EXPERIMENT_LABEL}` — does closing it require a run?'.\n"
+    f"  `label:{EXPERIMENT_LABEL}` is the queue of work that needs machine time booked;\n"
+    f"  `-label:{EXPERIMENT_LABEL}` is what can be picked up right now."
+)
+
 CLOSE_FOOTER = (
     "\nSee docs/RELEASE.md step 6. `solved` is a transient status, not a historical fact:\n"
     "  it goes ON when the fix PR is opened, and comes OFF in the write that closes the issue."
@@ -719,8 +797,16 @@ def main() -> int:
         found, footer = _create_problems(args), CREATE_FOOTER
         headline = "BLOCKED: this issue is missing a required label (CLAUDE.md, 'Label every issue you file')."
     elif method == "update":
-        found, footer = _close_problems(args), CLOSE_FOOTER
-        headline = f"BLOCKED: this close mishandles the `{SOLVED_LABEL}` label."
+        close_found = _close_problems(args)
+        found = close_found + _experiment_drop_problems(args)
+        # A close problem keeps the close wording; a bare label drop gets its own,
+        # since most updates that reach the new guard are not closing anything.
+        if close_found:
+            footer = CLOSE_FOOTER
+            headline = f"BLOCKED: this close mishandles the `{SOLVED_LABEL}` label."
+        else:
+            footer = EXPERIMENT_DROP_FOOTER
+            headline = f"BLOCKED: this update drops the `{EXPERIMENT_LABEL}` label."
     else:
         return 0
 
