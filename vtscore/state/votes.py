@@ -511,7 +511,11 @@ def set_vote(
         ordinal assigned to the new label, or ``None`` for ``"none"`` /
         idempotent calls.
     """
-    with _state_lock:
+    from vtscore.concurrency.stalls import timed_lock
+
+    # A long wait here means the vote queued behind whoever holds the state
+    # lock; logged at WARNING above the slow-phase threshold (issue #3853).
+    with timed_lock(_state_lock, "_state_lock/set_vote"):
         result = _set_vote_locked(
             media_id,
             target,

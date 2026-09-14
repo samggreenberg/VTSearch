@@ -334,6 +334,7 @@ VTSearch/
 │   │   ├── async_jobs.py           AsyncJob, JobManager, eval_jobs, learned_sort_jobs
 │   │   ├── gate.py                 ConcurrencyGate (dynamic-limit semaphore for load phases)
 │   │   ├── memory_budget.py        cap_workers_by_memory
+│   │   ├── stalls.py               Stall diagnostics: heartbeat watchdog + faulthandler dumps, GC-pause log, PhaseClock / timed_lock
 │   │   ├── events.py               SSE channel registry feeding /api/events (push, replaces polling)
 │   │   ├── notifications.py        Producer side of the one-shot server→client toast pipeline;
 │   │   │                           publishes on the `notification` SSE channel and is what

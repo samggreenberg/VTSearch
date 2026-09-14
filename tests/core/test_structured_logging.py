@@ -7,6 +7,8 @@ import json
 import logging
 import threading
 
+import pytest
+
 from vtsearch.logging_config import (
     ContextFilter,
     JsonFormatter,
@@ -590,3 +592,53 @@ class TestSlowRequestLogging:
         register_hooks(app)
         funcs = app.after_request_funcs[None]
         assert funcs[0] is _log_slow_request, "timer must be registered first to run last"
+
+
+# ---------------------------------------------------------------------------
+# VTSEARCH_LOG_FILE (#3853)
+# ---------------------------------------------------------------------------
+
+
+class TestLogFile:
+    """``VTSEARCH_LOG_FILE`` appends every record to a file beside the stream
+    handler, so a stall nobody was watching still leaves a trace once the
+    terminal pane has scrolled away."""
+
+    @pytest.fixture(autouse=True)
+    def _restore_root(self):
+        root = logging.getLogger()
+        prior_level, prior_handlers = root.level, list(root.handlers)
+        yield
+        for h in list(root.handlers):
+            root.removeHandler(h)
+            if h not in prior_handlers:
+                h.close()
+        for h in prior_handlers:
+            root.addHandler(h)
+        root.setLevel(prior_level)
+
+    def test_records_land_in_the_file_and_on_the_stream(self, monkeypatch, tmp_path):
+        from vtsearch.logging_config import setup_logging
+
+        path = tmp_path / "logs" / "app.log"  # parent does not exist yet
+        monkeypatch.setenv("VTSEARCH_LOG_FILE", str(path))
+        stream = io.StringIO()
+        setup_logging(level="WARNING", fmt="json", stream=stream)
+        logging.getLogger("vtsearch.test.logfile").warning("stall: heartbeat late by 4321ms")
+        for h in logging.getLogger().handlers:
+            h.flush()
+        on_disk = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+        assert [r["msg"] for r in on_disk] == ["stall: heartbeat late by 4321ms"]
+        assert "heartbeat late" in stream.getvalue()
+
+    def test_unwritable_path_keeps_the_stream(self, monkeypatch, tmp_path, capsys):
+        from vtsearch.logging_config import setup_logging
+
+        blocker = tmp_path / "not-a-dir"
+        blocker.write_text("x")
+        monkeypatch.setenv("VTSEARCH_LOG_FILE", str(blocker / "app.log"))
+        stream = io.StringIO()
+        setup_logging(level="WARNING", fmt="json", stream=stream)
+        assert "not writable" in capsys.readouterr().err
+        logging.getLogger("vtsearch.test.logfile").warning("still logged")
+        assert "still logged" in stream.getvalue()

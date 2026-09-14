@@ -1217,10 +1217,15 @@ def _train_and_score_xy(
         threshold_from_folds,
     )
 
+    from vtscore.concurrency.stalls import PhaseClock  # noqa: PLC0415
+
     num_good = sum(1 for v in y_list if v == 1.0)
     num_bad = len(y_list) - num_good
     if len(X_list) < 2 or num_good == 0 or num_bad == 0:
         return [], 0.5, None
+
+    # Where a slow retrain spent its time (issue #3853); silent unless slow.
+    clock = PhaseClock("train_and_score", rows=len(X_list), corpus=len(clips_dict))
 
     # The detector's primary embedder (the explicit space it scores in), or the
     # dataset score precedence when the detector has no primary yet.  Scoring
@@ -1261,6 +1266,7 @@ def _train_and_score_xy(
         score_rows_by_group=cal_score_rows,
     )
     threshold = threshold_from_folds(folds, inclusion_value)
+    clock.mark("calibration_folds")
 
     # A Good vote trains on one row (the raw patch nearest the drawn box); a
     # Bad vote trains on the image's whole score-row stack (region flooding),
@@ -1271,6 +1277,7 @@ def _train_and_score_xy(
         model = train_model(X, y, input_dim, hidden_dim=hidden_dim, sample_weights=sample_weights)
     else:
         model = train_model(X, y, input_dim, hidden_dim=hidden_dim)
+    clock.mark("final_fit")
 
     # One row build for the whole step: the final model's scoring pass and every
     # fold pass inside `_fused_threshold` read the same matrix (only the head
@@ -1279,8 +1286,10 @@ def _train_and_score_xy(
     # once rather than once per head.
     if rows is None:
         rows = scoring_rows_for_snap(clips_dict, score_emb)
+    clock.mark("score_rows")
     all_ids = rows.ids
     scores, best_region = score_rows_with_model(model, rows)
+    clock.mark("score")
 
     # The label counts feeding the fallback blend are votes, not flooded rows,
     # so its small-count ramp is unmoved by region flooding.
@@ -1296,8 +1305,10 @@ def _train_and_score_xy(
         final_ids=all_ids,
         voted_ids=voted_ids,
     )
+    clock.mark("fused_threshold")
 
     results = _format_results(all_ids, scores, best_region, clips_dict)
+    clock.finish(votes=_n_votes, score_rows=len(all_ids))
     return results, threshold, model
 
 

@@ -146,6 +146,11 @@ def _refresh_detector_caches(
         det_ctx.cached_labelset_mtime = path.stat().st_mtime
     except OSError:
         det_ctx.cached_labelset_mtime = 0.0
+    # Tell the pre-check's TTL cache about the write we just made, or every
+    # request for the next second re-parses the file to learn it is fresh.
+    from vtscore.detectors.dataset_sync import prime_detector_file_mtime
+
+    prime_detector_file_mtime(path, det_ctx.cached_labelset_mtime)
 
 
 def sync_labels_to_loaded_detector() -> None:
@@ -158,14 +163,24 @@ def sync_labels_to_loaded_detector() -> None:
     because the global votes reflect scoring results on a different dataset,
     not the detector's original training labels.
     """
-    with label_sync_write_lock:
+    from vtscore.concurrency.stalls import timed_lock
+
+    with timed_lock(label_sync_write_lock, "label_sync_write_lock"):
         _sync_labels_to_loaded_detector_locked()
 
 
 def _sync_labels_to_loaded_detector_locked() -> None:
     """Body of :func:`sync_labels_to_loaded_detector`; caller holds the lock."""
+    from vtscore.concurrency.stalls import PhaseClock
+
+    # This runs on every vote, inline in the request, and rewrites the whole
+    # detector file - O(labels) of rebuild + serialisation.  The breakdown is
+    # logged only when the sync was slow (issue #3853).
+    clock = PhaseClock("label_sync")
     state = _get_loaded_detector_state()
+    clock.mark("read_state")
     if state is None:
+        clock.finish(outcome="no detector")
         return
     entry, path, data, det_ctx = state
 
@@ -174,6 +189,7 @@ def _sync_labels_to_loaded_detector_locked() -> None:
     from vtscore.detectors.store import _write_detector
 
     vote_snap = validated_vote_snapshot()
+    clock.mark("snapshot")
     if not vote_snap.safe:
         # Vote dicts can't be proved keyed in the active dataset's cid space
         # (concurrent dataset switch on the same detector, missing
@@ -181,6 +197,7 @@ def _sync_labels_to_loaded_detector_locked() -> None:
         # an empty composition would erase the active dataset's on-disk
         # labels - drop this sync; the next vote will trigger another that
         # runs against a consistent snapshot.
+        clock.finish(outcome="unsafe snapshot")
         return
     snap = vote_snap.medias
     current_ls = LabelSet.from_clips_and_votes(
@@ -192,16 +209,20 @@ def _sync_labels_to_loaded_detector_locked() -> None:
         vote_provenance=vote_snap.vote_provenance,
     )
     existing_ls = LabelSet.from_dict(data.get("labelset") or {})
+    clock.mark("compose")
 
     # Existing labelset entries that resolve into the active dataset are
     # "owned" by it and get reconciled against the current votes; entries that
     # resolve to nothing are cross-dataset and are preserved verbatim.
     merged = merge_labelsets_across_datasets(existing_ls, current_ls, snap)
     data["labelset"] = merged.to_dict()
+    clock.mark("merge")
     _write_detector(path, data)
+    clock.mark("write")
 
     _refresh_detector_caches(det_ctx, merged, path, data.get("media_type", "") or "")
 
     import time as _time
 
     update_detector(entry["id"], num_training=len(merged), last_trained_at=_time.time())
+    clock.finish(labels=len(merged), corpus=len(snap))

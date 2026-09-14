@@ -15,6 +15,23 @@ not list every commit. Use `git log` for the full history.
 
 ## Unreleased
 
+### Added
+
+- **Stall diagnostics, on by default** (#3853). A rare 5-20 s freeze during
+  labeling in which every in-flight request finishes at once could not be
+  told apart from a slow endpoint by the request timer alone. The app now runs
+  a heartbeat watchdog that, when the interpreter cannot run it for
+  `VTSEARCH_STALL_WATCHDOG_MS` (default 1 s), logs which thread burned the
+  wall clock (or that none did, pointing at memory pressure) and has
+  `faulthandler` dump every thread's frames from inside the stall; logs any GC
+  pause over `VTSEARCH_GC_WARN_MS`; and logs a phase breakdown of the
+  learned-sort retrain, the per-vote labelset rewrite, the labeling-status
+  replay and a vote rehydrate - plus waits on the locks they share - when
+  one exceeds `VTSEARCH_SLOW_PHASE_MS`. `VTSEARCH_LOG_FILE` appends the log
+  (and the dump) to a file, and the SLURM launcher sets it under
+  `data/logs/`, so the pane scrolling away no longer loses the evidence. See
+  `docs/DEPLOYMENT.md` → "Diagnosing a stall".
+
 ### Changed
 
 - **The Smart indicator no longer flaps on a category that has plateaued**

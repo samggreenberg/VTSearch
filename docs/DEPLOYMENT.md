@@ -112,6 +112,12 @@ documented workarounds; this section describes the code as it stands.
 | `VTSEARCH_PORT` | `5000` | Bind port for the **dev server** (`python app.py`); `--port` wins over it. Gunicorn ignores this — use `VTSEARCH_BIND` below. |
 | `VTSEARCH_LOG_LEVEL` | `WARNING` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). `INFO`/`DEBUG` also turn on the per-request access log. |
 | `VTSEARCH_LOG_FORMAT` | `json` | Log record format: `json` (one JSON object per line, for log aggregators) or `text` (bracketed-tag human-readable form, for local dev). Every record carries the active user, `dataset_id`, `detector_id`, and `request_id`. |
+| `VTSEARCH_LOG_FILE` | unset | Also append every log record to this file (the terminal stream stays). The SLURM launcher sets it to `data/logs/app-<node>-<timestamp>.log` so a stall nobody was watching still leaves a trace; see [Diagnosing a stall](#the-app-freezes-for-seconds-during-labeling-diagnosing-a-stall). |
+| `VTSEARCH_SLOW_REQUEST_MS` | `1000` | A request whose handler takes at least this long is logged at WARNING with its method, path, status, duration and `request_id` (the same id the browser sees as `X-Request-Id`). |
+| `VTSEARCH_STALL_WATCHDOG_MS` | `1000` | Heartbeat-miss threshold for the stall watchdog: when the interpreter cannot run the heartbeat thread for this long, a WARNING names the thread that burned the wall clock (or reports that none did) and `faulthandler` dumps every thread's frames from inside the stall. `0` disables the watchdog. |
+| `VTSEARCH_STALL_DUMP_FILE` | `VTSEARCH_LOG_FILE`, else stderr | Where the watchdog's thread dump is written. |
+| `VTSEARCH_GC_WARN_MS` | `200` | A garbage-collection pause at least this long is logged at WARNING with its generation and duration. |
+| `VTSEARCH_SLOW_PHASE_MS` | `500` | Threshold for the internal phase breakdowns (learned-sort retrain, per-vote labelset rewrite, labeling-status replay, vote rehydrate) and for waits on the locks those paths share; each logs one WARNING line at or above it. |
 | `VTSEARCH_MAX_UPLOAD_MB` | `2048` | Maximum size of a single HTTP request body, in MB (Flask's `MAX_CONTENT_LENGTH`). Oversize uploads are rejected with HTTP 413 before they consume disk. Set to `0` to disable the cap entirely for genuinely large-archive uploads. |
 | `VTSEARCH_SSE_MAX_CONNECTIONS` | `VTSEARCH_THREADS - 2` (i.e. `6`) | Hard cap on concurrent `/api/events` streams. Each stream holds a gunicorn worker thread for its lifetime, so the default reserves headroom for ordinary REST requests. The Flask dev server spawns a thread per connection and therefore uncaps this automatically unless you set it explicitly. |
 | `VTSEARCH_RUNDIR` | system temp dir | Directory for the single-instance port lockfiles. Set it when several users run VTSearch on one host and a shared `/tmp` lockfile would collide. |
@@ -1119,6 +1125,42 @@ licensing statement.
 ---
 
 ## Troubleshooting
+
+### The app freezes for seconds during labeling (diagnosing a stall)
+
+A rare multi-second pause in which *every* in-flight request finishes at the
+same instant (issue #3853) is not one slow endpoint. It is either a thread
+holding the GIL, a lock convoy, or the process not being scheduled at all,
+and the per-request timer cannot tell those apart. The app carries three
+instruments that can, all on at the default log level:
+
+- **The stall watchdog** (`VTSEARCH_STALL_WATCHDOG_MS`). A heartbeat thread
+  measures how late it wakes. When it misses by more than the threshold it
+  logs `stall: heartbeat late by …ms` with the process's CPU time over the
+  gap, the threads that consumed it, major page faults, RSS, the cgroup memory
+  counters and GC activity. Read it like this:
+  - *process cpu ≈ wall, one thread on top* → that thread held the GIL. The
+    `faulthandler` dump the watchdog armed (written to `VTSEARCH_STALL_DUMP_FILE`,
+    which defaults to the log file) shows every thread's Python frames from
+    inside the stall; find the thread by its `ident` and read its top frame.
+  - *no thread consumed cpu* → the process was not running: look at `majflt`
+    and the cgroup `limit hits` (memory pressure), or at the node.
+  - *cpu spread across threads* → contention rather than one holder; the lock
+    and phase lines below say where.
+- **GC pauses** (`VTSEARCH_GC_WARN_MS`): `gc pause: generation 2 took …ms`. A
+  full collection holds the GIL and shows in a thread dump only as an
+  arbitrary allocation site, so it is named separately.
+- **Phase and lock timers** (`VTSEARCH_SLOW_PHASE_MS`): `slow phase: <name>
+  total …ms (phase=…ms, …)` for the learned-sort retrain, the per-vote
+  labelset rewrite, the labeling-status replay and a vote rehydrate; and
+  `lock wait: <lock> waited …ms` when a vote, the sort thread or the status
+  poll queued behind another holder.
+
+To capture one on the GRID: run the launcher as usual (it sets
+`VTSEARCH_LOG_FILE`), optionally `VTSEARCH_LOG_LEVEL=INFO` for the rehydrate
+and cache-truncation lines, label until a stall is felt, then read the log
+around the `stall:` line. `scripts/experiments/stall_3853/analyze_app_log.py`
+prints that window for every stall in a log.
 
 ### Models fail to download
 

@@ -1,0 +1,318 @@
+"""Tests for the stall diagnostics in :mod:`vtscore.concurrency.stalls` (#3853).
+
+Three instruments, each pinned on the property that makes it useful on a live
+deployment: the phase clock and lock timer are silent below their threshold
+and name what they measured above it; the GC callback logs a pause at
+WARNING; the watchdog turns a late heartbeat into a report that says which
+thread burned the wall clock, and re-arms its dump on every beat.
+"""
+
+from __future__ import annotations
+
+import gc
+import logging
+import threading
+
+import pytest
+
+from vtscore.concurrency import stalls
+from vtscore.concurrency.stalls import (
+    PhaseClock,
+    StallWatchdog,
+    gc_pause_stats,
+    install_gc_pause_logging,
+    slow_phase_threshold_ms,
+    timed_lock,
+    uninstall_gc_pause_logging,
+)
+
+LOGGER = "vtscore.concurrency.stalls"
+
+
+def _messages(caplog: pytest.LogCaptureFixture, needle: str) -> list[logging.LogRecord]:
+    return [r for r in caplog.records if needle in r.getMessage()]
+
+
+# ---------------------------------------------------------------------------
+# Threshold parsing
+# ---------------------------------------------------------------------------
+
+
+class TestThresholds:
+    def test_default_when_unset(self, monkeypatch):
+        monkeypatch.delenv(stalls.SLOW_PHASE_MS_ENV, raising=False)
+        assert slow_phase_threshold_ms() == stalls._DEFAULT_SLOW_PHASE_MS
+
+    def test_env_wins(self, monkeypatch):
+        monkeypatch.setenv(stalls.SLOW_PHASE_MS_ENV, "12.5")
+        assert slow_phase_threshold_ms() == 12.5
+
+    def test_unparseable_falls_back(self, monkeypatch):
+        """Bad configuration must not fault the vote path."""
+        monkeypatch.setenv(stalls.SLOW_PHASE_MS_ENV, "soon")
+        assert slow_phase_threshold_ms() == stalls._DEFAULT_SLOW_PHASE_MS
+
+
+# ---------------------------------------------------------------------------
+# PhaseClock
+# ---------------------------------------------------------------------------
+
+
+class TestPhaseClock:
+    def test_logs_breakdown_and_fields_when_slow(self, caplog, monkeypatch):
+        monkeypatch.setenv(stalls.SLOW_PHASE_MS_ENV, "0")
+        with caplog.at_level(logging.WARNING, logger=LOGGER):
+            with PhaseClock("learned_sort", labels=42) as clock:
+                clock.mark("train")
+                clock.mark("score")
+                clock.fields["corpus"] = 7
+        records = _messages(caplog, "slow phase: learned_sort")
+        assert len(records) == 1
+        msg = records[0].getMessage()
+        assert records[0].levelno == logging.WARNING
+        assert "train=" in msg and "score=" in msg
+        assert "labels=42" in msg and "corpus=7" in msg
+
+    def test_silent_below_threshold(self, caplog, monkeypatch):
+        monkeypatch.setenv(stalls.SLOW_PHASE_MS_ENV, "600000")
+        with caplog.at_level(logging.WARNING, logger=LOGGER):
+            with PhaseClock("quiet") as clock:
+                clock.mark("a")
+        assert not _messages(caplog, "slow phase")
+
+    def test_finish_fields_and_idempotence(self, caplog, monkeypatch):
+        monkeypatch.setenv(stalls.SLOW_PHASE_MS_ENV, "0")
+        clock = PhaseClock("x")
+        with caplog.at_level(logging.WARNING, logger=LOGGER):
+            total = clock.finish(outcome="done")
+            clock.finish(outcome="again")  # a second finish logs nothing
+        assert total >= 0
+        records = _messages(caplog, "slow phase: x")
+        assert len(records) == 1
+        assert "outcome=done" in records[0].getMessage()
+
+    def test_unmarked_clock_says_so(self, caplog, monkeypatch):
+        monkeypatch.setenv(stalls.SLOW_PHASE_MS_ENV, "0")
+        with caplog.at_level(logging.WARNING, logger=LOGGER):
+            PhaseClock("bare").finish()
+        assert "no phases marked" in _messages(caplog, "slow phase: bare")[0].getMessage()
+
+
+# ---------------------------------------------------------------------------
+# timed_lock
+# ---------------------------------------------------------------------------
+
+
+class TestTimedLock:
+    @pytest.mark.parametrize("lock_factory", [threading.Lock, threading.RLock])
+    def test_acquires_and_releases(self, lock_factory, caplog, monkeypatch):
+        monkeypatch.setenv(stalls.SLOW_PHASE_MS_ENV, "600000")
+        lock = lock_factory()
+        with caplog.at_level(logging.WARNING, logger=LOGGER):
+            with timed_lock(lock, "test") as waited:
+                assert waited >= 0.0
+                # Held: a non-blocking acquire from another thread must fail.
+                other: list[bool] = []
+                t = threading.Thread(target=lambda: other.append(lock.acquire(blocking=False)))
+                t.start()
+                t.join(5)
+                assert other == [False]
+        # Released on exit.
+        assert lock.acquire(blocking=False)
+        lock.release()
+        assert not _messages(caplog, "lock wait")
+
+    def test_logs_contended_wait(self, caplog, monkeypatch):
+        """A wait over the threshold is logged with the lock's name."""
+        monkeypatch.setenv(stalls.SLOW_PHASE_MS_ENV, "0")
+        lock = threading.Lock()
+        holding = threading.Event()
+        release = threading.Event()
+
+        def holder():
+            with lock:
+                holding.set()
+                release.wait(5)
+
+        t = threading.Thread(target=holder)
+        t.start()
+        assert holding.wait(5)
+        # Let the holder go once we are (about to be) blocked on the lock.
+        threading.Timer(0.05, release.set).start()
+        with caplog.at_level(logging.WARNING, logger=LOGGER):
+            with timed_lock(lock, "_progress_lock/test"):
+                pass
+        t.join(5)
+        records = _messages(caplog, "lock wait: _progress_lock/test")
+        assert len(records) == 1
+        assert records[0].levelno == logging.WARNING
+
+
+# ---------------------------------------------------------------------------
+# GC pause logging
+# ---------------------------------------------------------------------------
+
+
+class TestGcPauseLogging:
+    @pytest.fixture(autouse=True)
+    def _installed(self):
+        install_gc_pause_logging()
+        install_gc_pause_logging()  # idempotent
+        assert gc.callbacks.count(stalls._gc_callback) == 1
+        yield
+        uninstall_gc_pause_logging()
+        assert stalls._gc_callback not in gc.callbacks
+
+    def test_full_collection_logged_at_zero_threshold(self, caplog, monkeypatch):
+        monkeypatch.setenv(stalls.GC_WARN_MS_ENV, "0")
+        before = gc_pause_stats()
+        with caplog.at_level(logging.WARNING, logger=LOGGER):
+            gc.collect()
+        after = gc_pause_stats()
+        assert after["gen2_pauses"] == before["gen2_pauses"] + 1
+        records = _messages(caplog, "gc pause: generation 2")
+        assert records and records[-1].levelno == logging.WARNING
+        assert "collected=" in records[-1].getMessage()
+
+    def test_silent_above_threshold(self, caplog, monkeypatch):
+        monkeypatch.setenv(stalls.GC_WARN_MS_ENV, "600000")
+        with caplog.at_level(logging.WARNING, logger=LOGGER):
+            gc.collect()
+        assert not _messages(caplog, "gc pause")
+
+
+# ---------------------------------------------------------------------------
+# StallWatchdog
+# ---------------------------------------------------------------------------
+
+
+def _beat_base(wd: StallWatchdog) -> float:
+    base = wd._last_beat
+    assert base is not None
+    return base
+
+
+def _sample(cpu_by_tid: dict[int, float], proc_cpu: float, majflt: int = 0, gen2: int = 0) -> dict:
+    return {
+        "wall": 0.0,
+        "threads": {tid: (f"thread-{tid}", 0x1000 + tid, cpu) for tid, cpu in cpu_by_tid.items()},
+        "proc_cpu": proc_cpu,
+        "majflt": majflt,
+        "rss_kb": 2048,
+        "gc": {"gen2_pauses": gen2, "max_ms": 5.0},
+        "cgroup": {"current": 1_000_000_000, "max": 4_000_000_000, "limit_hits": 0},
+    }
+
+
+class TestStallWatchdog:
+    def test_report_names_the_thread_that_burned_the_gap(self, caplog):
+        """A GIL hold: one thread's CPU accounts for the wall clock."""
+        samples = iter(
+            [
+                _sample({1: 1.0, 2: 0.5}, proc_cpu=1.5),
+                _sample({1: 1.0, 2: 5.4}, proc_cpu=6.4, gen2=1),
+            ]
+        )
+        armed: list[float] = []
+        wd = StallWatchdog(
+            1000,
+            arm=armed.append,
+            sampler=lambda: next(samples),
+            dump_path="/tmp/dump.log",
+            logger=logging.getLogger(LOGGER),
+        )
+        wd._prime()
+        assert armed == [1.0]  # armed at construction-time priming
+        with caplog.at_level(logging.WARNING, logger=LOGGER):
+            # Beat scheduled at interval (0.25s) but ran 5.0s later.
+            lag_ms = wd.beat(now=_beat_base(wd) + wd.interval_s + 5.0)
+        assert lag_ms == pytest.approx(5000.0, abs=1.0)
+        assert wd.stalls == 1 and wd.worst_lag_ms == pytest.approx(5000.0, abs=1.0)
+        assert armed == [1.0, 1.0]  # re-armed after the beat
+        msg = _messages(caplog, "stall: heartbeat late by")[0].getMessage()
+        assert "thread-2 (tid 2, ident 0x1002) 4900ms" in msg
+        assert "process cpu 4900ms of 5250ms wall (0.93)" in msg
+        assert "gc gen2 pauses +1" in msg
+        assert "/tmp/dump.log" in msg
+        assert "cgroup mem 1.0GB of 4.0GB" in msg
+
+    def test_report_says_when_nothing_ran(self, caplog):
+        """A stalled process: no thread consumed CPU across the gap."""
+        samples = iter([_sample({1: 1.0}, proc_cpu=1.0, majflt=10), _sample({1: 1.0}, proc_cpu=1.0, majflt=900)])
+        wd = StallWatchdog(1000, sampler=lambda: next(samples), logger=logging.getLogger(LOGGER))
+        wd._prime()
+        with caplog.at_level(logging.WARNING, logger=LOGGER):
+            assert wd.beat(now=_beat_base(wd) + wd.interval_s + 2.0) is not None
+        msg = _messages(caplog, "stall: heartbeat late by")[0].getMessage()
+        assert "no thread consumed cpu across the gap" in msg
+        assert "majflt +890" in msg
+        assert "no thread dump armed" in msg
+
+    def test_on_time_beat_is_silent(self, caplog):
+        samples = iter([_sample({1: 1.0}, 1.0), _sample({1: 1.1}, 1.1)])
+        wd = StallWatchdog(1000, sampler=lambda: next(samples), logger=logging.getLogger(LOGGER))
+        wd._prime()
+        with caplog.at_level(logging.WARNING, logger=LOGGER):
+            assert wd.beat(now=_beat_base(wd) + wd.interval_s + 0.01) is None
+        assert wd.stalls == 0
+        assert not _messages(caplog, "stall:")
+
+    def test_thread_lifecycle_and_real_sampler(self):
+        """The thread starts, beats with the real /proc sampler, and stops."""
+        beats: list[float] = []
+        wd = StallWatchdog(200, arm=beats.append)
+        wd.start()
+        try:
+            assert wd.running
+            assert wd.interval_s == pytest.approx(0.05)
+            deadline = threading.Event()
+            deadline.wait(0.3)
+            assert len(beats) >= 2, "the heartbeat never beat"
+        finally:
+            wd.stop()
+        assert not wd.running
+        assert wd.stalls == 0
+
+    def test_default_sampler_sees_this_thread(self):
+        sample = stalls.default_sampler()
+        assert sample["proc_cpu"] is None or sample["proc_cpu"] >= 0
+        me = threading.get_native_id()
+        if sample["threads"]:  # /proc present
+            name, ident, cpu = sample["threads"][me]
+            assert name == threading.current_thread().name
+            assert ident == threading.get_ident()
+            assert cpu >= 0
+
+
+class TestWiring:
+    @pytest.fixture(autouse=True)
+    def _clean(self):
+        stalls.stop_stall_diagnostics()
+        uninstall_gc_pause_logging()
+        yield
+        stalls.stop_stall_diagnostics()
+        uninstall_gc_pause_logging()
+
+    def test_zero_disables_watchdog_but_installs_gc_logging(self, monkeypatch):
+        monkeypatch.setenv(stalls.WATCHDOG_MS_ENV, "0")
+        assert stalls.start_stall_diagnostics_from_env() is None
+        assert stalls.active_watchdog() is None
+        assert stalls._gc_callback in gc.callbacks
+
+    def test_starts_once_and_dumps_to_the_log_file(self, monkeypatch, tmp_path):
+        dump = tmp_path / "logs" / "app.log"
+        monkeypatch.setenv(stalls.WATCHDOG_MS_ENV, "5000")
+        monkeypatch.delenv(stalls.DUMP_FILE_ENV, raising=False)
+        monkeypatch.setenv("VTSEARCH_LOG_FILE", str(dump))
+        wd = stalls.start_stall_diagnostics_from_env()
+        assert wd is not None and wd.running
+        assert wd.dump_path == str(dump)
+        assert dump.parent.is_dir()
+        assert stalls.start_stall_diagnostics_from_env() is wd
+        stalls.stop_stall_diagnostics()
+        assert not wd.running
+
+    def test_dump_file_env_wins(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("VTSEARCH_LOG_FILE", str(tmp_path / "app.log"))
+        monkeypatch.setenv(stalls.DUMP_FILE_ENV, str(tmp_path / "stalls.log"))
+        assert stalls.resolve_dump_path() == str(tmp_path / "stalls.log")
