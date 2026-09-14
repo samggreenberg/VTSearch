@@ -2256,6 +2256,43 @@ class TestReportWholePageFigure:
 # ------------------------------------------------------------- embed cells
 
 
+class TestTheCellWriterLoadsBeforeAnythingIsEmbedded:
+    """The serializer has to import, and it has to be checked *first*.
+
+    `embed_corpus` loads the calibration harness's `_cells_io` by path, and that
+    module imports its own sibling `_cells_paths` by bare name -- so loading it
+    by path alone left the import unresolvable and `dump_medias` unreachable.
+    Nothing caught it because stage 5 of #3343 had never been run, and it
+    surfaces at the *last* line of a cell: `docmarks_s x sift_vlad` died on
+    ModuleNotFoundError after 2h16m of SIFT over 5,000 pages, having embedded
+    every one of them.
+    """
+
+    def test_the_cells_io_module_imports(self, mods):
+        io = mods["embed"]._cells_io()
+        assert hasattr(io, "dump_medias") and hasattr(io, "load_medias")
+
+    def test_loading_by_path_puts_the_module_directory_on_sys_path(self, mods):
+        # The mechanism, stated so a later refactor cannot quietly drop it.
+        io = mods["embed"]._cells_io()
+        assert str(mods["embed"]._CALIB_DIR) in sys.path
+        assert Path(io.__file__).parent == mods["embed"]._CALIB_DIR
+
+    def test_a_broken_serializer_is_reported_before_any_embedding(self, mods, monkeypatch, capsys):
+        # The preflight is the whole point: the cost of a cell is the embedding,
+        # so a write-path failure must be found before it is paid, not after.
+        def explode():
+            raise ModuleNotFoundError("No module named '_cells_paths'")
+
+        monkeypatch.setattr(mods["embed"], "_cells_io", explode)
+        called: list[str] = []
+        monkeypatch.setattr(mods["embed"], "build_cell", lambda *a, **k: called.append("built"))
+        with pytest.raises(SystemExit):
+            mods["embed"].main(["--tier", "s", "--embedders", "siglip"])
+        assert not called, "embedding started despite an unwritable cell"
+        assert "cannot write cells" in capsys.readouterr().err
+
+
 class TestEmbedCells:
     def test_a_tier_cell_is_cumulative_over_smaller_tiers(self, mods):
         assert mods["embed"].tiers_up_to("s") == {"s"}
