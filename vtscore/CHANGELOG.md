@@ -10,6 +10,16 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`FoldAnchoredCut.n_unconverged`, and a provenance that names it** (issue
+  #3825). A fold whose anchored refit exhausted `max_iter` is not the estimator
+  anyone specified, and until #3825 nothing reported it. The cut now carries
+  `fold_iterations` / `fold_converged` per fold (0 iterations marks a fold that
+  fell back and never ran an anchored refit), `n_unconverged` counts them, and
+  `provenance` reads `"fold_anchored_maxiter{u}[a/k]"` when *u* folds ran out.
+  The `[a/k]` group stays last and keeps its shape, because
+  `vtscore.eval.row_metrics.folds_used` parses it with an end-anchored regex.
+  `vtscore.detectors.training._fused_threshold` logs a warning when it happens.
+
 - **`vtscore.detectors.cost_trend`** (issue #3832) - the Smart indicator's
   arithmetic as a pure module: `cost_trend()` (the fitted `relative_slope` and
   its `t_stat`) and `smart_status_from_costs()`, plus its constants
@@ -207,6 +217,58 @@ instead, since every commit on `dev` is effectively a new app release.)
   `loaded_backbone()` instead.
 
 ### Changed
+
+- **The threshold's mixture fit is `vtscore`'s own EM, not sklearn's** (issue
+  #3585). `fit_score_gmm` fitted two Gaussians over one dimension with
+  `GaussianMixture(n_components=2, random_state=42)` - full-covariance machinery
+  and a k-means init on a problem whose covariance is a scalar. It is now a
+  deterministic 2-means init (`_two_means_init`) plus the same EM loop the
+  anchored refit uses with no anchors (`_plain_em`), stopped where sklearn
+  stopped it: when an iteration improves the mean log-likelihood by less than
+  `_EM_LOGLIK_TOL` = 1e-3.
+
+  **This moves the fit**, so it is licensed by measurement rather than by
+  argument: a different starting point lands EM elsewhere inside its tolerance
+  and sometimes in a different basin, and that reaches the green/red line
+  through the per-fold quantile and `snap_cut_to_sample`. Gated on 84 cells of
+  captured production inputs, it changes the admitted set on 7.0% of 2,258 fold
+  cases by a median of 2 medias - where keeping sklearn and changing only
+  `init_params="k-means++"` changes 16.1% by a median of 11.5, so the
+  replacement is *more* faithful to the incumbent than the smallest perturbation
+  of the incumbent. 7.3x cheaper per fit, 12.3x at `_GMM_MAX_SAMPLES`, and 1.7x
+  on a whole cosine/text sort.
+
+  The pre-#3585 fit stays in the module as **`fit_score_gmm_sklearn`**, unused
+  by production, so the equivalence can be re-measured rather than believed.
+  What was measured is in
+  `docs/experiments/2026-09-13-gmm-init-3585/REPORT.md`.
+
+- **The anchored refit stops on its own log-likelihood, not on a parameter
+  delta** (issue #3825). `fit_anchored_score_gmm` - the estimator behind the
+  shipped decision threshold - ran `_anchored_em` until no parameter moved by
+  more than 1e-8. On real fold haystacks that criterion is not slow but
+  **unreachable**: measured over 4,493 production refits it ran a median of 113
+  iterations, and **26.5% of them exited on `max_iter` rather than converging**
+  (given twice the budget, 10.7% still do). After #3585 made the initialiser 5x
+  cheaper, that loop was 92.9% of a fold's fit.
+
+  It now stops on `_ANCHORED_EM_LOGLIK_TOL` = **1e-8**, and on the likelihood of
+  *this* estimator - the weighted semi-supervised objective the anchored M-step
+  ascends, anchors included - rather than the free sample's alone, which under
+  that M-step is not monotone (it falls on 36.6% of iterations). The two are the
+  same arithmetic when there are no anchors, so `fit_score_gmm` is unaffected
+  bit for bit.
+
+  **The tolerance is deliberately not sklearn's 1e-3.** That value is correct
+  for `fit_score_gmm` and transferring it here is a regression worth +0.026 +/-
+  0.006 of cost over 114 paired trajectory cells, because at 1e-3 the refit
+  halts before the minority component has migrated to the high mode. At 1e-8 the
+  refit is 1.9x cheaper, the admitted set moves by a median of zero (p90 one
+  media in two thousand), and non-convergence falls to 7.4%. Measured in
+  `docs/experiments/2026-09-13-anchored-em-stop-3825/REPORT.md`.
+
+  `_anchored_em` and `fit_anchored_score_gmm` also take an optional `stats`
+  dict, filled with `n_iter` / `converged` / `loglik`.
 
 - **The voting simulation's app arm is now `trainer="app"`, not `trainer="mlp"`**
   (issue #3764). `vtscore.eval.voting_iterations.simulate_voting_iterations`
