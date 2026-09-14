@@ -1,0 +1,90 @@
+[
+  {
+    "threshold": 0.02,
+    "classes": 409,
+    "largest": 1,
+    "largest_share": 0.0024449877750611247,
+    "singletons": 409,
+    "usable": 0
+  },
+  {
+    "threshold": 0.03,
+    "classes": 407,
+    "largest": 2,
+    "largest_share": 0.004889975550122249,
+    "singletons": 405,
+    "usable": 0
+  },
+  {
+    "threshold": 0.04,
+    "classes": 400,
+    "largest": 4,
+    "largest_share": 0.009779951100244499,
+    "singletons": 394,
+    "usable": 0
+  },
+  {
+    "threshold": 0.05,
+    "classes": 389,
+    "largest": 10,
+    "largest_share": 0.02444987775061125,
+    "singletons": 382,
+    "usable": 1
+  },
+  {
+    "threshold": 0.06,
+    "classes": 383,
+    "largest": 13,
+    "largest_share": 0.03178484107579462,
+    "singletons": 376,
+    "usable": 2
+  },
+  {
+    "threshold": 0.08,
+    "classes": 334,
+    "largest": 40,
+    "largest_share": 0.097799511002445,
+    "singletons": 310,
+    "usable": 1
+  },
+  {
+    "threshold": 0.1,
+    "classes": 289,
+    "largest": 43,
+    "largest_share": 0.10513447432762836,
+    "singletons": 261,
+    "usable": 3
+  },
+  {
+    "threshold": 0.12,
+    "classes": 206,
+    "largest": 45,
+    "largest_share": 0.1100244498777506,
+    "singletons": 174,
+    "usable": 5
+  },
+  {
+    "threshold": 0.15,
+    "classes": 126,
+    "largest": 53,
+    "largest_share": 0.1295843520782396,
+    "singletons": 99,
+    "usable": 7
+  },
+  {
+    "threshold": 0.18,
+    "classes": 88,
+    "largest": 60,
+    "largest_share": 0.1466992665036675,
+    "singletons": 62,
+    "usable": 9
+  },
+  {
+    "threshold": 0.22,
+    "classes": 50,
+    "largest": 132,
+    "largest_share": 0.32273838630806845,
+    "singletons": 33,
+    "usable": 7
+  }
+]

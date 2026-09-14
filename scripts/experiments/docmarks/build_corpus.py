@@ -180,6 +180,14 @@ def admit_classes(
                 # or out by hand.  Until this is done the class is a proposal.
                 "membership_verified": False,
                 "rejected_page_ids": [],
+                # WHO looked, and when.  `membership_verified` is a boolean and
+                # the corpus's whole claim rests on what stands behind it --
+                # "checked by the person who owns this benchmark" and "checked
+                # by whoever ran the script" are different standards of
+                # evidence, and a boolean cannot tell them apart.  Stamped by
+                # `audit_to_corrections.py --reviewer`.
+                "reviewed_by": None,
+                "reviewed_on": None,
                 "notes": "",
             },
         }

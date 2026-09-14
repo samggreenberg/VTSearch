@@ -856,7 +856,7 @@ class TestMembershipAudit:
     def test_ok_verifies_without_dropping_anything(self, mods):
         pages, classes = self._setup(mods)
         row = {"class_id": "spods/a", "page_ids": classes["spods/a"]["page_ids"], "verdict": "ok"}
-        changes, problems = mods["audit"].apply_membership(pages, classes, [row])
+        changes, problems, _merges, _seps = mods["audit"].apply_membership(pages, classes, [row])
         assert not problems
         assert classes["spods/a"]["n_instances"] == 5
         assert classes["spods/a"]["audit"]["membership_verified"] is True
@@ -882,7 +882,7 @@ class TestMembershipAudit:
     def test_an_out_of_range_index_is_refused_not_silently_clamped(self, mods):
         pages, classes = self._setup(mods)
         row = {"class_id": "spods/a", "page_ids": classes["spods/a"]["page_ids"], "verdict": "9"}
-        changes, problems = mods["audit"].apply_membership(pages, classes, [row])
+        changes, problems, _merges, _seps = mods["audit"].apply_membership(pages, classes, [row])
         assert not changes
         assert "outside 0..4" in problems[0]
         assert classes["spods/a"]["n_instances"] == 5
@@ -890,7 +890,7 @@ class TestMembershipAudit:
     def test_a_malformed_verdict_is_refused(self, mods):
         pages, classes = self._setup(mods)
         row = {"class_id": "spods/a", "page_ids": classes["spods/a"]["page_ids"], "verdict": "maybe"}
-        _changes, problems = mods["audit"].apply_membership(pages, classes, [row])
+        _changes, problems, _merges, _seps = mods["audit"].apply_membership(pages, classes, [row])
         assert "must be 'ok' or comma-separated indices" in problems[0]
 
 
@@ -1337,6 +1337,84 @@ class TestClustering:
         # build.
         assert mods["cluster"].resolve_pairs(refs, [("spods/001", "spods/999")]) == []
 
+    def _two_marks_per_page(self, mods):
+        """The real shape of a SPODS page: one logo and one stamp, both clustered."""
+        MarkRef = mods["cluster"].MarkRef
+        return [
+            MarkRef(0, 0, "spods/546", "logo", (0, 0, 10, 10)),
+            MarkRef(0, 1, "spods/546", "stamp", (0, 20, 10, 30)),
+            MarkRef(1, 0, "spods/551", "logo", (0, 0, 10, 10)),
+            MarkRef(1, 1, "spods/551", "stamp", (0, 20, 10, 30)),
+        ]
+
+    def test_a_bare_page_id_is_refused_when_the_page_carries_several_marks(self, mods):
+        # The failure this exists to stop, from the real corpus (#3343): the
+        # DY.Secretary merge named two SPODS pages, each carrying a logo and a
+        # stamp. Expanded to all four crossings and replayed as must-links, it
+        # would have fused two 30-instance logo classes and a stamp class into
+        # one blob -- an over-merge, which is the error nothing downstream can
+        # see. Refusing is the only safe reading: the index was never recorded,
+        # so which mark was ruled on is not knowable from the file.
+        refs = self._two_marks_per_page(mods)
+        with pytest.raises(ValueError, match="more than one"):
+            mods["cluster"].resolve_pairs(refs, [("spods/546", "spods/551")])
+
+    def test_a_mark_index_pins_the_pair_to_one_row_each(self, mods):
+        refs = self._two_marks_per_page(mods)
+        pairs = [(("spods/546", 1), ("spods/551", 1))]
+        assert mods["cluster"].resolve_pairs(refs, pairs) == [(1, 3)]
+
+    def test_one_ambiguous_pair_does_not_take_the_unambiguous_ones_with_it(self, mods):
+        # The message has to name what is wrong, and the refusal has to be
+        # about the store rather than about whichever pair happened to be first.
+        refs = self._two_marks_per_page(mods)
+        with pytest.raises(ValueError, match="spods/546 carries 2 clustered marks"):
+            mods["cluster"].resolve_pairs(refs, [(("spods/546", 0), ("spods/551", 0)), ("spods/546", "spods/551")])
+
+    def test_two_verdicts_on_one_page_pair_are_two_decisions(self, mods, tmp_path):
+        # Keying the store on pages rather than marks silently kept whichever
+        # row was written last: one page's logo can be the same mark as
+        # another's while its stamp is not.
+        path = tmp_path / "adjudications.json"
+        mods["cluster"].save_adjudications(
+            [{"left_page_id": "spods/546", "left_mark_index": 0, "right_page_id": "spods/551", "right_mark_index": 0}],
+            [{"left_page_id": "spods/546", "left_mark_index": 1, "right_page_id": "spods/551", "right_mark_index": 1}],
+            path,
+        )
+        same, different = mods["cluster"].load_adjudications(path)
+        assert same == [(("spods/546", 0), ("spods/551", 0))]
+        assert different == [(("spods/546", 1), ("spods/551", 1))]
+
+    def test_reordering_a_pair_carries_every_side_field_with_it(self, mods, tmp_path):
+        # Rows are stored sorted within the pair. Swapping the page ids while
+        # leaving `left_class_id` behind would leave the row describing the
+        # wrong side -- and these are the fields the migration reads back.
+        path = tmp_path / "adjudications.json"
+        mods["cluster"].save_adjudications(
+            [],
+            [
+                {
+                    "left_page_id": "spods/900",
+                    "left_class_id": "spods/z",
+                    "right_page_id": "spods/100",
+                    "right_class_id": "spods/a",
+                }
+            ],
+            path,
+        )
+        row = json.loads(path.read_text())["different"][0]
+        assert (row["left_page_id"], row["left_class_id"]) == ("spods/100", "spods/a")
+        assert (row["right_page_id"], row["right_class_id"]) == ("spods/900", "spods/z")
+
+    def test_loading_rows_verbatim_keeps_the_notes_a_rewrite_would_drop(self, mods, tmp_path):
+        path = tmp_path / "adjudications.json"
+        mods["cluster"].save_adjudications(
+            [{"left_page_id": "a", "right_page_id": "b", "kept_class_id": "src/a", "note": "why"}], [], path
+        )
+        same, different = mods["cluster"].load_adjudication_rows(path)
+        assert different == []
+        assert same[0]["note"] == "why" and same[0]["kept_class_id"] == "src/a"
+
     def test_adjudications_round_trip_and_deduplicate(self, mods, tmp_path):
         path = tmp_path / "adjudications.json"
         mods["cluster"].save_adjudications(
@@ -1451,7 +1529,7 @@ class TestResplitRegistersItsPieces:
         classes, _ = mods["build"].admit_classes(pages, inventory, min_instances=1, min_mark_px=1)
         assert set(classes) == {"src/stamp_00000_0"}
 
-        notes = mods["audit"].resplit_classes(
+        notes, _merges, _seps = mods["audit"].resplit_classes(
             pages,
             classes,
             ["src/stamp_00000_0"],
@@ -1482,7 +1560,7 @@ class TestResplitRegistersItsPieces:
         pages = pages[:4] + pages[4:5]  # 4 bars, 1 comb
         inventory = mods["build"].class_inventory(pages)
         classes, _ = mods["build"].admit_classes(pages, inventory, min_instances=1, min_mark_px=1)
-        mods["audit"].resplit_classes(
+        _notes, _merges, _seps = mods["audit"].resplit_classes(
             pages,
             classes,
             ["src/stamp_00000_0"],
@@ -1493,6 +1571,314 @@ class TestResplitRegistersItsPieces:
         )
         sizes = sorted(m["n_instances"] for m in classes.values())
         assert sizes == [1, 4], sizes
+
+
+class TestAnAuditVerdictSurvivesARebuild:
+    """The audit's promise is not kept by ``classes.json`` alone.
+
+    ``build_corpus.py`` re-clusters from the sources and replays exactly one
+    file: ``adjudications.json``.  Stage 3 of #3343 rebuilds the corpus on
+    purpose -- to stamp the roster -- so a split or a membership pass recorded
+    only in ``classes.json`` is not "applied", it is applied until the next
+    documented step of the pipeline quietly undoes it.
+    """
+
+    def _resplit(self, mods, tmp_path):
+        pages = TestResplitRegistersItsPieces()._two_marks_one_class(mods, tmp_path)
+        inventory = mods["build"].class_inventory(pages)
+        classes, _ = mods["build"].admit_classes(pages, inventory, min_instances=1, min_mark_px=1)
+        notes, merges, separations = mods["audit"].resplit_classes(
+            pages,
+            classes,
+            ["src/stamp_00000_0"],
+            backend="phash",
+            threshold=0.20,
+            corpus=tmp_path,
+            min_mark_px=1,
+        )
+        return pages, classes, notes, merges, separations
+
+    def test_a_split_is_recorded_as_the_partition_it_is(self, mods, tmp_path):
+        _pages, classes, _notes, merges, separations = self._resplit(mods, tmp_path)
+        assert sorted(m["n_instances"] for m in classes.values()) == [2, 4]
+        # Stars, not cliques: 4 instances need 3 rows and 2 need 1.
+        assert len(merges) == 4
+        # One row between each pair of pieces.
+        assert len(separations) == 1
+        for row in merges + separations:
+            assert row["left_mark_index"] is not None and row["right_mark_index"] is not None
+
+    def _unlabelled(self, mods, tmp_path):
+        """The same pages with every identity forgotten — what a rebuild sees."""
+        Mark = mods["common"].Mark
+        fresh = TestResplitRegistersItsPieces()._two_marks_one_class(mods, tmp_path)
+        for page in fresh:
+            page.marks = [Mark(m.kind, m.box, None, m.provenance) for m in page.marks]
+        return fresh
+
+    def _fusing_threshold(self, mods, pages):
+        """A threshold that really does merge the two marks — measured, not guessed.
+
+        The control has to *fail* without the adjudications or it proves
+        nothing about them, and the distance between these two fixtures is a
+        property of the descriptor rather than a number to hard-code.
+        """
+        refs = mods["cluster"].collect_refs(pages, kinds=("stamp",), source="src")
+        desc = mods["cluster"].describe_marks(pages, refs, backend="phash")
+        return float(mods["cluster"].distance_matrix(desc, refs, backend="phash").max()) + 0.01
+
+    def test_without_them_the_rebuild_puts_the_class_back_together(self, mods, tmp_path):
+        # The control. No adjudications, a threshold loose enough to chain both
+        # marks: one class of six, which is what a split living only in
+        # classes.json came back as.
+        fresh = self._unlabelled(mods, tmp_path)
+        loose = self._fusing_threshold(mods, fresh)
+        summary = mods["cluster"].cluster_source(fresh, "src", backend="phash", threshold=loose)
+        assert summary["classes"] == 1
+
+    def test_replaying_those_rows_reproduces_the_split(self, mods, tmp_path):
+        # The end of the argument: forget every identity, cluster at the
+        # threshold the control just showed fuses them, and the reviewer's
+        # partition comes back anyway.
+        _pages, classes, _notes, merges, separations = self._resplit(mods, tmp_path)
+        expected = sorted(m["n_instances"] for m in classes.values())
+
+        fresh = self._unlabelled(mods, tmp_path)
+        loose = self._fusing_threshold(mods, fresh)
+
+        def pairs(rows):
+            return [
+                ((r["left_page_id"], r["left_mark_index"]), (r["right_page_id"], r["right_mark_index"])) for r in rows
+            ]
+
+        summary = mods["cluster"].cluster_source(
+            fresh, "src", backend="phash", threshold=loose, same=pairs(merges), different=pairs(separations)
+        )
+        assert summary["classes"] == 2
+        rebuilt = mods["build"].class_inventory(fresh)
+        assert sorted(len(v) for v in rebuilt.values()) == expected
+
+    def _membership(self, mods, verdict):
+        pages = [
+            _page(mods, f"spods/{i:03d}", "spods", [("logo", (0, 0, 200, 120), "spods/a", "clustered")])
+            for i in range(5)
+        ]
+        classes = {
+            "spods/a": {
+                "class_id": "spods/a",
+                "n_instances": 5,
+                "page_ids": [f"spods/{i:03d}" for i in range(5)],
+                "audit": {"membership_verified": False, "rejected_page_ids": []},
+            }
+        }
+        row = {"class_id": "spods/a", "page_ids": list(classes["spods/a"]["page_ids"]), "verdict": verdict}
+        return mods["audit"].apply_membership(pages, classes, [row])
+
+    def test_a_verified_class_is_recorded_as_a_must_link_star(self, mods):
+        _changes, problems, merges, separations = self._membership(mods, "ok")
+        assert not problems and not separations
+        assert len(merges) == 4  # n-1, not n(n-1)/2
+        assert {r["left_page_id"] for r in merges} == {"spods/000"}
+
+    def test_a_rejected_instance_is_recorded_as_one_separation(self, mods):
+        # One row is enough *because* the star is applied first: by the time
+        # the separation is registered the class is already one group.
+        _changes, problems, merges, separations = self._membership(mods, "1")
+        assert not problems
+        assert len(separations) == 1
+        assert separations[0]["left_page_id"] == "spods/001"
+        assert separations[0]["right_page_id"] in {p for p in ("spods/000", "spods/002", "spods/004")}
+        assert separations[0]["left_mark_index"] == 0
+        assert all(r["left_page_id"] != "spods/001" and r["right_page_id"] != "spods/001" for r in merges)
+
+    def test_a_merge_says_what_the_rebuild_will_rename_the_class_to(self, mods):
+        # Two writers of class ids that do not agree: a merge keeps the larger
+        # class's id, `assign_class_ids` derives one from the group's smallest
+        # page id. The disagreement is invisible until a rebuild renames the
+        # class under a roster that names it. (#3343: spods/stamp_00551_1 came
+        # back spods/stamp_00546_1.)
+        pages = [
+            _page(mods, "spods/00546", "spods", [("stamp", (0, 0, 200, 120), "spods/stamp_00551_1", "clustered")]),
+            _page(mods, "spods/00551", "spods", [("stamp", (0, 0, 200, 120), "spods/stamp_00551_1", "clustered")]),
+            _page(mods, "spods/00560", "spods", [("stamp", (0, 0, 200, 120), "spods/stamp_00560_0", "clustered")]),
+        ]
+        classes = {
+            "spods/stamp_00551_1": {
+                "kind": "stamp",
+                "n_instances": 2,
+                "page_ids": ["spods/00546", "spods/00551"],
+                "audit": {},
+            },
+            "spods/stamp_00560_0": {"kind": "stamp", "n_instances": 1, "page_ids": ["spods/00560"], "audit": {}},
+        }
+        rows = [{"left_class_id": "spods/stamp_00551_1", "right_class_id": "spods/stamp_00560_0", "verdict": "same"}]
+        changes, _p, _s, _m = mods["audit"].apply_confusable(pages, classes, rows)
+        assert any("RENAME AHEAD" in c and "spods/stamp_00546_0" in c for c in changes), changes
+
+    def test_a_merge_that_keeps_the_smallest_page_says_nothing(self, mods):
+        pages = [
+            _page(mods, "spods/00100", "spods", [("stamp", (0, 0, 200, 120), "spods/stamp_00100_0", "clustered")]),
+            _page(mods, "spods/00200", "spods", [("stamp", (0, 0, 200, 120), "spods/stamp_00100_0", "clustered")]),
+            _page(mods, "spods/00300", "spods", [("stamp", (0, 0, 200, 120), "spods/stamp_00300_0", "clustered")]),
+        ]
+        classes = {
+            "spods/stamp_00100_0": {
+                "kind": "stamp",
+                "n_instances": 2,
+                "page_ids": ["spods/00100", "spods/00200"],
+                "audit": {},
+            },
+            "spods/stamp_00300_0": {"kind": "stamp", "n_instances": 1, "page_ids": ["spods/00300"], "audit": {}},
+        }
+        rows = [{"left_class_id": "spods/stamp_00100_0", "right_class_id": "spods/stamp_00300_0", "verdict": "same"}]
+        changes, _p, _s, _m = mods["audit"].apply_confusable(pages, classes, rows)
+        assert not any("RENAME AHEAD" in c for c in changes), changes
+
+    def test_the_membership_pass_records_who_looked(self, mods):
+        # `membership_verified` is a boolean, and the corpus's whole claim rests
+        # on what stands behind it: "checked by the person who owns this
+        # benchmark" and "checked by whoever ran the script" are different
+        # standards of evidence that a boolean cannot tell apart.
+        pages = [
+            _page(mods, f"spods/{i:03d}", "spods", [("logo", (0, 0, 200, 120), "spods/a", "clustered")])
+            for i in range(3)
+        ]
+        classes = {
+            "spods/a": {
+                "n_instances": 3,
+                "page_ids": [f"spods/{i:03d}" for i in range(3)],
+                "audit": {"membership_verified": False, "rejected_page_ids": []},
+            }
+        }
+        row = {"class_id": "spods/a", "page_ids": list(classes["spods/a"]["page_ids"]), "verdict": "ok"}
+        mods["audit"].apply_membership(pages, classes, [row], reviewer="a reviewer")
+        assert classes["spods/a"]["audit"]["reviewed_by"] == "a reviewer"
+        assert classes["spods/a"]["audit"]["reviewed_on"]
+
+    def test_a_separation_says_whether_it_pins_marks_or_classes(self, mods):
+        # Recorded on the row rather than left to be re-derived: before the
+        # membership pass a class is not one must-linked group, so a single
+        # representative pair holds those two marks apart and nothing else.
+        pages = [
+            _page(mods, "spods/001", "spods", [("logo", (0, 0, 200, 120), "spods/a", "clustered")]),
+            _page(mods, "spods/002", "spods", [("logo", (0, 0, 200, 120), "spods/b", "clustered")]),
+        ]
+        classes = {
+            "spods/a": {"n_instances": 1, "page_ids": ["spods/001"], "audit": {"membership_verified": True}},
+            "spods/b": {"n_instances": 1, "page_ids": ["spods/002"], "audit": {}},
+        }
+        rows = [{"left_class_id": "spods/a", "right_class_id": "spods/b", "verdict": "different"}]
+        _c, _p, separations, _m = mods["audit"].apply_confusable(pages, classes, rows)
+        assert separations[0]["pins"] == "marks"
+        classes["spods/b"]["audit"]["membership_verified"] = True
+        _c, _p, separations, _m = mods["audit"].apply_confusable(pages, classes, rows)
+        assert separations[0]["pins"] == "classes"
+
+
+class TestAdjudicationMigration:
+    """A pre-#3343 store names pages; the index it meant is recoverable."""
+
+    def _corpus(self, mods):
+        pages = [
+            _page(
+                mods,
+                "spods/546",
+                "spods",
+                [
+                    ("logo", (0, 0, 200, 120), "spods/logo_a", "clustered"),
+                    ("stamp", (0, 300, 200, 360), "spods/st", "clustered"),
+                ],
+            ),
+            _page(
+                mods,
+                "spods/551",
+                "spods",
+                [
+                    ("logo", (0, 0, 200, 120), "spods/logo_b", "clustered"),
+                    ("stamp", (0, 300, 200, 360), "spods/st", "clustered"),
+                ],
+            ),
+        ]
+        classes = {
+            "spods/logo_a": {"page_ids": ["spods/546"], "n_instances": 1},
+            "spods/logo_b": {"page_ids": ["spods/551"], "n_instances": 1},
+            "spods/st": {"page_ids": ["spods/546", "spods/551"], "n_instances": 2},
+        }
+        return pages, classes
+
+    def test_a_merge_row_resolves_through_the_class_that_holds_both_pages(self, mods):
+        # The row the real corpus carried: two page ids and nothing else. Only
+        # one class contains both pages, and it is on mark 1 of each.
+        pages, classes = self._corpus(mods)
+        same, _diff, problems = mods["audit"].migrate_adjudications(
+            pages, classes, [{"left_page_id": "spods/546", "right_page_id": "spods/551"}], []
+        )
+        assert not problems
+        assert (same[0]["left_mark_index"], same[0]["right_mark_index"]) == (1, 1)
+
+    def test_a_separation_resolves_through_its_recorded_class_ids(self, mods):
+        pages, classes = self._corpus(mods)
+        _same, diff, problems = mods["audit"].migrate_adjudications(
+            pages,
+            classes,
+            [],
+            [
+                {
+                    "left_page_id": "spods/546",
+                    "left_class_id": "spods/logo_a",
+                    "right_page_id": "spods/551",
+                    "right_class_id": "spods/logo_b",
+                }
+            ],
+        )
+        assert not problems
+        assert (diff[0]["left_mark_index"], diff[0]["right_mark_index"]) == (0, 0)
+
+    def test_an_unresolvable_row_is_reported_rather_than_guessed(self, mods):
+        pages, classes = self._corpus(mods)
+        _same, _diff, problems = mods["audit"].migrate_adjudications(
+            pages,
+            classes,
+            [],
+            [{"left_page_id": "spods/546", "right_page_id": "spods/551"}],
+        )
+        assert len(problems) == 2
+        assert "cannot tell which mark" in problems[0]
+
+    def test_a_split_applied_before_it_was_recorded_is_recovered_from_its_notes(self, mods):
+        # The pieces of a pre-#3343 split carry their parent's id in the audit
+        # note, and the manifest still says which marks are theirs -- so the
+        # partition comes back without asking the reviewer a second time.
+        pages = [
+            _page(mods, f"src/{i:03d}", "src", [("stamp", (0, 0, 200, 120), f"src/piece_{i // 2}", "clustered")])
+            for i in range(4)
+        ]
+        classes = {
+            "src/piece_0": {
+                "page_ids": ["src/000", "src/001"],
+                "audit": {"notes": "re-clustered out of src/p at 0.150"},
+            },
+            "src/piece_1": {
+                "page_ids": ["src/002", "src/003"],
+                "audit": {"notes": "re-clustered out of src/p at 0.150"},
+            },
+        }
+        merges, separations = mods["audit"].split_rows_from_notes(pages, classes)
+        assert len(merges) == 2  # one star per piece, n-1 rows each
+        assert len(separations) == 1
+        assert separations[0]["pins"] == "classes"
+
+    def test_a_class_with_no_split_note_contributes_nothing(self, mods):
+        pages = [_page(mods, "src/000", "src", [("stamp", (0, 0, 200, 120), "src/a", "clustered")])]
+        classes = {"src/a": {"page_ids": ["src/000"], "audit": {"notes": "some other note"}}}
+        assert mods["audit"].split_rows_from_notes(pages, classes) == ([], [])
+
+    def test_a_row_about_pages_this_corpus_does_not_have_is_left_alone(self, mods):
+        pages, classes = self._corpus(mods)
+        row = {"left_page_id": "other/1", "right_page_id": "other/2"}
+        same, _diff, problems = mods["audit"].migrate_adjudications(pages, classes, [row], [])
+        assert not problems
+        assert same == [row]
 
 
 class TestSiglipClusterBackend:
@@ -1868,6 +2254,43 @@ class TestReportWholePageFigure:
 
 
 # ------------------------------------------------------------- embed cells
+
+
+class TestTheCellWriterLoadsBeforeAnythingIsEmbedded:
+    """The serializer has to import, and it has to be checked *first*.
+
+    `embed_corpus` loads the calibration harness's `_cells_io` by path, and that
+    module imports its own sibling `_cells_paths` by bare name -- so loading it
+    by path alone left the import unresolvable and `dump_medias` unreachable.
+    Nothing caught it because stage 5 of #3343 had never been run, and it
+    surfaces at the *last* line of a cell: `docmarks_s x sift_vlad` died on
+    ModuleNotFoundError after 2h16m of SIFT over 5,000 pages, having embedded
+    every one of them.
+    """
+
+    def test_the_cells_io_module_imports(self, mods):
+        io = mods["embed"]._cells_io()
+        assert hasattr(io, "dump_medias") and hasattr(io, "load_medias")
+
+    def test_loading_by_path_puts_the_module_directory_on_sys_path(self, mods):
+        # The mechanism, stated so a later refactor cannot quietly drop it.
+        io = mods["embed"]._cells_io()
+        assert str(mods["embed"]._CALIB_DIR) in sys.path
+        assert Path(io.__file__).parent == mods["embed"]._CALIB_DIR
+
+    def test_a_broken_serializer_is_reported_before_any_embedding(self, mods, monkeypatch, capsys):
+        # The preflight is the whole point: the cost of a cell is the embedding,
+        # so a write-path failure must be found before it is paid, not after.
+        def explode():
+            raise ModuleNotFoundError("No module named '_cells_paths'")
+
+        monkeypatch.setattr(mods["embed"], "_cells_io", explode)
+        called: list[str] = []
+        monkeypatch.setattr(mods["embed"], "build_cell", lambda *a, **k: called.append("built"))
+        with pytest.raises(SystemExit):
+            mods["embed"].main(["--tier", "s", "--embedders", "siglip"])
+        assert not called, "embedding started despite an unwritable cell"
+        assert "cannot write cells" in capsys.readouterr().err
 
 
 class TestEmbedCells:

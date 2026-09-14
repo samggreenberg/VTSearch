@@ -29,7 +29,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Optional, Sequence
+from typing import Any, Iterable, Optional, Sequence, Union
 
 import numpy as np
 
@@ -69,6 +69,12 @@ class MarkRef:
     page_id: str
     kind: str
     box: tuple[int, int, int, int]
+
+
+#: One side of an adjudicated pair: a ``(page_id, mark_index)`` mark, or a bare
+#: page id for the case — now only a legacy one — where the page carries a
+#: single clustered mark and the index adds nothing.  See ``resolve_pairs``.
+Endpoint = Union[str, tuple[str, int]]
 
 
 # --------------------------------------------------------------------------
@@ -428,9 +434,9 @@ def assign_class_ids(
 
 def resolve_pairs(
     refs: Sequence[MarkRef],
-    pairs: Sequence[tuple[str, str]],
+    pairs: Sequence[tuple[Endpoint, Endpoint]],
 ) -> list[tuple[int, int]]:
-    """Turn adjudicated ``(page_id, page_id)`` pairs into row-index pairs.
+    """Turn adjudicated endpoint pairs into row-index pairs.
 
     Adjudications are stored against **page ids**, not row indices or class
     ids, because those are the only identifiers that survive a re-cluster.  A
@@ -439,20 +445,62 @@ def resolve_pairs(
     both, or every re-run quietly discards the annotation it was supposed to be
     built on.
 
+    A page id alone is only an identifier for the *mark* when the page carries
+    one, and on every source here that is false: a SPODS page carries a logo, a
+    stamp and a signature, a StaVer page carries two stamps.  A bare page id
+    then resolves to *every* pair of marks across the two pages, which is not
+    what anybody adjudicated — and in the ``same`` direction it is actively
+    destructive.  The real corpus carried one such pair, the ``DY.Secretary``
+    merge (``spods/00546`` ↔ ``spods/00551``, two 30-instance logo classes and
+    one stamp class between them): replaying it would have must-linked all four
+    crossings and fused three classes into one 76-instance blob, silently, on
+    the next build (#3343).
+
+    So an endpoint is either a page id — accepted only while it is unambiguous
+    on this source's marks — or an explicit ``(page_id, mark_index)``, which is
+    what everything writes now.  ``mark_index`` survives a re-cluster for the
+    same reason a page id does: it indexes the page's own decomposition and
+    owes nothing to the clustering.  An ambiguous bare endpoint is **refused**
+    rather than guessed at, because guessing silently picks a side.
+
     A pair naming a page that is no longer in the corpus is skipped rather than
     raising: pages come and go with tier budgets, and a dropped page is not a
     reason to refuse to build.
     """
     rows_by_page: dict[str, list[int]] = {}
+    rows_by_mark: dict[tuple[str, int], int] = {}
     for index, ref in enumerate(refs):
         rows_by_page.setdefault(ref.page_id, []).append(index)
+        rows_by_mark[(ref.page_id, ref.mark_index)] = index
+
+    ambiguous: list[str] = []
+
+    def rows_for(endpoint: Endpoint) -> list[int]:
+        if isinstance(endpoint, str):
+            rows = rows_by_page.get(endpoint, [])
+            if len(rows) > 1:
+                ambiguous.append(
+                    f"{endpoint} carries {len(rows)} clustered marks "
+                    f"({', '.join(str(refs[r].mark_index) for r in rows)})"
+                )
+                return []
+            return rows
+        row = rows_by_mark.get((endpoint[0], endpoint[1]))
+        return [row] if row is not None else []
 
     out: list[tuple[int, int]] = []
     for left, right in pairs:
-        for a in rows_by_page.get(left, ()):
-            for b in rows_by_page.get(right, ()):
+        for a in rows_for(left):
+            for b in rows_for(right):
                 if a != b:
                     out.append((a, b))
+    if ambiguous:
+        raise ValueError(
+            f"{len(ambiguous)} adjudication endpoint(s) name a page carrying more than one "
+            f"clustered mark, so which mark was ruled on is not recorded: {'; '.join(sorted(set(ambiguous))[:5])}. "
+            "Re-record them with a mark index — `audit_to_corrections.py --migrate-adjudications "
+            "--corpus <dir>` does it from the class ids the rows already carry."
+        )
     return out
 
 
@@ -527,22 +575,45 @@ def write_cluster_report(summaries: list[dict[str, Any]], path: Path) -> None:
 # `cannot_link` in single_linkage does with these.
 
 
-def load_adjudications(path: Path) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
-    """``(same, different)`` page-id pairs a human has ruled on.
+def load_adjudications(path: Path) -> tuple[list[tuple[Endpoint, Endpoint]], list[tuple[Endpoint, Endpoint]]]:
+    """``(same, different)`` mark pairs a human has ruled on.
 
     Both directions live in one file because they are one decision procedure
     seen from two sides, and because a pair appearing in both is a conflict
     that has to be catchable — which it is not if they sit in separate stores
     that nothing reads together.
+
+    An endpoint carrying ``left_mark_index`` / ``right_mark_index`` comes back
+    as ``(page_id, mark_index)``; one without comes back as the bare page id it
+    was written as, and ``resolve_pairs`` decides whether that is still
+    unambiguous.  Reading a legacy row as a mark would be inventing the index.
     """
     if not path.exists():
         return [], []
     payload = json.loads(path.read_text(encoding="utf-8"))
 
-    def rows(key: str) -> list[tuple[str, str]]:
-        return [(r["left_page_id"], r["right_page_id"]) for r in payload.get(key, [])]
+    def endpoint(row: dict[str, Any], side: str) -> Endpoint:
+        index = row.get(f"{side}_mark_index")
+        page_id = row[f"{side}_page_id"]
+        return page_id if index is None else (page_id, int(index))
+
+    def rows(key: str) -> list[tuple[Endpoint, Endpoint]]:
+        return [(endpoint(r, "left"), endpoint(r, "right")) for r in payload.get(key, [])]
 
     return rows("same"), rows("different")
+
+
+def load_adjudication_rows(path: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """The ``(same, different)`` rows verbatim, for anyone about to rewrite them.
+
+    ``load_adjudications`` narrows each row to the pair the clusterer needs;
+    reading that and writing it back is lossy — it drops the class ids and the
+    reviewer's note, which are the only record of *why* a pair was ruled on.
+    """
+    if not path.exists():
+        return [], []
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    return list(payload.get("same", [])), list(payload.get("different", []))
 
 
 def save_adjudications(
@@ -554,15 +625,38 @@ def save_adjudications(
 
     Pairs are stored unordered-within-pair (sorted) so that ruling on
     ``(a, b)`` and later ``(b, a)`` records one decision rather than two.
+
+    The key is the pair of *marks*, not of pages: one page can carry a logo
+    that is the same as another page's and a stamp that is not, so keying on
+    pages would let the second verdict overwrite the first (#3343).  A row with
+    no mark index keys on ``-1``, which keeps a legacy file idempotent without
+    letting it collide with a row that names a real mark.
     """
 
-    def canon(rows: Sequence[dict[str, Any]]) -> dict[tuple[str, str], dict[str, Any]]:
-        out: dict[tuple[str, str], dict[str, Any]] = {}
+    def key_of(row: dict[str, Any], side: str) -> tuple[str, int]:
+        index = row.get(f"{side}_mark_index")
+        return (row[f"{side}_page_id"], -1 if index is None else int(index))
+
+    def flip(key: str) -> str:
+        """``left_class_id`` <-> ``right_class_id``, and so on."""
+        if key.startswith("left_"):
+            return "right_" + key[len("left_") :]
+        if key.startswith("right_"):
+            return "left_" + key[len("right_") :]
+        return key
+
+    def canon(rows: Sequence[dict[str, Any]]) -> dict[tuple[tuple[str, int], tuple[str, int]], dict[str, Any]]:
+        out: dict[tuple[tuple[str, int], tuple[str, int]], dict[str, Any]] = {}
         for row in rows:
-            key = tuple(sorted((row["left_page_id"], row["right_page_id"])))
+            left, right = key_of(row, "left"), key_of(row, "right")
             merged = dict(row)
-            merged["left_page_id"], merged["right_page_id"] = key
-            out[key] = merged  # type: ignore[index]
+            if right < left:
+                # Every ``left_*`` field moves with its side, not just the page
+                # id: swapping the ids alone would leave ``left_class_id``
+                # naming the page now on the right.
+                left, right = right, left
+                merged = {flip(k): v for k, v in merged.items()}
+            out[(left, right)] = merged
         return out
 
     same_map, diff_map = canon(same), canon(different)

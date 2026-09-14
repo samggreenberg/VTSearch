@@ -61,10 +61,24 @@ the ground truth. Measured on the fixture corpus at a loose threshold, three
 distinct marks collapse into one class — unless the separations are on disk, in
 which case all three survive.
 
-So a `different` verdict is stored permanently in `separations.json`, keyed on
-**page ids** (which survive a re-cluster; class ids do not) and enforced as a
-cannot-link constraint on every future run. The constraint propagates, so two
-separated marks cannot be reunited through some third ambiguous crop.
+So a `different` verdict is stored permanently in `adjudications.json`, keyed on
+**`(page_id, mark_index)`** (both of which survive a re-cluster; class ids and
+row indices do not) and enforced as a cannot-link constraint on every future
+run. The constraint propagates, so two separated marks cannot be reunited
+through some third ambiguous crop.
+
+The index is half the key and it was missing until #3343. A page id names a
+*page*, and every source here puts several marks on one — a SPODS page carries
+a logo, a stamp and a signature; a StaVer page carries two stamps. A pair keyed
+on pages alone therefore resolved to *every* crossing between the two pages'
+marks, which is not what anybody ruled on. The real corpus carried one such
+row, the `DY.Secretary` merge, and replaying it would have must-linked two
+30-instance logo classes to a stamp class and fused all three — an over-merge,
+written by the mechanism that exists to prevent them, on the next build.
+`resolve_pairs` now refuses a bare page id whose page carries more than one
+clustered mark rather than guessing;
+`audit_to_corrections.py --migrate-adjudications` recovers the index for a
+pre-#3343 store from the class ids those rows already carry.
 
 ## What each source ships
 
@@ -233,6 +247,10 @@ In the order you run them. Only the first two are needed for a first eval.
    a 30-crop class is one line. Afterwards no positive is unexamined, which is
    what lets a miss be blamed on the detector rather than the label. A rejected
    crop keeps its box and stays on its page — it becomes a known negative.
+   Pass `--reviewer` when applying: `membership_verified` is a boolean, and
+   "checked by the person who owns this benchmark" and "checked by whoever ran
+   the script" are different standards of evidence that a boolean cannot tell
+   apart. It lands in `audit.reviewed_by` beside the date.
 3. **`confusable`** — the same question as `merge`, asked one pair per sheet.
    Correct, and the form to use on a roster small enough that the full matrix is
    a sitting; past a couple of dozen classes prefer the slate, which compiles to
@@ -493,10 +511,35 @@ where it is "most accurate":
 
 So the threshold runs **strict**, the partition over-splits on purpose, and the
 repair is done by hand. Both directions of every hand decision are recorded in
-`adjudications.json` as page-id pairs and replayed on every future re-cluster —
-`same` becomes a must-link, `different` a cannot-link — so an afternoon of
-merging is not undone the next time a number moves. A pair ruled both ways is
-refused rather than resolved by whichever is applied last.
+`adjudications.json` as `(page_id, mark_index)` pairs and replayed on every
+future re-cluster — `same` becomes a must-link, `different` a cannot-link — so
+an afternoon of merging is not undone the next time a number moves. A pair
+ruled both ways is refused rather than resolved by whichever is applied last.
+
+**Every pass writes there, not just `merge` and `confusable`.** This is the
+file `build_corpus.py` replays, and it is the *only* one: a rebuild re-clusters
+from the sources and writes `classes.json` from scratch. So a verdict recorded
+only in `classes.json` is applied exactly until the next build, which is a
+documented step of the pipeline — stage 3 rebuilds the corpus to stamp the
+roster — and not an accident someone might avoid. Until #3343 that was true of
+two passes:
+
+- a **`split`** left its pieces in `classes.json` and nothing in the
+  adjudications, so the next build re-proposed the over-merge a person had just
+  taken apart. It is now recorded as the partition it is: a must-link star
+  inside each piece, one cannot-link between each pair of pieces.
+- a **`membership`** verdict set `membership_verified` and dropped the rejected
+  instances from the class, and a rebuild handed them straight back. A verified
+  class is now a must-link star and each rejection one cannot-link against it.
+
+The star is also what makes a single representative pair enough to separate two
+*classes*. Without it a cannot-link binds the two marks it names and no more —
+single linkage merges in increasing distance order, so a cheaper crossing edge
+elsewhere can fuse the classes and leave the two named representatives as the
+only members held apart. After the membership pass each class is one
+must-linked group before any distance is considered, and one row pins all of
+it. Separations written before that say so: `"pins": "marks"` rather than
+`"pins": "classes"`.
 
 Measured on 2,054 real SPODS marks with the 256-bit hash, after the mask
 decomposition was fixed:
