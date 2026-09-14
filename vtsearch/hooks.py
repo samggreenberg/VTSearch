@@ -14,8 +14,10 @@ obvious: Flask runs ``before_request`` handlers in registration order and
 """
 
 import logging
+import os
+import time
 
-from flask import g
+from flask import g, request
 
 from vtsearch.logging_config import new_request_id
 
@@ -289,6 +291,66 @@ def _echo_request_id(response):
     return response
 
 
+#: Env var naming the slow-request threshold, in milliseconds.
+_SLOW_REQUEST_MS_ENV = "VTSEARCH_SLOW_REQUEST_MS"
+
+#: Default threshold. A request slower than this is logged at WARNING.
+_DEFAULT_SLOW_REQUEST_MS = 1000.0
+
+
+def _slow_request_threshold_ms() -> float:
+    """Milliseconds above which a request counts as slow.
+
+    Read per call rather than captured at import, so a restart with a
+    different ``VTSEARCH_SLOW_REQUEST_MS`` takes effect and a test can lower
+    the bar without reloading the module. An unparseable value falls back to
+    the default rather than raising: bad configuration must not be able to
+    fault every request.
+    """
+    raw = os.environ.get(_SLOW_REQUEST_MS_ENV)
+    if raw is None:
+        return _DEFAULT_SLOW_REQUEST_MS
+    try:
+        return float(raw)
+    except ValueError:
+        return _DEFAULT_SLOW_REQUEST_MS
+
+
+def _set_request_start() -> None:
+    """Stamp a monotonic start time for :func:`_log_slow_request`."""
+    g.request_start = time.perf_counter()
+
+
+def _log_slow_request(response):
+    """Log any request slower than the threshold, at WARNING.
+
+    **WARNING, not INFO, on purpose.** ``VTSEARCH_LOG_LEVEL`` defaults to
+    ``WARNING``, so anything quieter would leave a stall with no trace on a
+    default deployment -- which is why the 6-20s post-vote stalls in #3853
+    could never be diagnosed after the fact.
+
+    The per-request id is included because the browser reads that same id off
+    the ``X-Request-Id`` response header (:func:`_echo_request_id`), so a
+    stall seen in DevTools can be matched to the server line explaining it.
+    """
+    start = getattr(g, "request_start", None)
+    if start is None:
+        # No start stamp: the request failed before ``_set_request_start``
+        # ran, or a test built a bare request context. Nothing to report.
+        return response
+    elapsed_ms = (time.perf_counter() - start) * 1000.0
+    if elapsed_ms >= _slow_request_threshold_ms():
+        logging.getLogger(__name__).warning(
+            "slow request: %s %s -> %s in %.0fms (request_id=%s)",
+            request.method,
+            request.path,
+            response.status_code,
+            elapsed_ms,
+            getattr(g, "request_id", None),
+        )
+    return response
+
+
 def register_hooks(app) -> None:
     """Register all request-lifecycle hooks on ``app``.
 
@@ -296,10 +358,12 @@ def register_hooks(app) -> None:
     ``app.py``: ``before_request`` handlers fire in registration order,
     ``after_request`` / ``teardown_request`` handlers in reverse.
     """
+    app.before_request(_set_request_start)
     app.before_request(_set_request_id)
     app.before_request(_set_user_context)
     app.before_request(_enforce_auth)
     app.before_request(_set_request_context)
     app.teardown_request(_clear_in_request_handler_marker)
+    app.after_request(_log_slow_request)
     app.after_request(_no_cache_api)
     app.after_request(_echo_request_id)
