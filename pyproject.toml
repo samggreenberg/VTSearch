@@ -441,5 +441,6 @@ skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,s
 # spells the breed and is a member of the `dog`/breed group in SCALE_VG_GROUPS
 # (#3636); `vas` is VG's truncated spelling of `vase` and joined
 # SCALE_VG_AMBIGUOUS at the #3588 promotion. Correcting any of them would break
-# a lookup against the data.
-ignore-words-list = "bouy,busses,dalmation,vas,clap,siglip,xclip,wrest,caller,recaller,medias,numer,denom,goup,repid,invokable,unparseable,copys,re-use,re-used,re-uses,re-using,re-declaring,pre-select,pre-selects,pre-selected,fpr,ths,ot,te,lod,usera,teh,provence,mane,tread,shepard,trough,umbrealla,umberella,unbrella,umbella,umbrela,bicyle,hyrdant"
+# a lookup against the data. `whis` is matplotlib's own `boxplot` keyword (the
+# whisker range), so it is an API name rather than a word.
+ignore-words-list = "whis,bouy,busses,dalmation,vas,clap,siglip,xclip,wrest,caller,recaller,medias,numer,denom,goup,repid,invokable,unparseable,copys,re-use,re-used,re-uses,re-using,re-declaring,pre-select,pre-selects,pre-selected,fpr,ths,ot,te,lod,usera,teh,provence,mane,tread,shepard,trough,umbrealla,umberella,unbrella,umbella,umbrela,bicyle,hyrdant"
