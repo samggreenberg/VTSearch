@@ -287,6 +287,43 @@ remain in the module as eval variants only (see issue #2836).
 Falls back to `np.median(scores)` when GMM fitting raises (e.g. degenerate
 score distributions), and to `0.5` when fewer than 2 scores are provided.
 
+### Where the **anchored** refit stops (issue #3825)
+
+`fit_anchored_score_gmm` initialises from the unanchored fit above and then
+runs `_anchored_em` with the votes clamped. Until #3825 that refit stopped on a
+**parameter delta** at 1e-8 - and having made the initialiser 5x cheaper, #3585
+left the refit as **92.9% of a fold's fit**. Measured over 4,493 real fold
+refits it ran a median of **113** iterations against the init's ~15, and on
+**26.5%** of them it never converged at all: it left on `max_iter`. That
+criterion is not merely slow on those folds, it is unreachable - given twice the
+budget the same rule still exits on its cap 10.7% of the time.
+
+It now stops on the **log-likelihood**, at `_ANCHORED_EM_LOGLIK_TOL` = 1e-8, and
+on the likelihood of *this* estimator - the weighted semi-supervised objective
+the anchored M-step ascends, anchors included - rather than the free sample's
+alone, which under an anchored M-step is not even monotone (it falls on 36.6% of
+iterations). The two coincide exactly when there are no anchors, so
+`fit_score_gmm` is untouched bit for bit.
+
+**The tolerance is not sklearn's 1e-3 and that is the finding**, not an
+oversight: 1e-3 is right for `fit_score_gmm` and transferring it here is a
+regression worth +0.026 +- 0.006 of cost, because at that tolerance the refit
+halts before the minority component has migrated to the high mode. 1e-8 is 1.9x
+cheaper at fold sizes, moves the admitted set by a median of zero, and cuts
+non-convergence to 7.4%. Measured in
+`docs/experiments/2026-09-13-anchored-em-stop-3825/REPORT.md`.
+
+Two things a caller can now see that nothing surfaced before:
+
+- **`stats`**, an optional out-dict on `_anchored_em` and
+  `fit_anchored_score_gmm`, carrying `n_iter`, `converged` and the `loglik` the
+  stopping decision was taken on.
+- **`FoldAnchoredCut.n_unconverged`**, and a provenance that names it:
+  `fold_anchored_maxiter2[2/2]` is two folds that ran out of iterations. The
+  `[a/k]` group stays last and keeps its shape, because
+  `vtscore.eval.row_metrics.folds_used` parses it with an end-anchored regex.
+  `_fused_threshold` logs a warning when it happens.
+
 ### `conformal_threshold(scores, labels, inclusion_value=0)`
 
 `vtscore/training/thresholds/conformal.py`. Split-conformal quantile rule mapping

@@ -262,11 +262,45 @@ class FoldAnchoredCut:
     #: Only read by the eval-only ``"q_tilt"`` rule; see
     #: :data:`FOLD_ANCHOR_QTILT_STEP`.
     qtilt_step: float = FOLD_ANCHOR_QTILT_STEP
+    #: Per-fold EM iteration count of the anchored refit, and whether that refit
+    #: met its tolerance rather than exhausting ``max_iter`` (issue #3825).
+    #: ``fold_iterations[i] == 0`` marks a fold that never ran an anchored refit
+    #: at all - it degenerated and kept its unanchored fit - so a zero there is
+    #: "not asked", not "converged instantly", and its ``fold_converged`` entry
+    #: is about a fit that did not happen.  Both empty when the cut was built by
+    #: a caller that predates the fields.
+    fold_iterations: tuple[int, ...] = ()
+    fold_converged: tuple[bool, ...] = ()
+
+    @property
+    def n_unconverged(self) -> int:
+        """How many folds' anchored refits ran out of iterations.
+
+        Zero for a cut that predates :attr:`fold_converged` - an unrecorded fit
+        is reported as nothing to report, never as a failure.  Folds that fell
+        back to the unanchored fit are not counted: no anchored refit ran there
+        to converge or not.
+        """
+        return sum(1 for it, ok in zip(self.fold_iterations, self.fold_converged, strict=False) if it > 0 and not ok)
 
     @property
     def provenance(self) -> str:
-        """``"fold_anchored[a/k]"`` - *a* of the *k* used folds fitted anchored."""
-        return f"fold_anchored[{self.n_anchored}/{len(self.fits)}]"
+        """``"fold_anchored[a/k]"`` - *a* of the *k* used folds fitted anchored.
+
+        A fit that stopped because it ran out of iterations is **not** the
+        estimator anyone specified, and until #3825 nothing said so: the
+        anchored refit had been exiting on ``max_iter`` on a large minority of
+        real folds for a month, and the only reason that was ever noticed is
+        that a cost measurement went looking.  So *u* non-converging folds name
+        themselves here, as ``"fold_anchored_maxiter{u}[a/k]"``.
+
+        The ``[a/k]`` group stays last and stays the same shape, because it is
+        parsed - :func:`vtscore.eval.row_metrics.folds_used` reads it with an
+        end-anchored regex, and every arm's fold-count column comes from that.
+        """
+        unconverged = self.n_unconverged
+        suffix = f"_maxiter{unconverged}" if unconverged else ""
+        return f"fold_anchored{suffix}[{self.n_anchored}/{len(self.fits)}]"
 
     def _combined_fold_quantile(self, rule: str, fpr_weight: float, fnr_weight: float) -> float:
         """Combined fold quantile of *rule*'s per-fold cuts at these cost weights."""
@@ -423,11 +457,14 @@ def fit_fold_anchored_cut(
     fits: list[GmmFit1D] = []
     haystacks: list[np.ndarray] = []
     anchor_counts: list[int] = []
+    iterations: list[int] = []
+    converged: list[bool] = []
     n_anchored = 0
     for hay, ordering in zip(fold_haystack_scores, fold_anchor_orderings, strict=True):
         a_scores, a_labels = scored_ordering(ordering)
         arr = gmm_fit_array(scored_only(hay))
-        fit, provenance = fit_anchored_score_gmm(arr, a_scores, a_labels, anchor_weight=anchor_weight)
+        stats: dict[str, float] = {}
+        fit, provenance = fit_anchored_score_gmm(arr, a_scores, a_labels, anchor_weight=anchor_weight, stats=stats)
         n_anchors = 0
         if fit is None:
             fit = fit_score_gmm(arr)
@@ -442,6 +479,11 @@ def fit_fold_anchored_cut(
         fits.append(fit)
         haystacks.append(np.sort(arr))
         anchor_counts.append(n_anchors)
+        # Only a fold that kept an anchored fit has a refit to report on; a
+        # fallback fold records 0 iterations, which :attr:`FoldAnchoredCut.
+        # n_unconverged` reads as "no anchored refit ran here".
+        iterations.append(int(stats.get("n_iter", 0.0)) if n_anchors else 0)
+        converged.append(bool(stats.get("converged", 0.0)) if n_anchors else True)
     if not fits:
         return None
     return FoldAnchoredCut(
@@ -452,6 +494,8 @@ def fit_fold_anchored_cut(
         anchor_counts=tuple(anchor_counts),
         cut_rule=cut_rule,
         combine=combine,
+        fold_iterations=tuple(iterations),
+        fold_converged=tuple(converged),
     )
 
 

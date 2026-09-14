@@ -7,7 +7,10 @@ combiner.  Library tier: pure ``vtscore.training.thresholds``, no app imports.
 
 ``TestAnchoredEmEquivalence`` additionally pins the #3558 optimisation of the
 EM loop to bit-for-bit equality with the two-column form it replaced, which is
-kept here verbatim as ``_reference_anchored_em``.
+kept here verbatim as ``_reference_anchored_em``, and
+``TestAnchoredEmStopping`` / ``TestFoldAnchoredConvergenceProvenance`` pin
+#3825: which objective the anchored refit is stopped on, and a fold that ran
+out of iterations naming itself.
 """
 
 from __future__ import annotations
@@ -751,3 +754,208 @@ class TestFoldAnchoredInclusion:
         """Inclusion 0 is the neutral point of the knob - which is also the
         only inclusion either calibration run scored, hence #2865."""
         assert inclusion_cost_weights(0) == (1.0, 1.0)
+
+
+class TestAnchoredEmStopping:
+    """Where the anchored refit stops, and what it reports about it (issue #3825).
+
+    #3585 made the *initialiser* five times cheaper and, measuring the loop next
+    to it, found the anchored refit had become ~90% of a fold's fit: 97-200
+    iterations of a parameter-delta criterion at 1e-8, and on a large minority
+    of real folds no convergence at all - the loop exits on ``max_iter``.  These
+    pin both halves of the fix: the refit is stopped on the log-likelihood of
+    the objective it is actually ascending, and a fit that ran out of iterations
+    can say so.
+    """
+
+    def _problem(self, seed: int = 3825):
+        rng = np.random.default_rng(seed)
+        x = _bimodal(rng)
+        a, lbl = _anchors_from_modes(np.random.default_rng(seed + 1))
+        return x, a[lbl != 1.0], a[lbl == 1.0], a, lbl
+
+    def test_stats_report_iterations_and_convergence(self):
+        x, a_lo, a_hi, _a, _l = self._problem()
+        init = fit_score_gmm(x)
+        stats: dict[str, float] = {}
+        fit = _anchored_em(x, a_lo, a_hi, init, 0.3, 200, 1e-8, 1e-3, stats)
+        assert fit is not None
+        assert stats["converged"] == 1.0
+        assert 1 <= stats["n_iter"] < 200
+        # The value the stopping decision was taken on, not a re-evaluation.
+        assert math.isfinite(stats["loglik"])
+
+    def test_a_fit_that_exhausts_max_iter_says_so(self):
+        # A tolerance of zero is never met, so the loop can only leave by the
+        # cap.  Asking a clean synthetic bimodal to *fail* to converge in seven
+        # iterations would not work and should not: the crawl the issue is
+        # about is a property of real, barely-identified fold haystacks, and
+        # what belongs in a unit test is that the exit is reported, not how
+        # often it happens (which the study measures).
+        x, a_lo, a_hi, _a, _l = self._problem()
+        init = fit_score_gmm(x)
+        stats: dict[str, float] = {}
+        fit = _anchored_em(x, a_lo, a_hi, init, 0.3, 7, 0.0, None, stats)
+        assert fit is not None
+        assert stats["n_iter"] == 7
+        assert stats["converged"] == 0.0
+
+    def test_the_two_rules_agree_on_a_well_identified_sample(self):
+        """Where the mixture *is* identified, where it stops does not matter.
+
+        Which is the other half of the issue's argument and the reason the gate
+        had to run on real fold haystacks: on a clean two-mode sample both rules
+        land in the same place in a handful of iterations, so a synthetic corpus
+        would have reported no difference and no cost to remove.  What decides
+        the question is the barely-identified case, and that is not something a
+        unit test can conjure - see
+        ``docs/experiments/2026-09-13-anchored-em-stop-3825/REPORT.md``.
+        """
+        x, a_lo, a_hi, _a, _l = self._problem()
+        init = fit_score_gmm(x)
+        by_loglik = _anchored_em(x, a_lo, a_hi, init, 0.3, 200, 1e-8, 1e-3, None)
+        by_params = _anchored_em(x, a_lo, a_hi, init, 0.3, 200, 1e-8, None, None)
+        assert abs(by_loglik.midpoint() - by_params.midpoint()) < 0.01
+
+    def test_the_shipped_anchored_path_stops_on_the_log_likelihood(self, monkeypatch):
+        """``fit_anchored_score_gmm`` reads the constant, and reads it per call."""
+        from vtscore.training.thresholds import gmm as gmm_mod
+
+        x, _lo, _hi, a, lbl = self._problem()
+        shipped: dict[str, float] = {}
+        fit_anchored_score_gmm(x, a, lbl, anchor_weight=0.3, stats=shipped)
+        assert gmm_mod._ANCHORED_EM_LOGLIK_TOL is not None
+        assert shipped["converged"] == 1.0
+        assert "loglik" in shipped, "the shipped path did not pass a log-likelihood tolerance"
+
+        # Read per call, not bound as a default argument - which is what lets a
+        # study install a stopping rule for a whole run.  A tolerance of zero is
+        # never met, so if the constant reaches the loop this run has to end at
+        # the cap and this one cannot.
+        monkeypatch.setattr(gmm_mod, "_ANCHORED_EM_LOGLIK_TOL", 0.0)
+        never: dict[str, float] = {}
+        fit_anchored_score_gmm(x, a, lbl, anchor_weight=0.3, stats=never)
+        assert never["n_iter"] == gmm_mod._ANCHORED_EM_MAX_ITER
+        assert never["converged"] == 0.0
+
+    def test_the_anchored_objective_is_inert_without_anchors(self):
+        """:func:`_plain_em` cannot tell the two objectives apart - bit for bit.
+
+        With no anchors the anchored objective's extra terms are skipped and its
+        divisor ``total_mass`` *is* ``n``, so the unanchored fit is unaffected by
+        #3825 whichever way the flag goes.  Asserted rather than argued, because
+        the whole licence for touching this loop is that the fit it shares with
+        the unanchored path did not move.
+        """
+        from vtscore.training.thresholds.gmm import _NO_ANCHORS
+
+        rng = np.random.default_rng(7)
+        x = _bimodal(rng)
+        init = fit_score_gmm(x)
+        with_anchored_objective = _anchored_em(x, _NO_ANCHORS, _NO_ANCHORS, init, 1.0, 100, 1e-8, 1e-3, None, True)
+        with_free_objective = _anchored_em(x, _NO_ANCHORS, _NO_ANCHORS, init, 1.0, 100, 1e-8, 1e-3, None, False)
+        assert with_anchored_objective == with_free_objective
+
+    @pytest.mark.parametrize("seed", [3825, 11, 404])
+    def test_the_anchored_objective_never_decreases(self, seed):
+        """It is what the M-step maximises, so watching it is a real criterion.
+
+        The free sample's likelihood has no such guarantee once the anchors pull
+        the components - which is why the shipped rule watches this one.  Run an
+        iteration at a time and check every step, rather than checking the two
+        endpoints and calling the middle monotone.
+        """
+        x, a_lo, a_hi, _a, _l = self._problem(seed)
+        cur = fit_score_gmm(x)
+        previous = None
+        for _ in range(40):
+            stats: dict[str, float] = {}
+            # ``loglik_tol`` huge: compute the objective at ``cur``, run one
+            # iteration, stop.  ``prev_loglik`` is None on that first pass, so
+            # the loop cannot short-circuit before the M-step.
+            nxt = _anchored_em(x, a_lo, a_hi, cur, 0.3, 1, 1e-30, 1e30, stats, True)
+            if nxt is None:
+                break
+            value = stats["loglik"]
+            if previous is not None:
+                assert value >= previous - 1e-12, f"the objective fell by {previous - value:.3e}"
+            previous = value
+            cur = nxt
+
+
+class TestFoldAnchoredConvergenceProvenance:
+    """A fold that ran out of iterations names itself in the provenance (#3825).
+
+    Until #3825 nothing did: the anchored refit had been exiting on ``max_iter``
+    on a large minority of real folds for a month, and the only reason anyone
+    noticed is that a cost measurement went looking.  The ``[a/k]`` group has to
+    stay last and stay the same shape - :func:`vtscore.eval.row_metrics.
+    folds_used` reads it with an end-anchored regex - so the marker goes in
+    front of it.
+    """
+
+    def _inputs(self):
+        rng = np.random.default_rng(55)
+        final = _bimodal(rng)
+        folds = [_bimodal(np.random.default_rng(56)), _bimodal(np.random.default_rng(57))]
+        a, lbl = _anchors_from_modes(np.random.default_rng(58))
+        return folds, [(list(a), list(lbl))] * 2, final
+
+    def test_a_converged_cut_reports_exactly_what_it_always_did(self):
+        folds, orderings, final = self._inputs()
+        cut = fit_fold_anchored_cut(folds, orderings, final)
+        assert cut.n_unconverged == 0
+        assert cut.provenance == "fold_anchored[2/2]"
+        assert all(i > 0 for i in cut.fold_iterations)
+        assert all(cut.fold_converged)
+
+    def test_a_fold_that_ran_out_of_iterations_is_named(self, monkeypatch):
+        from vtscore.training.thresholds import gmm as gmm_mod
+
+        # A tolerance of zero is never met, so every refit exhausts the cap.
+        monkeypatch.setattr(gmm_mod, "_ANCHORED_EM_LOGLIK_TOL", 0.0)
+        folds, orderings, final = self._inputs()
+        cut = fit_fold_anchored_cut(folds, orderings, final)
+        assert cut.n_unconverged == 2
+        assert cut.provenance == "fold_anchored_maxiter2[2/2]"
+        assert not any(cut.fold_converged)
+
+    def test_the_marked_provenance_still_parses_as_a_of_k(self, monkeypatch):
+        from vtscore.eval.row_metrics import folds_used
+        from vtscore.training.thresholds import gmm as gmm_mod
+
+        monkeypatch.setattr(gmm_mod, "_ANCHORED_EM_LOGLIK_TOL", 0.0)
+        folds, orderings, final = self._inputs()
+        cut = fit_fold_anchored_cut(folds, orderings, final)
+        assert folds_used(cut.provenance, 2) == 2.0
+
+    def test_a_fold_that_never_ran_an_anchored_refit_is_not_counted(self):
+        """A fallback fold has no refit to converge; 0 iterations means "not asked"."""
+        rng = np.random.default_rng(60)
+        final = _bimodal(rng)
+        good = _bimodal(np.random.default_rng(61))
+        # Anchors that contradict the modes make the anchored fit degenerate, so
+        # this fold keeps its unanchored fit (see
+        # ``test_degenerate_fold_falls_back_to_unanchored_fold_fit``).
+        a, lbl = _anchors_from_modes(np.random.default_rng(62))
+        contradicting = (list(a), list(1.0 - lbl))
+        # The weight the sibling degeneracy test uses: at the shipped 0.3 the
+        # population wins and inverted anchors merely tilt the fit.
+        cut = fit_fold_anchored_cut([good, good], [(list(a), list(lbl)), contradicting], final, anchor_weight=1000.0)
+        assert cut.n_anchored == 1
+        assert cut.fold_iterations[1] == 0
+        assert cut.n_unconverged == 0
+        assert cut.provenance == "fold_anchored[1/2]"
+
+    def test_a_cut_built_without_the_fields_reports_nothing(self):
+        """An unrecorded fit is nothing to report, never a failure."""
+        fit = GmmFit1D(w_lo=0.5, mu_lo=0.2, var_lo=0.01, w_hi=0.5, mu_hi=0.8, var_hi=0.01)
+        cut = FoldAnchoredCut(
+            fits=(fit,),
+            fold_haystacks=(np.sort(_bimodal(np.random.default_rng(1))),),
+            final_haystack=np.sort(_bimodal(np.random.default_rng(2))),
+            n_anchored=1,
+        )
+        assert cut.fold_iterations == ()
+        assert cut.n_unconverged == 0
+        assert cut.provenance == "fold_anchored[1/1]"
