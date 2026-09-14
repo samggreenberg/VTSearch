@@ -1862,6 +1862,157 @@ class TestRelabellingACellWithoutReEmbedding:
         assert mods["embed"].labels_for(page) == ([], [])
 
 
+class TestRepairingACellWithoutRebuildingIt:
+    """A page that will not decode costs the cell a vector, not a row.
+
+    ``build_cell`` writes every media it loaded, so one undecodable PNG leaves a
+    media with an empty ``embeddings`` and ``verify`` reporting ``MISSING 1
+    vector(s)`` for as long as that cell exists.  Rebuilding to obtain the one
+    vector costs the whole tier -- 11 h of SIFT over 50,000 pages -- because
+    ``build_cell`` is all-or-nothing and ``embed_missing`` is not.
+
+    The real case: ``ucsf/qkmg0227#0`` was truncated on write during the UCSF
+    pull and decoded to half a page of black; re-rendered from the cached PDF it
+    needed a vector in two tier-``m`` cells that cost 11 h to build.
+    """
+
+    @staticmethod
+    def _cell(mods, monkeypatch, tmp_path, medias, pages):
+        """Point `repair` at one fake siglip cell and record what it writes."""
+        dumped: dict[str, dict] = {}
+
+        class _IO:
+            @staticmethod
+            def load_medias(path):
+                return medias
+
+            @staticmethod
+            def dump_medias(m, path):
+                dumped[Path(path).name] = {k: dict(v) for k, v in m.items()}
+                return 1
+
+        cell = tmp_path / "docmarks_s__siglip.pkl"
+        cell.write_bytes(b"not read: load_medias is faked")
+        monkeypatch.setattr(mods["embed"], "_cells_io", lambda: _IO)
+        monkeypatch.setattr(mods["embed"], "EMBEDDERS", {"siglip": {}})
+        monkeypatch.setattr(mods["embed"].cfg, "TIER_ORDER", ["s"])
+        monkeypatch.setattr(mods["embed"], "cell_path", lambda tier, emb: cell)
+        monkeypatch.setattr(mods["embed"], "pages_for_tier", lambda corpus, tier: pages)
+        return dumped
+
+    @staticmethod
+    def _embedder(monkeypatch, *, succeeds=True):
+        """Replace `embed_missing`, recording exactly which medias it was given."""
+        import vtscore.datasets.stages.embedding as emb
+
+        handed: list[set] = []
+
+        def fake(medias, embedder_name="", on_progress=None):
+            handed.append(set(medias))
+            if succeeds:
+                for media in medias.values():
+                    media["embeddings"] = {embedder_name: [0.5, 0.5]}
+
+        monkeypatch.setattr(emb, "embed_missing", fake)
+        return handed
+
+    def _three(self, mods, tmp_path):
+        """Two embedded medias and one without a vector, page 1 the only readable one."""
+        from PIL import Image
+
+        img = tmp_path / "readable.png"
+        Image.new("RGB", (40, 30), "white").save(img)
+        medias = {
+            0: {"origin_name": "ucsf/a#0", "embeddings": {"siglip": [1.0]}, "categories": ["ucsf/x"]},
+            1: {"origin_name": "ucsf/b#0", "embeddings": {}, "categories": ["ucsf/y"]},
+            2: {"origin_name": "ucsf/c#0", "embeddings": {"siglip": [2.0]}, "categories": []},
+        }
+        # The already-embedded pages point at files that do not exist: if repair
+        # ever re-read them the test would fail with OSError, which is the
+        # memory claim stated as a test rather than a comment.
+        pages = [
+            _page(mods, "ucsf/a#0", "ucsf", path=str(tmp_path / "gone-a.png")),
+            _page(mods, "ucsf/b#0", "ucsf", path=str(img)),
+            _page(mods, "ucsf/c#0", "ucsf", path=str(tmp_path / "gone-c.png")),
+        ]
+        return medias, pages
+
+    def test_only_the_media_without_a_vector_is_embedded(self, mods, monkeypatch, tmp_path):
+        medias, pages = self._three(mods, tmp_path)
+        dumped = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        handed = self._embedder(monkeypatch)
+
+        assert mods["embed"].repair(tmp_path, apply=True) == 0
+        assert handed == [{1}], "embed_missing was handed more than the vectorless media"
+        assert dumped["docmarks_s__siglip.pkl"][1]["embeddings"] == {"siglip": [0.5, 0.5]}
+
+    def test_the_neighbours_keep_their_vectors_and_the_repaired_page_keeps_its_labels(
+        self, mods, monkeypatch, tmp_path
+    ):
+        # A repair is not a relabel: it must not touch what a page is called.
+        medias, pages = self._three(mods, tmp_path)
+        dumped = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        self._embedder(monkeypatch)
+
+        mods["embed"].repair(tmp_path, apply=True)
+        written = dumped["docmarks_s__siglip.pkl"]
+        assert written[0]["embeddings"] == {"siglip": [1.0]}
+        assert written[2]["embeddings"] == {"siglip": [2.0]}
+        assert written[1]["categories"] == ["ucsf/y"]
+
+    def test_the_raster_bytes_are_dropped_again_afterwards(self, mods, monkeypatch, tmp_path):
+        # `dump_medias` strips them, but the dict stays live for the rest of the
+        # loop -- holding 50,000 pages of PNG would cost the memory the thin
+        # pickle exists to avoid.
+        medias, pages = self._three(mods, tmp_path)
+        self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        self._embedder(monkeypatch)
+
+        mods["embed"].repair(tmp_path, apply=True)
+        assert all("media_bytes" not in m for m in medias.values())
+
+    def test_a_dry_run_writes_nothing(self, mods, monkeypatch, tmp_path, capsys):
+        medias, pages = self._three(mods, tmp_path)
+        dumped = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        handed = self._embedder(monkeypatch)
+
+        assert mods["embed"].repair(tmp_path, apply=False) == 0
+        assert not dumped and not handed
+        out = capsys.readouterr().out
+        assert "1 without a vector, 1 re-readable" in out
+        assert "dry run" in out
+
+    def test_a_page_missing_from_the_manifest_is_reported_not_raised(self, mods, monkeypatch, tmp_path, capsys):
+        medias, _ = self._three(mods, tmp_path)
+        dumped = self._cell(mods, monkeypatch, tmp_path, medias, [])
+        self._embedder(monkeypatch)
+
+        assert mods["embed"].repair(tmp_path, apply=True) == 1
+        assert not dumped, "a cell nothing could be repaired in was rewritten"
+        assert "not in the manifest" in capsys.readouterr().out
+
+    def test_a_page_that_still_will_not_embed_leaves_the_cell_alone(self, mods, monkeypatch, tmp_path, capsys):
+        # Re-rendering is the repair for the page; if it did not take, the cell
+        # must be left exactly as it was and the exit code must say so.
+        medias, pages = self._three(mods, tmp_path)
+        dumped = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        self._embedder(monkeypatch, succeeds=False)
+
+        assert mods["embed"].repair(tmp_path, apply=True) == 1
+        assert not dumped
+        assert "1 still missing" in capsys.readouterr().out
+
+    def test_a_complete_cell_is_left_untouched(self, mods, monkeypatch, tmp_path, capsys):
+        medias, pages = self._three(mods, tmp_path)
+        medias[1]["embeddings"] = {"siglip": [3.0]}
+        dumped = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        handed = self._embedder(monkeypatch)
+
+        assert mods["embed"].repair(tmp_path, apply=True) == 0
+        assert not dumped and not handed
+        assert "no vector missing" in capsys.readouterr().out
+
+
 class TestAMergeReconcilesDistinctFrom:
     """A merged-away class must not go on being named as a separation.
 

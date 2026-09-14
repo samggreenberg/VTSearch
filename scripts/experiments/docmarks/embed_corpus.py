@@ -222,6 +222,81 @@ def relabel(corpus: Path, *, apply: bool = False) -> int:
     return 0
 
 
+def repair(corpus: Path, *, apply: bool = False) -> int:
+    """Re-embed only the medias an existing cell holds no vector for.
+
+    A page whose pixels will not decode costs the cell a *vector* but not a
+    *row*: ``build_cell`` writes every media it loaded, so one undecodable PNG
+    leaves a media with an empty ``embeddings``, and ``verify`` reports
+    ``MISSING 1 vector(s)`` for as long as that cell exists.
+
+    The repair for the *page* is to re-render it.  The repair for the *cell*
+    would otherwise be a full rebuild -- 11 h of SIFT over 50,000 pages to
+    obtain one vector -- because ``build_cell`` is all-or-nothing.
+    ``embed_missing`` is not: it embeds exactly the medias with no vector under
+    this embedder's key, so re-reading those few pages and calling it costs one
+    image rather than the tier.
+
+    Bytes are re-read for the missing medias *only*.  ``dump_medias`` drops
+    ``media_bytes``, so a cell knows its pages by ``origin_name`` and nothing
+    else -- and re-reading all 50,000 to repair one would cost exactly the
+    memory the thin pickle exists to avoid.
+
+    The real case: ``ucsf/qkmg0227#0`` was truncated on write during the UCSF
+    pull and decoded to half a page of black.  Re-rendered from the cached PDF,
+    it needed a vector in two tier-``m`` cells that cost 11 h to build.
+    """
+    from vtscore.datasets.stages.embedding import embed_missing  # noqa: PLC0415
+
+    io = _cells_io()
+    unrepaired = 0
+    for tier in cfg.TIER_ORDER:
+        pages = None
+        for embedder in EMBEDDERS:
+            path = cell_path(tier, embedder)
+            if not path.exists():
+                continue
+            medias = io.load_medias(path)
+            missing = {cid: m for cid, m in medias.items() if not m.get("embeddings")}
+            if not missing:
+                print(f"  {path.name}: {len(medias)} medias, no vector missing")
+                continue
+            if pages is None:
+                pages = {p.page_id: p for p in pages_for_tier(corpus, tier)}
+            blocked: list[str] = []
+            for media in missing.values():
+                page = pages.get(media.get("origin_name"))
+                if page is None:
+                    blocked.append(f"{media.get('origin_name')}: not in the manifest")
+                    continue
+                try:
+                    media["media_bytes"] = Path(page.path).read_bytes()
+                except OSError as exc:  # noqa: PERF203 - one page, reported not raised
+                    blocked.append(f"{page.page_id}: {type(exc).__name__}")
+            loadable = {cid: m for cid, m in missing.items() if m.get("media_bytes")}
+            if apply and loadable:
+                with _batch_size(embedder):
+                    embed_missing(loadable, embedder)
+            repaired = sum(1 for m in loadable.values() if m.get("embeddings"))
+            # Drop the bytes again whatever happened: `dump_medias` would strip
+            # them, but this dict stays live for the rest of the loop.
+            for media in missing.values():
+                media.pop("media_bytes", None)
+            left = len(missing) - repaired
+            detail = f"{repaired} repaired" if apply else f"{len(loadable)} re-readable"
+            print(
+                f"  {path.name}: {len(medias)} medias, {len(missing)} without a vector, {detail}"
+                + (f", {left} still missing" if apply and left else "")
+                + (f" [{'; '.join(blocked)}]" if blocked else "")
+            )
+            if apply:
+                unrepaired += left
+                if repaired:
+                    io.dump_medias(medias, path)
+    print("" if apply else "\ndry run -- pass --force to write")
+    return 1 if unrepaired else 0
+
+
 def load_medias(pages: Sequence[Page], classes: dict[str, Any], embedder: str) -> dict[int, dict]:
     """Turn manifest pages into the media dicts the embedding stage expects.
 
@@ -343,6 +418,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="rewrite the labels in every existing cell from the current manifest, leaving the "
         "vectors alone; the repair for an audit verdict that lands after a cell was built",
     )
+    ap.add_argument(
+        "--repair",
+        action="store_true",
+        help="re-embed only the medias an existing cell has no vector for; the repair for a "
+        "page that would not decode when the cell was built",
+    )
     args = ap.parse_args(argv)
 
     if args.list:
@@ -358,6 +439,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     if args.relabel:
         return relabel(args.corpus, apply=args.force)
+
+    if args.repair:
+        return repair(args.corpus, apply=args.force)
 
     requested = [e.strip() for e in args.embedders.split(",") if e.strip()]
     unknown = set(requested) - set(EMBEDDERS)
