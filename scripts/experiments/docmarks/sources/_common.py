@@ -109,6 +109,65 @@ def read_manifest(path: Path) -> Iterator[Page]:
                 yield Page.from_json(json.loads(line))
 
 
+class UndecodableRender(RuntimeError):
+    """A page image was written, but the bytes that landed will not decode."""
+
+
+def save_verified(image: Any, path: Path, *, attempts: int = 2, **save_kwargs: Any) -> Path:
+    """Write *image* to *path*, proving the bytes that landed decode first.
+
+    A render that *fails* is already handled: ``fetch_and_render`` skips the
+    document and reports it through ``on_error``.  A render that *succeeds* and
+    writes a short file is invisible.  ``ucsf/qkmg0227#0`` was written truncated
+    during the 2026-09-01 pull -- 983 KB of a 1257x1641 page, decoding to 49%
+    image and 51% black filler -- and surfaced thirteen days later as an
+    *embedder* error 11 h into a tier-``m`` cell, having already cost it a
+    vector (#3847).
+
+    So the image goes to a temp name, is read back strictly, and only then takes
+    the real path: the same write-then-publish shape as :func:`write_manifest`,
+    for the same reason.  A half-written file that is never visible under its
+    real name cannot be mistaken for a good one by a later stage, and a failure
+    here cannot destroy a good file that was already there.
+
+    The retry is the mechanism, not a nicety.  The PDF behind the bad page was
+    intact; it was the PNG write that came up short, so writing it again from
+    the image still in hand is the entire repair and costs one page.
+    """
+    from PIL import Image, ImageFile  # noqa: PLC0415
+
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # Keep the real suffix: PIL infers the format from the extension, so a
+    # temp name ending in ".partial" fails as "unknown file extension" on
+    # every write, good and bad alike.
+    tmp = path.with_name(path.stem + ".partial" + path.suffix)
+    last: Optional[BaseException] = None
+    for _ in range(max(1, attempts)):
+        try:
+            image.save(tmp, **save_kwargs)
+            # Strictly.  With truncated loading allowed a short file decodes to
+            # the right size with the missing rows filled in, so the check would
+            # pass on precisely the failure it exists to catch.
+            previous = ImageFile.LOAD_TRUNCATED_IMAGES
+            ImageFile.LOAD_TRUNCATED_IMAGES = False
+            try:
+                with Image.open(tmp) as check:
+                    check.load()
+                    got = check.size
+            finally:
+                ImageFile.LOAD_TRUNCATED_IMAGES = previous
+            if got != image.size:
+                raise UndecodableRender(f"wrote {image.size} but read back {got}")
+        except Exception as exc:  # noqa: BLE001 - retried, then reported
+            last = exc
+            tmp.unlink(missing_ok=True)
+            continue
+        tmp.replace(path)
+        return path
+    raise UndecodableRender(f"{path}: {type(last).__name__}: {last}")
+
+
 # --------------------------------------------------------------------------
 # Deterministic sampling
 # --------------------------------------------------------------------------

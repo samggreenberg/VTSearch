@@ -2296,6 +2296,158 @@ class TestSynthesis:
 # ----------------------------------------------------------------- manifest
 
 
+def _png_bytes(w=60, h=80, seed=0):
+    """A noisy PNG, so truncating it actually costs IDAT rather than padding."""
+    import io
+
+    from PIL import Image
+
+    arr = np.random.default_rng(seed).integers(0, 255, (h, w, 3), dtype=np.uint8)
+    buf = io.BytesIO()
+    Image.fromarray(arr).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+class _ShortWriter:
+    """An image whose first *fails* saves land truncated, like the write in #3847.
+
+    `size` is the size the caller believes it wrote; the bytes are a real PNG cut
+    partway through, which is what a short write actually leaves behind.
+    """
+
+    def __init__(self, payload, *, fails=1, size=(60, 80)):
+        self.size = size
+        self._payload = payload
+        self._fails = fails
+        self.saves = 0
+
+    def save(self, path, **kwargs):
+        self.saves += 1
+        data = self._payload[: len(self._payload) // 2] if self.saves <= self._fails else self._payload
+        Path(path).write_bytes(data)
+
+
+class TestAPageThatRendersShortIsNeverPublished:
+    """A render that fails is handled; a render that *succeeds* short was not.
+
+    `ucsf/qkmg0227#0` was written truncated during the 2026-09-01 pull -- 49%
+    image, 51% black filler -- and was invisible for thirteen days, surfacing as
+    an *embedder* error 11 h into a tier-`m` cell it had already cost a vector.
+    Nothing between the render and the embed read the bytes back. (#3847)
+    """
+
+    def test_a_good_save_lands_and_leaves_no_partial_behind(self, mods, tmp_path):
+        from PIL import Image
+
+        dest = tmp_path / "page.png"
+        out = mods["common"].save_verified(Image.new("RGB", (60, 80), "white"), dest)
+        assert out == dest and dest.exists()
+        assert not list(tmp_path.glob("*.partial.*")), "the temp file outlived the write"
+        with Image.open(dest) as im:
+            im.load()
+            assert im.size == (60, 80)
+
+    def test_a_short_write_is_retried_from_the_image_still_in_hand(self, mods, tmp_path):
+        # The PDF behind the bad page was intact; only the PNG write came up
+        # short, so writing it again is the entire repair and costs one page.
+        from PIL import Image
+
+        dest = tmp_path / "page.png"
+        writer = _ShortWriter(_png_bytes(), fails=1)
+        mods["common"].save_verified(writer, dest)
+        assert writer.saves == 2, "a short write was not retried"
+        with Image.open(dest) as im:
+            im.load()
+
+    def test_a_write_that_stays_short_raises_and_publishes_nothing(self, mods, tmp_path):
+        dest = tmp_path / "page.png"
+        writer = _ShortWriter(_png_bytes(), fails=99)
+        with pytest.raises(mods["common"].UndecodableRender):
+            mods["common"].save_verified(writer, dest)
+        assert not dest.exists(), "a file that will not decode was published"
+        assert not list(tmp_path.glob("*.partial.*"))
+
+    def test_a_failed_write_does_not_destroy_the_good_file_already_there(self, mods, tmp_path):
+        # Write-then-publish, not write-then-repair: the previous page survives.
+        from PIL import Image
+
+        dest = tmp_path / "page.png"
+        Image.new("RGB", (60, 80), "red").save(dest)
+        before = dest.read_bytes()
+        with pytest.raises(mods["common"].UndecodableRender):
+            mods["common"].save_verified(_ShortWriter(_png_bytes(), fails=99), dest)
+        assert dest.read_bytes() == before
+
+    def test_a_file_of_the_wrong_size_is_rejected_even_though_it_decodes(self, mods, tmp_path):
+        # Decodability alone is not the property; "what I wrote is what landed" is.
+        dest = tmp_path / "page.png"
+        writer = _ShortWriter(_png_bytes(w=10, h=10, seed=3), fails=0, size=(60, 80))
+        with pytest.raises(mods["common"].UndecodableRender):
+            mods["common"].save_verified(writer, dest)
+        assert not dest.exists()
+
+    def test_the_renderer_writes_through_the_checked_path(self, mods):
+        # The guard is worth nothing if the one site that produced the bad page
+        # still calls `Image.save` directly.
+        src = Path(mods["ucsf"].__file__).read_text(encoding="utf-8")
+        assert "_common.save_verified(image, image_path)" in src
+        assert "image.save(image_path)" not in src
+
+
+class TestScanningForPagesAlreadyOnDisk:
+    """`save_verified` stops the next one; the scan finds the ones already there."""
+
+    @staticmethod
+    def _corpus(mods, tmp_path, *, truncate=False):
+        from PIL import Image
+
+        images = tmp_path / "images"
+        images.mkdir()
+        pages = []
+        for i, tier in enumerate(("s", "m")):
+            path = images / f"p{i}.png"
+            data = _png_bytes(seed=i + 1)
+            path.write_bytes(data[: len(data) // 2] if (truncate and tier == "m") else data)
+            page = _page(mods, f"ucsf/p{i}#0", "ucsf", path=str(path))
+            page.meta["tier"] = tier
+            pages.append(page)
+        # A page PIL can open normally, to prove the scan is not just failing everything.
+        assert Image.open(pages[0].path)
+        mods["common"].write_manifest(pages, tmp_path / "corpus.jsonl")
+        return tmp_path
+
+    def test_a_clean_corpus_passes(self, mods, tmp_path, capsys):
+        corpus = self._corpus(mods, tmp_path)
+        assert mods["build"].scan(corpus) == 0
+        assert "2 page(s); 0 undecodable" in capsys.readouterr().out
+
+    def test_a_truncated_page_is_named_and_the_exit_code_says_so(self, mods, tmp_path, capsys):
+        corpus = self._corpus(mods, tmp_path, truncate=True)
+        assert mods["build"].scan(corpus) == 1
+        out = capsys.readouterr().out
+        assert "1 undecodable" in out and "ucsf/p1#0" in out
+
+    def test_it_stays_strict_even_when_truncated_loading_is_globally_on(self, mods, tmp_path, monkeypatch):
+        # The whole mechanism.  Under a permissive decode a truncated PNG loads
+        # to the right size with the missing rows filled in, so the scan would
+        # pass on exactly the file it is looking for.
+        from PIL import ImageFile
+
+        monkeypatch.setattr(ImageFile, "LOAD_TRUNCATED_IMAGES", True)
+        corpus = self._corpus(mods, tmp_path, truncate=True)
+        assert mods["build"].scan(corpus) == 1
+        assert ImageFile.LOAD_TRUNCATED_IMAGES is True, "the global flag was not restored"
+
+    def test_a_tier_filter_only_scans_that_tier(self, mods, tmp_path, capsys):
+        corpus = self._corpus(mods, tmp_path, truncate=True)
+        assert mods["build"].scan(corpus, {"s"}) == 0
+        assert "1 page(s); 0 undecodable" in capsys.readouterr().out
+
+    def test_a_missing_manifest_is_reported_rather_than_traced(self, mods, tmp_path, capsys):
+        assert mods["build"].scan(tmp_path / "nowhere") == 1
+        assert "no manifest" in capsys.readouterr().out
+
+
 class TestManifest:
     def test_round_trips_marks_and_meta(self, mods, tmp_path):
         pages = [

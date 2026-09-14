@@ -369,7 +369,7 @@ def _render_to_disk(
     for idx, (_name, image) in enumerate(rendered[:max_pages_per_doc]):
         image_path = out_dir / f"{doc_id}_{idx}.png"
         if not image_path.exists():
-            image.save(image_path)
+            _common.save_verified(image, image_path)
         out.append((idx, str(image_path), image.width, image.height))
     return out
 

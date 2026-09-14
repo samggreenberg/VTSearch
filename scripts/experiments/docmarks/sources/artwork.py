@@ -108,7 +108,7 @@ def build_pool_from_logodet(
         if not dest.exists():
             with Image.open(image_path) as im:
                 x, y, w, h = box
-                im.convert("RGBA").crop((x, y, x + w, y + h)).save(dest)
+                _common.save_verified(im.convert("RGBA").crop((x, y, x + w, y + h)), dest)
         pool[key] = dest
     return pool
 
