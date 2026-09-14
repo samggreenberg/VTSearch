@@ -680,6 +680,7 @@ VTSearch reads several optional environment variables:
 |----------|---------|-------------|
 | `VTSEARCH_SECRET_KEY` | `vtsearch-dev-key-change-in-production` | Flask session secret key (set this in production) |
 | `VTSEARCH_LOG_LEVEL` | `WARNING` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`); `INFO`/`DEBUG` also enable the per-request access log. `python app.py -v`/`-vv` is the CLI shortcut. |
+| `VTSEARCH_LOG_FILE` | unset | Also append every log record (and the stall watchdog's thread dump) to this file; the SLURM launcher sets it under `data/logs/`. |
 | `VTSEARCH_MODELS_DIR` | `data/models` | Directory for HuggingFace model cache |
 | `VTSEARCH_PORT` | `5000` | Port for the `python app.py` dev server (also `--port`). Lets several instances share a host, e.g. co-located SLURM jobs. Gunicorn uses `VTSEARCH_BIND` instead. |
 | `VTSEARCH_SERVER_INIT` | unset | Set to `1` when running under gunicorn; triggers model init / settings sync at import time |

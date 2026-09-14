@@ -104,9 +104,18 @@ cat > "$RUNNER" <<'REMOTE'
             echo
             echo ">>> Starting app.py  (Ctrl+C stops it but keeps the node)..."
             echo
+            # Persist the app log beside the data dir: the tmux pane this runs
+            # in is the only other copy, and a stall that nobody was watching
+            # (issue #3853) left no trace once the pane scrolled. One file per
+            # start, so a restart never appends to a previous run's log.
+            # VTSEARCH_LOG_FILE is also where the stall watchdog's thread dump
+            # lands (see docs/DEPLOYMENT.md, "Diagnosing a stall").
+            mkdir -p "$VTS_DIR/data/logs"
+            log_file="$VTS_DIR/data/logs/app-$(hostname -s)-$(date +%Y%m%d-%H%M%S).log"
+            echo ">>> App log: $log_file"
             # Embedders run on CPU; give torch all the cores SLURM gave us
             # (default is 1 thread, which is painfully slow for SigLIP etc.).
-            VTSEARCH_TORCH_THREADS=${SLURM_CPUS_ON_NODE:-8} python app.py
+            VTSEARCH_LOG_FILE="$log_file" VTSEARCH_TORCH_THREADS=${SLURM_CPUS_ON_NODE:-8} python app.py
             echo
             echo ">>> app.py stopped. GPU node ($node) is still yours."
             # Inner prompt loop so "i" (reinstall) can re-prompt instead of

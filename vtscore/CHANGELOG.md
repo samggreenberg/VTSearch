@@ -10,6 +10,20 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`vtscore.concurrency.stalls`** (issue #3853): in-process stall
+  diagnostics. `StallWatchdog` is a heartbeat thread that, when it wakes late
+  by more than a threshold, logs which threads consumed CPU across the gap
+  (from `/proc`), the process CPU-to-wall ratio, page faults, RSS, cgroup
+  memory counters and GC pauses, and re-arms
+  `faulthandler.dump_traceback_later` on every beat so a miss dumps every
+  thread's frames from *inside* the stall. `install_gc_pause_logging` logs
+  long collections; `PhaseClock` and `timed_lock` are the slow-path breakdown
+  and lock-wait timers now on the learned-sort retrain
+  (`run_learned_sort`, `_train_and_score_xy`), the per-vote labelset rewrite,
+  the labeling-status replay and `ensure_votes_match_active_dataset`. All
+  silent below their `VTSEARCH_*_MS` thresholds; `start_stall_diagnostics_from_env`
+  is the one call an app makes.
+
 - **`FoldAnchoredCut.n_unconverged`, and a provenance that names it** (issue
   #3825). A fold whose anchored refit exhausted `max_iter` is not the estimator
   anyone specified, and until #3825 nothing reported it. The cut now carries

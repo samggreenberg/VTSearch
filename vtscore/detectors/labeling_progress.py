@@ -291,7 +291,13 @@ def invalidate_progress_cache_from(media_id: int) -> None:
     Scoped to the active pair: a polarity flip on one detector says nothing
     about another's cache.
     """
-    with _progress_lock:
+    import logging  # noqa: PLC0415
+
+    from vtscore.concurrency.stalls import timed_lock  # noqa: PLC0415
+
+    # Runs inline in the vote request; a long wait here is the vote queued
+    # behind the labeling-status worker's replay (issue #3853).
+    with timed_lock(_progress_lock, "_progress_lock/invalidate"):
         cache = _active_cache()
 
         # Find the first cached step that includes media_id in its training data.
@@ -307,6 +313,17 @@ def invalidate_progress_cache_from(media_id: int) -> None:
             # without building the progress cache.
             cache.live_models.clear()
             return
+
+        # Every discarded step is one the worker replays (scoring the whole
+        # pool per model-bearing step) under this same lock, so the size of
+        # the truncation is the size of the stall it can cause.
+        logging.getLogger(__name__).info(
+            "progress cache truncated at step %d of %d (media %d relabeled); %d steps to replay",
+            truncate_at,
+            len(cache.steps),
+            media_id,
+            len(cache.steps) - truncate_at,
+        )
 
         # Keep steps [0, truncate_at); discard the rest.
         del cache.steps[truncate_at:]
@@ -359,8 +376,12 @@ def inject_live_model(
     is stored on the active pair's cache, keyed by its label set, so
     ``_ensure_cache`` can look it up instead of retraining from scratch.
     """
+    from vtscore.concurrency.stalls import timed_lock  # noqa: PLC0415
+
     key = (frozenset(good_votes), frozenset(bad_votes))
-    with _progress_lock:
+    # The learned-sort thread parks its model here; if the labeling-status
+    # worker is mid-replay the sort result waits on it (issue #3853).
+    with timed_lock(_progress_lock, "_progress_lock/inject_live_model"):
         _active_cache().live_models[key] = (model, threshold)
 
 
@@ -791,10 +812,23 @@ def _advance_cache(
         behind = rebuilding or len(cache.steps) < len(label_history)
         needs_pool = behind and bool(cache.live_models)
 
-    pool = _build_pool(clips_dict) if needs_pool else None
+    from vtscore.concurrency.stalls import PhaseClock, timed_lock  # noqa: PLC0415
 
-    with _progress_lock:
-        return _ensure_cache(clips_dict, label_history, inclusion_value, pool)
+    # Every step replayed here that carries a model scores the whole pool, and
+    # the replay holds ``_progress_lock`` throughout - so a long replay (a
+    # polarity flip truncating a long history) is felt by every caller that
+    # touches the lock.  The breakdown is logged only when slow (issue #3853).
+    clock = PhaseClock("labeling_status_advance", history=len(label_history), corpus=len(clips_dict), pool=needs_pool)
+    pool = _build_pool(clips_dict) if needs_pool else None
+    clock.mark("build_pool")
+
+    with timed_lock(_progress_lock, "_progress_lock/advance"):
+        clock.mark("lock_wait")
+        before = len(_active_cache().steps)
+        cache = _ensure_cache(clips_dict, label_history, inclusion_value, pool)
+        clock.mark("replay")
+    clock.finish(steps=len(cache.steps) - before)
+    return cache
 
 
 # ---------------------------------------------------------------------------
@@ -1272,7 +1306,9 @@ def is_status_cache_fresh(label_history: list[tuple[int, str, float]], inclusion
     here would only mean a brand-new detector - no votes, no steps, nothing to
     compute - reported its indicators as "computing" for one extra poll.
     """
-    with _progress_lock:
+    from vtscore.concurrency.stalls import timed_lock  # noqa: PLC0415
+
+    with timed_lock(_progress_lock, "_progress_lock/status_fresh"):
         return _cache_covers_history(_active_cache(), label_history, inclusion_value)
 
 
@@ -1314,8 +1350,10 @@ def stale_labeling_status(
     poll after a detector switch / session start) - a transient "computing"
     placeholder.  The caller stamps ``stale = True`` on the result.
     """
+    from vtscore.concurrency.stalls import timed_lock  # noqa: PLC0415
+
     status = _pending_labeling_status(current_good_votes, current_bad_votes, span_info)
-    with _progress_lock:
+    with timed_lock(_progress_lock, "_progress_lock/stale_status"):
         # Reading the snapshot off the *active pair's* cache is what stops one
         # detector's indicators being handed to another; a detector with no
         # snapshot of its own shows the "computing" placeholder instead.

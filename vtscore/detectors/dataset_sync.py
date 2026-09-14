@@ -68,10 +68,34 @@ def _detector_file_mtime_cached(path) -> float:
     return mtime
 
 
+def prime_detector_file_mtime(path, mtime: float) -> None:
+    """Record *mtime* as the freshly-observed mtime of *path* in the TTL cache.
+
+    Called by the writers that also stamp ``cached_labelset_mtime`` (the
+    per-vote labelset rewrite, a rehydrate, a labelset re-point).  Without it
+    the pre-check keeps comparing the new stamp against a TTL-cached value
+    from *before* the write for up to ``_MTIME_CHECK_INTERVAL``, so every
+    request in that window - the SPA fires about ten per vote - re-parses the
+    whole detector JSON only to find the file already fresh under the lock
+    (issue #3853: measured at ~12 spurious parses per vote).
+    """
+    with _mtime_cache_lock:
+        _mtime_cache[str(path)] = (time.monotonic(), mtime)
+
+
 def reset_mtime_cache_for_tests() -> None:
     """Drop the TTL-cached detector-file mtimes (test isolation only)."""
     with _mtime_cache_lock:
         _mtime_cache.clear()
+
+
+def _rehydrate_reason(det_ctx, ds_ctx) -> str:
+    """Why :func:`ensure_votes_match_active_dataset` got past its freshness check."""
+    if det_ctx.votes_dataset_id != ds_ctx.dataset_id:
+        return "dataset switch"
+    if det_ctx.cached_labelset is None:
+        return "no cached labelset"
+    return "detector file mtime changed"
 
 
 def ensure_votes_match_active_dataset() -> None:
@@ -159,8 +183,24 @@ def ensure_votes_match_active_dataset() -> None:
         _repoint_labelset_cache(det_ctx, path)
         return
 
+    import logging  # noqa: PLC0415
+
+    from vtscore.concurrency.stalls import PhaseClock, timed_lock  # noqa: PLC0415
+
+    # A rehydrate mid-session is worth a line on its own (issue #3853): one
+    # triggered by the detector file's mtime - rather than by a dataset switch
+    # - means a request saw the file change under it, which the per-vote
+    # rewrite makes possible.  The clock logs the cost only when it was slow.
+    reason = _rehydrate_reason(det_ctx, ds_ctx)
+    logging.getLogger(__name__).info(
+        "rehydrating votes for detector %s on dataset %s: %s", det_ctx.detector_id, ds_ctx.dataset_id, reason
+    )
+    clock = PhaseClock("rehydrate", detector=det_ctx.detector_id, dataset=ds_ctx.dataset_id, reason=reason)
+
     data = _read_detector(path)
+    clock.mark("read_detector")
     if data is None:
+        clock.finish(outcome="file missing")
         # Detector file missing. Still mark the dataset transition so we
         # don't keep stale cids around.
         with _state_lock:
@@ -189,7 +229,8 @@ def ensure_votes_match_active_dataset() -> None:
     from vtscore.datasets.labelset import LabelSet
     from vtscore.state.coverage import resync_coverage_atlas_to_detector
 
-    with _state_lock:
+    with timed_lock(_state_lock, "_state_lock/rehydrate"):
+        clock.mark("lock_wait")
         # Re-check inside the lock; another request may have rehydrated us.
         refreshed_mtime = _detector_file_mtime(path)
         if (
@@ -198,6 +239,12 @@ def ensure_votes_match_active_dataset() -> None:
             and det_ctx.cached_labelset_mtime == refreshed_mtime
             and refreshed_mtime != 0.0
         ):
+            # The pre-check's TTL-cached mtime lagged a write this request
+            # raced with (the per-vote labelset rewrite); nothing to redo.
+            ms = clock.finish(outcome="already fresh")
+            logging.getLogger(__name__).info(
+                "rehydrate for detector %s: already fresh (%.0fms)", det_ctx.detector_id, ms
+            )
             return
         det_ctx.good_votes.clear()
         det_ctx.bad_votes.clear()
@@ -217,9 +264,11 @@ def ensure_votes_match_active_dataset() -> None:
         # "out of date" marker must not outlive it.
         det_ctx.find_eval_stale = False
         restore_labels_from_detector(data)
+        clock.mark("restore_labels")
         det_ctx.votes_dataset_id = ds_ctx.dataset_id
         det_ctx.cached_labelset = LabelSet.from_dict(data.get("labelset") or {})
         det_ctx.cached_labelset_mtime = refreshed_mtime
+        prime_detector_file_mtime(path, refreshed_mtime)
         det_ctx.cached_labelset_media_type = data.get("media_type", "") or ""
         # The dataset's coverage atlas was either built for a previous
         # detector on this dataset (so its evidence state reflects that
@@ -230,6 +279,12 @@ def ensure_votes_match_active_dataset() -> None:
         # ``label_restoration.py``) and therefore skip the per-vote atlas
         # update; this is where the equivalent bulk update lands.
         resync_coverage_atlas_to_detector(ds_ctx, det_ctx)
+        clock.mark("resync_atlas")
+    n_labels = len(det_ctx.cached_labelset.elements)
+    ms = clock.finish(labels=n_labels)
+    logging.getLogger(__name__).info(
+        "rehydrate for detector %s: restored %d labels in %.0fms (%s)", det_ctx.detector_id, n_labels, ms, reason
+    )
 
 
 def end_find_session() -> bool:
@@ -302,6 +357,7 @@ def _repoint_labelset_cache(det_ctx, path) -> None:
         # TTL-cached pre-check value), so the stamp always describes the bytes
         # in ``cached_labelset``.
         det_ctx.cached_labelset_mtime = _detector_file_mtime(path)
+        prime_detector_file_mtime(path, det_ctx.cached_labelset_mtime)
         det_ctx.cached_labelset_media_type = data.get("media_type", "") or det_ctx.cached_labelset_media_type
         det_ctx.labelset_good_count = sum(1 for el in labelset.elements if el.label == "good")
         det_ctx.labelset_bad_count = sum(1 for el in labelset.elements if el.label == "bad")
