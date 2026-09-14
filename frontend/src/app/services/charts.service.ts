@@ -183,6 +183,10 @@ export class ChartsService {
 
     const numLabels = data.map((d) => d.num_labels);
     const numFlips = data.map((d) => d.num_flips);
+    // The flips the Stable indicator judges on: items that sat clear of the
+    // cutoff under both detectors. The gap between the two lines is boundary
+    // wobble, which on an inseparable category never goes away (#3831).
+    const numConfident = data.map((d) => d.num_confident_flips);
     const maxLabels = Math.max(...numLabels);
     const maxFlips = Math.max(...numFlips, 1);
 
@@ -193,11 +197,17 @@ export class ChartsService {
     this.drawGrid(ctx, canvas.width, canvas.height, palette.borderSubtle);
 
     const xs = numLabels.map(xScale);
-    const ys = numFlips.map(yScale);
-    this.drawLine(ctx, xs, ys, palette.colorGood);
+    this.drawLine(ctx, xs, numFlips.map(yScale), palette.textMuted);
+    this.drawLine(ctx, xs, numConfident.map(yScale), palette.colorGood);
+
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillStyle = palette.textMuted;
+    ctx.fillText('all flips', canvas.width - this.padding.right, top + 12);
+    ctx.fillStyle = palette.colorGood;
+    ctx.fillText('confident flips', canvas.width - this.padding.right, top + 26);
 
     ctx.fillStyle = palette.textSecondary;
-    ctx.font = '12px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('Number of Labels', canvas.width / 2, canvas.height - 10);
 

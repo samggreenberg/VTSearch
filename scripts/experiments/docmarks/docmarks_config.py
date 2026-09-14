@@ -299,6 +299,44 @@ def cluster_threshold_for(source: str) -> float:
 ANCHOR_SOURCES: frozenset[str] = frozenset({"spods", "staver", "tobacco800"})
 
 # --------------------------------------------------------------------------
+# Query crops
+# --------------------------------------------------------------------------
+
+#: How far past its class's own median distance an instance may sit and still be
+#: eligible as that class's query crop, in robust standard deviations of that
+#: class's own distances (MAD x 1.4826).
+#:
+#: The exemplar is the largest boxed instance *drawn from the class's core*, not
+#: the largest outright: `spods/stamp_00489_1` holds three different rubber
+#: stamps and its largest box is the one that appears nowhere else in the class,
+#: so the eval searched 24 instances of one stamp with a crop of another
+#: (#3599).  Three sigma is the usual outlier bar and is deliberately loose
+#: here: excluding a good instance costs a slightly smaller crop, so the screen
+#: is set to fire only on an instance the class itself calls strange.
+#:
+#: It is a number of the class's own sigmas and not a distance on purpose -- see
+#: `cluster_marks.medoid_core` for why an absolute descriptor distance is not
+#: evidence about identity here.
+QUERY_CORE_SPREAD = float(os.environ.get("VTS_DOCMARKS_QUERY_CORE_SPREAD", "3.0"))
+
+#: The share of its class the chosen crop must *reach* before the build accepts
+#: it silently: the fraction of the class's boxed instances lying within the
+#: source's own merge threshold of the crop.
+#:
+#: This is the guard, and it is deliberately not a distance.  "Reach" is counted
+#: at `cluster_threshold_for(source)` -- the distance at which this corpus
+#: already decided two marks are one mark -- so it introduces no new number and
+#: asks the one question that matters: does the crop we are about to search with
+#: look like the class we are about to search for?  Half, because a crop that
+#: speaks for a minority of its class is by definition not its exemplar,
+#: whichever mark the majority turns out to be.
+#:
+#: A warning and never a refusal: the crop is still written (a class with no
+#: crop quietly drops out of the eval instead), but the class wants
+#: `make_audit_slate.py --task cluster` before its numbers are quoted.
+QUERY_CROP_MIN_REACH_FRAC = float(os.environ.get("VTS_DOCMARKS_QUERY_CROP_MIN_REACH_FRAC", "0.5"))
+
+# --------------------------------------------------------------------------
 # Synthesis (layer 3)
 # --------------------------------------------------------------------------
 

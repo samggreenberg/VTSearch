@@ -11,7 +11,11 @@ can be diffed against its two sources by eye:
 * :func:`smart_status`, :func:`stable_status`, and :func:`span_status` mirror
   ``_compute_smart_status`` / ``_compute_stable_status`` / ``_compute_span_status``
   in :mod:`vtscore.detectors.labeling_progress`, which is what the app's
-  ``/api/labeling-status`` poll feeds into the phase machine.
+  ``/api/labeling-status`` poll feeds into the phase machine.  Only Span is
+  still a copy: Smart and Stable are one-line wrappers over
+  :mod:`vtscore.detectors.cost_trend` (issue #3832) and
+  :mod:`vtscore.detectors.stability` (issue #3831), which the app calls too, so
+  neither rule can drift from the light the user reads.
 
 Why a port rather than a call: the phase machine itself lives in TypeScript, so
 there is nothing to import; and the indicator functions in
@@ -46,6 +50,23 @@ from __future__ import annotations
 
 from typing import Any, Literal, Optional
 
+from vtscore.detectors.cost_trend import (
+    SMART_FLAT_THRESHOLD,
+    SMART_MIN_POINTS,
+    SMART_SLOPE_T,
+    SMART_WINDOW,
+    smart_status_from_costs,
+)
+from vtscore.detectors.stability import (
+    MIN_PER_CLASS,
+    STABLE_MAX_THRESHOLD,
+    STABLE_MIN_ENTRIES,
+    STABLE_RATE_THRESHOLD,
+    STABLE_WINDOW,
+    ScoredSnapshot,
+    stability_entry,
+    stable_status_from_entries,
+)
 from vtscore.eval.startup_schedule import StartupState, is_startup_phase
 
 Phase = Literal["idle", "good", "bad", "hard", "new", "done", "exhausted"]
@@ -58,22 +79,32 @@ GOOD_TARGET = 3
 BAD_TARGET = 4
 
 # ``_compute_smart_status`` / ``_compute_stable_status``: both indicators stay
-# red until the labelset has at least this many of each class.
-MIN_PER_CLASS = 5
+# red until the labelset has at least this many of each class.  ``MIN_PER_CLASS``
+# is owned by ``vtscore.detectors.stability`` and re-exported here, with the
+# Stable constants below, so a study can name every gate from one place.
 
-# ``_compute_smart_status``: window of recent steps the error-cost trend is
-# regressed over, the minimum number of points that makes a trend meaningful,
-# and the relative-slope cutoff below which the cost is still falling.
-SMART_WINDOW = 10
-SMART_MIN_POINTS = 3
-SMART_FLAT_THRESHOLD = -0.015
+# ``_compute_smart_status``: the window of recent models the error-cost trend
+# is regressed over, the minimum number of points that makes a trend
+# meaningful, the relative-slope cutoff below which the cost is still falling,
+# and how many standard errors below zero that slope must sit before the
+# decline is believed rather than read as noise (issue #3832).  All four are
+# owned by ``vtscore.detectors.cost_trend`` and re-exported here, with the
+# Stable constants below, so a study can name every gate from one place.
 
 # ``_compute_stable_status``: the flip-rate window and its two cutoffs — the
-# average must be under 0.5% and no single recent step above 1%.
-STABLE_WINDOW = 10
-STABLE_MIN_ENTRIES = 5
-STABLE_RATE_THRESHOLD = 0.005
-STABLE_MAX_THRESHOLD = 0.01
+# confident-flip average must be under 0.5% of the pool and no single recent
+# step at 1%.  Re-exported from ``vtscore.detectors.stability``.
+__all__ = [
+    "MIN_PER_CLASS",
+    "SMART_FLAT_THRESHOLD",
+    "SMART_MIN_POINTS",
+    "SMART_SLOPE_T",
+    "SMART_WINDOW",
+    "STABLE_MAX_THRESHOLD",
+    "STABLE_MIN_ENTRIES",
+    "STABLE_RATE_THRESHOLD",
+    "STABLE_WINDOW",
+]
 
 # ``_compute_span_status``: yellow once this many atlas nodes carry evidence;
 # green at ``autopilot_goal_diversity`` (default 40), capped at the tree size.
@@ -82,56 +113,28 @@ SPAN_GREEN_DEFAULT = 40
 
 
 def smart_status(recent_error_costs: list[float], good: int, bad: int) -> Status:
-    """Port of ``_compute_smart_status``: has the error cost levelled off?
+    """The app's ``_compute_smart_status``: has the error cost levelled off?
 
     *recent_error_costs* are the per-step costs of the last :data:`SMART_WINDOW`
     cached models, each scored against the **current** labelset (never the
     held-out test split — the app has no test labels, and using them here would
-    leak into the vote order).  Green once the least-squares slope, normalised
-    by the mean cost, stops falling faster than :data:`SMART_FLAT_THRESHOLD`.
+    leak into the vote order).  Not a port: the rule is
+    :func:`~vtscore.detectors.cost_trend.smart_status_from_costs`, which the app
+    calls too, so the harness reads the same light as the user.
     """
-    if good < MIN_PER_CLASS or bad < MIN_PER_CLASS:
-        return "red"
-    costs = list(recent_error_costs)[-SMART_WINDOW:]
-    if len(costs) < SMART_MIN_POINTS:
-        return "yellow"
-
-    n_pts = len(costs)
-    x_vals = list(range(n_pts))
-    x_mean = sum(x_vals) / n_pts
-    y_mean = sum(costs) / n_pts
-    numer = sum((x_vals[i] - x_mean) * (costs[i] - y_mean) for i in range(n_pts))
-    denom = sum((x_vals[i] - x_mean) ** 2 for i in range(n_pts))
-    slope = numer / denom if denom != 0 else 0.0
-    relative_slope = slope / y_mean if y_mean > 0 else slope
-
-    return "yellow" if relative_slope < SMART_FLAT_THRESHOLD else "green"
+    return smart_status_from_costs(recent_error_costs, good, bad)["status"]  # type: ignore[return-value]
 
 
 def stable_status(stability_entries: list[dict[str, Any]], good: int, bad: int) -> Status:
-    """Port of ``_compute_stable_status``: have predictions stopped flipping?
+    """The app's ``_compute_stable_status``: have predictions stopped flipping?
 
-    Each entry is ``{"num_flips": int, "num_unlabeled": int}`` for one step —
-    how many unlabeled items changed predicted class since the previous step.
-    Keyed off the flip *rate* rather than a raw count so the cutoff means the
-    same thing on a 1k and a 1M item collection.
+    Each entry is one :func:`vtscore.detectors.stability.stability_entry`
+    record for one retraining - raw and *confident* flip counts over the
+    still-unlabeled pool, with the whole pool as denominator.  Not a port: the
+    rule is :func:`~vtscore.detectors.stability.stable_status_from_entries`,
+    which the app calls too, so the harness reads the same light as the user.
     """
-    if good < MIN_PER_CLASS or bad < MIN_PER_CLASS:
-        return "red"
-    if len(stability_entries) < STABLE_MIN_ENTRIES:
-        return "yellow"
-
-    recent = stability_entries[-STABLE_WINDOW:]
-    flip_rates: list[float] = []
-    for s in recent:
-        n_unlabeled = s.get("num_unlabeled", 0)
-        flip_rates.append(s["num_flips"] / n_unlabeled if n_unlabeled > 0 else 0.0)
-
-    avg_flip_rate = sum(flip_rates) / len(flip_rates)
-    max_flip_rate = max(flip_rates)
-    if avg_flip_rate < STABLE_RATE_THRESHOLD and max_flip_rate < STABLE_MAX_THRESHOLD:
-        return "green"
-    return "yellow"
+    return stable_status_from_entries(stability_entries, good, bad)["status"]
 
 
 def span_status(level: int, depth: int, green_at: int = SPAN_GREEN_DEFAULT) -> Status:
@@ -283,7 +286,7 @@ class AutopilotFlow:
         #: costs, all against the *current* labelset.  Replaced, never appended.
         self.recent_error_costs: list[float] = []
         self.stability: list[dict[str, Any]] = []
-        self._prev_predictions: Optional[dict[int, int]] = None
+        self._prev_snapshot: Optional[ScoredSnapshot] = None
         #: The three indicator lights behind the phase, as of the last
         #: :meth:`update`.  The phase alone cannot say which of Smart and Stable
         #: is holding a trajectory in ``hard`` - both gate that transition
@@ -304,7 +307,14 @@ class AutopilotFlow:
         self.span_level: int = -1
         self.span_depth: int = -1
 
-    def record_step(self, error_costs: list[float] | None, predictions: dict[int, int] | None) -> None:
+    def record_step(
+        self,
+        error_costs: list[float] | None,
+        scores: dict[int, float] | None,
+        threshold: float | None = None,
+        *,
+        num_pool: int | None = None,
+    ) -> None:
         """Fold one step's model into the Smart / Stable inputs.
 
         *error_costs* is the freshly re-scored Smart window — the weighted
@@ -313,19 +323,25 @@ class AutopilotFlow:
         ``None`` means no model was trained this step, leaving the window as it
         stands; an empty list means there was nothing usable to score against
         (either vote class empty), which the app also reports as an empty
-        window.  *predictions* maps each still-unlabeled pool id to its
-        predicted class, from which the flip count against the previous step is
-        derived.
+        window.  *scores* maps each still-unlabeled pool id to this step's
+        served score and *threshold* is the cut applied to them; the flip
+        counts against the previous step are derived from the pair exactly as
+        the app derives them (:func:`vtscore.detectors.stability.stability_entry`).
+        *num_pool* is the whole haystack size the rates are taken over; it
+        defaults to the scored ids plus nothing, which is right only for a
+        caller that scores every pool item including the labeled ones.
         """
         if error_costs is not None:
             self.recent_error_costs = list(error_costs)
-        if predictions is None:
+        if scores is None:
             return
-        if self._prev_predictions is not None:
-            shared = predictions.keys() & self._prev_predictions.keys()
-            num_flips = sum(1 for cid in shared if predictions[cid] != self._prev_predictions[cid])
-            self.stability.append({"num_flips": num_flips, "num_unlabeled": len(predictions)})
-        self._prev_predictions = dict(predictions)
+        if threshold is None:
+            raise ValueError("a threshold is required alongside the pool scores")
+        snapshot = ScoredSnapshot.from_scores(scores, threshold)
+        pool_size = len(snapshot.scores) if num_pool is None else num_pool
+        if self._prev_snapshot is not None:
+            self.stability.append(stability_entry(self._prev_snapshot, snapshot, pool_size))
+        self._prev_snapshot = snapshot
 
     def update(self, good_count: int, bad_count: int, remaining_unlabeled: float, span: dict[str, Any] | None) -> Phase:
         """Recompute and return the phase after a vote.

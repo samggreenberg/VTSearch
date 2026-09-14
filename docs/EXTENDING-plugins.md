@@ -761,9 +761,12 @@ Two related checks you will hit:
   embedder's declared `embedding_dim`.  Declaring `siglip2_l` while shipping
   768-dim rows is a self-contradiction, and it is rejected at import.
 - **Nameless vectors.** A vector supplied with no embedder name is stored under
-  a sentinel key and re-keyed to the embedder the load actually picked.  That
-  re-keying asserts the vector lives in that embedder's space, so it is
-  width-checked too — supply the name yourself if you know it.
+  a sentinel key and re-keyed to the embedder the load actually picked — the
+  user's pick, or, when nothing was picked and the framework had items of
+  yours to embed, the media-type default it resolved.  That re-keying asserts
+  the vector lives in that embedder's space, so it is width-checked too —
+  supply the name yourself if you know it.  A fully pre-computed nameless
+  import with nothing left to embed keeps the sentinel and is never re-keyed.
 
 When building dicts directly, the importer should also override
 `build_origin()` to return an empty origin (since the default
@@ -926,8 +929,10 @@ API contract: every plugin family that renders a field form has an options
 route of the same shape — `POST /api/dataset/import/<name>/options`
 (dataset importers), `POST /api/label-importers/field-options/<name>`,
 `POST /api/datasource-import/<name>/options`,
-`POST /api/seed-import/<name>/options`, and
-`POST /api/exporters/field-options/<name>` (results exporters). With body
+`POST /api/seed-import/<name>/options`,
+`POST /api/exporters/field-options/<name>` (results exporters),
+`POST /api/settings-importers/field-options/<name>`, and
+`POST /api/settings-exporters/field-options/<name>`. With body
 `{"field_key": "...", "values": {...}}` each returns
 `{"options": [{"value": "...", "label": "..."}, ...]}` — both the plain-
 string and `(value, label)` shapes are coerced to `{value, label}` before
@@ -1900,11 +1905,23 @@ SETTINGS_IMPORTER = S3SettingsImporter()
 |-----------|---------|-------------|
 | `icon` | `"⚙️"` | Emoji shown in the UI |
 
+### Dynamic select options
+
+Dynamic select options work exactly as for dataset importers: declare a
+field with `dynamic_options=True` and implement
+`get_field_options(field_key, current_values)`
+(see [Dynamic field options](#dynamic-field-options)). The Import Settings
+modal pre-fetches them the same way every other plugin-field form does, so
+an options list that is only knowable at runtime (remote profiles, buckets,
+saved configurations) fills in there too.
+
 ### How it gets invoked
 
 1. `GET /api/settings-importers` returns available importers.
 2. `POST /api/settings-importers/import/<name>` invokes `run()` and applies
    the returned settings.
+3. `POST /api/settings-importers/field-options/<name>` serves dynamic field
+   options.
 
 ---
 
@@ -1980,6 +1997,12 @@ SETTINGS_EXPORTER = S3SettingsExporter()
 |-----------|---------|-------------|
 | `icon` | `"📤"` | Emoji shown in the UI |
 
+### Dynamic select options
+
+Same as for the settings importer above: `dynamic_options=True` plus
+`get_field_options(field_key, current_values)`, honoured by the Export
+Settings modal.
+
 ### How it gets invoked
 
 1. `GET /api/settings-exporters` returns available exporters.
@@ -1993,7 +2016,10 @@ SETTINGS_EXPORTER = S3SettingsExporter()
 
    Note the asymmetry with the settings-*importer* sibling, which does
    keep the name in the path
-   (`POST /api/settings-importers/import/<importer_name>`).
+   (`POST /api/settings-importers/import/<importer_name>`). The
+   field-options route below keeps the name in the path on both sides.
+3. `POST /api/settings-exporters/field-options/<name>` serves dynamic field
+   options.
 
 ---
 

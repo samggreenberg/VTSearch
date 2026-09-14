@@ -57,6 +57,17 @@ EMBEDDERS: dict[str, dict[str, Any]] = {
 
 
 def _load_by_path(name: str, path: Path) -> Any:
+    """Import a module from a file, with its own directory importable.
+
+    The directory matters: these modules are written to be run from inside
+    their own experiment directory and import their siblings by bare name.
+    ``_cells_io`` does ``from _cells_paths import ...`` — the discovery half of
+    itself, split out so the pandas-free figure scripts can share it — and
+    loading it by path alone leaves that import with nowhere to resolve from.
+    """
+    directory = str(path.parent)
+    if directory not in sys.path:
+        sys.path.append(directory)
     spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
         raise SystemExit(f"cannot load {path}")
@@ -266,6 +277,24 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     unknown = set(requested) - set(EMBEDDERS)
     if unknown:
         ap.error(f"unknown embedder(s): {sorted(unknown)}; known: {sorted(EMBEDDERS)}")
+
+    # Resolve the write path BEFORE embedding anything.  This is a preflight
+    # rather than a tidiness: the cost of a cell is entirely in the embedding,
+    # and `dump_medias` is the last line of it, so anything wrong with the
+    # serializer surfaces only after the whole bill has been paid.  It did:
+    # `_cells_io` imports a sibling by bare name, loading it by path left that
+    # import unresolvable, and docmarks_s x sift_vlad died on
+    # ModuleNotFoundError after **2h16m** of SIFT on 5,000 pages (#3343).
+    # Nothing had run this path before, because stage 5 had never been reached.
+    try:
+        io = _cells_io()
+        if not hasattr(io, "dump_medias"):
+            ap.error(f"{_CALIB_DIR / '_cells_io.py'} has no dump_medias; cells cannot be written")
+        _pile_config().EMBEDDINGS.mkdir(parents=True, exist_ok=True)
+    except SystemExit:
+        raise
+    except Exception as exc:  # noqa: BLE001 - the point is to report, early, whatever broke
+        ap.error(f"cannot write cells: {type(exc).__name__}: {exc}")
 
     summaries = [build_cell(args.corpus, args.tier, e, force=args.force) for e in requested]
     built = [s for s in summaries if s["status"] == "built"]

@@ -336,9 +336,9 @@
     "why": "app labelset exports -- the clicks themselves, which `ingest_slate.py` turns into verdicts -- plus the verdict files parked here by hand, one of which is hardcoded in `verdicts_to_corrections.py`'s default"
   },
   "PILE__corrections.json": {
-    "bytes": 191185,
+    "bytes": 190949,
     "rel": "corrections.json",
-    "sha256": "4f785cadc3d533a211f944f6168f80dbef6ce66eb1f18cf10887cce8a9f84fbb",
+    "sha256": "9b1c22f7d90d17ccfc1d9d9fec64daa1b7fd6d939e80ab000fb3ba04e7ab6f0a",
     "source": "{PILE}/corrections.json",
     "tier": "human",
     "why": "the verdicts the build actually reads; reproducible only from the recovered two-campaign recipe in `verdicts_to_corrections.py`, and only while `{WORK3588}` survives"

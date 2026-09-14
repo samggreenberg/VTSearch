@@ -118,6 +118,14 @@ slate)
   # same context twice.  Neither touches a GPU and neither refetches a source --
   # this reads the built corpus and writes PNGs -- so it is minutes, not hours.
   #
+  # "One sitting" is true only once there is a roster.  Membership walks the
+  # classes carrying `on_roster`, and build_corpus stamps that only under
+  # `--roster`, so on a freshly built corpus the second half has nothing to
+  # render.  It used to render nothing quietly -- an empty verdicts.jsonl, a tar
+  # that succeeded, exit 0 -- so a reviewer who took the bundle away believed
+  # both passes were in it (#3601).  make_audit_slate.py now exits 3 for that
+  # case; the bundle then holds the merge sheets alone and the log says why.
+  #
   # MEM is 32G: rendering opens full-resolution scans (SPODS is A4 at 300 dpi,
   # ~2,476x3,480) one at a time, but membership walks every instance of every
   # class, so the page cache is the cost rather than any one image.
@@ -133,10 +141,22 @@ export CUDA_VISIBLE_DEVICES=
 cd "$HERE"
 echo "node=\$(hostname) job=\$SLURM_JOB_ID start=\$(date -Is)"
 python -u make_audit_slate.py --task merge      --corpus "$VTS_DOCMARKS_OUT" || exit 1
-python -u make_audit_slate.py --task membership --corpus "$VTS_DOCMARKS_OUT" || exit 1
-cd "$VTS_DOCMARKS_OUT" && tar czf "audit/docmarks-audit-\$(date +%Y%m%d).tar.gz" audit/merge audit/membership
-echo "bundle: $VTS_DOCMARKS_OUT/audit/docmarks-audit-\$(date +%Y%m%d).tar.gz"
-echo "exit=\$? end=\$(date -Is)"
+
+SHEETS="audit/merge"
+python -u make_audit_slate.py --task membership --corpus "$VTS_DOCMARKS_OUT"
+rc=\$?
+if [ \$rc -eq 0 ]; then
+  SHEETS="audit/merge audit/membership"
+elif [ \$rc -ne 3 ]; then
+  exit 1
+fi
+
+TARBALL="audit/docmarks-audit-\$(date +%Y%m%d).tar.gz"
+cd "$VTS_DOCMARKS_OUT" && tar czf "\$TARBALL" \$SHEETS || exit 1
+echo "bundle: $VTS_DOCMARKS_OUT/\$TARBALL"
+echo "  contains: \$SHEETS"
+[ \$rc -eq 3 ] && echo "  MEMBERSHIP NOT RENDERED -- no roster yet; re-run 'slate' after stage 2"
+echo "end=\$(date -Is)"
 RUNNER_EOF
   chmod +x "$RUNNER"
 

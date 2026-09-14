@@ -958,6 +958,85 @@ class TestConfirmationKeepsItsSeat:
         assert unlucky[0] in chosen
 
 
+class TestRetirementLeavesTheCell:
+    """The `present: false` path, end to end (#3778).
+
+    865 of the live file's 872 rows say `present: true`, so the half of
+    :func:`apply_corrections` that *retires* a positive had never been exercised
+    by anything but a unit test -- and the planter ruling (#3784) retires 21 rows
+    at once, 20 of them `vase` positives sitting in designated cells with the
+    roster pinning them there. Three passes have to agree for that to work, and
+    the failure mode if they do not is the quiet one: a cell that still looks
+    perfect while holding an image its own rule now excludes.
+    """
+
+    def _banded(self, pc, cls: str, band: str, ids: list[int]):
+        """*ids*, each holding one box of *cls* squarely inside *band*."""
+        lo, hi = pc.BOX_BANDS[band]
+        side = (((lo + hi) / 2) * 10000) ** 0.5
+        labels = {i: {cls: [[0.0, 0.0, side, side]]} for i in ids}
+        return labels, {i: (100, 100) for i in ids}
+
+    def test_a_retired_positive_loses_its_pinned_seat_and_is_backfilled(self, vgs, pc):
+        """The roster pins the membership a review was carried out against.
+
+        It must not pin an image the review has since removed: `designate_cells`
+        keeps a pin only while it is still *eligible*, and a retired positive is
+        not in the supply at all. Were it otherwise, a ruling could never take
+        anything out of a cell it had already been reviewed into.
+        """
+        cls, band = pc.SCALE_CLASSES[0], next(iter(pc.BOX_BANDS))
+        cell = pc.scale_cell(cls, band)
+        ids = list(range(1000, 1000 + pc.SCALE_N_POS + 5))
+        labels, box_dims = self._banded(pc, cls, band, ids)
+        retired = ids[0]
+        corrections = {(retired, cls): _verdict(False)}
+        roster = {"cells": {cell: ids[: pc.SCALE_N_POS]}}
+
+        unbanded = vgs.apply_corrections(labels, corrections, box_dims, set())
+        supply, _, _ = vgs.band_candidates(labels, box_dims, unbanded)
+        chosen = vgs.designate_cells(supply, corrections, roster)
+
+        assert labels[retired] == {}, "the class is popped from the image"
+        assert retired not in supply[cls][band]
+        assert retired not in chosen[cell], "a pin is not a licence to keep a retired positive"
+        assert len(chosen[cell]) == pc.SCALE_N_POS, "the seat is backfilled, not left empty"
+
+    def test_a_retired_positive_becomes_a_usable_negative(self, vgs, pc):
+        """What a rejection usually cannot buy: a human said this photo holds none.
+
+        It is the difference between `present: false` and a boxless
+        `present: true`, which lands in ``unbanded`` and is neither.
+        """
+        cls, band = pc.SCALE_CLASSES[0], next(iter(pc.BOX_BANDS))
+        labels, box_dims = self._banded(pc, cls, band, [7])
+        exhaustive: set[int] = set()
+
+        unbanded = vgs.apply_corrections(labels, {(7, cls): _verdict(False)}, box_dims, exhaustive)
+        _, _, clean = vgs.band_candidates(labels, box_dims, unbanded)
+
+        assert clean == [7] and unbanded == set()
+        assert exhaustive == {7}, "somebody looked, so absence here is a fact"
+
+    def test_it_retires_only_the_class_the_reviewer_was_asked_about(self, vgs, pc):
+        """The planter recheck ran per class over images that can hold both.
+
+        `bowl` and `vase` share images in this very pass -- `make_class_recheck`
+        symlinks one file into both datasets -- so a retirement that popped the
+        image rather than the class would delete a positive nobody rejected.
+        """
+        kept, retired_cls = pc.SCALE_CLASSES[0], pc.SCALE_CLASSES[1]
+        band = next(iter(pc.BOX_BANDS))
+        labels, box_dims = self._banded(pc, kept, band, [7])
+        labels[7][retired_cls] = [[0.0, 0.0, 4.0, 4.0]]
+
+        vgs.apply_corrections(labels, {(7, retired_cls): _verdict(False)}, box_dims, set())
+        supply, _, clean = vgs.band_candidates(labels, box_dims, set())
+
+        assert list(labels[7]) == [kept]
+        assert supply[kept][band] == [7] and clean == []
+
+
 class TestDisqualifiedNegatives:
     def test_a_rostered_negative_that_is_no_longer_clean_is_recorded(self, vgs):
         roster = {"negatives": [1, 2, 3], "spares": [4]}

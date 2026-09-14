@@ -86,8 +86,10 @@ share of any name's boxes misses COCO's for reasons that have nothing to do with
 vocabulary (a box drawn round the shelf rather than the volume, an object COCO
 simply did not annotate). So read the column as an ordering of attention, not as
 a rate of anything — and note that **`dog` and `bus` sit on the floor**, which
-is why `dog` is the one class of the twelve with no rule: its name is the whole
-question.
+is why `dog` went furthest without a written rule: its name is very nearly the
+whole question. Very nearly is not the same as entirely, and the one thing the
+name does not settle is a **wolf** (#3771), so it now carries a rule like the
+rest.
 
 ## The rulings, in one line each
 
@@ -96,9 +98,12 @@ The full wording is in `SCALE_CLASS_RULES`; these are the discriminations.
 - **Clock** — a device whose job is showing the time and which stands, hangs or
   is mounted. **Not a wristwatch**, not a departure board, not a clock drawn on
   a screen.
-- **Bird** — any live bird of any species. **Not a cooked one**: in VG,
-  `chicken` (428 images, 10%) and `turkey` (53, 12%) are usually food, and
-  `crane` (308, 2%) is a machine.
+- **Bird** — any **whole** bird of any species, **alive or dead**: prey in
+  another bird's beak, one lying dead, and a taxidermy mount, which is the
+  animal itself rather than a figurine of one (#3789). **Death is not the test,
+  food is** — a bird **prepared as food**, cooked or plucked or butchered, is
+  not one, because in VG `chicken` (428 images, 10%) and `turkey` (53, 12%) are
+  usually food. `crane` (308, 2%) is a machine.
 - **Boat** — anything built to travel on water. On a trailer still counts. Not a
   surfboard, which is COCO's own class.
 - **Umbrella** — one central pole carrying a round canopy: hand-held, parasol,
@@ -110,9 +115,12 @@ The full wording is in `SCALE_CLASS_RULES`; these are the discriminations.
 - **Book** — **is it bound along a spine?** Bound is a book, and that includes
   magazines and notebooks. Folded or loose sheets are not: newspapers, menus,
   posters, printouts.
-- **Dog** — a domestic dog of any breed, puppies included. A hot dog is not one
-  (8 boxes in the overlap, and it is the largest member of `dog`'s head-noun
-  family at 405 images — a trap for a *name*, not for an eye).
+- **Dog** — a live **domestic** dog of any breed, puppies included. An
+  **obviously wild** canid — a wolf, coyote or fox — is not one, and *obviously*
+  is the operative word: a wolf-like animal you have to squint at is somebody's
+  husky, so it is a Dog (#3771). Breed appearance never decides it. A hot dog is
+  not one either (8 boxes in the overlap, and it is the largest member of
+  `dog`'s head-noun family at 405 images — a trap for a *name*, not for an eye).
 - **Backpack** — carried on the back on two shoulder straps. Not a handbag, a
   shoulder bag or a suitcase; COCO carries those as their own classes.
 - **Knife** — a bladed cutting or spreading implement, servers included. Not

@@ -203,39 +203,65 @@ def _boundary_tile() -> float:
     return min(by_height, by_width)
 
 
+#: The four pages of the build: the row everyone agrees on, and then the three
+#: arguments one at a time. Revealing the bottom row all at once asks the room
+#: to hold three separate objections while the presenter makes one, and they
+#: are not the same objection — a magazine rack, a shelf of DVD box sets and a
+#: spiral notebook are three different reasons the word "book" runs out
+#: (#3779).
+BOUNDARY_STAGES = 1 + len(BOUNDARY_MAYBE)
+
+
 def boundary_fig() -> None:
-    """Three books over three things that are not books, or are, or it depends."""
+    """Three books, and then three arguments, one page at a time."""
+    for stage in range(1, BOUNDARY_STAGES):
+        save(
+            _boundary_stage(stage),
+            OUT,
+            f"book-boundary.build{stage}.png",
+            column=FULL_BLEED,
+            tight=False,
+        )
+    # `tight=False`: the empty left column *is* the figure here. A tight crop
+    # would helpfully remove the corner the slide's headline is drawn into,
+    # and the notch check would then pass on an image that no longer has a
+    # corner to spare. It is also what makes every stage share this one's
+    # framing for free — the canvas is fixed, so nothing reflows as the bottom
+    # row fills in.
+    save(_boundary_stage(BOUNDARY_STAGES), OUT, "book-boundary.png", column=FULL_BLEED, tight=False)
+
+
+def _boundary_stage(stage: int) -> plt.Figure:
+    """The top row, plus the first `stage - 1` of the arguable ones."""
     width, height = BOUNDARY_CANVAS
     fig, ax = _canvas(width, height, BOUNDARY_UNIT)
     tile_side = _boundary_tile()
 
     rows = (
         (BOUNDARY_YES, "Book", GREEN),
-        (BOUNDARY_MAYBE, "Book?", RED),
+        (BOUNDARY_MAYBE[: stage - 1], "Book?", RED),
     )
     y = height - BOUNDARY_MARGIN_V
     for names, label, colour in rows:
         y -= BOUNDARY_LABEL_H
-        ax.text(
-            BOUNDARY_LEFT,
-            y + 0.12,
-            label,
-            ha="left",
-            va="bottom",
-            fontsize=BOUNDARY_LABEL_PT,
-            color=colour,
-            fontweight="bold",
-        )
+        # The second row's name arrives with its first photograph, not before
+        # it: a "Book?" hanging over an empty band is a question about nothing.
+        if names:
+            ax.text(
+                BOUNDARY_LEFT,
+                y + 0.12,
+                label,
+                ha="left",
+                va="bottom",
+                fontsize=BOUNDARY_LABEL_PT,
+                color=colour,
+                fontweight="bold",
+            )
         y -= tile_side
         for i, name in enumerate(names):
             _photo(ax, name, BOUNDARY_LEFT + i * (tile_side + BOUNDARY_GAP), y, tile_side)
         y -= BOUNDARY_ROW_GAP
-
-    # `tight=False`: the empty left column *is* the figure here. A tight crop
-    # would helpfully remove the corner the slide's headline is drawn into,
-    # and the notch check would then pass on an image that no longer has a
-    # corner to spare.
-    save(fig, OUT, "book-boundary.png", column=FULL_BLEED, tight=False)
+    return fig
 
 
 # ---------------------------------------------------------------------------

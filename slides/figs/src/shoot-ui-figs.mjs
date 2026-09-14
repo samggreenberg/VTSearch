@@ -21,6 +21,14 @@
  * the piles that accumulate in the right-hand panel are a real session's, and
  * the ranking `find` then shows is a real trained head's.
  *
+ * One output of the `find` group is not a screenshot at all.
+ * `figs/ui-find-grid.webp` is a contact sheet of the top of that ranking with
+ * no app around it, built by `results_grid.py` from the frames the panel
+ * actually listed — because not viewing your results in the tool is a feature,
+ * and the slide's payoff is the pictures rather than a screen with the
+ * pictures stacked down one side of it (#3779). It is composed into the same
+ * box a screenshot occupies, so the slide's build reveals into the same frame.
+ *
  * These do not reuse the light-theme frames of the same-named shots in
  * `docs/user/screenshots.manifest.ts`, and that is deliberate. The docs shots are deliberately taken against the
  * synthetic fixture — the user guide talks the reader through `syn-imgs`, and
@@ -77,21 +85,38 @@ const FIXTURE_BUILDER = join(REPO, 'slides', 'figs', 'src', 'coco_fixture.py');
 // surplus out of the app's own layout rather than out of the figure.
 //
 // How short is bounded by the headline, not by taste. The composed canvas is
-// 16:9, so the app's width on the slide is `720·(1−2·SHOT_MARGIN)·1180/height`
-// and what is left of 1280 is the column the title lives in. That column has
-// to clear `slide_figure.TITLE_NOTCH_PX` — 300px at a 60px inset — so:
+// 16:9, so the app's width on the slide is
 //
-//     height ≥ 720·1180·(1 − 2·SHOT_MARGIN) / (1280 − 375)
+//     W = 720·1180 / (height · (1 + 2·SHOT_MARGIN))
 //
-// which at SHOT_MARGIN = 0.06 is 826. 830 takes it with 4px to spare.
+// and what is left of 1280 is the title column on the left plus SHOT_RIGHT on
+// the right. The title column has to clear `slide_figure.TITLE_NOTCH_PX` — 300px
+// at a 60px inset, so 375px with a gap — which gives
+//
+//     W ≤ 1280 − 375 − 1280·SHOT_RIGHT
+//
+// and at height 830 the three numbers below sit exactly on it: W = 870.4,
+// left = 375.0, right = 34.6.
 const VIEWPORT = { width: 1180, height: 830 };
 const SCALE = 2;
 
-// White above and below the frame, as a fraction of the shot's own height, so
-// the app does not bleed to the slide's edges. Spent out of the same 16:9
-// canvas as the title column, which is why the two numbers are chosen
+// White above and below the frame, and to the right of it, as fractions of the
+// shot's own height and of the composed canvas's width. All three are spent out
+// of the same 16:9 canvas as the title column, which is why they are chosen
 // together.
-const SHOT_MARGIN = 0.06;
+//
+// SHOT_RIGHT exists because the frame used to be flush to the slide's right
+// edge, which reads as an app that has been cropped rather than placed (#3779).
+// The ask was to move it left at the size it was; it cannot be done, and the
+// arithmetic above is why. The left edge already sat at 366.6 with the title
+// column ending at 360, and the headlines on these four slides reach 318–338px
+// of ink ("Read All About It" is the widest) — so the 30px of leftward room the
+// margin needed does not exist above the app's own top edge. Buying it out of
+// the app's size instead costs 4.7%: 913×642 on the slide became 870×612, which
+// also widens the top and bottom bands from 39px to 54px. Re-derive both if the
+// headlines change; `slides/STYLE.md` records how to measure them.
+const SHOT_MARGIN = 0.088;
+const SHOT_RIGHT = 0.027;
 
 // The intro sequence's detector: created on camera in `make-detector`, trained
 // in `train-loop`, and run over unseen media in `find`. Deleted and rebuilt on
@@ -100,6 +125,28 @@ const SHOT_MARGIN = 0.06;
 // modal over a detector already in the list.
 const INTRO_DETECTOR = 'Books';
 const INTRO_TEXT = 'book';
+
+// The frames the deck has already called *not* a book, by COCO file name.
+//
+// COCO files a frame under `book` when its largest box is annotated as one,
+// and its annotators counted DVD box-set spines, magazines, spiral notebooks
+// and boxed game manuals. The intro slide takes exactly those frames and puts
+// them in its bottom row — the ones the room will argue about — and the deck's
+// user answers no to them. So when autopilot serves one, the vote is the
+// deck's, not COCO's: `000000125062.jpg` is the shelf of "The Office" box sets
+// behind three teddy bears, and voting Good on it two slides after showing it
+// as the canonical *not* a book is the deck contradicting itself in front of
+// the room (#3779).
+//
+// This list is the `false` half of `make-book-figs.RANKING`, and
+// `tests_lib/meta/test_slide_book_votes.py` fails if the two drift apart.
+const NOT_A_BOOK = new Set([
+  '000000125062.jpg', // dvd — a shelf of box sets
+  '000000375278.jpg', // magazine
+  '000000176446.jpg', // notebook — spiral bound
+  '000000379842.jpg', // gamecase — a boxed game manual
+  '000000016249.jpg', // newspaper
+]);
 
 // Where `train-loop` stops to take a picture, as a running vote count. The
 // first five pages advance one vote at a time, because the claim the slide is
@@ -114,7 +161,16 @@ const TRAIN_STAGES = [0, 1, 2, 3, 4];
 // with twelve Good votes and a head that has never seen a negative. Vote until
 // both piles are worth showing (and the detector is trainable at all), with a
 // hard stop so a pathological ranking cannot loop forever.
-const TRAIN_FINAL = { good: 8, bad: 3, maxVotes: 24 };
+//
+// The targets used to be 8 and 3, which stopped the session at sixteen votes.
+// That was enough while the Find slide's payoff was a screen with the ranking
+// in a panel down one side; it is not enough now the payoff is the frames
+// themselves at 198px each (`shootFindGrid`). A 4x lift over the base rate
+// looks like a good detector in a column of 60px thumbnails and like a pile of
+// laptops on a contact sheet, and the honest fix is to answer more questions
+// rather than to photograph fewer of the results (#3779). Still inside the
+// twenty minutes the deck says the whole task is worth.
+const TRAIN_FINAL = { good: 12, bad: 8, maxVotes: 32 };
 
 const REGION_VOTES = {
   good: [
@@ -137,6 +193,15 @@ const REGION_VOTES = {
 // camera lens, a phone and a remote that are not books. The box is COCO's own
 // `book` annotation on that frame, as a fraction of the displayed image, which
 // is why it is tight on the object rather than eyeballed round it.
+// The contact sheet on the Find slide: how many frames, and how they are laid
+// out. Four by three, not six by four: this corpus's books are *rooms with
+// shelves in them* — COCO files a frame by its largest box — so at 24 frames
+// the cells are small enough that a wall of spines reads as a wall, and the
+// sheet stops looking like a set of results. Twelve puts each frame at ~198px
+// on the slide, which is where the subject becomes legible from the back.
+const GRID_COLS = 4;
+const GRID_ROWS = 3;
+
 const HERO_REGION = 'book/000000396729.jpg';
 const REGION_BOX = { x0: 0.156, y0: 0.222, x1: 0.910, y1: 0.601 };
 
@@ -157,16 +222,22 @@ const log = (...a) => console.log('[slide-shots]', ...a);
  */
 async function shoot(page, name) {
   const png = await page.screenshot({ type: 'png' });
-  // Padded on the left to exactly 16:9 before the encode, and by `SHOT_MARGIN`
-  // above and below so the frame does not run to the slide's own edges. These go on
-  // `_class: full` slides, which reserve their top-left corner for the
-  // headline; a 1.25:1 frame letterboxes into that slot with white bands too
-  // narrow to hold it, so the title landed across the app's own chrome. The
-  // padding is the `slides/STYLE.md` "pan the frame" repair, and it is free
-  // here for the same reason it is free there: the frame was height-bound, so
-  // the widened canvas is drawn at the same scale and the app comes out the
-  // same size on the slide — it just sits to the right of a real title
-  // column instead of under a floating headline (#3246).
+  // Padded out to exactly 16:9 before the encode: by `SHOT_MARGIN` above and
+  // below and by `SHOT_RIGHT` to the right, with everything left over going on
+  // the left. These go on `_class: full` slides, which reserve their top-left
+  // corner for the headline; a 1.25:1 frame letterboxes into that slot with
+  // white bands too narrow to hold it, so the title landed across the app's own
+  // chrome. The padding is the `slides/STYLE.md` "pan the frame" repair, and it
+  // is free here for the same reason it is free there: the frame is
+  // height-bound, so the widened canvas is drawn at the same scale and the app
+  // comes out the same size on the slide — it just sits to the right of a real
+  // title column instead of under a floating headline (#3246).
+  compose(png, name);
+  log(`wrote figs/${name}.webp`);
+}
+
+/** Pad a raw PNG out to the deck's 16:9 frame and write it as WebP. */
+function compose(png, name) {
   execFileSync(
     'python',
     [
@@ -176,15 +247,16 @@ async function shoot(page, name) {
         + 'm=round(shot.height*float(sys.argv[2]));'
         + 'h=shot.height+2*m;'
         + 'w=max(shot.width,round(h*16/9));'
+        + 'r=round(w*float(sys.argv[3]));'
         + 'canvas=Image.new("RGB",(w,h),"white");'
-        + 'canvas.paste(shot,(w-shot.width,m));'
+        + 'canvas.paste(shot,(w-shot.width-r,m));'
         + 'canvas.save(sys.argv[1],"WEBP",quality=92,method=6)',
       join(FIGS, `${name}.webp`),
       String(SHOT_MARGIN),
+      String(SHOT_RIGHT),
     ],
     { cwd: REPO, input: png, stdio: ['pipe', 'inherit', 'inherit'] }
   );
-  log(`wrote figs/${name}.webp`);
 }
 const only = process.argv.slice(2);
 const wanted = (id) => only.length === 0 || only.includes(id);
@@ -443,6 +515,31 @@ async function resetIntroDetector() {
   }
 }
 
+/**
+ * Un-register the production pile, so the dashboard build opens on one dataset.
+ *
+ * The same decision as `resetIntroDetector`, and for the same reason: the
+ * make-detector build's whole subject is a user who has *nothing* yet, and a
+ * dashboard already holding a second pile makes the audience carry a thing the
+ * story does not use for three more slides (#3779). Ordering the import after
+ * that group is enough on a cold box and not on a warm one — the pickle is on
+ * disk and the app registers it at startup — so the shot has to be made
+ * unconditional rather than left to depend on what the last run happened to
+ * leave behind.
+ *
+ * It costs one re-embed of 240 frames per run, which is the price of a
+ * reproducible first frame. The corpus itself stays on disk; only the vectors
+ * are recomputed, and `No Persisted Vectors` (see `CLAUDE.md`) is why they are
+ * not something that could have been kept anyway.
+ */
+async function resetProdDataset() {
+  for (const row of await datasets()) {
+    if (row.name !== 'photos-prod') continue;
+    await api(`/api/datasets/registry/${row.id}`, { method: 'DELETE' });
+    log('removed the previous photos-prod dataset');
+  }
+}
+
 /** Untick every row of *tag*, so the dashboard shows a clean card. */
 async function deselectAll(page, tag) {
   const checked = `${tag} .select-checkbox[aria-checked="true"]`;
@@ -510,15 +607,17 @@ async function shootMakeDetector(page) {
   await page.locator('.example-panel input.form-input').first().fill(INTRO_TEXT);
   await page.locator('#detector-name').fill(INTRO_DETECTOR);
   await page.waitForTimeout(700);
-  await shoot(page, 'ui-make-detector.build3');
+  await shoot(page, 'ui-make-detector');
 
+  // The detector is still created — the next two groups are the same session —
+  // but the dashboard it lands back on is not photographed. "And now there is a
+  // row in the table" is a page that shows the audience a table (#3779); what
+  // the slide is about is that the whole specification was one word, and that
+  // is the frame it should end on.
   await page.getByRole('button', { name: /^Creat/ }).last().click();
   await page.waitForSelector('.new-detector-form', { state: 'detached', timeout: 60000 });
   await waitFor(`the ${INTRO_DETECTOR} detector`, async () => named(await detectors(), INTRO_DETECTOR));
-  await page.waitForTimeout(2000);
-  await page.mouse.move(700, 120);
-  await page.waitForTimeout(400);
-  await shoot(page, 'ui-make-detector');
+  await page.waitForTimeout(1500);
 }
 
 /**
@@ -533,8 +632,20 @@ async function shootMakeDetector(page) {
  */
 async function voteServed(page) {
   const viewer = page.locator('img.image-element').first();
-  const before = await viewer.getAttribute('alt');
-  const good = (before || '').startsWith('book/');
+  // Read the served item only once the viewer has stopped changing. The button
+  // is chosen from this alt, so a read taken mid-swap decides the vote from one
+  // item and casts it on another — which is how a stack of paperbacks ended up
+  // in the Bad pile of a session the slide describes as truthful (#3779). The
+  // wait after the previous vote is a *change* plus a fixed delay, and a fixed
+  // delay is exactly the thing that is right until the box is busy.
+  let before = null;
+  for (let tick = 0; tick < 40; tick++) {
+    const now = await viewer.getAttribute('alt');
+    if (now && now === before) break;
+    before = now;
+    await page.waitForTimeout(500);
+  }
+  const good = (before || '').startsWith('book/') && !NOT_A_BOOK.has((before || '').split('/').pop());
   await page.locator(good ? '.btn-good' : '.btn-bad').first().click();
   // The vote retrains the head and re-sorts, and autopilot then serves a
   // different item. Waiting on the served item *changing* waits for all of it;
@@ -635,13 +746,8 @@ async function shootFind(page) {
     .catch(() => {});
   await page.waitForTimeout(3000);
 
-  // The best match in the centre, and the best matches beside it. Selecting the
-  // top item re-scrolls the panel to it, so the scroll goes after the click.
-  await scrollResults(page, 0);
-  await page.locator('.panel-left .thumbnail-wrap').first().click();
-  await page.waitForTimeout(1500);
-  await scrollResults(page, 0);
-  await shoot(page, 'ui-find');
+  // What came back, with no tool around it. See `results_grid.py`.
+  await shootFindGrid();
 
   // Then the line. Its offset is read off the rendered list rather than
   // computed from a rank, because how many items make a row is the panel's
@@ -677,6 +783,44 @@ async function shootFind(page) {
   await scrollResults(page, Math.max(0, centred));
   await shoot(page, 'ui-find-line');
 }
+
+/**
+ * What the detector found, as a contact sheet with no app around it.
+ *
+ * The Find slide's payoff used to be the verification screen — the results in a
+ * left-hand panel with the viewer beside them — which is a picture of somebody
+ * checking their answers rather than a picture of what they got. Not viewing
+ * results in the tool is a feature: an autorun detector mails a list of
+ * references and nobody opens anything (#3779). So the reveal is the frames.
+ *
+ * And the frames are twelve out of the production pile's `book/` folder, not
+ * the top of the live ranking. This deck is a **cartoon of how the tool works**
+ * rather than a transcript of one session: what the slide has to say is "the
+ * few minutes bought you these", and a sheet whose bottom row is whatever a
+ * twenty-three-vote head happened to rank eleventh spends the audience's
+ * attention on the wrong argument — the ranking's *mistakes* are slide 6's
+ * subject and the whole of Part 3, not this page's.
+ *
+ * Deterministic, so the slide does not reshuffle on every re-shoot: the
+ * selection is a seeded sample, in `results_grid.py`.
+ */
+async function shootFindGrid() {
+  const png = execFileSync(
+    'python',
+    [
+      join(FIGS, 'src', 'results_grid.py'),
+      String(VIEWPORT.width * SCALE),
+      String(VIEWPORT.height * SCALE),
+      String(GRID_COLS),
+      String(GRID_ROWS),
+      'photos-prod',
+    ],
+    { cwd: REPO, maxBuffer: 256 * 1024 * 1024, stdio: ['ignore', 'pipe', 'inherit'] }
+  );
+  compose(png, 'ui-find-grid');
+  log('wrote figs/ui-find-grid.webp');
+}
+
 
 async function shootRegionVoting(page, voted) {
   await enterLabelView(page, 'photo-regions', 'books-regions');
@@ -752,10 +896,6 @@ const intro = INTRO.some(wanted);
 
 await ensureApp();
 if (intro) await ensureDataset('photos', 'siglip');
-// The pile the detector has never seen. Embedded up front rather than between
-// the second and third shots, so the Find click in the captured session is the
-// click a user makes and not a five-minute wait dressed up as one.
-if (intro) await ensureDataset('photos-prod', 'siglip');
 let regionsVoted = new Set();
 if (wanted('region-voting')) {
   // A second detector, not the same one: a detector binds an embedder *type*
@@ -779,8 +919,18 @@ try {
     });
   }, STILL_CSS);
   if (intro) {
+    await resetProdDataset();
     await resetIntroDetector();
     await shootMakeDetector(page);
+    // The pile the detector has never seen, imported *after* the dashboard has
+    // been photographed and before anything waits on it. The order is the
+    // slide's, not the script's convenience: the make-detector build opens on a
+    // user who has one dataset and no detector, and a dashboard already holding
+    // a second pile makes the audience carry a thing the story does not use for
+    // three more slides (#3779). Still ahead of `shootFind`, so the Find click
+    // in the captured session is the click a user makes and not a five-minute
+    // wait dressed up as one.
+    await ensureDataset('photos-prod', 'siglip');
     await shootTrainLoop(page);
     await shootFind(page);
   }

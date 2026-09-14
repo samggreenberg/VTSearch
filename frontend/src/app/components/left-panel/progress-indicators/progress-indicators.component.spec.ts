@@ -76,10 +76,10 @@ describe('ProgressIndicatorsComponent', () => {
       bad_count: 0,
       total_count: 0,
       smart: { status: '' },
-      stable: { status: 'yellow', flips: 5 },
+      stable: { status: 'yellow', avg_flip_rate: 0.05 },
       span: { status: '' },
     });
-    expect(component.stableSubtext).toBe('Flips: 5');
+    expect(component.stableSubtext).toBe('Flips: 5.0% of items per retrain');
   });
 
   it('should show span subtext with diversity level', () => {
@@ -148,11 +148,53 @@ describe('ProgressIndicatorsComponent', () => {
       bad_count: 0,
       total_count: 0,
       smart: { status: '' },
-      stable: { status: 'yellow', flips: 7 },
+      stable: { status: 'yellow', avg_flip_rate: 0.012 },
       span: { status: '' },
     });
-    expect(component.stableTooltip).toContain('Flips: 7');
+    expect(component.stableTooltip).toContain('Flips: 1.2% of items per retrain');
     expect(component.stableTooltip).toContain('Stable: predictions stopped shifting between retrains.');
+    expect(component.stablePlateau).toBe(false);
+  });
+
+  it('should say so in the smart tooltip when the cost drift is within the noise', () => {
+    fixture.componentRef.setInput('labelingStatus', {
+      good_count: 0,
+      bad_count: 0,
+      total_count: 0,
+      smart: { status: 'green', cost: 0.42, drift_within_noise: true },
+      stable: { status: '' },
+      span: { status: '' },
+    });
+    expect(component.smartDriftWithinNoise).toBe(true);
+    expect(component.smartTooltip).toContain('noise rather than progress');
+    expect(component.smartTooltip).toContain('Cost: 0.420');
+  });
+
+  it('should not claim noise when smart is plainly green', () => {
+    fixture.componentRef.setInput('labelingStatus', {
+      good_count: 0,
+      bad_count: 0,
+      total_count: 0,
+      smart: { status: 'green', cost: 0.42 },
+      stable: { status: '' },
+      span: { status: '' },
+    });
+    expect(component.smartDriftWithinNoise).toBe(false);
+    expect(component.smartTooltip).not.toContain('noise rather than progress');
+  });
+
+  it('should say so in the stable tooltip when green is a plateau', () => {
+    fixture.componentRef.setInput('labelingStatus', {
+      good_count: 0,
+      bad_count: 0,
+      total_count: 0,
+      smart: { status: '' },
+      stable: { status: 'green', avg_flip_rate: 0.05, plateau: true },
+      span: { status: '' },
+    });
+    expect(component.stablePlateau).toBe(true);
+    expect(component.stableTooltip).toContain('irreducible in this embedding');
+    expect(component.stableTooltip).toContain('Flips: 5.0% of items per retrain');
   });
 
   it('should render tooltip text on the indicator buttons', () => {

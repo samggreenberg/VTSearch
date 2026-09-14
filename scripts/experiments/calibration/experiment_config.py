@@ -466,6 +466,37 @@ _CALIBRATION_FRACTION_ENV = os.environ.get("CALIB_CALIBRATION_FRACTION", "").str
 CALIBRATION_FRACTION: float | None = float(_CALIBRATION_FRACTION_ENV) if _CALIBRATION_FRACTION_ENV else None
 if CALIBRATION_FRACTION is not None and not 0.0 < CALIBRATION_FRACTION < 1.0:
     raise ValueError(f"CALIB_CALIBRATION_FRACTION={CALIBRATION_FRACTION} must lie strictly in (0, 1)")
+#: The #3796 axis: which **draw** of the Train/Calibrate split each cell
+#: calibrates with (issue #3794's ``calibration_seed``).
+#:
+#: Production pins this split to ``CALIBRATION_SPLIT_SEED`` (42) and #2934 pinned
+#: it on purpose, so a default run has nothing to sweep and this stays ``[None]``
+#: -- the sentinel that means "let the simulator resolve the app's own pin".
+#: Every study before #3796 therefore enumerates exactly the cells it always did.
+#:
+#: **It inverts the usual grid.**  Every other knob here is swept to find a
+#: better setting; this one is swept to find out how much a *single* setting was
+#: worth believing.  Hold the cell seed fixed -- same media voted, same order,
+#: same held-out test split -- and redraw only the split, and the spread across
+#: the draws is the error bar on every single-seed number this repo quotes.
+#: So the arms are NOT a search over 42's competitors: 42 is not better or worse
+#: than 7, it is one sample from a distribution nobody has measured.
+#:
+#: Like :data:`CALIBRATION_FRACTION` it moves the *trajectory*, not just the cut:
+#: a different split is a different threshold, a different acquisition rank, and
+#: therefore a different next vote.  That compounding is part of the measurand
+#: rather than a confound -- it is exactly what a user's session does -- but it
+#: does mean a draw is a whole run and cannot be re-cut out of another draw's.
+#:
+#: Include 42 in the list to keep production's own draw inside the distribution:
+#: without it the study can report a spread but cannot say where the number
+#: every other report quotes sits in it.
+_CALIBRATION_SEEDS_ENV = os.environ.get("CALIB_CALIBRATION_SEEDS", "").strip()
+CALIBRATION_SEEDS: list[int | None] = (
+    [int(s) for s in _CALIBRATION_SEEDS_ENV.split(",") if s.strip()] if _CALIBRATION_SEEDS_ENV else [None]
+)
+if len(set(CALIBRATION_SEEDS)) != len(CALIBRATION_SEEDS):
+    raise ValueError(f"CALIB_CALIBRATION_SEEDS={_CALIBRATION_SEEDS_ENV!r} repeats a draw; each cell must be distinct")
 #: The #3312 arm axis: the minimum unlabeled remainder at which the #3308
 #: voted-media exclusion still applies.  One scalar spans the whole axis, so
 #: the arms are ordered and no sentinel is needed:
@@ -1057,6 +1088,17 @@ def _select_categories_inner(medias: dict, category_counts: dict[str, int]) -> t
 #:
 #: That makes it the right ordering for any run against a wall-clock deadline -
 #: it converts "ran out of time" from a design failure into a power one.
+#:
+#: ``calibration_seed`` (#3796) is the same argument one level further out, for
+#: a grid that sweeps :data:`CALIBRATION_SEEDS`: it walks every environment at
+#: every cell seed for **draw 0**, then all of them again for draw 1, and so on.
+#: A truncated run then holds fewer draws of *every* (class, cell seed) block
+#: rather than complete blocks for some and none for others - the same design,
+#: wider error bars, which is the failure a report can state.  Under ``seed`` or
+#: ``category`` the draws are the innermost loop, so truncation instead deletes
+#: whole blocks and the spread is estimated off a different set of environments
+#: than the cell-seed spread it is compared against.  **Put the production draw
+#: (42) first in the list** and it is the one draw a truncation cannot take.
 CELL_ORDER = os.environ.get("CALIB_CELL_ORDER", "category").strip().lower()
 
 
@@ -1068,6 +1110,14 @@ def array_cells(categories_by_dataset: dict[str, dict[str, list[str]]]) -> list[
     splits, and exemplar.  Deterministic order -> a task index maps to a stable
     cell across submissions.  :data:`CELL_ORDER` chooses which index varies
     fastest; see the note there for why that matters to a truncated run.
+
+    Since #3796 a cell also carries a ``calibration_seed``.  It is ``None`` -
+    one cell per (dataset, embedder, category, seed), the enumeration every
+    study before that one ran - unless :data:`CALIBRATION_SEEDS` names draws,
+    in which case the grid is that many times larger and each cell is a full
+    trajectory at its own draw.  ``None`` is carried rather than 42 so the
+    resolution stays the simulator's: a harness that wrote the constant in
+    would keep running *its* 42 on the day the app moved.
     """
     envs: list[tuple[str, str, str]] = []
     for ds in DATASETS:
@@ -1076,13 +1126,23 @@ def array_cells(categories_by_dataset: dict[str, dict[str, list[str]]]) -> list[
             for cat in per_emb.get(emb, []):
                 envs.append((ds, emb, cat))
 
+    def cell(ds: str, emb: str, cat: str, seed: int, cal_seed: int | None) -> dict:
+        return {"dataset": ds, "embedder": emb, "category": cat, "seed": seed, "calibration_seed": cal_seed}
+
     cells: list[dict] = []
-    if CELL_ORDER == "seed":
+    if CELL_ORDER == "calibration_seed":
+        for cal_seed in CALIBRATION_SEEDS:
+            for seed in SEEDS:
+                for ds, emb, cat in envs:
+                    cells.append(cell(ds, emb, cat, seed, cal_seed))
+    elif CELL_ORDER == "seed":
         for seed in SEEDS:
             for ds, emb, cat in envs:
-                cells.append({"dataset": ds, "embedder": emb, "category": cat, "seed": seed})
+                for cal_seed in CALIBRATION_SEEDS:
+                    cells.append(cell(ds, emb, cat, seed, cal_seed))
     else:
         for ds, emb, cat in envs:
             for seed in SEEDS:
-                cells.append({"dataset": ds, "embedder": emb, "category": cat, "seed": seed})
+                for cal_seed in CALIBRATION_SEEDS:
+                    cells.append(cell(ds, emb, cat, seed, cal_seed))
     return cells

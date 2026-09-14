@@ -26,6 +26,7 @@ mis-specification has burned three studies (#2877, #2897, #2905), so
 
 from __future__ import annotations
 
+import hashlib
 import os
 from pathlib import Path
 from typing import NamedTuple
@@ -1698,11 +1699,32 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "Bad: pickups and cargo vans, which are `truck`."
         ),
     ),
+    # Ruled 2026-09-10 by the owner, on finishing the fork slate. Three cases the
+    # enumeration did not cover, and one principle that decides all of them: a
+    # SPORK is a fork (it has tines); a PASTA STRAINER is not, even the kind with
+    # protruding fingers, because those are for separating pasta from water rather
+    # than piercing; a CARVING FORK is, on two tines, so the count never mattered.
+    #
+    # Written as a test rather than three more list entries, because the list was
+    # what let these through. `spoon` is amended in the same change to disclaim the
+    # spork: leaving both rules silent about one object is how `vase` and `bowl`
+    # came to contradict each other about planters (#3784), found only when a
+    # reviewer hit it mid-pass.
+    #
+    # The fork pass was already complete (396 of 396, 134 good) when this was
+    # ruled. The verdicts stand: no spork or strainer case was reported as
+    # contested, and the ruling names what was already being done.
     "fork": ClassRule(
-        name="fork incl plastic",
+        name="fork incl sporks not strainers",
         test=(
-            "Good: metal, plastic and disposable forks, and serving, carving and fondue "
-            "forks. Bad: spatulas, tongs, whisks, skewers. Vote Good only when the boxed "
+            "Good: metal, plastic and disposable forks, serving, carving and fondue forks, "
+            "and SPORKS. THE TEST IS THE TINES: prongs meant to PIERCE OR HOLD FOOD make a "
+            "fork, and how many there are does not matter -- a carving fork has two. A "
+            "spork has them, so it is a Fork and not a Spoon; where an object could be "
+            "read as either, the tines decide. "
+            "Bad: spatulas, tongs, whisks, skewers, and a PASTA STRAINER even the kind with "
+            "protruding fingers, because those fingers separate pasta from water and are "
+            "not meant to pierce anything. Vote Good only when the boxed "
             "object IS a fork, not when a fork sits somewhere inside a `silverware` or "
             "`utensil` box covering a whole place setting. When only the handle shows and "
             "the food gives nothing away, read the GRIP: a fist closed to stab is a fork, "
@@ -1711,11 +1733,12 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
         ),
     ),
     "spoon": ClassRule(
-        name="spoon incl plastic not spatulas",
+        name="spoon incl plastic not spatulas or sporks",
         test=(
             "Good: teaspoons, tablespoons, soup, wooden, plastic, disposable and serving "
             "spoons, and ladles -- a ladle is a spoon with a deep bowl. Bad: spatulas, "
-            "slotted turners, scoops, whisks, tongs. Judge the object, not the drawer. "
+            "slotted turners, scoops, whisks, tongs, and a SPORK, which is a Fork -- "
+            "tines decide, and no single object is both. Judge the object, not the drawer. "
             "When only the HANDLE shows, read the food: a handle out of cereal is a "
             "spoon, a handle out of a salad is a fork. The one rule here that infers "
             "from surroundings rather than the object, because the alternative deletes "
@@ -1742,7 +1765,7 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
     # first name -- "incl plates and dishes" -- said nothing about it. Renamed
     # mid-slate once that showed up.
     "bowl": ClassRule(
-        name="bowl incl plates and food containers not wrappers",
+        name="bowl incl plates not planters or wrappers",
         test=(
             "Good: bowls, plates (a paper plate is a plate), saucers, dishes, serving "
             "pots, baskets that hold food, disposable food containers, and a dog's water "
@@ -1751,7 +1774,7 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "of apples is not a bowl, nor is a shopping cart, a grocery store, or a car "
             "boot with the shopping in it. It has to be MADE to hold food. "
             "Bad: flat wrappers and sleeves, cups and mugs (`cup`), sink basins (`sink`), "
-            "toilet bowls, feed troughs, planters (`vase`), ashtrays and carafes. "
+            "toilet bowls, feed troughs, planters (out of C, not `vase`), ashtrays and carafes. "
             "Judge the vessel, not the food -- which answers WHAT TO BOX. Contents "
             "answer WHICH CLASS when the vessel alone is ambiguous: full of soup is a "
             "Bowl whatever its shape; empty, the ladder decides (Bowl 0.66 h/w, Cup 1.26). "
@@ -1778,15 +1801,44 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "`jar` (120) and `jug` (28) fold in and barely have one."
         ),
     ),
+    # Until 2026-09-09 `vase` claimed "flower pots, planters" and "a potted
+    # plant's pot is a vase", and `bowl` pointed planters AT `vase`. The reviewer
+    # rejected planters through the whole finished vase slate and reported the
+    # line as "a little weak", judging on proportions and ornateness instead --
+    # which is the shape of a rule nobody can apply twice the same way.
+    #
+    # COCO disagrees with the old wording in two independent ways. `potted plant`
+    # is a class of its own: 69% of its images carry no `vase` at all, and only
+    # 82 of 2,500 potted plants reach IoU>0.5 with a vase box. And of 445 COCO
+    # `vase` crops taken from images with NO potted plant, 82.0% look like a vase
+    # and 4.1% like a flower pot or potted plant. (The first pass of that
+    # measurement normalised COCO's boxes by the VG file's dimensions and read
+    # 47.4%/3.6%; 88% of anchored pairs are a uniform ~1.28x rescale of each
+    # other, which aspect-ratio gating cannot see -- the trap `anchor_to_coco`
+    # documents and this analysis walked into anyway.)
+    #
+    # So a planter is not a vase, and `bowl` already refused it on its own
+    # principle -- "it has to be MADE to hold food" -- which a planter fails
+    # whatever its shape. Both doors shut, and `potted plant` is not in C, so the
+    # object is out of C. The plant is not the operative fact; being made to hold
+    # one is, which is why an EMPTY planter is out too.
+    #
+    # Sized before ruling: 167 of the 278 vase rejects score `potted plant` or
+    # `flower pot` above `vase`, against 18 of the 116 accepts. Applying the old
+    # wording literally would have roughly doubled vase's positives, so this
+    # keeps the 394 verdicts as cast rather than voiding them.
     "vase": ClassRule(
-        name="vase incl pots and planters",
+        name="vase not planters",
         test=(
-            "Good: only a vessel MADE as one -- vases, flower pots, planters, urns, "
-            "pottery. Against an ornamental BOWL, use the box: a vase is TALLER THAN "
+            "Good: only a vessel MADE as one -- vases, urns, decorative pottery. "
+            "Against an ornamental BOWL, use the box: a vase is TALLER THAN "
             "WIDE (median h/w 1.58, 84% of boxes) and a bowl is wider than tall (0.66, "
             "13%); the middle halves do not overlap. Size does not help -- bowl's median "
             "box is the larger. "
-            "A potted plant's pot is a vase; vote the vessel, not the plant. "
+            "A VESSEL MADE TO HOLD A GROWING PLANT is neither a vase nor a bowl -- a "
+            "flower pot, planter or window box is out of C entirely, whether or not a "
+            "plant is in it, because the plant is not what decides it. If you cannot "
+            "tell a planter from a vase and it is empty, use the shape test above. "
             "Bad: a cooking pot on a stove, a plain bowl, and any BORROWED vessel however "
             "it is used -- a jar of cut flowers is a `bottle`, a glass of them a `cup`. "
             "A pitcher or jug of them is a `bottle`: COCO split them (pitcher to cup 30, "
@@ -1988,18 +2040,61 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "narrows it without repairing that."
         ),
     ),
+    # Ruled 2026-09-10 (#3789). The rule said "any LIVE bird" and the reviewer hit
+    # a case it did not reach: a dead robin held in another bird's beak, at least
+    # twice in the queue. Not live, so it failed the Good clause; not cooked, not a
+    # part, not a depiction, so nothing in the Bad list caught it either.
+    #
+    # "live" was doing accidental work. Every entry on the Bad list carries a
+    # principle -- it is food, it is a part not a whole, it is a representation not
+    # an instance -- and prey satisfies none of them. The rule's own rationale is
+    # entirely about VG naming (`chicken`, `turkey` usually mean dinner), which is
+    # about food and never about death.
+    #
+    # Owner's ruling: whole dead birds are Birds, and taxidermy mounts are too. A
+    # mount is the animal, not a figurine of one. "Prepared as food" replaces
+    # "cooked", which also closes a hole nobody had hit: a raw plucked chicken in a
+    # butcher's window is not cooked and is plainly not wanted here.
+    #
+    # Costs nothing to apply: the bird pass had not started (0 of 645), so no
+    # verdict was cast under either reading.
     "bird": ClassRule(
-        name="bird any species not cooked",
+        name="bird incl dead not food",
         test=(
-            "Good: any live bird, wild or domestic, of any species -- ducks, geese, gulls, "
+            "Good: any WHOLE bird, wild or domestic, of any species, ALIVE OR DEAD -- a bird "
+            "carried as prey, one lying dead, and a taxidermy mount, which is the animal "
+            "itself and not a depiction of it. Ducks, geese, gulls, "
             "pigeons, swans, parrots, ostriches, owls, eagles, flamingos, peacocks, hens "
-            "and roosters. Bad: a COOKED bird on a plate, a feather or a wing on its own, a "
-            "bird figurine, a bird on a sign or a logo. The cooked clause is not "
+            "and roosters. Bad: a bird PREPARED AS FOOD -- cooked, plucked or butchered, on "
+            "a plate, in a pan or in a display case -- a feather or a wing on its own, a "
+            "bird figurine, a bird on a sign or a logo. The food clause is not "
             "hypothetical: `chicken` names 428 overlap images and COCO finds a bird on 10% "
             "of them, `turkey` 53 images at 12% -- in VG both words are usually food. "
             "`crane` is the other trap and it is a machine: 308 images, 2%. None of the "
-            "three can be a name for this class, but a reviewer looking at a live one "
-            "should vote Good."
+            "three can be a name for this class, but a reviewer looking at an actual "
+            "bird should vote Good. DEATH IS NOT THE TEST, food is: the exclusion exists "
+            "because VG uses bird words to mean dinner, not because a dead bird stops "
+            "being one."
+        ),
+    ),
+    "dog": ClassRule(
+        name="dog not wolves",
+        test=(
+            "Good: any live DOMESTIC dog, of any breed, size or life stage -- on a lead, "
+            "loose, working, being carried, in a vehicle, or partly hidden. A puppy is a "
+            "dog. Breed appearance is NOT the test: a husky, malamute or shepherd is a Dog "
+            "however wolf-like it looks. Bad: an OBVIOUSLY WILD canid -- a wolf, coyote, "
+            "fox, jackal or dingo -- and a HOT DOG, which is a trap for a name rather than "
+            "for an eye (405 images on this name's head-noun family, 8 boxes in the whole "
+            "COCO overlap). One test: wild or domestic, not what the coat looks like. "
+            "`Obviously` is the operative word, exactly as in the toy rule: a wolf-like "
+            "canid you have to squint at is somebody's husky, so vote Good. Excluding wild "
+            "canids is COCO's own reading -- it annotates domestic dogs alone -- and it is "
+            "the whole of what this rule adds. A dog FIGURINE, ornament or soft toy, and a "
+            "dog in a photo, on a sign, a logo or a screen, are already Bad under the "
+            "protocol's `a depiction is not the object` and `an obvious toy is not the "
+            "object`, which bind every class here; they are deliberately not restated, "
+            "because a generic rule restated per class is a generic rule that will drift."
         ),
     ),
     "boat": ClassRule(
@@ -2089,6 +2184,70 @@ def review_name(cls: str, suffix: str = "") -> str:
     """
     rule = SCALE_CLASS_RULES.get(cls)
     return f"{rule.name if rule else cls}{f' {suffix}' if suffix else ''}"
+
+
+#: The pass suffixes :func:`review_name` appends. Listed so the join can be
+#: undone: a slate's ``detector`` column is the only place a *past* review's rule
+#: name survives, and reading it back is what lets a verdict be stamped with the
+#: wording its reviewer saw rather than the wording in force today.
+REVIEW_SUFFIXES = ("positives", "audit", "reviewed")
+
+
+def rule_of_review_name(detector: str) -> str:
+    """The rule name inside a slate's ``detector``, with the pass suffix removed.
+
+    The inverse of :func:`review_name`, and it has to be an inverse rather than a
+    guess: a detector name is *evidence about the past*. ``make_class_recheck.py``
+    additionally appends a ``" -- ..."`` tail naming the question, which
+    ``bank_verdicts.py`` already strips the same way.
+
+    ``tests_lib/meta/test_pile_rule_version.py`` pins the round trip over every
+    class and every suffix, so a new suffix that is not listed above fails there
+    rather than silently reading as part of the rule.
+    """
+    name = detector.split(" -- ")[0]
+    for suffix in REVIEW_SUFFIXES:
+        if name.endswith(f" {suffix}"):
+            return name[: -len(suffix) - 1]
+    return name
+
+
+def rule_digest(cls: str) -> str:
+    """A short hash of *cls*'s rule **as written** -- the name and the test together.
+
+    The name answers "was the reviewer shown different words?". It does not
+    answer "did the rule move?", because a rule can be edited in the body while
+    the name stands still: #3756 rewrote `bench`'s Bad list and kept its name.
+    Both questions are worth asking and only one of them is readable in a diff,
+    so both are recorded -- the name because it is the wording a reviewer saw and
+    a human can check it at a glance, the digest because it is the only thing
+    that can see an edit the name hides.
+
+    Twelve hex characters, which is a hash to compare rather than a hash to
+    defend: the adversary here is a forgotten edit, not a forger.
+    """
+    rule = SCALE_CLASS_RULES.get(cls)
+    payload = f"{rule.name if rule else cls}\n{rule.test if rule else ''}"
+    return hashlib.sha256(payload.encode()).hexdigest()[:12]
+
+
+def rule_stamp(cls: str) -> dict[str, str]:
+    """The two fields a row records about the rule it was answered under (#3814).
+
+    Merge into a verdict or a correction row at the moment the answer is
+    *given*, never at the moment a file is regenerated: a row cast in August and
+    re-derived in September must carry August's rule, or the stamp asserts the
+    one thing it exists to disprove. Every writer here therefore takes its name
+    from what the reviewer was shown -- the slate's ``detector`` column, or a
+    labelset's recorded ``rule`` -- and falls back to this only when the two
+    already agree.
+
+    **Absence means unknown and must never be read as current.** The 872 rows
+    predating this field cannot be back-filled honestly: nothing on disk says
+    which wording they were cast under, which is the whole of #3814. See
+    :func:`pilebuild.corrections.rule_state`.
+    """
+    return {"rule": review_name(cls), "rule_digest": rule_digest(cls)}
 
 
 def scale_vg_wanted() -> set[str]:

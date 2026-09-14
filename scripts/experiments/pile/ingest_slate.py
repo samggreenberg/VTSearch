@@ -12,6 +12,15 @@ disagreements, and review *coverage* falls out for free — without it, "no bus
 here" is indistinguishable from "nobody looked", and every rate computed
 afterwards is biased by an unknown amount.
 
+**Each verdict records the rule it was cast under, read off the slate** (#3814).
+A class rule moves -- three rulings landed in September on classes with verdicts
+already banked -- and a row that says only what the reviewer answered starts
+meaning something else the moment one does. The wording is taken from the
+manifest's ``detector`` column, which is what the reviewer actually read while
+voting (#3612), and never from the rule table, which says what is in force today.
+See :func:`rule_stamp_for`; `verdicts_to_corrections.py` carries the stamp onto
+the correction row, and `rule_drift.py` is what asks the question afterwards.
+
 **The rate comes from the random stratum alone.** The boundary stratum is chosen
 to find errors, so its error rate is not the pool's error rate and averaging the
 two together produces a number that means nothing. Both are reported, labelled,
@@ -48,6 +57,27 @@ def log(msg: str) -> None:
 #: boxed re-issue supersedes the bare thumbnail: it is the same question asked
 #: in a form the reviewer could actually answer (`make_positive_slate.py`).
 STRATUM_RANK = {"positive": 0, "boundary": 0, "random": 0, "positive_boxed": 1}
+
+
+def rule_stamp_for(detector: str, cls: str) -> dict[str, str]:
+    """The rule this verdict was cast under, read from the SLATE (#3814).
+
+    Read from the slate's ``detector`` rather than from ``SCALE_CLASS_RULES``,
+    even though the table is right there, because the two are not the same claim
+    and only one of them is true. The detector name is what the reviewer had in
+    front of them while voting (#3612); the table is what is in force *now*, and
+    an export ingested after a ruling would otherwise be stamped with a wording
+    its reviewer never saw -- writing down the exact confusion the stamp exists
+    to prevent.
+
+    The digest rides along only when the two agree, because a digest covers the
+    rule's ``test`` and nothing in a detector name can reconstruct the body of a
+    rule that has since been rewritten. A name with no digest is an honest
+    smaller claim; a digest guessed from today's table would not be.
+    """
+    observed = pc.rule_of_review_name(detector)
+    in_force = pc.rule_stamp(cls)
+    return in_force if observed == in_force["rule"] else {"rule": observed}
 
 
 def load_manifests(roots: list[Path]) -> tuple[dict[tuple[int, str, str], dict], dict[str, str]]:
@@ -200,6 +230,7 @@ def main() -> int:
                 {
                     "image_id": iid,
                     "class": c,
+                    **rule_stamp_for(det, c),
                     "stratum": row["stratum"],
                     "human": "present" if el.get("label") == "good" else "absent",
                     "reference": row["reference"],
@@ -245,6 +276,16 @@ def main() -> int:
     if conflicts:
         log(f"  WARNING {conflicts} images carry BOTH a Good and a Bad vote -- kept the boxed one")
     verdicts = sorted(merged.values(), key=lambda v: (v["class"], v["image_id"]))
+
+    # Named, not silently carried: a slate whose detector no longer matches the
+    # class rule is a review of a superseded question, and the verdicts are
+    # stamped with what it actually asked (#3814). They are still ingested --
+    # the reviewer's answer to the old question is a fact, and `rule_drift.py`
+    # is what turns it into a recheck slate -- but "this pass predates a ruling"
+    # is the sort of thing worth reading before the rates below.
+    superseded = sorted({(v["class"], v["rule"]) for v in verdicts if v["rule"] != pc.review_name(v["class"])})
+    for cls, was in superseded:
+        log(f"  NOTE {cls}: voted under {was!r}, now {pc.review_name(cls)!r} -- stamped as cast, not as current")
 
     # Per stratum, per direction. Never pooled across strata.
     by: dict[tuple[str, str], int] = defaultdict(int)

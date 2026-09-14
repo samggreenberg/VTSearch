@@ -206,8 +206,9 @@ class TestScoredWhereItIsServed:
         lp.calculate_prediction_stability_over_time(clips, history, 0)
 
         with lp._progress_lock:
-            predictions = lp._active_cache().prev_predictions
-        assert predictions is not None
+            snapshot = lp._active_cache().prev_snapshot
+        assert snapshot is not None
+        predictions = {cid: snapshot.predicted(cid) for cid in snapshot.scores}
         planted = {cid for cid in predictions if cid % 2 == 0}
         assert planted, "the fixture must leave some planted media unlabeled"
         assert all(predictions[cid] == 1 for cid in planted)

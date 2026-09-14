@@ -61,10 +61,24 @@ the ground truth. Measured on the fixture corpus at a loose threshold, three
 distinct marks collapse into one class — unless the separations are on disk, in
 which case all three survive.
 
-So a `different` verdict is stored permanently in `separations.json`, keyed on
-**page ids** (which survive a re-cluster; class ids do not) and enforced as a
-cannot-link constraint on every future run. The constraint propagates, so two
-separated marks cannot be reunited through some third ambiguous crop.
+So a `different` verdict is stored permanently in `adjudications.json`, keyed on
+**`(page_id, mark_index)`** (both of which survive a re-cluster; class ids and
+row indices do not) and enforced as a cannot-link constraint on every future
+run. The constraint propagates, so two separated marks cannot be reunited
+through some third ambiguous crop.
+
+The index is half the key and it was missing until #3343. A page id names a
+*page*, and every source here puts several marks on one — a SPODS page carries
+a logo, a stamp and a signature; a StaVer page carries two stamps. A pair keyed
+on pages alone therefore resolved to *every* crossing between the two pages'
+marks, which is not what anybody ruled on. The real corpus carried one such
+row, the `DY.Secretary` merge, and replaying it would have must-linked two
+30-instance logo classes to a stamp class and fused all three — an over-merge,
+written by the mechanism that exists to prevent them, on the next build.
+`resolve_pairs` now refuses a bare page id whose page carries more than one
+clustered mark rather than guessing;
+`audit_to_corrections.py --migrate-adjudications` recovers the index for a
+pre-#3343 store from the class ids those rows already carry.
 
 ## What each source ships
 
@@ -233,6 +247,10 @@ In the order you run them. Only the first two are needed for a first eval.
    a 30-crop class is one line. Afterwards no positive is unexamined, which is
    what lets a miss be blamed on the detector rather than the label. A rejected
    crop keeps its box and stays on its page — it becomes a known negative.
+   Pass `--reviewer` when applying: `membership_verified` is a boolean, and
+   "checked by the person who owns this benchmark" and "checked by whoever ran
+   the script" are different standards of evidence that a boolean cannot tell
+   apart. It lands in `audit.reviewed_by` beside the date.
 3. **`confusable`** — the same question as `merge`, asked one pair per sheet.
    Correct, and the form to use on a roster small enough that the full matrix is
    a sitting; past a couple of dozen classes prefer the slate, which compiles to
@@ -251,10 +269,30 @@ In the order you run them. Only the first two are needed for a first eval.
 
 Query crops come from each class's largest boxed instance automatically (the
 prior study measured a 2.2× AP advantage for a clean query over a small in-scene
-crop). Band-located classes get none — auto-cropping the strip would hand the
-query a banner of letterhead plus address plus rule line and call it a logo,
-which is worse than no crop because it looks like ground truth. They are listed
-in `build_report.json` under `needs_hand_crop`.
+crop) — largest **among the class's core**, not largest outright. Nothing used to
+check that the largest box was a member of the class in any sense but the
+clustering's own say so, and `spods/stamp_00489_1` holds three rubber stamps
+whose largest box is a third that appears nowhere else in it, so the eval
+searched 24 instances of one stamp with a crop of `://NOT-DELIVERED//:` (#3599).
+The core is the class's medoid plus the instances that are not outliers *against
+that class's own spread*; the fixed-distance version of the same screen was
+measured and does not work, because on blue-on-white marks a perceptual hash
+tracks ink layout rather than identity — the one confirmed-wrong crop scored
+0.172 where the 60-class median was 0.28, second *lowest* of the 60.
+
+Neither half of the choice is silent. A crop that is not its class's largest
+instance reports the larger boxes it passed over, and a crop lying within the
+source's own merge threshold of fewer than half its class reports that too: that
+is a class with no dominant mark, where no rule can pick the right exemplar and
+a `--task cluster` sheet is owed before its numbers mean anything. Both are
+warnings in `build_report.json`, never refusals — a class with no crop drops out
+of the eval rather than failing it — and `classes.json` carries the evidence per
+class under `query_core`.
+
+Band-located classes get no crop — auto-cropping the strip would hand the query a
+banner of letterhead plus address plus rule line and call it a logo, which is
+worse than no crop because it looks like ground truth. They are listed in
+`build_report.json` under `needs_hand_crop`.
 
 
 ## The slate: ask for the partition, not the pairs
@@ -425,7 +463,9 @@ It does not check instances. `merge` fixes the *partition* — which proposals a
 one mark; `membership` fixes the *instances* — whether each crop really is that
 mark. Both are needed before the classes stop being proposals, they are one
 sitting rather than two, and `launch_docmarks.sh slate` renders both into one
-bundle for that reason.
+bundle for that reason — once there is a roster. `membership` walks only the
+classes carrying `on_roster`, so before the roster is picked it renders nothing,
+prints `membership: SKIPPED`, and the bundle holds `audit/merge` alone (#3601).
 
 ## Output
 
@@ -471,10 +511,35 @@ where it is "most accurate":
 
 So the threshold runs **strict**, the partition over-splits on purpose, and the
 repair is done by hand. Both directions of every hand decision are recorded in
-`adjudications.json` as page-id pairs and replayed on every future re-cluster —
-`same` becomes a must-link, `different` a cannot-link — so an afternoon of
-merging is not undone the next time a number moves. A pair ruled both ways is
-refused rather than resolved by whichever is applied last.
+`adjudications.json` as `(page_id, mark_index)` pairs and replayed on every
+future re-cluster — `same` becomes a must-link, `different` a cannot-link — so
+an afternoon of merging is not undone the next time a number moves. A pair
+ruled both ways is refused rather than resolved by whichever is applied last.
+
+**Every pass writes there, not just `merge` and `confusable`.** This is the
+file `build_corpus.py` replays, and it is the *only* one: a rebuild re-clusters
+from the sources and writes `classes.json` from scratch. So a verdict recorded
+only in `classes.json` is applied exactly until the next build, which is a
+documented step of the pipeline — stage 3 rebuilds the corpus to stamp the
+roster — and not an accident someone might avoid. Until #3343 that was true of
+two passes:
+
+- a **`split`** left its pieces in `classes.json` and nothing in the
+  adjudications, so the next build re-proposed the over-merge a person had just
+  taken apart. It is now recorded as the partition it is: a must-link star
+  inside each piece, one cannot-link between each pair of pieces.
+- a **`membership`** verdict set `membership_verified` and dropped the rejected
+  instances from the class, and a rebuild handed them straight back. A verified
+  class is now a must-link star and each rejection one cannot-link against it.
+
+The star is also what makes a single representative pair enough to separate two
+*classes*. Without it a cannot-link binds the two marks it names and no more —
+single linkage merges in increasing distance order, so a cheaper crossing edge
+elsewhere can fuse the classes and leave the two named representatives as the
+only members held apart. After the membership pass each class is one
+must-linked group before any distance is considered, and one row pins all of
+it. Separations written before that say so: `"pins": "marks"` rather than
+`"pins": "classes"`.
 
 Measured on 2,054 real SPODS marks with the 256-bit hash, after the mask
 decomposition was fixed:

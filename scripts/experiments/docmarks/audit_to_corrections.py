@@ -6,6 +6,7 @@
     python audit_to_corrections.py --task cluster --apply
     python audit_to_corrections.py --task confusable --apply
     python audit_to_corrections.py --task letterhead          # dry run (default)
+    python audit_to_corrections.py --migrate-adjudications --apply
 
 Without ``--apply`` it prints what it would change and touches nothing.
 
@@ -14,13 +15,26 @@ under each class's ``audit`` block, and re-running with the same verdict file is
 a no-op.  Nothing is ever deleted — a class judged ``generic`` keeps all its
 instances and simply stops being part of the headline stratum, so both numbers
 stay available and the decision stays visible.
+
+**Two files, two promises.**  ``classes.json`` is this corpus; whether a verdict
+*survives the next build* is a question about ``adjudications.json``, which is
+the only thing ``build_corpus.py`` replays.  So every verdict that changes the
+partition — a merge, a separation, a split, and each instance a membership pass
+accepts or rejects — is written to both.  Until #3343 the split and membership
+passes wrote only the first, which meant the audit held exactly until somebody
+rebuilt, and rebuilding is a documented step of the pipeline rather than an
+accident.  ``--migrate-adjudications`` brings a pre-#3343 store up to the
+current keying; see ``cluster_marks.resolve_pairs`` for why a bare page id is
+no longer enough.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
+from datetime import date
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
@@ -28,6 +42,171 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import docmarks_config as cfg  # noqa: E402
 from sources._common import Mark, Page, read_manifest, write_manifest  # noqa: E402
+
+
+def mark_indices(pages: Sequence[Page], class_id: str) -> dict[str, int]:
+    """``page_id -> mark_index`` for every instance of *class_id*.
+
+    Adjudications are keyed on ``(page_id, mark_index)``, and the index is the
+    half a verdict file never carries: the reviewer ruled on a crop, the crop
+    came from a class, and which of the page's marks that was is only knowable
+    here, while the class ids are still on the manifest.  Look it up before
+    mutating anything — ``apply_membership`` clears the ``class_id`` of a
+    rejected mark, which is exactly the row an adjudication has to name.
+    """
+    out: dict[str, int] = {}
+    for page in pages:
+        for index, mark in enumerate(page.marks):
+            if mark.class_id == class_id:
+                out.setdefault(page.page_id, index)
+    return out
+
+
+def star(endpoints: Sequence[tuple[str, int]], note: str) -> list[dict[str, Any]]:
+    """``n-1`` rows binding *endpoints* into one group, not ``n(n-1)/2``.
+
+    Sameness is transitive and ``single_linkage`` applies every ``must_link``
+    before any distance does, so a star is the whole constraint at a fraction
+    of the rows.
+    """
+    rows: list[dict[str, Any]] = []
+    first, *rest = endpoints
+    for other in rest:
+        rows.append(
+            {
+                "left_page_id": first[0],
+                "left_mark_index": first[1],
+                "right_page_id": other[0],
+                "right_mark_index": other[1],
+                "note": note,
+            }
+        )
+    return rows
+
+
+def migrate_adjudications(
+    pages: Sequence[Page],
+    classes: dict[str, Any],
+    same_rows: Sequence[dict[str, Any]],
+    diff_rows: Sequence[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
+    """Give every legacy page-id endpoint the mark index it always meant.
+
+    A row written before #3343 names two pages and leaves which mark on each
+    was ruled on to be inferred — and on these sources a page carries several,
+    so ``resolve_pairs`` now refuses it rather than expanding it to every
+    crossing.  The rows do carry enough to recover the answer: a ``different``
+    row names the two classes, a ``same`` row names the class that survived the
+    merge, and the marks still carry those ids on the manifest.  Where they do
+    not, a page with exactly one classed mark settles it, and anything still
+    ambiguous is **reported, not guessed**.
+
+    Returns ``(same, different, problems)``.  Rows naming a page that is not in
+    this corpus are passed through untouched: they belong to a tier or a build
+    this one cannot speak for.
+    """
+    by_page = {page.page_id: page for page in pages}
+    problems: list[str] = []
+
+    def index_for(page_id: str, hints: Sequence[Optional[str]]) -> Optional[int]:
+        page = by_page.get(page_id)
+        if page is None:
+            return None
+        wanted = [h for h in hints if h]
+        hit = [i for i, mark in enumerate(page.marks) if mark.class_id and mark.class_id in wanted]
+        if len(hit) == 1:
+            return hit[0]
+        classed = [i for i, mark in enumerate(page.marks) if mark.class_id]
+        if not wanted and len(classed) == 1:
+            return classed[0]
+        return None
+
+    def fixed(row: dict[str, Any], direction: str) -> dict[str, Any]:
+        out = dict(row)
+        sides = {
+            "left": [row.get("left_class_id"), row.get("kept_class_id")],
+            "right": [row.get("right_class_id"), row.get("merged_class_id")],
+        }
+        if direction == "same":
+            # Both endpoints are one class after the merge, and the manifest
+            # relabelled the absorbed side — so each end answers to either id.
+            shared = [h for hs in sides.values() for h in hs if h]
+            if not shared:
+                shared = [
+                    cid
+                    for cid, meta in classes.items()
+                    if row["left_page_id"] in meta.get("page_ids", [])
+                    and row["right_page_id"] in meta.get("page_ids", [])
+                ]
+            sides = {"left": shared, "right": shared}
+        for side in ("left", "right"):
+            page_id = row[f"{side}_page_id"]
+            if row.get(f"{side}_mark_index") is not None or page_id not in by_page:
+                continue
+            index = index_for(page_id, sides[side])
+            if index is None:
+                problems.append(
+                    f"{direction}: {row['left_page_id']} / {row['right_page_id']} — cannot tell which mark on "
+                    f"{page_id} was ruled on; add {side}_mark_index by hand"
+                )
+                continue
+            out[f"{side}_mark_index"] = index
+        return out
+
+    return (
+        [fixed(r, "same") for r in same_rows],
+        [fixed(r, "different") for r in diff_rows],
+        problems,
+    )
+
+
+#: What ``resplit_classes`` writes into a piece's ``audit.notes``.  Parsed, not
+#: just displayed: on a corpus split before #3343 it is the only surviving
+#: record of which parent a piece came out of.
+RESPLIT_NOTE = re.compile(r"^re-clustered out of (?P<parent>\S+) at (?P<threshold>[0-9.]+)$")
+
+
+def split_rows_from_notes(
+    pages: Sequence[Page], classes: dict[str, Any]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Recover an already-applied split as the adjudications it should have written.
+
+    A split applied before #3343 exists only as pieces in ``classes.json``, and
+    the next build would fuse them back.  The pieces do each carry the parent's
+    id in their audit note, and the manifest still says which marks are theirs,
+    so the partition is recoverable exactly — no reviewer is being asked again
+    and nothing is inferred beyond what they already ruled.
+    """
+    families: dict[str, list[str]] = {}
+    for class_id, meta in sorted(classes.items()):
+        match = RESPLIT_NOTE.match(str(meta.get("audit", {}).get("notes", "")))
+        if match:
+            families.setdefault(match.group("parent"), []).append(class_id)
+
+    merges: list[dict[str, Any]] = []
+    separations: list[dict[str, Any]] = []
+    for parent, pieces in sorted(families.items()):
+        anchors: list[tuple[str, int]] = []
+        for piece in pieces:
+            members = sorted(mark_indices(pages, piece).items())
+            if not members:
+                continue
+            if len(members) > 1:
+                merges.extend(star(members, f"split of {parent}: {piece} is one mark"))
+            anchors.append(members[0])
+        for i, left in enumerate(anchors):
+            for right in anchors[i + 1 :]:
+                separations.append(
+                    {
+                        "left_page_id": left[0],
+                        "left_mark_index": left[1],
+                        "right_page_id": right[0],
+                        "right_mark_index": right[1],
+                        "pins": "classes",
+                        "note": f"split of {parent}",
+                    }
+                )
+    return merges, separations
 
 
 def load_verdicts(path: Path) -> list[dict[str, Any]]:
@@ -105,8 +284,12 @@ def apply_cluster(
 
 
 def apply_membership(
-    pages: list[Page], classes: dict[str, Any], verdicts: list[dict[str, Any]]
-) -> tuple[list[str], list[str]]:
+    pages: list[Page],
+    classes: dict[str, Any],
+    verdicts: list[dict[str, Any]],
+    *,
+    reviewer: Optional[str] = None,
+) -> tuple[list[str], list[str], list[dict[str, Any]], list[dict[str, Any]]]:
     """Remove hand-rejected instances and mark the class fully verified.
 
     A rejected crop loses its ``class_id`` but keeps its box and stays on its
@@ -119,9 +302,26 @@ def apply_membership(
     class is a clustering proposal; after it, every positive in the eval has
     been looked at, so a miss is the detector's fault and not possibly the
     label's.
+
+    Returns ``(changes, problems, merges, separations)``.  The verdict is
+    recorded in ``adjudications.json`` as well as in ``classes.json``, because
+    those two files are not the same promise: ``classes.json`` is *this*
+    corpus, and the adjudications are what the decision is replayed from when
+    the corpus is rebuilt.  Until this wrote them, a membership pass was
+    durable only for as long as nobody re-ran the builder — which stage 3 of
+    #3343 does, on purpose, to stamp the roster.
+
+    A verified class is a hand-confirmed group of same-mark instances, so it is
+    recorded as a must-link star, and each rejected crop as one cannot-link
+    against it.  One row per rejection is enough precisely *because* the star
+    exists: ``single_linkage`` applies must-links first, so by the time the
+    separation is registered the class is already one group and the constraint
+    lands on all of it.
     """
     changes: list[str] = []
     problems: list[str] = []
+    merges: list[dict[str, Any]] = []
+    separations: list[dict[str, Any]] = []
 
     for row in verdicts:
         class_id = row["class_id"]
@@ -146,6 +346,9 @@ def apply_membership(
             continue
 
         dropped = {page_ids[i] for i in rejected_idx}
+        # Before the mutation, while the manifest still says which mark is which.
+        located = mark_indices(pages, class_id)
+        kept = [(p, located[p]) for p in meta["page_ids"] if p not in dropped and p in located]
         if dropped:
             for page in pages:
                 if page.page_id in dropped:
@@ -155,10 +358,28 @@ def apply_membership(
             meta["page_ids"] = [p for p in meta["page_ids"] if p not in dropped]
             meta["n_instances"] = len(meta["page_ids"])
 
+        if len(kept) > 1:
+            merges.extend(star(kept, f"membership: every instance of {class_id} confirmed by hand"))
+        for page_id in sorted(dropped):
+            if page_id not in located or not kept:
+                continue
+            separations.append(
+                {
+                    "left_page_id": page_id,
+                    "left_mark_index": located[page_id],
+                    "right_page_id": kept[0][0],
+                    "right_mark_index": kept[0][1],
+                    "right_class_id": class_id,
+                    "note": f"membership: rejected from {class_id}",
+                }
+            )
+
         meta["audit"]["membership_verified"] = True
         meta["audit"]["rejected_page_ids"] = sorted(dropped)
+        meta["audit"]["reviewed_by"] = reviewer
+        meta["audit"]["reviewed_on"] = date.today().isoformat()
         changes.append(f"{class_id}: verified, {len(dropped)} rejected, {meta['n_instances']} instance(s) remain")
-    return changes, problems
+    return changes, problems, merges, separations
 
 
 def apply_distinctive(classes: dict[str, Any], verdicts: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
@@ -231,10 +452,13 @@ def apply_confusable(
             # instances dominate it and the name keeps meaning what it meant.
             keep, gone = (left, right) if lmeta["n_instances"] >= rmeta["n_instances"] else (right, left)
             kmeta, gmeta = classes[keep], classes[gone]
+            kept_at, gone_at = mark_indices(pages, keep), mark_indices(pages, gone)
             merges.append(
                 {
                     "left_page_id": kmeta["page_ids"][0],
+                    "left_mark_index": kept_at.get(kmeta["page_ids"][0]),
                     "right_page_id": gmeta["page_ids"][0],
+                    "right_mark_index": gone_at.get(gmeta["page_ids"][0]),
                     "kept_class_id": keep,
                     "merged_class_id": gone,
                     "note": row.get("notes", ""),
@@ -249,6 +473,28 @@ def apply_confusable(
             classes.pop(gone)
             moved[gone] = keep
             changes.append(f"{gone} merged into {keep} ({kmeta['n_instances']} instances)")
+            # The two writers of class ids do not agree, and the disagreement is
+            # invisible until a rebuild.  Merging keeps the *larger* class's id,
+            # so the name goes on meaning what it meant; `assign_class_ids`
+            # derives an id from the group's *smallest page id*, so the next
+            # build renames this class.  Anything naming it by then -- a roster,
+            # a report, a verdict file -- is pointing at a class that no longer
+            # exists.  Measured on the real corpus (#3343): the `DY.Secretary`
+            # merge of #3561 was `spods/stamp_00551_1` and came back
+            # `spods/stamp_00546_1`.  Say so here rather than leaving it to the
+            # roster-drift warning three steps downstream.
+            located = {**gone_at, **kept_at}
+            if located:
+                anchor_page, anchor_mark = min(located.items())
+                predicted = (
+                    f"{keep.split('/')[0]}/{kmeta.get('kind', 'mark')}_{anchor_page.split('/')[-1]}_{anchor_mark}"
+                )
+                if predicted != keep:
+                    changes.append(
+                        f"  RENAME AHEAD: the next rebuild will call {keep} {predicted} — a class id comes "
+                        "from its group's smallest page id, not from the side a merge kept. Use that name in "
+                        "any roster or report written before the rebuild."
+                    )
         elif verdict == "different":
             lmeta.setdefault("distinct_from", [])
             rmeta.setdefault("distinct_from", [])
@@ -256,19 +502,44 @@ def apply_confusable(
                 lmeta["distinct_from"].append(right)
             if left not in rmeta["distinct_from"]:
                 rmeta["distinct_from"].append(left)
-            # One representative page per side is enough to pin the constraint,
-            # and keeps the store small; the cannot-link propagates to the whole
-            # group through union-find.
+            # One representative mark per side is enough to pin the constraint,
+            # and keeps the store small — but only because the membership pass
+            # ran first and must-linked each class into one group, which
+            # `single_linkage` forms before any separation is registered.  On a
+            # class that is still a clustering proposal it is NOT enough: the
+            # forbidden pair is between the two named marks, so a cheaper
+            # crossing edge elsewhere can fuse the classes and leave the two
+            # representatives as the only members kept apart.  Hence the
+            # warning rather than a quiet row.
+            lat, rat = mark_indices(pages, left), mark_indices(pages, right)
+            unverified = [
+                cid
+                for cid, meta in ((left, lmeta), (right, rmeta))
+                if not meta.get("audit", {}).get("membership_verified")
+            ]
             separations.append(
                 {
                     "left_page_id": lmeta["page_ids"][0],
+                    "left_mark_index": lat.get(lmeta["page_ids"][0]),
                     "right_page_id": rmeta["page_ids"][0],
+                    "right_mark_index": rat.get(rmeta["page_ids"][0]),
                     "left_class_id": left,
                     "right_class_id": right,
+                    # What the constraint will actually hold apart on a rebuild.
+                    # Not a detail: a reader of this file should not have to
+                    # re-derive which of their separations are load-bearing.
+                    "pins": "marks" if unverified else "classes",
                     "note": row.get("notes", ""),
                 }
             )
-            changes.append(f"{left} != {right}: separation recorded")
+            changes.append(
+                f"{left} != {right}: separation recorded"
+                + (
+                    f" (pins the two marks only — {', '.join(unverified)} not membership-verified)"
+                    if unverified
+                    else ""
+                )
+            )
         else:
             problems.append(f"{left} / {right}: unrecognised verdict {verdict!r} (expected same|different)")
 
@@ -505,26 +776,42 @@ def resplit_classes(
     corpus: Path,
     min_mark_px: int = cfg.MIN_MARK_PX,
     factor: float = 0.5,
-) -> list[str]:
+) -> tuple[list[str], list[dict[str, Any]], list[dict[str, Any]]]:
     """Re-cluster each over-merged class alone, at a tighter threshold.
 
     Only that class's own instances are touched, so re-splitting one class can
     never disturb another's already-confirmed membership.  The resulting pieces
     come back as fresh candidate classes for the next ``cluster`` sheet.
 
+    Returns ``(notes, merges, separations)``.
+
     The pieces are **registered in** ``classes``, not merely written onto the
     marks.  ``assign_class_ids`` relabels the manifest, but the slate, the
     roster, the embedder and the report all read ``classes.json``; the only
     other thing that writes it is ``build_corpus.py``, which rebuilds from the
-    sources and would discard this split along with every other audit verdict.
-    Popping the parent without adding its pieces therefore does not defer the
-    decision to the next sheet -- it deletes the class from everything
+    sources.  Popping the parent without adding its pieces therefore does not
+    defer the decision to the next sheet -- it deletes the class from everything
     downstream while leaving its marks pointing at ids nothing knows.
+
+    And registering them is still not enough, which is the half this used to
+    miss.  A rebuild re-clusters from the sources and replays
+    ``adjudications.json`` -- so a split that lives only in ``classes.json`` is
+    discarded by the next build, silently and completely, re-proposing the very
+    over-merge a person had just taken apart.  #3343 hit exactly that: stage 3
+    rebuilds the corpus to stamp the roster, and the two splits the #3561 audit
+    had applied (a five-mark StaVer class, a four-mark SPODS one) would have
+    come back fused.  So the partition is recorded the way every other hand
+    verdict is: a must-link star inside each piece, one cannot-link between
+    each pair of pieces.  The asymmetry is sound rather than lazy -- the stars
+    are applied first, so by the time a separation is registered each piece is
+    already one group and a single row pins all of it.
     """
     from build_corpus import admit_classes, write_query_crops
     from cluster_marks import assign_class_ids, describe_marks, distance_matrix, single_linkage
 
     notes: list[str] = []
+    merges: list[dict[str, Any]] = []
+    separations: list[dict[str, Any]] = []
     tighter = threshold * factor
     for class_id in class_ids:
         meta = classes.get(class_id)
@@ -550,12 +837,39 @@ def resplit_classes(
         for cid, fresh_meta in fresh.items():
             fresh_meta["audit"]["notes"] = f"re-clustered out of {class_id} at {tighter:.3f}"
             classes[cid] = fresh_meta
-        write_query_crops(pages, inventory, fresh, corpus / "queries")
+        # The pieces are fresh classes, so each needs its own exemplar -- and a
+        # piece that still holds more than one mark says so here.
+        _hand, crop_warnings = write_query_crops(
+            pages, inventory, fresh, corpus / "queries", backend=backend, threshold=tighter
+        )
+        # Record the partition so the next rebuild reproduces it.  Keyed on
+        # `(page_id, mark_index)` off the refs themselves, which is the one
+        # identifier that survives both a re-cluster and a renumbering.
+        anchors: list[tuple[str, int]] = []
+        for cid, group in sorted(pieces.items()):
+            members = sorted((ref.page_id, ref.mark_index) for ref in group)
+            if len(members) > 1:
+                merges.extend(star(members, f"split of {class_id}: {cid} is one mark"))
+            anchors.append(members[0])
+        for i, left in enumerate(anchors):
+            for right in anchors[i + 1 :]:
+                separations.append(
+                    {
+                        "left_page_id": left[0],
+                        "left_mark_index": left[1],
+                        "right_page_id": right[0],
+                        "right_mark_index": right[1],
+                        "pins": "classes",
+                        "note": f"split of {class_id} at {tighter:.3f}",
+                    }
+                )
+
         note = f"{class_id}: re-clustered at {tighter:.3f} into {len(pieces)} piece(s)"
         if rejected:
             note += f", {len(rejected)} not admitted ({'; '.join(sorted(rejected.values()))})"
         notes.append(note)
-    return notes
+        notes.extend(crop_warnings)
+    return notes, merges, separations
 
 
 def _refs_for_class(pages: list[Page], class_id: str) -> list[Any]:
@@ -573,11 +887,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument(
         "--task",
-        required=True,
         choices=("merge", "membership", "cluster", "confusable", "distinctive", "letterhead"),
     )
     ap.add_argument("--corpus", type=Path, default=cfg.OUT)
     ap.add_argument("--apply", action="store_true", help="write the changes (default is a dry run)")
+    ap.add_argument(
+        "--reviewer",
+        default=None,
+        help="who worked these sheets; stamped onto every class the membership pass verifies, "
+        "because 'a human checked it' is a claim about a person",
+    )
+    ap.add_argument(
+        "--migrate-adjudications",
+        action="store_true",
+        help="stamp the mark index onto legacy page-id-only adjudications, then exit",
+    )
     ap.add_argument("--cluster-backend", default=cfg.CLUSTER_BACKEND, choices=("phash", "siglip"))
     ap.add_argument("--cluster-threshold", type=float, default=cfg.CLUSTER_THRESHOLD)
     ap.add_argument("--min-mark-px", type=int, default=cfg.MIN_MARK_PX)
@@ -587,6 +911,39 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     manifest_path = args.corpus / "corpus.jsonl"
     adjudications_path = args.corpus / "adjudications.json"
     classes = json.loads(classes_path.read_text(encoding="utf-8"))
+
+    if args.migrate_adjudications:
+        from cluster_marks import load_adjudication_rows, save_adjudications
+
+        pages = list(read_manifest(manifest_path))
+        old_same, old_diff = load_adjudication_rows(adjudications_path)
+        same, diff, problems = migrate_adjudications(pages, classes, old_same, old_diff)
+        stamped = sum(
+            1
+            for before, after in zip(old_same + old_diff, same + diff)
+            for side in ("left", "right")
+            if before.get(f"{side}_mark_index") is None and after.get(f"{side}_mark_index") is not None
+        )
+        split_merges, split_separations = split_rows_from_notes(pages, classes)
+        same, diff = same + split_merges, diff + split_separations
+        for problem in problems:
+            print(f"  PROBLEM: {problem}")
+        print(f"{stamped} endpoint(s) resolved to a mark, {len(problems)} left ambiguous")
+        print(
+            f"{len(split_merges)} merge(s) and {len(split_separations)} separation(s) recovered "
+            "from splits that were applied before they were recorded"
+        )
+        if problems:
+            return 1
+        if args.apply:
+            save_adjudications(same, diff, adjudications_path)
+            print(f"wrote {adjudications_path}")
+        else:
+            print("dry run — pass --apply to write")
+        return 0
+
+    if not args.task:
+        ap.error("--task is required unless --migrate-adjudications is given")
     audit_dir = args.corpus / "audit" / args.task
     slate_problems: list[str] = []
     if args.task == "merge":
@@ -604,7 +961,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     resplit: list[str] = []
 
     if args.task == "membership":
-        changes, problems = apply_membership(pages, classes, verdicts)
+        changes, problems, new_merges, new_separations = apply_membership(
+            pages, classes, verdicts, reviewer=args.reviewer
+        )
     elif args.task == "cluster":
         changes, problems, resplit = apply_cluster(pages, classes, verdicts)
     elif args.task in ("confusable", "merge"):
@@ -632,7 +991,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 1 if problems else 0
 
     if resplit:
-        for note in resplit_classes(
+        notes, split_merges, split_separations = resplit_classes(
             pages,
             classes,
             resplit,
@@ -640,17 +999,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             threshold=args.cluster_threshold,
             corpus=args.corpus,
             min_mark_px=args.min_mark_px,
-        ):
+        )
+        for note in notes:
             print(f"  {note}")
+        new_merges += split_merges
+        new_separations += split_separations
         print("  re-run make_audit_slate.py --task cluster to review the new pieces")
 
     if new_separations or new_merges:
-        from cluster_marks import load_adjudications, save_adjudications
+        from cluster_marks import load_adjudication_rows, save_adjudications
 
-        old_same, old_diff = load_adjudications(adjudications_path)
+        # Verbatim rows, not the narrowed pairs: re-saving what the clusterer
+        # reads would drop every note and class id already on file.
+        old_same, old_diff = load_adjudication_rows(adjudications_path)
         save_adjudications(
-            [{"left_page_id": a, "right_page_id": b} for a, b in old_same] + new_merges,
-            [{"left_page_id": a, "right_page_id": b} for a, b in old_diff] + new_separations,
+            old_same + new_merges,
+            old_diff + new_separations,
             adjudications_path,
         )
         print(f"  wrote {len(new_merges)} merge(s) and {len(new_separations)} separation(s) to {adjudications_path}")

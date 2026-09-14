@@ -188,6 +188,19 @@ def _roster(plan: dict[str, int], reserved: frozenset[str] = frozenset()) -> dic
     return roster
 
 
+def category_order(plan: str, category: str) -> list[str]:
+    """A plan's frames for one category, most *about* that category first.
+
+    `_roster` already sorts by how much of the frame the largest box of the
+    category covers, and that order is thrown away when the files are copied
+    into a folder named by category — a directory listing is alphabetical by
+    COCO id, which is nothing at all. This hands the ranking back, for a caller
+    that wants the frames a person would call photographs *of* a book rather
+    than photographs with a book in them (`results_grid.py`).
+    """
+    return _roster(PLANS[plan], _reserved_for(plan))[category]
+
+
 def _reserved_for(name: str) -> frozenset[str]:
     """The frames *name* must not take, because another corpus holds them."""
     other = DISJOINT_FROM.get(name)

@@ -77,6 +77,8 @@ from typing import TYPE_CHECKING, Any, Optional
 import numpy as np
 
 from vtscore.concurrency.async_jobs import check_job_cancelled
+from vtscore.detectors.cost_trend import MIN_PER_CLASS, SMART_MIN_POINTS, SMART_WINDOW, smart_status_from_costs
+from vtscore.detectors.stability import ScoredSnapshot, stability_entry, stable_status_from_entries
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.training.thresholds import inclusion_cost_weights, weighted_error_cost
 
@@ -120,7 +122,10 @@ class _ProgressCache:
     steps: list[dict[str, Any]] = field(default_factory=list)
     good_ids: set[int] = field(default_factory=set)
     bad_ids: set[int] = field(default_factory=set)
-    prev_predictions: Optional[dict[int, int]] = None
+    #: The last model-bearing step's scores over the still-unlabeled pool, with
+    #: its cut and ambiguity band - the baseline the next step's detector is
+    #: compared against for the Stable indicator.
+    prev_snapshot: Optional[ScoredSnapshot] = None
     coverage_atlas: Any = None  # CoverageAtlas | None
 
     #: Last fully-computed ``/api/labeling-status`` payload (minus the transient
@@ -159,7 +164,7 @@ class _ProgressCache:
         self.steps.clear()
         self.good_ids.clear()
         self.bad_ids.clear()
-        self.prev_predictions = None
+        self.prev_snapshot = None
         self.inclusion = None
         self.coverage_atlas = None
         self.live_models.clear()
@@ -177,7 +182,7 @@ _caches: OrderedDict[tuple[str, str], _ProgressCache] = OrderedDict()
 
 # How many ``(dataset, detector)`` pairs stay warm at once.  Small on purpose:
 # each cache holds the app's trained head for every label-history step that had
-# a sort, plus a ``prev_predictions`` map over the scored pool, so the point is
+# a sort, plus a ``prev_snapshot`` of scores over the scored pool, so the point is
 # to keep an A-to-B-and-back detector toggle from throwing away work, not to
 # cache everything a long session ever touched.
 _MAX_CACHED_PAIRS = 3
@@ -192,8 +197,9 @@ _progress_lock = threading.RLock()
 # label-history steps: most steps carry none (see the module docstring), so a
 # step-counted window would silently shrink to a handful of points - or to
 # fewer than the three the regression needs - exactly when sorts are slowest
-# and the coalescing is heaviest.
-_SMART_WINDOW_MODELS = 10
+# and the coalescing is heaviest.  The width itself is the shared rule's
+# (:mod:`vtscore.detectors.cost_trend`), which the harness reads too.
+_SMART_WINDOW_MODELS = SMART_WINDOW
 
 # How long :func:`cached_indicator_history` will wait for ``_progress_lock``
 # before declaring the cache unreadable.  Long enough to ride out the brief
@@ -321,7 +327,7 @@ def invalidate_progress_cache_from(media_id: int) -> None:
 
         # Reset the stability prediction chain - it will restart from the
         # truncation point when _ensure_cache replays the remaining history.
-        cache.prev_predictions = None
+        cache.prev_snapshot = None
 
         # Clear live models - some may have been trained with the old label.
         cache.live_models.clear()
@@ -560,12 +566,15 @@ def _compute_step_stability(
     t: int,
     num_labels: int,
 ) -> Optional[dict[str, Any]]:
-    """Compute prediction stability by comparing to the previous step's predictions.
+    """Compute prediction stability by comparing to the previous step's scores.
 
     Scores *pool* the way the detector is served - one forward pass over its
     score rows, max-pooled per media (:func:`score_rows_with_model`) - so a flip
     means an item the user would have seen move across the cut, not an item a
-    differently-shaped scorer would have.
+    differently-shaped scorer would have.  The counting itself is
+    :func:`vtscore.detectors.stability.stability_entry`, shared with the eval
+    harness: a raw flip count and a *confident* one (items that sat clear of the
+    cut under both detectors), each over the whole pool as denominator.
 
     The comparison is against the previous **model**, which is not necessarily
     the previous step: steps whose label set no sort ran against carry no
@@ -580,41 +589,44 @@ def _compute_step_stability(
     from vtscore.detectors.training import score_rows_with_model  # noqa: PLC0415
 
     if pool is None:
-        cache.prev_predictions = None
+        cache.prev_snapshot = None
         return None
 
     labeled_ids = cache.good_ids | cache.bad_ids
     # Labels are few relative to the pool, so count the overlap from the
     # labelset rather than rescanning the pool.
-    num_unlabeled = len(pool.rows.ids) - sum(1 for cid in labeled_ids if cid in pool.id_set)
+    num_pool = len(pool.rows.ids)
+    num_unlabeled = num_pool - sum(1 for cid in labeled_ids if cid in pool.id_set)
 
     if num_unlabeled <= 0 or not pool.rows.ids:
-        return {"time_index": t, "num_labels": num_labels, "num_flips": 0, "num_unlabeled": 0}
+        return {
+            "time_index": t,
+            "num_labels": num_labels,
+            "num_flips": 0,
+            "num_confident_flips": 0,
+            "num_unlabeled": 0,
+            "num_pool": num_pool,
+        }
 
     # Score the whole pool in one pass and drop the currently-labeled ids
     # afterwards.  Scoring the handful of extra (labeled) media is far cheaper
     # than re-materialising a per-step row stack of the unlabeled subset.
     scores, _best_rows = score_rows_with_model(model, pool.rows)
-
-    predictions: dict[int, int] = {
-        cid: 1 if score >= threshold else 0
-        for cid, score in zip(pool.rows.ids, scores, strict=True)
-        if cid not in labeled_ids
-    }
+    snapshot = ScoredSnapshot.from_scores(
+        {cid: score for cid, score in zip(pool.rows.ids, scores, strict=True) if cid not in labeled_ids},
+        threshold,
+    )
 
     stability: Optional[dict[str, Any]] = None
-    if cache.prev_predictions is not None:
-        prev = cache.prev_predictions
-        num_flips = sum(1 for cid in predictions.keys() & prev.keys() if predictions[cid] != prev[cid])
+    if cache.prev_snapshot is not None:
         stability = {
             "time_index": t,
             "num_labels": num_labels,
-            "num_flips": num_flips,
-            "num_unlabeled": num_unlabeled,
+            **stability_entry(cache.prev_snapshot, snapshot, num_pool),
         }
-    # else: no prior predictions to compare - leave stability as None.
+    # else: no prior scores to compare - leave stability as None.
 
-    cache.prev_predictions = predictions
+    cache.prev_snapshot = snapshot
     return stability
 
 
@@ -998,48 +1010,24 @@ def _smart_status_uncached(
     good: int,
     bad: int,
 ) -> dict[str, Any]:
-    """The body of :func:`_compute_smart_status`, before memoisation."""
-    if good < 5 or bad < 5:
-        return {
-            "status": "red",
-            "reason": f"Need at least 5 good and 5 bad. Currently {good}g, {bad}b.",
-        }
+    """The body of :func:`_compute_smart_status`, before memoisation.
 
-    if len(model_steps) < 3:
+    Only the plumbing lives here: which models are in the window, and what they
+    cost against the current labelset.  The rule itself is
+    :func:`vtscore.detectors.cost_trend.smart_status_from_costs`, which the
+    eval harness calls too, so the pair cannot drift (issue #3832).
+    """
+    if good < MIN_PER_CLASS or bad < MIN_PER_CLASS:
+        return smart_status_from_costs([], good, bad)
+
+    if len(model_steps) < SMART_MIN_POINTS:
         return {
             "status": "yellow",
             "reason": "Not enough trained detectors yet to assess trend. Sort to train one.",
         }
 
     recent_entries = _eval_cached_models(cache, eval_set, inclusion_value, model_steps[-_SMART_WINDOW_MODELS:])
-    recent_error_costs = [e["error_cost"] for e in recent_entries]
-
-    if len(recent_error_costs) < 3:
-        return {"status": "yellow", "reason": "Not enough valid model steps in recent history to assess trend."}
-
-    # Linear regression slope over the recent error-cost values
-    n_pts = len(recent_error_costs)
-    x_vals = list(range(n_pts))
-    x_mean = sum(x_vals) / n_pts
-    y_mean = sum(recent_error_costs) / n_pts
-
-    numer = sum((x_vals[i] - x_mean) * (recent_error_costs[i] - y_mean) for i in range(n_pts))
-    denom = sum((x_vals[i] - x_mean) ** 2 for i in range(n_pts))
-    slope = numer / denom if denom != 0 else 0.0
-    relative_slope = slope / y_mean if y_mean > 0 else slope
-
-    FLAT_THRESHOLD = -0.015
-    if relative_slope < FLAT_THRESHOLD:
-        return {
-            "status": "yellow",
-            "reason": "Error cost is still declining. Keep labeling.",
-            "slope": round(relative_slope, 4),
-        }
-    return {
-        "status": "green",
-        "reason": "Error cost has leveled off. You can likely stop labeling.",
-        "slope": round(relative_slope, 4),
-    }
+    return smart_status_from_costs([e["error_cost"] for e in recent_entries], good, bad)
 
 
 def _compute_stable_status(
@@ -1048,44 +1036,15 @@ def _compute_stable_status(
     bad: int,
     total: int,
 ) -> dict[str, Any]:
-    """Compute Stable (prediction-flip) red/yellow/green status."""
-    if good < 5 or bad < 5:
-        return {
-            "status": "red",
-            "reason": f"Need at least 5 good and 5 bad. Currently {good}g, {bad}b.",
-        }
+    """Compute Stable (prediction-flip) red/yellow/green status.
 
+    Reads the per-step stability entries off *cache* and hands them to
+    :func:`vtscore.detectors.stability.stable_status_from_entries`, which owns
+    the rule (confident flips over the whole pool, plus the flip-rate plateau
+    test) so the eval harness cannot drift from it.
+    """
     stability = [step["stability"] for step in cache.steps if step["stability"] is not None]
-
-    MIN_STABLE_ENTRIES = 5
-    if len(stability) < MIN_STABLE_ENTRIES:
-        return {"status": "yellow", "reason": "Not enough history to assess prediction stability."}
-
-    recent = stability[-10:]
-
-    # Use flip *rate* (fraction of unlabeled predictions that changed) so the
-    # threshold scales with dataset size instead of using a fixed absolute count.
-    flip_rates: list[float] = []
-    for s in recent:
-        n_unlabeled = s.get("num_unlabeled", 0)
-        if n_unlabeled > 0:
-            flip_rates.append(s["num_flips"] / n_unlabeled)
-        else:
-            flip_rates.append(0.0)
-
-    avg_flip_rate = sum(flip_rates) / len(flip_rates)
-    max_flip_rate = max(flip_rates)
-
-    STABLE_RATE_THRESHOLD = 0.005  # average less than 0.5% of predictions flipping
-    STABLE_MAX_THRESHOLD = 0.01  # no single recent step above 1%
-
-    if avg_flip_rate < STABLE_RATE_THRESHOLD and max_flip_rate < STABLE_MAX_THRESHOLD:
-        return {"status": "green", "reason": "Predictions have stabilized.", "avg_flip_rate": round(avg_flip_rate, 4)}
-    return {
-        "status": "yellow",
-        "reason": f"Average {avg_flip_rate:.1%} of predictions flipping in recent steps.",
-        "avg_flip_rate": round(avg_flip_rate, 4),
-    }
+    return stable_status_from_entries(stability, good, bad)
 
 
 def _compute_span_status(span_info: Optional[dict[str, Any]]) -> dict[str, Any]:

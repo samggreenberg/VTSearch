@@ -726,6 +726,21 @@ written into `angular.json` next to the number. `./run-tests.sh` treats **any**
 `anyComponentStyle` budget. Fix the bloat — split the component, extract shared
 styles, delete dead rules. Raising a budget needs the user's explicit approval.
 
+What actually sits in the eager bundle is mostly **framework**: 317 kB of
+Angular against 121 kB of app code when it was last audited (#3811). That is
+why the budget carries visible headroom — Angular's own patch releases move the
+number a few kB at a time, and when the margin was under 1 kB a routine
+security bump turned the build gate red for every branch (#3795). Treat the
+headroom as reserved for the framework, not as room for app code.
+
+The corollary is that the budget cannot catch an app-code regression on its own
+any more, so one specific trap is covered by a test:
+**do not import `FormsModule` into anything on the eager path.** `vt-login` and
+`vt-dialog-host` each render a single uncontrolled text field and used to pull
+all ~37 kB of `@angular/forms` for it; both now use plain `[value]` + `(input)`.
+`TestEagerBundleComposition` in `tests/core/test_frontend.py` walks the built
+bundle's *static* imports from `main.js` and fails if the package reappears.
+
 ### Other primitives
 
 `components/icon/` maps names (and backend-supplied emoji) to sanitised inline

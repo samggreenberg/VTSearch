@@ -2,7 +2,7 @@
 
 ![bg fit](figs/calib-xcal-flow.png)
 
-## Cross Examination
+## Grading Your Own Homework
 
 <!-- build: figs/calib-xcal-flow.build1.png -->
 

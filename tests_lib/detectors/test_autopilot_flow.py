@@ -18,12 +18,14 @@ import math
 import numpy as np
 import pytest
 
+from vtscore.detectors.cost_trend import smart_status_from_costs
 from vtscore.eval.al_strategies import ALContext, select_next
 from vtscore.eval.autopilot_flow import (
     BAD_TARGET,
     GOOD_TARGET,
     MIN_PER_CLASS,
     SMART_FLAT_THRESHOLD,
+    SMART_SLOPE_T,
     SPAN_YELLOW,
     STABLE_MAX_THRESHOLD,
     STABLE_RATE_THRESHOLD,
@@ -35,6 +37,11 @@ from vtscore.eval.autopilot_flow import (
     span_status,
     stable_status,
 )
+
+
+#: A real plateaued window from the #3832 dice reproduction; see
+#: ``tests_lib/detectors/test_cost_trend_rule.py``.
+PLATEAU_WINDOW = [0.861, 0.832, 0.861, 0.861, 0.861, 0.887, 0.755, 0.669, 0.699, 0.857]
 
 
 def _sim_clips(n=160, dim=16):
@@ -95,9 +102,13 @@ class TestPortedConstants:
 
     def test_indicator_gates_match_labeling_progress(self):
         # _compute_smart_status / _compute_stable_status: "Need at least 5 good
-        # and 5 bad"; FLAT_THRESHOLD -0.015; stable rate/max 0.005 / 0.01.
+        # and 5 bad"; flat threshold -0.015 and a slope worth 2 standard errors
+        # (see vtscore.detectors.cost_trend); stable rate/max 0.005 / 0.01 (of
+        # the whole pool, confident flips only - see vtscore.detectors.stability).
+        # Both rules are now called by the app as well as re-exported here.
         assert MIN_PER_CLASS == 5
         assert SMART_FLAT_THRESHOLD == -0.015
+        assert SMART_SLOPE_T == 2.0
         assert STABLE_RATE_THRESHOLD == 0.005
         assert STABLE_MAX_THRESHOLD == 0.01
         assert SPAN_YELLOW == 10
@@ -172,6 +183,8 @@ class TestDetectorVisibility:
 
 
 class TestSmartStatus:
+    """The wrapper only; the rule is pinned in ``test_cost_trend_rule.py``."""
+
     def test_red_below_five_per_class(self):
         assert smart_status([0.5, 0.4, 0.3], MIN_PER_CLASS - 1, 9) == "red"
         assert smart_status([0.5, 0.4, 0.3], 9, MIN_PER_CLASS - 1) == "red"
@@ -188,32 +201,62 @@ class TestSmartStatus:
     def test_green_when_the_cost_is_rising(self):
         assert smart_status([0.2, 0.3, 0.4, 0.5], 9, 9) == "green"
 
+    def test_it_is_the_shared_rule_and_not_a_copy_of_it(self):
+        """Same inputs, same light as ``/api/labeling-status`` shows the user."""
+        for costs in ([0.9, 0.7, 0.5, 0.3], [0.3] * 6, PLATEAU_WINDOW):
+            assert smart_status(costs, 9, 9) == smart_status_from_costs(costs, 9, 9)["status"]
+
+    def test_a_noisy_plateau_does_not_hold_the_simulated_user_in_hard(self):
+        """The #3832 flap, at the level the harness reads it."""
+        assert smart_status(PLATEAU_WINDOW, 9, 9) == "green"
+
+
+def _entry(flips: int, confident: int | None = None, *, unlabeled: int = 500, pool: int = 1000) -> dict:
+    """One stability record; confident flips default to all of them."""
+    return {
+        "num_flips": flips,
+        "num_confident_flips": flips if confident is None else confident,
+        "num_unlabeled": unlabeled,
+        "num_pool": pool,
+    }
+
 
 class TestStableStatus:
+    """The light reads the shared rule; these pin its shape, not the rule
+    (``tests_lib/detectors/test_stability_rule.py`` does that)."""
+
     def test_red_below_five_per_class(self):
-        entries = [{"num_flips": 0, "num_unlabeled": 100}] * 6
+        entries = [_entry(0)] * 6
         assert stable_status(entries, MIN_PER_CLASS - 1, 9) == "red"
 
     def test_yellow_without_enough_entries(self):
-        entries = [{"num_flips": 0, "num_unlabeled": 100}] * 4
+        entries = [_entry(0)] * 4
         assert stable_status(entries, 9, 9) == "yellow"
 
     def test_green_once_predictions_settle(self):
-        entries = [{"num_flips": 0, "num_unlabeled": 1000}] * 6
+        entries = [_entry(0)] * 6
         assert stable_status(entries, 9, 9) == "green"
 
-    def test_yellow_while_predictions_still_flip(self):
-        entries = [{"num_flips": 50, "num_unlabeled": 1000}] * 6
+    def test_yellow_while_confident_predictions_still_flip(self):
+        entries = [_entry(50)] * 6
         assert stable_status(entries, 9, 9) == "yellow"
 
     def test_a_single_spike_blocks_green(self):
-        """``max_flip_rate`` is a separate gate from the average."""
-        entries = [{"num_flips": 0, "num_unlabeled": 1000}] * 5
-        entries.append({"num_flips": 20, "num_unlabeled": 1000})  # 2% > 1% max
+        """``max`` is a separate gate from the average."""
+        entries = [_entry(0)] * 5
+        entries.append(_entry(20))  # 2% of the pool > 1% max
         assert stable_status(entries, 9, 9) == "yellow"
 
-    def test_zero_unlabeled_counts_as_no_flips(self):
-        entries = [{"num_flips": 7, "num_unlabeled": 0}] * 6
+    def test_in_band_flips_do_not_block_green(self):
+        """Boundary wobble - flips of items inside the ambiguity band - is the
+        #3831 case: it must not hold a run in ``hard`` forever."""
+        entries = [_entry(50, confident=0)] * 6
+        assert stable_status(entries, 9, 9) == "green"
+
+    def test_rates_are_over_the_pool_not_the_remainder(self):
+        """One flip among the last few unlabeled items is a tiny fraction of the
+        pool, not a 25% spike."""
+        entries = [_entry(0, unlabeled=4)] * 5 + [_entry(1, unlabeled=4)]
         assert stable_status(entries, 9, 9) == "green"
 
 
@@ -241,12 +284,22 @@ class TestAutopilotFlow:
         assert flow.update(GOOD_TARGET, 0, 500, None) == "bad"
         assert flow.update(GOOD_TARGET, BAD_TARGET, 500, None) == "hard"
 
-    def test_records_flip_rates_between_consecutive_steps(self):
+    def test_records_flip_counts_between_consecutive_steps(self):
         flow = AutopilotFlow()
-        flow.record_step([0.4], {1: 1, 2: 0, 3: 1})
+        flow.record_step([0.4], {1: 0.9, 2: 0.1, 3: 0.9}, 0.5)
         assert flow.stability == []  # nothing to compare the first step against
-        flow.record_step([0.4, 0.3], {1: 0, 2: 0, 3: 1})  # id 1 flipped
-        assert flow.stability == [{"num_flips": 1, "num_unlabeled": 3}]
+        flow.record_step([0.4, 0.3], {1: 0.1, 2: 0.1, 3: 0.9}, 0.5, num_pool=10)  # id 1 flipped, clear of the cut
+        assert flow.stability == [{"num_flips": 1, "num_confident_flips": 1, "num_unlabeled": 3, "num_pool": 10}]
+
+    def test_pool_defaults_to_the_scored_ids(self):
+        flow = AutopilotFlow()
+        flow.record_step(None, {1: 0.9, 2: 0.1}, 0.5)
+        flow.record_step(None, {1: 0.9, 2: 0.1}, 0.5)
+        assert flow.stability[-1]["num_pool"] == 2
+
+    def test_a_threshold_is_required_with_scores(self):
+        with pytest.raises(ValueError):
+            AutopilotFlow().record_step(None, {1: 0.9})
 
     def test_ignores_steps_with_no_model(self):
         flow = AutopilotFlow()
@@ -282,7 +335,7 @@ class TestAutopilotFlow:
     def test_span_drives_the_new_to_done_transition(self):
         flow = AutopilotFlow()
         flow.recent_error_costs = [0.3] * 4
-        flow.stability = [{"num_flips": 0, "num_unlabeled": 1000}] * 6
+        flow.stability = [_entry(0)] * 6
         assert flow.update(9, 9, 500, {"level": 0, "depth": 100}) == "new"
         assert flow.update(9, 9, 500, {"level": 40, "depth": 100}) == "done"
 

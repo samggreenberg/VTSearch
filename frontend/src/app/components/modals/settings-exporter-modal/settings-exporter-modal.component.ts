@@ -10,6 +10,7 @@ import { ImporterField } from '../../../models/api.models';
 import type { SettingsExporterEntry } from '../../../generated/api-client/models/settings-exporter-entry';
 import type { RunSettingsExportResponse } from '../../../generated/api-client/models/run-settings-export-response';
 import { apiErrorMessage } from '../../../utils/api-error';
+import { DynamicFieldOptions } from '../../../utils/dynamic-field-options';
 
 type ModalView = 'picker' | 'form';
 
@@ -52,6 +53,11 @@ export class SettingsExporterModalComponent implements OnDestroy {
       (this.exportersResource.error() ? 'Failed to load settings exporters' : ''),
   );
   readonly successMessage = signal('');
+  /** Option lists for the selected exporter's ``dynamic_options`` fields;
+   *  the export-side twin of the settings-importer gap fixed in #3802. */
+  readonly fieldOptions = new DynamicFieldOptions((key, values) =>
+    this.settingsIoApi.getExporterFieldOptions(this.selectedExporter!.name, key, values),
+  );
   private closeTimer: ReturnType<typeof setTimeout> | null = null;
 
   get modalTitle(): string {
@@ -73,6 +79,7 @@ export class SettingsExporterModalComponent implements OnDestroy {
     this.formValues = {};
     this.exportError.set('');
     this.successMessage.set('');
+    this.fieldOptions.reset();
     const fields = (exporter.fields ?? []) as ImporterField[];
     for (const field of fields) {
       if (field.default) {
@@ -86,6 +93,7 @@ export class SettingsExporterModalComponent implements OnDestroy {
         this.formValues[field.key] = field.options![0];
       }
     }
+    this.fieldOptions.refreshAll(fields, this.formValues);
     // If the exporter has no fields, submit immediately
     if (fields.length === 0) {
       this.view = 'form';
@@ -95,11 +103,19 @@ export class SettingsExporterModalComponent implements OnDestroy {
     }
   }
 
+  /** Re-fetch the options of every field that depends on the one just
+   *  edited, so a ``depends_on`` chain stays consistent. */
+  onFormFieldChanged(changedKey: string): void {
+    if (!this.selectedExporter?.fields) return;
+    this.fieldOptions.refreshDependentsOf(changedKey, this.selectedExporterFields, this.formValues);
+  }
+
   back(): void {
     this.view = 'picker';
     this.selectedExporter = null;
     this.exportError.set('');
     this.successMessage.set('');
+    this.fieldOptions.reset();
   }
 
   submit(): void {

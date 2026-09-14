@@ -1,0 +1,3 @@
+objective,traces,iterations,decreasing_iterations,decreasing_pct,traces_with_a_decrease,worst_single_step
+anchored,8,1989,0,0.0,0,0.0
+free,8,2410,883,36.63900414937759,6,-2.021707969923625e-06

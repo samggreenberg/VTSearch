@@ -10,6 +10,34 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`vtscore.detectors.cost_trend`** (issue #3832) - the Smart indicator's
+  arithmetic as a pure module: `cost_trend()` (the fitted `relative_slope` and
+  its `t_stat`) and `smart_status_from_costs()`, plus its constants
+  (`SMART_WINDOW`, `SMART_MIN_POINTS`, `SMART_FLAT_THRESHOLD`,
+  `SMART_SLOPE_T`). Both `labeling_progress._compute_smart_status` and the eval
+  harness's `autopilot_flow.smart_status` delegate to it, so the two can no
+  longer drift. The rule changed with the move: a decline must now also be
+  larger than the window's own step-to-step scatter - the regression slope at
+  or below `-SMART_SLOPE_T` standard errors - before it counts as "still
+  falling". The status dict gained `slope_t` beside `slope`. The harness's
+  `SMART_*` constants are re-exports of this module's and keep their names.
+
+- **`vtscore.detectors.stability`** (issue #3831) - the Stable indicator's
+  arithmetic as a pure module: `ScoredSnapshot`, `count_flips`,
+  `stability_entry` and `stable_status_from_entries`, plus its constants.
+  Both `labeling_progress._compute_stable_status` and the eval harness's
+  `autopilot_flow.stable_status` delegate to it, so the two can no longer
+  drift. The rule changed with the move: only *confident* flips (items clear
+  of the cut, by `STABLE_BAND_STD_FRACTION` of the score spread, under both
+  detectors) count against stability, every rate is over the whole pool
+  rather than the unlabeled remainder, and green additionally requires the
+  raw flip rate to have stopped falling. The status dict gained
+  `avg_confident_flip_rate` and `plateau`. Per-step stability records - the
+  `stability_over_time` entries and `AutopilotFlow.stability` - carry
+  `num_confident_flips` and `num_pool` beside `num_flips` / `num_unlabeled`,
+  and `AutopilotFlow.record_step` now takes the pool's scores and threshold
+  instead of a predicted-class map.
+
 - **`vtscore.utils.import_metadata`** (issue #3715) - `seed_packages_distributions()`
   installs a stat-free stand-in for `importlib.metadata.packages_distributions`,
   which `transformers` calls at module import. The stdlib version stats every
@@ -375,6 +403,32 @@ instead, since every commit on `dev` is effectively a new app release.)
   before recording each tick.
 
 ### Fixed
+
+- **`embed_missing()` leaves a partially pre-embedded import keyed under one
+  embedder name** (issue #3798). Nameless pre-computed vectors (an importer's
+  `content_vectors` / `custom_metadata_map` entries, or an `.npz` manifest
+  without `embedder_name`) sit under the blank `UNKNOWN_EMBEDDER_KEY` sentinel,
+  and the stage re-keyed them to the load's embedder only when the caller
+  *named* one. A no-pick load - `vtscore.cli` always, `load_pipeline` when the
+  request carried no `embedder` - resolved the media-type default, embedded the
+  vector-less items under it, and left the shipped vectors nameless: two names
+  for one space, and `get_embedding_matrix(ctx, ctx.routed_embedder(...))`
+  raised `has no embedding for embedder` on every shipped media once #3650
+  stopped collapsing that request to the primary path on the first media's
+  say-so. The resolved embedder is now stamped whenever leaving the sentinel
+  would split the dataset - at least one nameless vector alongside at least one
+  media that is about to be, or already is, keyed under that embedder - with
+  the same width check the named path applies (`MismatchedVectorError` naming
+  both widths). A dataset that is nameless throughout with nothing to embed is
+  left exactly as it arrived, so a manifest of vectors from an unregistered
+  model still loads slot-less. Named-pick loads are unchanged.
+
+  Two silences in the same stage are now log `WARNING`s: an
+  `embed_media_bulk` that returns `None` for some inputs (naming the embedder
+  and the count), or a list of the wrong length (nothing is attached, since
+  `zip` would have paired vectors with the wrong media), and a media type with
+  no registered embedder at all. `_drop_none_embeddings_stage` additionally
+  publishes a warning `notify()` so the shrink reaches the user.
 
 - **A matrix built for one embedding space can no longer be filled with
   another space's vectors** (issue #3650). `scoreable_snapshot()`,

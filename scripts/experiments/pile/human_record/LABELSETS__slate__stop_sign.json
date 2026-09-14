@@ -4010,6 +4010,8 @@
    "time": -1.0
   }
  ],
+ "kind": "slate",
+ "question": "is this box one?",
  "rule": "stop sign not other signs",
- "source": "OWLv2-screened per-class slate, exported from the live app"
+ "source": "OWLv2-screened per-class review, exported from the live app"
 }

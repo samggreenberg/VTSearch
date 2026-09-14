@@ -3,8 +3,8 @@
   @if (dialog.dialogShowInput()) {
     <input
       class="form-input"
-      [ngModel]="dialog.dialogInputValue()"
-      (ngModelChange)="dialog.dialogInputValue.set($event)"
+      [value]="dialog.dialogInputValue()"
+      (input)="dialog.dialogInputValue.set($any($event.target).value)"
       (keydown.enter)="onButtonClick('__input__')"
       [attr.aria-label]="dialog.dialogTitle()"
       autofocus

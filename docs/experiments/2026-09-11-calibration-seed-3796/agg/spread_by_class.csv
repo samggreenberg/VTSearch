@@ -1,0 +1,6 @@
+category,dinov3_patch/max_patch,dinov3_patch/whole_image,siglip/whole_image
+bicycle,0.0478,0.0459,0.0403
+bird,0.026,0.0369,0.0334
+fork,0.0246,0.0578,0.0236
+kite,0.0329,0.0146,0.0182
+knife,0.032,0.0825,0.0682

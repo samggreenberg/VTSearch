@@ -46,9 +46,24 @@ def _drop_none_embeddings_stage(ctx: DatasetContext, tracker) -> None:
 
     import logging  # noqa: PLC0415
 
+    from vtscore.concurrency.notifications import notify  # noqa: PLC0415
+
     logging.getLogger(__name__).warning(
         "Dropped %d media item(s) with embedding=None (importer or re-embed step failed)",
         len(none_ids),
+    )
+    # The tracker message below is overwritten by the next stage within
+    # seconds, so a load that silently shrank was indistinguishable from one
+    # that didn't (issue #3798).  A warning toast stays until dismissed.
+    notify(
+        f"Dropped {len(none_ids)} item(s) whose embedding failed",
+        level="warning",
+        detail=(
+            f"{len(none_ids)} of {len(none_ids) + len(ctx.medias)} imported item(s) had no vector after the "
+            "embed step (the embedder returned nothing for them, or none is registered for their media type). "
+            "See the server log for which embedder declined."
+        ),
+        source="Dataset import",
     )
     tracker.update(
         "loading",

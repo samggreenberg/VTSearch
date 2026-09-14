@@ -8,6 +8,10 @@ Endpoints
 GET  /api/settings-importers
     List all registered settings importers with their metadata and fields.
 
+POST /api/settings-importers/field-options/<importer_name>
+    Resolve one ``dynamic_options`` select field's option list by calling
+    the importer's ``get_field_options(field_key, current_values)``.
+
 POST /api/settings-importers/import/<importer_name>
     Run the named settings importer and apply the imported settings.
     The request body shape depends on the importer plugin and isn't
@@ -19,6 +23,10 @@ POST /api/settings-importers/import/<importer_name>
 
 GET  /api/settings-exporters
     List all registered settings exporters with their metadata and fields.
+
+POST /api/settings-exporters/field-options/<exporter_name>
+    Resolve one ``dynamic_options`` select field's option list by calling
+    the exporter's ``get_field_options(field_key, current_values)``.
 
 POST /api/settings-exporters/export
     Run the named settings exporter on the current per-user settings.
@@ -39,9 +47,14 @@ from vtsearch.errors import error_response
 from vtsearch import settings
 from vtsearch.routes._plugins import (
     get_plugin_or_404,
+    plugin_field_options,
     run_plugin_or_error,
     validate_exporter_field_values,
     validate_plugin_args,
+)
+from vtsearch.schemas.datasets import (
+    ImporterFieldOptionsRequestSchema,
+    ImporterFieldOptionsResponseSchema,
 )
 from vtsearch.schemas.settings_io import (
     RunSettingsExportRequestSchema,
@@ -74,6 +87,39 @@ def get_settings_importers():
     from vtsearch.settings import filter_visible_plugins
 
     return [imp.to_dict() for imp in filter_visible_plugins("settings_importers", list_settings_importers())]
+
+
+# ---------------------------------------------------------------------------
+# POST /api/settings-importers/field-options/<importer_name>
+# ---------------------------------------------------------------------------
+
+
+@settings_io_bp.route("/api/settings-importers/field-options/<importer_name>", methods=["POST"])
+@settings_io_bp.arguments(ImporterFieldOptionsRequestSchema)
+@settings_io_bp.response(200, ImporterFieldOptionsResponseSchema)
+@settings_io_bp.alt_response(400, description="Unknown or non-dynamic field key.")
+@settings_io_bp.alt_response(404, description="Unknown importer name.")
+@settings_io_bp.alt_response(500, description="get_field_options did not return a list.")
+@settings_io_bp.alt_response(501, description="Importer does not implement get_field_options.")
+@settings_io_bp.alt_response(502, description="Remote service backing dynamic options raised an error.")
+def settings_importer_field_options(body: dict, importer_name: str):
+    """Return dropdown options for a dynamic-options field on a settings importer.
+
+    Same contract as the other plugin families' options routes (see
+    ``POST /api/label-importers/field-options/<name>``): the importer's
+    ``get_field_options(field_key, current_values)`` is called with the
+    supplied snapshot of current form values, and plugin errors (network
+    failure, auth error, ...) surface as a 502 with the original message
+    so the Import Settings modal can display them inline.
+    """
+    importer, err = get_plugin_or_404(
+        get_settings_importer, list_settings_importers, importer_name, "settings importer"
+    )
+    if err:
+        return err
+    assert importer is not None  # narrowed by err check
+
+    return plugin_field_options(importer, body)
 
 
 # ---------------------------------------------------------------------------
@@ -137,6 +183,35 @@ def get_settings_exporters():
     from vtsearch.settings import filter_visible_plugins
 
     return [exp.to_dict() for exp in filter_visible_plugins("settings_exporters", list_settings_exporters())]
+
+
+# ---------------------------------------------------------------------------
+# POST /api/settings-exporters/field-options/<exporter_name>
+# ---------------------------------------------------------------------------
+
+
+@settings_io_bp.route("/api/settings-exporters/field-options/<exporter_name>", methods=["POST"])
+@settings_io_bp.arguments(ImporterFieldOptionsRequestSchema)
+@settings_io_bp.response(200, ImporterFieldOptionsResponseSchema)
+@settings_io_bp.alt_response(400, description="Unknown or non-dynamic field key.")
+@settings_io_bp.alt_response(404, description="Unknown exporter name.")
+@settings_io_bp.alt_response(500, description="get_field_options did not return a list.")
+@settings_io_bp.alt_response(501, description="Exporter does not implement get_field_options.")
+@settings_io_bp.alt_response(502, description="Remote service backing dynamic options raised an error.")
+def settings_exporter_field_options(body: dict, exporter_name: str):
+    """Return dropdown options for a dynamic-options field on a settings exporter.
+
+    Mirror of the settings-importer route above, for the Export Settings
+    modal's field form.
+    """
+    exporter, err = get_plugin_or_404(
+        get_settings_exporter, list_settings_exporters, exporter_name, "settings exporter"
+    )
+    if err:
+        return err
+    assert exporter is not None  # narrowed by err check
+
+    return plugin_field_options(exporter, body)
 
 
 # ---------------------------------------------------------------------------

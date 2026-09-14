@@ -259,12 +259,22 @@ lists from votes, caching on `DetectorContext`) sits one layer up.
 
 ### `calculate_gmm_threshold(scores)`
 
-`vtscore/training/thresholds/gmm.py`. Fits a 2-component
-`sklearn.mixture.GaussianMixture` to the score list and returns the
-**midpoint between the two component means**. Used to produce a
-reasonable operating point even when only a few labels exist - the score
-distribution still tends to be bimodal because the embedder space already
-separates "kind of like X" from "kind of not like X".
+`vtscore/training/thresholds/gmm.py`. Fits a 2-component 1-D Gaussian
+mixture to the score list and returns the **midpoint between the two
+component means**. Used to produce a reasonable operating point even when
+only a few labels exist - the score distribution still tends to be bimodal
+because the embedder space already separates "kind of like X" from "kind of
+not like X".
+
+The fit is `fit_score_gmm`: a deterministic 2-means init and EM, sharing
+its loop with the anchored refit (`_anchored_em` with no anchors) and
+stopping where sklearn's `GaussianMixture` stopped it - when an iteration
+improves the mean log-likelihood by less than 1e-3. It **was** that
+`GaussianMixture` until issue #3585, which measured the call at 91-95% of
+a whole cosine/text sort and replaced it for a 4.8x saving on that path;
+`fit_score_gmm_sklearn` is the old one, retained out of production so the
+equivalence stays re-measurable
+(`docs/experiments/2026-09-13-gmm-init-3585/REPORT.md`).
 
 Issue #2798 briefly cut instead at the **equal-density crossing** of the
 two weighted components (the root of `w_lo·N(x; μ_lo, σ²_lo) = w_hi·N(x;
@@ -276,6 +286,43 @@ remain in the module as eval variants only (see issue #2836).
 
 Falls back to `np.median(scores)` when GMM fitting raises (e.g. degenerate
 score distributions), and to `0.5` when fewer than 2 scores are provided.
+
+### Where the **anchored** refit stops (issue #3825)
+
+`fit_anchored_score_gmm` initialises from the unanchored fit above and then
+runs `_anchored_em` with the votes clamped. Until #3825 that refit stopped on a
+**parameter delta** at 1e-8 - and having made the initialiser 5x cheaper, #3585
+left the refit as **92.9% of a fold's fit**. Measured over 4,493 real fold
+refits it ran a median of **113** iterations against the init's ~15, and on
+**26.5%** of them it never converged at all: it left on `max_iter`. That
+criterion is not merely slow on those folds, it is unreachable - given twice the
+budget the same rule still exits on its cap 10.7% of the time.
+
+It now stops on the **log-likelihood**, at `_ANCHORED_EM_LOGLIK_TOL` = 1e-8, and
+on the likelihood of *this* estimator - the weighted semi-supervised objective
+the anchored M-step ascends, anchors included - rather than the free sample's
+alone, which under an anchored M-step is not even monotone (it falls on 36.6% of
+iterations). The two coincide exactly when there are no anchors, so
+`fit_score_gmm` is untouched bit for bit.
+
+**The tolerance is not sklearn's 1e-3 and that is the finding**, not an
+oversight: 1e-3 is right for `fit_score_gmm` and transferring it here is a
+regression worth +0.026 +- 0.006 of cost, because at that tolerance the refit
+halts before the minority component has migrated to the high mode. 1e-8 is 1.9x
+cheaper at fold sizes, moves the admitted set by a median of zero, and cuts
+non-convergence to 7.4%. Measured in
+`docs/experiments/2026-09-13-anchored-em-stop-3825/REPORT.md`.
+
+Two things a caller can now see that nothing surfaced before:
+
+- **`stats`**, an optional out-dict on `_anchored_em` and
+  `fit_anchored_score_gmm`, carrying `n_iter`, `converged` and the `loglik` the
+  stopping decision was taken on.
+- **`FoldAnchoredCut.n_unconverged`**, and a provenance that names it:
+  `fold_anchored_maxiter2[2/2]` is two folds that ran out of iterations. The
+  `[a/k]` group stays last and keeps its shape, because
+  `vtscore.eval.row_metrics.folds_used` parses it with an end-anchored regex.
+  `_fused_threshold` logs a warning when it happens.
 
 ### `conformal_threshold(scores, labels, inclusion_value=0)`
 

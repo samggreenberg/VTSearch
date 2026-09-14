@@ -7,6 +7,7 @@ Covers:
 - Built-in plugins: local_json_file, server_json_file (both import and export)
 - POST /api/settings-importers/import/<name> endpoint
 - POST /api/settings-exporters/export endpoint
+- POST /api/settings-{importers,exporters}/field-options/<name> endpoints
 """
 
 from __future__ import annotations
@@ -456,3 +457,138 @@ class TestSettingsExportEndpoint:
             json={"exporter_name": "server_json_file", "field_values": {}},
         )
         assert res.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# POST /api/settings-importers/field-options/<name>
+# POST /api/settings-exporters/field-options/<name>
+#
+# Issue #3802: the settings import/export modals were the only plugin-field
+# forms without an options route, so a ``dynamic_options`` select there never
+# reached ``get_field_options()`` and rendered empty.
+# ---------------------------------------------------------------------------
+
+
+class TestSettingsImporterFieldOptionsEndpoint:
+    URL = "/api/settings-importers/field-options/server_json_file"
+
+    @staticmethod
+    def _importer():
+        from vtsearch.settings_io.importers import get_settings_importer
+
+        return get_settings_importer("server_json_file")
+
+    @classmethod
+    def _filepath_field(cls):
+        return next(f for f in cls._importer().fields if f.key == "filepath")
+
+    def test_unknown_field_400(self, client):
+        res = client.post(self.URL, json={"field_key": "nope", "values": {}})
+        assert res.status_code == 400
+
+    def test_non_dynamic_field_400(self, client):
+        res = client.post(self.URL, json={"field_key": "filepath", "values": {}})
+        assert res.status_code == 400
+        assert "not dynamic" in res.get_json()["message"]
+
+    def test_unknown_importer_404(self, client):
+        res = client.post(
+            "/api/settings-importers/field-options/nonexistent",
+            json={"field_key": "x", "values": {}},
+        )
+        assert res.status_code == 404
+
+    def test_unimplemented_dynamic_options_501(self, client, monkeypatch):
+        monkeypatch.setattr(self._filepath_field(), "dynamic_options", True)
+        res = client.post(self.URL, json={"field_key": "filepath", "values": {}})
+        assert res.status_code == 501
+
+    def test_options_normalised_to_value_label(self, client, monkeypatch):
+        imp = self._importer()
+        field_key = "filepath"
+        monkeypatch.setattr(self._filepath_field(), "dynamic_options", True)
+        monkeypatch.setattr(imp, "get_field_options", lambda key, values: ["plain", ("id1", "Label 1")])
+        res = client.post(self.URL, json={"field_key": field_key, "values": {}})
+        assert res.status_code == 200
+        assert res.get_json()["options"] == [
+            {"value": "plain", "label": "plain"},
+            {"value": "id1", "label": "Label 1"},
+        ]
+
+    def test_current_values_reach_the_plugin(self, client, monkeypatch):
+        """The ``values`` snapshot is what makes ``depends_on`` chains work."""
+        imp = self._importer()
+        field_key = "filepath"
+        seen: dict = {}
+        monkeypatch.setattr(self._filepath_field(), "dynamic_options", True)
+
+        def _capture(key, values):
+            seen["key"] = key
+            seen["values"] = values
+            return ["a"]
+
+        monkeypatch.setattr(imp, "get_field_options", _capture)
+        res = client.post(self.URL, json={"field_key": field_key, "values": {"media_type": "audio"}})
+        assert res.status_code == 200
+        assert seen == {"key": field_key, "values": {"media_type": "audio"}}
+
+    def test_plugin_error_maps_to_502(self, client, monkeypatch):
+        imp = self._importer()
+        field_key = "filepath"
+        monkeypatch.setattr(self._filepath_field(), "dynamic_options", True)
+
+        def _boom(key, values):
+            raise RuntimeError("service auth failed")
+
+        monkeypatch.setattr(imp, "get_field_options", _boom)
+        res = client.post(self.URL, json={"field_key": field_key, "values": {}})
+        assert res.status_code == 502
+        assert "service auth failed" in res.get_json()["message"]
+
+
+class TestSettingsExporterFieldOptionsEndpoint:
+    URL = "/api/settings-exporters/field-options/server_json_file"
+
+    @staticmethod
+    def _exporter():
+        from vtsearch.settings_io.exporters import get_settings_exporter
+
+        return get_settings_exporter("server_json_file")
+
+    @classmethod
+    def _filepath_field(cls):
+        return next(f for f in cls._exporter().fields if f.key == "filepath")
+
+    def test_non_dynamic_field_400(self, client):
+        res = client.post(self.URL, json={"field_key": "filepath", "values": {}})
+        assert res.status_code == 400
+        assert "not dynamic" in res.get_json()["message"]
+
+    def test_unknown_exporter_404(self, client):
+        res = client.post(
+            "/api/settings-exporters/field-options/nonexistent",
+            json={"field_key": "x", "values": {}},
+        )
+        assert res.status_code == 404
+
+    def test_options_normalised_to_value_label(self, client, monkeypatch):
+        exp = self._exporter()
+        field_key = "filepath"
+        monkeypatch.setattr(self._filepath_field(), "dynamic_options", True)
+        monkeypatch.setattr(exp, "get_field_options", lambda key, values: [("b1", "Bucket One")])
+        res = client.post(self.URL, json={"field_key": field_key, "values": {}})
+        assert res.status_code == 200
+        assert res.get_json()["options"] == [{"value": "b1", "label": "Bucket One"}]
+
+    def test_plugin_error_maps_to_502(self, client, monkeypatch):
+        exp = self._exporter()
+        field_key = "filepath"
+        monkeypatch.setattr(self._filepath_field(), "dynamic_options", True)
+
+        def _boom(key, values):
+            raise RuntimeError("bucket listing failed")
+
+        monkeypatch.setattr(exp, "get_field_options", _boom)
+        res = client.post(self.URL, json={"field_key": field_key, "values": {}})
+        assert res.status_code == 502
+        assert "bucket listing failed" in res.get_json()["message"]

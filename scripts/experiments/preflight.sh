@@ -649,6 +649,17 @@ if v is not None:
 if not C.SAFE_THRESHOLDS:
     rows.append(("safe_thresholds", env("CALIB_SAFE_THRESHOLDS") or "<unset> = 0", "1 (the app has no switch)"))
 
+# The #3796 calibration-split draw.  Production pins the split to
+# CALIBRATION_SPLIT_SEED and #2934 pinned it on purpose, so an unset env var IS
+# the production arm and ANY list is a divergence - including a one-element list
+# holding today's constant, which freezes the arm against a pin that can move.
+# The sweep is legitimate and is the only thing that can measure the pin's cost;
+# what it may not be is silent, because a grid whose cells calibrate off
+# nineteen splits nobody ships looks exactly like a grid that does not.
+v = env("CALIB_CALIBRATION_SEEDS")
+if v is not None:
+    rows.append(("calibration_seed", v, "<unset> = the app's pinned split (%d)" % T.CALIBRATION_SPLIT_SEED))
+
 # An explicit schedule overrides the app's per-mode default (#2841).
 v = env("CALIB_BLEND_SCHEDULE")
 if v is not None:

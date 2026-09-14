@@ -72,6 +72,8 @@ correct union of the two branches with no judgement involved.
 
 | Date | Lesson | Issue |
 |---|---|---|
+| 2026-09-13 | [a harness fitted at the library default, not the shipped one](lessons/2026-09-13-a-harness-fitted-at-the-library-default.md) | #3825 |
+| 2026-09-13 | [A single-seed harness fixture is a trajectory, and a threshold change re-rolls it](lessons/2026-09-13-a-single-seed-harness-fixture-is-a-trajectory.md) | — |
 | 2026-09-07 | [the launch output never named the checkout](lessons/2026-09-07-the-launch-output-never-named-the-checkout.md) | #3693 |
 | 2026-09-06 | [a backup glob that did not match the sibling](lessons/2026-09-06-a-backup-glob-that-did-not-match-the-sibling.md) | #3667 |
 | 2026-09-06 | [a force-push left the suite silently testing the old commit](lessons/2026-09-06-a-force-push-left-the-suite-testing-the-old-commit.md) | #3666 |

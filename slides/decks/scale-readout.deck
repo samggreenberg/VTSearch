@@ -1,0 +1,64 @@
+# SCALE readout — the shorter cut of (thresh)Hold The Line.
+#
+# Same argument, roughly two thirds of the slides: for a readout rather than a
+# talk, where the room wants the shape of the work and will ask about the parts
+# it cares about. What comes out, and why each one is the safe thing to lose:
+#
+#   Preference (the whole section)  — the second axis. It is the one part that
+#       stands alone: everything before it is the threshold where the *data*
+#       says, and Regions after it never refers back. Dropping it costs a
+#       section, not an argument.
+#   gmm-em      "Great Expectations" — an aside explaining EM to a room that
+#       may not need it. The slide before it says "fit a two-component Gaussian
+#       mixture" and the slide after it does not depend on how.
+#   anchored-em "Vote of Confidence" — the mechanism drawing under the anchored
+#       fit. The claim survives on anchored-gmm alone; this is the how.
+#   blend-schedule "Never Hand Over Completely" — the weighting on the average.
+#       A refinement of the slide before it, and a good answer to a question.
+#   the appendix — both slides after The End, which exist to be brought up if
+#       someone asks and cannot be in a deck that is being cut for length.
+#
+# Four fragments carry a `.scale` variant, and every one of them is the *notes*
+# rather than the slide: a note that pointed at a slide this cut removes. See
+# `slides/README.md` on variants. Nothing else differs, so a change to the
+# figure or the headline of xcal, blend, anchored-gmm or split-fraction has to
+# be made in both files — which is the price of the suffix mechanism and the
+# reason only four fragments pay it.
+#
+# The outline is its own fragment because this deck has four sections and not
+# five (`slides/STYLE.md`), so it appears five times: bare, then +at1 … +at4.
+
+theme: vtsearch
+
+slides:
+  title-hold-the-line
+  outline-scale-readout
+
+  # 1 — VTSearch
+  outline-scale-readout +at1
+  problem
+  make-detector
+  train-loop
+  find-results
+  find-line
+  embed-flow
+  vote-boundary
+
+  # 2 — Calibration
+  outline-scale-readout +at2
+  xcal.scale
+  gmm-idea
+  blend.scale
+  anchored-gmm.scale
+  quantile-transfer
+  split-fraction.scale
+
+  # 3 — Regions
+  outline-scale-readout +at3
+  voting-modes
+  evt-midpoint
+  evt-gumbel
+  evt-close
+
+  # 4 — The End
+  outline-scale-readout +at4

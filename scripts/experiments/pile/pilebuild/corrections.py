@@ -1,6 +1,10 @@
 """Human verdicts on ``(image, class)`` pairs, and the one box-space crossing.
 
-Everything in this module exists to make **one** conversion happen exactly once.
+Two things about a verdict have to survive the trip to disk, and this module owns
+both. They are the two halves of the same sentence: *what* a reviewer answered,
+and *which question* they were shown.
+
+The box space is the first, and it is made to happen exactly once.
 A correction's boxes arrive normalised (they come from the app's ``region_box``);
 every other box in the scale build is in pixels. Converting here, on the way in,
 is what keeps the rest of the loader in a single space -- and #3281 is what the
@@ -8,6 +12,17 @@ other arrangement costs: a normalised box merged unconverted is normalised a
 second time by the region write, which divides it by ~500 and parks it on the
 frame origin, with the band derived from the same corrupted box so that nothing
 downstream can see the disagreement.
+
+The **rule** is the second (#3814). A class rule is not a constant: three rulings
+landed in September on classes with rows already on disk, and a row that records
+only its answer starts meaning something else the moment one does. Since the
+``rule`` / ``rule_digest`` fields exist, a row carries the wording it was cast
+under, and :func:`rule_state` is where that is compared against the wording in
+force. Its one law is that **an absent stamp means unknown**: the 872 rows
+written before the field cannot be back-filled from anything -- nothing on disk
+ever said which wording they answered, which is why re-asking a human all 80
+planter images was the only way to find out (#3778) -- so reading them as current
+would be the failure itself rather than a rounding of it.
 """
 
 from __future__ import annotations
@@ -15,9 +30,27 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+from collections.abc import Iterable
 from pathlib import Path
 
 import pile_config as pc
+
+#: The row's rule is the one in force: nothing has moved under it.
+RULE_CURRENT = "current"
+#: The name matches but the *wording behind it* has been edited since (#3756
+#: rewrote `bench`'s Bad list and kept its name). The reviewer read the same
+#: words off the detector; what a near-miss resolves to may have changed.
+RULE_EDITED = "edited"
+#: The row names a rule that is no longer in force. These answer a superseded
+#: question, and they are the only state anybody can act on: they are exactly
+#: the rows a recheck slate should be built from.
+RULE_SUPERSEDED = "superseded"
+#: The row records no rule at all. **Not** a synonym for `current`: it is the
+#: state #3814 exists to make visible, and the 872 rows that predate the field
+#: are all in it. Nothing can back-fill them -- the wording they were cast under
+#: was never written down, which is why the planter recheck had to ask a human
+#: all 80 images again (#3778).
+RULE_UNKNOWN = "unknown"
 
 
 def dropped_rows(old: list[dict], new: list[dict]) -> dict[str, int]:
@@ -82,6 +115,17 @@ def load_corrections() -> dict[tuple[int, str], dict]:
     app's ``region_box``. The space is validated on the way in and converted to
     pixels once, by :func:`correction_boxes_px`, so that everything downstream
     of this function is in one space. See ``pile_config.CORRECTION_BOX_SPACE``.
+
+    **It names, but does not refuse, rows whose rule has been ruled away.** A
+    superseded row is not malformed -- the reviewer answered honestly, and the
+    definition moved afterwards -- so refusing would stop every build over a debt
+    that only a human re-review can settle. Reporting it here rather than only
+    from a tool that is asked is deliberate, and it is the counting that makes it
+    bearable: `unknown` is **excluded**, because 872 unstamped rows is a constant
+    nobody can act on and a line printed every run is a line everybody learns to
+    skip. What is left starts at zero and becomes non-zero exactly when a ruling
+    lands on stamped rows, which is the moment worth interrupting somebody for.
+    `rule_drift.py` is where the full four-state breakdown lives.
     """
     path = Path(os.environ.get("VTS_CORRECTIONS", pc.PILE / "corrections.json"))
     if not path.exists():
@@ -91,6 +135,14 @@ def load_corrections() -> dict[tuple[int, str], dict]:
     for r in rows:
         assert_correction_box_space(r, path)
         out[(int(r["image_id"]), r["class"])] = r
+    stale = superseded_rows(rows)
+    if stale:
+        classes = sorted({r["class"] for r in stale})
+        print(
+            f"[corrections] {len(stale)} of {len(rows)} rows answer a rule that has since been ruled away "
+            f"({', '.join(classes)}) -- `python rule_drift.py --state superseded --ids` names them (#3814)",
+            flush=True,
+        )
     return out
 
 
@@ -117,6 +169,66 @@ def assert_correction_box_space(row: dict, path: Path) -> None:
             )
         if float(b[2]) <= float(b[0]) or float(b[3]) <= float(b[1]):
             raise SystemExit(f"{where}: box {b} is degenerate (x1 <= x0 or y1 <= y0)")
+
+
+def rule_state(row: dict, in_force: dict[str, str] | None = None) -> str:
+    """Where *row*'s recorded rule stands against the one now in force (#3814).
+
+    One of :data:`RULE_CURRENT`, :data:`RULE_EDITED`, :data:`RULE_SUPERSEDED` or
+    :data:`RULE_UNKNOWN`. *in_force* is the class's :func:`pile_config.rule_stamp`,
+    passed in so the states are testable against a rule table this repository
+    does not have to actually hold.
+
+    **A row with no `rule` reads as unknown, never as current.** That asymmetry
+    is the entire point: reading an unstamped row as current is precisely the
+    silent re-interpretation #3814 was filed about, and it would make the 872
+    legacy rows look answered.
+
+    A row carrying a matching *name* and no digest reads as `current`. The name
+    is what the reviewer was shown, so the row's claim is satisfied; the digest
+    is the stricter, optional check, and its absence means the `edited` question
+    cannot be asked of that row rather than that the answer is no.
+    """
+    recorded = row.get("rule")
+    if not recorded:
+        return RULE_UNKNOWN
+    stamp = in_force if in_force is not None else pc.rule_stamp(row["class"])
+    if recorded != stamp.get("rule"):
+        return RULE_SUPERSEDED
+    digest = row.get("rule_digest")
+    if digest and digest != stamp.get("rule_digest"):
+        return RULE_EDITED
+    return RULE_CURRENT
+
+
+def rule_states(rows: Iterable[dict], stamps: dict[str, dict[str, str]] | None = None) -> list[tuple[dict, str]]:
+    """``[(row, state)]`` for every row, resolving each class's rule once.
+
+    The lookup is hoisted because :func:`pile_config.rule_digest` hashes the
+    rule's whole ``test`` -- a few hundred words for `truck` -- and a correction
+    file holds hundreds of rows per class.
+    """
+    stamps = {} if stamps is None else dict(stamps)
+    out = []
+    for row in rows:
+        cls = row["class"]
+        if cls not in stamps:
+            stamps[cls] = pc.rule_stamp(cls)
+        out.append((row, rule_state(row, stamps[cls])))
+    return out
+
+
+def superseded_rows(rows: Iterable[dict], stamps: dict[str, dict[str, str]] | None = None) -> list[dict]:
+    """The rows whose recorded rule has since been ruled away.
+
+    The one state a build can usefully name, and the reason the build's report is
+    not simply "rows that are not current": `unknown` is a large constant that
+    decays only as new rows are cast, and a number nobody can act on is a number
+    everybody learns to skip. This one is **zero until a ruling actually lands on
+    stamped rows**, which is exactly the event worth interrupting a run for. The
+    full four-state breakdown belongs to `rule_drift.py`, which is asked.
+    """
+    return [row for row, state in rule_states(rows, stamps) if state == RULE_SUPERSEDED]
 
 
 def correction_boxes_px(row: dict, W: int, H: int) -> list[list[float]]:

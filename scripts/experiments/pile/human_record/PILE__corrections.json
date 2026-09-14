@@ -121,19 +121,12 @@
     "source": "human_review"
   },
   {
-    "box_space": "normalised",
-    "boxes": [
-      [
-        0.8240534521158129,
-        0.6737193763919822,
-        0.8841870824053452,
-        0.7516703786191536
-      ]
-    ],
+    "boxes": [],
     "class": "vase",
     "image_id": 918,
-    "present": true,
-    "source": "human_review"
+    "note": "re-asked at image level under 'vase not planters' after the planter ruling (#3778, #3784) and the reviewer said this photo holds none",
+    "present": false,
+    "source": "human_recheck"
   },
   {
     "box_space": "normalised",
@@ -181,19 +174,12 @@
     "source": "human_review"
   },
   {
-    "box_space": "normalised",
-    "boxes": [
-      [
-        0.7079621380846325,
-        0.8608017817371938,
-        0.7806236080178174,
-        0.965478841870824
-      ]
-    ],
+    "boxes": [],
     "class": "vase",
     "image_id": 1187,
-    "present": true,
-    "source": "human_review"
+    "note": "re-asked at image level under 'vase not planters' after the planter ruling (#3778, #3784) and the reviewer said this photo holds none",
+    "present": false,
+    "source": "human_recheck"
   },
   {
     "box_space": "normalised",
@@ -671,19 +657,12 @@
     "source": "human_review"
   },
   {
-    "box_space": "normalised",
-    "boxes": [
-      [
-        0.7691249248957104,
-        0.7730673980956483,
-        0.8401423571668032,
-        0.8121545119812885
-      ]
-    ],
+    "boxes": [],
     "class": "vase",
     "image_id": 3253,
-    "present": true,
-    "source": "human_review"
+    "note": "re-asked at image level under 'vase not planters' after the planter ruling (#3778, #3784) and the reviewer said this photo holds none",
+    "present": false,
+    "source": "human_recheck"
   },
   {
     "box_space": "normalised",
@@ -822,19 +801,12 @@
     "source": "human_review"
   },
   {
-    "box_space": "normalised",
-    "boxes": [
-      [
-        0.4398663697104677,
-        0.4888641425389755,
-        0.48162583518930957,
-        0.5723830734966593
-      ]
-    ],
+    "boxes": [],
     "class": "vase",
     "image_id": 3593,
-    "present": true,
-    "source": "human_review"
+    "note": "re-asked at image level under 'vase not planters' after the planter ruling (#3778, #3784) and the reviewer said this photo holds none",
+    "present": false,
+    "source": "human_recheck"
   },
   {
     "box_space": "normalised",
@@ -882,19 +854,12 @@
     "source": "human_review"
   },
   {
-    "box_space": "normalised",
-    "boxes": [
-      [
-        0.007214765100671103,
-        0.37986577181208053,
-        0.3313758389261745,
-        0.6899328859060403
-      ]
-    ],
+    "boxes": [],
     "class": "bowl",
     "image_id": 4012,
-    "present": true,
-    "source": "human_review"
+    "note": "re-asked at image level under 'bowl incl plates not planters or wrappers' after the planter ruling (#3778, #3784) and the reviewer said this photo holds none",
+    "present": false,
+    "source": "human_recheck"
   },
   {
     "box_space": "normalised",
@@ -949,19 +914,12 @@
     "source": "human_review"
   },
   {
-    "box_space": "normalised",
-    "boxes": [
-      [
-        0.4615812917594655,
-        0.6904231625835189,
-        0.6185968819599109,
-        0.9387527839643652
-      ]
-    ],
+    "boxes": [],
     "class": "vase",
     "image_id": 4225,
-    "present": true,
-    "source": "human_rebox"
+    "note": "re-asked at image level under 'vase not planters' after the planter ruling (#3778, #3784) and the reviewer said this photo holds none",
+    "present": false,
+    "source": "human_recheck"
   },
   {
     "boxes": [],
@@ -1031,19 +989,12 @@
     "source": "human_review"
   },
   {
-    "box_space": "normalised",
-    "boxes": [
-      [
-        0.34544647828507796,
-        0.7216035634743875,
-        0.3905554008908686,
-        0.8830734966592427
-      ]
-    ],
+    "boxes": [],
     "class": "vase",
     "image_id": 4618,
-    "present": true,
-    "source": "human_review"
+    "note": "re-asked at image level under 'vase not planters' after the planter ruling (#3778, #3784) and the reviewer said this photo holds none",
+    "present": false,
+    "source": "human_recheck"
   },
   {
     "box_space": "normalised",
@@ -1210,49 +1161,28 @@
     "source": "human_review"
   },
   {
-    "box_space": "normalised",
-    "boxes": [
-      [
-        0.7188195991091314,
-        0.6447661469933185,
-        0.8324053452115813,
-        0.8474387527839644
-      ]
-    ],
+    "boxes": [],
     "class": "vase",
     "image_id": 285878,
-    "present": true,
-    "source": "human_review"
+    "note": "re-asked at image level under 'vase not planters' after the planter ruling (#3778, #3784) and the reviewer said this photo holds none",
+    "present": false,
+    "source": "human_recheck"
   },
   {
-    "box_space": "normalised",
-    "boxes": [
-      [
-        0.027944095116777763,
-        0.5906290088029543,
-        0.0901118572866878,
-        0.6852412259773629
-      ]
-    ],
+    "boxes": [],
     "class": "vase",
     "image_id": 286001,
-    "present": true,
-    "source": "human_review"
+    "note": "re-asked at image level under 'vase not planters' after the planter ruling (#3778, #3784) and the reviewer said this photo holds none",
+    "present": false,
+    "source": "human_recheck"
   },
   {
-    "box_space": "normalised",
-    "boxes": [
-      [
-        0.25131042072661475,
-        0.6191536748329621,
-        0.44665989525334077,
-        0.8919821826280624
-      ]
-    ],
+    "boxes": [],
     "class": "vase",
     "image_id": 286045,
-    "present": true,
-    "source": "human_review"
+    "note": "re-asked at image level under 'vase not planters' after the planter ruling (#3778, #3784) and the reviewer said this photo holds none",
+    "present": false,
+    "source": "human_recheck"
   },
   {
     "box_space": "normalised",
@@ -1420,19 +1350,12 @@
     "source": "human_review"
   },
   {
-    "box_space": "normalised",
-    "boxes": [
-      [
-        0.5126268008769488,
-        0.6403118040089086,
-        0.6076991839504454,
-        0.7538975501113586
-      ]
-    ],
+    "boxes": [],
     "class": "vase",
     "image_id": 713657,
-    "present": true,
-    "source": "human_review"
+    "note": "re-asked at image level under 'vase not planters' after the planter ruling (#3778, #3784) and the reviewer said this photo holds none",
+    "present": false,
+    "source": "human_recheck"
   },
   {
     "box_space": "normalised",
@@ -2450,19 +2373,12 @@
     "source": "claude_triage"
   },
   {
-    "box_space": "normalised",
-    "boxes": [
-      [
-        0.1974075723830735,
-        0.534521158129176,
-        0.32497104677060135,
-        0.734966592427617
-      ]
-    ],
+    "boxes": [],
     "class": "vase",
     "image_id": 2320748,
-    "present": true,
-    "source": "human_review"
+    "note": "re-asked at image level under 'vase not planters' after the planter ruling (#3778, #3784) and the reviewer said this photo holds none",
+    "present": false,
+    "source": "human_recheck"
   },
   {
     "box_space": "normalised",
@@ -4524,19 +4440,12 @@
     "source": "human_rebox"
   },
   {
-    "box_space": "normalised",
-    "boxes": [
-      [
-        0.780063481055706,
-        0.4910913140311804,
-        0.9034247762826241,
-        0.6458797327394209
-      ]
-    ],
+    "boxes": [],
     "class": "vase",
     "image_id": 2348728,
-    "present": true,
-    "source": "human_review"
+    "note": "re-asked at image level under 'vase not planters' after the planter ruling (#3778, #3784) and the reviewer said this photo holds none",
+    "present": false,
+    "source": "human_recheck"
   },
   {
     "box_space": "normalised",
@@ -4706,19 +4615,12 @@
     "source": "human_rebox"
   },
   {
-    "box_space": "normalised",
-    "boxes": [
-      [
-        0.2410913140311804,
-        0.2505567928730512,
-        0.3129175946547884,
-        0.2962138084632517
-      ]
-    ],
+    "boxes": [],
     "class": "vase",
     "image_id": 2350725,
-    "present": true,
-    "source": "human_review"
+    "note": "re-asked at image level under 'vase not planters' after the planter ruling (#3778, #3784) and the reviewer said this photo holds none",
+    "present": false,
+    "source": "human_recheck"
   },
   {
     "box_space": "normalised",
@@ -5909,19 +5811,12 @@
     "source": "human_review"
   },
   {
-    "box_space": "normalised",
-    "boxes": [
-      [
-        0.7606161899630169,
-        0.253458837371151,
-        0.8954176675300946,
-        0.4267750228145366
-      ]
-    ],
+    "boxes": [],
     "class": "vase",
     "image_id": 2370044,
-    "present": true,
-    "source": "human_review"
+    "note": "re-asked at image level under 'vase not planters' after the planter ruling (#3778, #3784) and the reviewer said this photo holds none",
+    "present": false,
+    "source": "human_recheck"
   },
   {
     "boxes": [],
@@ -5954,19 +5849,12 @@
     "source": "human_confirmed"
   },
   {
-    "box_space": "normalised",
-    "boxes": [
-      [
-        0.13291314031180396,
-        0.4042316258351893,
-        0.640988864142539,
-        0.6770601336302895
-      ]
-    ],
+    "boxes": [],
     "class": "vase",
     "image_id": 2370389,
-    "present": true,
-    "source": "human_review"
+    "note": "re-asked at image level under 'vase not planters' after the planter ruling (#3778, #3784) and the reviewer said this photo holds none",
+    "present": false,
+    "source": "human_recheck"
   },
   {
     "box_space": "normalised",
@@ -6418,19 +6306,12 @@
     "source": "human_confirmed"
   },
   {
-    "box_space": "normalised",
-    "boxes": [
-      [
-        0.34855233853006684,
-        0.6837416481069042,
-        0.4658500371195249,
-        0.7839643652561247
-      ]
-    ],
+    "boxes": [],
     "class": "vase",
     "image_id": 2375571,
-    "present": true,
-    "source": "human_review"
+    "note": "re-asked at image level under 'vase not planters' after the planter ruling (#3778, #3784) and the reviewer said this photo holds none",
+    "present": false,
+    "source": "human_recheck"
   },
   {
     "box_space": "normalised",
@@ -8307,19 +8188,12 @@
     "source": "human_review"
   },
   {
-    "box_space": "normalised",
-    "boxes": [
-      [
-        0.6782526789653129,
-        0.04477607815487594,
-        0.7322613660158308,
-        0.14743342807093293
-      ]
-    ],
+    "boxes": [],
     "class": "vase",
     "image_id": 2396901,
-    "present": true,
-    "source": "human_review"
+    "note": "re-asked at image level under 'vase not planters' after the planter ruling (#3778, #3784) and the reviewer said this photo holds none",
+    "present": false,
+    "source": "human_recheck"
   },
   {
     "boxes": [],
@@ -8351,19 +8225,12 @@
     "source": "claude_triage"
   },
   {
-    "box_space": "normalised",
-    "boxes": [
-      [
-        0.15339643652561244,
-        0.4866369710467706,
-        0.2168708240534521,
-        0.623608017817372
-      ]
-    ],
+    "boxes": [],
     "class": "vase",
     "image_id": 2397454,
-    "present": true,
-    "source": "human_review"
+    "note": "re-asked at image level under 'vase not planters' after the planter ruling (#3778, #3784) and the reviewer said this photo holds none",
+    "present": false,
+    "source": "human_recheck"
   },
   {
     "boxes": [],
@@ -9191,19 +9058,12 @@
     "source": "human_confirmed"
   },
   {
-    "box_space": "normalised",
-    "boxes": [
-      [
-        0.7263294657791727,
-        0.09213370135790411,
-        0.7902087377445148,
-        0.17696925417166684
-      ]
-    ],
+    "boxes": [],
     "class": "vase",
     "image_id": 2405305,
-    "present": true,
-    "source": "human_review"
+    "note": "re-asked at image level under 'vase not planters' after the planter ruling (#3778, #3784) and the reviewer said this photo holds none",
+    "present": false,
+    "source": "human_recheck"
   },
   {
     "boxes": [],
@@ -10076,19 +9936,12 @@
     "source": "human_review"
   },
   {
-    "box_space": "normalised",
-    "boxes": [
-      [
-        0.2978841870824053,
-        0.532293986636971,
-        0.3688752783964365,
-        0.6135857461024499
-      ]
-    ],
+    "boxes": [],
     "class": "vase",
     "image_id": 2417159,
-    "present": true,
-    "source": "human_review"
+    "note": "re-asked at image level under 'vase not planters' after the planter ruling (#3778, #3784) and the reviewer said this photo holds none",
+    "present": false,
+    "source": "human_recheck"
   },
   {
     "box_space": "normalised",

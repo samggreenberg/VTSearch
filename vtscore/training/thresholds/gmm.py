@@ -426,12 +426,189 @@ def snap_cut_to_sample(cut: float, sorted_scores: np.ndarray) -> float:
     return (float(sorted_scores[i - 1]) + float(sorted_scores[i])) / 2.0
 
 
+#: Iteration cap for the unanchored EM (:func:`fit_score_gmm`), and the
+#: parameter-delta tolerance it would stop on if the likelihood rule below were
+#: switched off.  Both are sklearn's own values for the fit this replaced, so
+#: "how long may it run" did not change with the implementation.  The tolerance
+#: is inert on the shipped path - :func:`_plain_em` passes
+#: :data:`_EM_LOGLIK_TOL`, and :func:`_anchored_em` reads one rule or the other,
+#: never both - and is kept so the parameter rule stays reachable as a measured
+#: arm (``scripts/experiments/gmm_init/arms_3585.py``).
+_EM_MAX_ITER = 100
+_EM_TOL = 1e-8
+
+#: Convergence tolerance for the unanchored fit, on the **mean log-likelihood**
+#: rather than on the parameters: stop when an iteration improves the objective
+#: by less than this.  Set to sklearn's own default, so the fit this replaced
+#: and the fit that replaced it stop at the same place in the same sense -
+#: which is what lets the two be compared as implementations of one estimator
+#: instead of as two estimators.  See :func:`_anchored_em` for why the
+#: parameter-delta rule is the wrong one here (a barely bimodal sort crawls a
+#: flat ridge for 200 iterations to buy 0.004 nats).
+_EM_LOGLIK_TOL = 1e-3
+
+#: Iteration cap for the 2-means init below.  Lloyd's on a sorted 1-D sample
+#: converges in a handful of boundary moves and each one costs a binary search,
+#: so this is a runaway guard rather than a budget.
+_KMEANS_MAX_ITER = 100
+
+#: The empty anchor arrays :func:`_plain_em` hands :func:`_anchored_em`.  Module
+#: level so a fit does not allocate two throwaway arrays; never written to (the
+#: loop only reads ``.sum()`` and ``(a - mu) ** 2`` off them).
+_NO_ANCHORS = np.empty(0, dtype=np.float64)
+
+
+def _two_means_init(xs: np.ndarray) -> GmmFit1D | None:
+    """Deterministic 2-means split of the **sorted** sample *xs*, as EM's start.
+
+    Exact Lloyd's algorithm for ``k = 2`` in one dimension.  A 2-means
+    assignment in 1-D is an *interval* split, so an iteration is a
+    :func:`numpy.searchsorted` for the midpoint of the two centres followed by
+    two O(1) prefix-sum means - not a pass over the data.  The whole
+    initialiser is therefore one sort and one pair of cumulative sums, and its
+    cost does not grow with the iteration count the way sklearn's
+    ``init_params="kmeans"`` does, where a third of the initialiser's time went
+    at 50k scores (issue #3585).
+
+    Started from the sample's **min and max** rather than from sampled points,
+    so it is deterministic without an RNG - no ``random_state`` to thread
+    through, and the same scores give the same init on every machine.  Scores
+    are bounded (a sigmoid or a cosine), so the pair is not an outlier artefact,
+    and it is the start that survives a *saturated* distribution: quartiles
+    coincide as soon as one class holds under 25% of the sample, which on the
+    #3166 shape is exactly the case the split has to find.
+
+    Returns ``None`` only when there is nothing to fit at all: fewer than two
+    scores, or a non-finite sample.  A **constant** sample has no split to find,
+    but it does have an answer - two identical components sitting on the value -
+    and that is what it gets, because the anchored fit initialises from here and
+    its anchors are what pull such a haystack apart.  (sklearn's initialiser
+    answered a constant sample with a phantom second component at zero, so
+    ``calculate_gmm_threshold`` on a haystack of 0.3s returned 0.15.)
+    """
+    n = int(xs.size)
+    if n < 2:
+        return None
+    lo_c, hi_c = float(xs[0]), float(xs[-1])
+    if not (math.isfinite(lo_c) and math.isfinite(hi_c)) or not math.isfinite(float(xs.sum())):
+        return None
+    if hi_c <= lo_c:
+        return GmmFit1D(w_lo=0.5, mu_lo=lo_c, var_lo=1e-12, w_hi=0.5, mu_hi=lo_c, var_hi=1e-12)
+
+    csum = np.concatenate(([0.0], np.cumsum(xs)))
+    csq = np.concatenate(([0.0], np.cumsum(xs * xs)))
+    var_all = max(float(csq[n] / n - (csum[n] / n) ** 2), 0.0)
+    floor = max(1e-12, _ANCHOR_VAR_FLOOR_FRAC * var_all)
+
+    split = 0
+    for _ in range(_KMEANS_MAX_ITER):
+        # Everything below the midpoint of the two centres belongs to the low
+        # cluster.  ``side="left"`` ties with the E-step's ``>=`` convention.
+        new_split = int(np.searchsorted(xs, 0.5 * (lo_c + hi_c), side="left"))
+        # A boundary that empties a cluster is not a 2-means solution; keep the
+        # previous centres and stop rather than divide by zero.
+        if new_split <= 0 or new_split >= n or new_split == split:
+            split = new_split if 0 < new_split < n else split
+            break
+        split = new_split
+        lo_c = float(csum[split] / split)
+        hi_c = float((csum[n] - csum[split]) / (n - split))
+    if not 0 < split < n:
+        # Lloyd's never found a non-degenerate boundary (two distinct values,
+        # one of them a single point, and similar edges).  Split the sample in
+        # half instead: the EM below is what has to find the components, and an
+        # init that names two non-empty groups is all it needs.
+        split = n // 2
+
+    def _moments(a: int, b: int) -> tuple[float, float]:
+        """``(mean, variance)`` of ``xs[a:b]`` from the prefix sums."""
+        m = float(b - a)
+        mean = (csum[b] - csum[a]) / m
+        # Cancellation in ``E[x^2] - E[x]^2`` can go slightly negative on a
+        # tight cluster far from zero; the floor is what the EM applies anyway.
+        return mean, max((csq[b] - csq[a]) / m - mean * mean, floor)
+
+    mu_lo, var_lo = _moments(0, split)
+    mu_hi, var_hi = _moments(split, n)
+    return GmmFit1D(
+        w_lo=split / n,
+        mu_lo=mu_lo,
+        var_lo=var_lo,
+        w_hi=(n - split) / n,
+        mu_hi=mu_hi,
+        var_hi=var_hi,
+    )
+
+
+def _plain_em(x: np.ndarray, init: GmmFit1D) -> GmmFit1D | None:
+    """The unanchored EM: :func:`_anchored_em` with no anchors at all.
+
+    With both anchor arrays empty every anchor term in that loop vanishes
+    identically - the M-step masses are the responsibility sums, the total mass
+    is ``n``, and the anchored sums are zero - so it *is* the plain
+    two-component EM, run in the same preallocated-buffer, BLAS-free form.
+    Sharing the body is the point: the unanchored fit and the anchored refit it
+    initialises cannot drift into two different estimators of the same mixture.
+    """
+    return _anchored_em(x, _NO_ANCHORS, _NO_ANCHORS, init, 1.0, _EM_MAX_ITER, _EM_TOL, _EM_LOGLIK_TOL)
+
+
 def fit_score_gmm(arr: np.ndarray) -> GmmFit1D | None:
     """Fit a deterministic 2-component GMM to a 1-D score array.
 
-    Returns ``None`` when the fit fails (fewer than 2 scores, or an EM
-    failure), leaving the fallback policy to the caller -
-    :func:`calculate_gmm_threshold` falls back to the median.
+    Returns ``None`` when the fit fails - fewer than 2 scores, a non-finite
+    sample, or an EM failure - leaving the fallback policy to the caller
+    (:func:`calculate_gmm_threshold` falls back to the median).  A **constant**
+    sample is not a failure: it comes back as two identical components sitting
+    on the value, so the cut is that value (see :func:`_two_means_init`).
+
+    **The estimator, and why it is ours** (issue #3585).  Two Gaussians over one
+    dimension, fitted by EM from a deterministic 2-means init
+    (:func:`_two_means_init`) with the same loop the anchored fit uses
+    (:func:`_plain_em`).  Until #3585 this was sklearn's
+    ``GaussianMixture(n_components=2, random_state=42)``, which is the same
+    estimator of the same model - and was measured at **48% of a whole
+    cosine/text sort** (10% after this change, and the sort as a whole 1.7x
+    faster), because it pays ``covariance_type="full"`` machinery and a k-means
+    init per call on a problem whose covariance is a scalar.  The fit itself is
+    **7.3x** cheaper at the sizes a fold sees and **12x** at
+    :data:`_GMM_MAX_SAMPLES`.  It is
+    kept, unused by production, as :func:`fit_score_gmm_sklearn`: the swap
+    *moves the fit* (a different init lands EM in a different place within its
+    tolerance, and can land it in a different basin), so it is licensed by a
+    measured equivalence rather than by argument, and the reference has to stay
+    in the tree for that measurement to be repeatable.  What the study measured
+    is in ``docs/experiments/2026-09-13-gmm-init-3585/REPORT.md``.
+    """
+    x = np.asarray(arr, dtype=np.float64).ravel()
+    if x.size < 2:
+        return None
+    xs = np.sort(x)
+    init = _two_means_init(xs)
+    if init is None:
+        return None
+    fit = _plain_em(x, init)
+    if fit is None:
+        return None
+    # EM keeps the init's component order in every case measured, but nothing in
+    # the loop enforces it, and every caller reads ``lo``/``hi`` as an ordering.
+    if fit.mu_hi < fit.mu_lo:
+        return GmmFit1D(
+            w_lo=fit.w_hi, mu_lo=fit.mu_hi, var_lo=fit.var_hi, w_hi=fit.w_lo, mu_hi=fit.mu_lo, var_hi=fit.var_lo
+        )
+    return fit
+
+
+def fit_score_gmm_sklearn(arr: np.ndarray) -> GmmFit1D | None:
+    """The pre-#3585 sklearn fit, kept as the reference the swap is measured against.
+
+    **Not on any production path.**  This is what :func:`fit_score_gmm` was
+    until #3585 replaced it with the native EM above, and it stays so that the
+    equivalence can be re-measured rather than believed: the gate is an
+    admitted-set comparison over real fold haystacks
+    (``scripts/experiments/gmm_init/``), and a gate whose baseline lives only in
+    a git history cannot be re-run against the next candidate.
+    ``tests_lib/sorting/test_gmm_native_fit.py`` holds the standing form of it.
     """
     if arr.shape[0] < 2:
         return None
@@ -497,6 +674,85 @@ _ANCHOR_VAR_FLOOR_FRAC = 1e-6
 #: back to the unanchored fit.
 _ANCHOR_MIN_WEIGHT = 1e-6
 
+#: Convergence tolerance for the **anchored refit**, on the log-likelihood
+#: rather than on the parameters (issue #3825).  Set to ``None`` to take the
+#: parameter rule at :data:`_ANCHORED_EM_TOL` instead, which is what shipped
+#: until #3825.
+#:
+#: **Not** the unanchored fit's :data:`_EM_LOGLIK_TOL`, and the difference is
+#: the whole finding of #3825.  1e-3 is sklearn's tolerance, it is right for
+#: :func:`fit_score_gmm`, and transferring it here is a **regression**: on 114
+#: paired trajectory cells it costs +0.026 +- 0.006, because a barely
+#: identified fold mixture stopped that early leaves the components too close
+#: together and the midpoint cut lands low (FPR +0.044 to buy FNR -0.018).
+#: What ports is the *criterion*, not the number.  1e-8 is numerically the
+#: incumbent's own tolerance applied to the likelihood instead of the
+#: parameters: 1.6x cheaper, the admitted set moves by a median of zero and a
+#: p90 of one media in two thousand, and the share of folds exiting on
+#: ``max_iter`` falls from 5.7% to 1.4%.  Measured in
+#: ``docs/experiments/2026-09-13-anchored-em-stop-3825/REPORT.md``.
+#:
+#: Read inside :func:`fit_anchored_score_gmm` rather than bound as a default
+#: argument, so a study can install a stopping rule for a whole run the way
+#: ``scripts/experiments/gmm_init/arms_3825.py`` does.
+_ANCHORED_EM_LOGLIK_TOL: "float | None" = 1e-8
+
+#: Iteration cap and parameter-delta tolerance for the anchored refit - the
+#: signature defaults of :func:`fit_anchored_score_gmm`, named so the loop's
+#: budget is one fact rather than two literals.  The tolerance is inert while
+#: :data:`_ANCHORED_EM_LOGLIK_TOL` is set (:func:`_anchored_em` reads one rule
+#: or the other, never both).
+_ANCHORED_EM_MAX_ITER = 200
+_ANCHORED_EM_TOL = 1e-8
+
+
+def _anchor_loglik_terms(
+    a_lo: np.ndarray,
+    a_hi: np.ndarray,
+    mu: np.ndarray,
+    const: np.ndarray,
+    two_var: np.ndarray,
+    lam: float,
+) -> float:
+    """The clamped points' contribution to :func:`_anchored_em`'s objective.
+
+    Their responsibilities are fixed one-hot, so each anchor simply adds its own
+    component's log density at the multiplicity *lam* the M-step counts it with;
+    *const* already holds ``log w_c - 0.5*log(2*pi*var_c)`` per component.  Zero
+    when there are no anchors, which is what makes the anchored and free
+    objectives the same arithmetic for :func:`_plain_em`.
+    """
+    total = 0.0
+    if a_lo.size:
+        total += lam * (a_lo.size * const[0] - float(np.sum((a_lo - mu[0]) ** 2)) / two_var[0])
+    if a_hi.size:
+        total += lam * (a_hi.size * const[1] - float(np.sum((a_hi - mu[1]) ** 2)) / two_var[1])
+    return total
+
+
+def _record_stopping(
+    stats: "dict[str, float] | None",
+    n_iter: int,
+    stopped: bool,
+    loglik: float,
+    loglik_tol: "float | None",
+) -> None:
+    """Fill an :func:`_anchored_em` caller's *stats* sink, if it passed one.
+
+    ``converged`` is 1.0 only when the loop met its tolerance; a fit that left
+    on ``max_iter`` is not the estimator anyone specified, and before #3825
+    nothing anywhere reported the difference.  ``loglik`` appears only when
+    there was a log-likelihood rule to record - the objective at the parameters
+    the final iteration started from, i.e. the value the stopping decision was
+    taken on rather than a re-evaluation.
+    """
+    if stats is None:
+        return
+    stats["n_iter"] = float(n_iter)
+    stats["converged"] = float(stopped)
+    if loglik_tol is not None:
+        stats["loglik"] = float(loglik)
+
 
 def _anchored_em(
     x: np.ndarray,
@@ -506,6 +762,9 @@ def _anchored_em(
     anchor_weight: float,
     max_iter: int,
     tol: float,
+    loglik_tol: "float | None" = None,
+    stats: "dict[str, float] | None" = None,
+    anchored_objective: bool = True,
 ) -> GmmFit1D | None:
     """Run the anchored EM iterations; ``None`` on numerical failure.
 
@@ -546,13 +805,59 @@ def _anchored_em(
     parameters.  **Keep that test passing rather than "tidying" this body**;
     the readable form is right there in the test to diff against.
 
-    What is *not* fixed here is the initialiser: :func:`fit_score_gmm`'s
-    sklearn ``GaussianMixture`` fit, which every anchored fit runs first, is
-    now the larger half of the remaining cost (~0.04 s of ~0.057 s per fold at
-    7,747 scores) - and it is ~12x slower per EM iteration than this loop, on
-    the same estimation problem.  It cannot be replaced without moving the
-    fit, so it is out of scope here; issue #3585 carries the measurement that
-    would have to come first.
+    **Two stopping rules, and which one you want depends on the sample.**  By
+    default (``loglik_tol=None``) the loop stops when no parameter moved by more
+    than *tol* - the anchored path's rule, and the right one there because an
+    anchored refit starts from an already-converged unanchored fit and has a
+    short way to go.  Passing *loglik_tol* switches to "stop when the mean
+    log-likelihood stops improving by that much", which is sklearn's rule and
+    what :func:`fit_score_gmm` uses.  *anchored_objective* then says which
+    likelihood: the **weighted semi-supervised** one this loop ascends, anchors
+    included at weight *anchor_weight* and divided by the total mass (the
+    default, and the only one that is the estimator's own objective), or the
+    free sample's alone.  They coincide exactly when there are no anchors, so
+    the unanchored fit cannot tell the difference; on an anchored refit they do
+    not, and #3825 measured which one to stop on.
+
+    The difference is not a detail: on a **barely bimodal** sample - a cosine
+    text sort, where the query's matches are a shoulder on one broad mode rather
+    than a second mode - the likelihood surface has a flat ridge, and EM crawls
+    along it forever.  Measured on real 13k-score sorts, the parameter rule at
+    1e-8 runs the full 200 iterations to buy ~0.004 nats, while the likelihood
+    rule stops in ~25 with the same cut.  A criterion that cannot tell "still
+    converging" from "converged, and now drifting" spends all of its time in the
+    second case.  Computing the objective costs an extra reduction and an
+    in-place log per iteration, which is why it is opt-in rather than always on:
+    the anchored path would pay it for a rule it does not need, and it must stay
+    bit-for-bit what #3558 pinned.
+
+    **Which rule the anchored refit uses, and why that changed** (issue #3825).
+    Until #3825 the anchored path passed nothing and therefore took the
+    parameter rule - and #3585, which made the *initialiser* 5x cheaper, left
+    that refit as ~90% of a fold's fit: measured on the captured fold corpus it
+    ran **97-200 iterations** where the init took ~15, and on 2 of 5 sampled
+    folds it never converged at all, exiting on *max_iter*.  The diagnosis is
+    the same one the sort path gave: a barely-identified mixture crawls a flat
+    ridge, and the parameter criterion cannot tell that it has stopped learning
+    anything.  So the anchored path now passes
+    :data:`_ANCHORED_EM_LOGLIK_TOL`, and the choice of that value is a measured
+    one - ``docs/experiments/2026-09-13-anchored-em-stop-3825/REPORT.md``.
+
+    Pass *stats* to learn **how** a fit ended: the dict comes back with
+    ``n_iter`` (iterations run) and ``converged`` (1.0 when the loop met its
+    tolerance, 0.0 when it exhausted *max_iter*).  Nothing reported that before
+    #3825, which is the only reason a shipped estimator could spend a month
+    exiting on its iteration cap without anyone knowing.  It is filled only on
+    the success path; a numerical failure returns ``None`` and leaves it alone.
+
+    The initialiser every anchored fit runs first used to be sklearn's
+    ``GaussianMixture`` - the larger half of the remaining cost, and ~5x slower
+    per EM iteration than this loop on the same estimation problem.  #3585
+    replaced it with :func:`fit_score_gmm`, which is now **this same loop with
+    no anchors** (:func:`_plain_em`), so the two halves of a fold's fit no
+    longer differ by a factor of five for no reason.  That swap moves the fit
+    and was licensed by measurement, not by argument; see
+    ``docs/experiments/2026-09-13-gmm-init-3585/REPORT.md``.
     """
     lam = float(anchor_weight)
     n = float(x.size)
@@ -576,8 +881,12 @@ def _anchored_em(
     r_lo = np.empty_like(x)
     r_hi = np.empty_like(x)
     scratch = np.empty_like(x)
+    prev_loglik: float | None = None
+    loglik = float("nan")
+    n_iter = 0
+    stopped = False
 
-    for _ in range(max_iter):
+    for n_iter in range(1, max_iter + 1):
         # E-step over the free sample only (anchors are clamped one-hot).
         # Log-domain: log w_c - 0.5*log(2*pi*var_c) - (x-mu_c)^2 / (2*var_c).
         # ``const`` is that first pair of terms, which do not depend on x.
@@ -595,6 +904,9 @@ def _anchored_em(
         # their elementwise maximum), exponentiate, and normalise by the row
         # sum (likewise, their elementwise sum).
         np.maximum(r_lo, r_hi, out=scratch)
+        # The shift the log-sum-exp is taken around; its own sum is half the
+        # log-likelihood, and it is about to be overwritten.
+        max_sum = float(np.sum(scratch)) if loglik_tol is not None else 0.0
         np.subtract(r_lo, scratch, out=r_lo)
         np.subtract(r_hi, scratch, out=r_hi)
         np.exp(r_lo, out=r_lo)
@@ -602,6 +914,27 @@ def _anchored_em(
         np.add(r_lo, r_hi, out=scratch)
         np.divide(r_lo, scratch, out=r_lo)
         np.divide(r_hi, scratch, out=r_hi)
+        if loglik_tol is not None:
+            # ``scratch`` still holds the row sums the responsibilities were
+            # normalised by, so the objective costs no second pass over the
+            # data: a log-sum-exp is the shift plus the log of that sum.  It is
+            # the log-likelihood at the parameters this iteration *started*
+            # from, which is exactly the quantity sklearn compares between
+            # iterations - so "converged" means the same thing in both, and the
+            # stopping decision is taken below, after the M-step, as it is there.
+            #
+            # ``anchored_objective`` decides *whose* likelihood that is: the
+            # free sample's alone, or the weighted semi-supervised objective
+            # this EM actually ascends, anchors included (#3825).  With no
+            # anchors the two are the same arithmetic on the same values -
+            # ``total_mass`` is ``n`` and both anchor terms are skipped - so
+            # :func:`_plain_em` is unaffected either way, bit for bit.
+            np.log(scratch, out=scratch)
+            loglik = max_sum + float(np.sum(scratch))
+            if anchored_objective:
+                loglik = (loglik + _anchor_loglik_terms(a_lo, a_hi, mu, const, two_var, lam)) / total_mass
+            else:
+                loglik /= n
 
         # M-step with the anchors folded in at weight ``lam`` each.
         m_lo = float(r_lo.sum()) + lam * n_lo
@@ -644,14 +977,22 @@ def _anchored_em(
 
         if not (np.all(np.isfinite(mu_new)) and np.all(np.isfinite(var_new)) and np.all(np.isfinite(w_new))):
             return None
-        delta = max(
-            float(np.max(np.abs(mu_new - mu))),
-            float(np.max(np.abs(var_new - var))),
-            float(np.max(np.abs(w_new - w))),
-        )
-        mu, var, w = mu_new, var_new, w_new
-        if delta < tol:
+        if loglik_tol is None:
+            delta = max(
+                float(np.max(np.abs(mu_new - mu))),
+                float(np.max(np.abs(var_new - var))),
+                float(np.max(np.abs(w_new - w))),
+            )
+            mu, var, w = mu_new, var_new, w_new
+            stopped = delta < tol
+        else:
+            mu, var, w = mu_new, var_new, w_new
+            stopped = prev_loglik is not None and abs(loglik - prev_loglik) < loglik_tol
+            prev_loglik = loglik
+        if stopped:
             break
+
+    _record_stopping(stats, n_iter, stopped, loglik, loglik_tol)
 
     return GmmFit1D(
         w_lo=float(w[0]),
@@ -669,16 +1010,18 @@ def fit_anchored_score_gmm(
     anchor_labels: "list[float] | np.ndarray",
     *,
     anchor_weight: float = ANCHOR_WEIGHT_DEFAULT,
-    max_iter: int = 200,
-    tol: float = 1e-8,
+    max_iter: int = _ANCHORED_EM_MAX_ITER,
+    tol: float = _ANCHORED_EM_TOL,
+    stats: "dict[str, float] | None" = None,
 ) -> tuple[GmmFit1D | None, str]:
     """Fit the label-anchored 2-component mixture (issue #2852).
 
     *arr* is the (possibly :func:`gmm_fit_array`-subsampled) haystack score
     sample; *anchor_scores* / *anchor_labels* are the voted items' scores and
     binary labels (1.0 Good -> high component, else low).  Initialised from the
-    **unanchored** :func:`fit_score_gmm` fit (deterministic, seed-42 EM), then
-    refined by anchored EM (see :func:`_anchored_em`).
+    **unanchored** :func:`fit_score_gmm` fit (deterministic: a 2-means init and
+    this same EM loop with no anchors), then refined by anchored EM (see
+    :func:`_anchored_em`).
 
     Returns ``(fit, provenance)``.  On success the provenance is ``"anchored"``
     and the fit's components are class-identified by construction (``hi`` is
@@ -687,6 +1030,11 @@ def fit_anchored_score_gmm(
     ``"unanchored_init_failed"``, ``"em_failed"``, ``"inverted_means"``,
     ``"component_collapse"``) - the caller decides the fallback policy
     (:func:`anchored_gmm_fit` falls back to the unanchored fit, never to 0.5).
+
+    Pass *stats* to receive the refit's ``n_iter`` / ``converged`` (see
+    :func:`_anchored_em`); the loop is stopped on
+    :data:`_ANCHORED_EM_LOGLIK_TOL`, read here at call time rather than bound as
+    a default so a study can install another rule (#3825).
 
     Anchors force a component ordering rather than inherit one: if the labelled
     scores contradict the population modes (Good votes living in the low mode),
@@ -709,7 +1057,7 @@ def fit_anchored_score_gmm(
 
     a_hi = a[z == 1.0]
     a_lo = a[z != 1.0]
-    fit = _anchored_em(x, a_lo, a_hi, init, anchor_weight, max_iter, tol)
+    fit = _anchored_em(x, a_lo, a_hi, init, anchor_weight, max_iter, tol, _ANCHORED_EM_LOGLIK_TOL, stats)
     if fit is None:
         return None, "em_failed"
     if not (fit.mu_hi > fit.mu_lo):

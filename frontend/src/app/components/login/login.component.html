@@ -3,13 +3,14 @@
     <img src="logo.png" alt="VTSearch logo" class="login-logo">
     <h1>VTSearch</h1>
     <p class="login-subtitle">Enter your name to get started</p>
-    <form (ngSubmit)="submit()" class="login-form">
+    <form (submit)="$event.preventDefault(); submit()" class="login-form">
       <label for="login-username" class="sr-only">Username</label>
       <input
         id="login-username"
         class="form-input"
         type="text"
-        [(ngModel)]="username"
+        [value]="username"
+        (input)="username = $any($event.target).value"
         name="username"
         placeholder="Username"
         title="Enter your username to log in"

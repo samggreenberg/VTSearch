@@ -50,8 +50,8 @@ describe('ChartsService', () => {
     it('should render with valid data', () => {
       const canvas = createMockCanvas();
       const data = [
-        { num_labels: 5, num_flips: 3 },
-        { num_labels: 10, num_flips: 1 },
+        { num_labels: 5, num_flips: 3, num_confident_flips: 2 },
+        { num_labels: 10, num_flips: 1, num_confident_flips: 0 },
       ];
       expect(() => service.renderStabilityChart(canvas, data)).not.toThrow();
     });

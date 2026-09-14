@@ -51,25 +51,39 @@
           "configurations": {
             "production": {
               "budgets": [
-                // initial: 520kB. The app is zoneless (zone.js dropped from the
-                // production polyfills), which took the measured eager bundle to
-                // ~488kB. The eager path is framework-dominated (Angular
-                // core+router+forms+http+CDK), not app bloat: routes are lazy,
-                // the heavy modals are @defer'd, and `marked` lives only in a
-                // deferred chunk. The shared `vt-modal` adds CDK a11y's focus
-                // trap (`CdkTrapFocus`) for keyboard/screen-reader focus
-                // management across all ~24 dialogs; because the modal is eager,
-                // that ~7kB lands in the initial bundle, taking it to ~507kB.
-                // Measured 515.63kB as of the eager-path audit that split
-                // `DashboardSortService` out of `DashboardColumnsService` (the
-                // eager context pulldowns were dragging `ManagedColumns` and the
-                // Dashboard column metadata onto first paint, ~6.5kB). The warn
-                // limit sits just above the real size with a small headroom.
-                // Do not raise without first auditing the eager path for genuine
-                // bloat.
+                // initial: 525kB. The app is zoneless (zone.js dropped from
+                // the production polyfills). The eager path is
+                // framework-dominated, not app bloat: routes are lazy, the
+                // heavy modals are @defer'd, and `marked` lives only in a
+                // deferred chunk. Measured 2026-09-12 (#3811) the eager split
+                // is 317.54kB framework to 121.47kB app code.
+                //
+                // Measured initial total: 483.71kB (#3811). The ~41kB of
+                // headroom is deliberate and is NOT spare capacity for app
+                // code. Angular's own patch releases move this number ~3kB at
+                // a time, and when the margin was last under 1kB a routine
+                // security bump (21.2.19 -> 21.2.23, #3795) turned the build
+                // gate red for every branch, for reasons nothing to do with
+                // the change under test.
+                //
+                // #3811 reclaimed 38.50kB by dropping FormsModule from the
+                // only two components on the eager path that pulled it
+                // (`vt-login`, `vt-dialog-host`) -- one uncontrolled text
+                // field each, now plain `[value]` + `(input)`. A test guards
+                // that, because the budget no longer can: see
+                // TestEagerBundleComposition in tests/core/test_frontend.py.
+                //
+                // Still eager on purpose: @angular/cdk a11y (~9kB), reached
+                // via `vt-modal` inside the always-rendered `vt-dialog-host`.
+                // Dropping it would cost the focus trap on all ~24 dialogs,
+                // and deferring the dialog host would put a chunk fetch in
+                // front of every confirm()/prompt().
+                //
+                // Do not raise without first auditing the eager path for
+                // genuine bloat.
                 {
                   "type": "initial",
-                  "maximumWarning": "520kB",
+                  "maximumWarning": "525kB",
                   "maximumError": "1MB"
                 },
                 {

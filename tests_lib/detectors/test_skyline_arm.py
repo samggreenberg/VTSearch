@@ -191,11 +191,22 @@ def test_negative_training_regret_is_not_clamped():
     # The whole-image column of a planted-PATCH dataset: the CLS vector averages
     # the signal away, so the image-labelled skyline is genuinely weak and some
     # step beats it.  Nothing in the harness may clamp that to zero.
-    medias, _ = _planted_dataset(n_per_cat=30, seed=0)
+    #
+    # THE SEED IS PART OF THE FIXTURE, and it is chosen for MARGIN.  Training
+    # regret is a difference of oracle costs over rankings, so it does not read
+    # the threshold - but the trajectory does: acquisition picks near the cut,
+    # so any change to the threshold rule sends the run down a different path
+    # and a fixture holding one negative step by a hair stops holding it.  #3585
+    # changed the unanchored fit and seed 0 (one negative step, -0.027) went to
+    # none, which reads as "the harness started clamping" and is not.  Seed 2
+    # produces 5 negative steps under that fit and 7 under the pre-#3585 one, so
+    # the fixture is exercising the no-clamp path rather than balancing on it.
+    medias, _ = _planted_dataset(n_per_cat=30, seed=2)
     rows = _run(medias, region_voting=True)
     mortal, skyline = _split(rows)
     assert skyline, "no skyline row"
-    assert any(r["training_regret"] < 0 for r in mortal), "fixture no longer produces a negative regret"
+    negative = [r["training_regret"] for r in mortal if r["training_regret"] < 0]
+    assert len(negative) >= 3, f"fixture no longer produces negative regrets ({len(negative)} of {len(mortal)} steps)"
 
 
 # ---------------------------------------------------------------------------

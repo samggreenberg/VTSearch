@@ -32,6 +32,7 @@ slides:
   train-loop
   find-results
   find-line
+  embed-flow
   vote-boundary
 
   # 2 — Calibration

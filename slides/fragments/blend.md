@@ -2,7 +2,7 @@
 
 ![bg fit](figs/calib-blend-flow.png)
 
-## Just an Average Guy
+## Cross Examination
 
 <!-- build: figs/calib-blend-flow.build1.png -->
 

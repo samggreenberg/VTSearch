@@ -113,6 +113,15 @@ IDENT_COLUMNS: tuple[str, ...] = (
     #: directory it was read out of.  Empty on every run that took the app's
     #: own opening, which is every study before #3267.
     "startup_schedule",
+    #: Seed of the Train/Calibrate fold splits this run calibrated with (issue
+    #: #3794).  42 on every default run - the app pins the split too, so the
+    #: default arm reports production's own draw - and a swept value only in a
+    #: calibration-noise arm, where the cell seed is held fixed so the *data*
+    #: cannot move and this is the one thing that does.  Recorded rather than
+    #: assumed because the spread across such a sweep is the error bar on every
+    #: single-seed number in every other study, and a pooled frame cannot say
+    #: which rows carry it otherwise.
+    "calibration_seed",
     # --- Acquisition/reporting decoupling (docs/ML.md, threshold calibration).
     #: The threshold handed to the *selector* this step - cut
     #: ``acq_inclusion_offset`` inclusion steps below ``threshold``.  Equal to it
@@ -211,6 +220,14 @@ PICK_COLUMNS: tuple[str, ...] = (
     "dataset",
     "category",
     "startup_schedule",
+    #: The Train/Calibrate split this trajectory calibrated with, for the same
+    #: reason the main frame carries it (issue #3794): a pooled pick log cannot
+    #: otherwise say which draw a click belongs to.  It earns its place here
+    #: rather than only there because the *pick* is where the closed loop shows:
+    #: two draws that cut differently pick differently from the step after they
+    #: first disagree, and the click at which that starts is not recoverable
+    #: from a metric column.
+    "calibration_seed",
     "style",
     "t",
     "phase",

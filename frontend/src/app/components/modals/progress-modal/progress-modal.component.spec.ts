@@ -257,7 +257,7 @@ describe('ProgressModalComponent', () => {
         job_id: 'j3',
         status: 'done',
         metric: 'stable',
-        stability: [{ num_labels: 5, num_flips: 1 }],
+        stability: [{ num_labels: 5, num_flips: 1, num_confident_flips: 1 }],
       });
 
       await vi.advanceTimersByTimeAsync(50);

@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
 import { ApiConfiguration } from '../generated/api-client/api-configuration';
+import type { FieldOptions } from '../generated/api-client/models/field-options';
 import type { SettingsImporterEntry } from '../generated/api-client/models/settings-importer-entry';
 import type { SettingsExporterEntry } from '../generated/api-client/models/settings-exporter-entry';
 import type { RunSettingsExportRequest } from '../generated/api-client/models/run-settings-export-request';
@@ -11,6 +12,8 @@ import type { RunSettingsExportResponse } from '../generated/api-client/models/r
 import { getSettingsImporters } from '../generated/api-client/fn/settings-io/get-settings-importers';
 import { getSettingsExporters } from '../generated/api-client/fn/settings-io/get-settings-exporters';
 import { runSettingsExport } from '../generated/api-client/fn/settings-io/run-settings-export';
+import { settingsImporterFieldOptions } from '../generated/api-client/fn/settings-io/settings-importer-field-options';
+import { settingsExporterFieldOptions } from '../generated/api-client/fn/settings-io/settings-exporter-field-options';
 
 /** Response shape for the plugin-field import route. The body shape is
  *  plugin-dependent and not described in the OpenAPI spec (the spec
@@ -54,8 +57,34 @@ export class SettingsIoApiService {
     return this.http.post<SettingsImportResponse>(url, params);
   }
 
+  /** Current option list for one of *importerName*'s ``dynamic_options``
+   *  select fields, given a snapshot of the form's current values. */
+  getImporterFieldOptions(
+    importerName: string,
+    fieldKey: string,
+    values: Record<string, string>,
+  ): Observable<{ options: FieldOptions[] }> {
+    return settingsImporterFieldOptions(this.http, this.config.rootUrl, {
+      importer_name: importerName,
+      body: { field_key: fieldKey, values },
+    }).pipe(map((r) => ({ options: r.body.options ?? [] })));
+  }
+
   listExporters(): Observable<SettingsExporterEntry[]> {
     return getSettingsExporters(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+  }
+
+  /** Current option list for one of *exporterName*'s ``dynamic_options``
+   *  select fields, given a snapshot of the form's current values. */
+  getExporterFieldOptions(
+    exporterName: string,
+    fieldKey: string,
+    values: Record<string, string>,
+  ): Observable<{ options: FieldOptions[] }> {
+    return settingsExporterFieldOptions(this.http, this.config.rootUrl, {
+      exporter_name: exporterName,
+      body: { field_key: fieldKey, values },
+    }).pipe(map((r) => ({ options: r.body.options ?? [] })));
   }
 
   runExport(

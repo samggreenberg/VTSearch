@@ -180,6 +180,14 @@ def admit_classes(
                 # or out by hand.  Until this is done the class is a proposal.
                 "membership_verified": False,
                 "rejected_page_ids": [],
+                # WHO looked, and when.  `membership_verified` is a boolean and
+                # the corpus's whole claim rests on what stands behind it --
+                # "checked by the person who owns this benchmark" and "checked
+                # by whoever ran the script" are different standards of
+                # evidence, and a boolean cannot tell them apart.  Stamped by
+                # `audit_to_corrections.py --reviewer`.
+                "reviewed_by": None,
+                "reviewed_on": None,
                 "notes": "",
             },
         }
@@ -273,20 +281,50 @@ def write_query_crops(
     inventory: dict[str, list[tuple[int, int]]],
     admitted: dict[str, dict[str, Any]],
     out_dir: Path,
-) -> list[str]:
-    """One query crop per admitted class: its largest boxed instance.
+    *,
+    backend: str = "phash",
+    threshold: Optional[float] = None,
+    spread: float = cfg.QUERY_CORE_SPREAD,
+    min_reach_frac: float = cfg.QUERY_CROP_MIN_REACH_FRAC,
+) -> tuple[list[str], list[str]]:
+    """One query crop per admitted class: its largest boxed instance *of that class*.
 
     Largest, because the prior study measured a 2.2x AP advantage for a clean
     canonical query over a crop of a small in-scene instance — the query is the
     one place where more pixels are free.
 
+    Largest **among the class's core**, because nothing else checks that the
+    exemplar is a member of the class in any sense but the clustering's own say
+    so.  `spods/stamp_00489_1` is the case (#3599): it holds three different
+    rubber stamps, 22 instances of one and 2 of another, and its largest box is
+    a third that appears nowhere else in it — so the eval would have searched
+    the whole class with a crop of `://NOT-DELIVERED//:`, and every resulting
+    zero would have looked like a detector failure.  The core is the class's
+    medoid plus the instances that are not outliers against the class's own
+    spread; see :func:`cluster_marks.medoid_core` for why the comparison is
+    within the class rather than against a fixed distance.
+
+    Neither half of the choice is made silently.  A crop that is not the class's
+    largest instance says which larger ones it passed over, and a crop that
+    *reaches* less than *min_reach_frac* of its class — counted at the merge
+    threshold this corpus already calls "one mark", `threshold` or the source's
+    own — says so: that is a class with no dominant mark, where medoid and
+    majority stop meaning the same thing and no rule can pick the right
+    exemplar.  Both are warnings and neither is a refusal; the crop is still
+    written, because a class with no crop drops out of the eval rather than
+    failing it.
+
     Weak-label classes have no box and therefore get no crop; they are returned
-    as the list of classes still owing a hand-drawn query.
+    as the list of classes still owing a hand-drawn query.  Returns
+    ``(needs_hand_crop, warnings)``.
     """
     from PIL import Image
 
+    from cluster_marks import MarkRef, describe_marks, distance_matrix, medoid_core
+
     out_dir.mkdir(parents=True, exist_ok=True)
     needs_hand_crop: list[str] = []
+    warnings: list[str] = []
 
     for class_id, meta in sorted(admitted.items()):
         # A band class is located by a top-of-page strip, not by the mark. Auto-
@@ -301,16 +339,58 @@ def write_query_crops(
         if not boxed:
             needs_hand_crop.append(class_id)
             continue
-        pi, mi = max(boxed, key=lambda r: pages[r[0]].marks[r[1]].area())
+
+        mark_refs = [
+            MarkRef(pi, mi, pages[pi].page_id, pages[pi].marks[mi].kind, pages[pi].marks[mi].box) for pi, mi in boxed
+        ]
+        desc = describe_marks(pages, mark_refs, backend=backend)
+        dist = distance_matrix(desc, mark_refs, backend=backend)
+        _medoid, core = medoid_core(dist, spread=spread)
+        core_set = set(core)
+
+        # Largest first, ties broken by the lower row, so the choice is a pure
+        # function of the corpus rather than of inventory order.
+        areas = [pages[pi].marks[mi].area() for pi, mi in boxed]
+        row = max(core, key=lambda r: (areas[r], -r))
+        pi, mi = boxed[row]
+        skipped = sum(1 for r, area in enumerate(areas) if area > areas[row] and r not in core_set)
+        if skipped:
+            warnings.append(
+                f"{class_id}: query crop is not the class's largest instance — {skipped} larger "
+                "box(es) sit outside the class's own core and were passed over"
+            )
+
+        merge_at = threshold if threshold is not None else cfg.cluster_threshold_for(meta["source"])
+        reach = int((dist[row] <= merge_at).sum())
+        if reach < min_reach_frac * len(boxed):
+            warnings.append(
+                f"{class_id}: the query crop is within {merge_at:.3f} of only {reach}/{len(boxed)} "
+                "instance(s) — the class has no dominant mark; adjudicate it with --task cluster "
+                "before quoting its numbers"
+            )
+
         mark = pages[pi].marks[mi]
         x, y, w, h = mark.box
         dest = out_dir / f"{class_id.replace('/', '__')}.png"
-        if not dest.exists():
-            with Image.open(pages[pi].path) as im:
-                im.convert("RGB").crop((x, y, x + w, y + h)).save(dest)
+        # Written every time, never skipped when the file is already there: the
+        # crop on disk may have been chosen by an earlier rule (or from an
+        # earlier clustering of this class), and a stale exemplar nobody rewrote
+        # is precisely the defect this function exists to avoid.
+        with Image.open(pages[pi].path) as im:
+            im.convert("RGB").crop((x, y, x + w, y + h)).save(dest)
         meta["query_crop"] = str(dest)
         meta["query_page_id"] = pages[pi].page_id
-    return needs_hand_crop
+        # What the choice was made out of, so classes.json carries the evidence
+        # rather than only the verdict.
+        meta["query_core"] = {
+            "n_boxed": len(boxed),
+            "n_core": len(core),
+            "larger_instances_skipped": skipped,
+            "reach": reach,
+            "reach_at": round(float(merge_at), 4),
+            "descriptor": backend,
+        }
+    return needs_hand_crop, warnings
 
 
 # --------------------------------------------------------------------------
@@ -799,9 +879,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
         print(f"\nadmitted {len(admitted)} candidate class(es); rejected {len(rejected)}")
         print("  no roster given — these are proposals, not ground truth; rank them with shortlist.py")
 
-    needs_hand_crop = write_query_crops(pages, inventory, admitted, args.out / "queries")
+    needs_hand_crop, crop_warnings = write_query_crops(
+        pages,
+        inventory,
+        admitted,
+        args.out / "queries",
+        backend=args.cluster_backend,
+        threshold=args.cluster_threshold,
+    )
     if needs_hand_crop:
         print(f"  {len(needs_hand_crop)} weak-label class(es) need a hand-drawn query crop")
+    warnings.extend(crop_warnings)
 
     pinned: Optional[dict[str, float]] = None
     if args.pin_tiers:

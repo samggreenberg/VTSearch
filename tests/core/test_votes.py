@@ -618,10 +618,38 @@ class TestStableIndicatorThresholds:
             [
                 None,  # no model yet
                 None,  # no prior model (first model step)
-                {"time_index": 2, "num_labels": 12, "num_flips": 0, "num_unlabeled": 88},
-                {"time_index": 3, "num_labels": 13, "num_flips": 0, "num_unlabeled": 87},
-                {"time_index": 4, "num_labels": 14, "num_flips": 0, "num_unlabeled": 86},
-                {"time_index": 5, "num_labels": 15, "num_flips": 0, "num_unlabeled": 85},
+                {
+                    "time_index": 2,
+                    "num_labels": 12,
+                    "num_flips": 0,
+                    "num_confident_flips": 0,
+                    "num_unlabeled": 88,
+                    "num_pool": 88,
+                },
+                {
+                    "time_index": 3,
+                    "num_labels": 13,
+                    "num_flips": 0,
+                    "num_confident_flips": 0,
+                    "num_unlabeled": 87,
+                    "num_pool": 87,
+                },
+                {
+                    "time_index": 4,
+                    "num_labels": 14,
+                    "num_flips": 0,
+                    "num_confident_flips": 0,
+                    "num_unlabeled": 86,
+                    "num_pool": 86,
+                },
+                {
+                    "time_index": 5,
+                    "num_labels": 15,
+                    "num_flips": 0,
+                    "num_confident_flips": 0,
+                    "num_unlabeled": 85,
+                    "num_pool": 85,
+                },
             ]
         )
         result = _compute_stable_status(_prog_cache(), good=5, bad=5, total=10)
@@ -633,10 +661,38 @@ class TestStableIndicatorThresholds:
         self._inject_stability(
             [
                 None,  # no prior model
-                {"time_index": 1, "num_labels": 11, "num_flips": 0, "num_unlabeled": 89},
-                {"time_index": 2, "num_labels": 12, "num_flips": 0, "num_unlabeled": 88},
-                {"time_index": 3, "num_labels": 13, "num_flips": 0, "num_unlabeled": 87},
-                {"time_index": 4, "num_labels": 14, "num_flips": 0, "num_unlabeled": 86},
+                {
+                    "time_index": 1,
+                    "num_labels": 11,
+                    "num_flips": 0,
+                    "num_confident_flips": 0,
+                    "num_unlabeled": 89,
+                    "num_pool": 89,
+                },
+                {
+                    "time_index": 2,
+                    "num_labels": 12,
+                    "num_flips": 0,
+                    "num_confident_flips": 0,
+                    "num_unlabeled": 88,
+                    "num_pool": 88,
+                },
+                {
+                    "time_index": 3,
+                    "num_labels": 13,
+                    "num_flips": 0,
+                    "num_confident_flips": 0,
+                    "num_unlabeled": 87,
+                    "num_pool": 87,
+                },
+                {
+                    "time_index": 4,
+                    "num_labels": 14,
+                    "num_flips": 0,
+                    "num_confident_flips": 0,
+                    "num_unlabeled": 86,
+                    "num_pool": 86,
+                },
             ]
         )
         result = _compute_stable_status(_prog_cache(), good=5, bad=5, total=10)
@@ -646,11 +702,46 @@ class TestStableIndicatorThresholds:
         self._inject_stability(
             [
                 None,  # no prior model
-                {"time_index": 1, "num_labels": 11, "num_flips": 0, "num_unlabeled": 89},
-                {"time_index": 2, "num_labels": 12, "num_flips": 0, "num_unlabeled": 88},
-                {"time_index": 3, "num_labels": 13, "num_flips": 0, "num_unlabeled": 87},
-                {"time_index": 4, "num_labels": 14, "num_flips": 0, "num_unlabeled": 86},
-                {"time_index": 5, "num_labels": 15, "num_flips": 0, "num_unlabeled": 85},
+                {
+                    "time_index": 1,
+                    "num_labels": 11,
+                    "num_flips": 0,
+                    "num_confident_flips": 0,
+                    "num_unlabeled": 89,
+                    "num_pool": 89,
+                },
+                {
+                    "time_index": 2,
+                    "num_labels": 12,
+                    "num_flips": 0,
+                    "num_confident_flips": 0,
+                    "num_unlabeled": 88,
+                    "num_pool": 88,
+                },
+                {
+                    "time_index": 3,
+                    "num_labels": 13,
+                    "num_flips": 0,
+                    "num_confident_flips": 0,
+                    "num_unlabeled": 87,
+                    "num_pool": 87,
+                },
+                {
+                    "time_index": 4,
+                    "num_labels": 14,
+                    "num_flips": 0,
+                    "num_confident_flips": 0,
+                    "num_unlabeled": 86,
+                    "num_pool": 86,
+                },
+                {
+                    "time_index": 5,
+                    "num_labels": 15,
+                    "num_flips": 0,
+                    "num_confident_flips": 0,
+                    "num_unlabeled": 85,
+                    "num_pool": 85,
+                },
             ]
         )
         result = _compute_stable_status(_prog_cache(), good=5, bad=5, total=10)
@@ -660,9 +751,25 @@ class TestStableIndicatorThresholds:
         """One spike above the max threshold should keep the indicator yellow."""
         entries: list = [None]  # no prior model
         for i in range(1, 7):
-            entries.append({"time_index": i, "num_labels": 10 + i, "num_flips": 0, "num_unlabeled": 100 - i})
-        # Inject one spike: 6 flips out of 93 unlabeled → ~6.5%, above 1% max threshold
-        entries[-1] = {"time_index": 6, "num_labels": 16, "num_flips": 6, "num_unlabeled": 93}
+            entries.append(
+                {
+                    "time_index": i,
+                    "num_labels": 10 + i,
+                    "num_flips": 0,
+                    "num_confident_flips": 0,
+                    "num_unlabeled": 100 - i,
+                    "num_pool": 100,
+                }
+            )
+        # Inject one spike: 6 confident flips over a 93-item pool → ~6.5%, above 1% max threshold
+        entries[-1] = {
+            "time_index": 6,
+            "num_labels": 16,
+            "num_flips": 6,
+            "num_confident_flips": 6,
+            "num_unlabeled": 93,
+            "num_pool": 93,
+        }
 
         self._inject_stability(entries)
         result = _compute_stable_status(_prog_cache(), good=8, bad=8, total=16)
@@ -672,8 +779,17 @@ class TestStableIndicatorThresholds:
         """Even a modest flip rate (~1.5%) should stay yellow under the tight thresholds."""
         entries: list = [None]  # no prior model
         for i in range(1, 7):
-            # 3 flips out of ~194 unlabeled → ~1.5% per step
-            entries.append({"time_index": i, "num_labels": 10 + i, "num_flips": 3, "num_unlabeled": 200 - i})
+            # 3 confident flips over a 200-item pool → 1.5% per step
+            entries.append(
+                {
+                    "time_index": i,
+                    "num_labels": 10 + i,
+                    "num_flips": 3,
+                    "num_confident_flips": 3,
+                    "num_unlabeled": 200 - i,
+                    "num_pool": 200,
+                }
+            )
         self._inject_stability(entries)
         result = _compute_stable_status(_prog_cache(), good=8, bad=8, total=16)
         assert result["status"] == "yellow", "~1.5% flip rate should stay yellow (threshold is 0.5% avg / 1% max)"
@@ -682,9 +798,18 @@ class TestStableIndicatorThresholds:
         """Green requires practically zero flips; only the rare single flip tolerated."""
         entries: list = [None]  # no prior model
         for i in range(1, 7):
-            # Mostly 0 flips, one step with 1 flip out of ~496 → 0.2%
+            # Mostly 0 flips, one step with 1 confident flip over a 500-item pool → 0.2%
             flips = 1 if i == 3 else 0
-            entries.append({"time_index": i, "num_labels": 10 + i, "num_flips": flips, "num_unlabeled": 500 - i})
+            entries.append(
+                {
+                    "time_index": i,
+                    "num_labels": 10 + i,
+                    "num_flips": flips,
+                    "num_confident_flips": flips,
+                    "num_unlabeled": 500 - i,
+                    "num_pool": 500,
+                }
+            )
         self._inject_stability(entries)
         result = _compute_stable_status(_prog_cache(), good=8, bad=8, total=16)
         assert result["status"] == "green", "Near-zero flips with rare single flip on large dataset should be green"
@@ -694,13 +819,41 @@ class TestStableIndicatorThresholds:
         self._inject_stability(
             [
                 None,  # no prior model (first model step)
-                {"time_index": 1, "num_labels": 11, "num_flips": 0, "num_unlabeled": 89},
-                {"time_index": 2, "num_labels": 12, "num_flips": 0, "num_unlabeled": 88},
+                {
+                    "time_index": 1,
+                    "num_labels": 11,
+                    "num_flips": 0,
+                    "num_confident_flips": 0,
+                    "num_unlabeled": 89,
+                    "num_pool": 89,
+                },
+                {
+                    "time_index": 2,
+                    "num_labels": 12,
+                    "num_flips": 0,
+                    "num_confident_flips": 0,
+                    "num_unlabeled": 88,
+                    "num_pool": 88,
+                },
                 None,  # model lost (gap; user unlabeled all bad)
                 None,  # still no model
                 None,  # first model step after gap; no prior model
-                {"time_index": 6, "num_labels": 16, "num_flips": 0, "num_unlabeled": 84},
-                {"time_index": 7, "num_labels": 17, "num_flips": 0, "num_unlabeled": 83},
+                {
+                    "time_index": 6,
+                    "num_labels": 16,
+                    "num_flips": 0,
+                    "num_confident_flips": 0,
+                    "num_unlabeled": 84,
+                    "num_pool": 84,
+                },
+                {
+                    "time_index": 7,
+                    "num_labels": 17,
+                    "num_flips": 0,
+                    "num_confident_flips": 0,
+                    "num_unlabeled": 83,
+                    "num_pool": 83,
+                },
             ]
         )
         result = _compute_stable_status(_prog_cache(), good=5, bad=5, total=10)

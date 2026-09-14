@@ -17,6 +17,34 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The Smart indicator no longer flaps on a category that has plateaued**
+  (#3832). Smart called the error cost "still declining" whenever a line
+  fitted through the last ten models sloped down by more than 1.5% of the mean
+  per step - with no notion of how much that cost bounces around between
+  retrains. On a category the embedding cannot resolve the cost is flat on
+  average but noisy, so the test fired on a quarter to a third of windows with
+  nothing having changed about the detector, and Autopilot's phase display
+  bounced between Done and Boundary with it. A decline now has to be bigger
+  than the window's own scatter (the slope at least two standard errors below
+  zero) before it holds the light yellow. A genuine improvement still does:
+  a run losing 5% of its cost per step reads yellow on 99% of windows, and the
+  synthetic dice reproduction's cleanly separable control reaches Done on the
+  same click it did before and never leaves. The indicator's tooltip says
+  which kind of green it is, and the status carries `slope_t` beside `slope`.
+
+- **The Stable indicator no longer waits for a category the embedding cannot
+  separate, and no longer degenerates as the haystack fills up** (#3831). It
+  now counts only *confident* flips - items that sat clear of the cut under
+  both the previous detector and this one - and divides by the whole pool
+  rather than the shrinking unlabeled remainder. A pool of dice labeled by
+  their roll used to hold Autopilot in the boundary phase for 127 of 150
+  clicks because the d8s flipped every retrain; it now reaches Done and
+  stays there for most of the run, while a cleanly separable category stops
+  at exactly the click it did before. When Stable goes green with items
+  still wobbling across the cut, the indicator tooltip and the Autopilot
+  Done step say so ("the remaining ambiguity looks irreducible in this
+  embedding") instead of implying the pool converged.
+
 - **Opening a saved dataset paces its progress bar for the branch its coverage
   atlas actually takes.** That step either restores the atlas cached in the
   dataset's pickle (~10 ms) or rebuilds a hierarchical k-means from scratch
@@ -32,6 +60,35 @@ not list every commit. Use `git log` for the full history.
   Pacing only: nothing about what is loaded or stored changes.
 
 ### Fixed
+
+- **A dataset imported with some of its vectors already computed no longer
+  fails every Browse, Train and text sort afterwards** (issue #3798). An
+  importer plugin that ships pre-computed vectors for part of a dataset
+  (`content_vectors` / `custom_metadata_map`, with no embedder name) and leaves
+  the rest for VTSearch to embed produced a dataset that was one embedding
+  space in fact and two by name: the items VTSearch embedded were keyed under
+  the embedder it resolved, the shipped vectors stayed nameless. The first
+  request for that embedder's matrix then raised
+  `media N has no embedding for embedder '<name>'` on every shipped item. This
+  happened whenever the import named no embedder - the CLI never does, and the
+  GUI need not - and became visible with the mixed-space guard added on
+  2026-09-04, which stopped reading a nameless vector as "the same space" on
+  the strength of the first media alone. The embed step now stamps the
+  embedder it resolved onto the nameless vectors whenever it embeds alongside
+  them (or the dataset already carries that embedder's name), so the dataset
+  leaves the import keyed under one name. A vector whose width contradicts
+  that embedder's declared dimension is rejected at import, naming both widths,
+  instead of surfacing later as a missing vector. A fully pre-computed nameless
+  import with nothing left to embed is unchanged.
+
+- **An import whose embedder produced nothing now says so.** Items the embedder
+  returned no vector for were dropped at the end of the load with one log line
+  and a progress message that the next stage overwrote within seconds, so a
+  dataset that silently shrank looked like a healthy one. The embed step now
+  logs which embedder declined and for how many items (and when a bulk
+  embedder returns the wrong number of vectors, or no embedder is registered
+  for the media type at all), and the drop raises a warning toast that stays
+  until dismissed.
 
 - **Startup no longer stalls for minutes on a cold NFS install** (issue #3715).
   `transformers` builds `importlib.metadata.packages_distributions()` when it is

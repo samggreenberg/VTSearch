@@ -286,9 +286,29 @@ unbounded surfaces (`sky`, `grass`, `floor`) are excluded by
 `pile_config.is_object_category`, which matches on the **head noun** so
 `blue sky` is dropped while `blue jeans` and `tennis ball` survive.
 
-Rebuild the scan behind them with `python scan_vg_boxes.py` (writes
-`vg_box_scale.json`; caches image dims, since `objects.json` stores boxes in
-pixels and carries no image dimensions).
+Rebuild the scan behind them with `python scan_vg_boxes.py` — but **read the
+next paragraph before you do**, because its default `--out` is not a safe thing
+to run.
+
+**A default-`--out` rerun silently redefines three published datasets.** The
+scanner has moved twice since `vg_box_scale.json` was written (per-image compact
+filtering in `10239c24e`, per-band supply in `fb4f4ec03`), and the two qualify
+categories differently, so rewriting the file in place changes what
+`vg_box_*@small|medium|large` *contain* while the numbers in #3129 and #3156 go
+on describing the old contents. `pilebuild/boxscan.py` reads the pre-envelope
+file deliberately for exactly that reason — the file on scratch is **meant** to
+be old. To refresh only the **dims cache** (`vg_image_dims.json`, which every
+VG-derived build reads and nothing publishes), send the scan somewhere else:
+
+```bash
+python scan_vg_boxes.py --out /expscratch/$USER/scratch-scan.json   # dims cache only
+```
+
+That cache is filled per image rather than all-or-nothing (#3822): a rerun reads
+headers only for files it has not seen — 170 of 108,245 the last time, two
+seconds — and a cache that is short does not stop being used. `objects.json`
+stores boxes in pixels and carries no image dimensions, which is why the cache
+exists at all.
 
 **Banding by median puts each category in exactly one band**, so these three
 sets carry disjoint vocabularies and a small-vs-large difference confounds box
@@ -363,6 +383,50 @@ vectors, so a parent rebuild used to leave it holding the parent's previous
 labels with a perfectly healthy media count. It now stamps a digest of the
 parent's labels, `--verify` compares that against the live parent, and a run
 that rebuilds `vg_scale` pulls the derived dataset in with it.
+
+## A row records the rule it was answered under
+
+The class rule *is* the question: it is the detector name a reviewer reads while
+voting (#3612), and files are named by image id alone. So when a ruling changes a
+rule, every row cast under the old wording silently starts meaning something
+else. That is not hypothetical — it cost the 80-image planter recheck. `vase`
+claimed "flower pots, planters" until #3784 withdrew the line, and nothing on the
+31 `vase` rows or the 49 `bowl` rows said which wording they were cast under, so
+all 80 had to go back in front of a human (#3778) to find the **21** that had
+actually moved.
+
+A row therefore carries two more optional fields (#3814): `rule`, the name the
+reviewer saw, and `rule_digest`, a hash of that rule's full `test` — because a
+rule can be rewritten in the body while the name stands still (#3756 did that to
+`bench`). Recording both is what separates "the reviewer read different words"
+from "the wording behind identical words moved".
+
+Three properties, and the third is the one that makes the field worth anything:
+
+- **The stamp is taken from what the reviewer was shown, never from the table.**
+  `ingest_slate.py` reads it off the slate's `detector` column; `apply_recheck.py`
+  takes it from the labelset it has just verified; `verdicts_to_corrections.py`
+  *carries* it and never re-derives one. That script reads August verdict files
+  and runs today — stamping them from `SCALE_CLASS_RULES` would write a wording
+  their reviewers never saw, which looks like a fix and is the bug.
+- **A recheck stamps both directions.** A Bad retires the row and carries the
+  rule that retired it; a **Good** changes no label and establishes the one thing
+  nothing else can — that a human looked under the rule now in force. 59 of the
+  80 planter images came back that way.
+- **Absence means unknown, and is never read as current.** The 872 rows written
+  before the field cannot be back-filled from anything, and treating them as
+  answered would be the original failure rather than a rounding of it.
+
+Asking the question is `rule_drift.py`, which sorts every row into `current` /
+`edited` / `superseded` / `unknown` and will print the superseded ids as a recheck
+slate. Every build additionally names the **superseded** count as it loads the
+file — and says nothing about `unknown`, which starts at 872, nobody can act on
+mid-run, and would train everyone to skip the line that matters.
+
+```bash
+python rule_drift.py                            # the table
+python rule_drift.py --state superseded --ids   # the slate a ruling implies
+```
 
 ## A rebox can change the band, and that is a correction
 
@@ -698,6 +762,73 @@ scores the other classes' COCO-scored positives — so 9,900 shared negatives
 deliver a realised **0.85%**, not the designed 1.00% (#3681).
 
 [`figures_3670.py`](figures_3670.py) draws the four of them.
+
+**The rate all four of them are about is now measured directly, and none of them
+is how you get it** (#3696). The composition they argue for is what removed the
+population it was measurable in, so `silence_rate.py` reads it off the exhaustive
+pass instead: every class VG did *not* name in a queue image is a measurement of
+its silence against a human reference, 81,363 pairs of them, at no extra labour.
+
+```bash
+python silence_rate.py --deep-unprovable 6264 --out silence_rate.json   # ~20s, login node
+```
+
+It is an **upper bound on the uniform rate**, not an estimate — the queue's
+images are selected for holding a class of *C*, and clutter correlates with
+holding more (#3667, #3679). That is the right shape for the one consumer left:
+`vg_scale_deep`'s 6,264 negatives that rest on VG's silence with nothing able to
+check them (#3723).
+
+**Run `silence_source.py` after it, and quote that number.** A cell pickle
+carries a *designation*, not what VG named (#3678), so the rate above counts an
+image VG called a `bike` as an image VG was silent about. Measured, that is
+**64%** of the errors — 441 of 815 under a spelling the build folds but never
+designates (#3818), 83 under one `lift_ambiguous` refuses (#3605) — and **none of it can
+reach a negative pool**, which is the only thing the rate is for. The correction
+is a factor of two and it re-ranks the classes:
+
+```bash
+python silence_source.py --rate silence_rate.json --deep-unprovable 6264   # ~2min, reads objects.json
+```
+
+2026-09-13, 9 of 25 classes finished: designation-based 2.8%, **VG-silence 1.0%
+[0.90%, 1.1%], bound 1.7%** — at most 104 of deep's 6,264, and near the middle
+of #3666's independently measured 1.40% [0.68, 2.86] rather than at its top edge. Full write-up in
+[`docs/experiments/2026-09-13-vg-silence-3696/REPORT.md`](../../../docs/experiments/2026-09-13-vg-silence-3696/REPORT.md);
+re-run both as classes finish rather than quoting that page.
+
+**`folded_supply.py` finishes the sentence `silence_source.py` leaves hanging.**
+Its `folded` bucket -- 441 images a human confirmed, that VG named under a
+spelling the build folds, and that the pile still does not designate -- is
+reported there as one count on purpose, because *which* reason applies is not
+readable from what that script loads. This runs the loader's front half in its
+own order and asks after each pass whether the class is still on the image, so
+the first pass to drop a pair is the answer:
+
+```bash
+python folded_supply.py --rate silence_rate.json --source silence_source.json \
+                        --per-outcome 1 --out folded_supply.json   # ~3 min CPU, no GPU
+```
+
+2026-09-13: **80% of them are `cell_full`** -- the cell took its `SCALE_N_POS`
+from a larger supply and never reached the image, in cells 1.4x to 22x
+over-subscribed -- with 17% scatter and 2.0% oversize, and **zero** in the seven
+outcomes that would mean a label was lost before the band. Nothing to repair; see
+[`docs/experiments/2026-09-13-folded-supply-3818/REPORT.md`](../../../docs/experiments/2026-09-13-folded-supply-3818/REPORT.md).
+
+`--source` is a gate rather than an option: it refuses to run unless the bucket
+it recovers matches `silence_source.py`'s published counts class for class. And
+read its **control** column before quoting any share -- the 441 are undesignated
+by construction and a scattered image can never be designated, so dividing by
+every queue image holding the class manufactures a 3.6x excess out of the
+conditioning alone.
+
+Two things it will tell you about rather than hide. A class whose slate is
+part-banked has candidates with no verdict, so they enter its bound at their
+worst case and it leaves the pooled figure — `chair` reads 25.1% at 300 of 841,
+which is the only reading that cannot be mistaken for a clean class. And a class
+whose labelset names a **superseded rule** is reported on its own line and kept
+out of the pool (#3814): `dog`, `fork` and `vase` are there today.
 
 Run `name_coverage.py` with no `--propose` to score the tables that are actually
 shipped, which is what says whether `pile_config` still does what its comment

@@ -82,8 +82,13 @@ export class ProgressIndicatorsComponent {
     const status = this.labelingStatus();
     if (!status?.stable) return '';
     const s = status.stable;
-    if (s['flips'] != null) return `Flips: ${s['flips']}`;
+    if (s['avg_flip_rate'] != null) return `Flips: ${((s['avg_flip_rate'] as number) * 100).toFixed(1)}% of items per retrain`;
     return '';
+  }
+
+  /** Set when Stable is green only because the remaining flips are irreducible boundary wobble (#3831). */
+  get stablePlateau(): boolean {
+    return this.labelingStatus()?.stable['plateau'] === true;
   }
 
   get spanSubtext(): string {
@@ -96,14 +101,26 @@ export class ProgressIndicatorsComponent {
     return '';
   }
 
+  /** Set when Smart is green only because the cost's downward drift is smaller
+   *  than its step-to-step scatter (#3832). */
+  get smartDriftWithinNoise(): boolean {
+    return this.labelingStatus()?.smart['drift_within_noise'] === true;
+  }
+
   get smartTooltip(): string {
     const meaning = 'Smart: the model fits your votes consistently.';
-    return this.smartSubtext ? `${meaning} ${this.smartSubtext}.` : meaning;
+    const drift = this.smartDriftWithinNoise
+      ? ' The cost still drifts down, but by less than it bounces around between retrains, so the drift is noise rather than progress.'
+      : '';
+    return this.smartSubtext ? `${meaning}${drift} ${this.smartSubtext}.` : `${meaning}${drift}`;
   }
 
   get stableTooltip(): string {
     const meaning = 'Stable: predictions stopped shifting between retrains.';
-    return this.stableSubtext ? `${meaning} ${this.stableSubtext}.` : meaning;
+    const plateau = this.stablePlateau
+      ? ' Some items near the cutoff still change calls, but no longer fewer each retrain: the remaining ambiguity looks irreducible in this embedding.'
+      : '';
+    return this.stableSubtext ? `${meaning}${plateau} ${this.stableSubtext}.` : `${meaning}${plateau}`;
   }
 
   get spanTooltip(): string {

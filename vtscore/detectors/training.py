@@ -303,6 +303,18 @@ def _fused_threshold(
     if det_ctx is not None:
         det_ctx.anchored_cut_cache = cut
 
+    if cut is not None and cut.n_unconverged:
+        # Not a fallback and not an error - the threshold is still this fit's -
+        # but a fit that stopped on its iteration cap is not the estimator the
+        # calibration studies measured, and until #3825 no surface said so.
+        log.warning(
+            "threshold fit: %d of %d anchored fold refits stopped on the iteration cap rather than "
+            "converging (iterations %s); the threshold is usable but under-converged",
+            cut.n_unconverged,
+            len(cut.fits),
+            ",".join(str(i) for i in cut.fold_iterations),
+        )
+
     if cut is not None:
         threshold = cut.threshold_at(inclusion_value)
         if np.isfinite(threshold):

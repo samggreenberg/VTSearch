@@ -48,6 +48,16 @@ describe('SettingsExporterModalComponent', () => {
     await settleResource();
   }
 
+  /** `flushInit` with a caller-supplied exporter list, then a real click on the
+   *  first picker card. The bound event is what schedules change detection under
+   *  zoneless, so the form view actually renders for DOM assertions. */
+  async function openFirstExporter(exporters: unknown[]): Promise<void> {
+    TestBed.tick();
+    httpMock.expectOne('/api/settings-exporters').flush(exporters);
+    await settleResource();
+    (fixture.nativeElement.querySelector('.picker-card') as HTMLButtonElement).click();
+  }
+
   it('should create and render exporter cards', async () => {
     await flushInit();
     expect(component).toBeTruthy();
@@ -102,5 +112,40 @@ describe('SettingsExporterModalComponent', () => {
     const err = fixture.nativeElement.querySelector('.error-text') as HTMLElement;
     expect(err).toBeTruthy();
     expect(err.textContent).toContain('cannot write');
+  });
+
+  // Issue #3802 (export side): selecting an exporter must pre-fetch every
+  // `dynamic_options` field so the plugin's `get_field_options()` runs.
+  it('pre-fetches options for a dynamic_options field on exporter select', async () => {
+    const dynamicExporter = {
+      name: 'dyn',
+      fields: [{ key: 'bucket', field_type: 'select', dynamic_options: true, required: true }],
+    } as any;
+    await openFirstExporter([dynamicExporter]);
+
+    httpMock
+      .expectOne((req) => req.url.endsWith('/api/settings-exporters/field-options/dyn'))
+      .flush({ options: [{ value: 'b1', label: 'Bucket One' }] });
+    await settleZoneless(fixture);
+
+    expect(component.formValues['bucket']).toBe('b1');
+    const options = fixture.nativeElement.querySelectorAll('select option');
+    expect([...options].map((o: any) => o.textContent.trim())).toContain('Bucket One');
+  });
+
+  it('surfaces a field-options failure inline next to the field', async () => {
+    const dynamicExporter = {
+      name: 'dyn',
+      fields: [{ key: 'bucket', field_type: 'select', dynamic_options: true }],
+    } as any;
+    await openFirstExporter([dynamicExporter]);
+    httpMock
+      .expectOne((req) => req.url.endsWith('/api/settings-exporters/field-options/dyn'))
+      .flush({ message: 'bucket listing failed' }, { status: 502, statusText: 'Bad Gateway' });
+    await settleZoneless(fixture);
+
+    const err = fixture.nativeElement.querySelector('.error-text') as HTMLElement;
+    expect(err).toBeTruthy();
+    expect(err.textContent).toContain('bucket listing failed');
   });
 });

@@ -1,0 +1,759 @@
+{
+ "classes": [
+  {
+   "class": "backpack",
+   "silent_pairs": 3285,
+   "vg_silent_pairs": 3222,
+   "found_present": 90,
+   "coverage": 52,
+   "withheld": 0,
+   "folded": 38,
+   "designation_rate": 0.0273972602739726,
+   "coverage_rate": 0.016139044072004966,
+   "coverage_wilson95": [
+    0.012328745909586212,
+    0.02110178583133994
+   ]
+  },
+  {
+   "class": "bench",
+   "silent_pairs": 3272,
+   "vg_silent_pairs": 3146,
+   "found_present": 178,
+   "coverage": 78,
+   "withheld": 3,
+   "folded": 97,
+   "designation_rate": 0.054400977995110025,
+   "coverage_rate": 0.024793388429752067,
+   "coverage_wilson95": [
+    0.019911765958568063,
+    0.030834150915474104
+   ]
+  },
+  {
+   "class": "bicycle",
+   "silent_pairs": 3273,
+   "vg_silent_pairs": 3161,
+   "found_present": 102,
+   "coverage": 22,
+   "withheld": 32,
+   "folded": 48,
+   "designation_rate": 0.031164069660861594,
+   "coverage_rate": 0.006959822840873141,
+   "coverage_wilson95": [
+    0.004600683161182287,
+    0.01051590276842632
+   ]
+  },
+  {
+   "class": "boat",
+   "silent_pairs": 3237,
+   "vg_silent_pairs": 3171,
+   "found_present": 65,
+   "coverage": 13,
+   "withheld": 1,
+   "folded": 51,
+   "designation_rate": 0.020080321285140562,
+   "coverage_rate": 0.004099653106275623,
+   "coverage_wilson95": [
+    0.0023974496347659484,
+    0.007001948432841581
+   ]
+  },
+  {
+   "class": "book",
+   "silent_pairs": 3271,
+   "vg_silent_pairs": 3161,
+   "found_present": 131,
+   "coverage": 56,
+   "withheld": 33,
+   "folded": 42,
+   "designation_rate": 0.04004891470498319,
+   "coverage_rate": 0.017715912685858905,
+   "coverage_wilson95": [
+    0.013668189218658873,
+    0.022934464133723752
+   ]
+  },
+  {
+   "class": "bus",
+   "silent_pairs": 3249,
+   "vg_silent_pairs": 3160,
+   "found_present": 89,
+   "coverage": 16,
+   "withheld": 0,
+   "folded": 73,
+   "designation_rate": 0.027393044013542627,
+   "coverage_rate": 0.005063291139240506,
+   "coverage_wilson95": [
+    0.003119066331460993,
+    0.008209440127269431
+   ]
+  },
+  {
+   "class": "fire hydrant",
+   "silent_pairs": 3247,
+   "vg_silent_pairs": 3216,
+   "found_present": 47,
+   "coverage": 16,
+   "withheld": 0,
+   "folded": 31,
+   "designation_rate": 0.014474899907607022,
+   "coverage_rate": 0.004975124378109453,
+   "coverage_wilson95": [
+    0.0030647145279824213,
+    0.008066764734848395
+   ]
+  },
+  {
+   "class": "sink",
+   "silent_pairs": 3256,
+   "vg_silent_pairs": 3179,
+   "found_present": 77,
+   "coverage": 16,
+   "withheld": 10,
+   "folded": 51,
+   "designation_rate": 0.02364864864864865,
+   "coverage_rate": 0.0050330292544825414,
+   "coverage_wilson95": [
+    0.0031004107519295564,
+    0.008160470091151041
+   ]
+  },
+  {
+   "class": "stop sign",
+   "silent_pairs": 3324,
+   "vg_silent_pairs": 3304,
+   "found_present": 36,
+   "coverage": 22,
+   "withheld": 4,
+   "folded": 10,
+   "designation_rate": 0.010830324909747292,
+   "coverage_rate": 0.006658595641646489,
+   "coverage_wilson95": [
+    0.004401381752457577,
+    0.010061704992687654
+   ]
+  }
+ ],
+ "pooled": {
+  "classes": [
+   "backpack",
+   "bench",
+   "bicycle",
+   "boat",
+   "book",
+   "bus",
+   "fire hydrant",
+   "sink",
+   "stop sign"
+  ],
+  "silent_pairs": 29414,
+  "vg_silent_pairs": 28720,
+  "found_present": 815,
+  "coverage": 291,
+  "withheld": 83,
+  "folded": 441,
+  "designation_rate": 0.027707894200040797,
+  "coverage_rate": 0.010132311977715877,
+  "coverage_wilson95": [
+   0.009037792290556117,
+   0.011357863978485557
+  ],
+  "screening_allowance": 0.00526729320534141,
+  "bound": 0.01662515718382697
+ },
+ "examples": [
+  {
+   "class": "backpack",
+   "image_id": 587,
+   "kind": "coverage",
+   "vg_names_total": 26,
+   "vg_names_distinct": 24,
+   "vg_named": [
+    "white",
+    "sign",
+    "road",
+    "building.",
+    "street",
+    "people",
+    "sidewalk.",
+    "van",
+    "car",
+    "blue",
+    "can.",
+    "brown"
+   ],
+   "matched": []
+  },
+  {
+   "class": "backpack",
+   "image_id": 611,
+   "kind": "coverage",
+   "vg_names_total": 26,
+   "vg_names_distinct": 18,
+   "vg_named": [
+    "person",
+    "car",
+    "pole",
+    "carriage",
+    "sign",
+    "arrow",
+    "light",
+    "street",
+    "sidewalk",
+    "bus",
+    "man",
+    "deck"
+   ],
+   "matched": []
+  },
+  {
+   "class": "backpack",
+   "image_id": 2004,
+   "kind": "folded",
+   "vg_names_total": 16,
+   "vg_names_distinct": 16,
+   "vg_named": [
+    "artwork",
+    "backpack",
+    "bench",
+    "brochures",
+    "chair",
+    "desk lamp",
+    "lamp shade",
+    "magazine",
+    "mini fridge",
+    "monitor",
+    "remote",
+    "stand"
+   ],
+   "matched": [
+    "backpack"
+   ]
+  },
+  {
+   "class": "bench",
+   "image_id": 29,
+   "kind": "coverage",
+   "vg_names_total": 34,
+   "vg_names_distinct": 31,
+   "vg_named": [
+    "grass",
+    "woman",
+    "words",
+    "outside",
+    "beach",
+    "women",
+    "ocean",
+    "clouds",
+    "building",
+    "boat",
+    "boats",
+    "pole"
+   ],
+   "matched": []
+  },
+  {
+   "class": "bench",
+   "image_id": 56,
+   "kind": "coverage",
+   "vg_names_total": 8,
+   "vg_names_distinct": 2,
+   "vg_named": [
+    "window",
+    "building"
+   ],
+   "matched": []
+  },
+  {
+   "class": "bench",
+   "image_id": 75,
+   "kind": "coverage",
+   "vg_names_total": 32,
+   "vg_names_distinct": 14,
+   "vg_named": [
+    "window",
+    "blue window",
+    "light",
+    "countertop",
+    "seat",
+    "stove",
+    "oven",
+    "counter",
+    "table",
+    "oven handle",
+    "white cushion",
+    "sink"
+   ],
+   "matched": []
+  },
+  {
+   "class": "bicycle",
+   "image_id": 90,
+   "kind": "folded",
+   "vg_names_total": 33,
+   "vg_names_distinct": 28,
+   "vg_named": [
+    "table",
+    "cabinet",
+    "chair",
+    "living room",
+    "rug",
+    "ceiling",
+    "couch",
+    "frame",
+    "ottomon",
+    "footstool",
+    "bicycle",
+    "shelf"
+   ],
+   "matched": [
+    "bicycle"
+   ]
+  },
+  {
+   "class": "bicycle",
+   "image_id": 364,
+   "kind": "withheld",
+   "vg_names_total": 33,
+   "vg_names_distinct": 24,
+   "vg_named": [
+    "pole",
+    "light",
+    "tree",
+    "banner",
+    "flag",
+    "person",
+    "city",
+    "leaves",
+    "poles",
+    "sidewalk",
+    "street",
+    "clouds"
+   ],
+   "matched": [
+    "bike"
+   ]
+  },
+  {
+   "class": "bicycle",
+   "image_id": 848,
+   "kind": "folded",
+   "vg_names_total": 41,
+   "vg_names_distinct": 24,
+   "vg_named": [
+    "wheel",
+    "car",
+    "tree",
+    "red brick",
+    "building",
+    "leaves",
+    "sidewalk",
+    "street",
+    "bikes",
+    "bicycle",
+    "trunk",
+    "gravel"
+   ],
+   "matched": [
+    "bicycle",
+    "bikes"
+   ]
+  },
+  {
+   "class": "boat",
+   "image_id": 673,
+   "kind": "folded",
+   "vg_names_total": 23,
+   "vg_names_distinct": 23,
+   "vg_named": [
+    "land",
+    "harbor",
+    "bulidings",
+    "ocean",
+    "buildings",
+    "air",
+    "water",
+    "waves",
+    "hill",
+    "window",
+    "edge",
+    "buliding"
+   ],
+   "matched": [
+    "boats"
+   ]
+  },
+  {
+   "class": "boat",
+   "image_id": 498166,
+   "kind": "folded",
+   "vg_names_total": 35,
+   "vg_names_distinct": 21,
+   "vg_named": [
+    "boat",
+    "people",
+    "shirt",
+    "bridge",
+    "canopie",
+    "canopy",
+    "sign",
+    "writing",
+    "banner",
+    "boats",
+    "building",
+    "car"
+   ],
+   "matched": [
+    "boat",
+    "boats"
+   ]
+  },
+  {
+   "class": "boat",
+   "image_id": 1159484,
+   "kind": "coverage",
+   "vg_names_total": 5,
+   "vg_names_distinct": 4,
+   "vg_named": [
+    "woman",
+    "clouds",
+    "kite"
+   ],
+   "matched": []
+  },
+  {
+   "class": "book",
+   "image_id": 12,
+   "kind": "coverage",
+   "vg_names_total": 20,
+   "vg_names_distinct": 18,
+   "vg_named": [
+    "computer keyboard",
+    "inbox tray",
+    "desk",
+    "office chair",
+    "computer monitor",
+    "cpu",
+    "composition book",
+    "armrest",
+    "telephone",
+    "surge protector",
+    "spots",
+    "water bottle"
+   ],
+   "matched": []
+  },
+  {
+   "class": "book",
+   "image_id": 13,
+   "kind": "folded",
+   "vg_names_total": 28,
+   "vg_names_distinct": 25,
+   "vg_named": [
+    "desk",
+    "pen",
+    "monitor",
+    "orange cloth",
+    "chair",
+    "computer",
+    "keyboard",
+    "book",
+    "calendar",
+    "paper",
+    "rolodex",
+    "cord"
+   ],
+   "matched": [
+    "book"
+   ]
+  },
+  {
+   "class": "book",
+   "image_id": 75,
+   "kind": "coverage",
+   "vg_names_total": 32,
+   "vg_names_distinct": 14,
+   "vg_named": [
+    "window",
+    "blue window",
+    "light",
+    "countertop",
+    "seat",
+    "stove",
+    "oven",
+    "counter",
+    "table",
+    "oven handle",
+    "white cushion",
+    "sink"
+   ],
+   "matched": []
+  },
+  {
+   "class": "bus",
+   "image_id": 55,
+   "kind": "folded",
+   "vg_names_total": 39,
+   "vg_names_distinct": 25,
+   "vg_named": [
+    "window",
+    "person",
+    "shirt",
+    "building",
+    "wheels",
+    "bicycle",
+    "city",
+    "buildings",
+    "street",
+    "pole",
+    "bus",
+    "sidewalk"
+   ],
+   "matched": [
+    "bus"
+   ]
+  },
+  {
+   "class": "bus",
+   "image_id": 56,
+   "kind": "coverage",
+   "vg_names_total": 8,
+   "vg_names_distinct": 2,
+   "vg_named": [
+    "window",
+    "building"
+   ],
+   "matched": []
+  },
+  {
+   "class": "bus",
+   "image_id": 108,
+   "kind": "coverage",
+   "vg_names_total": 30,
+   "vg_names_distinct": 21,
+   "vg_named": [
+    "tree",
+    "person",
+    "street",
+    "building",
+    "car",
+    "lines",
+    "sign",
+    "line",
+    "cement island",
+    "windows",
+    "pole",
+    "truck"
+   ],
+   "matched": []
+  },
+  {
+   "class": "fire hydrant",
+   "image_id": 311,
+   "kind": "folded",
+   "vg_names_total": 26,
+   "vg_names_distinct": 21,
+   "vg_named": [
+    "window",
+    "road",
+    "house",
+    "snow",
+    "car",
+    "line",
+    "sidewalk",
+    "second floor",
+    "tree",
+    "porch",
+    "fence",
+    "puddle water"
+   ],
+   "matched": [
+    "hydrant"
+   ]
+  },
+  {
+   "class": "fire hydrant",
+   "image_id": 364,
+   "kind": "coverage",
+   "vg_names_total": 33,
+   "vg_names_distinct": 24,
+   "vg_named": [
+    "pole",
+    "light",
+    "tree",
+    "banner",
+    "flag",
+    "person",
+    "city",
+    "leaves",
+    "poles",
+    "sidewalk",
+    "street",
+    "clouds"
+   ],
+   "matched": []
+  },
+  {
+   "class": "fire hydrant",
+   "image_id": 2301,
+   "kind": "coverage",
+   "vg_names_total": 17,
+   "vg_names_distinct": 12,
+   "vg_named": [
+    "car",
+    "bicycle",
+    "bus",
+    "corner",
+    "mailbox",
+    "pants",
+    "people",
+    "shirt",
+    "street",
+    "tire",
+    "umbrella",
+    "woman"
+   ],
+   "matched": []
+  },
+  {
+   "class": "sink",
+   "image_id": 36,
+   "kind": "folded",
+   "vg_names_total": 34,
+   "vg_names_distinct": 31,
+   "vg_named": [
+    "drawers",
+    "pot",
+    "kitchen",
+    "table",
+    "reflection",
+    "cabinet",
+    "light",
+    "wall unit",
+    "ceiling",
+    "stove",
+    "greenery",
+    "top"
+   ],
+   "matched": [
+    "sink"
+   ]
+  },
+  {
+   "class": "sink",
+   "image_id": 67,
+   "kind": "coverage",
+   "vg_names_total": 21,
+   "vg_names_distinct": 15,
+   "vg_named": [
+    "leg of a chair",
+    "an outlet",
+    "l shaped counter top",
+    "ceiling",
+    "picture frame",
+    "flowers",
+    "shiny metal",
+    "counter top",
+    "fridge",
+    "purple flowers",
+    "two lights",
+    "oven"
+   ],
+   "matched": []
+  },
+  {
+   "class": "sink",
+   "image_id": 548,
+   "kind": "coverage",
+   "vg_names_total": 22,
+   "vg_names_distinct": 17,
+   "vg_named": [
+    "chair",
+    "cabinet",
+    "pot",
+    "knob",
+    "island",
+    "stove",
+    "table",
+    "window",
+    "three pictures",
+    "pole",
+    "plant",
+    "rug"
+   ],
+   "matched": []
+  },
+  {
+   "class": "stop sign",
+   "image_id": 3133,
+   "kind": "coverage",
+   "vg_names_total": 32,
+   "vg_names_distinct": 17,
+   "vg_named": [
+    "window",
+    "car",
+    "sign",
+    "building",
+    "house",
+    "snow",
+    "arrow",
+    "cars",
+    "lettering",
+    "pole",
+    "street",
+    "tracks"
+   ],
+   "matched": []
+  },
+  {
+   "class": "stop sign",
+   "image_id": 3833,
+   "kind": "withheld",
+   "vg_names_total": 67,
+   "vg_names_distinct": 24,
+   "vg_named": [
+    "street",
+    "road",
+    "car",
+    "grass",
+    "sidewalk",
+    "leaves",
+    "tree",
+    "line",
+    "man",
+    "sign",
+    "window",
+    "bicycle"
+   ],
+   "matched": [
+    "stop"
+   ]
+  },
+  {
+   "class": "stop sign",
+   "image_id": 150491,
+   "kind": "folded",
+   "vg_names_total": 32,
+   "vg_names_distinct": 27,
+   "vg_named": [
+    "building",
+    "cars",
+    "house",
+    "man",
+    "window",
+    "billboard",
+    "bush",
+    "car",
+    "chimney",
+    "cover",
+    "driveway",
+    "face"
+   ],
+   "matched": [
+    "stop sign"
+   ]
+  }
+ ]
+}

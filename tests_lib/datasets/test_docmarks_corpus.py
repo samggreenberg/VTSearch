@@ -580,6 +580,178 @@ class TestClassAdmission:
         assert "ucsf" in eligible
 
 
+# -------------------------------------------------------------- query crops
+
+
+class TestQueryCropIsAMemberOfItsClass:
+    """The exemplar has to be an instance of the mark it is used to search for.
+
+    #3599: `spods/stamp_00489_1` holds three different rubber stamps, and its
+    largest box is a third one that appears nowhere else in the class -- so the
+    eval searched 24 instances of one stamp with a crop of `NOT-DELIVERED`, and
+    every resulting zero looked like a detector failure.  Nothing checked that
+    the largest box belonged to the class in any sense but the clustering's own
+    say so.
+    """
+
+    @staticmethod
+    def _stamp(kind, size):
+        """A page carrying one stamp: a bar, a comb, or a mark unlike any other.
+
+        ``kind`` is ``"bar"``, ``"comb"``, or ``"noise<n>"`` — the last being a
+        seeded random block, so a class of them holds no two alike.
+        """
+        arr = np.full((_PAGE_H, _PAGE_W), 255, dtype=np.uint8)
+        if kind == "bar":
+            arr[200 + size // 4 : 200 + 3 * size // 4, 200 : 200 + size] = 0
+        elif kind == "comb":
+            for k in range(0, size, max(2, size // 10)):
+                arr[200 : 200 + size, 200 + k : 200 + k + max(1, size // 25)] = 0
+        else:
+            rng = np.random.default_rng(int(kind.removeprefix("noise")))
+            arr[200 : 200 + size, 200 : 200 + size] = rng.integers(0, 2, (size, size)) * 255
+        return arr
+
+    def _class(self, mods, tmp_path, instances):
+        """One class over ``[(kind, size), ...]``, on real pages."""
+        from PIL import Image
+
+        tmp_path.mkdir(parents=True, exist_ok=True)
+        pages = []
+        for i, (kind, size) in enumerate(instances):
+            path = tmp_path / f"p{i}.png"
+            Image.fromarray(self._stamp(kind, size)).save(path)
+            pages.append(
+                _page(
+                    mods,
+                    f"spods/{i:05d}",
+                    "spods",
+                    marks=[("stamp", (200, 200, size, size), "spods/stamp_00000_0", "clustered")],
+                    path=str(path),
+                    w=_PAGE_W,
+                    h=_PAGE_H,
+                )
+            )
+        return pages
+
+    def _crop(self, mods, tmp_path, instances):
+        pages = self._class(mods, tmp_path, instances)
+        inventory = mods["build"].class_inventory(pages)
+        admitted, _ = mods["build"].admit_classes(pages, inventory, min_instances=1, min_mark_px=1)
+        _hand, warnings = mods["build"].write_query_crops(pages, inventory, admitted, tmp_path / "queries")
+        return admitted["spods/stamp_00000_0"], warnings
+
+    def test_the_largest_box_does_not_win_when_it_is_not_the_class_mark(self, mods, tmp_path):
+        # Eight instances of one stamp and one much larger instance of another:
+        # the shape of the live case, and the crop the old rule chose.
+        meta, _warnings = self._crop(mods, tmp_path, [("bar", 120)] * 8 + [("comb", 300)])
+        assert meta["query_page_id"] != "spods/00008"
+        assert meta["query_core"]["larger_instances_skipped"] == 1
+
+    def test_passing_over_a_larger_instance_is_reported_not_silent(self, mods, tmp_path):
+        # The crop is still written -- a class with no crop drops out of the
+        # eval rather than failing it -- so the warning is the only thing that
+        # says the exemplar is not the obvious one.
+        meta, warnings = self._crop(mods, tmp_path, [("bar", 120)] * 8 + [("comb", 300)])
+        assert Path(meta["query_crop"]).exists()
+        assert any("not the class's largest instance" in w for w in warnings)
+
+    def test_a_clean_class_still_gets_its_largest_instance(self, mods, tmp_path):
+        # The 2.2x AP advantage the largest-box rule was chosen for is not given
+        # up: the core screen only ever removes an outlier, so a class that is
+        # one mark keeps the most pixels it has.
+        meta, warnings = self._crop(mods, tmp_path, [("bar", 80 + 20 * i) for i in range(8)])
+        assert meta["query_page_id"] == "spods/00007"
+        assert meta["query_core"]["n_core"] == meta["query_core"]["n_boxed"] == 8
+        assert warnings == []
+
+    def test_a_class_with_no_dominant_mark_is_warned_about(self, mods, tmp_path):
+        # Nine mutually unlike marks: the medoid is not a majority, so no rule
+        # can pick the right exemplar and the build says so rather than choosing
+        # one and calling it ground truth.
+        instances = [(f"noise{i}", 100 + 10 * i) for i in range(9)]
+        meta, warnings = self._crop(mods, tmp_path, instances)
+        assert meta["query_core"]["reach"] < meta["query_core"]["n_boxed"] / 2
+        assert any("no dominant mark" in w for w in warnings)
+
+    def test_a_stale_crop_from_an_earlier_selection_is_overwritten(self, mods, tmp_path):
+        # The crop used to be skipped when the file was already there, so a
+        # corpus rebuilt after this rule changed would have kept the exemplar
+        # the old rule chose -- the defect, preserved.
+        pages = self._class(mods, tmp_path, [("bar", 120)] * 8 + [("comb", 300)])
+        inventory = mods["build"].class_inventory(pages)
+        admitted, _ = mods["build"].admit_classes(pages, inventory, min_instances=1, min_mark_px=1)
+        queries = tmp_path / "queries"
+        queries.mkdir()
+        stale = queries / "spods__stamp_00000_0.png"
+        stale.write_bytes(b"")
+        mods["build"].write_query_crops(pages, inventory, admitted, queries)
+        assert stale.stat().st_size > 0
+
+    def test_the_chosen_mark_does_not_depend_on_instance_order(self, mods, tmp_path):
+        instances = [("bar", 120)] * 8 + [("comb", 300)]
+        first, _ = self._crop(mods, tmp_path / "a", instances)
+        second, _ = self._crop(mods, tmp_path / "b", list(reversed(instances)))
+        # Same marks, opposite order: the odd one is page 00008 in the first
+        # corpus and page 00000 in the second, and is passed over in both.
+        assert first["query_page_id"] == "spods/00000"
+        assert second["query_page_id"] == "spods/00001"
+
+
+class TestMedoidCore:
+    """The core is found by the class's own spread, never by a fixed distance.
+
+    #3599 measured the fixed-distance screen and it does not work: the one
+    confirmed-wrong exemplar scored 0.172 against its own class where the
+    60-class median was 0.28 -- second *lowest*, i.e. healthier-looking than
+    almost all of them -- because a perceptual hash of blue ink on white paper
+    tracks ink layout rather than identity.
+    """
+
+    @staticmethod
+    def _dist(sizes, within, between, sd=0.02, seed=0):
+        rng = np.random.default_rng(seed)
+        labels = [k for k, n in enumerate(sizes) for _ in range(n)]
+        n = len(labels)
+        dist = np.zeros((n, n))
+        for i in range(n):
+            for j in range(i + 1, n):
+                base = within if labels[i] == labels[j] else between
+                dist[i, j] = dist[j, i] = abs(rng.normal(base, sd)) if sd else base
+        return dist, labels
+
+    def test_the_core_is_the_majority_mark_not_the_whole_class(self, mods):
+        # The live shape: 22 instances of one stamp, 2 of another, 1 of a third.
+        dist, labels = self._dist([22, 2, 1], within=0.08, between=0.30)
+        medoid, core = mods["cluster"].medoid_core(dist, spread=3.0)
+        assert labels[medoid] == 0
+        assert {labels[i] for i in core} == {0}
+        assert len(core) == 22
+
+    def test_a_homogeneous_group_keeps_every_member(self, mods):
+        # Excluding a good instance costs a slightly smaller crop, so the cut
+        # only ever removes an outlier -- it does not take a fixed share.
+        dist, _labels = self._dist([12], within=0.10, between=0.10, sd=0.0)
+        _medoid, core = mods["cluster"].medoid_core(dist, spread=3.0)
+        assert len(core) == 12
+
+    def test_the_cut_is_relative_so_a_scale_change_does_not_move_it(self, mods):
+        # The whole argument for a within-class comparison: doubling every
+        # distance is a differently-scaled class and the same partition, which
+        # is what a fixed bar on the descriptor cannot say.
+        dist, _labels = self._dist([9, 3], within=0.06, between=0.25)
+        _m, core = mods["cluster"].medoid_core(dist, spread=3.0)
+        _m2, scaled = mods["cluster"].medoid_core(dist * 2, spread=3.0)
+        assert core == scaled == list(range(9))
+
+    def test_a_single_instance_is_its_own_core(self, mods):
+        assert mods["cluster"].medoid_core(np.zeros((1, 1)), spread=3.0) == (0, [0])
+
+    def test_an_empty_group_is_refused(self, mods):
+        with pytest.raises(ValueError, match="at least one row"):
+            mods["cluster"].medoid_core(np.zeros((0, 0)), spread=3.0)
+
+
 # ------------------------------------------------------------------- roster
 
 
@@ -684,7 +856,7 @@ class TestMembershipAudit:
     def test_ok_verifies_without_dropping_anything(self, mods):
         pages, classes = self._setup(mods)
         row = {"class_id": "spods/a", "page_ids": classes["spods/a"]["page_ids"], "verdict": "ok"}
-        changes, problems = mods["audit"].apply_membership(pages, classes, [row])
+        changes, problems, _merges, _seps = mods["audit"].apply_membership(pages, classes, [row])
         assert not problems
         assert classes["spods/a"]["n_instances"] == 5
         assert classes["spods/a"]["audit"]["membership_verified"] is True
@@ -710,7 +882,7 @@ class TestMembershipAudit:
     def test_an_out_of_range_index_is_refused_not_silently_clamped(self, mods):
         pages, classes = self._setup(mods)
         row = {"class_id": "spods/a", "page_ids": classes["spods/a"]["page_ids"], "verdict": "9"}
-        changes, problems = mods["audit"].apply_membership(pages, classes, [row])
+        changes, problems, _merges, _seps = mods["audit"].apply_membership(pages, classes, [row])
         assert not changes
         assert "outside 0..4" in problems[0]
         assert classes["spods/a"]["n_instances"] == 5
@@ -718,8 +890,49 @@ class TestMembershipAudit:
     def test_a_malformed_verdict_is_refused(self, mods):
         pages, classes = self._setup(mods)
         row = {"class_id": "spods/a", "page_ids": classes["spods/a"]["page_ids"], "verdict": "maybe"}
-        _changes, problems = mods["audit"].apply_membership(pages, classes, [row])
+        _changes, problems, _merges, _seps = mods["audit"].apply_membership(pages, classes, [row])
         assert "must be 'ok' or comma-separated indices" in problems[0]
+
+
+class TestMembershipRosterGate:
+    """`membership` walks the roster, so it cannot run before one is picked.
+
+    `build_corpus.py` stamps `on_roster` only under `--roster`, so on a freshly
+    built corpus this pass has nothing to walk.  It used to say so in one line of
+    passing arithmetic and still write an empty `verdicts.jsonl`, which
+    `launch_docmarks.sh slate` then tarred alongside the merge sheets -- a bundle
+    that asserted a pass nobody had rendered (#3601).  The distinction pinned
+    here is between *not yet* and *nothing matched*: the first renders no file at
+    all and exits `EXIT_SKIPPED`, the second is a real run that happens to be
+    empty.
+    """
+
+    def _corpus(self, tmp_path, classes):
+        (tmp_path / "corpus.jsonl").write_text("", encoding="utf-8")
+        (tmp_path / "classes.json").write_text(json.dumps(classes), encoding="utf-8")
+        return tmp_path
+
+    def test_no_roster_renders_nothing_and_says_so(self, mods, tmp_path, capsys):
+        corpus = self._corpus(tmp_path, {"spods/a": {"class_id": "spods/a", "page_ids": []}})
+        rc = mods["slate"].main(["--task", "membership", "--corpus", str(corpus)])
+        assert rc == mods["slate"].EXIT_SKIPPED
+        assert "SKIPPED" in capsys.readouterr().out
+        # Not even an empty directory: the slate job tars what is on disk, so a
+        # bare `audit/membership/` would put the same false claim in the bundle.
+        assert not (corpus / "audit" / "membership").exists()
+
+    def test_a_roster_that_matches_no_page_is_a_run_not_a_skip(self, mods, tmp_path):
+        corpus = self._corpus(tmp_path, {"spods/a": {"class_id": "spods/a", "on_roster": True, "page_ids": []}})
+        rc = mods["slate"].main(["--task", "membership", "--corpus", str(corpus)])
+        assert rc == 0
+        assert (corpus / "audit" / "membership" / "verdicts.jsonl").read_text(encoding="utf-8") == ""
+
+    def test_merge_still_runs_without_a_roster(self, mods):
+        # A roster narrows `merge`; it is not a precondition for it, which is why
+        # the slate job renders the merge half regardless.
+        classes = {"spods/a": {"class_id": "spods/a"}, "spods/b": {"class_id": "spods/b"}}
+        assert mods["slate"].roster_pool(classes) == {}
+        assert (mods["slate"].roster_pool(classes) or classes) == classes
 
 
 class TestMergeSlateOrdering:
@@ -1124,6 +1337,84 @@ class TestClustering:
         # build.
         assert mods["cluster"].resolve_pairs(refs, [("spods/001", "spods/999")]) == []
 
+    def _two_marks_per_page(self, mods):
+        """The real shape of a SPODS page: one logo and one stamp, both clustered."""
+        MarkRef = mods["cluster"].MarkRef
+        return [
+            MarkRef(0, 0, "spods/546", "logo", (0, 0, 10, 10)),
+            MarkRef(0, 1, "spods/546", "stamp", (0, 20, 10, 30)),
+            MarkRef(1, 0, "spods/551", "logo", (0, 0, 10, 10)),
+            MarkRef(1, 1, "spods/551", "stamp", (0, 20, 10, 30)),
+        ]
+
+    def test_a_bare_page_id_is_refused_when_the_page_carries_several_marks(self, mods):
+        # The failure this exists to stop, from the real corpus (#3343): the
+        # DY.Secretary merge named two SPODS pages, each carrying a logo and a
+        # stamp. Expanded to all four crossings and replayed as must-links, it
+        # would have fused two 30-instance logo classes and a stamp class into
+        # one blob -- an over-merge, which is the error nothing downstream can
+        # see. Refusing is the only safe reading: the index was never recorded,
+        # so which mark was ruled on is not knowable from the file.
+        refs = self._two_marks_per_page(mods)
+        with pytest.raises(ValueError, match="more than one"):
+            mods["cluster"].resolve_pairs(refs, [("spods/546", "spods/551")])
+
+    def test_a_mark_index_pins_the_pair_to_one_row_each(self, mods):
+        refs = self._two_marks_per_page(mods)
+        pairs = [(("spods/546", 1), ("spods/551", 1))]
+        assert mods["cluster"].resolve_pairs(refs, pairs) == [(1, 3)]
+
+    def test_one_ambiguous_pair_does_not_take_the_unambiguous_ones_with_it(self, mods):
+        # The message has to name what is wrong, and the refusal has to be
+        # about the store rather than about whichever pair happened to be first.
+        refs = self._two_marks_per_page(mods)
+        with pytest.raises(ValueError, match="spods/546 carries 2 clustered marks"):
+            mods["cluster"].resolve_pairs(refs, [(("spods/546", 0), ("spods/551", 0)), ("spods/546", "spods/551")])
+
+    def test_two_verdicts_on_one_page_pair_are_two_decisions(self, mods, tmp_path):
+        # Keying the store on pages rather than marks silently kept whichever
+        # row was written last: one page's logo can be the same mark as
+        # another's while its stamp is not.
+        path = tmp_path / "adjudications.json"
+        mods["cluster"].save_adjudications(
+            [{"left_page_id": "spods/546", "left_mark_index": 0, "right_page_id": "spods/551", "right_mark_index": 0}],
+            [{"left_page_id": "spods/546", "left_mark_index": 1, "right_page_id": "spods/551", "right_mark_index": 1}],
+            path,
+        )
+        same, different = mods["cluster"].load_adjudications(path)
+        assert same == [(("spods/546", 0), ("spods/551", 0))]
+        assert different == [(("spods/546", 1), ("spods/551", 1))]
+
+    def test_reordering_a_pair_carries_every_side_field_with_it(self, mods, tmp_path):
+        # Rows are stored sorted within the pair. Swapping the page ids while
+        # leaving `left_class_id` behind would leave the row describing the
+        # wrong side -- and these are the fields the migration reads back.
+        path = tmp_path / "adjudications.json"
+        mods["cluster"].save_adjudications(
+            [],
+            [
+                {
+                    "left_page_id": "spods/900",
+                    "left_class_id": "spods/z",
+                    "right_page_id": "spods/100",
+                    "right_class_id": "spods/a",
+                }
+            ],
+            path,
+        )
+        row = json.loads(path.read_text())["different"][0]
+        assert (row["left_page_id"], row["left_class_id"]) == ("spods/100", "spods/a")
+        assert (row["right_page_id"], row["right_class_id"]) == ("spods/900", "spods/z")
+
+    def test_loading_rows_verbatim_keeps_the_notes_a_rewrite_would_drop(self, mods, tmp_path):
+        path = tmp_path / "adjudications.json"
+        mods["cluster"].save_adjudications(
+            [{"left_page_id": "a", "right_page_id": "b", "kept_class_id": "src/a", "note": "why"}], [], path
+        )
+        same, different = mods["cluster"].load_adjudication_rows(path)
+        assert different == []
+        assert same[0]["note"] == "why" and same[0]["kept_class_id"] == "src/a"
+
     def test_adjudications_round_trip_and_deduplicate(self, mods, tmp_path):
         path = tmp_path / "adjudications.json"
         mods["cluster"].save_adjudications(
@@ -1238,7 +1529,7 @@ class TestResplitRegistersItsPieces:
         classes, _ = mods["build"].admit_classes(pages, inventory, min_instances=1, min_mark_px=1)
         assert set(classes) == {"src/stamp_00000_0"}
 
-        notes = mods["audit"].resplit_classes(
+        notes, _merges, _seps = mods["audit"].resplit_classes(
             pages,
             classes,
             ["src/stamp_00000_0"],
@@ -1269,7 +1560,7 @@ class TestResplitRegistersItsPieces:
         pages = pages[:4] + pages[4:5]  # 4 bars, 1 comb
         inventory = mods["build"].class_inventory(pages)
         classes, _ = mods["build"].admit_classes(pages, inventory, min_instances=1, min_mark_px=1)
-        mods["audit"].resplit_classes(
+        _notes, _merges, _seps = mods["audit"].resplit_classes(
             pages,
             classes,
             ["src/stamp_00000_0"],
@@ -1280,6 +1571,314 @@ class TestResplitRegistersItsPieces:
         )
         sizes = sorted(m["n_instances"] for m in classes.values())
         assert sizes == [1, 4], sizes
+
+
+class TestAnAuditVerdictSurvivesARebuild:
+    """The audit's promise is not kept by ``classes.json`` alone.
+
+    ``build_corpus.py`` re-clusters from the sources and replays exactly one
+    file: ``adjudications.json``.  Stage 3 of #3343 rebuilds the corpus on
+    purpose -- to stamp the roster -- so a split or a membership pass recorded
+    only in ``classes.json`` is not "applied", it is applied until the next
+    documented step of the pipeline quietly undoes it.
+    """
+
+    def _resplit(self, mods, tmp_path):
+        pages = TestResplitRegistersItsPieces()._two_marks_one_class(mods, tmp_path)
+        inventory = mods["build"].class_inventory(pages)
+        classes, _ = mods["build"].admit_classes(pages, inventory, min_instances=1, min_mark_px=1)
+        notes, merges, separations = mods["audit"].resplit_classes(
+            pages,
+            classes,
+            ["src/stamp_00000_0"],
+            backend="phash",
+            threshold=0.20,
+            corpus=tmp_path,
+            min_mark_px=1,
+        )
+        return pages, classes, notes, merges, separations
+
+    def test_a_split_is_recorded_as_the_partition_it_is(self, mods, tmp_path):
+        _pages, classes, _notes, merges, separations = self._resplit(mods, tmp_path)
+        assert sorted(m["n_instances"] for m in classes.values()) == [2, 4]
+        # Stars, not cliques: 4 instances need 3 rows and 2 need 1.
+        assert len(merges) == 4
+        # One row between each pair of pieces.
+        assert len(separations) == 1
+        for row in merges + separations:
+            assert row["left_mark_index"] is not None and row["right_mark_index"] is not None
+
+    def _unlabelled(self, mods, tmp_path):
+        """The same pages with every identity forgotten — what a rebuild sees."""
+        Mark = mods["common"].Mark
+        fresh = TestResplitRegistersItsPieces()._two_marks_one_class(mods, tmp_path)
+        for page in fresh:
+            page.marks = [Mark(m.kind, m.box, None, m.provenance) for m in page.marks]
+        return fresh
+
+    def _fusing_threshold(self, mods, pages):
+        """A threshold that really does merge the two marks — measured, not guessed.
+
+        The control has to *fail* without the adjudications or it proves
+        nothing about them, and the distance between these two fixtures is a
+        property of the descriptor rather than a number to hard-code.
+        """
+        refs = mods["cluster"].collect_refs(pages, kinds=("stamp",), source="src")
+        desc = mods["cluster"].describe_marks(pages, refs, backend="phash")
+        return float(mods["cluster"].distance_matrix(desc, refs, backend="phash").max()) + 0.01
+
+    def test_without_them_the_rebuild_puts_the_class_back_together(self, mods, tmp_path):
+        # The control. No adjudications, a threshold loose enough to chain both
+        # marks: one class of six, which is what a split living only in
+        # classes.json came back as.
+        fresh = self._unlabelled(mods, tmp_path)
+        loose = self._fusing_threshold(mods, fresh)
+        summary = mods["cluster"].cluster_source(fresh, "src", backend="phash", threshold=loose)
+        assert summary["classes"] == 1
+
+    def test_replaying_those_rows_reproduces_the_split(self, mods, tmp_path):
+        # The end of the argument: forget every identity, cluster at the
+        # threshold the control just showed fuses them, and the reviewer's
+        # partition comes back anyway.
+        _pages, classes, _notes, merges, separations = self._resplit(mods, tmp_path)
+        expected = sorted(m["n_instances"] for m in classes.values())
+
+        fresh = self._unlabelled(mods, tmp_path)
+        loose = self._fusing_threshold(mods, fresh)
+
+        def pairs(rows):
+            return [
+                ((r["left_page_id"], r["left_mark_index"]), (r["right_page_id"], r["right_mark_index"])) for r in rows
+            ]
+
+        summary = mods["cluster"].cluster_source(
+            fresh, "src", backend="phash", threshold=loose, same=pairs(merges), different=pairs(separations)
+        )
+        assert summary["classes"] == 2
+        rebuilt = mods["build"].class_inventory(fresh)
+        assert sorted(len(v) for v in rebuilt.values()) == expected
+
+    def _membership(self, mods, verdict):
+        pages = [
+            _page(mods, f"spods/{i:03d}", "spods", [("logo", (0, 0, 200, 120), "spods/a", "clustered")])
+            for i in range(5)
+        ]
+        classes = {
+            "spods/a": {
+                "class_id": "spods/a",
+                "n_instances": 5,
+                "page_ids": [f"spods/{i:03d}" for i in range(5)],
+                "audit": {"membership_verified": False, "rejected_page_ids": []},
+            }
+        }
+        row = {"class_id": "spods/a", "page_ids": list(classes["spods/a"]["page_ids"]), "verdict": verdict}
+        return mods["audit"].apply_membership(pages, classes, [row])
+
+    def test_a_verified_class_is_recorded_as_a_must_link_star(self, mods):
+        _changes, problems, merges, separations = self._membership(mods, "ok")
+        assert not problems and not separations
+        assert len(merges) == 4  # n-1, not n(n-1)/2
+        assert {r["left_page_id"] for r in merges} == {"spods/000"}
+
+    def test_a_rejected_instance_is_recorded_as_one_separation(self, mods):
+        # One row is enough *because* the star is applied first: by the time
+        # the separation is registered the class is already one group.
+        _changes, problems, merges, separations = self._membership(mods, "1")
+        assert not problems
+        assert len(separations) == 1
+        assert separations[0]["left_page_id"] == "spods/001"
+        assert separations[0]["right_page_id"] in {p for p in ("spods/000", "spods/002", "spods/004")}
+        assert separations[0]["left_mark_index"] == 0
+        assert all(r["left_page_id"] != "spods/001" and r["right_page_id"] != "spods/001" for r in merges)
+
+    def test_a_merge_says_what_the_rebuild_will_rename_the_class_to(self, mods):
+        # Two writers of class ids that do not agree: a merge keeps the larger
+        # class's id, `assign_class_ids` derives one from the group's smallest
+        # page id. The disagreement is invisible until a rebuild renames the
+        # class under a roster that names it. (#3343: spods/stamp_00551_1 came
+        # back spods/stamp_00546_1.)
+        pages = [
+            _page(mods, "spods/00546", "spods", [("stamp", (0, 0, 200, 120), "spods/stamp_00551_1", "clustered")]),
+            _page(mods, "spods/00551", "spods", [("stamp", (0, 0, 200, 120), "spods/stamp_00551_1", "clustered")]),
+            _page(mods, "spods/00560", "spods", [("stamp", (0, 0, 200, 120), "spods/stamp_00560_0", "clustered")]),
+        ]
+        classes = {
+            "spods/stamp_00551_1": {
+                "kind": "stamp",
+                "n_instances": 2,
+                "page_ids": ["spods/00546", "spods/00551"],
+                "audit": {},
+            },
+            "spods/stamp_00560_0": {"kind": "stamp", "n_instances": 1, "page_ids": ["spods/00560"], "audit": {}},
+        }
+        rows = [{"left_class_id": "spods/stamp_00551_1", "right_class_id": "spods/stamp_00560_0", "verdict": "same"}]
+        changes, _p, _s, _m = mods["audit"].apply_confusable(pages, classes, rows)
+        assert any("RENAME AHEAD" in c and "spods/stamp_00546_0" in c for c in changes), changes
+
+    def test_a_merge_that_keeps_the_smallest_page_says_nothing(self, mods):
+        pages = [
+            _page(mods, "spods/00100", "spods", [("stamp", (0, 0, 200, 120), "spods/stamp_00100_0", "clustered")]),
+            _page(mods, "spods/00200", "spods", [("stamp", (0, 0, 200, 120), "spods/stamp_00100_0", "clustered")]),
+            _page(mods, "spods/00300", "spods", [("stamp", (0, 0, 200, 120), "spods/stamp_00300_0", "clustered")]),
+        ]
+        classes = {
+            "spods/stamp_00100_0": {
+                "kind": "stamp",
+                "n_instances": 2,
+                "page_ids": ["spods/00100", "spods/00200"],
+                "audit": {},
+            },
+            "spods/stamp_00300_0": {"kind": "stamp", "n_instances": 1, "page_ids": ["spods/00300"], "audit": {}},
+        }
+        rows = [{"left_class_id": "spods/stamp_00100_0", "right_class_id": "spods/stamp_00300_0", "verdict": "same"}]
+        changes, _p, _s, _m = mods["audit"].apply_confusable(pages, classes, rows)
+        assert not any("RENAME AHEAD" in c for c in changes), changes
+
+    def test_the_membership_pass_records_who_looked(self, mods):
+        # `membership_verified` is a boolean, and the corpus's whole claim rests
+        # on what stands behind it: "checked by the person who owns this
+        # benchmark" and "checked by whoever ran the script" are different
+        # standards of evidence that a boolean cannot tell apart.
+        pages = [
+            _page(mods, f"spods/{i:03d}", "spods", [("logo", (0, 0, 200, 120), "spods/a", "clustered")])
+            for i in range(3)
+        ]
+        classes = {
+            "spods/a": {
+                "n_instances": 3,
+                "page_ids": [f"spods/{i:03d}" for i in range(3)],
+                "audit": {"membership_verified": False, "rejected_page_ids": []},
+            }
+        }
+        row = {"class_id": "spods/a", "page_ids": list(classes["spods/a"]["page_ids"]), "verdict": "ok"}
+        mods["audit"].apply_membership(pages, classes, [row], reviewer="a reviewer")
+        assert classes["spods/a"]["audit"]["reviewed_by"] == "a reviewer"
+        assert classes["spods/a"]["audit"]["reviewed_on"]
+
+    def test_a_separation_says_whether_it_pins_marks_or_classes(self, mods):
+        # Recorded on the row rather than left to be re-derived: before the
+        # membership pass a class is not one must-linked group, so a single
+        # representative pair holds those two marks apart and nothing else.
+        pages = [
+            _page(mods, "spods/001", "spods", [("logo", (0, 0, 200, 120), "spods/a", "clustered")]),
+            _page(mods, "spods/002", "spods", [("logo", (0, 0, 200, 120), "spods/b", "clustered")]),
+        ]
+        classes = {
+            "spods/a": {"n_instances": 1, "page_ids": ["spods/001"], "audit": {"membership_verified": True}},
+            "spods/b": {"n_instances": 1, "page_ids": ["spods/002"], "audit": {}},
+        }
+        rows = [{"left_class_id": "spods/a", "right_class_id": "spods/b", "verdict": "different"}]
+        _c, _p, separations, _m = mods["audit"].apply_confusable(pages, classes, rows)
+        assert separations[0]["pins"] == "marks"
+        classes["spods/b"]["audit"]["membership_verified"] = True
+        _c, _p, separations, _m = mods["audit"].apply_confusable(pages, classes, rows)
+        assert separations[0]["pins"] == "classes"
+
+
+class TestAdjudicationMigration:
+    """A pre-#3343 store names pages; the index it meant is recoverable."""
+
+    def _corpus(self, mods):
+        pages = [
+            _page(
+                mods,
+                "spods/546",
+                "spods",
+                [
+                    ("logo", (0, 0, 200, 120), "spods/logo_a", "clustered"),
+                    ("stamp", (0, 300, 200, 360), "spods/st", "clustered"),
+                ],
+            ),
+            _page(
+                mods,
+                "spods/551",
+                "spods",
+                [
+                    ("logo", (0, 0, 200, 120), "spods/logo_b", "clustered"),
+                    ("stamp", (0, 300, 200, 360), "spods/st", "clustered"),
+                ],
+            ),
+        ]
+        classes = {
+            "spods/logo_a": {"page_ids": ["spods/546"], "n_instances": 1},
+            "spods/logo_b": {"page_ids": ["spods/551"], "n_instances": 1},
+            "spods/st": {"page_ids": ["spods/546", "spods/551"], "n_instances": 2},
+        }
+        return pages, classes
+
+    def test_a_merge_row_resolves_through_the_class_that_holds_both_pages(self, mods):
+        # The row the real corpus carried: two page ids and nothing else. Only
+        # one class contains both pages, and it is on mark 1 of each.
+        pages, classes = self._corpus(mods)
+        same, _diff, problems = mods["audit"].migrate_adjudications(
+            pages, classes, [{"left_page_id": "spods/546", "right_page_id": "spods/551"}], []
+        )
+        assert not problems
+        assert (same[0]["left_mark_index"], same[0]["right_mark_index"]) == (1, 1)
+
+    def test_a_separation_resolves_through_its_recorded_class_ids(self, mods):
+        pages, classes = self._corpus(mods)
+        _same, diff, problems = mods["audit"].migrate_adjudications(
+            pages,
+            classes,
+            [],
+            [
+                {
+                    "left_page_id": "spods/546",
+                    "left_class_id": "spods/logo_a",
+                    "right_page_id": "spods/551",
+                    "right_class_id": "spods/logo_b",
+                }
+            ],
+        )
+        assert not problems
+        assert (diff[0]["left_mark_index"], diff[0]["right_mark_index"]) == (0, 0)
+
+    def test_an_unresolvable_row_is_reported_rather_than_guessed(self, mods):
+        pages, classes = self._corpus(mods)
+        _same, _diff, problems = mods["audit"].migrate_adjudications(
+            pages,
+            classes,
+            [],
+            [{"left_page_id": "spods/546", "right_page_id": "spods/551"}],
+        )
+        assert len(problems) == 2
+        assert "cannot tell which mark" in problems[0]
+
+    def test_a_split_applied_before_it_was_recorded_is_recovered_from_its_notes(self, mods):
+        # The pieces of a pre-#3343 split carry their parent's id in the audit
+        # note, and the manifest still says which marks are theirs -- so the
+        # partition comes back without asking the reviewer a second time.
+        pages = [
+            _page(mods, f"src/{i:03d}", "src", [("stamp", (0, 0, 200, 120), f"src/piece_{i // 2}", "clustered")])
+            for i in range(4)
+        ]
+        classes = {
+            "src/piece_0": {
+                "page_ids": ["src/000", "src/001"],
+                "audit": {"notes": "re-clustered out of src/p at 0.150"},
+            },
+            "src/piece_1": {
+                "page_ids": ["src/002", "src/003"],
+                "audit": {"notes": "re-clustered out of src/p at 0.150"},
+            },
+        }
+        merges, separations = mods["audit"].split_rows_from_notes(pages, classes)
+        assert len(merges) == 2  # one star per piece, n-1 rows each
+        assert len(separations) == 1
+        assert separations[0]["pins"] == "classes"
+
+    def test_a_class_with_no_split_note_contributes_nothing(self, mods):
+        pages = [_page(mods, "src/000", "src", [("stamp", (0, 0, 200, 120), "src/a", "clustered")])]
+        classes = {"src/a": {"page_ids": ["src/000"], "audit": {"notes": "some other note"}}}
+        assert mods["audit"].split_rows_from_notes(pages, classes) == ([], [])
+
+    def test_a_row_about_pages_this_corpus_does_not_have_is_left_alone(self, mods):
+        pages, classes = self._corpus(mods)
+        row = {"left_page_id": "other/1", "right_page_id": "other/2"}
+        same, _diff, problems = mods["audit"].migrate_adjudications(pages, classes, [row], [])
+        assert not problems
+        assert same == [row]
 
 
 class TestSiglipClusterBackend:
@@ -1655,6 +2254,43 @@ class TestReportWholePageFigure:
 
 
 # ------------------------------------------------------------- embed cells
+
+
+class TestTheCellWriterLoadsBeforeAnythingIsEmbedded:
+    """The serializer has to import, and it has to be checked *first*.
+
+    `embed_corpus` loads the calibration harness's `_cells_io` by path, and that
+    module imports its own sibling `_cells_paths` by bare name -- so loading it
+    by path alone left the import unresolvable and `dump_medias` unreachable.
+    Nothing caught it because stage 5 of #3343 had never been run, and it
+    surfaces at the *last* line of a cell: `docmarks_s x sift_vlad` died on
+    ModuleNotFoundError after 2h16m of SIFT over 5,000 pages, having embedded
+    every one of them.
+    """
+
+    def test_the_cells_io_module_imports(self, mods):
+        io = mods["embed"]._cells_io()
+        assert hasattr(io, "dump_medias") and hasattr(io, "load_medias")
+
+    def test_loading_by_path_puts_the_module_directory_on_sys_path(self, mods):
+        # The mechanism, stated so a later refactor cannot quietly drop it.
+        io = mods["embed"]._cells_io()
+        assert str(mods["embed"]._CALIB_DIR) in sys.path
+        assert Path(io.__file__).parent == mods["embed"]._CALIB_DIR
+
+    def test_a_broken_serializer_is_reported_before_any_embedding(self, mods, monkeypatch, capsys):
+        # The preflight is the whole point: the cost of a cell is the embedding,
+        # so a write-path failure must be found before it is paid, not after.
+        def explode():
+            raise ModuleNotFoundError("No module named '_cells_paths'")
+
+        monkeypatch.setattr(mods["embed"], "_cells_io", explode)
+        called: list[str] = []
+        monkeypatch.setattr(mods["embed"], "build_cell", lambda *a, **k: called.append("built"))
+        with pytest.raises(SystemExit):
+            mods["embed"].main(["--tier", "s", "--embedders", "siglip"])
+        assert not called, "embedding started despite an unwritable cell"
+        assert "cannot write cells" in capsys.readouterr().err
 
 
 class TestEmbedCells:
