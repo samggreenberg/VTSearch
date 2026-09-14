@@ -207,8 +207,6 @@ now covers all 25 classes, so #3618's "before the next rebuild" warning is spent
 
 <!-- item-sep -->
 
-- [x] #3696 — emit VG's silence rate from the pass's own answers, as an upper bound (Sonnet 5)
-
 <!-- item-sep -->
 
 - **Retire the inference machinery, and delete it.** After the pass, the name
