@@ -377,7 +377,7 @@ def write_query_crops(
         # earlier clustering of this class), and a stale exemplar nobody rewrote
         # is precisely the defect this function exists to avoid.
         with Image.open(pages[pi].path) as im:
-            im.convert("RGB").crop((x, y, x + w, y + h)).save(dest)
+            _common.save_verified(im.convert("RGB").crop((x, y, x + w, y + h)), dest)
         meta["query_crop"] = str(dest)
         meta["query_page_id"] = pages[pi].page_id
         # What the choice was made out of, so classes.json carries the evidence
@@ -665,6 +665,51 @@ def probe(raw: Path) -> int:
 # --------------------------------------------------------------------------
 
 
+def scan(corpus: Path, tiers: Optional[set[str]] = None) -> int:
+    """Check every page in the manifest still decodes.  Returns an exit code.
+
+    The companion to :func:`sources._common.save_verified`: that one stops a
+    short write from ever being published under its real name, this one finds
+    the pages already on disk from before it existed.
+
+    Strict decoding is the whole mechanism.  With ``LOAD_TRUNCATED_IMAGES`` left
+    on, a truncated PNG loads to the right size with the missing rows filled in
+    -- so the scan would pass on exactly the file it is looking for.  The one
+    known offender, ``ucsf/qkmg0227#0``, was 49% image and 51% black filler and
+    read back as a perfectly ordinary page under a permissive decode.
+    """
+    from PIL import Image, ImageFile  # noqa: PLC0415
+
+    manifest = corpus / "corpus.jsonl"
+    if not manifest.exists():
+        print(f"no manifest at {manifest}")
+        return 1
+
+    previous = ImageFile.LOAD_TRUNCATED_IMAGES
+    ImageFile.LOAD_TRUNCATED_IMAGES = False
+    bad: list[tuple[str, str, str]] = []
+    checked = 0
+    try:
+        for page in _common.read_manifest(manifest):
+            if tiers and page.meta.get("tier") not in tiers:
+                continue
+            checked += 1
+            path = Path(page.path)
+            try:
+                with Image.open(path) as im:
+                    im.load()
+            except Exception as exc:  # noqa: BLE001 - a scan reports, never raises
+                size = path.stat().st_size if path.exists() else -1
+                bad.append((page.page_id, str(path), f"{type(exc).__name__}: {exc} ({size} bytes)"))
+    finally:
+        ImageFile.LOAD_TRUNCATED_IMAGES = previous
+
+    print(f"checked {checked} page(s); {len(bad)} undecodable")
+    for page_id, path_str, why in bad:
+        print(f"  {page_id} {path_str} -- {why}")
+    return 1 if bad else 0
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument(
@@ -713,10 +758,23 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
         help="metadata-only reachability check for every source (downloads nothing), then exit",
     )
     ap.add_argument("--survival", action="store_true", help="print the class survival curve and exit")
+    ap.add_argument(
+        "--scan",
+        action="store_true",
+        help="check every page in the manifest still decodes, then exit",
+    )
+    ap.add_argument(
+        "--scan-tiers",
+        default="",
+        help="restrict --scan to these tiers (comma-separated; default every page)",
+    )
     args = ap.parse_args(argv)
 
     if args.probe:
         return probe(args.raw)
+
+    if args.scan:
+        return scan(args.out, {t.strip() for t in args.scan_tiers.split(",") if t.strip()} or None)
 
     selected = [s.strip() for s in args.sources.split(",") if s.strip()]
     unknown = set(selected) - set(ALL_SOURCES)
