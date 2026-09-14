@@ -160,6 +160,58 @@ def migrate_adjudications(
     )
 
 
+def pair_key(row: dict[str, Any]) -> tuple[tuple[str, int], tuple[str, int]]:
+    """The two marks a row rules on, order-independent — the identity of a verdict."""
+
+    def side(name: str) -> tuple[str, int]:
+        index = row.get(f"{name}_mark_index")
+        return (row[f"{name}_page_id"], -1 if index is None else int(index))
+
+    left, right = sorted((side("left"), side("right")))
+    return (left, right)
+
+
+def describe_pair(row: dict[str, Any]) -> str:
+    left, right = pair_key(row)
+    names = [row.get("left_class_id"), row.get("right_class_id"), row.get("kept_class_id")]
+    named = " / ".join(n for n in names if n)
+    where = f"{left[0]}#{left[1]} vs {right[0]}#{right[1]}"
+    return f"{named} ({where})" if named else where
+
+
+def supersede(
+    old_same: Sequence[dict[str, Any]],
+    old_diff: Sequence[dict[str, Any]],
+    new_merges: Sequence[dict[str, Any]],
+    new_separations: Sequence[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    """Drop stored rulings the new verdicts overturn.  Returns the survivors.
+
+    A reviewer changing their mind is a normal event on a corpus adjudicated in
+    rounds, and it is **not** the contradiction ``save_adjudications`` refuses.
+    That refusal exists for a store holding a pair ruled both ways at once, where
+    whichever is applied last would silently win.  Here the later verdict is the
+    decision and the earlier one is history — but only a person can say which is
+    which, so this reports the overlap and the caller requires ``--supersede``
+    before any of it is dropped.
+
+    The real case (#3343): the confusable pass ruled
+    ``logo_afm90c00-first_1_0`` and ``logo_bad45f00_1`` **different** — one is a
+    chief engraving and the other a "100 Years of Achievement" panel carrying
+    that same engraving.  The corpus owner ruled them the **same** mark on the
+    rule that a mark plus additional elements is still that mark.  Without a way
+    to supersede, applying that ruling means hand-editing the store, which is
+    the one thing every other path here exists to avoid.
+    """
+    same_keys = {pair_key(r) for r in new_merges}
+    diff_keys = {pair_key(r) for r in new_separations}
+    overturned = [r for r in old_diff if pair_key(r) in same_keys]
+    overturned += [r for r in old_same if pair_key(r) in diff_keys]
+    kept_same = [r for r in old_same if pair_key(r) not in diff_keys]
+    kept_diff = [r for r in old_diff if pair_key(r) not in same_keys]
+    return kept_same, kept_diff, overturned
+
+
 #: What ``resplit_classes`` writes into a piece's ``audit.notes``.  Parsed, not
 #: just displayed: on a corpus split before #3343 it is the only surviving
 #: record of which parent a piece came out of.
@@ -543,6 +595,25 @@ def apply_confusable(
         else:
             problems.append(f"{left} / {right}: unrecognised verdict {verdict!r} (expected same|different)")
 
+    # Reconcile `distinct_from` against the merges just applied.  A merge pops
+    # the absorbed class, and every separation already recorded against it is
+    # left naming a class that no longer exists -- including, on the survivor,
+    # a reference to the id it just absorbed, which reads as "distinct from
+    # itself".  Measured on v3: one merge left all 23 classes holding a
+    # dangling id.  The adjudications are keyed on marks and were never
+    # affected; this is the human-readable half of the same fact, and letting
+    # the two disagree is how a reader stops trusting either.
+    for class_id, meta in classes.items():
+        if not meta.get("distinct_from"):
+            continue
+        resolved: list[str] = []
+        for other in meta["distinct_from"]:
+            target = resolve(other)
+            if target != class_id and target in classes and target not in resolved:
+                resolved.append(target)
+        if resolved != meta["distinct_from"]:
+            meta["distinct_from"] = resolved
+
     return changes, problems, separations, merges
 
 
@@ -892,6 +963,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--corpus", type=Path, default=cfg.OUT)
     ap.add_argument("--apply", action="store_true", help="write the changes (default is a dry run)")
     ap.add_argument(
+        "--supersede",
+        action="store_true",
+        help="let these verdicts replace stored rulings on the same pairs (a reviewer changing "
+        "their mind); without it an overlap is reported and nothing is written",
+    )
+    ap.add_argument(
         "--reviewer",
         default=None,
         help="who worked these sheets; stamped onto every class the membership pass verifies, "
@@ -1012,6 +1089,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         # Verbatim rows, not the narrowed pairs: re-saving what the clusterer
         # reads would drop every note and class id already on file.
         old_same, old_diff = load_adjudication_rows(adjudications_path)
+        old_same, old_diff, overturned = supersede(old_same, old_diff, new_merges, new_separations)
+        if overturned and not args.supersede:
+            for row in overturned:
+                print(f"  PROBLEM: {describe_pair(row)} is already on file ruled the other way")
+            print(
+                "\nA reviewer has changed their mind, which is allowed and is not the same as a "
+                "contradiction: re-run with --supersede to replace the stored ruling(s) above. "
+                "Without it nothing is written, because silently keeping whichever was applied "
+                "last is how a decision nobody made ends up in the ground truth."
+            )
+            return 1
+        for row in overturned:
+            print(f"  SUPERSEDED: {describe_pair(row)} — the stored ruling is replaced")
         save_adjudications(
             old_same + new_merges,
             old_diff + new_separations,

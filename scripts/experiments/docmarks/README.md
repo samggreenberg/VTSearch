@@ -46,6 +46,36 @@ benchmark whose labels nobody checked is a benchmark whose numbers nobody should
 quote. Without a `--roster`, the builder emits candidate classes for
 `shortlist.py` to rank — those are *proposals*, and the build says so.
 
+## What counts as the same mark
+
+Two rulings by the corpus owner, both made on real cases in the v3 audit and
+both standing policy for every future roster. They are here rather than in a
+report because they decide labels, and a reviewer needs them *before* working a
+sheet, not after.
+
+**Colour is not identity.** The same stamp in blue, purple and red is one mark.
+`spods/stamp_00293_1` is the case: 15 instances of one elephant engraving, 14 in
+blue ink and one in red, and they belong in a single class. This is also why
+`cluster_marks.phash` is deliberately greyscale — a descriptor that separated
+them would be separating ink, not marks. The corollary is that ink colour is
+never evidence *for* a split either: two marks that differ only in colour are
+the same mark, and two that share a colour are not thereby related.
+
+**A mark plus additional elements is still that mark.** Where one mark contains
+another whole, they are the same class, not two. The case is
+`tobacco800/logo_afm90c00-first_1_0` — the American Tobacco chief engraving —
+against `tobacco800/logo_bad45f00_1`, a "100 Years of Achievement" panel
+carrying that same engraving beside the lettering. *Same logo plus* is the same
+logo. The confusable pass had ruled them different; the owner overturned it
+(`--supersede`), and the merged class is 80 instances.
+
+Note what this does **not** license. It is containment of the *same artwork*,
+not resemblance of subject: `tobacco800/logo_ciy01a00-page02_1_0` is also a
+chief in a headdress, and it is a different engraving — finer line work, the
+plume falling the other way — so it stays a separate class, and the "100 Years"
+panel merges with the one it actually contains. Checking which requires looking
+at full size, which is the standing advice for every split-or-merge call here.
+
 ## Both directions of the ground truth
 
 An eval for "find this mark" needs two kinds of label, and clustering can only

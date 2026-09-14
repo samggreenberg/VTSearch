@@ -1775,6 +1775,150 @@ class TestAnAuditVerdictSurvivesARebuild:
         assert separations[0]["pins"] == "classes"
 
 
+class TestAReviewerMayChangeTheirMind:
+    """Superseding a stored ruling is a normal event, and must not be silent.
+
+    `save_adjudications` refuses a pair ruled both ways, which is right for a
+    store holding both at once. A corpus adjudicated in rounds also produces
+    the other case: a later verdict that overturns an earlier one. #3343 hit it
+    when the owner ruled `logo_afm90c00-first_1_0` and `logo_bad45f00_1` the
+    same mark -- a chief engraving and a "100 Years of Achievement" panel
+    carrying that same engraving -- after the confusable pass had ruled them
+    different. Without a supported path, applying that means hand-editing the
+    store, which every other path here exists to avoid.
+    """
+
+    def _rows(self):
+        pair = {"left_page_id": "t/a", "left_mark_index": 1, "right_page_id": "t/b", "right_mark_index": 0}
+        return dict(pair), dict(pair)
+
+    def test_a_new_merge_overturns_a_stored_separation(self, mods):
+        stored, fresh = self._rows()
+        same, diff, overturned = mods["audit"].supersede([], [stored], [fresh], [])
+        assert diff == [] and same == []
+        assert len(overturned) == 1
+
+    def test_a_new_separation_overturns_a_stored_merge(self, mods):
+        stored, fresh = self._rows()
+        same, diff, overturned = mods["audit"].supersede([stored], [], [], [fresh])
+        assert same == [] and diff == []
+        assert len(overturned) == 1
+
+    def test_rows_about_other_pairs_are_untouched(self, mods):
+        stored, fresh = self._rows()
+        other = {"left_page_id": "t/c", "left_mark_index": 0, "right_page_id": "t/d", "right_mark_index": 0}
+        same, diff, overturned = mods["audit"].supersede([], [stored, other], [fresh], [])
+        assert diff == [other]
+        assert len(overturned) == 1
+
+    def test_the_pair_key_ignores_which_side_is_written_first(self, mods):
+        forward = {"left_page_id": "t/a", "left_mark_index": 1, "right_page_id": "t/b", "right_mark_index": 0}
+        reverse = {"left_page_id": "t/b", "left_mark_index": 0, "right_page_id": "t/a", "right_mark_index": 1}
+        assert mods["audit"].pair_key(forward) == mods["audit"].pair_key(reverse)
+
+    def test_the_same_pair_on_a_different_mark_is_a_different_ruling(self, mods):
+        # The whole reason endpoints carry a mark index: one page's logo can be
+        # ruled same while its stamp is ruled different.
+        stored = {"left_page_id": "t/a", "left_mark_index": 0, "right_page_id": "t/b", "right_mark_index": 0}
+        fresh = {"left_page_id": "t/a", "left_mark_index": 1, "right_page_id": "t/b", "right_mark_index": 1}
+        _same, diff, overturned = mods["audit"].supersede([], [stored], [fresh], [])
+        assert diff == [stored] and overturned == []
+
+
+class TestRelabellingACellWithoutReEmbedding:
+    """A verdict landing after a cell is built costs a rewrite, not a re-embed.
+
+    "Embedding comes last, because the cells carry the labels" is right about
+    the ordering and wrong about the price: `embed_missing` embeds pixels, so a
+    merge changes what a page is *called* and nothing about its vector. The v3
+    countersignature merged `logo_bad45f00_1` away after tier `s` was built,
+    leaving 15 pages naming a class that no longer exists.
+    """
+
+    def test_labels_come_from_the_page_for_both_paths(self, mods, tmp_path):
+        # The factoring is the guarantee: `load_medias` and `relabel` derive
+        # labels the same way, so a cell's two write paths cannot disagree.
+        from PIL import Image
+
+        path = tmp_path / "p.png"
+        Image.new("RGB", (60, 40), "white").save(path)
+        page = _page(
+            mods,
+            "src/0001",
+            "src",
+            [("logo", (0, 0, 20, 10), "src/a", "clustered"), ("stamp", (0, 0, 0, 0), "src/b", "clustered")],
+            path=str(path),
+        )
+        categories, regions = mods["embed"].labels_for(page)
+        (media,) = mods["embed"].load_medias([page], {}, "siglip").values()
+        assert media["categories"] == categories == ["src/a", "src/b"]
+        assert media["regions"] == regions
+        # The zero-area mark is a category but not a region: a zero box would be
+        # indistinguishable from a real one.
+        assert [r["label"] for r in regions] == ["src/a"]
+
+    def test_an_unclassed_page_has_an_empty_category(self, mods):
+        page = _page(mods, "src/0002", "src", [("logo", (0, 0, 20, 10), None, "clustered")])
+        assert mods["embed"].labels_for(page) == ([], [])
+
+
+class TestAMergeReconcilesDistinctFrom:
+    """A merged-away class must not go on being named as a separation.
+
+    `distinct_from` is the human-readable half of the "must be told apart"
+    ground truth. A merge pops the absorbed class, and every separation already
+    recorded against it dangles -- on the survivor, as a claim to be distinct
+    from itself. Measured on v3: one merge left all 23 classes holding an id
+    that no longer resolved.
+    """
+
+    def _three(self, mods):
+        pages = [
+            _page(mods, "t/a", "t", [("logo", (0, 0, 10, 10), "t/a", "clustered")]),
+            _page(mods, "t/b", "t", [("logo", (0, 0, 10, 10), "t/b", "clustered")]),
+            _page(mods, "t/c", "t", [("logo", (0, 0, 10, 10), "t/c", "clustered")]),
+        ]
+        classes = {
+            "t/a": {"kind": "logo", "n_instances": 5, "page_ids": ["t/a"], "audit": {}},
+            "t/b": {"kind": "logo", "n_instances": 1, "page_ids": ["t/b"], "audit": {}},
+            "t/c": {"kind": "logo", "n_instances": 3, "page_ids": ["t/c"], "audit": {}},
+        }
+        return pages, classes
+
+    def test_a_separation_against_a_merged_class_follows_the_merge(self, mods):
+        pages, classes = self._three(mods)
+        rows = [
+            {"left_class_id": "t/c", "right_class_id": "t/b", "verdict": "different"},
+            {"left_class_id": "t/a", "right_class_id": "t/b", "verdict": "same"},
+        ]
+        mods["audit"].apply_confusable(pages, classes, rows)
+        assert "t/b" not in classes
+        # t/c was separated from the class that got absorbed; it is now
+        # separated from the survivor, and from nothing that does not exist.
+        assert classes["t/c"]["distinct_from"] == ["t/a"]
+
+    def test_the_survivor_is_never_distinct_from_itself(self, mods):
+        pages, classes = self._three(mods)
+        rows = [
+            {"left_class_id": "t/a", "right_class_id": "t/b", "verdict": "different"},
+            {"left_class_id": "t/a", "right_class_id": "t/b", "verdict": "same"},
+        ]
+        mods["audit"].apply_confusable(pages, classes, rows)
+        assert classes["t/a"].get("distinct_from") == []
+
+    def test_every_surviving_entry_resolves(self, mods):
+        pages, classes = self._three(mods)
+        rows = [
+            {"left_class_id": "t/a", "right_class_id": "t/c", "verdict": "different"},
+            {"left_class_id": "t/a", "right_class_id": "t/b", "verdict": "same"},
+        ]
+        mods["audit"].apply_confusable(pages, classes, rows)
+        for cid, meta in classes.items():
+            for other in meta.get("distinct_from") or []:
+                assert other in classes, f"{cid} names {other}, which does not exist"
+                assert other != cid
+
+
 class TestAdjudicationMigration:
     """A pre-#3343 store names pages; the index it meant is recoverable."""
 
