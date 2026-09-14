@@ -55,6 +55,19 @@ def _anchors_from_modes(rng: np.random.Generator, n_each: int = 10) -> tuple[np.
     return scores, labels
 
 
+def _init_fit(x: np.ndarray) -> GmmFit1D:
+    """The unanchored init, narrowed to non-``None``.
+
+    Every anchored fit starts from one (:func:`fit_anchored_score_gmm` returns
+    ``"unanchored_init_failed"`` when it cannot get one), so a test that hands
+    ``_anchored_em`` an init is asserting it exists either way; this says so once
+    instead of at seven call sites.
+    """
+    init = fit_score_gmm(x)
+    assert init is not None
+    return init
+
+
 class TestAnchoredEm:
     def test_bimodal_with_agreeing_anchors_recovers_modes(self):
         rng = np.random.default_rng(42)
@@ -776,7 +789,7 @@ class TestAnchoredEmStopping:
 
     def test_stats_report_iterations_and_convergence(self):
         x, a_lo, a_hi, _a, _l = self._problem()
-        init = fit_score_gmm(x)
+        init = _init_fit(x)
         stats: dict[str, float] = {}
         fit = _anchored_em(x, a_lo, a_hi, init, 0.3, 200, 1e-8, 1e-3, stats)
         assert fit is not None
@@ -793,7 +806,7 @@ class TestAnchoredEmStopping:
         # what belongs in a unit test is that the exit is reported, not how
         # often it happens (which the study measures).
         x, a_lo, a_hi, _a, _l = self._problem()
-        init = fit_score_gmm(x)
+        init = _init_fit(x)
         stats: dict[str, float] = {}
         fit = _anchored_em(x, a_lo, a_hi, init, 0.3, 7, 0.0, None, stats)
         assert fit is not None
@@ -812,9 +825,11 @@ class TestAnchoredEmStopping:
         ``docs/experiments/2026-09-13-anchored-em-stop-3825/REPORT.md``.
         """
         x, a_lo, a_hi, _a, _l = self._problem()
-        init = fit_score_gmm(x)
+        init = _init_fit(x)
         by_loglik = _anchored_em(x, a_lo, a_hi, init, 0.3, 200, 1e-8, 1e-3, None)
         by_params = _anchored_em(x, a_lo, a_hi, init, 0.3, 200, 1e-8, None, None)
+        assert by_loglik is not None
+        assert by_params is not None
         assert abs(by_loglik.midpoint() - by_params.midpoint()) < 0.01
 
     def test_the_shipped_anchored_path_stops_on_the_log_likelihood(self, monkeypatch):
@@ -851,7 +866,7 @@ class TestAnchoredEmStopping:
 
         rng = np.random.default_rng(7)
         x = _bimodal(rng)
-        init = fit_score_gmm(x)
+        init = _init_fit(x)
         with_anchored_objective = _anchored_em(x, _NO_ANCHORS, _NO_ANCHORS, init, 1.0, 100, 1e-8, 1e-3, None, True)
         with_free_objective = _anchored_em(x, _NO_ANCHORS, _NO_ANCHORS, init, 1.0, 100, 1e-8, 1e-3, None, False)
         assert with_anchored_objective == with_free_objective
@@ -866,7 +881,7 @@ class TestAnchoredEmStopping:
         endpoints and calling the middle monotone.
         """
         x, a_lo, a_hi, _a, _l = self._problem(seed)
-        cur = fit_score_gmm(x)
+        cur = _init_fit(x)
         previous = None
         for _ in range(40):
             stats: dict[str, float] = {}
@@ -904,6 +919,7 @@ class TestFoldAnchoredConvergenceProvenance:
     def test_a_converged_cut_reports_exactly_what_it_always_did(self):
         folds, orderings, final = self._inputs()
         cut = fit_fold_anchored_cut(folds, orderings, final)
+        assert cut is not None
         assert cut.n_unconverged == 0
         assert cut.provenance == "fold_anchored[2/2]"
         assert all(i > 0 for i in cut.fold_iterations)
@@ -916,6 +932,7 @@ class TestFoldAnchoredConvergenceProvenance:
         monkeypatch.setattr(gmm_mod, "_ANCHORED_EM_LOGLIK_TOL", 0.0)
         folds, orderings, final = self._inputs()
         cut = fit_fold_anchored_cut(folds, orderings, final)
+        assert cut is not None
         assert cut.n_unconverged == 2
         assert cut.provenance == "fold_anchored_maxiter2[2/2]"
         assert not any(cut.fold_converged)
@@ -927,6 +944,7 @@ class TestFoldAnchoredConvergenceProvenance:
         monkeypatch.setattr(gmm_mod, "_ANCHORED_EM_LOGLIK_TOL", 0.0)
         folds, orderings, final = self._inputs()
         cut = fit_fold_anchored_cut(folds, orderings, final)
+        assert cut is not None
         assert folds_used(cut.provenance, 2) == 2.0
 
     def test_a_fold_that_never_ran_an_anchored_refit_is_not_counted(self):
@@ -942,6 +960,7 @@ class TestFoldAnchoredConvergenceProvenance:
         # The weight the sibling degeneracy test uses: at the shipped 0.3 the
         # population wins and inverted anchors merely tilt the fit.
         cut = fit_fold_anchored_cut([good, good], [(list(a), list(lbl)), contradicting], final, anchor_weight=1000.0)
+        assert cut is not None
         assert cut.n_anchored == 1
         assert cut.fold_iterations[1] == 0
         assert cut.n_unconverged == 0
