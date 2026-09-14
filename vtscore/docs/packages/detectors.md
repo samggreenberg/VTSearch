@@ -619,8 +619,14 @@ cache state without going through the key is not possible.
 `compute_labeling_status` returns three indicators:
 
 - **Smart** - fits a linear regression slope over the most recent 10
-  error-cost values; green when the relative slope is above
-  `-0.015` (cost has leveled off).
+  error-cost values; green when the relative slope is above `-0.015` (cost has
+  leveled off) **or** when the slope is within two standard errors of zero, i.e.
+  the window's step-to-step scatter explains it. The second condition is the
+  `#3832` fix: on a plateaued category the cost is flat on average but jumps
+  between retrains, and a slope alone read "still falling" on a quarter to a
+  third of windows with nothing having changed about the detector. The
+  arithmetic lives in `vtscore.detectors.cost_trend`, which the eval harness
+  calls too.
 - **Stable** - prediction flips between successive detectors, counted over
   the still-unlabeled pool with the *whole* pool as denominator. Only
   **confident** flips count against it - items that sat clear of the cut

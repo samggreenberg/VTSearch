@@ -156,6 +156,33 @@ describe('ProgressIndicatorsComponent', () => {
     expect(component.stablePlateau).toBe(false);
   });
 
+  it('should say so in the smart tooltip when the cost drift is within the noise', () => {
+    fixture.componentRef.setInput('labelingStatus', {
+      good_count: 0,
+      bad_count: 0,
+      total_count: 0,
+      smart: { status: 'green', cost: 0.42, drift_within_noise: true },
+      stable: { status: '' },
+      span: { status: '' },
+    });
+    expect(component.smartDriftWithinNoise).toBe(true);
+    expect(component.smartTooltip).toContain('noise rather than progress');
+    expect(component.smartTooltip).toContain('Cost: 0.420');
+  });
+
+  it('should not claim noise when smart is plainly green', () => {
+    fixture.componentRef.setInput('labelingStatus', {
+      good_count: 0,
+      bad_count: 0,
+      total_count: 0,
+      smart: { status: 'green', cost: 0.42 },
+      stable: { status: '' },
+      span: { status: '' },
+    });
+    expect(component.smartDriftWithinNoise).toBe(false);
+    expect(component.smartTooltip).not.toContain('noise rather than progress');
+  });
+
   it('should say so in the stable tooltip when green is a plateau', () => {
     fixture.componentRef.setInput('labelingStatus', {
       good_count: 0,

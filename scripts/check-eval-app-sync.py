@@ -212,13 +212,19 @@ MIRRORS: list[Mirror] = [
         kind="ported",
         note=(
             "The Smart indicator - error-cost flatness - one of the three gates the phase "
-            "machine reads. Re-check the per-class minimum and the flatness threshold."
+            "machine reads. Both sides are one-line wrappers over "
+            "`vtscore.detectors.cost_trend.smart_status_from_costs` (issue #3832), so the rule "
+            "itself - the per-class minimum, the flatness threshold, and the slope's "
+            "significance against the window's own scatter - cannot drift; what this pin "
+            "watches is the plumbing around it. If either wrapper grows a step of its own, "
+            "move that step into the shared module instead."
         ),
         divergence=(
             "The harness takes the error-cost window as an argument instead of reading a "
             "`_ProgressCache`'s `steps` model cache, which is built for one interactive "
-            "detector advancing a vote at a time. The *rules* are copied; only the input "
-            "plumbing differs - and only in where the models come from, not in how they are "
+            "detector advancing a vote at a time. The *rule* is shared rather than copied; "
+            "only the input plumbing differs - and only in where the models come from, not in "
+            "how they are "
             "scored: the caller (`step_trainers._labelset_error_costs`) re-scores the "
             "whole window against the *current* labelset every step, as `_eval_cached_models` "
             "does. Handing in a history of frozen per-step costs instead would silently change "
