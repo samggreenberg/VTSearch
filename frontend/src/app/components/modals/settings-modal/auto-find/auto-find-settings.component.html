@@ -50,7 +50,17 @@
     } @else {
       @for (field of activeFields; track field.key) {
         <div class="form-group">
-          <label class="form-label">{{ field.label || field.key }}{{ field.required ? ' *' : '' }}</label>
+          <label class="form-label" [for]="'autofind-' + field.key">
+            @if (field.field_type === 'checkbox') {
+              <vt-plugin-checkbox
+                [inputId]="'autofind-' + field.key"
+                [value]="fieldValue(field.key)"
+                (valueChange)="setFieldValue(field.key, $event)"
+                [title]="field.description || field.label || field.key"
+              ></vt-plugin-checkbox>
+            }
+            {{ field.label || field.key }}{{ field.required ? ' *' : '' }}
+          </label>
           @if (field.field_type === 'select' && field.allow_free_text) {
             <input
               type="text"
@@ -98,8 +108,9 @@
               [attr.min]="field.min || null"
               [attr.max]="field.max || null"
               [attr.step]="field.step || null" />
-          } @else {
+          } @else if (field.field_type !== 'checkbox') {
             <input
+              [id]="'autofind-' + field.key"
               [type]="inputType(field)"
               class="form-input"
               [ngModel]="fieldValue(field.key)"

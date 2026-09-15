@@ -103,6 +103,12 @@
                     [attr.step]="$any(f).step ?? null"
                     (ngModelChange)="setParam(st, f.key, $event)"
                   />
+                } @else if (f.field_type === 'checkbox') {
+                  <vt-plugin-checkbox
+                    [value]="paramValue(st, f.key) ?? f.default ?? ''"
+                    (valueChange)="setParam(st, f.key, $event)"
+                    [title]="f.description || f.label || f.key"
+                  ></vt-plugin-checkbox>
                 } @else {
                   <input
                     [type]="f.field_type === 'password' ? 'password' : f.field_type === 'email' ? 'email' : f.field_type === 'url' ? 'url' : 'text'"

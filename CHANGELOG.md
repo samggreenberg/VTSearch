@@ -78,6 +78,22 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **A plugin's `checkbox` field now renders as a checkbox everywhere, not as a
+  text box you were invited to type `true` into** (issue #3851). The SPA has
+  ten near-duplicate blocks that pick a widget from a `PluginField`'s
+  `field_type`, one per surface that shows plugin configuration. When
+  `"checkbox"` was added to `FieldType`, only two of them grew a branch for it
+  - so on the other eight (results exporters, settings importers and
+  exporters, label importers, the New Model form, Auto-Find, the autodetect
+  results modal, the source-specs picker) a checkbox field fell through to the
+  generic text input. Every checkbox field shipped in this repo happens to
+  belong to a dataset importer, which is rendered by one of the two surfaces
+  that worked, so the bug was only reachable from a third-party plugin. All
+  ten now delegate to one shared `<vt-plugin-checkbox>`, which draws the box
+  inside the field's label (so clicking the label toggles it) and reads
+  `default` the way `vtscore.plugins.parse_checkbox` does - case-insensitively,
+  so a Python-style `default="False"` no longer renders as ticked.
+
 - **Docker images now ship the `toponymy` signpost labeler** (issue #3852). A
   Docker build never runs `scripts/install.sh`, and that script is the only
   place `toponymy` was installed - it cannot be declared in `pyproject.toml`
