@@ -122,7 +122,7 @@ def test_direct_write_drains_the_queue_first(monkeypatch, async_writes):
     queue_detector_write(path, {"n": 1}, after=lambda: order.append("queued-landed"))
     gate.gate.set()
     data = _read_detector(path)
-    assert data == {"n": 1}
+    assert data is not None and data == {"n": 1}
     data["n"] = 2
     _write_detector(path, data)
     order.append("direct-landed")
