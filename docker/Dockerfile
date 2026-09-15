@@ -55,6 +55,22 @@ RUN pip install --no-cache-dir --upgrade pip setuptools && \
         --prefer-binary \
         -r "requirements/$REQUIREMENTS"
 
+# ---------- VTSBrowse signpost naming (toponymy) ----------
+# Docker builds never run scripts/install.sh, so this step mirrors its
+# `vts_install_toponymy` by hand. Without it the image ships without
+# `toponymy` and every Browse map renders unlettered, behind a one-time
+# "VTSBrowse signposts are disabled" error in the log (issue #3852).
+#
+# `--no-deps` is the whole reason this cannot live in requirements/ (pip
+# rejects the flag inside a requirements file): toponymy 0.5.2 pins
+# `transformers<5.0.0`, which a plain install would honour by downgrading the
+# image's transformers stack. That pin is empirically unnecessary for our
+# usage -- see docs/plans/vtsbrowse-toponymy.md -- so the package goes in bare
+# and its real dependencies (fast_hdbscan, vectorizers, apricot-select,
+# tenacity, jinja2) come from `requirements/$REQUIREMENTS`, which declares
+# them on toponymy's behalf through pyproject.toml.
+RUN pip install --no-cache-dir --no-deps "toponymy==0.5.2"
+
 # ---------- application layer ----------
 COPY . .
 
