@@ -29,12 +29,10 @@ def _forward_spec(*, port: str = "10042", node: str = "gpu07", bind: str | None 
     expansion here would pass forever even after the script stopped agreeing
     with it.
     """
-    line = next(
-        ln for ln in SCRIPT.read_text().splitlines() if ln.startswith("FORWARD=")
-    )
-    preamble = f'PORT={port}; NODE={node}; VTS_BIND={bind!r}' if bind is not None else f"PORT={port}; NODE={node}"
-    out = subprocess.run(
-        ["bash", "-c", f'set -u; {preamble}; {line}; printf "%s" "$FORWARD"'],
+    line = next(ln for ln in SCRIPT.read_text().splitlines() if ln.startswith("FORWARD="))
+    preamble = f"PORT={port}; NODE={node}; VTS_BIND={bind!r}" if bind is not None else f"PORT={port}; NODE={node}"
+    out = subprocess.run(  # noqa: S603  # fixed argv, test-controlled values, no shell
+        ["bash", "-c", f'set -u; {preamble}; {line}; printf "%s" "$FORWARD"'],  # noqa: S607 - bash from PATH
         capture_output=True,
         text=True,
         check=True,
@@ -59,7 +57,10 @@ class TestForwardSpec:
 
 class TestScriptShape:
     def test_script_parses(self):
-        subprocess.run(["bash", "-n", str(SCRIPT)], check=True)
+        subprocess.run(  # noqa: S603  # fixed argv, repo-local script path, no shell
+            ["bash", "-n", str(SCRIPT)],  # noqa: S607 - bash from PATH
+            check=True,
+        )
 
     def test_no_shell_mode_holds_the_forward_without_a_remote_command(self):
         text = SCRIPT.read_text()
@@ -78,8 +79,10 @@ class TestScriptShape:
         assert "ServerAliveCountMax" in text
 
     def test_unknown_argument_is_rejected(self):
-        out = subprocess.run(
-            ["bash", str(SCRIPT), "--bogus"], capture_output=True, text=True
+        out = subprocess.run(  # noqa: S603  # fixed argv, repo-local script path, no shell
+            ["bash", str(SCRIPT), "--bogus"],  # noqa: S607 - bash from PATH
+            capture_output=True,
+            text=True,
         )
         assert out.returncode == 2
         assert "Unknown argument" in out.stderr
