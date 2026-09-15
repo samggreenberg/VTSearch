@@ -219,6 +219,11 @@ def delete_detector(name: str):
     path = _detector_path(name)
     if not path.exists():
         abort(404, message=f"Detector '{name}' not found")
+    # A queued labelset write landing after the unlink would resurrect the
+    # file (issue #3853); drop it first.
+    from vtscore.detectors.store import discard_pending_detector_write
+
+    discard_pending_detector_write(path)
     path.unlink()
     return {"success": True, "name": name}
 
@@ -251,6 +256,12 @@ def rename_detector(body: dict, name: str):
     data["name"] = new_name
     _write_detector(new_path, data)
     if new_path != old_path:
+        # ``data`` already carries any queued labelset write for the old path
+        # (``_read_detector`` returns queued text); drop the queued entry so
+        # it cannot land after the unlink and resurrect the old file.
+        from vtscore.detectors.store import discard_pending_detector_write
+
+        discard_pending_detector_write(old_path)
         old_path.unlink(missing_ok=True)
 
     # Update the detector registry entry that references this detector

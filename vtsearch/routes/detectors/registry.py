@@ -830,6 +830,11 @@ def unload_detector_route(detector_id: str):
     det_ctx = get_active_detector_context()
     if det_ctx.detector_id == detector_id and (good_votes or bad_votes):
         sync_labels_to_loaded_detector()
+        # The sync queues its write (issue #3853); an unloaded detector is
+        # something another process may read next, so land it now.
+        from vtscore.detectors.store import flush_detector_writes
+
+        flush_detector_writes(_detector_path(entry.get("name", "")))
 
     unregister_detector_context(detector_id)
     remove_loaded_detector_id(detector_id)
@@ -860,6 +865,11 @@ def delete_registered_detector(detector_id: str):
         det_name = entry.get("name", "")
         if det_name:
             det_path = _detector_path(det_name)
+            # A queued labelset write landing after the unlink would
+            # resurrect the file (issue #3853); drop it first.
+            from vtscore.detectors.store import discard_pending_detector_write
+
+            discard_pending_detector_write(det_path)
             if det_path.exists():
                 det_path.unlink(missing_ok=True)
     except Exception:
