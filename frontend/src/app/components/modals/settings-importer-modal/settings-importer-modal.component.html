@@ -34,6 +34,14 @@
           <div class="form-group">
             <label class="form-label" [for]="'sif-' + field.key"
               [title]="field.description || field.label || field.key">
+              @if (field.field_type === 'checkbox') {
+                <vt-plugin-checkbox
+                  [inputId]="'sif-' + field.key"
+                  [value]="formValues[field.key]"
+                  (valueChange)="formValues[field.key] = $event"
+                  [title]="field.description || field.label || field.key"
+                ></vt-plugin-checkbox>
+              }
               {{ field.label || field.key }}
               @if (field.required) {
                 <span class="required">*</span>
@@ -109,7 +117,7 @@
                 [attr.max]="field.max || null"
                 [attr.step]="field.step || null"
               />
-            } @else {
+            } @else if (field.field_type !== 'checkbox') {
               <input
                 [id]="'sif-' + field.key"
                 [type]="field.field_type === 'password' ? 'password' : field.field_type === 'email' ? 'email' : field.field_type === 'url' ? 'url' : 'text'"

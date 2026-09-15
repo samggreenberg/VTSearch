@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, effect, input, output } from '@angu
 import { FormsModule } from '@angular/forms';
 
 import { ClipperInfo, ConverterInfo, SourceSpec } from '../../../../models/api.models';
+import { PluginCheckboxComponent } from '../../../plugin-checkbox/plugin-checkbox.component';
 
 /** Checkbox column for choosing which source media types feed a
  *  multi-media import.  The native type sits at the top (always
@@ -19,7 +20,7 @@ import { ClipperInfo, ConverterInfo, SourceSpec } from '../../../../models/api.m
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-source-specs-picker',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, PluginCheckboxComponent],
   templateUrl: './source-specs-picker.component.html',
   styleUrl: './source-specs-picker.component.scss',
 })

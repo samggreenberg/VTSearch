@@ -275,15 +275,29 @@ def setup_logging(
     fmt_kind = (fmt or os.environ.get("VTSEARCH_LOG_FORMAT") or _DEFAULT_FORMAT).lower()
     formatter: logging.Formatter = JsonFormatter() if fmt_kind == "json" else TextFormatter()
 
-    handler = logging.StreamHandler(stream or sys.stderr)
-    handler.setFormatter(formatter)
-    handler.addFilter(ContextFilter())
-    handler.addFilter(_TransformersVocabTokenFilter())
+    handlers: list[logging.Handler] = [logging.StreamHandler(stream or sys.stderr)]
+    # ``VTSEARCH_LOG_FILE``: also append every record to a file.  The stream
+    # handler stays, so an operator watching the terminal loses nothing; the
+    # file is what survives a closed tmux pane, which is how the #3853 stalls
+    # went unrecorded for months.  An unwritable path is reported once on
+    # stderr rather than faulting startup.
+    log_file = os.environ.get("VTSEARCH_LOG_FILE")
+    if log_file:
+        try:
+            os.makedirs(os.path.dirname(os.path.abspath(log_file)), exist_ok=True)
+            handlers.append(logging.FileHandler(log_file, encoding="utf-8"))
+        except OSError as exc:
+            print(f"VTSEARCH_LOG_FILE={log_file!r} is not writable ({exc}); logging to stderr only", file=sys.stderr)
+    for handler in handlers:
+        handler.setFormatter(formatter)
+        handler.addFilter(ContextFilter())
+        handler.addFilter(_TransformersVocabTokenFilter())
 
     root = logging.getLogger()
     for existing in list(root.handlers):
         root.removeHandler(existing)
-    root.addHandler(handler)
+    for handler in handlers:
+        root.addHandler(handler)
     root.setLevel(level_value)
 
     # Quiet down chatty libraries; preserved from app.py's old basicConfig.

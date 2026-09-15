@@ -43,6 +43,22 @@ _ALWAYS_REQUIRED: frozenset[str] = frozenset(
         # the CPU umap-learn reducer whenever cuML is absent (always, in the
         # slim images).
         "umap-learn",
+        # Browse signposts: toponymy's real dependencies, declared on its
+        # behalf because toponymy itself is installed `--no-deps` by a
+        # dedicated Dockerfile step (its transformers<5 pin would downgrade
+        # the image's transformers stack -- see
+        # docs/plans/vtsbrowse-toponymy.md) AND these images install the
+        # package with `--no-deps -e .`, so pyproject.toml's declarations
+        # never reach them either. Only the ones with no carrier are listed:
+        # jinja2 arrives with flask, numba with fast_hdbscan, httpx and
+        # tokenizers with transformers' huggingface_hub, and apricot-select
+        # is installed alongside toponymy in that same dedicated step
+        # because it ships a legacy setup.py sdist. Omitting these is how
+        # issue #3852 stayed half-fixed: `toponymy` imports at build time,
+        # so a missing one is an ImportError in the signpost path.
+        "fast_hdbscan",
+        "vectorizers",
+        "tenacity",
     }
 )
 
@@ -90,7 +106,8 @@ def test_slim_requirements_include_core_deps(req_file: Path) -> None:
     assert not missing, (
         f"{req_file.name} is missing deps every deployment needs: {sorted(missing)}\n"
         "Add them to that file (core framework / numeric stack entries near the top; "
-        "umap-learn under the '── VTSBrowse projection ──' heading)."
+        "umap-learn under the '── VTSBrowse projection ──' heading; fast_hdbscan / "
+        "vectorizers / tenacity under '── VTSBrowse signpost naming (toponymy) ──')."
     )
 
 

@@ -341,6 +341,14 @@ def initialize_server(mode_label: str = "PRODUCTION") -> None:
     admin_overrides.apply_env_overrides()
     _report_admin_overrides()
 
+    # Stall diagnostics (issue #3853): GC-pause logging plus a heartbeat
+    # watchdog that dumps every thread's frames when the interpreter freezes.
+    # Started before the model loads so a stall during startup is caught too;
+    # ``VTSEARCH_STALL_WATCHDOG_MS=0`` turns the watchdog off.
+    from vtscore.concurrency.stalls import start_stall_diagnostics_from_env
+
+    start_stall_diagnostics_from_env()
+
     print("\U0001f4da Loading ML libraries...", flush=True)
     initialize_models(on_progress=lambda *a, **k: None)
     # The solo-mediaType restriction (the flag, the env var, or the persisted

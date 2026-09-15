@@ -11,6 +11,7 @@ import type { SettingsExporterEntry } from '../../../generated/api-client/models
 import type { RunSettingsExportResponse } from '../../../generated/api-client/models/run-settings-export-response';
 import { apiErrorMessage } from '../../../utils/api-error';
 import { DynamicFieldOptions } from '../../../utils/dynamic-field-options';
+import { PluginCheckboxComponent } from '../../plugin-checkbox/plugin-checkbox.component';
 
 type ModalView = 'picker' | 'form';
 
@@ -18,7 +19,7 @@ type ModalView = 'picker' | 'form';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-settings-exporter-modal',
   standalone: true,
-  imports: [FormsModule, ModalComponent, IconComponent, FieldHintIconComponent],
+  imports: [FormsModule, ModalComponent, IconComponent, FieldHintIconComponent, PluginCheckboxComponent],
   templateUrl: './settings-exporter-modal.component.html',
   styleUrl: './settings-exporter-modal.component.scss',
 })

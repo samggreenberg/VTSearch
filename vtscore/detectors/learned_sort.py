@@ -178,6 +178,7 @@ def run_learned_sort(
     and stores the model + training set on *det_ctx*.  Returns
     ``(results, threshold)``.
     """
+    from vtscore.concurrency.stalls import PhaseClock
     from vtscore.detectors.labeling_progress import inject_live_model
     from vtscore.detectors.labelset_training import labelset_train_and_score
     from vtscore.detectors.training import train_and_score
@@ -188,7 +189,16 @@ def run_learned_sort(
         thread_detector_context,
     )
 
-    with thread_dataset_context(ds_ctx), thread_detector_context(det_ctx):
+    # Phase breakdown of the retrain, logged only when the whole run was slow
+    # (issue #3853): the per-vote retrain is the prime suspect for the stalls,
+    # and this is what says which part of it grew.
+    clock = PhaseClock(
+        "learned_sort",
+        detector=getattr(det_ctx, "detector_id", ""),
+        labels=len(labelset.elements) if labelset is not None else len(good) + len(bad),
+        corpus=len(snap),
+    )
+    with thread_dataset_context(ds_ctx), thread_detector_context(det_ctx), clock:
         if labelset is not None:
             results, threshold, model = labelset_train_and_score(
                 det_ctx,
@@ -211,7 +221,9 @@ def run_learned_sort(
                 det_ctx=det_ctx,
             )
 
+        clock.mark("train_and_score")
         update_learned_scores({r["id"]: r["score"] for r in results})
+        clock.mark("update_scores")
 
         local_good, local_bad, training_medias, has_cross_dataset = resolve_labelset_local_state(labelset, snap)
 
@@ -219,8 +231,10 @@ def run_learned_sort(
             labelset, has_cross_dataset, local_good, local_bad, good, bad
         ):
             inject_live_model(good, bad, model, threshold)
+        clock.mark("inject_live_model")
 
         if det_ctx is not _empty_detector_context and model is not None:
             update_det_ctx_with_trained_model(det_ctx, model, threshold, labelset, training_medias, snap, good, bad)
+        clock.mark("update_det_ctx")
 
     return results, threshold

@@ -29,7 +29,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
-from sources._common import Mark, Page
+from sources._common import Mark, Page, save_verified
 
 
 @dataclass(frozen=True)
@@ -165,9 +165,9 @@ def compose_page(
     out_path.parent.mkdir(parents=True, exist_ok=True)
     rgb = page.convert("RGB")
     if jpeg_quality is not None:
-        rgb.save(out_path, quality=jpeg_quality)
+        save_verified(rgb, out_path, quality=jpeg_quality)
     else:
-        rgb.save(out_path)
+        save_verified(rgb, out_path)
     return placements
 
 

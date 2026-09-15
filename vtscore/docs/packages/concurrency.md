@@ -26,6 +26,7 @@ true of `vtscore.security`.
 | `vtscore/concurrency/notifications.py` | `notify()` - one-off user-facing messages, rendered as toasts by the app |
 | `vtscore/concurrency/gate.py` | `ConcurrencyGate` - a semaphore whose limit is re-read on every acquisition |
 | `vtscore/concurrency/memory_budget.py` | Cap fan-out so peak per-worker memory fits a fraction of available RAM |
+| `vtscore/concurrency/stalls.py` | Stall diagnostics: a GIL-aware heartbeat watchdog with `faulthandler` thread dumps, GC-pause logging, `PhaseClock` / `timed_lock` slow-path timers |
 
 - [Two kinds of "progress"](#two-kinds-of-progress)
 - [Async jobs](#async-jobs)
@@ -38,6 +39,7 @@ true of `vtscore.security`.
 - [`ConcurrencyGate`](#concurrencygate)
 - [`events.py`](#eventspy)
 - [User notifications](#user-notifications)
+- [Stall diagnostics](#stall-diagnostics)
 
 ---
 
@@ -581,3 +583,27 @@ subscriber that raises is swallowed. A call whose whole purpose is to
 
 **It always logs**, at a severity matching the level, so a headless run
 still has a record when no browser is attached.
+
+## Stall diagnostics
+
+`vtscore/concurrency/stalls.py` exists because a per-request timer cannot
+explain a freeze in which every in-flight request finishes at the same
+instant (issue #3853): that signature fits a thread holding the GIL, a lock
+convoy, and a process the kernel stopped scheduling equally well. Three
+instruments separate them, all silent below their thresholds and all
+reading their threshold from the environment on every call so a restart
+picks up a change:
+
+| Name | Description |
+|------|-------------|
+| `StallWatchdog(threshold_ms, *, arm=None, sampler=default_sampler, dump_path=…)` | Heartbeat thread. A beat that wakes `threshold_ms` late logs one WARNING naming the threads whose CPU time grew across the gap (from `/proc/self/task`), the process CPU-to-wall ratio, major faults, RSS, cgroup memory counters and GC pauses. `beat(now=…)` is the unit of work, so a test drives it with an explicit clock |
+| `start_stall_diagnostics_from_env() -> StallWatchdog \| None` | What the app calls: installs GC-pause logging and starts the watchdog with a `faulthandler.dump_traceback_later` armer, re-armed on every beat so a miss dumps every thread's Python frames *during* the stall - GIL-free, because that timer runs on a C thread. `VTSEARCH_STALL_WATCHDOG_MS=0` disables the watchdog; the dump goes to `VTSEARCH_STALL_DUMP_FILE`, else `VTSEARCH_LOG_FILE`, else stderr |
+| `install_gc_pause_logging()` / `gc_pause_stats()` | `gc.callbacks` timer; a pause at or above `VTSEARCH_GC_WARN_MS` logs its generation, duration and collected count |
+| `PhaseClock(name, **fields)` | `mark(phase)` between phases, `finish(**fields)` (or exit the `with`) logs `slow phase: name total …ms (phase=…ms, …)` at or above `VTSEARCH_SLOW_PHASE_MS`. Used on the learned-sort retrain, `_train_and_score_xy`, the per-vote labelset rewrite, the labeling-status replay and the vote rehydrate |
+| `timed_lock(lock, name)` | `with lock:` that logs `lock wait: name waited …ms` above the same threshold. Sits on `_state_lock` (vote, rehydrate), `_progress_lock` (invalidate, inject, status reads, replay) and `label_sync_write_lock` |
+
+The watchdog's report is read by its CPU line: process CPU close to wall
+with one thread on top is a GIL hold (the dump names the frame); no CPU
+consumed is a process that was not scheduled (memory pressure, a paged-out
+cgroup); CPU spread over threads is contention, which the lock and phase
+lines then locate.

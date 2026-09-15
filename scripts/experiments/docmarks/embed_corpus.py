@@ -127,6 +127,176 @@ def pages_for_tier(corpus: Path, tier: str) -> list[Page]:
     return [p for p in read_manifest(corpus / "corpus.jsonl") if p.meta.get("tier") in wanted]
 
 
+def labels_for(page: Page) -> tuple[list[str], list[dict[str, Any]]]:
+    """``(categories, regions)`` for one page — everything a cell says about labels.
+
+    Factored out so ``load_medias`` and ``relabel`` cannot drift: one derives
+    the labels while embedding, the other rewrites them afterwards, and a cell
+    whose two paths disagreed would be wrong in a way nothing checks.
+    """
+    regions: list[dict[str, Any]] = []
+    categories: list[str] = []
+    for mark in page.marks:
+        if not mark.class_id:
+            continue
+        categories.append(mark.class_id)
+        if mark.area() > 0:
+            x, y, w, h = mark.box
+            regions.append(
+                {
+                    "label": mark.class_id,
+                    "x": x,
+                    "y": y,
+                    "width": w,
+                    "height": h,
+                    "provenance": mark.provenance,
+                }
+            )
+    return sorted(dict.fromkeys(categories)), regions
+
+
+def relabel(corpus: Path, *, apply: bool = False) -> int:
+    """Rewrite the labels in every existing cell from the current manifest.
+
+    "Embedding comes last, because the cells carry the labels" is the rule
+    #3343 states, and it makes any later audit verdict cost a full re-embed —
+    ~12 h here for a change to fifteen pages. It costs that only because the
+    labels and the vectors are written in one pass; they do not *depend* on
+    each other. ``embed_missing`` embeds pixels, so a merge, a split or a
+    membership rejection changes what a page is called and nothing about its
+    vector.
+
+    So this rewrites `category`, `categories` and each region's `label` in
+    place, from the manifest, and leaves every vector untouched. It is the
+    repair for a verdict that lands after a cell is built — not a licence to
+    embed first, because a membership *rejection* also changes which pages are
+    positives, and only the manifest knows that.
+
+    The real case: the corpus owner countersigned the v3 roster and overturned
+    one pair, merging `logo_bad45f00_1` into `logo_afm90c00-first_1_0`. Fifteen
+    pages in tiers already built were left naming a class that no longer exists.
+    """
+    io = _cells_io()
+    classes_path = corpus / "classes.json"
+    known = set(json.loads(classes_path.read_text(encoding="utf-8"))) if classes_path.exists() else set()
+    touched = 0
+    for tier in cfg.TIER_ORDER:
+        pages = None
+        for embedder in EMBEDDERS:
+            path = cell_path(tier, embedder)
+            if not path.exists():
+                continue
+            if pages is None:
+                pages = {p.page_id: p for p in pages_for_tier(corpus, tier)}
+            medias = io.load_medias(path)
+            changed = 0
+            orphans = 0
+            for media in medias.values():
+                page = pages.get(media.get("origin_name"))
+                if page is None:
+                    orphans += 1
+                    continue
+                categories, regions = labels_for(page)
+                before = (media.get("category"), media.get("categories"), media.get("regions"))
+                after = (categories[0] if categories else "", categories, regions)
+                if before != after:
+                    media["category"], media["categories"], media["regions"] = after
+                    changed += 1
+            # Labels naming a class that is not in `classes.json` are EXPECTED
+            # and are not damage: under `--roster` only the chosen classes are
+            # admitted, while the manifest keeps every candidate id it derived,
+            # so a distractor page carrying an unrostered mark says so. Counted
+            # rather than hidden, because an eval that grouped a cell by
+            # `categories` alone would silently treat those as eval classes --
+            # which is the whole distinction the roster exists to draw.
+            offroster = sum(1 for m in medias.values() for c in (m.get("categories") or []) if c not in known)
+            print(
+                f"  {path.name}: {len(medias)} medias, {changed} relabelled"
+                + (f", {orphans} not in the manifest" if orphans else "")
+                + (f", {offroster} label(s) on candidate classes not on the roster" if offroster else "")
+            )
+            touched += changed
+            if apply and changed:
+                io.dump_medias(medias, path)
+    print(f"\n{touched} media(s) relabelled" + ("" if apply else " — dry run, pass --apply to write"))
+    return 0
+
+
+def repair(corpus: Path, *, apply: bool = False) -> int:
+    """Re-embed only the medias an existing cell holds no vector for.
+
+    A page whose pixels will not decode costs the cell a *vector* but not a
+    *row*: ``build_cell`` writes every media it loaded, so one undecodable PNG
+    leaves a media with an empty ``embeddings``, and ``verify`` reports
+    ``MISSING 1 vector(s)`` for as long as that cell exists.
+
+    The repair for the *page* is to re-render it.  The repair for the *cell*
+    would otherwise be a full rebuild -- 11 h of SIFT over 50,000 pages to
+    obtain one vector -- because ``build_cell`` is all-or-nothing.
+    ``embed_missing`` is not: it embeds exactly the medias with no vector under
+    this embedder's key, so re-reading those few pages and calling it costs one
+    image rather than the tier.
+
+    Bytes are re-read for the missing medias *only*.  ``dump_medias`` drops
+    ``media_bytes``, so a cell knows its pages by ``origin_name`` and nothing
+    else -- and re-reading all 50,000 to repair one would cost exactly the
+    memory the thin pickle exists to avoid.
+
+    The real case: ``ucsf/qkmg0227#0`` was truncated on write during the UCSF
+    pull and decoded to half a page of black.  Re-rendered from the cached PDF,
+    it needed a vector in two tier-``m`` cells that cost 11 h to build.
+    """
+    from vtscore.datasets.stages.embedding import embed_missing  # noqa: PLC0415
+
+    io = _cells_io()
+    unrepaired = 0
+    for tier in cfg.TIER_ORDER:
+        pages = None
+        for embedder in EMBEDDERS:
+            path = cell_path(tier, embedder)
+            if not path.exists():
+                continue
+            medias = io.load_medias(path)
+            missing = {cid: m for cid, m in medias.items() if not m.get("embeddings")}
+            if not missing:
+                print(f"  {path.name}: {len(medias)} medias, no vector missing")
+                continue
+            if pages is None:
+                pages = {p.page_id: p for p in pages_for_tier(corpus, tier)}
+            blocked: list[str] = []
+            for media in missing.values():
+                page = pages.get(media.get("origin_name"))
+                if page is None:
+                    blocked.append(f"{media.get('origin_name')}: not in the manifest")
+                    continue
+                try:
+                    media["media_bytes"] = Path(page.path).read_bytes()
+                except OSError as exc:  # noqa: PERF203 - one page, reported not raised
+                    blocked.append(f"{page.page_id}: {type(exc).__name__}")
+            loadable = {cid: m for cid, m in missing.items() if m.get("media_bytes")}
+            if apply and loadable:
+                with _batch_size(embedder):
+                    embed_missing(loadable, embedder)
+            repaired = sum(1 for m in loadable.values() if m.get("embeddings"))
+            # Drop the bytes again whatever happened: `dump_medias` would strip
+            # them, but this dict stays live for the rest of the loop.
+            for media in missing.values():
+                media.pop("media_bytes", None)
+            left = len(missing) - repaired
+            detail = f"{repaired} repaired" if apply else f"{len(loadable)} re-readable"
+            print(
+                f"  {path.name}: {len(medias)} medias, {len(missing)} without a vector, {detail}"
+                + (f", {left} still missing" if apply and left else "")
+                + (f" [{'; '.join(blocked)}]" if blocked else "")
+            )
+            if apply:
+                unrepaired += left
+                if repaired:
+                    io.dump_medias(medias, path)
+    print("" if apply else "\ndry run -- pass --force to write")
+    return 1 if unrepaired else 0
+
+
 def load_medias(pages: Sequence[Page], classes: dict[str, Any], embedder: str) -> dict[int, dict]:
     """Turn manifest pages into the media dicts the embedding stage expects.
 
@@ -139,25 +309,7 @@ def load_medias(pages: Sequence[Page], classes: dict[str, Any], embedder: str) -
     """
     medias: dict[int, dict] = {}
     for index, page in enumerate(sorted(pages, key=lambda p: p.page_id)):
-        regions = []
-        categories = []
-        for mark in page.marks:
-            if not mark.class_id:
-                continue
-            categories.append(mark.class_id)
-            if mark.area() > 0:
-                x, y, w, h = mark.box
-                regions.append(
-                    {
-                        "label": mark.class_id,
-                        "x": x,
-                        "y": y,
-                        "width": w,
-                        "height": h,
-                        "provenance": mark.provenance,
-                    }
-                )
-        ordered = sorted(dict.fromkeys(categories))
+        ordered, regions = labels_for(page)
         medias[index] = {
             "id": index,
             "media_type": "image",
@@ -260,6 +412,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--list", action="store_true", help="show which cells exist, then exit")
     ap.add_argument("--verify", action="store_true", help="load every present cell and check it, then exit")
+    ap.add_argument(
+        "--relabel",
+        action="store_true",
+        help="rewrite the labels in every existing cell from the current manifest, leaving the "
+        "vectors alone; the repair for an audit verdict that lands after a cell was built",
+    )
+    ap.add_argument(
+        "--repair",
+        action="store_true",
+        help="re-embed only the medias an existing cell has no vector for; the repair for a "
+        "page that would not decode when the cell was built",
+    )
     args = ap.parse_args(argv)
 
     if args.list:
@@ -272,6 +436,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     if args.verify:
         return verify(args.corpus)
+
+    if args.relabel:
+        return relabel(args.corpus, apply=args.force)
+
+    if args.repair:
+        return repair(args.corpus, apply=args.force)
 
     requested = [e.strip() for e in args.embedders.split(",") if e.strip()]
     unknown = set(requested) - set(EMBEDDERS)

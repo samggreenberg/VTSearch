@@ -7,6 +7,8 @@ import json
 import logging
 import threading
 
+import pytest
+
 from vtsearch.logging_config import (
     ContextFilter,
     JsonFormatter,
@@ -535,3 +537,108 @@ class TestExtraOverride:
 
         records = _emit(stream, "json", go)
         assert records[0]["dataset_id"] == "explicit-ds"
+
+
+# ---------------------------------------------------------------------------
+# Slow-request logging (#3853)
+# ---------------------------------------------------------------------------
+
+
+class TestSlowRequestLogging:
+    """The post-vote stalls in #3853 left no trace because nothing timed a
+    request. These pin the two properties that make the log usable: it fires
+    at WARNING (the default level, so a stall survives on a stock deployment)
+    and it carries the request id the browser already sees."""
+
+    def test_slow_request_logged_at_warning_with_request_id(self, client, caplog, monkeypatch):
+        """Every request is "slow" at a 0ms threshold, so one must be logged."""
+        monkeypatch.setenv("VTSEARCH_SLOW_REQUEST_MS", "0")
+        with caplog.at_level(logging.WARNING, logger="vtsearch.hooks"):
+            resp = client.get("/api/auth/status")
+        rid = resp.headers["X-Request-Id"]
+
+        slow = [r for r in caplog.records if "slow request" in r.getMessage()]
+        assert slow, "a request over the threshold was not logged"
+        msg = slow[-1].getMessage()
+        assert slow[-1].levelno == logging.WARNING
+        # The id ties the server line to what DevTools shows for the stall.
+        assert rid in msg
+        assert "/api/auth/status" in msg
+        assert "GET" in msg
+
+    def test_fast_request_not_logged(self, client, caplog, monkeypatch):
+        """A high threshold must stay silent, or the log is noise."""
+        monkeypatch.setenv("VTSEARCH_SLOW_REQUEST_MS", "600000")
+        with caplog.at_level(logging.WARNING, logger="vtsearch.hooks"):
+            client.get("/api/auth/status")
+        assert not [r for r in caplog.records if "slow request" in r.getMessage()]
+
+    def test_unparseable_threshold_falls_back_to_default(self, monkeypatch):
+        """Bad config must not fault every request."""
+        from vtsearch.hooks import _DEFAULT_SLOW_REQUEST_MS, _slow_request_threshold_ms
+
+        monkeypatch.setenv("VTSEARCH_SLOW_REQUEST_MS", "not-a-number")
+        assert _slow_request_threshold_ms() == _DEFAULT_SLOW_REQUEST_MS
+
+    def test_timer_runs_last_so_it_brackets_the_other_hooks(self):
+        """Flask runs ``after_request`` in reverse registration order, so the
+        timer must be registered *first* to run last and measure the most.
+        Registering it later would silently under-report every request."""
+        import flask
+
+        from vtsearch.hooks import _log_slow_request, register_hooks
+
+        app = flask.Flask(__name__)
+        register_hooks(app)
+        funcs = app.after_request_funcs[None]
+        assert funcs[0] is _log_slow_request, "timer must be registered first to run last"
+
+
+# ---------------------------------------------------------------------------
+# VTSEARCH_LOG_FILE (#3853)
+# ---------------------------------------------------------------------------
+
+
+class TestLogFile:
+    """``VTSEARCH_LOG_FILE`` appends every record to a file beside the stream
+    handler, so a stall nobody was watching still leaves a trace once the
+    terminal pane has scrolled away."""
+
+    @pytest.fixture(autouse=True)
+    def _restore_root(self):
+        root = logging.getLogger()
+        prior_level, prior_handlers = root.level, list(root.handlers)
+        yield
+        for h in list(root.handlers):
+            root.removeHandler(h)
+            if h not in prior_handlers:
+                h.close()
+        for h in prior_handlers:
+            root.addHandler(h)
+        root.setLevel(prior_level)
+
+    def test_records_land_in_the_file_and_on_the_stream(self, monkeypatch, tmp_path):
+        from vtsearch.logging_config import setup_logging
+
+        path = tmp_path / "logs" / "app.log"  # parent does not exist yet
+        monkeypatch.setenv("VTSEARCH_LOG_FILE", str(path))
+        stream = io.StringIO()
+        setup_logging(level="WARNING", fmt="json", stream=stream)
+        logging.getLogger("vtsearch.test.logfile").warning("stall: heartbeat late by 4321ms")
+        for h in logging.getLogger().handlers:
+            h.flush()
+        on_disk = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+        assert [r["msg"] for r in on_disk] == ["stall: heartbeat late by 4321ms"]
+        assert "heartbeat late" in stream.getvalue()
+
+    def test_unwritable_path_keeps_the_stream(self, monkeypatch, tmp_path, capsys):
+        from vtsearch.logging_config import setup_logging
+
+        blocker = tmp_path / "not-a-dir"
+        blocker.write_text("x")
+        monkeypatch.setenv("VTSEARCH_LOG_FILE", str(blocker / "app.log"))
+        stream = io.StringIO()
+        setup_logging(level="WARNING", fmt="json", stream=stream)
+        assert "not writable" in capsys.readouterr().err
+        logging.getLogger("vtsearch.test.logfile").warning("still logged")
+        assert "still logged" in stream.getvalue()

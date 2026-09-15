@@ -176,6 +176,14 @@
               <div class="tab-field">
                 <label class="form-label" [for]="'field-' + field.key"
                   [title]="field.description || field.label || field.key">
+                  @if (field.field_type === 'checkbox') {
+                    <vt-plugin-checkbox
+                      [inputId]="'field-' + field.key"
+                      [value]="formValues[field.key]"
+                      (valueChange)="formValues[field.key] = $event"
+                      [title]="field.description || field.label || field.key"
+                    ></vt-plugin-checkbox>
+                  }
                   {{ field.label || field.key }}
                   @if (field.required) {
                     <span class="required">*</span>
@@ -267,7 +275,7 @@
                   @if (field.dynamic_options && fieldOptions.error()[field.key]) {
                     <p class="error-text">{{ fieldOptions.error()[field.key] }}</p>
                   }
-                } @else {
+                } @else if (field.field_type !== 'checkbox') {
                   <input
                     [id]="'field-' + field.key"
                     type="text"

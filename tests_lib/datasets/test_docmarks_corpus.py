@@ -1775,6 +1775,301 @@ class TestAnAuditVerdictSurvivesARebuild:
         assert separations[0]["pins"] == "classes"
 
 
+class TestAReviewerMayChangeTheirMind:
+    """Superseding a stored ruling is a normal event, and must not be silent.
+
+    `save_adjudications` refuses a pair ruled both ways, which is right for a
+    store holding both at once. A corpus adjudicated in rounds also produces
+    the other case: a later verdict that overturns an earlier one. #3343 hit it
+    when the owner ruled `logo_afm90c00-first_1_0` and `logo_bad45f00_1` the
+    same mark -- a chief engraving and a "100 Years of Achievement" panel
+    carrying that same engraving -- after the confusable pass had ruled them
+    different. Without a supported path, applying that means hand-editing the
+    store, which every other path here exists to avoid.
+    """
+
+    def _rows(self):
+        pair = {"left_page_id": "t/a", "left_mark_index": 1, "right_page_id": "t/b", "right_mark_index": 0}
+        return dict(pair), dict(pair)
+
+    def test_a_new_merge_overturns_a_stored_separation(self, mods):
+        stored, fresh = self._rows()
+        same, diff, overturned = mods["audit"].supersede([], [stored], [fresh], [])
+        assert diff == [] and same == []
+        assert len(overturned) == 1
+
+    def test_a_new_separation_overturns_a_stored_merge(self, mods):
+        stored, fresh = self._rows()
+        same, diff, overturned = mods["audit"].supersede([stored], [], [], [fresh])
+        assert same == [] and diff == []
+        assert len(overturned) == 1
+
+    def test_rows_about_other_pairs_are_untouched(self, mods):
+        stored, fresh = self._rows()
+        other = {"left_page_id": "t/c", "left_mark_index": 0, "right_page_id": "t/d", "right_mark_index": 0}
+        same, diff, overturned = mods["audit"].supersede([], [stored, other], [fresh], [])
+        assert diff == [other]
+        assert len(overturned) == 1
+
+    def test_the_pair_key_ignores_which_side_is_written_first(self, mods):
+        forward = {"left_page_id": "t/a", "left_mark_index": 1, "right_page_id": "t/b", "right_mark_index": 0}
+        reverse = {"left_page_id": "t/b", "left_mark_index": 0, "right_page_id": "t/a", "right_mark_index": 1}
+        assert mods["audit"].pair_key(forward) == mods["audit"].pair_key(reverse)
+
+    def test_the_same_pair_on_a_different_mark_is_a_different_ruling(self, mods):
+        # The whole reason endpoints carry a mark index: one page's logo can be
+        # ruled same while its stamp is ruled different.
+        stored = {"left_page_id": "t/a", "left_mark_index": 0, "right_page_id": "t/b", "right_mark_index": 0}
+        fresh = {"left_page_id": "t/a", "left_mark_index": 1, "right_page_id": "t/b", "right_mark_index": 1}
+        _same, diff, overturned = mods["audit"].supersede([], [stored], [fresh], [])
+        assert diff == [stored] and overturned == []
+
+
+class TestRelabellingACellWithoutReEmbedding:
+    """A verdict landing after a cell is built costs a rewrite, not a re-embed.
+
+    "Embedding comes last, because the cells carry the labels" is right about
+    the ordering and wrong about the price: `embed_missing` embeds pixels, so a
+    merge changes what a page is *called* and nothing about its vector. The v3
+    countersignature merged `logo_bad45f00_1` away after tier `s` was built,
+    leaving 15 pages naming a class that no longer exists.
+    """
+
+    def test_labels_come_from_the_page_for_both_paths(self, mods, tmp_path):
+        # The factoring is the guarantee: `load_medias` and `relabel` derive
+        # labels the same way, so a cell's two write paths cannot disagree.
+        from PIL import Image
+
+        path = tmp_path / "p.png"
+        Image.new("RGB", (60, 40), "white").save(path)
+        page = _page(
+            mods,
+            "src/0001",
+            "src",
+            [("logo", (0, 0, 20, 10), "src/a", "clustered"), ("stamp", (0, 0, 0, 0), "src/b", "clustered")],
+            path=str(path),
+        )
+        categories, regions = mods["embed"].labels_for(page)
+        (media,) = mods["embed"].load_medias([page], {}, "siglip").values()
+        assert media["categories"] == categories == ["src/a", "src/b"]
+        assert media["regions"] == regions
+        # The zero-area mark is a category but not a region: a zero box would be
+        # indistinguishable from a real one.
+        assert [r["label"] for r in regions] == ["src/a"]
+
+    def test_an_unclassed_page_has_an_empty_category(self, mods):
+        page = _page(mods, "src/0002", "src", [("logo", (0, 0, 20, 10), None, "clustered")])
+        assert mods["embed"].labels_for(page) == ([], [])
+
+
+class TestRepairingACellWithoutRebuildingIt:
+    """A page that will not decode costs the cell a vector, not a row.
+
+    ``build_cell`` writes every media it loaded, so one undecodable PNG leaves a
+    media with an empty ``embeddings`` and ``verify`` reporting ``MISSING 1
+    vector(s)`` for as long as that cell exists.  Rebuilding to obtain the one
+    vector costs the whole tier -- 11 h of SIFT over 50,000 pages -- because
+    ``build_cell`` is all-or-nothing and ``embed_missing`` is not.
+
+    The real case: ``ucsf/qkmg0227#0`` was truncated on write during the UCSF
+    pull and decoded to half a page of black; re-rendered from the cached PDF it
+    needed a vector in two tier-``m`` cells that cost 11 h to build.
+    """
+
+    @staticmethod
+    def _cell(mods, monkeypatch, tmp_path, medias, pages):
+        """Point `repair` at one fake siglip cell and record what it writes."""
+        dumped: dict[str, dict] = {}
+
+        class _IO:
+            @staticmethod
+            def load_medias(path):
+                return medias
+
+            @staticmethod
+            def dump_medias(m, path):
+                dumped[Path(path).name] = {k: dict(v) for k, v in m.items()}
+                return 1
+
+        cell = tmp_path / "docmarks_s__siglip.pkl"
+        cell.write_bytes(b"not read: load_medias is faked")
+        monkeypatch.setattr(mods["embed"], "_cells_io", lambda: _IO)
+        monkeypatch.setattr(mods["embed"], "EMBEDDERS", {"siglip": {}})
+        monkeypatch.setattr(mods["embed"].cfg, "TIER_ORDER", ["s"])
+        monkeypatch.setattr(mods["embed"], "cell_path", lambda tier, emb: cell)
+        monkeypatch.setattr(mods["embed"], "pages_for_tier", lambda corpus, tier: pages)
+        return dumped
+
+    @staticmethod
+    def _embedder(monkeypatch, *, succeeds=True):
+        """Replace `embed_missing`, recording exactly which medias it was given."""
+        import vtscore.datasets.stages.embedding as emb
+
+        handed: list[set] = []
+
+        def fake(medias, embedder_name="", on_progress=None):
+            handed.append(set(medias))
+            if succeeds:
+                for media in medias.values():
+                    media["embeddings"] = {embedder_name: [0.5, 0.5]}
+
+        monkeypatch.setattr(emb, "embed_missing", fake)
+        return handed
+
+    def _three(self, mods, tmp_path):
+        """Two embedded medias and one without a vector, page 1 the only readable one."""
+        from PIL import Image
+
+        img = tmp_path / "readable.png"
+        Image.new("RGB", (40, 30), "white").save(img)
+        medias = {
+            0: {"origin_name": "ucsf/a#0", "embeddings": {"siglip": [1.0]}, "categories": ["ucsf/x"]},
+            1: {"origin_name": "ucsf/b#0", "embeddings": {}, "categories": ["ucsf/y"]},
+            2: {"origin_name": "ucsf/c#0", "embeddings": {"siglip": [2.0]}, "categories": []},
+        }
+        # The already-embedded pages point at files that do not exist: if repair
+        # ever re-read them the test would fail with OSError, which is the
+        # memory claim stated as a test rather than a comment.
+        pages = [
+            _page(mods, "ucsf/a#0", "ucsf", path=str(tmp_path / "gone-a.png")),
+            _page(mods, "ucsf/b#0", "ucsf", path=str(img)),
+            _page(mods, "ucsf/c#0", "ucsf", path=str(tmp_path / "gone-c.png")),
+        ]
+        return medias, pages
+
+    def test_only_the_media_without_a_vector_is_embedded(self, mods, monkeypatch, tmp_path):
+        medias, pages = self._three(mods, tmp_path)
+        dumped = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        handed = self._embedder(monkeypatch)
+
+        assert mods["embed"].repair(tmp_path, apply=True) == 0
+        assert handed == [{1}], "embed_missing was handed more than the vectorless media"
+        assert dumped["docmarks_s__siglip.pkl"][1]["embeddings"] == {"siglip": [0.5, 0.5]}
+
+    def test_the_neighbours_keep_their_vectors_and_the_repaired_page_keeps_its_labels(
+        self, mods, monkeypatch, tmp_path
+    ):
+        # A repair is not a relabel: it must not touch what a page is called.
+        medias, pages = self._three(mods, tmp_path)
+        dumped = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        self._embedder(monkeypatch)
+
+        mods["embed"].repair(tmp_path, apply=True)
+        written = dumped["docmarks_s__siglip.pkl"]
+        assert written[0]["embeddings"] == {"siglip": [1.0]}
+        assert written[2]["embeddings"] == {"siglip": [2.0]}
+        assert written[1]["categories"] == ["ucsf/y"]
+
+    def test_the_raster_bytes_are_dropped_again_afterwards(self, mods, monkeypatch, tmp_path):
+        # `dump_medias` strips them, but the dict stays live for the rest of the
+        # loop -- holding 50,000 pages of PNG would cost the memory the thin
+        # pickle exists to avoid.
+        medias, pages = self._three(mods, tmp_path)
+        self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        self._embedder(monkeypatch)
+
+        mods["embed"].repair(tmp_path, apply=True)
+        assert all("media_bytes" not in m for m in medias.values())
+
+    def test_a_dry_run_writes_nothing(self, mods, monkeypatch, tmp_path, capsys):
+        medias, pages = self._three(mods, tmp_path)
+        dumped = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        handed = self._embedder(monkeypatch)
+
+        assert mods["embed"].repair(tmp_path, apply=False) == 0
+        assert not dumped and not handed
+        out = capsys.readouterr().out
+        assert "1 without a vector, 1 re-readable" in out
+        assert "dry run" in out
+
+    def test_a_page_missing_from_the_manifest_is_reported_not_raised(self, mods, monkeypatch, tmp_path, capsys):
+        medias, _ = self._three(mods, tmp_path)
+        dumped = self._cell(mods, monkeypatch, tmp_path, medias, [])
+        self._embedder(monkeypatch)
+
+        assert mods["embed"].repair(tmp_path, apply=True) == 1
+        assert not dumped, "a cell nothing could be repaired in was rewritten"
+        assert "not in the manifest" in capsys.readouterr().out
+
+    def test_a_page_that_still_will_not_embed_leaves_the_cell_alone(self, mods, monkeypatch, tmp_path, capsys):
+        # Re-rendering is the repair for the page; if it did not take, the cell
+        # must be left exactly as it was and the exit code must say so.
+        medias, pages = self._three(mods, tmp_path)
+        dumped = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        self._embedder(monkeypatch, succeeds=False)
+
+        assert mods["embed"].repair(tmp_path, apply=True) == 1
+        assert not dumped
+        assert "1 still missing" in capsys.readouterr().out
+
+    def test_a_complete_cell_is_left_untouched(self, mods, monkeypatch, tmp_path, capsys):
+        medias, pages = self._three(mods, tmp_path)
+        medias[1]["embeddings"] = {"siglip": [3.0]}
+        dumped = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        handed = self._embedder(monkeypatch)
+
+        assert mods["embed"].repair(tmp_path, apply=True) == 0
+        assert not dumped and not handed
+        assert "no vector missing" in capsys.readouterr().out
+
+
+class TestAMergeReconcilesDistinctFrom:
+    """A merged-away class must not go on being named as a separation.
+
+    `distinct_from` is the human-readable half of the "must be told apart"
+    ground truth. A merge pops the absorbed class, and every separation already
+    recorded against it dangles -- on the survivor, as a claim to be distinct
+    from itself. Measured on v3: one merge left all 23 classes holding an id
+    that no longer resolved.
+    """
+
+    def _three(self, mods):
+        pages = [
+            _page(mods, "t/a", "t", [("logo", (0, 0, 10, 10), "t/a", "clustered")]),
+            _page(mods, "t/b", "t", [("logo", (0, 0, 10, 10), "t/b", "clustered")]),
+            _page(mods, "t/c", "t", [("logo", (0, 0, 10, 10), "t/c", "clustered")]),
+        ]
+        classes = {
+            "t/a": {"kind": "logo", "n_instances": 5, "page_ids": ["t/a"], "audit": {}},
+            "t/b": {"kind": "logo", "n_instances": 1, "page_ids": ["t/b"], "audit": {}},
+            "t/c": {"kind": "logo", "n_instances": 3, "page_ids": ["t/c"], "audit": {}},
+        }
+        return pages, classes
+
+    def test_a_separation_against_a_merged_class_follows_the_merge(self, mods):
+        pages, classes = self._three(mods)
+        rows = [
+            {"left_class_id": "t/c", "right_class_id": "t/b", "verdict": "different"},
+            {"left_class_id": "t/a", "right_class_id": "t/b", "verdict": "same"},
+        ]
+        mods["audit"].apply_confusable(pages, classes, rows)
+        assert "t/b" not in classes
+        # t/c was separated from the class that got absorbed; it is now
+        # separated from the survivor, and from nothing that does not exist.
+        assert classes["t/c"]["distinct_from"] == ["t/a"]
+
+    def test_the_survivor_is_never_distinct_from_itself(self, mods):
+        pages, classes = self._three(mods)
+        rows = [
+            {"left_class_id": "t/a", "right_class_id": "t/b", "verdict": "different"},
+            {"left_class_id": "t/a", "right_class_id": "t/b", "verdict": "same"},
+        ]
+        mods["audit"].apply_confusable(pages, classes, rows)
+        assert classes["t/a"].get("distinct_from") == []
+
+    def test_every_surviving_entry_resolves(self, mods):
+        pages, classes = self._three(mods)
+        rows = [
+            {"left_class_id": "t/a", "right_class_id": "t/c", "verdict": "different"},
+            {"left_class_id": "t/a", "right_class_id": "t/b", "verdict": "same"},
+        ]
+        mods["audit"].apply_confusable(pages, classes, rows)
+        for cid, meta in classes.items():
+            for other in meta.get("distinct_from") or []:
+                assert other in classes, f"{cid} names {other}, which does not exist"
+                assert other != cid
+
+
 class TestAdjudicationMigration:
     """A pre-#3343 store names pages; the index it meant is recoverable."""
 
@@ -1999,6 +2294,158 @@ class TestSynthesis:
 
 
 # ----------------------------------------------------------------- manifest
+
+
+def _png_bytes(w=60, h=80, seed=0):
+    """A noisy PNG, so truncating it actually costs IDAT rather than padding."""
+    import io
+
+    from PIL import Image
+
+    arr = np.random.default_rng(seed).integers(0, 255, (h, w, 3), dtype=np.uint8)
+    buf = io.BytesIO()
+    Image.fromarray(arr).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+class _ShortWriter:
+    """An image whose first *fails* saves land truncated, like the write in #3847.
+
+    `size` is the size the caller believes it wrote; the bytes are a real PNG cut
+    partway through, which is what a short write actually leaves behind.
+    """
+
+    def __init__(self, payload, *, fails=1, size=(60, 80)):
+        self.size = size
+        self._payload = payload
+        self._fails = fails
+        self.saves = 0
+
+    def save(self, path, **kwargs):
+        self.saves += 1
+        data = self._payload[: len(self._payload) // 2] if self.saves <= self._fails else self._payload
+        Path(path).write_bytes(data)
+
+
+class TestAPageThatRendersShortIsNeverPublished:
+    """A render that fails is handled; a render that *succeeds* short was not.
+
+    `ucsf/qkmg0227#0` was written truncated during the 2026-09-01 pull -- 49%
+    image, 51% black filler -- and was invisible for thirteen days, surfacing as
+    an *embedder* error 11 h into a tier-`m` cell it had already cost a vector.
+    Nothing between the render and the embed read the bytes back. (#3847)
+    """
+
+    def test_a_good_save_lands_and_leaves_no_partial_behind(self, mods, tmp_path):
+        from PIL import Image
+
+        dest = tmp_path / "page.png"
+        out = mods["common"].save_verified(Image.new("RGB", (60, 80), "white"), dest)
+        assert out == dest and dest.exists()
+        assert not list(tmp_path.glob("*.partial.*")), "the temp file outlived the write"
+        with Image.open(dest) as im:
+            im.load()
+            assert im.size == (60, 80)
+
+    def test_a_short_write_is_retried_from_the_image_still_in_hand(self, mods, tmp_path):
+        # The PDF behind the bad page was intact; only the PNG write came up
+        # short, so writing it again is the entire repair and costs one page.
+        from PIL import Image
+
+        dest = tmp_path / "page.png"
+        writer = _ShortWriter(_png_bytes(), fails=1)
+        mods["common"].save_verified(writer, dest)
+        assert writer.saves == 2, "a short write was not retried"
+        with Image.open(dest) as im:
+            im.load()
+
+    def test_a_write_that_stays_short_raises_and_publishes_nothing(self, mods, tmp_path):
+        dest = tmp_path / "page.png"
+        writer = _ShortWriter(_png_bytes(), fails=99)
+        with pytest.raises(mods["common"].UndecodableRender):
+            mods["common"].save_verified(writer, dest)
+        assert not dest.exists(), "a file that will not decode was published"
+        assert not list(tmp_path.glob("*.partial.*"))
+
+    def test_a_failed_write_does_not_destroy_the_good_file_already_there(self, mods, tmp_path):
+        # Write-then-publish, not write-then-repair: the previous page survives.
+        from PIL import Image
+
+        dest = tmp_path / "page.png"
+        Image.new("RGB", (60, 80), "red").save(dest)
+        before = dest.read_bytes()
+        with pytest.raises(mods["common"].UndecodableRender):
+            mods["common"].save_verified(_ShortWriter(_png_bytes(), fails=99), dest)
+        assert dest.read_bytes() == before
+
+    def test_a_file_of_the_wrong_size_is_rejected_even_though_it_decodes(self, mods, tmp_path):
+        # Decodability alone is not the property; "what I wrote is what landed" is.
+        dest = tmp_path / "page.png"
+        writer = _ShortWriter(_png_bytes(w=10, h=10, seed=3), fails=0, size=(60, 80))
+        with pytest.raises(mods["common"].UndecodableRender):
+            mods["common"].save_verified(writer, dest)
+        assert not dest.exists()
+
+    def test_the_renderer_writes_through_the_checked_path(self, mods):
+        # The guard is worth nothing if the one site that produced the bad page
+        # still calls `Image.save` directly.
+        src = Path(mods["ucsf"].__file__).read_text(encoding="utf-8")
+        assert "_common.save_verified(image, image_path)" in src
+        assert "image.save(image_path)" not in src
+
+
+class TestScanningForPagesAlreadyOnDisk:
+    """`save_verified` stops the next one; the scan finds the ones already there."""
+
+    @staticmethod
+    def _corpus(mods, tmp_path, *, truncate=False):
+        from PIL import Image
+
+        images = tmp_path / "images"
+        images.mkdir()
+        pages = []
+        for i, tier in enumerate(("s", "m")):
+            path = images / f"p{i}.png"
+            data = _png_bytes(seed=i + 1)
+            path.write_bytes(data[: len(data) // 2] if (truncate and tier == "m") else data)
+            page = _page(mods, f"ucsf/p{i}#0", "ucsf", path=str(path))
+            page.meta["tier"] = tier
+            pages.append(page)
+        # A page PIL can open normally, to prove the scan is not just failing everything.
+        assert Image.open(pages[0].path)
+        mods["common"].write_manifest(pages, tmp_path / "corpus.jsonl")
+        return tmp_path
+
+    def test_a_clean_corpus_passes(self, mods, tmp_path, capsys):
+        corpus = self._corpus(mods, tmp_path)
+        assert mods["build"].scan(corpus) == 0
+        assert "2 page(s); 0 undecodable" in capsys.readouterr().out
+
+    def test_a_truncated_page_is_named_and_the_exit_code_says_so(self, mods, tmp_path, capsys):
+        corpus = self._corpus(mods, tmp_path, truncate=True)
+        assert mods["build"].scan(corpus) == 1
+        out = capsys.readouterr().out
+        assert "1 undecodable" in out and "ucsf/p1#0" in out
+
+    def test_it_stays_strict_even_when_truncated_loading_is_globally_on(self, mods, tmp_path, monkeypatch):
+        # The whole mechanism.  Under a permissive decode a truncated PNG loads
+        # to the right size with the missing rows filled in, so the scan would
+        # pass on exactly the file it is looking for.
+        from PIL import ImageFile
+
+        monkeypatch.setattr(ImageFile, "LOAD_TRUNCATED_IMAGES", True)
+        corpus = self._corpus(mods, tmp_path, truncate=True)
+        assert mods["build"].scan(corpus) == 1
+        assert ImageFile.LOAD_TRUNCATED_IMAGES is True, "the global flag was not restored"
+
+    def test_a_tier_filter_only_scans_that_tier(self, mods, tmp_path, capsys):
+        corpus = self._corpus(mods, tmp_path, truncate=True)
+        assert mods["build"].scan(corpus, {"s"}) == 0
+        assert "1 page(s); 0 undecodable" in capsys.readouterr().out
+
+    def test_a_missing_manifest_is_reported_rather_than_traced(self, mods, tmp_path, capsys):
+        assert mods["build"].scan(tmp_path / "nowhere") == 1
+        assert "no manifest" in capsys.readouterr().out
 
 
 class TestManifest:

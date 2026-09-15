@@ -7,6 +7,14 @@
     <div class="form-group">
       <label class="form-label" [for]="'pif-' + field.key"
         [title]="field.description || field.label || field.key">
+        @if (field.field_type === 'checkbox') {
+          <vt-plugin-checkbox
+            [inputId]="'pif-' + field.key"
+            [value]="values[field.key]"
+            (valueChange)="values[field.key] = $event"
+            [title]="field.description || field.label || field.key"
+          ></vt-plugin-checkbox>
+        }
         {{ field.label || field.key }}
         @if (field.required) {
           <span class="required">*</span>
@@ -119,15 +127,7 @@
           [attr.max]="field.max || null"
           [attr.step]="field.step || null"
         />
-      } @else if (field.field_type === 'checkbox') {
-        <input
-          [id]="'pif-' + field.key"
-          type="checkbox"
-          [checked]="values[field.key] === 'true'"
-          (change)="values[field.key] = $any($event.target).checked ? 'true' : 'false'"
-          [title]="field.description || field.label || field.key"
-        />
-      } @else {
+      } @else if (field.field_type !== 'checkbox') {
         <input
           [id]="'pif-' + field.key"
           type="text"

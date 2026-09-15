@@ -37,6 +37,7 @@ import {
 } from '../../../utils/external-url';
 import type { ExporterEntry } from '../../../generated/api-client/models/exporter-entry';
 import type { LabeledElement } from '../../../generated/api-client/models/labeled-element';
+import { PluginCheckboxComponent } from '../../plugin-checkbox/plugin-checkbox.component';
 
 export interface ColumnDef {
   key: string;
@@ -49,14 +50,7 @@ export interface ColumnDef {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-export-modal',
   standalone: true,
-  imports: [
-    CommonModule,
-    FormsModule,
-    ModalComponent,
-    FieldHintIconComponent,
-    ClipboardCopyComponent,
-    IconComponent,
-  ],
+  imports: [CommonModule, FormsModule, ModalComponent, FieldHintIconComponent, ClipboardCopyComponent, IconComponent, PluginCheckboxComponent],
   templateUrl: './export-modal.component.html',
   styleUrl: './export-modal.component.scss',
 })

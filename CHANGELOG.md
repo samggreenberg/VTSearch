@@ -15,6 +15,23 @@ not list every commit. Use `git log` for the full history.
 
 ## Unreleased
 
+### Added
+
+- **Stall diagnostics, on by default** (#3853). A rare 5-20 s freeze during
+  labeling in which every in-flight request finishes at once could not be
+  told apart from a slow endpoint by the request timer alone. The app now runs
+  a heartbeat watchdog that, when the interpreter cannot run it for
+  `VTSEARCH_STALL_WATCHDOG_MS` (default 1 s), logs which thread burned the
+  wall clock (or that none did, pointing at memory pressure) and has
+  `faulthandler` dump every thread's frames from inside the stall; logs any GC
+  pause over `VTSEARCH_GC_WARN_MS`; and logs a phase breakdown of the
+  learned-sort retrain, the per-vote labelset rewrite, the labeling-status
+  replay and a vote rehydrate - plus waits on the locks they share - when
+  one exceeds `VTSEARCH_SLOW_PHASE_MS`. `VTSEARCH_LOG_FILE` appends the log
+  (and the dump) to a file, and the SLURM launcher sets it under
+  `data/logs/`, so the pane scrolling away no longer loses the evidence. See
+  `docs/DEPLOYMENT.md` → "Diagnosing a stall".
+
 ### Changed
 
 - **The Smart indicator no longer flaps on a category that has plateaued**
@@ -60,6 +77,37 @@ not list every commit. Use `git log` for the full history.
   Pacing only: nothing about what is loaded or stored changes.
 
 ### Fixed
+
+- **A plugin's `checkbox` field now renders as a checkbox everywhere, not as a
+  text box you were invited to type `true` into** (issue #3851). The SPA has
+  ten near-duplicate blocks that pick a widget from a `PluginField`'s
+  `field_type`, one per surface that shows plugin configuration. When
+  `"checkbox"` was added to `FieldType`, only two of them grew a branch for it
+  - so on the other eight (results exporters, settings importers and
+  exporters, label importers, the New Model form, Auto-Find, the autodetect
+  results modal, the source-specs picker) a checkbox field fell through to the
+  generic text input. Every checkbox field shipped in this repo happens to
+  belong to a dataset importer, which is rendered by one of the two surfaces
+  that worked, so the bug was only reachable from a third-party plugin. All
+  ten now delegate to one shared `<vt-plugin-checkbox>`, which draws the box
+  inside the field's label (so clicking the label toggles it) and reads
+  `default` the way `vtscore.plugins.parse_checkbox` does - case-insensitively,
+  so a Python-style `default="False"` no longer renders as ticked.
+
+- **Docker images now ship the `toponymy` signpost labeler** (issue #3852). A
+  Docker build never runs `scripts/install.sh`, and that script is the only
+  place `toponymy` was installed - it cannot be declared in `pyproject.toml`
+  or a requirements file, because its `transformers<5.0.0` pin would drag the
+  app's transformers stack backwards and pip rejects `--no-deps` inside a
+  requirements file. So every image built from `docker/` shipped without it,
+  and VTSBrowse logged `VTSBrowse signposts are disabled: the required
+  'toponymy' library is not importable` and rendered every map unlettered.
+  Each Dockerfile now carries a dedicated `--no-deps` install step mirroring
+  the script, and the two slim requirements files (`labbench.txt`,
+  `image-embedders.txt`) declare toponymy's real dependencies on its behalf,
+  since those images install VTSearch itself with `--no-deps -e .`. A new meta
+  test fails the suite if an image drops the step, installs toponymy with its
+  deps, or pins a version the other install paths do not.
 
 - **A dataset imported with some of its vectors already computed no longer
   fails every Browse, Train and text sort afterwards** (issue #3798). An

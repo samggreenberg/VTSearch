@@ -20,12 +20,12 @@
         <div class="form-group">
           <label class="form-label" [for]="'field-' + field.key"
             [title]="field.description || field.label || field.key">
-            <input
-              [id]="'field-' + field.key"
-              type="checkbox"
-              [checked]="formValues[field.key] === true || formValues[field.key] === 'true'"
-              (change)="formValues[field.key] = $any($event.target).checked ? 'true' : 'false'"
-            />
+            <vt-plugin-checkbox
+              [inputId]="'field-' + field.key"
+              [value]="formValues[field.key]"
+              (valueChange)="formValues[field.key] = $event"
+              [title]="field.description || field.label || field.key"
+            ></vt-plugin-checkbox>
             {{ field.label || field.key }}
             @if (field.hint) {
               <vt-field-hint-icon [hint]="field.hint"></vt-field-hint-icon>
