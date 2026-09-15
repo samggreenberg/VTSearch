@@ -39,6 +39,7 @@ import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any
 
@@ -64,7 +65,11 @@ class Client:
 
     def call(self, method: str, path: str, body: Any = None, *, vote_index: int, tag: str) -> dict[str, Any]:
         data = json.dumps(body).encode() if body is not None else None
-        req = urllib.request.Request(self.base_url + path, data=data, method=method, headers=self.headers)  # noqa: S310
+        # Detector names carry spaces and parentheses ("knife incl butter
+        # knives (confirm the box)"); the SPA percent-encodes them and
+        # urllib refuses a raw space, so quote the path the same way.
+        url = self.base_url + urllib.parse.quote(path, safe="/?=&%")
+        req = urllib.request.Request(url, data=data, method=method, headers=self.headers)  # noqa: S310
         t0 = time.time()
         status = 0
         payload: Any = None
@@ -149,11 +154,24 @@ def _resolve_dataset(base_url: str, spec: str) -> str:
     return loaded[0]["id"]
 
 
-def _ensure_detector(base_url: str, dataset_id: str, detector_id: str | None, create: str | None) -> str:
+def _ensure_detector(
+    base_url: str,
+    dataset_id: str,
+    detector_id: str | None,
+    create: str | None,
+    embedder_type: str = "patch_semantic",
+    text_query: str = "",
+) -> str:
     """Return a loaded detector id, registering *create* and loading it if asked."""
     probe = Client(base_url, dataset_id, "", None)
     if create:
-        body = {"name": create, "media_type": "image", "trainable": True, "embedder_type": "patch_semantic"}
+        body = {
+            "name": create,
+            "media_type": "image",
+            "trainable": True,
+            "embedder_type": embedder_type,
+            "text_query": text_query,
+        }
         made = probe.call("POST", "/api/detectors/registry", body, vote_index=-1, tag="setup")
         if made["status"] == 201:
             detector_id = ((made["payload"] or {}).get("detector") or {}).get("id")
@@ -261,7 +279,13 @@ def main() -> None:
     ap.add_argument("--base-url", default="http://localhost:5000")
     ap.add_argument("--dataset-id", default="auto", help="registry id, or 'auto' for the first loaded dataset")
     ap.add_argument("--detector-id", default=None, help="registry id (default: the first loaded detector)")
-    ap.add_argument("--create-detector", default=None, help="register (image, patch_semantic) and load this detector")
+    ap.add_argument("--create-detector", default=None, help="register (image, --embedder-type) and load this detector")
+    ap.add_argument(
+        "--embedder-type",
+        default="patch_semantic",
+        help="embedder type for --create-detector: semantic (the VG slates as labeled) or patch_semantic",
+    )
+    ap.add_argument("--text-query", default="", help="text query for --create-detector, as the SPA sets it")
     ap.add_argument("--votes", type=int, default=200)
     ap.add_argument("--cadence", type=float, default=0.0, help="seconds of think time between votes (after the chain)")
     ap.add_argument("--good-frac", type=float, default=0.5)
@@ -274,7 +298,9 @@ def main() -> None:
     args = ap.parse_args()
 
     dataset_id = _resolve_dataset(args.base_url, args.dataset_id)
-    detector_id = _ensure_detector(args.base_url, dataset_id, args.detector_id, args.create_detector)
+    detector_id = _ensure_detector(
+        args.base_url, dataset_id, args.detector_id, args.create_detector, args.embedder_type, args.text_query
+    )
     client = Client(args.base_url, dataset_id, detector_id, args.out)
     rng = random.Random(args.seed)
     ids = _resolve_ids(client, args.ids)

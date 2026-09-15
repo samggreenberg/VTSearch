@@ -64,6 +64,27 @@ http://localhost:<port> --dataset-id auto --detector-id <id> --votes 400
 action that truncates the labeling-status cache and makes its worker replay
 the history under `_progress_lock`.
 
+**Match the shape the reviewer labels.** The VG slates are ~500-image
+`server_folder` imports embedded with SigLIP and labeled through a plain
+*semantic* text-query detector — no patch grids, no region boxes. To
+reproduce that against a fresh instance, import the slate folder over the
+API and let the driver register the detector the way the SPA does:
+`drive_labeling.py --create-detector "knife (repro)" --embedder-type semantic
+--text-query knife --votes 600 --cadence 1.0`. `--region` and the default
+`patch_semantic` type exercise a different code path (the region-vote
+retrain), which is what the offline run below measures.
+
+**Read the app log even when there is no `stall:` line.** The watchdog only
+fires when the *interpreter* cannot run. A vote held by its own `fsync` to a
+slow filesystem, or a request holding `_state_lock` across a `stat()` of the
+detector file, never trips it; those show up only as `slow phase:
+label_sync … write=NNNms`, `lock wait: _state_lock/…` and the requests
+queued behind them, which `analyze_app_log.py` now lists after the stall
+windows. The 2026-09-15 run on the GRID (issue thread) found exactly that
+shape in the reviewer's own trace: every slow vote but one was slow *alone*,
+and the one that froze everything did so through the lock every request
+takes in `get_context()`.
+
 ## Offline (this kit's own reproduction)
 
 ```bash

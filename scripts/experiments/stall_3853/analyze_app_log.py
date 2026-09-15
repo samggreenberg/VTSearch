@@ -164,10 +164,30 @@ def main() -> None:
         else:
             print("  (no thread dump found before this stall line)")
 
+    # A stall that is I/O rather than the interpreter - a vote's fsync to a
+    # slow filesystem, a stat under ``_state_lock`` - never trips the
+    # watchdog, so it shows only as slow phases, lock waits and the requests
+    # queued behind them.  List those too, so "no stall lines" is not read as
+    # "nothing happened".
+    waits = [e for e in events if e["kind"] in ("phase", "lock")]
+    if waits:
+        print(f"\nslow phases and lock waits ({len(waits)}), slowest first:")
+        for e in sorted(waits, key=lambda e: _duration_ms(e["msg"]), reverse=True)[:15]:
+            print(f"  {datetime.fromtimestamp(e['t'], tz=timezone.utc).strftime('%H:%M:%S')}Z  {e['msg'][:170]}")
+
     if args.all and requests:
         print("\nall slow requests:")
         for e in requests:
             print(f"  {datetime.fromtimestamp(e['t'], tz=timezone.utc).strftime('%H:%M:%S')}Z  {e['msg']}")
+
+
+_MS = re.compile(r"(\d+)ms")
+
+
+def _duration_ms(msg: str) -> int:
+    """The first ``NNNms`` in a phase / lock-wait line (its total)."""
+    m = _MS.search(msg)
+    return int(m.group(1)) if m else 0
 
 
 if __name__ == "__main__":
