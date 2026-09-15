@@ -53,6 +53,7 @@ import { apiErrorMessage } from '../../../utils/api-error';
 import { DynamicFieldOptions } from '../../../utils/dynamic-field-options';
 import { sortRowsByColumn } from '../../../utils/sort-rows';
 import { demoSortValue } from '../dataset-importer-modal/pickers/shared/demo-sort';
+import { PluginCheckboxComponent } from '../../plugin-checkbox/plugin-checkbox.component';
 
 type ModalView = 'main' | 'media-picker';
 type ModalTab = 'blank' | 'trained';
@@ -90,7 +91,7 @@ interface MediaExampleItem {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-new-detector-modal',
   standalone: true,
-  imports: [NgTemplateOutlet, FormsModule, ModalComponent, IconComponent, MediaCropModalComponent, DropZoneComponent, SourcePickerComponent, PluginImportFormComponent, FieldHintIconComponent, ProgressBarComponent],
+  imports: [NgTemplateOutlet, FormsModule, ModalComponent, IconComponent, MediaCropModalComponent, DropZoneComponent, SourcePickerComponent, PluginImportFormComponent, FieldHintIconComponent, ProgressBarComponent, PluginCheckboxComponent],
   templateUrl: './new-detector-modal.component.html',
   styleUrl: './new-detector-modal.component.scss',
 })

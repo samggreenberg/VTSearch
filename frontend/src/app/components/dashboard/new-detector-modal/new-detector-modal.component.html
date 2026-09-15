@@ -193,6 +193,14 @@
                 <div class="form-group">
                   <label class="form-label" [for]="'nmm-' + field.key"
                     [title]="field.description || field.label || field.key">
+                    @if (field.field_type === 'checkbox') {
+                      <vt-plugin-checkbox
+                        [inputId]="'nmm-' + field.key"
+                        [value]="labelImporterValues[field.key]"
+                        (valueChange)="labelImporterValues[field.key] = $event"
+                        [title]="field.description || field.label || field.key"
+                      ></vt-plugin-checkbox>
+                    }
                     {{ field.label || field.key }}
                     @if (field.required) {
                       <span class="required">*</span>
@@ -305,7 +313,7 @@
                       [attr.max]="field.max || null"
                       [attr.step]="field.step || null"
                     />
-                  } @else {
+                  } @else if (field.field_type !== 'checkbox') {
                     <input
                       [id]="'nmm-' + field.key"
                       type="text"

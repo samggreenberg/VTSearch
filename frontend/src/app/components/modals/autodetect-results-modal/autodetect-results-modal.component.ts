@@ -17,12 +17,13 @@ import {
 import type { ExporterEntry } from '../../../generated/api-client/models/exporter-entry';
 import { IconComponent } from '../../icon/icon.component';
 import { openExternalUrl, safeExternalUrl } from '../../../utils/external-url';
+import { PluginCheckboxComponent } from '../../plugin-checkbox/plugin-checkbox.component';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-autodetect-results-modal',
   standalone: true,
-  imports: [FormsModule, ModalComponent, ClipboardCopyComponent, IconComponent],
+  imports: [FormsModule, ModalComponent, ClipboardCopyComponent, IconComponent, PluginCheckboxComponent],
   templateUrl: './autodetect-results-modal.component.html',
   styleUrl: './autodetect-results-modal.component.scss',
 })

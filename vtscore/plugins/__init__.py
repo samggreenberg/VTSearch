@@ -128,9 +128,12 @@ class PluginField:
       :attr:`dynamic_options` set, in which case options are fetched at
       runtime from the plugin's ``get_field_options`` method).
     - ``"server_path"`` – File-browser picker for server filesystem paths.
-    - ``"checkbox"`` – Boolean tick-box.  ``default`` should be ``"true"`` or
-      ``"false"``; values arrive at :meth:`run` as plain strings (or already
-      coerced bools) and should be parsed via ``str(value).lower() == "true"``.
+    - ``"checkbox"`` – Boolean tick-box rendered beside the field's label.
+      ``default`` should be ``"true"`` or ``"false"`` (either case; a
+      Python-style ``"False"`` reads the way its author meant it).  Values
+      arrive at :meth:`run` as plain strings or as already-coerced bools, so
+      parse them with :func:`parse_checkbox` rather than by hand — it is the
+      one reading the GUI, the CLI and the frontend all share.
 
     Dynamic option fields
     ---------------------

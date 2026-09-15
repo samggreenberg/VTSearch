@@ -26,6 +26,7 @@ import {
 } from '../../../../../models/api.models';
 import { ImportDefaultsService } from '../shared/import-defaults.service';
 import { availableConvertersFor, composeEmbedders, mediaTypeLabels, mediaTypeOptionIcons, mediaTypeOptionLabels, toFolderName, toTypeId } from '../shared/media-type.util';
+import { PluginCheckboxComponent } from '../../../../plugin-checkbox/plugin-checkbox.component';
 
 /** How long the form settles before asking the importer to name the dataset.
  *  ``default_display_name`` may resolve a label from a remote service, so
@@ -46,7 +47,7 @@ const SUGGESTED_NAME_DEBOUNCE_MS = 250;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-generic-form-picker',
   standalone: true,
-  imports: [FormsModule, ImportAdvancedComponent, ImportConfigComponent, ClipperChooserComponent, FieldHintIconComponent, FileBrowserComponent],
+  imports: [FormsModule, ImportAdvancedComponent, ImportConfigComponent, ClipperChooserComponent, FieldHintIconComponent, FileBrowserComponent, PluginCheckboxComponent],
   templateUrl: './generic-form-picker.component.html',
   styleUrl: './generic-form-picker.component.scss',
 })
