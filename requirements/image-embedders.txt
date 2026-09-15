@@ -102,3 +102,24 @@ einops
 open_clip_torch
 timm
 ftfy
+
+# ── VTSBrowse signpost naming (toponymy) ─────────────────────────────
+# `toponymy` letters the Browse map (vtscore.projection.signpost_build).
+# It is NOT listed here: its `transformers<5.0.0` pin would drag this file's
+# `transformers>=4.49.0` floor backwards, and the pin is empirically
+# unnecessary for our usage — so both Dockerfiles install it in a dedicated
+# `--no-deps` step, exactly as scripts/install.sh does for a host install
+# (see docs/plans/vtsbrowse-toponymy.md). A requirements file cannot express
+# that: pip rejects `--no-deps` inside one.
+#
+# What DOES belong here are toponymy's real dependencies, declared on its
+# behalf because the `--no-deps` install skips them and these images install
+# the package itself with `--no-deps -e .` (so pyproject.toml's declarations
+# never reach them either). Only the ones with no carrier are listed: jinja2
+# arrives with flask, numba with fast_hdbscan, and httpx with transformers'
+# huggingface_hub (tokenizers is already declared above). apricot-select
+# ships a legacy setup.py sdist, so it is installed alongside toponymy in
+# that same dedicated step.
+fast_hdbscan
+vectorizers
+tenacity
