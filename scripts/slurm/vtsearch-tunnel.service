@@ -1,0 +1,49 @@
+# Hold the VTSearch tunnel open without a terminal, on an always-on relay box.
+#
+# This is a systemd *user* unit -- no root needed. Install it as:
+#
+#     mkdir -p ~/.config/systemd/user
+#     cp scripts/slurm/vtsearch-tunnel.service ~/.config/systemd/user/
+#     # edit Environment= below, then:
+#     systemctl --user daemon-reload
+#     systemctl --user enable --now vtsearch-tunnel
+#     loginctl enable-linger "$USER"   # <-- runs it with nobody logged in
+#
+# That last line is the one people miss: without lingering, a user unit stops
+# when your last session ends, which on an unattended box is exactly when you
+# needed it to keep running.
+#
+# WHY Restart= RATHER THAN autossh. autossh re-dials a connection whose target
+# it already resolved -- but the GPU node is re-picked by SLURM on every
+# allocation, so a reconnect to yesterday's node forwards to nothing and looks
+# healthy while doing it. vtsearch-tunnel re-runs `squeue` on each start, so
+# restarting the *script* rediscovers node and port; restarting the *ssh* would
+# not. Hence plain systemd supervision, and no autossh dependency.
+
+[Unit]
+Description=VTSearch SSH tunnel to the cluster GPU node
+After=network-online.target
+Wants=network-online.target
+# A tunnel that cannot re-resolve its target is worse than one that is down, so
+# never let systemd give up and leave a dead unit behind. (This key lives in
+# [Unit], not [Service] -- systemd warns and ignores it in the wrong section.)
+StartLimitIntervalSec=0
+
+[Service]
+Type=exec
+
+# Bind the forwarded port so other devices can reach it through this machine.
+# Use a private-mesh address, not 0.0.0.0 -- see the note in vtsearch-tunnel.sh.
+Environment=VTS_BIND=
+# Environment=CLUSTER_HOST=cluster
+
+ExecStart=%h/.local/bin/vtsearch-tunnel --no-shell
+
+# The script exits non-zero when no VTSearch job is RUNNING, which is a normal
+# state between allocations rather than a fault. Restart unconditionally and
+# back off enough that a long gap costs a poll every half minute, not a spin.
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=default.target
