@@ -293,10 +293,20 @@ def _drain_pending(only: Path | None) -> None:
         if item is None:
             return
         path, pend = item
+        # Keep the filesystem's latency visible now that it no longer holds
+        # a request: one WARNING per slow landing, with how long the text sat
+        # queued before the writer got to it.
+        from vtscore.concurrency.stalls import PhaseClock
+
+        clock = PhaseClock(
+            "detector_write", file=path.name, queued_ms=round((time.monotonic() - pend.queued_at) * 1000)
+        )
         try:
             _atomic_write_text(path, pend.text)
+            clock.mark("write")
             if pend.after is not None:
                 pend.after()
+            clock.finish(bytes=len(pend.text))
         except Exception as exc:  # noqa: BLE001 - reported on the next queue call
             log.exception("queued detector write failed for %s", path)
             with _queue_lock:
