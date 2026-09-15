@@ -7,7 +7,8 @@ scripts make the day-to-day loop a two-command affair:
 | Script | Runs on | What it does |
 |--------|---------|--------------|
 | [`vtsearch-slurm.sh`](vtsearch-slurm.sh) | the **cluster** (a login node) | Allocates a GPU compute node with `srun`, activates the venv, and runs `app.py` on it. Prints the node it landed on. Holds the allocation until you quit. |
-| [`vtsearch-tunnel.sh`](vtsearch-tunnel.sh) | your **local machine** | Finds your running VTSearch job, SSH-forwards your local port to that compute node (auto-discovering the node + per-user port), and drops you into the project dir. |
+| [`vtsearch-tunnel.sh`](vtsearch-tunnel.sh) | your **local machine** | Finds your running VTSearch job, SSH-forwards your local port to that compute node (auto-discovering the node + per-user port), and drops you into the project dir. `VTS_BIND=<addr>` serves the port to another device; `--no-shell` holds the tunnel open without a login shell. |
+| [`vtsearch-tunnel.service`](vtsearch-tunnel.service) | your **local machine** | systemd *user* unit that keeps the tunnel up with no terminal attached, for an always-on box that holds the VPN on other devices' behalf. |
 
 Both are parameterized by environment variables (no hard-coded usernames,
 hostnames, or paths) so they should work on most SLURM clusters with a shared

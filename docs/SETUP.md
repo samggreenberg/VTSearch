@@ -597,6 +597,53 @@ inline, e.g. `VTS_MEM=64G VTS_GPU=a100 vtsearch`:
 | `CLUSTER_HOST` | `cluster` | SSH host alias for the cluster login node |
 | `VTS_DIR` | `/exp/$USER/projects/VTSearch` | Project dir to drop into on the login node |
 | `VTS_PORT` | (cluster-computed) | Forwarded port; defaults to the same per-user value the launcher binds. Set it only if you overrode `VTS_PORT` on the cluster too |
+| `VTS_BIND` | (unset — loopback only) | Address the forwarded port is bound to *locally*. Unset, only this machine can reach it. Set it to serve the app to another device through this one — see below |
+
+It also takes one flag, `--no-shell`, which holds the forward open and nothing
+else (`ssh -N`, no TTY, no login shell) instead of dropping you into the login
+node. That is the mode a service unit wants; the interactive default is the mode
+a human wants.
+
+#### Relaying the app to another device
+
+If the machine running the tunnel is a always-on box that holds the VPN — and
+the device you actually browse from is a different one — the two knobs above are
+what bridge them. `VTS_BIND` binds the forwarded port to an address that other
+device can reach:
+
+```bash
+VTS_BIND=$(tailscale ip -4) vtsearch-tunnel
+# → ssh -L 100.x.y.z:PORT:NODE:PORT cluster
+# → browse http://100.x.y.z:PORT from any device on the same private mesh
+```
+
+**Bind to that specific address, not `0.0.0.0`.** The wildcard also serves the
+app to everything else on the local network, which on a home or campus Wi-Fi is
+a larger audience than intended.
+
+To keep the tunnel up without a terminal, install
+[`scripts/slurm/vtsearch-tunnel.service`](../scripts/slurm/vtsearch-tunnel.service)
+as a systemd **user** unit — it runs the script with `--no-shell` under
+`Restart=always`:
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp scripts/slurm/vtsearch-tunnel.service ~/.config/systemd/user/
+# set Environment=VTS_BIND=... in the copy, then:
+systemctl --user daemon-reload
+systemctl --user enable --now vtsearch-tunnel
+loginctl enable-linger "$USER"   # keeps it running with nobody logged in
+```
+
+That last line is the one that gets missed: without lingering, a user unit stops
+when your last session ends — precisely when an unattended box needed it to keep
+going.
+
+The unit supervises the **script**, not a bare `ssh`, and that distinction
+matters. SLURM re-picks the GPU node on every allocation, so a reconnect aimed
+at the previous node forwards to nothing while still looking healthy. Re-running
+the script re-queries `squeue` and rediscovers node and port, which is also why
+no `autossh` is needed here.
 
 #### Which GPU type gets requested
 
