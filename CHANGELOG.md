@@ -94,6 +94,21 @@ not list every commit. Use `git log` for the full history.
   `default` the way `vtscore.plugins.parse_checkbox` does - case-insensitively,
   so a Python-style `default="False"` no longer renders as ticked.
 
+- **Docker images now ship the `toponymy` signpost labeler** (issue #3852). A
+  Docker build never runs `scripts/install.sh`, and that script is the only
+  place `toponymy` was installed - it cannot be declared in `pyproject.toml`
+  or a requirements file, because its `transformers<5.0.0` pin would drag the
+  app's transformers stack backwards and pip rejects `--no-deps` inside a
+  requirements file. So every image built from `docker/` shipped without it,
+  and VTSBrowse logged `VTSBrowse signposts are disabled: the required
+  'toponymy' library is not importable` and rendered every map unlettered.
+  Each Dockerfile now carries a dedicated `--no-deps` install step mirroring
+  the script, and the two slim requirements files (`labbench.txt`,
+  `image-embedders.txt`) declare toponymy's real dependencies on its behalf,
+  since those images install VTSearch itself with `--no-deps -e .`. A new meta
+  test fails the suite if an image drops the step, installs toponymy with its
+  deps, or pins a version the other install paths do not.
+
 - **A dataset imported with some of its vectors already computed no longer
   fails every Browse, Train and text sort afterwards** (issue #3798). An
   importer plugin that ships pre-computed vectors for part of a dataset

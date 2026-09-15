@@ -1267,6 +1267,33 @@ cd frontend && npm install && npm run build:prod
 bash scripts/install.sh
 ```
 
+### Browse maps render unlettered ("VTSBrowse signposts are disabled")
+
+**Symptom**: the Browse canvas draws the map but never names any region, and
+the server log carries a one-time
+
+```
+VTSBrowse signposts are disabled: the required 'toponymy' library is not importable.
+```
+
+**Cause**: `toponymy` is installed in a dedicated `--no-deps` step rather than
+declared as an ordinary dependency (its `transformers<5.0.0` pin would
+downgrade the transformers stack every embedder sits on). Any environment that
+skipped that step has no labeler.
+
+**Fix**: on a host install, re-run the installer, which performs the step (and
+installs `apricot-select` alongside it):
+
+```bash
+bash scripts/install.sh
+```
+
+In a container, rebuild the image from a current checkout: every Dockerfile
+under `docker/` carries the step as of issue #3852. Images built before that
+fix are missing it, and `pip install toponymy` inside a running container is a
+workaround rather than a repair -- pass `--no-deps` if you try it, or pip will
+downgrade transformers and break the embedders.
+
 ### `install.sh` installs CPU torch on a machine that has a GPU
 
 **Symptom**: On a GPU host (e.g. an AWS `g4dn` with a Tesla T4), `scripts/install.sh`
