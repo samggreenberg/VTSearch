@@ -135,4 +135,6 @@ class TestServiceUnit:
         assert "Restart=always" in text
         # Between allocations there is legitimately no job, so a tight respin
         # would poll squeue continuously for hours.
-        assert re.search(r"^RestartSec=(\d+)", text, re.M).group(1) != "0"
+        restart_sec = re.search(r"^RestartSec=(\d+)", text, re.M)
+        assert restart_sec is not None, "unit sets no RestartSec"
+        assert restart_sec.group(1) != "0"
