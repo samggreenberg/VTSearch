@@ -10,6 +10,24 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **Batched, GPU-able descriptor matching for structural search** (issue #3900).
+  `vtscore.media.structural.ratio_test_matches` runs the brute-force L2 kNN +
+  Lowe ratio test of one template against a whole candidate list as a single
+  batched `torch` distance computation, on the GPU when one is available;
+  `SiftMatcher.verify_many` and
+  `vtscore.training.structural_similarity.best_match_stats_many` are the batched
+  counterparts of `verify` / `best_match_stats` that use it. All three are
+  additive: `StructuralMatcher` still requires only `verify`, and a matcher
+  without `verify_many` falls back to the per-pair loop unchanged. Measured 2.9x
+  on a 50-item, 5-template re-rank on CPU, with identical ranking.
+- **`cap_detect_resolution`, and a resolution budget for local-feature
+  detection** (issue #3900). Detection cost scales with pixel count while the
+  keypoint set is capped at `DEFAULT_MAX_FEATURES` regardless, so
+  `SiftMatcher` now detects at no more than
+  `vtscore.config.MAX_STRUCTURAL_DETECT_PIXELS` (default 2 MP, `0` opts out).
+  Measured 2.8x faster ingest on a 4.5 MP corpus, and it *raises* the verified-
+  pair rate rather than costing quality (see the issue for the sweep).
+
 - **The stopping indicators' margins, not just their lights** (issue #3560).
   `stable_status_from_entries` now returns `max_confident_flip_rate` and the
   two halves of the raw-flip window (`flip_rate_early` / `flip_rate_late`)

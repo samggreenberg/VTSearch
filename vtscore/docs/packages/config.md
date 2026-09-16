@@ -324,6 +324,7 @@ Every env var consulted by `vtscore.config`, in one place:
 | `VTSEARCH_TRAIN_PATIENCE`   | Set `TRAIN_PATIENCE` (early-stop patience). `0` disables.                                       |
 | `VTSEARCH_CALIBRATE_COUNT`  | Set `DEFAULT_CALIBRATE_COUNT` (first-run default; later writes go to per-user settings).        |
 | `VTSEARCH_MAX_DECODE_PIXELS`| Set `MAX_DECODE_PIXELS`, the bitmap budget for a single image decode. `0` disables bounding.    |
+| `VTSEARCH_MAX_STRUCTURAL_DETECT_PIXELS` | Set `MAX_STRUCTURAL_DETECT_PIXELS` (default 2 MP), the resolution budget for structural local-feature detection. `0` detects at native size. |
 | `VTSEARCH_SVM_HEAD_C`       | Set `SVM_HEAD_C`, the production linear SVM head's inverse regularisation strength.             |
 | `VTSEARCH_EMBED_PRECISION`  | Set `EMBED_PRECISION`: `fp32` (default), `fp16`, `bf16`, `autocast_fp16`, `autocast_bf16`, `auto`. Compute only - stored vectors stay fp32. |
 | `VTSEARCH_IMAGE_PROCESSOR_BACKEND` | Pin the `transformers` image-processor implementation: `torchvision` (default), `pil`, or `auto`. |
