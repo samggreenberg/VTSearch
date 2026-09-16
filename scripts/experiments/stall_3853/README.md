@@ -25,18 +25,33 @@ On a stall the log carries, at the default WARNING level:
   thread dump written just before this line names its frame. `r ≈ 0` and no
   thread on top means the process was not scheduled (memory pressure,
   swapping, a paged-out cgroup): read `majflt` and the cgroup limit hits.
-- `slow request: …` for each frozen request (`vtsearch/hooks.py`).
+- `slow request: … in NNNms cpu=NNms gc=NNms` for each frozen request
+  (`vtsearch/hooks.py`).  Read `cpu` first: `cpu ~ wall` is work, `cpu << wall`
+  is blocking or descheduling, `gc ~ wall` is a collection that froze
+  everything.
 - `slow phase: learned_sort …`, `slow phase: train_and_score …`,
   `slow phase: label_sync …`, `slow phase: labeling_status_advance …`,
   `slow phase: rehydrate …` — which part of the suspect paths grew.
 - `lock wait: <lock> waited Nms` — a vote, the sort thread or the status
   poll queued behind another holder of `_state_lock`, `_progress_lock` or
   `label_sync_write_lock`.
-- `gc pause: generation 2 took Nms`.
+- `gc pause: generation 2 took Nms`.  Unset, that bar tracks the phase bar,
+  so lowering `VTSEARCH_SLOW_PHASE_MS` raises GC resolution with it.
 
-At `VTSEARCH_LOG_LEVEL=INFO` two more: `rehydrating votes … : <reason>` /
-`rehydrate for detector …: already fresh | restored N labels` and
+At `VTSEARCH_LOG_LEVEL=INFO` three more: `request trace: …` for *every*
+request (same figures as `slow request`), `rehydrating votes … : <reason>` /
+`rehydrate for detector …: already fresh | restored N labels`, and
 `progress cache truncated at step i of n … k steps to replay`.
+
+**The trace lines are what make a sum visible.**  A felt pause is not always
+an outlier: a vote cycle's ~10 requests, its retrain and a collection can each
+sit below every threshold and still add to the half-second the reviewer
+notices, which no per-request bar can see.  Given the trace,
+`analyze_app_log.py` prints a **per-vote budget** - each cycle keypress to
+keypress, split into `busy` (the server had a request in flight) and `gap`
+(it did not: client work, browser queueing, think time) - and breaks down the
+worst cycles request by request.  A 2 s cycle with 200 ms of `busy` was not
+the server.
 
 ## On the GRID (the careful experiment)
 
@@ -46,7 +61,8 @@ At `VTSEARCH_LOG_LEVEL=INFO` two more: `rehydrating votes … : <reason>` /
    the rehydrate and truncation lines; optionally `VTSEARCH_SLOW_REQUEST_MS=400
    VTSEARCH_SLOW_PHASE_MS=300` to lower the bars.
 2. Label a slate as normal. Note the wall-clock time of any felt stall.
-3. `python scripts/experiments/stall_3853/analyze_app_log.py data/logs/app-*.log`.
+3. `python scripts/experiments/stall_3853/analyze_app_log.py data/logs/app-*.log`
+   (add `--votes 15` for a deeper per-vote breakdown).
    Every stall the watchdog saw is printed with what surrounded it; if the
    reviewer felt a pause the watchdog did not report, the stall was not in
    the server process (browser or network) — the earlier client-side probe

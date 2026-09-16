@@ -32,7 +32,36 @@ not list every commit. Use `git log` for the full history.
   `data/logs/`, so the pane scrolling away no longer loses the evidence. See
   `docs/DEPLOYMENT.md` → "Diagnosing a stall".
 
+- **`gc.freeze()` after the model preload** (#3870). A labeling session logged
+  a gen-2 collection of ~300 ms every ~2 minutes - 35 of them over 2,400 votes,
+  flat with label count - and each one holds the GIL, so whatever was in flight
+  froze with it (a vote POST to 333 ms, a learned sort to 351 ms). The pause is
+  dominated by the object graph the process starts with: `transformers`,
+  `torch`, `sklearn`, `cuml`/`numba` contribute millions of tracked containers
+  that every full collection traverses and never frees. The app now freezes
+  that graph into the permanent generation once the preload finishes, which
+  full collections skip. Measured on the GRID over an otherwise identical
+  600-vote run: **ten pauses of 290-360 ms became zero**, and vote POST max
+  fell 377 ms → 121 ms. Datasets and detectors load lazily afterwards and stay
+  collectable, so unloading one still frees its cycles. `VTSEARCH_GC_FREEZE=0`
+  skips it.
+
 ### Changed
+
+- **Every request and phase now reports CPU and GC time beside wall time**
+  (#3853). A 4918 ms vote POST that did 12 ms of work and one that did 4900 ms
+  are the same number to a `perf_counter` pair, which is why the captured stall
+  could be seen but not explained: six of the eight slow votes in that trace
+  were slow *alone*, so something released the GIL, and nothing recorded
+  whether it had blocked or merely been descheduled. `slow request` and
+  `slow phase` lines now carry `cpu=` and `gc=`, and below the slow bar (at
+  `VTSEARCH_LOG_LEVEL=INFO`) every request is logged as `request trace:` with
+  the same figures, so a diagnostic run can add up a vote cycle instead of
+  hunting for an outlier in it -- the shape the remaining felt pauses actually
+  have. `VTSEARCH_GC_WARN_MS`, left unset, now tracks `VTSEARCH_SLOW_PHASE_MS`
+  rather than sitting at a fixed 200 ms: a collection under the GC bar is
+  invisible but still lands inside whatever phase was running, so the old
+  default silently inflated phases whenever the phase bar was lowered below it.
 
 - **The Smart indicator no longer flaps on a category that has plateaued**
   (#3832). Smart called the error cost "still declining" whenever a line

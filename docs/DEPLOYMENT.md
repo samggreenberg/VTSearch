@@ -113,10 +113,11 @@ documented workarounds; this section describes the code as it stands.
 | `VTSEARCH_LOG_LEVEL` | `WARNING` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). `INFO`/`DEBUG` also turn on the per-request access log. |
 | `VTSEARCH_LOG_FORMAT` | `json` | Log record format: `json` (one JSON object per line, for log aggregators) or `text` (bracketed-tag human-readable form, for local dev). Every record carries the active user, `dataset_id`, `detector_id`, and `request_id`. |
 | `VTSEARCH_LOG_FILE` | unset | Also append every log record to this file (the terminal stream stays). The SLURM launcher sets it to `data/logs/app-<node>-<timestamp>.log` so a stall nobody was watching still leaves a trace; see [Diagnosing a stall](#the-app-freezes-for-seconds-during-labeling-diagnosing-a-stall). |
-| `VTSEARCH_SLOW_REQUEST_MS` | `1000` | A request whose handler takes at least this long is logged at WARNING with its method, path, status, duration and `request_id` (the same id the browser sees as `X-Request-Id`). |
+| `VTSEARCH_SLOW_REQUEST_MS` | `1000` | A request whose handler takes at least this long is logged at WARNING with its method, path, status, duration, thread CPU time, GC time and `request_id` (the same id the browser sees as `X-Request-Id`). Below the bar, and only at `VTSEARCH_LOG_LEVEL=INFO`, the same figures are logged as `request trace:` so a diagnostic run has the whole chain to add up. |
 | `VTSEARCH_STALL_WATCHDOG_MS` | `1000` | Heartbeat-miss threshold for the stall watchdog: when the interpreter cannot run the heartbeat thread for this long, a WARNING names the thread that burned the wall clock (or reports that none did) and `faulthandler` dumps every thread's frames from inside the stall. `0` disables the watchdog. |
 | `VTSEARCH_STALL_DUMP_FILE` | `VTSEARCH_LOG_FILE`, else stderr | Where the watchdog's thread dump is written. |
-| `VTSEARCH_GC_WARN_MS` | `200` | A garbage-collection pause at least this long is logged at WARNING with its generation and duration. |
+| `VTSEARCH_GC_WARN_MS` | half `VTSEARCH_SLOW_PHASE_MS`, capped at `200` | A garbage-collection pause at least this long is logged at WARNING with its generation and duration. Unset it tracks the phase threshold, so a collection can never be too small to report while still being large enough to inflate the phase it lands in. |
+| `VTSEARCH_GC_FREEZE` | `1` | After the model preload, `gc.freeze()` moves the imported ML libraries and the loaded embedders into the permanent generation, which full collections skip (issue #3870: gen-2 pauses of ~300 ms every ~2 minutes, each freezing every in-flight request, measured to zero with this on). Datasets and detectors load lazily afterwards and stay collectable. Set falsey to skip it. |
 | `VTSEARCH_SLOW_PHASE_MS` | `500` | Threshold for the internal phase breakdowns (learned-sort retrain, per-vote labelset rewrite, labeling-status replay, vote rehydrate) and for waits on the locks those paths share; each logs one WARNING line at or above it. |
 | `VTSEARCH_DETECTOR_WRITE_MODE` | `async` | Where the per-vote labelset rewrite runs. `async` (default) composes the merged labelset on the request thread and hands the `fsync` + rename of the detector JSON to a background writer, so a slow filesystem never holds `POST /api/medias/<id>/vote` (issue #3853: on a shared NFS export that write's tail ran to seconds and the panel stayed black for it). Every in-process reader sees the queued text before it lands, a burst of votes coalesces into one write of the newest text, and a failed write is raised as a 500 from the *next* vote. `sync` writes inline on the request thread, as before; the test suite runs that way. |
 | `VTSEARCH_MAX_UPLOAD_MB` | `2048` | Maximum size of a single HTTP request body, in MB (Flask's `MAX_CONTENT_LENGTH`). Oversize uploads are rejected with HTTP 413 before they consume disk. Set to `0` to disable the cap entirely for genuinely large-archive uploads. |
@@ -1150,18 +1151,46 @@ instruments that can, all on at the default log level:
     and phase lines below say where.
 - **GC pauses** (`VTSEARCH_GC_WARN_MS`): `gc pause: generation 2 took …ms`. A
   full collection holds the GIL and shows in a thread dump only as an
-  arbitrary allocation site, so it is named separately.
+  arbitrary allocation site, so it is named separately. Left unset this bar
+  **tracks `VTSEARCH_SLOW_PHASE_MS`**, so lowering the phase bar for a
+  diagnostic session cannot leave collections below it invisible — they would
+  otherwise still inflate every phase they land in, with nothing saying why.
 - **Phase and lock timers** (`VTSEARCH_SLOW_PHASE_MS`): `slow phase: <name>
-  total …ms (phase=…ms, …)` for the learned-sort retrain, the per-vote
-  labelset rewrite, the labeling-status replay and a vote rehydrate; and
-  `lock wait: <lock> waited …ms` when a vote, the sort thread or the status
+  total …ms cpu=…ms gc=…ms (phase=…ms, …)` for the learned-sort retrain, the
+  per-vote labelset rewrite, the labeling-status replay and a vote rehydrate;
+  and `lock wait: <lock> waited …ms` when a vote, the sort thread or the status
   poll queued behind another holder.
+
+**Read the `cpu=` column first.** Every request and phase line carries the
+thread's own CPU time beside its wall time, and the two together say what
+kind of slow it was:
+
+| | reading |
+|---|---|
+| `cpu ≈ wall` | it did the work — a real cost that grows with the data |
+| `cpu ≪ wall`, `gc` small | it blocked (a lock, an `fsync`, a slow filesystem) or was descheduled — an 8-thread torch process in an 8-CPU cgroup on a shared node is descheduled routinely |
+| `gc ≈ wall` | a collection froze every thread; the phase is innocent |
+
+`gc` is not additive with `cpu` — a collection running on that thread burned
+its CPU too, so `total 1137ms cpu=1133ms gc=139ms` reads "on the CPU
+throughout, 139 ms of it collecting".
 
 To capture one on the GRID: run the launcher as usual (it sets
 `VTSEARCH_LOG_FILE`), optionally `VTSEARCH_LOG_LEVEL=INFO` for the rehydrate
 and cache-truncation lines, label until a stall is felt, then read the log
 around the `stall:` line. `scripts/experiments/stall_3853/analyze_app_log.py`
 prints that window for every stall in a log.
+
+**A felt pause is often a sum, not an outlier.** The residue of #3853 is a
+vote cycle whose chain of requests, retrain and collection each cost less than
+any threshold while adding up to the half-second the reviewer notices — which
+a per-request bar cannot see by construction. At `VTSEARCH_LOG_LEVEL=INFO`
+every request is logged as `request trace: …` with the same wall/CPU/GC
+figures, and `analyze_app_log.py` adds them up into a **per-vote budget**:
+each cycle's span from keypress to keypress, how much of it the server had a
+request in flight (`busy`), and how much it did not (`gap` — client work,
+browser queueing and think time). A 2 s cycle with 200 ms of `busy` was not
+the server.
 
 ### Models fail to download
 
