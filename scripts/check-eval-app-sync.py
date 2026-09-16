@@ -208,7 +208,7 @@ MIRRORS: list[Mirror] = [
     Mirror(
         id="progress.smart_status",
         app="py:vtscore.detectors.labeling_progress._compute_smart_status",
-        harness="vtscore/eval/autopilot_flow.py::smart_status",
+        harness="vtscore/eval/autopilot_flow.py::smart_status,smart_detail",
         kind="ported",
         note=(
             "The Smart indicator - error-cost flatness - one of the three gates the phase "
@@ -217,7 +217,12 @@ MIRRORS: list[Mirror] = [
             "itself - the per-class minimum, the flatness threshold, and the slope's "
             "significance against the window's own scatter - cannot drift; what this pin "
             "watches is the plumbing around it. If either wrapper grows a step of its own, "
-            "move that step into the shared module instead."
+            "move that step into the shared module instead. `smart_detail` is the harness's "
+            "whole-dict entry point (issue #3560) and is pinned beside `smart_status`, which "
+            "is now a one-liner over it: the app has always returned the whole sub-object and "
+            "the harness was discarding everything but `status`, so keeping `slope` / "
+            "`slope_t` moves the two closer together rather than apart. The real call path is "
+            "`smart_detail`, so it is the name that has to be watched."
         ),
         divergence=(
             "The harness takes the error-cost window as an argument instead of reading a "
@@ -270,14 +275,18 @@ MIRRORS: list[Mirror] = [
     Mirror(
         id="progress.stable_status",
         app="py:vtscore.detectors.labeling_progress._compute_stable_status",
-        harness="vtscore/eval/autopilot_flow.py::stable_status",
+        harness="vtscore/eval/autopilot_flow.py::stable_status,stable_detail",
         kind="ported",
         note=(
             "The Stable indicator - confident prediction-flip rate over the whole pool, plus the "
             "flip-rate plateau test (issue #3831). Both sides are one-line wrappers over "
             "`vtscore.detectors.stability.stable_status_from_entries`, so the rule itself cannot "
             "drift; what this pin watches is the plumbing around it. If either wrapper grows a "
-            "step of its own, move that step into the shared module instead."
+            "step of its own, move that step into the shared module instead. `stable_detail` is "
+            "the harness's whole-dict entry point (issue #3560), pinned beside `stable_status` "
+            "for the reason given on progress.smart_status: the app returns the whole "
+            "sub-object, and the harness keeping the three flip rates is convergence, not "
+            "divergence."
         ),
         divergence=(
             "Same input plumbing divergence as progress.smart_status: flip counts are passed "
@@ -287,15 +296,24 @@ MIRRORS: list[Mirror] = [
     Mirror(
         id="progress.span_status",
         app="py:vtscore.detectors.labeling_progress._compute_span_status",
-        harness="vtscore/eval/autopilot_flow.py::span_status",
+        harness="vtscore/eval/autopilot_flow.py::span_status,span_target",
         kind="ported",
         note=(
             "The Span indicator - coverage-atlas breadth - which drives the new -> done "
-            "transition. Re-check the green target and the yellow cutoff."
+            "transition. Re-check the green target and the yellow cutoff. `span_target` is "
+            "pinned beside it because the harness's green bar was extracted into it (issue "
+            "#3560) - it is the app's own `green_at = min(SPAN_GREEN, tree_total)`, split out "
+            "so that a study *reporting* how far short a run fell reads the same number the "
+            "light was decided by. The degenerate-tree branch still short-circuits ahead of "
+            "it on both sides."
         ),
         divergence=(
             "The app reads its green target from `CoreConfig.autopilot_goal_diversity`; the "
-            "harness takes it per-run so a sweep can vary it, defaulting to the same value."
+            "harness takes it per-run so a sweep can vary it, defaulting to the same value. "
+            "The harness also *reports* the resolved bar (`span_target`, on every emitted "
+            "row); the app computes the same quantity and keeps it to itself, spelling it into "
+            "the indicator's reason string instead. That is a reporting addition on the "
+            "harness side, not a difference in the rule."
         ),
     ),
     # ----------------------------------------------------------------- default

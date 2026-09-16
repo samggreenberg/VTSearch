@@ -173,6 +173,17 @@ def stable_status_from_entries(entries: Sequence[Mapping[str, Any]], good: int, 
     the window is still above :data:`STABLE_RATE_THRESHOLD` - the pool has an
     ambiguous fringe the detector cannot settle - which the UI reports beside
     the green light.
+
+    Three further numbers ride along, and they are the *other* quantities green
+    turns on: ``max_confident_flip_rate`` (the worst single step in the window,
+    which :data:`STABLE_MAX_THRESHOLD` caps) and ``flip_rate_early`` /
+    ``flip_rate_late`` (the two halves of the raw-rate window, which the
+    still-falling test compares).  Without them a reader has the status and one
+    of the three gates behind it, and cannot say how close a yellow was to
+    green or which condition was binding - which is what issue #3560 asked the
+    eval harness to record per step.  All five rates are rounded to six places
+    rather than four: on a haystack of tens of thousands a single flip is finer
+    than 1e-4, and these are reporting numbers that no rule reads back.
     """
     if good < MIN_PER_CLASS or bad < MIN_PER_CLASS:
         return {
@@ -193,8 +204,11 @@ def stable_status_from_entries(entries: Sequence[Mapping[str, Any]], good: int, 
     late = sum(raw[half:]) / (len(raw) - half)
 
     extras = {
-        "avg_flip_rate": round(avg_raw, 4),
-        "avg_confident_flip_rate": round(avg_confident, 4),
+        "avg_flip_rate": round(avg_raw, 6),
+        "avg_confident_flip_rate": round(avg_confident, 6),
+        "max_confident_flip_rate": round(max_confident, 6),
+        "flip_rate_early": round(early, 6),
+        "flip_rate_late": round(late, 6),
         "plateau": False,
     }
     if not (avg_confident < STABLE_RATE_THRESHOLD and max_confident < STABLE_MAX_THRESHOLD):

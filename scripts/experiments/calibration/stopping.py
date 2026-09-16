@@ -14,13 +14,35 @@ This module turns the `phase` column every run already emits into that pair:
     stopping point  =  the click at which the rules first fired  (the width)
     stopping cost   =  the metric at that click                  (the height)
 
-Nothing here needs a re-run.  `phase` has been on every metric row since the
-harness adopted the app's phase machine (2026-07-31), so any study whose cells
-are still on disk can be enriched by re-reading them.  What a *new* run adds is
-the three indicator lights beside the phase (`smart` / `stable` / `span`, plus
-`span_level` / `span_depth`), which say **which** rule held a run short of
-stopping; those are absent from older frames and every function here degrades to
-"unknown" rather than failing.
+Nothing in the *first* half needs a re-run.  `phase` has been on every metric
+row since the harness adopted the app's phase machine (2026-07-31), so any study
+whose cells are still on disk can be enriched by re-reading them.  What a *new*
+run adds is the three indicator lights beside the phase (`smart` / `stable` /
+`span`, plus `span_level` / `span_depth`), which say **which** rule held a run
+short of stopping; those are absent from older frames and every function here
+degrades to "unknown" rather than failing.
+
+And then the question underneath that one
+-----------------------------------------
+
+"Stable held it" is three different findings.  A light is a threshold test, and
+a study that records only the answer cannot say whether a run sat one noisy
+window short of green for a hundred clicks or was never within reach of it —
+which is the difference between a rule that needs de-flapping and a detector
+that needs a better embedding.  So a run now also records, every step, the
+continuous quantities the gates are thresholds **on**: the error-cost slope and
+its t-statistic, the confident flip rate and its worst step, the two halves of
+the raw flip window, and the atlas bar `span_level` is measured against.
+
+:func:`margins`, :func:`summarise_margins` and :func:`margin_table` are that
+half, on the same "margin to green" sign convention throughout
+(:data:`GATES`): **negative is short by that much, positive is satisfied with
+that much room.**  Recording them costs nothing — the rules fit all of it every
+step already, because the vote order depends on the lights they produce — but
+unlike `phase` and the lights it is *not* recoverable from old cells, because
+the windows are per-step state the run discarded.  :func:`has_margins` is the
+guard, and every margin function returns an empty frame rather than a table of
+zeros on a frame that predates them.
 
 Three properties of the data decide the shape of this API, and all three were
 measured before it was written:
@@ -52,6 +74,11 @@ Usage::
     import stopping
     stops = stopping.stopping_points(main, keys=curves.KEYS)
     print(stopping.stopping_table(stopping.summarise(stops)))
+    print(stopping.binding_note(stopping.summarise(stops)))
+
+    # Post-#3560 cells only: how close the rules came, gate by gate.
+    mg = stopping.margins(main, keys=curves.KEYS)
+    print(stopping.margin_table(stopping.summarise_margins(mg)))
 
 `selftest_stopping.py` is its planted-answer test.
 """
@@ -65,7 +92,14 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from vtscore.eval.autopilot_flow import STOPPING_PHASE
+from vtscore.eval.autopilot_flow import (
+    SMART_FLAT_THRESHOLD,
+    SMART_SLOPE_T,
+    STABLE_FALLING_RATIO,
+    STABLE_MAX_THRESHOLD,
+    STABLE_RATE_THRESHOLD,
+    STOPPING_PHASE,
+)
 
 #: What identifies one trajectory in a pooled frame.  Mirrors ``curves.KEYS``
 #: with ``arm`` in front: a study tags each arm's frame with an ``arm`` column
@@ -81,6 +115,64 @@ DEFAULT_METRICS: tuple[str, ...] = ("cost", "average_precision")
 #: The indicator columns a post-#3560 run emits.  Absent from every earlier
 #: frame, which is why every read of them is guarded.
 LIGHT_COLUMNS: tuple[str, ...] = ("smart", "stable", "span")
+
+#: The five gates green is a conjunction over, each as a **margin to green**:
+#: ``(name, column, threshold, sense)``, where the margin is
+#: ``value - threshold`` when *sense* is ``+`` and ``threshold - value`` when it
+#: is ``-``.  One sign convention for all five - **positive means the gate is
+#: satisfied, with that much room; negative means the run is that far short** -
+#: because the underlying rules point in both directions (Smart wants its slope
+#: *above* a negative cutoff, Stable wants its flip rates *below* positive ones)
+#: and a table that inherits that inconsistency cannot be read down a column.
+#:
+#: Smart's two are a **disjunction**: it is green when either is at or above
+#: zero, so neither alone says a run was held.  Stable's two and Span's one are
+#: conjunctive with each other and with Smart.
+#:
+#: Two gates are not in this table, for the same reason: their threshold is not
+#: a constant.  **Span**'s bar is ``span_target``, which moves with the run's
+#: diversity goal and with the atlas size, so its margin is a difference of two
+#: columns; :func:`margins` computes it directly.  The third **Stable** gate -
+#: the raw rate having stopped falling - compares two halves of the window
+#: against each other, so it has no margin at all and is reported as a share of
+#: held steps instead.
+GATES: tuple[tuple[str, str, float, str], ...] = (
+    ("smart_slope", "smart_slope", SMART_FLAT_THRESHOLD, "+"),
+    ("smart_t", "smart_slope_t", -SMART_SLOPE_T, "+"),
+    ("stable_conf", "stable_confident_flip_rate", STABLE_RATE_THRESHOLD, "-"),
+    ("stable_max", "stable_max_confident_flip_rate", STABLE_MAX_THRESHOLD, "-"),
+)
+
+#: Names of every margin :func:`margins` reports, in table order - the four
+#: constant-threshold gates above plus Span's moving bar.
+GATE_NAMES: tuple[str, ...] = (*(g[0] for g in GATES), "span")
+
+#: Every column :func:`margins` reads, so a caller can ask whether a frame
+#: predates them without knowing how :data:`GATES` is spelled.  ``span_level``
+#: is here because Span's margin needs it, even though it arrived with the
+#: lights rather than with the margins.
+MARGIN_COLUMNS: tuple[str, ...] = (
+    "smart_slope",
+    "smart_slope_t",
+    "stable_flip_rate",
+    "stable_confident_flip_rate",
+    "stable_max_confident_flip_rate",
+    "stable_flip_rate_early",
+    "stable_flip_rate_late",
+    "span_level",
+    "span_target",
+)
+
+
+def has_margins(main: pd.DataFrame) -> bool:
+    """Whether *main* carries the per-step margins, i.e. is a post-#3560 run.
+
+    Older frames have the lights but not the numbers behind them, and every
+    margin function here returns an empty frame on one rather than a table of
+    zeros.  Unlike the lights, this cannot be back-filled by re-reading cells:
+    the slope and flip-rate windows are per-step state that the run threw away.
+    """
+    return bool(len(main)) and all(c in main.columns for c in MARGIN_COLUMNS)
 
 
 def _present(df: pd.DataFrame, keys: Sequence[str]) -> list[str]:
@@ -300,8 +392,13 @@ def _fmt(v: Any, digits: int = 2) -> str:
         f = float(v)
     except (TypeError, ValueError):
         return str(v)
-    if not math.isfinite(f):
+    if math.isnan(f):
         return "—"
+    if math.isinf(f):
+        # Distinct from "—": an infinite margin is a Smart window with no
+        # residual at all (see `margins`), which is measured and extreme, not
+        # missing.
+        return "∞" if f > 0 else "-∞"
     return f"{f:.{digits}f}"
 
 
@@ -330,6 +427,198 @@ def stopping_table(summary: pd.DataFrame, *, metric: str = "cost") -> str:
         cells.append(_fmt(r.get(f"median_{metric}_final")))
         cells.append(_fmt(r.get(f"median_{metric}_delta")))
         cells.append(_fmt(r.get("median_clicks_after_stop"), 0))
+        lines.append("| " + " | ".join(cells) + " |")
+    return "\n".join(lines)
+
+
+def _margin_frame(g: pd.DataFrame) -> dict[str, np.ndarray]:
+    """Per-step margins to green for one trajectory's steps, by gate name."""
+    out: dict[str, np.ndarray] = {}
+    for name, col, thr, sense in GATES:
+        v = pd.to_numeric(g[col], errors="coerce").to_numpy(dtype=float)
+        out[name] = (v - thr) if sense == "+" else (thr - v)
+    lvl = pd.to_numeric(g["span_level"], errors="coerce").to_numpy(dtype=float)
+    tgt = pd.to_numeric(g["span_target"], errors="coerce").to_numpy(dtype=float)
+    # -1 is "no atlas was read", not "zero nodes short".
+    out["span"] = np.where((lvl < 0) | (tgt < 0), np.nan, lvl - tgt)
+    return out
+
+
+def margins(
+    main: pd.DataFrame,
+    *,
+    keys: Sequence[str] = RUN_KEYS,
+) -> pd.DataFrame:
+    """One row per trajectory: how *close* the rules came, not whether they fired.
+
+    :func:`stopping_points` answers "did the app ever say stop, and where".  This
+    answers the question underneath it — **how far short was the run, on which
+    gate** — which is what separates an arm that sat one noisy window away from
+    green all session from one that was never going to converge.  Both read the
+    same rows; neither needs a re-run of anything that has the columns.
+
+    Measured over each run's **held** steps: everything before its first fire,
+    or the whole trajectory when it never fired.  What the indicators do after
+    the app has said stop is a different question and would otherwise dominate
+    the average, since a converged run sits at a comfortable positive margin for
+    the rest of its budget.
+
+    Returns an empty frame on a pre-#3560 frame (see :func:`has_margins`) rather
+    than a table of zeros: unlike the lights, these cannot be reconstructed by
+    re-reading old cells, because the slope and flip-rate windows were per-step
+    state the run discarded.
+
+    Columns, per run and per gate in :data:`GATE_NAMES`:
+
+    ``{gate}_median`` / ``{gate}_best``
+        The median and the **closest approach** — the largest margin the run
+        ever reached — over its held steps.  Both in "margin to green" units:
+        negative is short by that much, positive is satisfied with that much
+        room (see :data:`GATES`).  ``NaN`` where the rule never fit that gate.
+    ``{gate}_green_share``
+        Fraction of held steps at which that gate was satisfied.  A gate at 0.9
+        with a median margin barely under zero is a rule flapping on noise; one
+        at 0.0 is a rule that was never close.
+    ``stable_block_avg`` / ``stable_block_max`` / ``stable_block_falling``
+        Which of Stable's three gates was doing the blocking, as a share of the
+        held steps where Stable was measured and not green.  Attributed in the
+        rule's own short-circuit order, so the shares over a blocked step sum to
+        one and ``falling`` is only credited when the other two passed.  This is
+        the resolution the light cannot give: "Stable held it" is three
+        different findings, and they want three different fixes.
+    ``n_held`` / ``n_measured``
+        Held steps, and how many of those the phase machine actually evaluated
+        (a startup schedule's rounds own the phase without consulting the
+        indicators, and leave every margin blank).
+    """
+    kk = _present(main, keys)
+    if not has_margins(main) or "t" not in main.columns or "phase" not in main.columns or not kk:
+        return pd.DataFrame()
+
+    out: list[dict[str, Any]] = []
+    for run_key, g in main.groupby(kk, dropna=False, sort=True):
+        g = g.sort_values("t")
+        is_done = (g["phase"].astype(str) == STOPPING_PHASE).to_numpy()
+        first_i = int(np.argmax(is_done)) if is_done.any() else None
+        held = slice(0, first_i if first_i is not None else len(g))
+        gh = g.iloc[held]
+
+        row: dict[str, Any] = dict(zip(kk, run_key if isinstance(run_key, tuple) else (run_key,), strict=True))
+        row["n_held"] = int(len(gh))
+        if not len(gh):
+            # Fired on its very first measured step: nothing was ever held.
+            row["n_measured"] = 0
+            for name in GATE_NAMES:
+                row[f"{name}_median"] = row[f"{name}_best"] = row[f"{name}_green_share"] = float("nan")
+            for k in ("avg", "max", "falling"):
+                row[f"stable_block_{k}"] = float("nan")
+            out.append(row)
+            continue
+
+        per_step = _margin_frame(gh)
+        for name in GATE_NAMES:
+            v = per_step[name]
+            # `~isnan`, not `isfinite`: a Smart window with no residual at all
+            # gives a t of +-inf, which is a measurement (an infinitely
+            # significant trend) and not a missing one.  Every statistic below
+            # is order-based or a comparison, so all three survive it.
+            ok = v[~np.isnan(v)]
+            row[f"{name}_median"] = float(np.median(ok)) if ok.size else float("nan")
+            row[f"{name}_best"] = float(np.max(ok)) if ok.size else float("nan")
+            # Span and Smart's slope gate are green AT zero; Smart's t gate and
+            # Stable's two are strict.  The difference is one step in a float
+            # margin and never decides a reading, so >= is used throughout.
+            row[f"{name}_green_share"] = float(np.mean(ok >= 0.0)) if ok.size else float("nan")
+
+        # Which Stable gate blocked, in the rule's own short-circuit order.
+        avg = pd.to_numeric(gh["stable_confident_flip_rate"], errors="coerce").to_numpy(dtype=float)
+        mx = pd.to_numeric(gh["stable_max_confident_flip_rate"], errors="coerce").to_numpy(dtype=float)
+        early = pd.to_numeric(gh["stable_flip_rate_early"], errors="coerce").to_numpy(dtype=float)
+        late = pd.to_numeric(gh["stable_flip_rate_late"], errors="coerce").to_numpy(dtype=float)
+        measured = np.isfinite(avg) & np.isfinite(mx) & np.isfinite(early) & np.isfinite(late)
+        row["n_measured"] = int(measured.sum())
+        fail_avg = measured & (avg >= STABLE_RATE_THRESHOLD)
+        fail_max = measured & ~fail_avg & (mx >= STABLE_MAX_THRESHOLD)
+        fail_falling = (
+            measured & ~fail_avg & ~fail_max & (late >= STABLE_RATE_THRESHOLD) & (late < STABLE_FALLING_RATIO * early)
+        )
+        blocked = fail_avg | fail_max | fail_falling
+        n_blocked = int(blocked.sum())
+        for k, arr in (("avg", fail_avg), ("max", fail_max), ("falling", fail_falling)):
+            row[f"stable_block_{k}"] = float(arr.sum() / n_blocked) if n_blocked else float("nan")
+        out.append(row)
+    return pd.DataFrame(out)
+
+
+def summarise_margins(
+    mg: pd.DataFrame,
+    *,
+    by: Sequence[str] = ("arm",),
+) -> pd.DataFrame:
+    """Reduce per-run margins to one row per group, by median across runs.
+
+    Median rather than mean throughout: ``smart_t`` is ``±inf`` on a window with
+    no residual at all — a real and not especially rare state, since a short
+    window of identical costs has nothing to scatter — and one such run would
+    take a mean with it.
+    """
+    if mg.empty:
+        return pd.DataFrame()
+    gb = _present(mg, by)
+    groups: list[tuple[Any, pd.DataFrame]] = list(mg.groupby(gb, dropna=False, sort=True)) if gb else [((), mg)]
+    # Numeric, and not one of the columns that *identify* a run rather than
+    # measure it - a median of the `seed` column is a number with no referent,
+    # and `dataset` would come back NaN and render as a column of dashes.
+    skip = {*gb, *RUN_KEYS, "n_held", "n_measured"}
+    cols = [c for c in mg.columns if c not in skip and pd.api.types.is_numeric_dtype(mg[c])]
+
+    out: list[dict[str, Any]] = []
+    for key, g in groups:
+        row: dict[str, Any] = dict(zip(gb, key if isinstance(key, tuple) else (key,), strict=True))
+        row["n_runs"] = int(len(g))
+        row["median_n_held"] = _q(g["n_held"], 0.5) if "n_held" in g.columns else float("nan")
+        for c in cols:
+            row[c] = _q(g[c], 0.5)
+        out.append(row)
+    return pd.DataFrame(out)
+
+
+def margin_table(summary: pd.DataFrame) -> str:
+    """The "how close did it come" block of a REPORT.md, as markdown.
+
+    One row per group.  Each gate is reported as the median margin to green over
+    held steps, with the share of held steps it was satisfied at in brackets —
+    the pair is the point: a gate whose median margin is ``-0.01`` and whose
+    share is 48% is flapping, and a gate at ``-0.01`` and 0% is a wall.
+    """
+    if summary.empty:
+        return "_No margin data: these cells predate the per-step indicator margins (issue #3560)._"
+    ident = [c for c in summary.columns if c in ("arm", "dataset", "embedder", "category")]
+    labels = {
+        "smart_slope": "Smart slope",
+        "smart_t": "Smart t",
+        "stable_conf": "Stable avg",
+        "stable_max": "Stable max",
+        "span": "Span nodes",
+    }
+    head = [*ident, "runs", "held", *(labels[n] for n in GATE_NAMES), "Stable blocked by"]
+    lines = ["| " + " | ".join(head) + " |", "|" + "|".join(["---"] * len(head)) + "|"]
+    for _, r in summary.iterrows():
+        cells = [str(r[c]) for c in ident]
+        cells.append(str(int(r["n_runs"])))
+        cells.append(_fmt(r.get("median_n_held"), 0))
+        for name in GATE_NAMES:
+            m = r.get(f"{name}_median")
+            share = r.get(f"{name}_green_share")
+            digits = 0 if name == "span" else 3
+            share_txt = "—" if share is None or not math.isfinite(float(share)) else f"{float(share):.0%}"
+            cells.append(f"{_fmt(m, digits)} [{share_txt}]")
+        parts = []
+        for k, lab in (("avg", "avg"), ("max", "max"), ("falling", "falling")):
+            v = r.get(f"stable_block_{k}")
+            if v is not None and math.isfinite(float(v)):
+                parts.append(f"{lab} {float(v):.0%}")
+        cells.append(", ".join(parts) if parts else "—")
         lines.append("| " + " | ".join(cells) + " |")
     return "\n".join(lines)
 
