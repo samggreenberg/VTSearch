@@ -115,7 +115,10 @@ def main() -> None:
     from app import app  # noqa: PLC0415
 
     from vtscore.concurrency.events import uncap_sse_connections  # noqa: PLC0415
-    from vtscore.concurrency.stalls import start_stall_diagnostics_from_env  # noqa: PLC0415
+    from vtscore.concurrency.stalls import (  # noqa: PLC0415
+        freeze_gc_after_preload,
+        start_stall_diagnostics_from_env,
+    )
     from vtscore.datasets.registry import add_loaded_id, register_dataset  # noqa: PLC0415
     from vtscore.embedding import initialize_models  # noqa: PLC0415
     from vtscore.state import core  # noqa: PLC0415
@@ -123,6 +126,13 @@ def main() -> None:
 
     start_stall_diagnostics_from_env()
     initialize_models()
+    # ``initialize_server`` freezes the GC once its preload is done (#3870);
+    # do the same here or the offline reproduction measures a different
+    # process shape from the deployed one.  ``VTSEARCH_GC_FREEZE=0`` skips it,
+    # which is how the two arms are compared.
+    frozen = freeze_gc_after_preload()
+    if frozen is not None:
+        print(f"froze {frozen[0]} objects for GC in {frozen[1]:.0f}ms", flush=True)
 
     entry = register_dataset(
         name=f"synthetic-patch-{args.medias}",

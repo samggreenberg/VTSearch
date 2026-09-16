@@ -329,7 +329,7 @@ def _vote_budgets(events: list[dict[str, Any]], reqs: list[dict[str, Any]], wors
         for r in sorted(c["inside"], key=lambda r: r["ms"], reverse=True)[:6]:
             print(f"      {r['ms']:6.0f}ms {_cpu_gc(r)}  {r['method']} {r['path']}")
         for e in c["marks"]:
-            print(f"      [{e['kind']}] {e['msg'][:150]}")
+            print(f"      [{e['kind']}] {e['msg'][:170]}")
 
 
 def _sort_wait_ms(inside: list[dict[str, Any]]) -> float:

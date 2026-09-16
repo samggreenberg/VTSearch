@@ -1171,6 +1171,10 @@ kind of slow it was:
 | `cpu ≪ wall`, `gc` small | it blocked (a lock, an `fsync`, a slow filesystem) or was descheduled — an 8-thread torch process in an 8-CPU cgroup on a shared node is descheduled routinely |
 | `gc ≈ wall` | a collection froze every thread; the phase is innocent |
 
+`gc` is not additive with `cpu` — a collection running on that thread burned
+its CPU too, so `total 1137ms cpu=1133ms gc=139ms` reads "on the CPU
+throughout, 139 ms of it collecting".
+
 To capture one on the GRID: run the launcher as usual (it sets
 `VTSEARCH_LOG_FILE`), optionally `VTSEARCH_LOG_LEVEL=INFO` for the rehydrate
 and cache-truncation lines, label until a stall is felt, then read the log

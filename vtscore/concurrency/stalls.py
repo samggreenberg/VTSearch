@@ -48,8 +48,10 @@ leaves a trace at the default log level:
   means the phase did the work; ``cpu << wall`` means it blocked on I/O or was
   descheduled (an 8-thread torch process in an 8-CPU cgroup on a shared node
   is descheduled routinely); ``gc`` names the part that was a collection
-  freezing every thread, and is subtracted from nothing - it is reported so
-  the reader can subtract it.
+  freezing every thread.  ``gc`` is **not** additive with ``cpu``: a
+  collection that ran on this thread burned this thread's CPU too, so a line
+  reading ``total 1137ms cpu=1133ms gc=139ms`` means "spent on the CPU, and
+  139ms of that was the collector", not 1272ms of anything.
 
 * :func:`freeze_gc_after_preload` - ``gc.freeze()`` once the models are
   loaded, so full collections stop traversing the imported ML libraries'
