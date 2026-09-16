@@ -2718,6 +2718,11 @@ class TestTheCellWriterLoadsBeforeAnythingIsEmbedded:
     def test_the_cells_io_module_imports(self, mods):
         io = mods["embed"]._cells_io()
         assert hasattr(io, "dump_medias") and hasattr(io, "load_medias")
+        # The streaming half is checked by the same preflight, for the same
+        # reason: a chunked build discovers an unreachable writer at the end of
+        # its *first* chunk rather than the end of the cell, which is better and
+        # still hours in on tier `l`.
+        assert hasattr(io, "CellWriter") and hasattr(io, "iter_medias")
 
     def test_loading_by_path_puts_the_module_directory_on_sys_path(self, mods):
         # The mechanism, stated so a later refactor cannot quietly drop it.
@@ -2790,6 +2795,159 @@ class TestEmbedCells:
         forward = mods["embed"].load_medias(pages, {}, "siglip")
         reverse = mods["embed"].load_medias(list(reversed(pages)), {}, "siglip")
         assert {i: m["origin_name"] for i, m in forward.items()} == {i: m["origin_name"] for i, m in reverse.items()}
+
+
+class TestABigCellIsStreamedRatherThanAssembled:
+    """A cell must never be held whole -- neither its pages nor itself.
+
+    The straight-through build reads every page in the tier into one dict,
+    embeds them all, and pickles the dict at the end.  Measured on tier ``s``
+    (#3842): **34.5 GB of peak RSS for 5,000 pages**, and an 847 MB cell = 169
+    KB/page.  Neither extrapolates.  Tier ``l`` is 200,000 pages: ~50 GB of
+    raster bytes resident at once and a ~34 GB cell assembled in memory before
+    a byte of it is written, on a node that has neither.
+
+    That was never a *time* problem, which is why the arithmetic in the issue
+    is worth restating: ``sift_vlad`` runs at ~1.3 pages/s either way, so tier
+    ``l`` is ~43 h streamed or not.  Chunking does not make the run fast; it
+    makes it possible.
+
+    What chunking invites in exchange is an off-by-a-chunk in the *ids*, which
+    is why half of these are about ordering rather than memory: a cell whose
+    pages are numbered per chunk instead of continuously is not smaller or
+    slower, it is silently wrong.
+    """
+
+    @staticmethod
+    def _pages(mods, tmp_path, n):
+        """*n* one-pixel pages, named so page_id order is NOT input order."""
+        from PIL import Image
+
+        pages = []
+        for i in range(n):
+            img = tmp_path / f"page{i:03d}.png"
+            Image.new("RGB", (8, 8), "white").save(img)
+            # Reversed ids: the sort has to do real work, so a chunked build
+            # that sorted per chunk would disagree with a one-shot one.
+            pages.append(_page(mods, f"spods/{n - 1 - i:03d}", "spods", path=str(img)))
+        return pages
+
+    @staticmethod
+    def _wire(mods, monkeypatch, tmp_path, pages):
+        """Point `build_cell` at a real `_cells_io` and a tmp cell path."""
+        cell = tmp_path / "docmarks_s__siglip.pkl"
+        monkeypatch.setattr(mods["embed"], "pages_for_tier", lambda corpus, tier: list(pages))
+        monkeypatch.setattr(mods["embed"], "cell_path", lambda tier, emb: cell)
+        return cell
+
+    @staticmethod
+    def _embedder(monkeypatch):
+        """Replace `embed_missing`, recording the size of each chunk handed to it."""
+        import vtscore.datasets.stages.embedding as emb
+
+        sizes: list[int] = []
+
+        def fake(medias, embedder_name="", on_progress=None):
+            sizes.append(len(medias))
+            for media in medias.values():
+                assert media.get("media_bytes"), "a page reached the embedder without its pixels"
+                media["embeddings"] = {embedder_name: [0.25]}
+                media["local_features"] = [[0.5]]
+
+        monkeypatch.setattr(emb, "embed_missing", fake)
+        return sizes
+
+    def test_no_more_than_one_chunk_of_pages_is_ever_resident(self, mods, monkeypatch, tmp_path):
+        pages = self._pages(mods, tmp_path, 10)
+        self._wire(mods, monkeypatch, tmp_path, pages)
+        sizes = self._embedder(monkeypatch)
+
+        summary = mods["embed"].build_cell(tmp_path, "s", "siglip", chunk=3)
+
+        assert sizes == [3, 3, 3, 1], "the embedder was handed more than a chunk at a time"
+        assert summary["n_chunks"] == 4
+        assert summary["n_medias"] == 10
+
+    def test_chunking_changes_nothing_about_what_the_cell_holds(self, mods, monkeypatch, tmp_path):
+        """The cell is page-for-page and id-for-id what one-shot would write.
+
+        This is the claim that lets tier `l` be built differently from tier `s`
+        without the two being different experiments.
+        """
+        pages = self._pages(mods, tmp_path, 10)
+        cell = self._wire(mods, monkeypatch, tmp_path, pages)
+        self._embedder(monkeypatch)
+
+        mods["embed"].build_cell(tmp_path, "s", "siglip", chunk=0)
+        whole = mods["embed"]._cells_io().load_medias(cell)
+
+        mods["embed"].build_cell(tmp_path, "s", "siglip", chunk=3, force=True)
+        streamed = mods["embed"]._cells_io().load_medias(cell)
+
+        assert streamed == whole
+        # Stated separately, because `==` on the dicts would still pass if both
+        # builds were wrong in the same way: ids follow the global page_id sort.
+        assert [m["origin_name"] for _, m in sorted(streamed.items())] == [f"spods/{i:03d}" for i in range(10)]
+
+    def test_a_chunked_cell_carries_no_pixels(self, mods, monkeypatch, tmp_path):
+        pages = self._pages(mods, tmp_path, 7)
+        cell = self._wire(mods, monkeypatch, tmp_path, pages)
+        self._embedder(monkeypatch)
+
+        mods["embed"].build_cell(tmp_path, "s", "siglip", chunk=2)
+        medias = mods["embed"]._cells_io().load_medias(cell)
+
+        assert len(medias) == 7
+        assert all("media_bytes" not in m for m in medias.values())
+        assert all(m["embeddings"] == {"siglip": [0.25]} for m in medias.values())
+
+    def test_a_build_that_dies_part_way_leaves_no_cell_to_mistake_for_a_whole_one(
+        self, mods, monkeypatch, tmp_path
+    ):
+        """43 h in, a killed job must leave nothing `--verify` would accept."""
+        import vtscore.datasets.stages.embedding as emb
+
+        pages = self._pages(mods, tmp_path, 10)
+        cell = self._wire(mods, monkeypatch, tmp_path, pages)
+
+        calls: list[int] = []
+
+        def fake(medias, embedder_name="", on_progress=None):
+            calls.append(len(medias))
+            if len(calls) == 3:
+                raise MemoryError("node ran out")
+            for media in medias.values():
+                media["embeddings"] = {embedder_name: [0.25]}
+
+        monkeypatch.setattr(emb, "embed_missing", fake)
+
+        with pytest.raises(MemoryError):
+            mods["embed"].build_cell(tmp_path, "s", "siglip", chunk=3)
+
+        assert not cell.exists()
+        assert not list(tmp_path.glob("*.part")), "a partial cell was left behind"
+
+    def test_verify_reads_a_chunked_cell_without_loading_it(self, mods, monkeypatch, tmp_path, capsys):
+        """`--verify` on a 34 GB cell must not be the step that cannot hold it."""
+        pages = self._pages(mods, tmp_path, 6)
+        cell = self._wire(mods, monkeypatch, tmp_path, pages)
+        self._embedder(monkeypatch)
+        mods["embed"].build_cell(tmp_path, "s", "siglip", chunk=2)
+
+        monkeypatch.setattr(mods["embed"], "EMBEDDERS", {"siglip": {}})
+        monkeypatch.setattr(mods["embed"].cfg, "TIER_ORDER", ["s"])
+
+        io = mods["embed"]._cells_io()
+
+        def no_load(path):
+            raise AssertionError("verify materialised the whole cell")
+
+        monkeypatch.setattr(io, "load_medias", no_load)
+        monkeypatch.setattr(mods["embed"], "_cells_io", lambda: io)
+
+        assert mods["embed"].verify(tmp_path) == 0
+        assert "6 medias, 0 labelled, ok" in capsys.readouterr().out
+        assert cell.exists()
 
 
 class TestKaggleCredentialGate:
