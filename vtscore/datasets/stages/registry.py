@@ -240,15 +240,6 @@ def _register_and_migrate(
 
 def _migrate_context_id(old_id: str, new_id: str) -> None:
     """Re-key a context from *old_id* to *new_id* in the store."""
-    from vtscore.state.core import _contexts, _state_lock
+    from vtscore.state.core import rekey_dataset_context
 
-    with _state_lock:
-        ctx = _contexts.get(old_id)
-        if ctx is None:
-            return
-        ctx.dataset_id = new_id
-        # Insert under the new key before removing the old, so the context
-        # is never briefly invisible to concurrent lookups.
-        _contexts[new_id] = ctx
-        if old_id != new_id:
-            _contexts.pop(old_id, None)
+    rekey_dataset_context(old_id, new_id)

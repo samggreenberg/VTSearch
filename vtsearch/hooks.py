@@ -35,6 +35,19 @@ def state_sync_exempt(view):
     worker's threads (2026-06-19: one stuck job parked 23 threads on the
     futex and froze the whole UI).
 
+    **What "off the lock" covers, and what it rests on.** The marker itself
+    only skips the rehydrate. The rest of :func:`_set_request_context` still
+    runs for an exempt route -- the SPA sends ``X-Dataset-Id`` /
+    ``X-Detector-Id`` on every request, so every request resolves them
+    through ``get_context`` / ``get_detector_context``. Those two take
+    ``_context_registry_lock`` (a dict lookup, never held across a call-out)
+    rather than ``_state_lock``, which is what makes the exemption worth
+    anything: before #3869 they took ``_state_lock``, so an exempt route
+    blocked for exactly as long as the blocker ran -- a ``jobs/active`` poll
+    sat 2425 ms behind a vote in the #3853 capture, and the resulting
+    diagnosis blamed the GIL. If either resolver ever starts taking
+    ``_state_lock`` again, this decorator stops buying anything.
+
     The marker lives on the **view function** rather than in a URL-prefix
     list next to the hook, so renaming a route cannot silently drop its
     exemption — which would reintroduce exactly the hang the exemption
@@ -237,7 +250,10 @@ def _set_request_context():
     # Skip the lock-taking state-sync for endpoints whose handlers never
     # read the proxies (e.g. the jobs/active spinner poll), so a frequent
     # poll cannot queue on `_state_lock` behind a long-running job. The
-    # opt-out is a `@state_sync_exempt` marker on the view itself.
+    # opt-out is a `@state_sync_exempt` marker on the view itself. The header
+    # resolution above is already lock-free with respect to `_state_lock`
+    # (see that decorator's docstring), so skipping this block is the last
+    # thing an exempt route needs to stay off the lock entirely.
     if not _is_state_sync_exempt():
         try:
             from vtscore.detectors.dataset_sync import (

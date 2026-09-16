@@ -217,6 +217,11 @@ ground rules:
   mutation. Using an RLock (not a plain Lock) lets one public function
   call another safely - for example `clear_all()` calls `clear_medias()`
   and `clear_votes()` while holding the lock.
+- **Registry *lookups* are deliberately outside it.** `get_context` /
+  `get_detector_context` take a separate `_context_registry_lock`, held
+  only across a dict operation, so asking "is this ID loaded?" never
+  queues behind a long `_state_lock` holder. Writers take `_state_lock`
+  first and the registry lock inside it.
 - **Thread-local progress callbacks.** Both `vtscore.media` (per-thread
   via `set_thread_progress_callback`) and `vtscore.concurrency.progress`
   (per-thread via `set_thread_progress`) let parallel ingestion threads
