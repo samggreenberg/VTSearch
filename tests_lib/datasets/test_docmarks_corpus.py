@@ -1227,6 +1227,112 @@ class TestTiers:
         assert len(pages) > len(tier_of)
 
 
+class TestRebuildingAnExistingCorpusMustChooseATierPromise:
+    """#3903: an unpinned build into an existing corpus used to re-tier it silently.
+
+    ``assign_tiers`` recomputes cutoffs from whatever page set it is given, so a
+    later build over a grown pool moves pages between tiers and every cell built
+    on the old ones stops being comparable -- a well-formed corpus, reported as
+    exact, that no longer matches the numbers measured on it.
+    """
+
+    @staticmethod
+    def _finished(tmp_path, cutoffs=None):
+        out = tmp_path / "corpus"
+        out.mkdir()
+        report = out / "build_report.json"
+        report.write_text(json.dumps({"tier_cutoffs": cutoffs or {"s": 0.01, "m": 0.2, "l": 1.0}}), encoding="utf-8")
+        return out, report
+
+    @staticmethod
+    def _no_pull(mods, monkeypatch):
+        """Make the first real step of a build fatal, and record whether it was reached."""
+        reached = []
+
+        def pull(*args, **kwargs):
+            reached.append(True)
+            raise RuntimeError("reached the pull")
+
+        monkeypatch.setattr(mods["build"], "load_anchor_sources", pull)
+        return reached
+
+    def test_an_unpinned_build_into_a_finished_corpus_is_refused_before_the_pull(self, mods, monkeypatch, tmp_path):
+        out, _ = self._finished(tmp_path)
+        reached = self._no_pull(mods, monkeypatch)
+
+        assert mods["build"].main(["--sources", "spods", "--out", str(out)]) == 2
+        assert not reached, "the refusal came after work had started"
+        assert sorted(p.name for p in out.iterdir()) == ["build_report.json"], "a refused build wrote into --out"
+
+    def test_the_refusal_names_both_ways_out(self, mods, tmp_path):
+        out, report = self._finished(tmp_path)
+        with pytest.raises(mods["build"].TierStabilityError) as exc:
+            mods["build"].tier_provenance(out, pin_tiers=None, new_version=False)
+        assert "--pin-tiers" in str(exc.value) and "--new-version" in str(exc.value)
+        assert str(report) in str(exc.value)
+
+    def test_pinning_reuses_the_recorded_cutoffs_and_gets_past_the_guard(self, mods, monkeypatch, tmp_path):
+        cutoffs = {"s": 0.013, "m": 0.25, "l": 1.0}
+        out, report = self._finished(tmp_path, cutoffs)
+        prov = mods["build"].tier_provenance(out, pin_tiers=report, new_version=False)
+        assert prov["pinned_cutoffs"] == cutoffs
+        assert prov["pinned_from"] == str(report) and prov["new_version"] is False
+
+        reached = self._no_pull(mods, monkeypatch)
+        with pytest.raises(RuntimeError, match="reached the pull"):
+            mods["build"].main(["--sources", "spods", "--out", str(out), "--pin-tiers", str(report)])
+        assert reached
+
+    def test_pinned_cutoffs_keep_a_rebuild_on_the_same_tiers(self, mods):
+        # What pinning is *for*, end to end through the recorded cutoffs: the
+        # same page set, rebuilt with the cutoffs a report recorded, is the same
+        # tier membership page for page.
+        tiers = TestTiers()
+        budgets = {"s": 60, "m": 200, "l": 400}
+        first, cutoffs = tiers._assign(mods, tiers._pages(mods, 500), budgets)
+        again, _ = tiers._assign(mods, tiers._pages(mods, 500), budgets, pinned=json.loads(json.dumps(cutoffs)))
+        assert again == first
+
+    def test_a_new_version_is_allowed_and_records_what_it_superseded(self, mods, monkeypatch, tmp_path):
+        old = {"s": 0.01, "m": 0.2, "l": 1.0}
+        out, _ = self._finished(tmp_path, old)
+        prov = mods["build"].tier_provenance(out, pin_tiers=None, new_version=True)
+        assert prov == {"pinned_from": None, "pinned_cutoffs": None, "new_version": True, "superseded_cutoffs": old}
+
+        reached = self._no_pull(mods, monkeypatch)
+        with pytest.raises(RuntimeError, match="reached the pull"):
+            mods["build"].main(["--sources", "spods", "--out", str(out), "--new-version"])
+        assert reached
+
+    def test_an_empty_out_builds_as_before(self, mods, monkeypatch, tmp_path):
+        out = tmp_path / "fresh"
+        prov = mods["build"].tier_provenance(out, pin_tiers=None, new_version=False)
+        assert prov == {"pinned_from": None, "pinned_cutoffs": None, "new_version": False, "superseded_cutoffs": None}
+
+        reached = self._no_pull(mods, monkeypatch)
+        with pytest.raises(RuntimeError, match="reached the pull"):
+            mods["build"].main(["--sources", "spods", "--out", str(out)])
+        assert reached
+
+    def test_an_unreadable_report_still_counts_as_a_corpus(self, mods, tmp_path):
+        out = tmp_path / "corpus"
+        out.mkdir()
+        (out / "build_report.json").write_text("{not json", encoding="utf-8")
+        with pytest.raises(mods["build"].TierStabilityError):
+            mods["build"].tier_provenance(out, pin_tiers=None, new_version=False)
+
+    def test_a_pin_file_without_cutoffs_is_refused_up_front(self, mods, tmp_path):
+        bad = tmp_path / "report.json"
+        bad.write_text(json.dumps({"pages_written": 5}), encoding="utf-8")
+        with pytest.raises(mods["build"].TierStabilityError, match="no tier_cutoffs"):
+            mods["build"].tier_provenance(tmp_path / "fresh", pin_tiers=bad, new_version=False)
+
+    def test_pinning_and_a_new_version_contradict_each_other(self, mods, tmp_path):
+        out, report = self._finished(tmp_path)
+        with pytest.raises(mods["build"].TierStabilityError, match="contradict"):
+            mods["build"].tier_provenance(out, pin_tiers=report, new_version=True)
+
+
 # --------------------------------------------------------------- clustering
 
 
