@@ -28,13 +28,32 @@ leaves a trace at the default log level:
 * :func:`install_gc_pause_logging` - ``gc.callbacks`` timing, logged at
   WARNING above ``VTSEARCH_GC_WARN_MS``.  A full collection holds the GIL for
   its whole duration and shows up in a ``faulthandler`` dump only as an
-  arbitrary allocation site, so it is named here explicitly.
+  arbitrary allocation site, so it is named here explicitly.  Unset, that
+  threshold *tracks* ``VTSEARCH_SLOW_PHASE_MS`` (half of it, capped at the
+  200 ms default): a collection shorter than the phase bar is invisible but
+  still lands inside whatever phase was running, so a bar left behind while
+  the phase bar was lowered silently inflates every phase it contaminates.
+  That happened on 2026-09-15 (issue #3853), where three ``label_sync``
+  outliers at a 150 ms phase bar each coincided with a ~206 ms collection
+  that a 200 ms GC bar had only just failed to report.
 
 * :class:`PhaseClock` and :func:`timed_lock` - breakdown timers for the
   paths a vote runs through (the labelset rewrite, the learned-sort retrain,
   the labeling-status replay) and wait timers on the locks they share.  Both
   log at WARNING above ``VTSEARCH_SLOW_PHASE_MS`` and are silent below it, so
-  they cost two ``perf_counter`` reads on the fast path.
+  they cost a few counter reads on the fast path.
+
+  A :class:`PhaseClock` reports **CPU and GC alongside wall time**, because
+  wall time alone cannot say what a slow phase was doing.  ``cpu ~ wall``
+  means the phase did the work; ``cpu << wall`` means it blocked on I/O or was
+  descheduled (an 8-thread torch process in an 8-CPU cgroup on a shared node
+  is descheduled routinely); ``gc`` names the part that was a collection
+  freezing every thread, and is subtracted from nothing - it is reported so
+  the reader can subtract it.
+
+* :func:`freeze_gc_after_preload` - ``gc.freeze()`` once the models are
+  loaded, so full collections stop traversing the imported ML libraries'
+  object graph (issue #3870).
 
 Everything is opt-out by environment (``VTSEARCH_STALL_WATCHDOG_MS=0``
 disables the watchdog) and nothing here imports Flask or ``vtsearch``; the
@@ -71,6 +90,11 @@ _DEFAULT_GC_WARN_MS = 200.0
 SLOW_PHASE_MS_ENV = "VTSEARCH_SLOW_PHASE_MS"
 _DEFAULT_SLOW_PHASE_MS = 500.0
 
+#: Env var: set falsey to skip the post-preload :func:`gc.freeze`.
+GC_FREEZE_ENV = "VTSEARCH_GC_FREEZE"
+
+_FALSEY = {"0", "false", "no", "off"}
+
 
 def _env_ms(name: str, default: float) -> float:
     """Read a millisecond threshold from the environment.
@@ -99,6 +123,23 @@ def slow_phase_threshold_ms() -> float:
     return _env_ms(SLOW_PHASE_MS_ENV, _DEFAULT_SLOW_PHASE_MS)
 
 
+def thread_cpu_ms() -> float:
+    """This thread's CPU time in ms, or ``0.0`` where the clock is missing.
+
+    ``time.thread_time`` is documented as available only on some platforms.
+    A missing clock must degrade to "no CPU figure", never to an exception on
+    the vote path, so every caller reads a difference of two of these and a
+    constant 0.0 simply reports ``cpu=0ms``.
+    """
+    clock = getattr(time, "thread_time", None)
+    if clock is None:  # pragma: no cover - POSIX and Windows both have it
+        return 0.0
+    try:
+        return clock() * 1000.0
+    except (OSError, RuntimeError):  # pragma: no cover - defensive
+        return 0.0
+
+
 def _fmt_fields(fields: dict[str, Any]) -> str:
     return " ".join(f"{k}={v}" for k, v in fields.items())
 
@@ -122,7 +163,17 @@ class PhaseClock:
     ``rest``.
     """
 
-    __slots__ = ("name", "fields", "_t0", "_last", "_phases", "_finished", "_logger")
+    __slots__ = (
+        "name",
+        "fields",
+        "_t0",
+        "_last",
+        "_phases",
+        "_finished",
+        "_logger",
+        "_cpu0",
+        "_gc0",
+    )
 
     def __init__(self, name: str, *, logger: logging.Logger | None = None, **fields: Any) -> None:
         self.name = name
@@ -132,6 +183,9 @@ class PhaseClock:
         self._phases: list[tuple[str, float]] = []
         self._finished = False
         self._logger = logger or log
+        self._cpu0 = thread_cpu_ms()
+        # Defined further down the module; resolved at call time.
+        self._gc0 = gc_pause_ms_total()
 
     def mark(self, phase: str) -> float:
         """Close the phase that ran since the previous mark; returns its ms."""
@@ -154,14 +208,18 @@ class PhaseClock:
         rest_ms = (now - self._last) * 1000.0
         self.fields.update(fields)
         if total_ms >= slow_phase_threshold_ms():
+            cpu_ms = max(0.0, thread_cpu_ms() - self._cpu0)
+            gc_ms = max(0.0, gc_pause_ms_total() - self._gc0)
             phases = list(self._phases)
             if self._phases and rest_ms >= 1.0:
                 phases.append(("rest", rest_ms))
             breakdown = ", ".join(f"{p}={ms:.0f}ms" for p, ms in phases) or "no phases marked"
             self._logger.warning(
-                "slow phase: %s total %.0fms (%s) %s",
+                "slow phase: %s total %.0fms cpu=%.0fms gc=%.0fms (%s) %s",
                 self.name,
                 total_ms,
+                cpu_ms,
+                gc_ms,
                 breakdown,
                 _fmt_fields(self.fields),
             )
@@ -216,7 +274,21 @@ _gc_stats = _GcStats()
 
 
 def gc_warn_threshold_ms() -> float:
-    return _env_ms(GC_WARN_MS_ENV, _DEFAULT_GC_WARN_MS)
+    """Milliseconds above which a collection is logged.
+
+    Unset, the bar **tracks the phase bar** at half of it, capped at the
+    200 ms default.  A collection holds the GIL, so it lands inside whatever
+    phase or request was running and is charged to that phase; if the GC bar
+    sits above the phase bar, every such phase is reported as slow with no
+    line anywhere saying a collection was the reason.  Lowering
+    ``VTSEARCH_SLOW_PHASE_MS`` for a diagnostic session therefore raises GC
+    resolution by itself, and cannot leave the two out of step (#3853).
+    An explicit ``VTSEARCH_GC_WARN_MS`` still wins outright.
+    """
+    raw = os.environ.get(GC_WARN_MS_ENV)
+    if raw is not None:
+        return _env_ms(GC_WARN_MS_ENV, _DEFAULT_GC_WARN_MS)
+    return min(_DEFAULT_GC_WARN_MS, slow_phase_threshold_ms() / 2.0)
 
 
 def _gc_callback(phase: str, info: dict[str, Any]) -> None:
@@ -265,6 +337,17 @@ def uninstall_gc_pause_logging() -> None:
     _gc_stats.installed = False
 
 
+def gc_pause_ms_total() -> float:
+    """Total collection time since install, in ms; monotonic.
+
+    Snapshotted at both ends of a window (a :class:`PhaseClock`, a request)
+    to say how much of it was a collection.  Collections are process-wide and
+    hold the GIL, so a pause that fires on another thread still froze this
+    one, and charging it to this window is exactly right.
+    """
+    return _gc_stats.total_ms
+
+
 def gc_pause_stats() -> dict[str, Any]:
     """Counters since install: ``pauses``, ``gen2_pauses``, ``total_ms``, ``max_ms``."""
     return {
@@ -273,6 +356,43 @@ def gc_pause_stats() -> dict[str, Any]:
         "total_ms": round(_gc_stats.total_ms, 1),
         "max_ms": round(_gc_stats.max_ms, 1),
     }
+
+
+def freeze_gc_after_preload() -> tuple[int, float] | None:
+    """Collect once, then :func:`gc.freeze`; returns ``(objects, ms)``.
+
+    Issue #3870.  A labeling session logged a **gen-2 pause of ~300 ms every
+    ~2 minutes** (35 of them over 2,400 votes, flat with label count), each
+    freezing whatever was in flight - a vote POST to 333 ms, a sort to
+    351 ms.  The pause is dominated by the long-lived graph the process
+    starts with: ``transformers``, ``torch``, ``sklearn``, ``cuml``/``numba``
+    contribute millions of tracked containers that every full collection
+    traverses and never frees.  ``gc.freeze()`` moves everything alive at
+    this point into the permanent generation, which full collections skip.
+    Measured on the GRID with an otherwise identical run: ten pauses of
+    290-360 ms became **zero**, and vote POST max fell 377 ms -> 121 ms.
+
+    Call this **after the model preload and before serving**, which is what
+    makes it safe: the frozen set is the imported libraries and the loaded
+    embedders, all of which live for the process anyway.  Datasets and
+    detectors load lazily *afterwards*, so they stay collectable and
+    unloading one still frees its cycles.  Nothing is frozen that would
+    otherwise have been freed.
+
+    Returns ``None`` when ``VTSEARCH_GC_FREEZE`` is falsey, so a deployment
+    can turn it off without a code change.
+    """
+    raw = os.environ.get(GC_FREEZE_ENV, "1").strip().lower()
+    if raw in _FALSEY:
+        log.info("gc freeze: skipped (%s=%s)", GC_FREEZE_ENV, raw)
+        return None
+    t0 = time.perf_counter()
+    gc.collect()
+    gc.freeze()
+    frozen = gc.get_freeze_count()
+    ms = (time.perf_counter() - t0) * 1000.0
+    log.info("gc freeze: froze %d objects into the permanent generation in %.0fms", frozen, ms)
+    return frozen, ms
 
 
 # ---------------------------------------------------------------------------

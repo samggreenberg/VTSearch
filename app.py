@@ -368,6 +368,18 @@ def initialize_server(mode_label: str = "PRODUCTION") -> None:
     if preloaded:
         print(f"✅ Preloaded embedders: {', '.join(preloaded)}", flush=True)
 
+    # Everything alive now - the ML libraries and the preloaded embedders -
+    # lives for the process, so move it out of the generations a full
+    # collection traverses (issue #3870: ~300ms gen-2 pauses every ~2 min,
+    # each freezing whatever request was in flight). After the preload and
+    # before serving on purpose; datasets and detectors load lazily later
+    # and stay collectable. ``VTSEARCH_GC_FREEZE=0`` skips it.
+    from vtscore.concurrency.stalls import freeze_gc_after_preload
+
+    frozen = freeze_gc_after_preload()
+    if frozen is not None:
+        print(f"🧊 Froze {frozen[0]} objects for GC in {frozen[1]:.0f}ms", flush=True)
+
     print("✅ VTSearch is ready!", flush=True)
 
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import gc
 import logging
+import re
 import threading
 
 import pytest
@@ -19,7 +20,10 @@ from vtscore.concurrency import stalls
 from vtscore.concurrency.stalls import (
     PhaseClock,
     StallWatchdog,
+    freeze_gc_after_preload,
+    gc_pause_ms_total,
     gc_pause_stats,
+    gc_warn_threshold_ms,
     install_gc_pause_logging,
     slow_phase_threshold_ms,
     timed_lock,
@@ -51,6 +55,35 @@ class TestThresholds:
         """Bad configuration must not fault the vote path."""
         monkeypatch.setenv(stalls.SLOW_PHASE_MS_ENV, "soon")
         assert slow_phase_threshold_ms() == stalls._DEFAULT_SLOW_PHASE_MS
+
+
+class TestGcThresholdTracksPhaseThreshold:
+    """A GC bar left above the phase bar makes every phase it contaminates
+    look slow with nothing anywhere saying a collection was the reason
+    (#3853, 2026-09-15: three ``label_sync`` outliers at a 150ms phase bar,
+    each coinciding with a ~206ms collection a 200ms GC bar just missed)."""
+
+    def test_default_config_is_unchanged(self, monkeypatch):
+        monkeypatch.delenv(stalls.GC_WARN_MS_ENV, raising=False)
+        monkeypatch.delenv(stalls.SLOW_PHASE_MS_ENV, raising=False)
+        assert gc_warn_threshold_ms() == stalls._DEFAULT_GC_WARN_MS
+
+    def test_lowering_the_phase_bar_lowers_the_gc_bar(self, monkeypatch):
+        monkeypatch.delenv(stalls.GC_WARN_MS_ENV, raising=False)
+        monkeypatch.setenv(stalls.SLOW_PHASE_MS_ENV, "150")
+        assert gc_warn_threshold_ms() == 75.0
+
+    def test_gc_bar_never_sits_above_the_phase_bar(self, monkeypatch):
+        """The property that matters, over the whole range."""
+        monkeypatch.delenv(stalls.GC_WARN_MS_ENV, raising=False)
+        for phase_ms in (10, 50, 150, 300, 500, 5000):
+            monkeypatch.setenv(stalls.SLOW_PHASE_MS_ENV, str(phase_ms))
+            assert gc_warn_threshold_ms() <= phase_ms
+
+    def test_explicit_env_still_wins(self, monkeypatch):
+        monkeypatch.setenv(stalls.GC_WARN_MS_ENV, "42")
+        monkeypatch.setenv(stalls.SLOW_PHASE_MS_ENV, "150")
+        assert gc_warn_threshold_ms() == 42.0
 
 
 # ---------------------------------------------------------------------------
@@ -96,6 +129,56 @@ class TestPhaseClock:
         with caplog.at_level(logging.WARNING, logger=LOGGER):
             PhaseClock("bare").finish()
         assert "no phases marked" in _messages(caplog, "slow phase: bare")[0].getMessage()
+
+    def test_reports_cpu_alongside_wall(self, caplog, monkeypatch):
+        """A phase that burns CPU must be distinguishable from one that waits.
+
+        This is what the wall-only clock could not do in #3853: six of the
+        eight slow votes in the captured trace were slow *alone*, which says
+        they released the GIL - but nothing recorded whether they had done
+        work or blocked, so the candidates could not be separated.
+        """
+        monkeypatch.setenv(stalls.SLOW_PHASE_MS_ENV, "0")
+        with caplog.at_level(logging.WARNING, logger=LOGGER):
+            with PhaseClock("busy"):
+                n = 0
+                for i in range(200_000):
+                    n += i
+        msg = _messages(caplog, "slow phase: busy")[0].getMessage()
+        cpu_ms = float(re.search(r"cpu=(\d+)ms", msg).group(1))
+        total_ms = float(re.search(r"total (\d+)ms", msg).group(1))
+        assert cpu_ms > 0, msg
+        # Spin loops do not block, so CPU must account for the wall clock.
+        assert cpu_ms >= total_ms * 0.5, msg
+
+    def test_reports_the_gc_pause_that_landed_inside_it(self, caplog, monkeypatch):
+        """A collection holds the GIL, so it is charged to whatever phase was
+        running - which is why an un-lowered GC bar silently inflates phases.
+        The phase line now carries the figure itself."""
+        monkeypatch.setenv(stalls.SLOW_PHASE_MS_ENV, "0")
+        monkeypatch.setenv(stalls.GC_WARN_MS_ENV, "600000")  # bar is irrelevant here
+        install_gc_pause_logging()
+        try:
+            with caplog.at_level(logging.WARNING, logger=LOGGER):
+                with PhaseClock("collecting"):
+                    gc.collect()
+        finally:
+            uninstall_gc_pause_logging()
+        msg = _messages(caplog, "slow phase: collecting")[0].getMessage()
+        assert float(re.search(r"gc=(\d+)ms", msg).group(1)) >= 0
+        assert "cpu=" in msg
+
+    def test_gc_column_is_zero_without_the_callback(self, caplog, monkeypatch):
+        """The counter is only fed by the installed callback; with none
+        installed the clock must report 0, not crash or guess."""
+        monkeypatch.setenv(stalls.SLOW_PHASE_MS_ENV, "0")
+        uninstall_gc_pause_logging()
+        before = gc_pause_ms_total()
+        with caplog.at_level(logging.WARNING, logger=LOGGER):
+            with PhaseClock("uninstrumented"):
+                gc.collect()
+        assert gc_pause_ms_total() == before
+        assert "gc=0ms" in _messages(caplog, "slow phase: uninstrumented")[0].getMessage()
 
 
 # ---------------------------------------------------------------------------
@@ -179,6 +262,62 @@ class TestGcPauseLogging:
         with caplog.at_level(logging.WARNING, logger=LOGGER):
             gc.collect()
         assert not _messages(caplog, "gc pause")
+
+
+# ---------------------------------------------------------------------------
+# gc.freeze after preload (#3870)
+# ---------------------------------------------------------------------------
+
+
+class TestFreezeGcAfterPreload:
+    """``gc.freeze()`` once the models are loaded, so full collections stop
+    traversing the imported ML libraries' graph (#3870: ~300ms gen-2 pauses
+    every ~2 minutes, each freezing whatever request was in flight)."""
+
+    @pytest.fixture(autouse=True)
+    def _unfreeze(self):
+        """Undo it: leaving this process frozen would silently change what
+        every later test's collections can reach."""
+        yield
+        gc.unfreeze()
+
+    def test_freezes_and_reports_what_it_froze(self, monkeypatch):
+        monkeypatch.delenv(stalls.GC_FREEZE_ENV, raising=False)
+        gc.unfreeze()
+        assert gc.get_freeze_count() == 0
+        result = freeze_gc_after_preload()
+        assert result is not None
+        frozen, ms = result
+        assert frozen == gc.get_freeze_count() > 0
+        assert ms >= 0.0
+
+    @pytest.mark.parametrize("value", ["0", "false", "no", "off", "OFF"])
+    def test_env_can_turn_it_off(self, monkeypatch, value):
+        """A deployment must be able to back this out without a code change."""
+        monkeypatch.setenv(stalls.GC_FREEZE_ENV, value)
+        gc.unfreeze()
+        assert freeze_gc_after_preload() is None
+        assert gc.get_freeze_count() == 0
+
+    def test_objects_created_after_the_freeze_stay_collectable(self, monkeypatch):
+        """The safety property the call site depends on: datasets and
+        detectors load *after* this runs, so unloading one must still free
+        its cycles. Only what was alive at freeze time is permanent."""
+        monkeypatch.delenv(stalls.GC_FREEZE_ENV, raising=False)
+        gc.unfreeze()
+        freeze_gc_after_preload()
+
+        class Node:
+            pass
+
+        a, b = Node(), Node()
+        a.peer, b.peer = b, a  # a cycle only the collector can break
+        import weakref
+
+        ref = weakref.ref(a)
+        del a, b
+        gc.collect()
+        assert ref() is None, "post-freeze garbage was not collected"
 
 
 # ---------------------------------------------------------------------------
