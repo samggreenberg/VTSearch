@@ -46,6 +46,20 @@ not list every commit. Use `git log` for the full history.
   collectable, so unloading one still frees its cycles. `VTSEARCH_GC_FREEZE=0`
   skips it.
 
+- **One switch for a diagnostic session, and a log that says what its bars
+  were** (#3853). `VTSEARCH_DIAGNOSE=1` sets the whole set together — INFO
+  level, a 400 ms request bar, a 150 ms phase bar, and by the coupling a 75 ms
+  GC bar — each as a default, so a variable you set yourself still wins. It
+  deliberately does not pin `VTSEARCH_GC_WARN_MS`, since that would bypass the
+  coupling. Two sessions in that issue produced inconclusive logs for
+  configuration reasons alone: one ran at the shipped 1 s request bar, so a
+  600–900 ms vote was invisible to it, and one got lower bars only through
+  uncommitted edits to two source files. Every run now also logs a
+  `diagnostics config:` line at startup (at WARNING, so a stock deployment has
+  it), because a log that omits its own thresholds makes every absence in it
+  ambiguous — "no slow requests" reads as *nothing was slow* and as *the bar
+  was a second* equally well.
+
 ### Changed
 
 - **Every request and phase now reports CPU and GC time beside wall time**

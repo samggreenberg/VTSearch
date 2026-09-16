@@ -113,6 +113,7 @@ documented workarounds; this section describes the code as it stands.
 | `VTSEARCH_LOG_LEVEL` | `WARNING` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). `INFO`/`DEBUG` also turn on the per-request access log. |
 | `VTSEARCH_LOG_FORMAT` | `json` | Log record format: `json` (one JSON object per line, for log aggregators) or `text` (bracketed-tag human-readable form, for local dev). Every record carries the active user, `dataset_id`, `detector_id`, and `request_id`. |
 | `VTSEARCH_LOG_FILE` | unset | Also append every log record to this file (the terminal stream stays). The SLURM launcher sets it to `data/logs/app-<node>-<timestamp>.log` so a stall nobody was watching still leaves a trace; see [Diagnosing a stall](#the-app-freezes-for-seconds-during-labeling-diagnosing-a-stall). |
+| `VTSEARCH_DIAGNOSE` | unset | Truthy turns on the whole diagnostic bar set at once: `VTSEARCH_LOG_LEVEL=INFO`, `VTSEARCH_SLOW_REQUEST_MS=400`, `VTSEARCH_SLOW_PHASE_MS=150` (and, by the coupling below, a 75 ms GC bar). Each is a default, so any variable you set yourself still wins. It deliberately does **not** pin `VTSEARCH_GC_WARN_MS`, because pinning it would bypass that coupling. |
 | `VTSEARCH_SLOW_REQUEST_MS` | `1000` | A request whose handler takes at least this long is logged at WARNING with its method, path, status, duration, thread CPU time, GC time and `request_id` (the same id the browser sees as `X-Request-Id`). Below the bar, and only at `VTSEARCH_LOG_LEVEL=INFO`, the same figures are logged as `request trace:` so a diagnostic run has the whole chain to add up. |
 | `VTSEARCH_STALL_WATCHDOG_MS` | `1000` | Heartbeat-miss threshold for the stall watchdog: when the interpreter cannot run the heartbeat thread for this long, a WARNING names the thread that burned the wall clock (or reports that none did) and `faulthandler` dumps every thread's frames from inside the stall. `0` disables the watchdog. |
 | `VTSEARCH_STALL_DUMP_FILE` | `VTSEARCH_LOG_FILE`, else stderr | Where the watchdog's thread dump is written. |
@@ -1175,11 +1176,25 @@ kind of slow it was:
 its CPU too, so `total 1137ms cpu=1133ms gc=139ms` reads "on the CPU
 throughout, 139 ms of it collecting".
 
-To capture one on the GRID: run the launcher as usual (it sets
-`VTSEARCH_LOG_FILE`), optionally `VTSEARCH_LOG_LEVEL=INFO` for the rehydrate
-and cache-truncation lines, label until a stall is felt, then read the log
-around the `stall:` line. `scripts/experiments/stall_3853/analyze_app_log.py`
-prints that window for every stall in a log.
+To capture one on the GRID: launch with **`VTSEARCH_DIAGNOSE=1`** (one switch
+for every bar — see the env table; it reaches the app through the launcher's
+environment, so no launcher change is needed), label until a stall is felt,
+then read the log around the `stall:` line.
+`scripts/experiments/stall_3853/analyze_app_log.py` prints that window for
+every stall in a log.
+
+**Every run records the bars it is using**, as a `diagnostics config:` line at
+startup, at WARNING so a stock deployment has it too. Without it a log cannot
+be read honestly after the fact: "no slow requests" means *nothing was slow*
+and *the bar was a second* equally well, and one whole session in #3853 was
+mis-read that way. The analyzer prints that line first, and says so when a log
+predates it.
+
+For what the app cannot see — NFS latency on the mount every vote writes to,
+and major faults on the app process — run
+`scripts/experiments/stall_3853/sample_host.py` alongside the session; it
+writes JSONL that lines up with the app log by timestamp, and summarises
+itself with `--summarize`.
 
 **A felt pause is often a sum, not an outlier.** The residue of #3853 is a
 vote cycle whose chain of requests, retrain and collection each cost less than

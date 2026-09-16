@@ -314,7 +314,7 @@ _SLOW_REQUEST_MS_ENV = "VTSEARCH_SLOW_REQUEST_MS"
 _DEFAULT_SLOW_REQUEST_MS = 1000.0
 
 
-def _slow_request_threshold_ms() -> float:
+def slow_request_threshold_ms() -> float:
     """Milliseconds above which a request counts as slow.
 
     Read per call rather than captured at import, so a restart with a
@@ -377,7 +377,7 @@ def _log_slow_request(response):
     cpu_ms = max(0.0, thread_cpu_ms() - getattr(g, "request_cpu_start", 0.0))
     gc_ms = max(0.0, gc_pause_ms_total() - getattr(g, "request_gc_start", 0.0))
     logger = logging.getLogger(__name__)
-    if elapsed_ms >= _slow_request_threshold_ms():
+    if elapsed_ms >= slow_request_threshold_ms():
         logger.warning(
             "slow request: %s %s -> %s in %.0fms cpu=%.0fms gc=%.0fms (request_id=%s)",
             request.method,

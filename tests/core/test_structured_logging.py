@@ -575,10 +575,10 @@ class TestSlowRequestLogging:
 
     def test_unparseable_threshold_falls_back_to_default(self, monkeypatch):
         """Bad config must not fault every request."""
-        from vtsearch.hooks import _DEFAULT_SLOW_REQUEST_MS, _slow_request_threshold_ms
+        from vtsearch.hooks import _DEFAULT_SLOW_REQUEST_MS, slow_request_threshold_ms
 
         monkeypatch.setenv("VTSEARCH_SLOW_REQUEST_MS", "not-a-number")
-        assert _slow_request_threshold_ms() == _DEFAULT_SLOW_REQUEST_MS
+        assert slow_request_threshold_ms() == _DEFAULT_SLOW_REQUEST_MS
 
     def test_timer_runs_last_so_it_brackets_the_other_hooks(self):
         """Flask runs ``after_request`` in reverse registration order, so the

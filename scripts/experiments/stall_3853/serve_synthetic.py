@@ -125,6 +125,9 @@ def main() -> None:
     from vtscore.state.coverage import build_coverage_atlas  # noqa: PLC0415
 
     start_stall_diagnostics_from_env()
+    from vtsearch.diagnose import log_effective_settings  # noqa: PLC0415
+
+    log_effective_settings()
     initialize_models()
     # ``initialize_server`` freezes the GC once its preload is done (#3870);
     # do the same here or the offline reproduction measures a different

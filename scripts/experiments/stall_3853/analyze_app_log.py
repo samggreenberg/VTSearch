@@ -60,6 +60,7 @@ def _kind(msg: str) -> str | None:
     for prefix, kind in (
         ("slow request:", "request"),
         ("request trace:", "trace"),
+        ("diagnostics config:", "config"),
         ("stall:", "stall"),
         ("gc pause:", "gc"),
         ("slow phase:", "phase"),
@@ -133,6 +134,20 @@ def main() -> None:
     args = ap.parse_args()
 
     events, dumps = load(args.log)
+
+    # Print the bars first: every absence below is relative to them, and a
+    # reader who does not know them can misread "no slow requests" as "nothing
+    # was slow" when the bar was simply high (#3853, the `car` session).
+    configs = [e for e in events if e["kind"] == "config"]
+    if configs:
+        for e in configs:
+            print(f"{_hms(e['t'])}Z  {e['msg']}")
+    else:
+        print(
+            "no `diagnostics config` line: this log predates it, so the "
+            "thresholds it was written at are unknown -- read every absence with that in mind."
+        )
+
     counts: dict[str, int] = {}
     for e in events:
         counts[e["kind"]] = counts.get(e["kind"], 0) + 1
