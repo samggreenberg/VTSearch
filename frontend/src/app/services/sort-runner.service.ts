@@ -1,4 +1,4 @@
-import { DestroyRef, Injectable, inject, signal } from '@angular/core';
+import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { HttpErrorResponse } from '@angular/common/http';
 import { of, throwError } from 'rxjs';
@@ -63,6 +63,38 @@ export class SortRunnerService {
 
   /** True while a windowed-sort "Load more" page fetch is in flight. */
   readonly loadingMoreSort = signal(false);
+
+  /** Last coverage-atlas probe came back empty. Only meaningful under the `new`
+   *  Select mode, whose pick is a server round-trip rather than a rule over the
+   *  loaded window — see {@link fetchDiversityNext}. */
+  private readonly diversityExhausted = signal(false);
+
+  /**
+   * True when the current Sort + Select has nothing left to advance to: every
+   * row in the loaded ranking is labeled (`top` / `hard`), or the coverage
+   * atlas has no unseen item left to offer (`new`).
+   *
+   * This is the state {@link autoSelectNext} silently no-ops in, and the reason
+   * it needs a name: the vote-swipe animation pins the outgoing media node
+   * off-screen with `forwards` until a *new* item replaces the node, so an
+   * advance that finds nothing leaves the centre pane blank with no message and
+   * no placeholder — `media()` is still the item just voted on, so the viewer's
+   * own "Select a media item" empty state never fires (#3887). The centre panel
+   * takes this as its `exhausted` input and says so instead.
+   *
+   * Derived rather than latched so an undo puts the user straight back to work:
+   * un-voting a row makes it unlabeled again, which makes this false again with
+   * nothing having to notice. Deliberately false before any sort has landed —
+   * an unranked pair is the placeholder state, not an exhausted one.
+   */
+  readonly queueExhausted = computed(() => {
+    const sortOrder = this.sortState.sortOrder;
+    if (!sortOrder || sortOrder.length === 0) return false;
+    if (this.sortState.selectMode === 'new') return this.diversityExhausted();
+    const good = this.voteState.goodVotes;
+    const bad = this.voteState.badVotes;
+    return !sortOrder.some((s) => !good.has(s.id) && !bad.has(s.id));
+  });
 
   private learnedSortPending = false;
 
@@ -438,6 +470,7 @@ export class SortRunnerService {
       .pipe(this.pairScope.scoped())
       .subscribe({
         next: (response) => {
+          this.diversityExhausted.set(response.id === null);
           if (response.id !== null) {
             this.mediaState.selectMedia(response.id);
           }
@@ -492,7 +525,12 @@ export class SortRunnerService {
     });
     if (pick.kind === 'media') {
       this.mediaState.selectMedia(pick.id);
+      this.diversityExhausted.set(false);
     } else if (pick.kind === 'diversity') {
+      // The probe below is the only thing that can answer for the `new` mode, so
+      // clear the previous answer rather than letting a stale "empty" latch
+      // across the round-trip.
+      this.diversityExhausted.set(false);
       this.fetchDiversityNext();
     }
   }

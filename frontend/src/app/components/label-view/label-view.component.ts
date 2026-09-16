@@ -100,6 +100,12 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   /** True while a windowed-sort "Load more" page fetch is in flight. Aliased
    *  from the runner that owns it, so the template binding is unchanged. */
   readonly loadingMoreSort = this.sortRunner.loadingMoreSort;
+  /** True when the manual (non-Autopilot) advance has nothing left to move to:
+   *  every row in the loaded ranking is labeled. Bound into the centre panel so
+   *  the last vote in a dataset lands on a message rather than on the blank
+   *  pane the vote-swipe animation otherwise leaves behind (#3887). Aliased
+   *  from {@link SortRunnerService}, which owns the advance rule. */
+  readonly queueExhausted = this.sortRunner.queueExhausted;
   progressModalMetric: ProgressMetric | null = null;
 
   // SortStateService / VoteStateService are now signal-backed (their value

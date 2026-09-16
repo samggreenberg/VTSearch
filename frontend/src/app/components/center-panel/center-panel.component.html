@@ -1,10 +1,26 @@
 <div
   class="center-panel"
-  [class.empty]="!media()"
+  [class.empty]="!media() && !exhausted()"
   [class.region-draw]="regionDrawActive"
   (mousedown)="onPanelMouseDown($event)"
 >
-  @if (!media()) {
+  @if (exhausted()) {
+    <div class="exhausted-pane" role="status">
+      <p class="exhausted-heading">{{ exhaustedHeading() }}</p>
+      <p class="exhausted-body">{{ exhaustedDetail() }}</p>
+    </div>
+
+    <!-- The vote row stays put so the panel does not reflow out from under the
+         user on their last vote; both buttons are inert and unhighlighted,
+         because there is no item on screen for either to be about. -->
+    <vt-voting-overlay
+      [isGood]="false"
+      [isBad]="false"
+      [unavailable]="true"
+      [spinningVote]="null"
+      [showHint]="false"
+    ></vt-voting-overlay>
+  } @else if (!media()) {
     <p class="placeholder-text">Select a media item to view</p>
   } @else {
     <div class="media-swipe-wrapper" [class]="mediaType === 'audio' ? '' : swipeClass()">

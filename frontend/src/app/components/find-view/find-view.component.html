@@ -97,6 +97,9 @@
     <vt-center-panel
       [media]="mediaState.selectedMedia"
       [disabled]="waiting"
+      [exhausted]="queueEmpty()"
+      exhaustedHeading="All items reviewed"
+      exhaustedDetail="Every item on both sides of the cutoff has been verified. Check Stats or export your results."
       (mediaVoted)="onMediaVoted($event)"
     />
   </div>
