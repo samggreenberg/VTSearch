@@ -58,6 +58,62 @@ SKYLINE_COLUMNS: tuple[str, ...] = (
 )
 
 
+#: The continuous quantities the Smart and Stable gates are thresholds **on**,
+#: one per step (issue #3560).  The lights in :data:`IDENT_COLUMNS` say whether
+#: each rule fired; these say *how close it came*, which is a different and
+#: more actionable fact: a run that sat one noisy window short of green all
+#: session and a run whose error cost never stopped falling are both "not
+#: green", and only these columns tell them apart.
+#:
+#: They cost nothing to record.  The phase machine fits the cost trend and the
+#: flip-rate window on every step already, because the vote order depends on
+#: the lights they produce; before this the rules' own numbers were thrown away
+#: and only the three-way status kept.  Nothing here re-derives anything -
+#: every value is read off the dict
+#: :func:`~vtscore.eval.autopilot_flow.smart_detail` /
+#: :func:`~vtscore.eval.autopilot_flow.stable_detail` already built, so a margin
+#: can never disagree with the light beside it.
+#:
+#: ``NaN`` means the rule declined to fit, not "far from green": both stay red
+#: below :data:`~vtscore.detectors.stability.MIN_PER_CLASS` votes of each class,
+#: Smart needs three model steps and Stable five entries, and neither runs at
+#: all on a non-autopilot run or inside a startup schedule's rounds.
+#:
+#: They ride :data:`IDENT_COLUMNS` with the lights, so every frame carries
+#: them.  That does repeat a per-step fact across a step's variant rows - but
+#: the alternative is worse than the repetition: a **calibration** study's main
+#: frame *is* the variant frame (``emit_calibration_metrics`` replaces the
+#: plain row with one row per ``pool_variant``), so a margin block on the plain
+#: schema alone would be missing from precisely the studies that ask where the
+#: rules fired.
+#:
+#: Which gate each one belongs to, since green is a conjunction of three:
+#:
+#: * Smart is green when ``smart_slope >= SMART_FLAT_THRESHOLD`` **or**
+#:   ``smart_slope_t > -SMART_SLOPE_T`` - a disjunction (the second is #3832's
+#:   noise test: a decline shallower than the window's own scatter is not
+#:   believed), so both are kept rather than one summary distance.
+#:   ``smart_slope_t`` is ``±inf`` on a window with no residual at all.
+#: * Stable needs all of: ``stable_confident_flip_rate <
+#:   STABLE_RATE_THRESHOLD``, ``stable_max_confident_flip_rate <
+#:   STABLE_MAX_THRESHOLD``, and the raw rate no longer falling -
+#:   ``stable_flip_rate_late`` not below ``STABLE_FALLING_RATIO`` of
+#:   ``stable_flip_rate_early`` once it is over the rate threshold.
+#:   ``stable_flip_rate`` is the window average the app's UI quotes.
+#: * Span's margin is ``span_level`` against ``span_target``, in
+#:   :data:`IDENT_COLUMNS` with the light.
+STOPPING_MARGIN_COLUMNS: tuple[str, ...] = (
+    "smart_slope",
+    "smart_slope_t",
+    "stable_flip_rate",
+    "stable_confident_flip_rate",
+    "stable_max_confident_flip_rate",
+    "stable_flip_rate_early",
+    "stable_flip_rate_late",
+)
+
+
+
 #: Identifying columns every emitted row (main or sweep) leads with.  ``phase``
 #: and ``app_trained`` ride along so any downstream analysis - including the
 #: calibration study's threshold rows - can filter to the steps at which the app
@@ -102,11 +158,21 @@ IDENT_COLUMNS: tuple[str, ...] = (
     "smart",
     "stable",
     "span",
-    #: Consecutive evidence-bearing atlas nodes, out of the tree's total.  The
-    #: Span light is ``level >= min(autopilot_goal_diversity, depth)``, so these
-    #: two say *how far short* a run fell rather than merely that it did.
+    #: Consecutive evidence-bearing atlas nodes, out of the tree's total, and
+    #: the bar between them: the Span light is exactly
+    #: ``span_level >= span_target``, where the target is the run's
+    #: ``autopilot_goal_diversity`` capped at the tree size.  Emitted rather
+    #: than assumed to be 40, because it is a per-run knob *and* a per-step
+    #: quantity (a small atlas caps it, and the atlas grows), so a frame that
+    #: omits it cannot say how far short a run fell without knowing which sweep
+    #: it came from.  The three of them are the Span margin, in the unit the
+    #: rule counts in.
     "span_level",
     "span_depth",
+    "span_target",
+    #: How close Smart and Stable came to firing, as opposed to whether they
+    #: did (issue #3560).  Declared just above.
+    *STOPPING_MARGIN_COLUMNS,
     "app_trained",
     #: The parameterised opening this run took (issue #3267), verbatim - so a
     #: pooled frame says which arm each row came from without depending on the

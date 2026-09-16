@@ -78,6 +78,7 @@ from vtscore.eval.labels import evaluable_pool, media_is_positive
 from vtscore.eval.score_dumps import maybe_dump_predictions
 from vtscore.eval.voting_columns import (
     FIT_QUALITY_STRIDE_DEFAULT,
+    STOPPING_MARGIN_COLUMNS,
     VOTING_COLUMNS,
 )
 from vtscore.training.blend_schedules import BlendContext
@@ -1993,6 +1994,12 @@ def simulate_voting_iterations(  # noqa: C901
             "span": flow.span if flow is not None else "",
             "span_level": flow.span_level if flow is not None else -1,
             "span_depth": flow.span_depth if flow is not None else -1,
+            "span_target": flow.span_target if flow is not None else -1,
+            # How close each rule came to firing, beside whether it did (#3560).
+            # Read off the dicts the phase machine already built this step, so a
+            # margin cannot disagree with the light above it; NaN where no phase
+            # machine ran, or where the rule itself declined to fit one.
+            **{col: (getattr(flow, col) if flow is not None else float("nan")) for col in STOPPING_MARGIN_COLUMNS},
             "app_trained": 1 if (flow is None or app_has_detector(flow.phase)) else 0,
             "startup_schedule": startup_schedule or "",
             "calibration_seed": calibration_seed,
@@ -2230,6 +2237,8 @@ def simulate_voting_iterations(  # noqa: C901
             "span": "",
             "span_level": -1,
             "span_depth": -1,
+            "span_target": -1,
+            **{col: float("nan") for col in STOPPING_MARGIN_COLUMNS},
             "app_trained": 0,
             "startup_schedule": startup_schedule or "",
             "calibration_seed": calibration_seed,
