@@ -72,6 +72,15 @@ EMBEDDERS: dict[str, dict[str, Any]] = {
 #: disables chunking and restores the one-shot cell.
 DEFAULT_CHUNK = 1000
 
+#: Medias buffered in memory at once by a cell **rewrite** (``--relabel``,
+#: ``--repair``).  Deliberately a separate number from :data:`DEFAULT_CHUNK`
+#: rather than a second use of it: a build chunk is sized by what a *page*
+#: costs while it is being embedded (~7 MB of raster bytes, decoded image and
+#: per-image features), and a rewrite holds none of that.  What it holds is
+#: what the cell stores -- a thin media, ~169 KB for ``sift_vlad`` (measured,
+#: #3842) -- so 1,000 of them is ~170 MB whatever the tier.
+REWRITE_CHUNK = 1000
+
 
 def _load_by_path(name: str, path: Path) -> Any:
     """Import a module from a file, with its own directory importable.
@@ -172,7 +181,81 @@ def labels_for(page: Page) -> tuple[list[str], list[dict[str, Any]]]:
     return sorted(dict.fromkeys(categories)), regions
 
 
-def relabel(corpus: Path, *, apply: bool = False) -> int:
+def _rewrite_cell(io: Any, path: Path, medias: Iterator[tuple[int, dict]], *, chunk: int = REWRITE_CHUNK) -> int:
+    """Stream *medias* into *path*, replacing it only once all of them are written.
+
+    The read-modify-write half of the streaming work: :class:`CellWriter` gave
+    ``build_cell`` a cell it never holds whole, and this gives the same to the
+    two repair paths, which read an *existing* cell rather than building a new
+    one.  Both were ``load_medias`` -> mutate -> ``dump_medias``, which needs
+    the whole cell resident to change fifteen labels or one vector -- ~34 GB at
+    tier ``l`` (#3881).
+
+    Pair it with ``io.iter_medias(path)``: the reader streams the old cell, this
+    streams the new one, and *chunk* medias exist at once.  Reading and writing
+    the same path is safe because the writer's target is a ``.part`` beside it
+    and the rename happens after the reader is exhausted.
+
+    **A rewrite is all-or-nothing.**  A ``relabel`` that dies at 60% must not
+    leave a truncated cell in place of the original, and must not leave one
+    whose labels are half-updated either -- the second is the worse failure,
+    because nothing downstream can see it: a half-relabelled cell is a
+    well-formed cell that ``--verify`` calls ``ok`` and a study reads as ground
+    truth.  Writing beside the original and renaming last gives both: the cell
+    at *path* is either entirely the old one or entirely the new one, and a
+    re-run after a failure starts from a cell whose state is known.
+    """
+    buffer: dict[int, dict] = {}
+    with io.CellWriter(path) as writer:
+        for cid, media in medias:
+            buffer[cid] = media
+            if len(buffer) >= chunk:
+                writer.write(buffer)
+                buffer = {}
+        if buffer:
+            writer.write(buffer)
+    return writer.nbytes
+
+
+class _RelabelPass:
+    """One streamed pass over a cell, rewriting labels from the manifest.
+
+    A streamed ``relabel`` needs the same pass twice -- once to count, so a dry
+    run can report and an unchanged cell can be left alone, and once to write --
+    and the two must agree, because the count decides whether the write happens
+    at all.  Sharing the class is what makes that structural rather than
+    remembered: ``run`` is the only place a label is derived or a media is
+    counted, so a dry run reports exactly what an ``--force`` run would write.
+    """
+
+    def __init__(self, pages: dict[str, Page], known: set[str]) -> None:
+        self.pages = pages
+        self.known = known
+        self.n = 0
+        self.changed = 0
+        self.orphans = 0
+        self.offroster = 0
+
+    def run(self, medias: Iterator[tuple[int, dict]]) -> Iterator[tuple[int, dict]]:
+        for cid, media in medias:
+            self.n += 1
+            page = self.pages.get(media.get("origin_name"))
+            if page is None:
+                self.orphans += 1
+            else:
+                categories, regions = labels_for(page)
+                before = (media.get("category"), media.get("categories"), media.get("regions"))
+                after = (categories[0] if categories else "", categories, regions)
+                if before != after:
+                    media["category"], media["categories"], media["regions"] = after
+                    self.changed += 1
+            # Counted on the labels as they now stand, so the number describes
+            # the cell that gets written rather than the one that was read.
+            self.offroster += sum(1 for c in (media.get("categories") or []) if c not in self.known)
+            yield cid, media
+
+
+def relabel(corpus: Path, *, apply: bool = False, chunk: int = REWRITE_CHUNK) -> int:
     """Rewrite the labels in every existing cell from the current manifest.
 
     "Embedding comes last, because the cells carry the labels" is the rule
@@ -188,6 +271,14 @@ def relabel(corpus: Path, *, apply: bool = False) -> int:
     repair for a verdict that lands after a cell is built — not a licence to
     embed first, because a membership *rejection* also changes which pages are
     positives, and only the manifest knows that.
+
+    **Streamed, in two passes** (#3881). The obvious shape -- load the cell,
+    rewrite it, dump it -- carries the ceiling the chunked build removed: ~34 GB
+    resident at tier ``l`` to change fifteen labels. The first pass counts and
+    is what a dry run reports; the second runs only when something changed and
+    feeds :func:`_rewrite_cell`, so *chunk* medias are resident rather than the
+    tier. Two reads and a write cost more disk than one of each, and a re-read
+    is cheap against a cell that would not fit at all.
 
     The real case: the corpus owner countersigned the v3 roster and overturned
     one pair, merging `logo_bad45f00_1` into `logo_afm90c00-first_1_0`. Fifteen
@@ -205,20 +296,9 @@ def relabel(corpus: Path, *, apply: bool = False) -> int:
                 continue
             if pages is None:
                 pages = {p.page_id: p for p in pages_for_tier(corpus, tier)}
-            medias = io.load_medias(path)
-            changed = 0
-            orphans = 0
-            for media in medias.values():
-                page = pages.get(media.get("origin_name"))
-                if page is None:
-                    orphans += 1
-                    continue
-                categories, regions = labels_for(page)
-                before = (media.get("category"), media.get("categories"), media.get("regions"))
-                after = (categories[0] if categories else "", categories, regions)
-                if before != after:
-                    media["category"], media["categories"], media["regions"] = after
-                    changed += 1
+            counted = _RelabelPass(pages, known)
+            for _cid, _media in counted.run(io.iter_medias(path)):
+                pass
             # Labels naming a class that is not in `classes.json` are EXPECTED
             # and are not damage: under `--roster` only the chosen classes are
             # admitted, while the manifest keeps every candidate id it derived,
@@ -226,20 +306,27 @@ def relabel(corpus: Path, *, apply: bool = False) -> int:
             # rather than hidden, because an eval that grouped a cell by
             # `categories` alone would silently treat those as eval classes --
             # which is the whole distinction the roster exists to draw.
-            offroster = sum(1 for m in medias.values() for c in (m.get("categories") or []) if c not in known)
             print(
-                f"  {path.name}: {len(medias)} medias, {changed} relabelled"
-                + (f", {orphans} not in the manifest" if orphans else "")
-                + (f", {offroster} label(s) on candidate classes not on the roster" if offroster else "")
+                f"  {path.name}: {counted.n} medias, {counted.changed} relabelled"
+                + (f", {counted.orphans} not in the manifest" if counted.orphans else "")
+                + (
+                    f", {counted.offroster} label(s) on candidate classes not on the roster"
+                    if counted.offroster
+                    else ""
+                )
             )
-            touched += changed
-            if apply and changed:
-                io.dump_medias(medias, path)
+            touched += counted.changed
+            if apply and counted.changed:
+                # A second pass rather than a buffered first one: the first has
+                # to finish before it is known whether a write is owed at all,
+                # and holding what it read to find out is the ceiling this
+                # change exists to remove.
+                _rewrite_cell(io, path, _RelabelPass(pages, known).run(io.iter_medias(path)), chunk=chunk)
     print(f"\n{touched} media(s) relabelled" + ("" if apply else " — dry run, pass --apply to write"))
     return 0
 
 
-def repair(corpus: Path, *, apply: bool = False) -> int:
+def repair(corpus: Path, *, apply: bool = False, chunk: int = REWRITE_CHUNK) -> int:
     """Re-embed only the medias an existing cell holds no vector for.
 
     A page whose pixels will not decode costs the cell a *vector* but not a
@@ -259,6 +346,14 @@ def repair(corpus: Path, *, apply: bool = False) -> int:
     else -- and re-reading all 50,000 to repair one would cost exactly the
     memory the thin pickle exists to avoid.
 
+    **Nor is the cell held to write it** (#3881).  The scan keeps only the
+    vectorless medias -- the handful this exists for -- and the rewrite streams
+    the rest straight from the old cell into the new one through
+    :func:`_rewrite_cell`, substituting the repaired medias by id as they pass.
+    So the whole dict was never what ``dump_medias`` needed; it was what
+    ``dump_medias`` *took*, and at tier ``l`` that is ~34 GB to replace one
+    vector.
+
     The real case: ``ucsf/qkmg0227#0`` was truncated on write during the UCSF
     pull and decoded to half a page of black.  Re-rendered from the cached PDF,
     it needed a vector in two tier-``m`` cells that cost 11 h to build.
@@ -273,10 +368,16 @@ def repair(corpus: Path, *, apply: bool = False) -> int:
             path = cell_path(tier, embedder)
             if not path.exists():
                 continue
-            medias = io.load_medias(path)
-            missing = {cid: m for cid, m in medias.items() if not m.get("embeddings")}
+            # The scan keeps the vectorless medias and counts the rest: a cell
+            # with nothing missing costs one streamed read and no memory.
+            n_medias = 0
+            missing: dict[int, dict] = {}
+            for cid, media in io.iter_medias(path):
+                n_medias += 1
+                if not media.get("embeddings"):
+                    missing[cid] = media
             if not missing:
-                print(f"  {path.name}: {len(medias)} medias, no vector missing")
+                print(f"  {path.name}: {n_medias} medias, no vector missing")
                 continue
             if pages is None:
                 pages = {p.page_id: p for p in pages_for_tier(corpus, tier)}
@@ -295,23 +396,34 @@ def repair(corpus: Path, *, apply: bool = False) -> int:
                 with _batch_size(embedder):
                     embed_missing(loadable, embedder)
             repaired = sum(1 for m in loadable.values() if m.get("embeddings"))
-            # Drop the bytes again whatever happened: `dump_medias` would strip
-            # them, but this dict stays live for the rest of the loop.
+            # Drop the bytes again whatever happened: `_rewrite_cell` would
+            # strip them, but this dict stays live for the rest of the loop.
             for media in missing.values():
                 media.pop("media_bytes", None)
             left = len(missing) - repaired
             detail = f"{repaired} repaired" if apply else f"{len(loadable)} re-readable"
             print(
-                f"  {path.name}: {len(medias)} medias, {len(missing)} without a vector, {detail}"
+                f"  {path.name}: {n_medias} medias, {len(missing)} without a vector, {detail}"
                 + (f", {left} still missing" if apply and left else "")
                 + (f" [{'; '.join(blocked)}]" if blocked else "")
             )
             if apply:
                 unrepaired += left
                 if repaired:
-                    io.dump_medias(medias, path)
+                    _rewrite_cell(io, path, _substituted(io.iter_medias(path), missing), chunk=chunk)
     print("" if apply else "\ndry run -- pass --force to write")
     return 1 if unrepaired else 0
+
+
+def _substituted(medias: Iterator[tuple[int, dict]], replacements: dict[int, dict]) -> Iterator[tuple[int, dict]]:
+    """Yield *medias*, handing back the *replacements* entry for a cid wherever one exists.
+
+    What makes a repair a streamed rewrite rather than a mutation: the cell on
+    disk is the source of every media it is not repairing, and the few it is
+    are the in-memory copies ``embed_missing`` just filled in.
+    """
+    for cid, media in medias:
+        yield cid, replacements.get(cid, media)
 
 
 def load_medias(
