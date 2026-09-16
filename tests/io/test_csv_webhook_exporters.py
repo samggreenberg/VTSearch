@@ -115,12 +115,19 @@ class TestCsvExporterCLI:
         exp = ServerCsvResultsExporter()
         exp.validate_cli_field_values({"filepath": str(tmp_path / "out.csv")})
 
-    def test_validate_missing_filepath(self):
+    def test_validate_missing_filepath_falls_back_to_the_default(self):
+        # ``filepath`` declares a ``{YYYYMMDD-HHMMSS}``-stamped default, and
+        # ``argparse`` already applies it to an omitted ``--filepath``, so the
+        # presence check must not reject the same absence when the exporter is
+        # driven directly (issue #3874). A required field with *no* default
+        # still raises - see ``TestPluginFieldDefaults`` in
+        # ``tests_lib/core/test_plugin_field_defaults.py``.
         from vtscore.exporters.server_csv_file import ServerCsvResultsExporter
 
         exp = ServerCsvResultsExporter()
-        with pytest.raises(ValueError, match="Missing required argument: --filepath"):
-            exp.validate_cli_field_values({})
+        values: dict = {}
+        exp.validate_cli_field_values(values)
+        assert values["filepath"].endswith(".csv")
 
 
 # ---------------------------------------------------------------------------

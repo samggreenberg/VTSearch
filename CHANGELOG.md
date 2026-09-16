@@ -121,6 +121,26 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **A `PluginField`'s `default` is now a value everywhere, not just on the CLI**
+  (issue #3874). A plugin declaring `default=DEFAULT_EMAIL` on a field showed
+  an empty box in the GUI, and saving the form without touching the field
+  stored a blank - so a default the plugin author could set programmatically
+  was invisible to the user and absent from what ran. Three layers disagreed
+  about what a blank meant. Marshmallow's `load_default` fires on a *missing*
+  key, but a form posts every input it rendered, an untouched one as `""`: the
+  plugin-arg schema now drops a blank for a defaulted field before loading, so
+  a blank loads exactly as an omitted key does (which also lets a blank
+  `number` take its default instead of failing to parse). `normalize_field_values`
+  - the only pass a schema-less caller such as the Auto-Find results exporter
+  gets - fills a missing or blank field from its default before the required
+  check, so a declared default now satisfies `required` rather than raising
+  `"<Label> is required."`; the CLI's presence check defers to it too, so
+  `--email-address ""` no longer fails where omitting the flag succeeds. And
+  the Auto-Find settings tab seeds defaults on every arrival at an exporter
+  rather than only on the first pick, so an exporter restored from saved
+  settings - or a field that *gained* a default after the exporter was first
+  configured - shows and persists it.
+
 - **A plugin's `checkbox` field now renders as a checkbox everywhere, not as a
   text box you were invited to type `true` into** (issue #3851). The SPA has
   ten near-duplicate blocks that pick a widget from a `PluginField`'s

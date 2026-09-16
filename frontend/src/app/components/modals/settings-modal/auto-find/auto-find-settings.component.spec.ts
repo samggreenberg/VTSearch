@@ -207,6 +207,103 @@ describe('AutoFindSettingsComponent', () => {
     ]);
   });
 
+  describe('declared field defaults (issue #3874)', () => {
+    it('seeds defaults into an exporter restored from saved settings', async () => {
+      // The reporting case: the exporter was configured in an earlier session,
+      // so the tab is already active and `selectExporter` — where seeding used
+      // to live — is never called. The default was invisible in the UI.
+      await create({ exporter: 'server_json_file', fieldValues: { server_json_file: {} } });
+      expect(component.fieldValue('filepath')).toBe('/out.json');
+    });
+
+    it('seeds a field that gained a default after the exporter was configured', async () => {
+      // The saved map exists and is non-empty, so a whole-map "is this
+      // exporter new?" guard skips it forever; only a per-field check fills
+      // the newly-defaulted key in.
+      await create({
+        exporter: 'server_json_file',
+        fieldValues: { server_json_file: { mode: 'a' } },
+      });
+      expect(component.fieldValue('filepath')).toBe('/out.json');
+      expect(component.fieldValue('mode')).toBe('a');
+    });
+
+    it('treats a saved empty string as blank, matching the backend', async () => {
+      // A settings file written before the default existed carries `''`, which
+      // `normalize_field_values` also reads as "the caller said nothing".
+      await create({
+        exporter: 'server_json_file',
+        fieldValues: { server_json_file: { filepath: '   ' } },
+      });
+      expect(component.fieldValue('filepath')).toBe('/out.json');
+    });
+
+    it('never overwrites a value the user actually set', async () => {
+      await create({
+        exporter: 'server_json_file',
+        fieldValues: { server_json_file: { filepath: '/mine.json' } },
+      });
+      expect(component.fieldValue('filepath')).toBe('/mine.json');
+    });
+
+    it('emits the seeded values so the parent persists what is on screen', async () => {
+      // The other half of the report: saving without touching the field left
+      // the default out of the settings file.
+      const emits: AutoFindExporterChange[] = [];
+      fixture = TestBed.createComponent(AutoFindSettingsComponent);
+      component = fixture.componentInstance;
+      component.exporterChange.subscribe((v) => emits.push(v));
+      fixture.componentRef.setInput('autofindExporter', 'server_json_file');
+      fixture.componentRef.setInput('autofindExporterFieldValues', {});
+      await settleZoneless(fixture);
+
+      expect(emits.at(-1)).toEqual({
+        exporter: 'server_json_file',
+        fieldValues: { server_json_file: { filepath: '/out.json' } },
+      });
+    });
+
+    it('does not emit when there is nothing to seed', async () => {
+      // Opening the tab must not PUT the settings back unchanged — the parent
+      // saves on every emit and flashes "Saved".
+      await create({
+        exporter: 'server_json_file',
+        fieldValues: { server_json_file: { filepath: '/mine.json' } },
+      });
+      const emits = captureEmits();
+      fixture.componentRef.setInput('autofindExporterFieldValues', {
+        server_json_file: { filepath: '/mine.json' },
+      });
+      await settleZoneless(fixture);
+      expect(emits).toEqual([]);
+    });
+
+    it('seeds once rather than re-emitting on the resulting input push-back', async () => {
+      // The parent re-pushes both inputs after every emit, so a seed that
+      // answered its own save would loop forever.
+      const emits: AutoFindExporterChange[] = [];
+      fixture = TestBed.createComponent(AutoFindSettingsComponent);
+      component = fixture.componentInstance;
+      component.exporterChange.subscribe((v) => emits.push(v));
+      fixture.componentRef.setInput('autofindExporter', 'server_json_file');
+      fixture.componentRef.setInput('autofindExporterFieldValues', {});
+      await settleZoneless(fixture);
+
+      // Play the parent back: it stores what we emitted and pushes it down.
+      fixture.componentRef.setInput('autofindExporterFieldValues', emits.at(-1)!.fieldValues);
+      await settleZoneless(fixture);
+
+      expect(emits.length).toBe(1);
+    });
+
+    it('emits once per click when a pick both selects and seeds', async () => {
+      await create();
+      const emits = captureEmits();
+      component.selectExporter('server_json_file');
+      expect(emits.length).toBe(1);
+    });
+  });
+
   it('selectExporter to the None tab emits an empty exporter', async () => {
     await create({ exporter: 'server_json_file' });
     const emits = captureEmits();
