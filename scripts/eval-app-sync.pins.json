@@ -25,15 +25,15 @@
   },
   "progress.smart_status": {
     "app": "2e99faef386bd339968c72fbb65eb11c7075174c55bc8a10e34ddc26b406fa1b",
-    "harness": "292a6aee6c8ef86907f1858182b72327aae73125e58f2eef8a63b970df46112e"
+    "harness": "e0f83049070827f322fc988bf510fc64c29020db8e1be28e95149082eb0a3119"
   },
   "progress.span_status": {
     "app": "7da887d32d0559066dd3d51ad1045e5b9322f2e295aa6bc8e5ca62e6f81ba3a3",
-    "harness": "5d09d37401c8e3fec28bc32998c5a8f17721bd4105bdc0bf27dcc03103d23af1"
+    "harness": "943c601eab9f7b60b323015d29c3e3e9da6b54edcc17c0d4ceffee3e287530cd"
   },
   "progress.stable_status": {
     "app": "1c90ae2a074e29f58163986c6da63b5cc7b68588ca574393d13334146cbe1354",
-    "harness": "891dc2c561ca74480cc59ccd4bc5ba8e7fc62d09868ec2b1c915bb798226e130"
+    "harness": "107b8ec9007651c51bec2b4e30649d2013de40510615bf022965aaf66df6ac19"
   },
   "thresholds.fold_anchored_fit_then_cut": {
     "app": "ae8504e0b03401743dfcb8912d804fdf3644b23cb710d43f33e4663d680da93a",

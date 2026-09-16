@@ -289,12 +289,31 @@ A study's headline number is its **final cost** — the metric at the last click
 | **stopping point** | the click at which the rules first fired — the *width* | first `t` where `phase == "done"` |
 | **stopping cost** | the metric at that click — the *height* | that row's `cost` (and `average_precision` beside it) |
 
-`phase` has been on every metric row since the harness adopted the app's phase machine, so **this needs no re-run**: a finished study's cells carry it already. Five columns beside it (added by #3560) say *which* rule was doing the holding, which `phase` alone cannot:
+`phase` has been on every metric row since the harness adopted the app's phase machine, so **this needs no re-run**: a finished study's cells carry it already. Columns beside it (added by #3560) say *which* rule was doing the holding, which `phase` alone cannot:
 
 - **`smart` / `stable` / `span`** — the three indicator lights that produced the phase, each `red` / `yellow` / `green`. `done` is all three green and `new` is Span alone short, so the phase already encodes those; what it cannot encode is whether Smart, Stable or both hold a run in `hard`.
-- **`span_level` / `span_depth`** — the raw atlas counts the Span light thresholds (`level >= min(autopilot_goal_diversity, depth)`), so a run can say how far short it fell rather than only that it did.
+- **`span_level` / `span_depth` / `span_target`** — the raw atlas counts the Span light thresholds, and the bar itself: the light is exactly `span_level >= span_target`, where the target is `min(autopilot_goal_diversity, span_depth)`. The bar is emitted rather than assumed to be 40 because it is a per-run knob *and* a per-step quantity (a small atlas caps it, and the atlas grows).
 
-All five are blank / `-1` where no phase machine ran (a non-`autopilot` strategy, `autopilot_fidelity=False`) and throughout a startup schedule's rounds, which own the phase without consulting the indicators — *not measured* is deliberately distinguishable from *not green*. They cost nothing: the phase machine already computed all three every step and threw them away.
+All of them are blank / `-1` where no phase machine ran (a non-`autopilot` strategy, `autopilot_fidelity=False`) and throughout a startup schedule's rounds, which own the phase without consulting the indicators — *not measured* is deliberately distinguishable from *not green*. They cost nothing: the phase machine already computed all three every step and threw them away.
+
+##### The margins: how close each rule came
+
+A light is a threshold test, and a study that records only the answer cannot say whether a run sat one noisy window short of green for a hundred clicks or was never within reach of it. Those are different findings — the first wants the rule de-flapped, the second wants a better embedding — and "Stable held it" is three of them, because Stable is a conjunction of three gates. So every step also carries the continuous quantities those gates are thresholds **on**:
+
+| column | the gate it feeds | green when |
+|---|---|---|
+| `smart_slope` | error-cost flatness | `>= SMART_FLAT_THRESHOLD` (−0.015) |
+| `smart_slope_t` | that slope against the window's own scatter (#3832) | `> -SMART_SLOPE_T` (−2.0) |
+| `stable_confident_flip_rate` | confident-flip average over the pool | `< STABLE_RATE_THRESHOLD` (0.005) |
+| `stable_max_confident_flip_rate` | its worst single step in the window | `< STABLE_MAX_THRESHOLD` (0.01) |
+| `stable_flip_rate_early` / `stable_flip_rate_late` | the raw rate having stopped falling | not (`late >= 0.005` and `late < STABLE_FALLING_RATIO × early`) |
+| `stable_flip_rate` | — (the window average the app's panel quotes) | |
+
+Smart's two are a **disjunction** — either clears it — so neither alone says a run was held; Stable's three and Span's one are conjunctive. Every value is read off the dict the rule itself built (`autopilot_flow.smart_detail` / `stable_detail`), so a margin can never disagree with the light beside it, and `NaN` means the rule **declined to fit** one — below `MIN_PER_CLASS` votes of either class, under three model steps for Smart, under five entries for Stable — never "far from green".
+
+**These cost nothing to record and cannot be back-filled.** The rules fit all of it on every step already, because the vote order depends on the lights they produce; before #3560 the numbers were discarded and only the three-way status kept. But unlike `phase` and the lights, a finished study's cells *cannot* be enriched with them — the slope and flip-rate windows are per-step state the run threw away — so this half, and only this half, needs a re-run to answer on an old grid. `stopping.has_margins()` is the guard, and every margin function returns an empty frame rather than a table of zeros on a frame that predates them.
+
+`stopping.margins()` / `summarise_margins()` / `margin_table()` report them per run over its **held** steps (everything before its first fire, or the whole trajectory when it never fired — a converged run sits at a comfortable margin for the rest of its budget and would otherwise swamp the steps that actually held it). One sign convention throughout: **positive means the gate is satisfied with that much room, negative means the run is short by that much**, whichever way the underlying inequality points. Beside each margin is the share of held steps that gate was satisfied at, which is what separates a flap from a wall, and `stable_block_avg` / `stable_block_max` / `stable_block_falling` attribute a Stable block to one of its three gates in the rule's own short-circuit order.
 
 **Do not truncate the run at `done`.** The simulated user keeps clicking to the budget exactly as before, because the stretch past the stopping point is what says whether stopping there was the right call — and because arms can only be compared at a fixed `t`.
 

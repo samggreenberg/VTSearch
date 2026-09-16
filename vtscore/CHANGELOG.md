@@ -10,6 +10,21 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **The stopping indicators' margins, not just their lights** (issue #3560).
+  `stable_status_from_entries` now returns `max_confident_flip_rate` and the
+  two halves of the raw-flip window (`flip_rate_early` / `flip_rate_late`)
+  beside the averages it already reported - the two gates green depends on
+  that nothing was reporting, so a caller could see *that* Stable was yellow
+  but not *which* of its three conditions was binding. Purely additive to the
+  status dict; all five rates now round to six places rather than four, since
+  on a large haystack a single flip is finer than 1e-4 and no rule reads them
+  back. `vtscore.eval.autopilot_flow` gains `smart_detail` / `stable_detail`
+  (the whole status dict, where `smart_status` / `stable_status` keep only the
+  light) and `span_target` (the bar `span_level` is measured against, split
+  out of `span_status` so the two cannot disagree); `AutopilotFlow` records all
+  of it per step, and the voting-iterations frames carry it as eight new
+  identifying columns.
+
 - **`vtscore.concurrency.stalls`** (issue #3853): in-process stall
   diagnostics. `StallWatchdog` is a heartbeat thread that, when it wakes late
   by more than a threshold, logs which threads consumed CPU across the gap
