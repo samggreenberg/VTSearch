@@ -14,7 +14,6 @@ import pytest
 
 from vtscore.eval.timing_benchmark import run_timing_benchmark
 from vtscore.eval.sweep_trainers import _as_scores, _parse_trainer_spec, resolve_trainer
-from vtscore.eval.voting_columns import TIMING_COLUMNS
 from vtscore.eval.voting_iterations import (
     _downsample_to_prevalence,
     _prevalence,
@@ -23,13 +22,7 @@ from vtscore.eval.voting_iterations import (
 )
 from vtscore.training.svm import train_svm
 
-
-_TIMING_COLS = TIMING_COLUMNS
-
-
-def _drop_timing(rows):
-    """Rows with wall-clock timing columns removed, for deterministic comparison."""
-    return [{k: v for k, v in r.items() if k not in _TIMING_COLS} for r in rows]
+from tests_shared.rows import assert_same_rows, drop_timing
 
 
 def _separable_clips(dim=16, n_per_cat=40, n_cats=2, seed=0):
@@ -144,8 +137,8 @@ class TestTrainerPluggableVoting:
         # Omitting `trainer` must equal trainer="app", and a rerun must reproduce,
         # on every non-timing column (wall-clock columns vary run to run).  This
         # guards against silent drift in the app-pipeline path.
-        assert _drop_timing(rows_default) == _drop_timing(rows_explicit)
-        assert _drop_timing(rows_default) == _drop_timing(rerun)
+        assert_same_rows(drop_timing(rows_default), drop_timing(rows_explicit))
+        assert_same_rows(drop_timing(rows_default), drop_timing(rerun))
         assert rows_default[-1]["trainer"] == "app"
 
     def test_legacy_mlp_trainer_name_still_resolves_to_the_app_pipeline(self):
@@ -157,7 +150,7 @@ class TestTrainerPluggableVoting:
         clips = _separable_clips(seed=1)
         rows_legacy = simulate_voting_iterations(clips, "cat0", seed=3, max_steps=25, trainer="mlp")
         rows_new = simulate_voting_iterations(clips, "cat0", seed=3, max_steps=25, trainer="app")
-        assert _drop_timing(rows_legacy) == _drop_timing(rows_new)
+        assert_same_rows(drop_timing(rows_legacy), drop_timing(rows_new))
         assert rows_legacy[-1]["trainer"] == "app"
 
     def test_head_is_rejected_on_a_standalone_estimator(self):
@@ -238,7 +231,7 @@ class TestPrevalenceControl:
         clips = _separable_clips(seed=1)
         with_none = simulate_voting_iterations(clips, "cat0", seed=0, max_steps=15)
         with_natural = simulate_voting_iterations(clips, "cat0", seed=0, max_steps=15, target_prevalence=None)
-        assert _drop_timing(with_none) == _drop_timing(with_natural)
+        assert_same_rows(drop_timing(with_none), drop_timing(with_natural))
 
 
 # ---------------------------------------------------------------------------

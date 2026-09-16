@@ -32,11 +32,12 @@ from vtscore.eval.patch_styles import (
     resolve_style,
     snap_box_to_region,
 )
-from vtscore.eval.voting_columns import TIMING_COLUMNS, VOTING_COLUMNS
+from vtscore.eval.voting_columns import VOTING_COLUMNS
 from vtscore.eval.voting_iterations import run_voting_iterations_eval, simulate_voting_iterations
 from vtscore.media.patch_embed import nearest_patch_to_box
 
-_TIMING_COLS = TIMING_COLUMNS
+from tests_shared.rows import assert_same_rows, drop_timing
+
 
 DIM = 32
 GRID = 4  # 4x4 patch grid
@@ -620,10 +621,6 @@ class TestWholeImageStyle:
 # ---------------------------------------------------------------------------
 
 
-def _drop_timing(rows):
-    return [{k: v for k, v in r.items() if k not in _TIMING_COLS} for r in rows]
-
-
 class TestStyleVotingSimulation:
     @pytest.mark.parametrize("style", ["whole_image", "max_patch", "max_patch_hac", "max_patch_pca_hac"])
     def test_style_run_produces_learnable_rows(self, style):
@@ -658,7 +655,7 @@ class TestStyleVotingSimulation:
         )
         a = simulate_voting_iterations(dict(medias), **kwargs)
         b = simulate_voting_iterations(dict(medias), **kwargs)
-        assert _drop_timing(a) == _drop_timing(b)
+        assert_same_rows(drop_timing(a), drop_timing(b))
 
     def test_max_patch_learns_planted_signal(self):
         medias, target = _planted_dataset(n_per_cat=25, seed=9)
@@ -752,7 +749,7 @@ class TestStyleVotingSimulation:
         default = simulate_voting_iterations(dict(medias), **kwargs)
         explicit = simulate_voting_iterations(dict(medias), style="max_patch", **kwargs)
         assert default
-        assert _drop_timing(default) == _drop_timing(explicit)
+        assert_same_rows(drop_timing(default), drop_timing(explicit))
 
     def test_default_arm_floods_a_bad_vote_over_every_scored_row(self):
         """Pinned on the assembled vectors, so a refactor can't quietly restore

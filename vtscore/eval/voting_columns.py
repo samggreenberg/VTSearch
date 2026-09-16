@@ -113,7 +113,6 @@ STOPPING_MARGIN_COLUMNS: tuple[str, ...] = (
 )
 
 
-
 #: Identifying columns every emitted row (main or sweep) leads with.  ``phase``
 #: and ``app_trained`` ride along so any downstream analysis - including the
 #: calibration study's threshold rows - can filter to the steps at which the app
