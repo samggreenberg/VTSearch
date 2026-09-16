@@ -28,8 +28,16 @@ import shutil
 from collections import defaultdict
 from pathlib import Path
 
+#: The classes this was first run for (#3768) -- the ones whose slates were
+#: finished at the time. It is the default rather than the only option: the
+#: probe applies to any finished class, and the remaining nineteen were run
+#: against it in 2026-09 (#3879). Pass ``--classes`` for a different set.
 FINISHED = ["bicycle", "boat", "dog", "fire hydrant", "sink", "stop sign"]
 SAMPLE = 100
+
+#: Fixed so a rebuild draws the same images and can be diffed rather than
+#: re-argued. The 2026-09 run of the remaining nineteen used 3879, recorded in
+#: each slate's manifest, so the two batches are distinguishable.
 SEED = 3768
 
 
@@ -40,7 +48,14 @@ def main() -> int:
     ap.add_argument("--queue", default="/expscratch/sgreenberg/vgscale-3156/annotation_queue.jsonl")
     ap.add_argument("--out", default="/expscratch/sgreenberg/vlm-3720/belowcut")
     ap.add_argument("--n", type=int, default=SAMPLE)
+    ap.add_argument("--seed", type=int, default=SEED, help="fixed so a rebuild is diffable")
+    ap.add_argument(
+        "--classes",
+        default="",
+        help="comma-separated classes to build; default is FINISHED, the #3768 six",
+    )
     args = ap.parse_args()
+    classes = [c.strip() for c in args.classes.split(",") if c.strip()] or list(FINISHED)
 
     manifest = json.loads((Path(args.slates) / "slates.json").read_text())
     known: dict[str, set[int]] = defaultdict(set)
@@ -68,12 +83,12 @@ def main() -> int:
     dets = [json.loads(x) for x in Path(args.dets).read_text().splitlines() if x.strip()]
     dets = [r for r in dets if "dets" in r]
 
-    rng = random.Random(SEED)
+    rng = random.Random(args.seed)
     out = Path(args.out)
     summary = {}
     print(f"{'class':<13}{'cut':>6}{'below':>8}{'eligible':>10}{'sampled':>9}")
     print("-" * 47)
-    for cls in FINISHED:
+    for cls in classes:
         cut = manifest[cls]["cut"]
         below = []
         for r in dets:
@@ -91,7 +106,7 @@ def main() -> int:
         d.mkdir(parents=True, exist_ok=True)
         for iid in pick:
             (d / f"{iid}.jpg").symlink_to(paths[iid])
-        summary[cls] = {"cut": cut, "below": len(below), "sampled": len(pick), "ids": pick}
+        summary[cls] = {"cut": cut, "below": len(below), "sampled": len(pick), "seed": args.seed, "ids": pick}
         print(f"{cls:<13}{cut:>6.2f}{len(below):>8,}{len(below):>10,}{len(pick):>9}")
     (out / "belowcut.json").write_text(json.dumps(summary, indent=1) + "\n")
     print(f"\nwrote {out}/belowcut.json")
