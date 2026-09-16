@@ -645,6 +645,27 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private queueEmptyNotified = false;
 
+  /**
+   * True when {@link advanceToBoundary} has nowhere left to go: every row in
+   * the scored window is verified, on both faces of the cutoff.
+   *
+   * The toast that fires on reaching this state says so once and then scrolls
+   * away; the centre pane needs to keep saying it, because the vote-swipe
+   * animation pins the outgoing media node off-screen until a new item replaces
+   * it and here nothing ever does — leaving a blank pane with the item still
+   * selected, so the viewer's own empty state never fires (#3887).
+   *
+   * Derived rather than latched alongside {@link queueEmptyNotified} so an undo
+   * un-verifies a row and puts the user straight back to work. False before a
+   * score has landed: that is the placeholder state, not an exhausted one.
+   */
+  readonly queueEmpty = computed(() => {
+    const order = this.sortState.sortOrder;
+    if (!order || order.length === 0 || this.sortState.threshold == null) return false;
+    const verified = this.voteState.verifiedIds;
+    return !order.some((item) => !verified.has(item.id));
+  });
+
   /** Open the detector-evaluation Stats modal. */
   onStats(): void {
     this.showStats = true;
