@@ -270,6 +270,15 @@ A chunked cell is written to `<name>.pkl.part` and renamed on clean exit, so a
 job killed at hour 40 leaves nothing behind for `--verify` to accept as a
 finished cell. There is no mid-cell resume: a re-run restarts the tier.
 
+`--verify`, `--relabel` and `--repair` stream the same way, so none of them
+needs the memory the build no longer needs. `--relabel` reads the cell twice —
+once to count, which is what the dry run reports, and once to write, only if
+something changed — and `--repair` holds just the vectorless medias while the
+rest pass straight from the old cell into the new one. Both write beside the
+original and rename last, so a rewrite killed part way leaves the cell entirely
+as it was: never truncated, and never half-relabelled, which is the failure
+`--verify` could not see.
+
 Cells land in `$VTS_PILE/embeddings/docmarks_<tier>__<embedder>.pkl`. Verify
 before trusting:
 
