@@ -125,6 +125,11 @@ def slow_phase_threshold_ms() -> float:
     return _env_ms(SLOW_PHASE_MS_ENV, _DEFAULT_SLOW_PHASE_MS)
 
 
+def watchdog_threshold_ms() -> float:
+    """Heartbeat-miss threshold; ``0`` means the watchdog is off."""
+    return _env_ms(WATCHDOG_MS_ENV, _DEFAULT_WATCHDOG_MS)
+
+
 def thread_cpu_ms() -> float:
     """This thread's CPU time in ms, or ``0.0`` where the clock is missing.
 
@@ -360,6 +365,11 @@ def gc_pause_stats() -> dict[str, Any]:
     }
 
 
+def gc_freeze_enabled() -> bool:
+    """Whether :func:`freeze_gc_after_preload` will do anything."""
+    return os.environ.get(GC_FREEZE_ENV, "1").strip().lower() not in _FALSEY
+
+
 def freeze_gc_after_preload() -> tuple[int, float] | None:
     """Collect once, then :func:`gc.freeze`; returns ``(objects, ms)``.
 
@@ -384,9 +394,8 @@ def freeze_gc_after_preload() -> tuple[int, float] | None:
     Returns ``None`` when ``VTSEARCH_GC_FREEZE`` is falsey, so a deployment
     can turn it off without a code change.
     """
-    raw = os.environ.get(GC_FREEZE_ENV, "1").strip().lower()
-    if raw in _FALSEY:
-        log.info("gc freeze: skipped (%s=%s)", GC_FREEZE_ENV, raw)
+    if not gc_freeze_enabled():
+        log.info("gc freeze: skipped (%s=%s)", GC_FREEZE_ENV, os.environ.get(GC_FREEZE_ENV))
         return None
     t0 = time.perf_counter()
     gc.collect()
@@ -712,7 +721,7 @@ def start_stall_diagnostics_from_env() -> Optional[StallWatchdog]:
     install_gc_pause_logging()
     if _active is not None and _active.running:
         return _active
-    threshold_ms = _env_ms(WATCHDOG_MS_ENV, _DEFAULT_WATCHDOG_MS)
+    threshold_ms = watchdog_threshold_ms()
     if threshold_ms <= 0:
         return None
     path = resolve_dump_path()

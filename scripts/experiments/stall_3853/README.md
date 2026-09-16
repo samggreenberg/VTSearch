@@ -13,7 +13,8 @@ stall"); this directory holds what drives and reads them.
 |---|---|
 | `serve_synthetic.py` | Run the real app over an in-memory synthetic patch dataset (N images, `dinov3_patch` CLS + `14x14x768` grids), for reproducing offline. Patch grids are never pickled, so a VG slate cannot be loaded without the DINOv3 weights and a GPU; this builds the post-load shape directly. |
 | `drive_labeling.py` | Replay the SPA's per-vote request chain against any running VTSearch (a tunnel to the GRID included), timing each request client-side and reporting keypress→panel, sort wait, per-endpoint percentiles, and head-of-line clusters. Stdlib only. |
-| `analyze_app_log.py` | Read the app's JSON log and print the ±15 s window around every `stall:` line, with the `faulthandler` thread dump that fired during it. |
+| `analyze_app_log.py` | Read the app's JSON log and print the ±15 s window around every `stall:` line, with the `faulthandler` thread dump that fired during it, the per-vote budget, and the thresholds the log was written at. |
+| `sample_host.py` | Sample what the app cannot see, every N seconds, to JSONL: per-op NFS RTT/queue/exec for the mounts the data dir and venv live on (differenced per interval, never a lifetime counter), plus `majflt`/RSS for the app process. `--summarize` prints the tables. Stdlib only, so it runs in a bare shell on a node with no venv. |
 
 ## What the instruments say
 
@@ -55,11 +56,22 @@ the server.
 
 ## On the GRID (the careful experiment)
 
-1. Pull `dev` and start the app with the launcher as usual. It now sets
+1. Pull `dev` and start the app with the launcher as usual, with
+   **`VTSEARCH_DIAGNOSE=1`** exported: one switch for the whole bar set
+   (INFO, request 400 ms, phase 150 ms, and a 75 ms GC bar by the coupling).
+   Do **not** also set `VTSEARCH_GC_WARN_MS` -- pinning it bypasses the
+   coupling, which is the mistake the preset exists to prevent. The variable
+   travels through `srun`'s environment, so the launcher copy already
+   deployed at `~/.local/bin/vtsearch` needs no update. The launcher sets
    `VTSEARCH_LOG_FILE` to `data/logs/app-<node>-<timestamp>.log`, which is
-   also where the thread dump lands. Add `VTSEARCH_LOG_LEVEL=INFO` to get
-   the rehydrate and truncation lines; optionally `VTSEARCH_SLOW_REQUEST_MS=400
-   VTSEARCH_SLOW_PHASE_MS=300` to lower the bars.
+   also where the thread dump lands.
+
+   Start the host sampler in another pane, so the filesystem and the process
+   are on the record for the same minutes::
+
+       python scripts/experiments/stall_3853/sample_host.py \
+           --mount /exp/$USER --mount /expscratch/$USER \
+           --match "python app.py" --out host-$(hostname -s).jsonl
 2. Label a slate as normal. Note the wall-clock time of any felt stall.
 3. `python scripts/experiments/stall_3853/analyze_app_log.py data/logs/app-*.log`
    (add `--votes 15` for a deeper per-vote breakdown).
