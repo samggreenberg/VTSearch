@@ -2901,9 +2901,7 @@ class TestABigCellIsStreamedRatherThanAssembled:
         assert all("media_bytes" not in m for m in medias.values())
         assert all(m["embeddings"] == {"siglip": [0.25]} for m in medias.values())
 
-    def test_a_build_that_dies_part_way_leaves_no_cell_to_mistake_for_a_whole_one(
-        self, mods, monkeypatch, tmp_path
-    ):
+    def test_a_build_that_dies_part_way_leaves_no_cell_to_mistake_for_a_whole_one(self, mods, monkeypatch, tmp_path):
         """43 h in, a killed job must leave nothing `--verify` would accept."""
         import vtscore.datasets.stages.embedding as emb
 
