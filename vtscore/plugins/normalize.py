@@ -4,9 +4,18 @@ After marshmallow / argparse validates the *shape* of incoming field
 values, this module's :func:`normalize_field_values` applies the
 behaviours that used to be plugin-author responsibility:
 
-1. **Whitespace strip** on every text-like value, so plugin bodies can
+1. **Default fallback** for a field the caller left blank.  A
+   :attr:`~vtscore.plugins.PluginField.default` is a *value*, not a
+   placeholder: a field arriving missing, empty, or whitespace-only is
+   filled from it before anything else runs, so the declared default is
+   what the plugin body sees.  ``argparse`` already did this for the CLI
+   (an omitted flag takes the field's ``default``); web callers send an
+   untouched input as ``""``, which marshmallow's ``load_default`` does
+   *not* cover, so the two ingress points disagreed until this pass
+   (issue #3874).
+2. **Whitespace strip** on every text-like value, so plugin bodies can
    trust ``field_values[key]`` is the trimmed form.
-2. **Template variable substitution** for fields that declare
+3. **Template variable substitution** for fields that declare
    :attr:`PluginField.template_vars`.  Recognised names -
    ``YYYYMMDD-HHMMSS``, ``YYYYMMDD``, ``YYYY``, ``MM``, ``DD``,
    ``detector_name``, ``detector_id``,
@@ -14,7 +23,7 @@ behaviours that used to be plugin-author responsibility:
    :func:`~vtscore.security.path_validation.sanitize_template_value`
    so attacker-controlled values cannot escape the directory implied
    by an admin-configured template.
-3. **Field-type-driven security validation**.
+4. **Field-type-driven security validation**.
    ``field_type="url"`` values are passed through
    :func:`~vtscore.security.url_validation.validate_url`;
    ``field_type="server_path"`` values are passed through
@@ -137,14 +146,32 @@ def _validated_field_value(field_type: str, value: str) -> str:
     return value
 
 
+def _is_blank(value: Any) -> bool:
+    """True when *value* carries no input from the caller.
+
+    ``None`` (key absent, or an optional field the schema left empty) and
+    a string that is empty or whitespace-only both count.  A ``0``, a
+    ``False``, or any other non-string value is *input* and is left alone
+    - only the caller's silence is filled in.
+    """
+    if value is None:
+        return True
+    return isinstance(value, str) and not value.strip()
+
+
 def normalize_field_values(plugin: PluginBase, field_values: dict[str, Any]) -> dict[str, Any]:
     """Normalize *field_values* against *plugin*'s declared fields.
 
     Mutates *field_values* in place and returns it.  Skips file uploads
     (those don't carry strings) and non-string values (numbers,
     booleans).  Raises :class:`ValueError` for an empty / missing
-    required field, an invalid URL, a path-traversal attempt, or an
-    unknown template variable.
+    required field with no declared default, an invalid URL, a
+    path-traversal attempt, or an unknown template variable.
+
+    A field left blank by the caller is filled from its declared
+    :attr:`~vtscore.plugins.PluginField.default` before any other pass
+    runs, so the default is templated, security-validated and
+    required-checked exactly like a typed value.
 
     Idempotent: running the pass twice on the same dict produces the
     same result and never raises differently the second time.
@@ -152,6 +179,17 @@ def normalize_field_values(plugin: PluginBase, field_values: dict[str, Any]) -> 
     for f in plugin.fields:
         if f.field_type == "file":
             continue
+
+        # A blank field takes its declared default.  This runs for *every*
+        # non-file type (not just the text-like ones normalized below)
+        # because it is the only place the web path applies a default at
+        # all: marshmallow's ``load_default`` fires on a *missing* key,
+        # and a GUI form posts an untouched input as ``""``.  Saved-settings
+        # callers (the Auto-Find results exporter) reach a plugin through
+        # here without passing a schema at all.
+        if f.default and _is_blank(field_values.get(f.key)):
+            field_values[f.key] = f.default
+
         if f.field_type not in _TEXT_LIKE_TYPES:
             continue
 

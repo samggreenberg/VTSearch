@@ -87,7 +87,7 @@ other parameter is optional.
 | `description` | `str`       | `""`     | Helper text shown below the field                       |
 | `accept`      | `str`       | `""`     | For `"file"` fields: comma-separated extensions (e.g. `".pkl"`) |
 | `options`     | `list[str]` | `[]`     | For `"select"` fields: allowed dropdown values          |
-| `default`     | `str`       | `""`     | Pre-filled value                                        |
+| `default`     | `str`       | `""`     | Pre-filled **value** — not a placeholder (that's `placeholder`). The UI renders it into the widget so the user sees and can edit it, and the framework fills it in for any field that still arrives blank, so an untouched field reaches your body as its default rather than as `""`. A declared default therefore satisfies `required` |
 | `required`    | `bool`      | `True`   | Whether the field must be filled before submitting      |
 | `placeholder` | `str`       | `""`     | Hint shown as placeholder text in the input widget      |
 | `hint`        | `str`       | `""`     | Format-hint chip rendered *below* the input and kept visible while the user types (`placeholder` disappears). Newlines and indentation render verbatim, so multi-line schema samples are fine |
@@ -180,17 +180,25 @@ don't pick one get a letter instead of inheriting yours), and its
 **Do not write input-handling boilerplate in your plugin body.** Before
 `field_values` reaches your `run()` / `export()` / `_do_load()` /
 `_do_save()`, the framework runs it through
-`normalize_field_values()` (`vtscore/plugins/normalize.py`), which does
-three things to every text-like field (`text`, `url`, `email`,
-`password`, `folder`, `server_path`, `select`):
+`normalize_field_values()` (`vtscore/plugins/normalize.py`). One pass
+applies to **every** non-`file` field:
 
-1. **Whitespace strip.** `field_values[key]` is already trimmed — no
-   `.strip()` in your body. A required field that is empty (or missing)
-   after stripping raises `ValueError("<Label> is required.")`, so no
+1. **Declared defaults fill in blanks.** A field that arrives missing,
+   empty, or whitespace-only takes its `default`, so you never have to
+   write `field_values.get(key) or MY_DEFAULT`. This runs first, which is
+   why a declared default satisfies `required`.
+
+The remaining three apply to every text-like field (`text`, `url`,
+`email`, `password`, `folder`, `server_path`, `select`):
+
+2. **Whitespace strip.** `field_values[key]` is already trimmed — no
+   `.strip()` in your body. A required field that is still empty (or
+   missing) after stripping — meaning it declares no default either —
+   raises `ValueError("<Label> is required.")`, so no
    `if not foo: raise` boilerplate either.
-2. **Template-variable substitution**, for fields that declare
+3. **Template-variable substitution**, for fields that declare
    `template_vars` (see below).
-3. **Field-type-driven security validation.** A `url` field is passed
+4. **Field-type-driven security validation.** A `url` field is passed
    through `vtscore.security.url_validation.validate_url` (the SSRF
    guard). A `server_path` or `folder` field is passed through
    `confine_server_filepath()` anchored at the per-user data dir, and
@@ -209,6 +217,7 @@ Both ingress points run the pass, so HTTP and CLI behave identically:
 | HTTP, flat body | `validate_plugin_args()` in `vtsearch/routes/_plugins.py`, after the marshmallow load and file-upload population |
 | HTTP, nested `{"..._name", "field_values"}` body | `validate_exporter_field_values()` in the same module |
 | CLI  | `PluginBase.validate_cli_field_values()`, after the presence check |
+| Saved settings | The Auto-Find results exporter is handed its persisted `field_values` map with no schema in the loop, so this pass is the only one that runs |
 | Sync sources | `SyncSource.load()` / `save()` / `peek_version()` normalize a **copy** of `field_values` before dispatching to your `_do_*` hook (`vtscore/sync/__init__.py`) |
 
 Calling `validate_url()` or `validate_server_filepath()` by hand still

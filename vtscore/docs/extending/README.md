@@ -129,8 +129,9 @@ one directly when running outside an app context, or call
 **Trust `field_values`; don't re-validate declared fields.** Every
 plugin family whose inputs arrive as `field_values` gets a framework
 normalization pass before your body runs — see [Framework-side
-normalization](#framework-side-normalization) below. Whitespace is
-stripped, required-but-empty raises, declared `template_vars` are
+normalization](#framework-side-normalization) below. Blanks are filled
+from the field's declared `default`, whitespace is
+stripped, required-but-empty-and-undefaulted raises, declared `template_vars` are
 substituted and sanitised, `url` fields are SSRF-checked, and
 `server_path` / `folder` fields are confined to the user's data dir and
 written back canonicalised. Writing that boilerplate again is redundant;
@@ -153,17 +154,28 @@ before you use it.
 `vtscore/plugins/normalize.py` owns everything that used to be
 plugin-author boilerplate. `normalize_field_values(plugin,
 field_values)` walks the plugin's declared `fields` and, for every
-text-like type (`text`, `url`, `email`, `password`, `folder`,
-`server_path`, `select`):
+non-`file` type:
 
-1. **Strips whitespace**, then raises `ValueError("<Label> is
-   required.")` if a `required=True` field is empty or missing. Your
-   body never needs `.strip()` or a presence check.
-2. **Substitutes declared `template_vars`** (see below).
-3. **Runs the field-type security validator.** `url` → `validate_url`.
+1. **Applies the declared `default`** to a value that arrives missing,
+   empty, or whitespace-only. A `default` is a value, not a placeholder:
+   the form pre-fills it, an omitted CLI flag takes it, and a field the
+   user never touched reaches your body as it rather than as `""`. Your
+   body never needs `field_values.get(key) or MY_DEFAULT`.
+
+Then, for every text-like type (`text`, `url`, `email`, `password`,
+`folder`, `server_path`, `select`):
+
+2. **Strips whitespace**, then raises `ValueError("<Label> is
+   required.")` if a `required=True` field is *still* empty or missing —
+   i.e. it declares no default either. Your body never needs `.strip()`
+   or a presence check.
+3. **Substitutes declared `template_vars`** (see below).
+4. **Runs the field-type security validator.** `url` → `validate_url`.
    `server_path` / `folder` → `confine_server_filepath` anchored at the
    per-user data dir, whose *approved* path is written back into
-   `field_values`.
+   `field_values`. A value that arrived as a default goes through this
+   like any other, so a default cannot smuggle an unchecked destination
+   past the guard.
 
 That write-back matters. Under multi-user confinement the validator
 resolves a relative path against the user's data dir, while your plugin
@@ -182,6 +194,7 @@ validators by hand keeps working; it is simply doing no additional work.
 | HTTP, `{"..._name", "field_values"}` body | `validate_exporter_field_values()` (same module) |
 | CLI | `PluginBase.validate_cli_field_values()` |
 | Sync sources | `SyncSource.load()` / `save()` / `peek_version()` normalize a copy before dispatching to `_do_load` / `_do_save` / `_do_peek_version` ([`vtscore/sync/__init__.py`](../../sync/__init__.py)) |
+| Saved settings | The app's Auto-Find results exporter runs with a persisted `field_values` map and no schema in the loop, so this pass is the only one it gets |
 
 **Two families are outside it.** Media converter `params` and media
 clipper `parameters` ride in as pass-through payloads, not plugin form

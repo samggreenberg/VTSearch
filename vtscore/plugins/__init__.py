@@ -156,7 +156,14 @@ class PluginField:
     accept: str = ""
     #: For ``"select"`` fields: the list of allowed values.
     options: list[str] = field(default_factory=list)
-    #: Pre-filled default value shown in the UI.
+    #: Pre-filled default value.  It is a **value**, not a placeholder (use
+    #: :attr:`placeholder` for grey hint text): the GUI renders it into the
+    #: widget so the user sees and can edit it, the CLI hands it to
+    #: ``argparse`` as the flag's default, and
+    #: :func:`~vtscore.plugins.normalize.normalize_field_values` fills it in
+    #: for any field that still arrives blank — so a field the user never
+    #: touched reaches :meth:`run` as its default rather than as ``""``.
+    #: That also means a declared default satisfies :attr:`required`.
     default: str = ""
     required: bool = True
     #: Hint shown as placeholder text inside the input widget.
@@ -703,6 +710,12 @@ class PluginBase:
         for f in self.fields:
             # Booleans are always populated by argparse (default included).
             if f.field_type == "checkbox":
+                continue
+            # A field with a declared default is never "missing": the
+            # normalize pass below fills a blank one from it, so rejecting
+            # it here would make ``--email ""`` fail where omitting the
+            # flag entirely succeeds.
+            if f.default:
                 continue
             value = field_values.get(f.key)
             if f.required and (value is None or (isinstance(value, str) and not value.strip())):

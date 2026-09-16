@@ -83,7 +83,7 @@ is used by every family; each family's base module re-exports
 | `description` | `str` | `""` | Helper text under the field (also fed into the placeholder for CLI `--help`) |
 | `accept` | `str` | `""` | For `"file"` fields: comma-separated extensions, e.g. `".pkl,.json"` |
 | `options` | `list[str]` | `[]` | For `"select"` fields: allowed dropdown values |
-| `default` | `str` | `""` | Pre-filled value; checkboxes use `"true"` / `"false"` |
+| `default` | `str` | `""` | Pre-filled **value** (not a placeholder — that's `placeholder`): the UI renders it into the widget, and `normalize_field_values` fills it in for any field that still arrives blank, so a declared default satisfies `required`. Checkboxes use `"true"` / `"false"` |
 | `required` | `bool` | `True` | Whether the field must be non-empty after `str.strip()` |
 | `placeholder` | `str` | `""` | Placeholder text inside the input widget |
 | `hint` | `str` | `""` | Format-hint chip rendered below the input (separate from `description`) |

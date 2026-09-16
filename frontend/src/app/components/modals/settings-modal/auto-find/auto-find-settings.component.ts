@@ -126,16 +126,15 @@ export class AutoFindSettingsComponent implements OnInit {
 
   // --- Results Exporter ----------------------------------------------------
 
-  /** Select an exporter tab. ``''`` is the "None" tab (auto-export off). When
-   *  an exporter is chosen for the first time its fields are seeded from their
-   *  defaults so the form is never blank. Emits the change for persistence. */
+  /** Select an exporter tab. ``''`` is the "None" tab (auto-export off).
+   *  Seeding the newly-active exporter's declared defaults is
+   *  :meth:`syncFieldOptions`'s job, so it happens here and on a restored
+   *  selection alike. Emits the change for persistence. */
   selectExporter(name: string): void {
     this.activeExporter = name;
-    if (name && !this.fieldValues[name]) {
-      this.fieldValues[name] = this.defaultFieldValues(name);
-    }
-    this.syncFieldOptions();
-    this.emitChange();
+    // Seeding emits on its own; emitting again here would PUT the settings
+    // twice for one click.
+    if (!this.syncFieldOptions()) this.emitChange();
   }
 
   /** Fields of the active exporter, or ``[]`` for the "None" tab. */
@@ -174,14 +173,18 @@ export class AutoFindSettingsComponent implements OnInit {
    *  which of them are dynamic) aren't known before then. */
   private optionsLoadedFor: string | null = null;
 
-  /** Fetch the active exporter's dynamic option lists, once per exporter.
+  /** Adopt the active exporter: seed its blank fields from their declared
+   *  defaults and fetch its dynamic option lists, once per exporter.
+   *  Returns whether it emitted a change (so a caller that would emit
+   *  anyway doesn't emit twice).
    *
    *  The guard is what keeps this safe to call from the seeding effect: the
    *  parent re-pushes both inputs on every emit, so an unguarded fetch here
-   *  would answer its own auto-selection with another fetch, forever. */
-  private syncFieldOptions(): void {
-    if (this.loadingExporters()) return;
-    if (this.optionsLoadedFor === this.activeExporter) return;
+   *  would answer its own auto-selection with another fetch, forever. It is
+   *  also what stops the commit below from re-entering. */
+  private syncFieldOptions(): boolean {
+    if (this.loadingExporters()) return false;
+    if (this.optionsLoadedFor === this.activeExporter) return false;
     this.optionsLoadedFor = this.activeExporter;
 
     // Drop the tab we just left: ``reset`` invalidates its in-flight requests
@@ -190,8 +193,40 @@ export class AutoFindSettingsComponent implements OnInit {
     this.workingValues = this.activeExporter
       ? { ...(this.fieldValues[this.activeExporter] || {}) }
       : {};
-    if (!this.activeExporter) return;
+    if (!this.activeExporter) return false;
+    // Commit only when seeding actually filled something in, so merely
+    // opening this tab doesn't PUT the settings back unchanged.
+    const seeded = this.seedDefaults();
+    if (seeded) this.commitWorkingValues();
     this.fieldOptions.refreshAll(this.activeFields, this.workingValues);
+    return seeded;
+  }
+
+  /** Fill every blank field of the active exporter from its declared
+   *  ``default``, returning whether anything changed.
+   *
+   *  Runs on *every* arrival at an exporter tab, not just the first pick:
+   *  a selection restored from saved settings never passes through
+   *  :meth:`selectExporter`, so seeding there alone left a configured
+   *  exporter's defaults invisible - and a field that *gained* a default
+   *  after the exporter was first configured stayed blank forever, since
+   *  the saved map already existed (issue #3874).
+   *
+   *  A stored empty string counts as blank, matching the backend's
+   *  ``normalize_field_values``: a field declaring a default has no way to
+   *  express "deliberately empty" - reopening the form would show the
+   *  default again either way - so the two ends agree on one rule rather
+   *  than disagreeing about what a blank means. */
+  private seedDefaults(): boolean {
+    let changed = false;
+    for (const field of this.activeFields) {
+      if (!field.default) continue;
+      const current = this.workingValues[field.key];
+      if (current !== undefined && String(current).trim() !== '') continue;
+      this.workingValues[field.key] = field.default;
+      changed = true;
+    }
+    return changed;
   }
 
   /** Publish :attr:`workingValues` onto ``fieldValues`` and emit, so an
@@ -200,15 +235,6 @@ export class AutoFindSettingsComponent implements OnInit {
     if (!this.activeExporter) return;
     this.fieldValues = { ...this.fieldValues, [this.activeExporter]: { ...this.workingValues } };
     this.emitChange();
-  }
-
-  private defaultFieldValues(name: string): Record<string, string> {
-    const exp = this.exporters().find((e) => e.name === name);
-    const out: Record<string, string> = {};
-    for (const field of (exp?.fields ?? []) as ImporterField[]) {
-      if (field.default) out[field.key] = field.default;
-    }
-    return out;
   }
 
   private cloneFieldValues(

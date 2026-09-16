@@ -496,6 +496,24 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Fixed
 
+- **A declared `PluginField.default` now reaches the plugin body** (issue
+  #3874). `default` was documented as a pre-filled value but only `argparse`
+  ever applied it: marshmallow's `load_default` fires on a *missing* key, and a
+  web form posts every input it rendered - an untouched one as `""`. So a
+  required field with a default was rejected (`"Field may not be empty."`) and
+  an optional one arrived as `""`. Three changes, all additive:
+  `normalize_field_values` fills any field arriving missing, empty, or
+  whitespace-only from its `default` before the strip / template / security
+  passes, so a declared default now satisfies `required` instead of raising
+  `"<Label> is required."`; the schemas from
+  `make_plugin_arg_schema` / `make_plugin_route_schema` drop a blank for a
+  defaulted field in a `pre_load` hook, so a blank loads identically to an
+  omitted key (a blank `number` takes its default rather than failing to
+  parse); and `PluginBase.validate_cli_field_values` defers its presence check
+  to the default, so an explicitly blank flag behaves like an omitted one.
+  A defaulted value still goes through the `url` / `server_path` validators,
+  so a default cannot carry an unchecked destination past the guard.
+
 - **`embed_missing()` leaves a partially pre-embedded import keyed under one
   embedder name** (issue #3798). Nameless pre-computed vectors (an importer's
   `content_vectors` / `custom_metadata_map` entries, or an `.npz` manifest
