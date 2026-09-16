@@ -266,4 +266,71 @@ describe('SortRunnerService', () => {
     httpMock.expectOne('/api/inclusion').flush({ inclusion: 0.25 });
     expect(mediaState.selectedId()).toBe(5);
   });
+
+  // --- exhausted queue (#3887) ---------------------------------------------
+
+  /**
+   * The state `autoSelectNext` silently no-ops in. It needs a name because the
+   * centre pane's vote-swipe animation pins the outgoing media off-screen until
+   * a new item replaces the node — so an advance that finds nothing leaves a
+   * blank pane with no message and the just-voted item still selected.
+   */
+  describe('queueExhausted', () => {
+    it('is false before any sort has landed — that is the placeholder state', () => {
+      expect(runner.queueExhausted()).toBe(false);
+    });
+
+    it('is false while the ranking still holds an unlabeled row', () => {
+      sortState.setSelectMode('top');
+      sortState.setSortResults([{ id: 1, score: 0.9 }, { id: 2, score: 0.8 }], 0.5);
+      voteState.applyOptimisticState(1, 'good');
+
+      expect(runner.queueExhausted()).toBe(false);
+    });
+
+    it('is true once every row in the ranking is labeled', () => {
+      sortState.setSelectMode('top');
+      sortState.setSortResults([{ id: 1, score: 0.9 }, { id: 2, score: 0.8 }], 0.5);
+      voteState.applyOptimisticState(1, 'good');
+      voteState.applyOptimisticState(2, 'bad');
+
+      expect(runner.queueExhausted()).toBe(true);
+      // ...and the advance it describes really does have nowhere to go.
+      runner.autoSelectNext();
+      expect(mediaState.selectedId()).toBeNull();
+    });
+
+    it('goes back to false when an undo un-votes a row', () => {
+      sortState.setSelectMode('top');
+      sortState.setSortResults([{ id: 1, score: 0.9 }], 0.5);
+      voteState.applyOptimisticState(1, 'good');
+      expect(runner.queueExhausted()).toBe(true);
+
+      // Derived, not latched: nothing has to remember to clear it.
+      voteState.applyOptimisticState(1, 'none');
+      expect(runner.queueExhausted()).toBe(false);
+    });
+
+    it('defers to the coverage-atlas probe under the New select mode', () => {
+      sortState.setSelectMode('new');
+      sortState.setSortResults([{ id: 1, score: 0.9 }], 0.5);
+      voteState.applyOptimisticState(1, 'good');
+      // Every row is labeled, but `new` samples the whole dataset rather than
+      // the loaded window, so the window says nothing about exhaustion.
+      expect(runner.queueExhausted()).toBe(false);
+
+      runner.autoSelectNext();
+      httpMock
+        .expectOne((req) => req.url.startsWith('/api/coverage-atlas/next'))
+        .flush({ id: null, coverage_level: 3 });
+      expect(runner.queueExhausted()).toBe(true);
+
+      runner.autoSelectNext();
+      httpMock
+        .expectOne((req) => req.url.startsWith('/api/coverage-atlas/next'))
+        .flush({ id: 7, coverage_level: 3 });
+      expect(runner.queueExhausted()).toBe(false);
+      expect(mediaState.selectedId()).toBe(7);
+    });
+  });
 });

@@ -601,4 +601,89 @@ describe('CenterPanelComponent', () => {
       expect(() => component.onPanelMouseDown(mousedown())).not.toThrow();
     });
   });
+
+  /**
+   * #3887: voting on the last unlabeled item left this pane blank. The swipe
+   * animation pins the outgoing media node off-screen with `forwards` until a
+   * new item replaces it, the host has nothing to advance to, and `media()` is
+   * still the item just voted on — so the "Select a media item" empty state
+   * never fires either. `exhausted` is the state's name; these assert it says
+   * so, refuses votes, and still allows the undo that gets the user out.
+   */
+  describe('exhausted queue (#3887)', () => {
+    async function exhaust(): Promise<void> {
+      fixture.componentRef.setInput('exhausted', true);
+      await settleZoneless(fixture);
+    }
+
+    it('replaces the viewer with a message instead of leaving the pane blank', async () => {
+      expect(fixture.nativeElement.querySelector('.exhausted-pane')).toBeNull();
+      await exhaust();
+
+      const pane = fixture.nativeElement.querySelector('.exhausted-pane');
+      expect(pane).not.toBeNull();
+      expect(pane.querySelector('.exhausted-heading').textContent).toContain('Nothing left to label');
+      expect(pane.querySelector('.exhausted-body').textContent.trim().length).toBeGreaterThan(0);
+      // The viewer — and the swipe wrapper that strands it off-screen — is gone.
+      expect(fixture.nativeElement.querySelector('.media-swipe-wrapper')).toBeNull();
+      // Not the generic "nothing selected" placeholder: an item IS selected.
+      expect(fixture.nativeElement.querySelector('.placeholder-text')).toBeNull();
+    });
+
+    it('takes the heading and detail the host supplies', async () => {
+      fixture.componentRef.setInput('exhaustedHeading', 'All items reviewed');
+      fixture.componentRef.setInput('exhaustedDetail', 'Check Stats or export.');
+      await exhaust();
+
+      expect(fixture.nativeElement.querySelector('.exhausted-heading').textContent)
+        .toContain('All items reviewed');
+      expect(fixture.nativeElement.querySelector('.exhausted-body').textContent)
+        .toContain('Check Stats or export.');
+    });
+
+    it('renders both vote buttons disabled and unhighlighted', async () => {
+      // Land a vote first: without `exhausted` its button would stay lit, which
+      // is exactly the stale highlight the pane used to be left showing.
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+      await settleZoneless(fixture);
+      httpMock.expectOne('/api/medias/1/vote').flush({ state: 'good', click_time: 1 });
+      await settleZoneless(fixture);
+      expect(votingOverlay().querySelector('.btn-good.voted')).not.toBeNull();
+
+      await exhaust();
+
+      const good = votingOverlay().querySelector('.btn-good') as HTMLButtonElement;
+      const bad = votingOverlay().querySelector('.btn-bad') as HTMLButtonElement;
+      expect(good.disabled).toBe(true);
+      expect(bad.disabled).toBe(true);
+      expect(good.classList.contains('voted')).toBe(false);
+      expect(bad.classList.contains('voted')).toBe(false);
+    });
+
+    it('ignores a keyboard vote, so no vote is cast against the vanished item', async () => {
+      await exhaust();
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+      await settleZoneless(fixture);
+      // `httpMock.verify()` in afterEach would fail on a stray POST; assert the
+      // absence directly so the failure names this case.
+      expect(httpMock.match('/api/medias/1/vote').length).toBe(0);
+    });
+
+    it('still allows undo — un-voting an item is the way out of this state', async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+      await settleZoneless(fixture);
+      httpMock.expectOne('/api/medias/1/vote').flush({ state: 'good', click_time: 1 });
+      await settleZoneless(fixture);
+
+      await exhaust();
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true }));
+      await settleZoneless(fixture);
+      httpMock.expectOne('/api/medias/1/vote').flush({ state: 'none', click_time: 2 });
+      await settleZoneless(fixture);
+
+      expect(component.voteState.goodVotes.has(1)).toBe(false);
+    });
+  });
 });
