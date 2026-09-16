@@ -232,6 +232,22 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **Context-registry lookups no longer take `_state_lock`** (issue #3869).
+  `get_context`, `get_detector_context` and `list_loaded_*_ids` now hold only
+  `_context_registry_lock` - a plain `Lock` guarding the two registry dicts'
+  membership, taken across a dict operation and nothing else. Membership is
+  the only thing they read, and taking the lock that a vote, a training pass
+  or a dataset load holds for seconds meant an app's per-request
+  `X-Dataset-Id` / `X-Detector-Id` resolution blocked for the whole of a long
+  operation - so the routes explicitly exempted from the state sync (the
+  spinner poll, the SSE reconnect) queued behind it anyway. Writers are
+  unchanged from the outside: they take `_state_lock` first and the registry
+  lock inside it, an ordering that is one-way. New alongside them:
+  `rekey_dataset_context(old_id, new_id)`, so a re-key goes through the
+  registry lock rather than mutating `_contexts` directly, and
+  `loaded_detector_contexts()`, a snapshot for callers that want to walk every
+  loaded detector without iterating the live dict.
+
 - **The threshold's mixture fit is `vtscore`'s own EM, not sklearn's** (issue
   #3585). `fit_score_gmm` fitted two Gaussians over one dimension with
   `GaussianMixture(n_components=2, random_state=42)` - full-covariance machinery

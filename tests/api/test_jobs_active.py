@@ -136,3 +136,50 @@ class TestListActivePairs:
         finally:
             release.set()
             learned_sort_jobs.reset_for_tests()
+
+
+class TestExemptRouteStaysOffTheStateLock:
+    """``@state_sync_exempt`` must survive a long ``_state_lock`` holder (#3869).
+
+    The spinner poll is the endpoint the frontend hits every few seconds
+    *during* the long operations that hold ``_state_lock``, so it is the one
+    route that must never queue on it. The exemption skips the rehydrate, but
+    the header resolution in ``_set_request_context`` runs regardless -- and
+    it used to take ``_state_lock``, which made the exemption buy nothing (a
+    2425 ms ``jobs/active`` in the #3853 capture, misread as GIL starvation).
+
+    The headers are sent deliberately: without them the resolver short-
+    circuits and the test would pass even against the old code.
+    """
+
+    def test_jobs_active_answers_while_state_lock_is_held(self, client):
+        from vtscore.state.core import _state_lock
+
+        acquired = threading.Event()
+        released = threading.Event()
+        stop = threading.Event()
+
+        def hold() -> None:
+            with _state_lock:
+                acquired.set()
+                # Bounded so a regression fails in seconds rather than
+                # hanging until the per-test timeout.
+                stop.wait(timeout=10)
+            released.set()
+
+        holder = threading.Thread(target=hold, daemon=True)
+        holder.start()
+        try:
+            assert acquired.wait(timeout=5), "holder thread never acquired _state_lock"
+            resp = client.get(
+                "/api/jobs/active",
+                headers={"X-Dataset-Id": "ds-1", "X-Detector-Id": "det-1"},
+            )
+            # Had the request queued on the lock it could only have been
+            # served after the holder let go.
+            assert not released.is_set(), "jobs/active was served only after _state_lock was freed"
+            assert resp.status_code == 200
+            assert resp.get_json() == {"busy_pairs": []}
+        finally:
+            stop.set()
+            holder.join(timeout=5)

@@ -36,6 +36,27 @@ from typing import Any
 # (e.g. clear_all -> clear_medias + clear_votes).
 _state_lock = threading.RLock()
 
+# Lock protecting *only* the two context-store dicts (``_contexts``,
+# ``_detector_contexts``) -- which ids are loaded, not what the contexts
+# hold.
+#
+# It exists so :func:`get_context` / :func:`get_detector_context` can answer
+# "is this id loaded?" without touching ``_state_lock``, which a vote, a
+# training pass or a dataset load holds for seconds at a time. Every request
+# goes through that lookup -- the app's ``_set_request_context`` hook resolves
+# the SPA's ``X-Dataset-Id`` / ``X-Detector-Id`` headers on the way in -- so
+# taking ``_state_lock`` there blocked even the routes marked
+# ``@state_sync_exempt`` (the jobs/active spinner poll, the SSE reconnect)
+# for exactly as long as the blocker ran, which is the opposite of what the
+# exemption promises (#3869).
+#
+# **Ordering: always innermost.** Code may take this lock while holding
+# ``_state_lock``; never the reverse. Nothing calls out to arbitrary code
+# while holding it -- every critical section guarded by it is a dict
+# get/set/pop/copy and nothing more -- so a reader waits at most the length
+# of one dict operation, whatever else is running.
+_context_registry_lock = threading.Lock()
+
 
 class DatasetNotLoadedError(LookupError):
     """The request explicitly named a dataset that is not loaded in memory.
@@ -1235,14 +1256,15 @@ def thread_dataset_context(ctx: DatasetContext | None) -> Iterator[None]:
 
 def register_context(ctx: DatasetContext) -> None:
     """Add *ctx* to the context store, keyed by its ``dataset_id``."""
-    with _state_lock:
+    with _state_lock, _context_registry_lock:
         _contexts[ctx.dataset_id] = ctx
 
 
 def unregister_context(dataset_id: str) -> DatasetContext | None:
     """Remove and return the context for *dataset_id*, or ``None``."""
     with _state_lock:
-        ctx = _contexts.pop(dataset_id, None)
+        with _context_registry_lock:
+            ctx = _contexts.pop(dataset_id, None)
         # Clear thread-local if it was pointing to the removed context.
         tl_ctx = getattr(_thread_local, "dataset_context", None)
         if tl_ctx is not None and tl_ctx.dataset_id == dataset_id:
@@ -1250,22 +1272,52 @@ def unregister_context(dataset_id: str) -> DatasetContext | None:
         return ctx
 
 
+def rekey_dataset_context(old_id: str, new_id: str) -> bool:
+    """Re-key a loaded dataset context from *old_id* to *new_id*.
+
+    Returns whether a context was found and re-keyed. Lives here rather
+    than in the caller that needs it (the dataset-registration flow, which
+    swaps a provisional task id for the real dataset id) so that every
+    write to ``_contexts`` goes through ``_context_registry_lock``: a
+    caller mutating the dict directly would be invisible to the lock-free
+    readers above, which is the whole point of that lock.
+    """
+    with _state_lock, _context_registry_lock:
+        ctx = _contexts.get(old_id)
+        if ctx is None:
+            return False
+        ctx.dataset_id = new_id
+        # Insert under the new key before removing the old, so the context
+        # is never briefly invisible to concurrent lookups.
+        _contexts[new_id] = ctx
+        if old_id != new_id:
+            _contexts.pop(old_id, None)
+        return True
+
+
 def get_context(dataset_id: str) -> DatasetContext | None:
-    """Return the context for *dataset_id*, or ``None`` if not loaded."""
-    with _state_lock:
+    """Return the context for *dataset_id*, or ``None`` if not loaded.
+
+    Takes ``_context_registry_lock`` only, never ``_state_lock`` -- see the
+    comment on that lock. Every request resolves its ``X-Dataset-Id`` header
+    through here, so this lookup must not queue behind a long-running vote
+    or load.
+    """
+    with _context_registry_lock:
         return _contexts.get(dataset_id)
 
 
 def list_loaded_dataset_ids() -> list[str]:
     """Return all dataset IDs that have an in-memory context."""
-    with _state_lock:
+    with _context_registry_lock:
         return list(_contexts.keys())
 
 
 def clear_all_contexts() -> None:
     """Remove all dataset contexts and clear the thread-local.  For tests."""
     with _state_lock:
-        _contexts.clear()
+        with _context_registry_lock:
+            _contexts.clear()
         _thread_local.dataset_context = None
         # Also reset the empty context's state
         _empty_dataset_context.__init__("")  # type: ignore[misc]
@@ -1414,7 +1466,7 @@ def register_detector_context(ctx: DetectorContext) -> None:
     """
     from vtscore.detectors.labeling_progress import clear_progress_cache
 
-    with _state_lock:
+    with _state_lock, _context_registry_lock:
         _detector_contexts[ctx.detector_id] = ctx
     # ``_progress_lock`` is acquired strictly outside ``_state_lock`` so the
     # two locks never establish a cross-module ordering (audit M1).
@@ -1430,7 +1482,8 @@ def unregister_detector_context(detector_id: str) -> DetectorContext | None:
     from vtscore.detectors.labeling_progress import clear_progress_cache
 
     with _state_lock:
-        ctx = _detector_contexts.pop(detector_id, None)
+        with _context_registry_lock:
+            ctx = _detector_contexts.pop(detector_id, None)
         tl_ctx = getattr(_thread_local, "detector_context", None)
         if tl_ctx is not None and tl_ctx.detector_id == detector_id:
             _thread_local.detector_context = None
@@ -1441,21 +1494,38 @@ def unregister_detector_context(detector_id: str) -> DetectorContext | None:
 
 
 def get_detector_context(detector_id: str) -> DetectorContext | None:
-    """Return the detector context for *detector_id*, or ``None`` if not loaded."""
-    with _state_lock:
+    """Return the detector context for *detector_id*, or ``None`` if not loaded.
+
+    Lock-free with respect to ``_state_lock``, for the same reason as
+    :func:`get_context`: the per-request ``X-Detector-Id`` resolution runs
+    through here on every request, exempt routes included.
+    """
+    with _context_registry_lock:
         return _detector_contexts.get(detector_id)
 
 
 def list_loaded_detector_ids() -> list[str]:
     """Return all detector IDs that have an in-memory context."""
-    with _state_lock:
+    with _context_registry_lock:
         return list(_detector_contexts.keys())
+
+
+def loaded_detector_contexts() -> list[DetectorContext]:
+    """Return a snapshot of every loaded detector context.
+
+    A snapshot rather than a live view so callers can mutate each context
+    under ``_state_lock`` without iterating ``_detector_contexts`` while
+    another thread registers one.
+    """
+    with _context_registry_lock:
+        return list(_detector_contexts.values())
 
 
 def clear_all_detector_contexts() -> None:
     """Remove all detector contexts and clear the thread-local.  For tests."""
     with _state_lock:
-        _detector_contexts.clear()
+        with _context_registry_lock:
+            _detector_contexts.clear()
         _thread_local.detector_context = None
         _empty_detector_context.__init__("")  # type: ignore[misc]
 
@@ -1473,7 +1543,7 @@ def invalidate_loaded_detector_models() -> None:
     making the cached-MLP consumers honour live setting changes.
     """
     with _state_lock:
-        for ctx in _detector_contexts.values():
+        for ctx in loaded_detector_contexts():
             ctx.model = None
             ctx.threshold = 0.5
 
@@ -1532,7 +1602,7 @@ def recompute_detector_thresholds_for_inclusion(inclusion_value: int) -> None:
     from vtscore.training.thresholds import threshold_from_fold_orderings
 
     with _state_lock:
-        for ctx in _detector_contexts.values():
+        for ctx in loaded_detector_contexts():
             cut = ctx.anchored_cut_cache
             if cut is not None:
                 ctx.threshold = cut.threshold_at(inclusion_value)
