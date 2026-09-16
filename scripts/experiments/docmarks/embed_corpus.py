@@ -22,6 +22,14 @@ chronically full.  This script reuses the pile's *format*, *location* and
 Tiers are nested, so build them small-first: ``--tier s`` produces a 5k cell you
 can iterate against in minutes, and ``l`` is the same corpus with more
 distractors.
+
+Cells are built **in chunks** (``--chunk``, default
+:data:`DEFAULT_CHUNK`): a chunk's pages are read, embedded, written to the cell
+and dropped before the next chunk is read, so peak memory is set by the chunk
+size rather than by the tier.  Straight-through, tier ``s`` peaked at 34.5 GB of
+RSS for 5,000 pages and nothing here could have built tier ``l`` at all (#3842).
+It remains slow -- ``sift_vlad`` is ~1.3 pages/s, so tier ``l`` is ~43 h -- but
+slow is a schedule and out-of-memory is not.
 """
 
 from __future__ import annotations
@@ -54,6 +62,15 @@ EMBEDDERS: dict[str, dict[str, Any]] = {
     "siglip": {"batch": 128, "structural": False},
     "siglip2_l": {"batch": 32, "structural": False},
 }
+
+#: Pages held in memory at once by a streamed build.  Tier ``s`` peaked at
+#: **34.5 GB of RSS for 5,000 pages** (#3842) -- ~7 MB per page resident across
+#: the raster bytes, the decoded image and ``sift_vlad``'s per-image features --
+#: so a 1,000-page chunk is roughly a 7 GB working set whatever the tier, which
+#: is what makes tier ``l`` a scheduling problem rather than an impossible one.
+#: Smaller trades a little write overhead for headroom on a shared node; ``0``
+#: disables chunking and restores the one-shot cell.
+DEFAULT_CHUNK = 1000
 
 
 def _load_by_path(name: str, path: Path) -> Any:
@@ -297,7 +314,9 @@ def repair(corpus: Path, *, apply: bool = False) -> int:
     return 1 if unrepaired else 0
 
 
-def load_medias(pages: Sequence[Page], classes: dict[str, Any], embedder: str) -> dict[int, dict]:
+def load_medias(
+    pages: Sequence[Page], classes: dict[str, Any], embedder: str, *, start_index: int = 0
+) -> dict[int, dict]:
     """Turn manifest pages into the media dicts the embedding stage expects.
 
     ``regions`` carries every located mark, so a region-voting arm can drag the
@@ -306,9 +325,20 @@ def load_medias(pages: Sequence[Page], classes: dict[str, Any], embedder: str) -
     letterhead band; unlocated marks contribute no region at all, because a
     zero-area box would be indistinguishable from a real one and that is exactly
     the distinction the corpus exists to preserve.
+
+    *start_index* is the id the first media takes, so :func:`build_cell` can
+    call this once per chunk and still number the cell continuously.  Ids must
+    not repeat across chunks -- ``CellWriter`` refuses a cell where they do,
+    because merging the chunks would silently lose the repeat rather than fail.
+
+    The sort is **per call**, so a chunked build must slice an already-sorted
+    page list: sorting each chunk alone would order the chunk but not the cell.
+    :func:`build_cell` sorts once and slices; the sort here is then a no-op and
+    is kept because a single-chunk caller still needs it.
     """
     medias: dict[int, dict] = {}
-    for index, page in enumerate(sorted(pages, key=lambda p: p.page_id)):
+    for offset, page in enumerate(sorted(pages, key=lambda p: p.page_id)):
+        index = start_index + offset
         ordered, regions = labels_for(page)
         medias[index] = {
             "id": index,
@@ -340,7 +370,33 @@ def load_medias(pages: Sequence[Page], classes: dict[str, Any], embedder: str) -
     return medias
 
 
-def build_cell(corpus: Path, tier: str, embedder: str, *, force: bool = False) -> dict[str, Any]:
+def build_cell(
+    corpus: Path, tier: str, embedder: str, *, force: bool = False, chunk: int = DEFAULT_CHUNK
+) -> dict[str, Any]:
+    """Embed one tier under one embedder and write its cell.
+
+    **Streamed, in chunks of *chunk* pages** (``0`` disables it and writes the
+    old one-shot cell).  The straight-through version -- load every page, embed
+    them all, pickle the dict -- is what made tier ``l`` unbuildable rather than
+    merely slow (#3842): tier ``s`` peaked at **34.5 GB of RSS for 5,000
+    pages**, because ``load_medias`` holds the raster bytes of every page in the
+    tier while ``embed_missing`` accumulates ``local_features`` beside them, and
+    neither is released until ``dump_medias`` writes at the very end.  Neither
+    term extrapolates: at 200,000 pages the bytes alone are ~50 GB and the
+    ``sift_vlad`` features another ~34 GB (169 KB/page, measured).
+
+    Chunking retires both.  Each chunk's bytes are read, embedded, written and
+    dropped before the next is read, so peak memory is set by *chunk* rather
+    than by the tier -- and the cell is appended to rather than assembled, so
+    the finished 34 GB of it is never resident either.  What it does **not**
+    change is the time: ``sift_vlad`` is ~1.3 pages/s whatever the chunk size,
+    so tier ``l`` is still ~43 h of CPU.  That is a wall to schedule around,
+    not one that stops the job starting.
+
+    A chunked run is resumable only at the granularity of the whole cell: the
+    writer renames its ``.part`` into place on clean exit, so a job that dies at
+    hour 40 leaves nothing for ``--verify`` to mistake for a finished cell.
+    """
     from vtscore.datasets.stages.embedding import embed_missing  # noqa: PLC0415
 
     out = cell_path(tier, embedder)
@@ -351,32 +407,56 @@ def build_cell(corpus: Path, tier: str, embedder: str, *, force: bool = False) -
     classes_path = corpus / "classes.json"
     classes = json.loads(classes_path.read_text(encoding="utf-8")) if classes_path.exists() else {}
 
-    t0 = time.time()
     pages = pages_for_tier(corpus, tier)
     if not pages:
         raise SystemExit(f"no pages at tier {tier!r} in {corpus} — was the corpus built with this tier?")
-    medias = load_medias(pages, classes, embedder)
-    print(f"=== docmarks_{tier} x {embedder}: {len(medias)} page(s) loaded in {time.time() - t0:.0f}s")
+    # Sorted ONCE, here: `load_medias` sorts what it is given, which orders a
+    # chunk but not the cell.  Slicing an already-sorted list is what makes the
+    # chunked cell identical to the one-shot one page for page.
+    pages = sorted(pages, key=lambda p: p.page_id)
+    size = chunk if chunk and chunk > 0 else len(pages)
+    n_chunks = (len(pages) + size - 1) // size
+    print(f"=== docmarks_{tier} x {embedder}: {len(pages)} page(s) in {n_chunks} chunk(s) of {size}")
 
-    t1 = time.time()
-    with _batch_size(embedder):
-        embed_missing(medias, embedder)
-    embed_s = time.time() - t1
+    io = _cells_io()
+    load_s = embed_s = 0.0
+    n_local = 0
+    t0 = time.time()
+    with io.CellWriter(out) as writer:
+        for start in range(0, len(pages), size):
+            batch = pages[start : start + size]
+            t = time.time()
+            medias = load_medias(batch, classes, embedder, start_index=start)
+            load_s += time.time() - t
 
-    out.parent.mkdir(parents=True, exist_ok=True)
-    nbytes = _cells_io().dump_medias(medias, out)
-    n_local = sum(1 for m in medias.values() if m.get("local_features") is not None)
+            t = time.time()
+            with _batch_size(embedder):
+                embed_missing(medias, embedder)
+            embed_s += time.time() - t
+
+            n_local += sum(1 for m in medias.values() if m.get("local_features") is not None)
+            writer.write(medias)
+            # The chunk dies here, bytes and features together.  Holding it
+            # while the next one loads is the whole of what this costs.
+            medias.clear()
+            del medias
+            if n_chunks > 1:
+                done = min(start + size, len(pages))
+                print(f"  {done}/{len(pages)} pages, load {load_s:.0f}s, embed {embed_s:.0f}s", flush=True)
+
     print(
-        f"  wrote {out.name}: {nbytes / 1e6:.0f} MB, {len(medias)} medias, "
-        f"local_features {n_local}/{len(medias)}, embed {embed_s:.0f}s"
+        f"  wrote {out.name}: {writer.nbytes / 1e6:.0f} MB, {writer.n_medias} medias in "
+        f"{writer.n_chunks} chunk(s), local_features {n_local}/{writer.n_medias}, "
+        f"load {load_s:.0f}s, embed {embed_s:.0f}s, total {time.time() - t0:.0f}s"
     )
     return {
         "tier": tier,
         "embedder": embedder,
         "status": "built",
-        "n_medias": len(medias),
+        "n_medias": writer.n_medias,
+        "n_chunks": writer.n_chunks,
         "n_local_features": n_local,
-        "megabytes": round(nbytes / 1e6, 1),
+        "megabytes": round(writer.nbytes / 1e6, 1),
         "embed_seconds": round(embed_s, 1),
     }
 
@@ -390,16 +470,21 @@ def verify(corpus: Path) -> int:
             path = cell_path(tier, embedder)
             if not path.exists():
                 continue
+            # Streamed rather than loaded: verifying is a pure visit, and a
+            # tier-`l` `sift_vlad` cell is ~34 GB, so the check that a cell is
+            # usable must not be the thing that cannot hold it.
             try:
-                medias = io.load_medias(path)
+                n = vectors = labelled = 0
+                for _cid, media in io.iter_medias(path):
+                    n += 1
+                    vectors += bool(media.get("embeddings"))
+                    labelled += bool(media.get("categories"))
             except Exception as exc:  # noqa: BLE001 - verify reports, never raises
                 print(f"  BROKEN {path.name}: {type(exc).__name__}: {exc}")
                 bad += 1
                 continue
-            vectors = sum(1 for m in medias.values() if m.get("embeddings"))
-            labelled = sum(1 for m in medias.values() if m.get("categories"))
-            status = "ok" if vectors == len(medias) else f"MISSING {len(medias) - vectors} vector(s)"
-            print(f"  {path.name}: {len(medias)} medias, {labelled} labelled, {status}")
+            status = "ok" if vectors == n else f"MISSING {n - vectors} vector(s)"
+            print(f"  {path.name}: {n} medias, {labelled} labelled, {status}")
             bad += status != "ok"
     return 1 if bad else 0
 
@@ -410,6 +495,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--tier", default="s", choices=cfg.TIER_ORDER)
     ap.add_argument("--embedders", default="sift_vlad,siglip")
     ap.add_argument("--force", action="store_true")
+    ap.add_argument(
+        "--chunk",
+        type=int,
+        default=DEFAULT_CHUNK,
+        metavar="N",
+        help=f"pages held in memory at once (default {DEFAULT_CHUNK}); 0 builds the cell in one "
+        "piece, which is what tier `l` cannot do",
+    )
     ap.add_argument("--list", action="store_true", help="show which cells exist, then exit")
     ap.add_argument("--verify", action="store_true", help="load every present cell and check it, then exit")
     ap.add_argument(
@@ -458,15 +551,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     # Nothing had run this path before, because stage 5 had never been reached.
     try:
         io = _cells_io()
-        if not hasattr(io, "dump_medias"):
-            ap.error(f"{_CALIB_DIR / '_cells_io.py'} has no dump_medias; cells cannot be written")
+        missing = [name for name in ("CellWriter", "iter_medias") if not hasattr(io, name)]
+        if missing:
+            ap.error(f"{_CALIB_DIR / '_cells_io.py'} has no {', '.join(missing)}; cells cannot be written")
         _pile_config().EMBEDDINGS.mkdir(parents=True, exist_ok=True)
     except SystemExit:
         raise
     except Exception as exc:  # noqa: BLE001 - the point is to report, early, whatever broke
         ap.error(f"cannot write cells: {type(exc).__name__}: {exc}")
 
-    summaries = [build_cell(args.corpus, args.tier, e, force=args.force) for e in requested]
+    summaries = [build_cell(args.corpus, args.tier, e, force=args.force, chunk=args.chunk) for e in requested]
     built = [s for s in summaries if s["status"] == "built"]
     print(f"\n{len(built)} cell(s) built, {len(summaries) - len(built)} already present")
     return 0

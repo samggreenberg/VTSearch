@@ -245,6 +245,31 @@ quote an ETA from a tier-`s` cell for tier `l` without accounting for
 `sift_vlad`'s per-image feature extraction, which dominates and is roughly
 linear in page count.
 
+### Memory, and `--chunk`
+
+Cells are built in chunks of `--chunk` pages (default 1000): each chunk's pages
+are read, embedded, appended to the cell and dropped before the next is read.
+Without it this stage could not build tier `l` at all — measured on tier `s`
+(#3842), the straight-through build peaked at **34.5 GB of RSS for 5,000
+pages**, because every page in the tier is held as raster bytes while
+`local_features` accumulate beside them and nothing is released until the cell
+is pickled at the very end. At 200,000 pages that is ~50 GB of bytes plus a
+~34 GB cell, both resident at once.
+
+Chunked, the working set is ~7 MB × `--chunk` — about 7 GB at the default —
+whatever the tier. Lower it on a shared node; `--chunk 0` restores the
+one-shot build, which is the right thing for a tier-`s` cell you want
+byte-identical to an older one and the wrong thing for anything larger.
+
+**This does not make the run faster.** `sift_vlad` is ~1.3 pages/s measured
+(8 CPUs; ~200% CPU throughout, so it is CPU-bound and does not use the cores it
+is given), which puts tier `m` at ~11 h and tier `l` at ~43 h. Size the
+`--time` limit for that, not for the memory fix.
+
+A chunked cell is written to `<name>.pkl.part` and renamed on clean exit, so a
+job killed at hour 40 leaves nothing behind for `--verify` to accept as a
+finished cell. There is no mid-cell resume: a re-run restarts the tier.
+
 Cells land in `$VTS_PILE/embeddings/docmarks_<tier>__<embedder>.pkl`. Verify
 before trusting:
 
