@@ -37,6 +37,13 @@ def _messages(caplog: pytest.LogCaptureFixture, needle: str) -> list[logging.Log
     return [r for r in caplog.records if needle in r.getMessage()]
 
 
+def _field_ms(msg: str, field: str) -> float:
+    """``cpu=41ms`` / ``total 270ms`` out of a log line, as a number."""
+    m = re.search(rf"{re.escape(field)}=?\s?(\d+)ms", msg)
+    assert m is not None, f"no {field!r} figure in {msg!r}"
+    return float(m.group(1))
+
+
 # ---------------------------------------------------------------------------
 # Threshold parsing
 # ---------------------------------------------------------------------------
@@ -145,8 +152,8 @@ class TestPhaseClock:
                 for i in range(200_000):
                     n += i
         msg = _messages(caplog, "slow phase: busy")[0].getMessage()
-        cpu_ms = float(re.search(r"cpu=(\d+)ms", msg).group(1))
-        total_ms = float(re.search(r"total (\d+)ms", msg).group(1))
+        cpu_ms = _field_ms(msg, "cpu")
+        total_ms = _field_ms(msg, "total ")
         assert cpu_ms > 0, msg
         # Spin loops do not block, so CPU must account for the wall clock.
         assert cpu_ms >= total_ms * 0.5, msg
@@ -165,7 +172,7 @@ class TestPhaseClock:
         finally:
             uninstall_gc_pause_logging()
         msg = _messages(caplog, "slow phase: collecting")[0].getMessage()
-        assert float(re.search(r"gc=(\d+)ms", msg).group(1)) >= 0
+        assert _field_ms(msg, "gc") >= 0
         assert "cpu=" in msg
 
     def test_gc_column_is_zero_without_the_callback(self, caplog, monkeypatch):
@@ -308,7 +315,7 @@ class TestFreezeGcAfterPreload:
         freeze_gc_after_preload()
 
         class Node:
-            pass
+            peer: "Node | None" = None
 
         a, b = Node(), Node()
         a.peer, b.peer = b, a  # a cycle only the collector can break
