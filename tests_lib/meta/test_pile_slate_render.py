@@ -73,5 +73,7 @@ class TestRender:
         with Image.open(dest) as im:
             assert im.size == (g["canvas_w"], g["canvas_h"])
             # bottom-right of the PHOTO is where the old corner inset would have gone
-            r, gg, b = im.getpixel((620, 460))
+            pixel = im.getpixel((620, 460))
+        assert isinstance(pixel, tuple)
+        r, gg, b = pixel[:3]
         assert abs(r - 0) < 20 and abs(gg - 90) < 20 and abs(b - 200) < 20
