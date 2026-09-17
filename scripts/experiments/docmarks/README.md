@@ -366,6 +366,16 @@ In the order you run them. Only the first two are needed for a first eval.
    `--loose-only` keeps only members whose proposal is at most 80% of the
    current box.
 
+**Reviewing in VTSearch.** Visual passes that can be put as Good/Bad questions
+(UCSF members and relations, query crops, box tightening, completeness) are
+answered in the VTSearch app, not on sheets: `binary_review.py emit --task <t>`
+renders one image per question (references left, one enlarged candidate right)
+into `/expscratch/sgreenberg/docmarks/binary/<queue>/`, `load` makes each queue a
+dataset plus same-named detector (`docmarks <class> -- <question>`, one per
+class), and `bank` writes the votes back as `audit/<task>/verdicts.from_vtsearch.jsonl`
+for `audit_to_corrections.py`. `bank` reads only `docmarks` detectors and deletes
+nothing; the dashboard is shared with vg_scale.
+
 Query crops come from each class's largest boxed instance automatically (the
 prior study measured a 2.2× AP advantage for a clean query over a small in-scene
 crop) — largest **among the class's core**, not largest outright. Nothing used to
