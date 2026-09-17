@@ -271,6 +271,78 @@ def assign_tiers(
     return out, cutoffs
 
 
+class TierStabilityError(ValueError):
+    """A build would silently re-tier a corpus that already exists."""
+
+
+def tier_provenance(out: Path, *, pin_tiers: Optional[Path], new_version: bool) -> dict[str, Any]:
+    """Decide, before any work starts, which tier promise this build makes.
+
+    ``assign_tiers`` offers two promises and says which one to pick; nothing used
+    to make anyone pick.  Pointed at an ``--out`` that already holds a finished
+    build, an unpinned build recomputes the cutoffs from the new page set, pages
+    move between ``s`` / ``m`` / ``l``, and every cell and number measured on the
+    old tiers stops being comparable to the new ones -- with nothing reporting
+    it (#3903).  Pinning was advice in the runbook, and advice is what a
+    rebuild three weeks later does not read.
+
+    So a build into an existing corpus has to say which it is:
+
+    * ``--pin-tiers <build_report.json>`` -- the same corpus, grown or rebuilt;
+      tier membership is held by the recorded cutoffs.
+    * ``--new-version`` -- a new, incomparable corpus version.  The cutoffs it
+      supersedes are recorded in the new report, so the break is on disk rather
+      than in someone's memory.
+
+    Refused (``TierStabilityError``) rather than warned, and *before* the pull:
+    a warning at the end of a multi-day build is read after the manifest the
+    cells are keyed on has already been replaced.  A ``--pin-tiers`` report that
+    carries no cutoffs is refused here too, instead of after clustering.
+
+    Returns what ``build_report.json`` records under ``tier_provenance``;
+    ``pinned_cutoffs`` is what ``assign_tiers`` is handed.
+    """
+    if pin_tiers is not None and new_version:
+        raise TierStabilityError(
+            "--pin-tiers and --new-version contradict each other: pinning keeps this build "
+            "comparable to an earlier one, --new-version declares that it is not"
+        )
+
+    pinned: Optional[dict[str, float]] = None
+    if pin_tiers is not None:
+        try:
+            pinned = json.loads(Path(pin_tiers).read_text(encoding="utf-8")).get("tier_cutoffs")
+        except (OSError, ValueError) as exc:
+            raise TierStabilityError(f"--pin-tiers {pin_tiers}: cannot read it ({exc})") from exc
+        if not pinned:
+            raise TierStabilityError(f"--pin-tiers {pin_tiers}: no tier_cutoffs recorded in it")
+
+    existing = Path(out) / "build_report.json"
+    superseded: Optional[dict[str, float]] = None
+    if existing.exists():
+        try:
+            superseded = json.loads(existing.read_text(encoding="utf-8")).get("tier_cutoffs")
+        except (OSError, ValueError):
+            # Unreadable is not "no corpus here": a report exists, so something
+            # was built, and guessing that nothing depends on it is the bet
+            # this guard exists not to make.
+            superseded = {}
+        if superseded is not None and pin_tiers is None and not new_version:
+            raise TierStabilityError(
+                f"{existing} already records a finished build, and this build would re-tier it: "
+                "pages would move between tiers and every cell built on the old tiers would stop "
+                f"being comparable. Pass --pin-tiers {existing} to keep the tiers, or --new-version "
+                "to declare a new, incomparable corpus version."
+            )
+
+    return {
+        "pinned_from": str(pin_tiers) if pin_tiers is not None else None,
+        "pinned_cutoffs": pinned,
+        "new_version": bool(new_version),
+        "superseded_cutoffs": superseded if new_version else None,
+    }
+
+
 # --------------------------------------------------------------------------
 # Query crops
 # --------------------------------------------------------------------------
@@ -753,6 +825,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
         help="an earlier build_report.json; reuse its tier cutoffs so this build stays comparable to it",
     )
     ap.add_argument(
+        "--new-version",
+        action="store_true",
+        help="--out already holds a build and this one is a new, incomparable corpus version (see --pin-tiers)",
+    )
+    ap.add_argument(
         "--probe",
         action="store_true",
         help="metadata-only reachability check for every source (downloads nothing), then exit",
@@ -780,6 +857,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
     unknown = set(selected) - set(ALL_SOURCES)
     if unknown:
         ap.error(f"unknown source(s): {sorted(unknown)}")
+
+    try:
+        provenance = tier_provenance(args.out, pin_tiers=args.pin_tiers, new_version=args.new_version)
+    except TierStabilityError as exc:
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        return 2
 
     args.out.mkdir(parents=True, exist_ok=True)
     images_dir = args.out / "images"
@@ -949,9 +1032,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
         print(f"  {len(needs_hand_crop)} weak-label class(es) need a hand-drawn query crop")
     warnings.extend(crop_warnings)
 
-    pinned: Optional[dict[str, float]] = None
-    if args.pin_tiers:
-        pinned = json.loads(args.pin_tiers.read_text(encoding="utf-8")).get("tier_cutoffs")
+    # Read at the start by `tier_provenance`, not here: this file may be the
+    # very report this build is about to overwrite.
+    pinned = provenance["pinned_cutoffs"]
+    if pinned:
         print(f"\npinning tier cutoffs from {args.pin_tiers}: {pinned}")
 
     tier_of, tier_cutoffs = assign_tiers(
@@ -989,6 +1073,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
         # Feed these back with --pin-tiers to keep a later, larger build's tier
         # membership comparable to this one.
         "tier_cutoffs": tier_cutoffs,
+        "tier_provenance": provenance,
         "classes_admitted": len(admitted),
         "classes_rejected": len(rejected),
         "roster": chosen.name if chosen is not None else None,

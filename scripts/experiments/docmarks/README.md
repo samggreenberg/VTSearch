@@ -16,7 +16,7 @@ python build_corpus.py --probe                       # can I reach every source?
 python build_corpus.py --sources spods               # cluster into candidates
 python shortlist.py --corpus <dir> --write-roster     # rank them, draft a roster
 $EDITOR <dir>/roster.json                             # pick your two dozen
-python build_corpus.py --sources spods --roster <dir>/roster.json
+python build_corpus.py --sources spods --roster <dir>/roster.json --new-version
 
 python make_audit_slate.py --task merge               # which classes are one mark?
 python make_audit_slate.py --task membership          # verify every instance
@@ -262,6 +262,11 @@ Two stability promises are on offer and they genuinely conflict:
 
 Without pinning, a build over a different page set is a **new corpus version**.
 Both behaviours are pinned by tests, including the negative one.
+
+Neither is chosen by default once a corpus exists: a build into an `--out` that
+already holds a `build_report.json` is refused before the pull unless it passes
+`--pin-tiers` or `--new-version` (#3903), and the report records which under
+`tier_provenance`.
 
 ## The human passes
 

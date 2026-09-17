@@ -45,6 +45,12 @@ DISTRACTORS="${VTS_DOCMARKS_DISTRACTORS:-200000}"
 LETTERHEAD="${VTS_DOCMARKS_LETTERHEAD:-2000}"
 ROSTER_ARG=""
 [ -n "${VTS_DOCMARKS_ROSTER:-}" ] && ROSTER_ARG="--roster ${VTS_DOCMARKS_ROSTER}"
+# Building into a corpus that already exists must say which tier promise it
+# makes (#3903): VTS_DOCMARKS_PIN_TIERS=<build_report.json> keeps the tiers,
+# VTS_DOCMARKS_NEW_VERSION=1 declares a new corpus version.
+TIER_ARG=""
+[ -n "${VTS_DOCMARKS_PIN_TIERS:-}" ] && TIER_ARG="--pin-tiers ${VTS_DOCMARKS_PIN_TIERS}"
+[ "${VTS_DOCMARKS_NEW_VERSION:-0}" = "1" ] && TIER_ARG="$TIER_ARG --new-version"
 
 # The pull is one stream; the CPUs are for rendering PDFs behind it.
 #
@@ -78,6 +84,14 @@ probe)
   ;;
 
 build)
+  # build_corpus refuses this itself, but only once the job starts; saying so
+  # here costs no queue wait.
+  if [ -f "$VTS_DOCMARKS_OUT/build_report.json" ] && [ -z "$TIER_ARG" ]; then
+    echo "REFUSED: $VTS_DOCMARKS_OUT already holds a finished build (build_report.json)." >&2
+    echo "  set VTS_DOCMARKS_PIN_TIERS=$VTS_DOCMARKS_OUT/build_report.json to keep its tiers," >&2
+    echo "  or VTS_DOCMARKS_NEW_VERSION=1 to declare a new corpus version (#3903)." >&2
+    exit 2
+  fi
   bash "$WT/scripts/experiments/preflight.sh" --exp "$VTS_DOCMARKS_OUT" \
     --job-name "$JOB_NAME" --mem "$MEM" --conc 1 || exit 1
 
@@ -99,7 +113,7 @@ python -u build_corpus.py \\
   --sources "$SOURCES" \\
   --ucsf-distractors $DISTRACTORS \\
   --ucsf-letterhead-per-author $LETTERHEAD \\
-  $ROSTER_ARG
+  $ROSTER_ARG $TIER_ARG
 echo "exit=\$? end=\$(date -Is)"
 RUNNER_EOF
   chmod +x "$RUNNER"
