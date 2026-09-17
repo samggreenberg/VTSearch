@@ -95,6 +95,19 @@ class TestMetrics:
         assert mods["eval"].rank_pool({"b": 1.0, "a": 1.0, "c": 2.0}, ["a", "b", "c"]) == ["c", "a", "b"]
 
 
+class TestTheHeadlinePool:
+    def test_per_source_summary_is_quoted_from_the_own_verified_pool(self, mods):
+        base = {"tier": "s", "source": "spods", "method": "siglip", "r@10": 0.0, "r@50": 0.0}
+        rows = [
+            dict(base, pool="eligible", ap=0.9),
+            dict(base, pool="own_verified", ap=0.1),
+            dict(base, pool="naive", ap=0.05),
+        ]
+        summary = mods["eval"].summarise(rows)
+        assert mods["eval"].HEADLINE_POOL == "own_verified"
+        assert "| s | spods | siglip | 1 | 0.10 |" in summary
+
+
 class TestRerankGoesThroughTheAppPath:
     def test_a_verified_candidate_overtakes_a_stronger_stage1_score(self, mods):
         from vtscore.media.structural import MatchStats, StructuralFeatures

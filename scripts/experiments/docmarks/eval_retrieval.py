@@ -59,6 +59,11 @@ METHODS = ("siglip", "vlad", "vlad_rerank", "source_prior")
 #: source's style, and a ranker that recognises SPODS paper wins without looking
 #: at the mark.  ``source_prior`` is that ranker, as a control.
 POOLS = ("eligible", "own_verified", "naive")
+#: The pool numbers are quoted from.  The owner chose it on 2026-09-16 (#3913):
+#: every mark on an anchor-source page is boxed and clustered, so a same-source
+#: non-member is a verified negative, and excluding those pages instead lets
+#: ``source_prior`` score AP 1.00 without looking at the mark.
+HEADLINE_POOL = "own_verified"
 #: Cut-offs reported beside AP.  50 is also the app's re-rank shortlist, so
 #: ``r@50`` under ``vlad`` is exactly what Stage 2 gets to see.
 RECALL_AT = (10, 50, 100)
@@ -336,7 +341,7 @@ def _strata(
 
 
 def summarise(rows: list[dict[str, Any]]) -> str:
-    """Mean over classes per (tier, pool, method), and per source under the eligible pool."""
+    """Mean over classes per (tier, pool, method), and per source under :data:`HEADLINE_POOL`."""
     lines = [
         "| tier | pool | method | classes | mean AP | mean r@10 | mean r@50 |",
         "|---|---|---|---:|---:|---:|---:|",
@@ -351,14 +356,17 @@ def summarise(rows: list[dict[str, Any]]) -> str:
             f"| {tier} | {pool} | {method} | {len(sel)} | {np.mean([r['ap'] for r in sel]):.2f} "
             f"| {np.mean([r['r@10'] for r in sel]):.2f} | {np.mean([r['r@50'] for r in sel]):.2f} |"
         )
-    lines += ["", "| tier | source | method | classes | mean AP (eligible) |", "|---|---|---|---:|---:|"]
+    lines += ["", f"| tier | source | method | classes | mean AP ({HEADLINE_POOL}) |", "|---|---|---|---:|---:|"]
     for tier in sorted({r["tier"] for r in rows}):
         for source in sorted({r["source"] for r in rows}):
             for method in METHODS + ("rerank_all",):
                 sel = [
                     r
                     for r in rows
-                    if r["tier"] == tier and r["source"] == source and r["method"] == method and r["pool"] == "eligible"
+                    if r["tier"] == tier
+                    and r["source"] == source
+                    and r["method"] == method
+                    and r["pool"] == HEADLINE_POOL
                 ]
                 if sel:
                     lines.append(

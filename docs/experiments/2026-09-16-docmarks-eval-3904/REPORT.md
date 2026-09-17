@@ -94,9 +94,9 @@ claim: **every mark on an anchor-source page is boxed and was clustered**, so a
 same-source page that is not a member is verified not to carry the mark. That
 holds for SPODS (ground-truth masks), Tobacco800 (GEDI boxes) and StaVer
 (masks), and the #3561 merge slate compared every candidate class. On it,
-`source_prior` falls to 0.029, which is within-source chance. **This report
-quotes `own_verified` as the headline, and that choice wants the owner's
-countersignature** before it becomes the default.
+`source_prior` falls to 0.029, which is within-source chance. **`own_verified`
+is the headline pool**, countersigned by the corpus owner on 2026-09-16 (#3913)
+and now the default in `eval_retrieval.py` and the README.
 
 ## 3. Structural search is starved by the page's keypoint budget
 
@@ -172,7 +172,7 @@ script) down to 0.002 (`tobacco800/logo_cgr96c00_1`, a small binarised device).
 
 - #3911 — a page-feature scheme that gives the mark keypoints at a storable cell size
 - #3912 — three Tobacco800 query crops that do not match their own page
-- #3913 — the owner decision on counting a class's own source as known negatives
+- #3913 — counting a class's own source as known negatives (decided: yes)
 - #3914 — whether the Philip Morris crest reaches UCSF Food pages through Kraft
 
 ## Reproduce
