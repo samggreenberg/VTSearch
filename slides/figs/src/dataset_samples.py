@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import json
 import sys
+import tarfile
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -98,7 +99,10 @@ def _fetch_vg(image_id: int, path: Path) -> None:
     for folder in VG_FOLDERS:
         url = VG_IMAGE_URL.format(folder=folder, image_id=image_id)
         try:
-            with urllib.request.urlopen(url, timeout=60) as response:
+            # S310: the URL is the constant above with an integer substituted;
+            # there is no scheme for a caller to choose. Same call, same
+            # reason, as `coco_fixture.py`'s download.
+            with urllib.request.urlopen(url, timeout=60) as response:  # noqa: S310
                 data = response.read()
         except Exception:  # noqa: BLE001 — a 404 in the first folder is the normal path
             continue
@@ -147,6 +151,42 @@ CALTECH_SAMPLES: tuple[tuple[str, int], ...] = (
 )
 
 
+def _checked(archive: Path, name: str, root: Path) -> None:
+    """Refuse a member whose path would land outside `root`."""
+    if not (root / name).resolve().is_relative_to(root):
+        raise SystemExit(f"{archive.name}: member {name!r} would write outside {root}")
+
+
+def _extract(archive: Path, into: Path) -> None:
+    """Unpack a zip or a tar under `into`, refusing any member that escapes it.
+
+    Member by member rather than `extractall`, and not as ceremony: an archive
+    can name `../` or ship a symlink and write anywhere this process can, and
+    these arrive over the network from a third party. The linter's bandit rules
+    refuse the bulk call for that reason.
+    """
+    root = into.resolve()
+    into.mkdir(parents=True, exist_ok=True)
+    if archive.suffix == ".zip":
+        with zipfile.ZipFile(archive) as zf:
+            for info in zf.infolist():
+                _checked(archive, info.filename, root)
+                # The high bits of a zip's external attributes carry the unix
+                # mode; 0xA000 there is a symlink, which extracts as a file
+                # whose *contents* are a path and is the other way out of the
+                # tree.
+                if (info.external_attr >> 16) & 0xF000 == 0xA000:
+                    raise SystemExit(f"{archive.name}: refusing symlink member {info.filename!r}")
+                zf.extract(info, into)
+        return
+    with tarfile.open(archive) as tar:
+        for member in tar.getmembers():
+            if member.issym() or member.islnk():
+                raise SystemExit(f"{archive.name}: refusing link member {member.name!r}")
+            _checked(archive, member.name, root)
+            tar.extract(member, into)
+
+
 def caltech101_dir() -> Path:
     """The extracted `101_ObjectCategories` tree, downloading it if absent."""
     root = CALTECH_DIR / "caltech-101" / "101_ObjectCategories"
@@ -154,18 +194,13 @@ def caltech101_dir() -> Path:
         return root
     if not CALTECH_ZIP.exists():
         CALTECH_ZIP.parent.mkdir(parents=True, exist_ok=True)
-        urllib.request.urlretrieve(CALTECH_URL, CALTECH_ZIP)
-    CALTECH_DIR.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(CALTECH_ZIP) as archive:
-        archive.extractall(CALTECH_DIR)
+        urllib.request.urlretrieve(CALTECH_URL, CALTECH_ZIP)  # noqa: S310 — constant https URL
+    _extract(CALTECH_ZIP, CALTECH_DIR)
     # The distribution nests a second archive: the outer zip holds
     # `101_ObjectCategories.tar.gz` rather than the folders themselves.
     inner = next(CALTECH_DIR.rglob("101_ObjectCategories.tar.gz"), None)
     if inner is not None and not root.is_dir():
-        import tarfile
-
-        with tarfile.open(inner) as tar:
-            tar.extractall(inner.parent)
+        _extract(inner, inner.parent)
     root = next(iter(CALTECH_DIR.rglob("101_ObjectCategories")), None)
     if root is None:
         raise SystemExit(f"caltech-101: no 101_ObjectCategories under {CALTECH_DIR}")

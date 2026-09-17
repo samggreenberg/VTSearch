@@ -43,7 +43,9 @@ work. Until then the DocMarks slides show structure and counts and say so.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import importlib.util
+import io
 import re
 import sys
 import textwrap
@@ -117,7 +119,10 @@ def _save_photo(fig: plt.Figure, name: str) -> None:
     from PIL import Image
 
     png = f"{name}.png"
-    save(fig, OUT, png, column=FULL_BLEED, tight=False)
+    # `save` announces the file it writes, and this one is deleted three lines
+    # later; printing it would put a name in the log that is not on disk.
+    with contextlib.redirect_stdout(io.StringIO()):
+        save(fig, OUT, png, column=FULL_BLEED, tight=False)
     with Image.open(OUT / png) as image:
         image.convert("RGB").save(OUT / f"{name}.webp", quality=88, method=6)
     (OUT / png).unlink()
@@ -146,9 +151,7 @@ def _pile_config() -> Any:
 
 
 def _docmarks_config() -> Any:
-    return _load_module(
-        REPO / "scripts" / "experiments" / "docmarks" / "docmarks_config.py", "_slides_docmarks_config"
-    )
+    return _load_module(REPO / "scripts" / "experiments" / "docmarks" / "docmarks_config.py", "_slides_docmarks_config")
 
 
 # --------------------------------------------------------------------------
@@ -271,8 +274,32 @@ def _source_line(fig: plt.Figure, text: str, *, caption: str = "where to get it"
     fig.text(LEFT_X, y - 0.052, text, fontsize=FLOOR_PT + 1, color=CUT, va="center", family="monospace")
 
 
+def _caption(fig: plt.Figure, text: str) -> None:
+    """One descriptive line at the top of the right column, and no title.
+
+    For a figure whose *name* is already the slide's headline, sitting in the
+    notch six centimetres to the left. Repeating "Caltech-101" inside the
+    drawing is the one thing a full-bleed slide can get wrong for free: the
+    room reads it twice and learns nothing the second time.
+    """
+    fig.text(
+        RIGHT_X,
+        0.945,
+        "\n".join(textwrap.wrap(text, 76)),
+        fontsize=FLOOR_PT + 1,
+        color=SOFT,
+        va="top",
+        linespacing=1.4,
+    )
+
+
 def _heading(fig: plt.Figure, text: str, sub: str = "") -> None:
-    """The right column's own heading, above whatever it carries."""
+    """The right column's own heading, above whatever it carries.
+
+    Only for a panel the slide's headline does not already name — the source
+    breakdown, the three band sets. Where it would restate the headline, use
+    `_caption`.
+    """
     fig.text(RIGHT_X, 0.945, text, fontsize=FLOOR_PT + 5, color=INK, fontweight="bold", va="top")
     if sub:
         # Wrapped, not trusted to fit: the right column is 863px wide and a
@@ -414,15 +441,7 @@ def fig_vg_scale_bands(pc: Any) -> plt.Figure:
     # (twelve to twenty-five) and a column layout has to be re-tuned every time
     # it does, while a wrap does not.
     names = list(pc.SCALE_CLASSES)
-    fig.text(
-        RIGHT_X,
-        0.945,
-        f"the same {len(names)} classes in every band",
-        fontsize=FLOOR_PT + 5,
-        color=INK,
-        fontweight="bold",
-        va="top",
-    )
+    _caption(fig, f"the same {len(names)} classes, whatever size the thing is")
     fig.text(
         RIGHT_X,
         0.885,
@@ -462,9 +481,7 @@ def fig_vg_scale_cells(pc: Any) -> plt.Figure:
 
     for r, band in enumerate(bands):
         for c in range(len(classes)):
-            ax.add_patch(
-                Rectangle((c - 0.42, r - 0.40), 0.84, 0.80, facecolor=CUT, alpha=0.18, ec=CUT, lw=1.2)
-            )
+            ax.add_patch(Rectangle((c - 0.42, r - 0.40), 0.84, 0.80, facecolor=CUT, alpha=0.18, ec=CUT, lw=1.2))
         # Set as figure text, not an axis label: an axis label is placed
         # outside the axes and ran off the canvas the first time the class
         # list grew.
@@ -634,8 +651,7 @@ def _docmarks_steps(dc: Any, facts: dict[str, Any]) -> list[tuple[str, str]]:
         ),
         (
             "Group the marks that are the same mark",
-            "No source says 'these two impressions are the same stamp'. Hashing every "
-            "boxed mark proposes the groups.",
+            "No source says 'these two impressions are the same stamp'. Hashing every boxed mark proposes the groups.",
         ),
         (
             "Settle every identity by hand",
@@ -723,7 +739,11 @@ def fig_docmarks_shape(dc: Any, facts: dict[str, Any]) -> plt.Figure:
     # source is seventy times the size of everything that holds an answer, and
     # a column of numbers does not say that at a glance.
     for i, source in enumerate(sources):
-        note = f"{source['pages']:,}\n{source['instances']} marks" if source["instances"] else f"{source['pages']:,}\nno marks"
+        note = (
+            f"{source['pages']:,}\n{source['instances']} marks"
+            if source["instances"]
+            else f"{source['pages']:,}\nno marks"
+        )
         ax.text(
             i,
             source["pages"] * 1.5,
@@ -779,11 +799,7 @@ def fig_card_visual_genome() -> plt.Figure:
         ],
     )
     _source_line(fig, "homes.cs.washington.edu/~ranjay/visualgenome")
-    _heading(
-        fig,
-        "Visual Genome",
-        "ordinary scenes with a dozen nameable things in each, in the app as visual_genome_s/m/l/a",
-    )
+    _caption(fig, "ordinary scenes with a dozen nameable things in each — in the app as visual_genome_s/m/l/a")
     tiles = [_fit_tile(Image.open(p)) for p in dataset_samples.visual_genome_samples()]
     _strip(fig, tiles, cols=4, rows=3)
     return fig
@@ -812,10 +828,10 @@ def fig_card_coco_val() -> plt.Figure:
         ],
     )
     _source_line(fig, "images.cocodataset.org/zips/val2017.zip")
-    _heading(
+    _caption(
         fig,
-        "COCO val2017",
-        "exhaustive — if a class is not boxed here it is not in the picture, which is what lets COCO correct another dataset",
+        "exhaustive — if a class is not boxed here it is not in the picture, which is what "
+        "lets COCO correct another dataset",
     )
 
     # Cropped to the strip's own aspect like every other card, with the boxes
@@ -871,11 +887,7 @@ def fig_card_caltech101() -> plt.Figure:
         ],
     )
     _source_line(fig, "data.caltech.edu/records/mzrjq-6wc02")
-    _heading(
-        fig,
-        "Caltech-101",
-        "one object, centred, filling the frame — the set where region voting has nothing to point at",
-    )
+    _caption(fig, "one object, centred, filling the frame — the set where region voting has nothing to point at")
     tiles = [_fit_tile(Image.open(p)) for _, p in picks]
     _strip(fig, tiles, cols=4, rows=3, captions=[c.replace("_", " ") for c, _ in picks])
     return fig
@@ -906,7 +918,6 @@ def fig_card_vg_box(pc: Any) -> plt.Figure:
         fig,
         "vg_box_small · vg_box_medium · vg_box_large",
         "built from the whole Visual Genome source, not the demo pipeline's 100 curated categories",
-
     )
 
     ax = fig.add_axes([RIGHT_X, 0.30, RIGHT_W * 0.98, 0.50])
@@ -980,7 +991,9 @@ def main() -> int:
 
     steps = len(_vg_scale_steps(pc))
     for n in range(1, steps):
-        save(fig_vg_scale_build(pc, upto=n), OUT, f"dataset-vg-scale-build.build{n}.png", column=FULL_BLEED, tight=False)
+        save(
+            fig_vg_scale_build(pc, upto=n), OUT, f"dataset-vg-scale-build.build{n}.png", column=FULL_BLEED, tight=False
+        )
     save(fig_vg_scale_build(pc), OUT, "dataset-vg-scale-build.png", column=FULL_BLEED, tight=False)
     save(fig_vg_scale_bands(pc), OUT, "dataset-vg-scale-bands.png", column=FULL_BLEED, tight=False)
     save(fig_vg_scale_cells(pc), OUT, "dataset-vg-scale-cells.png", column=FULL_BLEED, tight=False)
