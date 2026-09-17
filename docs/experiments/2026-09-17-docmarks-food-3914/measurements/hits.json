@@ -1,0 +1,612 @@
+{
+  "tobacco800/logo_aah97e00-page02_1_0": {
+    "sheet": "tobacco800__logo_aah97e00-page02_1_0.png",
+    "n_positive": 56,
+    "ucsf_in_pool": {
+      "Opioids": 26954,
+      "Food": 15796,
+      "Chemical": 826,
+      "Drug": 234,
+      "Fossil Fuel": 72
+    },
+    "hits": [
+      {
+        "page_id": "ucsf/rsjj0229#0",
+        "industry": "Food",
+        "rank": 1,
+        "score": 0.6241
+      },
+      {
+        "page_id": "ucsf/qrdv0229#0",
+        "industry": "Food",
+        "rank": 2,
+        "score": 0.6239
+      },
+      {
+        "page_id": "ucsf/tpjj0229#0",
+        "industry": "Food",
+        "rank": 3,
+        "score": 0.6088
+      },
+      {
+        "page_id": "ucsf/thkj0229#0",
+        "industry": "Food",
+        "rank": 5,
+        "score": 0.6057
+      },
+      {
+        "page_id": "ucsf/yrdw0229#0",
+        "industry": "Food",
+        "rank": 7,
+        "score": 0.6045
+      },
+      {
+        "page_id": "ucsf/xlmf0228#0",
+        "industry": "Food",
+        "rank": 8,
+        "score": 0.6041
+      },
+      {
+        "page_id": "ucsf/fnhl0429#0",
+        "industry": "Opioids",
+        "rank": 9,
+        "score": 0.603
+      },
+      {
+        "page_id": "ucsf/rzcf0228#0",
+        "industry": "Food",
+        "rank": 10,
+        "score": 0.6021
+      }
+    ]
+  },
+  "tobacco800/logo_aeq93a00_1": {
+    "sheet": "tobacco800__logo_aeq93a00_1.png",
+    "n_positive": 9,
+    "ucsf_in_pool": {
+      "Opioids": 26954,
+      "Food": 15796,
+      "Chemical": 826,
+      "Drug": 234,
+      "Fossil Fuel": 72
+    },
+    "hits": [
+      {
+        "page_id": "ucsf/qzng0257#0",
+        "industry": "Food",
+        "rank": 1,
+        "score": 0.4823
+      },
+      {
+        "page_id": "ucsf/szcf0228#0",
+        "industry": "Food",
+        "rank": 2,
+        "score": 0.4803
+      },
+      {
+        "page_id": "ucsf/qjff0228#0",
+        "industry": "Food",
+        "rank": 3,
+        "score": 0.4767
+      },
+      {
+        "page_id": "ucsf/jgbf0227#0",
+        "industry": "Food",
+        "rank": 5,
+        "score": 0.4705
+      },
+      {
+        "page_id": "ucsf/trln0226#0",
+        "industry": "Chemical",
+        "rank": 6,
+        "score": 0.47
+      },
+      {
+        "page_id": "ucsf/tjjv0233#0",
+        "industry": "Food",
+        "rank": 7,
+        "score": 0.4696
+      },
+      {
+        "page_id": "ucsf/prcf0228#0",
+        "industry": "Food",
+        "rank": 8,
+        "score": 0.466
+      },
+      {
+        "page_id": "ucsf/qjgf0228#0",
+        "industry": "Food",
+        "rank": 9,
+        "score": 0.4658
+      }
+    ]
+  },
+  "tobacco800/logo_afm90c00-first_1_0": {
+    "sheet": "tobacco800__logo_afm90c00-first_1_0.png",
+    "n_positive": 79,
+    "ucsf_in_pool": {
+      "Opioids": 26954,
+      "Food": 15796,
+      "Chemical": 826,
+      "Drug": 234,
+      "Fossil Fuel": 72
+    },
+    "hits": [
+      {
+        "page_id": "ucsf/rzcf0228#0",
+        "industry": "Food",
+        "rank": 1,
+        "score": 0.6897
+      },
+      {
+        "page_id": "ucsf/ytww0228#0",
+        "industry": "Food",
+        "rank": 2,
+        "score": 0.6865
+      },
+      {
+        "page_id": "ucsf/thkj0229#0",
+        "industry": "Food",
+        "rank": 3,
+        "score": 0.6832
+      },
+      {
+        "page_id": "ucsf/fjhk0228#0",
+        "industry": "Fossil Fuel",
+        "rank": 4,
+        "score": 0.6822
+      },
+      {
+        "page_id": "ucsf/ztff0228#0",
+        "industry": "Food",
+        "rank": 5,
+        "score": 0.6813
+      },
+      {
+        "page_id": "ucsf/qjff0228#0",
+        "industry": "Food",
+        "rank": 6,
+        "score": 0.6792
+      },
+      {
+        "page_id": "ucsf/szcf0228#0",
+        "industry": "Food",
+        "rank": 7,
+        "score": 0.6759
+      },
+      {
+        "page_id": "ucsf/qjgf0228#0",
+        "industry": "Food",
+        "rank": 8,
+        "score": 0.6724
+      }
+    ]
+  },
+  "tobacco800/logo_ajj10e00_1": {
+    "sheet": "tobacco800__logo_ajj10e00_1.png",
+    "n_positive": 46,
+    "ucsf_in_pool": {
+      "Opioids": 26954,
+      "Food": 15796,
+      "Chemical": 826,
+      "Drug": 234,
+      "Fossil Fuel": 72
+    },
+    "hits": [
+      {
+        "page_id": "ucsf/ypfg0269#0",
+        "industry": "Food",
+        "rank": 19,
+        "score": 0.5341
+      },
+      {
+        "page_id": "ucsf/hqfg0269#0",
+        "industry": "Food",
+        "rank": 25,
+        "score": 0.5265
+      },
+      {
+        "page_id": "ucsf/gqfg0269#0",
+        "industry": "Food",
+        "rank": 36,
+        "score": 0.5143
+      },
+      {
+        "page_id": "ucsf/fgyf0241#0",
+        "industry": "Opioids",
+        "rank": 38,
+        "score": 0.5112
+      },
+      {
+        "page_id": "ucsf/htfg0269#0",
+        "industry": "Food",
+        "rank": 40,
+        "score": 0.5102
+      },
+      {
+        "page_id": "ucsf/szcf0228#0",
+        "industry": "Food",
+        "rank": 41,
+        "score": 0.5098
+      },
+      {
+        "page_id": "ucsf/qjgf0228#0",
+        "industry": "Food",
+        "rank": 43,
+        "score": 0.5071
+      },
+      {
+        "page_id": "ucsf/prcf0228#0",
+        "industry": "Food",
+        "rank": 45,
+        "score": 0.5061
+      }
+    ]
+  },
+  "tobacco800/logo_ald41a00-ernest_1": {
+    "sheet": "tobacco800__logo_ald41a00-ernest_1.png",
+    "n_positive": 45,
+    "ucsf_in_pool": {
+      "Opioids": 26954,
+      "Food": 15796,
+      "Chemical": 826,
+      "Drug": 234,
+      "Fossil Fuel": 72
+    },
+    "hits": [
+      {
+        "page_id": "ucsf/hqfg0269#0",
+        "industry": "Food",
+        "rank": 1,
+        "score": 0.5174
+      },
+      {
+        "page_id": "ucsf/msjp0228#0",
+        "industry": "Food",
+        "rank": 2,
+        "score": 0.4996
+      },
+      {
+        "page_id": "ucsf/ysxv0229#0",
+        "industry": "Food",
+        "rank": 3,
+        "score": 0.4911
+      },
+      {
+        "page_id": "ucsf/ytgv0229#0",
+        "industry": "Food",
+        "rank": 4,
+        "score": 0.4894
+      },
+      {
+        "page_id": "ucsf/njhk0226#0",
+        "industry": "Food",
+        "rank": 5,
+        "score": 0.489
+      },
+      {
+        "page_id": "ucsf/zqlv0228#0",
+        "industry": "Food",
+        "rank": 6,
+        "score": 0.4838
+      },
+      {
+        "page_id": "ucsf/mgkj0229#0",
+        "industry": "Food",
+        "rank": 7,
+        "score": 0.4834
+      },
+      {
+        "page_id": "ucsf/fkxp0228#0",
+        "industry": "Food",
+        "rank": 8,
+        "score": 0.4828
+      }
+    ]
+  },
+  "tobacco800/logo_asg54f00_1": {
+    "sheet": "tobacco800__logo_asg54f00_1.png",
+    "n_positive": 5,
+    "ucsf_in_pool": {
+      "Opioids": 26954,
+      "Food": 15796,
+      "Chemical": 826,
+      "Drug": 234,
+      "Fossil Fuel": 72
+    },
+    "hits": [
+      {
+        "page_id": "ucsf/lnxp0227#0",
+        "industry": "Food",
+        "rank": 1,
+        "score": 0.7042
+      },
+      {
+        "page_id": "ucsf/splf0228#0",
+        "industry": "Food",
+        "rank": 3,
+        "score": 0.6949
+      },
+      {
+        "page_id": "ucsf/rzcf0228#0",
+        "industry": "Food",
+        "rank": 4,
+        "score": 0.6901
+      },
+      {
+        "page_id": "ucsf/qjff0228#0",
+        "industry": "Food",
+        "rank": 5,
+        "score": 0.6881
+      },
+      {
+        "page_id": "ucsf/szcf0228#0",
+        "industry": "Food",
+        "rank": 6,
+        "score": 0.6867
+      },
+      {
+        "page_id": "ucsf/qjgf0228#0",
+        "industry": "Food",
+        "rank": 9,
+        "score": 0.6833
+      },
+      {
+        "page_id": "ucsf/fhxy0312#0",
+        "industry": "Opioids",
+        "rank": 10,
+        "score": 0.6816
+      },
+      {
+        "page_id": "ucsf/ztff0228#0",
+        "industry": "Food",
+        "rank": 11,
+        "score": 0.6806
+      }
+    ]
+  },
+  "tobacco800/logo_azb11c00_1": {
+    "sheet": "tobacco800__logo_azb11c00_1.png",
+    "n_positive": 23,
+    "ucsf_in_pool": {
+      "Opioids": 26954,
+      "Food": 15796,
+      "Chemical": 826,
+      "Drug": 234,
+      "Fossil Fuel": 72
+    },
+    "hits": [
+      {
+        "page_id": "ucsf/hqfg0269#0",
+        "industry": "Food",
+        "rank": 1,
+        "score": 0.5033
+      },
+      {
+        "page_id": "ucsf/fggg0378#0",
+        "industry": "Opioids",
+        "rank": 2,
+        "score": 0.4901
+      },
+      {
+        "page_id": "ucsf/njhk0226#0",
+        "industry": "Food",
+        "rank": 3,
+        "score": 0.4799
+      },
+      {
+        "page_id": "ucsf/pjhk0226#0",
+        "industry": "Food",
+        "rank": 4,
+        "score": 0.4797
+      },
+      {
+        "page_id": "ucsf/fjxw0244#0",
+        "industry": "Opioids",
+        "rank": 5,
+        "score": 0.4761
+      },
+      {
+        "page_id": "ucsf/zfln0226#0",
+        "industry": "Chemical",
+        "rank": 6,
+        "score": 0.4736
+      },
+      {
+        "page_id": "ucsf/tjjv0233#0",
+        "industry": "Food",
+        "rank": 7,
+        "score": 0.4685
+      },
+      {
+        "page_id": "ucsf/fkxp0228#0",
+        "industry": "Food",
+        "rank": 8,
+        "score": 0.4682
+      }
+    ]
+  },
+  "tobacco800/logo_bqz95d00_1": {
+    "sheet": "tobacco800__logo_bqz95d00_1.png",
+    "n_positive": 8,
+    "ucsf_in_pool": {
+      "Opioids": 26954,
+      "Food": 15796,
+      "Chemical": 826,
+      "Drug": 234,
+      "Fossil Fuel": 72
+    },
+    "hits": [
+      {
+        "page_id": "ucsf/thkj0229#0",
+        "industry": "Food",
+        "rank": 1,
+        "score": 0.6812
+      },
+      {
+        "page_id": "ucsf/qrdv0229#0",
+        "industry": "Food",
+        "rank": 2,
+        "score": 0.6785
+      },
+      {
+        "page_id": "ucsf/rsjj0229#0",
+        "industry": "Food",
+        "rank": 3,
+        "score": 0.6765
+      },
+      {
+        "page_id": "ucsf/tpjj0229#0",
+        "industry": "Food",
+        "rank": 4,
+        "score": 0.6741
+      },
+      {
+        "page_id": "ucsf/shkj0229#0",
+        "industry": "Food",
+        "rank": 5,
+        "score": 0.6705
+      },
+      {
+        "page_id": "ucsf/xlmf0228#0",
+        "industry": "Food",
+        "rank": 6,
+        "score": 0.6682
+      },
+      {
+        "page_id": "ucsf/xmgj0229#0",
+        "industry": "Food",
+        "rank": 8,
+        "score": 0.6646
+      },
+      {
+        "page_id": "ucsf/xzxj0229#0",
+        "industry": "Food",
+        "rank": 10,
+        "score": 0.661
+      }
+    ]
+  },
+  "tobacco800/logo_cgr96c00_1": {
+    "sheet": "tobacco800__logo_cgr96c00_1.png",
+    "n_positive": 7,
+    "ucsf_in_pool": {
+      "Opioids": 26954,
+      "Food": 15796,
+      "Chemical": 826,
+      "Drug": 234,
+      "Fossil Fuel": 72
+    },
+    "hits": [
+      {
+        "page_id": "ucsf/qjgf0228#0",
+        "industry": "Food",
+        "rank": 2,
+        "score": 0.6438
+      },
+      {
+        "page_id": "ucsf/szcf0228#0",
+        "industry": "Food",
+        "rank": 3,
+        "score": 0.6431
+      },
+      {
+        "page_id": "ucsf/prcf0228#0",
+        "industry": "Food",
+        "rank": 4,
+        "score": 0.6386
+      },
+      {
+        "page_id": "ucsf/qjff0228#0",
+        "industry": "Food",
+        "rank": 5,
+        "score": 0.6374
+      },
+      {
+        "page_id": "ucsf/tjjv0233#0",
+        "industry": "Food",
+        "rank": 6,
+        "score": 0.6274
+      },
+      {
+        "page_id": "ucsf/rzcf0228#0",
+        "industry": "Food",
+        "rank": 7,
+        "score": 0.6272
+      },
+      {
+        "page_id": "ucsf/xkjv0233#0",
+        "industry": "Food",
+        "rank": 9,
+        "score": 0.6197
+      },
+      {
+        "page_id": "ucsf/ztff0228#0",
+        "industry": "Food",
+        "rank": 10,
+        "score": 0.6137
+      }
+    ]
+  },
+  "tobacco800/logo_ciy01a00-page02_1_0": {
+    "sheet": "tobacco800__logo_ciy01a00-page02_1_0.png",
+    "n_positive": 21,
+    "ucsf_in_pool": {
+      "Opioids": 26954,
+      "Food": 15796,
+      "Chemical": 826,
+      "Drug": 234,
+      "Fossil Fuel": 72
+    },
+    "hits": [
+      {
+        "page_id": "ucsf/fjhk0228#0",
+        "industry": "Fossil Fuel",
+        "rank": 1,
+        "score": 0.6665
+      },
+      {
+        "page_id": "ucsf/szcf0228#0",
+        "industry": "Food",
+        "rank": 2,
+        "score": 0.6439
+      },
+      {
+        "page_id": "ucsf/qjgf0228#0",
+        "industry": "Food",
+        "rank": 3,
+        "score": 0.6404
+      },
+      {
+        "page_id": "ucsf/qjff0228#0",
+        "industry": "Food",
+        "rank": 4,
+        "score": 0.6392
+      },
+      {
+        "page_id": "ucsf/rzcf0228#0",
+        "industry": "Food",
+        "rank": 5,
+        "score": 0.6376
+      },
+      {
+        "page_id": "ucsf/ztff0228#0",
+        "industry": "Food",
+        "rank": 6,
+        "score": 0.6364
+      },
+      {
+        "page_id": "ucsf/prcf0228#0",
+        "industry": "Food",
+        "rank": 7,
+        "score": 0.6331
+      },
+      {
+        "page_id": "ucsf/pgny0229#0",
+        "industry": "Food",
+        "rank": 11,
+        "score": 0.6188
+      }
+    ]
+  }
+}
