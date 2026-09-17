@@ -54,6 +54,8 @@ def main() -> int:
     for name, d in sorted(ds.items()):
         size = sum(int(v) for v in (d.get("file_type_counts") or {}).values())
         t = dets.get(name)
+        if not (t and pc.is_scale_review(name, t.get("text_query") or "")):
+            continue  # another project's pair on the shared dashboard: never ours to delete
         done = (t.get("num_training") or 0) if t else 0
         if not size or done < size:
             kept += 1
