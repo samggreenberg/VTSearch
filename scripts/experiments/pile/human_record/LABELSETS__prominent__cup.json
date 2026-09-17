@@ -1,0 +1,555 @@
+{
+ "bad": [
+  {
+   "cid": null,
+   "filename": "4363.jpg",
+   "framing": "side-right",
+   "id": "6676a4b9cb6d796b",
+   "label": "bad",
+   "md5": "7fc209351da5fda67757f4caf092f04e",
+   "media_type": "image",
+   "name": "4363.jpg",
+   "origin_name": "4363.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  }
+ ],
+ "class": "cup",
+ "detector_name": "cup incl mugs glasses and stemware -- prominent check",
+ "exported": "2026-09-17",
+ "framings": "Two framings, both recorded per element in `framing`. corner-inset: the first 0 votes, on the slate render with the magnifier over a bottom corner; region_box is normalised to the photo. side-right: the rest, re-rendered with the magnifier on black padding to the photo's right (slate_render.draw_with_side_inset) so no part of the scene was covered; the app's box was normalised to the padded canvas, kept as region_box_canvas, and region_box is converted to the photo with slate_render.side_inset_to_original, clipped at the photo's edge.",
+ "good": [
+  {
+   "cid": null,
+   "filename": "1202.jpg",
+   "framing": "side-right",
+   "id": "bcb74016a9ceb758",
+   "label": "good",
+   "md5": "beeed8c360e9f10c20a37371b0711488",
+   "media_type": "image",
+   "name": "1202.jpg",
+   "origin_name": "1202.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "canvas": {
+    "canvas_h": 515,
+    "canvas_w": 1252,
+    "orig_h": 515,
+    "orig_w": 1024
+   },
+   "cid": null,
+   "filename": "1592935.jpg",
+   "framing": "side-right",
+   "id": "fce662cfabe554e1",
+   "label": "good",
+   "md5": "62b4fc0f02f3481bacbfdf4ceb9f6cc0",
+   "media_type": "image",
+   "name": "1592935.jpg",
+   "origin_name": "1592935.jpg",
+   "region_box": [
+    0.2925129359517601,
+    0.7099846837381806,
+    0.31642407513037807,
+    0.7749610764420704
+   ],
+   "region_box_canvas": [
+    0.2392438070404172,
+    0.7099846837381806,
+    0.2588005215123859,
+    0.7749610764420704
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "canvas": {
+    "canvas_h": 600,
+    "canvas_w": 1064,
+    "orig_h": 600,
+    "orig_w": 800
+   },
+   "cid": null,
+   "filename": "2175.jpg",
+   "framing": "side-right",
+   "id": "15a87032d9009d83",
+   "label": "good",
+   "md5": "40741b896b5646ae051181d39ffc8934",
+   "media_type": "image",
+   "name": "2175.jpg",
+   "origin_name": "2175.jpg",
+   "region_box": [
+    0.3740604026845638,
+    0.5449664429530201,
+    0.4193624161073826,
+    0.7073825503355705
+   ],
+   "region_box_canvas": [
+    0.2812484230711006,
+    0.5449664429530201,
+    0.3153100872987839,
+    0.7073825503355705
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "cid": null,
+   "filename": "2200.jpg",
+   "framing": "side-right",
+   "id": "bf7bece6dc245c15",
+   "label": "good",
+   "md5": "e3587f9dad2996ed343c25f38220cfce",
+   "media_type": "image",
+   "name": "2200.jpg",
+   "origin_name": "2200.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "canvas": {
+    "canvas_h": 333,
+    "canvas_w": 647,
+    "orig_h": 333,
+    "orig_w": 500
+   },
+   "cid": null,
+   "filename": "2320424.jpg",
+   "framing": "side-right",
+   "id": "a67e897586188d12",
+   "label": "good",
+   "md5": "5b16f6d08d05aafc4a8c50780349e06f",
+   "media_type": "image",
+   "name": "2320424.jpg",
+   "origin_name": "2320424.jpg",
+   "region_box": [
+    0.11420000000000004,
+    0.774496644295302,
+    0.17002336737671442,
+    0.9030872483221476
+   ],
+   "region_box_canvas": [
+    0.08825347758887174,
+    0.774496644295302,
+    0.13139363784908378,
+    0.9030872483221476
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "cid": null,
+   "filename": "2334089.jpg",
+   "framing": "side-right",
+   "id": "ffcc6aef62cee916",
+   "label": "good",
+   "md5": "e26520a0866aaba8d8de26d0732507c5",
+   "media_type": "image",
+   "name": "2334089.jpg",
+   "origin_name": "2334089.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "canvas": {
+    "canvas_h": 500,
+    "canvas_w": 540,
+    "orig_h": 500,
+    "orig_w": 375
+   },
+   "cid": null,
+   "filename": "2340620.jpg",
+   "framing": "side-right",
+   "id": "2ad649fd18131513",
+   "label": "good",
+   "md5": "a158b61b6110fc69c72048436b171a3e",
+   "media_type": "image",
+   "name": "2340620.jpg",
+   "origin_name": "2340620.jpg",
+   "region_box": [
+    0.0,
+    0.15302013422818792,
+    0.9025503355704697,
+    0.963758389261745
+   ],
+   "region_box_canvas": [
+    0.0,
+    0.15302013422818792,
+    0.6267710663683818,
+    0.963758389261745
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "cid": null,
+   "filename": "2344893.jpg",
+   "framing": "side-right",
+   "id": "33e21063bc438c1f",
+   "label": "good",
+   "md5": "b5fc3919709e5dd7c002e850bb895392",
+   "media_type": "image",
+   "name": "2344893.jpg",
+   "origin_name": "2344893.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 665,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "filename": "2352262.jpg",
+   "framing": "side-right",
+   "id": "585e21cc8bc0454d",
+   "label": "good",
+   "md5": "91c0c11761860ada07098160d6d2ced9",
+   "media_type": "image",
+   "name": "2352262.jpg",
+   "origin_name": "2352262.jpg",
+   "region_box": [
+    0.8743959731543625,
+    0.774496644295302,
+    0.9972147651006711,
+    1.0
+   ],
+   "region_box_canvas": [
+    0.6574405813190695,
+    0.774496644295302,
+    0.7497855376696775,
+    1.0
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "cid": null,
+   "filename": "2355048.jpg",
+   "framing": "side-right",
+   "id": "393ca7c3842f2efc",
+   "label": "good",
+   "md5": "8ca96797266851af331ff957ea8a3f8b",
+   "media_type": "image",
+   "name": "2355048.jpg",
+   "origin_name": "2355048.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "cid": null,
+   "filename": "2359554.jpg",
+   "framing": "side-right",
+   "id": "5381a1835029b846",
+   "label": "good",
+   "md5": "3742b77870dd28669c430ffe6fda08e6",
+   "media_type": "image",
+   "name": "2359554.jpg",
+   "origin_name": "2359554.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "canvas": {
+    "canvas_h": 500,
+    "canvas_w": 722,
+    "orig_h": 500,
+    "orig_w": 500
+   },
+   "cid": null,
+   "filename": "2381294.jpg",
+   "framing": "side-right",
+   "id": "583fea6dc624bcd6",
+   "label": "good",
+   "md5": "0ac13517d133931e338eb465e50eb330",
+   "media_type": "image",
+   "name": "2381294.jpg",
+   "origin_name": "2381294.jpg",
+   "region_box": [
+    0.2575704697986577,
+    0.6738255033557047,
+    0.36763758389261747,
+    0.9328859060402684
+   ],
+   "region_box_canvas": [
+    0.17837290152261615,
+    0.6738255033557047,
+    0.25459666474557996,
+    0.9328859060402684
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "cid": null,
+   "filename": "2385151.jpg",
+   "framing": "side-right",
+   "id": "c87886cb93f211a8",
+   "label": "good",
+   "md5": "af12a0cd9206bc910b67f23b8ce7f0ff",
+   "media_type": "image",
+   "name": "2385151.jpg",
+   "origin_name": "2385151.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "cid": null,
+   "filename": "2389890.jpg",
+   "framing": "side-right",
+   "id": "d66d4669fecfb673",
+   "label": "good",
+   "md5": "df829bbe5d4436c13933fb7104cf626e",
+   "media_type": "image",
+   "name": "2389890.jpg",
+   "origin_name": "2389890.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "cid": null,
+   "filename": "2394004.jpg",
+   "framing": "side-right",
+   "id": "eadcc1992a6a61cc",
+   "label": "good",
+   "md5": "d180d409b4601b2a35f4f3860d284544",
+   "media_type": "image",
+   "name": "2394004.jpg",
+   "origin_name": "2394004.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "cid": null,
+   "filename": "2398153.jpg",
+   "framing": "side-right",
+   "id": "33b069e80251b1a9",
+   "label": "good",
+   "md5": "08ea5775304aa5cbc25f303241ec364b",
+   "media_type": "image",
+   "name": "2398153.jpg",
+   "origin_name": "2398153.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "cid": null,
+   "filename": "2410568.jpg",
+   "framing": "side-right",
+   "id": "af10c53fe56ea7c2",
+   "label": "good",
+   "md5": "dbeaea0984607ef3e666b74de8023567",
+   "media_type": "image",
+   "name": "2410568.jpg",
+   "origin_name": "2410568.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "canvas": {
+    "canvas_h": 500,
+    "canvas_w": 540,
+    "orig_h": 500,
+    "orig_w": 375
+   },
+   "cid": null,
+   "filename": "2411384.jpg",
+   "framing": "side-right",
+   "id": "6d77799b7c3ade9c",
+   "label": "good",
+   "md5": "29cf2a5f5020663ca84b362fdef053ea",
+   "media_type": "image",
+   "name": "2411384.jpg",
+   "origin_name": "2411384.jpg",
+   "region_box": [
+    0.8166442953020134,
+    0.2912751677852349,
+    1.0,
+    0.6241610738255033
+   ],
+   "region_box_canvas": [
+    0.5671140939597316,
+    0.2912751677852349,
+    0.7000994282873477,
+    0.6241610738255033
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "canvas": {
+    "canvas_h": 681,
+    "canvas_w": 1326,
+    "orig_h": 681,
+    "orig_w": 1024
+   },
+   "cid": null,
+   "filename": "285639.jpg",
+   "framing": "side-right",
+   "id": "e7256a5a39b2a219",
+   "label": "good",
+   "md5": "9491ede84dbb0e507ac23d8d031413a5",
+   "media_type": "image",
+   "name": "285639.jpg",
+   "origin_name": "285639.jpg",
+   "region_box": [
+    0.26004220847315435,
+    0.5503355704697986,
+    0.30021235318791945,
+    0.7261744966442953
+   ],
+   "region_box_canvas": [
+    0.20081690910747363,
+    0.5503355704697986,
+    0.23183819733365724,
+    0.7261744966442953
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "canvas": {
+    "canvas_h": 500,
+    "canvas_w": 536,
+    "orig_h": 500,
+    "orig_w": 372
+   },
+   "cid": null,
+   "filename": "4854.jpg",
+   "framing": "side-right",
+   "id": "3ca95cd405c6b49f",
+   "label": "good",
+   "md5": "fc45ef062ede71eb111f1a3e973207b8",
+   "media_type": "image",
+   "name": "4854.jpg",
+   "origin_name": "4854.jpg",
+   "region_box": [
+    0.5580572995597893,
+    0.312751677852349,
+    0.7438839575665729,
+    0.6120805369127517
+   ],
+   "region_box_canvas": [
+    0.3873084243213463,
+    0.312751677852349,
+    0.5162776720424722,
+    0.6120805369127517
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "canvas": {
+    "canvas_h": 1024,
+    "canvas_w": 1106,
+    "orig_h": 1024,
+    "orig_w": 768
+   },
+   "cid": null,
+   "filename": "713776.jpg",
+   "framing": "side-right",
+   "id": "eae02422111a7f4b",
+   "label": "good",
+   "md5": "be104776fb2b49eaea6a23457c10fbf9",
+   "media_type": "image",
+   "name": "713776.jpg",
+   "origin_name": "713776.jpg",
+   "region_box": [
+    0.7755330676733782,
+    0.46308724832214765,
+    0.9580834032438479,
+    0.7731543624161074
+   ],
+   "region_box_canvas": [
+    0.5385256744784398,
+    0.46308724832214765,
+    0.665287571149435,
+    0.7731543624161074
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "canvas": {
+    "canvas_h": 768,
+    "canvas_w": 1362,
+    "orig_h": 768,
+    "orig_w": 1024
+   },
+   "cid": null,
+   "filename": "713943.jpg",
+   "framing": "side-right",
+   "id": "ff65feda2075fc1b",
+   "label": "good",
+   "md5": "f978b099912eb510df9134cf34cdd77d",
+   "media_type": "image",
+   "name": "713943.jpg",
+   "origin_name": "713943.jpg",
+   "region_box": [
+    0.34389812290268457,
+    0.2979865771812081,
+    0.4445692638422819,
+    0.4147651006711409
+   ],
+   "region_box_canvas": [
+    0.2585548295538539,
+    0.2979865771812081,
+    0.33424297075954235,
+    0.4147651006711409
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "canvas": {
+    "canvas_h": 247,
+    "canvas_w": 606,
+    "orig_h": 247,
+    "orig_w": 495
+   },
+   "cid": null,
+   "filename": "72.jpg",
+   "framing": "side-right",
+   "id": "cf6ff03f53732caf",
+   "label": "good",
+   "md5": "b9adf695d384bfcabb03b8fc2920d37b",
+   "media_type": "image",
+   "name": "72.jpg",
+   "origin_name": "72.jpg",
+   "region_box": [
+    0.4628817510173442,
+    0.7487028171170077,
+    0.5227371498557939,
+    0.9662178211550337
+   ],
+   "region_box_canvas": [
+    0.37809647979139505,
+    0.7487028171170077,
+    0.42698826597131684,
+    0.9662178211550337
+   ],
+   "score": -1.0,
+   "time": -1.0
+  }
+ ],
+ "kind": "prominent",
+ "question": "is the boxed instance the most prominent one? (redraw if not)",
+ "rule": "cup incl mugs glasses and stemware",
+ "rule_digest": "9a2e295de0c2",
+ "source": "OWLv2-screened per-class review, exported from the live app"
+}

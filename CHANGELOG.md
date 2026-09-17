@@ -15,6 +15,16 @@ not list every commit. Use `git log` for the full history.
 
 ## Unreleased
 
+### Fixed
+
+- **Pressing Enter on a Text sort query now hands focus back, so you can vote
+  with the arrow keys straight away** (issue #3935). In Manual mode, typing a
+  keyword and hitting Enter resorted the left panel and selected a new item in
+  the centre, but focus stayed in the query box - and keyboard shortcuts are
+  deliberately suppressed while focus sits in a text field, so left/right did
+  nothing until you clicked elsewhere. Submitting the sort now blurs the box.
+  A query you are still typing keeps focus, as before.
+
 ### Changed
 
 - **Structural (instance-matching) search is ~3x faster on both of its hot

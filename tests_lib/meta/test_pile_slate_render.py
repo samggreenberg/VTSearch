@@ -73,8 +73,9 @@ class TestRender:
         with Image.open(dest) as im:
             assert im.size == (g["canvas_w"], g["canvas_h"])
             # bottom-right of the PHOTO is where the old corner inset would have gone
-            # (getpixel is typed `float | tuple | None`; an RGB JPEG is always a triple).
             px = im.getpixel((620, 460))
-            assert isinstance(px, tuple)
-            r, gg, b = px[:3]
+        # Pillow types getpixel() as float | tuple | None (it is a scalar for
+        # single-band modes); this is an RGB JPEG, so narrow it for the unpack.
+        assert isinstance(px, tuple)
+        r, gg, b = px[:3]
         assert abs(r - 0) < 20 and abs(gg - 90) < 20 and abs(b - 200) < 20
