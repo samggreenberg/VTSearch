@@ -1103,6 +1103,13 @@ and hides the trophy button and unlock pop-ups until you turn it back on.
   open the help sheet. It has two tabs: a **Keyboard shortcuts**
   reference and a **User guide** that renders this document inside the
   app (matching your theme).
+- **Double-click the image to zoom in.** In Train / Find, a double-click
+  on the image zooms in on the spot you clicked - the quick way to check a
+  detail before voting without leaving the keyboard rhythm. Double-click
+  again to go deeper; the viewer stops at 5x, and a double-click there
+  returns you to the fitted view. Any rotation you set is kept. While the
+  **Marquee** toggle is on (or `Shift` is held) the gesture belongs to the
+  region draw instead, so it does not zoom.
 - **Right-click a media item** for a context menu: **Sort by similarity
   to this**, **Crop, then sort by similarity…** (audio/image), **Use as
   detector seed**, and **Crop, then use as detector seed…**. The crop
