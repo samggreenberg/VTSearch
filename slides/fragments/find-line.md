@@ -2,7 +2,7 @@
 
 ![bg fit](figs/ui-find-line.webp)
 
-## Drawing the Line
+## Drawing<br>the Line
 
 <!-- **a** — Same list, scrolled down to the only thing on this screen nobody
      asked for: the tool has **drawn a line** through the ranking. Above it is

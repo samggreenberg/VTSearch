@@ -2,7 +2,7 @@
 
 ![bg fit](figs/calib-error-decomposition.png)
 
-## The Anchored Fit Ate the Cut Axis
+## The Axis<br>Is Spent
 
 <!-- The answer, in two parts. Judged against the anchored fit that had shipped
      in the meantime, the extreme-value rule is **worse** — by 0.0069 even at its

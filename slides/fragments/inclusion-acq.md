@@ -2,7 +2,7 @@
 
 ![bg fit](figs/calib-acq-flow.png)
 
-## Compound Interest
+## Compound<br>Interest
 
 <!-- build: figs/calib-acq-flow.build1.png -->
 

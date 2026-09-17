@@ -15,7 +15,8 @@ _out/       rendered decks (gitignored)
 ```
 
 `build.py --check` runs as a `./run-tests.sh` gate, so a deck that names a
-missing fragment or figure fails the suite rather than rotting quietly.
+missing fragment or figure — or a headline that has grown to three lines —
+fails the suite rather than rotting quietly.
 
 **Test a deck change with `./run-tests.sh slides`** — about four seconds, versus
 three and a half minutes for the full suite. It is not a shortcut you are
@@ -48,12 +49,17 @@ Needs node and python3. Nothing to install — `npx` fetches Marp on first run
 ./build.py --list                   # decks, slide counts, unused fragments
 ```
 
+Headline breaks are decided by measurement rather than by eye —
+`node balance-titles.mjs _out/<deck>.html [--write]` against a rendered HTML
+build. See *A title is two lines at most* in [`STYLE.md`](STYLE.md) for what it
+is enforcing and why the browser's own wrap is the wrong answer.
+
 ## Exporting a pile of images
 
 `./render.sh <deck> png` renders one PNG per page and zips the pile:
 
 ```bash
-./render.sh scale-readout png --no-pageno   # -> _out/scale-readout.unnumbered-pngs*.zip
+./render.sh hold-the-line png --no-pageno   # -> _out/hold-the-line.unnumbered-pngs*.zip
 PNG_SCALE=3 ./render.sh hold-the-line png   # 3840x2160 instead of 2560x1440
 ```
 

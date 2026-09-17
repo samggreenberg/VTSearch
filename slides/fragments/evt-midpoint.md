@@ -2,7 +2,7 @@
 
 ![bg fit](figs/calib-crossing.png)
 
-## Prior Convictions
+## Prior<br>Convictions
 
 <!-- build: figs/calib-crossing.build1.png -->
 
