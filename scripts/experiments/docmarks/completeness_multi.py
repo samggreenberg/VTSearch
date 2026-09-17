@@ -42,7 +42,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
-from completeness import ANCHOR_SOURCES, Candidate, ClassCandidates, overlapping_mark
+from completeness import ANCHOR_SOURCES, OVERLAP, Candidate, ClassCandidates, overlapping_mark
 from sources._common import Page
 
 #: Candidates per class; two one-screen sheets at completeness.PER_SHEET.
@@ -51,6 +51,35 @@ AUDIT_DIR = "completeness2"
 PASS = "multi"
 #: Short names for sheet captions, which have room for about 30 characters.
 CODES = {"sift": "SIFT", "siglip_tiles": "SIG", "dinov3_patches": "DINO", "ocr": "OCR", "ncc": "NCC"}
+#: Whose box to keep when methods agree on a candidate, tightest localiser first.
+#: A SigLIP box is the whole winning tile -- several times the mark -- so it is
+#: used only when no other method proposed the candidate; accepting such a
+#: candidate on a page with no existing mark adds that tile as the new box, so
+#: the reviewer should read "SIG" + "NO BOX" as "needs a box drawn".
+BOX_PRIORITY = {"sift": 0, "ncc": 1, "ocr": 2, "dinov3_patches": 3, "siglip_tiles": 9}
+
+
+def mark_under(page: Page, box: Sequence[int]) -> Optional[int]:
+    """The mark a proposal box points at.
+
+    A tight box lies mostly inside its mark (:func:`completeness.overlapping_mark`);
+    a coarse one -- a SigLIP tile -- instead *contains* the mark, so failing the
+    first test, take the non-signature mark with the most of its own area inside
+    the box, if at least OVERLAP of it is.
+    """
+    idx = overlapping_mark(page, tuple(box))
+    if idx is not None:
+        return idx
+    bx, by, bw, bh = box
+    best, best_area = None, 0
+    for i, mark in enumerate(page.marks):
+        if mark.kind == "signature":
+            continue
+        mx, my, mw, mh = mark.box
+        inside = max(0, min(bx + bw, mx + mw) - max(bx, mx)) * max(0, min(by + bh, my + mh) - max(by, my))
+        if inside >= OVERLAP * max(1, mw * mh) and inside > best_area:
+            best, best_area = i, inside
+    return best
 
 
 def proposals_path(directory: Path, method: str) -> Path:
@@ -127,6 +156,7 @@ class _Merged:
     mark_index: Optional[int]
     box: tuple[int, int, int, int]
     best_frac: float
+    box_method: str
     methods: dict[str, float] = field(default_factory=dict)
 
 
@@ -169,7 +199,7 @@ def merge_proposals(
                     st["no_box"] += 1
                     continue
                 box = tuple(int(v) for v in box)
-                idx = overlapping_mark(page, box)
+                idx = mark_under(page, box)
                 if page_id in members:
                     st["decided"] += 1
                     continue
@@ -190,11 +220,12 @@ def merge_proposals(
                 key = (page_id, idx)
                 entry = merged.get(key)
                 if entry is None:
-                    merged[key] = _Merged(page_id, idx, box, frac, {method: frac})
-                else:
-                    entry.methods[method] = min(frac, entry.methods.get(method, frac))
-                    if frac < entry.best_frac:
-                        entry.best_frac, entry.box = frac, box
+                    merged[key] = _Merged(page_id, idx, box, frac, method, {method: frac})
+                    continue
+                entry.methods[method] = min(frac, entry.methods.get(method, frac))
+                entry.best_frac = min(entry.best_frac, frac)
+                if BOX_PRIORITY.get(method, 5) < BOX_PRIORITY.get(entry.box_method, 5):
+                    entry.box, entry.box_method = box, method
         ranked = sorted(merged.values(), key=lambda m: (-len(m.methods), m.best_frac, m.page_id))[:top]
         cands = []
         for m in ranked:

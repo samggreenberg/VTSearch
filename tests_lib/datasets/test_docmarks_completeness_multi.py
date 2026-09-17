@@ -105,9 +105,30 @@ class TestMerge:
         }
         entry, _ = _merge(mods, proposals)
         assert [c.page_id for c in entry.candidates] == ["tobacco800/other", "tobacco800/nobox"]
-        # DINOv3 ranked it first (fraction 0), so its box is kept and it is named first
+        # both proposed it; DINOv3 localises more tightly than a SigLIP tile, so its box is kept
         assert entry.candidates[0].note == "DINO+SIG" and entry.candidates[0].box == (505, 505, 70, 70)
         assert entry.candidates[1].note == "SIG" and entry.candidates[1].mark_index is None
+
+    def test_the_tighter_localiser_supplies_the_box_whatever_the_rank(self, mods):
+        proposals = {
+            "siglip_tiles": {"tobacco800/logo_a": [["tobacco800/nobox", 1.0, [0, 0, 400, 400]]]},
+            "ncc": {
+                "tobacco800/logo_a": [
+                    ["tobacco800/other", 1.0, [0, 0, 5, 5]],
+                    ["tobacco800/nobox", 0.2, [40, 40, 60, 60]],
+                ]
+            },
+        }
+        entry, _ = _merge(mods, proposals)
+        nobox = next(c for c in entry.candidates if c.page_id == "tobacco800/nobox")
+        assert nobox.box == (40, 40, 60, 60) and nobox.note == "SIG+NCC"
+
+    def test_a_coarse_box_containing_a_mark_is_that_mark(self, mods):
+        pages, _ = _corpus(mods)
+        m = mods["m"]
+        assert m.mark_under(pages["tobacco800/other"], (400, 400, 400, 400)) == 0  # tile around the logo
+        assert m.mark_under(pages["tobacco800/other"], (510, 510, 60, 60)) == 0  # tight box inside it
+        assert m.mark_under(pages["tobacco800/other"], (0, 0, 520, 520)) is None  # clips a corner only
 
     def test_top_caps(self, mods):
         rows = [["tobacco800/nobox", 1.0, [10, 10, 50, 50]], ["tobacco800/other", 0.5, [510, 510, 60, 60]]]
