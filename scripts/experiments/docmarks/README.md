@@ -235,6 +235,16 @@ Not all distractors are equal, and the manifest keeps them distinct:
   individually. Fine in bulk, and the only way to reach 200k.
 - **excluded** — a contamination risk, never scored.
 
+**For the anchor sources, a class's own source is a known negative** (decided
+2026-09-16, #3913). `CONTAMINATES` lists each anchor source as contaminating
+itself, which is right for a source nobody checked. But SPODS, Tobacco800 and
+StaVer marks are all boxed and clustered, so a same-source page that is not a
+member is verified not to carry the mark. Excluding those pages instead is worse
+than conservative. It leaves the positives as the only pages in their source's
+style, and on the first evaluation (#3904) a control that ranks by source alone,
+ignoring the mark, scored **AP 1.00**. `eval_retrieval.py` passes the class's
+own source as `verified_negative_sources` for its headline pool.
+
 The trap that last category exists for: RVL-CDIP, Tobacco800 and UCSF's Tobacco
 industry all descend from IIT-CDIP, so an American Tobacco letterhead is
 *certain* to appear in an RVL-CDIP "distractor" pool. Unlabelled positives don't

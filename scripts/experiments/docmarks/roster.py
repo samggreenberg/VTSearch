@@ -105,6 +105,8 @@ def eligible_pages(
     class_meta: dict[str, Any],
     pages_by_source: dict[str, list[str]],
     verified_negative_sources: Optional[Sequence[str]] = None,
+    *,
+    industry_of: Optional[dict[str, Optional[str]]] = None,
 ) -> dict[str, list[str]]:
     """Split the corpus into what may be scored against this class.
 
@@ -119,10 +121,24 @@ def eligible_pages(
       usable instead of a contamination risk.
     * ``presumed_negative`` — pages from a contamination-safe source that nobody
       checked individually.  Fine in bulk, and the only way to reach 200k.
+
+    **Eligibility is decided per page, not per source** (#3904).  The class's
+    ``eligible_distractor_sources`` can only say ``ucsf``, but the rule it was
+    resolved from is finer: a Tobacco800 class must not be scored against
+    UCSF's *Tobacco* pages -- the same IIT-CDIP archive, where its letterhead
+    recurs unlabelled -- while UCSF's other industries are safe.  Read from the
+    source list alone, all 158 / 3,182 / 10,662 UCSF Tobacco pages in tiers
+    s / m / l were scored as negatives for the ten Tobacco800 classes.  So when
+    the class names its ``source``, each page is put to
+    ``docmarks_config.eligible_distractor`` with its industry from *industry_of*.
     """
+    import docmarks_config as cfg  # noqa: PLC0415
+
     positives = set(class_meta.get("page_ids", []))
     verified = set(verified_negative_sources or ())
     eligible = set(class_meta.get("eligible_distractor_sources", []))
+    class_source = class_meta.get("source")
+    industry_of = industry_of or {}
 
     known: list[str] = []
     presumed: list[str] = []
@@ -132,7 +148,9 @@ def eligible_pages(
                 continue
             if source in verified:
                 known.append(page_id)
-            elif source in eligible:
+            elif source in eligible and (
+                class_source is None or cfg.eligible_distractor(class_source, source, industry_of.get(page_id))
+            ):
                 presumed.append(page_id)
     return {
         "positive": sorted(positives),
