@@ -21,7 +21,7 @@
 
 <!-- The bottom one is why a per-class number needs its **n** printed beside
      it. Copies per mark run from 8 to 82. One miss moves recall by an eighth
-     at one end of that roster and a eighty-second at the other, and a
+     at one end of that roster and an eighty-second at the other, and a
      league table across classes would read that as difficulty. -->
 
 <!-- The version number is on the slide on purpose. This corpus is in flux —
