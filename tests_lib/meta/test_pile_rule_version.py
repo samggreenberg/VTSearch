@@ -415,6 +415,7 @@ class TestDetectorKind:
         assert pc.detector_kind("vase not planters -- recheck: is there one in this image?") == "recheck"
         assert pc.detector_kind("chair incl stools not couches -- box check") == "boxcheck"
         assert pc.detector_kind("car incl SUVs and minivans -- prominent check") == "prominent"
+        assert pc.detector_kind("car incl SUVs and minivans -- seat check") == "seatcheck"
 
     def test_a_box_check_never_banks_over_the_slate(self, pc):
         """The failure this exists to prevent: a class-named audit overwriting a real slate."""
@@ -433,3 +434,30 @@ class TestDetectorKind:
             name = f"{pc.review_name(cls)} -- prominent check"
             assert pc.detector_kind(name) == "prominent", cls
             assert pc.rule_of_review_name(name) == pc.review_name(cls), cls
+
+    def test_a_seat_check_overwrites_no_other_labelset_of_its_class(self, pc):
+        """car and cup already have slate, box-check AND prominence labelsets; a seat check banks beside all three."""
+        for cls in pc.SCALE_CLASSES:
+            name = f"{pc.review_name(cls)} -- seat check"
+            assert pc.detector_kind(name) == "seatcheck", cls
+            assert pc.rule_of_review_name(name) == pc.review_name(cls), cls
+
+    def test_every_vg_scale_review_is_recognised_as_one(self, pc):
+        """Each class, under each question a detector can ask, is banked -- including a superseded rule."""
+        for cls in pc.SCALE_CLASSES:
+            for tail in (
+                "",
+                " -- recheck",
+                " -- box check",
+                " -- prominent check",
+                " -- seat check",
+                " (any in image, no box)",
+            ):
+                assert pc.is_scale_review(pc.review_name(cls) + tail, cls), (cls, tail)
+        assert pc.is_scale_review("vase incl pots and planters", "vase")  # an old rule still banks
+
+    def test_another_projects_queue_on_the_shared_dashboard_is_not(self, pc):
+        """DocMarks loads its queues onto the same app; banking one would let retire_finished delete it."""
+        assert not pc.is_scale_review("docmarks completeness: elephant stamp", "elephant stamp")
+        assert not pc.is_scale_review("docmarks clock-face stamp", "clock")  # a class word is not enough
+        assert not pc.is_scale_review("clockwork", "clock")

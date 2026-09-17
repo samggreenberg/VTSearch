@@ -53,6 +53,7 @@ QUESTION = {
     "recheck": "does this photo contain one under the revised rule?",
     "boxcheck": "is the stored box on an instance of the class?",
     "prominent": "is the boxed instance the most prominent one? (redraw if not)",
+    "seatcheck": "is the box on an instance of the class, and the most prominent one? (redraw if not; bad if none)",
 }
 
 written: dict[pathlib.Path, str] = {}
@@ -61,7 +62,11 @@ for d in sorted(get("/api/detectors/registry")["detectors"], key=lambda x: x["na
     if not (d.get("num_training") or 0):
         continue
     name = d["name"]
-    # Five questions live in this dashboard and they must never share a file
+    if not pc.is_scale_review(name, d.get("text_query") or ""):
+        # Another project's queue on the shared dashboard -- see pc.is_scale_review.
+        print(f"  skipped, not a vg_scale review: {name[:60]}")
+        continue
+    # Six questions live in this dashboard and they must never share a file
     # (`pile_config.detector_kind`, shared with retire_finished.py).
     # "(any in image, no box)" and the older "[below-cut: ...]" ask whether the
     # class is anywhere in the image; "-- recheck:" re-asks the class question of

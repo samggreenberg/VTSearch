@@ -45,7 +45,7 @@ if TYPE_CHECKING:
     from vtscore.training.thresholds import FoldAnchoredCut
 
 from vtscore.embedding.media_vectors import media_embedding
-from vtscore.eval.al_strategies import ALContext, select_next
+from vtscore.eval.al_strategies import ALContext, is_autopilot_strategy, select_next
 from vtscore.eval.autopilot_flow import SMART_WINDOW, AutopilotFlow, app_has_detector
 from vtscore.eval.startup_schedule import StartupState, parse_startup_schedule, round_cut
 from vtscore.eval.arms_anchored import (
@@ -209,6 +209,24 @@ def _split_media_ids(
     shuffled = rng.permutation(all_ids).tolist()
     n_sim = max(1, int(len(shuffled) * sim_fraction))
     return shuffled[:n_sim], shuffled[n_sim:]
+
+
+def _pool_uncertainty(
+    step: StepModel, pool_ids: list[int], clips_dict: dict[int, dict[str, Any]]
+) -> dict[int, float] | None:
+    """``{pool_id: std}`` from ``step.predict_std``, or ``None`` when it has none.
+
+    Whole-image vectors only: the ``gp_*`` trainers that set ``predict_std``
+    fit single vectors, exactly as the SVM path does, so there is no region
+    geometry to pool here.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    if step.predict_std is None or not pool_ids:
+        return None
+    embs = np.array([media_embedding(clips_dict[cid]) for cid in pool_ids])
+    spread = np.asarray(step.predict_std(embs), dtype=np.float64).ravel()
+    return {cid: float(s) for cid, s in zip(pool_ids, spread)}
 
 
 def _pool_percentile(pool_scores: dict[int, float], threshold: float) -> float:
@@ -1227,6 +1245,7 @@ def simulate_voting_iterations(  # noqa: C901
     exclusion_min_remainder: Optional[float] = None,
     skyline_arms: Optional[list[str]] = None,
     calibration_seed: Optional[int] = None,
+    standalone_cut: str = "raw",
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -1457,6 +1476,18 @@ def simulate_voting_iterations(  # noqa: C901
             Recorded verbatim in the ``calibration_seed`` column, so a pooled
             frame says which draw each row came from.
 
+        standalone_cut: How a ``gp_*`` trainer's cross-calibration cut reaches
+            its final model (issue #3954).  ``"raw"`` (the default, and what
+            the ``svm_*`` arms always do) applies the pooled held-out cut as a
+            raw score; ``"rank"`` reads each fold's cut as a quantile of that
+            fold model's simulation-set scores and realizes the averaged
+            quantile on the final model's - the transfer production's
+            fold-anchored estimator makes, for a probability whose scale moves
+            with every refit.  See
+            :func:`vtscore.eval.step_trainers._rank_transferred_threshold`.
+            Only the ``gp_*`` trainers honour it; ``"rank"`` with any other
+            trainer is an error, as is a region-aware dataset.
+
     Returns:
         List of row dicts.  Keys: ``seed, dataset, category, strategy, trainer,
         head, style, prevalence_arm, realized_prevalence, t, n_good, n_bad, phase,
@@ -1623,9 +1654,22 @@ def simulate_voting_iterations(  # noqa: C901
     }
     input_dim = int(next(iter(sim_embeddings.values())).shape[0])
 
+    # The rank-transfer haystack for a ``gp_*`` arm (issue #3954): the
+    # simulation set's whole-image vectors, in id order.  ``None`` keeps every
+    # trainer on its raw-score cut.
+    if standalone_cut not in ("raw", "rank"):
+        raise ValueError(f"standalone_cut must be 'raw' or 'rank', got {standalone_cut!r}")
+    haystack_X: "np.ndarray | None" = None
+    if standalone_cut == "rank":
+        if not trainer.startswith("gp_"):
+            raise ValueError(f"standalone_cut='rank' applies to the gp_* trainers only; got trainer={trainer!r}")
+        if region_aware:
+            raise ValueError("standalone_cut='rank' needs a single-vector dataset (the gp_* arms score whole images)")
+        haystack_X = np.stack([sim_embeddings[cid] for cid in sorted(sim_ids)])
+
     # The autopilot New phase reads a coverage atlas built over the pool; it is
     # labelled in lock-step with the votes below so its coverage advances.
-    atlas = _build_eval_atlas(sim_embeddings, atlas_min_node_size) if strategy == "autopilot" else None
+    atlas = _build_eval_atlas(sim_embeddings, atlas_min_node_size) if is_autopilot_strategy(strategy) else None
 
     # Pre-compute embeddings for safe-threshold GMM scoring.  Restrict to the
     # simulation set so the held-out ``test_ids`` never feed into the GMM that
@@ -1676,13 +1720,17 @@ def simulate_voting_iterations(  # noqa: C901
     #: regression got in).
     acq_threshold = 0.5
     pool_scores: dict[int, float] = {}
+    # The detector's per-item spread over the pool, for the uncertainty-driven
+    # strategies (issue #3954).  ``None`` until a trainer that reports one has
+    # scored the pool; the app trainer never does.
+    pool_uncertainty: dict[int, float] | None = None
     n_steps = len(pool) if max_steps is None else min(max_steps, len(pool))
 
     # The app's phase machine, driving the vote order the way Autopilot does.
     # Disabled (``None``) under ``autopilot_fidelity=False``, which leaves the
     # selector on its legacy parity interleave.
     flow: Any = None
-    if autopilot_fidelity and strategy == "autopilot":
+    if autopilot_fidelity and is_autopilot_strategy(strategy):
         flow = AutopilotFlow(startup=startup_state)
     # Each schedule round's cut on the seed sort, resolved once: the app fits a
     # cosine sort's GMM over the whole sort and never refits it as votes come
@@ -1724,6 +1772,7 @@ def simulate_voting_iterations(  # noqa: C901
             seed_scores=seed_scores,
             phase=phase,
             startup_cut=startup_cut,
+            uncertainty=pool_uncertainty,
         )
         cid = select_next(strategy, ctx)
         pool.remove(cid)
@@ -1814,6 +1863,7 @@ def simulate_voting_iterations(  # noqa: C901
             emit_calibration_metrics=emit_calibration_metrics,
             fold_count_variants=fold_count_variants,
             calibration_seed=calibration_seed,
+            haystack_X=haystack_X,
         )
 
         # Apply the shipped safe threshold if enabled
@@ -1926,6 +1976,7 @@ def simulate_voting_iterations(  # noqa: C901
             sim_scored=(sim_pooled_ids, sim_pooled_scores) if sim_pooled_scores else None,
         )
         pool_score_seconds = time.monotonic() - t_pool
+        pool_uncertainty = _pool_uncertainty(step, pool, clips_dict)
 
         # Advance the app's phase machine on this step's model: the Smart
         # indicator needs the labelset error cost, Stable the prediction flips
@@ -2276,6 +2327,7 @@ def run_voting_iterations_eval(
     autopilot_fidelity: bool = True,
     startup_schedule: Optional[str] = None,
     calibration_seed: Optional[int] = None,
+    standalone_cut: str = "raw",
 ) -> pd.DataFrame:
     """Run the voting-iterations evaluation over multiple seeds/datasets/categories.
 
@@ -2397,6 +2449,7 @@ def run_voting_iterations_eval(
                                     autopilot_fidelity=autopilot_fidelity,
                                     startup_schedule=startup_schedule,
                                     calibration_seed=calibration_seed,
+                                    standalone_cut=standalone_cut,
                                 )
                                 all_rows.extend(rows)
 

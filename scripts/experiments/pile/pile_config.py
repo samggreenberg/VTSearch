@@ -2212,6 +2212,28 @@ def rule_of_review_name(detector: str) -> str:
     return name
 
 
+def is_scale_review(detector: str, text_query: str) -> bool:
+    """Whether a dashboard detector is a vg_scale review at all.
+
+    The dashboard is shared: other projects load their own review queues onto the
+    same app (DocMarks does, 2026-09-17). ``bank_verdicts.py`` exported EVERY voted
+    detector, so a foreign queue would have been banked into vg_scale's human
+    record as a ``slate`` labelset -- and ``retire_finished.py``, finding that file,
+    would then have deleted the other project's finished pairs. Both scripts ask
+    this first and leave anything else alone.
+
+    A vg_scale review is queried by one of its classes, and its name, once the
+    question suffix and any bracketed tail are stripped, is that class's rule --
+    which always begins with the class name. The rule itself may be an OLD one (a
+    detector left over from before a ruling still banks, without a digest), so the
+    name is tested by its prefix rather than against the rule in force.
+    """
+    if text_query not in SCALE_CLASSES:
+        return False
+    rule = rule_of_review_name(detector.split(" [")[0].split(" (")[0])
+    return rule == text_query or rule.startswith(f"{text_query} ")
+
+
 def detector_kind(detector: str) -> str:
     """Which question a dashboard detector asks, and so which labelset file it banks to.
 
@@ -2227,8 +2249,11 @@ def detector_kind(detector: str) -> str:
 
     ``-- prominent check`` asks whether the boxed instance is the most prominent
     one, and is distinct from ``-- box check`` so a triage of a class cannot
-    overwrite that class's box-check audit either. The markers do not overlap,
-    so their order does not matter.
+    overwrite that class's box-check audit either. ``-- seat check`` reviews the
+    positives a build actually SEATED in a class's cells (#3926) -- whatever their
+    source -- and asks both questions at once, so it needs its own file beside the
+    prominence triage of the same class. The markers do not overlap, so their
+    order does not matter.
     """
     if "-- recheck" in detector:
         return "recheck"
@@ -2236,6 +2261,8 @@ def detector_kind(detector: str) -> str:
         return "boxcheck"
     if "-- prominent check" in detector:
         return "prominent"
+    if "-- seat check" in detector:
+        return "seatcheck"
     if ("any in image" in detector) or ("below-cut" in detector):
         return "belowcut"
     return "slate"

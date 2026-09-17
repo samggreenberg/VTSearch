@@ -152,6 +152,29 @@ def _brier(scores: np.ndarray, labels: np.ndarray) -> float:
     return float(((scores - labels) ** 2).mean())
 
 
+def _ece(scores: np.ndarray, labels: np.ndarray, n_bins: int = 10) -> float:
+    """Expected calibration error over *n_bins* equal-width score bins.
+
+    ``sum_b (n_b / n) |mean(label_b) - mean(score_b)|`` - the gap between the
+    hit rate and the claimed probability, weighted by how many items make the
+    claim.  Zero for a perfectly calibrated score; ``0.5`` for a score that
+    says 0.5 everywhere on a balanced set.
+    """
+    scores = np.clip(np.asarray(scores, dtype=np.float64), 0.0, 1.0)
+    labels = np.asarray(labels, dtype=np.float64)
+    if scores.size == 0:
+        return float("nan")
+    # ``1.0`` lands in the top bin rather than an eleventh.
+    bins = np.minimum((scores * n_bins).astype(int), n_bins - 1)
+    total = 0.0
+    for b in range(n_bins):
+        mask = bins == b
+        if not mask.any():
+            continue
+        total += mask.sum() / scores.size * abs(float(labels[mask].mean()) - float(scores[mask].mean()))
+    return float(total)
+
+
 def _f1_at(scores: np.ndarray, labels: np.ndarray, threshold: float) -> float:
     preds = (scores >= threshold).astype(np.int32)
     tp = int(((preds == 1) & (labels == 1)).sum())
@@ -299,6 +322,7 @@ threshold from the labels alone."
 
 _DIAGNOSTIC_METRICS: tuple[str, ...] = (
     "brier",
+    "ece",
     "f1_at_0.5",
     "std_err_auroc",
     "std_mean",
@@ -310,7 +334,10 @@ Brier and F1@0.5 only mean something if the score is a calibrated
 probability with 0.5 as the operating point - neither holds in VTSearch
 (the MLP's sigmoid is uncalibrated and the operating point is the
 cross-calibrated threshold).  They stay available for anyone debugging
-score-distribution shapes.
+score-distribution shapes.  ``ece`` (expected calibration error, ten
+equal-width bins) is the third of that family, added for the #3954 GP study
+whose whole claim is a calibrated probability: it reads the score *as* a
+probability and asks how far the per-bin hit rate is from it.
 
 ``std_err_auroc`` is the Hanley-McNeil analytic standard error of the
 AUROC - an error bar on the ranking metric, computable for every
@@ -410,6 +437,7 @@ def evaluate_one(
         "f1_at_xcal": _f1_at(scores, labels, xcal_thr),
         "train_seconds": round(train_seconds, 4),
         "brier": _brier(np.clip(scores, 0.0, 1.0), labels),
+        "ece": _ece(scores, labels),
         "f1_at_0.5": _f1_at(scores, labels, 0.5),
         "std_err_auroc": _auroc_std_err(scores, labels, auroc),
         "std_mean": std_mean,

@@ -60,6 +60,13 @@ TIER_ORDER: tuple[str, ...] = ("s", "m", "l")
 #: membership is reshuffled — so don't, unless you mean to.
 TIER_SALT = os.environ.get("VTS_DOCMARKS_TIER_SALT", "docmarks-v1")
 
+#: The corpus version a build records in ``build_report.json``.  A label-only
+#: change to the same page set bumps the minor (v3 -> v3.1: the completeness
+#: pass, #3927, 613 -> 721 roster instances); a new page set, tier cut or roster
+#: bumps the major.  A number is only comparable to one measured on the same
+#: version.  See DATASHEET.md.
+CORPUS_VERSION = "v3.1"
+
 # --------------------------------------------------------------------------
 # Class admission
 # --------------------------------------------------------------------------

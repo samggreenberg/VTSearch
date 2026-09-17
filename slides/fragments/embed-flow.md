@@ -2,7 +2,7 @@
 
 ![bg fit](figs/embed-flow.png)
 
-## Embed-time Stories
+## Embed-time<br>Stories
 
 <!-- build: figs/embed-flow.build1.png -->
 

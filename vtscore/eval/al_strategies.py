@@ -37,8 +37,18 @@ difference and why it matters.
 
 An :class:`ALContext` bundles the per-step state; the selector is a callable
 ``ALContext -> int`` returning the chosen pool id.  :func:`select_next` dispatches
-by name and :data:`STRATEGIES` is the (single-entry) registry, both kept so the
-harness interface is unchanged.
+by name and :data:`STRATEGIES` is the registry, both kept so the harness
+interface is unchanged.
+
+**Two experiment arms sit beside ``autopilot`` (issue #3954)**, and neither is
+the app.  ``autopilot_uncertainty`` and ``autopilot_maxvar`` keep every phase of
+the flow above - the same seed sort, the same Bad phase, the same New probe -
+and replace only the *Hard* pick with a rule that reads the detector's
+posterior spread (:attr:`ALContext.uncertainty`, which only a ``gp_*`` trainer
+supplies).  They exist to measure whether a Gaussian process's own answer to
+"which yes/no question is most informative" beats the app's rank-nearest-cut
+rule; :data:`AUTOPILOT_STRATEGIES` names all three so the harness gates its
+atlas and phase machine on the family rather than the one name.
 """
 
 from __future__ import annotations
@@ -113,6 +123,12 @@ class ALContext:
             :func:`vtscore.eval.startup_schedule.round_cut`.  Read only while
             :attr:`phase` names a schedule round (``s0``, ``s1``, ...);
             ``None`` everywhere else, including on every default-arm run.
+        uncertainty: ``{pool_id: std}`` - the current detector's per-item
+            posterior spread of its score, on the score's [0, 1] scale, for the
+            two uncertainty-driven strategies (issue #3954).  Supplied only when
+            the step's trainer reports one (``StepModel.predict_std``); ``None``
+            otherwise, which those strategies treat as an error rather than a
+            reason to fall back to the rank pick.
     """
 
     pool_ids: list[int]
@@ -127,6 +143,7 @@ class ALContext:
     seed_scores: Optional[dict[int, float]] = None
     phase: Optional[str] = None
     startup_cut: Optional[float] = None
+    uncertainty: Optional[dict[int, float]] = None
 
 
 # ------------------------------------------------------------------
@@ -440,9 +457,112 @@ def _select_autopilot(ctx: ALContext) -> int:
     return _uniform_pick(ctx, pool)
 
 
-#: Registry of vote-order strategies.  The eval simulates only the real user
-#: flow, so ``autopilot`` is the sole entry.
-STRATEGIES: dict[str, Callable[[ALContext], int]] = {"autopilot": _select_autopilot}
+# ------------------------------------------------------------------
+# Uncertainty-driven Hard picks (issue #3954) - experiment arms, not the app
+# ------------------------------------------------------------------
+
+
+def _uncertainty_pick(ctx: ALContext, *, straddle: bool) -> Optional[int]:
+    """The GP's answer to "which item is the most informative question?".
+
+    Two rules, both read off :attr:`ALContext.uncertainty`:
+
+    * *straddle* (``autopilot_uncertainty``): ``argmax 1.96 std - |p - t|``,
+      the level-set "straddle" heuristic (Bryan et al., 2005) at the
+      detector's own acquisition cut rather than at 0.5.  It is the app's
+      Hard pick with the GP's uncertainty folded in: an item exactly on the
+      cut but confidently so ranks below one a little off the cut whose
+      posterior could put it on either side, because the second is where a
+      label moves the boundary.
+    * *max variance* (``autopilot_maxvar``): ``argmax std``, plain uncertainty
+      sampling.  Ignores the cut entirely, so it explores wherever the GP is
+      least sure, which on a rare category is mostly negatives.
+
+    Returns ``None`` when no unlabeled item carries both a score and a spread,
+    so the caller can fall back.
+    """
+    spread = ctx.uncertainty
+    if not spread or not ctx.scores:
+        return None
+    best: Optional[int] = None
+    best_key = float("inf")
+    for cid in ctx.pool_ids:
+        if cid not in ctx.scores or cid not in spread:
+            continue
+        std = float(spread[cid])
+        if straddle:
+            key = abs(float(ctx.scores[cid]) - ctx.threshold) - 1.96 * std
+        else:
+            key = -std
+        if key < best_key:
+            best_key = key
+            best = cid
+    return best
+
+
+def _select_autopilot_with_pick(ctx: ALContext, *, straddle: bool) -> int:
+    """The faithful Autopilot flow with the Hard pick swapped for a GP rule.
+
+    Every phase but Hard is delegated to :func:`_select_phase_faithful`
+    unchanged - the seed sort, the Bad phase and the New probe are the app's.
+    Hard (and New once the atlas is exhausted) takes :func:`_uncertainty_pick`
+    instead of the rank-nearest-cut rule.
+
+    Raises ``ValueError`` when the run cannot honour the arm: without the
+    faithful phase machine there is no Hard phase to replace, and without a
+    trainer that reports a spread there is nothing to pick by.  Both are loud
+    on purpose - a silent fall-back to the rank pick would attribute the app's
+    own numbers to a GP rule.
+    """
+    phase = ctx.phase
+    if phase is None:
+        raise ValueError("the uncertainty strategies need the faithful autopilot flow (autopilot_fidelity=True)")
+    if ctx.model is not None and ctx.uncertainty is None:
+        raise ValueError(
+            "the uncertainty strategies need a trainer that reports per-item uncertainty "
+            "(a gp_* trainer); this step's model reports none"
+        )
+    if is_startup_phase(phase) or phase in ("good", "bad"):
+        return _select_phase_faithful(ctx, phase)
+    if phase == "new":
+        pick = _atlas_next(ctx)
+        if pick is not None:
+            return pick
+    if ctx.model is not None and ctx.scores:
+        pick = _uncertainty_pick(ctx, straddle=straddle)
+        if pick is not None:
+            return pick
+    return _uniform_pick(ctx, ctx.pool_ids)
+
+
+def _select_autopilot_uncertainty(ctx: ALContext) -> int:
+    """``autopilot_uncertainty``: Autopilot with the straddle Hard pick."""
+    return _select_autopilot_with_pick(ctx, straddle=True)
+
+
+def _select_autopilot_maxvar(ctx: ALContext) -> int:
+    """``autopilot_maxvar``: Autopilot with the max-variance Hard pick."""
+    return _select_autopilot_with_pick(ctx, straddle=False)
+
+
+#: Registry of vote-order strategies.  The eval simulates the real user flow,
+#: so ``autopilot`` is the app; the other two are the #3954 experiment arms
+#: (see the module docstring) and are never a default.
+STRATEGIES: dict[str, Callable[[ALContext], int]] = {
+    "autopilot": _select_autopilot,
+    "autopilot_uncertainty": _select_autopilot_uncertainty,
+    "autopilot_maxvar": _select_autopilot_maxvar,
+}
+
+#: The strategies that run the app's Autopilot phases and therefore need the
+#: harness's coverage atlas and phase machine.  ``voting_iterations`` gates
+#: both on membership here rather than on the one name ``"autopilot"``.
+AUTOPILOT_STRATEGIES: frozenset[str] = frozenset(STRATEGIES)
+
+
+def is_autopilot_strategy(strategy: str) -> bool:
+    """Whether *strategy* drives the Autopilot phase machine (atlas + flow)."""
+    return strategy in AUTOPILOT_STRATEGIES
 
 
 def select_next(strategy: str, ctx: ALContext) -> int:
@@ -461,5 +581,5 @@ def select_next(strategy: str, ctx: ALContext) -> int:
 
 
 def available_strategies() -> list[str]:
-    """Return the sorted list of registered strategy names (just ``autopilot``)."""
+    """Return the sorted list of registered strategy names."""
     return sorted(STRATEGIES)

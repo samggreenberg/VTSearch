@@ -66,6 +66,8 @@ class Candidate:
     mark_index: Optional[int] = None
     mark_class_id: Optional[str] = None
     mark_kind: Optional[str] = None
+    #: Caption override for the sheet (the multi-method pass names its proposers).
+    note: Optional[str] = None
 
 
 @dataclass
@@ -349,7 +351,8 @@ def apply_completeness(
         meta["page_ids"] = sorted(meta["page_ids"])
         meta["n_instances"] = len(meta["page_ids"])
         audit = meta.setdefault("audit", {})
-        audit["completeness_checked"] = {
+        # One record per pass, so a later pass never erases an earlier one's rejections.
+        audit["completeness_checked" + (f"_{row['pass']}" if row.get("pass") else "")] = {
             "reviewed_by": reviewer,
             "reviewed_on": date.today().isoformat(),
             "n_candidates": len(cands),
@@ -486,7 +489,10 @@ def render(
             label = cand.mark_class_id.split("/")[-1][:20] if cand.mark_class_id else "unclassed mark"
         else:
             label = unboxed_label
-        cells.append((i, f"{cand.inliers} inl · {label}" if label else f"{cand.inliers} inl", crop))
+        if cand.note:
+            cells.append((i, f"{cand.note} · {label[:12]}" if label else cand.note, crop))
+        else:
+            cells.append((i, f"{cand.inliers} inl · {label}" if label else f"{cand.inliers} inl", crop))
 
     paths = []
     name = entry.class_id.replace("/", "__")
@@ -503,7 +509,7 @@ def render(
             title
             or (
                 f"{entry.class_id}   sheet {sheet_no + 1}/{len(chunks)}   candidates {first}-{last}   "
-                f"(members' inliers: median {pos[len(pos) // 2] if pos else 0})"
+                + (f"(members' inliers: median {pos[len(pos) // 2]})" if pos else "")
             ),
             fill="black",
             font=title_font,

@@ -267,9 +267,12 @@ is computed, the held-out test set is scored, and the inclusion-weighted
 cost is recorded. This is how the team answers "how does cost drop as
 the user labels?" without spinning up a UI session.
 
-The only vote-order strategy is `autopilot` (see
+The vote-order strategy is `autopilot` (see
 `vtscore/eval/al_strategies.py`): the eval reproduces the real user flow
-rather than any academic active-learning heuristic. Autopilot seeds the
+rather than any academic active-learning heuristic.  Its two experiment
+variants, `autopilot_uncertainty` and `autopilot_maxvar` (issue #3954), keep
+every phase and swap only the Hard pick for a posterior-spread rule; they
+need a `gp_*` trainer and are never a default. Autopilot seeds the
 first few positives from text sort when a `seed_scores` ranking is
 supplied, else from a handful of random known-good examples ("3 random
 examples pulled from the Good"), then gathers the initial negatives and
@@ -457,7 +460,7 @@ column against the sweep that produced it:
 | Entry point | `simulate_voting_iterations` | `run_label_curve_eval`, `run_timing_benchmark` |
 | Registry | `vtscore/eval/step_trainers.py` | `vtscore/eval/sweep_trainers.py` |
 | A "trainer" is | a whole **pipeline**: fit + threshold calibration | a bare **estimator**: `(X, y, seed) -> predict_fn` |
-| Values | `app` (VTSearch's own pipeline; the default), `svm_linear`, `svm_rbf`, `svm_<kernel>@<params>` | `mlp`, `svm_linear`, `svm_rbf`, `mlp_ens<N>`, `svm_<kernel>@<params>` |
+| Values | `app` (VTSearch's own pipeline; the default), `svm_linear`, `svm_rbf`, `svm_<kernel>@<params>`, `gp_rbf`, `gp_dot`, `gp_<kernel>@<params>` | `mlp`, `svm_linear`, `svm_rbf`, `mlp_ens<N>`, `svm_<kernel>@<params>`, `gp_rbf`, `gp_dot`, `gp_<kernel>@ls=..,amp=..,fixed` |
 | Is `"mlp"` an MLP? | n/a — the arm is spelled `app`, and `"mlp"` is accepted only as its retired alias | yes, `train_model` with an auto-sized hidden layer |
 
 The voting simulation's `head` knob is the one that picks a *model*, and it
@@ -473,7 +476,11 @@ heads:
 So `trainer="app", head="linear_svm"` is the shipped detector; `trainer="app",
 head="mlp"` is the app's pipeline around a legacy head; and `trainer="svm_rbf"`
 is a standalone estimator that has no head at all (its rows carry an empty
-`head` column). Passing `head=` with any `svm_*` trainer is an error.
+`head` column). Passing `head=` with any `svm_*` or `gp_*` trainer is an error.
+The `gp_*` arms (issue #3954) are scikit-learn Gaussian-process classifiers
+conditioned on the votes; in both registries they return `(score, per_item_std)`
+like the MLP ensembles, and in the voting simulation the spread is what the
+uncertainty strategies pick by.
 
 `svm_linear` and `linear_svm` are also easy to swap by eye and are not the same
 thing: the first is a standalone sklearn/cuML SVM scored through its own

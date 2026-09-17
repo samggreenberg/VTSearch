@@ -2,7 +2,7 @@
 
 ![bg fit](figs/calib-em-anchored.png)
 
-## Vote of Confidence
+## Vote of<br>Confidence
 
 <!-- build: figs/calib-em-anchored.build1.png -->
 
