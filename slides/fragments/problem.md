@@ -2,7 +2,7 @@
 
 ![bg fit](figs/book-boundary.png)
 
-## Judging a Book by its Cover
+## Judging a Book<br>by its Cover
 
 <!-- build: figs/book-boundary.build1.png -->
 

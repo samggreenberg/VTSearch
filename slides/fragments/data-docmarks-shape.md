@@ -2,7 +2,7 @@
 
 ![bg fit](figs/dataset-docmarks-shape.png)
 
-## What's in the Pile
+## What's in<br>the Pile
 
 <!-- Two charts, and each answers a question that decides whether a number
      from this corpus means anything. -->

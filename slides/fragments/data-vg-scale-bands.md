@@ -2,7 +2,7 @@
 
 ![bg fit](figs/dataset-vg-scale-bands.png)
 
-## Same Words, Three Sizes
+## Same Words,<br>Three Sizes
 
 <!-- The one-sentence version of why this dataset exists: the same
      twenty-five class names appear in all three bands, so the only thing

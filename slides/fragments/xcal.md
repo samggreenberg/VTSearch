@@ -2,7 +2,7 @@
 
 ![bg fit](figs/calib-xcal-flow.png)
 
-## Grading Your Own Homework
+## Grading Your<br>Own Homework
 
 <!-- build: figs/calib-xcal-flow.build1.png -->
 

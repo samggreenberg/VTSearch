@@ -182,10 +182,10 @@ Three rules follow.
 this is; `### Iteration 1 — the idea` over the top of it is a second thing to
 read before the first. Say it instead — it belongs in the presenter notes.
 
-**The headline is meant to wrap.** 40px in a 300px column, three or four lines
-deep. That is not a compromise to fit the notch, it is what makes the notch
-narrow enough to be clearable — see below — and it buys a bigger headline than
-the deck's own 34px `h2`.
+**The headline wraps, into at most two lines.** 40px in a 300px column. The
+wrapping is not a compromise to fit the notch — it is what makes the notch
+narrow enough to be clearable, see below, and it buys a bigger headline than
+the deck's own 34px `h2`. The two-line ceiling is the section below.
 
 **Which figures can clear it is geometry, not taste.** A schematic drawn
 symmetrically about a spine puts its first row — the block, plus any labels
@@ -221,6 +221,57 @@ the repair is one of these three, in rising order of cost:
 A figure that resists all three still carries no title, and its headline
 becomes the first line of the notes. That is the standard working, not
 failing — but check the three first, because none of them was tried before.
+
+<!-- item-sep -->
+
+## A title is two lines at most, and the two are balanced
+
+Two halves, and the second is the one nobody does by hand.
+
+**At most two lines.** A headline is a thing the room takes in at a glance and
+then stops looking at; a third line turns it into something to read. There is
+no size relief available — the type floor is a floor — so a headline that needs
+three lines is a headline with too many words in it, and the fix is fewer
+words. `Never Hand Over Completely` became **Never All the Way** and
+`The Anchored Fit Ate the Cut Axis` became **The Axis Is Spent**; both are
+shorter *and* better, which is the usual outcome.
+
+**When it takes two, break them as evenly as you can.** Of the splits available,
+take the one whose halves come out closest to equal. Three words of 6, 5 and 4
+characters break `6 / 5+4` — nine against six — and not `6+5 / 4`, which is
+eleven against four. Where the words leave no even split, the best available one
+is the rule: `Great / Expectations` is lopsided and is still correct, because
+there is nowhere else to put the break.
+
+**The browser will not do this for you, and its answer is the worst one.** CSS
+wraps *greedily* — it fills the first line as far as it will go and drops the
+remainder — which is the most lopsided split available rather than the least.
+`Read All About It` came out **278px over 24px** that way: three words, then one
+word the width of a single glyph. So a two-line headline carries an explicit
+`<br>` at the break, always, even when the greedy wrap happens to land on the
+same place today. Pinning it is what stops an unrelated edit moving it.
+
+**Where the break goes is measured, not counted.** Character counts are a good
+way to think about balance and a bad way to decide it — `COCO val2017` sets 22px
+per character and `Judging a Book` about 19. So `slides/balance-titles.mjs`
+measures it in the browser Marp rasterises with, on the real deck, by trying
+every word break and reading the line boxes back:
+
+```bash
+./build.py hold-the-line
+npx @marp-team/marp-cli@4 _build/hold-the-line.md --theme-set themes/ \
+    --allow-local-files --html -o _out/hold-the-line.html
+node balance-titles.mjs _out/hold-the-line.html            # report
+node balance-titles.mjs _out/hold-the-line.html --write    # apply
+```
+
+It reports `REWRITE` for a headline that takes three lines at every break —
+that one is yours, not the tool's. Everything else it can fix itself.
+
+**One line is fine, and stays the author's call.** The rule is a ceiling, not a
+quota: a headline that fits on one line does not have to be broken, and one that
+is broken on purpose — `Above / Average` over the mixture plot — keeps its break.
+What is never the author's call is *where* a two-line headline divides.
 
 <!-- item-sep -->
 

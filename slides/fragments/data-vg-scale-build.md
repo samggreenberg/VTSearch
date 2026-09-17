@@ -2,7 +2,7 @@
 
 ![bg fit](figs/dataset-vg-scale-build.png)
 
-## Where the Buses Came From
+## Where Buses<br>Come From
 
 <!-- build: figs/dataset-vg-scale-build.build1.png -->
 

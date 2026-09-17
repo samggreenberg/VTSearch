@@ -2,7 +2,7 @@
 
 ![bg fit](figs/dataset-vg-scale-cells.png)
 
-## No Variation to Plot
+## No Variation<br>to Plot
 
 <!-- Every tile on this grid is the same shape: 100 positives, the same 9,900
      shared negatives, the same 1% prevalence. There is no variation to plot,

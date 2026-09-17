@@ -2,7 +2,7 @@
 
 ![bg fit](figs/dataset-docmarks-build.png)
 
-## Needles, Then Haystack
+## Needles, Then<br>Haystack
 
 <!-- build: figs/dataset-docmarks-build.build1.png -->
 

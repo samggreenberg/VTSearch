@@ -2,7 +2,7 @@
 
 ![bg fit](figs/calib-gmm-flow.png)
 
-## A Mixed Blessing
+## A Mixed<br>Blessing
 
 <!-- build: figs/calib-gmm-flow.build1.png -->
 

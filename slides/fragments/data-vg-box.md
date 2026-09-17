@@ -2,7 +2,7 @@
 
 ![bg fit](figs/dataset-card-vg-box.png)
 
-## The Bands That Came First
+## The Bands That<br>Came First
 
 <!-- The first attempt at "does the size of the thing change how hard it is
      to find?", and it is here because it is instructive rather than because

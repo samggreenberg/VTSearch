@@ -2,7 +2,7 @@
 
 ![bg fit](figs/book-rank.png)
 
-## The Cutting Room
+## The Cutting<br>Room
 
 <!-- build: figs/book-rank.build1.png -->
 
