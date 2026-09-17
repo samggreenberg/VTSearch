@@ -59,9 +59,23 @@ export class SortBarComponent implements OnInit {
     this.textQuery = value;
   }
 
-  submitTextSort(): void {
+  /**
+   * Run the text sort, and drop focus from whatever triggered it.
+   *
+   * The blur is the point of the ``trigger`` argument, not a nicety:
+   * ``KeyboardService`` deliberately ignores every shortcut while focus sits
+   * in a text field, so an input that keeps focus after Enter leaves the user
+   * unable to vote with the arrow keys on the results they just asked for.
+   * Submitting ends the typing task, so hand focus back to the document.
+   *
+   * Only a submit that actually runs blurs: Enter on an empty (or
+   * whitespace-only) query is a no-op, and yanking focus out of the field the
+   * user is still filling in would be hostile.
+   */
+  submitTextSort(trigger?: HTMLElement | null): void {
     const trimmed = this.textQuery.trim();
     if (trimmed) {
+      trigger?.blur();
       this.textSort.emit(trimmed);
     }
   }
