@@ -123,8 +123,8 @@ stub randomness the UI exposes (never rely on unseeded draws).
   `git diff --stat docs/user/assets/` is the precise list of shots the GUI
   change moved. The everyday refresh.
 - `check.sh` — re-render to a temp dir and **pixel-diff** against baselines;
-  exits non-zero on drift. Manual pre-release chore (VTSearch has no CI, no
-  chromium in the test container); intentionally *not* in `run-tests.sh`.
+  exits non-zero on drift. Manual pre-release chore (a pixel diff needs a
+  browser and a pinned rendering stack); intentionally *not* in `run-tests.sh`.
 - `wiring-check.py` — browser-free, **wired into `run-tests.sh`**: asserts every
   manifest `id` has both theme files on disk, every embed in the three docs has
   a matching manifest entry, and every reshoot-queue id is a real manifest id.
