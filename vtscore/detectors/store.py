@@ -184,7 +184,11 @@ _writer_lock = threading.RLock()
 _writer_thread: threading.Thread | None = None
 _write_mode_override: str | None = None
 #: Tests set this False to keep queued writes parked until an explicit flush.
+#: It only stops a writer from being *started*; a writer already running is
+#: stopped with :func:`stop_detector_writer_for_tests`.
 _writer_autostart = True
+#: Set while :func:`stop_detector_writer_for_tests` is joining the writer.
+_writer_stopping = False
 
 
 def detector_write_mode() -> str:
@@ -252,15 +256,54 @@ def discard_pending_detector_write(path: Path) -> None:
 
 
 def reset_detector_write_queue_for_tests() -> None:
-    """Drop queued writes and failures; tests call this between cases."""
+    """Drop queued writes and failures and stop the writer; tests call this between cases."""
     with _writer_lock, _queue_lock:
         _pending.clear()
         _failed.clear()
+    # Outside the ``_writer_lock`` block: the join below waits for a writer
+    # that may still need that lock to finish its current drain.
+    stop_detector_writer_for_tests()
+
+
+def detector_writer_is_running() -> bool:
+    """Whether the background writer thread is alive."""
+    thread = _writer_thread
+    return thread is not None and thread.is_alive()
+
+
+def stop_detector_writer_for_tests(timeout: float = 30.0) -> None:
+    """Stop and join the background writer thread, if one is running.
+
+    The writer is a process-wide singleton that outlives the test that
+    started it: it parks in ``_queue_cv.wait()`` and drains whatever is
+    queued next, in *any* later test running in the same process.  So
+    ``_writer_autostart = False`` alone does not park a queue - it only
+    stops a *new* writer from starting, leaving an older one free to drain
+    writes the test meant to hold (issue #3931).  Call this to make the
+    park real; the next queue call starts a fresh writer.
+    """
+    global _writer_thread, _writer_stopping
+    with _queue_cv:
+        thread = _writer_thread
+        if thread is None:
+            return
+        _writer_stopping = True
+        _queue_cv.notify_all()
+    thread.join(timeout)
+    alive = thread.is_alive()
+    with _queue_cv:
+        _writer_stopping = False
+        if not alive and _writer_thread is thread:
+            _writer_thread = None
+    if alive:
+        raise RuntimeError(f"the detector writer thread did not stop within {timeout}s")
 
 
 def _ensure_writer_thread_locked() -> None:
     global _writer_thread
-    if not _writer_autostart or (_writer_thread is not None and _writer_thread.is_alive()):
+    if not _writer_autostart or _writer_stopping:
+        return
+    if _writer_thread is not None and _writer_thread.is_alive():
         return
     _writer_thread = threading.Thread(target=_writer_loop, name="detector-writer", daemon=True)
     _writer_thread.start()
@@ -269,8 +312,10 @@ def _ensure_writer_thread_locked() -> None:
 def _writer_loop() -> None:
     while True:
         with _queue_cv:
-            while not _pending:
+            while not _pending and not _writer_stopping:
                 _queue_cv.wait()
+            if _writer_stopping:
+                return
         with _writer_lock:
             _drain_pending(None)
 
