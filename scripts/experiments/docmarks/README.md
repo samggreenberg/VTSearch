@@ -344,6 +344,27 @@ In the order you run them. Only the first two are needed for a first eval.
    replays the store after it writes the primary crops, and warns about a
    stored crop that no longer fits the build. `query_crop` itself is
    unchanged, so existing studies keep reading the same query.
+9. **`box_tighten`** — boxes that hold more than the mark. Some StaVer
+   boxes take in the separate EINGEGANGEN AM date stamp beside the form stamp
+   (`staver/stampds-00218`: 570x414 against ~556x282). `box_tighten.py` fits
+   the class's query crop to each member with SIFT (a similarity transform,
+   searched in the page region around the current box) and proposes the bounds of the query
+   crop's ink (pixels far from its paper colour) projected onto the page -- not
+   the crop's rectangle, whose corner margin on an askew query added ~25% to
+   every box's height -- clamped to the current box plus 15%.
+   It flags few inliers, inliers that span little of the proposal, a proposal
+   that grows the old box (the first slate found every `stampds-00230_0` source
+   box clipping its stamp's frame), a clamp, and "unchanged". The sheets show the current
+   box in grey and the proposal in red; the answer is the member numbers whose
+   red box to accept. `audit_to_corrections.py --task box_tighten` replaces
+   each accepted box **in place** (same page, same mark index, so every
+   adjudication still names the same mark), records it in
+   `box_overrides.json`, and re-cuts the primary query crop when the query
+   page's box moved. `build_corpus.py` replays the store right after the
+   added marks and warns about a mark that has neither its old nor its new box.
+   Defaults to StaVer's roster classes; `--classes` picks others and
+   `--loose-only` keeps only members whose proposal is at most 80% of the
+   current box.
 
 Query crops come from each class's largest boxed instance automatically (the
 prior study measured a 2.2× AP advantage for a clean query over a small in-scene

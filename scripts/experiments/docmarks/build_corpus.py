@@ -913,6 +913,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
     replayed = replay_added_marks(pages, load_added_marks(args.out / ADDED_MARKS), warnings)
     if replayed:
         print(f"replayed {replayed} hand-added mark(s) from {ADDED_MARKS}")
+    # Hand-tightened boxes (box_tighten.py) next: an override may name an added
+    # mark, and clustering and the query crops should see the reviewed box.
+    # Replaced in place, so the mark indices the adjudications name hold.
+    from box_tighten import STORE as BOX_OVERRIDES, load_store as load_box_overrides, replay_box_overrides
+
+    tightened = replay_box_overrides(pages, load_box_overrides(args.out / BOX_OVERRIDES), warnings)
+    if tightened:
+        print(f"replayed {tightened} hand-tightened box(es) from {BOX_OVERRIDES}")
 
     from cluster_marks import cluster_source, load_adjudications, write_cluster_report
 
