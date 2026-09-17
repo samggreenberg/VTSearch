@@ -242,7 +242,8 @@ def _train_and_calibrate(
     Dispatches on *trainer*: :data:`~vtscore.eval.step_model.APP_TRAINER`
     (``"app"``) runs the app's own pipeline (see
     :func:`_app_train_and_calibrate`); any ``svm_*`` name runs the standalone-SVM
-    path (see :func:`_svm_train_and_calibrate`).  Returns ``(step, threshold,
+    path (see :func:`_svm_train_and_calibrate`); any ``gp_*`` name runs the
+    Gaussian-process path (see :func:`_gp_train_and_calibrate`).  Returns ``(step, threshold,
     n_labels, timings, details)`` where *timings* has ``train_seconds`` and
     ``xcal_seconds`` for the fit and threshold-calibration wall clocks, and
     *details* is empty unless *emit_calibration_metrics* (the #2781 study),
@@ -287,6 +288,17 @@ def _train_and_calibrate(
             calibrate_count=calibrate_count,
             calibration_fraction=calibration_fraction,
             head=head,
+            calibration_seed=calibration_seed,
+        )
+    if trainer.startswith("gp_"):
+        return _gp_train_and_calibrate(
+            trainer,
+            good_votes,
+            bad_votes,
+            clips_dict,
+            inclusion=inclusion,
+            calibrate_count=calibrate_count,
+            calibration_fraction=calibration_fraction,
             calibration_seed=calibration_seed,
         )
     return _svm_train_and_calibrate(
@@ -781,5 +793,80 @@ def _svm_train_and_calibrate(
         torch_model=None,
         backend=clf.backend,
         device="cuda" if clf.backend == "cuml" else "cpu",
+    )
+    return step, threshold, n_labels, {"train_seconds": train_seconds, "xcal_seconds": xcal_seconds}, {}
+
+
+def _gp_train_and_calibrate(
+    trainer: str,
+    good_votes: dict[int, None],
+    bad_votes: dict[int, None],
+    clips_dict: dict[int, dict[str, Any]],
+    *,
+    inclusion: int,
+    calibrate_count: int,
+    calibration_fraction: float,
+    calibration_seed: int = CALIBRATION_SPLIT_SEED,
+) -> tuple[StepModel, float, int, dict[str, float], dict[str, Any]]:
+    """Gaussian-process path (issue #3954) - single-vector only, like the SVM path.
+
+    *trainer* is a ``gp_*`` name :func:`vtscore.eval.sweep_trainers.resolve_trainer`
+    accepts, so the arm fits a bare :class:`sklearn.gaussian_process.GaussianProcessClassifier`
+    conditioned on the votes rather than the app's head.  The threshold is the
+    same trainer-agnostic cross-calibration port the SVM arm uses, with the
+    fold fits driven by *calibration_seed* exactly as there; the final fit is
+    pinned to seed 42, mirroring the SVM path.
+
+    What this path adds to the contract is :attr:`StepModel.predict_std`: the
+    GP's per-item posterior spread of the score, which the
+    ``autopilot_uncertainty`` / ``autopilot_maxvar`` strategies read to choose
+    the next question.  The fold count and split are the app's; nothing about
+    the calibration rule is GP-aware.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    from vtscore.eval.sweep_trainers import _as_scores, resolve_trainer  # noqa: PLC0415
+
+    X = np.array(
+        [media_embedding(clips_dict[vid]) for vid in good_votes]
+        + [media_embedding(clips_dict[vid]) for vid in bad_votes],
+        dtype=np.float32,
+    )
+    y = np.array([1] * len(good_votes) + [0] * len(bad_votes), dtype=np.int32)
+    n_labels = len(good_votes) + len(bad_votes)
+
+    trainer_fn = resolve_trainer(trainer)
+
+    t_xcal = time.monotonic()
+    threshold = _cross_calibrated_threshold(
+        X,
+        y,
+        trainer_fn,
+        calibration_seed,
+        inclusion_value=inclusion,
+        calibrate_count=calibrate_count,
+        cal_fraction=calibration_fraction,
+    )
+    xcal_seconds = time.monotonic() - t_xcal
+
+    t_train = time.monotonic()
+    predict_fn = trainer_fn(X, y, 42)
+    train_seconds = time.monotonic() - t_train
+
+    def predict(X_test: Any) -> "np.ndarray":
+        return _as_scores(predict_fn(X_test))
+
+    def predict_std(X_test: Any) -> "np.ndarray":
+        result = predict_fn(X_test)
+        if not isinstance(result, tuple):  # pragma: no cover - every gp_* trainer returns the pair
+            raise TypeError(f"trainer {trainer!r} reported no per-item uncertainty")
+        return np.asarray(result[1], dtype=np.float64)
+
+    step = StepModel(
+        predict=predict,
+        torch_model=None,
+        backend="sklearn-gp",
+        device="cpu",
+        predict_std=predict_std,
     )
     return step, threshold, n_labels, {"train_seconds": train_seconds, "xcal_seconds": xcal_seconds}, {}

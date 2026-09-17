@@ -45,7 +45,7 @@ if TYPE_CHECKING:
     from vtscore.training.thresholds import FoldAnchoredCut
 
 from vtscore.embedding.media_vectors import media_embedding
-from vtscore.eval.al_strategies import ALContext, select_next
+from vtscore.eval.al_strategies import ALContext, is_autopilot_strategy, select_next
 from vtscore.eval.autopilot_flow import SMART_WINDOW, AutopilotFlow, app_has_detector
 from vtscore.eval.startup_schedule import StartupState, parse_startup_schedule, round_cut
 from vtscore.eval.arms_anchored import (
@@ -209,6 +209,24 @@ def _split_media_ids(
     shuffled = rng.permutation(all_ids).tolist()
     n_sim = max(1, int(len(shuffled) * sim_fraction))
     return shuffled[:n_sim], shuffled[n_sim:]
+
+
+def _pool_uncertainty(
+    step: StepModel, pool_ids: list[int], clips_dict: dict[int, dict[str, Any]]
+) -> dict[int, float] | None:
+    """``{pool_id: std}`` from ``step.predict_std``, or ``None`` when it has none.
+
+    Whole-image vectors only: the ``gp_*`` trainers that set ``predict_std``
+    fit single vectors, exactly as the SVM path does, so there is no region
+    geometry to pool here.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    if step.predict_std is None or not pool_ids:
+        return None
+    embs = np.array([media_embedding(clips_dict[cid]) for cid in pool_ids])
+    spread = np.asarray(step.predict_std(embs), dtype=np.float64).ravel()
+    return {cid: float(s) for cid, s in zip(pool_ids, spread)}
 
 
 def _pool_percentile(pool_scores: dict[int, float], threshold: float) -> float:
@@ -1625,7 +1643,7 @@ def simulate_voting_iterations(  # noqa: C901
 
     # The autopilot New phase reads a coverage atlas built over the pool; it is
     # labelled in lock-step with the votes below so its coverage advances.
-    atlas = _build_eval_atlas(sim_embeddings, atlas_min_node_size) if strategy == "autopilot" else None
+    atlas = _build_eval_atlas(sim_embeddings, atlas_min_node_size) if is_autopilot_strategy(strategy) else None
 
     # Pre-compute embeddings for safe-threshold GMM scoring.  Restrict to the
     # simulation set so the held-out ``test_ids`` never feed into the GMM that
@@ -1676,13 +1694,17 @@ def simulate_voting_iterations(  # noqa: C901
     #: regression got in).
     acq_threshold = 0.5
     pool_scores: dict[int, float] = {}
+    # The detector's per-item spread over the pool, for the uncertainty-driven
+    # strategies (issue #3954).  ``None`` until a trainer that reports one has
+    # scored the pool; the app trainer never does.
+    pool_uncertainty: dict[int, float] | None = None
     n_steps = len(pool) if max_steps is None else min(max_steps, len(pool))
 
     # The app's phase machine, driving the vote order the way Autopilot does.
     # Disabled (``None``) under ``autopilot_fidelity=False``, which leaves the
     # selector on its legacy parity interleave.
     flow: Any = None
-    if autopilot_fidelity and strategy == "autopilot":
+    if autopilot_fidelity and is_autopilot_strategy(strategy):
         flow = AutopilotFlow(startup=startup_state)
     # Each schedule round's cut on the seed sort, resolved once: the app fits a
     # cosine sort's GMM over the whole sort and never refits it as votes come
@@ -1724,6 +1746,7 @@ def simulate_voting_iterations(  # noqa: C901
             seed_scores=seed_scores,
             phase=phase,
             startup_cut=startup_cut,
+            uncertainty=pool_uncertainty,
         )
         cid = select_next(strategy, ctx)
         pool.remove(cid)
@@ -1926,6 +1949,7 @@ def simulate_voting_iterations(  # noqa: C901
             sim_scored=(sim_pooled_ids, sim_pooled_scores) if sim_pooled_scores else None,
         )
         pool_score_seconds = time.monotonic() - t_pool
+        pool_uncertainty = _pool_uncertainty(step, pool, clips_dict)
 
         # Advance the app's phase machine on this step's model: the Smart
         # indicator needs the labelset error cost, Stable the prediction flips
