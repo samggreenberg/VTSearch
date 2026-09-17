@@ -170,13 +170,17 @@ def save_added_marks(rows: Sequence[dict[str, Any]], path: Path) -> None:
 def replay_added_marks(
     pages: Sequence[Page], rows: Sequence[dict[str, Any]], warnings: Optional[list[str]] = None
 ) -> int:
-    """Append stored hand-added marks to their pages, unclassed, in store order.
+    """Append stored hand-added marks to their pages, in store order.
 
-    Clustering then assigns them, bound by the must-links the completeness pass
-    recorded.  A row naming a page that is not in this build is reported, not
+    On a clustered source a mark goes back unclassed, and clustering then
+    assigns it, bound by the must-links the completeness pass recorded.  A
+    source that is never clustered (UCSF) has nothing to assign it, so there the
+    stored ``class_id`` is kept (#3921).  A row naming a page that is not in this build is reported, not
     fatal: a smaller ``--limit`` build legitimately lacks it.  A mark already on
     the page with the same box is not added twice.
     """
+    import docmarks_config as cfg  # noqa: PLC0415
+
     by_id = {p.page_id: p for p in pages}
     added = 0
     for row in rows:
@@ -188,7 +192,8 @@ def replay_added_marks(
         box = tuple(int(v) for v in row["box"])
         if any(tuple(m.box) == box for m in page.marks):
             continue
-        page.marks.append(Mark(row.get("kind", "logo"), box, None, row.get("provenance", PROVENANCE)))
+        class_id = None if page.source in cfg.CLUSTERED_SOURCES else row.get("class_id")
+        page.marks.append(Mark(row.get("kind", "logo"), box, class_id, row.get("provenance", PROVENANCE)))
         added += 1
     return added
 

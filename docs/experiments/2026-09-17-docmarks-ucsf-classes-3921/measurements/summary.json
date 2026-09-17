@@ -14,7 +14,7 @@
       "8-11": 127
     },
     "hits_outside": 186,
-    "collapsed_fits_dropped": 1776,
+    "collapsed_fits_dropped": 1777,
     "crop": {
       "source": "hand",
       "page_id": "ucsf/ftfc0067#0",
@@ -74,7 +74,7 @@
       "8-11": 19
     },
     "hits_outside": 70,
-    "collapsed_fits_dropped": 502,
+    "collapsed_fits_dropped": 510,
     "crop": {
       "source": "hand",
       "page_id": "ucsf/hsfk0211#0",
@@ -118,66 +118,6 @@
       [
         "tobacco800/logo_aeq93a00_1",
         0
-      ]
-    ]
-  },
-  "bw_1990s_leaf": {
-    "relation": "new",
-    "roster_class": null,
-    "band_class": 70,
-    "band_class_sm": 19,
-    "band_class_found": 35,
-    "band_class_sm_found": 9,
-    "hits_outside_by_bin": {
-      "80+": 3,
-      "40-79": 2,
-      "20-39": 4,
-      "12-19": 8,
-      "8-11": 96
-    },
-    "hits_outside": 113,
-    "collapsed_fits_dropped": 2484,
-    "crop": {
-      "source": "hand",
-      "page_id": "ucsf/hmbb0172#0",
-      "box": [
-        500,
-        35,
-        290,
-        160
-      ],
-      "needs_hand_crop": false,
-      "auto": {
-        "verified": 32,
-        "sampled": 32,
-        "box": [
-          485,
-          110,
-          329,
-          109
-        ],
-        "norm": [
-          0.3906,
-          0.25,
-          0.6562,
-          0.5
-        ],
-        "support": 32,
-        "flags": []
-      }
-    },
-    "cross_roster_top": [
-      [
-        "tobacco800/logo_ajj10e00_1",
-        5
-      ],
-      [
-        "tobacco800/logo_ciy01a00-page02_1_0",
-        5
-      ],
-      [
-        "tobacco800/logo_ald41a00-ernest_1",
-        4
       ]
     ]
   },
@@ -558,7 +498,7 @@
       "8-11": 27
     },
     "hits_outside": 56,
-    "collapsed_fits_dropped": 48,
+    "collapsed_fits_dropped": 56,
     "crop": {
       "source": "hand",
       "page_id": "ucsf/fndk0210#0",

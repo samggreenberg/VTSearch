@@ -28,6 +28,8 @@ def mods():
             "u": importlib.import_module("ucsf_classes"),
             "c": importlib.import_module("completeness"),
             "common": importlib.import_module("sources._common"),
+            "roster": importlib.import_module("roster"),
+            "ev": importlib.import_module("eval_retrieval"),
         }
     finally:
         sys.path.remove(str(_DOCMARKS))
@@ -178,7 +180,7 @@ class TestSheets:
         # 248 x 126 px: a mark
         assert mods["u"].best_hit(hits, ["crop"], "q", expect, (1240, 1680))[0] == 20
 
-    def test_tally_estimates_a_sampled_bin_from_its_sheet(self, mods):
+    def test_all_never_reaches_past_the_shown_cells(self, mods):
         cells = [{"index": i} for i in range(4)]
         rows = [
             {
@@ -189,7 +191,7 @@ class TestSheets:
                 "cells": cells,
                 "verdict": "all",
             },
-            # 3 of 4 shown carry the mark, from a bin of 40: an estimate of 30
+            # one sheet of a 40-page bin: 'all but 2' is 3 pages, not 30
             {
                 "task": "ucsf_classes",
                 "proposal": "p",
@@ -212,8 +214,40 @@ class TestSheets:
             {"task": "ucsf_classes_relation", "proposal": "p", "relation": "new"},
         ]
         counts, problems = mods["u"].tally(rows)
-        assert counts["p"] == {"sheets": 4, "answered": 2, "shown": 8, "accepted": 7, "estimated": 30.0, "exact": False}
+        assert counts["p"] == {"sheets": 4, "answered": 2, "accepted": 7, "rejected": 1, "unreviewed": 4}
         assert len(problems) == 1 and problems[0].startswith("d:")
+
+    def test_every_page_of_a_bin_gets_a_sheet_and_the_first_is_the_old_draw(self, mods):
+        u = mods["u"]
+        items = [(f"p{i:03d}", 200 - i) for i in range(40)]
+        key = lambda t: (-t[1], t[0])  # noqa: E731
+        first = u.sample_sheet(items, 18, random.Random(7), key=key)
+        sheets = u.sheet_order(items, 18, random.Random(7), key=key)
+        assert sheets[0] == first
+        assert [len(s) for s in sheets] == [18, 18, 4]
+        assert sorted(x for s in sheets for x in s) == sorted(items)
+        assert u.sheet_order(items[:3], 18, random.Random(7), key=key) == [items[:3]]
+
+    def test_a_rerender_keeps_answers_only_where_the_pages_are_unchanged(self, mods):
+        old = [
+            dict(_sheet("a.png", "p", ["x", "y"], "all"), suggestion="all", uncertain=True, note="n"),
+            dict(_sheet("b.png", "p", ["x", "y"], "0"), suggestion="0"),
+            dict(_relation("p", "new"), uncertain=True, note="r"),
+        ]
+        new = [_sheet("a.png", "p", ["x", "y"], ""), _sheet("b.png", "p", ["x", "z"], ""), _relation("p", "")]
+        for row in new:
+            row.update(uncertain=False, note="")
+        for row in new[:2]:
+            row.update(suggestion="")
+        assert mods["u"].carry_answers(old, new) == 2
+        assert (new[0]["verdict"], new[0]["suggestion"], new[0]["uncertain"], new[0]["note"]) == (
+            "all",
+            "all",
+            True,
+            "n",
+        )
+        assert new[1]["verdict"] == "" and new[1]["suggestion"] == ""
+        assert new[2]["relation"] == "new" and new[2]["note"] == "r"
 
     def test_render_takes_a_proposal_reference_row_and_title(self, mods, tmp_path):
         from PIL import Image
@@ -234,3 +268,186 @@ class TestSheets:
             unboxed_label="",
         )
         assert path.name == "bat_leaf__a_members_00.png" and path.exists()
+
+
+def _ucsf_pages(mods):
+    Page = mods["common"].Page
+    mk = lambda pid, src: Page(page_id=pid, source=src, path="x.png", width=1240, height=1680, marks=[])  # noqa: E731
+    return [mk("ucsf/a#0", "ucsf"), mk("ucsf/b#0", "ucsf"), mk("ucsf/c#0", "ucsf"), mk("tobacco800/t", "tobacco800")]
+
+
+def _sheet(sheet, proposal, page_ids, verdict, located=True):
+    cells = [
+        {"index": i, "page_id": pid, "inliers": 30, "box": [10, 10, 50, 40], "located": located}
+        for i, pid in enumerate(page_ids)
+    ]
+    return {
+        "task": "ucsf_classes",
+        "proposal": proposal,
+        "part": "b_20-39",
+        "sheet": sheet,
+        "cells": cells,
+        "verdict": verdict,
+    }
+
+
+def _relation(proposal, relation):
+    return {
+        "task": "ucsf_classes_relation",
+        "proposal": proposal,
+        "relation": relation,
+        "suggested_relation": "new",
+        "query_crop": "/crops/x.png",
+        "query_page_id": "ucsf/a#0",
+    }
+
+
+class TestApply:
+    ROSTER = "tobacco800/logo_x"
+
+    def _classes(self):
+        return {
+            self.ROSTER: {
+                "on_roster": True,
+                "source": "tobacco800",
+                "kind": "logo",
+                "page_ids": ["tobacco800/t"],
+                "audit": {},
+            }
+        }
+
+    def test_an_extension_gains_accepted_pages_and_records_rejected_ones(self, mods):
+        pages, classes = _ucsf_pages(mods), self._classes()
+        rows = [_relation("lor", f"extends {self.ROSTER}"), _sheet("s0", "lor", ["ucsf/a#0", "ucsf/b#0"], "0")]
+        changes, problems, added, negatives, excluded = mods["u"].apply_ucsf_classes(
+            pages, classes, rows, reviewer="sam"
+        )
+        assert problems == []
+        meta = classes[self.ROSTER]
+        assert meta["page_ids"] == ["tobacco800/t", "ucsf/a#0"] and meta["n_instances"] == 2
+        assert meta["reviewed_negative_page_ids"] == ["ucsf/b#0"] and negatives == {self.ROSTER: ["ucsf/b#0"]}
+        assert pages[0].marks[0].class_id == self.ROSTER and pages[1].marks == []
+        assert added[0]["class_id"] == self.ROSTER and added[0]["provenance"] == "ucsf_classes"
+
+    def test_a_new_class_is_created_and_an_unlocated_accept_is_tagged_band(self, mods):
+        pages, classes = _ucsf_pages(mods), self._classes()
+        rows = [_relation("bat", "new"), _sheet("s0", "bat", ["ucsf/c#0"], "all", located=False)]
+        _, problems, added, _, _ = mods["u"].apply_ucsf_classes(pages, classes, rows)
+        assert problems == []
+        meta = classes["ucsf/logo_bat"]
+        assert meta["source"] == "ucsf" and meta["on_roster"] and meta["page_ids"] == ["ucsf/c#0"]
+        assert "ucsf" not in meta["eligible_distractor_sources"] and meta["query_crop"] == "/crops/x.png"
+        assert added[0]["provenance"] == "ucsf_classes_band"
+
+    def test_suggestions_and_unanswered_sheets_are_never_applied(self, mods):
+        pages, classes = _ucsf_pages(mods), self._classes()
+        row = dict(_sheet("s0", "lor", ["ucsf/a#0"], ""), suggestion="all")
+        rel = dict(_relation("lor", ""), suggested_relation=f"extends {self.ROSTER}")
+        assert mods["u"].apply_ucsf_classes(pages, classes, [rel, row]) == ([], [], [], {}, {})
+        assert classes == self._classes()
+
+    def test_a_page_accepted_on_one_sheet_is_not_a_negative_from_another(self, mods):
+        pages, classes = _ucsf_pages(mods), self._classes()
+        rows = [
+            _relation("lor", f"extends {self.ROSTER}"),
+            _sheet("a", "lor", ["ucsf/a#0"], "all"),
+            _sheet("b", "lor", ["ucsf/a#0", "ucsf/b#0"], "none"),
+        ]
+        _, problems, added, negatives, _ = mods["u"].apply_ucsf_classes(pages, classes, rows)
+        assert problems == [] and len(added) == 1
+        assert negatives[self.ROSTER] == ["ucsf/b#0"]
+
+    def test_a_blank_relation_with_answered_sheets_and_an_unknown_class_are_problems(self, mods):
+        pages, classes = _ucsf_pages(mods), self._classes()
+        _, problems, *_ = mods["u"].apply_ucsf_classes(
+            pages, classes, [_relation("lor", ""), _sheet("s", "lor", ["ucsf/a#0"], "all")]
+        )
+        assert problems and "relation is blank" in problems[0]
+        _, problems, *_ = mods["u"].apply_ucsf_classes(pages, classes, [_relation("x", "extends tobacco800/nope")])
+        assert problems and "not an on-roster class" in problems[0]
+
+    def test_an_accepted_tobacco800_page_for_a_new_class_is_excluded_not_a_negative(self, mods):
+        pages, classes = _ucsf_pages(mods), self._classes()
+        rows = [_relation("bat", "new"), _sheet("s", "bat", ["tobacco800/t", "ucsf/a#0", "ucsf/b#0"], "0,1")]
+        _, problems, added, negatives, excluded = mods["u"].apply_ucsf_classes(pages, classes, rows)
+        meta = classes["ucsf/logo_bat"]
+        assert problems == [] and [a["page_id"] for a in added] == ["ucsf/a#0"] and pages[3].marks == []
+        assert meta["page_ids"] == ["ucsf/a#0"] and meta["excluded_page_ids"] == ["tobacco800/t"]
+        assert excluded == {"ucsf/logo_bat": ["tobacco800/t"]} and negatives == {"ucsf/logo_bat": ["ucsf/b#0"]}
+        pools = mods["ev"].class_pools(
+            meta, {"tobacco800": ["tobacco800/t", "tobacco800/u"], "ucsf": ["ucsf/a#0", "ucsf/b#0"]}, {}
+        )
+        assert (
+            "tobacco800/t" not in pools["own_verified"] | pools["eligible"] and "tobacco800/u" in pools["own_verified"]
+        )
+
+
+class TestPoolsAfterApply:
+    """Decisions 3 and 4: only reviewed UCSF pages enter a class's pools."""
+
+    PAGES = {
+        "tobacco800": ["tobacco800/t", "tobacco800/u"],
+        "ucsf": ["ucsf/acc", "ucsf/rej", "ucsf/unseen", "ucsf/food"],
+        "spods": ["spods/x"],
+    }
+    INDUSTRY = {"ucsf/acc": "Tobacco", "ucsf/rej": "Tobacco", "ucsf/unseen": "Tobacco", "ucsf/food": "Food"}
+
+    def test_a_ucsf_class_keeps_only_reviewed_ucsf_pages_even_in_its_own_source_pool(self, mods):
+        meta = {
+            "source": "ucsf",
+            "page_ids": ["ucsf/acc"],
+            "reviewed_negative_page_ids": ["ucsf/rej"],
+            "eligible_distractor_sources": ["spods", "staver", "synth", "tobacco800"],
+        }
+        pools = mods["ev"].class_pools(meta, self.PAGES, self.INDUSTRY)
+        assert pools["positives"] == {"ucsf/acc"}
+        for name in ("own_verified", "eligible"):
+            assert "ucsf/rej" in pools[name]
+            assert not {"ucsf/unseen", "ucsf/food"} & pools[name]
+        assert {"tobacco800/t", "spods/x"} <= pools["own_verified"]
+
+    def test_a_ucsf_class_with_no_review_record_gets_no_ucsf_negatives(self, mods):
+        meta = {"source": "ucsf", "page_ids": ["ucsf/acc"], "eligible_distractor_sources": ["spods", "tobacco800"]}
+        own = mods["roster"].eligible_pages(
+            meta, self.PAGES, verified_negative_sources=["ucsf"], industry_of=self.INDUSTRY
+        )
+        assert not [p for p in own["known_negative"] + own["presumed_negative"] if p.startswith("ucsf/")]
+
+    def test_an_extended_tobacco800_class_takes_accepted_and_rejected_ucsf_pages_only(self, mods):
+        meta = {
+            "source": "tobacco800",
+            "page_ids": ["tobacco800/t", "ucsf/acc"],
+            "reviewed_negative_page_ids": ["ucsf/rej"],
+            "eligible_distractor_sources": ["spods", "staver", "synth", "ucsf"],
+        }
+        pools = mods["ev"].class_pools(meta, self.PAGES, self.INDUSTRY)
+        assert pools["positives"] == {"tobacco800/t", "ucsf/acc"}
+        for name in ("own_verified", "eligible"):
+            assert "ucsf/rej" in pools[name] and "ucsf/unseen" not in pools[name]
+            assert "ucsf/food" in pools[name]  # other industries are unchanged
+        assert "tobacco800/u" in pools["own_verified"]
+
+    def test_the_stores_survive_a_rebuild(self, mods, tmp_path):
+        r, c = mods["roster"], mods["c"]
+        store = tmp_path / r.REVIEWED_NEGATIVES
+        r.save_reviewed_negatives(
+            {"ucsf/logo_bat": ["ucsf/rej", "ucsf/acc"]}, store, {"ucsf/logo_bat": ["tobacco800/t"]}
+        )
+        rebuilt = {"ucsf/logo_bat": {"page_ids": ["ucsf/acc"]}, "spods/x": {"page_ids": []}}
+        assert (
+            r.attach_reviewed_negatives(
+                rebuilt, r.load_reviewed_negatives(store), r.load_reviewed_negatives(store, "excluded")
+            )
+            == 1
+        )
+        assert rebuilt["ucsf/logo_bat"]["reviewed_negative_page_ids"] == ["ucsf/rej"]
+        assert rebuilt["ucsf/logo_bat"]["excluded_page_ids"] == ["tobacco800/t"]
+        assert "reviewed_negative_page_ids" not in rebuilt["spods/x"]
+        # a UCSF mark keeps its class on replay (nothing clusters UCSF); a clustered source's does not
+        pages = _ucsf_pages(mods)
+        rows = [
+            {"page_id": "ucsf/a#0", "box": [1, 2, 3, 4], "class_id": "ucsf/logo_bat", "provenance": "ucsf_classes"},
+            {"page_id": "tobacco800/t", "box": [1, 2, 3, 4], "class_id": "tobacco800/logo_x"},
+        ]
+        assert c.replay_added_marks(pages, rows) == 2
+        assert pages[0].marks[0].class_id == "ucsf/logo_bat" and pages[3].marks[0].class_id is None

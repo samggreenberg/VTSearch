@@ -101,6 +101,47 @@ def starter(name: str, candidates: Sequence[dict[str, Any]], size: int = 24) -> 
     )
 
 
+#: Per-class pages a person reviewed and rejected, kept outside ``classes.json``
+#: so a rebuild -- which regenerates every class's metadata -- restores them.
+REVIEWED_NEGATIVES = "reviewed_negatives.json"
+
+
+def load_reviewed_negatives(path: Path, key: str = "classes") -> dict[str, list[str]]:
+    """Per class, the stored page ids under *key*: ``classes`` (reviewed negatives) or ``excluded``."""
+    if not path.exists():
+        return {}
+    return {cid: list(ids) for cid, ids in json.loads(path.read_text(encoding="utf-8")).get(key, {}).items()}
+
+
+def save_reviewed_negatives(
+    store: dict[str, list[str]], path: Path, excluded: Optional[dict[str, list[str]]] = None
+) -> None:
+    """Write the store.  ``excluded`` holds pages a reviewer saw carry the mark where it cannot be an instance."""
+    payload: dict[str, Any] = {"classes": {cid: sorted(set(ids)) for cid, ids in sorted(store.items())}}
+    if excluded:
+        payload["excluded"] = {cid: sorted(set(ids)) for cid, ids in sorted(excluded.items()) if ids}
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def attach_reviewed_negatives(
+    classes: dict[str, dict[str, Any]],
+    store: dict[str, list[str]],
+    excluded: Optional[dict[str, list[str]]] = None,
+) -> int:
+    """Put each class's stored reviewed negatives (and exclusions) on its metadata; a positive is never either."""
+    n = 0
+    for cid, meta in classes.items():
+        positives = set(meta.get("page_ids", []))
+        ids = sorted(set(store.get(cid, ())) - positives)
+        if ids:
+            meta["reviewed_negative_page_ids"] = ids
+            n += len(ids)
+        out = sorted(set((excluded or {}).get(cid, ())) - positives)
+        if out:
+            meta["excluded_page_ids"] = out
+    return n
+
+
 def eligible_pages(
     class_meta: dict[str, Any],
     pages_by_source: dict[str, list[str]],
@@ -131,11 +172,24 @@ def eligible_pages(
     s / m / l were scored as negatives for the ten Tobacco800 classes.  So when
     the class names its ``source``, each page is put to
     ``docmarks_config.eligible_distractor`` with its industry from *industry_of*.
+
+    **Reviewed pages beat the source rule** (#3921).  A page in the class's
+    ``reviewed_negative_page_ids`` -- a person saw it and rejected the mark --
+    is a known negative in every pool.  A source in
+    ``docmarks_config.REVIEW_ONLY_SOURCES`` is never verified wholesale, even
+    when *verified_negative_sources* names it: its unreviewed pages go to the
+    contamination rule instead, so a UCSF class keeps only its reviewed UCSF
+    pages, and a Tobacco800 class extended onto UCSF gains its accepted UCSF
+    pages as positives and its rejected ones as negatives while every other
+    UCSF Tobacco page stays out.  A page in ``excluded_page_ids`` -- seen to
+    carry the mark where it could not be made an instance -- is in no pool.
     """
     import docmarks_config as cfg  # noqa: PLC0415
 
     positives = set(class_meta.get("page_ids", []))
-    verified = set(verified_negative_sources or ())
+    excluded = set(class_meta.get("excluded_page_ids", [])) - positives
+    reviewed = set(class_meta.get("reviewed_negative_page_ids", [])) - positives - excluded
+    verified = set(verified_negative_sources or ()) - cfg.REVIEW_ONLY_SOURCES
     eligible = set(class_meta.get("eligible_distractor_sources", []))
     class_source = class_meta.get("source")
     industry_of = industry_of or {}
@@ -144,9 +198,9 @@ def eligible_pages(
     presumed: list[str] = []
     for source, page_ids in sorted(pages_by_source.items()):
         for page_id in page_ids:
-            if page_id in positives:
+            if page_id in positives or page_id in excluded:
                 continue
-            if source in verified:
+            if page_id in reviewed or source in verified:
                 known.append(page_id)
             elif source in eligible and (
                 class_source is None or cfg.eligible_distractor(class_source, source, industry_of.get(page_id))

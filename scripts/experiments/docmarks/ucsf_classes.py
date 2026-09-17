@@ -20,10 +20,21 @@ and writes nothing to the corpus but a slate under ``audit/ucsf_classes/``:
   crop and every Tobacco800 roster crop, and checks each crop against the roster
   crops directly.
 * ``slates`` renders one-screen sheets with ``completeness.render``: (a) is it
-  one mark, from a sample of the band class; (b) search hits outside the band
-  class, one sheet per inlier bin, sampled to a sheet when a bin is larger, so
-  a clean bin can be accepted whole; (c) band-class members in ``s``/``m`` the
-  search did not find.
+  one mark, from a sample of the band class, then every other band-class member
+  in tiers ``s``/``m``; (b) every search hit outside the band class, by inlier
+  bin; (c) every band-class member in ``s``/``m`` the search did not find.
+  **A verdict covers exactly the cells its sheet shows** -- ``all`` on a sheet
+  that is one of nine for a bin accepts those 18 pages and nothing else -- so a
+  bin is reviewed only when every one of its sheets is answered.
+* :func:`apply_ucsf_classes` (``audit_to_corrections.py --task ucsf_classes``)
+  folds the owner's answers back: accepted cells become marks of the extended
+  or new class, stored in ``added_marks.json`` with their ``class_id`` (UCSF is
+  never clustered, so nothing else would restore it), and rejected cells become
+  the class's ``reviewed_negative_page_ids``, stored in
+  ``reviewed_negatives.json``.  Those are the only UCSF negatives a class gets:
+  ``roster.eligible_pages`` keeps every unreviewed UCSF page out of the pool.
+  Suggestions (``suggestion``, ``suggested_relation``) are never applied; only
+  ``verdict`` and ``relation`` are.
 
 Bands are resampled so every page is ``TARGET_WIDTH`` pixels wide before
 detection: UCSF pages are 150 dpi and a letterhead mark on one is often under
@@ -48,6 +59,7 @@ from collections import Counter
 from dataclasses import dataclass
 from multiprocessing import get_context
 from pathlib import Path
+from datetime import date
 from typing import Any, Optional, Sequence
 
 import numpy as np
@@ -108,8 +120,13 @@ class Proposal:
 
 
 def load_proposals(path: Path = PROPOSALS, classes: Optional[dict[str, Any]] = None) -> list[Proposal]:
-    """Read and check the proposals: an extension must name an on-roster class, a new one none."""
+    """Read and check the proposals: an extension must name an on-roster class, a new one none.
+
+    A proposal the owner dropped moves to ``dropped`` with its reason and is not
+    returned: it gets no slate and cannot be applied.
+    """
     raw = json.loads(path.read_text(encoding="utf-8"))
+    dropped = {row["name"] for row in raw.get("dropped", [])}
     out, errors, seen = [], [], set()
     for row in raw["proposals"]:
         p = Proposal(
@@ -132,6 +149,7 @@ def load_proposals(path: Path = PROPOSALS, classes: Optional[dict[str, Any]] = N
         if p.roster_class and classes is not None and not classes.get(p.roster_class, {}).get("on_roster"):
             errors.append(f"{p.name}: {p.roster_class} is not an on-roster class")
         out.append(p)
+    errors += [f"{name}: both proposed and dropped" for name in sorted(seen & dropped)]
     claimed = Counter(c for p in out for c in p.components)
     errors += [f"component {c} is claimed by {n} proposals" for c, n in claimed.items() if n > 1]
     if errors:
@@ -293,15 +311,57 @@ def spread_sample(groups: Sequence[Sequence[Any]], k: int, rng: random.Random) -
     return out
 
 
+ANSWER_FIELDS = ("verdict", "suggestion", "uncertain", "note", "suggested_by", "relation")
+
+
+def carry_answers(old: Sequence[dict[str, Any]], new: Sequence[dict[str, Any]]) -> int:
+    """Copy answers from a previous ``verdicts.jsonl`` onto re-rendered rows that show exactly the same pages.
+
+    A sheet whose cells changed (a new crop, a moved bin edge) starts blank:
+    its old answer was about other pages.  Returns the number of rows carried.
+    """
+
+    def key(row: dict[str, Any]) -> tuple:
+        if row.get("task") == TASK:
+            return (row["sheet"], tuple(c["page_id"] for c in row["cells"]))
+        return (row.get("task"), row.get("proposal"))
+
+    by_key = {key(r): r for r in old}
+    carried = 0
+    for row in new:
+        prev = by_key.get(key(row))
+        if prev is None:
+            continue
+        for field in ANSWER_FIELDS:
+            if field in prev and prev[field] not in ("", None) and (field in row or field == "suggested_by"):
+                row[field] = prev[field]
+        carried += 1
+    return carried
+
+
+def chunks(items: Sequence[Any], k: int = PER_SHEET) -> list[list[Any]]:
+    return [list(items[i : i + k]) for i in range(0, len(items), k)]
+
+
+def sheet_order(items: Sequence[Any], k: int, rng: random.Random, key=None) -> list[list[Any]]:
+    """Every item on sheets of *k*: a random *k* first (the sheet a clean bin is judged by), the rest in *key* order.
+
+    The first sheet is the same draw ``sample_sheet`` makes, so a sheet already
+    reviewed keeps its cells when the rest of its bin is added behind it.
+    """
+    first = sample_sheet(items, k, rng, key=key)
+    taken = {id(x) for x in first}
+    rest = [x for x in items if id(x) not in taken]
+    return [first] + chunks(sorted(rest, key=key) if key else rest, k) if items else []
+
+
 def tally(rows: Sequence[dict[str, Any]]) -> tuple[dict[str, dict[str, Any]], list[str]]:
     """Per proposal, what the answered sheets say: ``(counts, problems)``.
 
-    A sheet shows every page of its population or a random sample of it, so the
-    accepted share of a sheet estimates its population: exact when the sheet
-    shows it all.  ``estimated`` is that share times the population, summed over
-    the proposal's (b) and (c) sheets: the members the band class lacks plus the
-    band-class members the search missed, before anyone has looked at the pages
-    no sheet shows.
+    Counts only pages a verdict names: ``accepted`` and ``rejected`` are shown
+    cells, and ``unreviewed`` is every cell on an unanswered sheet.  There is no
+    extrapolation from a sheet to the bin it came from -- a page nobody saw is
+    unreviewed, whatever its neighbours were.
     """
     out: dict[str, dict[str, Any]] = {}
     problems: list[str] = []
@@ -309,7 +369,7 @@ def tally(rows: Sequence[dict[str, Any]]) -> tuple[dict[str, dict[str, Any]], li
         if row.get("task") != TASK:
             continue
         entry = out.setdefault(
-            row["proposal"], {"sheets": 0, "answered": 0, "shown": 0, "accepted": 0, "estimated": 0.0, "exact": True}
+            row["proposal"], {"sheets": 0, "answered": 0, "accepted": 0, "rejected": 0, "unreviewed": 0}
         )
         n = len(row["cells"])
         accepted, error = parse_verdict(str(row.get("verdict", "")), n)
@@ -318,15 +378,209 @@ def tally(rows: Sequence[dict[str, Any]]) -> tuple[dict[str, dict[str, Any]], li
             problems.append(f"{row['sheet']}: {error}")
             continue
         if accepted is None:
+            entry["unreviewed"] += n
             continue
         entry["answered"] += 1
-        entry["shown"] += n
         entry["accepted"] += len(accepted)
-        if row["part"] != "a_members" and n:
-            population = int(row.get("n_population", n))
-            entry["estimated"] += len(accepted) / n * population
-            entry["exact"] = entry["exact"] and population == n
+        entry["rejected"] += n - len(accepted)
     return out, problems
+
+
+# ---------------------------------------------------------------------------
+# Applying the owner's answers
+# ---------------------------------------------------------------------------
+
+PROVENANCE = "ucsf_classes"
+#: A cell the search did not locate shows the page's whole band; accepting it
+#: says the mark is on the page, not where, so its mark is tagged apart.
+PROVENANCE_BAND = "ucsf_classes_band"
+ALL_SOURCES = ("spods", "staver", "tobacco800", "ucsf", "synth")
+
+
+def new_class_id(name: str) -> str:
+    return f"ucsf/logo_{name}"
+
+
+def _new_class_meta(class_id: str, relation_row: dict[str, Any], reviewer: Optional[str]) -> dict[str, Any]:
+    """Metadata for a new UCSF class, in the shape ``build_corpus.admit_classes`` writes."""
+    return {
+        "class_id": class_id,
+        "source": "ucsf",
+        "kind": "logo",
+        "n_instances": 0,
+        "median_mark_px": None,
+        "located_by": "box",
+        "provenance": [PROVENANCE],
+        "page_ids": [],
+        "eligible_distractor_sources": sorted(s for s in ALL_SOURCES if cfg.eligible_distractor("ucsf", s)),
+        "distinct_from": [],
+        "on_roster": True,
+        "caveats": [],
+        "query_crop": relation_row.get("query_crop"),
+        "query_page_id": relation_row.get("query_page_id"),
+        "audit": {
+            "distinctive": None,
+            "cluster_ok": None,
+            "membership_verified": False,
+            "rejected_page_ids": [],
+            "reviewed_by": reviewer,
+            "reviewed_on": None,
+            "notes": f"proposed by #3921 ({relation_row['proposal']})",
+        },
+    }
+
+
+def _target(relation: str, name: str, classes: dict[str, Any]) -> tuple[Optional[str], Optional[str]]:
+    """``(class_id, problem)`` for a relation answer; ``(None, None)`` for reject or blank."""
+    text = relation.strip()
+    if not text or text.lower() == "reject":
+        return None, None
+    if text.lower() == "new":
+        return new_class_id(name), None
+    if text.lower().startswith("extends "):
+        cid = text.split(None, 1)[1].strip()
+        if not classes.get(cid, {}).get("on_roster"):
+            return None, f"{name}: {cid} is not an on-roster class"
+        return cid, None
+    return None, f"{name}: relation must be 'extends <class_id>', 'new' or 'reject', got {relation!r}"
+
+
+def apply_ucsf_classes(
+    pages: list[Any],
+    classes: dict[str, Any],
+    rows: Sequence[dict[str, Any]],
+    *,
+    reviewer: Optional[str] = None,
+) -> tuple[list[str], list[str], list[dict[str, Any]], dict[str, list[str]], dict[str, list[str]]]:
+    """Fold answered sheets into classes: ``(changes, problems, added_marks, reviewed_negatives, excluded)``.
+
+    Per proposal whose ``relation`` is answered: every accepted cell becomes a
+    mark of the target class on its page (a new box, provenance ``ucsf_classes``
+    or ``ucsf_classes_band`` when the search never located it) and the page a
+    positive; every *shown* rejected cell becomes a reviewed negative of that
+    class, unless the same page is accepted elsewhere.  Nothing else changes:
+    an unanswered sheet leaves its pages unreviewed, which keeps them out of
+    the class's pool.  A sheet answered while its proposal's relation is blank
+    is a problem, not a silent no-op.
+
+    An accepted cell on a clustered source (a Tobacco800 hit for a new UCSF
+    class) cannot become a mark here -- a mark there needs a must-link to a
+    class instance -- so its page is *excluded* from the class's pools rather
+    than left to score as a negative carrying the mark, and reported for the
+    completeness pass.
+    """
+    from sources._common import Mark  # noqa: PLC0415
+
+    by_id = {p.page_id: p for p in pages}
+    changes: list[str] = []
+    problems: list[str] = []
+    added_rows: list[dict[str, Any]] = []
+    negatives: dict[str, list[str]] = {}
+    exclusions: dict[str, list[str]] = {}
+    relations = {r["proposal"]: r for r in rows if r.get("task") == f"{TASK}_relation"}
+    sheets: dict[str, list[dict[str, Any]]] = {}
+    for r in rows:
+        if r.get("task") == TASK:
+            sheets.setdefault(r["proposal"], []).append(r)
+
+    for name in sorted(set(relations) | set(sheets)):
+        rel = relations.get(name, {"proposal": name})
+        cid, problem = _target(str(rel.get("relation", "")), name, classes)
+        answered = [r for r in sheets.get(name, []) if str(r.get("verdict", "")).strip()]
+        if problem:
+            problems.append(problem)
+            continue
+        if cid is None:
+            if answered and not str(rel.get("relation", "")).strip():
+                problems.append(f"{name}: {len(answered)} sheet(s) answered but the relation is blank")
+            elif str(rel.get("relation", "")).strip():
+                changes.append(f"{name}: rejected, nothing applied")
+            continue
+        if cid not in classes:
+            classes[cid] = _new_class_meta(cid, rel, reviewer)
+        meta = classes[cid]
+        kind = meta.get("kind", "logo")
+        accepted_pages: set[str] = set()
+        rejected_pages: set[str] = set()
+        bad = False
+        for row in answered:
+            cells = row["cells"]
+            accepted, error = parse_verdict(str(row["verdict"]), len(cells))
+            if error or accepted is None:
+                problems.append(f"{row['sheet']}: {error}")
+                bad = True
+                continue
+            for i, cell in enumerate(cells):
+                (accepted_pages if i in accepted else rejected_pages).add(cell["page_id"])
+        if bad:
+            continue
+        added = 0
+        refused: set[str] = set()
+        carried: set[str] = set()
+        for row in answered:
+            accepted, _ = parse_verdict(str(row["verdict"]), len(row["cells"]))
+            for i in accepted or []:
+                cell = row["cells"][i]
+                page = by_id.get(cell["page_id"])
+                if page is None:
+                    problems.append(f"{row['sheet']}: cell {i} page {cell['page_id']} is not in the manifest")
+                    refused.add(cell["page_id"])
+                    continue
+                if page.source in cfg.CLUSTERED_SOURCES:
+                    carried.add(page.page_id)
+                    continue
+                if any(m.class_id == cid for m in page.marks):
+                    continue  # accepted twice (e.g. on an (a) and a (b) sheet)
+                box = tuple(int(v) for v in cell["box"])
+                prov = PROVENANCE if cell.get("located", cell.get("inliers", 0) >= MIN_INLIERS) else PROVENANCE_BAND
+                page.marks.append(Mark(kind, box, cid, prov))
+                added_rows.append(
+                    {
+                        "page_id": page.page_id,
+                        "kind": kind,
+                        "box": list(box),
+                        "provenance": prov,
+                        "class_id": cid,
+                        "note": f"{TASK}: {name} {row['sheet']} cell {i}, {cell.get('inliers')} SIFT inliers, reviewer {reviewer}",
+                    }
+                )
+                added += 1
+        # A page whose mark could not be added is neither a positive nor a negative: it stays unreviewed.
+        positives = set(meta.get("page_ids", [])) | (accepted_pages - refused - carried)
+        meta["page_ids"] = sorted(positives)
+        meta["n_instances"] = len(positives)
+        rejected = sorted(rejected_pages - positives - refused - carried)
+        out = sorted(carried - positives)
+        if out:
+            meta["excluded_page_ids"] = sorted(set(meta.get("excluded_page_ids", [])) | set(out))
+            exclusions[cid] = out
+        meta["reviewed_negative_page_ids"] = sorted(
+            set(meta.get("reviewed_negative_page_ids", [])) - positives | set(rejected)
+        )
+        negatives[cid] = sorted(set(rejected) - set(meta.get("excluded_page_ids", [])))
+        meta["reviewed_negative_page_ids"] = sorted(
+            set(meta["reviewed_negative_page_ids"]) - set(meta.get("excluded_page_ids", []))
+        )
+        audit = meta.setdefault("audit", {})
+        audit[f"{TASK}_checked"] = {
+            "proposal": name,
+            "reviewed_by": reviewer,
+            "reviewed_on": date.today().isoformat(),
+            "sheets_answered": len(answered),
+            "sheets_total": len(sheets.get(name, [])),
+            "accepted": len(accepted_pages),
+            "rejected": len(rejected),
+        }
+        changes.append(
+            f"{name} -> {cid}: {len(answered)}/{len(sheets.get(name, []))} sheet(s), {added} new mark(s), "
+            f"{len(negatives[cid])} reviewed negative(s); {meta['n_instances']} instance(s)"
+            + (
+                f"; {len(out)} page(s) on a clustered source excluded (box them with --task completeness): {out}"
+                if out
+                else ""
+            )
+        )
+    return changes, problems, added_rows, negatives, exclusions
 
 
 # ---------------------------------------------------------------------------
@@ -653,10 +907,19 @@ def step_slates(corpus: Path, bands_path: Path, out: Path, threshold: float) -> 
                         refs.append(("roster member", im.convert("RGB").crop((x, y, x + w, y + h))))
         return refs
 
-    def sheet(p: Proposal, part: str, title: str, cells: list[tuple[str, int, list[int]]], extra: dict[str, Any]):
+    def sheet(
+        p: Proposal,
+        part: str,
+        title: str,
+        cells: list[tuple[str, int, list[int], bool]],
+        extra: dict[str, Any],
+        k: int = 0,
+    ):
+        # render() always writes <class_id>_00.png; a later sheet of the same part renders under its own
+        # name first, or it would overwrite sheet 0 before being moved to _0k.
         entry = comp.ClassCandidates(
-            class_id=f"{p.name}__{part}",
-            candidates=[comp.Candidate(page_id=pid, inliers=n, box=tuple(box)) for pid, n, box in cells],
+            class_id=f"{p.name}__{part}" if not k else f"{p.name}__{part}__sheet{k}",
+            candidates=[comp.Candidate(page_id=pid, inliers=n, box=tuple(box)) for pid, n, box, _ in cells],
         )
         (path,) = comp.render(
             entry,
@@ -669,18 +932,25 @@ def step_slates(corpus: Path, bands_path: Path, out: Path, threshold: float) -> 
             unboxed_label="",
             min_context=CONTEXT_PX,
         )
+        if k:
+            path = path.rename(path.with_name(f"{p.name}__{part}_{k:02d}.png"))
         rows.append(
             {
                 "task": TASK,
                 "proposal": p.name,
                 "part": part,
                 "sheet": path.name,
+                "sheet_index": k,
                 **extra,
                 "cells": [
-                    {"index": i, "page_id": pid, "inliers": n, "box": box} for i, (pid, n, box) in enumerate(cells)
+                    {"index": i, "page_id": pid, "inliers": n, "box": box, "located": located}
+                    for i, (pid, n, box, located) in enumerate(cells)
                 ],
-                # Which shown cells carry this proposal's mark: all | none | 0,3,7 | all but 3,7
+                # Which SHOWN cells carry this proposal's mark: all | none | 0,3,7 | all but 3,7.
+                # It never reaches a page this sheet does not show.
                 "verdict": "",
+                # A first pass's answer, for the reviewer to confirm; never applied.
+                "suggestion": "",
                 "uncertain": False,
                 "note": "",
             }
@@ -695,22 +965,41 @@ def step_slates(corpus: Path, bands_path: Path, out: Path, threshold: float) -> 
         groups = members_of(p, bands, threshold)
         in_comp = {m for g in groups for m in g}
 
-        def cell(pid: str) -> tuple[str, int, list[int]]:
+        def cell(pid: str) -> tuple[str, int, list[int], bool]:
             n, norm = hit(pid, keys)
             pg = pages[pid]
+            located = bool(norm) and n >= MIN_INLIERS
             box = norm_to_page_box(norm, pg.width, pg.height) if norm else [0, 0, *band_px(pg.width, pg.height)]
-            return pid, n, box
+            return pid, n, box, located
 
-        # (a) one mark?
-        shown = spread_sample(groups, PER_SHEET, rng)
-        sheet(
-            p,
+        def emit(part: str, label: str, pages_by_sheet: list[list[str]], total: int, extra: dict[str, Any]) -> None:
+            shown = 0
+            for k, ids in enumerate(pages_by_sheet):
+                what = f"sheet {k + 1}/{len(pages_by_sheet)}: pages {shown + 1}-{shown + len(ids)} of {total}"
+                if k == 0 and len(pages_by_sheet) > 1:
+                    what += " (a random draw)"
+                sheet(
+                    p,
+                    part,
+                    f"{p.name}  {label}  {what}",
+                    [cell(pid) for pid in ids],
+                    dict(extra, n_sheets=len(pages_by_sheet)),
+                    k,
+                )
+                shown += len(ids)
+
+        # (a) one mark?  A sample across the band class, then every other member in s/m.
+        sample = spread_sample(groups, PER_SHEET, rng)
+        comp_sm = sorted(m for m in in_comp if pages[m].meta.get("tier") in ("s", "m"))
+        rest_sm = [m for m in comp_sm if m not in set(sample)]
+        emit(
             "a_members",
-            f"{p.name}  (a) ONE MARK?  {len(shown)} of {len(in_comp)} band-class members",
-            [cell(m) for m in shown],
-            {"n_population": len(in_comp)},
+            "(a) ONE MARK?",
+            [sample] + chunks(rest_sm),
+            len(sample) + len(rest_sm),
+            {"n_band_class": len(in_comp), "note_scope": "sheet 1 samples all tiers; later sheets are the rest of s+m"},
         )
-        # (b) search hits outside the band class
+        # (b) every search hit outside the band class
         eligible_sources = ("ucsf",) if p.relation == "extends" else ("ucsf", "tobacco800")
         roster_members = set(classes.get(p.roster_class, {}).get("page_ids", [])) if p.roster_class else set()
         scored = []
@@ -728,24 +1017,22 @@ def step_slates(corpus: Path, bands_path: Path, out: Path, threshold: float) -> 
             by_bin[bin_label(lo, hi)] = len(items)
             if not items:
                 continue
-            picked = sample_sheet(items, PER_SHEET, rng, key=lambda t: (-t[1], t[0]))
-            sheet(
-                p,
+            ordered = sheet_order(items, PER_SHEET, rng, key=lambda t: (-t[1], t[0]))
+            emit(
                 f"b_{bin_label(lo, hi)}",
-                f"{p.name}  (b) HITS {bin_label(lo, hi)} inliers: {len(picked)} of {len(items)}",
-                [cell(pid) for pid, _ in picked],
+                f"(b) HITS {bin_label(lo, hi)} inliers",
+                [[pid for pid, _ in chunk] for chunk in ordered],
+                len(items),
                 {"bin": [lo, hi], "n_population": len(items)},
             )
-        # (c) band-class members in s/m the search missed
-        comp_sm = sorted(m for m in in_comp if pages[m].meta.get("tier") in ("s", "m"))
+        # (c) every band-class member in s/m the search missed
         missed = [m for m in comp_sm if hit(m, keys)[0] < MIN_INLIERS]
         if missed:
-            picked_missed = sample_sheet(missed, PER_SHEET, rng, key=lambda m: m)
-            sheet(
-                p,
+            emit(
                 "c_missed",
-                f"{p.name}  (c) MISSED: {len(picked_missed)} of {len(missed)} s/m band-class members under {MIN_INLIERS}",
-                [cell(m) for m in picked_missed],
+                f"(c) MISSED s/m band-class members under {MIN_INLIERS}",
+                sheet_order(missed, PER_SHEET, rng, key=lambda m: m),
+                len(missed),
                 {"n_population": len(missed)},
             )
         comp_all_scores = [hit(m, keys)[0] for m in sorted(in_comp)]
@@ -769,8 +1056,11 @@ def step_slates(corpus: Path, bands_path: Path, out: Path, threshold: float) -> 
                 "task": f"{TASK}_relation",
                 "proposal": p.name,
                 "suggested_relation": f"extends {p.roster_class}" if p.roster_class else "new",
-                # extends <class_id> | new | reject | split
+                # extends <class_id> | new | reject.  Blank = not reviewed; the suggestion is never applied.
                 "relation": "",
+                "query_crop": crops[p.name]["query_crop"],
+                "query_page_id": crops[p.name]["page_id"],
+                "query_box": crops[p.name]["box"],
                 "uncertain": False,
                 "note": p.note,
             }
@@ -782,7 +1072,11 @@ def step_slates(corpus: Path, bands_path: Path, out: Path, threshold: float) -> 
     for stale in slate.glob("*.png"):
         if stale.name not in written:
             stale.unlink()
-    comp.write_template(rows, slate / "verdicts.jsonl")
+    template = slate / "verdicts.jsonl"
+    if template.exists():
+        old = [json.loads(line) for line in template.read_text(encoding="utf-8").splitlines() if line.strip()]
+        print(f"carried answers onto {carry_answers(old, rows)} of {len(rows)} row(s) whose pages did not change")
+    comp.write_template(rows, template)
     (out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     n_sheets = sum(1 for r in rows if r["task"] == TASK)
     print(f"\n{n_sheets} sheet(s) over {len(summary)} proposal(s) -> {slate}")

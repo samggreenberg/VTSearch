@@ -1,382 +1,280 @@
 {
  "lorillard_script": {
-  "sheets": 7,
-  "answered": 7,
-  "shown": 88,
-  "accepted": 59,
-  "estimated": 58,
-  "exact": false,
-  "by_sheet": {
+  "sheets": 31,
+  "answered": 31,
+  "accepted": 356,
+  "rejected": 137,
+  "unreviewed": 0,
+  "by_part": {
    "a_members": [
-    18,
-    18,
-    1213
+    297,
+    297
    ],
    "b_80+": [
-    1,
     1,
     1
    ],
    "b_40-79": [
-    18,
-    18,
+    35,
     35
    ],
    "b_20-39": [
-    7,
     7,
     7
    ],
    "b_12-19": [
     5,
-    16,
     16
    ],
    "b_8-11": [
-    0,
-    18,
+    1,
     127
    ],
    "c_missed": [
     10,
-    10,
     10
    ]
   },
-  "band_class": 1213
+  "uncertain_sheets": 2
  },
  "bw_old_leaf": {
-  "sheets": 6,
-  "answered": 6,
-  "shown": 88,
-  "accepted": 71,
-  "estimated": 61,
-  "exact": false,
-  "by_sheet": {
+  "sheets": 14,
+  "answered": 14,
+  "accepted": 161,
+  "rejected": 18,
+  "unreviewed": 0,
+  "by_part": {
    "a_members": [
-    17,
-    18,
-    329
+    100,
+    101
    ],
    "b_40-79": [
-    18,
-    18,
+    22,
     22
    ],
    "b_20-39": [
-    17,
-    18,
+    20,
     21
    ],
    "b_12-19": [
     8,
-    8,
     8
    ],
    "b_8-11": [
     3,
-    18,
     19
    ],
    "c_missed": [
     8,
-    8,
     8
    ]
   },
-  "band_class": 329
- },
- "bw_1990s_leaf": {
-  "sheets": 7,
-  "answered": 7,
-  "shown": 63,
-  "accepted": 32,
-  "estimated": 14,
-  "exact": false,
-  "by_sheet": {
-   "a_members": [
-    18,
-    18,
-    70
-   ],
-   "b_80+": [
-    3,
-    3,
-    3
-   ],
-   "b_40-79": [
-    1,
-    2,
-    2
-   ],
-   "b_20-39": [
-    0,
-    4,
-    4
-   ],
-   "b_12-19": [
-    0,
-    8,
-    8
-   ],
-   "b_8-11": [
-    0,
-    18,
-    96
-   ],
-   "c_missed": [
-    10,
-    10,
-    10
-   ]
-  },
-  "band_class": 70
+  "uncertain_sheets": 1
  },
  "rjr_block": {
-  "sheets": 4,
-  "answered": 4,
-  "shown": 68,
-  "accepted": 62,
-  "estimated": 87,
-  "exact": false,
-  "by_sheet": {
+  "sheets": 7,
+  "answered": 7,
+  "accepted": 105,
+  "rejected": 6,
+  "unreviewed": 0,
+  "by_part": {
    "a_members": [
     18,
-    18,
-    20
+    18
    ],
    "b_20-39": [
-    18,
-    18,
+    51,
     51
    ],
    "b_12-19": [
-    18,
-    18,
+    28,
     28
    ],
    "b_8-11": [
     8,
-    14,
     14
    ]
   },
-  "band_class": 20
+  "uncertain_sheets": 1
  },
  "pm_crest": {
-  "sheets": 6,
-  "answered": 6,
-  "shown": 96,
-  "accepted": 78,
-  "estimated": 284,
-  "exact": false,
-  "by_sheet": {
+  "sheets": 22,
+  "answered": 22,
+  "accepted": 307,
+  "rejected": 49,
+  "unreviewed": 0,
+  "by_part": {
    "a_members": [
     18,
-    18,
-    20
+    18
    ],
    "b_80+": [
-    18,
-    18,
+    79,
     79
    ],
    "b_40-79": [
-    18,
-    18,
+    157,
     157
    ],
    "b_20-39": [
-    18,
-    18,
+    42,
     42
    ],
    "b_12-19": [
     6,
-    6,
     6
    ],
    "b_8-11": [
-    0,
-    18,
+    5,
     54
    ]
   },
-  "band_class": 20
+  "uncertain_sheets": 1
  },
  "atc_chief_block": {
-  "sheets": 4,
-  "answered": 4,
-  "shown": 30,
-  "accepted": 26,
-  "estimated": 8,
-  "exact": true,
-  "by_sheet": {
+  "sheets": 5,
+  "answered": 5,
+  "accepted": 27,
+  "rejected": 4,
+  "unreviewed": 0,
+  "by_part": {
    "a_members": [
-    18,
-    18,
-    27
+    19,
+    19
    ],
    "b_20-39": [
-    2,
     2,
     2
    ],
    "b_12-19": [
-    2,
     2,
     2
    ],
    "b_8-11": [
     4,
-    8,
     8
    ]
   },
-  "band_class": 27
+  "uncertain_sheets": 0
  },
  "p_lorillard_crest": {
-  "sheets": 5,
-  "answered": 5,
-  "shown": 43,
-  "accepted": 25,
-  "estimated": 7,
-  "exact": false,
-  "by_sheet": {
+  "sheets": 8,
+  "answered": 8,
+  "accepted": 28,
+  "rejected": 53,
+  "unreviewed": 0,
+  "by_part": {
    "a_members": [
-    18,
-    18,
-    30
+    21,
+    21
    ],
    "b_20-39": [
-    3,
     3,
     3
    ],
    "b_12-19": [
-    1,
     1,
     1
    ],
    "b_8-11": [
     0,
-    18,
     53
    ],
    "c_missed": [
     3,
-    3,
     3
    ]
   },
-  "band_class": 30
+  "uncertain_sheets": 2
  },
  "bw_oval_emblem": {
-  "sheets": 5,
-  "answered": 5,
-  "shown": 47,
-  "accepted": 27,
-  "estimated": 9,
-  "exact": true,
-  "by_sheet": {
+  "sheets": 6,
+  "answered": 6,
+  "accepted": 30,
+  "rejected": 20,
+  "unreviewed": 0,
+  "by_part": {
    "a_members": [
-    18,
-    18,
-    26
+    21,
+    21
    ],
    "b_40-79": [
-    4,
     4,
     4
    ],
    "b_20-39": [
-    4,
     4,
     4
    ],
    "b_12-19": [
     1,
-    4,
     4
    ],
    "b_8-11": [
     0,
-    17,
     17
    ]
   },
-  "band_class": 26
+  "uncertain_sheets": 0
  },
  "rjr_script": {
-  "sheets": 5,
-  "answered": 5,
-  "shown": 81,
-  "accepted": 61,
-  "estimated": 48,
-  "exact": false,
-  "by_sheet": {
+  "sheets": 9,
+  "answered": 9,
+  "accepted": 68,
+  "rejected": 34,
+  "unreviewed": 0,
+  "by_part": {
    "a_members": [
-    18,
-    18,
-    31
+    21,
+    21
    ],
    "b_40-79": [
-    18,
-    18,
+    19,
     19
    ],
    "b_20-39": [
-    17,
-    18,
+    20,
     21
    ],
    "b_12-19": [
     6,
-    9,
     9
    ],
    "b_8-11": [
     2,
-    18,
     32
    ]
   },
-  "band_class": 31
+  "uncertain_sheets": 0
  },
  "bat_leaf": {
-  "sheets": 5,
-  "answered": 5,
-  "shown": 76,
-  "accepted": 72,
-  "estimated": 86,
-  "exact": false,
-  "by_sheet": {
+  "sheets": 16,
+  "answered": 16,
+  "accepted": 219,
+  "rejected": 19,
+  "unreviewed": 0,
+  "by_part": {
    "a_members": [
-    18,
-    18,
-    528
+    133,
+    144
    ],
    "b_20-39": [
-    4,
     4,
     4
    ],
    "b_12-19": [
-    18,
-    18,
+    25,
     25
    ],
    "b_8-11": [
-    18,
-    18,
+    27,
     27
    ],
    "c_missed": [
-    14,
-    18,
+    30,
     38
    ]
   },
-  "band_class": 528
+  "uncertain_sheets": 11
  }
 }
