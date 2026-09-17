@@ -2223,13 +2223,19 @@ def detector_kind(detector: str) -> str:
     A class-named detector with no marker is the pass's ``slate`` ("is this box
     one?"). **Every other question must carry a marker, or it banks over that
     class's slate labelset** -- a ten-image audit named ``chair incl stools not
-    couches`` would overwrite the 455-Good chair slate. The markers do not overlap,
+    couches`` would overwrite the 455-Good chair slate.
+
+    ``-- prominent check`` asks whether the boxed instance is the most prominent
+    one, and is distinct from ``-- box check`` so a triage of a class cannot
+    overwrite that class's box-check audit either. The markers do not overlap,
     so their order does not matter.
     """
     if "-- recheck" in detector:
         return "recheck"
     if "-- box check" in detector:
         return "boxcheck"
+    if "-- prominent check" in detector:
+        return "prominent"
     if ("any in image" in detector) or ("below-cut" in detector):
         return "belowcut"
     return "slate"
