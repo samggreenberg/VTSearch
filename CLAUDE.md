@@ -432,6 +432,14 @@ VTSearch is a desktop web app. **Do not design, implement, or test for mobile or
 - **How:** `cd slides && ./render.sh <deck> pdf` for each affected deck. The cloud container has a browser; if Marp can't find it, use `CHROME_PATH=/opt/pw-browsers/chromium`. When presenter notes or the speaker pipeline changed, also render `./render.sh <deck> pdf --speaker` and attach that variant too.
 - **When:** at the end of the session, from the final state of the branch (after the last commit that touches `slides/`), so what the user sees is what the PR ships. Attach with a one-line caption naming the deck(s).
 - Rendered PDFs stay in gitignored `slides/_out/` — attach them, never commit them.
+  Publishing them is not your job either: `.github/workflows/publish-slides.yml`
+  re-renders every deck on each push to `dev` that touches `slides/` and uploads
+  the audience and speaker PDFs to the rolling `slides-latest` release, which is
+  where the always-current deck lives
+  (`https://github.com/samggreenberg/VTSearch/releases/download/slides-latest/<deck>.pdf`).
+  A cloud session has no `gh` credentials and could not publish anyway; attach the
+  PDFs here, merge to `dev`, and the release follows. `scripts/publish-slides.sh`
+  is the same path by hand, from a laptop with `gh`. See `slides/README.md`.
 
 ## Screenshot reshoots (when you change the GUI)
 
@@ -495,7 +503,7 @@ This applies to:
 - Frontend unit-test failures from the Vitest suite (`cd frontend && npm run test:ci`, also run by `./run-tests.sh` and `./run-tests.sh frontend`).
 - Angular build warnings of any kind, including `anyComponentStyle` budget warnings (e.g. `▲ [WARNING] ... exceeded maximum budget`). `run-tests.sh` treats every `▲ [WARNING]` line from `build:prod` as a hard test failure, so do not just bump budgets to silence them: fix the underlying bloat (split the component, extract shared styles, or remove dead rules). Bumping a budget is only acceptable when the size is genuinely justified, and requires the user's explicit approval.
 - Python test failures from `./run-tests.sh` and `pytest` runs.
-- Linter errors from `ruff check` (including the flake8-bandit `S` ruleset), formatting drift from `ruff format --check`, typos from `codespell`, documentation drift from `scripts/check-docs.py`, dependency issues from `deptry`, known CVEs from `pip-audit`, type errors from `pyright`, and OpenAPI snapshot drift. All of these run as the first steps of `./run-tests.sh`, so the test loop catches them before pytest. There is no CI backstop: VTSearch has no GitHub Actions workflows; `./run-tests.sh` is the source of truth, so do not push a change without running it.
+- Linter errors from `ruff check` (including the flake8-bandit `S` ruleset), formatting drift from `ruff format --check`, typos from `codespell`, documentation drift from `scripts/check-docs.py`, dependency issues from `deptry`, known CVEs from `pip-audit`, type errors from `pyright`, and OpenAPI snapshot drift. All of these run as the first steps of `./run-tests.sh`, so the test loop catches them before pytest. There is no CI backstop: VTSearch's one GitHub Actions workflow only republishes rendered slide decks and gates nothing, so `./run-tests.sh` is the source of truth — do not push a change without running it.
 - Any other diagnostics surfaced by tooling you invoke.
 
 If a failure is genuinely outside the scope of the current task (e.g. a flaky network test, a failure in unrelated infrastructure you cannot reproduce), explicitly call it out in your end-of-turn summary with one sentence explaining why you did not fix it. The default is **fix it**; skipping requires justification.
@@ -557,7 +565,7 @@ A flow can legitimately carry both: a nested view shows `← Back` at the top to
 
 ## What `run-tests.sh` gates
 
-There is no CI: a **full** `./run-tests.sh` is the only gate, and it still runs every check. **This list is derived from `run-tests.sh`; when you add or remove a gate there, update it here in the same commit.** The run is staged: cheap gates run serially and stop at the first failure with a `TESTS BLOCKED: ...` banner naming which one; the heavy, mutually independent gates then run **concurrently with pytest**, each runs to completion, and every failure is reported (so one pass surfaces every problem instead of one per rerun). A final `RUN PASSED` / `RUN FAILED: <gates>` banner closes the run.
+No CI runs tests — the repo's one workflow only publishes slide decks — so a **full** `./run-tests.sh` is the only gate, and it still runs every check. **This list is derived from `run-tests.sh`; when you add or remove a gate there, update it here in the same commit.** The run is staged: cheap gates run serially and stop at the first failure with a `TESTS BLOCKED: ...` banner naming which one; the heavy, mutually independent gates then run **concurrently with pytest**, each runs to completion, and every failure is reported (so one pass surfaces every problem instead of one per rerun). A final `RUN PASSED` / `RUN FAILED: <gates>` banner closes the run.
 
 Wrapping everything: a wall-clock cap (`VTSEARCH_TEST_TIMEOUT`, default **1800s = 30 min**, `0` opts out for a deliberately long run) and `.claude/hooks/ensure-test-deps.sh` (minutes on a cold container, near-instant after).
 
