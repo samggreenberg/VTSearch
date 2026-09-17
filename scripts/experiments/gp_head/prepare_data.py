@@ -46,8 +46,8 @@ def main(argv: list[str] | None = None) -> int:
             for c in m.get("categories") or [m.get("category")]:
                 if c:
                     cats[c] = cats.get(c, 0) + 1
-        queried = {q.target_category for q in EVAL_DATASETS.get(ds, {}).get("queries", [])}
-        query_counts = {c: k for c, k in cats.items() if c in queried}
+        query_cats = {q.target_category for q in EVAL_DATASETS.get(ds, {}).get("queries", [])}
+        query_counts = {c: k for c, k in cats.items() if c in query_cats}
         selected = cfg.select_categories(query_counts)
         common.log(f"{ds}: {len(medias)} medias, {len(cats)} categories, {len(query_counts)} with a query")
         common.log(f"  selected ({len(selected)}): {[(c, cats[c]) for c in selected]}")
