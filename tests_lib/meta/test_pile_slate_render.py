@@ -79,3 +79,25 @@ class TestRender:
         assert isinstance(px, tuple)
         r, gg, b = px[:3]
         assert abs(r - 0) < 20 and abs(gg - 90) < 20 and abs(b - 200) < 20
+
+    def test_every_instance_is_outlined_when_there_are_several(self, sr, tmp_path):
+        """A VG positive is banded by ALL its instances, so the review render must show each one."""
+        from PIL import Image
+
+        src = _photo(tmp_path, 640, 480)
+        dest = tmp_path / "multi.jpg"
+        g = sr.draw_with_side_inset(src, (0.05, 0.05, 0.15, 0.15), dest, also=[(0.60, 0.60, 0.75, 0.75)])
+        with Image.open(dest) as im:
+            assert im.size == (g["canvas_w"], g["canvas_h"])
+            # the left edge of the SECOND box, at its vertical middle, is drawn red
+            px = im.getpixel((int(0.60 * 640) + 1, int(0.675 * 480)))
+        assert isinstance(px, tuple)
+        r, gg, b = px[:3]
+        assert r > 180 and gg < 90 and b < 90
+
+    def test_no_extra_boxes_renders_exactly_as_before(self, sr, tmp_path):
+        src = _photo(tmp_path, 640, 480)
+        a, b = tmp_path / "a.jpg", tmp_path / "b.jpg"
+        sr.draw_with_side_inset(src, (0.1, 0.1, 0.3, 0.3), a)
+        sr.draw_with_side_inset(src, (0.1, 0.1, 0.3, 0.3), b, also=())
+        assert a.read_bytes() == b.read_bytes()
