@@ -5,6 +5,10 @@ scanned documents** — finding a given stamp, seal or letterhead logo in a pile
 of pages. Built for the feature the structural embedder is heading toward, and
 for the experiments that will decide how it should work.
 
+**What the data is, and what a study may conclude from it:
+[`DATASHEET.md`](DATASHEET.md)** (corpus version, composition, label provenance,
+scoring pools, known gaps, and the use register).
+
 The 2026-07-13 study found the first configuration where structural search beats
 the deep embedder on a real corpus (SuperPoint+LightGlue, AP 0.395/0.481 vs
 SigLIP's 0.204/0.235), then ran out of road: its two document corpora are 259
