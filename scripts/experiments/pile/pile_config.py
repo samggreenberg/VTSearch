@@ -2227,8 +2227,11 @@ def detector_kind(detector: str) -> str:
 
     ``-- prominent check`` asks whether the boxed instance is the most prominent
     one, and is distinct from ``-- box check`` so a triage of a class cannot
-    overwrite that class's box-check audit either. The markers do not overlap,
-    so their order does not matter.
+    overwrite that class's box-check audit either. ``-- seat check`` reviews the
+    positives a build actually SEATED in a class's cells (#3926) -- whatever their
+    source -- and asks both questions at once, so it needs its own file beside the
+    prominence triage of the same class. The markers do not overlap, so their
+    order does not matter.
     """
     if "-- recheck" in detector:
         return "recheck"
@@ -2236,6 +2239,8 @@ def detector_kind(detector: str) -> str:
         return "boxcheck"
     if "-- prominent check" in detector:
         return "prominent"
+    if "-- seat check" in detector:
+        return "seatcheck"
     if ("any in image" in detector) or ("below-cut" in detector):
         return "belowcut"
     return "slate"
