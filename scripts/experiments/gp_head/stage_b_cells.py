@@ -22,7 +22,13 @@ import os
 import time
 from pathlib import Path
 
-import common
+# One BLAS thread per worker, pinned BEFORE numpy loads: the pool forks four
+# workers and each would otherwise spin up a thread per core, which put the
+# load average at 4x the core count on the pilot box and slowed every cell.
+for _var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+    os.environ.setdefault(_var, "1")
+
+import common  # noqa: E402
 
 common.setup_env()
 
@@ -207,7 +213,6 @@ def main(argv: list[str] | None = None) -> int:
     else:
         import multiprocessing as mp
 
-        os.environ.setdefault("OMP_NUM_THREADS", "1")
         with mp.get_context("fork").Pool(args.workers) as pool:
             for line in pool.imap_unordered(_run_one, jobs):
                 common.log(line)
