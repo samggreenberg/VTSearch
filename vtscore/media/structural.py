@@ -457,7 +457,20 @@ _LOWE_RATIO = 0.75
 # RANSAC reprojection tolerance, in normalised image units.
 _RANSAC_REPROJ_THRESHOLD = 0.02
 # Plausible-scale window for the fitted similarity model.
-_MIN_SANE_SCALE = 0.1
+#
+# The scale is measured in *normalised* coordinates, so it is not a
+# magnification: a template matched to a larger candidate fits at roughly
+# (template width / candidate width) times the true magnification.  A query crop
+# of a 158 px logo on a 2,544 px page therefore fits its own page at ~0.06, and
+# the old 0.1 floor rejected it -- no Tobacco800 logo under a tenth of its page's
+# width could verify against the page it was cut from (#3912).  The floor still
+# does real work: collapsed RANSAC fits, which map every template point onto one
+# spot, land at scale ~0 and carry up to 151 inliers on unrelated DocMarks pages.
+# Measured on the 23-class DocMarks roster at a 16,384-keypoint page budget, 0.03
+# verifies all 23 crops against their own page (0.1: 16) and lifts positives
+# with 8+ inliers from 111 to 166 of 182, while negatives with 8+ go from 5 to 13
+# of 184; the smallest true own-page fit was 0.057.
+_MIN_SANE_SCALE = 0.03
 _MAX_SANE_SCALE = 10.0
 # Minimum inlier support for a model to count as plausible.  A similarity
 # transform is fit from a 2-point minimal sample, so a 2-inlier fit has *zero*
