@@ -102,10 +102,13 @@ and now the default in `eval_retrieval.py` and the README.
 
 VLAD reaches **mean AP 0.006** on tier `s` and 0.001 on `m`; re-ranking its top 50
 changes nothing, because no positive reaches the top 50. Verifying *every* page
-lifts it only to 0.044. So Stage 2 cannot rescue it either. That does not
-reproduce the 2026-07-13 result that structural search beats the deep embedder
-on the 1,088 SPODS pages; that study's feature configuration was not re-checked
-here, and is the first place to look.
+lifts it only to 0.044. So Stage 2 cannot rescue it either. **This agrees with
+the 2026-07-13 study** on the same SPODS pages, which found SIFT verifies only
+5.1% of true scanned-document pairs. Its structural win came from a different
+backend: SuperPoint+LightGlue verified 41% and, as a ranker, reached AP 0.395 /
+0.481 against SigLIP's 0.204 / 0.235. That backend
+(`vtscore/media/structural_splg.py`) has never been wired to an embedder, so
+DocMarks has no cell for it.
 
 `diag_structural.py` asks the direct question: RANSAC inliers between each query
 crop and (a) 8 of its true positives, (b) 8 same-source negatives, with the
@@ -144,8 +147,9 @@ stored features and with the pages re-extracted at larger budgets.
 
 **Raising the budget is not a fix on its own.** Local features are stored per
 page; at 16,384 keypoints a tier-`l` `sift_vlad` cell is ~16× today's ~34 GB. The
-lever the 2026-07-13 screenshot study found — tile the page, so a mark competes
-with its neighbourhood rather than the whole page — is the likelier shape.
+2026-07-13 study points at two likelier levers: **the SuperPoint+LightGlue
+backend**, which is what beat SigLIP there, and **tiling** the page so a mark
+competes with its neighbourhood rather than the whole page. #3911 carries both.
 
 ## 4. SigLIP
 
