@@ -329,3 +329,18 @@ ERROR_SCHEMA  # noqa: F821
 # in-repo reader by design.
 # ---------------------------------------------------------------------------
 last_report  # noqa: F821
+
+# ---------------------------------------------------------------------------
+# ``AutopilotFlow`` stopping-rule margin attributes read reflectively via
+# ``getattr(flow, col) for col in STOPPING_MARGIN_COLUMNS`` in
+# ``vtscore/eval/voting_iterations.py`` when emitting per-step voting rows.
+# Vulture sees the assignments in ``__init__`` and ``update()`` but not the
+# dynamic reads. The two also-in-the-tuple names (``smart_slope`` and
+# ``stable_confident_flip_rate``) are read directly by
+# ``tests_lib/detectors/test_stopping_columns.py`` and don't need entries.
+# ---------------------------------------------------------------------------
+smart_slope_t  # noqa: F821
+stable_flip_rate  # noqa: F821
+stable_max_confident_flip_rate  # noqa: F821
+stable_flip_rate_early  # noqa: F821
+stable_flip_rate_late  # noqa: F821
