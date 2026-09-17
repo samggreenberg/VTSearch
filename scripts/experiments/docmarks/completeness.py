@@ -396,27 +396,57 @@ def sift_verifier(classes: dict[str, Any], pages: dict[str, Page], budget: int):
     return for_class
 
 
+#: Candidates per sheet. A sheet is answered by eye and must fit one screen with
+#: its reference row (Sam, 2026-09-17: a 90-candidate class rendered as three stacked
+#: 30-cell sheets meant scrolling up to count and down to answer).
+PER_SHEET = 18
+COLS = 6
+
+
+def _font(size: int, bold: bool = False):
+    from PIL import ImageFont  # noqa: PLC0415
+
+    for name in (
+        ("DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf"),
+        "LiberationSans-Bold.ttf" if bold else "LiberationSans-Regular.ttf",
+    ):
+        try:
+            return ImageFont.truetype(name, size)
+        except OSError:
+            continue
+    try:
+        return ImageFont.load_default(size=size)
+    except TypeError:  # Pillow < 10.1
+        return ImageFont.load_default()
+
+
 def render(
-    entry: ClassCandidates, classes: dict[str, Any], pages: dict[str, Page], out: Path, *, per_sheet: int = 30
+    entry: ClassCandidates, classes: dict[str, Any], pages: dict[str, Page], out: Path, *, per_sheet: int = PER_SHEET
 ) -> list[Path]:
-    """Query crop and reference members, then every candidate around its match."""
+    """One-screen sheets: the reference row, then up to *per_sheet* numbered candidates.
+
+    The candidate number is the largest thing in its cell -- the reviewer reads it
+    and types it -- and the reference row (query crop + members) repeats on every
+    sheet, so nothing needs scrolling back to.
+    """
     from PIL import Image, ImageDraw  # noqa: PLC0415
 
-    thumb, pad, cap = 220, 8, 30
+    thumb, pad, cap = 250, 10, 22
+    big, small, title = _font(40, bold=True), _font(15), _font(18, bold=True)
     meta = classes[entry.class_id]
     refs: list[tuple[str, Any]] = []
     with Image.open(meta["query_crop"]) as im:
         refs.append(("QUERY", im.convert("RGB").copy()))
-    for page_id in meta.get("page_ids", [])[:4]:
+    for page_id in meta.get("page_ids", [])[: COLS - 1]:
         page = pages.get(page_id)
         mark = next((m for m in page.marks if m.class_id == entry.class_id), None) if page else None
         if mark is None:
             continue
         x, y, w, h = mark.box
         with Image.open(page.path) as im:
-            refs.append((f"member {page_id.split('/')[-1][:14]}", im.convert("RGB").crop((x, y, x + w, y + h))))
+            refs.append(("member", im.convert("RGB").crop((x, y, x + w, y + h))))
 
-    cells: list[tuple[str, Any]] = []
+    cells: list[tuple[int, str, Any]] = []
     for i, cand in enumerate(entry.candidates):
         page = pages[cand.page_id]
         x, y, w, h = cand.box
@@ -431,40 +461,57 @@ def render(
             left, top = max(0, x0 - margin), max(0, y0 - margin)
             crop = im.crop((left, top, min(im.width, x1 + margin), min(im.height, y1 + margin)))
         draw = ImageDraw.Draw(crop)
-        draw.rectangle([x - left, y - top, x - left + w, y - top + h], outline="#1f77b4", width=3)
+        lw = max(2, crop.width // 120)
+        draw.rectangle([x - left, y - top, x - left + w, y - top + h], outline="#1f77b4", width=lw)
         if cand.mark_index is not None:
             mx, my, mw, mh = page.marks[cand.mark_index].box
-            draw.rectangle([mx - left, my - top, mx - left + mw, my - top + mh], outline="#d62728", width=2)
-            label = cand.mark_class_id.split("/")[-1][:18] if cand.mark_class_id else "unclassed mark"
+            draw.rectangle([mx - left, my - top, mx - left + mw, my - top + mh], outline="#d62728", width=lw)
+            label = cand.mark_class_id.split("/")[-1][:20] if cand.mark_class_id else "unclassed mark"
         else:
             label = "NO BOX"
-        cells.append((f"[{i}] {cand.inliers} inl  {page.page_id.split('/')[-1][:12]}\n{label}", crop))
+        cells.append((i, f"{cand.inliers} inl · {label}", crop))
 
     paths = []
-    cols = 6
     name = entry.class_id.replace("/", "__")
-    for start in range(0, max(1, len(cells)), per_sheet):
-        chunk = cells[start : start + per_sheet]
-        ref_row = 1
-        rows = ref_row + (len(chunk) + cols - 1) // cols
-        sheet = Image.new("RGB", (cols * (thumb + pad) + pad, rows * (thumb + cap + pad) + 40), "white")
+    chunks = [cells[j : j + per_sheet] for j in range(0, len(cells), per_sheet)] or [[]]
+    pos = entry.positive_inliers
+    for sheet_no, chunk in enumerate(chunks):
+        rows = 1 + (len(chunk) + COLS - 1) // COLS
+        width = COLS * (thumb + pad) + pad
+        sheet = Image.new("RGB", (width, 44 + rows * (thumb + cap + pad)), "white")
         draw = ImageDraw.Draw(sheet)
-        pos = entry.positive_inliers
+        first, last = (chunk[0][0], chunk[-1][0]) if chunk else (0, -1)
         draw.text(
-            (pad, 8),
-            f"{entry.class_id} -- which candidates carry THIS mark?  blue = SIFT match, red = existing box.  "
-            f"members' inliers: median {pos[len(pos) // 2] if pos else 0}, min {pos[-1] if pos else 0}",
+            (pad, 10),
+            f"{entry.class_id}   sheet {sheet_no + 1}/{len(chunks)}   candidates {first}-{last}   "
+            f"(members' inliers: median {pos[len(pos) // 2] if pos else 0})",
             fill="black",
+            font=title,
         )
-        for r, cells_row in enumerate([refs[:cols]] + [chunk[j : j + cols] for j in range(0, len(chunk), cols)]):
-            for c, (label, img) in enumerate(cells_row):
-                t = img.copy()
-                t.thumbnail((thumb, thumb))
-                x = pad + c * (thumb + pad)
-                y = 40 + r * (thumb + cap + pad)
-                sheet.paste(t, (x, y + cap))
-                draw.text((x, y), label, fill="#b00000" if r == 0 else "black")
-        path = out / f"{name}_{start // per_sheet:02d}.png"
+        for c, (label, img) in enumerate(refs[:COLS]):
+            t = img.copy()
+            t.thumbnail((thumb, thumb))
+            x, y = pad + c * (thumb + pad), 44
+            sheet.paste(t, (x, y + cap))
+            draw.text((x, y), label, fill="#b00000", font=small)
+        draw.line(
+            [(pad, 44 + thumb + cap + pad // 2), (width - pad, 44 + thumb + cap + pad // 2)], fill="#999999", width=2
+        )
+        for k, (index, caption, img) in enumerate(chunk):
+            r, c = divmod(k, COLS)
+            x, y = pad + c * (thumb + pad), 44 + (r + 1) * (thumb + cap + pad)
+            t = img.copy()
+            t.thumbnail((thumb, thumb))
+            sheet.paste(t, (x, y + cap))
+            draw.rectangle([x, y + cap, x + thumb - 1, y + cap + thumb - 1], outline="#cccccc")
+            draw.text((x, y + 2), caption, fill="#333333", font=small)
+            # The number the reviewer types: large, boxed, top-left over the crop.
+            num = str(index)
+            nb = draw.textbbox((0, 0), num, font=big)
+            bw, bh = nb[2] - nb[0] + 16, nb[3] - nb[1] + 14
+            draw.rectangle([x, y + cap, x + bw, y + cap + bh], fill="#111111")
+            draw.text((x + 8 - nb[0], y + cap + 7 - nb[1]), num, fill="#ffffff", font=big)
+        path = out / f"{name}_{sheet_no:02d}.png"
         path.parent.mkdir(parents=True, exist_ok=True)
         sheet.save(path)
         paths.append(path)
