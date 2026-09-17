@@ -17,6 +17,13 @@ the recipe #3926 applied:
   (``LABELSETS__prominent__*``): a redraw replaces the stored box, a Good keeps it,
   a Bad makes the pair absent. Its boxes are already in photo coordinates.
 
+**A stored box is clipped to the image.** OWLv2 predicts boxes that run past the
+frame -- 358 of the applied ones, by at most 1.4% -- and the build refuses any
+coordinate outside [0, 1] as pixel space (pilebuild.corrections). The render the
+reviewer confirmed already clipped them (slate_render.inset_crop), so the clipped
+box is the box they saw. The first application missed this and the rebuild's own
+check caught it.
+
 Rule stamps are carried from the labelset, never re-derived (#3814).
 
 Usage (then ALWAYS ``apply_recheck.py`` on the same file -- see #3926)::
@@ -44,6 +51,16 @@ def _iid(el: dict) -> int:
     return int(str(el["filename"]).split(".")[0])
 
 
+def _clipped(box: list[float] | None) -> list[float] | None:
+    """*box* clipped to [0, 1]; refuses one with no area left inside the image."""
+    if box is None:
+        return None
+    x0, y0, x1, y1 = (min(1.0, max(0.0, float(v))) for v in box)
+    if x1 <= x0 or y1 <= y0:
+        raise SystemExit(f"stored box {box} has no area inside the image")
+    return [x0, y0, x1, y1] if [x0, y0, x1, y1] != [float(v) for v in box] else box
+
+
 def build(slates: dict) -> tuple[list[dict], Counter, Counter]:
     """``(verdicts, by_source, prominence_overrides)``; raises on a stale rule or a duplicate pair."""
     out: dict[tuple[int, str], dict] = {}
@@ -55,7 +72,7 @@ def build(slates: dict) -> tuple[list[dict], Counter, Counter]:
             if d.get("rule") != pc.review_name(cls):
                 raise SystemExit(f"{f.name}: voted under {d.get('rule')!r}, rule in force is {pc.review_name(cls)!r}")
             owl = (
-                {int(r["image_id"]): r.get("box") for r in slates.get(cls, {}).get("rows", [])}
+                {int(r["image_id"]): _clipped(r.get("box")) for r in slates.get(cls, {}).get("rows", [])}
                 if kind == "slate"
                 else {}
             )
@@ -83,7 +100,7 @@ def build(slates: dict) -> tuple[list[dict], Counter, Counter]:
         cls = d["class"]
         if d.get("rule") != pc.review_name(cls):
             raise SystemExit(f"{f.name}: voted under a superseded rule")
-        owl = {int(r["image_id"]): r.get("box") for r in slates[cls]["rows"]}
+        owl = {int(r["image_id"]): _clipped(r.get("box")) for r in slates[cls]["rows"]}
         for side, human in (("good", "present"), ("bad", "absent")):
             for el in d[side]:
                 key = (_iid(el), cls)
