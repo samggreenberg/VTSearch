@@ -145,6 +145,10 @@ export class ImageViewerComponent implements OnDestroy {
   readonly minZoom = 1;
   readonly maxZoom = 5;
   readonly zoomStep = 0.05;
+  /** How hard a double-click zooms in about the cursor. Matches the Browse
+   *  canvas's own `DOUBLE_CLICK_ZOOM`, and is deliberately larger than a wheel
+   *  notch so the gesture lands a decisive jump rather than a nudge. */
+  readonly doubleClickZoom = 2;
 
   constructor() {
     this.setupWindowKeyListeners();
@@ -228,14 +232,54 @@ export class ImageViewerComponent implements OnDestroy {
     event.preventDefault();
     const oldZoom = this.zoom();
     const delta = event.deltaY > 0 ? -0.15 : 0.15;
-    this.zoom.set(this.clampZoom(oldZoom + delta * oldZoom));
+    this.zoomAbout(oldZoom + delta * oldZoom, event.clientX, event.clientY);
+  }
+
+  /** Double-click the image to look closer.
+   *
+   *  The gesture people reach for when a voting decision needs more detail, and
+   *  the one the Browse canvas already answers, so it means the same thing in
+   *  both places: a decisive jump in (`DOUBLE_CLICK_ZOOM`, larger than a wheel
+   *  notch) anchored on the point under the cursor, suppressed while a region
+   *  draw owns the gesture.
+   *
+   *  The one thing it does that the map's version doesn't is close the loop:
+   *  the image viewer caps at `maxZoom`, so a double-click there would
+   *  otherwise be a dead gesture, leaving the toolbar or `-` as the only way
+   *  back from a zoom the user got into with the mouse alone. At the cap the
+   *  same gesture returns to fit instead. Rotation is deliberately kept - the
+   *  user rotated on purpose, and this is a zoom control, not `resetView()`. */
+  onDoubleClick(event: MouseEvent): void {
+    if (event.button !== 0) return;
+    // Region-draw owns the gesture while it is active (Shift held or the sticky
+    // Marquee toggle on): two quick draws must not also zoom. Same suppression
+    // the Browse canvas applies to its own double-click zoom.
+    if (this.regionDrawActive) return;
+    // Without this a double-click paints a native selection over the canvas.
+    event.preventDefault();
+    if (this.zoom() >= this.maxZoom) {
+      this.zoom.set(this.minZoom);
+      this.panX.set(0);
+      this.panY.set(0);
+      this.applyTransform();
+      return;
+    }
+    this.zoomAbout(this.zoom() * this.doubleClickZoom, event.clientX, event.clientY);
+  }
+
+  /** Zoom to `newZoom` (clamped) keeping the image point currently under
+   *  (`clientX`, `clientY`) pinned there, by counter-panning about that point.
+   *  Shared by the wheel and the double-click so both anchor identically. */
+  private zoomAbout(newZoom: number, clientX: number, clientY: number): void {
+    const oldZoom = this.zoom();
+    this.zoom.set(this.clampZoom(newZoom));
 
     const wrap = this.wrapRef()?.nativeElement;
     if (wrap) {
       const rect = wrap.getBoundingClientRect();
       const s = this.layoutScale(wrap, rect);
-      const cx = (event.clientX - rect.left - rect.width / 2) / s;
-      const cy = (event.clientY - rect.top - rect.height / 2) / s;
+      const cx = (clientX - rect.left - rect.width / 2) / s;
+      const cy = (clientY - rect.top - rect.height / 2) / s;
       const ratio = this.zoom() / oldZoom;
       this.panX.set(cx - ratio * (cx - this.panX()));
       this.panY.set(cy - ratio * (cy - this.panY()));
