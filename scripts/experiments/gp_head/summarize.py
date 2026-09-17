@@ -137,14 +137,40 @@ def _aulc(frame: pd.DataFrame, metric: str, t_from: int, t_to: int) -> pd.DataFr
 # ---------------------------------------------------------------------------
 
 
+def _requested_labels(n_labels: pd.Series) -> pd.Series:
+    """Map the label count a cell got back to the count the grid asked for.
+
+    The balanced sampler caps a cell at the positives its category has, so a
+    request for 32 labels on a category with 12 sim positives comes back as 24;
+    the smallest requested count at or above the actual one is the grid point
+    the cell belongs to.
+    """
+    grid = sorted(cfg.LABEL_COUNTS)
+
+    def up(n: int) -> int:
+        for g in grid:
+            if n <= g:
+                return g
+        return grid[-1]
+
+    return n_labels.astype(int).map(up)
+
+
 def stage_a_tables(stage_a: pd.DataFrame, out: Path) -> list[str]:
     md: list[str] = []
+    stage_a = stage_a.copy()
+    stage_a["n_actual"] = stage_a["n_labels"]
+    stage_a["n_labels"] = _requested_labels(stage_a["n_labels"])
     metrics = ["auroc", "average_precision", "best_f1", "f1_at_xcal", "brier", "ece", "std_mean", "train_seconds"]
     metrics = [m for m in metrics if m in stage_a.columns]
     summ = stage_a.groupby(["trainer", "n_labels"], as_index=False)[metrics].mean()
     summ["n_cells"] = stage_a.groupby(["trainer", "n_labels"]).size().to_numpy()
+    summ["n_actual_mean"] = stage_a.groupby(["trainer", "n_labels"])["n_actual"].mean().to_numpy()
     summ.to_csv(out / "stage_a_summary.csv", index=False)
-    md.append("### Stage A - label curve, mean over categories x seeds\n")
+    md.append(
+        "### Stage A - label curve, mean over categories x seeds "
+        "(`n_labels` = the requested count; `n_actual_mean` = what the positives allowed)\n"
+    )
     md.append(_md(summ))
 
     ref = "svm_linear"

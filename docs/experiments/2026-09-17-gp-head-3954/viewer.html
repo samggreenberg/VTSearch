@@ -1,0 +1,1170 @@
+<!doctype html>
+<!--
+  Template for scripts/experiments/calibration/viewer.py.  The builder swaps the
+  placeholder token in the payload script tag below for the study's JSON;
+  everything else here is static, so this file is the whole of the viewer's
+  behaviour and is edited directly rather than through a Python string.
+
+  Do not write that token anywhere else in this file - not even in a comment.
+  The substitution is a plain string replace, and a second occurrence silently
+  doubles the page.  viewer.py asserts there is exactly one.
+
+  Self-contained on purpose: no CDN, no fetch, no fonts.  These pages are read
+  off a laptop with no network and out of a repo checkout over file://, where a
+  fetch of a sibling file is blocked by CORS.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quality over clicks</title>
+<style>
+  :root {
+    color-scheme: light;
+    --plane:          #f9f9f7;
+    --surface:        #fcfcfb;
+    --ink:            #0b0b0b;
+    --ink-2:          #52514e;
+    --muted:          #898781;
+    --grid:           #e1e0d9;
+    --axis:           #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100;
+    --s5:#e87ba4; --s6:#008300; --s7:#4a3aa7; --s8:#e34948;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --plane:   #0d0d0d;
+      --surface: #1a1a19;
+      --ink:     #ffffff;
+      --ink-2:   #c3c2b7;
+      --muted:   #898781;
+      --grid:    #2c2c2a;
+      --axis:    #383835;
+      --border:  rgba(255,255,255,0.10);
+      --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+      --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --plane:#0d0d0d; --surface:#1a1a19; --ink:#ffffff; --ink-2:#c3c2b7;
+    --muted:#898781; --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,0.10);
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+    --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--plane); color: var(--ink);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 1500px; margin: 0 auto; padding: 24px 20px 64px; }
+  h1 { font-size: 20px; margin: 0 0 4px; font-weight: 600; }
+  .sub { color: var(--ink-2); margin: 0 0 18px; font-size: 13px; max-width: 90ch; }
+
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 18px 26px; align-items: flex-start;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px; margin-bottom: 16px;
+  }
+  .ctl { display: flex; flex-direction: column; gap: 6px; }
+  .ctl > label.h {
+    font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--muted); font-weight: 600;
+  }
+  select {
+    font: inherit; padding: 5px 8px; border-radius: 6px;
+    border: 1px solid var(--axis); background: var(--surface); color: var(--ink);
+    min-width: 170px;
+  }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; max-width: 620px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+    border: 1px solid var(--axis); border-radius: 999px; padding: 3px 11px 3px 8px;
+    font-size: 13px; background: var(--surface); color: var(--ink-2); user-select: none;
+  }
+  .chip input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .chip .sw { width: 11px; height: 11px; border-radius: 3px; background: var(--axis); flex: none; }
+  .chip[data-on="1"] { color: var(--ink); border-color: currentColor; font-weight: 500; }
+  /* The last selection in a group cannot be turned off; say so rather than
+     ignoring the click. */
+  .chip[data-locked="1"] { cursor: not-allowed; }
+  .chip[data-locked="1"]::after {
+    content: "\00a0\1F512"; font-size: 9px; opacity: .55; margin-left: -2px;
+  }
+  .chip:focus-within { outline: 2px solid var(--s1); outline-offset: 2px; }
+  .radios { display: flex; gap: 4px; }
+  .radios label {
+    cursor: pointer; border: 1px solid var(--axis); padding: 5px 10px; font-size: 13px;
+    background: var(--surface); color: var(--ink-2);
+  }
+  .radios label:first-of-type { border-radius: 6px 0 0 6px; }
+  .radios label:last-of-type { border-radius: 0 6px 6px 0; }
+  .radios input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .radios label[data-on="1"] { color: var(--ink); font-weight: 500; border-color: var(--ink-2); }
+  .radios label:focus-within { outline: 2px solid var(--s1); outline-offset: 2px; }
+
+  /* Draw-what toggles.  Square boxes rather than chips: a chip group is a
+     subset of one dimension and these are two independent switches, so they
+     must not read as "pick some of these". */
+  .checks { display: flex; flex-direction: column; gap: 5px; }
+  .checks label {
+    display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+    font-size: 13px; color: var(--ink-2); user-select: none;
+  }
+  .checks label[data-on="1"] { color: var(--ink); font-weight: 500; }
+  .checks label[data-off="1"] { opacity: .4; cursor: not-allowed; }
+  .checks input { accent-color: var(--s1); margin: 0; }
+  .checks .why { font-size: 11px; color: var(--muted); margin: -2px 0 0 24px; max-width: 34ch; }
+
+  .legend-key { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; margin-top: 6px; }
+  .legend-key span { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+  .legend-key svg { display: inline-block; width: 22px; height: 10px; overflow: visible; }
+  /* Sits ABOVE the swatches, not below them: at sixty series the swatch list is
+     taller than the viewport, so a warning under it is a warning nobody reads. */
+  .legend-warn {
+    font-size: 12.5px; color: var(--ink); margin-bottom: 7px;
+    border-left: 3px solid var(--s2); padding: 3px 0 3px 9px;
+  }
+  .legend-warn b { font-weight: 600; }
+  /* Cap the swatch list so a hairball's legend cannot push the chart itself
+     off the screen; it scrolls in place instead. */
+  .legend { max-height: 148px; overflow-y: auto; }
+
+  /* Grid, not flex: a flex row lets the last panel of an uneven row stretch to
+     the full width, so the same series is drawn at two different sizes on one
+     screen and the small multiples stop being comparable. */
+  .panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(430px, 1fr)); gap: 14px; }
+  /* A lone panel - the overlay view, or a study with one series - must not
+     stretch to the full page. The SVG scales its 660-wide viewBox to whatever
+     width it gets, so a full-bleed panel renders 11px axis labels as
+     billboards and pushes the rotated y-axis title off its own left edge. */
+  .panels.one { grid-template-columns: minmax(0, 940px); justify-content: center; }
+  .panel {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 12px 6px; position: relative; min-width: 0;
+  }
+  .panel h2 { font-size: 13px; margin: 0 0 2px; font-weight: 600; }
+  .panel .pn { font-size: 11px; color: var(--muted); margin: 0 0 6px; }
+  svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .tip {
+    position: absolute; pointer-events: none; z-index: 5; opacity: 0;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 7px 9px; font-size: 12px; min-width: 140px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.13); transition: opacity .08s;
+  }
+  .tip table { border-collapse: collapse; }
+  .tip td { padding: 1px 0; }
+  .tip td.k { padding-right: 10px; }
+  .tip td.v { text-align: right; font-variant-numeric: tabular-nums; }
+  .tip .hd { font-weight: 600; margin-bottom: 3px; }
+  .tip .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; }
+
+  #legend {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 14px; margin: 14px 0 0;
+  }
+  .legend-head { font-size: 12.5px; color: var(--ink-2); margin-bottom: 6px; }
+  .legend-head b { color: var(--ink); font-weight: 600; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2); }
+  .legend i { width: 16px; height: 3px; border-radius: 2px; display: inline-block; }
+
+  .note { color: var(--muted); font-size: 12px; margin: 14px 0 0; max-width: 100ch; }
+  .note b { color: var(--ink-2); font-weight: 600; }
+  details { margin-top: 16px; }
+  summary { cursor: pointer; color: var(--ink-2); font-size: 13px; }
+  table.data { border-collapse: collapse; margin-top: 10px; font-size: 12.5px; }
+  table.data th, table.data td {
+    border-bottom: 1px solid var(--grid); padding: 4px 12px 4px 0; text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  table.data th:first-child, table.data td:first-child { text-align: left; }
+  table.data th { color: var(--muted); font-weight: 600; }
+  .empty { color: var(--muted); padding: 40px 0; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 id="title">Quality over clicks</h1>
+  <p class="sub" id="subtitle"></p>
+
+  <div class="controls" id="controls">
+    <div class="ctl">
+      <label class="h" for="ds">Dataset</label>
+      <select id="ds"></select>
+    </div>
+    <div class="ctl" id="bandWrap">
+      <label class="h" for="band">Target size</label>
+      <select id="band"></select>
+    </div>
+    <div class="ctl">
+      <label class="h" for="cat">Category</label>
+      <select id="cat"></select>
+    </div>
+    <div class="ctl">
+      <label class="h" for="metric">Metric</label>
+      <select id="metric"></select>
+    </div>
+    <div class="ctl" id="embWrap">
+      <label class="h">Embedder <span style="text-transform:none;letter-spacing:0">— one or more; one panel each, never averaged</span></label>
+      <div class="chips" id="emb"></div>
+    </div>
+    <div class="ctl" id="drawWrap">
+      <label class="h">Draw</label>
+      <div class="checks" id="draw">
+        <label id="oracleLab"><input type="checkbox" id="oracleBox">oracle threshold, dotted</label>
+        <label id="overlayLab"><input type="checkbox" id="overlayBox">overlay on one chart</label>
+      </div>
+    </div>
+    <div class="ctl">
+      <label class="h">Seeds</label>
+      <div class="radios" id="seedMode">
+        <label data-on="1"><input type="radio" name="sm" value="avg" checked>averaged</label>
+        <label><input type="radio" name="sm" value="each">each its own line</label>
+      </div>
+    </div>
+    <div class="ctl" style="flex:1 1 100%">
+      <label class="h">Arms <span style="text-transform:none;letter-spacing:0">— one or more</span></label>
+      <div class="chips" id="arms"></div>
+    </div>
+  </div>
+
+  <div id="legend"></div>
+
+  <div class="panels" id="panels" style="margin-top:14px"></div>
+
+  <p class="note" id="reading"></p>
+
+  <details id="tableWrap">
+    <summary>Table view — the plotted numbers</summary>
+    <div id="table"></div>
+  </details>
+</div>
+
+<script id="payload" type="application/json">{"schema":2,"title":"GP head vs the shipped linear SVM (#3954)","subtitle":"caltech101_m / siglip; Autopilot voting to 150 clicks","anchor":{"has":true,"label":"text sort, 0 clicks"},"skyline":null,"solid_coverage":0.95,"datasets":["caltech101_m"],"embedders":[""],"categories":["airplanes"],"arms":["app","app_xcal"],"seeds":[0,1,2,3],"metrics":[{"key":"cost","label":"Cost (weighted FPR+FNR)","lower":true,"lo":0.0,"hi":2.0,"oracle":false,"ranking":false},{"key":"precision","label":"Precision","lower":false,"lo":0.0,"hi":1.0,"oracle":false,"ranking":false},{"key":"recall","label":"Recall (= 1 - FNR)","lower":false,"lo":0.0,"hi":1.0,"oracle":false,"ranking":false},{"key":"f1","label":"F1","lower":false,"lo":0.0,"hi":1.0,"oracle":false,"ranking":false},{"key":"fpr","label":"False-positive rate","lower":true,"lo":0.0,"hi":1.0,"oracle":false,"ranking":false},{"key":"fnr","label":"False-negative rate","lower":true,"lo":0.0,"hi":1.0,"oracle":false,"ranking":false},{"key":"average_precision","label":"Average precision (ranking)","lower":false,"lo":0.0,"hi":1.0,"oracle":false,"ranking":true},{"key":"auroc","label":"AUROC (ranking)","lower":false,"lo":0.0,"hi":1.0,"oracle":false,"ranking":true}],"groups":[["caltech101_m","","airplanes"],["caltech101_m","","chandelier"],["caltech101_m","","flamingo"],["caltech101_m","","laptop"],["caltech101_m","","nautilus"],["caltech101_m","","starfish"]],"t":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150],"agg":{"mean":{"scale":4000,"shape":[6,2,8,151],"v":"H4sIAOkRrGoC/+3XTUgUYRgH8Gf2e6V11QU/yqAoCOpSaUHHbkJQUfciCDoY1aVTBF0M+oDq4L1Lpy7VJQm6FYR18OJHYR9IZgpuorGz6uq/533nY3d18aas9P/BzI7vvPPOO8/MPPMo4plynuM+euQhPmIQ++UXvmKvvEe7jGMM83BRwgpE0ra3C7OOimnx1vUlusnjX8s2S5s48g4DOCWL6JAveIOr8hgXpYhO6ZSUH6kyF+lwXV/cTb5/g5nTcl0G8EDOSId8R5N0a5SapUX3HV43j/qLz9Z61NglPTKKQ/oMdcsMWiUhYzgpQziiEctKo8Qlpv1KNloxe0wJsXBdX5Y3+dlqkiUs6jnaZKdM6PUX9LnqkBEc1LyVknLeqs4O/2veGnFe4Ylm+Zt4iSnN73P4pFH6g7xGYqgiGuktyQv17kR2n7TqPcnoGxiXiK5X4OgbF9F9SaFqF7I5zU/ADo2Q40cror/OFjzX289k5q07WrqLGTm/2iHH8AHDmLDv25Lmq8oMFbW/XgTN32Zp0JrDtAYZLIivd2TCbpltr31JeyX8X08inEfM/46YvQm7VFuyZxP/KxPsX9/P65nR/BvVMRfDdVJnUkLSv5KCbkX9WUbtLBeRrJkHC2ioyM99sb7UnHNJulannbyOdw/n5HJYVVVWVkWYIwthJWGWn8jZ8dJr6h3vyFl7hWbbOyqni2nLhbOZDedR1GzpyWlrrmJP0GrOFowe7F/fz+s5jl06ryJadO3qaK7m4ZTOJW/PUtS9eW1P2bMWdYRUzZG8npPhzESeZn+XfshZ6ZcDOsKg9NqrY21VWyQ5HWuK3JYUruizdUMW0O1XpUBc65e4rWLi9vlfti1B3WXa5vUJMnVXfE294x1poh6z26Uw/i4q70P5G+udo/xcrv36pu3ZgtHLd3T9V9r0zCNj55sO166dpetXihkxlVFMvMXMMl3ze296LlTUlZOZZ39frwzjjnNr1eSAo/INn8P/Bpm3qvOWSHt0D16gV2PUIsfRj+D/v/+9ttqo3tqt0TfvguMvtFG91eZXpIwUEREREREREREREREREREREREREREREREREREREREREREREREREREREREREREREW1f/wAdEG0wQHEAAA==","m":"H4sIAOkRrGoC/+P/jw7+yWMI/bHHEPpRjyH0AUPk/0NMocOYQu2YQvyD01kMo2AUjIJRMAqGMQAAMTOMqhQHAAA="},"sd":{"scale":4000,"shape":[6,2,8,151],"v":"H4sIAOkRrGoC/+3XPWiTQRgH8H8Sm8RGmyiIVWkbrCBSKgqCIFh3Byk4CFYFByelg7Obg+Ao+AHi6iiIgiAIfoy6iAhVLKZV0QpC0zZptWn+PneXpEkTCwqFSv+/kjcv99XLk7vnvQDBeQziKgexF3c5wxSmOM0uZFBiiY85wSmSvwikfes83TUOVxKuq0t8hcfvsziMsMzjdveMC0xYvI7hKXfjMzfiNd9aXX5JVNI+amnkV120Mis8/gUM4AZP4iCucYx78MZWVsT+pi0S91gfocW1tXYdwSHcZy+24QcLtu86MMoDVr4eRX7kN363nThnMUr41j99tJJwJeG6uiRXePwOxFCwT5211fOFblWR3fjEtJVuwGLeaswOazVvaSf+jX7bg6O2kor2DJyzjD7LOMqct3xPe0ZCGvRiM8YtWjMWLVqMimzDgr2XLVLzitYSwxiKnuCj8qnIFn7gLvbhOd/7KM1avqrPUEtzgitLWUTb7FXNYPFaneuTAnxdHG2+tOB7hPcg1WJGBetXYKqpFNhUG71a39wutMzAfevws4v7knbLLgW6Kywzu9o2n6PdC76u1Vxcy9AnGMDhdedKN9kde1DqwTt+xWleYji7TNK9wp3LXDFbdTHfy608V9ZjmczVTrLxvBN6Zv2duw/lOf80Ce9Btm5e1TnlrF+O2SXzdn321Uav1je3Cy377TmVsTHz/n/nGMUOm/043RX2KdxTrKPyeRasfazlSKFlF2J1JSORi7heHsJ2eybu5EP7D8rof3IUndGJ8n7ejtwpj/Eyr9gvoBeVOM2x/mSVQNTWVLSyEuDLMpU21ZNX9bwTSjP+zt0nK2sirL5JLnf2Dusy01QKdNZGr9Y3twstt9p3nazMI2klEVtJESvrqOxEV5to2ImtRgot03U7cRizseL8K96Knllotz5n8YQva78Glbca85Z24r+ct0Ztx7gTAysvWe68NW6xKhO1rCQiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIi8v/5DfuoaQRAcQAA","m":"H4sIAOkRrGoC/+P/jw7+yWMI/bHHEPpRjyH0AUPk/0NMocOYQu2YQvyD01kMo2AUjIJRMAqGMQAAMTOMqhQHAAA="},"n":{"scale":1,"shape":[6,2,8,151],"v":"H4sIAOkRrGoC/+3QIQEAAAgDsAv6Z0a8APgtwpKacGfLli1btmxhy5YtW7ZsYcuWLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+FiNn78vQHEAAA==","m":"H4sIAOkRrGoC//v/fxSMglEwCkbBKBgFIAAANHQdcRQHAAA="},"cells":{"scale":1,"shape":[6,2,1],"v":"H4sIAOkRrGoC/2NlYMUKAe/j7x0YAAAA","m":"H4sIAOkRrGoC//v/AQCRHUBvAgAAAA=="},"omean":{"scale":4000,"shape":[6,2,8,151],"v":"H4sIAOkRrGoC/+3BMQEAAADCoPVPbQo/oAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAC+BoQMVTpAcQAA","m":"H4sIAOkRrGoC/2NgGAWjYBSMglEwCkYBCAAA+PbChRQHAAA="},"on":{"scale":1,"shape":[6,2,8,151],"v":"H4sIAOkRrGoC/+3BMQEAAADCoPVPbQo/oAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAC+BoQMVTpAcQAA","m":"H4sIAOkRrGoC//v/fxSMglEwCkbBKBgFIAAANHQdcRQHAAA="}},"runs":{"t":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150],"index":[[0,0,0],[0,0,1],[0,0,2],[0,0,3],[0,1,0],[0,1,1],[0,1,2],[0,1,3]],"values":{"scale":1000,"shape":[8,8,151],"v":"H4sIAOkRrGoC/+1bb2gcRRR/e3N3yV1Nm+RKElKLNGq19EMLpf6jUIRUC220+KFgoSD4RUQoiEgtFYSCCIp+81MLIvol0CI2FYtVq1Sx/6AtFNtir9Qm8ZI2SdtoLn/u8vPNzM3u3t7t3QUSId78QnZn38zODu/e/ObN27dEGnvoMibRRUexlksbKI3baKIxZCGonYZAlIdsl1Cts6C6RkYEJTewSp0n8Rue4nMjWRi8I9ayPtLoYctaS+fZyrpoEC0FW/KQ9VlY/eKw6KAojeJxGkYb66mVZVHWSpRyuIWV6koip7QVteYVQBONK80U85ZFeZZPo1OxfHE7y/IS10QjxQkMhxxrPFVwU0RJLotgq7HaqobdzFKDyGAJ89Mdnn9yxt1DHsvpjuWrEqRFUvHRedzDNtdbSLAvscEqpwSfiAR10gpm8YTSkuTxVquWEBxjbS2lJN1GjlfGGM2wtmLsVw3yymgRhFD+lKDlvDLegiezvFUOL/PcG8QA87ueh5LlR62eQnBFNPHsi5H2thySfpdFGG6IBp53ev9n9VQNb9Mlnncr6BT+RDNfT2GWOesPJGmisFss3Skarqu/HeRZsdL1sUbxl9otXsQud02UHkVp9CbhHusL+8UjfBzAZrYvzfPW2wrH52KV2uusZJ90HFJX42xh6/jYpOplXCsY1copnsuh/qJdHj/lEeeru8xelrfC8AZrRrL8T+xzJQrsZWdcGE6LFPtYMWpQvpb1IirjkljGWoraiHtN+JKa6TAeZsY6iWn+izO/NzMjCZ6VJ5m9xhfVvBQL3P91MYx2kjGuH3g9TNEIVtNFZq/r7G+tp348uqh++4V+b/CcyGI7XcMEdhbJpee53k69AD4U97CR/YZpLGMNSb8hRUPMY3+zv7WO7vPVYsIMFnqmN/DeUHpObeTnrSbW213LW0Ffni2qj7kqSb0IMsAF63kF8KOYZpafRANJL8KhOO9oIvwbRbiuwaongHOsrVbWViNryFHayrO2IspLFVY9AewQ/+S7qRtj2I1JtFAatXDC/O8Q53fXGdzJ6t2u2fMKtyx80rB+/CN7xjkS0aXfsabiCCZ9Pc5/Tpe07vnuzetTjr2xcNRyI/GkYf34R5YR382ewAlqoaMsH0OXnW4VkHa2OudxgNfEF3kPJOdiGHI+25r/XeX8RsuCETgdpTOxOik3kmjZCJ6/H//IdoivcrrUQmOo1ZepV94i2uJolu/h+VmJ5S28/C1ZtrGtajD5Wxa14F3xfH4fttJHbF1f0z6cRQdl8F9EPxYjupxfI8WSI3jJqiUEGbEJ79O3eIvLL3BpIyVsbnwofnaOOz10BZu5fBA99CBdxWML5FP9H3jrQK5YsopuWMYKxSkqZnmT32BZvhQmf8tP9dbvCoPJ37J5brXgkHgt34N+vOJ8NnsTE5iY05c99ZYL0eFciOzFBzSab438wp5p55x8h3rL4cqImdlhGsATdIb/LSrjG+eg8yw9TX2z2x35XmzpnDytesvhOiRezT1Jp/Gp8/psO1neqoaY04YVah6esR5WFZj8rThFrDKqwuRvCeuT1oD9oh3n8u20jHbSx+jDGvoeeTcTtTi+baLYGlIWL7Txx791nc5jJVUnCvJpdYc+a8TLjEjmYkwjXiIllTel1xZTX9rOtJxyI+9RLuv37lMwb9+nlNwPr44qyFt4RdwbuYot6qofe/CF+w11IpAZb77I05CyEZXNm3Q9NFOr7xxR45ZlnfGbUnfos8ZIGaaUOWSpkpqUGp3p3dSnyvSgW6ZUlrEcXRbec03rlJIHn1pOW8XyjJhgi8riGnrxJttXyk63CjjsbKNjzhCW0Dl000N0HLsopmrkXlv+U+FoJO5aqmxJv2+LFWSmVt+ZVW/qZDnnxheLv+0oF+dIBGzYs+T7bu9exLK0B90y4b4xnIH3XM/2pTz41HL6KZbvF0vxXv4BGlayJG2yvFVRnqTtrMHViuV7MWJ9rgow+Vtt6vtgG9uqDJO/lSpkuFmUw79eg7EggEsAAA==","m":"H4sIAOkRrGoC/+P/jw7+yWMI/bHHEPpRjyH0AUPk/0NMocOYQu2YQvyjzhp11qizRp2Fy1kAgOv7QLgEAAA="}},"runs_note":"Per-seed lines are at full click resolution (151 clicks).","n_cells":240,"oracle_metrics":[],"build":{"results":"/root/gp-head/results","arms":"app,app_xcal"},"payload_kb":{"mean":1,"sd":1,"n":0,"cells":0,"omean":0,"on":0,"runs":2}}</script>
+<script>
+"use strict";
+(async function () {
+  const P = JSON.parse(document.getElementById("payload").textContent);
+  const $ = (id) => document.getElementById(id);
+  const NaNv = Number.NaN;
+
+  // ---- decode -------------------------------------------------------------
+  const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+  async function gunzip(bytes) {
+    if (typeof DecompressionStream !== "function") throw new Error("no DecompressionStream");
+    const ds = new DecompressionStream("gzip");
+    const buf = await new Response(new Blob([bytes]).stream().pipeThrough(ds)).arrayBuffer();
+    return new Uint8Array(buf);
+  }
+  // Undo delta + mask.  Returns Float64Array shaped [...outer, nT] flattened.
+  async function decode(enc) {
+    const shape = enc.shape, nT = shape[shape.length - 1];
+    const rows = shape.slice(0, -1).reduce((a, b) => a * b, 1);
+    const dv = new Int16Array((await gunzip(b64(enc.v))).buffer);
+    const mask = await gunzip(b64(enc.m));
+    const out = new Float64Array(rows * nT);
+    for (let r = 0; r < rows; r++) {
+      let acc = 0;
+      const off = r * nT;
+      for (let t = 0; t < nT; t++) {
+        acc += dv[off + t];
+        const bit = off + t;
+        const on = (mask[bit >> 3] >> (7 - (bit & 7))) & 1;
+        out[off + t] = on ? acc / enc.scale : NaNv;
+      }
+    }
+    return out;
+  }
+
+  let A;
+  try {
+    A = {
+      mean: await decode(P.agg.mean),
+      sd: await decode(P.agg.sd),
+      n: await decode(P.agg.n),
+      cells: await decode(P.agg.cells),
+      omean: P.agg.omean ? await decode(P.agg.omean) : null,
+      on: P.agg.on ? await decode(P.agg.on) : null,
+      sky: P.skyline ? await decode(P.skyline.mean) : null,
+      skyN: P.skyline ? await decode(P.skyline.n) : null,
+      runs: P.runs ? await decode(P.runs.values) : null,
+    };
+  } catch (err) {
+    document.getElementById("panels").innerHTML =
+      '<p class="empty">This page needs a browser with <code>DecompressionStream</code> ' +
+      "(Chrome 80+, Firefox 113+, Safari 16.4+).<br>" + String(err) + "</p>";
+    return;
+  }
+
+  const nG = P.groups.length, nA = P.arms.length, nM = P.metrics.length, nT = P.t.length;
+  const aggAt = (buf, g, a, m) => buf.subarray(((g * nA + a) * nM + m) * nT, ((g * nA + a) * nM + m + 1) * nT);
+  const cellsAt = (g, a) => A.cells[g * nA + a];
+  const rT = P.runs ? P.runs.t.length : 0;
+  const runAt = (i, m) => A.runs.subarray((i * nM + m) * rT, (i * nM + m + 1) * rT);
+  // The skyline is one number per (group, arm, metric), encoded with a trailing
+  // axis of length 1 so it goes through the same delta codec as everything else.
+  const skyAt = (g, a, m) => (A.sky ? A.sky[(g * nA + a) * nM + m] : NaNv);
+  const skyNAt = (g, a, m) => (A.skyN ? A.skyN[(g * nA + a) * nM + m] : 0);
+
+  // ---- state --------------------------------------------------------------
+  // The eight VALIDATED categorical slots, contrast-checked in both themes.
+  const SERIES = ["--s1","--s2","--s3","--s4","--s5","--s6","--s7","--s8"];
+  const ALL = "__all__", EACH = "__each__";
+
+  // Past the validated eight, hues are GENERATED on the golden angle so a
+  // twelve-class overlay is drawable at all.  Two things keep that honest:
+  // the generated hues start only where the validated ones run out (so the
+  // common small overlay is still the checked palette), and lightness is
+  // picked for the live theme rather than left to a var() nested inside an SVG
+  // presentation attribute.  A theme flip re-renders; see the listener below.
+  let DARK = false;
+  function readTheme() {
+    const t = document.documentElement.dataset.theme;
+    DARK = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+  }
+  readTheme();
+  function paletteColor(i) {
+    if (i < SERIES.length) return `var(${SERIES[i]})`;
+    const h = Math.round((20 + (i - SERIES.length + 1) * 137.508) % 360);
+    return `hsl(${h}, 62%, ${DARK ? 66 : 40}%)`;
+  }
+  //: The one hue used when colour carries no information - split mode, where
+  //: every panel holds exactly one bold line and a second colour would be
+  //: inviting a comparison the layout does not make.
+  const SOLO = "var(--s1)";
+
+  // Categories in the #3156 map are `<class>@<band>` - the same twelve classes at
+  // three target sizes - and the band is that study's headline axis, so it gets
+  // its own control. Parsed out of the category names rather than added to the
+  // payload: every other study's categories are bare names, and a viewer that
+  // needs a schema change per study is a viewer nobody reuses. The control
+  // appears only when EVERY category carries a suffix and there is more than one
+  // band to choose between, for the same reason the embedder chips hide
+  // themselves at one embedder - a control with one option is furniture.
+  const BAND_ORDER = ["small", "medium", "large"];
+  const bandOf = (c) => { const i = String(c).lastIndexOf("@"); return i < 0 ? null : String(c).slice(i + 1); };
+  const BANDS = (() => {
+    const bs = P.categories.map(bandOf);
+    if (!bs.length || bs.some((b) => !b)) return [];
+    const u = [...new Set(bs)];
+    if (u.length < 2) return [];
+    const rank = (b) => { const i = BAND_ORDER.indexOf(b); return i < 0 ? BAND_ORDER.length : i; };
+    return u.sort((x, y) => rank(x) - rank(y) || x.localeCompare(y));
+  })();
+  const inBand = (c) => state.band === ALL || bandOf(c) === state.band;
+
+  const state = {
+    dataset: P.datasets.length > 1 ? ALL : P.datasets[0],
+    band: ALL,
+    category: ALL,
+    metric: P.metrics[0].key,
+    embedders: new Set(P.embedders),
+    arms: new Set(P.arms),
+    seedMode: "avg",
+    // Both off on open: the plain shipped-performance read is the least
+    // cluttered one, and each of these answers a follow-up question.
+    oracle: false,
+    overlay: false,
+  };
+
+  const gDataset = (g) => P.groups[g][0];
+  const gEmb = (g) => P.groups[g][1];
+  const gCat = (g) => P.groups[g][2];
+
+  function datasetsInPlay() {
+    return state.dataset === ALL || state.dataset === EACH ? P.datasets : [state.dataset];
+  }
+  function categoriesInPlay() {
+    const ds = new Set(datasetsInPlay());
+    const s = new Set();
+    P.groups.forEach((g, i) => { if (ds.has(gDataset(i))) s.add(gCat(i)); });
+    const all = [...s].sort().filter(inBand);
+    return state.category === ALL || state.category === EACH ? all : all.filter((c) => c === state.category);
+  }
+
+  // ---- controls -----------------------------------------------------------
+  $("title").textContent = P.title;
+  $("subtitle").textContent = P.subtitle;
+
+  const dsSel = $("ds");
+  dsSel.innerHTML =
+    (P.datasets.length > 1
+      ? `<option value="${ALL}">All datasets — averaged together</option>` +
+        `<option value="${EACH}">Each dataset — one line each</option>`
+      : "") +
+    P.datasets.map((d) => `<option value="${esc(d)}">${esc(d)}</option>`).join("");
+  dsSel.value = state.dataset;
+  dsSel.onchange = () => { state.dataset = dsSel.value; fillCats(); render(); };
+
+  const catSel = $("cat");
+  function fillCats() {
+    const cur = state.category;
+    const ds = new Set(datasetsInPlay());
+    const s = new Set();
+    P.groups.forEach((g, i) => { if (ds.has(gDataset(i))) s.add(gCat(i)); });
+    const cats = [...s].sort().filter(inBand);
+    catSel.innerHTML =
+      `<option value="${ALL}">All categories — averaged together</option>` +
+      `<option value="${EACH}">Each category — one line each</option>` +
+      cats.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+    state.category = cur === ALL || cur === EACH || cats.includes(cur) ? cur : ALL;
+    catSel.value = state.category;
+  }
+  catSel.onchange = () => { state.category = catSel.value; render(); };
+
+  const bandSel = $("band");
+  if (!BANDS.length) {
+    $("bandWrap").style.display = "none";
+  } else {
+    bandSel.innerHTML =
+      `<option value="${ALL}">All sizes</option>` +
+      BANDS.map((b) => `<option value="${esc(b)}">${esc(b)}</option>`).join("");
+    bandSel.value = state.band;
+    // Narrowing the band can strip the category currently selected, so refill
+    // rather than leaving a selection that names no group: `fillCats` falls back
+    // to "all categories" when the current one is no longer on offer.
+    bandSel.onchange = () => { state.band = bandSel.value; fillCats(); render(); };
+  }
+  fillCats();
+
+  const mSel = $("metric");
+  mSel.innerHTML = P.metrics.map((m) => `<option value="${esc(m.key)}">${esc(m.label)}</option>`).join("");
+  mSel.value = state.metric;
+  mSel.onchange = () => { state.metric = mSel.value; render(); };
+
+  // Embedders: a non-empty subset, one panel each.  Hidden entirely when the
+  // study ran a single embedder - a control with one option is furniture.
+  if (P.embedders.length < 2) $("embWrap").style.display = "none";
+  chips($("emb"), P.embedders.map((e) => ({ id: e, label: e || "(unnamed)" })), state.embedders, render);
+  chips($("arms"), P.arms.map((a) => ({ id: a, label: a })), state.arms, render);
+
+  $("seedMode").querySelectorAll("input").forEach((inp) => {
+    inp.onchange = () => {
+      state.seedMode = inp.value;
+      $("seedMode").querySelectorAll("label").forEach((l) =>
+        l.dataset.on = l.querySelector("input").checked ? "1" : "0");
+      render();
+    };
+  });
+  if (!P.runs) {
+    const each = $("seedMode").querySelector('input[value="each"]');
+    each.disabled = true;
+    each.closest("label").title = P.runs_note || "no per-seed data in this payload";
+    each.closest("label").style.opacity = ".45";
+  }
+
+  // The two draw toggles.  `oracle` is per-metric: the oracle is a CUT, so it
+  // moves every metric that is a statement about one cut and none of the two
+  // that integrate over all of them.  Rather than offer a switch that does
+  // nothing on AUROC, the box disables itself and says why - the same rule the
+  // embedder chips follow when a study ran one embedder.
+  const oracleBox = $("oracleBox"), overlayBox = $("overlayBox");
+  oracleBox.checked = state.oracle;
+  overlayBox.checked = state.overlay;
+  oracleBox.onchange = () => { state.oracle = oracleBox.checked; render(); };
+  overlayBox.onchange = () => { state.overlay = overlayBox.checked; render(); };
+  function syncDraw(spec) {
+    const can = !!spec.oracle;
+    oracleBox.disabled = !can;
+    $("oracleLab").dataset.off = can ? "0" : "1";
+    $("oracleLab").dataset.on = can && state.oracle ? "1" : "0";
+    $("oracleLab").title = can
+      ? "Draw what the same model would have scored had its threshold been chosen with the test labels in hand."
+      : (spec.ranking
+        ? `${spec.label} integrates over every threshold, so the oracle CUT cannot move it — the two lines would be identical.`
+        : `This run emitted no oracle cut for ${spec.label}.`);
+    $("overlayLab").dataset.on = state.overlay ? "1" : "0";
+    // Never leave a checked-but-inert box on screen.
+    oracleBox.checked = can && state.oracle;
+  }
+
+  // Every chip group is a NON-EMPTY subset - arms exactly as much as embedders.
+  // An empty one has no honest rendering: the page would either go blank or
+  // quietly fall back to "all", and a reader who did not notice would take a
+  // chart of everything for a chart of nothing.
+  //
+  // The last chip still on is therefore LOCKED rather than silently snapped
+  // back. Both stop the same thing; only one of them tells the reader why the
+  // click did nothing, and a control that ignores a click reads as broken.
+  function chips(host, items, set, onChange) {
+    host.innerHTML = "";
+    items.forEach((it) => {
+      const lab = document.createElement("label");
+      lab.className = "chip";
+      lab.innerHTML = `<input type="checkbox"><span class="sw"></span><span>${esc(it.label)}</span>`;
+      const box = lab.querySelector("input");
+      box.checked = set.has(it.id);
+      box.onchange = () => {
+        if (box.checked) set.add(it.id);
+        else if (set.size > 1) set.delete(it.id);
+        else { box.checked = true; return; }   // the lock, as a failsafe
+        host._sync();
+        onChange();
+      };
+      host.appendChild(lab);
+      lab._box = box; lab._id = it.id;
+    });
+    host._sync = () => {
+      const last = set.size === 1;
+      [...host.children].forEach((lab) => {
+        const on = set.has(lab._id);
+        lab.dataset.on = on ? "1" : "0";
+        const col = on ? (host._colorOf ? host._colorOf(lab._id) : "") : "";
+        lab.querySelector(".sw").style.background = col || "var(--axis)";
+        lab.querySelector(".sw").style.visibility = host._colorOf ? "visible" : "hidden";
+        const locked = on && last;
+        lab.dataset.locked = locked ? "1" : "0";
+        lab.title = locked ? "At least one must stay selected" : "";
+      });
+    };
+    host._sync();
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  }
+
+  // ---- the series model ---------------------------------------------------
+  //
+  // Two modes, chosen by the reader rather than inferred:
+  //
+  //   SPLIT (default) - every dimension that varies becomes a PANEL, so each
+  //     panel carries exactly one bold line plus the +/-1 SD shadow of the
+  //     population under it.  The line is drawn in one colour, because with a
+  //     single series per panel hue would be decoration and a reader is
+  //     entitled to assume any colour difference means something.  This is the
+  //     shadow's honest home: two shaded bands over one another are two clouds
+  //     nobody can read the overlap of.
+  //
+  //   OVERLAY - every dimension that varies becomes a HUE and everything lands
+  //     on one chart, with the shadows dropped.  This is the comparison view:
+  //     bikes vs birds, SigLIP vs CLIP, arm vs arm, all against one y-scale.
+  //
+  // Overlaying two embedders is not averaging them - the ban that keeps
+  // embedders in separate panels is a ban on pooling two representations of the
+  // haystack into one number, and drawing two lines pools nothing.
+  const DIMS = ["embedder", "arm", "category", "dataset"];
+
+  function plan() {
+    const values = {
+      embedder: P.embedders.filter((e) => state.embedders.has(e)),
+      arm: P.arms.filter((a) => state.arms.has(a)),
+      // `null` means "pooled over everything in play" rather than a single value.
+      category: state.category === EACH ? categoriesInPlay() : [state.category === ALL ? null : state.category],
+      dataset: state.dataset === EACH ? datasetsInPlay() : [state.dataset === ALL ? null : state.dataset],
+    };
+    const varying = DIMS.filter((d) => values[d].length > 1);
+    return { values, varying, overlay: state.overlay, hueDims: state.overlay ? varying : [], facetDims: state.overlay ? [] : varying };
+  }
+
+  // Colour follows the VALUE, not its position in the current selection, so
+  // deselecting one series never repaints the survivors.  With several
+  // dimensions varying at once the index is mixed-radix over the STUDY's own
+  // lists - each digit is that value's position in the study, so removing a
+  // category leaves every other series' colour exactly where it was.
+  const ORDER = {
+    embedder: (v) => P.embedders.indexOf(v),
+    arm: (v) => P.arms.indexOf(v),
+    category: (v) => P.categories.indexOf(v),
+    dataset: (v) => P.datasets.indexOf(v),
+  };
+  const SIZE = {
+    embedder: () => Math.max(1, P.embedders.length),
+    arm: () => Math.max(1, P.arms.length),
+    category: () => Math.max(1, P.categories.length),
+    dataset: () => Math.max(1, P.datasets.length),
+  };
+  function hueIndex(hueDims, sel) {
+    let i = 0;
+    for (const d of hueDims) i = i * SIZE[d]() + Math.max(0, ORDER[d](sel[d]));
+    return i;
+  }
+
+  function groupsFor(sel) {
+    const cats = new Set(sel.category === null ? categoriesInPlay() : [sel.category]);
+    const dss = new Set(sel.dataset === null ? datasetsInPlay() : [sel.dataset]);
+    const out = [];
+    P.groups.forEach((_, i) => {
+      if (gEmb(i) === sel.embedder && dss.has(gDataset(i)) && cats.has(gCat(i))) out.push(i);
+    });
+    return out;
+  }
+
+  // ---- pooling ------------------------------------------------------------
+  // Exact, because the payload carries n beside the moments: a mean of means
+  // would weight a category that trained on 3 cells like one that trained on
+  // 42, which is the survivorship the coverage strip exists to expose.
+  function pooled(groups, ai, mi) {
+    const mean = new Float64Array(nT).fill(NaNv);
+    const sd = new Float64Array(nT).fill(NaNv);
+    const cov = new Float64Array(nT);
+    // The oracle carries its own weights: an oracle that declines to flag
+    // anything has no precision at a click where the trained cut's precision
+    // is perfectly well defined, so the two are not measured on the same cells.
+    const omean = new Float64Array(nT).fill(NaNv);
+    const ocov = new Float64Array(nT);
+    let cells = 0;
+    for (const g of groups) cells += cellsAt(g, ai);
+    for (let t = 0; t < nT; t++) {
+      let n = 0, s1 = 0, s2 = 0, on = 0, os1 = 0;
+      for (const g of groups) {
+        const c = aggAt(A.n, g, ai, mi)[t];
+        if (A.omean) {
+          const oc = aggAt(A.on, g, ai, mi)[t];
+          const omu = aggAt(A.omean, g, ai, mi)[t];
+          if (oc > 0 && Number.isFinite(omu)) { on += oc; os1 += oc * omu; }
+        }
+        if (!(c > 0)) continue;
+        const mu = aggAt(A.mean, g, ai, mi)[t];
+        const s = aggAt(A.sd, g, ai, mi)[t];
+        if (!Number.isFinite(mu)) continue;
+        n += c; s1 += c * mu; s2 += c * (s * s + mu * mu);
+      }
+      if (n > 0) {
+        const mu = s1 / n;
+        mean[t] = mu;
+        sd[t] = Math.sqrt(Math.max(0, s2 / n - mu * mu));
+      }
+      if (on > 0) omean[t] = os1 / on;
+      cov[t] = cells > 0 ? n / cells : 0;
+      ocov[t] = cells > 0 ? on / cells : 0;
+    }
+    return { mean, sd, cov, omean, ocov, cells };
+  }
+
+  // The supervised skyline, pooled the same way and for the same reason: it is
+  // a per-cell number, so "all categories" must weight it by the cells that
+  // produced one.  Returns NaN when this run measured no skyline.
+  function skyline(groups, ai, mi) {
+    if (!A.sky) return NaNv;
+    let n = 0, s1 = 0;
+    for (const g of groups) {
+      const c = skyNAt(g, ai, mi), v = skyAt(g, ai, mi);
+      if (c > 0 && Number.isFinite(v)) { n += c; s1 += c * v; }
+    }
+    return n > 0 ? s1 / n : NaNv;
+  }
+
+  function runLines(groups, ai, mi) {
+    if (!P.runs) return [];
+    const want = new Set(groups);
+    const out = [];
+    P.runs.index.forEach((ix, i) => {
+      if (ix[1] !== ai || !want.has(ix[0])) return;
+      const v = runAt(i, mi);
+      for (let t = 0; t < rT; t++) if (Number.isFinite(v[t])) { out.push(v); return; }
+    });
+    return out;
+  }
+
+  // ---- render -------------------------------------------------------------
+  const SOLID = P.solid_coverage;
+  // "Fully measured", for deciding whether the coverage strip has anything to
+  // show. Not 1.0: coverage is a ratio of integers and a pooled slice can land a
+  // hair under it, which would keep a flat strip on screen forever.
+  const COV_FLAT = 0.995;
+  const MAX_PANELS = 16;
+  const fmt = (v, d = 3) => (Number.isFinite(v) ? v.toFixed(d) : "—");
+  const shortLabel = (dim, v) =>
+    v === null ? (dim === "category" ? "all categories" : "all datasets")
+    : dim === "embedder" ? (String(v) || "(unnamed embedder)")
+    : String(v);
+  // In overlay the name has to name the COMBINATION, because that is what the
+  // hue stands for; in split the panel title already carries every varying
+  // dimension, so the series is named by its arm and nothing is said twice.
+  function seriesName(pl, sel, useOverlay) {
+    const dims = useOverlay ? pl.hueDims : [];
+    return dims.length ? dims.map((d) => shortLabel(d, sel[d])).join(" · ") : String(sel.arm);
+  }
+
+  function render() {
+    const host = $("panels");
+    host.innerHTML = "";
+    host.classList.remove("one");
+    const pl = plan();
+    const mi = P.metrics.findIndex((m) => m.key === state.metric);
+    const spec = P.metrics[mi];
+
+    syncDraw(spec);
+    // Chip swatches carry colour only where hue means something: overlay mode
+    // with arm among the varying dimensions.  A swatch beside a chip in split
+    // mode would promise a colour the chart never uses.
+    $("arms")._colorOf = pl.hueDims.includes("arm")
+      ? (v) => paletteColor(hueIndex(pl.hueDims, { embedder: pl.values.embedder[0], arm: v, category: pl.values.category[0], dataset: pl.values.dataset[0] }))
+      : null;
+    $("arms")._sync();
+    $("emb")._sync();
+
+    // Every combination the selection names, as one flat list.  In overlay mode
+    // they all land on one panel and are told apart by hue; in split mode each
+    // one IS a panel and holds a single line.
+    let combos = [{}];
+    for (const dim of DIMS) {
+      const next = [];
+      for (const c of combos) for (const v of pl.values[dim]) next.push({ ...c, [dim]: v });
+      combos = next;
+    }
+    const useOverlay = pl.overlay;
+    let facetKeys = useOverlay ? [{}] : combos;
+    let hidden = 0;
+    if (facetKeys.length > MAX_PANELS) { hidden = facetKeys.length - MAX_PANELS; facetKeys = facetKeys.slice(0, MAX_PANELS); }
+
+    const seriesFor = (fk) => (useOverlay ? combos : [fk]);
+    const panels = facetKeys.map((fk) => {
+      const per = [];
+      for (const sel of seriesFor(fk)) {
+        const ai = P.arms.indexOf(sel.arm);
+        if (ai < 0) continue;
+        const groups = groupsFor(sel);
+        if (!groups.length) continue;
+        per.push({
+          sel, ai,
+          color: useOverlay ? paletteColor(hueIndex(pl.hueDims, sel)) : SOLO,
+          name: seriesName(pl, sel, useOverlay),
+          agg: pooled(groups, ai, mi),
+          sky: skyline(groups, ai, mi),
+          runs: state.seedMode === "each" ? runLines(groups, ai, mi) : [],
+        });
+      }
+      return { fk, per };
+    }).filter((p) => p.per.length);
+
+    // One y-scale across every panel: two panels on two scales is a dual-axis
+    // chart wearing a disguise.
+    const showOracle = state.oracle && !!spec.oracle;
+    const showSky = panels.some((p) => p.per.some((q) => Number.isFinite(q.sky)));
+    let lo = Infinity, hi = -Infinity;
+    for (const p of panels) for (const q of p.per) {
+      for (let t = 0; t < nT; t++) {
+        const m = q.agg.mean[t], sd = q.agg.sd[t];
+        if (!Number.isFinite(m)) continue;
+        // The shadow is drawn only where it is honest - one line per panel -
+        // so it only widens the scale there.
+        const wide = !useOverlay && state.seedMode === "avg" && Number.isFinite(sd);
+        lo = Math.min(lo, wide ? m - sd : m);
+        hi = Math.max(hi, wide ? m + sd : m);
+      }
+      if (showOracle) for (let t = 0; t < nT; t++) {
+        const o = q.agg.omean[t];
+        if (Number.isFinite(o)) { lo = Math.min(lo, o); hi = Math.max(hi, o); }
+      }
+      // The notches are the whole point of the left and right margins: a
+      // skyline clipped off the bottom is a floor the reader cannot see.
+      if (Number.isFinite(q.sky)) { lo = Math.min(lo, q.sky); hi = Math.max(hi, q.sky); }
+      for (const v of q.runs) for (let t = 0; t < rT; t++) {
+        if (Number.isFinite(v[t])) { lo = Math.min(lo, v[t]); hi = Math.max(hi, v[t]); }
+      }
+    }
+    if (!Number.isFinite(lo) || !panels.length) {
+      host.innerHTML = '<p class="empty">Nothing measured in this slice.</p>';
+      $("reading").textContent = ""; $("table").innerHTML = ""; $("legend").innerHTML = "";
+      return;
+    }
+    const pad = (hi - lo) * 0.06 || 0.02;
+    lo = Math.max(spec.lo, lo - pad); hi = Math.min(spec.hi, hi + pad);
+
+    // Does the coverage strip earn its space in THIS selection?
+    //
+    // It exists to expose survivorship: a mean at click 140 pooled from a third
+    // of the cells is a different quantity from one pooled from all of them, and
+    // nothing else on the page says which you are looking at. But in a study
+    // where every cell runs to the horizon it is a flat 100% line under every
+    // panel -- a fifth of each panel's height, in every panel, carrying one bit
+    // that never changes. Same rule as the embedder chips at one embedder: an
+    // axis with one value is furniture.
+    //
+    // The run-up does NOT count as variation. Coverage climbs from nothing to
+    // full over the first clicks because detectors only start once a run has
+    // both classes, and the main chart already says so by DASHING the mean
+    // there. So the strip's only unique information is a dip AFTER every series
+    // has come up, and that is exactly what this tests.
+    //
+    // Decided across all panels rather than per panel: panels of two different
+    // heights are two charts, which is why the y-scale is shared already.
+    let covStart = -1;
+    for (let t = 1; t < nT && covStart < 0; t++) {
+      let all = true;
+      for (const p of panels) for (const q of p.per) if (!(q.agg.cov[t] >= COV_FLAT)) all = false;
+      if (all) covStart = t;
+    }
+    let showCov = true;
+    if (covStart >= 0) {
+      let covMin = 1;
+      for (const p of panels) for (const q of p.per) {
+        for (let t = covStart; t < nT; t++) if (Number.isFinite(q.agg.cov[t])) covMin = Math.min(covMin, q.agg.cov[t]);
+      }
+      showCov = covMin < COV_FLAT;
+    }
+
+    const nSeries = new Set(panels.flatMap((p) => p.per.map((q) => q.name))).size;
+    const opt = { showCov, showOracle, showSky, useOverlay, nSeries };
+    host.classList.toggle("one", panels.length === 1);
+    for (const p of panels) host.appendChild(panel(p, pl, spec, lo, hi, opt));
+    legend(pl, panels, opt);
+    reading(spec, pl, hidden, facetKeys.length, opt);
+    tableView(spec, panels, opt);
+  }
+
+  // A theme flip changes the lightness the generated hues are picked at, and
+  // those are baked into the SVG rather than left to a CSS variable, so the
+  // page has to redraw.  Cheap: everything is already in memory.
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { readTheme(); render(); });
+
+  const W = 660, H = 300, CH = 54, M = { l: 56, r: 14, t: 10, b: 26 };
+
+  function panelTitle(fk, pl) {
+    const bits = [];
+    if (P.embedders.length > 1 && "embedder" in fk) bits.push(shortLabel("embedder", fk.embedder));
+    for (const dim of pl.facetDims) if (dim !== "embedder" && dim in fk) bits.push(shortLabel(dim, fk[dim]));
+    if (bits.length) return bits.join(" · ");
+    return (P.embedders.length === 1 ? P.embedders[0] : "") || P.title;
+  }
+
+  function panelSub(pl) {
+    const bits = [];
+    const splits = (d) => pl.hueDims.includes(d) || pl.facetDims.includes(d);
+    bits.push(splits("dataset")
+      ? null
+      : (state.dataset === ALL ? `all ${P.datasets.length} datasets pooled` : state.dataset));
+    const nCats = categoriesInPlay().length;
+    const pooled = state.band === ALL
+      ? `all ${nCats} categories pooled`
+      : `all ${nCats} ${state.band}-band categories pooled`;
+    bits.push(splits("category")
+      ? (state.band === ALL ? null : `${state.band} band`)
+      : (state.category === ALL ? pooled : state.category));
+    bits.push(state.seedMode === "each" ? "every seed" : "seeds averaged");
+    return bits.filter(Boolean).join(" · ");
+  }
+
+  function panel(pnl, pl, spec, lo, hi, opt) {
+    const { showCov, showOracle, useOverlay } = opt;
+    const el = document.createElement("div");
+    el.className = "panel";
+    const tmax = P.t[nT - 1];
+    const x = (t) => M.l + (t / tmax) * (W - M.l - M.r);
+    const y = (v) => M.t + (1 - (v - lo) / (hi - lo || 1)) * (H - M.t - M.b);
+    const yc = (c) => H + 16 + (1 - c) * (CH - 22);
+
+    const nCells = pnl.per.reduce((a, q) => a + q.agg.cells, 0);
+    // In overlay the panel IS the page, so its heading would be the <h1> again.
+    const head = useOverlay ? "" : panelTitle(pnl.fk, pl);
+    el.innerHTML =
+      (head ? `<h2>${esc(head)}</h2>` : "") +
+      `<p class="pn">${esc(panelSub(pl))} · ${nCells} cell${nCells === 1 ? "" : "s"}</p>`;
+
+    const parts = [];
+    const yticks = ticks(lo, hi, 5);
+    const xticks = [...new Set([0, ...ticks(0, tmax, 5), tmax])].filter((t) => t >= 0 && t <= tmax);
+    for (const v of yticks) parts.push(
+      `<line x1="${M.l}" x2="${W - M.r}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="var(--grid)" stroke-width="1"/>`,
+      `<text x="${M.l - 8}" y="${(y(v) + 4).toFixed(1)}" text-anchor="end" font-size="11" fill="var(--muted)">${trim(v)}</text>`);
+    for (const t of xticks) parts.push(
+      `<text x="${x(t).toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="11" fill="var(--muted)">${Math.round(t)}</text>`);
+    parts.push(`<line x1="${M.l}" x2="${W - M.r}" y1="${H - M.b}" y2="${H - M.b}" stroke="var(--axis)"/>`);
+
+    // The click-0 anchor is a NOTCH, not the first point of the curve, and
+    // nothing joins it to the curve.  The dotted bridge that used to run from
+    // the text sort to the first trained click was drawing across a stretch
+    // where nothing was measured, in the one place a reader's eye goes first;
+    // a gap says the same thing and asserts nothing.  So the curves start at
+    // the first trained click and the two reference marks sit in the margins.
+    const t0 = P.anchor.has ? 1 : 0;
+    const ts = P.t.slice(t0);
+    const NOTCH = 12;
+    const clamp = (v) => Math.min(hi, Math.max(lo, v));
+    const inRange = (v) => Number.isFinite(v) && v >= lo && v <= hi;
+
+    for (const q of pnl.per) {
+      if (state.seedMode === "each") {
+        for (const v of q.runs) {
+          const from = P.anchor.has && P.runs.t[0] === 0 ? 1 : 0;
+          parts.push(
+            `<path d="${path(P.runs.t.slice(from), v.subarray(from), x, y, lo, hi, true)}" fill="none" stroke="${q.color}" stroke-width="1" opacity="0.16"/>`);
+          // A run that never trained has ONLY its click-0 value, and a
+          // single-point path draws nothing - so it gets its own faint notch,
+          // or total starvation renders as an absent line.
+          if (P.anchor.has && inRange(v[0])) parts.push(
+            `<line x1="${M.l.toFixed(1)}" x2="${(M.l + NOTCH * 0.6).toFixed(1)}" y1="${y(v[0]).toFixed(1)}" y2="${y(v[0]).toFixed(1)}" stroke="${q.color}" stroke-width="1" opacity="0.3"/>`);
+        }
+      } else if (!useOverlay) {
+        // The shadow lives only in split mode.  Two translucent clouds over one
+        // another are a third shape nobody can read, which is exactly why the
+        // overlay drops them rather than stacking them.
+        parts.push(`<path d="${band(q.agg, x, y, lo, hi, t0)}" fill="${q.color}" opacity="0.10"/>`);
+      }
+      // The mean, dashed wherever it describes fewer than SOLID of that
+      // series' cells: there it is a level for a subset, not for the grid.
+      parts.push(
+        `<path d="${path(ts, q.agg.mean.subarray(t0), x, y, lo, hi, true)}" fill="none" stroke="${q.color}" stroke-width="1.1" stroke-dasharray="3 3" opacity="0.85"/>`,
+        `<path d="${path(ts, mask(q.agg.mean, q.agg.cov).subarray(t0), x, y, lo, hi)}" fill="none" stroke="${q.color}" stroke-width="2"/>`);
+      // The oracle: the same model, cut with the test labels in hand.  Dotted
+      // against the solid performance line, in the SAME hue, because it is not
+      // another system - it is the ceiling this one's threshold left on the
+      // table, and the gap between the two IS the calibration regret.
+      if (showOracle) parts.push(
+        `<path d="${path(ts, mask(q.agg.omean, q.agg.ocov).subarray(t0), x, y, lo, hi, true)}" fill="none" stroke="${q.color}" stroke-width="1.4" stroke-dasharray="1 3" stroke-linecap="round" opacity="0.95"/>`);
+      // Baseline notch, hard left: what typing the query got for free.
+      if (P.anchor.has && inRange(q.agg.mean[0])) parts.push(
+        `<line x1="${M.l.toFixed(1)}" x2="${(M.l + NOTCH).toFixed(1)}" y1="${y(q.agg.mean[0]).toFixed(1)}" y2="${y(q.agg.mean[0]).toFixed(1)}" stroke="${q.color}" stroke-width="3"/>`);
+      // Skyline notch, hard right: the same head trained on every label there
+      // is.  A notch and not a rule across the panel, because it is a floor the
+      // loop is walking toward, not a level it reached at click 3.
+      if (inRange(q.sky)) parts.push(
+        `<line x1="${(W - M.r - NOTCH).toFixed(1)}" x2="${(W - M.r).toFixed(1)}" y1="${y(q.sky).toFixed(1)}" y2="${y(q.sky).toFixed(1)}" stroke="${q.color}" stroke-width="3"/>`);
+      if (showCov) {
+        parts.push(
+          `<path d="${path(P.t.slice(1), q.agg.cov.slice(1), x, yc, 0, 1)}" fill="none" stroke="${q.color}" stroke-width="1.2"/>`);
+        // Click 0 is a point, not the start of the line: every cell is measured
+        // there (it has a text sort) and none has a detector at click 1, so a
+        // joined line renders two different facts as a spike.
+        if (P.anchor.has && Number.isFinite(q.agg.cov[0])) parts.push(
+          `<circle cx="${x(0).toFixed(1)}" cy="${yc(q.agg.cov[0]).toFixed(1)}" r="2" fill="${q.color}"/>`);
+      }
+    }
+    if (showCov) parts.push(
+      `<line x1="${M.l}" x2="${W - M.r}" y1="${yc(SOLID).toFixed(1)}" y2="${yc(SOLID).toFixed(1)}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="1 3"/>`,
+      `<text x="${M.l - 8}" y="${(yc(1) + 4).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--muted)">100%</text>`,
+      `<text x="${M.l - 8}" y="${(yc(0) + 4).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--muted)">0%</text>`,
+      `<text x="${W - M.r}" y="${(yc(0) + 14).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--muted)">cells measured</text>`);
+    const foot = showCov ? H + CH : H;
+    parts.push(
+      `<text x="${(M.l + (W - M.l) / 2).toFixed(0)}" y="${foot + 12}" text-anchor="middle" font-size="11" fill="var(--muted)">clicks spent${P.anchor.has ? "  (0 = the free text sort)" : ""}</text>`,
+      `<text transform="translate(13,${(M.t + (H - M.b) / 2).toFixed(0)}) rotate(-90)" text-anchor="middle" font-size="11" fill="var(--muted)">${esc(spec.label)}</text>`);
+
+    el.insertAdjacentHTML("beforeend",
+      `<svg viewBox="0 0 ${W} ${foot + 20}" role="img" aria-label="${esc(spec.label)} against clicks">${parts.join("")}</svg>`);
+    hover(el, pnl, spec, x, y, opt);
+    return el;
+  }
+
+  // ---- legend -------------------------------------------------------------
+  // Two jobs, and the second one is why it is always on screen: it says what
+  // hue MEANS in this configuration - which the reader chose, and which
+  // therefore changes - and it decodes the line styles, which carry as much of
+  // the chart's meaning as the colours do.
+  function legend(pl, panels, opt) {
+    const host = $("legend");
+    const heading = opt.useOverlay
+      ? (pl.hueDims.length
+        ? `Colour = <b>${pl.hueDims.map(esc).join(" × ")}</b>, all on one chart`
+        : `One series`)
+      : (panels.length > 1
+        ? `<b>One chart per ${pl.facetDims.map(esc).join(" × ")}</b> — one line each, so the shaded spread underneath it is readable. Colour carries no meaning here; tick <b>overlay on one chart</b> to compare them directly.`
+        : `One series`);
+    let rows = "", warn = "";
+    if (opt.useOverlay) {
+      const seen = new Map();
+      for (const p of panels) for (const q of p.per) if (!seen.has(q.name)) seen.set(q.name, q.color);
+      rows = `<div class="legend">` + [...seen].map(([name, col]) =>
+        `<span><i style="background:${col}"></i>${esc(name)}</span>`).join("") + `</div>`;
+      // The palette has 8 contrast-checked slots; past them hues are generated
+      // on the golden angle so a twelve-class overlay is drawable at all. That
+      // is a real trade and the reader is told where it starts, at the top,
+      // where the swatch list has not already pushed it off screen.
+      if (seen.size > SERIES.length) warn =
+        `<div class="legend-warn"><b>${seen.size} series on one chart</b> — past the palette's ` +
+        `${SERIES.length} contrast-checked slots, so the rest are generated on the golden angle: ` +
+        `distinguishable, but not validated${seen.size > 20 ? ", and at this count the chart is a hairball" : ""}. ` +
+        `Narrow the selection, or untick <b>overlay</b> for one chart each.</div>`;
+    }
+    const key = [];
+    const stroke = (extra) => `<svg viewBox="0 0 22 10" aria-hidden="true"><line x1="0" y1="5" x2="22" y2="5" stroke="var(--ink-2)" ${extra}/></svg>`;
+    key.push(`<span>${stroke('stroke-width="2"')}measured level</span>`);
+    key.push(`<span>${stroke('stroke-width="1.1" stroke-dasharray="3 3"')}a subset of the cells</span>`);
+    if (opt.showOracle) key.push(`<span>${stroke('stroke-width="1.4" stroke-dasharray="1 3" stroke-linecap="round"')}oracle threshold</span>`);
+    if (P.anchor.has) key.push(
+      `<span><svg viewBox="0 0 22 10" aria-hidden="true"><line x1="0" y1="5" x2="9" y2="5" stroke="var(--ink-2)" stroke-width="3"/></svg>${esc(P.anchor.label)}</span>`);
+    if (opt.showSky) key.push(
+      `<span><svg viewBox="0 0 22 10" aria-hidden="true"><line x1="13" y1="5" x2="22" y2="5" stroke="var(--ink-2)" stroke-width="3"/></svg>${esc(P.skyline.label)}</span>`);
+    if (!opt.useOverlay) key.push(`<span><i style="width:16px;height:9px;border-radius:2px;background:${SOLO};opacity:.22;display:inline-block"></i>±1 SD across cells</span>`);
+    host.innerHTML =
+      warn + `<div class="legend-head">${heading}</div>` + rows +
+      `<div class="legend-key">${key.join("")}</div>`;
+  }
+
+  function mask(vals, cov) {
+    const out = new Float64Array(vals.length);
+    for (let i = 0; i < vals.length; i++) out[i] = cov[i] >= SOLID ? vals[i] : NaNv;
+    return out;
+  }
+  // `bridge` draws straight through the clicks with no measurement instead of
+  // lifting the pen.  Used for the thin dashed line only, and that is the whole
+  // reason it is dashed: it is what carries a series across a stretch of low or
+  // absent coverage without claiming a level there.  The solid line never
+  // bridges - a solid segment must be a level.
+  //
+  // It does NOT bridge the click-0 anchor to the first trained click any more.
+  // That stretch is now a plain gap with a notch in the left margin: a dotted
+  // line across it was the most prominent mark on the chart and it stood for a
+  // measurement nobody made.
+  function path(ts, vals, x, y, lo, hi, bridge) {
+    let d = "", pen = false;
+    for (let i = 0; i < ts.length; i++) {
+      const v = vals[i];
+      if (!Number.isFinite(v)) { if (!bridge) pen = false; continue; }
+      const px = x(ts[i]).toFixed(1), py = y(Math.min(hi, Math.max(lo, v))).toFixed(1);
+      d += (pen ? "L" : "M") + px + " " + py + " ";
+      pen = true;
+    }
+    return d;
+  }
+  // Segmented on purpose.  Skipping the un-measured clicks and joining what is
+  // left would draw one polygon straight across a stretch where nothing was
+  // measured, which is the exact opposite of what the dashed-mean rule says
+  // there.  Starts at *from* so the click-0 notch is never a corner of it.
+  function band(agg, x, y, lo, hi, from) {
+    const segs = [];
+    let up = [], dn = [];
+    const flush = () => {
+      if (up.length > 1) segs.push("M" + up.join(" L") + " L" + dn.reverse().join(" L") + " Z");
+      up = []; dn = [];
+    };
+    for (let i = from || 0; i < nT; i++) {
+      const m = agg.mean[i], s = agg.sd[i];
+      if (!Number.isFinite(m) || !Number.isFinite(s) || agg.cov[i] < SOLID) { flush(); continue; }
+      up.push(`${x(P.t[i]).toFixed(1)} ${y(Math.min(hi, m + s)).toFixed(1)}`);
+      dn.push(`${x(P.t[i]).toFixed(1)} ${y(Math.max(lo, m - s)).toFixed(1)}`);
+    }
+    flush();
+    return segs.join(" ");
+  }
+  // Round tick values, not range/n: an axis reading 0.475 / 0.391 / 0.307 is a
+  // number the reader has to decode before they can use it.
+  function ticks(a, b, n) {
+    const raw = (b - a) / Math.max(1, n);
+    if (!(raw > 0)) return [a];
+    const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((v) => v >= raw) || 10 * mag;
+    const out = [];
+    for (let v = Math.ceil(a / step) * step; v <= b + step * 1e-9; v += step) out.push(Math.round(v / step) * step);
+    return out;
+  }
+  const trim = (v) => {
+    const a = Math.abs(v);
+    if (a >= 100 || v === 0) return v.toFixed(0);
+    return a >= 1 ? String(+v.toFixed(2)) : String(+v.toFixed(4));
+  };
+
+  // ---- hover: crosshair + tooltip ----------------------------------------
+  function hover(el, pnl, spec, x, y, opt) {
+    const showCov = opt.showCov;
+    const svg = el.querySelector("svg");
+    const tip = document.createElement("div");
+    tip.className = "tip";
+    el.appendChild(tip);
+    const cross = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    cross.setAttribute("stroke", "var(--axis)");
+    cross.setAttribute("stroke-width", "1");
+    cross.setAttribute("y1", M.t); cross.setAttribute("y2", H - M.b);
+    cross.style.opacity = "0";
+    svg.appendChild(cross);
+    const tmax = P.t[nT - 1];
+
+    svg.addEventListener("pointermove", (ev) => {
+      const r = svg.getBoundingClientRect();
+      const vx = ((ev.clientX - r.left) / r.width) * W;
+      if (vx < M.l || vx > W - M.r) return hide();
+      const t = Math.round(((vx - M.l) / (W - M.l - M.r)) * tmax);
+      let i = P.t.indexOf(Math.max(P.t[0], Math.min(tmax, t)));
+      if (i < 0) i = 0;
+      cross.setAttribute("x1", x(P.t[i])); cross.setAttribute("x2", x(P.t[i]));
+      cross.style.opacity = "1";
+      const rows = pnl.per.map((q) =>
+        `<tr><td class="k"><span class="sw" style="background:${q.color}"></span>${esc(q.name)}</td>` +
+        `<td class="v">${fmt(q.agg.mean[i])}</td>` +
+        (opt.showOracle ? `<td class="v" style="color:var(--ink-2);padding-left:10px">${fmt(q.agg.omean[i])}</td>` : "") +
+        (opt.showSky ? `<td class="v" style="color:var(--ink-2);padding-left:10px">${fmt(q.sky)}</td>` : "") +
+        (showCov ? `<td class="v" style="color:var(--muted);padding-left:10px">${(q.agg.cov[i] * 100).toFixed(0)}%</td>` : "") +
+        `</tr>`).join("");
+      const cols = ["value"]
+        .concat(opt.showOracle ? ["oracle"] : [], opt.showSky ? ["skyline"] : [], showCov ? ["% measured"] : []);
+      tip.innerHTML =
+        `<div class="hd">${P.t[i]} click${P.t[i] === 1 ? "" : "s"}${P.t[i] === 0 && P.anchor.has ? " — " + esc(P.anchor.label) : ""}</div>` +
+        `<table>${rows}</table>` +
+        `<div style="color:var(--muted);margin-top:4px">${esc(spec.label)} · ${cols.join(" · ")}</div>`;
+      tip.style.opacity = "1";
+      tip.style.left = Math.min(ev.clientX - r.left + 14, r.width - tip.offsetWidth - 8) + "px";
+      tip.style.top = Math.max(4, ev.clientY - r.top - 10) + "px";
+    });
+    svg.addEventListener("pointerleave", hide);
+    function hide() { tip.style.opacity = "0"; cross.style.opacity = "0"; }
+  }
+
+  // ---- prose + table ------------------------------------------------------
+  function reading(spec, pl, hidden, wanted, opt) {
+    const bits = [];
+    bits.push(
+      `<b>Reading it.</b> Each line is the ${state.seedMode === "each" ? "individual run" : "mean over the cells it pools"}; ` +
+      (opt.useOverlay
+        ? `the shaded spread is dropped in this view — several translucent bands over one another are a shape nobody can read, so overlay trades the spread for the comparison. Untick it to get one chart per series with its band back.`
+        : `the shaded band is ±1 SD.`) +
+      ` A line is <b>dashed</b> wherever fewer than ${(SOLID * 100).toFixed(0)}% of that ` +
+      `series' cells are measured at that click — there it describes a subset, not the grid, so only a solid ` +
+      `segment is a level worth quoting.` +
+      (opt.showCov
+        ? ` The strip underneath is that fraction, and it drops below full somewhere in this slice.`
+        : ` <b>Every cell is measured at every click here</b>, so the coverage strip is omitted rather than drawn` +
+          ` as a flat 100% line: nothing in this slice dropped out.`));
+    if (P.anchor.has) bits.push(
+      `<b>The notch in the left margin is the ${esc(P.anchor.label)}</b> — what typing the query got for free. ` +
+      `Nothing joins it to the curve on purpose: no detector exists between it and the first trained click, so the ` +
+      `gap is the honest drawing. A curve is worth its clicks once it has crossed that notch.`);
+    if (opt.showSky) bits.push(
+      `<b>The notch in the right margin is the ${esc(P.skyline.label)}</b> — the same head, through the same ` +
+      `trainer, with every training label handed to it (issue #3322). It is vote-independent, which is why it is a ` +
+      `mark at the horizon and not a rule across the chart: it is the floor this loop is walking toward, not a level ` +
+      `it reached early. The distance still left to it is what better <b>acquisition</b> could buy; the floor itself ` +
+      `is what only a better <b>embedder</b> can move.`);
+    if (opt.showOracle) bits.push(
+      `<b>The dotted line is the oracle threshold</b> — the same model's scores, cut where the test labels say the ` +
+      `cut should have gone. The gap between it and the solid line is the <b>calibration regret</b>: quality the ` +
+      `ranking already had and the threshold rule gave away.` +
+      (spec.key === "cost" ? "" : ` For ${esc(spec.label)} it is reconstructed exactly from the oracle cut's own ` +
+        `FPR/FNR and the split's class counts — the same confusion matrix, read in a different unit.`));
+    else if (spec.ranking) bits.push(
+      `<b>${esc(spec.label)} has no oracle line.</b> It integrates over every threshold, so moving the cut cannot ` +
+      `move it — the oracle and the performance line would be the same line drawn twice.`);
+    if (state.seedMode === "each" && P.runs_note) bits.push(esc(P.runs_note));
+    if (opt.useOverlay && state.embedders.size > 1) bits.push(
+      `<b>Overlaying embedders is not averaging them.</b> Two embedders are two representations of the haystack and ` +
+      `their mean describes no system anyone could run — but two lines pool nothing, so the comparison is fair.`);
+    if (hidden) bits.push(
+      `<b>${hidden} of ${wanted} charts are not drawn</b> (the page caps at ${MAX_PANELS}). Narrow the selection, ` +
+      `or tick <b>overlay on one chart</b> to put them all on one.`);
+    $("reading").innerHTML = bits.join(" ");
+  }
+
+  function tableView(spec, panels, opt) {
+    const marks = [0, 10, 20, 50, 100, P.t[nT - 1]].filter((t, i, a) => P.t.includes(t) && a.indexOf(t) === i);
+    const pl = plan();
+    let html = "";
+    for (const p of panels) {
+      html += `<table class="data"><caption style="text-align:left;color:var(--muted);padding:8px 0 2px">${esc(panelTitle(p.fk, pl))}</caption>` +
+        `<thead><tr><th>series</th>` + marks.map((t) => `<th>${t === 0 && P.anchor.has ? "text" : t}</th>`).join("") +
+        (opt.showSky ? `<th>skyline</th>` : "") + `</tr></thead><tbody>`;
+      for (const q of p.per) {
+        html += `<tr><td><span class="sw" style="display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;background:${q.color}"></span>${esc(q.name)}${q.sel.arm && q.name !== q.sel.arm ? " · " + esc(q.sel.arm) : ""}</td>` +
+          marks.map((t) => `<td>${fmt(q.agg.mean[P.t.indexOf(t)])}</td>`).join("") +
+          (opt.showSky ? `<td>${fmt(q.sky)}</td>` : "") + `</tr>`;
+        if (opt.showOracle) html +=
+          `<tr style="color:var(--muted)"><td style="padding-left:21px">↳ oracle threshold</td>` +
+          marks.map((t) => `<td>${t === 0 && P.anchor.has ? "—" : fmt(q.agg.omean[P.t.indexOf(t)])}</td>`).join("") +
+          (opt.showSky ? `<td>—</td>` : "") + `</tr>`;
+      }
+      html += `</tbody></table>`;
+    }
+    $("table").innerHTML = html + `<p class="note">${esc(spec.label)} at the click marks above, for the current selection.` +
+      (P.anchor.has ? ` The <b>text</b> column is click 0, the free text sort.` : "") + `</p>`;
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>

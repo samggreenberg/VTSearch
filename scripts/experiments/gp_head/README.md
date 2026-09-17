@@ -25,16 +25,22 @@ grid and the arm table.
 | Arm | Trainer | Hard pick | Threshold |
 |---|---|---|---|
 | `app` | the shipped pipeline (linear-SVM head) | rank-nearest-cut | fold-anchored fusion (shipped) |
-| `app_xcal` | the shipped pipeline | rank-nearest-cut | plain cross-calibration — the parity control |
-| `gp_rbf` | `GaussianProcessClassifier`, RBF kernel, ML-II | rank-nearest-cut | plain cross-calibration |
-| `gp_dot` | the same, dot-product kernel (Bayesian linear) | rank-nearest-cut | plain cross-calibration |
-| `gp_rbf_straddle` | RBF GP | `autopilot_uncertainty`: argmax `1.96·std − |p − cut|` | plain cross-calibration |
-| `gp_rbf_maxvar` | RBF GP | `autopilot_maxvar`: argmax `std` | plain cross-calibration |
+| `app_xcal` | the shipped pipeline | rank-nearest-cut | plain cross-calibration, raw score — the parity control |
+| `gp_rbf` | `GaussianProcessClassifier`, RBF kernel, ML-II | rank-nearest-cut | plain cross-calibration, raw score |
+| `gp_rbf_rank` | RBF GP | rank-nearest-cut | cross-calibration carried by rank (`standalone_cut="rank"`) |
+| `gp_rbf_blend` | RBF GP | rank-nearest-cut | the app's fold-less fallback: schedule blend of the cut with a GMM on the final model's haystack |
+| `gp_dot_blend` | the same, dot-product kernel (Bayesian linear) | rank-nearest-cut | blend |
+| `gp_rbf_blend_straddle` | RBF GP | `autopilot_uncertainty`: argmax `1.96·std − |p − cut|` | blend |
+| `gp_rbf_blend_maxvar` | RBF GP | `autopilot_maxvar`: argmax `std` | blend |
 
 The standalone arms cannot run the fused threshold — their fold models are not
 the app's head, so there is nothing for the fold-anchored mixture to anchor on
 (see `_safe_threshold_for_step`) — which is why `app_xcal` exists: it is the
-same head under the only rule the GP arms can share.
+same head under a rule the GP arms can share. Three threshold rules are run on
+the RBF GP because the pilot found the raw cut collapsing on it (the
+probability scale moves between the fold models and the final model) and the
+rank transfer under-admitting (the fold models know fewer positives); the blend
+is the shipped rule that survives both.
 
 ## Run it
 
@@ -42,7 +48,7 @@ same head under the only rule the GP arms can share.
 cd scripts/experiments/gp_head
 python prepare_data.py                 # ~5 min CPU for caltech101_m (SigLIP)
 python stage_a_label_curve.py          # ~10 min
-python stage_b_cells.py                # 30 cells x 6 arms on 4 workers, ~1-2 h
+python stage_b_cells.py                # 30 cells x 8 arms on 4 workers, ~1-2 h
 python summarize.py                    # tables, figures, viewer into the study dir
 ```
 

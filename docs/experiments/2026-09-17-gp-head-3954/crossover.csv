@@ -1,0 +1,3 @@
+arm,dataset,baseline,final,crossover_t
+app,caltech101_m,0.0883379666666666,0.00079625,6
+app_xcal,caltech101_m,0.0883379666666666,0.0023885,9
