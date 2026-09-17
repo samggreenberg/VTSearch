@@ -23,21 +23,48 @@ from vtscore.detectors.store import (
     DetectorWriteError,
     _read_detector,
     _write_detector,
+    detector_writer_is_running,
     discard_pending_detector_write,
     flush_detector_writes,
     pending_detector_writes,
     queue_detector_write,
     reset_detector_write_queue_for_tests,
     set_detector_write_mode,
+    stop_detector_writer_for_tests,
 )
 
 
+class _AsyncWrites:
+    """Handle yielded by :func:`async_writes`."""
+
+    def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._monkeypatch = monkeypatch
+
+    def park(self) -> None:
+        """Hold every queued write until an explicit flush - with no writer at all.
+
+        ``_writer_autostart`` only stops a writer from being *started*, and
+        the writer is a process-wide singleton, so one started by an earlier
+        test in the same worker is still there to drain the queue this test
+        means to hold (issue #3931).  Stop it, and assert the park took.
+        """
+        self._monkeypatch.setattr(store, "_writer_autostart", False)
+        stop_detector_writer_for_tests()
+        assert not detector_writer_is_running(), "a live writer would drain the parked queue"
+
+
 @pytest.fixture
-def async_writes():
-    """Run the test in ``async`` mode; the suite-wide default is ``sync``."""
+def async_writes(monkeypatch):
+    """Run the test in ``async`` mode; the suite-wide default is ``sync``.
+
+    Yields an :class:`_AsyncWrites` handle whose ``park()`` parks the queue.
+    The writer thread is stopped on both sides of the test so neither an
+    earlier test's writer nor this one's can drain another test's queue.
+    """
+    reset_detector_write_queue_for_tests()
     set_detector_write_mode("async")
     try:
-        yield
+        yield _AsyncWrites(monkeypatch)
     finally:
         reset_detector_write_queue_for_tests()
         set_detector_write_mode("sync")
@@ -150,9 +177,9 @@ def test_failed_background_write_is_raised_from_the_next_queue_call(monkeypatch,
     flush_detector_writes(path)
 
 
-def test_discard_pending_drops_the_write(monkeypatch, async_writes):
+def test_discard_pending_drops_the_write(async_writes):
     # Park the queue (no writer thread) so the discard races nothing.
-    monkeypatch.setattr(store, "_writer_autostart", False)
+    async_writes.park()
     path = _path()
     queue_detector_write(path, {"n": 1})
     assert pending_detector_writes() == [path]
@@ -162,8 +189,8 @@ def test_discard_pending_drops_the_write(monkeypatch, async_writes):
     assert pending_detector_writes() == []
 
 
-def test_parked_queue_lands_on_flush_in_order(monkeypatch, async_writes):
-    monkeypatch.setattr(store, "_writer_autostart", False)
+def test_parked_queue_lands_on_flush_in_order(async_writes):
+    async_writes.park()
     a, b = _path("a"), _path("b")
     queue_detector_write(a, {"n": 1})
     queue_detector_write(b, {"n": 1})
@@ -175,6 +202,31 @@ def test_parked_queue_lands_on_flush_in_order(monkeypatch, async_writes):
     flush_detector_writes()
     assert json.loads(b.read_text()) == {"n": 1}
     assert pending_detector_writes() == []
+
+
+def test_parking_stops_a_writer_an_earlier_test_left_running(async_writes):
+    """The park is a real park: nothing is left alive that could drain it (issue #3931).
+
+    A writer started here stands in for one started by any earlier
+    async-mode test in the same xdist worker - it outlives that test, and
+    used to drain a later test's parked queue between two of its asserts.
+    """
+    warm = _path("warm")
+    queue_detector_write(warm, {"n": 1})
+    assert detector_writer_is_running(), "precondition: an async write starts the writer"
+    flush_detector_writes()
+
+    async_writes.park()
+
+    assert not detector_writer_is_running()
+    parked = _path("parked")
+    queue_detector_write(parked, {"n": 1})
+    # Nothing is running that could land it, so this holds indefinitely.
+    assert pending_detector_writes() == [parked]
+    assert not parked.exists()
+    assert not detector_writer_is_running()
+    flush_detector_writes()
+    assert json.loads(parked.read_text()) == {"n": 1}
 
 
 class TestVoteRoute:
