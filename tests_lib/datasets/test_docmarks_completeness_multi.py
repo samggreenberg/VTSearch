@@ -112,7 +112,7 @@ class TestMerge:
     def test_the_tighter_localiser_supplies_the_box_whatever_the_rank(self, mods):
         proposals = {
             "siglip_tiles": {"tobacco800/logo_a": [["tobacco800/nobox", 1.0, [0, 0, 400, 400]]]},
-            "ncc": {
+            "template_ncc": {
                 "tobacco800/logo_a": [
                     ["tobacco800/other", 1.0, [0, 0, 5, 5]],
                     ["tobacco800/nobox", 0.2, [40, 40, 60, 60]],
@@ -132,7 +132,7 @@ class TestMerge:
 
     def test_top_caps(self, mods):
         rows = [["tobacco800/nobox", 1.0, [10, 10, 50, 50]], ["tobacco800/other", 0.5, [510, 510, 60, 60]]]
-        entry, _ = _merge(mods, {"ocr": {"tobacco800/logo_a": rows}}, top=1)
+        entry, _ = _merge(mods, {"ocr_text": {"tobacco800/logo_a": rows}}, top=1)
         assert [c.page_id for c in entry.candidates] == ["tobacco800/nobox"]
 
 

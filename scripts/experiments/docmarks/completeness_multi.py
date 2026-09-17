@@ -50,13 +50,19 @@ TOP = 36
 AUDIT_DIR = "completeness2"
 PASS = "multi"
 #: Short names for sheet captions, which have room for about 30 characters.
-CODES = {"sift": "SIFT", "siglip_tiles": "SIG", "dinov3_patches": "DINO", "ocr": "OCR", "ncc": "NCC"}
+CODES = {
+    "sift": "SIFT",
+    "siglip_tiles": "SIG",
+    "dinov3_patches": "DINO",
+    "ocr_text": "OCR",
+    "template_ncc": "NCC",
+}
 #: Whose box to keep when methods agree on a candidate, tightest localiser first.
 #: A SigLIP box is the whole winning tile -- several times the mark -- so it is
 #: used only when no other method proposed the candidate; accepting such a
 #: candidate on a page with no existing mark adds that tile as the new box, so
 #: the reviewer should read "SIG" + "NO BOX" as "needs a box drawn".
-BOX_PRIORITY = {"sift": 0, "ncc": 1, "ocr": 2, "dinov3_patches": 3, "siglip_tiles": 9}
+BOX_PRIORITY = {"sift": 0, "template_ncc": 1, "ocr_text": 2, "dinov3_patches": 3, "siglip_tiles": 9}
 
 
 def mark_under(page: Page, box: Sequence[int]) -> Optional[int]:
