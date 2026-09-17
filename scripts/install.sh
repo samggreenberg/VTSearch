@@ -898,6 +898,22 @@ vts_install_face_deps() {
     pip install --no-deps facenet-pytorch --progress-bar on
 }
 
+# --- setuptools (PYSEC-2026-3447) --------------------------------------------
+# setuptools < 83 carries PYSEC-2026-3447 and fails run-tests.sh's pip-audit
+# gate. This used to be a flat "setuptools<82" pin, added because torch 2.12.0
+# declares setuptools<82; it outlived that torch, and a venv rebuilt with it
+# landed on 81 (#3905). Only torch 2.11.x-2.12.x cap setuptools (today: the
+# cu128 index, which tops out at 2.11.0), so setuptools_spec.py asks the torch
+# actually installed: >=83 unless that torch excludes it, in which case torch's
+# own pin wins (anything else is the resolver ERROR the old pin silenced) and a
+# warning says pip-audit will flag it. Called before torch is installed and
+# again after, so a torch that arrives with or without a cap is reconciled.
+vts_upgrade_setuptools() {
+    local spec
+    spec="$(python "$SCRIPT_DIR/setuptools_spec.py")" || spec="setuptools>=83"
+    pip install --upgrade "$spec" --progress-bar on
+}
+
 vts_install_cpu() {
     vts_progress_init 6 "Installing VTSearch CPU dependencies"
     echo "Heads-up: the pip steps below show a download bar, but pip also goes quiet"
@@ -909,13 +925,15 @@ vts_install_cpu() {
     source "$SCRIPT_DIR/_check-python.sh"
 
     vts_progress_step "Upgrading pip / setuptools / wheel"
-    pip install --upgrade pip "setuptools<82" wheel --progress-bar on
+    pip install --upgrade pip wheel --progress-bar on
+    vts_upgrade_setuptools
 
     vts_progress_step "Installing signpost naming deps (apricot-select + toponymy)"
     vts_install_toponymy
 
     vts_progress_step "Installing runtime + dev dependencies (this may take several minutes)"
     pip install -r "$(vts_requirements_file base)" --progress-bar on
+    vts_upgrade_setuptools  # torch arrived with base; follow its setuptools pin
 
     vts_progress_step "Installing FaceNet face embedder (facenet-pytorch, --no-deps)"
     vts_install_face_deps
@@ -1104,7 +1122,8 @@ vts_install_gpu() {
     source "$SCRIPT_DIR/_check-python.sh"
 
     vts_progress_step "Upgrading pip / setuptools / wheel"
-    pip install --upgrade pip "setuptools<82" wheel --progress-bar on
+    pip install --upgrade pip wheel --progress-bar on
+    vts_upgrade_setuptools
 
     vts_progress_step "Pre-installing binary-only wheels (numpy, scipy) from PyPI"
     pip install --only-binary :all: \
@@ -1126,6 +1145,7 @@ vts_install_gpu() {
       --prefer-binary \
       torch torchvision torchaudio \
       --progress-bar on
+    vts_upgrade_setuptools  # follow the setuptools pin of the torch just installed
 
     vts_progress_step "Installing signpost naming deps (apricot-select + toponymy)"
     vts_install_toponymy
