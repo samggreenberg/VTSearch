@@ -415,6 +415,7 @@ class TestDetectorKind:
         assert pc.detector_kind("vase not planters -- recheck: is there one in this image?") == "recheck"
         assert pc.detector_kind("chair incl stools not couches -- box check") == "boxcheck"
         assert pc.detector_kind("car incl SUVs and minivans -- prominent check") == "prominent"
+        assert pc.detector_kind("car incl SUVs and minivans -- seat check") == "seatcheck"
 
     def test_a_box_check_never_banks_over_the_slate(self, pc):
         """The failure this exists to prevent: a class-named audit overwriting a real slate."""
@@ -432,4 +433,11 @@ class TestDetectorKind:
         for cls in pc.SCALE_CLASSES:
             name = f"{pc.review_name(cls)} -- prominent check"
             assert pc.detector_kind(name) == "prominent", cls
+            assert pc.rule_of_review_name(name) == pc.review_name(cls), cls
+
+    def test_a_seat_check_overwrites_no_other_labelset_of_its_class(self, pc):
+        """car and cup already have slate, box-check AND prominence labelsets; a seat check banks beside all three."""
+        for cls in pc.SCALE_CLASSES:
+            name = f"{pc.review_name(cls)} -- seat check"
+            assert pc.detector_kind(name) == "seatcheck", cls
             assert pc.rule_of_review_name(name) == pc.review_name(cls), cls
