@@ -170,9 +170,10 @@ script) down to 0.002 (`tobacco800/logo_cgr96c00_1`, a small binarised device).
 
 ## Follow-ups
 
-Filed as issues and linked from the PR: the keypoint budget on document pages,
-the Tobacco800 crops that do not match their own page, the headline pool
-decision, and the Kraft/Food contamination check.
+- #3911 — a page-feature scheme that gives the mark keypoints at a storable cell size
+- #3912 — three Tobacco800 query crops that do not match their own page
+- #3913 — the owner decision on counting a class's own source as known negatives
+- #3914 — whether the Philip Morris crest reaches UCSF Food pages through Kraft
 
 ## Reproduce
 
