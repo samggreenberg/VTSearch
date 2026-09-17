@@ -6,6 +6,7 @@
     python audit_to_corrections.py --task cluster --apply
     python audit_to_corrections.py --task confusable --apply
     python audit_to_corrections.py --task letterhead          # dry run (default)
+    python audit_to_corrections.py --task completeness --reviewer <name> --apply
     python audit_to_corrections.py --migrate-adjudications --apply
 
 Without ``--apply`` it prints what it would change and touches nothing.
@@ -958,7 +959,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument(
         "--task",
-        choices=("merge", "membership", "cluster", "confusable", "distinctive", "letterhead"),
+        choices=("merge", "membership", "cluster", "confusable", "distinctive", "letterhead", "completeness"),
     )
     ap.add_argument("--corpus", type=Path, default=cfg.OUT)
     ap.add_argument("--apply", action="store_true", help="write the changes (default is a dry run)")
@@ -1031,10 +1032,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     else:
         verdicts = load_verdicts(audit_dir / "verdicts.jsonl")
 
-    mutates_pages = args.task in ("cluster", "membership", "confusable", "merge")
+    mutates_pages = args.task in ("cluster", "membership", "confusable", "merge", "completeness")
     pages = list(read_manifest(manifest_path)) if mutates_pages else []
     new_separations: list[dict[str, Any]] = []
     new_merges: list[dict[str, Any]] = []
+    new_added_marks: list[dict[str, Any]] = []
     resplit: list[str] = []
 
     if args.task == "membership":
@@ -1052,6 +1054,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 for meta in classes.values():
                     meta.setdefault("audit", {})["partition_reviewed"] = True
                 changes.append(f"{len(classes)} class(es) marked partition_reviewed")
+    elif args.task == "completeness":
+        from completeness import apply_completeness  # noqa: PLC0415
+
+        changes, problems, new_merges, new_separations, new_added_marks = apply_completeness(
+            pages, classes, verdicts, reviewer=args.reviewer
+        )
     elif args.task == "distinctive":
         changes, problems = apply_distinctive(classes, verdicts)
     else:
@@ -1108,6 +1116,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             adjudications_path,
         )
         print(f"  wrote {len(new_merges)} merge(s) and {len(new_separations)} separation(s) to {adjudications_path}")
+
+    if new_added_marks:
+        from completeness import ADDED_MARKS, load_added_marks, save_added_marks  # noqa: PLC0415
+
+        # Before classes.json and the manifest: a new box that is on a page but
+        # not in the store would vanish at the next rebuild while its must-link
+        # still names it, which is the drift this store exists to prevent.
+        store = args.corpus / ADDED_MARKS
+        save_added_marks(load_added_marks(store) + new_added_marks, store)
+        print(f"  appended {len(new_added_marks)} hand-added mark(s) to {store}")
 
     classes_path.write_text(json.dumps(classes, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     if mutates_pages:

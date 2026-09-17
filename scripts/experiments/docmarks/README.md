@@ -311,6 +311,22 @@ In the order you run them. Only the first two are needed for a first eval.
 6. **`letterhead`** — for the later UCSF expansion: sample bands per candidate
    author and count how many carry a printed mark at all. Decides whether that
    pool is worth clustering.
+7. **`completeness`** — the other half of `membership`. `membership` checks
+   every instance a class *has*; this looks for instances it *lacks*: pages
+   carrying a roster mark that clustering filed under another class, or that
+   the source never boxed. A strong matcher proposes and a person decides:
+   `completeness.py` reads an `inliers.json` from `eval_sift_rank.py` (SIFT at
+   8,192 keypoints against every anchor page of tier `s`), re-verifies the
+   top candidates per class to find *where* the match is, and draws each beside
+   the query crop with the page's existing mark outlined. The answer is the
+   candidate numbers that carry the mark. `audit_to_corrections.py --task
+   completeness` reassigns an existing mark, or adds a new one with
+   `provenance="completeness"` and records it in `added_marks.json`, which
+   `build_corpus.py` replays before clustering so a new box survives a rebuild.
+   Rejected candidates become cannot-links: permanent hard negatives.
+   Measured on the v3 roster (#3927): SPODS's elephant stamp was split across
+   ten classes, and 104 missing members turned up over 23 classes. Candidates
+   are ranked, so extend `--top` for a class whose sheet ends on real copies.
 
 Query crops come from each class's largest boxed instance automatically (the
 prior study measured a 2.2× AP advantage for a clean query over a small in-scene

@@ -904,6 +904,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
     # `collect_refs` already takes only `class_id is None` marks of the queryable
     # kinds, so listing the source here clusters the logos and cannot disturb a
     # signature identity.
+    # Hand-added marks (the completeness pass, #3927) before clustering: they
+    # are real marks the sources never boxed, and the must-links that bind them
+    # to a class name them by index, so they must be on the page -- unclassed,
+    # in store order -- when those links are replayed.
+    from completeness import ADDED_MARKS, load_added_marks, replay_added_marks
+
+    replayed = replay_added_marks(pages, load_added_marks(args.out / ADDED_MARKS), warnings)
+    if replayed:
+        print(f"replayed {replayed} hand-added mark(s) from {ADDED_MARKS}")
+
     from cluster_marks import cluster_source, load_adjudications, write_cluster_report
 
     same, different = load_adjudications(args.out / "adjudications.json")
