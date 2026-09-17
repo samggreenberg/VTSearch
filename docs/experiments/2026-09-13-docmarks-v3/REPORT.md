@@ -29,6 +29,11 @@ of them fails in the direction that looks like success until much later.
 | durability | 2 rows, both ambiguous | **586 must-link + 291 cannot-link**, all mark-keyed |
 | 5 — cells | none, and `embed_corpus.py` could not write one | tier `s` built and **verified**; `m` running; `l` priced out (#3842) |
 
+> **Superseded counts (2026-09-17).** The completeness pass (#3927) grew the
+> roster from 613 to **721** instances on the same pages (corpus v3.1). Counts
+> here describe v3. Current composition:
+> [`scripts/experiments/docmarks/DATASHEET.md`](../../../scripts/experiments/docmarks/DATASHEET.md).
+
 ## The roster is not the top of the ranking, and that is the point
 
 `shortlist.py` ranks candidates on instances, size, tightness and separation.

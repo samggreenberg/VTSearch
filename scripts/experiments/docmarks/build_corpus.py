@@ -1090,6 +1090,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
         cumulative[t] = running
 
     report = {
+        "corpus_version": cfg.CORPUS_VERSION,
         "pages_written": n,
         "pages_dropped_over_budget": dropped,
         "tier_counts": tier_counts,

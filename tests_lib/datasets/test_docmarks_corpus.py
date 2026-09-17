@@ -4291,3 +4291,11 @@ class TestSlateDescriptorChoice:
         groups = mods["slate"].subgroups(tmp_path, "siglip2_l", 0.5)["a"]
         assert groups["p0"] == groups["p1"] == groups["p2"] == 1
         assert groups["p3"] == 2
+
+
+class TestCorpusVersion:
+    def test_the_version_is_a_major_minor_stamp_the_datasheet_names(self, mods):
+        version = mods["build"].cfg.CORPUS_VERSION
+        assert re.fullmatch(r"v\d+\.\d+", version)
+        datasheet = Path(mods["build"].__file__).with_name("DATASHEET.md").read_text(encoding="utf-8")
+        assert f"**Corpus version {version}**" in datasheet
