@@ -1,0 +1,606 @@
+{
+  "lorillard_script": {
+    "relation": "extends",
+    "roster_class": "tobacco800/logo_ajj10e00_1",
+    "band_class": 1213,
+    "band_class_sm": 282,
+    "band_class_found": 1176,
+    "band_class_sm_found": 272,
+    "hits_outside_by_bin": {
+      "80+": 1,
+      "40-79": 35,
+      "20-39": 7,
+      "12-19": 16,
+      "8-11": 127
+    },
+    "hits_outside": 186,
+    "collapsed_fits_dropped": 1776,
+    "crop": {
+      "source": "hand",
+      "page_id": "ucsf/ftfc0067#0",
+      "box": [
+        140,
+        195,
+        345,
+        83
+      ],
+      "needs_hand_crop": false,
+      "auto": {
+        "verified": 32,
+        "sampled": 32,
+        "box": [
+          159,
+          158,
+          357,
+          158
+        ],
+        "norm": [
+          0.125,
+          0.375,
+          0.4062,
+          0.75
+        ],
+        "support": 30,
+        "flags": []
+      }
+    },
+    "cross_roster_top": [
+      [
+        "tobacco800/logo_ajj10e00_1",
+        17
+      ],
+      [
+        "tobacco800/logo_aah97e00-page02_1_0",
+        9
+      ],
+      [
+        "tobacco800/logo_afm90c00-first_1_0",
+        4
+      ]
+    ]
+  },
+  "bw_old_leaf": {
+    "relation": "extends",
+    "roster_class": "tobacco800/logo_ald41a00-ernest_1",
+    "band_class": 329,
+    "band_class_sm": 86,
+    "band_class_found": 294,
+    "band_class_sm_found": 78,
+    "hits_outside_by_bin": {
+      "80+": 0,
+      "40-79": 22,
+      "20-39": 21,
+      "12-19": 8,
+      "8-11": 19
+    },
+    "hits_outside": 70,
+    "collapsed_fits_dropped": 502,
+    "crop": {
+      "source": "hand",
+      "page_id": "ucsf/hsfk0211#0",
+      "box": [
+        515,
+        145,
+        180,
+        95
+      ],
+      "needs_hand_crop": true,
+      "auto": {
+        "verified": 32,
+        "sampled": 32,
+        "box": [
+          232,
+          130,
+          737,
+          208
+        ],
+        "norm": [
+          0.1875,
+          0.3125,
+          0.7812,
+          0.8125
+        ],
+        "support": 31,
+        "flags": [
+          "width 0.59 of the band > 0.5"
+        ]
+      }
+    },
+    "cross_roster_top": [
+      [
+        "tobacco800/logo_ald41a00-ernest_1",
+        54
+      ],
+      [
+        "tobacco800/logo_aah97e00-page02_1_0",
+        7
+      ],
+      [
+        "tobacco800/logo_aeq93a00_1",
+        0
+      ]
+    ]
+  },
+  "bw_1990s_leaf": {
+    "relation": "new",
+    "roster_class": null,
+    "band_class": 70,
+    "band_class_sm": 19,
+    "band_class_found": 35,
+    "band_class_sm_found": 9,
+    "hits_outside_by_bin": {
+      "80+": 3,
+      "40-79": 2,
+      "20-39": 4,
+      "12-19": 8,
+      "8-11": 96
+    },
+    "hits_outside": 113,
+    "collapsed_fits_dropped": 2484,
+    "crop": {
+      "source": "hand",
+      "page_id": "ucsf/hmbb0172#0",
+      "box": [
+        500,
+        35,
+        290,
+        160
+      ],
+      "needs_hand_crop": false,
+      "auto": {
+        "verified": 32,
+        "sampled": 32,
+        "box": [
+          485,
+          110,
+          329,
+          109
+        ],
+        "norm": [
+          0.3906,
+          0.25,
+          0.6562,
+          0.5
+        ],
+        "support": 32,
+        "flags": []
+      }
+    },
+    "cross_roster_top": [
+      [
+        "tobacco800/logo_ajj10e00_1",
+        5
+      ],
+      [
+        "tobacco800/logo_ciy01a00-page02_1_0",
+        5
+      ],
+      [
+        "tobacco800/logo_ald41a00-ernest_1",
+        4
+      ]
+    ]
+  },
+  "rjr_block": {
+    "relation": "extends",
+    "roster_class": "tobacco800/logo_aeq93a00_1",
+    "band_class": 20,
+    "band_class_sm": 5,
+    "band_class_found": 20,
+    "band_class_sm_found": 5,
+    "hits_outside_by_bin": {
+      "80+": 0,
+      "40-79": 0,
+      "20-39": 51,
+      "12-19": 28,
+      "8-11": 14
+    },
+    "hits_outside": 93,
+    "collapsed_fits_dropped": 78,
+    "crop": {
+      "source": "hand",
+      "page_id": "ucsf/fjdh0092#0",
+      "box": [
+        795,
+        245,
+        110,
+        50
+      ],
+      "needs_hand_crop": false,
+      "auto": {
+        "verified": 19,
+        "sampled": 19,
+        "box": [
+          775,
+          77,
+          476,
+          258
+        ],
+        "norm": [
+          0.6094,
+          0.1875,
+          0.9844,
+          0.8125
+        ],
+        "support": 19,
+        "flags": []
+      }
+    },
+    "cross_roster_top": [
+      [
+        "tobacco800/logo_aeq93a00_1",
+        14
+      ],
+      [
+        "tobacco800/logo_bqz95d00_1",
+        4
+      ],
+      [
+        "tobacco800/logo_aah97e00-page02_1_0",
+        0
+      ]
+    ]
+  },
+  "pm_crest": {
+    "relation": "extends",
+    "roster_class": "tobacco800/logo_aah97e00-page02_1_0",
+    "band_class": 20,
+    "band_class_sm": 3,
+    "band_class_found": 20,
+    "band_class_sm_found": 3,
+    "hits_outside_by_bin": {
+      "80+": 79,
+      "40-79": 157,
+      "20-39": 42,
+      "12-19": 6,
+      "8-11": 54
+    },
+    "hits_outside": 338,
+    "collapsed_fits_dropped": 1241,
+    "crop": {
+      "source": "hand",
+      "page_id": "ucsf/fhjf0060#0",
+      "box": [
+        520,
+        230,
+        225,
+        130
+      ],
+      "needs_hand_crop": false,
+      "auto": {
+        "verified": 19,
+        "sampled": 19,
+        "box": [
+          496,
+          210,
+          257,
+          185
+        ],
+        "norm": [
+          0.3906,
+          0.5,
+          0.5938,
+          0.9375
+        ],
+        "support": 19,
+        "flags": []
+      }
+    },
+    "cross_roster_top": [
+      [
+        "tobacco800/logo_aah97e00-page02_1_0",
+        103
+      ],
+      [
+        "tobacco800/logo_aeq93a00_1",
+        4
+      ],
+      [
+        "tobacco800/logo_ald41a00-ernest_1",
+        4
+      ]
+    ]
+  },
+  "atc_chief_block": {
+    "relation": "extends",
+    "roster_class": "tobacco800/logo_afm90c00-first_1_0",
+    "band_class": 27,
+    "band_class_sm": 5,
+    "band_class_found": 22,
+    "band_class_sm_found": 5,
+    "hits_outside_by_bin": {
+      "80+": 0,
+      "40-79": 0,
+      "20-39": 2,
+      "12-19": 2,
+      "8-11": 8
+    },
+    "hits_outside": 12,
+    "collapsed_fits_dropped": 339,
+    "crop": {
+      "source": "hand",
+      "page_id": "ucsf/fjmy0078#0",
+      "box": [
+        85,
+        125,
+        130,
+        128
+      ],
+      "needs_hand_crop": false,
+      "auto": {
+        "verified": 26,
+        "sampled": 26,
+        "box": [
+          75,
+          98,
+          356,
+          197
+        ],
+        "norm": [
+          0.0625,
+          0.25,
+          0.3594,
+          0.75
+        ],
+        "support": 26,
+        "flags": []
+      }
+    },
+    "cross_roster_top": [
+      [
+        "tobacco800/logo_afm90c00-first_1_0",
+        156
+      ],
+      [
+        "tobacco800/logo_cgr96c00_1",
+        6
+      ],
+      [
+        "tobacco800/logo_ald41a00-ernest_1",
+        4
+      ]
+    ]
+  },
+  "p_lorillard_crest": {
+    "relation": "new",
+    "roster_class": null,
+    "band_class": 30,
+    "band_class_sm": 7,
+    "band_class_found": 19,
+    "band_class_sm_found": 4,
+    "hits_outside_by_bin": {
+      "80+": 0,
+      "40-79": 0,
+      "20-39": 3,
+      "12-19": 1,
+      "8-11": 53
+    },
+    "hits_outside": 57,
+    "collapsed_fits_dropped": 1398,
+    "crop": {
+      "source": "hand",
+      "page_id": "ucsf/fgph0063#0",
+      "box": [
+        90,
+        170,
+        240,
+        185
+      ],
+      "needs_hand_crop": false,
+      "auto": {
+        "verified": 29,
+        "sampled": 29,
+        "box": [
+          516,
+          132,
+          634,
+          263
+        ],
+        "norm": [
+          0.4062,
+          0.3125,
+          0.9062,
+          0.9375
+        ],
+        "support": 29,
+        "flags": []
+      }
+    },
+    "cross_roster_top": [
+      [
+        "tobacco800/logo_ciy01a00-page02_1_0",
+        5
+      ],
+      [
+        "tobacco800/logo_afm90c00-first_1_0",
+        4
+      ],
+      [
+        "tobacco800/logo_ajj10e00_1",
+        4
+      ]
+    ]
+  },
+  "bw_oval_emblem": {
+    "relation": "new",
+    "roster_class": null,
+    "band_class": 26,
+    "band_class_sm": 8,
+    "band_class_found": 26,
+    "band_class_sm_found": 8,
+    "hits_outside_by_bin": {
+      "80+": 0,
+      "40-79": 4,
+      "20-39": 4,
+      "12-19": 4,
+      "8-11": 17
+    },
+    "hits_outside": 29,
+    "collapsed_fits_dropped": 172,
+    "crop": {
+      "source": "hand",
+      "page_id": "ucsf/jlvx0197#0",
+      "box": [
+        495,
+        280,
+        125,
+        45
+      ],
+      "needs_hand_crop": true,
+      "auto": {
+        "verified": 25,
+        "sampled": 25,
+        "box": [
+          218,
+          154,
+          676,
+          206
+        ],
+        "norm": [
+          0.1719,
+          0.375,
+          0.7031,
+          0.875
+        ],
+        "support": 25,
+        "flags": [
+          "width 0.53 of the band > 0.5"
+        ]
+      }
+    },
+    "cross_roster_top": [
+      [
+        "tobacco800/logo_aah97e00-page02_1_0",
+        5
+      ],
+      [
+        "tobacco800/logo_afm90c00-first_1_0",
+        4
+      ],
+      [
+        "tobacco800/logo_ciy01a00-page02_1_0",
+        4
+      ]
+    ]
+  },
+  "rjr_script": {
+    "relation": "new",
+    "roster_class": null,
+    "band_class": 31,
+    "band_class_sm": 6,
+    "band_class_found": 28,
+    "band_class_sm_found": 6,
+    "hits_outside_by_bin": {
+      "80+": 0,
+      "40-79": 19,
+      "20-39": 21,
+      "12-19": 9,
+      "8-11": 32
+    },
+    "hits_outside": 81,
+    "collapsed_fits_dropped": 751,
+    "crop": {
+      "source": "hand",
+      "page_id": "ucsf/ffvw0086#0",
+      "box": [
+        95,
+        95,
+        430,
+        90
+      ],
+      "needs_hand_crop": false,
+      "auto": {
+        "verified": 30,
+        "sampled": 30,
+        "box": [
+          79,
+          79,
+          456,
+          158
+        ],
+        "norm": [
+          0.0625,
+          0.1875,
+          0.4219,
+          0.5625
+        ],
+        "support": 29,
+        "flags": []
+      }
+    },
+    "cross_roster_top": [
+      [
+        "tobacco800/logo_cgr96c00_1",
+        6
+      ],
+      [
+        "tobacco800/logo_ald41a00-ernest_1",
+        4
+      ],
+      [
+        "tobacco800/logo_asg54f00_1",
+        4
+      ]
+    ]
+  },
+  "bat_leaf": {
+    "relation": "new",
+    "roster_class": null,
+    "band_class": 528,
+    "band_class_sm": 131,
+    "band_class_found": 347,
+    "band_class_sm_found": 93,
+    "hits_outside_by_bin": {
+      "80+": 0,
+      "40-79": 0,
+      "20-39": 4,
+      "12-19": 25,
+      "8-11": 27
+    },
+    "hits_outside": 56,
+    "collapsed_fits_dropped": 48,
+    "crop": {
+      "source": "hand",
+      "page_id": "ucsf/fndk0210#0",
+      "box": [
+        555,
+        200,
+        75,
+        65
+      ],
+      "needs_hand_crop": false,
+      "auto": {
+        "verified": 28,
+        "sampled": 32,
+        "box": [
+          232,
+          192,
+          504,
+          164
+        ],
+        "norm": [
+          0.1875,
+          0.4375,
+          0.5938,
+          0.8125
+        ],
+        "support": 22,
+        "flags": []
+      }
+    },
+    "cross_roster_top": [
+      [
+        "tobacco800/logo_aah97e00-page02_1_0",
+        0
+      ],
+      [
+        "tobacco800/logo_aeq93a00_1",
+        0
+      ],
+      [
+        "tobacco800/logo_afm90c00-first_1_0",
+        0
+      ]
+    ]
+  }
+}
