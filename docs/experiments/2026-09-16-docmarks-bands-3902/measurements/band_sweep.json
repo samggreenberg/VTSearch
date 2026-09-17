@@ -1,0 +1,1025 @@
+{
+  "backend": "siglip",
+  "band_frac": 0.22,
+  "grid": [
+    0.02,
+    0.04,
+    0.06,
+    0.08,
+    0.1,
+    0.12,
+    0.15,
+    0.18,
+    0.22,
+    0.26,
+    0.3
+  ],
+  "AMERICAN TOBACCO": [
+    {
+      "threshold": 0.02,
+      "bands": 1855,
+      "classes": 1762,
+      "largest": 88,
+      "largest_share": 0.04743935309973046,
+      "singleton_share": 0.9471698113207547,
+      "usable": 1,
+      "usable_bands": 88
+    },
+    {
+      "threshold": 0.04,
+      "bands": 1855,
+      "classes": 1703,
+      "largest": 143,
+      "largest_share": 0.07708894878706199,
+      "singleton_share": 0.9137466307277629,
+      "usable": 1,
+      "usable_bands": 143
+    },
+    {
+      "threshold": 0.06,
+      "bands": 1855,
+      "classes": 1482,
+      "largest": 210,
+      "largest_share": 0.11320754716981132,
+      "singleton_share": 0.786522911051213,
+      "usable": 4,
+      "usable_bands": 342
+    },
+    {
+      "threshold": 0.08,
+      "bands": 1855,
+      "classes": 1223,
+      "largest": 286,
+      "largest_share": 0.15417789757412398,
+      "singleton_share": 0.6447439353099731,
+      "usable": 3,
+      "usable_bands": 584
+    },
+    {
+      "threshold": 0.1,
+      "bands": 1855,
+      "classes": 923,
+      "largest": 440,
+      "largest_share": 0.2371967654986523,
+      "singleton_share": 0.4738544474393531,
+      "usable": 6,
+      "usable_bands": 865
+    },
+    {
+      "threshold": 0.12,
+      "bands": 1855,
+      "classes": 607,
+      "largest": 1019,
+      "largest_share": 0.5493261455525607,
+      "singleton_share": 0.3078167115902965,
+      "usable": 8,
+      "usable_bands": 1211
+    },
+    {
+      "threshold": 0.15,
+      "bands": 1855,
+      "classes": 244,
+      "largest": 1589,
+      "largest_share": 0.8566037735849057,
+      "singleton_share": 0.12291105121293801,
+      "usable": 1,
+      "usable_bands": 1589
+    },
+    {
+      "threshold": 0.18,
+      "bands": 1855,
+      "classes": 95,
+      "largest": 1750,
+      "largest_share": 0.9433962264150944,
+      "singleton_share": 0.04743935309973046,
+      "usable": 1,
+      "usable_bands": 1750
+    },
+    {
+      "threshold": 0.22,
+      "bands": 1855,
+      "classes": 32,
+      "largest": 1824,
+      "largest_share": 0.9832884097035041,
+      "singleton_share": 0.016711590296495958,
+      "usable": 1,
+      "usable_bands": 1824
+    },
+    {
+      "threshold": 0.26,
+      "bands": 1855,
+      "classes": 11,
+      "largest": 1845,
+      "largest_share": 0.9946091644204852,
+      "singleton_share": 0.005390835579514825,
+      "usable": 1,
+      "usable_bands": 1845
+    },
+    {
+      "threshold": 0.3,
+      "bands": 1855,
+      "classes": 8,
+      "largest": 1848,
+      "largest_share": 0.9962264150943396,
+      "singleton_share": 0.0037735849056603774,
+      "usable": 1,
+      "usable_bands": 1848
+    }
+  ],
+  "BATCO": [
+    {
+      "threshold": 0.02,
+      "bands": 1837,
+      "classes": 1692,
+      "largest": 89,
+      "largest_share": 0.048448557430593356,
+      "singleton_share": 0.9112683723462166,
+      "usable": 3,
+      "usable_bands": 128
+    },
+    {
+      "threshold": 0.04,
+      "bands": 1837,
+      "classes": 1487,
+      "largest": 160,
+      "largest_share": 0.08709853021230267,
+      "singleton_share": 0.7974959172563963,
+      "usable": 5,
+      "usable_bands": 321
+    },
+    {
+      "threshold": 0.06,
+      "bands": 1837,
+      "classes": 1276,
+      "largest": 496,
+      "largest_share": 0.2700054436581383,
+      "singleton_share": 0.6766467065868264,
+      "usable": 2,
+      "usable_bands": 508
+    },
+    {
+      "threshold": 0.08,
+      "bands": 1837,
+      "classes": 993,
+      "largest": 716,
+      "largest_share": 0.38976592270005445,
+      "singleton_share": 0.5187806205770278,
+      "usable": 2,
+      "usable_bands": 773
+    },
+    {
+      "threshold": 0.1,
+      "bands": 1837,
+      "classes": 720,
+      "largest": 920,
+      "largest_share": 0.5008165487207403,
+      "singleton_share": 0.3712574850299401,
+      "usable": 3,
+      "usable_bands": 1054
+    },
+    {
+      "threshold": 0.12,
+      "bands": 1837,
+      "classes": 490,
+      "largest": 1109,
+      "largest_share": 0.6037016875340229,
+      "singleton_share": 0.25095264017419705,
+      "usable": 5,
+      "usable_bands": 1301
+    },
+    {
+      "threshold": 0.15,
+      "bands": 1837,
+      "classes": 250,
+      "largest": 1458,
+      "largest_share": 0.793685356559608,
+      "singleton_share": 0.12193794229722374,
+      "usable": 5,
+      "usable_bands": 1553
+    },
+    {
+      "threshold": 0.18,
+      "bands": 1837,
+      "classes": 117,
+      "largest": 1677,
+      "largest_share": 0.9129014697876974,
+      "singleton_share": 0.056614044637996734,
+      "usable": 2,
+      "usable_bands": 1698
+    },
+    {
+      "threshold": 0.22,
+      "bands": 1837,
+      "classes": 43,
+      "largest": 1789,
+      "largest_share": 0.9738704409363091,
+      "singleton_share": 0.020141535111594992,
+      "usable": 1,
+      "usable_bands": 1789
+    },
+    {
+      "threshold": 0.26,
+      "bands": 1837,
+      "classes": 13,
+      "largest": 1825,
+      "largest_share": 0.9934676102340773,
+      "singleton_share": 0.0065323897659227,
+      "usable": 1,
+      "usable_bands": 1825
+    },
+    {
+      "threshold": 0.3,
+      "bands": 1837,
+      "classes": 5,
+      "largest": 1833,
+      "largest_share": 0.9978225367446925,
+      "singleton_share": 0.002177463255307567,
+      "usable": 1,
+      "usable_bands": 1833
+    }
+  ],
+  "BROWN & WILLIAMSON": [
+    {
+      "threshold": 0.02,
+      "bands": 1737,
+      "classes": 1716,
+      "largest": 22,
+      "largest_share": 0.012665515256188831,
+      "singleton_share": 0.9873344847438111,
+      "usable": 1,
+      "usable_bands": 22
+    },
+    {
+      "threshold": 0.04,
+      "bands": 1737,
+      "classes": 1695,
+      "largest": 28,
+      "largest_share": 0.016119746689694875,
+      "singleton_share": 0.970063327576281,
+      "usable": 1,
+      "usable_bands": 28
+    },
+    {
+      "threshold": 0.06,
+      "bands": 1737,
+      "classes": 1605,
+      "largest": 88,
+      "largest_share": 0.050662061024755324,
+      "singleton_share": 0.9078871617731722,
+      "usable": 1,
+      "usable_bands": 88
+    },
+    {
+      "threshold": 0.08,
+      "bands": 1737,
+      "classes": 1369,
+      "largest": 141,
+      "largest_share": 0.08117443868739206,
+      "singleton_share": 0.7610823258491652,
+      "usable": 3,
+      "usable_bands": 297
+    },
+    {
+      "threshold": 0.1,
+      "bands": 1737,
+      "classes": 962,
+      "largest": 329,
+      "largest_share": 0.1894070236039148,
+      "singleton_share": 0.5250431778929189,
+      "usable": 5,
+      "usable_bands": 704
+    },
+    {
+      "threshold": 0.12,
+      "bands": 1737,
+      "classes": 659,
+      "largest": 483,
+      "largest_share": 0.27806563039723664,
+      "singleton_share": 0.3517559009786989,
+      "usable": 6,
+      "usable_bands": 997
+    },
+    {
+      "threshold": 0.15,
+      "bands": 1737,
+      "classes": 289,
+      "largest": 1384,
+      "largest_share": 0.796776050662061,
+      "singleton_share": 0.15025906735751296,
+      "usable": 2,
+      "usable_bands": 1395
+    },
+    {
+      "threshold": 0.18,
+      "bands": 1737,
+      "classes": 90,
+      "largest": 1623,
+      "largest_share": 0.9343696027633851,
+      "singleton_share": 0.04605641911341393,
+      "usable": 2,
+      "usable_bands": 1635
+    },
+    {
+      "threshold": 0.22,
+      "bands": 1737,
+      "classes": 31,
+      "largest": 1680,
+      "largest_share": 0.9671848013816926,
+      "singleton_share": 0.013241220495106506,
+      "usable": 2,
+      "usable_bands": 1693
+    },
+    {
+      "threshold": 0.26,
+      "bands": 1737,
+      "classes": 13,
+      "largest": 1722,
+      "largest_share": 0.9913644214162349,
+      "singleton_share": 0.0057570523891767415,
+      "usable": 1,
+      "usable_bands": 1722
+    },
+    {
+      "threshold": 0.3,
+      "bands": 1737,
+      "classes": 7,
+      "largest": 1730,
+      "largest_share": 0.9959700633275763,
+      "singleton_share": 0.0028785261945883708,
+      "usable": 1,
+      "usable_bands": 1730
+    }
+  ],
+  "COUNCIL FOR TOBACCO RESEARCH": [
+    {
+      "threshold": 0.02,
+      "bands": 1826,
+      "classes": 1812,
+      "largest": 2,
+      "largest_share": 0.001095290251916758,
+      "singleton_share": 0.9846659364731654,
+      "usable": 0,
+      "usable_bands": 0
+    },
+    {
+      "threshold": 0.04,
+      "bands": 1826,
+      "classes": 1786,
+      "largest": 16,
+      "largest_share": 0.008762322015334063,
+      "singleton_share": 0.9693318729463308,
+      "usable": 2,
+      "usable_bands": 28
+    },
+    {
+      "threshold": 0.06,
+      "bands": 1826,
+      "classes": 1764,
+      "largest": 43,
+      "largest_share": 0.023548740416210297,
+      "singleton_share": 0.9550930996714129,
+      "usable": 1,
+      "usable_bands": 43
+    },
+    {
+      "threshold": 0.08,
+      "bands": 1826,
+      "classes": 1694,
+      "largest": 54,
+      "largest_share": 0.029572836801752465,
+      "singleton_share": 0.9008762322015335,
+      "usable": 2,
+      "usable_bands": 66
+    },
+    {
+      "threshold": 0.1,
+      "bands": 1826,
+      "classes": 1273,
+      "largest": 314,
+      "largest_share": 0.171960569550931,
+      "singleton_share": 0.6577217962760131,
+      "usable": 6,
+      "usable_bands": 463
+    },
+    {
+      "threshold": 0.12,
+      "bands": 1826,
+      "classes": 633,
+      "largest": 1071,
+      "largest_share": 0.5865279299014239,
+      "singleton_share": 0.328039430449069,
+      "usable": 4,
+      "usable_bands": 1164
+    },
+    {
+      "threshold": 0.15,
+      "bands": 1826,
+      "classes": 109,
+      "largest": 1701,
+      "largest_share": 0.9315443592552026,
+      "singleton_share": 0.054764512595837894,
+      "usable": 2,
+      "usable_bands": 1711
+    },
+    {
+      "threshold": 0.18,
+      "bands": 1826,
+      "classes": 22,
+      "largest": 1801,
+      "largest_share": 0.9863088718510405,
+      "singleton_share": 0.009857612267250822,
+      "usable": 1,
+      "usable_bands": 1801
+    },
+    {
+      "threshold": 0.22,
+      "bands": 1826,
+      "classes": 6,
+      "largest": 1820,
+      "largest_share": 0.9967141292442497,
+      "singleton_share": 0.002190580503833516,
+      "usable": 1,
+      "usable_bands": 1820
+    },
+    {
+      "threshold": 0.26,
+      "bands": 1826,
+      "classes": 4,
+      "largest": 1822,
+      "largest_share": 0.9978094194961665,
+      "singleton_share": 0.001095290251916758,
+      "usable": 1,
+      "usable_bands": 1822
+    },
+    {
+      "threshold": 0.3,
+      "bands": 1826,
+      "classes": 3,
+      "largest": 1823,
+      "largest_share": 0.9983570646221248,
+      "singleton_share": 0.000547645125958379,
+      "usable": 1,
+      "usable_bands": 1823
+    }
+  ],
+  "LOR, LORILLARD": [
+    {
+      "threshold": 0.02,
+      "bands": 1810,
+      "classes": 1804,
+      "largest": 2,
+      "largest_share": 0.0011049723756906078,
+      "singleton_share": 0.9933701657458563,
+      "usable": 0,
+      "usable_bands": 0
+    },
+    {
+      "threshold": 0.04,
+      "bands": 1810,
+      "classes": 1695,
+      "largest": 45,
+      "largest_share": 0.024861878453038673,
+      "singleton_share": 0.9093922651933701,
+      "usable": 2,
+      "usable_bands": 59
+    },
+    {
+      "threshold": 0.06,
+      "bands": 1810,
+      "classes": 1293,
+      "largest": 393,
+      "largest_share": 0.21712707182320443,
+      "singleton_share": 0.6784530386740332,
+      "usable": 4,
+      "usable_bands": 438
+    },
+    {
+      "threshold": 0.08,
+      "bands": 1810,
+      "classes": 752,
+      "largest": 943,
+      "largest_share": 0.5209944751381216,
+      "singleton_share": 0.3883977900552486,
+      "usable": 3,
+      "usable_bands": 983
+    },
+    {
+      "threshold": 0.1,
+      "bands": 1810,
+      "classes": 412,
+      "largest": 1213,
+      "largest_share": 0.6701657458563536,
+      "singleton_share": 0.20773480662983426,
+      "usable": 6,
+      "usable_bands": 1360
+    },
+    {
+      "threshold": 0.12,
+      "bands": 1810,
+      "classes": 246,
+      "largest": 1349,
+      "largest_share": 0.7453038674033149,
+      "singleton_share": 0.11988950276243093,
+      "usable": 5,
+      "usable_bands": 1529
+    },
+    {
+      "threshold": 0.15,
+      "bands": 1810,
+      "classes": 125,
+      "largest": 1589,
+      "largest_share": 0.8779005524861878,
+      "singleton_share": 0.058011049723756904,
+      "usable": 4,
+      "usable_bands": 1653
+    },
+    {
+      "threshold": 0.18,
+      "bands": 1810,
+      "classes": 61,
+      "largest": 1682,
+      "largest_share": 0.9292817679558011,
+      "singleton_share": 0.02541436464088398,
+      "usable": 2,
+      "usable_bands": 1721
+    },
+    {
+      "threshold": 0.22,
+      "bands": 1810,
+      "classes": 29,
+      "largest": 1774,
+      "largest_share": 0.980110497237569,
+      "singleton_share": 0.013259668508287293,
+      "usable": 1,
+      "usable_bands": 1774
+    },
+    {
+      "threshold": 0.26,
+      "bands": 1810,
+      "classes": 17,
+      "largest": 1787,
+      "largest_share": 0.987292817679558,
+      "singleton_share": 0.0071823204419889505,
+      "usable": 1,
+      "usable_bands": 1787
+    },
+    {
+      "threshold": 0.3,
+      "bands": 1810,
+      "classes": 8,
+      "largest": 1803,
+      "largest_share": 0.9961325966850829,
+      "singleton_share": 0.0038674033149171273,
+      "usable": 1,
+      "usable_bands": 1803
+    }
+  ],
+  "PHILIP MORRIS": [
+    {
+      "threshold": 0.02,
+      "bands": 1821,
+      "classes": 1812,
+      "largest": 4,
+      "largest_share": 0.002196595277320154,
+      "singleton_share": 0.9912136188907194,
+      "usable": 0,
+      "usable_bands": 0
+    },
+    {
+      "threshold": 0.04,
+      "bands": 1821,
+      "classes": 1348,
+      "largest": 453,
+      "largest_share": 0.2487644151565074,
+      "singleton_share": 0.7325645249862712,
+      "usable": 1,
+      "usable_bands": 453
+    },
+    {
+      "threshold": 0.06,
+      "bands": 1821,
+      "classes": 893,
+      "largest": 814,
+      "largest_share": 0.44700713893465127,
+      "singleton_share": 0.4684239428885228,
+      "usable": 3,
+      "usable_bands": 880
+    },
+    {
+      "threshold": 0.08,
+      "bands": 1821,
+      "classes": 560,
+      "largest": 1204,
+      "largest_share": 0.6611751784733663,
+      "singleton_share": 0.2954420647995607,
+      "usable": 3,
+      "usable_bands": 1235
+    },
+    {
+      "threshold": 0.1,
+      "bands": 1821,
+      "classes": 385,
+      "largest": 1357,
+      "largest_share": 0.7451949478308622,
+      "singleton_share": 0.19934102141680396,
+      "usable": 3,
+      "usable_bands": 1402
+    },
+    {
+      "threshold": 0.12,
+      "bands": 1821,
+      "classes": 302,
+      "largest": 1420,
+      "largest_share": 0.7797913234486545,
+      "singleton_share": 0.15101592531576058,
+      "usable": 3,
+      "usable_bands": 1487
+    },
+    {
+      "threshold": 0.15,
+      "bands": 1821,
+      "classes": 201,
+      "largest": 1603,
+      "largest_share": 0.8802855573860516,
+      "singleton_share": 0.10104338275672707,
+      "usable": 1,
+      "usable_bands": 1603
+    },
+    {
+      "threshold": 0.18,
+      "bands": 1821,
+      "classes": 128,
+      "largest": 1674,
+      "largest_share": 0.9192751235584844,
+      "singleton_share": 0.06315211422295441,
+      "usable": 1,
+      "usable_bands": 1674
+    },
+    {
+      "threshold": 0.22,
+      "bands": 1821,
+      "classes": 72,
+      "largest": 1745,
+      "largest_share": 0.958264689730917,
+      "singleton_share": 0.036243822075782535,
+      "usable": 1,
+      "usable_bands": 1745
+    },
+    {
+      "threshold": 0.26,
+      "bands": 1821,
+      "classes": 36,
+      "largest": 1783,
+      "largest_share": 0.9791323448654585,
+      "singleton_share": 0.01757276221856123,
+      "usable": 1,
+      "usable_bands": 1783
+    },
+    {
+      "threshold": 0.3,
+      "bands": 1821,
+      "classes": 17,
+      "largest": 1803,
+      "largest_share": 0.9901153212520593,
+      "singleton_share": 0.008237232289950576,
+      "usable": 1,
+      "usable_bands": 1803
+    }
+  ],
+  "RJR": [
+    {
+      "threshold": 0.02,
+      "bands": 1314,
+      "classes": 1313,
+      "largest": 2,
+      "largest_share": 0.0015220700152207,
+      "singleton_share": 0.9984779299847792,
+      "usable": 0,
+      "usable_bands": 0
+    },
+    {
+      "threshold": 0.04,
+      "bands": 1314,
+      "classes": 1305,
+      "largest": 7,
+      "largest_share": 0.00532724505327245,
+      "singleton_share": 0.9901065449010654,
+      "usable": 0,
+      "usable_bands": 0
+    },
+    {
+      "threshold": 0.06,
+      "bands": 1314,
+      "classes": 1287,
+      "largest": 11,
+      "largest_share": 0.00837138508371385,
+      "singleton_share": 0.969558599695586,
+      "usable": 1,
+      "usable_bands": 11
+    },
+    {
+      "threshold": 0.08,
+      "bands": 1314,
+      "classes": 1238,
+      "largest": 18,
+      "largest_share": 0.0136986301369863,
+      "singleton_share": 0.910958904109589,
+      "usable": 1,
+      "usable_bands": 18
+    },
+    {
+      "threshold": 0.1,
+      "bands": 1314,
+      "classes": 1094,
+      "largest": 40,
+      "largest_share": 0.030441400304414,
+      "singleton_share": 0.7884322678843226,
+      "usable": 5,
+      "usable_bands": 112
+    },
+    {
+      "threshold": 0.12,
+      "bands": 1314,
+      "classes": 826,
+      "largest": 217,
+      "largest_share": 0.16514459665144596,
+      "singleton_share": 0.5898021308980214,
+      "usable": 8,
+      "usable_bands": 436
+    },
+    {
+      "threshold": 0.15,
+      "bands": 1314,
+      "classes": 474,
+      "largest": 721,
+      "largest_share": 0.5487062404870624,
+      "singleton_share": 0.334855403348554,
+      "usable": 4,
+      "usable_bands": 784
+    },
+    {
+      "threshold": 0.18,
+      "bands": 1314,
+      "classes": 229,
+      "largest": 1065,
+      "largest_share": 0.8105022831050228,
+      "singleton_share": 0.1643835616438356,
+      "usable": 1,
+      "usable_bands": 1065
+    },
+    {
+      "threshold": 0.22,
+      "bands": 1314,
+      "classes": 55,
+      "largest": 1250,
+      "largest_share": 0.9512937595129376,
+      "singleton_share": 0.03881278538812785,
+      "usable": 1,
+      "usable_bands": 1250
+    },
+    {
+      "threshold": 0.26,
+      "bands": 1314,
+      "classes": 13,
+      "largest": 1292,
+      "largest_share": 0.9832572298325722,
+      "singleton_share": 0.00684931506849315,
+      "usable": 1,
+      "usable_bands": 1292
+    },
+    {
+      "threshold": 0.3,
+      "bands": 1314,
+      "classes": 3,
+      "largest": 1310,
+      "largest_share": 0.9969558599695586,
+      "singleton_share": 0.00076103500761035,
+      "usable": 1,
+      "usable_bands": 1310
+    }
+  ],
+  "TOBACCO INSTITUTE": [
+    {
+      "threshold": 0.02,
+      "bands": 1802,
+      "classes": 1783,
+      "largest": 4,
+      "largest_share": 0.0022197558268590455,
+      "singleton_share": 0.9811320754716981,
+      "usable": 0,
+      "usable_bands": 0
+    },
+    {
+      "threshold": 0.04,
+      "bands": 1802,
+      "classes": 1446,
+      "largest": 175,
+      "largest_share": 0.09711431742508324,
+      "singleton_share": 0.7824639289678136,
+      "usable": 4,
+      "usable_bands": 301
+    },
+    {
+      "threshold": 0.06,
+      "bands": 1802,
+      "classes": 976,
+      "largest": 764,
+      "largest_share": 0.4239733629300777,
+      "singleton_share": 0.5260821309655938,
+      "usable": 2,
+      "usable_bands": 780
+    },
+    {
+      "threshold": 0.08,
+      "bands": 1802,
+      "classes": 567,
+      "largest": 1179,
+      "largest_share": 0.6542730299667037,
+      "singleton_share": 0.2991120976692564,
+      "usable": 2,
+      "usable_bands": 1200
+    },
+    {
+      "threshold": 0.1,
+      "bands": 1802,
+      "classes": 335,
+      "largest": 1369,
+      "largest_share": 0.7597114317425083,
+      "singleton_share": 0.16537180910099888,
+      "usable": 3,
+      "usable_bands": 1409
+    },
+    {
+      "threshold": 0.12,
+      "bands": 1802,
+      "classes": 208,
+      "largest": 1454,
+      "largest_share": 0.806881243063263,
+      "singleton_share": 0.09988901220865705,
+      "usable": 5,
+      "usable_bands": 1560
+    },
+    {
+      "threshold": 0.15,
+      "bands": 1802,
+      "classes": 108,
+      "largest": 1662,
+      "largest_share": 0.9223085460599334,
+      "singleton_share": 0.05438401775804662,
+      "usable": 2,
+      "usable_bands": 1676
+    },
+    {
+      "threshold": 0.18,
+      "bands": 1802,
+      "classes": 51,
+      "largest": 1738,
+      "largest_share": 0.9644839067702553,
+      "singleton_share": 0.0244173140954495,
+      "usable": 1,
+      "usable_bands": 1738
+    },
+    {
+      "threshold": 0.22,
+      "bands": 1802,
+      "classes": 19,
+      "largest": 1772,
+      "largest_share": 0.9833518312985572,
+      "singleton_share": 0.008324084350721421,
+      "usable": 1,
+      "usable_bands": 1772
+    },
+    {
+      "threshold": 0.26,
+      "bands": 1802,
+      "classes": 7,
+      "largest": 1796,
+      "largest_share": 0.9966703662597114,
+      "singleton_share": 0.003329633740288568,
+      "usable": 1,
+      "usable_bands": 1796
+    },
+    {
+      "threshold": 0.3,
+      "bands": 1802,
+      "classes": 4,
+      "largest": 1799,
+      "largest_share": 0.9983351831298557,
+      "singleton_share": 0.001664816870144284,
+      "usable": 1,
+      "usable_bands": 1799
+    }
+  ],
+  "ALL": [
+    {
+      "threshold": 0.02,
+      "bands": 14002,
+      "classes": 13522,
+      "largest": 236,
+      "largest_share": 0.016854735037851735,
+      "singleton_share": 0.9520782745322097,
+      "usable": 3,
+      "usable_bands": 275
+    },
+    {
+      "threshold": 0.04,
+      "bands": 14002,
+      "classes": 12262,
+      "largest": 453,
+      "largest_share": 0.0323525210684188,
+      "singleton_share": 0.8557348950149979,
+      "usable": 12,
+      "usable_bands": 1411
+    },
+    {
+      "threshold": 0.06,
+      "bands": 14002,
+      "classes": 10334,
+      "largest": 984,
+      "largest_share": 0.0702756749035852,
+      "singleton_share": 0.7133266676189116,
+      "usable": 11,
+      "usable_bands": 3219
+    },
+    {
+      "threshold": 0.08,
+      "bands": 14002,
+      "classes": 8119,
+      "largest": 1422,
+      "largest_share": 0.10155692043993715,
+      "singleton_share": 0.5530638480217112,
+      "usable": 12,
+      "usable_bands": 5359
+    },
+    {
+      "threshold": 0.1,
+      "bands": 14002,
+      "classes": 5820,
+      "largest": 1985,
+      "largest_share": 0.14176546207684618,
+      "singleton_share": 0.3880874160834167,
+      "usable": 27,
+      "usable_bands": 7626
+    },
+    {
+      "threshold": 0.12,
+      "bands": 14002,
+      "classes": 3713,
+      "largest": 4470,
+      "largest_share": 0.3192401085559206,
+      "singleton_share": 0.24525067847450363,
+      "usable": 29,
+      "usable_bands": 9926
+    },
+    {
+      "threshold": 0.15,
+      "bands": 14002,
+      "classes": 1606,
+      "largest": 12011,
+      "largest_share": 0.8578060277103271,
+      "singleton_share": 0.10384230824167975,
+      "usable": 10,
+      "usable_bands": 12163
+    },
+    {
+      "threshold": 0.18,
+      "bands": 14002,
+      "classes": 664,
+      "largest": 13184,
+      "largest_share": 0.9415797743179546,
+      "singleton_share": 0.042779602913869445,
+      "usable": 4,
+      "usable_bands": 13245
+    },
+    {
+      "threshold": 0.22,
+      "bands": 14002,
+      "classes": 213,
+      "largest": 13736,
+      "largest_share": 0.9810027138980145,
+      "singleton_share": 0.01349807170404228,
+      "usable": 2,
+      "usable_bands": 13749
+    },
+    {
+      "threshold": 0.26,
+      "bands": 14002,
+      "classes": 75,
+      "largest": 13904,
+      "largest_share": 0.9930009998571633,
+      "singleton_share": 0.00449935723468076,
+      "usable": 1,
+      "usable_bands": 13904
+    },
+    {
+      "threshold": 0.3,
+      "bands": 14002,
+      "classes": 32,
+      "largest": 13968,
+      "largest_share": 0.9975717754606485,
+      "singleton_share": 0.0020711326953292385,
+      "usable": 1,
+      "usable_bands": 13968
+    }
+  ]
+}

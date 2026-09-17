@@ -1,0 +1,23 @@
+# #3902 purity calls, threshold 0.10, per author, every proposed class with >= 20 bands.
+# One call per class from a random 24-member sample (purity_t0.10/<name>.png, members in purity.json).
+# ONE = one printed mark; MIXED = more than one mark or mark + typeset; LAYOUT = typeset heading or form, no artwork; JUNK = blank band, typed text, fax header, scan noise.
+lor_lorillard_c1_n1213      ONE     Lorillard script wordmark, 24/24 (address line varies)
+lor_lorillard_c2_n63        LAYOUT  typed "LORILLARD, INC. / 666 Fifth Avenue / Tax Department" address block
+lor_lorillard_c3_n30        ONE     1960s "P. Lorillard Company" engraved crest + script, 24/24
+lor_lorillard_c4_n30        JUNK    blank bands, punch holes
+philip_morris_c1_n1357      MIXED   PM crest over PHILIP MORRIS 13/24; typeset PHILIP MORRIS without crest 11/24
+philip_morris_c2_n25        JUNK    blank bands, rules, fax noise
+philip_morris_c3_n20        ONE     PM crest alone (wordmark below the band cut), 18/20 clear, 2 faint
+brown_and_williamson_c1_n329  ONE   old B&W leaf monogram over BROWN & WILLIAMSON TOBACCO CORPORATION, 23/24 (1 typeset only)
+brown_and_williamson_c2_n269  JUNK  tiny typeset B&W name, blank bands, fax headers
+brown_and_williamson_c3_n70   ONE   1990s B&W tobacco-leaf mark, 24/24
+brown_and_williamson_c4_n26   ONE   1950s-60s oval B&W emblem with air-mail stripes, 24/24
+rjr_c1_n40                  JUNK    blank bands, typed dates
+rjr_c2_n31                  ONE     RJReynolds Tobacco Company script, 24/24
+rjr_c3_n20                  ONE     RJR block logo under right-aligned address, 20/20
+american_tobacco_c1_n440    ONE     BAT leaf + BRITISH-AMERICAN TOBACCO COMPANY (LTD centred / LIMITED left), 24/24
+american_tobacco_c2_n358    JUNK    no letterhead: typed references, blank bands
+american_tobacco_c3_n27     ONE     The American Tobacco Company chief's-head block logo, 24/24
+batco_c1_n920               JUNK    no letterhead, toner-black and noisy scans
+batco_c2_n103               ONE     BAT leaf (same mark as american_tobacco_c1), 24/24
+batco_c3_n31                LAYOUT  typeset TOBACCO ADVISORY COUNCIL heading
