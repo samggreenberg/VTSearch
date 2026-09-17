@@ -33,6 +33,16 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **Double-click the image to zoom in** (#3934). Looking closer at a borderline
+  item meant reaching for the zoom control below the image, which breaks the
+  rhythm of keyboard voting. A double-click on the image in the Train / Find
+  centre panel now zooms 2x about the point you clicked, the way it already
+  does on the Browse map. Repeat to go deeper; because the viewer caps at 5x,
+  a double-click *at* the cap returns to fit instead of doing nothing, so the
+  mouse alone gets you both in and out. Any rotation you applied is kept, and
+  the gesture stands aside while a region draw owns it (Shift held, or the
+  Marquee toggle on).
+
 - **Stall diagnostics, on by default** (#3853). A rare 5-20 s freeze during
   labeling in which every in-flight request finishes at once could not be
   told apart from a slow endpoint by the request timer alone. The app now runs
