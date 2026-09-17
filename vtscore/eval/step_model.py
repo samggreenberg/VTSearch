@@ -43,12 +43,20 @@ class StepModel:
     only ever runs on single-vector, region-free datasets).
     ``backend``/``device`` are recorded on every result row so the report can
     say which engine produced each number.
+
+    ``predict_std`` is the optional uncertainty half of the contract (issue
+    #3954): the same ``(N, D)`` matrix to a per-row spread of the score, on the
+    score's own [0, 1] scale.  Only a trainer with a posterior sets it (the
+    ``gp_*`` arms); it is ``None`` everywhere else, and the uncertainty-driven
+    strategies in :mod:`vtscore.eval.al_strategies` refuse to run without it
+    rather than silently degrading to the rank pick.
     """
 
     predict: Callable[[Any], "np.ndarray"]
     torch_model: Optional[Any]
     backend: str
     device: str
+    predict_std: Optional[Callable[[Any], "np.ndarray"]] = None
 
 
 #: Head choices for the app-pipeline trainer (:data:`APP_TRAINER`), all three
