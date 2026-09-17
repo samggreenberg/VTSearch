@@ -140,6 +140,35 @@ class TestSiftMatcher:
         assert stats.inlier_count == 0
         assert stats.inlier_box is None
 
+    def test_a_small_crop_verifies_against_the_page_it_was_cut_from(self):
+        """#3912: the scale window must not reject a template much smaller than its candidate.
+
+        Keypoints are normalised per image, so a crop matched to its own page
+        fits at a scale of roughly crop width / page width, whatever the true
+        magnification is -- here 100 / 1400, about 0.07.  Under the old 0.1 floor
+        that model was thrown away, so a Tobacco800 logo less than a tenth of
+        its page's width could not verify against the very page it came from.
+        """
+        page = np.full((1400, 1400), 255, dtype=np.uint8)
+        page[600:700, 650:750] = _textured_image(seed=7, size=100)
+        crop = page[600:700, 650:750].copy()
+        m = SiftMatcher()
+        template = m.detect_and_describe(crop, max_features=400)
+        candidate = m.detect_and_describe(page, max_features=4000)
+
+        stats = m.verify(template, candidate)
+        assert stats.scale == pytest.approx(100 / 1400, rel=0.15)
+        assert stats.model_ok is True
+        assert stats.inlier_count >= 20
+
+    def test_a_small_crop_still_does_not_verify_against_an_unrelated_page(self):
+        page = np.full((1400, 1400), 255, dtype=np.uint8)
+        page[600:700, 650:750] = _textured_image(seed=8, size=100)
+        m = SiftMatcher()
+        template = m.detect_and_describe(_textured_image(seed=7, size=100), max_features=400)
+        stats = m.verify(template, m.detect_and_describe(page, max_features=4000))
+        assert stats.model_ok is False
+
     def test_sift_matcher_satisfies_protocol(self):
         assert isinstance(SiftMatcher(), StructuralMatcher)
 
