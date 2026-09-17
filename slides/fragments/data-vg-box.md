@@ -9,7 +9,7 @@
      it worked. -->
 
 <!-- The good half. It is drawn from the *whole* Visual Genome source — all
-     108,000 images and the full free-text vocabulary — not the demo
+     108K images and the full free-text vocabulary — not the demo
      pipeline's hundred curated categories. That matters more than it
      sounds: the curated vocabulary puts **five** categories below one model
      patch, and the full source puts **643** there. A vocabulary chosen for
@@ -29,5 +29,5 @@
 
 <!-- If asked about the "38 of 40": band membership was assigned on the
      median voted area over all of VG, and the check recomputes it on the
-     12,000-image sample, so the strays are a measurement difference rather
+     12K-image sample, so the strays are a measurement difference rather
      than a mis-filing. -->

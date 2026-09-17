@@ -16,10 +16,10 @@
      twenty-four boxes. The skier and the stop sign at the bottom are the
      other end of the range — sparse frames are in there too. -->
 
-<!-- Five thousand images, of which 4,952 carry at least one object. The
-     other 48 are not a defect and not a mystery: they hold nothing from the
-     eighty classes, so they carry no label to score and the pile's
-     `coco_val` cell is 4,952 medias for that reason alone. -->
+<!-- Five thousand images, and 48 of them hold nothing from the eighty
+     classes. That is not a defect and not a mystery: those 48 carry no label
+     to score, which is the whole reason the pile's `coco_val` cell is 4,952
+     medias rather than a round five thousand. -->
 
 <!-- Two jobs in this work, and they are different. It is a **dataset** —
      one of the two region-voting cells in the pile, because it has boxes.

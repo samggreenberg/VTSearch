@@ -15,7 +15,8 @@
      thousand photographs, two and a half million objects, and every object
      carries a pixel box and a name. One frame is a dozen labelled things
      rather than one, which is what lets a single dataset answer questions
-     about small objects and large ones without changing dataset. -->
+     about small objects and large ones without changing dataset. (Exactly:
+     108,077 and 2,516,939, if anybody wants them.) -->
 
 <!-- The catch, and it is the one the next four slides are all about: the
      names are **free text**. Whoever annotated the image typed a word.

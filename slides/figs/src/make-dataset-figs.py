@@ -129,6 +129,31 @@ def _save_photo(fig: plt.Figure, name: str) -> None:
     print(f"wrote figs/{name}.webp")
 
 
+def count(n: int) -> str:
+    """A count as a room would hear it said, not as the file reports it.
+
+    `2,516,939` on a slide is seven digits nobody can hold and six of them
+    nobody needs; what the number is doing there is saying *millions, a couple
+    of them*. So: a suffix above ten thousand, at most three significant
+    figures, and nothing under a thousand touched — small counts are usually
+    exact-by-design (`23` classes, `40` categories) and rounding one would only
+    make it disagree with the datasheet.
+
+    >>> count(2_516_939), count(108_077), count(2_778), count(721)
+    ('2.5M', '108K', '2,800', '721')
+
+    The exact figures are not lost, they move to the presenter notes, which is
+    where a number somebody might check belongs anyway.
+    """
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}".rstrip("0").rstrip(".") + "M"
+    if n >= 10_000:
+        return f"{round(n / 1_000):,.0f}K"
+    if n >= 1_000:
+        return f"{round(n, -2):,}"
+    return f"{n:,}"
+
+
 def _blank_fig() -> plt.Figure:
     fig = plt.figure(figsize=(FIG_W, FIG_H))
     fig.patch.set_facecolor("white")
@@ -333,7 +358,7 @@ def _vg_scale_steps(pc: Any) -> list[tuple[str, str]]:
     return [
         (
             "Start with Visual Genome",
-            "108,077 photographs of ordinary scenes, every object drawn as a pixel box "
+            f"{count(108_077)} photographs of ordinary scenes, every object drawn as a pixel box "
             "and named in free text by whoever annotated it.",
         ),
         (
@@ -343,13 +368,13 @@ def _vg_scale_steps(pc: Any) -> list[tuple[str, str]]:
         ),
         (
             "Repair the labels",
-            "51,497 of them are COCO images too, so COCO's exhaustive boxes replace VG's. "
-            "The rest went in front of a person, in VTSearch.",
+            f"{count(51_497)} of them are COCO images too, so COCO's exhaustive boxes replace "
+            "VG's. The rest went in front of a person, in VTSearch.",
         ),
         (
             "Audit what the class is called",
-            "A bicycle annotated 'bike' was nobody's bicycle. 182 spellings now fold into "
-            "their class; 254 more are withheld from it.",
+            "A bicycle annotated 'bike' was nobody's bicycle. Around 180 spellings now fold "
+            "into their class, and 250 more are withheld.",
         ),
         (
             "Draw negatives that are provable",
@@ -511,7 +536,7 @@ def fig_vg_scale_cells(pc: Any) -> plt.Figure:
         fig,
         [
             (f"{n_pos}", "positives"),
-            (f"{n_neg:,}", "negatives"),
+            (count(n_neg), "negatives"),
             (f"{prevalence:.0%}", "prevalence"),
         ],
         top=0.33,
@@ -646,8 +671,8 @@ def _docmarks_steps(dc: Any, facts: dict[str, Any]) -> list[tuple[str, str]]:
     return [
         (
             "Start with pages that carry marks",
-            ", ".join(f"{s['name']} ({s['pages']:,})" for s in anchors)
-            + f" — {anchor_pages:,} pages that each ship a mark with its outline already drawn.",
+            ", ".join(f"{s['name']} ({count(s['pages'])})" for s in anchors)
+            + f" — {count(anchor_pages)} pages that each ship a mark with its outline drawn.",
         ),
         (
             "Group the marks that are the same mark",
@@ -660,8 +685,10 @@ def _docmarks_steps(dc: Any, facts: dict[str, Any]) -> list[tuple[str, str]]:
         ),
         (
             "Bury them in real documents",
-            f"{distractors:,} scanned industry pages go in as distractors, in nested tiers of "
-            + " ⊂ ".join(f"{size:,}" for size in dc.TIERS.values())
+            f"{count(distractors)} scanned industry pages go in as distractors, in nested tiers of "
+            # The tiers sit in one breath, so they take one form: `count` would
+            # give "5,000 ⊂ 50K ⊂ 200K", which reads as three different units.
+            + " ⊂ ".join(f"{size // 1000}K" for size in dc.TIERS.values())
             + " pages.",
         ),
         (
@@ -680,7 +707,7 @@ def fig_docmarks_build(dc: Any, facts: dict[str, Any], upto: int | None = None) 
         _stats(
             fig,
             [
-                (f"{max(dc.TIERS.values()):,}", "pages"),
+                (count(max(dc.TIERS.values())), "pages"),
                 (f"{facts['classes']}", "marks to find"),
                 (f"{facts['instances']}", "copies of them, all checked"),
             ],
@@ -706,8 +733,8 @@ def fig_docmarks_shape(dc: Any, facts: dict[str, Any]) -> plt.Figure:
     _stats(
         fig,
         [
-            (f"{total:,}", "pages, in three nested tiers"),
-            (f"{anchor_pages:,}", "of them carry a roster mark"),
+            (count(total), "pages, in three nested tiers"),
+            (count(anchor_pages), "of them carry a roster mark"),
             (f"{dc.CORPUS_VERSION}", "corpus version, and it moves"),
         ],
     )
@@ -740,9 +767,9 @@ def fig_docmarks_shape(dc: Any, facts: dict[str, Any]) -> plt.Figure:
     # a column of numbers does not say that at a glance.
     for i, source in enumerate(sources):
         note = (
-            f"{source['pages']:,}\n{source['instances']} marks"
+            f"{count(source['pages'])}\n{source['instances']} marks"
             if source["instances"]
-            else f"{source['pages']:,}\nno marks"
+            else f"{count(source['pages'])}\nno marks"
         )
         ax.text(
             i,
@@ -793,8 +820,8 @@ def fig_card_visual_genome() -> plt.Figure:
     _stats(
         fig,
         [
-            ("108,077", "photographs"),
-            ("2,516,939", "objects, each a box and a name"),
+            (count(108_077), "photographs"),
+            (count(2_516_939), "objects, each a box and a name"),
             ("0.61", "VG's recall against COCO"),
         ],
     )
@@ -822,9 +849,9 @@ def fig_card_coco_val() -> plt.Figure:
     _stats(
         fig,
         [
-            (f"{len(by_id):,}", "images in val2017"),
+            (count(len(by_id)), "images in val2017"),
             (f"{len(coco['categories'])}", "classes, all always annotated"),
-            (f"{len(annotated):,}", "hold at least one object"),
+            (count(len(by_id) - len(annotated)), "hold none of them"),
         ],
     )
     _source_line(fig, "images.cocodataset.org/zips/val2017.zip")
@@ -907,7 +934,7 @@ def fig_card_vg_box(pc: Any) -> plt.Figure:
     _stats(
         fig,
         [
-            ("12,000", "images in each"),
+            (count(12_000), "images in each"),
             ("40", "categories in each"),
             ("643", "categories below one patch"),
             ("5", "the demo vocabulary has this many"),

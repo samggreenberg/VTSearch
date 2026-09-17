@@ -27,7 +27,7 @@
      about a threshold we picked. Size means the *union* box over the class's
      instances, because that is what one Good vote actually drags. -->
 
-<!-- **c** — Repair. Just over 51,000 of these images are COCO images too,
+<!-- **c** — Repair. About 51K of these images are COCO images too,
      and there COCO's exhaustive boxes replace VG's outright. The rest went
      in front of a person, in VTSearch, in three passes: the negatives it
      ranked highest, a uniform random stratum, and every positive re-issued
@@ -40,7 +40,8 @@
      became a `bicycle` **negative**. 182 spellings now fold into their
      class; 254 more are withheld from it, because a name can be evidence
      that the class *might* be there without being evidence that it is.
-     `bike` carries 638 of COCO's 3,683 `bicycle` boxes. -->
+     Numbers if asked: 182 spellings fold, 254 are withheld, and `bike`
+     carries 638 of COCO's 3,683 `bicycle` boxes. -->
 
 <!-- **e** — Draw the negatives where absence is provable. Every negative now
      comes from the COCO-scored half, so "this image holds no bus" is a fact

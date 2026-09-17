@@ -21,7 +21,8 @@
      them: SPODS, a set of pseudo-official documents made with logos, stamps
      and signatures on them; Tobacco800, binarised scans from 1980s and 90s
      tobacco litigation with the logos boxed; and StaVer, German scanned
-     invoices carrying real rubber stamps. 2,778 pages between them. -->
+     invoices carrying real rubber stamps. Under three thousand pages
+     between them. -->
 
 <!-- **b** — None of the three tells you which marks are *the same* mark.
      A box is a box. So perceptual hashing over every boxed mark proposes the
@@ -34,10 +35,11 @@
      ruled on and the rulings are kept — they survive a rebuild, because it
      is the *rulings* that are the dataset, not the clustering. -->
 
-<!-- **d** — Then bury them. 197,222 real scanned industry pages go in as
-     distractors, in three nested tiers. Every page that carries a mark is in
-     the smallest tier, so going from 5,000 pages to 200,000 adds only
-     distractors and the hard same-source near-misses stay constant. -->
+<!-- **d** — Then bury them. Nearly two hundred thousand real scanned
+     industry pages go in as distractors, in three nested tiers. Every page
+     that carries a mark is in the smallest tier, so going from 5K pages to
+     200K adds only distractors and the hard same-source near-misses stay
+     constant. -->
 
 <!-- **e** — Last, fix what counts as wrong. A mark is scored against its
      own source's other pages — all of which have been checked — and two

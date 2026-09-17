@@ -9,13 +9,14 @@
 
 <!-- The top one is the whole design in one picture. It is a log scale — the
      distractor source is seventy times the size of everything that holds an
-     answer. 2,778 pages carry a mark and 197,222 do not, and every one of
-     the pages that does is in the smallest tier. So "how does this method
+     answer. Under three thousand pages carry a mark and nearly two hundred
+     thousand do not, and every one of the pages that does is in the smallest
+     tier. So "how does this method
      degrade as the haystack grows" is a question about *real unrelated
      scans*, and not about harder look-alikes: those are all in the small
      tier already. -->
 
-<!-- UCSF holds no positives for anything. There are 14,002 letterhead bands
+<!-- UCSF holds no positives for anything. There are 14K letterhead bands
      boxed on those pages, and not one of them belongs to a class yet — they
      are raw material for classes that have not passed the audits. -->
 
