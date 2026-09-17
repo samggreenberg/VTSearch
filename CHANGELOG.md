@@ -15,6 +15,22 @@ not list every commit. Use `git log` for the full history.
 
 ## Unreleased
 
+### Changed
+
+- **Structural (instance-matching) search is ~3x faster on both of its hot
+  paths** (#3900). Ingest with the `sift_vlad` embedder no longer runs SIFT
+  detection at the source's full resolution: detection cost scales with pixel
+  count while the keypoint set is capped regardless, so a high-resolution
+  source was paying many times over for the same descriptors. Detection is now
+  bounded by `VTSEARCH_MAX_STRUCTURAL_DETECT_PIXELS` (default 2 MP, `0` opts
+  out) — measured 2.8x faster on a 4.5 MP corpus, and it *improves* the
+  verified-pair rate, because the keypoints an uncapped detection spends its
+  budget on sit in fine texture that does not survive a rescale. Separately,
+  the Stage-2 geometric re-rank now matches the whole shortlist in one batched
+  `torch` computation instead of a `cv2.BFMatcher` call per pair — 2.9x on CPU
+  with identical ranking, and it is the one part of the pipeline that uses a
+  GPU when there is one.
+
 ### Added
 
 - **Stall diagnostics, on by default** (#3853). A rare 5-20 s freeze during

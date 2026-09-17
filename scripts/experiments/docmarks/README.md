@@ -16,7 +16,7 @@ python build_corpus.py --probe                       # can I reach every source?
 python build_corpus.py --sources spods               # cluster into candidates
 python shortlist.py --corpus <dir> --write-roster     # rank them, draft a roster
 $EDITOR <dir>/roster.json                             # pick your two dozen
-python build_corpus.py --sources spods --roster <dir>/roster.json
+python build_corpus.py --sources spods --roster <dir>/roster.json --new-version
 
 python make_audit_slate.py --task merge               # which classes are one mark?
 python make_audit_slate.py --task membership          # verify every instance
@@ -235,6 +235,16 @@ Not all distractors are equal, and the manifest keeps them distinct:
   individually. Fine in bulk, and the only way to reach 200k.
 - **excluded** — a contamination risk, never scored.
 
+**For the anchor sources, a class's own source is a known negative** (decided
+2026-09-16, #3913). `CONTAMINATES` lists each anchor source as contaminating
+itself, which is right for a source nobody checked. But SPODS, Tobacco800 and
+StaVer marks are all boxed and clustered, so a same-source page that is not a
+member is verified not to carry the mark. Excluding those pages instead is worse
+than conservative. It leaves the positives as the only pages in their source's
+style, and on the first evaluation (#3904) a control that ranks by source alone,
+ignoring the mark, scored **AP 1.00**. `eval_retrieval.py` passes the class's
+own source as `verified_negative_sources` for its headline pool.
+
 The trap that last category exists for: RVL-CDIP, Tobacco800 and UCSF's Tobacco
 industry all descend from IIT-CDIP, so an American Tobacco letterhead is
 *certain* to appear in an RVL-CDIP "distractor" pool. Unlabelled positives don't
@@ -262,6 +272,11 @@ Two stability promises are on offer and they genuinely conflict:
 
 Without pinning, a build over a different page set is a **new corpus version**.
 Both behaviours are pinned by tests, including the negative one.
+
+Neither is chosen by default once a corpus exists: a build into an `--out` that
+already holds a `build_report.json` is refused before the pull unless it passes
+`--pin-tiers` or `--new-version` (#3903), and the report records which under
+`tier_provenance`.
 
 ## The human passes
 

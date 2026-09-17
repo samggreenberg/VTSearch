@@ -150,8 +150,14 @@ Copy `shortlist.png` and `roster.json` somewhere you can look at them, pick your
 two dozen, edit the file, then rebuild in roster mode:
 
 ```bash
-python build_corpus.py --sources spods,staver,tobacco800,ucsf --roster $VTS_DOCMARKS_OUT/roster.json
+python build_corpus.py --sources spods,staver,tobacco800,ucsf --roster $VTS_DOCMARKS_OUT/roster.json --new-version
 ```
+
+`--new-version` because `--out` already holds the candidate build, and a build
+into an existing corpus is refused unless it says which tier promise it makes
+(#3903). Picking a roster changes which pages are positives, so the tiers do
+move; before any cell exists nothing depends on them, and that is exactly what
+`--new-version` records. Once cells exist, see "Growing the corpus later".
 
 Rebuilding is cheap — the sources are cached, so only clustering and manifest
 writing re-run.
@@ -329,3 +335,10 @@ python build_corpus.py ... --pin-tiers $VTS_DOCMARKS_OUT/build_report.json
 Pinning keeps tier membership stable so the new numbers stay comparable to the
 old ones, at the cost of letting the page counts drift. Without it, say plainly
 that it is a new version and re-run the baselines.
+
+This is enforced, not advice (#3903). A build whose `--out` already holds a
+`build_report.json` stops before the pull unless it passes `--pin-tiers` or
+`--new-version`, and `launch_docmarks.sh build` refuses before submitting unless
+`VTS_DOCMARKS_PIN_TIERS` or `VTS_DOCMARKS_NEW_VERSION=1` is set. The choice is
+recorded under `tier_provenance` in the new report, including the cutoffs a new
+version superseded.
