@@ -974,6 +974,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         ),
     )
     ap.add_argument("--corpus", type=Path, default=cfg.OUT)
+    ap.add_argument(
+        "--audit-dir",
+        default=None,
+        help="read verdicts from <corpus>/audit/<this> instead of audit/<task>, e.g. completeness2 for the "
+        "multi-method completeness slate",
+    )
     ap.add_argument("--apply", action="store_true", help="write the changes (default is a dry run)")
     ap.add_argument(
         "--supersede",
@@ -1034,7 +1040,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     if not args.task:
         ap.error("--task is required unless --migrate-adjudications is given")
-    audit_dir = args.corpus / "audit" / args.task
+    audit_dir = args.corpus / "audit" / (args.audit_dir or args.task)
     slate_problems: list[str] = []
     if args.task == "merge":
         # The slate is an input *format*, not a second way of recording ground

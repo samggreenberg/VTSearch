@@ -331,6 +331,18 @@ In the order you run them. Only the first two are needed for a first eval.
    Measured on the v3 roster (#3927): SPODS's elephant stamp was split across
    ten classes, and 104 missing members turned up over 23 classes. Candidates
    are ranked, so extend `--top` for a class whose sheet ends on real copies.
+   **Second pass, non-SIFT proposers (#3951).** SIFT proposed all 108 missing
+   members, so the members still missing are the ones SIFT cannot see.
+   `completeness_multi.py` takes `proposals-<method>.json` files
+   (`{method, classes: {class_id: [[page_id, score, box|null], ...]}}`, best
+   first) from independent matchers: `propose_embed.py siglip_tiles` (max over
+   page tiles) and `dinov3_patches` (dense patch correspondence at the query's
+   own-page resolution), plus OCR and template NCC. It drops members,
+   cannot-linked marks, pages an earlier pass rejected and candidates an earlier
+   slate showed, then ranks the rest by how many methods agree and captions each
+   sheet cell with them (`SIG+DINO`). Apply with `audit_to_corrections.py --task
+   completeness --audit-dir completeness2`. A SigLIP box is a whole tile, so a
+   `SIG`-only candidate marked NO BOX needs a box drawn, not accepting as is.
 8. **`query_crops`** — extra queries, chosen by a person. Every result used to
    rest on one crop per class, so it mixed how good the method is with how good
    that crop happens to be. `query_crops.py` ranks a class's members by SIFT
