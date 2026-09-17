@@ -197,18 +197,27 @@ class TestRuleState:
     def test_an_empty_rule_string_is_unknown_too(self, corr, pc):
         assert corr.rule_state(_row(rule=""), pc.rule_stamp(_CLASS)) == corr.RULE_UNKNOWN
 
-    def test_the_872_committed_rows_are_all_unknown(self, corr):
-        """The live record, read as it stands: nothing in it can be back-filled.
+    def test_the_committed_unstamped_rows_are_all_unknown(self, corr):
+        """The committed record, read as it stands: no legacy row can be back-filled.
 
         A regression here would mean some reader had started treating the legacy
         rows as answered, which is the one outcome this issue forbids.
+
+        This used to assert that EVERY row was unknown, which held only while the
+        file was nothing but the 872 legacy rows. Applying the per-class pass
+        (#3926) added thousands of rows stamped when they were answered, so the
+        law is now stated for the rows it is about -- the ones with no stamp --
+        and a stamped row must never collapse into ``unknown``.
         """
         import json
 
         rows = json.loads((_PILE_DIR / "human_record" / "PILE__corrections.json").read_text())
-        states = {state for _, state in corr.rule_states(rows)}
+        states = corr.rule_states(rows)
+        unstamped = {state for row, state in states if not row.get("rule")}
+        stamped = {state for row, state in states if row.get("rule")}
 
-        assert states == {corr.RULE_UNKNOWN}, f"expected every legacy row to be unknown, got {states}"
+        assert unstamped == {corr.RULE_UNKNOWN}, f"expected every unstamped row to be unknown, got {unstamped}"
+        assert corr.RULE_UNKNOWN not in stamped, "a row carrying its rule read as unknown"
 
 
 class TestTheQuery:
