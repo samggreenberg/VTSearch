@@ -327,6 +327,19 @@ In the order you run them. Only the first two are needed for a first eval.
    Measured on the v3 roster (#3927): SPODS's elephant stamp was split across
    ten classes, and 104 missing members turned up over 23 classes. Candidates
    are ranked, so extend `--top` for a class whose sheet ends on real copies.
+8. **`query_crops`** — extra queries, chosen by a person. Every result used to
+   rest on one crop per class, so it mixed how good the method is with how good
+   that crop happens to be. `query_crops.py` ranks a class's members by SIFT
+   inliers against the current query (the same `inliers.json` as
+   `completeness`), keeps one per source document (only Tobacco800 page ids
+   share a document), and draws up to 12 of them in context with their box on
+   one screen. The answer is the candidate numbers to keep, in order.
+   `audit_to_corrections.py --task query_crops` stores them in
+   `query_crops.json`, cuts `queries/<class>__q<n>.png`, and gives the class a
+   `query_crops` list: the primary first, then the extras. `build_corpus.py`
+   replays the store after it writes the primary crops, and warns about a
+   stored crop that no longer fits the build. `query_crop` itself is
+   unchanged, so existing studies keep reading the same query.
 
 Query crops come from each class's largest boxed instance automatically (the
 prior study measured a 2.2× AP advantage for a clean query over a small in-scene

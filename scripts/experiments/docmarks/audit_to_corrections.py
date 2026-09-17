@@ -7,6 +7,7 @@
     python audit_to_corrections.py --task confusable --apply
     python audit_to_corrections.py --task letterhead          # dry run (default)
     python audit_to_corrections.py --task completeness --reviewer <name> --apply
+    python audit_to_corrections.py --task query_crops --reviewer <name> --apply
     python audit_to_corrections.py --migrate-adjudications --apply
 
 Without ``--apply`` it prints what it would change and touches nothing.
@@ -959,7 +960,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument(
         "--task",
-        choices=("merge", "membership", "cluster", "confusable", "distinctive", "letterhead", "completeness"),
+        choices=(
+            "merge",
+            "membership",
+            "cluster",
+            "confusable",
+            "distinctive",
+            "letterhead",
+            "completeness",
+            "query_crops",
+        ),
     )
     ap.add_argument("--corpus", type=Path, default=cfg.OUT)
     ap.add_argument("--apply", action="store_true", help="write the changes (default is a dry run)")
@@ -1060,6 +1070,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         changes, problems, new_merges, new_separations, new_added_marks = apply_completeness(
             pages, classes, verdicts, reviewer=args.reviewer
         )
+    elif args.task == "query_crops":
+        from query_crops import STORE, apply_query_crops, load_store  # noqa: PLC0415
+
+        crop_store = load_store(args.corpus / STORE)
+        changes, problems = apply_query_crops(classes, verdicts, crop_store, reviewer=args.reviewer)
     elif args.task == "distinctive":
         changes, problems = apply_distinctive(classes, verdicts)
     else:
@@ -1126,6 +1141,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         store = args.corpus / ADDED_MARKS
         save_added_marks(load_added_marks(store) + new_added_marks, store)
         print(f"  appended {len(new_added_marks)} hand-added mark(s) to {store}")
+
+    if args.task == "query_crops":
+        from query_crops import STORE, materialise, save_store  # noqa: PLC0415
+
+        # The store first: it is what a rebuild replays, so a crop that exists
+        # on disk but not in the store would silently vanish at the next build.
+        save_store(crop_store, args.corpus / STORE)
+        crop_pages = {p.page_id: p for p in read_manifest(manifest_path)}
+        crop_warnings: list[str] = []
+        n = materialise(classes, crop_store, crop_pages, args.corpus / "queries", crop_warnings)
+        for w in crop_warnings:
+            print(f"  WARNING: {w}")
+        print(f"  wrote {n} extra query crop(s) and {args.corpus / STORE}")
 
     classes_path.write_text(json.dumps(classes, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     if mutates_pages:

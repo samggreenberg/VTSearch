@@ -1042,6 +1042,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
         print(f"  {len(needs_hand_crop)} weak-label class(es) need a hand-drawn query crop")
     warnings.extend(crop_warnings)
 
+    # Hand-chosen extra query crops (query_crops.py) after the primaries, so a
+    # rebuild reproduces each class's `query_crops` list rather than dropping it.
+    from query_crops import STORE as QUERY_CROP_STORE, load_store as load_query_crops, materialise
+
+    extra = materialise(
+        admitted,
+        load_query_crops(args.out / QUERY_CROP_STORE),
+        {p.page_id: p for p in pages},
+        args.out / "queries",
+        warnings,
+    )
+    if extra:
+        print(f"  replayed {extra} hand-chosen extra query crop(s)")
+
     # Read at the start by `tier_provenance`, not here: this file may be the
     # very report this build is about to overwrite.
     pinned = provenance["pinned_cutoffs"]
