@@ -83,25 +83,40 @@ def _box_px(im, box: Sequence[float]) -> tuple[float, float, float, float]:
     )
 
 
+#: The side panel magnifies at most this much, so a tiny box is not blown up to mush.
+SIDE_MAX_ZOOM = 8.0
+#: The whole canvas stays at most this wide for its height, so on a wide screen the photo's
+#: HEIGHT is still what limits its size -- a panel as wide as a landscape photo would make it
+#: ~2.9:1 and shrink the photo on anything narrower than an ultrawide.
+MAX_CANVAS_ASPECT = 2.2
+#: Outline of the side panel itself -- deliberately NOT red, so it cannot be read as the box.
+PANEL_EDGE = (110, 110, 110)
+
+
 def draw_with_side_inset(
     src: Path,
     box: tuple[float, float, float, float],
     dest: Path,
     also: Sequence[Sequence[float]] = (),
 ) -> dict[str, int | str]:
-    """Write *src* with *box* outlined, and the magnified crop on padding beside it.
+    """Write *src* with *box* outlined, and a magnified view of it on padding beside the photo.
 
     The canvas always grows to the RIGHT. The reviewer's screen is far wider than it is tall,
     so height is what limits how large the photo is drawn; padding sideways leaves it at full
-    height, where padding below would shrink it. (An earlier draft padded along the photo's
-    shorter side, which is the wrong constraint for a wide screen.) The photo sits at the
-    canvas origin, so :func:`side_inset_to_original` is a pure rescale.
+    height, where padding below would shrink it. The photo sits at the canvas origin, so
+    :func:`side_inset_to_original` is a pure rescale.
 
-    *also* outlines further boxes of the same class on the photo, for an image whose
-    class has several instances (a VG positive is banded by the union of them all, so
-    a reviewer asked "is the most prominent one boxed?" has to see every one). The
-    magnified panel then shows the union of *box* and *also*. With no *also* the
-    render is byte-identical to the single-box one.
+    **The panel is a faithful view, not the corner inset moved sideways.** The corner inset
+    (:func:`inset_crop`) caps width and height to the same target independently, which squashes
+    any crop that is not square, and its red frame surrounds the padded context rather than the
+    box -- so the reviewer could not tell whether something near the box's edge was inside it
+    (#3926, reported on a seat-check render). Here the crop keeps its aspect ratio, the box
+    itself is drawn in red INSIDE the panel at the same place it has on the photo, and the
+    panel's own edge is grey. The context padding is the corner inset's, so a small object still
+    comes with its surroundings.
+
+    *also* outlines further boxes of the same class, on the photo and in the panel, for an
+    image whose class has several instances; the panel then frames their union.
 
     Returns the geometry needed to convert a box drawn on this render back to the photo.
     """
@@ -110,26 +125,42 @@ def draw_with_side_inset(
     with Image.open(src) as im:
         im = im.convert("RGB")
         W, H = im.size
-        boxes = [tuple(box), *(tuple(b) for b in also)]
-        union = (min(b[0] for b in boxes), min(b[1] for b in boxes), max(b[2] for b in boxes), max(b[3] for b in boxes))
-        crop, (x0, y0, x1, y1), lw = inset_crop(im, union if also else box)
+        boxes = [_box_px(im, b) for b in (tuple(box), *(tuple(b) for b in also))]
+        ux0, uy0 = min(b[0] for b in boxes), min(b[1] for b in boxes)
+        ux1, uy1 = max(b[2] for b in boxes), max(b[3] for b in boxes)
+        bw, bh = max(1.0, ux1 - ux0), max(1.0, uy1 - uy0)
+        pad = max(max(bw, bh) * 0.6, min(W, H) * 0.10)
+        cx0, cy0 = max(0, int(ux0 - pad)), max(0, int(uy0 - pad))
+        cx1, cy1 = min(W, int(ux1 + pad) + 1), min(H, int(uy1 + pad) + 1)
+        cx1, cy1 = max(cx1, cx0 + 2), max(cy1, cy0 + 2)
+        crw, crh = cx1 - cx0, cy1 - cy0
+        lw = max(2, int(min(W, H) * 0.006))
         gap = max(4, 2 * lw)
-        side = "right"
-        cw, ch = W + crop.width + 2 * gap, max(H, crop.height + 2 * gap)
-        ix, iy = W + gap, (ch - crop.height) // 2
+        # One scale for both axes. The panel may be as tall as the photo; its width is whatever
+        # keeps the canvas within MAX_CANVAS_ASPECT, but never under 40% of a very wide photo.
+        max_pw = max(MAX_CANVAS_ASPECT * H - W - 2 * gap, 0.4 * W)
+        zoom = min((H - 2 * gap) / crh, max_pw / crw, SIDE_MAX_ZOOM)
+        pw, ph = max(1, round(crw * zoom)), max(1, round(crh * zoom))
+        panel = im.crop((cx0, cy0, cx1, cy1)).resize((pw, ph), Image.LANCZOS)
+        cw, ch = W + pw + 2 * gap, H
+        ix, iy = W + gap, (H - ph) // 2
         out = Image.new("RGB", (cw, ch), (0, 0, 0))
         out.paste(im, (0, 0))
+        out.paste(panel, (ix, iy))
         d = ImageDraw.Draw(out)
-        if also:
-            for b in boxes:
-                bx0, by0, bx1, by1 = _box_px(im, b)
-                d.rectangle([bx0, by0, bx1, by1], outline=(255, 32, 32), width=lw)
-        else:
+        d.rectangle([ix - 1, iy - 1, ix + pw, iy + ph], outline=PANEL_EDGE, width=1)
+        sx, sy = pw / crw, ph / crh
+        for x0, y0, x1, y1 in boxes:
             d.rectangle([x0, y0, x1, y1], outline=(255, 32, 32), width=lw)
-        out.paste(crop, (ix, iy))
-        d.rectangle([ix, iy, ix + crop.width - 1, iy + crop.height - 1], outline=(255, 32, 32), width=lw)
-        out.save(dest, quality=92)
-        return {"orig_w": W, "orig_h": H, "canvas_w": cw, "canvas_h": ch, "side": side}
+            d.rectangle(
+                [ix + (x0 - cx0) * sx, iy + (y0 - cy0) * sy, ix + (x1 - cx0) * sx, iy + (y1 - cy0) * sy],
+                outline=(255, 32, 32),
+                width=lw,
+            )
+        # No chroma subsampling: at the default 4:2:0 a 2 px red outline blurs to a dull purple,
+        # and the outline is exactly what the reviewer is reading.
+        out.save(dest, quality=92, subsampling=0)
+        return {"orig_w": W, "orig_h": H, "canvas_w": cw, "canvas_h": ch, "side": "right"}
 
 
 def side_inset_to_original(box: list[float] | tuple[float, ...], geom: dict) -> list[float]:
