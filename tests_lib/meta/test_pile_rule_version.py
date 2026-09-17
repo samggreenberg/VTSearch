@@ -395,3 +395,24 @@ class TestCarryThrough:
         got = _run_corrections(tmp_path, [_verdict(1, stratum="positive_boxed", reference="present", rule=_RULE)])
 
         assert got[1]["source"] == "human_confirmed" and got[1]["rule"] == _RULE
+
+
+class TestDetectorKind:
+    """One mapping decides which labelset file a detector banks to (`pile_config.detector_kind`)."""
+
+    def test_each_question_maps_to_its_own_kind(self, pc):
+        assert pc.detector_kind("chair incl stools not couches") == "slate"
+        assert pc.detector_kind("chair incl stools not couches (any in image, no box)") == "belowcut"
+        assert pc.detector_kind("vase not planters -- recheck: is there one in this image?") == "recheck"
+        assert pc.detector_kind("chair incl stools not couches -- box check") == "boxcheck"
+
+    def test_a_box_check_never_banks_over_the_slate(self, pc):
+        """The failure this exists to prevent: a class-named audit overwriting a real slate."""
+        for cls in pc.SCALE_CLASSES:
+            assert pc.detector_kind(f"{pc.review_name(cls)} -- box check") == "boxcheck", cls
+
+    def test_the_box_check_tail_strips_back_to_the_rule(self, pc):
+        """So `bank_verdicts.py` stamps a box check with the rule in force."""
+        for cls in pc.SCALE_CLASSES:
+            name = f"{pc.review_name(cls)} -- box check"
+            assert pc.rule_of_review_name(name) == pc.review_name(cls), cls

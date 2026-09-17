@@ -2212,6 +2212,29 @@ def rule_of_review_name(detector: str) -> str:
     return name
 
 
+def detector_kind(detector: str) -> str:
+    """Which question a dashboard detector asks, and so which labelset file it banks to.
+
+    The single home for a mapping ``bank_verdicts.py`` and ``retire_finished.py``
+    used to copy inline. They must agree: ``retire_finished.py`` re-verifies the
+    live votes against the file ``bank_verdicts.py`` wrote, so if the two ever
+    derived different kinds it would compare against the wrong file.
+
+    A class-named detector with no marker is the pass's ``slate`` ("is this box
+    one?"). **Every other question must carry a marker, or it banks over that
+    class's slate labelset** -- a ten-image audit named ``chair incl stools not
+    couches`` would overwrite the 455-Good chair slate. The markers do not overlap,
+    so their order does not matter.
+    """
+    if "-- recheck" in detector:
+        return "recheck"
+    if "-- box check" in detector:
+        return "boxcheck"
+    if ("any in image" in detector) or ("below-cut" in detector):
+        return "belowcut"
+    return "slate"
+
+
 def rule_digest(cls: str) -> str:
     """A short hash of *cls*'s rule **as written** -- the name and the test together.
 
