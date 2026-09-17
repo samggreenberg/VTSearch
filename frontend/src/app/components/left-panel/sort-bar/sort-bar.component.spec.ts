@@ -82,6 +82,48 @@ describe('SortBarComponent', () => {
     expect(component.textSort.emit).not.toHaveBeenCalled();
   });
 
+  // Issue #3935: KeyboardService ignores every shortcut while focus sits in a
+  // text field, so the query input must hand focus back once the sort runs —
+  // otherwise the user cannot vote with the arrow keys on the results they
+  // just searched for without clicking away first.
+  it('should blur the text input after a submitted Enter so arrow-key voting works', async () => {
+    fixture.componentRef.setInput('sortMode', 'text');
+    await settleZoneless(fixture);
+    const input = fixture.nativeElement.querySelector('.text-sort-input') as HTMLInputElement;
+
+    input.value = 'cats';
+    input.dispatchEvent(new Event('input'));
+    input.focus();
+    expect(document.activeElement).toBe(input);
+
+    input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', bubbles: true }));
+    await settleZoneless(fixture);
+
+    expect(document.activeElement).not.toBe(input);
+  });
+
+  it('should keep focus in the text input when Enter submits nothing', async () => {
+    fixture.componentRef.setInput('sortMode', 'text');
+    await settleZoneless(fixture);
+    const input = fixture.nativeElement.querySelector('.text-sort-input') as HTMLInputElement;
+
+    input.value = '   ';
+    input.dispatchEvent(new Event('input'));
+    input.focus();
+
+    input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', bubbles: true }));
+    await settleZoneless(fixture);
+
+    expect(document.activeElement).toBe(input);
+  });
+
+  it('should blur the trigger element on a submitted sort', () => {
+    const trigger = { blur: vi.fn() } as unknown as HTMLElement;
+    component.onTextInput('cats');
+    component.submitTextSort(trigger);
+    expect(trigger.blur).toHaveBeenCalled();
+  });
+
   it('should render a Search button alongside the text input', async () => {
     fixture.componentRef.setInput('sortMode', 'text');
     await settleZoneless(fixture);

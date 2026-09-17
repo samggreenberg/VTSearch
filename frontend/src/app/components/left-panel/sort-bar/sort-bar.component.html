@@ -49,14 +49,14 @@
             placeholder="Describe what you're looking for…"
             [value]="textQuery"
             (input)="onTextInput($any($event.target).value)"
-            (keyup.enter)="submitTextSort()"
+            (keyup.enter)="submitTextSort($any($event.target))"
             title="Enter a text description and press Enter (or click Search) to rank items by how well they match your description"
             aria-label="Text sort query"
           />
           <button
             class="btn btn--primary btn--sm text-sort-btn"
             type="button"
-            (click)="submitTextSort()"
+            (click)="submitTextSort($any($event.currentTarget))"
             [disabled]="searchDisabled"
             title="Run text search"
           >Search</button>
