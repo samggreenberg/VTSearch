@@ -1,0 +1,13 @@
+{
+  "_legend": "What each of the top-8 SigLIP-ranked non-Tobacco UCSF pages shows, by position on its class sheet (tier m, own_verified pool). roster_mark lists positions carrying the class's mark.",
+  "tobacco800/logo_aah97e00-page02_1_0": {"roster_mark": [], "calls": ["article", "blank", "article", "article", "article", "typed", "typed", "blank"]},
+  "tobacco800/logo_aeq93a00_1": {"roster_mark": [], "calls": ["logo_image", "blank", "blank", "typed", "typed", "logo_image", "blank", "blank"]},
+  "tobacco800/logo_afm90c00-first_1_0": {"roster_mark": [], "calls": ["blank", "illustration", "article", "black", "blank", "blank", "blank", "blank"]},
+  "tobacco800/logo_ajj10e00_1": {"roster_mark": [], "calls": ["logo_image", "logo_image", "logo_image", "logo_image", "logo_image", "blank", "blank", "blank"]},
+  "tobacco800/logo_ald41a00-ernest_1": {"roster_mark": [], "calls": ["logo_image", "article", "article", "article", "article", "article", "article", "article"]},
+  "tobacco800/logo_asg54f00_1": {"roster_mark": [], "calls": ["black", "black", "blank", "blank", "blank", "blank", "black", "blank"]},
+  "tobacco800/logo_azb11c00_1": {"roster_mark": [], "calls": ["logo_image", "typed", "article", "article", "blank", "typed", "logo_image", "article"]},
+  "tobacco800/logo_bqz95d00_1": {"roster_mark": [], "calls": ["article", "article", "article", "article", "article", "typed", "article", "typed"]},
+  "tobacco800/logo_cgr96c00_1": {"roster_mark": [], "calls": ["blank", "blank", "blank", "blank", "logo_image", "blank", "logo_image", "blank"]},
+  "tobacco800/logo_ciy01a00-page02_1_0": {"roster_mark": [], "calls": ["black", "blank", "blank", "blank", "blank", "blank", "blank", "illustration"]}
+}
