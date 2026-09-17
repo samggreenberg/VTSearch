@@ -122,3 +122,21 @@ class TestRendering:
 
     def test_class_name_leads_the_queue_name(self, br):
         assert br.short_class("tobacco800/logo_ajj10e00_1") == "t800 logo_ajj10e00_1"
+
+
+class TestCompleteness2:
+    def test_tile_box_goods_are_held_back_for_a_tight_box(self, br):
+        qs = {
+            "c0": {"task": "completeness2", "key": {"class_id": "c", "index": 0, "tile_box": False}},
+            "c1": {"task": "completeness2", "key": {"class_id": "c", "index": 1, "tile_box": True}},
+            "c2": {"task": "completeness2", "key": {"class_id": "c", "index": 2, "tile_box": False}},
+        }
+        rows, notes = br.translate_completeness2(
+            [{"class_id": "c", "verdict": "none"}], qs, {"c0": "good", "c1": "good", "c2": "bad"}
+        )
+        assert rows[0]["verdict"] == "0" and rows[0]["needs_tight_box"] == [1]
+        assert any("tile box" in n for n in notes)
+
+    def test_sig_only_candidates_are_tiles(self, br):
+        assert br.tile_box({"methods": "SIG"})
+        assert not br.tile_box({"methods": "OCR+SIG"})

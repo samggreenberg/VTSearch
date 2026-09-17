@@ -18,7 +18,7 @@ a binary goes there instead:
 
 Sub-commands::
 
-    python binary_review.py emit  --task ucsf_classes|query_crops|box_tighten
+    python binary_review.py emit  --task ucsf_classes|query_crops|box_tighten|completeness2
     python binary_review.py load  --queue <dir> [--queue <dir> ...]
     python binary_review.py bank  [--date YYYY-MM-DD]
 
@@ -102,6 +102,11 @@ class Question:
     #: Page context around the box, as a share of its long side.  A located SIFT
     #: box can sit inside the mark, so "same logo?" questions show more.
     margin: float = MARGIN
+    #: False when the box is only a region the mark is somewhere inside (a SigLIP
+    #: tile): drawing it would read as "this is the box".
+    outline: bool = True
+    #: Small print under the image (e.g. which methods proposed the candidate).
+    detail: str = ""
 
 
 def short_class(class_id: str) -> str:
@@ -226,9 +231,11 @@ def render(q: Question, pages: dict[str, Any], corpus: Path, out: Path) -> Path:
 
     if q.old_box:
         outline(q.old_box, "#8a8a8a")
-    outline(q.box, "#e0201c")
+    if q.outline:
+        outline(q.box, "#e0201c")
     draw.rectangle([0, H - FOOTER_H, W, H], fill="#eeeeee")
-    draw.text((16, H - FOOTER_H + 6), f"{q.item}   ·   {q.page_id}", fill="#333333", font=_font(18))
+    footer = f"{q.item}   ·   {q.page_id}" + (f"   ·   {q.detail}" if q.detail else "")
+    draw.text((16, H - FOOTER_H + 6), footer, fill="#333333", font=_font(18))
     path = out / q.filename
     img.save(path, quality=90)
     return path
@@ -431,6 +438,48 @@ def emit_box_tighten(audit: Path, classes, pages) -> list[tuple[str, list[Questi
     return [(f"{PREFIX} staver boxes -- red box right?", qs)]
 
 
+COMPLETENESS2 = Path("/expscratch/sgreenberg/docmarks/completeness2/verdicts.suggested.jsonl")
+
+
+def tile_box(candidate: dict[str, Any]) -> bool:
+    """Proposed by SigLIP tiles alone: its box is the whole tile, not the mark."""
+    return str(candidate.get("methods", "")).strip() == "SIG"
+
+
+def emit_completeness2(source: Path, classes, pages) -> list[tuple[str, list[Question]]]:
+    """The multi-proposer completeness slate (#3963), one queue per class."""
+    queues = []
+    for r in read_jsonl(source):
+        cid = r["class_id"]
+        if cid not in classes:
+            continue
+        refs = class_refs(cid, classes, pages)
+        qs = []
+        for c in r["candidates"]:
+            if c["page_id"] not in pages or not c.get("box"):
+                continue
+            tile = tile_box(c)
+            sugg = {"yes": "good", "no": "bad"}.get(str(c.get("suggestion", "")).lower())
+            qs.append(
+                Question(
+                    filename=f"compl2__{slug(cid)}__c{c['index']:02d}.jpg",
+                    task="completeness2",
+                    question="Same mark as left?" + ("  (mark somewhere in this tile)" if tile else ""),
+                    refs=refs,
+                    page_id=c["page_id"],
+                    box=list(c["box"]),
+                    key={"class_id": cid, "index": c["index"], "tile_box": tile},
+                    suggestion=sugg,
+                    item=f"{cid} candidate {c['index']}",
+                    margin=0.5 if tile else 0.6,  # a tile can clip the mark: show around it too
+                    outline=not tile,
+                    detail=f"found by {c.get('methods', '?')}",
+                )
+            )
+        queues.append((f"{PREFIX} {short_class(cid)} -- right mark same as left? (completeness 2)", qs))
+    return queues
+
+
 # ---------------------------------------------------------------------------
 # Banking: votes -> each audit's verdict rows
 # ---------------------------------------------------------------------------
@@ -531,12 +580,48 @@ def translate_box_tighten(rows, questions, votes):
     return out, unanswered
 
 
-#: task (as written in a manifest) -> (audit dir name, translator)
-TRANSLATORS: dict[str, tuple[str, Callable[..., Any]]] = {
-    "ucsf_classes": ("ucsf_classes", translate_ucsf),
-    "ucsf_classes_relation": ("ucsf_classes", translate_ucsf),
-    "query_crops": ("query_crops", translate_query_crops),
-    "box_tighten": ("box_tighten", translate_box_tighten),
+def translate_completeness2(rows, questions, votes):
+    """Good candidates become the completeness verdict -- except tile boxes.
+
+    A Good vote on a SigLIP-tile candidate says the mark is on that page, but its
+    box is the tile.  Passing it through would add a tile-sized mark, so those
+    indices go to ``needs_tight_box`` and stay out of ``verdict`` until a box is drawn.
+    """
+    got: dict[str, dict[int, tuple[Optional[str], bool]]] = defaultdict(dict)
+    for fn, q in questions.items():
+        if q["task"] == "completeness2":
+            got[q["key"]["class_id"]][q["key"]["index"]] = (votes.get(fn), bool(q["key"].get("tile_box")))
+    out, unanswered = [], []
+    for r in rows:
+        r = dict(r)
+        asked = got.get(r["class_id"], {})
+        missing = sum(v is None for v, _ in asked.values())
+        if not asked or missing:
+            unanswered.append(
+                f"{r['class_id']}: {missing} of {len(asked)} candidates unanswered; verdict left as it was"
+            )
+            out.append(r)
+            continue
+        keep = sorted(i for i, (v, tile) in asked.items() if v == "good" and not tile)
+        tight = sorted(i for i, (v, tile) in asked.items() if v == "good" and tile)
+        r["verdict"] = ",".join(map(str, keep)) if keep else "none"
+        r["needs_tight_box"] = tight
+        r["verdict_source"] = "vtsearch"
+        if tight:
+            unanswered.append(
+                f"{r['class_id']}: candidate(s) {tight} carry the mark but have only a tile box; draw a box before apply"
+            )
+        out.append(r)
+    return out, unanswered
+
+
+#: task (as written in a manifest) -> (verdict source for a corpus, translator)
+TRANSLATORS: dict[str, tuple[Callable[[Path], Path], Callable[..., Any]]] = {
+    "ucsf_classes": (lambda corpus: corpus / "audit" / "ucsf_classes" / "verdicts.jsonl", translate_ucsf),
+    "ucsf_classes_relation": (lambda corpus: corpus / "audit" / "ucsf_classes" / "verdicts.jsonl", translate_ucsf),
+    "query_crops": (lambda corpus: corpus / "audit" / "query_crops" / "verdicts.jsonl", translate_query_crops),
+    "box_tighten": (lambda corpus: corpus / "audit" / "box_tighten" / "verdicts.jsonl", translate_box_tighten),
+    "completeness2": (lambda corpus: COMPLETENESS2, translate_completeness2),
 }
 
 
@@ -659,19 +744,19 @@ def bank(base: str, root: Path, corpus: Path, date: str) -> int:
         votes = votes_from_labels(detail)
         print(f"  {name}: {len(votes)} of {len(m['questions'])} answered")
         for fn, q in m["questions"].items():
-            audit_dir = TRANSLATORS[q["task"]][0]
-            qs, vs = by_task[audit_dir]
+            src = TRANSLATORS[q["task"]][0](corpus)
+            qs, vs = by_task[str(src)]
             qs[fn] = q
             if fn in votes:
                 vs[fn] = votes[fn]
-    for audit_dir, (qs, vs) in by_task.items():
+    for src_name, (qs, vs) in by_task.items():
         translator = TRANSLATORS[next(iter(qs.values()))["task"]][1]
-        src = corpus / "audit" / audit_dir / "verdicts.jsonl"
+        src = Path(src_name)
         rows = read_jsonl(src)
         out_rows, unanswered = translator(rows, qs, vs)
         dest = src.with_name("verdicts.from_vtsearch.jsonl")
         dest.write_text("".join(json.dumps(r) + "\n" for r in out_rows), encoding="utf-8")
-        print(f"{audit_dir}: wrote {dest} ({len(vs)} votes); {len(unanswered)} item(s) not fully answered")
+        print(f"{src.parent.name}: wrote {dest} ({len(vs)} votes); {len(unanswered)} item(s) not fully answered")
         for u in unanswered[:40]:
             print(f"    {u}")
     return 0
@@ -686,7 +771,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     e = sub.add_parser("emit")
-    e.add_argument("--task", choices=["ucsf_classes", "query_crops", "box_tighten"], required=True)
+    e.add_argument("--task", choices=["ucsf_classes", "query_crops", "box_tighten", "completeness2"], required=True)
     e.add_argument("--corpus", type=Path, default=cfg.OUT)
     e.add_argument("--root", type=Path, default=ROOT)
     e.add_argument("--cross", type=Path, default=Path("/expscratch/sgreenberg/docmarks/ucsf-3921/cross.json"))
@@ -717,10 +802,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         queues = emit_ucsf(args.corpus, audit, cross, classes, pages)
     elif args.task == "query_crops":
         queues = emit_query_crops(audit, classes, pages, cap=args.cap)
+    elif args.task == "completeness2":
+        queues = emit_completeness2(COMPLETENESS2, classes, pages)
     else:
         queues = emit_box_tighten(audit, classes, pages)
+    # a class can have queues from several passes: the pass keeps their dirs apart
+    suffix = "__completeness2" if args.task == "completeness2" else ""
     for name, qs in queues:
-        d = args.root / slug(name.split(" -- ")[0])
+        d = args.root / (slug(name.split(" -- ")[0]) + suffix)
         emit(qs, d, name, pages=pages, corpus=args.corpus)
         print(f"  {name}: {len(qs)} questions -> {d}", flush=True)
     return 0
