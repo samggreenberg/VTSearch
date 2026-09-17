@@ -1,0 +1,158 @@
+{
+ "bad": [],
+ "class": "bowl",
+ "detector_name": "bowl incl plates not planters or wrappers -- box check",
+ "exported": "2026-09-16",
+ "good": [
+  {
+   "cid": null,
+   "filename": "2324242.jpg",
+   "id": "e405642e7a6145a0",
+   "label": "good",
+   "md5": "f6ec8d8900d98e7be2337208e3d47358",
+   "media_type": "image",
+   "name": "2324242.jpg",
+   "origin_name": "2324242.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "cid": null,
+   "filename": "2364883.jpg",
+   "id": "97300e9795afcbd7",
+   "label": "good",
+   "md5": "64f7fe43ae75e7f14e341ffd264b0187",
+   "media_type": "image",
+   "name": "2364883.jpg",
+   "origin_name": "2364883.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "cid": null,
+   "filename": "2414086.jpg",
+   "id": "fedcd4298c954018",
+   "label": "good",
+   "md5": "ba4266fd88cee2380502b510c1b6970f",
+   "media_type": "image",
+   "name": "2414086.jpg",
+   "origin_name": "2414086.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "cid": null,
+   "filename": "2380379.jpg",
+   "id": "ecc5f99dba28a7ca",
+   "label": "good",
+   "md5": "87e0e3278f3c269a4c321e057f422890",
+   "media_type": "image",
+   "name": "2380379.jpg",
+   "origin_name": "2380379.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "cid": null,
+   "filename": "2362006.jpg",
+   "id": "34445f136d1fa612",
+   "label": "good",
+   "md5": "042cc88b0006cd436e125ac6189023a2",
+   "media_type": "image",
+   "name": "2362006.jpg",
+   "origin_name": "2362006.jpg",
+   "region_box": [
+    0.0,
+    0.0,
+    1.0,
+    0.9624161073825503
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "cid": null,
+   "filename": "713387.jpg",
+   "id": "a4adb22639040b98",
+   "label": "good",
+   "md5": "c47fd86e0947b57d12bd50a70d389d1e",
+   "media_type": "image",
+   "name": "713387.jpg",
+   "origin_name": "713387.jpg",
+   "region_box": [
+    0.2553691275167785,
+    0.40134228187919463,
+    0.8593959731543624,
+    1.0
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "cid": null,
+   "filename": "2335408.jpg",
+   "id": "a7aee083299d5b84",
+   "label": "good",
+   "md5": "a72183cd54fcecc6415afa430e4f2fd3",
+   "media_type": "image",
+   "name": "2335408.jpg",
+   "origin_name": "2335408.jpg",
+   "region_box": [
+    0.3884166652992238,
+    0.5946308724832214,
+    0.8692095633481564,
+    0.9006711409395973
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "cid": null,
+   "filename": "2363396.jpg",
+   "id": "eb15b22dd17e9fb4",
+   "label": "good",
+   "md5": "dbd63de1d04f480672f5dacb47a563a4",
+   "media_type": "image",
+   "name": "2363396.jpg",
+   "origin_name": "2363396.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "cid": null,
+   "filename": "2357198.jpg",
+   "id": "47388956420b7139",
+   "label": "good",
+   "md5": "5c3e5fa9cac5ebe4f7977a09be50776a",
+   "media_type": "image",
+   "name": "2357198.jpg",
+   "origin_name": "2357198.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "cid": null,
+   "filename": "2344444.jpg",
+   "id": "765ca27f6666aee4",
+   "label": "good",
+   "md5": "2ffa0da5d297d9ff2202defd0cab8bbc",
+   "media_type": "image",
+   "name": "2344444.jpg",
+   "origin_name": "2344444.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  }
+ ],
+ "kind": "boxcheck",
+ "question": "is the stored box on an instance of the class?",
+ "rule": "bowl incl plates not planters or wrappers",
+ "rule_digest": "6c7c2d74d335",
+ "source": "OWLv2-screened per-class review, exported from the live app"
+}
