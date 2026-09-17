@@ -169,6 +169,52 @@ def best_match_stats(
     return best
 
 
+def best_match_stats_many(
+    templates: list[tuple[Any, StructuralFeatures]],
+    candidates: list[StructuralFeatures],
+    matcher: StructuralMatcher,
+    *,
+    skip: Optional[Any] = None,
+) -> list[MatchStats]:
+    """Max-over-templates :class:`MatchStats` for *each* candidate, batched.
+
+    The list form of :func:`best_match_stats`.  When the matcher exposes a
+    ``verify_many`` (``SiftMatcher`` does), each template is matched against the
+    **whole candidate list in one batched pass**, which is what lets the
+    descriptor matching run as a single GPU-able distance computation instead of
+    one ``cv2.BFMatcher`` call per pair.  A matcher without ``verify_many`` -
+    any third-party :class:`~vtscore.media.structural.StructuralMatcher`, which
+    the protocol never required to have one - falls back to the per-pair loop and
+    behaves exactly as before.
+
+    *skip*, when given, is called as ``skip(template_key, candidate_index)`` and
+    suppresses that template for that candidate; it is how the verification
+    classifier holds out an item's own template (leave-one-out).
+    """
+    if not templates or not candidates:
+        return [MatchStats() for _ in candidates]
+
+    verify_many = getattr(matcher, "verify_many", None)
+    if verify_many is None:
+        out: list[MatchStats] = []
+        for i, cand in enumerate(candidates):
+            usable = [tpl for key, tpl in templates if skip is None or not skip(key, i)]
+            out.append(best_match_stats(usable, cand, matcher))
+        return out
+
+    best = [MatchStats() for _ in candidates]
+    best_keys = [(False, -1, -1.0) for _ in candidates]
+    for key, tpl in templates:
+        for i, stats in enumerate(verify_many(tpl, candidates)):
+            if skip is not None and skip(key, i):
+                continue
+            cur = (stats.model_ok, stats.inlier_count, stats.inlier_ratio)
+            if cur > best_keys[i]:
+                best_keys[i] = cur
+                best[i] = stats
+    return best
+
+
 # --------------------------------------------------------------------------
 # Verification classifier (the genuinely-structural learnable)
 # --------------------------------------------------------------------------
@@ -240,24 +286,27 @@ def train_verification_classifier(
     labels: list[float] = []
     all_templates = [tpl for _, tpl in templates]
 
-    for cid in good_votes:
-        cand = _local_features(snap.get(cid))
-        if cand is None or cand.count == 0:
-            continue
-        # Hold out this item's own template (leave-one-out) to avoid a trivial
-        # self-match positive.  If it was the only template, there is nothing to
-        # verify against, so skip it as a training example.
-        loo = [tpl for tc, tpl in templates if tc != cid]
-        if not loo:
-            continue
-        feats.append(match_stats_to_features(best_match_stats(loo, cand, matcher)))
+    # Positives: each Good vote verified against every template *but its own*
+    # (leave-one-out), so a trivial self-match cannot dominate training.  An item
+    # that was the only template has nothing left to verify against, so it is not
+    # a usable training example at all.
+    good_pairs = [
+        (cid, cand)
+        for cid in good_votes
+        if (cand := _local_features(snap.get(cid))) is not None
+        and cand.count > 0
+        and any(tc != cid for tc, _ in templates)
+    ]
+    good_ids = [cid for cid, _ in good_pairs]
+    for stats in best_match_stats_many(
+        templates, [c for _, c in good_pairs], matcher, skip=lambda key, i: key == good_ids[i]
+    ):
+        feats.append(match_stats_to_features(stats))
         labels.append(1.0)
 
-    for cid in bad_votes:
-        cand = _local_features(snap.get(cid))
-        if cand is None or cand.count == 0:
-            continue
-        feats.append(match_stats_to_features(best_match_stats(all_templates, cand, matcher)))
+    bad_cands = [f for cid in bad_votes if (f := _local_features(snap.get(cid))) is not None and f.count > 0]
+    for stats in best_match_stats_many([(None, tpl) for tpl in all_templates], bad_cands, matcher):
+        feats.append(match_stats_to_features(stats))
         labels.append(0.0)
 
     num_pos = sum(1 for v in labels if v == 1.0)
@@ -314,13 +363,19 @@ def structural_rerank(
     head = results[:top_k]
     tail = results[top_k:]
 
+    # Verify the whole shortlist in one batched pass rather than pair by pair:
+    # the descriptor matching is the bulk of Stage-2 latency and batches into a
+    # single (GPU-able) distance computation per template.
+    verifiable = [(i, f) for i, e in enumerate(head) if (f := _local_features(snap.get(e.get("id")))) and f.count > 0]
+    batched = best_match_stats_many([(None, tpl) for tpl in template_features], [f for _, f in verifiable], matcher)
+    stats_by_pos = {pos: st for (pos, _), st in zip(verifiable, batched)}
+
     scored: list[tuple[float, float, dict]] = []
-    for entry in head:
-        feats = _local_features(snap.get(entry.get("id")))
+    for pos, entry in enumerate(head):
         verification = 0.0
         box: Optional[tuple[float, float, float, float]] = None
-        if feats is not None and feats.count > 0:
-            stats = best_match_stats(template_features, feats, matcher)
+        stats = stats_by_pos.get(pos)
+        if stats is not None:
             verification = scorer.score(stats)
             box = stats.inlier_box
         new = dict(entry)
