@@ -352,9 +352,9 @@
     "why": "the deep sibling's roster, same argument"
   },
   "PILE__vg_scale_roster.json": {
-    "bytes": 276220,
+    "bytes": 275352,
     "rel": "vg_scale_roster.json",
-    "sha256": "760c074d99b09b55367945728d7d76fbc50af46fac08b363a874d843cd4a1af9",
+    "sha256": "d4dddaea6be228d5b6b96fc61c66a72890221285c6cf30867c4531ae79d9247d",
     "source": "{PILE}/vg_scale_roster.json",
     "tier": "derived",
     "why": "the membership a review was carried out against; a build rewrites it, and losing it means the next rebuild reshuffles reviewed images away"
