@@ -68,7 +68,7 @@ class TestGPSweepTrainers:
         assert name in SWEEP_TRAINERS
         X, y = _blobs()
         idx = np.r_[0:4, 40:44]  # 4 positives, 4 negatives - a quorum-sized vote set
-        predict = resolve_trainer(name)(X[idx], y[idx], seed=0)
+        predict = resolve_trainer(name)(X[idx], y[idx], 0)
         scores, std = predict(X)
         assert scores.shape == (80,) and std.shape == (80,)
         assert np.all((scores >= 0.0) & (scores <= 1.0))
@@ -79,27 +79,27 @@ class TestGPSweepTrainers:
     def test_spread_is_smaller_near_the_training_votes(self):
         X, y = _blobs()
         idx = np.r_[0:4, 40:44]
-        _, std = resolve_trainer("gp_rbf")(X[idx], y[idx], seed=0)(X)
+        _, std = resolve_trainer("gp_rbf")(X[idx], y[idx], 0)(X)
         # The voted items are the GP's own conditioning points.
         assert std[idx].mean() <= std.mean()
 
     def test_fixed_hyperparameters_skip_ml_ii(self):
         X, y = _blobs()
         idx = np.r_[0:4, 40:44]
-        fixed = resolve_trainer("gp_rbf@ls=0.5,amp=2,fixed")(X[idx], y[idx], seed=0)
+        fixed = resolve_trainer("gp_rbf@ls=0.5,amp=2,fixed")(X[idx], y[idx], 0)
         scores, _ = fixed(X)
         assert scores[:40].mean() > scores[40:].mean()
 
     def test_single_class_labels_are_refused(self):
         X, y = _blobs()
         with pytest.raises(ValueError):
-            resolve_trainer("gp_rbf")(X[:4], y[:4], seed=0)
+            resolve_trainer("gp_rbf")(X[:4], y[:4], 0)
 
     def test_deterministic_for_a_seed(self):
         X, y = _blobs()
         idx = np.r_[0:4, 40:44]
-        a, _ = resolve_trainer("gp_dot")(X[idx], y[idx], seed=3)(X)
-        b, _ = resolve_trainer("gp_dot")(X[idx], y[idx], seed=3)(X)
+        a, _ = resolve_trainer("gp_dot")(X[idx], y[idx], 3)(X)
+        b, _ = resolve_trainer("gp_dot")(X[idx], y[idx], 3)(X)
         np.testing.assert_allclose(a, b)
 
 
@@ -193,7 +193,7 @@ class TestGPStepTrainer:
 # ---------------------------------------------------------------------------
 
 
-def _ctx(pool_ids, *, scores, uncertainty, threshold=0.5, phase="hard", model=object()):
+def _ctx(pool_ids, *, scores, uncertainty, threshold=0.5, phase: str | None = "hard", model=object()):
     return ALContext(
         pool_ids=list(pool_ids),
         embeddings={i: np.zeros(4, np.float32) for i in pool_ids},

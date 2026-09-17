@@ -258,7 +258,7 @@ plot_eval_results(results, output_dir="eval_seeds")
 
 The voting-iterations evaluation measures how classification quality improves as more votes are cast. This is useful for understanding how many labels a user needs to provide before the model converges.
 
-Votes are cast in the order the app's **Autopilot** would present them — the eval reproduces the real user flow rather than an academic active-learning heuristic. Autopilot seeds the first few positives from text sort when available (pass `seed_scores`, a per-media cosine-to-query ranking), else from a handful of random known-good examples, then gathers the initial negatives and works through the standard Good / Bad / Hard / New phases. `autopilot` is the only vote-order strategy; every result row carries `strategy="autopilot"`.
+Votes are cast in the order the app's **Autopilot** would present them — the eval reproduces the real user flow rather than an academic active-learning heuristic. Autopilot seeds the first few positives from text sort when available (pass `seed_scores`, a per-media cosine-to-query ranking), else from a handful of random known-good examples, then gathers the initial negatives and works through the standard Good / Bad / Hard / New phases. `autopilot` is the vote-order strategy every study's headline numbers are read off, and every default-arm result row carries `strategy="autopilot"`. Two experiment arms sit beside it (issue #3954): `autopilot_uncertainty` and `autopilot_maxvar` keep every Autopilot phase and replace only the Hard pick with a rule that reads the detector's posterior spread — the straddle `argmax 1.96·std − |p − cut|` and plain `argmax std` respectively. They run only against a trainer that reports a spread (the `gp_*` trainers below) and raise otherwise, so a run can never attribute the app's own picks to a GP rule.
 
 #### Autopilot fidelity (`autopilot_fidelity`, default `True`)
 
@@ -543,7 +543,7 @@ Both functions:
 
 The voting simulation takes two knobs that both sound like "which model?". They are not the same question, and until issue #3764 they also shared the string `"mlp"`.
 
-**`trainer` picks the pipeline.** `trainer="app"` (the default) runs VTSearch's own: `train_model` plus production fold calibration, the arm every study's headline numbers are read off. Any `svm_*` value instead fits a standalone sklearn/cuML estimator that thresholds itself, from the registry in `vtscore/eval/sweep_trainers.py`. The arm was spelled `"mlp"` before #3764, which named no MLP — its default head is the linear SVM — so the old spelling is now accepted as an input alias and normalised away; result rows always record `app`.
+**`trainer` picks the pipeline.** `trainer="app"` (the default) runs VTSearch's own: `train_model` plus production fold calibration, the arm every study's headline numbers are read off. Any `svm_*` value instead fits a standalone sklearn/cuML estimator that thresholds itself, from the registry in `vtscore/eval/sweep_trainers.py`; any `gp_*` value fits a standalone Gaussian-process classifier the same way (issue #3954) and additionally exposes its posterior spread as `StepModel.predict_std`, which is what the two uncertainty strategies read. Both standalone families take the plain cross-calibration cut: their fold models are not the app's head, so the fold-anchored fusion has nothing to anchor on and `safe_thresholds` lands them on the blend fallback — compare them against `trainer="app", safe_thresholds=False`, not against the shipped cut, when the question is the head. The arm was spelled `"mlp"` before #3764, which named no MLP — its default head is the linear SVM — so the old spelling is now accepted as an input alias and normalised away; result rows always record `app`.
 
 **`head` picks the model that pipeline fits**, and applies to `trainer="app"` alone:
 
@@ -553,7 +553,7 @@ The voting simulation takes two knobs that both sound like "which model?". They 
 | `linear` | The same `Linear(d, 1)` fitted by balanced BCE — the logistic head the SVM replaced (#2790/#2809). |
 | `mlp` | An auto-sized hidden layer, BCE — the head shipped before #2790 (#2781). |
 
-Passing `head=` alongside an `svm_*` trainer is an error: those arms fit their own estimator and have no head to choose, which is why their rows carry an empty `head` column.
+Passing `head=` alongside an `svm_*` or `gp_*` trainer is an error: those arms fit their own estimator and have no head to choose, which is why their rows carry an empty `head` column.
 
 Two names are worth reading slowly. `svm_linear` is a **trainer**: a standalone SVM scored through its own `predict_proba`. `linear_svm` is a **head**: the app's `Linear(d, 1)` whose weights come from liblinear, scored and thresholded exactly as production does. A run of `trainer="svm_linear"` and a run of `trainer="app", head="linear_svm"` fit a similar boundary by very different routes, and only the second measures the shipped detector.
 

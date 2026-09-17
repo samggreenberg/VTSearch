@@ -213,17 +213,17 @@ def _train_gp_factory(
             base: Any = RBF(length_scale, length_scale_bounds=(1e-1, 1e1) if optimize else fixed)
         else:
             base = DotProduct(sigma_0=length_scale, sigma_0_bounds=(1e-2, 1e1) if optimize else fixed)
-        clf = GaussianProcessClassifier(
-            kernel=amp * base,
-            optimizer="fmin_l_bfgs_b" if optimize else None,
-            random_state=seed,
-        )
+        # ``None`` (no optimizer) is a documented value sklearn's stub types as ``str``.
+        optimizer: Any = "fmin_l_bfgs_b" if optimize else None
+        clf = GaussianProcessClassifier(kernel=amp * base, optimizer=optimizer, random_state=seed)
         with warnings.catch_warnings():
             # ML-II running into a bound is a property of the vote set the
             # report reads off ``std_mean``, not a fault to print per fold.
             warnings.simplefilter("ignore", ConvergenceWarning)
             clf.fit(X64, y_int)
-        est = clf.base_estimator_
+        # sklearn types ``base_estimator_`` as the union of every estimator
+        # shape it can hold; a binary fit always holds the Laplace binary one.
+        est: Any = clf.base_estimator_
         pos_col = int(np.searchsorted(clf.classes_, 1))
 
         def predict(X_test: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
