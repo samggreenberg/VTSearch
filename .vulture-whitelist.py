@@ -131,15 +131,6 @@ set_dataset_display_name  # noqa: F821 - vtscore.state; docs/packages/state.md
 make_plugin_route_schema  # noqa: F821 - vtscore.plugins.schema; kept for out-of-tree app tiers that mint a route per plugin (see the docstring)
 
 # ---------------------------------------------------------------------------
-# ``SplgMatcher`` is the SuperPoint + LightGlue structural backend that the
-# structural-embedder design reserves alongside the shipped SIFT one: a
-# StructuralMatcher-conformant alternative, evaluated in the 2026-07-13
-# iconography study and wired in by choosing it, not by being called from
-# here. A zero-registrant extension point is the shape of a working one.
-# ---------------------------------------------------------------------------
-SplgMatcher  # noqa: F821
-
-# ---------------------------------------------------------------------------
 # Public context managers exported from ``vtsearch.state`` for callers
 # that need explicit, scoped switching of the active dataset/detector
 # without going through the per-request middleware.
