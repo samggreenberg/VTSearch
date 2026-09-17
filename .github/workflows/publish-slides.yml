@@ -15,6 +15,11 @@ on:
       - 'slides/**'
       - 'scripts/publish-slides.sh'
       - '.github/workflows/publish-slides.yml'
+  # Note: GitHub only offers the "Run workflow" button for workflows present on
+  # the *default* branch, which here is `main`. Until a release sweeps this file
+  # there, manual dispatch is unavailable and scripts/publish-slides.sh is the
+  # way to publish by hand. The push trigger above is unaffected -- it fires
+  # from `dev`, where the file already is.
   workflow_dispatch:
 
 permissions:

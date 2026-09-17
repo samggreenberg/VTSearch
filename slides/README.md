@@ -89,6 +89,11 @@ soon, say — run the same script the workflow runs:
 ./scripts/publish-slides.sh --dry-run        # render, print the plan, upload nothing
 ```
 
+(Publishing by hand is also the only manual route for now: GitHub offers a
+workflow's "Run workflow" button only on the *default* branch, and ours is
+`main`, so the dispatch trigger stays dark until a release carries the workflow
+there. The push trigger from `dev` is unaffected.)
+
 It needs `gh` authenticated with write access, which a Claude Code on the web
 container does not have — that is the reason the work happens in a workflow
 rather than at the end of a session. It also refuses to publish while `slides/`
