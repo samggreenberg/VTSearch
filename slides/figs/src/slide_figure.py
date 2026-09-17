@@ -86,16 +86,27 @@ OBJECT_GAP_PT = 16.0
 #: 0.28 of a 16:9 drawing's width and the symmetric flows clear it, which is
 #: the difference between those slides having a headline and not.
 #:
-#: The height is measured, not chosen. It used to be 250px, sized against the
-#: sentence-length headlines the deck carried before #3242 retitled the figure
-#: slides to short recognizable phrases. Every `_class: full` headline in the
-#: deck now renders at or under 191.2px in this column ("Simulated Voters,
-#: Thousands of Runs", the longest, at four lines), so 250 was 59px of reserve
-#: nothing ever used — and every one of those pixels was taken out of a figure.
-#: Re-measure before changing it, and re-measure if a full-bleed headline grows
-#: past two lines: `slides/STYLE.md` records the recipe (render the deck to
-#: HTML and read every `section.full h2` box in a browser). This number is a
-#: measurement of the deck, so it is only true of the deck it was measured on.
+#: The height is measured, not chosen, and since #3958 it is a *ceiling the
+#: type rule guarantees* rather than the tallest headline the deck happens to
+#: carry. `section.full h2` is 40px over a 1.12 line-height, so its box is
+#: exactly `44.8 * lines + 12` slide pixels — 56.8 at one line, 101.6 at two —
+#: and `slides/STYLE.md` now caps a headline at two lines, with
+#: `slides/balance-titles.mjs` enforcing it. So 101.6px is the most any
+#: headline can render at, plus one `OBJECT_GAP_PT` (27.8px at the largest
+#: scale a full-bleed figure is drawn at) so the nearest ink still clears the
+#: headline by the deck's own standard gap: 130.
+#:
+#: It was 200 until #3969, and 250 before #3242. Each of those was the same
+#: defect one rule-change behind — 250 was sized for the sentence-length
+#: headlines #3242 retitled away, and 200 for the four-line headlines (191.2px)
+#: #3958's two-line cap removed. Every pixel of a reserve nothing can use is
+#: taken straight out of a figure, on the only axis a slide is short of.
+#:
+#: What re-measuring now depends on is the *type rule*, not the deck's wording:
+#: adding a longer headline cannot invalidate this number, but changing `h2`'s
+#: font-size, line-height, or the two-line cap can. `slides/STYLE.md` records
+#: the recipe (render the deck to HTML and read every `section.full h2` box in
+#: a browser).
 #:
 #: What still cannot clear it is a figure whose *top row spans the drawing* —
 #: a score axis or a scatter that starts in the top-left corner by
@@ -103,21 +114,29 @@ OBJECT_GAP_PT = 16.0
 #: horizontal, so the drawing has to start right of the notch instead. The
 #: Part 2 panel figures do exactly that. What the height buys is the figures
 #: whose ink merely grazed the reserve's lower half.
-TITLE_NOTCH_PX = (60.0, 42.0, 300.0, 200.0)
+TITLE_NOTCH_PX = (60.0, 42.0, 300.0, 130.0)
 
 #: A figure may pass its *own* rectangle to `save(notch=...)`, and exactly one
 #: does. The x, y and width are not negotiable — that is the standard, and a
-#: headline that moved would stop being a headline — but the *height* is only
-#: ever a reserve for the deck's **longest** headline, and a figure whose slide
-#: carries a one-line one is holding back 100px it will never use. On a
-#: schematic that costs nothing (the drawing does not reach up there anyway);
-#: on `vote-boundary`, whose whole first page is a field of items filling the
+#: headline that moved would stop being a headline — but the *height* is a
+#: reserve for a **two-line** headline, and a figure whose slide carries a
+#: one-line one is holding back 42px it will never use. On a schematic that
+#: costs nothing (the drawing does not reach up there anyway); on
+#: `vote-boundary`, whose whole first page is a field of items filling the
 #: slide, it left a band under the title with no title in it and no items
 #: either, which reads as a mistake rather than as a margin (#3254).
 #:
-#: The height is measured the same way `TITLE_NOTCH_PX`'s is, on the slide the
-#: figure actually appears on, and a figure that trims it owns that
-#: measurement: re-take it if the headline changes. See `slides/STYLE.md`.
+#: An override is worth keeping only while it is *shorter* than the standard.
+#: `embed-flow` carried one until #3969 — its headline is two lines, so its
+#: measured box plus a gap came to exactly the 130 the standard now reserves,
+#: and the override had become a restatement of the global that would silently
+#: stop tracking it. Trim for a one-line headline; do not re-derive the
+#: two-line case per figure.
+#:
+#: The height is measured the same way `TITLE_NOTCH_PX`'s is — line count
+#: through `44.8 * lines + 12`, plus one `OBJECT_GAP_PT` at that figure's own
+#: scale — and a figure that trims it owns that measurement: re-take it if the
+#: headline gains or loses a line. See `slides/STYLE.md`.
 
 INK = "#14181f"
 SOFT = "#5b6472"

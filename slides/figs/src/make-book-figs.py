@@ -46,6 +46,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from coco_fixture import IMAGES, ensure_corpus  # noqa: E402
 from slide_figure import (  # noqa: E402
     FULL_BLEED,
+    SLIDE_PX,
+    TITLE_NOTCH_PX,
     save,
     tight_box,
 )
@@ -173,10 +175,11 @@ def _canvas(width: float, height: float, unit: float) -> tuple[plt.Figure, plt.A
 #: in the presenter notes, which is where the rest of the deck keeps its
 #: sentences.
 #:
-#: 16:9 at 80 slide pixels per unit, so the title notch — 300x200 px at a
-#: 60x42 inset — is the rectangle x 0.75..4.50, y 5.975..8.475. The grid is
+#: 16:9 at 80 slide pixels per unit, so the title notch — 300x130 px at a
+#: 60x42 inset — is the rectangle x 0.75..4.50, y 6.85..8.475. The grid is
 #: right-aligned past it: the tiles are height-bound at three columns, which
-#: leaves exactly the horizontal slack the headline needs.
+#: leaves exactly the horizontal slack the headline needs. Only the notch's
+#: *left* edge matters here, so #3969's shorter reserve moved nothing.
 BOUNDARY_CANVAS = (16.0, 9.0)
 BOUNDARY_UNIT = 72.0
 #: Left edge of the grid: clear of the notch by an object gap, and the one
@@ -268,14 +271,21 @@ def _boundary_stage(stage: int) -> plt.Figure:
 # The full-bleed figure: one ranking, and every cut anyone could defend on it.
 # ---------------------------------------------------------------------------
 
-#: A 16:9 canvas at 80 slide pixels per unit, so the title notch — 300x200
-#: pixels at a 60x42 inset — is the rectangle x 0.75..4.50, y 5.98..8.48 in
-#: these coordinates. `RANK_TOP` is that rectangle's floor: nothing that spans
-#: the drawing may sit above it, which is what pins the score axis and, under
-#: it, the tile row.
+#: A 16:9 canvas, so one canvas unit is 80 slide pixels and the title notch —
+#: `slide_figure.TITLE_NOTCH_PX`, 300x130 at a 60x42 inset — is the rectangle
+#: x 0.75..4.50, y 6.85..8.475 in these coordinates. `RANK_TOP` is that
+#: rectangle's floor: nothing that spans the drawing may sit above it.
+#:
+#: Derived rather than hand-copied, because it was hand-copied and went stale:
+#: it read 5.97 against the 200px reserve that #3969 shortened to 130. Nothing
+#: below moved — the score axis is pinned by the tile row under it, not by the
+#: notch, and 5.80 cleared the old floor by 0.17 units — so what the stale copy
+#: cost was only its own truth. Deriving it means the next re-measure does not
+#: have to find this file.
 RANK_CANVAS = (16.0, 9.0)
 RANK_UNIT = 80.0
-RANK_TOP = 5.97
+_RANK_PX_PER_UNIT = SLIDE_PX / RANK_CANVAS[0]
+RANK_TOP = RANK_CANVAS[1] - (TITLE_NOTCH_PX[1] + TITLE_NOTCH_PX[3]) / _RANK_PX_PER_UNIT
 
 RANK_TILE = 1.44
 RANK_GAP = 0.11

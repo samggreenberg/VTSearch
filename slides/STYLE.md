@@ -135,18 +135,29 @@ Two consequences, and the second is the one that surprises people:
   So the standard is `<!-- _class: full -->` with `![bg fit]`, and the title
   goes in a **notch** cut out of the drawing's top-left corner.
 
-`slide_figure.TITLE_NOTCH_PX` is that rectangle — 300×200 at a 60×42 inset —
+`slide_figure.TITLE_NOTCH_PX` is that rectangle — 300×130 at a 60×42 inset —
 and `section.full` in `themes/vtsearch.css` is the same rectangle in CSS. Keep
 the two in step. `save()` refuses to write a full-bleed figure that draws
 inside it, so the reserve cannot rot.
 
-**The height is a measurement, not a round number.** It is the deck's longest
-full-bleed headline plus a little: every `section.full h2` renders at or under
-191.2px in a 300px column, so the reserve is 200. It used to be 250, sized
-against the sentence-length headlines the figure slides carried before #3242
-retitled them to short phrases, and the 59px nobody used were 59px taken out of
-every full-bleed figure. Re-measure before you change it, and re-measure if a
-headline grows past two lines — render the deck to HTML and read the boxes:
+**The height is a measurement, not a round number** — and since the two-line
+cap below it is a measurement the *type rule* guarantees, not one the deck's
+current wording happens to satisfy. `section.full h2` is 40px over a 1.12
+line-height, so its box is exactly `44.8 × lines + 12` slide pixels: 56.8 at
+one line, 101.6 at two. The cap makes 101.6 the ceiling, and the reserve is
+that plus one `OBJECT_GAP_PT` — 27.8px at the largest scale a full-bleed figure
+is drawn at — so the nearest ink clears the headline by the deck's own standard
+gap. Hence 130.
+
+It was 200 until #3969 and 250 before #3242, and each was the same defect one
+rule-change behind: 250 was sized for sentence-length headlines #3242 retitled
+away, 200 for the four-line headlines (191.2px) the two-line cap removed. Those
+pixels are not free — they come out of every full-bleed figure, on the one axis
+a slide is short of.
+
+So what obliges a re-measure is now a change to the **type rule**: `h2`'s
+font-size or line-height, or the two-line cap itself. A longer headline cannot
+invalidate it. To re-take it, render the deck to HTML and read the boxes:
 
 ```bash
 ./build.py hold-the-line
@@ -161,20 +172,23 @@ another thing to hunt for. So a figure that genuinely cannot spare its top-left
 corner **carries no title at all** — it does not put one somewhere else. That
 is the standard working, not failing.
 
-**Its height is the one part a figure may trim**, because 200px is a reserve
-for the deck's *longest* headline and most slides carry a shorter one. Pass the
+**Its height is the one part a figure may trim**, because 130px is a reserve
+for a *two-line* headline and some slides carry a one-line one. Pass the
 rectangle to `save(notch=...)`, with the height measured — by the recipe above,
 on the slide the figure actually appears on — rather than guessed, and re-take
-that measurement if the headline changes. Two figures do it, and both for the
-same reason — a drawing that fills its slot has nowhere to spend the slack.
-`vote-boundary`: "Pics on a Plane" is one line and measures 56.8px, and the
-100px of unused reserve left a band under the title with no title in it and no
-items either. `embed-flow`: "Embed-time Stories" is two lines and measures
-101.6px, and holding back the other 70 pushed the pipeline down until its own
-names crowded the bottom edge. Both take the measured box plus one
-`OBJECT_GAP_PT`. Do not trim x, y or width; the notch's *position* is the
-standard, and a figure whose ink reaches the top-left corner still carries no
-title.
+that measurement if the headline gains or loses a line. One figure does it, and
+for the reason a drawing that fills its slot has nowhere to spend the slack:
+`vote-boundary`'s "Pics on a Plane" is one line and measures 56.8px, so the
+unused reserve left a band under the title with no title in it and no items
+either. It takes the measured box plus one `OBJECT_GAP_PT`, giving 88.
+
+**Trim only for a one-line headline.** `embed-flow` also carried an override
+until #3969: its headline is two lines, so its measured box plus a gap came to
+exactly the 130 the standard now reserves. An override that equals the standard
+buys nothing and is worse than none, because it is a literal — it would have
+gone on saying 130 after the standard next moved. Do not trim x, y or width
+either; the notch's *position* is the standard, and a figure whose ink reaches
+the top-left corner still carries no title.
 
 Three rules follow.
 
