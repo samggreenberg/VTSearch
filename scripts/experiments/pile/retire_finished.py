@@ -14,9 +14,13 @@ import json
 import pathlib
 import shutil
 import subprocess
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import pile_config as pc  # noqa: E402
 
 _SQUEUE = shutil.which("squeue") or "/usr/bin/squeue"
 _ARGS = [_SQUEUE, "-u", "sgreenberg", "-h", "-n", "vtsearch", "-o", "%N"]
@@ -58,12 +62,7 @@ def main() -> int:
             continue
 
         # re-verify the bank against live, right now
-        if "-- recheck" in name:
-            kind = "recheck"
-        elif ("any in image" in name) or ("below-cut" in name):
-            kind = "belowcut"
-        else:
-            kind = "slate"
+        kind = pc.detector_kind(name)
         cls = t.get("text_query") or name.split(" [")[0].split(" (")[0].split(" -- ")[0].split()[0]
         f = REPO / f"LABELSETS__{kind}__{cls.replace(' ', '_')}.json"
         live = api(f"/api/detectors/{urllib.parse.quote(name)}/labels-detail")[1]
