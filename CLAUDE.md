@@ -360,6 +360,39 @@ override each one:**
   instead, per *Recommend a Claude model in every issue you file* — the same ladder
   applies.
 
+**These are settings outside this repository, so paste the override text.** Nothing in
+this file and no hook can enforce the three bullets above: they live in the project,
+not the clone, and take effect only once this is in **Project settings > Memory >
+Project instructions**. Paste it verbatim when creating a VTSearch project.
+
+```text
+Base every branch on dev, not main, and target dev with every pull request.
+
+After you open a pull request, stop watching it. Do not call subscribe_pr_activity,
+and if auto-fix is on for your pull request, turn it off. Report the PR number in
+your final message and stop; I review and merge pull requests myself.
+
+Choose the model per thread, sized to the work; do not leave every thread on Opus.
+```
+
+**Then verify the watch half rather than assuming it.** Project instructions are
+instructions Claude keeps to, not an enforced setting — the docs say as much of thread
+limits, and nothing promises more for auto-fix, which the project turns on *around* the
+thread rather than inside it. So a thread can obey *PR Activity Subscription (do not
+ask)* to the letter, never calling `subscribe_pr_activity`, and still end up watching
+its own PR. Check once, after pasting: open a throwaway PR from a thread and confirm
+the thread's CI status bar at claude.ai/code shows **Auto-fix** cleared. A watch left
+on pushes commits and review replies to the PR under the owner's account, and wakes the
+otherwise-idle thread — spending plan quota — every time a review comment arrives.
+There is no CI here to fail (`./run-tests.sh` is the only gate; the repo has no GitHub
+Actions), but review comments alone are enough, and every open PR leaves a wakeable
+thread behind.
+
+If it does not stick, give up the *Auto-PR* convenience for threads rather than the
+rule: instruct them to push the branch and report the compare URL instead of opening
+the PR. That costs a step and is enforceable by instruction, which a toggle Claude does
+not own may not be.
+
 **What does not belong in a thread.** Anything reaching the GRID: the
 `grid-experiments` skill drives SLURM over `ssh grid`, which a cloud sandbox cannot
 do, and the docs put work needing machine-only services in a local session. So an
