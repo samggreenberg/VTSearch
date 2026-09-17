@@ -1,0 +1,91 @@
+{
+  "note": "Words each roster mark carries, for the ocr_text completeness proposer (proposers_ocr_ncc.py). Read off EasyOCR of the query crops (completeness2/query_ocr.json) and corrected by eye against the query-crop sheets, 2026-09-17. Only text INSIDE the mark's box; variable parts (dates) left out. A list gives alternatives scored separately (best wins). null = no legible text, so the class gets no OCR proposals. 'flag' marks classes where OCR proposals are expected to be weak or noisy.",
+  "classes": {
+    "spods/logo_00003_0": {
+      "text": "INSTITUTE OF TECHNOLOGY",
+      "flag": "curved text around a seal: OCR of the query read only 'OF'; expect low recall"
+    },
+    "spods/logo_00011_0": {
+      "text": "Bank of Queen",
+      "flag": "small text on the crown band"
+    },
+    "spods/logo_00014_0": {
+      "text": "Blue Diamond Oils",
+      "flag": "company name may also be printed in the letter's address block beside the logo"
+    },
+    "spods/logo_00023_0": {
+      "text": "World Union Bank",
+      "flag": "company name may also be printed in the letter's address block beside the logo"
+    },
+    "spods/logo_00029_0": {
+      "text": "Dainik Suwarta",
+      "flag": "diagonal stylised lettering: OCR of the query read 'cainik'"
+    },
+    "spods/stamp_00293_1": {
+      "text": null
+    },
+    "spods/stamp_00546_1": {
+      "text": "DY. Secretary 1111222"
+    },
+    "spods/stamp_00577_1": {
+      "text": "Vice-Pres PSSKKCollege Call 23333444"
+    },
+    "spods/stamp_00612_1": {
+      "text": "Joint.Secretary E-Mail: mmm@ccc.com",
+      "flag": "copies are rotated at many angles; EasyOCR reads only mildly slanted text"
+    },
+    "spods/stamp_00769_1": {
+      "text": "Under Secretary",
+      "flag": "copies are rotated at many angles; EasyOCR reads only mildly slanted text"
+    },
+    "spods/stamp_00931_1": {
+      "text": "OUTWARD",
+      "flag": "single token"
+    },
+    "staver/stamp_stampds-00213_1": {
+      "text": "Projekt Anerkennung Anweisung Datum Name"
+    },
+    "staver/stamp_stampds-00230_0": {
+      "text": "DFKI Empfang"
+    },
+    "tobacco800/logo_aah97e00-page02_1_0": {
+      "text": [
+        "VENI VIDI VICI",
+        "PHILIP MORRIS"
+      ],
+      "flag": "the crest's ribbon text is tiny; 'PHILIP MORRIS' also matches the letterhead wordmark under the crest and body text, so its box is often the wordmark or a sentence, not the crest"
+    },
+    "tobacco800/logo_aeq93a00_1": {
+      "text": "RJR",
+      "flag": "single short token; OCR of the query read 'RUR'"
+    },
+    "tobacco800/logo_afm90c00-first_1_0": {
+      "text": null
+    },
+    "tobacco800/logo_ajj10e00_1": {
+      "text": "LORILLARD INC",
+      "flag": "the script wordmark does not OCR; matches the printed 'LORILLARD, INC.' line, which also occurs in addresses and body text"
+    },
+    "tobacco800/logo_ald41a00-ernest_1": {
+      "text": null,
+      "flag": "'B&W' is a monogram: its tokens are single letters, which match anything, so no OCR proposals"
+    },
+    "tobacco800/logo_asg54f00_1": {
+      "text": null
+    },
+    "tobacco800/logo_azb11c00_1": {
+      "text": null,
+      "flag": "'B&W' is a monogram: its tokens are single letters, which match anything, so no OCR proposals"
+    },
+    "tobacco800/logo_bqz95d00_1": {
+      "text": "VE RI TAS",
+      "flag": "three two/three-letter tokens on a small shield; OCR of the query read nothing"
+    },
+    "tobacco800/logo_cgr96c00_1": {
+      "text": null
+    },
+    "tobacco800/logo_ciy01a00-page02_1_0": {
+      "text": null
+    }
+  }
+}
