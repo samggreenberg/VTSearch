@@ -40,9 +40,11 @@ def _corpus(mods):
             _page(mods, "tobacco800/checked"),
             _page(mods, "tobacco800/seen"),
             _page(mods, "ucsf/leak", source="ucsf"),
+            _page(mods, "tobacco800/sister", marks=[("logo", (0, 0, 100, 100), "tobacco800/logo_rostered")]),
         )
     }
     classes = {
+        "tobacco800/logo_rostered": {"on_roster": True, "page_ids": ["tobacco800/sister"]},
         "tobacco800/logo_a": {
             "on_roster": True,
             "kind": "logo",
@@ -72,7 +74,8 @@ def _merge(mods, proposals, **kw):
     m = mods["m"]
     done = m.decided(classes, pages, [SEPARATION], [REVIEWED])
     stats: dict = {}
-    (entry,) = m.merge_proposals(classes, pages, proposals, done, stats=stats, **kw)
+    entries = m.merge_proposals(classes, pages, proposals, done, stats=stats, **kw)
+    (entry,) = [e for e in entries if e.class_id == "tobacco800/logo_a"]
     return entry, stats
 
 
@@ -85,13 +88,14 @@ class TestMerge:
             ["tobacco800/seen", 6.0, [10, 10, 50, 50]],  # already on a reviewed slate
             ["ucsf/leak", 5.0, [0, 0, 10, 10]],  # not an anchor source
             ["tobacco800/nobox", 4.0, None],  # nothing to show
-            ["tobacco800/other", 3.0, [510, 510, 60, 60]],  # new: on another class's mark
+            ["tobacco800/sister", 3.5, [0, 0, 100, 100]],  # another roster class's instance: a merge question
+            ["tobacco800/other", 3.0, [510, 510, 60, 60]],  # new: on a non-roster cluster's mark
         ]
         entry, stats = _merge(mods, {"siglip_tiles": {"tobacco800/logo_a": rows}})
         assert [(c.page_id, c.mark_index, c.mark_class_id) for c in entry.candidates] == [
             ("tobacco800/other", 0, "tobacco800/logo_z")
         ]
-        assert stats["siglip_tiles"] == {"proposed": 7, "no_box": 1, "decided": 5, "novel": 1}
+        assert stats["siglip_tiles"] == {"proposed": 8, "no_box": 1, "decided": 6, "novel": 1}
 
     def test_agreement_ranks_first_and_names_the_methods(self, mods):
         proposals = {
@@ -149,7 +153,11 @@ class TestInterface:
         pages, classes = _corpus(mods)
         m, c = mods["m"], mods["c"]
         proposals = {"siglip_tiles": {"tobacco800/logo_a": [["tobacco800/nobox", 1.0, [10, 10, 50, 50]]]}}
-        (entry,) = m.merge_proposals(classes, pages, proposals, m.decided(classes, pages, [], []))
+        (entry,) = [
+            e
+            for e in m.merge_proposals(classes, pages, proposals, m.decided(classes, pages, [], []))
+            if e.class_id == "tobacco800/logo_a"
+        ]
         row = m.verdict_row(entry)
         assert row["pass"] == "multi" and row["candidates"][0]["methods"] == "SIG"
         row["verdict"] = "none"

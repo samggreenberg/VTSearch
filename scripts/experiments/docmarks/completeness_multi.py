@@ -23,7 +23,9 @@ added as a new mark, so it is counted and dropped.
 
 * pages outside the anchor sources (UCSF is distractor-only);
 * member pages, and proposals landing on a mark already labelled this class;
-* marks already cannot-linked to the class (``adjudications.json`` ``different``);
+* marks already cannot-linked to the class (``adjudications.json`` ``different``),
+  and marks labelled any roster class (another roster class is a merge question
+  the merge audit already ruled on, not a missing member);
 * pages a previous pass rejected as carrying no box
   (``audit.completeness_checked*.unboxed_rejected_page_ids``);
 * candidates a previous slate already put in front of a reviewer
@@ -212,7 +214,9 @@ def merge_proposals(
                 if idx is not None:
                     mark_key = (page_id, idx)
                     if (
-                        page.marks[idx].class_id == class_id
+                        # labelled this class, or another roster class: the merge audit ruled
+                        # those distinct (``distinct_from``) and the applier refuses them
+                        page.marks[idx].class_id in classes
                         or mark_key in known.rejected_marks
                         or mark_key in known.reviewed_marks
                     ):
