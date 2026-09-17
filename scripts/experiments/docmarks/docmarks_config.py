@@ -305,6 +305,18 @@ def cluster_threshold_for(source: str) -> float:
 #: them; they fit in every tier including `s`.
 ANCHOR_SOURCES: frozenset[str] = frozenset({"spods", "staver", "tobacco800"})
 
+#: Sources whose absence of a mark is only ever known page by page (#3921).
+#:
+#: A SPODS or Tobacco800 class was checked against its whole source, so every
+#: unlabelled page there is a verified negative.  No one will ever look at all
+#: 197,000 UCSF pages for a mark, and a search that scored them does not count
+#: as looking: its below-floor pages hold real members (the ``c_missed`` sheets
+#: show them).  So for a class touching one of these sources only the pages a
+#: person saw and rejected -- a class's ``reviewed_negative_page_ids`` -- are
+#: known negatives, and the rest of the source falls back to the contamination
+#: rule, which for a UCSF class or UCSF's Tobacco pages means *out of the pool*.
+REVIEW_ONLY_SOURCES: frozenset[str] = frozenset({"ucsf"})
+
 # --------------------------------------------------------------------------
 # Query crops
 # --------------------------------------------------------------------------

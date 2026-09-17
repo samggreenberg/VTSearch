@@ -1021,6 +1021,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
         roster=chosen,
     )
 
+    # Reviewed negatives (#3921) live in their own store, like hand-added marks:
+    # this build regenerates every class's metadata, and the reviewed-only pool
+    # rule would otherwise silently lose every page a person rejected.
+    import roster as _reviewed  # noqa: PLC0415
+
+    _store = args.out / _reviewed.REVIEWED_NEGATIVES
+    attached = _reviewed.attach_reviewed_negatives(
+        admitted, _reviewed.load_reviewed_negatives(_store), _reviewed.load_reviewed_negatives(_store, "excluded")
+    )
+    if attached:
+        print(f"attached {attached} reviewed negative page(s) from {_reviewed.REVIEWED_NEGATIVES}")
+
     if chosen is not None:
         _present, missing = _roster.check(chosen, list(inventory))
         if missing:

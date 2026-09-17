@@ -172,13 +172,17 @@ def save_added_marks(rows: Sequence[dict[str, Any]], path: Path) -> None:
 def replay_added_marks(
     pages: Sequence[Page], rows: Sequence[dict[str, Any]], warnings: Optional[list[str]] = None
 ) -> int:
-    """Append stored hand-added marks to their pages, unclassed, in store order.
+    """Append stored hand-added marks to their pages, in store order.
 
-    Clustering then assigns them, bound by the must-links the completeness pass
-    recorded.  A row naming a page that is not in this build is reported, not
+    On a clustered source a mark goes back unclassed, and clustering then
+    assigns it, bound by the must-links the completeness pass recorded.  A
+    source that is never clustered (UCSF) has nothing to assign it, so there the
+    stored ``class_id`` is kept (#3921).  A row naming a page that is not in this build is reported, not
     fatal: a smaller ``--limit`` build legitimately lacks it.  A mark already on
     the page with the same box is not added twice.
     """
+    import docmarks_config as cfg  # noqa: PLC0415
+
     by_id = {p.page_id: p for p in pages}
     added = 0
     for row in rows:
@@ -190,7 +194,8 @@ def replay_added_marks(
         box = tuple(int(v) for v in row["box"])
         if any(tuple(m.box) == box for m in page.marks):
             continue
-        page.marks.append(Mark(row.get("kind", "logo"), box, None, row.get("provenance", PROVENANCE)))
+        class_id = None if page.source in cfg.CLUSTERED_SOURCES else row.get("class_id")
+        page.marks.append(Mark(row.get("kind", "logo"), box, class_id, row.get("provenance", PROVENANCE)))
         added += 1
     return added
 
@@ -424,30 +429,42 @@ def _font(size: int, bold: bool = False):
 
 
 def render(
-    entry: ClassCandidates, classes: dict[str, Any], pages: dict[str, Page], out: Path, *, per_sheet: int = PER_SHEET
+    entry: ClassCandidates,
+    classes: dict[str, Any],
+    pages: dict[str, Page],
+    out: Path,
+    *,
+    per_sheet: int = PER_SHEET,
+    refs: Optional[list[tuple[str, Any]]] = None,
+    title: Optional[str] = None,
+    unboxed_label: str = "NO BOX",
+    min_context: int = 0,
 ) -> list[Path]:
     """One-screen sheets: the reference row, then up to *per_sheet* numbered candidates.
 
     The candidate number is the largest thing in its cell -- the reviewer reads it
     and types it -- and the reference row (query crop + members) repeats on every
-    sheet, so nothing needs scrolling back to.
+    sheet, so nothing needs scrolling back to.  *refs* (``(label, image)`` pairs)
+    and *title* replace the roster class's own, for a proposal that is not yet a
+    class (``ucsf_classes.py``).
     """
     from PIL import Image, ImageDraw  # noqa: PLC0415
 
     thumb, pad, cap = 250, 10, 22
-    big, small, title = _font(40, bold=True), _font(15), _font(18, bold=True)
-    meta = classes[entry.class_id]
-    refs: list[tuple[str, Any]] = []
-    with Image.open(meta["query_crop"]) as im:
-        refs.append(("QUERY", im.convert("RGB").copy()))
-    for page_id in meta.get("page_ids", [])[: COLS - 1]:
-        page = pages.get(page_id)
-        mark = next((m for m in page.marks if m.class_id == entry.class_id), None) if page else None
-        if mark is None:
-            continue
-        x, y, w, h = mark.box
-        with Image.open(page.path) as im:
-            refs.append(("member", im.convert("RGB").crop((x, y, x + w, y + h))))
+    big, small, title_font = _font(40, bold=True), _font(15), _font(18, bold=True)
+    if refs is None:
+        meta = classes[entry.class_id]
+        refs = []
+        with Image.open(meta["query_crop"]) as im:
+            refs.append(("QUERY", im.convert("RGB").copy()))
+        for page_id in meta.get("page_ids", [])[: COLS - 1]:
+            page = pages.get(page_id)
+            mark = next((m for m in page.marks if m.class_id == entry.class_id), None) if page else None
+            if mark is None:
+                continue
+            x, y, w, h = mark.box
+            with Image.open(page.path) as im:
+                refs.append(("member", im.convert("RGB").crop((x, y, x + w, y + h))))
 
     cells: list[tuple[int, str, Any]] = []
     for i, cand in enumerate(entry.candidates):
@@ -458,7 +475,7 @@ def render(
             x0, y0, x1, y1 = min(x, mx), min(y, my), max(x + w, mx + mw), max(y + h, my + mh)
         else:
             x0, y0, x1, y1 = x, y, x + w, y + h
-        margin = int(0.25 * max(x1 - x0, y1 - y0))
+        margin = max(int(0.25 * max(x1 - x0, y1 - y0)), min_context)
         with Image.open(page.path) as im:
             im = im.convert("RGB")
             left, top = max(0, x0 - margin), max(0, y0 - margin)
@@ -471,11 +488,11 @@ def render(
             draw.rectangle([mx - left, my - top, mx - left + mw, my - top + mh], outline="#d62728", width=lw)
             label = cand.mark_class_id.split("/")[-1][:20] if cand.mark_class_id else "unclassed mark"
         else:
-            label = "NO BOX"
+            label = unboxed_label
         if cand.note:
-            cells.append((i, f"{cand.note} · {label[:12]}", crop))
+            cells.append((i, f"{cand.note} · {label[:12]}" if label else cand.note, crop))
         else:
-            cells.append((i, f"{cand.inliers} inl · {label}", crop))
+            cells.append((i, f"{cand.inliers} inl · {label}" if label else f"{cand.inliers} inl", crop))
 
     paths = []
     name = entry.class_id.replace("/", "__")
@@ -489,10 +506,13 @@ def render(
         first, last = (chunk[0][0], chunk[-1][0]) if chunk else (0, -1)
         draw.text(
             (pad, 10),
-            f"{entry.class_id}   sheet {sheet_no + 1}/{len(chunks)}   candidates {first}-{last}   "
-            + (f"(members' inliers: median {pos[len(pos) // 2]})" if pos else ""),
+            title
+            or (
+                f"{entry.class_id}   sheet {sheet_no + 1}/{len(chunks)}   candidates {first}-{last}   "
+                + (f"(members' inliers: median {pos[len(pos) // 2]})" if pos else "")
+            ),
             fill="black",
-            font=title,
+            font=title_font,
         )
         for c, (label, img) in enumerate(refs[:COLS]):
             t = img.copy()
