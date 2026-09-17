@@ -284,7 +284,7 @@ def stage_b_tables(main: pd.DataFrame, cells: pd.DataFrame, out: Path, baseline:
                 "steps": n,
                 "flagged_nothing": none / n if n else float("nan"),
                 "flagged_everything": all_ / n if n else float("nan"),
-                "mean_threshold": float(g["threshold"].mean()) if "threshold" in g.columns else float("nan"),
+                "mean_threshold": float(g["acq_threshold"].mean()) if "acq_threshold" in g.columns else float("nan"),
                 "mean_train_seconds": float(g["train_seconds"].mean())
                 if "train_seconds" in g.columns
                 else float("nan"),

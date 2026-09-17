@@ -181,51 +181,219 @@
 
 | arm | n_cells | cost@25 | cost@50 | cost@100 | cost@150 | fnr@50 | fnr@150 | average_precision@50 | average_precision@150 | aulc_cost |
 |---|---|---|---|---|---|---|---|---|---|---|
-| app | 4 | 0.002 | 0.000 | 0.000 | 0.001 | 0.000 | 0.000 | 1.000 | 1.000 | 0.003 |
-| app_xcal | 4 | 0.001 | 0.002 | 0.002 | 0.002 | 0.000 | 0.000 | 1.000 | 1.000 | 0.004 |
+| app | 30 | 0.049 | 0.020 | 0.058 | 0.102 | 0.000 | 0.000 | 1.000 | 1.000 | 0.059 |
+| app_xcal | 30 | 0.004 | 0.005 | 0.005 | 0.003 | 0.004 | 0.000 | 1.000 | 1.000 | 0.006 |
+| gp_rbf | 30 | 0.479 | 0.384 | 0.118 | 0.004 | 0.000 | 0.004 | 1.000 | 1.000 | 0.168 |
+| gp_rbf_rank | 30 | 0.521 | 0.500 | 0.584 | 0.539 | 0.493 | 0.536 | 1.000 | 1.000 | 0.529 |
+| gp_rbf_blend | 30 | 0.073 | 0.015 | 0.002 | 0.057 | 0.000 | 0.057 | 1.000 | 1.000 | 0.033 |
+| gp_dot_blend | 30 | 0.172 | 0.019 | 0.009 | 0.056 | 0.007 | 0.056 | 1.000 | 1.000 | 0.051 |
+| gp_rbf_blend_straddle | 30 | 0.151 | 0.091 | 0.007 | 0.012 | 0.006 | 0.012 | 1.000 | 1.000 | 0.059 |
+| gp_rbf_blend_maxvar | 30 | 0.003 | 0.004 | 0.014 | 0.012 | 0.004 | 0.012 | 1.000 | 1.000 | 0.019 |
 
 ### Stage B - paired against `app_xcal` (arm - ref; negative cost/FNR = better, positive AP = better)
 
 | budget | metric | arm | ref | n | ref_mean | arm_mean | delta | se | wilcoxon_p |
 |---|---|---|---|---|---|---|---|---|---|
-| 25 | cost | app | app_xcal | 4 | 0.001 | 0.002 | 0.001 | 0.001 | 1.000 |
-| 25 | fnr | app | app_xcal | 4 | 0.000 | 0.002 | 0.002 | 0.002 | 1.000 |
-| 25 | average_precision | app | app_xcal | 4 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
-| 50 | cost | app | app_xcal | 4 | 0.002 | 0.000 | -0.002 | 0.002 | 1.000 |
-| 50 | fnr | app | app_xcal | 4 | 0.000 | 0.000 | 0.000 | 0.000 | nan |
-| 50 | average_precision | app | app_xcal | 4 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
-| 100 | cost | app | app_xcal | 4 | 0.002 | 0.000 | -0.002 | 0.002 | 1.000 |
-| 100 | fnr | app | app_xcal | 4 | 0.000 | 0.000 | 0.000 | 0.000 | nan |
-| 100 | average_precision | app | app_xcal | 4 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
-| 150 | cost | app | app_xcal | 4 | 0.002 | 0.001 | -0.002 | 0.002 | 1.000 |
-| 150 | fnr | app | app_xcal | 4 | 0.000 | 0.000 | 0.000 | 0.000 | nan |
-| 150 | average_precision | app | app_xcal | 4 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
-| AULC | aulc_cost | app | app_xcal | 4 | 0.004 | 0.003 | -0.001 | 0.000 | 0.125 |
+| 25 | cost | app | app_xcal | 30 | 0.004 | 0.049 | 0.045 | 0.018 | 0.006 |
+| 25 | cost | gp_rbf | app_xcal | 30 | 0.004 | 0.479 | 0.475 | 0.085 | 0.000 |
+| 25 | cost | gp_rbf_rank | app_xcal | 30 | 0.004 | 0.521 | 0.517 | 0.060 | 0.000 |
+| 25 | cost | gp_rbf_blend | app_xcal | 30 | 0.004 | 0.073 | 0.069 | 0.034 | 0.005 |
+| 25 | cost | gp_dot_blend | app_xcal | 30 | 0.004 | 0.172 | 0.168 | 0.045 | 0.000 |
+| 25 | cost | gp_rbf_blend_straddle | app_xcal | 30 | 0.004 | 0.151 | 0.147 | 0.058 | 0.004 |
+| 25 | cost | gp_rbf_blend_maxvar | app_xcal | 30 | 0.004 | 0.003 | -0.001 | 0.004 | 0.109 |
+| 25 | fnr | app | app_xcal | 30 | 0.004 | 0.000 | -0.003 | 0.004 | 0.655 |
+| 25 | fnr | gp_rbf | app_xcal | 30 | 0.004 | 0.001 | -0.003 | 0.004 | 0.655 |
+| 25 | fnr | gp_rbf_rank | app_xcal | 30 | 0.004 | 0.516 | 0.512 | 0.062 | 0.000 |
+| 25 | fnr | gp_rbf_blend | app_xcal | 30 | 0.004 | 0.000 | -0.004 | 0.004 | 0.317 |
+| 25 | fnr | gp_dot_blend | app_xcal | 30 | 0.004 | 0.000 | -0.003 | 0.004 | 0.655 |
+| 25 | fnr | gp_rbf_blend_straddle | app_xcal | 30 | 0.004 | 0.002 | -0.002 | 0.004 | 0.655 |
+| 25 | fnr | gp_rbf_blend_maxvar | app_xcal | 30 | 0.004 | 0.000 | -0.004 | 0.004 | 0.317 |
+| 25 | average_precision | app | app_xcal | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 25 | average_precision | gp_rbf | app_xcal | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 25 | average_precision | gp_rbf_rank | app_xcal | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 25 | average_precision | gp_rbf_blend | app_xcal | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 25 | average_precision | gp_dot_blend | app_xcal | 30 | 1.000 | 0.999 | -0.001 | 0.001 | 0.317 |
+| 25 | average_precision | gp_rbf_blend_straddle | app_xcal | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 25 | average_precision | gp_rbf_blend_maxvar | app_xcal | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 50 | cost | app | app_xcal | 30 | 0.005 | 0.020 | 0.015 | 0.007 | 0.084 |
+| 50 | cost | gp_rbf | app_xcal | 30 | 0.005 | 0.384 | 0.380 | 0.088 | 0.002 |
+| 50 | cost | gp_rbf_rank | app_xcal | 30 | 0.005 | 0.500 | 0.495 | 0.061 | 0.000 |
+| 50 | cost | gp_rbf_blend | app_xcal | 30 | 0.005 | 0.015 | 0.010 | 0.010 | 0.009 |
+| 50 | cost | gp_dot_blend | app_xcal | 30 | 0.005 | 0.019 | 0.015 | 0.005 | 0.004 |
+| 50 | cost | gp_rbf_blend_straddle | app_xcal | 30 | 0.005 | 0.091 | 0.086 | 0.034 | 0.005 |
+| 50 | cost | gp_rbf_blend_maxvar | app_xcal | 30 | 0.005 | 0.004 | -0.000 | 0.000 | 0.093 |
+| 50 | fnr | app | app_xcal | 30 | 0.004 | 0.000 | -0.004 | 0.004 | 0.317 |
+| 50 | fnr | gp_rbf | app_xcal | 30 | 0.004 | 0.000 | -0.004 | 0.004 | 0.317 |
+| 50 | fnr | gp_rbf_rank | app_xcal | 30 | 0.004 | 0.493 | 0.489 | 0.062 | 0.000 |
+| 50 | fnr | gp_rbf_blend | app_xcal | 30 | 0.004 | 0.000 | -0.004 | 0.004 | 0.317 |
+| 50 | fnr | gp_dot_blend | app_xcal | 30 | 0.004 | 0.007 | 0.004 | 0.004 | 0.317 |
+| 50 | fnr | gp_rbf_blend_straddle | app_xcal | 30 | 0.004 | 0.006 | 0.002 | 0.002 | 0.317 |
+| 50 | fnr | gp_rbf_blend_maxvar | app_xcal | 30 | 0.004 | 0.004 | 0.000 | 0.000 | nan |
+| 50 | average_precision | app | app_xcal | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 50 | average_precision | gp_rbf | app_xcal | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 50 | average_precision | gp_rbf_rank | app_xcal | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 50 | average_precision | gp_rbf_blend | app_xcal | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 50 | average_precision | gp_dot_blend | app_xcal | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 50 | average_precision | gp_rbf_blend_straddle | app_xcal | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 50 | average_precision | gp_rbf_blend_maxvar | app_xcal | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 100 | cost | app | app_xcal | 30 | 0.005 | 0.058 | 0.053 | 0.016 | 0.011 |
+| 100 | cost | gp_rbf | app_xcal | 30 | 0.005 | 0.118 | 0.113 | 0.056 | 0.260 |
+| 100 | cost | gp_rbf_rank | app_xcal | 30 | 0.005 | 0.584 | 0.579 | 0.049 | 0.000 |
+| 100 | cost | gp_rbf_blend | app_xcal | 30 | 0.005 | 0.002 | -0.003 | 0.004 | 0.698 |
+| 100 | cost | gp_dot_blend | app_xcal | 30 | 0.005 | 0.009 | 0.004 | 0.005 | 0.048 |
+| 100 | cost | gp_rbf_blend_straddle | app_xcal | 30 | 0.005 | 0.007 | 0.002 | 0.004 | 0.109 |
+| 100 | cost | gp_rbf_blend_maxvar | app_xcal | 30 | 0.005 | 0.014 | 0.009 | 0.006 | 0.790 |
+| 100 | fnr | app | app_xcal | 30 | 0.004 | 0.000 | -0.004 | 0.004 | 0.317 |
+| 100 | fnr | gp_rbf | app_xcal | 30 | 0.004 | 0.000 | -0.004 | 0.004 | 0.317 |
+| 100 | fnr | gp_rbf_rank | app_xcal | 30 | 0.004 | 0.584 | 0.580 | 0.049 | 0.000 |
+| 100 | fnr | gp_rbf_blend | app_xcal | 30 | 0.004 | 0.000 | -0.004 | 0.004 | 0.317 |
+| 100 | fnr | gp_dot_blend | app_xcal | 30 | 0.004 | 0.000 | -0.004 | 0.004 | 0.317 |
+| 100 | fnr | gp_rbf_blend_straddle | app_xcal | 30 | 0.004 | 0.007 | 0.004 | 0.004 | 0.317 |
+| 100 | fnr | gp_rbf_blend_maxvar | app_xcal | 30 | 0.004 | 0.014 | 0.010 | 0.006 | 0.109 |
+| 100 | average_precision | app | app_xcal | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 100 | average_precision | gp_rbf | app_xcal | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 100 | average_precision | gp_rbf_rank | app_xcal | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 100 | average_precision | gp_rbf_blend | app_xcal | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 100 | average_precision | gp_dot_blend | app_xcal | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 100 | average_precision | gp_rbf_blend_straddle | app_xcal | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 100 | average_precision | gp_rbf_blend_maxvar | app_xcal | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 150 | cost | app | app_xcal | 30 | 0.003 | 0.102 | 0.100 | 0.029 | 0.023 |
+| 150 | cost | gp_rbf | app_xcal | 30 | 0.003 | 0.004 | 0.002 | 0.004 | 0.126 |
+| 150 | cost | gp_rbf_rank | app_xcal | 30 | 0.003 | 0.539 | 0.536 | 0.058 | 0.000 |
+| 150 | cost | gp_rbf_blend | app_xcal | 30 | 0.003 | 0.057 | 0.054 | 0.019 | 0.055 |
+| 150 | cost | gp_dot_blend | app_xcal | 30 | 0.003 | 0.056 | 0.053 | 0.016 | 0.012 |
+| 150 | cost | gp_rbf_blend_straddle | app_xcal | 30 | 0.003 | 0.012 | 0.010 | 0.009 | 0.209 |
+| 150 | cost | gp_rbf_blend_maxvar | app_xcal | 30 | 0.003 | 0.012 | 0.010 | 0.009 | 0.209 |
+| 150 | fnr | app | app_xcal | 30 | 0.000 | 0.000 | 0.000 | 0.000 | nan |
+| 150 | fnr | gp_rbf | app_xcal | 30 | 0.000 | 0.004 | 0.004 | 0.004 | 0.317 |
+| 150 | fnr | gp_rbf_rank | app_xcal | 30 | 0.000 | 0.536 | 0.536 | 0.058 | 0.000 |
+| 150 | fnr | gp_rbf_blend | app_xcal | 30 | 0.000 | 0.057 | 0.057 | 0.019 | 0.008 |
+| 150 | fnr | gp_dot_blend | app_xcal | 30 | 0.000 | 0.056 | 0.056 | 0.016 | 0.003 |
+| 150 | fnr | gp_rbf_blend_straddle | app_xcal | 30 | 0.000 | 0.012 | 0.012 | 0.009 | 0.180 |
+| 150 | fnr | gp_rbf_blend_maxvar | app_xcal | 30 | 0.000 | 0.012 | 0.012 | 0.009 | 0.180 |
+| 150 | average_precision | app | app_xcal | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 150 | average_precision | gp_rbf | app_xcal | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 150 | average_precision | gp_rbf_rank | app_xcal | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 150 | average_precision | gp_rbf_blend | app_xcal | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 150 | average_precision | gp_dot_blend | app_xcal | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 150 | average_precision | gp_rbf_blend_straddle | app_xcal | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 150 | average_precision | gp_rbf_blend_maxvar | app_xcal | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| AULC | aulc_cost | app | app_xcal | 30 | 0.006 | 0.059 | 0.052 | 0.014 | 0.000 |
+| AULC | aulc_cost | gp_rbf | app_xcal | 30 | 0.006 | 0.168 | 0.162 | 0.026 | 0.000 |
+| AULC | aulc_cost | gp_rbf_rank | app_xcal | 30 | 0.006 | 0.529 | 0.522 | 0.046 | 0.000 |
+| AULC | aulc_cost | gp_rbf_blend | app_xcal | 30 | 0.006 | 0.033 | 0.027 | 0.007 | 0.000 |
+| AULC | aulc_cost | gp_dot_blend | app_xcal | 30 | 0.006 | 0.051 | 0.045 | 0.009 | 0.000 |
+| AULC | aulc_cost | gp_rbf_blend_straddle | app_xcal | 30 | 0.006 | 0.059 | 0.052 | 0.017 | 0.000 |
+| AULC | aulc_cost | gp_rbf_blend_maxvar | app_xcal | 30 | 0.006 | 0.019 | 0.013 | 0.004 | 0.000 |
 
 ### Stage B - paired against `app` (arm - ref; negative cost/FNR = better, positive AP = better)
 
 | budget | metric | arm | ref | n | ref_mean | arm_mean | delta | se | wilcoxon_p |
 |---|---|---|---|---|---|---|---|---|---|
-| 25 | cost | app_xcal | app | 4 | 0.002 | 0.001 | -0.001 | 0.001 | 1.000 |
-| 25 | fnr | app_xcal | app | 4 | 0.002 | 0.000 | -0.002 | 0.002 | 1.000 |
-| 25 | average_precision | app_xcal | app | 4 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
-| 50 | cost | app_xcal | app | 4 | 0.000 | 0.002 | 0.002 | 0.002 | 1.000 |
-| 50 | fnr | app_xcal | app | 4 | 0.000 | 0.000 | 0.000 | 0.000 | nan |
-| 50 | average_precision | app_xcal | app | 4 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
-| 100 | cost | app_xcal | app | 4 | 0.000 | 0.002 | 0.002 | 0.002 | 1.000 |
-| 100 | fnr | app_xcal | app | 4 | 0.000 | 0.000 | 0.000 | 0.000 | nan |
-| 100 | average_precision | app_xcal | app | 4 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
-| 150 | cost | app_xcal | app | 4 | 0.001 | 0.002 | 0.002 | 0.002 | 1.000 |
-| 150 | fnr | app_xcal | app | 4 | 0.000 | 0.000 | 0.000 | 0.000 | nan |
-| 150 | average_precision | app_xcal | app | 4 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
-| AULC | aulc_cost | app_xcal | app | 4 | 0.003 | 0.004 | 0.001 | 0.000 | 0.125 |
+| 25 | cost | app_xcal | app | 30 | 0.049 | 0.004 | -0.045 | 0.018 | 0.006 |
+| 25 | cost | gp_rbf | app | 30 | 0.049 | 0.479 | 0.430 | 0.083 | 0.000 |
+| 25 | cost | gp_rbf_rank | app | 30 | 0.049 | 0.521 | 0.473 | 0.062 | 0.000 |
+| 25 | cost | gp_rbf_blend | app | 30 | 0.049 | 0.073 | 0.024 | 0.040 | 0.927 |
+| 25 | cost | gp_dot_blend | app | 30 | 0.049 | 0.172 | 0.123 | 0.050 | 0.016 |
+| 25 | cost | gp_rbf_blend_straddle | app | 30 | 0.049 | 0.151 | 0.102 | 0.062 | 0.590 |
+| 25 | cost | gp_rbf_blend_maxvar | app | 30 | 0.049 | 0.003 | -0.045 | 0.018 | 0.006 |
+| 25 | fnr | app_xcal | app | 30 | 0.000 | 0.004 | 0.003 | 0.004 | 0.655 |
+| 25 | fnr | gp_rbf | app | 30 | 0.000 | 0.001 | 0.000 | 0.000 | 0.317 |
+| 25 | fnr | gp_rbf_rank | app | 30 | 0.000 | 0.516 | 0.516 | 0.062 | 0.000 |
+| 25 | fnr | gp_rbf_blend | app | 30 | 0.000 | 0.000 | -0.000 | 0.000 | 0.317 |
+| 25 | fnr | gp_dot_blend | app | 30 | 0.000 | 0.000 | 0.000 | 0.000 | nan |
+| 25 | fnr | gp_rbf_blend_straddle | app | 30 | 0.000 | 0.002 | 0.002 | 0.002 | 0.655 |
+| 25 | fnr | gp_rbf_blend_maxvar | app | 30 | 0.000 | 0.000 | -0.000 | 0.000 | 0.317 |
+| 25 | average_precision | app_xcal | app | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 25 | average_precision | gp_rbf | app | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 25 | average_precision | gp_rbf_rank | app | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 25 | average_precision | gp_rbf_blend | app | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 25 | average_precision | gp_dot_blend | app | 30 | 1.000 | 0.999 | -0.001 | 0.001 | 0.317 |
+| 25 | average_precision | gp_rbf_blend_straddle | app | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 25 | average_precision | gp_rbf_blend_maxvar | app | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 50 | cost | app_xcal | app | 30 | 0.020 | 0.005 | -0.015 | 0.007 | 0.084 |
+| 50 | cost | gp_rbf | app | 30 | 0.020 | 0.384 | 0.364 | 0.087 | 0.002 |
+| 50 | cost | gp_rbf_rank | app | 30 | 0.020 | 0.500 | 0.480 | 0.062 | 0.000 |
+| 50 | cost | gp_rbf_blend | app | 30 | 0.020 | 0.015 | -0.005 | 0.011 | 0.286 |
+| 50 | cost | gp_dot_blend | app | 30 | 0.020 | 0.019 | -0.000 | 0.010 | 0.906 |
+| 50 | cost | gp_rbf_blend_straddle | app | 30 | 0.020 | 0.091 | 0.071 | 0.034 | 0.210 |
+| 50 | cost | gp_rbf_blend_maxvar | app | 30 | 0.020 | 0.004 | -0.016 | 0.007 | 0.037 |
+| 50 | fnr | app_xcal | app | 30 | 0.000 | 0.004 | 0.004 | 0.004 | 0.317 |
+| 50 | fnr | gp_rbf | app | 30 | 0.000 | 0.000 | 0.000 | 0.000 | nan |
+| 50 | fnr | gp_rbf_rank | app | 30 | 0.000 | 0.493 | 0.493 | 0.063 | 0.000 |
+| 50 | fnr | gp_rbf_blend | app | 30 | 0.000 | 0.000 | 0.000 | 0.000 | nan |
+| 50 | fnr | gp_dot_blend | app | 30 | 0.000 | 0.007 | 0.007 | 0.007 | 0.317 |
+| 50 | fnr | gp_rbf_blend_straddle | app | 30 | 0.000 | 0.006 | 0.006 | 0.004 | 0.180 |
+| 50 | fnr | gp_rbf_blend_maxvar | app | 30 | 0.000 | 0.004 | 0.004 | 0.004 | 0.317 |
+| 50 | average_precision | app_xcal | app | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 50 | average_precision | gp_rbf | app | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 50 | average_precision | gp_rbf_rank | app | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 50 | average_precision | gp_rbf_blend | app | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 50 | average_precision | gp_dot_blend | app | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 50 | average_precision | gp_rbf_blend_straddle | app | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 50 | average_precision | gp_rbf_blend_maxvar | app | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 100 | cost | app_xcal | app | 30 | 0.058 | 0.005 | -0.053 | 0.016 | 0.011 |
+| 100 | cost | gp_rbf | app | 30 | 0.058 | 0.118 | 0.060 | 0.058 | 0.955 |
+| 100 | cost | gp_rbf_rank | app | 30 | 0.058 | 0.584 | 0.526 | 0.046 | 0.000 |
+| 100 | cost | gp_rbf_blend | app | 30 | 0.058 | 0.002 | -0.055 | 0.016 | 0.030 |
+| 100 | cost | gp_dot_blend | app | 30 | 0.058 | 0.009 | -0.048 | 0.017 | 0.099 |
+| 100 | cost | gp_rbf_blend_straddle | app | 30 | 0.058 | 0.007 | -0.050 | 0.017 | 0.006 |
+| 100 | cost | gp_rbf_blend_maxvar | app | 30 | 0.058 | 0.014 | -0.044 | 0.016 | 0.013 |
+| 100 | fnr | app_xcal | app | 30 | 0.000 | 0.004 | 0.004 | 0.004 | 0.317 |
+| 100 | fnr | gp_rbf | app | 30 | 0.000 | 0.000 | 0.000 | 0.000 | nan |
+| 100 | fnr | gp_rbf_rank | app | 30 | 0.000 | 0.584 | 0.584 | 0.050 | 0.000 |
+| 100 | fnr | gp_rbf_blend | app | 30 | 0.000 | 0.000 | 0.000 | 0.000 | nan |
+| 100 | fnr | gp_dot_blend | app | 30 | 0.000 | 0.000 | 0.000 | 0.000 | nan |
+| 100 | fnr | gp_rbf_blend_straddle | app | 30 | 0.000 | 0.007 | 0.007 | 0.007 | 0.317 |
+| 100 | fnr | gp_rbf_blend_maxvar | app | 30 | 0.000 | 0.014 | 0.014 | 0.009 | 0.109 |
+| 100 | average_precision | app_xcal | app | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 100 | average_precision | gp_rbf | app | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 100 | average_precision | gp_rbf_rank | app | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 100 | average_precision | gp_rbf_blend | app | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 100 | average_precision | gp_dot_blend | app | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 100 | average_precision | gp_rbf_blend_straddle | app | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 100 | average_precision | gp_rbf_blend_maxvar | app | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 150 | cost | app_xcal | app | 30 | 0.102 | 0.003 | -0.100 | 0.029 | 0.023 |
+| 150 | cost | gp_rbf | app | 30 | 0.102 | 0.004 | -0.098 | 0.028 | 0.004 |
+| 150 | cost | gp_rbf_rank | app | 30 | 0.102 | 0.539 | 0.436 | 0.052 | 0.000 |
+| 150 | cost | gp_rbf_blend | app | 30 | 0.102 | 0.057 | -0.045 | 0.030 | 0.121 |
+| 150 | cost | gp_dot_blend | app | 30 | 0.102 | 0.056 | -0.047 | 0.029 | 0.159 |
+| 150 | cost | gp_rbf_blend_straddle | app | 30 | 0.102 | 0.012 | -0.090 | 0.027 | 0.001 |
+| 150 | cost | gp_rbf_blend_maxvar | app | 30 | 0.102 | 0.012 | -0.090 | 0.027 | 0.001 |
+| 150 | fnr | app_xcal | app | 30 | 0.000 | 0.000 | 0.000 | 0.000 | nan |
+| 150 | fnr | gp_rbf | app | 30 | 0.000 | 0.004 | 0.004 | 0.004 | 0.317 |
+| 150 | fnr | gp_rbf_rank | app | 30 | 0.000 | 0.536 | 0.536 | 0.058 | 0.000 |
+| 150 | fnr | gp_rbf_blend | app | 30 | 0.000 | 0.057 | 0.057 | 0.019 | 0.008 |
+| 150 | fnr | gp_dot_blend | app | 30 | 0.000 | 0.056 | 0.056 | 0.016 | 0.003 |
+| 150 | fnr | gp_rbf_blend_straddle | app | 30 | 0.000 | 0.012 | 0.012 | 0.009 | 0.180 |
+| 150 | fnr | gp_rbf_blend_maxvar | app | 30 | 0.000 | 0.012 | 0.012 | 0.009 | 0.180 |
+| 150 | average_precision | app_xcal | app | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 150 | average_precision | gp_rbf | app | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 150 | average_precision | gp_rbf_rank | app | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 150 | average_precision | gp_rbf_blend | app | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 150 | average_precision | gp_dot_blend | app | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 150 | average_precision | gp_rbf_blend_straddle | app | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| 150 | average_precision | gp_rbf_blend_maxvar | app | 30 | 1.000 | 1.000 | 0.000 | 0.000 | nan |
+| AULC | aulc_cost | app_xcal | app | 30 | 0.059 | 0.006 | -0.052 | 0.014 | 0.000 |
+| AULC | aulc_cost | gp_rbf | app | 30 | 0.059 | 0.168 | 0.110 | 0.026 | 0.000 |
+| AULC | aulc_cost | gp_rbf_rank | app | 30 | 0.059 | 0.529 | 0.470 | 0.043 | 0.000 |
+| AULC | aulc_cost | gp_rbf_blend | app | 30 | 0.059 | 0.033 | -0.025 | 0.016 | 0.730 |
+| AULC | aulc_cost | gp_dot_blend | app | 30 | 0.059 | 0.051 | -0.007 | 0.017 | 0.655 |
+| AULC | aulc_cost | gp_rbf_blend_straddle | app | 30 | 0.059 | 0.059 | 0.000 | 0.022 | 0.887 |
+| AULC | aulc_cost | gp_rbf_blend_maxvar | app | 30 | 0.059 | 0.019 | -0.039 | 0.015 | 0.262 |
 
 ### Stage B - cut health and cost per step (fraction of steps whose cut flagged nothing / everything)
 
 | arm | steps | flagged_nothing | flagged_everything | mean_threshold | mean_train_seconds | mean_xcal_seconds |
 |---|---|---|---|---|---|---|
-| app | 588 | 0.0000 | 0.0000 | nan | 0.0069 | 0.0124 |
-| app_xcal | 588 | 0.0000 | 0.0000 | nan | 0.0083 | 0.0142 |
+| app | 4410 | 0.0000 | 0.0000 | 0.4113 | 0.0077 | 0.0125 |
+| app_xcal | 4410 | 0.0000 | 0.0000 | 0.4427 | 0.0082 | 0.0127 |
+| gp_rbf | 4410 | 0.0005 | 0.0850 | 0.3126 | 0.0371 | 0.0449 |
+| gp_rbf_rank | 4410 | 0.0351 | 0.0000 | 0.6850 | 0.0362 | 0.0996 |
+| gp_rbf_blend | 4410 | 0.0093 | 0.0014 | 0.3317 | 0.0392 | 0.0411 |
+| gp_dot_blend | 4410 | 0.0005 | 0.0002 | 0.3291 | 0.0259 | 0.0263 |
+| gp_rbf_blend_straddle | 4410 | 0.0088 | 0.0018 | 0.3978 | 0.0386 | 0.0477 |
+| gp_rbf_blend_maxvar | 4410 | 0.0100 | 0.0016 | 0.4223 | 0.0362 | 0.0490 |
 
 ### Figures
 
@@ -238,18 +406,24 @@
 
 | arm | dataset | baseline | final | crossover_t |
 |---|---|---|---|---|
-| app | caltech101_m | 0.088 | 0.001 | 6 |
-| app_xcal | caltech101_m | 0.088 | 0.002 | 9 |
+| app | caltech101_m | 0.088 | 0.102 | 15.000 |
+| app_xcal | caltech101_m | 0.088 | 0.003 | 10.000 |
+| gp_dot_blend | caltech101_m | 0.088 | 0.056 | 12.000 |
+| gp_rbf | caltech101_m | 0.088 | 0.004 | 15.000 |
+| gp_rbf_blend | caltech101_m | 0.088 | 0.057 | 13.000 |
+| gp_rbf_blend_maxvar | caltech101_m | 0.088 | 0.012 | 12.000 |
+| gp_rbf_blend_straddle | caltech101_m | 0.088 | 0.012 | 12.000 |
+| gp_rbf_rank | caltech101_m | 0.088 | 0.539 | nan |
 
 ### Cells loaded per arm
 
 | arm | n_read | no_positive_found | unreadable |
 |---|---|---|---|
-| app | 4 | 0 | 0 |
-| app_xcal | 4 | 0 | 0 |
-| gp_rbf | 0 | 0 | 0 |
-| gp_rbf_rank | 0 | 0 | 0 |
-| gp_rbf_blend | 0 | 0 | 0 |
-| gp_dot_blend | 0 | 0 | 0 |
-| gp_rbf_blend_straddle | 0 | 0 | 0 |
-| gp_rbf_blend_maxvar | 0 | 0 | 0 |
+| app | 30 | 0 | 0 |
+| app_xcal | 30 | 0 | 0 |
+| gp_rbf | 30 | 0 | 0 |
+| gp_rbf_rank | 30 | 0 | 0 |
+| gp_rbf_blend | 30 | 0 | 0 |
+| gp_dot_blend | 30 | 0 | 0 |
+| gp_rbf_blend_straddle | 30 | 0 | 0 |
+| gp_rbf_blend_maxvar | 30 | 0 | 0 |
