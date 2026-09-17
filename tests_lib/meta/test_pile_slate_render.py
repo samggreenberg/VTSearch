@@ -101,3 +101,34 @@ class TestRender:
         sr.draw_with_side_inset(src, (0.1, 0.1, 0.3, 0.3), a)
         sr.draw_with_side_inset(src, (0.1, 0.1, 0.3, 0.3), b, also=())
         assert a.read_bytes() == b.read_bytes()
+
+    def test_the_panel_keeps_the_crops_aspect_ratio(self, sr, tmp_path):
+        """A tall crop stays tall: the corner inset squashed non-square crops into a square."""
+        src = _photo(tmp_path, 333, 500)
+        g = sr.draw_with_side_inset(src, (0.03, 0.06, 0.99, 0.80), tmp_path / "tall.jpg")
+        # box + context padding reaches every edge, so the crop is the whole 333x500 photo
+        gap = 4  # max(4, 2 * line width) at this size
+        pw, ph = g["canvas_w"] - 333 - 2 * gap, 500 - 2 * gap
+        assert g["canvas_h"] == 500
+        assert abs(pw / ph - 333 / 500) < 0.01, f"panel {pw}x{ph} is not 333:500"
+
+    def test_the_box_is_drawn_inside_the_panel_where_it_sits_on_the_photo(self, sr, tmp_path):
+        """What the reviewer compares: a pixel on the box's edge in the panel is red, a pixel inside is not."""
+        from PIL import Image
+
+        src = _photo(tmp_path, 640, 480)
+        dest = tmp_path / "boxed.jpg"
+        g = sr.draw_with_side_inset(src, (0.40, 0.40, 0.60, 0.60), dest)
+        with Image.open(dest) as im:
+            W = 640
+            rows = [im.getpixel((x, 240)) for x in range(W, g["canvas_w"])]
+            centre = im.getpixel(((W + g["canvas_w"]) // 2, 240))
+        panel = [p for p in rows if isinstance(p, tuple) and p[0] > 180 and p[1] < 90]
+        assert len(panel) >= 2, "the box's left and right edges are drawn in the panel"
+        assert isinstance(centre, tuple) and centre[2] > 150, "the box's interior shows the photo, not a frame"
+
+    def test_the_canvas_stays_within_the_wide_screen_aspect(self, sr, tmp_path):
+        """A small box on a landscape photo would magnify to a panel as wide as the photo; it is capped."""
+        src = _photo(tmp_path, 800, 534)
+        g = sr.draw_with_side_inset(src, (0.05, 0.02, 0.08, 0.06), tmp_path / "wide.jpg")
+        assert g["canvas_w"] / g["canvas_h"] <= sr.MAX_CANVAS_ASPECT + 0.01
