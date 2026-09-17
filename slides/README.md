@@ -53,7 +53,7 @@ Needs node and python3. Nothing to install — `npx` fetches Marp on first run
 `./render.sh <deck> png` renders one PNG per page and zips the pile:
 
 ```bash
-./render.sh scale-readout png --no-pageno   # -> _out/scale-readout.unnumbered-pngs*.zip
+./render.sh hold-the-line png --no-pageno   # -> _out/hold-the-line.unnumbered-pngs*.zip
 PNG_SCALE=3 ./render.sh hold-the-line png   # 3840x2160 instead of 2560x1440
 ```
 
