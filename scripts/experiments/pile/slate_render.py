@@ -23,6 +23,7 @@ No import side effects (unlike ``make_positive_slate``, which calls
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 
 #: How big the inset may get, as a fraction of the image's shorter side.
@@ -69,7 +70,25 @@ def inset_crop(im, box: tuple[float, float, float, float]):
     return crop, (x0, y0, x1, y1), lw
 
 
-def draw_with_side_inset(src: Path, box: tuple[float, float, float, float], dest: Path) -> dict[str, int | str]:
+def _box_px(im, box: Sequence[float]) -> tuple[float, float, float, float]:
+    """*box* (normalised) in pixels, clamped exactly as :func:`inset_crop` clamps it."""
+    W, H = im.size
+    x0, x1 = sorted((box[0] * W, box[2] * W))
+    y0, y1 = sorted((box[1] * H, box[3] * H))
+    return (
+        max(0.0, min(x0, W - 1.0)),
+        max(0.0, min(y0, H - 1.0)),
+        max(1.0, min(x1, float(W))),
+        max(1.0, min(y1, float(H))),
+    )
+
+
+def draw_with_side_inset(
+    src: Path,
+    box: tuple[float, float, float, float],
+    dest: Path,
+    also: Sequence[Sequence[float]] = (),
+) -> dict[str, int | str]:
     """Write *src* with *box* outlined, and the magnified crop on padding beside it.
 
     The canvas always grows to the RIGHT. The reviewer's screen is far wider than it is tall,
@@ -78,6 +97,12 @@ def draw_with_side_inset(src: Path, box: tuple[float, float, float, float], dest
     shorter side, which is the wrong constraint for a wide screen.) The photo sits at the
     canvas origin, so :func:`side_inset_to_original` is a pure rescale.
 
+    *also* outlines further boxes of the same class on the photo, for an image whose
+    class has several instances (a VG positive is banded by the union of them all, so
+    a reviewer asked "is the most prominent one boxed?" has to see every one). The
+    magnified panel then shows the union of *box* and *also*. With no *also* the
+    render is byte-identical to the single-box one.
+
     Returns the geometry needed to convert a box drawn on this render back to the photo.
     """
     from PIL import Image, ImageDraw  # noqa: PLC0415
@@ -85,7 +110,9 @@ def draw_with_side_inset(src: Path, box: tuple[float, float, float, float], dest
     with Image.open(src) as im:
         im = im.convert("RGB")
         W, H = im.size
-        crop, (x0, y0, x1, y1), lw = inset_crop(im, box)
+        boxes = [tuple(box), *(tuple(b) for b in also)]
+        union = (min(b[0] for b in boxes), min(b[1] for b in boxes), max(b[2] for b in boxes), max(b[3] for b in boxes))
+        crop, (x0, y0, x1, y1), lw = inset_crop(im, union if also else box)
         gap = max(4, 2 * lw)
         side = "right"
         cw, ch = W + crop.width + 2 * gap, max(H, crop.height + 2 * gap)
@@ -93,7 +120,12 @@ def draw_with_side_inset(src: Path, box: tuple[float, float, float, float], dest
         out = Image.new("RGB", (cw, ch), (0, 0, 0))
         out.paste(im, (0, 0))
         d = ImageDraw.Draw(out)
-        d.rectangle([x0, y0, x1, y1], outline=(255, 32, 32), width=lw)
+        if also:
+            for b in boxes:
+                bx0, by0, bx1, by1 = _box_px(im, b)
+                d.rectangle([bx0, by0, bx1, by1], outline=(255, 32, 32), width=lw)
+        else:
+            d.rectangle([x0, y0, x1, y1], outline=(255, 32, 32), width=lw)
         out.paste(crop, (ix, iy))
         d.rectangle([ix, iy, ix + crop.width - 1, iy + crop.height - 1], outline=(255, 32, 32), width=lw)
         out.save(dest, quality=92)
