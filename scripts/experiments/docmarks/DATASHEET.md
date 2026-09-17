@@ -141,8 +141,13 @@ on-disk v3.1 corpus predates that field, and is recognisable by
   `provenance="completeness"`.
 - **Durable records:** accepted candidates became must-links and rejected ones
   cannot-links. These are permanent hard negatives.
-- **One owner ruling:** the leafless B&W monogram counts as
-  `ald41a00-ernest_1`.
+- **Owner rulings:**
+  - the leafless B&W monogram counts as `ald41a00-ernest_1`;
+  - Sam Greenberg, 2026-09-17: in `tobacco800/logo_aah97e00-page02_1_0`
+    (Philip Morris) the globe crest with *VENI·VIDI·VICI* and the *PM*
+    monogram crest with *PHILIP MORRIS* are the **same mark, one class**; both
+    crests are positives for each other. Adjudications name mark pairs, not
+    class-level rulings, so this lives here and in the class's members.
 
 **Everything decided by hand survives a rebuild.** Three stores are replayed,
 in this order:
@@ -150,6 +155,9 @@ in this order:
   rather than the class id);
 - `added_marks.json` (hand-drawn boxes, replayed **before** clustering so the
   must-links can name them);
+- `box_overrides.json` (hand-accepted tighter boxes, replaced in place by mark
+  index right after the added marks, so every adjudication still names the
+  same mark);
 - `query_crops.json` (extra query boxes, replayed after the primary crops,
   once #3949 is applied).
 
@@ -227,18 +235,16 @@ those copies is scored down for it, and SIFT is not.
 - **`spods/stamp_00931_1` (OUTWARD-).** Faint red impressions. Its members'
   median was 19 SIFT inliers, against 43–160 for the other SPODS classes, so
   faint copies are the most likely positives still unlabelled.
-- **`tobacco800/logo_aah97e00-page02_1_0` (Philip Morris).**
-  - The members mix two crests: the globe crest with *VENI·VIDI·VICI*, which
-    the query shows, and the *PM* monogram crest with *PHILIP MORRIS*.
-  - Under the rule that a mark plus additional elements is still that mark,
-    this is one class. But no ruling covers whether the two crests are the
-    same artwork.
-  - A result on this class is partly a result on whether a method treats them
-    as one.
-- **`staver/stamp_stampds-00213_1`.** The boxes, including the query crop, are
-  wide enough to take in the EINGEGANGEN AM date stamp, which is page
-  furniture and not part of the mark (recorded in `roster.json` at v3).
-  Several of its query-crop candidates contain it too.
+- **`tobacco800/logo_aah97e00-page02_1_0` (Philip Morris).** The members
+  mix the globe crest (the query) and the *PM* monogram crest. By owner ruling
+  (2026-09-17, above) they are one mark, so a method that ranks only globe
+  copies high is *missing positives*, not being strict. A per-class number
+  here still depends on how a method bridges the two crests.
+- **`staver/stamp_stampds-00213_1`.** Some boxes are wide enough to take in
+  the EINGEGANGEN AM date stamp, which is page furniture and not part of the
+  mark (recorded in `roster.json` at v3). The owner chose to tighten them by
+  review: `box_tighten.py` (README audit item 9) proposes the boxes, and
+  nothing changes until the verdicts are applied.
 - **`staver/stamp_stampds-00230_0`.** 8 instances, the minimum the roster
   admits.
 - **`tobacco800/logo_azb11c00_1`.** The copies are tiny: median box 69 × 78 px,

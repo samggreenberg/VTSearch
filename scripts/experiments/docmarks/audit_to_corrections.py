@@ -8,6 +8,7 @@
     python audit_to_corrections.py --task letterhead          # dry run (default)
     python audit_to_corrections.py --task completeness --reviewer <name> --apply
     python audit_to_corrections.py --task query_crops --reviewer <name> --apply
+    python audit_to_corrections.py --task box_tighten --reviewer <name> --apply
     python audit_to_corrections.py --migrate-adjudications --apply
 
 Without ``--apply`` it prints what it would change and touches nothing.
@@ -969,6 +970,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "letterhead",
             "completeness",
             "query_crops",
+            "box_tighten",
         ),
     )
     ap.add_argument("--corpus", type=Path, default=cfg.OUT)
@@ -1042,7 +1044,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     else:
         verdicts = load_verdicts(audit_dir / "verdicts.jsonl")
 
-    mutates_pages = args.task in ("cluster", "membership", "confusable", "merge", "completeness")
+    mutates_pages = args.task in ("cluster", "membership", "confusable", "merge", "completeness", "box_tighten")
     pages = list(read_manifest(manifest_path)) if mutates_pages else []
     new_separations: list[dict[str, Any]] = []
     new_merges: list[dict[str, Any]] = []
@@ -1075,6 +1077,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
         crop_store = load_store(args.corpus / STORE)
         changes, problems = apply_query_crops(classes, verdicts, crop_store, reviewer=args.reviewer)
+    elif args.task == "box_tighten":
+        from box_tighten import STORE as BOX_STORE, apply_box_tighten, load_store as load_box_store  # noqa: PLC0415
+
+        box_store = load_box_store(args.corpus / BOX_STORE)
+        changes, problems, stale_queries = apply_box_tighten(
+            pages, classes, verdicts, box_store, reviewer=args.reviewer
+        )
     elif args.task == "distinctive":
         changes, problems = apply_distinctive(classes, verdicts)
     else:
@@ -1141,6 +1150,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         store = args.corpus / ADDED_MARKS
         save_added_marks(load_added_marks(store) + new_added_marks, store)
         print(f"  appended {len(new_added_marks)} hand-added mark(s) to {store}")
+
+    if args.task == "box_tighten":
+        from box_tighten import STORE as BOX_STORE, recut_query_crop, save_store as save_box_store  # noqa: PLC0415
+
+        # The store before the manifest, for the same reason as added_marks: a
+        # box on the page but not in the store would revert at the next rebuild.
+        save_box_store(box_store, args.corpus / BOX_STORE)
+        print(f"  wrote {len(box_store)} box override(s) to {args.corpus / BOX_STORE}")
+        by_page = {p.page_id: p for p in pages}
+        for class_id in sorted(stale_queries):
+            # The primary crop was cut from the box just replaced.
+            path = recut_query_crop(classes[class_id], by_page[classes[class_id]["query_page_id"]], class_id)
+            print(f"  re-cut {class_id} query crop -> {path}")
 
     if args.task == "query_crops":
         from query_crops import STORE, materialise, save_store  # noqa: PLC0415
