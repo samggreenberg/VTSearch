@@ -26,7 +26,7 @@ from vtscore.eval.al_strategies import (
     is_autopilot_strategy,
     select_next,
 )
-from vtscore.eval.step_trainers import _train_and_calibrate
+from vtscore.eval.step_trainers import _rank_transferred_threshold, _train_and_calibrate
 from vtscore.eval.sweep_trainers import (
     SWEEP_TRAINERS,
     _parse_gp_spec,
@@ -166,7 +166,7 @@ class TestGPStepTrainer:
         assert p.shape == s.shape == (80,)
         assert 0.0 <= threshold <= 1.0
         assert set(timings) == {"train_seconds", "xcal_seconds"}
-        assert details == {}
+        assert details == {"threshold_rule": "xcal_raw"}
 
     def test_app_and_svm_paths_carry_no_spread(self):
         clips = _clips()
@@ -186,6 +186,72 @@ class TestGPStepTrainer:
                 calibration_fraction=0.5,
             )
             assert step.predict_std is None
+
+
+class TestRankTransferredThreshold:
+    """The cut is carried between models by rank, so a rescaled final model keeps its operating point."""
+
+    @staticmethod
+    def _trainer(scale: float):
+        # A "model" whose score is a fixed ranking function rescaled by *scale*
+        # - the fold/final drift a GP's re-fitted amplitude produces.
+        def trainer(X, y, seed):
+            def predict(Xt):
+                z = np.asarray(Xt)[:, 0]
+                return 1.0 / (1.0 + np.exp(-scale * z))
+
+            return predict
+
+        return trainer
+
+    def test_survives_a_rescaled_final_model(self):
+        X, y = _blobs()
+        idx = np.r_[0:8, 40:48]
+        hay = X[np.r_[8:40, 48:80]]
+
+        def admitted(final_scale: float) -> float:
+            final = self._trainer(final_scale)(None, None, 0)
+            thr = _rank_transferred_threshold(
+                X[idx], y[idx], self._trainer(1.0), 0, hay, final, calibrate_count=2, cal_fraction=0.5
+            )
+            scores = final(hay)
+            assert scores.min() <= thr <= np.nextafter(scores.max(), np.inf)
+            return float(np.mean(scores >= thr))
+
+        # The folds always score at scale 1; the final model is re-scaled x1,
+        # x6 and x0.2 (a GP's amplitude drifting between refits).  By rank the
+        # operating point - the share of the haystack admitted - is invariant
+        # to that drift; a raw cut would swing with it.
+        shares = [admitted(scale) for scale in (1.0, 6.0, 0.2)]
+        assert 0.0 < shares[0] < 1.0
+        assert max(shares) - min(shares) <= 1.0 / hay.shape[0] + 1e-9
+
+    def test_too_few_labels_falls_back_to_half(self):
+        X, y = _blobs()
+        idx = np.r_[0:2, 40:41]
+        assert _rank_transferred_threshold(X[idx], y[idx], self._trainer(1.0), 0, X, lambda Xt: Xt[:, 0]) == 0.5
+
+    def test_gp_step_trainer_reports_the_rule(self):
+        clips = _clips()
+        good = {1: None, 2: None, 3: None}
+        bad = {41: None, 42: None, 43: None, 44: None}
+        hay = np.stack([clips[i]["embeddings"]["emb"] for i in sorted(clips)])
+        for hay_arg, rule in ((None, "xcal_raw"), (hay, "xcal_rank")):
+            step, threshold, _, _, details = _train_and_calibrate(
+                "gp_rbf",
+                good,
+                bad,
+                clips,
+                "cat0",
+                region_voting=False,
+                input_dim=16,
+                inclusion=0,
+                calibrate_count=2,
+                calibration_fraction=0.5,
+                haystack_X=hay_arg,
+            )
+            assert details == {"threshold_rule": rule}
+            assert np.isfinite(threshold)
 
 
 # ---------------------------------------------------------------------------
@@ -287,6 +353,19 @@ class TestGPVotingSimulation:
         # The phase machine ran: the family gates the atlas and flow, not the one name.
         assert all(r["phase"] for r in rows)
         assert rows[-1]["cost"] <= rows[0]["cost"]
+
+    def test_rank_cut_runs_and_is_gp_only(self):
+        rows = simulate_voting_iterations(
+            _clips(), "cat0", seed=0, trainer="gp_dot", max_steps=16, safe_thresholds=False, standalone_cut="rank"
+        )
+        assert rows and all(np.isfinite(r["cost"]) for r in rows)
+        assert rows[-1]["cost"] < 0.5, "a separable pool should end far from the flag-everything collapse"
+        with pytest.raises(ValueError, match="gp_\\* trainers only"):
+            simulate_voting_iterations(
+                _clips(), "cat0", seed=0, trainer="app", max_steps=8, safe_thresholds=False, standalone_cut="rank"
+            )
+        with pytest.raises(ValueError, match="standalone_cut"):
+            simulate_voting_iterations(_clips(), "cat0", seed=0, trainer="gp_rbf", max_steps=8, standalone_cut="x")
 
     def test_app_trainer_under_an_uncertainty_strategy_is_loud(self):
         with pytest.raises(ValueError, match="per-item uncertainty"):

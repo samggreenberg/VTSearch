@@ -27,20 +27,30 @@ STAGE_A_TRAINERS = os.environ.get("GPHEAD_STAGE_A_TRAINERS", "svm_linear,gp_rbf,
 LABEL_COUNTS = [int(x) for x in os.environ.get("GPHEAD_LABEL_COUNTS", "8,16,32,64,128").split(",")]
 
 # --- Stage B: the Autopilot voting simulation.  An arm is a (trainer,
-# strategy, safe_thresholds) triple; the directory under RESULTS is the arm
-# name.  ``app`` is the shipped detector: linear-SVM head, fused threshold, the
-# rank-nearest-cut Hard pick.  ``app_xcal`` is the same head on the plain
-# cross-calibration cut, which is the only threshold rule the standalone arms
-# can run (their fold models are not the app's head, so the fold-anchored
-# fusion has nothing to anchor; see ``_safe_threshold_for_step``) - it is the
-# parity control that separates "the GP head" from "the threshold rule".
-ARMS: dict[str, tuple[str, str, bool]] = {
-    "app": ("app", "autopilot", True),
-    "app_xcal": ("app", "autopilot", False),
-    "gp_rbf": ("gp_rbf", "autopilot", False),
-    "gp_dot": ("gp_dot", "autopilot", False),
-    "gp_rbf_straddle": ("gp_rbf", "autopilot_uncertainty", False),
-    "gp_rbf_maxvar": ("gp_rbf", "autopilot_maxvar", False),
+# strategy, safe_thresholds, standalone_cut) tuple; the directory under RESULTS
+# is the arm name.  ``app`` is the shipped detector: linear-SVM head, fused
+# threshold, the rank-nearest-cut Hard pick.  ``app_xcal`` is the same head on
+# the plain cross-calibration cut, which is the only threshold rule the
+# standalone arms can share (their fold models are not the app's head, so the
+# fold-anchored fusion has nothing to anchor; see ``_safe_threshold_for_step``)
+# - the parity control that separates "the GP head" from "the threshold rule".
+# ``gp_rbf`` takes that cut as a raw score, as every standalone arm did before
+# this study; ``gp_rbf_rank`` carries it by rank (``standalone_cut="rank"``),
+# the transfer production makes, because a GP's probability scale moves with
+# every refit and the raw cut collapses on it; the ``*_blend`` arms take the
+# app's own fold-less fallback (``safe_thresholds=True`` lands a standalone
+# trainer on the schedule blend of the cut with a GMM fitted on the final
+# model's haystack scores), the one shipped rule that is scale-consistent by
+# construction (see the report).
+ARMS: dict[str, tuple[str, str, bool, str]] = {
+    "app": ("app", "autopilot", True, "raw"),
+    "app_xcal": ("app", "autopilot", False, "raw"),
+    "gp_rbf": ("gp_rbf", "autopilot", False, "raw"),
+    "gp_rbf_rank": ("gp_rbf", "autopilot", False, "rank"),
+    "gp_rbf_blend": ("gp_rbf", "autopilot", True, "raw"),
+    "gp_dot_blend": ("gp_dot", "autopilot", True, "raw"),
+    "gp_rbf_blend_straddle": ("gp_rbf", "autopilot_uncertainty", True, "raw"),
+    "gp_rbf_blend_maxvar": ("gp_rbf", "autopilot_maxvar", True, "raw"),
 }
 STAGE_B_ARMS = os.environ.get("GPHEAD_ARMS", ",".join(ARMS)).split(",")
 

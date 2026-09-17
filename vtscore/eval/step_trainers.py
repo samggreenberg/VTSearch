@@ -25,10 +25,9 @@ That is why the app arm is spelled ``"app"`` rather than by a model name
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    import numpy as np
+import numpy as np
 
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.eval.labels import region_box_for_category
@@ -42,7 +41,7 @@ from vtscore.eval.step_model import (
     resolve_trainer_name,
     score_sim_set_with_model,
 )
-from vtscore.eval.sweep_trainers import _cross_calibrated_threshold, _parse_trainer_spec
+from vtscore.eval.sweep_trainers import _as_scores, _cross_calibrated_threshold, _parse_trainer_spec
 from vtscore.training.mlp import train_model
 from vtscore.training.thresholds import (
     CALIBRATION_SPLIT_SEED,
@@ -230,8 +229,15 @@ def _train_and_calibrate(
     emit_calibration_metrics: bool = False,
     fold_count_variants: list[int] | None = None,
     calibration_seed: int = CALIBRATION_SPLIT_SEED,
+    haystack_X: Any = None,
 ) -> tuple[StepModel, float, int, dict[str, float], dict[str, Any]]:
     """Train the step's ranker and calibrate its threshold from the current votes.
+
+    *haystack_X* (an ``(N, D)`` matrix of the simulation set's whole-image
+    vectors) switches the ``gp_*`` path to the **rank-transferred** cut
+    (:func:`_rank_transferred_threshold`); ``None`` leaves every path on its
+    raw-score rule.  It is ignored by the app path, whose shipped estimator
+    already transfers by rank.
 
     *head* selects the head on both production paths (see :data:`HEADS`):
     ``"linear_svm"`` (the default, :data:`PRODUCTION_HEAD`) trains the head the
@@ -300,6 +306,7 @@ def _train_and_calibrate(
             calibrate_count=calibrate_count,
             calibration_fraction=calibration_fraction,
             calibration_seed=calibration_seed,
+            haystack_X=haystack_X,
         )
     return _svm_train_and_calibrate(
         trainer,
@@ -807,6 +814,7 @@ def _gp_train_and_calibrate(
     calibrate_count: int,
     calibration_fraction: float,
     calibration_seed: int = CALIBRATION_SPLIT_SEED,
+    haystack_X: Any = None,
 ) -> tuple[StepModel, float, int, dict[str, float], dict[str, Any]]:
     """Gaussian-process path (issue #3954) - single-vector only, like the SVM path.
 
@@ -815,7 +823,10 @@ def _gp_train_and_calibrate(
     conditioned on the votes rather than the app's head.  The threshold is the
     same trainer-agnostic cross-calibration port the SVM arm uses, with the
     fold fits driven by *calibration_seed* exactly as there; the final fit is
-    pinned to seed 42, mirroring the SVM path.
+    pinned to seed 42, mirroring the SVM path.  With *haystack_X* the cut is
+    instead transferred from the fold models to the final model **by rank**
+    (:func:`_rank_transferred_threshold`), and ``details["threshold_rule"]``
+    says which rule ran.
 
     What this path adds to the contract is :attr:`StepModel.predict_std`: the
     GP's per-item posterior spread of the score, which the
@@ -823,9 +834,7 @@ def _gp_train_and_calibrate(
     the next question.  The fold count and split are the app's; nothing about
     the calibration rule is GP-aware.
     """
-    import numpy as np  # noqa: PLC0415
-
-    from vtscore.eval.sweep_trainers import _as_scores, resolve_trainer  # noqa: PLC0415
+    from vtscore.eval.sweep_trainers import resolve_trainer  # noqa: PLC0415
 
     X = np.array(
         [media_embedding(clips_dict[vid]) for vid in good_votes]
@@ -837,21 +846,36 @@ def _gp_train_and_calibrate(
 
     trainer_fn = resolve_trainer(trainer)
 
-    t_xcal = time.monotonic()
-    threshold = _cross_calibrated_threshold(
-        X,
-        y,
-        trainer_fn,
-        calibration_seed,
-        inclusion_value=inclusion,
-        calibrate_count=calibrate_count,
-        cal_fraction=calibration_fraction,
-    )
-    xcal_seconds = time.monotonic() - t_xcal
-
     t_train = time.monotonic()
     predict_fn = trainer_fn(X, y, 42)
     train_seconds = time.monotonic() - t_train
+
+    t_xcal = time.monotonic()
+    if haystack_X is None:
+        threshold = _cross_calibrated_threshold(
+            X,
+            y,
+            trainer_fn,
+            calibration_seed,
+            inclusion_value=inclusion,
+            calibrate_count=calibrate_count,
+            cal_fraction=calibration_fraction,
+        )
+        rule = "xcal_raw"
+    else:
+        threshold = _rank_transferred_threshold(
+            X,
+            y,
+            trainer_fn,
+            calibration_seed,
+            np.asarray(haystack_X, dtype=np.float32),
+            lambda Xh: _as_scores(predict_fn(Xh)),
+            inclusion_value=inclusion,
+            calibrate_count=calibrate_count,
+            cal_fraction=calibration_fraction,
+        )
+        rule = "xcal_rank"
+    xcal_seconds = time.monotonic() - t_xcal
 
     def predict(X_test: Any) -> "np.ndarray":
         return _as_scores(predict_fn(X_test))
@@ -869,4 +893,91 @@ def _gp_train_and_calibrate(
         device="cpu",
         predict_std=predict_std,
     )
-    return step, threshold, n_labels, {"train_seconds": train_seconds, "xcal_seconds": xcal_seconds}, {}
+    return (
+        step,
+        threshold,
+        n_labels,
+        {"train_seconds": train_seconds, "xcal_seconds": xcal_seconds},
+        {"threshold_rule": rule},
+    )
+
+
+def _rank_transferred_threshold(
+    X_train: "np.ndarray",
+    y_train: "np.ndarray",
+    trainer_fn: Any,
+    seed: int,
+    haystack_X: "np.ndarray",
+    final_predict: Any,
+    *,
+    inclusion_value: int = 0,
+    calibrate_count: int = 2,
+    cal_fraction: float = 0.5,
+) -> float:
+    """The cross-calibration cut, carried from the fold models to the final one by rank.
+
+    :func:`~vtscore.eval.sweep_trainers._cross_calibrated_threshold` pools the
+    folds' held-out scores, cuts them once, and applies that raw score to the
+    final model.  That assumes the fold models and the final model score on one
+    scale - true enough of a max-margin head, and false of a Gaussian process,
+    whose predictive probability re-scales with every refit (the marginal
+    likelihood re-fits the amplitude, and more negatives pull every prior
+    down).  Measured on the #3954 pilot, the raw cut of a GP trained on 19
+    votes sat *under* every negative the final model scored and flagged the
+    whole haystack, on a ranking that was perfect.
+
+    This is the same repair production makes in its fold-anchored estimator
+    (``docs/ML.md``, "rank transfer"): each fold's cut is read as its
+    **quantile in that fold model's own haystack**, the quantiles are averaged,
+    and the result is realized on the final model's haystack.  Two models
+    scoring one haystack are related by a near-monotone map and quantiles
+    survive monotone maps, so no raw score crosses scales.  It differs from the
+    pooled rule in one deliberate way: the conformal cut is taken **per fold**
+    (it has to be, to read it in that fold's own scale) rather than over the
+    pooled held-out scores.  The haystack is the simulation set, voted items
+    included; the test half never enters.
+
+    Falls back to ``0.5`` exactly where the pooled rule does (too few labels, no
+    usable fold).
+    """
+    from vtscore.training.thresholds import conformal_threshold  # noqa: PLC0415
+
+    n = int(y_train.size)
+    if n < 4:
+        return 0.5
+    n_cal = max(1, round(n * cal_fraction))
+    n_tr = n - n_cal
+    if n_tr < 2 or n_cal < 1:
+        return 0.5
+
+    rng = np.random.default_rng(seed)
+    quantiles: list[float] = []
+    for k in range(max(1, calibrate_count)):
+        order = rng.permutation(n)
+        tr_idx = order[:n_tr]
+        cal_idx = order[n_tr:]
+        if len({int(v) for v in y_train[tr_idx]}) < 2 or len({int(v) for v in y_train[cal_idx]}) < 2:
+            continue
+        try:
+            fold_predict = trainer_fn(X_train[tr_idx], y_train[tr_idx], seed + k)
+        except ValueError:
+            continue
+        cal_scores = _as_scores(fold_predict(X_train[cal_idx])).tolist()
+        cut_k = conformal_threshold(cal_scores, [float(v) for v in y_train[cal_idx]], inclusion_value)
+        hay_k = _as_scores(fold_predict(haystack_X))
+        # The cut's position in this fold's own score distribution: the
+        # fraction of the haystack it admits nothing of.
+        quantiles.append(float(np.mean(hay_k < cut_k)))
+
+    if not quantiles:
+        return 0.5
+    q = float(np.mean(quantiles))
+    hay_final = np.sort(np.asarray(final_predict(haystack_X), dtype=np.float64))
+    # Realize the averaged quantile on the final model's haystack: the lowest
+    # final score at or above which the same fraction of the haystack sits.
+    idx = min(int(np.floor(q * hay_final.size)), hay_final.size - 1)
+    if q >= 1.0:
+        # The folds admitted nothing; sit just above the final model's top score
+        # so the realized cut admits nothing too, rather than its single top item.
+        return float(np.nextafter(hay_final[-1], np.inf))
+    return float(hay_final[idx])

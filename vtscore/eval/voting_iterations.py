@@ -1245,6 +1245,7 @@ def simulate_voting_iterations(  # noqa: C901
     exclusion_min_remainder: Optional[float] = None,
     skyline_arms: Optional[list[str]] = None,
     calibration_seed: Optional[int] = None,
+    standalone_cut: str = "raw",
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -1475,6 +1476,18 @@ def simulate_voting_iterations(  # noqa: C901
             Recorded verbatim in the ``calibration_seed`` column, so a pooled
             frame says which draw each row came from.
 
+        standalone_cut: How a ``gp_*`` trainer's cross-calibration cut reaches
+            its final model (issue #3954).  ``"raw"`` (the default, and what
+            the ``svm_*`` arms always do) applies the pooled held-out cut as a
+            raw score; ``"rank"`` reads each fold's cut as a quantile of that
+            fold model's simulation-set scores and realizes the averaged
+            quantile on the final model's - the transfer production's
+            fold-anchored estimator makes, for a probability whose scale moves
+            with every refit.  See
+            :func:`vtscore.eval.step_trainers._rank_transferred_threshold`.
+            Only the ``gp_*`` trainers honour it; ``"rank"`` with any other
+            trainer is an error, as is a region-aware dataset.
+
     Returns:
         List of row dicts.  Keys: ``seed, dataset, category, strategy, trainer,
         head, style, prevalence_arm, realized_prevalence, t, n_good, n_bad, phase,
@@ -1640,6 +1653,19 @@ def simulate_voting_iterations(  # noqa: C901
         cid: np.asarray(media_embedding(clips_dict[cid]), dtype=np.float32) for cid in sim_ids
     }
     input_dim = int(next(iter(sim_embeddings.values())).shape[0])
+
+    # The rank-transfer haystack for a ``gp_*`` arm (issue #3954): the
+    # simulation set's whole-image vectors, in id order.  ``None`` keeps every
+    # trainer on its raw-score cut.
+    if standalone_cut not in ("raw", "rank"):
+        raise ValueError(f"standalone_cut must be 'raw' or 'rank', got {standalone_cut!r}")
+    haystack_X: "np.ndarray | None" = None
+    if standalone_cut == "rank":
+        if not trainer.startswith("gp_"):
+            raise ValueError(f"standalone_cut='rank' applies to the gp_* trainers only; got trainer={trainer!r}")
+        if region_aware:
+            raise ValueError("standalone_cut='rank' needs a single-vector dataset (the gp_* arms score whole images)")
+        haystack_X = np.stack([sim_embeddings[cid] for cid in sorted(sim_ids)])
 
     # The autopilot New phase reads a coverage atlas built over the pool; it is
     # labelled in lock-step with the votes below so its coverage advances.
@@ -1837,6 +1863,7 @@ def simulate_voting_iterations(  # noqa: C901
             emit_calibration_metrics=emit_calibration_metrics,
             fold_count_variants=fold_count_variants,
             calibration_seed=calibration_seed,
+            haystack_X=haystack_X,
         )
 
         # Apply the shipped safe threshold if enabled
@@ -2300,6 +2327,7 @@ def run_voting_iterations_eval(
     autopilot_fidelity: bool = True,
     startup_schedule: Optional[str] = None,
     calibration_seed: Optional[int] = None,
+    standalone_cut: str = "raw",
 ) -> pd.DataFrame:
     """Run the voting-iterations evaluation over multiple seeds/datasets/categories.
 
@@ -2421,6 +2449,7 @@ def run_voting_iterations_eval(
                                     autopilot_fidelity=autopilot_fidelity,
                                     startup_schedule=startup_schedule,
                                     calibration_seed=calibration_seed,
+                                    standalone_cut=standalone_cut,
                                 )
                                 all_rows.extend(rows)
 

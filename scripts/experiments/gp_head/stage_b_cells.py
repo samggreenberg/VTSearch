@@ -69,7 +69,7 @@ def run_cell(idx: int, cell: dict, arms: list[str]) -> str:
         if out.exists():
             lines.append(f"{arm}=cached")
             continue
-        trainer, strategy, safe = cfg.ARMS[arm]
+        trainer, strategy, safe, cut = cfg.ARMS[arm]
         t0 = time.time()
         df = run_voting_iterations_eval(
             {ds: clips},
@@ -85,6 +85,7 @@ def run_cell(idx: int, cell: dict, arms: list[str]) -> str:
             seed_scores=seed_scores,
             trainers=[trainer],
             prevalence_arms=cfg.PREVALENCE_ARMS,
+            standalone_cut=cut,
         )
         out.parent.mkdir(parents=True, exist_ok=True)
         df.to_csv(out, index=False)
