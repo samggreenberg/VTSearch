@@ -89,8 +89,39 @@ SIDE_MAX_ZOOM = 8.0
 #: HEIGHT is still what limits its size -- a panel as wide as a landscape photo would make it
 #: ~2.9:1 and shrink the photo on anything narrower than an ultrawide.
 MAX_CANVAS_ASPECT = 2.2
+#: Each individual annotation of the class, when there are several. Thin and amber: VG often
+#: holds many overlapping boxes for one object (21 on one bench image), and outlining them all
+#: in red buried the one box the band actually comes from.
+INSTANCE_EDGE = (255, 190, 0)
+#: Two annotations overlapping by at least this much are the same object annotated twice, for
+#: DISPLAY only: VG holds 21 boxes on one bench image and 23 on one bird image, mostly repeats.
+DUPLICATE_IOU = 0.5
 #: Outline of the side panel itself -- deliberately NOT red, so it cannot be read as the box.
 PANEL_EDGE = (110, 110, 110)
+
+
+def distinct_boxes(boxes: Sequence[Sequence[float]], iou: float = DUPLICATE_IOU) -> list[Sequence[float]]:
+    """*boxes* with near-duplicates dropped, largest first -- for drawing, never for banding.
+
+    VG is annotated by many people, so one object collects many boxes: 21 on one bench image,
+    23 on one bird image. Outlining every one buries the object. A box is dropped when it
+    overlaps a bigger kept box by *iou*, or sits almost entirely inside one.
+    """
+    kept: list[Sequence[float]] = []
+    for b in sorted(boxes, key=lambda b: -(b[2] - b[0]) * (b[3] - b[1])):
+        ba = max(1e-12, (b[2] - b[0]) * (b[3] - b[1]))
+        dup = False
+        for k in kept:
+            ix = max(0.0, min(b[2], k[2]) - max(b[0], k[0]))
+            iy = max(0.0, min(b[3], k[3]) - max(b[1], k[1]))
+            inter = ix * iy
+            ka = max(1e-12, (k[2] - k[0]) * (k[3] - k[1]))
+            if inter / (ba + ka - inter) >= iou or inter / ba >= 0.8:
+                dup = True
+                break
+        if not dup:
+            kept.append(b)
+    return kept
 
 
 def draw_with_side_inset(
@@ -115,8 +146,11 @@ def draw_with_side_inset(
     panel's own edge is grey. The context padding is the corner inset's, so a small object still
     comes with its surroundings.
 
-    *also* outlines further boxes of the same class, on the photo and in the panel, for an
-    image whose class has several instances; the panel then frames their union.
+    *also* carries the class's further annotations in this image. The band comes from the
+    UNION of them all (``vg_scale.band_for``), so the union is what is drawn in red -- it is
+    the box the reviewer is being asked about -- and each annotation is drawn thin, in amber,
+    underneath it. Drawing every annotation in red instead made a 21-box VG bench unreadable
+    and hid the band's own box.
 
     Returns the geometry needed to convert a box drawn on this render back to the photo.
     """
@@ -150,13 +184,21 @@ def draw_with_side_inset(
         d = ImageDraw.Draw(out)
         d.rectangle([ix - 1, iy - 1, ix + pw, iy + ph], outline=PANEL_EDGE, width=1)
         sx, sy = pw / crw, ph / crh
-        for x0, y0, x1, y1 in boxes:
-            d.rectangle([x0, y0, x1, y1], outline=(255, 32, 32), width=lw)
+
+        def outline(b, colour, width):
+            x0, y0, x1, y1 = b
+            d.rectangle([x0, y0, x1, y1], outline=colour, width=width)
             d.rectangle(
                 [ix + (x0 - cx0) * sx, iy + (y0 - cy0) * sy, ix + (x1 - cx0) * sx, iy + (y1 - cy0) * sy],
-                outline=(255, 32, 32),
-                width=lw,
+                outline=colour,
+                width=width,
             )
+
+        shown = distinct_boxes(boxes)
+        if len(shown) > 1:
+            for b in shown:
+                outline(b, INSTANCE_EDGE, max(1, lw // 2))
+        outline((ux0, uy0, ux1, uy1), (255, 32, 32), lw)
         # No chroma subsampling: at the default 4:2:0 a 2 px red outline blurs to a dull purple,
         # and the outline is exactly what the reviewer is reading.
         out.save(dest, quality=92, subsampling=0)
