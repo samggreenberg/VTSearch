@@ -108,13 +108,17 @@ and it is cheap to settle — see the first item below.
 
 <!-- item-sep -->
 
-- **Move prevalence, band and class list to eval-time queries.** The point the
-  old exhaustive-annotation plan was aiming at, and the switch delivers its
-  precondition for free: COCO is exhaustively annotated, so a cell becomes a
-  filter over a fixed set rather than a build-time designation. `SCALE_N_POS` /
-  `SCALE_N_NEG` / `SCALE_PREVALENCE` stop being re-embeds, and a class-list change
-  stops being a rebuild. This is the item that turns the benchmark into a dataset.
-  (Opus 4.8)
+- [ ] #3987 — prevalence becomes an axis: one meta-dataset exporting versions from 5% to 0.1% (Opus 4.8)
+
+<!-- item-sep -->
+
+- **Move band and class list to eval-time queries too.** #3987 does prevalence;
+  the other two are the same change and should land with it. COCO is exhaustively
+  annotated, so a cell is a filter over a fixed set rather than a build-time
+  designation: `SCALE_N_POS` / `SCALE_N_NEG` stop being re-embeds and a class-list
+  change stops being a rebuild. Together with #3986 this is what turns the
+  benchmark into a dataset — and it is what makes the embed a one-time cost
+  (123,287 images, ~5.3 h for all five embedders) instead of a treadmill. (Opus 4.8)
 
 <!-- item-sep -->
 
