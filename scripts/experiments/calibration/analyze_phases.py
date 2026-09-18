@@ -28,9 +28,11 @@ from pathlib import Path
 
 from _cells_paths import side_frame_files
 
+from study_paths import require_study_dir
+
 _ap = argparse.ArgumentParser(description=__doc__)
 _ap.add_argument("--exp", default=f"/expscratch/{os.environ.get('USER', 'sgreenberg')}/scale-3156-fixed")
-EXP = _ap.parse_args().exp
+EXP = str(require_study_dir(_ap.parse_args().exp, "--exp"))
 rows_by = defaultdict(lambda: {"n": 0, "good": 0, "pct": [], "runs": set()})
 files = side_frame_files(Path(EXP) / "results" / "cells", "__picks")
 for path in files:
