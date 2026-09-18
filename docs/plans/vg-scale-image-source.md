@@ -118,15 +118,45 @@ and it is cheap to settle — see the first item below.
 
 <!-- item-sep -->
 
-- **Widen the class list on the measured shortlist.** 29 classes beyond the
-  current 25 clear the shipped floor in all three bands. Two things the #3983
-  census settles in advance: the classes VG blocked for *vocabulary* reasons all
-  return (`motorcycle`, `surfboard`, `skateboard`, `snowboard` stop being aliases
-  of `bike`/`board`; `potted plant` goes from 1 small-band image to 299), while
-  #3603's structural finding is independently confirmed and still binds —
-  `giraffe` has 3 small-band images in all of COCO against 14 in VG, because a
-  class that owns its scene is photographed filling the frame whatever the source.
-  So the easy end still cannot be widened; everything else can. (Sonnet 5)
+- **Widen the class list on the measured shortlist, and select on scatter rather
+  than on definitions.** 29 classes beyond the current 25 clear the shipped floor
+  in all three bands. Two things the #3983 census settles in advance: the classes
+  VG blocked for *vocabulary* reasons all return (`motorcycle`, `surfboard`,
+  `skateboard`, `snowboard` stop being aliases of `bike`/`board`; `potted plant`
+  goes from 1 small-band image to 299), while #3603's structural finding is
+  independently confirmed and still binds — `giraffe` has 3 small-band images in
+  all of COCO against 14 in VG, because a class that owns its scene is
+  photographed filling the frame whatever the source. So the easy end still
+  cannot be widened; everything else can.
+
+  **Do not select for tidy boundaries.** #3983's second half measured what is
+  inside each COCO class and found that heterogeneity does not predict review
+  pain: `book` is 85% pure with `magazine` at 6%, `cell phone` 89% with
+  `telephone` at 4%, `knife` 93%, `bench` 93% — every class whose review split is
+  homogeneous. What splits a reviewer is an unwritten rule meeting a minority
+  case, at 4% as surely as at 40%. Select on the **scatter rate** instead, which
+  is a real cost and is measured in the same pass: `chair` 52%, `car` 59%,
+  `book` 58%, `bottle` 50% against `fire hydrant` 5%, `microwave` 6%, `stop sign`
+  8%, `frisbee` 11%, `sink` 13%, `dog` 13%. (Sonnet 5)
+
+<!-- item-sep -->
+
+- **Decide the `truck`/`car` pair on the measurement.** 17% of COCO `truck` boxes
+  are objects LVIS calls `car_(automobile)`, against 2% the other way. #3588 added
+  `truck` beside `car` as a same-scene partner; the asymmetry says the pair is
+  partly one population relabelled rather than two. Either keep both and say so
+  where results are read, or drop `truck` — it is the one genuine boundary
+  contest the census surfaced among the current 25. (human)
+
+<!-- item-sep -->
+
+- **Write the class notes from the purity table, once, and ship them.**
+  [`coco_class_purity.py`](../../scripts/experiments/pile/coco_class_purity.py)'s
+  name list is the text `SCALE_CLASS_RULES` needs — `cup` is
+  glass/cup/mug, `book` includes magazines, `stop sign` includes 20% generic
+  `street_sign`. A minute per class against a review pass, and it is what would
+  have prevented #3612's split. This is the whole of the definitional work the
+  migration still owes. (Sonnet 5)
 
 <!-- item-sep -->
 

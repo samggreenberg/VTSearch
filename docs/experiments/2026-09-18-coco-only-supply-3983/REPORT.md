@@ -139,6 +139,70 @@ classes VG could not carry because free text collapsed them onto `bike` and
 barred by `scale_study_exclusion` because its head noun `light` is not an object;
 COCO's vocabulary has no head nouns to exclude.
 
+## What is inside a COCO class, and why that is not the review problem
+
+Choosing a class list raised a second question: **which classes have boundaries
+that are cheap to pin down?** The review programme's expensive moments were
+definitional — COCO annotates magazines as `book` (#3612), landlines split
+`cell phone`, planters split `vase` (#3784) — so it looked as though picking
+classes with tidier boundaries would buy a lot.
+
+Two instruments were tried.
+
+**Box collision inside COCO measures nothing, and cannot.** The natural first
+probe is `scan_name_overlap.py`'s: how often do two classes box the same pixels?
+Run over COCO it separates nothing — the eight classes whose definitions actually
+broke in review average **3.32%** collision against **3.43%** for all 80. That is
+not a weak signal, it is a structural zero: COCO's vocabulary is curated and
+disjoint, so an annotator records one label and no disagreement. The instrument
+worked on VG only because free text let two annotators write two names on one
+object. **Definitional ambiguity is invisible from inside COCO by construction.**
+
+**A finer vocabulary with written definitions does see it.** LVIS re-annotated
+COCO's images with 1,203 WordNet synsets, so matching COCO boxes to LVIS boxes
+(mutual best match, IoU ≥ 0.7) reports what each COCO class is made of —
+[`coco_class_purity.py`](../../../scripts/experiments/pile/coco_class_purity.py):
+
+| COCO class | purity | LVIS dominant | what else is in there |
+|---|---:|---|---|
+| `truck` | 38% | `truck` | `car_(automobile)` **17%**, `pickup_truck` 16%, `trailer_truck` 8% |
+| `cup` | 39% | `glass_(drink_container)` | `cup` 28%, `mug` 17% |
+| `bottle` | 42% | `bottle` | `wine_bottle` 18%, `water_bottle` 9%, `beer_bottle` 7% |
+| `chair` | 66% | `chair` | `armchair` 11%, `deck_chair` 8%, `stool` 5% |
+| `book` | **85%** | `book` | `magazine` **6%**, `notebook` 2% |
+| `cell phone` | **89%** | `cellular_telephone` | `telephone` **4%**, `camera` 3% |
+| `knife` | **93%** | `knife` | `handle` 3%, `spatula` 2% |
+| `bench` | **93%** | `bench` | `table` 2%, `desk` 1% |
+| `fire hydrant` | **100%** | `fireplug` | — |
+
+**And that is the finding: heterogeneity is not what made review painful.** Every
+class whose review actually split is *homogeneous* — `book` 85% pure with
+magazines at 6%, `cell phone` 89% with landlines at 4%, `knife` 93%, `bench` 93%.
+The mean separation (74.1% for the eight against 82.8% overall) is carried
+entirely by `cup`, `bottle` and `chair`, and those three are not the ones that
+split a reviewer.
+
+What splits reviewers is **an unwritten rule meeting a minority case**, and a 4%
+minority does it as surely as a 40% one: the reviewer hits a landline, has
+nothing to consult, and decides. So a purity threshold would select the wrong
+classes. Read the **name list** instead — it is exactly the text
+`SCALE_CLASS_RULES` needs, and it costs a minute per class against a review pass.
+
+A third signal is worth more than either for *selection*, and has nothing to do
+with definitions: the **scatter rate**, the share of a class's images where
+`band_for` rejects the union as describing the scatter rather than the object.
+`chair` 52%, `car` 59%, `book` 58%, `bottle` 50%, `boat` 49%, `cup` 45% — against
+`fire hydrant` 5%, `microwave` 6%, `stop sign` 8%, `frisbee` 11%, `sink` 13%,
+`dog` 13%. A scattered class throws away half its images before banding and makes
+every review render harder to read.
+
+One genuine boundary contest does fall out of the table, and it is actionable:
+**17% of COCO `truck` boxes are objects LVIS calls `car_(automobile)`**, while
+only 2% of `car` boxes are trucks. Both are in *C*, so the two classes are
+contesting the same objects asymmetrically — #3588 added `truck` beside `car`
+precisely as a same-scene partner, and this says the pair is partly a relabelling
+of one population rather than two.
+
 ## Method, and what it is not
 
 The band rule is **imported, not restated** —
