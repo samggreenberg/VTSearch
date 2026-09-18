@@ -155,3 +155,46 @@ class TestRender:
         with Image.open(dest) as im:
             edge = im.getpixel((int(0.95 * 640) - 1, int(0.50 * 480)))
         assert isinstance(edge, tuple) and edge[0] > 180 and edge[1] < 90, "the union reaches the far annotation"
+
+
+class TestCanvasBoxToOriginal:
+    """A reviewer draws on whichever half shows the object best; both convert."""
+
+    def test_a_box_drawn_on_the_photo_is_a_rescale(self, sr, tmp_path):
+        src = _photo(tmp_path, 640, 480)
+        shown = [(0.40, 0.40, 0.60, 0.60)]
+        g = sr.draw_with_side_inset(src, shown[0], tmp_path / "a.jpg")
+        canvas = [0.40 * 640 / g["canvas_w"], 0.40, 0.60 * 640 / g["canvas_w"], 0.60]
+        out, where = sr.canvas_box_to_original(canvas, g, shown)
+        assert where == "photo"
+        assert out == pytest.approx([0.40, 0.40, 0.60, 0.60], abs=1e-6)
+
+    def test_a_box_drawn_on_the_panel_lands_on_the_same_object(self, sr, tmp_path):
+        """The panel magnifies a known rectangle, so a box on it maps back through that rectangle."""
+        src = _photo(tmp_path, 640, 480)
+        shown = [(0.40, 0.40, 0.60, 0.60)]
+        g = sr.draw_with_side_inset(src, shown[0], tmp_path / "b.jpg")
+        # the object as the reviewer sees it in the panel: re-derive the panel's own geometry
+        W, H, cw, ch = g["orig_w"], g["orig_h"], g["canvas_w"], g["canvas_h"]
+        cx0, cy0, cx1, cy1 = sr.side_crop_rect(W, H, (0.40 * W, 0.40 * H, 0.60 * W, 0.60 * H))
+        lw = max(2, int(min(W, H) * 0.006))
+        gap = max(4, 2 * lw)
+        pw = cw - W - 2 * gap
+        ph = max(1, round((cy1 - cy0) * (pw / (cx1 - cx0))))
+        ix, iy = W + gap, (ch - ph) // 2
+        # the box's own corners, expressed on the panel
+        corners = []
+        for ox, oy in ((0.40 * W, 0.40 * H), (0.60 * W, 0.60 * H)):
+            corners += [(ix + (ox - cx0) * pw / (cx1 - cx0)) / cw, (iy + (oy - cy0) * ph / (cy1 - cy0)) / ch]
+        out, where = sr.canvas_box_to_original(corners, g, shown)
+
+        assert where == "panel"
+        assert out == pytest.approx([0.40, 0.40, 0.60, 0.60], abs=0.01)
+
+    def test_a_photo_box_dragged_into_the_padding_is_clipped(self, sr, tmp_path):
+        src = _photo(tmp_path, 640, 480)
+        shown = [(0.10, 0.10, 0.90, 0.95)]
+        g = sr.draw_with_side_inset(src, shown[0], tmp_path / "c.jpg")
+        out, where = sr.canvas_box_to_original([0.05, 0.10, 640 / g["canvas_w"] + 0.01, 0.99], g, shown)
+        assert where == "across both"
+        assert out[2] == 1.0 and all(0.0 <= v <= 1.0 for v in out)

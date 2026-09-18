@@ -124,6 +124,20 @@ def distinct_boxes(boxes: Sequence[Sequence[float]], iou: float = DUPLICATE_IOU)
     return kept
 
 
+def side_crop_rect(W: int, H: int, union: Sequence[float]) -> tuple[int, int, int, int]:
+    """The photo rectangle the side panel magnifies: *union* in pixels, with context padding.
+
+    Shared with :func:`canvas_box_to_original`, which has to know exactly what the panel shows to
+    convert a box drawn ON the panel. Deriving it twice is how a converter drifts from its renderer.
+    """
+    ux0, uy0, ux1, uy1 = union
+    bw, bh = max(1.0, ux1 - ux0), max(1.0, uy1 - uy0)
+    pad = max(max(bw, bh) * 0.6, min(W, H) * 0.10)
+    cx0, cy0 = max(0, int(ux0 - pad)), max(0, int(uy0 - pad))
+    cx1, cy1 = min(W, int(ux1 + pad) + 1), min(H, int(uy1 + pad) + 1)
+    return cx0, cy0, max(cx1, cx0 + 2), max(cy1, cy0 + 2)
+
+
 def draw_with_side_inset(
     src: Path,
     box: tuple[float, float, float, float],
@@ -164,11 +178,7 @@ def draw_with_side_inset(
         boxes = [_box_px(im, b) for b in (tuple(box), *(tuple(b) for b in also))]
         ux0, uy0 = min(b[0] for b in boxes), min(b[1] for b in boxes)
         ux1, uy1 = max(b[2] for b in boxes), max(b[3] for b in boxes)
-        bw, bh = max(1.0, ux1 - ux0), max(1.0, uy1 - uy0)
-        pad = max(max(bw, bh) * 0.6, min(W, H) * 0.10)
-        cx0, cy0 = max(0, int(ux0 - pad)), max(0, int(uy0 - pad))
-        cx1, cy1 = min(W, int(ux1 + pad) + 1), min(H, int(uy1 + pad) + 1)
-        cx1, cy1 = max(cx1, cx0 + 2), max(cy1, cy0 + 2)
+        cx0, cy0, cx1, cy1 = side_crop_rect(W, H, (ux0, uy0, ux1, uy1))
         crw, crh = cx1 - cx0, cy1 - cy0
         lw = max(2, int(min(W, H) * 0.006))
         gap = max(4, 2 * lw)
@@ -211,3 +221,54 @@ def side_inset_to_original(box: list[float] | tuple[float, ...], geom: dict) -> 
     sy = geom["canvas_h"] / geom["orig_h"]
     x0, y0, x1, y1 = box
     return [min(1.0, max(0.0, v)) for v in (x0 * sx, y0 * sy, x1 * sx, y1 * sy)]
+
+
+def canvas_box_to_original(
+    box: Sequence[float], geom: dict, boxes_shown: Sequence[Sequence[float]]
+) -> tuple[list[float], str]:
+    """``(box in PHOTO coordinates, where it was drawn)`` for a box drawn on a side-inset render.
+
+    A reviewer may draw on either half, and for a small object the magnified panel is the natural
+    place -- it is bigger and clearer. Both halves convert exactly:
+
+    * **photo** -- a rescale, :func:`side_inset_to_original`.
+    * **panel** -- the panel shows :func:`side_crop_rect` of the photo, scaled to fit, so a box on it
+      maps back through that rectangle. *boxes_shown* (normalised, as recorded in the render
+      manifest) is what the panel framed.
+    * **across both** -- a photo box dragged past the photo's right edge into the padding, which is
+      what a reviewer boxing a frame-filling object does. Clipped at the edge, as before.
+    """
+    W, H = geom["orig_w"], geom["orig_h"]
+    cw, ch = geom["canvas_w"], geom["canvas_h"]
+    frac = W / cw
+    x0, x1 = sorted((float(box[0]), float(box[2])))
+    y0, y1 = sorted((float(box[1]), float(box[3])))
+    if x0 < frac - 1e-9:
+        return side_inset_to_original([x0, y0, x1, y1], geom), ("photo" if x1 <= frac + 1e-9 else "across both")
+
+    px = [_norm_to_px(b, W, H) for b in boxes_shown]
+    union = (min(b[0] for b in px), min(b[1] for b in px), max(b[2] for b in px), max(b[3] for b in px))
+    cx0, cy0, cx1, cy1 = side_crop_rect(W, H, union)
+    crw, crh = cx1 - cx0, cy1 - cy0
+    lw = max(2, int(min(W, H) * 0.006))
+    gap = max(4, 2 * lw)
+    pw, ph = cw - W - 2 * gap, ch - 2 * gap if ch - 2 * gap < H else min(H - 2 * gap, ch)
+    ph = max(1, round(crh * (pw / crw)))
+    ix, iy = W + gap, (ch - ph) // 2
+    out = []
+    for cxn, cyn in ((x0, y0), (x1, y1)):
+        sx = (cxn * cw - ix) / max(1, pw)
+        sy = (cyn * ch - iy) / max(1, ph)
+        out += [(cx0 + sx * crw) / W, (cy0 + sy * crh) / H]
+    return [min(1.0, max(0.0, v)) for v in (out[0], out[1], out[2], out[3])], "panel"
+
+
+def _norm_to_px(b: Sequence[float], W: int, H: int) -> tuple[float, float, float, float]:
+    x0, x1 = sorted((b[0] * W, b[2] * W))
+    y0, y1 = sorted((b[1] * H, b[3] * H))
+    return (
+        max(0.0, min(x0, W - 1.0)),
+        max(0.0, min(y0, H - 1.0)),
+        max(1.0, min(x1, float(W))),
+        max(1.0, min(y1, float(H))),
+    )
