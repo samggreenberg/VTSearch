@@ -330,7 +330,14 @@ def blindspot_fig() -> None:
     along the boundary will ever produce a question there.
     """
     for stage in range(1, BLINDSPOT_STAGES):
-        save(_blindspot_stage(stage), OUT, f"atlas-blindspot.build{stage}.png", column=FULL_BLEED, tight=False, notch=NOTCH)
+        save(
+            _blindspot_stage(stage),
+            OUT,
+            f"atlas-blindspot.build{stage}.png",
+            column=FULL_BLEED,
+            tight=False,
+            notch=NOTCH,
+        )
     save(_blindspot_stage(BLINDSPOT_STAGES), OUT, "atlas-blindspot.png", column=FULL_BLEED, tight=False, notch=NOTCH)
 
 
@@ -393,7 +400,6 @@ def _cells_stage(stage: int) -> plt.Figure:
         _draw_cells(ax, 1 if stage == 2 else _leaf_depth())
 
     cell = _next_cell()
-    members = np.flatnonzero(_cells_at(_leaf_depth()) == cell)
     probe = _probe(cell)
 
     if stage >= 4:
