@@ -121,10 +121,10 @@ and it is cheap to settle — see the first item below.
 - **Widen *C* to every class meeting the count requirement — 54 of COCO's 80.**
   The selection rule is the count and nothing else: a class is in if it clears
   `SCALE_N_POS` in all three bands. Measured, that is **54 classes, 29 beyond the
-  current 25**, and the shared negative pool survives all of them — 16,058 clean
-  images against the 10,900 the pool and its spares need (**1.5x**, against 4.5x
-  at 25). Per-class supply is therefore not what caps the list; the pool is, and
-  it does not bind.
+  current 25**. The shared negative pool survives all of them at 1.5x (16,058
+  clean images against the 10,900 the pool and its spares need, versus 4.5x at
+  25) — and under #3986 that constraint goes away entirely, since a per-class
+  pool leaves 5x to 11x. Either way, per-class supply is not what caps the list.
 
   **Do not select on scatter, purity, or anything else correlated with
   difficulty.** Scatter is a proxy for how hard a class is to detect, so building
@@ -146,14 +146,16 @@ and it is cheap to settle — see the first item below.
 
 <!-- item-sep -->
 
-- **Decide `person` separately from the other 28.** It qualifies on counts, and
-  it is the only candidate whose inclusion is a genuine trade: it holds 66,808
-  images and costs the shared negative pool **26,132** on its own, more than the
-  other 28 candidates combined. With it the pool sits at 1.5x over-subscription,
-  without it 2.1x. That is a decision about pool headroom, not about `person`
-  being awkward, and it wants a measured negative-retirement rate rather than a
-  feel — at 1.6x, 68% of the clean pool is spoken for and there is little room to
-  retire a contaminated negative later, which is what spares are for (#3670). (human)
+- [ ] #3986 — drop the shared negative pool; per-class negatives, one pool filtered by `evaluable_categories` (Opus 4.8)
+
+<!-- item-sep -->
+
+- **`person` sizes the pool; it is no longer a trade.** Under a shared pool it
+  was the one costly addition — 66,808 images held, 26,132 off the pool, more
+  than the other 28 candidates combined. Under #3986's per-class pools that cost
+  disappears and `person` simply sets |P|: it is in 54% of COCO, so a uniform
+  pool needs 10,900 / 0.458 ≈ 24,000 images to serve it. Nothing to decide, just
+  a number to use. (Sonnet 5)
 
 <!-- item-sep -->
 

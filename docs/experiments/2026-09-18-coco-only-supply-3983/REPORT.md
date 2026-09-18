@@ -179,11 +179,54 @@ Without `person` the 53 remaining leave **22,476** clean (2.1x). So `person` is
 the one class whose inclusion is a real trade rather than a free addition, and it
 is a trade about the negative pool — not about `person` being awkward.
 
-**What this does not settle** is headroom. At 1.6x, 68% of the clean pool is
-consumed by the pool and its spares, which leaves little room to retire a
-contaminated negative later — the reason spares exist at all (#3670). That is an
-argument for measuring the retirement rate before fixing `SCALE_N_NEG`, not
-against widening.
+### …and the cap is an artifact of sharing the pool
+
+Everything above prices a rule that turns out not to be needed. `band_candidates`
+admits an image to the pool only when it holds **no class in C** — but a negative
+for `book` need only lack `book`. Sharing *within* a class is what the
+construction needs (the three bands of one class scored against identical
+negatives is what makes small-vs-large paired); sharing *across* classes rides
+along unargued.
+
+Dropping it costs nothing and buys two things.
+
+**The cap disappears.** Per class, "holds no A" leaves 56,479 candidates at the
+thinnest (`person`) and 110,000–122,000 for most — **5x to 11x** what is needed,
+against the shared pool's 1.5x.
+
+**The negatives stop being barren, which matters more.** A shared-pool negative
+holds no common object *by construction*:
+
+| | co-occurs with another class in C |
+|---|---:|
+| shared pool | **0%** |
+| representative negatives for the same class | **86%** |
+
+So the pool samples unusually empty images, and a detector scored against it
+answers an easier question than the app poses — it can learn that an image
+containing a B cannot contain an A. #3667 found the shortcut half of this and
+fixed it partially by adding other classes' positives as negatives (measuring the
+removed shortcut at 1.88 ± 0.19), but the designated pool is still drawn barren
+and is still most of what a detector faces: at 25 classes #3670 put the evaluable
+pool only ~1,900 images above `SCALE_N_NEG`, so ~84% of negatives hold nothing in
+C where ~14% would be representative.
+
+The machinery is already there — `evaluable_categories` is per media and per
+class. Draw **one** pool *P* and let class *A* use `{p in P : p holds no A}`.
+|P| is set by the most common class, `person` at 54% of COCO:
+
+| \|P\| | thinnest class | classes short of 10,900 |
+|---:|---|---:|
+| 16,058 (today's shared pool) | `person` 7,315 | 1 |
+| **24,000** | `person` **10,969** | **0** |
+| 30,000 | `person` 13,716 | 0 |
+
+**24,000 images — a ~50% larger embed — serves all 54 classes their full 10,900
+negatives at COCO's own co-occurrence rate.** Filed as **#3986**, which also
+notes what it dissolves (`person` as a trade, the `provable`/`matched` switch and
+#3702, #3667's separate cross-class mechanism) and what must be measured before
+committing: a representative pool is *harder*, so every published number moves,
+and by how much is a detector run rather than arithmetic.
 
 ## What is inside a COCO class, and why that is not the review problem
 
