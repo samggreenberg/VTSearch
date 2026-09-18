@@ -919,6 +919,14 @@
     "tier": "support",
     "why": "which (image, class, cell) each slate row was: without it a labelset is a pile of anonymous votes and no verdict can be reconstructed from it"
   },
+  "WORK__triage_rows_20260820.json": {
+    "bytes": 13745,
+    "rel": "triage_rows_20260820.json",
+    "sha256": "b264a47f63e7363aeb3aa5baded2de8267982ac1bb74834303096ec27da74a3e",
+    "source": "{WORK}/tri_flags_all.json + {WORK}/sheets_neg/*/index.json",
+    "tier": "derived",
+    "why": "the 122 rows the 2026-08-20 triage pass produced, frozen because BOTH its inputs were deleted with the study directories (#4003) and neither is recoverable. Machine output, not a judgement: no reviewer read a rule, so these rows carry no rule stamp by design. Re-running the pass would find different negatives on a different ranking, so the rows are carried forward verbatim rather than re-derived."
+  },
   "WORK__verdicts_20260820b.json": {
     "bytes": 286818,
     "rel": "verdicts_20260820b.json",
