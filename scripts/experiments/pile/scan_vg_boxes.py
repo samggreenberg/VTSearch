@@ -98,7 +98,10 @@ def _read_dims(paths: dict[int, Path]) -> dict[int, tuple[int, int]]:
 
 
 def _union(boxes: list[tuple[float, float, float, float]]) -> tuple[float, float, float, float]:
-    """The single box a Good vote drags: the union over a category's instances."""
+    """The box a SIMULATED Good vote drags: the union over a category's instances.
+
+    A real vote carries one human-drawn box; the union is the harness's stand-in.
+    """
     x0 = min(b[0] for b in boxes)
     y0 = min(b[1] for b in boxes)
     x1 = max(b[2] for b in boxes)

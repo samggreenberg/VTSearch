@@ -194,8 +194,9 @@ A third number is worth more than either for *choosing* classes, and has nothing
 to do with definitions.
 
 A band is a claim about **how big the object is**, and `band_for` computes it
-from the **union** of a class's boxes in an image — because the union is what one
-Good vote drags in the app. That works while the instances sit together, and
+from the **union** of a class's boxes in an image. (That union is the *harness's*
+stand-in for a Good vote, not the app's behaviour — see "The union is a modelling
+choice" below.) It works while the instances sit together, and
 stops meaning anything when they do not: three cars strung across a street have a
 union box spanning the street, which is not the size of any car in it. So the
 rule rejects the image when the union exceeds the largest single box by more than
@@ -252,6 +253,72 @@ only 2% of `car` boxes are trucks. Both are in *C*, so the two classes are
 contesting the same objects asymmetrically — #3588 added `truck` beside `car`
 precisely as a same-scene partner, and this says the pair is partly a relabelling
 of one population rather than two.
+
+## The union is a modelling choice, and the guard has a blind spot
+
+Two corrections to things this repo asserted, both found by reading the code
+rather than the docstrings.
+
+### A Good vote does not drag the union
+
+`pile_config`, the band plan and this report's own first draft said the union is
+"what one Good vote drags in the app". **It is not.** A real vote carries at most
+*one* box: `MediaVoteRequest.region_box` is four numbers, `good_region_boxes`
+holds one box per media, and a person drew it around one object.
+
+The union is what `vtscore.eval.labels.region_box_for_category` returns when the
+*harness* has to invent that drag from *N* ground-truth boxes. Its docstring
+justifies the choice only against picking one box **arbitrarily** — "would
+discard real signal and depend on annotation order" — which does not rule out
+picking the **largest**, a choice that is neither arbitrary nor order-dependent.
+
+This is **not** eval/app drift in the sense `scripts/check-eval-app-sync.py`
+guards: there is no app function to mirror, because the app has a human. It is an
+unvalidated assumption about the simulated user, and it was being quoted as a
+fact about the app. Corrected at every live site; the archived reports keep their
+wording, since they record what was believed when they ran.
+
+### The scatter guard cannot see a stack
+
+The guard catches instances that are **spread out**. The opposite failure is
+harder and invisible to it: **a stack is compact.** Five books on a shelf boxed
+as one lump have a union equal to that lump, an inflation ratio of 1.0, and they
+pass cleanly — after which the image is banded by the size of the *pile*.
+
+COCO's explicit group mechanism, `iscrowd=1`, is not the vector: 2.6% of `book`
+annotations, 3.0% of `kite`, under 1% for most of *C*. The lumping is inside
+ordinary boxes, so it takes a second opinion to see —
+[`coco_box_granularity.py`](../../../scripts/experiments/pile/coco_box_granularity.py).
+
+Instance counts alone cannot answer it, because lumping and plain incompleteness
+both raise LVIS's count. Box **area** separates them:
+
+| class | count ratio | COCO box | LVIS box | **area ratio** | |
+|---|---:|---:|---:|---:|---|
+| `banana` | 7.58 | 13.0% | 7.4% | **8.15** | lumps |
+| `apple` | 4.48 | 7.2% | 3.8% | **5.69** | lumps |
+| `car` | 1.40 | 4.6% | 5.7% | **2.09** | lumps |
+| `kite` | 1.20 | 6.2% | 6.5% | **2.08** | lumps |
+| **`book`** | **2.46** | **3.3%** | **3.0%** | **1.83** | **lumps** |
+| `boat` | 1.29 | 11.2% | 9.8% | **1.76** | lumps |
+| `bottle` | 1.36 | 2.6% | 2.3% | 1.44 | agree |
+| `donut` | **1.81** | 8.5% | 8.1% | 1.17 | incompleteness, not lumping |
+| `dog` | 1.05 | 19.7% | 19.3% | 1.07 | agree |
+
+The split is clean — agreeing classes 1.04–1.44, lumping ones 1.76–8.15, nothing
+between — and `donut` shows the discriminator working: 1.81 more instances in
+LVIS, same box size, so COCO simply annotated fewer.
+
+**Four classes in *C* are affected — `book`, `car`, `kite`, `boat`** — and the
+bias runs *upward*, toward `large` and away from the `small` band that binds
+everywhere. It is the mirror image of #3924's 8.3% "box on a smaller instance",
+which moves an image one band *down*; both survive the scatter guard, and they
+partly cancel in aggregate while both corrupt individual cells.
+
+Filed as **#3985**, with four options and no obviously right one. The two
+findings interact: banding on the **largest instance** would fix lumping and
+retire the scatter guard's reason to exist, and per the correction above
+"largest" was never actually argued against — only "arbitrary" was.
 
 ## Method, and what it is not
 

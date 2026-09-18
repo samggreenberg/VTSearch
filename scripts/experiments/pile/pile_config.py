@@ -162,13 +162,27 @@ SCALE_CROSS_CLASS_NEGATIVES = True
 #: **The band is a VIEW over every instance, not a replacement for them, and
 #: that is a decision** (2026-09-07).
 #: :func:`~pilebuild.loaders.vg_scale.band_for` summarises a class's boxes in an
-#: image by their **union**, which is what one Good vote drags in the app and is
-#: what #3156 measured -- and the build keeps every instance box behind it
+#: image by their **union**, which is what the harness's SIMULATED Good vote
+#: drags and is what #3156 measured -- and the build keeps every instance box
+#: behind it
 #: (``band_candidates`` stores them all; ``_emit_medias`` writes one region per
 #: box). Keep it that way. The union is derivable from the instances and the
 #: instances are not derivable from the union, so a summary chosen at eval time
 #: -- largest, smallest, count, density -- stays available at no cost, while
 #: collapsing the set at build time would end that permanently and silently.
+#:
+#: **The union is a modelling choice, not a reproduction of the app** (2026-09-18).
+#: A real Good vote carries at most ONE box -- ``MediaVoteRequest.region_box`` is
+#: four numbers and ``good_region_boxes`` holds one box per media -- drawn by a
+#: person around one object, plausibly the most prominent. The union is what
+#: :func:`vtscore.eval.labels.region_box_for_category` returns when it has to
+#: invent that drag from *N* ground-truth boxes, and its own docstring justifies
+#: it only against picking one **arbitrarily** ("would depend on annotation
+#: order"), which does not rule out picking the **largest**. So the union is an
+#: assumption about the simulated user that nothing has validated against a real
+#: one. It is not eval/app drift -- there is no app function to mirror, because
+#: the app has a human -- but it is not a fact about the app either, and this
+#: file used to say it was.
 #:
 #: The shipped band statistic does **not** move as a result: changing it now
 #: would restate what #3156 measured under its own name. What the decision buys

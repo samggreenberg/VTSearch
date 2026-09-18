@@ -33,8 +33,10 @@ implementation is to filter the media pool **once per cell** rather than thread
 a third value through every scorer: `calibration/prepare_data.py`,
 `voting_iterations.py`, `text_baseline.py`.
 
-**Size means the union box.** `region_box_for_category` already returns the
-union over a category's instances, because that is what one Good vote drags.
+**Size means the union box.** `region_box_for_category` returns the union over a
+category's instances. That is the **harness's** choice when simulating a Good
+vote from *N* ground-truth boxes, not a reproduction of the app: a real vote
+carries one box a person drew (#3983 follow-up).
 An image holding one foreground bus and three background buses is therefore a
 foreground-bus image — which is the honest reading of "find buses in the
 middleground".
