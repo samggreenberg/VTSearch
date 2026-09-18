@@ -49,6 +49,18 @@ COCO_ROOT = Path(os.environ.get("VTS_COCO_ROOT", "/exp/scale26/datasets/external
 #: directory, and the rebuild canary checked the directory: it reported
 #: `coco_val` REBUILD-BROKEN against a source that was present and fine (#3299).
 COCO_VAL_ZIP = COCO_ROOT / "images" / "val2017.zip"
+#: The COCO **train** images, and the one asset `coco_quarry` needs that nothing
+#: in this repo has ever fetched (#3988). Only the *annotations* were needed
+#: before: `coco_anchor.py` downloads `annotations_trainval2017.zip` (241 MB)
+#: because the pixels came from VG's own copies of the same photographs. Moving
+#: the image pool off VG makes these 18 GB a hard prerequisite -- 118,287 of the
+#: 123,287 images in the corpus, so nothing meaningful can be embedded without
+#: them. Staged by ``stage_coco_images.py``.
+#:
+#: A zip read member-wise, like :data:`COCO_VAL_ZIP` and for the same reason:
+#: what the builder opens is what the rebuild canary must check (#3299).
+COCO_TRAIN_ZIP = COCO_ROOT / "images" / "train2017.zip"
+
 #: Where the images live *if* somebody extracts them. Optional, and not part of
 #: the rebuild path: nothing depends on this directory existing. `box_sheets.py`
 #: prefers it (a loose JPEG is cheaper than a zip member) but falls back to
