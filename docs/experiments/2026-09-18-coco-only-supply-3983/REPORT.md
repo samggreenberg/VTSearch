@@ -188,13 +188,63 @@ nothing to consult, and decides. So a purity threshold would select the wrong
 classes. Read the **name list** instead — it is exactly the text
 `SCALE_CLASS_RULES` needs, and it costs a minute per class against a review pass.
 
-A third signal is worth more than either for *selection*, and has nothing to do
-with definitions: the **scatter rate**, the share of a class's images where
-`band_for` rejects the union as describing the scatter rather than the object.
-`chair` 52%, `car` 59%, `book` 58%, `bottle` 50%, `boat` 49%, `cup` 45% — against
-`fire hydrant` 5%, `microwave` 6%, `stop sign` 8%, `frisbee` 11%, `sink` 13%,
-`dog` 13%. A scattered class throws away half its images before banding and makes
-every review render harder to read.
+### The signal that does select: the scatter rate
+
+A third number is worth more than either for *choosing* classes, and has nothing
+to do with definitions.
+
+A band is a claim about **how big the object is**, and `band_for` computes it
+from the **union** of a class's boxes in an image — because the union is what one
+Good vote drags in the app. That works while the instances sit together, and
+stops meaning anything when they do not: three cars strung across a street have a
+union box spanning the street, which is not the size of any car in it. So the
+rule rejects the image when the union exceeds the largest single box by more than
+`BAND_MAX_INFLATION` = 1.5:
+
+```python
+union = (ux1 - ux0) * (uy1 - uy0) / area      # bounding box of ALL the class's boxes
+largest = max((b[2] - b[0]) * (b[3] - b[1]) for b in boxes) / area
+if union > largest * pc.BAND_MAX_INFLATION:
+    return SCATTERED                          # excluded from every band of this class
+```
+
+![the scatter guard on two real COCO images](fig_scatter.png)
+
+Both images above hold **three cars**. On the left the largest is 4.7% of the
+frame and the union is 27.4% — **5.8x**, so the union describes the spread rather
+than a car, and the image is dropped. On the right the cars overlap: largest
+47.8%, union 67.3%, **1.4x**, so the union still describes a car and the image
+bands as `large`.
+
+**Scatter is about spread, not about count.** Five cars parked bumper to bumper
+pass; two at opposite corners do not. That is why it is measured per image rather
+than per class.
+
+It costs three things, and all of them are the pain the review programme felt:
+
+- **Supply.** A scattered image is excluded from *every* band of that class, so a
+  high-scatter class discards most of its own candidates before banding.
+- **Legibility.** The images it rejects are exactly the ones whose review render
+  carries a dozen boxes, which is what made slates hard to read (#3976).
+- **Meaning.** Where it *doesn't* fire but nearly does, the band rests on a union
+  a user would not have dragged.
+
+Measured over COCO for the current *C* and the shortlist:
+
+| high scatter | | low scatter | |
+|---|---:|---|---:|
+| `car` | 59% | `fire hydrant` | 5% |
+| `book` | 58% | `microwave` | 6% |
+| `chair` | 52% | `stop sign` | 8% |
+| `bottle` | 50% | `frisbee` | 11% |
+| `boat` | 49% | `sink` | 13% |
+| `cup` | 45% | `dog` | 13% |
+| `kite` | 45% | `baseball bat` | 15% |
+| `bird` | 43% | `mouse` | 15% |
+
+`car` discards 59% of its images; `fire hydrant` 5%. That is a real, measured
+difference in what a class costs to build and to review, and unlike purity it
+points the same way as every other consideration.
 
 One genuine boundary contest does fall out of the table, and it is actionable:
 **17% of COCO `truck` boxes are objects LVIS calls `car_(automobile)`**, while
