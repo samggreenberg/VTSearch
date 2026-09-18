@@ -429,6 +429,50 @@ findings interact: banding on the **largest instance** would fix lumping and
 retire the scatter guard's reason to exist, and per the correction above
 "largest" was never actually argued against — only "arbitrary" was.
 
+## Prevalence is a ratio, so the envelope is two-dimensional
+
+An earlier draft of this section reported prevalence reach at a fixed positive
+count, which framed every low-prevalence version as *more hay*. That is one route
+of two, and the wrong one to reach for first. π = P/(P+N) is a **ratio**: it says
+nothing about scale, so 100:10k and 200:20k are the same prevalence and different
+experiments — which is exactly the overtraining question (#3945). And a rarer
+needle can be reached by **removing needles** as readily as by adding hay.
+
+With a fixed test cell held out of both axes (100 positives, 10,000 negatives),
+the train grid COCO serves, band-free:
+
+| train P | train N | π | classes | binding |
+|---:|---:|---:|---:|---|
+| 50 | 1,000 | 4.76% | **54 / 54** | — |
+| 100 | 10,000 | 0.99% | **54 / 54** | — |
+| 200 | 20,000 | 0.99% | **54 / 54** | — |
+| 400 | 40,000 | 0.99% | 53 / 54 | `parking meter` |
+| 800 | 80,000 | 0.99% | 48 / 54 | `person` |
+| 100 | 100,000 | 0.10% | 52 / 54 | `person` |
+
+**The overtraining pair — 100:10k against 200:20k, same π, twice the scale — is
+served for all 54 classes with the test cell held out.** The grid only starts
+binding at 400:40k, and on `parking meter` rather than on anything structural.
+
+And the two routes to 0.1% are not equivalent:
+
+| | | classes served |
+|---|---|---:|
+| 100 needles : 99,900 hay | more hay | 53 / 54 |
+| 50 needles : 49,950 hay | | 53 / 54 |
+| **20 needles : 19,980 hay** | **fewer needles** | **54 / 54** |
+
+Fewer needles serves *more* classes and embeds ~5x fewer images for the same π.
+It is also the honest reading of the question a rare-class user actually has:
+not "what if there were more of everything else" but "what if there were barely
+any of mine".
+
+**Keeping the per-band contrast costs more than going band-free**, and that is
+the real trade in the grid: a per-band cell needs its positives in the *thinnest*
+band plus the test cell's, so 100:10k per band serves 37 of 54 against 54 of 54
+band-free. Which of the two a version wants is a per-question choice, which is
+the point of making it a query.
+
 ## Method, and what it is not
 
 The band rule is **imported, not restated** —

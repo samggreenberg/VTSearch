@@ -9,10 +9,15 @@ cell is a **filter over a fixed set** and prevalence becomes a sampling
 parameter: one meta-dataset can export a version at any pi the data supports, and
 prevalence turns into an experimental axis instead of a constant.
 
-This measures the envelope. ``pi = P / (P + N)``: positives are capped by a
-cell's supply, negatives by the images that lack the class. **The low end is the
-hard one** -- 0.1% at 100 positives needs 99,900 negatives -- and it is where the
-interesting question lives, because a rare-needle haystack is what the app faces.
+This measures the envelope, and it is **two-dimensional**. ``pi = P / (P + N)``
+is a *ratio*: it says nothing about scale, so 100:10k and 200:20k are the same
+prevalence and different experiments -- which is the overtraining question
+(#3945). And a rarer needle can be reached by **removing needles** as readily as
+by adding hay; the two routes cost very different amounts of embedding, and the
+cheap one is the one nobody reaches for.
+
+The **test cell is held out of both axes** and stays fixed, so a train-side move
+is the only thing that varies between two versions.
 
 The headline the run prints: at the shipped ``SCALE_N_POS`` every class but
 `person` reaches 0.1%, and halving the positive count reaches it for all of them.
@@ -46,6 +51,12 @@ TARGETS = (0.05, 0.01, 0.005, 0.002, 0.001, 0.0005)
 POSITIVE_COUNTS = (pc.SCALE_N_POS, 50, 25)
 #: Minutes per 6,000 images across all five embedders, measured in #3670.
 MINUTES_PER_6K = 15.5
+#: The held-out test cell, fixed across every version so a difference between two
+#: of them is a train-side move and nothing else.
+TEST_POS, TEST_NEG = 100, 10_000
+#: ``(train positives, train negatives)`` pairs worth reporting. The 100:10k /
+#: 200:20k pair is #3945's overtraining question -- same pi, twice the scale.
+TRAIN_GRID = ((50, 1_000), (100, 10_000), (200, 20_000), (400, 40_000), (800, 80_000), (100, 100_000))
 
 
 def main() -> None:
@@ -71,6 +82,7 @@ def main() -> None:
         del data
 
     cell: collections.Counter = collections.Counter()
+    bandfree: collections.Counter = collections.Counter()
     holders: dict[str, set] = collections.defaultdict(set)
     for iid, per in boxes.items():
         w, h = dims[iid]
@@ -79,6 +91,7 @@ def main() -> None:
             band = band_for(bs, w, h)
             if band in BANDS:
                 cell[(cls, band)] += 1
+                bandfree[cls] += 1
 
     total = len(dims)
     roster = [c for c in sorted({c for c, _ in cell}) if min(cell[(c, b)] for b in BANDS) >= pc.SCALE_N_POS]
@@ -108,6 +121,29 @@ def main() -> None:
         print(f"  {c:<15}{n:>9,} negatives -> floor {100 * pc.SCALE_N_POS / (pc.SCALE_N_POS + n):.3f}%")
     if not short:
         print("  none")
+
+    # The train grid, with a fixed test cell held out of both axes.
+    print(f"\nTRAIN grid, holding out a fixed {TEST_POS}-positive / {TEST_NEG:,}-negative test cell:")
+    print(f"{'train P':>9}{'train N':>10}{'pi':>9}{'classes':>10}   binding")
+    print("-" * 52)
+    for p_train, n_train in TRAIN_GRID:
+        served, binding, worst = 0, None, float("inf")
+        for c in roster:
+            head = min(bandfree[c] - TEST_POS - p_train, neg[c] - TEST_NEG - n_train)
+            if head >= 0:
+                served += 1
+            elif head < worst:
+                worst, binding = head, c
+        print(
+            f"{p_train:>9}{n_train:>10,}{100 * p_train / (p_train + n_train):>8.2f}%"
+            f"{served:>7} / {len(roster)}   {binding or '-'}"
+        )
+
+    print("\ntwo routes to 0.1%, from the same embedded corpus:")
+    for p_train, n_train in ((100, 99_900), (50, 49_950), (20, 19_980)):
+        served = sum(1 for c in roster if bandfree[c] - TEST_POS >= p_train and neg[c] - TEST_NEG >= n_train)
+        print(f"  {p_train:>4} needles : {n_train:>7,} hay -> {served}/{len(roster)} classes")
+    print("  (fewer needles serves more classes AND embeds ~5x fewer images)")
 
     hours = total / 6000 * MINUTES_PER_6K / 60
     print(f"\nembedding the whole source once: {total:,} images, ~{hours:.1f} h for all five")
