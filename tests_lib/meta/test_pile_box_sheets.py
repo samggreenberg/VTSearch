@@ -198,6 +198,40 @@ def test_the_zip_path_is_never_spelled_inline() -> None:
     """
     source = _BOX_SHEETS.read_text()
     assert "pc.COCO_VAL_ZIP" in source
+    assert "pc.COCO_TRAIN_ZIP" in source
     # Prose may name the file; a string literal would be a second definition.
-    assert '"val2017.zip"' not in source
-    assert "'val2017.zip'" not in source
+    for literal in ("val2017.zip", "train2017.zip"):
+        assert f'"{literal}"' not in source
+        assert f"'{literal}'" not in source
+
+
+class TestCocoTrainPixels:
+    """#3991: `coco_quarry` draws 94% of its corpus from COCO's train2017 zip.
+
+    The zip was staged in the shared tree months ago and named nowhere in this
+    repo, so the resolver could not reach a train image at all. These pin that it
+    can, through the same path val goes through -- a second resolver is exactly
+    the #3299/#3305 shape.
+    """
+
+    def test_a_train_zip_member_is_found(self, tree, tmp_path: Path) -> None:
+        """Pixels staged only in `train2017.zip` are drawable."""
+        pile, coco, demos, out = tree
+        names = _names()
+        _cell(pile, "coco_val", names, "cat")
+        _zip_images(coco / "images" / "train2017.zip", names, tmp_path)
+        result = _run(pile, coco, demos, ["--dataset", "coco_val", "--category", "cat", "--out", str(out)])
+        assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
+        assert f"{len(names)} of {len(names)} positives drawable" in result.stdout
+        assert out.exists() and out.stat().st_size > 0
+
+    def test_val_and_train_are_both_searched(self, tree, tmp_path: Path) -> None:
+        """A cell spanning both archives draws every image; neither shadows the other."""
+        pile, coco, demos, out = tree
+        names = _names()
+        _cell(pile, "coco_val", names, "cat")
+        _zip_images(coco / "images" / "val2017.zip", names[:1], tmp_path)
+        _zip_images(coco / "images" / "train2017.zip", names[1:], tmp_path)
+        result = _run(pile, coco, demos, ["--dataset", "coco_val", "--category", "cat", "--out", str(out)])
+        assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
+        assert f"{len(names)} of {len(names)} positives drawable" in result.stdout

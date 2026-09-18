@@ -57,6 +57,29 @@ COCO_VAL_ZIP = COCO_ROOT / "images" / "val2017.zip"
 COCO_IMAGES = COCO_ROOT / "images" / "val2017"
 COCO_ANNOTATIONS = COCO_ROOT / "derived" / "objects_flat_val2017.jsonl.gz"
 
+#: COCO 2017 **train** pixels -- 118,287 images, 94% of `coco_quarry`'s corpus
+#: (#3983, #3991). Staged in the same shared tree as the val zip and referenced
+#: nowhere in this repo until now, which is why #3991 was filed believing an
+#: 18 GB fetch was still owed: it is not, the archive has been there since July.
+#:
+#: **Read members in place; do not extract.** Measured 2026-09-18: all 118,287
+#: members are STORED, not deflated (ratio 1.000), so a read is a seek and a raw
+#: read with no inflate. Read + decode costs 6.4 ms/image from the zip against
+#: 4.0 ms from an extracted tree -- about 13 min versus 8 min over the whole
+#: corpus, against an embed run of ~6 hours (#3988). Extraction would pay ~11
+#: minutes and **19.3 GB** of scratch to save ~5 minutes, i.e. 1.4% of the run,
+#: on the filesystem that run needs for its own 36 GB of output.
+#:
+#: `zipfile.ZipFile` is not thread-safe, so a parallel reader wants one handle
+#: per worker. That is cheap: parsing the 118k-entry central directory costs
+#: well under a tenth of a second.
+COCO_TRAIN_ZIP = COCO_ROOT / "images" / "train2017.zip"
+#: Where the train images live *if* somebody extracts them anyway. Optional and
+#: not part of any rebuild path, exactly like :data:`COCO_IMAGES` -- and carrying
+#: the same warning, because #3299 was a canary checking this kind of directory
+#: while the builder opened the zip.
+COCO_TRAIN_IMAGES = COCO_ROOT / "images" / "train2017"
+
 #: Datasets in the pile. ``boxed`` means the medias carry ground-truth region
 #: boxes, which is what a region-voting arm drags — necessary but not
 #: sufficient (the embedder must also be patch-capable; see region_capable).

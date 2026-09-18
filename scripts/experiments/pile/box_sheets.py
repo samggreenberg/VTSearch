@@ -45,7 +45,7 @@ import pile_config as pc  # noqa: E402
 #: cheaper to read than a zip member, and VG is only ever staged this way.
 IMAGE_DIRS = {
     "vg": [pc.DEMO_CACHE / "visual_genome" / "VG_100K", pc.DEMO_CACHE / "visual_genome" / "VG_100K_2"],
-    "coco": [pc.COCO_IMAGES],
+    "coco": [pc.COCO_IMAGES, pc.COCO_TRAIN_IMAGES],
 }
 
 #: Zipped image archives, per dataset kind, read member-wise when no extracted
@@ -53,9 +53,13 @@ IMAGE_DIRS = {
 #: `val2017.zip` and has never held `val2017/`, so a directory-only resolver
 #: found nothing for every COCO media and drew an empty sheet (#3305).
 #: `pilebuild.loaders.coco.load` has always read pixels out of the same zip.
+#: The train zip joins it for `coco_quarry` (#3991): 118,287 STORED members read
+#: in place, never extracted -- see :data:`pile_config.COCO_TRAIN_ZIP`. Listing
+#: both is what lets one sheet draw a val image and a train image side by side;
+#: `locate` tries them in order and a name resolves in exactly one.
 IMAGE_ZIPS = {
     "vg": [],
-    "coco": [pc.COCO_VAL_ZIP],
+    "coco": [pc.COCO_VAL_ZIP, pc.COCO_TRAIN_ZIP],
 }
 
 
