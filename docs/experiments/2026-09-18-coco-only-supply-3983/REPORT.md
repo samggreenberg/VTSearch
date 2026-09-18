@@ -31,8 +31,9 @@ python figures_3983.py --supply supply.json --outdir docs/experiments/2026-09-18
 [`exact_supply.py`](../../../scripts/experiments/pile/exact_supply.py) asked a
 neighbouring question in August and is read as having answered this one. It
 reported **20 of 36 shipped cells** short of 300 COCO-anchored positives, which
-is the founding measurement of the 3,391-image annotation pass in
-`docs/plans/vg-scale-exhaustive-annotation.md`.
+is the founding measurement of the 3,391-image exhaustive annotation pass (the
+plan that carried it was retired by this study; see the migration plan,
+[`docs/plans/vg-scale-image-source.md`](../../plans/vg-scale-image-source.md)).
 
 It draws its candidates from `vg_source()`:
 
@@ -179,8 +180,8 @@ things it therefore does not establish:
 
 ## Consequences
 
-`docs/plans/vg-scale-exhaustive-annotation.md` exists to answer the off-COCO half
-by hand: 3,391 images, one exhaustive 25-way judgement each. Its premise is the
+The retired exhaustive-annotation plan existed to answer the off-COCO half by
+hand: 3,391 images, one exhaustive 25-way judgement each. Its premise was the
 `exact_supply.py` reading above. With the pool unbounded by VG the debt is not
 answered but **absent** — there is no off-COCO half — and with it go the name
 tables, the two-search candidate hunt, pooled adjudication,
