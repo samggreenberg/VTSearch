@@ -2,7 +2,7 @@
 
 ![bg fit](figs/atlas-blindspot.png)
 
-## Here Be Dragons
+## Off the Map
 
 <!-- build: figs/atlas-blindspot.build1.png -->
 
