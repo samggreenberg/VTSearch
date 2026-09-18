@@ -79,6 +79,45 @@ def desanitize_csv_cell(value: str) -> str:
     return value
 
 
+def read_server_bytes(path: Path | str, *, missing_ok: bool = False) -> bytes | None:
+    """Read a user-named file from the server filesystem, or raise :class:`ValueError`.
+
+    Every failure a caller-supplied path can produce is a *client* error and
+    must arrive as ``ValueError``, because the API layer maps that to 400 and
+    anything else to 500 (:func:`vtsearch.routes._plugins.run_plugin_or_error`).
+    The missing-file and not-a-file cases were already checked; the **read
+    itself** was not, so a path naming a real but unreadable file -- the
+    ordinary shape of a typo that lands on ``/etc/shadow`` -- surfaced as a
+    stack trace and a 500 (#3995).
+
+    This is not a confinement check and does not replace one. Whether a path is
+    allowed at all is decided earlier, per field, by
+    :func:`~vtscore.security.path_validation.confine_server_filepath`, which is
+    unrestricted in single-user mode by design.
+
+    Args:
+        path: The file to read.
+        missing_ok: When ``True``, return ``None`` if *path* doesn't exist.
+
+    Raises:
+        ValueError: If the path doesn't exist (unless *missing_ok*), is not a
+            regular file, or cannot be read.
+    """
+    p = Path(path)
+    try:
+        if not p.exists():
+            if missing_ok:
+                return None
+            raise ValueError(f"File not found: {p}")
+        if not p.is_file():
+            raise ValueError(f"Not a file: {p}")
+        return p.read_bytes()
+    except OSError as exc:
+        # PermissionError, IsADirectoryError, ELOOP on a symlink cycle, a
+        # dangling mount: all of them describe the path the caller gave.
+        raise ValueError(f"Cannot read file: {p} ({exc.strerror or exc})") from exc
+
+
 def read_server_json(path: Path | str, *, missing_ok: bool = False) -> Any:
     """Read and parse a JSON file from the server filesystem.
 
@@ -91,18 +130,13 @@ def read_server_json(path: Path | str, *, missing_ok: bool = False) -> Any:
             specific user-supplied file leave the default.
 
     Raises:
-        ValueError: If the path exists but is not a regular file, the
-            file is not valid UTF-8 JSON, or the file doesn't exist
+        ValueError: If the path exists but is not a regular file, cannot be
+            read, the file is not valid UTF-8 JSON, or the file doesn't exist
             (only when ``missing_ok=False``).
     """
-    p = Path(path)
-    if not p.exists():
-        if missing_ok:
-            return None
-        raise ValueError(f"File not found: {p}")
-    if not p.is_file():
-        raise ValueError(f"Not a file: {p}")
-    raw = p.read_bytes()
+    raw = read_server_bytes(path, missing_ok=missing_ok)
+    if raw is None:
+        return None
     try:
         return json.loads(raw.decode("utf-8"))
     except Exception as exc:
