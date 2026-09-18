@@ -132,6 +132,10 @@ and it is cheap to settle — see the first item below.
 
 <!-- item-sep -->
 
+- [ ] #3991 — stage COCO train2017 on the GRID: 18 GB, 94% of the corpus, blocked by nothing (Sonnet 5)
+
+<!-- item-sep -->
+
 - [ ] #3988 — embed all of COCO once: six columns, ~7 h, ~81 GB (Sonnet 5)
 
 <!-- item-sep -->
