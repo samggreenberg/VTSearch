@@ -64,7 +64,9 @@ Keep `#3421` as the link text; the number is what the user reads and what they'd
 
 **Why every one, rather than the first mention.** Linking only the first is the convention that prose style guides inherited from print, where a repeated footnote is clutter. It is actively wrong here. A turn that links `#3421` in its opening sentence and leaves the next five bare teaches the reader that a bare `#3421` means something — a repeat, a different register, an unlinked *something* — when it means nothing at all. Worse, the reference the user actually wants to click is almost never the first: it is the one in the summary table at the bottom, or the one in the sentence that says *this is the issue that's still open*. Making them scroll back up to find the linked copy costs more than the link would have. Linking costs you nothing but the characters, so spend them uniformly.
 
-This covers **everything that renders as markdown in a message to the user** — prose, end-of-turn summaries, bullet lists, tables. Repeats inside one sentence included.
+**This applies on every surface Claude talks to the user on** — the web app, Claude Code in the terminal, the desktop app, a cloud session's final message. Like the bare-`#N` convention above, it is repo policy rather than a per-session preference, so it holds wherever this file is loaded. Within a message it covers prose, end-of-turn summaries, bullet lists and tables alike, repeats inside a single sentence included.
+
+**What decides is the direction of the message, not the surface it's typed on.** Anything travelling *to the user* gets links, because the user is the one who would otherwise be pasting a number into a URL bar. Anything travelling *to GitHub* — or into git — does not, for the reasons in the four carve-outs below. That split is the whole rule; a surface you haven't seen before is on the user's side of it unless it's one of those four.
 
 ### Where `#N` stays bare
 
