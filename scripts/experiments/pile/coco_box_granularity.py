@@ -190,8 +190,10 @@ def main() -> None:
     rows.sort(key=lambda r: -r[4])
 
     head = ("class", "imgs", "cover", "cnt ratio", "COCO box", "LVIS box", "area", "med", "over")
-    print(f"{head[0]:<12}{head[1]:>7}{head[2]:>7}{head[3]:>11}{head[4]:>10}{head[5]:>10}"
-          f"{head[6]:>7}{head[7]:>7}{head[8]:>7}   verdict")
+    print(
+        f"{head[0]:<12}{head[1]:>7}{head[2]:>7}{head[3]:>11}{head[4]:>10}{head[5]:>10}"
+        f"{head[6]:>7}{head[7]:>7}{head[8]:>7}   verdict"
+    )
     print("-" * 98)
     for cls, n, seen, cnt, area, med, over, cbox, lbox in rows:
         if area >= LUMP_AREA_RATIO:
@@ -202,20 +204,22 @@ def main() -> None:
             verdict = "agree"
         if cls in SUBTYPE_FLOOR:
             verdict += " (floor)"
-        print(f"{cls:<12}{n:>7,}{100 * n / seen:>6.0f}%{cnt:>11.2f}{cbox:>9.1f}%{lbox:>9.1f}%"
-              f"{area:>7.2f}{med:>7.2f}{100 * over:>6.0f}%   {verdict}")
+        print(
+            f"{cls:<12}{n:>7,}{100 * n / seen:>6.0f}%{cnt:>11.2f}{cbox:>9.1f}%{lbox:>9.1f}%"
+            f"{area:>7.2f}{med:>7.2f}{100 * over:>6.0f}%   {verdict}"
+        )
 
     for cls, lname, seen, n in thin:
-        print(f"{cls:<12}{n:>7,}   NOT COMPARED: {seen:,} COCO images, "
-              f"under {MIN_IMAGES} carry LVIS `{lname}`")
+        print(f"{cls:<12}{n:>7,}   NOT COMPARED: {seen:,} COCO images, under {MIN_IMAGES} carry LVIS `{lname}`")
     if SUBTYPE_FLOOR:
-        print("\n(floor) LVIS files the same objects under sibling names, so the ratio is a "
-              "lower bound:")
+        print("\n(floor) LVIS files the same objects under sibling names, so the ratio is a lower bound:")
         for cls, why in SUBTYPE_FLOOR.items():
             print(f"    {cls:<10}{why}")
-    print("\n`area` is a mean over per-image ratios and rides on a tail; `med` is the median "
-          "and\n`over` the share of images at or above "
-          f"{LUMP_AREA_RATIO}, which is what a per-image guard would act on.")
+    print(
+        "\n`area` is a mean over per-image ratios and rides on a tail; `med` is the median "
+        "and\n`over` the share of images at or above "
+        f"{LUMP_AREA_RATIO}, which is what a per-image guard would act on."
+    )
 
     if args.out:
         Path(args.out).write_text(
@@ -236,8 +240,7 @@ def main() -> None:
                         for r in rows
                     },
                     "not_compared": {
-                        cls: {"lvis_name": lname, "coco_images": seen, "matched": n}
-                        for cls, lname, seen, n in thin
+                        cls: {"lvis_name": lname, "coco_images": seen, "matched": n} for cls, lname, seen, n in thin
                     },
                 },
                 indent=2,

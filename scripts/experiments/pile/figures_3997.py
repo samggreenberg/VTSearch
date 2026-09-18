@@ -42,8 +42,15 @@ def fig_matched(probe: dict, out: Path) -> None:
     ax.bar(x - 0.19, pooled, 0.36, label="pooled", color="#9ecae1")
     ax.bar(x + 0.19, matched, 0.36, label="matched within class@band", color="#3182bd")
     ax.axhline(CHANCE, color="#d62728", lw=1.2, ls="--")
-    ax.annotate("chance", (0.012, CHANCE), xycoords=("axes fraction", "data"),
-                xytext=(0, 3), textcoords="offset points", color="#d62728", fontsize=8)
+    ax.annotate(
+        "chance",
+        (0.012, CHANCE),
+        xycoords=("axes fraction", "data"),
+        xytext=(0, 3),
+        textcoords="offset points",
+        color="#d62728",
+        fontsize=8,
+    )
     for xi, (p, m) in enumerate(zip(pooled, matched)):
         ax.annotate(f"{p:.3f}", (xi - 0.19, p), ha="center", va="bottom", fontsize=7)
         ax.annotate(f"{m:.3f}", (xi + 0.19, m), ha="center", va="bottom", fontsize=7)
@@ -76,13 +83,18 @@ def fig_hardness(hard: dict, out: Path) -> None:
         ax.hist(d, bins=18, color="#3182bd", alpha=0.85)
         ax.axvline(0, color="#444", lw=1)
         ax.axvline(d.mean(), color="#d62728", lw=1.6)
-        ax.annotate(f"mean {d.mean():+.3f}\n{(d > 0).sum()} of {len(d)} cells > 0",
-                    (0.03, 0.97), xycoords="axes fraction", va="top", fontsize=8, color="#d62728")
+        ax.annotate(
+            f"mean {d.mean():+.3f}\n{(d > 0).sum()} of {len(d)} cells > 0",
+            (0.03, 0.97),
+            xycoords="axes fraction",
+            va="top",
+            fontsize=8,
+            color="#d62728",
+        )
         ax.set_title(embedder, fontsize=10)
         ax.set_xlabel("per-cell Δ log1p(rank)\n(+ = off-COCO ranks better)", fontsize=8)
     axes[0].set_ylabel("cells")
-    fig.suptitle("Off-COCO positives are not harder: per-cell differences straddle zero, leaning easier",
-                 fontsize=10)
+    fig.suptitle("Off-COCO positives are not harder: per-cell differences straddle zero, leaning easier", fontsize=10)
     fig.tight_layout()
     fig.savefig(out, dpi=150)
     plt.close(fig)

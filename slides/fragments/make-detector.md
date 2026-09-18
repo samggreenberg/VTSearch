@@ -1,4 +1,5 @@
 <!-- _class: full -->
+<!-- frames: equal -->
 
 ![bg fit](figs/ui-make-detector.webp)
 

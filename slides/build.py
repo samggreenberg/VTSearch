@@ -55,6 +55,17 @@ SRC_RE = re.compile(r'src="([^"]+)"')
 BUILD_RE = re.compile(r"^\s*<!--\s*build(?:\s*:\s*(\S+))?\s*-->\s*$")
 # The same marker as a comment body, so notes extraction can skip it.
 BUILD_BODY_RE = re.compile(r"\s*build(?:\s*:\s*\S+)?\s*")
+# Which of the two frame-overview shapes a fragment's reveals get on the
+# speaker page, alone on its line: `<!-- frames: equal -->` for reveals of
+# equal standing (a click-through, a run of votes), `<!-- frames: build -->`
+# for one picture drawn in stages. Build-up is the default because that is what
+# a build marker usually means; the declaration exists because the difference
+# is semantic — later frames of a build *contain* the earlier ones — and no
+# amount of looking at the PNGs can be trusted to tell. Stripped from every
+# emitted deck, and never a presenter note.
+FRAMES_RE = re.compile(r"^\s*<!--\s*frames\s*:\s*(\S+)\s*-->\s*$")
+FRAMES_BODY_RE = re.compile(r"\s*frames\s*:\s*\S+\s*")
+FRAME_STYLES = ("build", "equal")
 # The page number, emitted by this script rather than by Marpit. Marpit can
 # only count pages or hold the previous count, and this deck needs neither: the
 # title slide takes no number at all (so the first real slide is 1, not 2), and
@@ -234,7 +245,7 @@ def fragment_notes(text: str) -> list[str]:
     notes: list[str] = []
     for match in COMMENT_RE.finditer(text):
         body = match.group(1)
-        if is_directive_comment(body) or BUILD_BODY_RE.fullmatch(body):
+        if is_directive_comment(body) or BUILD_BODY_RE.fullmatch(body) or FRAMES_BODY_RE.fullmatch(body):
             continue
         # Reflow: Marp renders single newlines as hard breaks, so joining the
         # comment's wrapped lines with "\n" would keep its ragged wrapping.
@@ -279,10 +290,12 @@ def expand_builds(text: str) -> list[str]:
     whole numbering group, which `assemble` knows about and one fragment does
     not — a fragment shown six times over is six pages of one slide.
     """
-    lines = text.splitlines()
+    # The frames directive steers the speaker build only; Marp would read it as
+    # a presenter note, so it never reaches an emitted deck.
+    lines = [line for line in text.splitlines() if not FRAMES_RE.match(line)]
     markers = [(i, m.group(1)) for i, m in ((i, BUILD_RE.match(line)) for i, line in enumerate(lines)) if m]
     if not markers:
-        return [text]
+        return ["\n".join(lines)]
 
     # Appended last so it wins over any `_class` the fragment sets itself,
     # which is why it must also carry those classes forward.
@@ -301,66 +314,201 @@ def expand_builds(text: str) -> list[str]:
     return slides
 
 
+def fragment_frame_style(text: str) -> str:
+    """Which overview shape a fragment's frames get. See `frame_overview`."""
+    for line in text.splitlines():
+        match = FRAMES_RE.match(line)
+        if match:
+            return match.group(1)
+    return "build"
+
+
 def page_count(text: str) -> int:
     """How many audience pages one *use* of a fragment renders as."""
     return len([line for line in text.splitlines() if BUILD_RE.match(line)]) + 1
 
 
-#: What one speaker page's notes column holds, measured against the theme:
-#: notes are 20px on a 1.38 line height in a 636px column, which is about 62
-#: characters a line and 21 lines a page. Deliberately conservative — the cost
-#: of underestimating is one extra continuation page, and the cost of
-#: overestimating is a sentence the presenter cannot read, which is the bug
-#: this exists to make impossible (#3246).
-NOTES_CHARS_PER_LINE = 67
-NOTES_LINES = 23
+#: Speaker-page geometry, in CSS px at 1280x720. Every number here mirrors a
+#: rule in the theme's `section.speaker` block: they are one layout described
+#: twice, once to draw it and once to decide what fits in it, so a change to
+#: either half is a change to both.
+SPEAKER_PAD_X, SPEAKER_PAD_Y = 42, 36
+SPEAKER_W = 1280 - 2 * SPEAKER_PAD_X
+SPEAKER_H = 720 - 2 * SPEAKER_PAD_Y
+#: The visual column — the miniature and the frame overview — floats left at
+#: this share of the page, and the notes wrap around it and then *under* it.
+#: That reflow is what buys a wordy slide its one page: a note that starts
+#: beside a 478px column finishes across the full 1196.
+VISUAL_FRACTION = 0.40
+#: An equal-weight overview gets a wider column, because it is carrying the
+#: whole slide rather than a hero plus footnotes: at 40% its frames would be
+#: half the size of the hero they replaced, which is the opposite of the point.
+#: The notes lose a little width beside it and get it all back underneath.
+VISUAL_FRACTION_EQUAL = 0.52
+VISUAL_W = VISUAL_FRACTION * SPEAKER_W
+VISUAL_GUTTER = 34
+FRAME_GAP = 10
+FRAME_BORDER = 2
+#: Gap between the hero miniature and the strip of frames under it.
+STRIP_TOP = 18
+SLIDE_ASPECT = 9 / 16
+
+#: Presenter notes are 18px, not the deck's 20px floor. The floor is about a
+#: projector at the back of a room; this page is a PDF on the presenter's own
+#: laptop, half a metre away, and the 20px version could not fit a long slide's
+#: narration on one page however the pictures were arranged. See STYLE.md.
+NOTES_FONT_PX = 18
+NOTES_LINE_HEIGHT = 1.38
+NOTES_LINE_PX = NOTES_FONT_PX * NOTES_LINE_HEIGHT
+#: Average glyph width of the notes face. Measured against the theme: 20px
+#: Helvetica in a 636px column fits about 67 characters, i.e. 9.5px each, and
+#: the face scales linearly. Deliberately a touch wide — overestimating the
+#: width fails a deck that would in fact have fitted, which costs an edit,
+#: while underestimating it clips a sentence the presenter cannot read.
+NOTES_PX_PER_CHAR = 9.5 * NOTES_FONT_PX / 20
+NOTES_LINES = int(SPEAKER_H // NOTES_LINE_PX)
 #: A paragraph's bottom margin, in lines.
 NOTES_PARAGRAPH_GAP = 0.4
 
 
-def _notes_pages(notes: list[str]) -> list[list[str]]:
-    """Split *notes* into as many speaker pages as it takes for all of it to fit.
+#: How tall a build-up's strip of earlier frames may stand, in px. A budget
+#: rather than a column count, because the two things the strip trades against
+#: each other — how big a thumbnail is, and how many lines of notes run full
+#: width under it — are both measured in pixels. Set where a ten-frame build
+#: still leaves the notes two thirds of the page.
+STRIP_MAX_H = 150
 
-    A speaker page that clips its own notes mid-sentence is worse than useless
-    — the presenter cannot tell that anything is missing. The type floor rules
-    out shrinking to fit, so the overflow goes onto a continuation page
-    instead. A single paragraph longer than a whole page still overflows; the
-    estimator reports that by giving it its own page, which is the loudest
-    thing a build step can do without failing a deck for being wordy.
+
+def frame_columns(count: int, style: str) -> int:
+    """How many frames a row of the overview holds.
+
+    The two styles want opposite things from the grid. An **equal-weight**
+    overview *is* the slide — every frame carries its own content — so it goes
+    as wide as it can without leaving a widow: two up to four (a square), three
+    beyond, and it never shrinks itself to buy room for prose.
+
+    A **build-up** strip is an afterthought under the hero, and the presenter
+    only has to recognise those frames rather than read them, so it is sized to
+    a height budget instead: the fewest columns — hence the largest thumbnails
+    — whose strip still fits `STRIP_MAX_H`. That keeps a ten-frame build from
+    spending most of the page on thumbnails of one picture, and it is why a
+    long build's frames come out smaller than a short one's.
     """
-    pages: list[list[str]] = []
-    current: list[str] = []
-    used = 0.0
-    for note in notes:
-        cost = max(1, math.ceil(len(note) / NOTES_CHARS_PER_LINE)) + NOTES_PARAGRAPH_GAP
-        if current and used + cost > NOTES_LINES:
-            pages.append(current)
-            current, used = [], 0.0
-        current.append(note)
-        used += cost
-    pages.append(current or ["*(no presenter notes on this slide)*"])
-    return pages
+    if style == "equal":
+        return count if count <= 3 else (2 if count == 4 else 3)
+    # Never fewer than three columns: at two, a two-frame build's lone earlier
+    # frame comes out half the size of the hero above it and stops reading as
+    # subordinate to it. Six is the ceiling because the theme defines --c2
+    # through --c6; past twelve frames the strip grows a third row rather than a
+    # seventh column, which is the right trade anyway — a seventh column is 66px.
+    for cols in range(3, 6):
+        if _grid_height(count, cols) <= STRIP_MAX_H:
+            return cols
+    return 6
 
 
-def _frame_strip(deck: str, pages: list[int]) -> str:
-    """The build group's reveals, as a lettered contact sheet.
+def _grid_height(count: int, cols: int, width: float = VISUAL_W) -> float:
+    rows = math.ceil(count / cols)
+    cell = (width - (cols - 1) * FRAME_GAP) / cols
+    return rows * _cell_height(cell) + (rows - 1) * FRAME_GAP
 
-    A speaker page used to spend a sentence of its notes saying "in the
-    audience deck this slide is a seven-page build" — prose standing in for a
-    picture, in a column that had none to spare, beside a quarter of the page
-    that was empty. The frames themselves say it better and for free: the
-    presenter sees what each advance puts on screen, and every one carries the
-    letter the notes refer to it by.
 
-    Empty for a fragment that is one page — there is nothing to contact-sheet.
+def visual_width(style: str) -> float:
+    """How wide the floated visual column stands, in px. See `frame_overview`."""
+    return (VISUAL_FRACTION_EQUAL if style == "equal" else VISUAL_FRACTION) * SPEAKER_W
+
+
+def _cell_height(width: float) -> float:
+    return width * SLIDE_ASPECT + FRAME_BORDER
+
+
+def speaker_visual_height(frames: int, style: str) -> float:
+    """How tall the floated visual column stands, in px.
+
+    This is what decides how much of the notes column is narrow (beside the
+    pictures) and how much is full width (below them), so it has to agree with
+    the theme to the pixel rather than approximately.
     """
-    if len(pages) < 2:
-        return ""
-    cells = "\n".join(
-        f'<figure><img src="_build/imgs/{deck}.{page:03d}.png"><figcaption>{stage_letter(i)}</figcaption></figure>'
-        for i, page in enumerate(pages)
-    )
-    return f'<div class="speaker-frames">\n{cells}\n</div>\n'
+    width = visual_width(style)
+    if frames < 2:
+        return _cell_height(width)
+    if style == "equal":
+        return _grid_height(frames, frame_columns(frames, style), width)
+    return _cell_height(width) + STRIP_TOP + _grid_height(frames - 1, frame_columns(frames - 1, style))
+
+
+def notes_lines_used(notes: list[str], visual_height: float, visual_width_px: float = VISUAL_W) -> float:
+    """Estimate how many lines *notes* occupy beside and below the visual column.
+
+    Lines above the float's bottom edge are narrow; everything after it runs
+    the full width of the page. The estimate walks a paragraph line by line so
+    one that *starts* beside the pictures and finishes under them is costed at
+    both widths, which is the common case and the whole reason the float is
+    worth having.
+    """
+    beside = math.ceil(visual_height / NOTES_LINE_PX)
+    narrow = SPEAKER_W - visual_width_px - VISUAL_GUTTER
+    line = 0.0
+    for index, note in enumerate(notes):
+        if index:
+            line += NOTES_PARAGRAPH_GAP
+        remaining = len(note)
+        while True:
+            width = narrow if line < beside else SPEAKER_W
+            remaining -= max(1, int(width / NOTES_PX_PER_CHAR))
+            line += 1
+            if remaining <= 0:
+                break
+    return line
+
+
+def notes_overflow(notes: list[str], frames: int, style: str) -> float:
+    """Lines by which *notes* miss fitting one speaker page; 0.0 when they fit."""
+    used = notes_lines_used(notes, speaker_visual_height(frames, style), visual_width(style))
+    return max(0.0, used - NOTES_LINES)
+
+
+def _frame_cell(deck: str, page: int, letter: str) -> str:
+    return f'<figure><img src="_build/imgs/{deck}.{page:03d}.png"><figcaption>{letter}</figcaption></figure>'
+
+
+def frame_overview(deck: str, pages: list[int], group: list[int], style: str) -> str:
+    """The floated visual column: this showing's slide, and its sibling frames.
+
+    Two shapes, because a group's frames are not all the same kind of thing.
+
+    A **build-up** — the default, and what a `<!-- build -->` marker usually
+    means — reveals one picture in stages, so only the last frame holds all of
+    it. That frame is the hero, drawn big, and the rest sit under it small: the
+    presenter needs to *read* the slide they are on and only needs to
+    *recognise* the steps that got there.
+
+    An **equal-weight** group has no such last frame. Its reveals are different
+    pictures of equal standing — three screens of a click-through, six votes in
+    a row — so a hero would be an arbitrary one of them blown up while the ones
+    that carry the argument stay thumbnails. Every frame is drawn the same size
+    instead, which is also *bigger*, because the hero's space is shared out.
+
+    A fragment that renders as one page has no overview at all; it is the hero
+    and nothing else.
+    """
+    hero = pages[-1]
+    if len(group) < 2:
+        return f'<figure class="speaker-hero"><img src="_build/imgs/{deck}.{hero:03d}.png"></figure>\n'
+    letters = {page: stage_letter(index) for index, page in enumerate(group)}
+    if style == "equal":
+        shown, head = group, ""
+    else:
+        # Every frame but the one drawn big — "earlier" for a real build, "the
+        # other showings" for a fragment the deck comes back to.
+        shown = [page for page in group if page != hero]
+        head = (
+            f'<figure class="speaker-hero"><img src="_build/imgs/{deck}.{hero:03d}.png">'
+            f"<figcaption>{letters[hero]}</figcaption></figure>\n"
+        )
+    cols = frame_columns(len(shown), style)
+    cells = "\n".join(_frame_cell(deck, page, letters[page]) for page in shown)
+    return f'{head}<div class="speaker-frames speaker-frames--c{cols}">\n{cells}\n</div>\n'
 
 
 def notes_for_showing(notes: list[str], letters: set[str], first: bool) -> list[str]:
@@ -383,45 +531,42 @@ def notes_for_showing(notes: list[str], letters: set[str], first: bool) -> list[
     return kept
 
 
-def speaker_page(deck: str, pages: list[int], group: list[int], text: str) -> list[str]:
-    """Build the speaker pages for one showing of a fragment: slide beside notes.
+def showing_notes(text: str, pages: list[int], group: list[int]) -> list[str]:
+    """The notes one showing of a fragment narrates."""
+    notes = fragment_notes(text)
+    if pages == group:
+        return notes
+    letters = {stage_letter(group.index(page)) for page in pages}
+    return notes_for_showing(notes, letters, first=pages[0] == group[0])
+
+
+def speaker_page(deck: str, pages: list[int], group: list[int], text: str) -> str:
+    """One showing of a fragment as one speaker page: pictures beside notes.
 
     The miniature is the per-slide PNG of the audience deck (rendered by
     render.sh into _build/imgs/ before this runs), so the speaker sees exactly
     what the audience sees, pixel for pixel — page number included. When the
-    fragment is more than one page, the frames of the whole numbering *group*
-    follow it as a lettered contact sheet, filling the space the single
-    miniature left empty. The paths are written repo-`slides/`-relative like
-    every fragment figure, and rewrite_images repoints them for _build/.
+    fragment renders as more than one page, `frame_overview` draws the rest of
+    the group with it, in whichever of the two shapes the fragment declares.
 
-    *pages* is this showing's audience pages; *group* is every page the fragment
-    renders as across the deck. They differ only for a fragment shown more than
-    once, where the contact sheet still shows the whole slide and the notes are
-    narrowed to this showing.
+    *pages* is this showing's audience pages; *group* is every page the
+    fragment renders as across the deck. They differ only for a fragment shown
+    more than once, where the overview still shows the whole slide and the
+    notes are narrowed to this showing.
 
-    Returns one page per chunk of notes: usually one, more when the notes are
-    too long to fit at the type floor.
+    Always exactly one page. Notes that would not fit are a deck error raised
+    by `check_speaker_fit`, not a continuation page: a presenter mid-sentence
+    does not turn over, so notes split across two pages are notes half read.
     """
-    last = pages[-1]
-    image = f"_build/imgs/{deck}.{last:03d}.png"
-    notes = fragment_notes(text)
-    if pages != group:
-        letters = {stage_letter(group.index(page)) for page in pages}
-        notes = notes_for_showing(notes, letters, first=pages[0] == group[0])
-    chunks = _notes_pages(notes)
-    strip = _frame_strip(deck, group)
-    out: list[str] = []
-    for number, chunk in enumerate(chunks):
-        # The contact sheet goes on the first page only: a continuation page is
-        # more notes about the same slide, not a second slide.
-        left = f"![Slide {last}]({image})\n\n" + (strip if number == 0 else "")
-        out.append(
-            "<!-- _class: speaker -->\n<!-- _paginate: false -->\n\n"
-            '<div class="speaker-page">\n<div class="speaker-slide">\n\n'
-            f"{left}"
-            '</div>\n<div class="speaker-notes">\n\n' + "\n\n".join(chunk) + "\n\n</div>\n</div>"
-        )
-    return out
+    style = fragment_frame_style(text)
+    visual = frame_overview(deck, pages, group, style)
+    notes = showing_notes(text, pages, group) or ["*(no presenter notes on this slide)*"]
+    return (
+        "<!-- _class: speaker -->\n<!-- _paginate: false -->\n\n"
+        f'<div class="speaker-page">\n<div class="speaker-visual speaker-visual--{style}">\n'
+        f"{visual}"
+        '</div>\n<div class="speaker-notes">\n\n' + "\n\n".join(notes) + "\n\n</div>\n</div>"
+    )
 
 
 def check_build_markers(name: str, text: str, problems: list[str]) -> None:
@@ -510,6 +655,58 @@ def check_headline(name: str, text: str, problems: list[str]) -> None:
             )
 
 
+def check_frames_directive(name: str, text: str, problems: list[str]) -> None:
+    """Preflight a fragment's `<!-- frames: ... -->` declaration."""
+    seen = []
+    for lineno, line in enumerate(text.splitlines(), 1):
+        match = FRAMES_RE.match(line)
+        if match:
+            seen.append((lineno, match.group(1)))
+        elif line.strip().startswith("<!-- frames"):
+            problems.append(
+                f"fragments/{name}.md:{lineno}: malformed frames directive — expected "
+                f"`<!-- frames: build -->` or `<!-- frames: equal -->` alone on its line"
+            )
+    for lineno, style in seen:
+        if style not in FRAME_STYLES:
+            problems.append(
+                f"fragments/{name}.md:{lineno}: unknown frame style {style!r} — "
+                f"expected one of {', '.join(FRAME_STYLES)}"
+            )
+    if len(seen) > 1:
+        lines = ", ".join(str(lineno) for lineno, _ in seen)
+        problems.append(f"fragments/{name}.md: more than one frames directive (lines {lines})")
+
+
+def check_speaker_fit(
+    showings: list[Showing], texts: dict[str, str], group: dict[str, list[int]], problems: list[str]
+) -> None:
+    """Preflight that every showing's notes fit on its one speaker page.
+
+    Run on every build, the audience one included, because the fit is a
+    property of the fragment and not of the deck you happen to be rendering. A
+    slide whose narration only fits across two pages is one nobody can present
+    from — the presenter turns over mid-sentence, or more often does not notice
+    the second page at all — and discovering that at `--speaker` time means
+    discovering it the evening before the talk.
+    """
+    for name, _extras, _stages, pages in showings:
+        style = fragment_frame_style(texts[name])
+        notes = showing_notes(texts[name], pages, group[name])
+        over = notes_overflow(notes, len(group[name]), style)
+        if not over:
+            continue
+        characters = math.ceil(over * SPEAKER_W / NOTES_PX_PER_CHAR)
+        letters = "".join(stage_letter(group[name].index(page)) for page in pages)
+        where = f" (showing {letters})" if pages != group[name] else ""
+        problems.append(
+            f"fragments/{name}.md{where}: presenter notes overflow the speaker page by about "
+            f"{over:.0f} of {NOTES_LINES} lines — trim roughly {characters} characters, or move "
+            f"detail into the report the note cites. A speaker page never continues onto a "
+            f"second one; see slides/README.md."
+        )
+
+
 def check_fragment(name: str, text: str, problems: list[str]) -> None:
     for lineno, line in enumerate(text.splitlines(), 1):
         if RULE_RE.match(line):
@@ -519,6 +716,7 @@ def check_fragment(name: str, text: str, problems: list[str]) -> None:
             )
     check_headline(name, text, problems)
     check_build_markers(name, text, problems)
+    check_frames_directive(name, text, problems)
     for match in IMAGE_RE.finditer(text):
         target = match.group(1)
         if target.startswith(("http://", "https://", "data:")):
@@ -603,11 +801,13 @@ def speaker_bodies(
     write: bool,
     problems: list[str],
 ) -> list[str]:
-    """The speaker deck's pages: one per showing, more when its notes overflow.
+    """The speaker deck's pages: exactly one per showing.
 
     The miniature is the *final* stage of the audience build, which is the page
-    the fragment's notes narrate, and the lettered contact sheet beneath it is
-    every page of the numbering group.
+    the fragment's notes narrate, and `frame_overview` draws the rest of the
+    numbering group beside or beneath it. Notes that would not fit one page are
+    a deck error (`check_speaker_fit`), so this never emits two pages for one
+    slide.
     """
     bodies: list[str] = []
     for name, _extras, _stages, pages in showings:
@@ -618,7 +818,7 @@ def speaker_bodies(
                     f"the speaker build needs the audience deck rendered to per-slide PNGs "
                     f"first; use `./render.sh {deck} pdf --speaker`, which does both"
                 )
-        bodies.extend(speaker_page(deck, pages, group[name], texts[name]))
+        bodies.append(speaker_page(deck, pages, group[name], texts[name]))
     return bodies
 
 
@@ -637,6 +837,7 @@ def assemble(deck: str, write: bool, speaker: bool = False, pageno: bool = True,
 
     for name, text in texts.items():
         check_note_letters(name, text, len(group[name]), problems)
+    check_speaker_fit(showings, texts, group, problems)
 
     if speaker:
         bodies = speaker_bodies(deck, showings, texts, group, write, problems)

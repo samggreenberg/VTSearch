@@ -90,6 +90,13 @@ If the slide has no figure, it has no reason to colour a word.
 Nothing on a slide renders below **20px** — which is the page number, the
 smallest thing the theme draws. Body copy is 28px.
 
+**The speaker page is the one exception, and it is deliberate.** Its presenter
+notes render at 18px, because this floor is about a projector at the back of a
+room and that page is a PDF half a metre from the presenter's own eyes. It is
+also load-bearing: a speaker page never continues onto a second one, and at
+20px the longest slides' narration could not be made to fit however the
+pictures were arranged. Nothing an *audience* ever sees goes below 20px.
+
 This binds figures too, and figures are where it gets broken, because the size
 a figure's labels *render* at is not the size they were *set* at. A figure `W`
 inches wide is drawn at `W × 72` points and displayed in a slot `P` pixels
@@ -436,6 +443,16 @@ markers). Two rules keep a build honest:
   reveal adds ink, and that is all it does. (For generated figures,
   `slide_figure.tight_box` pins every stage to the final stage's crop for
   exactly this reason.)
+
+  **A click-through is the exception, and declares itself.** A run of UI
+  screenshots — three dialogs, six votes in a row — has no final page that
+  contains the others: each frame is a different screen of equal standing, and
+  the layout holds still only in the sense that the same slot keeps being
+  refilled. Such a fragment writes `<!-- frames: equal -->` at the top, which
+  is what tells the speaker build not to pick one of them to blow up. Everything
+  else is a build-up and needs no declaration. The difference is semantic, not
+  visual — it is about whether a later frame *contains* an earlier one — so it
+  is declared rather than detected.
 - **Chop at the mechanism's own joints.** One reveal per step the speaker
   narrates, not per bullet and not per sentence. A build that advances on
   every line is a slow way to read a list; a build that reveals "and now the
@@ -450,9 +467,17 @@ sheet labels each frame with. `build.py --check` requires every page of a
 group to be named by some note — one note may cover two, but no frame may go
 unmentioned.
 
-The speaker build shows the one complete page large — a speaker glancing at
-notes needs the whole picture, not whichever stage the audience is on — with
-the whole group beneath it as a lettered contact sheet. That sheet is why a
-note never has to *describe* the build: "this slide is a seven-page build" is
-a sentence spent saying what a picture already says, in the one column that
-has no room to spare.
+The speaker build draws the group in whichever of two shapes the fragment
+declares. A **build-up** gets its last page large — a speaker glancing at notes
+needs the whole picture, not whichever stage the audience is on — with the
+earlier frames small beneath it. An **equal-weight** group gets every frame at
+one size and no hero, which is also a bigger frame, because the space the hero
+would have taken is shared out. Either way the overview is why a note never has
+to *describe* the build: "this slide is a seven-page build" is a sentence spent
+saying what a picture already says.
+
+**Notes are budgeted, not paginated.** `build.py --check` fails a fragment
+whose notes would not fit its one speaker page, naming it and roughly how many
+characters it is over. A presenter does not turn over mid-sentence, and more
+often never notices that a second page exists — so a wordy slide is an edit,
+not a continuation.

@@ -229,6 +229,49 @@ every page of the group gets the theme's top-anchoring `build` class — a
 reveal adds ink below what is already on screen, rather than re-centring the
 column between pages.
 
+### Build-up, or equal weight?
+
+A fragment declares which kind of animation it is, with a directive at the top:
+
+```markdown
+<!-- _class: full -->
+<!-- frames: equal -->
+```
+
+The declaration steers the **speaker page** only; the audience deck is
+identical either way. Two shapes, because a group's frames are not all the
+same kind of thing:
+
+| | What it is | What the speaker page draws |
+|---|---|---|
+| `build` (the default) | One picture revealed in stages, so the last frame contains all of them | That last frame large, with the earlier ones small beneath it |
+| `equal` | Frames of equal standing — three screens of a click-through, six votes in a row | Every frame at one size, no hero, so each is bigger than a strip thumbnail |
+
+Build-up is the default because that is what a build marker usually means, and
+most figure builds are additive. Declare `equal` when no frame contains the
+others: picking one of them to blow up would be picking arbitrarily, and the
+frames carrying the argument would stay thumbnails. The difference is semantic
+— whether a later frame *contains* an earlier one — so it is declared rather
+than guessed at from the images.
+
+### One slide, one speaker page
+
+A speaker page never continues onto a second one. `build.py --check` fails a
+fragment whose presenter notes would not fit, naming it and roughly how many
+characters it is over:
+
+```
+fragments/train-loop.md: presenter notes overflow the speaker page by about
+2 of 26 lines — trim roughly 336 characters …
+```
+
+That is a deliberate wall rather than a convenience. Notes used to spill onto
+continuation pages, and a presenter mid-sentence does not turn over — more
+often they never notice the second page is there. The page is laid out to give
+the notes as much room as it can (the pictures float, so a note starts beside
+them and finishes across the full width underneath), and past that the answer
+is a shorter note.
+
 **Every page of a group also carries a letter after the number** — 5a, 5b,
 5c — set a step lighter than the number, because the number is the address
 and the letter is the sub-address. A one-page slide carries no letter, so a
