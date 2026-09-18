@@ -1,0 +1,54 @@
+# Republish the rendered slide decks whenever the slide sources change on dev.
+#
+# This is the repository's only workflow, and it deliberately tests nothing:
+# `./run-tests.sh` is still the whole gate (see CLAUDE.md). All this does is
+# render the decks and push the PDFs to the rolling `slides-latest` release, so
+# the newest deck has a stable URL that does not require cloning the repo and
+# running Marp. The rendering and upload logic lives in scripts/publish-slides.sh
+# so it can be run and debugged from a laptop, not only from here.
+name: Publish slide decks
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'slides/**'
+      - 'scripts/publish-slides.sh'
+      - '.github/workflows/publish-slides.yml'
+  # Note: GitHub only offers the "Run workflow" button for workflows present on
+  # the *default* branch, which here is `main`. Until a release sweeps this file
+  # there, manual dispatch is unavailable and scripts/publish-slides.sh is the
+  # way to publish by hand. The push trigger above is unaffected -- it fires
+  # from `dev`, where the file already is.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Two pushes in quick succession would otherwise race to clobber the same
+# assets; only the newest deck is worth publishing, so drop the older run.
+concurrency:
+  group: publish-slides
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # slides/build.py is pure stdlib and Marp arrives via npx, so there is
+      # nothing to install: the only external need is a browser for Marp's PDF
+      # export, and publish-slides.sh finds the runner's Chrome itself.
+      - name: Render and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/publish-slides.sh

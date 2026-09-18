@@ -296,6 +296,15 @@ def isolated_settings(tmp_path, monkeypatch):
     settings_mod.set_saved_datasets_dir(str(tmp_path / "saved_datasets"))
     settings_mod.set_detectors_dir(str(tmp_path / "detectors"))
 
+    # The per-vote labelset rewrite is queued to a background thread in
+    # production (issue #3853); the suite asserts on file contents right
+    # after each call, so write inline here.  The queue's own tests opt back
+    # into ``async`` explicitly.
+    from vtscore.detectors import store as det_store_mod
+
+    det_store_mod.set_detector_write_mode("sync")
+    det_store_mod.reset_detector_write_queue_for_tests()
+
     ds_reg_mod.reset_for_tests()
     det_reg_mod.reset_for_tests()
 

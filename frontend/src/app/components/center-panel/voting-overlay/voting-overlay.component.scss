@@ -47,6 +47,16 @@ button {
   &:focus:not(:focus-visible) {
     outline: none;
   }
+
+  // Nothing left to vote on (`unavailable`). Stays legible rather than being
+  // hidden: the pair is the anchor the user reads the "nothing left" message
+  // against, so it has to still look like the vote row, just inert.
+  &:disabled {
+    cursor: default;
+    opacity: var(--opacity-dim);
+    color: var(--text-muted);
+    border-color: var(--border);
+  }
 }
 
 @keyframes icon-spin-cw {
@@ -63,7 +73,7 @@ vt-icon.icon-spinning {
   color: var(--color-good);
   border-color: var(--color-good);
 
-  &:hover {
+  &:hover:not(:disabled) {
     background: var(--good-bg);
   }
 
@@ -83,7 +93,7 @@ vt-icon.icon-spinning {
   color: var(--color-bad);
   border-color: var(--color-bad);
 
-  &:hover {
+  &:hover:not(:disabled) {
     background: var(--bad-bg);
   }
 

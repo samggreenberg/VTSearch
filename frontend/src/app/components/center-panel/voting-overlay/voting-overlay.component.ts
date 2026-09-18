@@ -12,7 +12,16 @@ import { IconComponent } from '../../icon/icon.component';
 export class VotingOverlayComponent implements OnDestroy {
   readonly isGood = input(false);
   readonly isBad = input(false);
+  /** Voting is momentarily blocked (a vote is in flight, Find is waiting on a
+   *  score). Silently swallows clicks and keeps the buttons looking normal:
+   *  these states last a few hundred milliseconds, and flickering the pair grey
+   *  on every vote would be worse than doing nothing. */
   readonly disabled = input(false);
+  /** There is nothing to vote on at all — the host's queue is empty. Unlike
+   *  {@link disabled} this is a standing state the user has to be *told* about,
+   *  so it sets the buttons' native `disabled` attribute: they grey out, stop
+   *  taking hover, and drop out of the tab order. */
+  readonly unavailable = input(false);
   readonly spinningVote = input<'good' | 'bad' | null>(null);
   /** When true, renders the faint first-vote hint above the buttons. The
    *  parent decides when to show this (zero votes + not previously dismissed)
@@ -29,7 +38,7 @@ export class VotingOverlayComponent implements OnDestroy {
   private badTimer: ReturnType<typeof setTimeout> | null = null;
 
   onVoteGood(event?: Event): void {
-    if (this.disabled()) return;
+    if (this.disabled() || this.unavailable()) return;
     this.dropFocus(event);
     this.goodFlash.set(true);
     this.voted.emit('good');
@@ -38,7 +47,7 @@ export class VotingOverlayComponent implements OnDestroy {
   }
 
   onVoteBad(event?: Event): void {
-    if (this.disabled()) return;
+    if (this.disabled() || this.unavailable()) return;
     this.dropFocus(event);
     this.badFlash.set(true);
     this.voted.emit('bad');

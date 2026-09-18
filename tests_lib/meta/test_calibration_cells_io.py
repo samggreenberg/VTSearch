@@ -283,3 +283,138 @@ def test_every_key_a_loader_writes_is_one_the_sentence_knows(arm: Path, loader: 
         "vanish from every study's coverage line.  Add the spelling to `LOSS_KEYS` or "
         "`STARVED_KEYS` in `_cells_io.py` in the same commit as the rename (#3808)."
     )
+
+
+# --- The two on-disk cell shapes ---------------------------------------------
+#
+# `dump_medias` writes a cell as one pickled dict, which is fine while the dict
+# fits.  DocMarks tier `l` is where it stops: 200,000 pages at ~169 KB of
+# `local_features` each is a ~34 GB cell assembled entirely in RAM before a byte
+# of it is written (#3842).  `CellWriter` appends chunk by chunk instead.
+#
+# The risk the second shape introduces is not corruption but *silence*: five
+# scripts under `scripts/experiments/` read a cell with a bare `pickle.load`,
+# and the natural chunked encoding hands one of those its first chunk -- a
+# well-formed dict of medias that is a fraction of the cell, with nothing
+# anywhere saying so.  That is what the header object is for, and it is the
+# property most of these pin.
+
+
+def _cell_io_module():
+    return _load_cells_io()
+
+
+def test_a_one_shot_cell_is_still_one_pickled_dict(tmp_path: Path) -> None:
+    """The default shape is unchanged, byte for byte.
+
+    Cells are symlinked between this directory and the Max-Patch runner's,
+    whose trimmed ``_cells_io`` knows only this shape, so "unchanged" is a
+    compatibility claim rather than a tidiness one.
+    """
+    import pickle
+
+    cells_io = _cell_io_module()
+    medias = {0: {"a": 1, "media_bytes": b"xxx"}, 1: {"a": 2, "thumbnail_bytes": b"y"}}
+    path = tmp_path / "one.pkl"
+    cells_io.dump_medias(medias, path)
+
+    with path.open("rb") as fh:
+        assert pickle.load(fh) == {0: {"a": 1}, 1: {"a": 2}}  # noqa: S301 - written two lines up
+
+
+def test_a_chunked_cell_round_trips_to_the_same_dict(tmp_path: Path) -> None:
+    cells_io = _cell_io_module()
+    path = tmp_path / "chunked.pkl"
+    with cells_io.CellWriter(path) as writer:
+        writer.write({0: {"a": 1, "media_bytes": b"xxx"}})
+        writer.write({1: {"a": 2}, 2: {"a": 3}})
+
+    assert writer.n_medias == 3
+    assert writer.n_chunks == 2
+    assert writer.nbytes == path.stat().st_size
+    # Identical to what one-shot would have written for the same medias: the
+    # raster fields are dropped by the same `_thin`, and the chunks merge in
+    # write order.
+    assert cells_io.load_medias(path) == {0: {"a": 1}, 1: {"a": 2}, 2: {"a": 3}}
+
+
+def test_a_bare_pickle_load_on_a_chunked_cell_gets_the_header_not_a_chunk(tmp_path: Path) -> None:
+    """The one property the whole two-shape design rests on.
+
+    A reader that bypasses ``load_medias`` must not be handed something that
+    *looks* like the cell.  The header is the first object in the file, so it is
+    what such a reader gets -- and it has no media in it to misread.
+    """
+    import pickle
+
+    cells_io = _cell_io_module()
+    path = tmp_path / "chunked.pkl"
+    with cells_io.CellWriter(path) as writer:
+        writer.write({0: {"a": 1}})
+        writer.write({1: {"a": 2}})
+
+    with path.open("rb") as fh:
+        first = pickle.load(fh)  # noqa: S301 - written two lines up
+    assert first == {cells_io.CHUNKED_MARKER: cells_io.CHUNKED_FORMAT}
+    assert not any(isinstance(k, int) for k in first), "a bare reader must not see a media id"
+
+
+def test_iter_medias_reads_either_shape(tmp_path: Path) -> None:
+    cells_io = _cell_io_module()
+    medias = {0: {"a": 1}, 1: {"a": 2}, 2: {"a": 3}}
+
+    one = tmp_path / "one.pkl"
+    cells_io.dump_medias(medias, one)
+    chunked = tmp_path / "chunked.pkl"
+    with cells_io.CellWriter(chunked) as writer:
+        writer.write({0: {"a": 1}})
+        writer.write({1: {"a": 2}, 2: {"a": 3}})
+
+    assert dict(cells_io.iter_medias(one)) == medias
+    assert dict(cells_io.iter_medias(chunked)) == medias
+
+
+def test_a_repeated_media_id_is_refused_rather_than_silently_dropped(tmp_path: Path) -> None:
+    """Restarting the index each chunk is the mistake this shape invites.
+
+    The chunks merge into one dict, so a repeated id makes the cell *shorter*
+    than the pages that went into it -- a number that looks plausible and is
+    wrong, which is the failure mode this whole file exists to refuse.
+    """
+    cells_io = _cell_io_module()
+    path = tmp_path / "dup.pkl"
+    with pytest.raises(ValueError, match="already written"):
+        with cells_io.CellWriter(path) as writer:
+            writer.write({0: {"a": 1}})
+            writer.write({0: {"a": 2}})
+    assert not path.exists()
+
+
+def test_a_run_that_dies_mid_cell_leaves_no_cell(tmp_path: Path) -> None:
+    """A `.part` renamed on clean exit, so `--verify` cannot accept a half cell.
+
+    Tier ``l`` is ~43 h of ``sift_vlad``; a job killed at hour 40 must not leave
+    behind something the next reader treats as the finished artifact.
+    """
+    cells_io = _cell_io_module()
+    path = tmp_path / "died.pkl"
+
+    class _Boom(RuntimeError):
+        pass
+
+    with pytest.raises(_Boom):
+        with cells_io.CellWriter(path) as writer:
+            writer.write({0: {"a": 1}})
+            raise _Boom
+
+    assert not path.exists()
+    assert not list(tmp_path.glob("*.part")), "the partial file was left behind"
+
+
+def test_the_cell_does_not_appear_until_the_writer_exits(tmp_path: Path) -> None:
+    cells_io = _cell_io_module()
+    path = tmp_path / "late.pkl"
+    with cells_io.CellWriter(path) as writer:
+        writer.write({0: {"a": 1}})
+        assert not path.exists(), "a reader could pick this up mid-build"
+    assert path.exists()

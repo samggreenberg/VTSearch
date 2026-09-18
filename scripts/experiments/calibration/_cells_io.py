@@ -8,13 +8,20 @@ prepare serializes the *in-memory* medias dict directly, dropping only the two
 bulky raster fields the cell stage never reads.  The resulting pickles are
 byte-compatible with the Max-Patch runner's, so its ``visual_genome_m__*.pkl``
 can be symlinked in and read here unchanged.
+
+A cell has two on-disk shapes.  ``dump_medias`` writes the original one -- a
+single pickled dict -- and is still the default; ``CellWriter`` writes the
+chunked one, for a cell too large to hold in memory whole (#3842).
+``load_medias`` and ``iter_medias`` read either, and the chunked shape opens
+with a header object so a reader that bypasses them cannot mistake one chunk
+for the cell.
 """
 
 from __future__ import annotations
 
 import pickle
 from pathlib import Path
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from typing import Any
 
 import pandas as pd
@@ -250,13 +257,115 @@ def load_arm(arm_dir: Path) -> tuple[pd.DataFrame, dict]:
     return df, prov
 
 
+def _thin(medias: dict[int, dict[str, Any]]) -> dict[int, dict[str, Any]]:
+    """*medias* minus the bulky raster fields, as the cell stores them."""
+    return {cid: {k: v for k, v in m.items() if k not in _DROP_FIELDS} for cid, m in medias.items()}
+
+
 def dump_medias(medias: dict[int, dict[str, Any]], path: str | Path) -> int:
-    """Pickle *medias* minus the bulky raster fields; return bytes written."""
-    thin = {cid: {k: v for k, v in m.items() if k not in _DROP_FIELDS} for cid, m in medias.items()}
+    """Pickle *medias* minus the bulky raster fields; return bytes written.
+
+    One dict, one ``pickle.dump``, unchanged since the Max-Patch runner wrote
+    the first cell -- the format the five scripts that read a cell with a bare
+    ``pickle.load`` depend on.  :class:`CellWriter` is the streaming half, for a
+    cell too large to hold whole; see its docstring for why it is a separate
+    entry point rather than a flag here.
+    """
     path = Path(path)
     with path.open("wb") as fh:
-        pickle.dump(thin, fh, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle.dump(_thin(medias), fh, protocol=pickle.HIGHEST_PROTOCOL)
     return path.stat().st_size
+
+
+#: Key of the header object that opens a chunked cell.  Its **value** is the
+#: format name, so a later shape can be told from this one rather than guessed
+#: at.  A one-shot cell is a dict keyed by integer media id, so the key cannot
+#: collide with a real cid.
+CHUNKED_MARKER = "__vts_chunked_cell__"
+CHUNKED_FORMAT = "chunked-v1"
+
+
+class CellWriter:
+    """Write a cell in chunks, so the whole of it is never in memory at once.
+
+    A cell has always been assembled as one dict and pickled at the end, which
+    is fine while the dict fits.  It stops fitting: DocMarks tier ``l`` is
+    200,000 pages at ~169 KB of ``local_features`` each (measured, #3842), so
+    the ``sift_vlad`` cell alone is ~34 GB *before* the page bytes each media
+    carries until :func:`_thin` drops them.  Streaming turns that into one
+    chunk at a time.
+
+    **Why a separate entry point rather than a flag on** :func:`dump_medias`.
+    Five scripts under ``scripts/experiments/`` read a cell with a bare
+    ``pickle.load`` rather than through :func:`load_medias`, and a chunked cell
+    handed to one of those would otherwise return its *first chunk* -- a
+    perfectly well-formed dict of medias that is silently a fraction of the
+    cell.  So the two formats are written by two functions, one-shot stays the
+    default and stays byte-identical (the Max-Patch runner's ``_cells_io`` is a
+    trimmed copy of this one, and cells are symlinked between the two), and the
+    chunked shape opens with :data:`CHUNKED_MARKER`: a bare ``pickle.load`` on
+    a streamed cell gets the header, never medias, and fails loudly at the
+    first ``.get`` on what it thinks is a media.
+
+    Writes to a ``.part`` file and renames on clean exit, so a run that dies at
+    hour 40 leaves no half-cell for ``--verify`` to accept as whole.
+
+        with CellWriter(path) as writer:
+            for chunk in chunks:
+                writer.write(embed(chunk))
+        print(writer.nbytes)
+    """
+
+    def __init__(self, path: str | Path) -> None:
+        self.path = Path(path)
+        self._tmp = self.path.with_name(self.path.name + ".part")
+        self._fh: Any = None
+        self._ids: set[int] = set()
+        self.n_medias = 0
+        self.n_chunks = 0
+        self.nbytes = 0
+
+    def __enter__(self) -> "CellWriter":
+        self._tmp.parent.mkdir(parents=True, exist_ok=True)
+        self._fh = self._tmp.open("wb")
+        pickle.dump({CHUNKED_MARKER: CHUNKED_FORMAT}, self._fh, protocol=pickle.HIGHEST_PROTOCOL)
+        return self
+
+    def write(self, medias: dict[int, dict[str, Any]]) -> int:
+        """Append one chunk, thinned as :func:`dump_medias` thins it.
+
+        Media ids must be unique across the whole cell: the reader merges the
+        chunks into one dict, so a repeated id would be a silently *shorter*
+        cell rather than an error.  That is exactly the mistake a chunked
+        writer invites -- indexing each chunk from zero instead of from a
+        running offset -- so it is refused here rather than left to a later
+        count that looks plausible.
+        """
+        if self._fh is None:
+            raise RuntimeError("CellWriter.write outside the `with` block")
+        thin = _thin(medias)
+        repeated = self._ids & set(thin)
+        if repeated:
+            raise ValueError(
+                f"{self.path.name}: media id(s) {sorted(repeated)[:5]} already written -- "
+                "chunk indices must continue across chunks, not restart at 0"
+            )
+        self._ids.update(thin)
+        pickle.dump(thin, self._fh, protocol=pickle.HIGHEST_PROTOCOL)
+        self.n_medias += len(thin)
+        self.n_chunks += 1
+        return len(thin)
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
+        if self._fh is not None:
+            self._fh.close()
+            self._fh = None
+        if exc_type is not None:
+            self._tmp.unlink(missing_ok=True)
+            return False
+        self._tmp.replace(self.path)
+        self.nbytes = self.path.stat().st_size
+        return False
 
 
 class _StaleRegionVector:
@@ -292,15 +401,44 @@ class _StaleClassUnpickler(pickle.Unpickler):
         return super().find_class(module, name)
 
 
-def load_medias(path: str | Path) -> dict[int, dict[str, Any]]:
-    """Load a cell pickle written by :func:`dump_medias`.
+def iter_medias(path: str | Path) -> Iterator[tuple[int, dict[str, Any]]]:
+    """Yield ``(cid, media)`` from a cell without holding the whole of it.
 
-    Tolerates the pre-#2886 ``RegionVector`` nodes in cached pickles; see
+    Reads either shape: a one-shot cell from :func:`dump_medias` (one pickled
+    dict) or a chunked one from :class:`CellWriter` (a header then one pickled
+    dict per chunk).  Only the chunked shape is actually streamed -- a one-shot
+    cell is one pickle and there is no way to read half of it -- so this buys
+    nothing on the cells that already fit and everything on the ones that do
+    not.
+
+    Use it wherever a pass only *visits* medias (counting, verifying,
+    summarising).  :func:`load_medias` is the same iteration collected into the
+    dict every caller that indexes or mutates a cell still wants.
+
+    Tolerates the pre-#2886 ``RegionVector`` nodes; see
     :class:`_StaleRegionVector`.
     """
     with Path(path).open("rb") as fh:
         # S301 - our own prepare-written cache, not untrusted input.
-        return _StaleClassUnpickler(fh).load()  # noqa: S301
+        first = _StaleClassUnpickler(fh).load()  # noqa: S301
+        if not (isinstance(first, dict) and first.get(CHUNKED_MARKER)):
+            yield from first.items()
+            return
+        while True:
+            try:
+                chunk = _StaleClassUnpickler(fh).load()  # noqa: S301
+            except EOFError:
+                return
+            yield from chunk.items()
+
+
+def load_medias(path: str | Path) -> dict[int, dict[str, Any]]:
+    """Load a cell pickle written by :func:`dump_medias` or :class:`CellWriter`.
+
+    Tolerates the pre-#2886 ``RegionVector`` nodes in cached pickles; see
+    :class:`_StaleRegionVector`.
+    """
+    return dict(iter_medias(path))
 
 
 #: Columns ``run_cells.py`` writes to record **how each cell opened**: the app's

@@ -48,6 +48,7 @@ The phase ordering the app implements, and the harness therefore reproduces:
 
 from __future__ import annotations
 
+import math
 from typing import Any, Literal, Optional
 
 from vtscore.detectors.cost_trend import (
@@ -59,6 +60,7 @@ from vtscore.detectors.cost_trend import (
 )
 from vtscore.detectors.stability import (
     MIN_PER_CLASS,
+    STABLE_FALLING_RATIO,
     STABLE_MAX_THRESHOLD,
     STABLE_MIN_ENTRIES,
     STABLE_RATE_THRESHOLD,
@@ -91,15 +93,19 @@ BAD_TARGET = 4
 # owned by ``vtscore.detectors.cost_trend`` and re-exported here, with the
 # Stable constants below, so a study can name every gate from one place.
 
-# ``_compute_stable_status``: the flip-rate window and its two cutoffs — the
-# confident-flip average must be under 0.5% of the pool and no single recent
-# step at 1%.  Re-exported from ``vtscore.detectors.stability``.
+# ``_compute_stable_status``: the flip-rate window and its cutoffs — the
+# confident-flip average must be under 0.5% of the pool, no single recent step
+# at 1%, and the raw rate must have stopped falling (the later half of the
+# window not below ``STABLE_FALLING_RATIO`` of the earlier half).  Re-exported
+# from ``vtscore.detectors.stability`` so a study naming a gate, or measuring
+# how far a run sat from one, has every threshold from one place.
 __all__ = [
     "MIN_PER_CLASS",
     "SMART_FLAT_THRESHOLD",
     "SMART_MIN_POINTS",
     "SMART_SLOPE_T",
     "SMART_WINDOW",
+    "STABLE_FALLING_RATIO",
     "STABLE_MAX_THRESHOLD",
     "STABLE_MIN_ENTRIES",
     "STABLE_RATE_THRESHOLD",
@@ -112,8 +118,8 @@ SPAN_YELLOW = 10
 SPAN_GREEN_DEFAULT = 40
 
 
-def smart_status(recent_error_costs: list[float], good: int, bad: int) -> Status:
-    """The app's ``_compute_smart_status``: has the error cost levelled off?
+def smart_detail(recent_error_costs: list[float], good: int, bad: int) -> dict[str, Any]:
+    """The app's Smart sub-object, *whole*: the light and the numbers behind it.
 
     *recent_error_costs* are the per-step costs of the last :data:`SMART_WINDOW`
     cached models, each scored against the **current** labelset (never the
@@ -121,20 +127,63 @@ def smart_status(recent_error_costs: list[float], good: int, bad: int) -> Status
     leak into the vote order).  Not a port: the rule is
     :func:`~vtscore.detectors.cost_trend.smart_status_from_costs`, which the app
     calls too, so the harness reads the same light as the user.
+
+    :func:`smart_status` keeps only ``status``.  This keeps ``slope`` and
+    ``slope_t`` as well, which is what lets a study say how *close* a yellow was
+    to green rather than only that it was not green (issue #3560).
     """
-    return smart_status_from_costs(recent_error_costs, good, bad)["status"]  # type: ignore[return-value]
+    return smart_status_from_costs(recent_error_costs, good, bad)
 
 
-def stable_status(stability_entries: list[dict[str, Any]], good: int, bad: int) -> Status:
-    """The app's ``_compute_stable_status``: have predictions stopped flipping?
+def smart_status(recent_error_costs: list[float], good: int, bad: int) -> Status:
+    """The app's ``_compute_smart_status``: has the error cost levelled off?
+
+    The light alone, for callers that only need the phase; :func:`smart_detail`
+    is the same call with its margins kept.
+    """
+    return smart_detail(recent_error_costs, good, bad)["status"]  # type: ignore[return-value]
+
+
+def stable_detail(stability_entries: list[dict[str, Any]], good: int, bad: int) -> dict[str, Any]:
+    """The app's Stable sub-object, *whole*: the light and the numbers behind it.
 
     Each entry is one :func:`vtscore.detectors.stability.stability_entry`
     record for one retraining - raw and *confident* flip counts over the
     still-unlabeled pool, with the whole pool as denominator.  Not a port: the
     rule is :func:`~vtscore.detectors.stability.stable_status_from_entries`,
     which the app calls too, so the harness reads the same light as the user.
+
+    :func:`stable_status` keeps only ``status``.  This keeps the three rates
+    Stable's three gates turn on - the confident average and its worst step,
+    and the two halves of the raw window - so a study can say which gate was
+    binding and by how much (issue #3560).
     """
-    return stable_status_from_entries(stability_entries, good, bad)["status"]
+    return stable_status_from_entries(stability_entries, good, bad)
+
+
+def stable_status(stability_entries: list[dict[str, Any]], good: int, bad: int) -> Status:
+    """The app's ``_compute_stable_status``: have predictions stopped flipping?
+
+    The light alone, for callers that only need the phase; :func:`stable_detail`
+    is the same call with its margins kept.
+    """
+    return stable_detail(stability_entries, good, bad)["status"]
+
+
+def span_target(depth: int, green_at: int = SPAN_GREEN_DEFAULT) -> int:
+    """How many consecutive evidence-bearing nodes Span needs to read green.
+
+    The goal, capped at what the tree can supply: a 12-node atlas cannot show
+    40 nodes of evidence, so on it green means 12.  ``0`` on a degenerate tree,
+    which :func:`span_status` reads as green outright.
+
+    Split out of :func:`span_status` because it is also the *denominator* a
+    study wants beside :attr:`AutopilotFlow.span_level`: "31 nodes" says
+    nothing without the bar it is short of, and that bar is per-run (the green
+    target is a knob) and per-step (the atlas grows).  One definition, two
+    readers, so the reported target cannot disagree with the light.
+    """
+    return min(green_at, depth) if depth > 0 else 0
 
 
 def span_status(level: int, depth: int, green_at: int = SPAN_GREEN_DEFAULT) -> Status:
@@ -148,7 +197,7 @@ def span_status(level: int, depth: int, green_at: int = SPAN_GREEN_DEFAULT) -> S
     """
     if depth <= 0:
         return "green"
-    green = min(green_at, depth)
+    green = span_target(depth, green_at)
     yellow = min(SPAN_YELLOW, green)
     if level >= green:
         return "green"
@@ -226,6 +275,17 @@ def stopping_rule_fired(phase: str) -> bool:
     ``scripts/experiments/calibration/stopping.py``, which reports both.
     """
     return phase == STOPPING_PHASE
+
+
+def _num(v: Any) -> float:
+    """A status dict's numeric extra as a float, ``nan`` when the rule omitted it.
+
+    The indicator rules drop their margins entirely on the branches that refuse
+    to fit one - too few votes of a class, too little history - so a missing key
+    means "not measured".  Reading it as 0.0 would put a run that has cast six
+    votes at the exact centre of the Smart flatness test.
+    """
+    return float("nan") if v is None else float(v)
 
 
 def app_has_detector(phase: str) -> bool:
@@ -306,6 +366,43 @@ class AutopilotFlow:
         #: number when Span turns out to be the binding rule.
         self.span_level: int = -1
         self.span_depth: int = -1
+        #: Consecutive evidence-bearing nodes Span needs for green *on this
+        #: step's atlas* - the run's green target capped at the tree size, via
+        #: :func:`span_target`.  ``-1`` where no atlas was read.  The light is
+        #: exactly ``span_level >= span_target``, so the pair is the Span
+        #: margin: how far short the run fell, in the unit the rule counts in.
+        self.span_target: int = -1
+        #: The continuous quantities the Smart and Stable gates are thresholds
+        #: **on**, as of the last :meth:`update`, and the other half of issue
+        #: #3560.  The lights above say whether each rule fired; these say how
+        #: close it came, which is what separates a run that sat one noisy
+        #: window short of stopping from one that was never going to stop.
+        #:
+        #: ``nan`` until the rule has enough history to compute them - the
+        #: per-class minimum for either, three model steps for Smart, five
+        #: entries for Stable - which is "not measured", not "far from green".
+        #: Every one of them is read off the dict the rule already builds
+        #: (:func:`smart_detail` / :func:`stable_detail`); nothing here is a
+        #: second derivation that could disagree with the light beside it.
+        #:
+        #: Smart is green when ``smart_slope >= SMART_FLAT_THRESHOLD`` **or**
+        #: ``smart_slope_t > -SMART_SLOPE_T`` - a disjunction, which is why both
+        #: are kept rather than one summary distance.  ``smart_slope_t`` is
+        #: ``±inf`` on a window with no residual at all.
+        self.smart_slope: float = math.nan
+        self.smart_slope_t: float = math.nan
+        #: Stable is green when the confident average is under
+        #: :data:`STABLE_RATE_THRESHOLD`, its worst step under
+        #: :data:`STABLE_MAX_THRESHOLD`, and the raw rate has stopped falling
+        #: (the later half of the window not below
+        #: ``STABLE_FALLING_RATIO`` of the earlier half).  Three gates, so five
+        #: numbers: the two the first two cap, the raw average the UI quotes,
+        #: and the two halves the third compares.
+        self.stable_flip_rate: float = math.nan
+        self.stable_confident_flip_rate: float = math.nan
+        self.stable_max_confident_flip_rate: float = math.nan
+        self.stable_flip_rate_early: float = math.nan
+        self.stable_flip_rate_late: float = math.nan
 
     def record_step(
         self,
@@ -358,12 +455,25 @@ class AutopilotFlow:
             if not self.startup.done:
                 self.phase = self.startup.phase_name()  # type: ignore[assignment]
                 return self.phase
-        smart = smart_status(self.recent_error_costs, good_count, bad_count)
-        stable = stable_status(self.stability, good_count, bad_count)
+        smart_d = smart_detail(self.recent_error_costs, good_count, bad_count)
+        stable_d = stable_detail(self.stability, good_count, bad_count)
+        smart: Status = smart_d["status"]
+        stable: Status = stable_d["status"]
         sp: Status = span_status(int(span["level"]), int(span["depth"]), self.span_green) if span is not None else "red"
         self.smart, self.stable, self.span = smart, stable, sp
         self.span_level = int(span["level"]) if span is not None else -1
         self.span_depth = int(span["depth"]) if span is not None else -1
+        self.span_target = span_target(int(span["depth"]), self.span_green) if span is not None else -1
+        # The margins behind the two computed lights.  Absent from the dict
+        # exactly when the rule refused to fit one (too few votes, too little
+        # history), which is `nan` here and not a zero.
+        self.smart_slope = _num(smart_d.get("slope"))
+        self.smart_slope_t = _num(smart_d.get("slope_t"))
+        self.stable_flip_rate = _num(stable_d.get("avg_flip_rate"))
+        self.stable_confident_flip_rate = _num(stable_d.get("avg_confident_flip_rate"))
+        self.stable_max_confident_flip_rate = _num(stable_d.get("max_confident_flip_rate"))
+        self.stable_flip_rate_early = _num(stable_d.get("flip_rate_early"))
+        self.stable_flip_rate_late = _num(stable_d.get("flip_rate_late"))
         self.phase = next_phase(
             good_count,
             bad_count,

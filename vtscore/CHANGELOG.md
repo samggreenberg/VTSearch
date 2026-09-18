@@ -10,6 +10,39 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **Batched, GPU-able descriptor matching for structural search** (issue #3900).
+  `vtscore.media.structural.ratio_test_matches` runs the brute-force L2 kNN +
+  Lowe ratio test of one template against a whole candidate list as a single
+  batched `torch` distance computation, on the GPU when one is available;
+  `SiftMatcher.verify_many` and
+  `vtscore.training.structural_similarity.best_match_stats_many` are the batched
+  counterparts of `verify` / `best_match_stats` that use it. All three are
+  additive: `StructuralMatcher` still requires only `verify`, and a matcher
+  without `verify_many` falls back to the per-pair loop unchanged. Measured 2.9x
+  on a 50-item, 5-template re-rank on CPU, with identical ranking.
+- **`cap_detect_resolution`, and a resolution budget for local-feature
+  detection** (issue #3900). Detection cost scales with pixel count while the
+  keypoint set is capped at `DEFAULT_MAX_FEATURES` regardless, so
+  `SiftMatcher` now detects at no more than
+  `vtscore.config.MAX_STRUCTURAL_DETECT_PIXELS` (default 2 MP, `0` opts out).
+  Measured 2.8x faster ingest on a 4.5 MP corpus, and it *raises* the verified-
+  pair rate rather than costing quality (see the issue for the sweep).
+
+- **The stopping indicators' margins, not just their lights** (issue #3560).
+  `stable_status_from_entries` now returns `max_confident_flip_rate` and the
+  two halves of the raw-flip window (`flip_rate_early` / `flip_rate_late`)
+  beside the averages it already reported - the two gates green depends on
+  that nothing was reporting, so a caller could see *that* Stable was yellow
+  but not *which* of its three conditions was binding. Purely additive to the
+  status dict; all five rates now round to six places rather than four, since
+  on a large haystack a single flip is finer than 1e-4 and no rule reads them
+  back. `vtscore.eval.autopilot_flow` gains `smart_detail` / `stable_detail`
+  (the whole status dict, where `smart_status` / `stable_status` keep only the
+  light) and `span_target` (the bar `span_level` is measured against, split
+  out of `span_status` so the two cannot disagree); `AutopilotFlow` records all
+  of it per step, and the voting-iterations frames carry it as eight new
+  identifying columns.
+
 - **`vtscore.concurrency.stalls`** (issue #3853): in-process stall
   diagnostics. `StallWatchdog` is a heartbeat thread that, when it wakes late
   by more than a threshold, logs which threads consumed CPU across the gap
@@ -231,6 +264,22 @@ instead, since every commit on `dev` is effectively a new app release.)
   `loaded_backbone()` instead.
 
 ### Changed
+
+- **Context-registry lookups no longer take `_state_lock`** (issue #3869).
+  `get_context`, `get_detector_context` and `list_loaded_*_ids` now hold only
+  `_context_registry_lock` - a plain `Lock` guarding the two registry dicts'
+  membership, taken across a dict operation and nothing else. Membership is
+  the only thing they read, and taking the lock that a vote, a training pass
+  or a dataset load holds for seconds meant an app's per-request
+  `X-Dataset-Id` / `X-Detector-Id` resolution blocked for the whole of a long
+  operation - so the routes explicitly exempted from the state sync (the
+  spinner poll, the SSE reconnect) queued behind it anyway. Writers are
+  unchanged from the outside: they take `_state_lock` first and the registry
+  lock inside it, an ordering that is one-way. New alongside them:
+  `rekey_dataset_context(old_id, new_id)`, so a re-key goes through the
+  registry lock rather than mutating `_contexts` directly, and
+  `loaded_detector_contexts()`, a snapshot for callers that want to walk every
+  loaded detector without iterating the live dict.
 
 - **The threshold's mixture fit is `vtscore`'s own EM, not sklearn's** (issue
   #3585). `fit_score_gmm` fitted two Gaussians over one dimension with
@@ -479,6 +528,24 @@ instead, since every commit on `dev` is effectively a new app release.)
   before recording each tick.
 
 ### Fixed
+
+- **A declared `PluginField.default` now reaches the plugin body** (issue
+  #3874). `default` was documented as a pre-filled value but only `argparse`
+  ever applied it: marshmallow's `load_default` fires on a *missing* key, and a
+  web form posts every input it rendered - an untouched one as `""`. So a
+  required field with a default was rejected (`"Field may not be empty."`) and
+  an optional one arrived as `""`. Three changes, all additive:
+  `normalize_field_values` fills any field arriving missing, empty, or
+  whitespace-only from its `default` before the strip / template / security
+  passes, so a declared default now satisfies `required` instead of raising
+  `"<Label> is required."`; the schemas from
+  `make_plugin_arg_schema` / `make_plugin_route_schema` drop a blank for a
+  defaulted field in a `pre_load` hook, so a blank loads identically to an
+  omitted key (a blank `number` takes its default rather than failing to
+  parse); and `PluginBase.validate_cli_field_values` defers its presence check
+  to the default, so an explicitly blank flag behaves like an omitted one.
+  A defaulted value still goes through the `url` / `server_path` validators,
+  so a default cannot carry an unchecked destination past the guard.
 
 - **`embed_missing()` leaves a partially pre-embedded import keyed under one
   embedder name** (issue #3798). Nameless pre-computed vectors (an importer's

@@ -197,18 +197,27 @@ class TestRuleState:
     def test_an_empty_rule_string_is_unknown_too(self, corr, pc):
         assert corr.rule_state(_row(rule=""), pc.rule_stamp(_CLASS)) == corr.RULE_UNKNOWN
 
-    def test_the_872_committed_rows_are_all_unknown(self, corr):
-        """The live record, read as it stands: nothing in it can be back-filled.
+    def test_the_committed_unstamped_rows_are_all_unknown(self, corr):
+        """The committed record, read as it stands: no legacy row can be back-filled.
 
         A regression here would mean some reader had started treating the legacy
         rows as answered, which is the one outcome this issue forbids.
+
+        This used to assert that EVERY row was unknown, which held only while the
+        file was nothing but the 872 legacy rows. Applying the per-class pass
+        (#3926) added thousands of rows stamped when they were answered, so the
+        law is now stated for the rows it is about -- the ones with no stamp --
+        and a stamped row must never collapse into ``unknown``.
         """
         import json
 
         rows = json.loads((_PILE_DIR / "human_record" / "PILE__corrections.json").read_text())
-        states = {state for _, state in corr.rule_states(rows)}
+        states = corr.rule_states(rows)
+        unstamped = {state for row, state in states if not row.get("rule")}
+        stamped = {state for row, state in states if row.get("rule")}
 
-        assert states == {corr.RULE_UNKNOWN}, f"expected every legacy row to be unknown, got {states}"
+        assert unstamped == {corr.RULE_UNKNOWN}, f"expected every unstamped row to be unknown, got {unstamped}"
+        assert corr.RULE_UNKNOWN not in stamped, "a row carrying its rule read as unknown"
 
 
 class TestTheQuery:
@@ -395,3 +404,60 @@ class TestCarryThrough:
         got = _run_corrections(tmp_path, [_verdict(1, stratum="positive_boxed", reference="present", rule=_RULE)])
 
         assert got[1]["source"] == "human_confirmed" and got[1]["rule"] == _RULE
+
+
+class TestDetectorKind:
+    """One mapping decides which labelset file a detector banks to (`pile_config.detector_kind`)."""
+
+    def test_each_question_maps_to_its_own_kind(self, pc):
+        assert pc.detector_kind("chair incl stools not couches") == "slate"
+        assert pc.detector_kind("chair incl stools not couches (any in image, no box)") == "belowcut"
+        assert pc.detector_kind("vase not planters -- recheck: is there one in this image?") == "recheck"
+        assert pc.detector_kind("chair incl stools not couches -- box check") == "boxcheck"
+        assert pc.detector_kind("car incl SUVs and minivans -- prominent check") == "prominent"
+        assert pc.detector_kind("car incl SUVs and minivans -- seat check") == "seatcheck"
+
+    def test_a_box_check_never_banks_over_the_slate(self, pc):
+        """The failure this exists to prevent: a class-named audit overwriting a real slate."""
+        for cls in pc.SCALE_CLASSES:
+            assert pc.detector_kind(f"{pc.review_name(cls)} -- box check") == "boxcheck", cls
+
+    def test_the_box_check_tail_strips_back_to_the_rule(self, pc):
+        """So `bank_verdicts.py` stamps a box check with the rule in force."""
+        for cls in pc.SCALE_CLASSES:
+            name = f"{pc.review_name(cls)} -- box check"
+            assert pc.rule_of_review_name(name) == pc.review_name(cls), cls
+
+    def test_a_prominence_triage_overwrites_neither_the_slate_nor_the_audit(self, pc):
+        """A class has a slate AND a box-check audit on disk; a triage must bank beside both."""
+        for cls in pc.SCALE_CLASSES:
+            name = f"{pc.review_name(cls)} -- prominent check"
+            assert pc.detector_kind(name) == "prominent", cls
+            assert pc.rule_of_review_name(name) == pc.review_name(cls), cls
+
+    def test_a_seat_check_overwrites_no_other_labelset_of_its_class(self, pc):
+        """car and cup already have slate, box-check AND prominence labelsets; a seat check banks beside all three."""
+        for cls in pc.SCALE_CLASSES:
+            name = f"{pc.review_name(cls)} -- seat check"
+            assert pc.detector_kind(name) == "seatcheck", cls
+            assert pc.rule_of_review_name(name) == pc.review_name(cls), cls
+
+    def test_every_vg_scale_review_is_recognised_as_one(self, pc):
+        """Each class, under each question a detector can ask, is banked -- including a superseded rule."""
+        for cls in pc.SCALE_CLASSES:
+            for tail in (
+                "",
+                " -- recheck",
+                " -- box check",
+                " -- prominent check",
+                " -- seat check",
+                " (any in image, no box)",
+            ):
+                assert pc.is_scale_review(pc.review_name(cls) + tail, cls), (cls, tail)
+        assert pc.is_scale_review("vase incl pots and planters", "vase")  # an old rule still banks
+
+    def test_another_projects_queue_on_the_shared_dashboard_is_not(self, pc):
+        """DocMarks loads its queues onto the same app; banking one would let retire_finished delete it."""
+        assert not pc.is_scale_review("docmarks completeness: elephant stamp", "elephant stamp")
+        assert not pc.is_scale_review("docmarks clock-face stamp", "clock")  # a class word is not enough
+        assert not pc.is_scale_review("clockwork", "clock")

@@ -221,6 +221,9 @@ LOAD_COST_MODEL: dict[tuple[str, str, str], dict[str, float]] = {
         "a_fin": 0.0,
         "b_fin": 0.008102,
     },
+    # NB: measured before #3900 bounded structural detection resolution
+    # (``MAX_STRUCTURAL_DETECT_PIXELS``); ``b_embed`` now overestimates on any
+    # corpus above 2 MP — ~2.8x on a 4.5 MP one. Re-fit on the next sweep.
     ("cpu", "image", "sift_vlad"): {
         "a_model": 0.5,
         "b_load": 0.0,
@@ -445,6 +448,9 @@ LOAD_COST_MODEL: dict[tuple[str, str, str], dict[str, float]] = {
         "a_fin": 0.0,
         "b_fin": 0.005462,
     },
+    # NB: measured before #3900 bounded structural detection resolution
+    # (``MAX_STRUCTURAL_DETECT_PIXELS``); ``b_embed`` now overestimates on any
+    # corpus above 2 MP — ~2.8x on a 4.5 MP one. Re-fit on the next sweep.
     ("cuda+cuml", "image", "sift_vlad"): {
         "a_model": 0.5,
         "b_load": 0.0,

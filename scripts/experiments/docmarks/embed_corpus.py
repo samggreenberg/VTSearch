@@ -22,6 +22,14 @@ chronically full.  This script reuses the pile's *format*, *location* and
 Tiers are nested, so build them small-first: ``--tier s`` produces a 5k cell you
 can iterate against in minutes, and ``l`` is the same corpus with more
 distractors.
+
+Cells are built **in chunks** (``--chunk``, default
+:data:`DEFAULT_CHUNK`): a chunk's pages are read, embedded, written to the cell
+and dropped before the next chunk is read, so peak memory is set by the chunk
+size rather than by the tier.  Straight-through, tier ``s`` peaked at 34.5 GB of
+RSS for 5,000 pages and nothing here could have built tier ``l`` at all (#3842).
+It remains slow -- ``sift_vlad`` is ~1.3 pages/s, so tier ``l`` is ~43 h -- but
+slow is a schedule and out-of-memory is not.
 """
 
 from __future__ import annotations
@@ -54,6 +62,24 @@ EMBEDDERS: dict[str, dict[str, Any]] = {
     "siglip": {"batch": 128, "structural": False},
     "siglip2_l": {"batch": 32, "structural": False},
 }
+
+#: Pages held in memory at once by a streamed build.  Tier ``s`` peaked at
+#: **34.5 GB of RSS for 5,000 pages** (#3842) -- ~7 MB per page resident across
+#: the raster bytes, the decoded image and ``sift_vlad``'s per-image features --
+#: so a 1,000-page chunk is roughly a 7 GB working set whatever the tier, which
+#: is what makes tier ``l`` a scheduling problem rather than an impossible one.
+#: Smaller trades a little write overhead for headroom on a shared node; ``0``
+#: disables chunking and restores the one-shot cell.
+DEFAULT_CHUNK = 1000
+
+#: Medias buffered in memory at once by a cell **rewrite** (``--relabel``,
+#: ``--repair``).  Deliberately a separate number from :data:`DEFAULT_CHUNK`
+#: rather than a second use of it: a build chunk is sized by what a *page*
+#: costs while it is being embedded (~7 MB of raster bytes, decoded image and
+#: per-image features), and a rewrite holds none of that.  What it holds is
+#: what the cell stores -- a thin media, ~169 KB for ``sift_vlad`` (measured,
+#: #3842) -- so 1,000 of them is ~170 MB whatever the tier.
+REWRITE_CHUNK = 1000
 
 
 def _load_by_path(name: str, path: Path) -> Any:
@@ -155,7 +181,81 @@ def labels_for(page: Page) -> tuple[list[str], list[dict[str, Any]]]:
     return sorted(dict.fromkeys(categories)), regions
 
 
-def relabel(corpus: Path, *, apply: bool = False) -> int:
+def _rewrite_cell(io: Any, path: Path, medias: Iterator[tuple[int, dict]], *, chunk: int = REWRITE_CHUNK) -> int:
+    """Stream *medias* into *path*, replacing it only once all of them are written.
+
+    The read-modify-write half of the streaming work: :class:`CellWriter` gave
+    ``build_cell`` a cell it never holds whole, and this gives the same to the
+    two repair paths, which read an *existing* cell rather than building a new
+    one.  Both were ``load_medias`` -> mutate -> ``dump_medias``, which needs
+    the whole cell resident to change fifteen labels or one vector -- ~34 GB at
+    tier ``l`` (#3881).
+
+    Pair it with ``io.iter_medias(path)``: the reader streams the old cell, this
+    streams the new one, and *chunk* medias exist at once.  Reading and writing
+    the same path is safe because the writer's target is a ``.part`` beside it
+    and the rename happens after the reader is exhausted.
+
+    **A rewrite is all-or-nothing.**  A ``relabel`` that dies at 60% must not
+    leave a truncated cell in place of the original, and must not leave one
+    whose labels are half-updated either -- the second is the worse failure,
+    because nothing downstream can see it: a half-relabelled cell is a
+    well-formed cell that ``--verify`` calls ``ok`` and a study reads as ground
+    truth.  Writing beside the original and renaming last gives both: the cell
+    at *path* is either entirely the old one or entirely the new one, and a
+    re-run after a failure starts from a cell whose state is known.
+    """
+    buffer: dict[int, dict] = {}
+    with io.CellWriter(path) as writer:
+        for cid, media in medias:
+            buffer[cid] = media
+            if len(buffer) >= chunk:
+                writer.write(buffer)
+                buffer = {}
+        if buffer:
+            writer.write(buffer)
+    return writer.nbytes
+
+
+class _RelabelPass:
+    """One streamed pass over a cell, rewriting labels from the manifest.
+
+    A streamed ``relabel`` needs the same pass twice -- once to count, so a dry
+    run can report and an unchanged cell can be left alone, and once to write --
+    and the two must agree, because the count decides whether the write happens
+    at all.  Sharing the class is what makes that structural rather than
+    remembered: ``run`` is the only place a label is derived or a media is
+    counted, so a dry run reports exactly what an ``--force`` run would write.
+    """
+
+    def __init__(self, pages: dict[str, Page], known: set[str]) -> None:
+        self.pages = pages
+        self.known = known
+        self.n = 0
+        self.changed = 0
+        self.orphans = 0
+        self.offroster = 0
+
+    def run(self, medias: Iterator[tuple[int, dict]]) -> Iterator[tuple[int, dict]]:
+        for cid, media in medias:
+            self.n += 1
+            page = self.pages.get(media.get("origin_name"))
+            if page is None:
+                self.orphans += 1
+            else:
+                categories, regions = labels_for(page)
+                before = (media.get("category"), media.get("categories"), media.get("regions"))
+                after = (categories[0] if categories else "", categories, regions)
+                if before != after:
+                    media["category"], media["categories"], media["regions"] = after
+                    self.changed += 1
+            # Counted on the labels as they now stand, so the number describes
+            # the cell that gets written rather than the one that was read.
+            self.offroster += sum(1 for c in (media.get("categories") or []) if c not in self.known)
+            yield cid, media
+
+
+def relabel(corpus: Path, *, apply: bool = False, chunk: int = REWRITE_CHUNK) -> int:
     """Rewrite the labels in every existing cell from the current manifest.
 
     "Embedding comes last, because the cells carry the labels" is the rule
@@ -171,6 +271,14 @@ def relabel(corpus: Path, *, apply: bool = False) -> int:
     repair for a verdict that lands after a cell is built — not a licence to
     embed first, because a membership *rejection* also changes which pages are
     positives, and only the manifest knows that.
+
+    **Streamed, in two passes** (#3881). The obvious shape -- load the cell,
+    rewrite it, dump it -- carries the ceiling the chunked build removed: ~34 GB
+    resident at tier ``l`` to change fifteen labels. The first pass counts and
+    is what a dry run reports; the second runs only when something changed and
+    feeds :func:`_rewrite_cell`, so *chunk* medias are resident rather than the
+    tier. Two reads and a write cost more disk than one of each, and a re-read
+    is cheap against a cell that would not fit at all.
 
     The real case: the corpus owner countersigned the v3 roster and overturned
     one pair, merging `logo_bad45f00_1` into `logo_afm90c00-first_1_0`. Fifteen
@@ -188,20 +296,9 @@ def relabel(corpus: Path, *, apply: bool = False) -> int:
                 continue
             if pages is None:
                 pages = {p.page_id: p for p in pages_for_tier(corpus, tier)}
-            medias = io.load_medias(path)
-            changed = 0
-            orphans = 0
-            for media in medias.values():
-                page = pages.get(media.get("origin_name"))
-                if page is None:
-                    orphans += 1
-                    continue
-                categories, regions = labels_for(page)
-                before = (media.get("category"), media.get("categories"), media.get("regions"))
-                after = (categories[0] if categories else "", categories, regions)
-                if before != after:
-                    media["category"], media["categories"], media["regions"] = after
-                    changed += 1
+            counted = _RelabelPass(pages, known)
+            for _cid, _media in counted.run(io.iter_medias(path)):
+                pass
             # Labels naming a class that is not in `classes.json` are EXPECTED
             # and are not damage: under `--roster` only the chosen classes are
             # admitted, while the manifest keeps every candidate id it derived,
@@ -209,20 +306,27 @@ def relabel(corpus: Path, *, apply: bool = False) -> int:
             # rather than hidden, because an eval that grouped a cell by
             # `categories` alone would silently treat those as eval classes --
             # which is the whole distinction the roster exists to draw.
-            offroster = sum(1 for m in medias.values() for c in (m.get("categories") or []) if c not in known)
             print(
-                f"  {path.name}: {len(medias)} medias, {changed} relabelled"
-                + (f", {orphans} not in the manifest" if orphans else "")
-                + (f", {offroster} label(s) on candidate classes not on the roster" if offroster else "")
+                f"  {path.name}: {counted.n} medias, {counted.changed} relabelled"
+                + (f", {counted.orphans} not in the manifest" if counted.orphans else "")
+                + (
+                    f", {counted.offroster} label(s) on candidate classes not on the roster"
+                    if counted.offroster
+                    else ""
+                )
             )
-            touched += changed
-            if apply and changed:
-                io.dump_medias(medias, path)
+            touched += counted.changed
+            if apply and counted.changed:
+                # A second pass rather than a buffered first one: the first has
+                # to finish before it is known whether a write is owed at all,
+                # and holding what it read to find out is the ceiling this
+                # change exists to remove.
+                _rewrite_cell(io, path, _RelabelPass(pages, known).run(io.iter_medias(path)), chunk=chunk)
     print(f"\n{touched} media(s) relabelled" + ("" if apply else " — dry run, pass --apply to write"))
     return 0
 
 
-def repair(corpus: Path, *, apply: bool = False) -> int:
+def repair(corpus: Path, *, apply: bool = False, chunk: int = REWRITE_CHUNK) -> int:
     """Re-embed only the medias an existing cell holds no vector for.
 
     A page whose pixels will not decode costs the cell a *vector* but not a
@@ -242,6 +346,14 @@ def repair(corpus: Path, *, apply: bool = False) -> int:
     else -- and re-reading all 50,000 to repair one would cost exactly the
     memory the thin pickle exists to avoid.
 
+    **Nor is the cell held to write it** (#3881).  The scan keeps only the
+    vectorless medias -- the handful this exists for -- and the rewrite streams
+    the rest straight from the old cell into the new one through
+    :func:`_rewrite_cell`, substituting the repaired medias by id as they pass.
+    So the whole dict was never what ``dump_medias`` needed; it was what
+    ``dump_medias`` *took*, and at tier ``l`` that is ~34 GB to replace one
+    vector.
+
     The real case: ``ucsf/qkmg0227#0`` was truncated on write during the UCSF
     pull and decoded to half a page of black.  Re-rendered from the cached PDF,
     it needed a vector in two tier-``m`` cells that cost 11 h to build.
@@ -256,10 +368,16 @@ def repair(corpus: Path, *, apply: bool = False) -> int:
             path = cell_path(tier, embedder)
             if not path.exists():
                 continue
-            medias = io.load_medias(path)
-            missing = {cid: m for cid, m in medias.items() if not m.get("embeddings")}
+            # The scan keeps the vectorless medias and counts the rest: a cell
+            # with nothing missing costs one streamed read and no memory.
+            n_medias = 0
+            missing: dict[int, dict] = {}
+            for cid, media in io.iter_medias(path):
+                n_medias += 1
+                if not media.get("embeddings"):
+                    missing[cid] = media
             if not missing:
-                print(f"  {path.name}: {len(medias)} medias, no vector missing")
+                print(f"  {path.name}: {n_medias} medias, no vector missing")
                 continue
             if pages is None:
                 pages = {p.page_id: p for p in pages_for_tier(corpus, tier)}
@@ -278,26 +396,39 @@ def repair(corpus: Path, *, apply: bool = False) -> int:
                 with _batch_size(embedder):
                     embed_missing(loadable, embedder)
             repaired = sum(1 for m in loadable.values() if m.get("embeddings"))
-            # Drop the bytes again whatever happened: `dump_medias` would strip
-            # them, but this dict stays live for the rest of the loop.
+            # Drop the bytes again whatever happened: `_rewrite_cell` would
+            # strip them, but this dict stays live for the rest of the loop.
             for media in missing.values():
                 media.pop("media_bytes", None)
             left = len(missing) - repaired
             detail = f"{repaired} repaired" if apply else f"{len(loadable)} re-readable"
             print(
-                f"  {path.name}: {len(medias)} medias, {len(missing)} without a vector, {detail}"
+                f"  {path.name}: {n_medias} medias, {len(missing)} without a vector, {detail}"
                 + (f", {left} still missing" if apply and left else "")
                 + (f" [{'; '.join(blocked)}]" if blocked else "")
             )
             if apply:
                 unrepaired += left
                 if repaired:
-                    io.dump_medias(medias, path)
+                    _rewrite_cell(io, path, _substituted(io.iter_medias(path), missing), chunk=chunk)
     print("" if apply else "\ndry run -- pass --force to write")
     return 1 if unrepaired else 0
 
 
-def load_medias(pages: Sequence[Page], classes: dict[str, Any], embedder: str) -> dict[int, dict]:
+def _substituted(medias: Iterator[tuple[int, dict]], replacements: dict[int, dict]) -> Iterator[tuple[int, dict]]:
+    """Yield *medias*, handing back the *replacements* entry for a cid wherever one exists.
+
+    What makes a repair a streamed rewrite rather than a mutation: the cell on
+    disk is the source of every media it is not repairing, and the few it is
+    are the in-memory copies ``embed_missing`` just filled in.
+    """
+    for cid, media in medias:
+        yield cid, replacements.get(cid, media)
+
+
+def load_medias(
+    pages: Sequence[Page], classes: dict[str, Any], embedder: str, *, start_index: int = 0
+) -> dict[int, dict]:
     """Turn manifest pages into the media dicts the embedding stage expects.
 
     ``regions`` carries every located mark, so a region-voting arm can drag the
@@ -306,9 +437,20 @@ def load_medias(pages: Sequence[Page], classes: dict[str, Any], embedder: str) -
     letterhead band; unlocated marks contribute no region at all, because a
     zero-area box would be indistinguishable from a real one and that is exactly
     the distinction the corpus exists to preserve.
+
+    *start_index* is the id the first media takes, so :func:`build_cell` can
+    call this once per chunk and still number the cell continuously.  Ids must
+    not repeat across chunks -- ``CellWriter`` refuses a cell where they do,
+    because merging the chunks would silently lose the repeat rather than fail.
+
+    The sort is **per call**, so a chunked build must slice an already-sorted
+    page list: sorting each chunk alone would order the chunk but not the cell.
+    :func:`build_cell` sorts once and slices; the sort here is then a no-op and
+    is kept because a single-chunk caller still needs it.
     """
     medias: dict[int, dict] = {}
-    for index, page in enumerate(sorted(pages, key=lambda p: p.page_id)):
+    for offset, page in enumerate(sorted(pages, key=lambda p: p.page_id)):
+        index = start_index + offset
         ordered, regions = labels_for(page)
         medias[index] = {
             "id": index,
@@ -340,7 +482,33 @@ def load_medias(pages: Sequence[Page], classes: dict[str, Any], embedder: str) -
     return medias
 
 
-def build_cell(corpus: Path, tier: str, embedder: str, *, force: bool = False) -> dict[str, Any]:
+def build_cell(
+    corpus: Path, tier: str, embedder: str, *, force: bool = False, chunk: int = DEFAULT_CHUNK
+) -> dict[str, Any]:
+    """Embed one tier under one embedder and write its cell.
+
+    **Streamed, in chunks of *chunk* pages** (``0`` disables it and writes the
+    old one-shot cell).  The straight-through version -- load every page, embed
+    them all, pickle the dict -- is what made tier ``l`` unbuildable rather than
+    merely slow (#3842): tier ``s`` peaked at **34.5 GB of RSS for 5,000
+    pages**, because ``load_medias`` holds the raster bytes of every page in the
+    tier while ``embed_missing`` accumulates ``local_features`` beside them, and
+    neither is released until ``dump_medias`` writes at the very end.  Neither
+    term extrapolates: at 200,000 pages the bytes alone are ~50 GB and the
+    ``sift_vlad`` features another ~34 GB (169 KB/page, measured).
+
+    Chunking retires both.  Each chunk's bytes are read, embedded, written and
+    dropped before the next is read, so peak memory is set by *chunk* rather
+    than by the tier -- and the cell is appended to rather than assembled, so
+    the finished 34 GB of it is never resident either.  What it does **not**
+    change is the time: ``sift_vlad`` is ~1.3 pages/s whatever the chunk size,
+    so tier ``l`` is still ~43 h of CPU.  That is a wall to schedule around,
+    not one that stops the job starting.
+
+    A chunked run is resumable only at the granularity of the whole cell: the
+    writer renames its ``.part`` into place on clean exit, so a job that dies at
+    hour 40 leaves nothing for ``--verify`` to mistake for a finished cell.
+    """
     from vtscore.datasets.stages.embedding import embed_missing  # noqa: PLC0415
 
     out = cell_path(tier, embedder)
@@ -351,32 +519,56 @@ def build_cell(corpus: Path, tier: str, embedder: str, *, force: bool = False) -
     classes_path = corpus / "classes.json"
     classes = json.loads(classes_path.read_text(encoding="utf-8")) if classes_path.exists() else {}
 
-    t0 = time.time()
     pages = pages_for_tier(corpus, tier)
     if not pages:
         raise SystemExit(f"no pages at tier {tier!r} in {corpus} — was the corpus built with this tier?")
-    medias = load_medias(pages, classes, embedder)
-    print(f"=== docmarks_{tier} x {embedder}: {len(medias)} page(s) loaded in {time.time() - t0:.0f}s")
+    # Sorted ONCE, here: `load_medias` sorts what it is given, which orders a
+    # chunk but not the cell.  Slicing an already-sorted list is what makes the
+    # chunked cell identical to the one-shot one page for page.
+    pages = sorted(pages, key=lambda p: p.page_id)
+    size = chunk if chunk and chunk > 0 else len(pages)
+    n_chunks = (len(pages) + size - 1) // size
+    print(f"=== docmarks_{tier} x {embedder}: {len(pages)} page(s) in {n_chunks} chunk(s) of {size}")
 
-    t1 = time.time()
-    with _batch_size(embedder):
-        embed_missing(medias, embedder)
-    embed_s = time.time() - t1
+    io = _cells_io()
+    load_s = embed_s = 0.0
+    n_local = 0
+    t0 = time.time()
+    with io.CellWriter(out) as writer:
+        for start in range(0, len(pages), size):
+            batch = pages[start : start + size]
+            t = time.time()
+            medias = load_medias(batch, classes, embedder, start_index=start)
+            load_s += time.time() - t
 
-    out.parent.mkdir(parents=True, exist_ok=True)
-    nbytes = _cells_io().dump_medias(medias, out)
-    n_local = sum(1 for m in medias.values() if m.get("local_features") is not None)
+            t = time.time()
+            with _batch_size(embedder):
+                embed_missing(medias, embedder)
+            embed_s += time.time() - t
+
+            n_local += sum(1 for m in medias.values() if m.get("local_features") is not None)
+            writer.write(medias)
+            # The chunk dies here, bytes and features together.  Holding it
+            # while the next one loads is the whole of what this costs.
+            medias.clear()
+            del medias
+            if n_chunks > 1:
+                done = min(start + size, len(pages))
+                print(f"  {done}/{len(pages)} pages, load {load_s:.0f}s, embed {embed_s:.0f}s", flush=True)
+
     print(
-        f"  wrote {out.name}: {nbytes / 1e6:.0f} MB, {len(medias)} medias, "
-        f"local_features {n_local}/{len(medias)}, embed {embed_s:.0f}s"
+        f"  wrote {out.name}: {writer.nbytes / 1e6:.0f} MB, {writer.n_medias} medias in "
+        f"{writer.n_chunks} chunk(s), local_features {n_local}/{writer.n_medias}, "
+        f"load {load_s:.0f}s, embed {embed_s:.0f}s, total {time.time() - t0:.0f}s"
     )
     return {
         "tier": tier,
         "embedder": embedder,
         "status": "built",
-        "n_medias": len(medias),
+        "n_medias": writer.n_medias,
+        "n_chunks": writer.n_chunks,
         "n_local_features": n_local,
-        "megabytes": round(nbytes / 1e6, 1),
+        "megabytes": round(writer.nbytes / 1e6, 1),
         "embed_seconds": round(embed_s, 1),
     }
 
@@ -390,16 +582,21 @@ def verify(corpus: Path) -> int:
             path = cell_path(tier, embedder)
             if not path.exists():
                 continue
+            # Streamed rather than loaded: verifying is a pure visit, and a
+            # tier-`l` `sift_vlad` cell is ~34 GB, so the check that a cell is
+            # usable must not be the thing that cannot hold it.
             try:
-                medias = io.load_medias(path)
+                n = vectors = labelled = 0
+                for _cid, media in io.iter_medias(path):
+                    n += 1
+                    vectors += bool(media.get("embeddings"))
+                    labelled += bool(media.get("categories"))
             except Exception as exc:  # noqa: BLE001 - verify reports, never raises
                 print(f"  BROKEN {path.name}: {type(exc).__name__}: {exc}")
                 bad += 1
                 continue
-            vectors = sum(1 for m in medias.values() if m.get("embeddings"))
-            labelled = sum(1 for m in medias.values() if m.get("categories"))
-            status = "ok" if vectors == len(medias) else f"MISSING {len(medias) - vectors} vector(s)"
-            print(f"  {path.name}: {len(medias)} medias, {labelled} labelled, {status}")
+            status = "ok" if vectors == n else f"MISSING {n - vectors} vector(s)"
+            print(f"  {path.name}: {n} medias, {labelled} labelled, {status}")
             bad += status != "ok"
     return 1 if bad else 0
 
@@ -410,6 +607,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--tier", default="s", choices=cfg.TIER_ORDER)
     ap.add_argument("--embedders", default="sift_vlad,siglip")
     ap.add_argument("--force", action="store_true")
+    ap.add_argument(
+        "--chunk",
+        type=int,
+        default=DEFAULT_CHUNK,
+        metavar="N",
+        help=f"pages held in memory at once (default {DEFAULT_CHUNK}); 0 builds the cell in one "
+        "piece, which is what tier `l` cannot do",
+    )
     ap.add_argument("--list", action="store_true", help="show which cells exist, then exit")
     ap.add_argument("--verify", action="store_true", help="load every present cell and check it, then exit")
     ap.add_argument(
@@ -458,15 +663,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     # Nothing had run this path before, because stage 5 had never been reached.
     try:
         io = _cells_io()
-        if not hasattr(io, "dump_medias"):
-            ap.error(f"{_CALIB_DIR / '_cells_io.py'} has no dump_medias; cells cannot be written")
+        missing = [name for name in ("CellWriter", "iter_medias") if not hasattr(io, name)]
+        if missing:
+            ap.error(f"{_CALIB_DIR / '_cells_io.py'} has no {', '.join(missing)}; cells cannot be written")
         _pile_config().EMBEDDINGS.mkdir(parents=True, exist_ok=True)
     except SystemExit:
         raise
     except Exception as exc:  # noqa: BLE001 - the point is to report, early, whatever broke
         ap.error(f"cannot write cells: {type(exc).__name__}: {exc}")
 
-    summaries = [build_cell(args.corpus, args.tier, e, force=args.force) for e in requested]
+    summaries = [build_cell(args.corpus, args.tier, e, force=args.force, chunk=args.chunk) for e in requested]
     built = [s for s in summaries if s["status"] == "built"]
     print(f"\n{len(built)} cell(s) built, {len(summaries) - len(built)} already present")
     return 0

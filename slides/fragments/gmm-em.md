@@ -2,7 +2,7 @@
 
 ![bg fit](figs/calib-em-steps.png)
 
-## Great Expectations
+## Great<br>Expectations
 
 <!-- build: figs/calib-em-steps.build1.png -->
 

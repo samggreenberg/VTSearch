@@ -17,7 +17,9 @@ questions and their names used to collide:
 
 * Here — :mod:`vtscore.eval.label_curve` and :mod:`vtscore.eval.timing_benchmark`
   ask *how does this estimator rank, given N labels?*, so every arm is a bare
-  estimator and ``"mlp"`` really is an MLP.
+  estimator and ``"mlp"`` really is an MLP.  The ``gp_*`` arms (issue #3954) are
+  Gaussian-process classifiers conditioned on the votes; like the ensembles they
+  return a per-item uncertainty beside the score.
 * There — :mod:`vtscore.eval.step_trainers`, driven by
   :mod:`vtscore.eval.voting_iterations`, asks *what does VTSearch do with these
   votes?*, so its ``trainer="app"`` arm is the shipped pipeline (whose head is
@@ -125,6 +127,123 @@ def _train_mlp_ensemble_factory(n_seeds: int) -> TrainerFn:
     return trainer
 
 
+# Kernels that :func:`resolve_trainer` accepts as ``gp_<kernel>[@params]``.
+_GP_KERNELS = frozenset({"rbf", "dot"})
+
+# Gauss-Hermite nodes/weights for E[g(f)] under f ~ N(mean, std^2):
+# E[g(f)] = sum_k w_k g(mean + sqrt(2) std x_k) / sqrt(pi).
+_GH_NODES, _GH_WEIGHTS = np.polynomial.hermite.hermgauss(32)
+
+
+def _sigmoid_posterior_std(mean_f: np.ndarray, std_f: np.ndarray) -> np.ndarray:
+    """Posterior std of ``sigmoid(f)`` for ``f ~ N(mean_f, std_f^2)``, per item.
+
+    Exact to quadrature precision, so it is bounded by 0.5 like any std of a
+    [0, 1] variable and comparable across items whatever their latent scale -
+    which the delta-method ``p (1 - p) std_f`` is not once ML-II pushes the
+    amplitude up and the latent std past a few units.
+    """
+    from scipy.special import expit  # noqa: PLC0415
+
+    f = mean_f[:, np.newaxis] + np.sqrt(2.0) * std_f[:, np.newaxis] * _GH_NODES[np.newaxis, :]
+    g = expit(f)
+    w = _GH_WEIGHTS / np.sqrt(np.pi)
+    m1 = g @ w
+    m2 = (g * g) @ w
+    return np.sqrt(np.clip(m2 - m1 * m1, 0.0, None))
+
+
+def _train_gp_factory(
+    kernel: str,
+    *,
+    length_scale: float = 1.0,
+    amplitude: float = 1.0,
+    optimize: bool = True,
+) -> TrainerFn:
+    """Build a Gaussian-process-classifier trainer (issue #3954).
+
+    The GP is scikit-learn's :class:`~sklearn.gaussian_process.GaussianProcessClassifier`
+    - a latent GP with a logistic likelihood, fitted by the Laplace
+    approximation - conditioned on the vote embeddings.  Two kernels:
+
+    * ``"rbf"`` - ``amplitude * RBF(length_scale)``.  Every embedding here is
+      L2-normalised, so the squared distance the kernel reads is
+      ``2 - 2 cos``: a length scale of 1 puts one e-fold of correlation at a
+      cosine of 0.5.
+    * ``"dot"`` - ``amplitude * DotProduct(sigma_0=length_scale)``, a Bayesian
+      linear classifier: the closest GP analogue of the shipped linear head,
+      and the arm that separates "a GP" from "a curved boundary".
+
+    With *optimize* (the default) the kernel hyperparameters are fitted by
+    marginal likelihood (ML-II) on every call; ``optimize=False`` pins them at
+    the values given, the arm to reach for when a handful of votes lets ML-II
+    collapse the amplitude to its bound and score everything at 0.5.
+
+    The returned ``predict`` reports ``(P(positive), per_item_std)`` like the
+    ensembles: the score is the GP's predictive probability and the std is the
+    posterior standard deviation of ``sigmoid(f)`` - the spread of the
+    probability itself under the latent posterior ``N(mean, var)``, integrated
+    by Gauss-Hermite quadrature - so it lives on the same [0, 1] scale as the
+    score (never above 0.5) and the ``std_mean`` column reads it directly.  The
+    latent mean and variance are read off the fitted estimator with the
+    identities sklearn's own ``predict_proba`` uses (its ``X_train_`` / ``pi_``
+    / ``W_sr_`` / ``L_`` fitted attributes), because the public API exposes
+    only the integrated probability and the acquisition rules in
+    :mod:`vtscore.eval.al_strategies` need the spread as well.
+    """
+    if kernel not in _GP_KERNELS:
+        raise ValueError(f"Unknown GP kernel {kernel!r}; choices: {sorted(_GP_KERNELS)}")
+
+    def trainer(X: np.ndarray, y: np.ndarray, seed: int) -> PredictFn:
+        import warnings  # noqa: PLC0415
+
+        from scipy.linalg import solve_triangular  # noqa: PLC0415
+        from sklearn.exceptions import ConvergenceWarning  # noqa: PLC0415
+        from sklearn.gaussian_process import GaussianProcessClassifier  # noqa: PLC0415
+        from sklearn.gaussian_process.kernels import RBF, ConstantKernel, DotProduct  # noqa: PLC0415
+
+        X64 = np.asarray(X, dtype=np.float64)
+        y_int = np.asarray(y).astype(int).ravel()
+        if len(set(y_int.tolist())) < 2:
+            raise ValueError("gp trainer needs both classes in the training labels")
+
+        fixed: Any = "fixed"
+        amp = ConstantKernel(amplitude, constant_value_bounds=(1e-1, 1e2) if optimize else fixed)
+        if kernel == "rbf":
+            base: Any = RBF(length_scale, length_scale_bounds=(1e-1, 1e1) if optimize else fixed)
+        else:
+            base = DotProduct(sigma_0=length_scale, sigma_0_bounds=(1e-2, 1e1) if optimize else fixed)
+        # ``None`` (no optimizer) is a documented value sklearn's stub types as ``str``.
+        optimizer: Any = "fmin_l_bfgs_b" if optimize else None
+        clf = GaussianProcessClassifier(kernel=amp * base, optimizer=optimizer, random_state=seed)
+        with warnings.catch_warnings():
+            # ML-II running into a bound is a property of the vote set the
+            # report reads off ``std_mean``, not a fault to print per fold.
+            warnings.simplefilter("ignore", ConvergenceWarning)
+            clf.fit(X64, y_int)
+        # sklearn types ``base_estimator_`` as the union of every estimator
+        # shape it can hold; a binary fit always holds the Laplace binary one.
+        est: Any = clf.base_estimator_
+        pos_col = int(np.searchsorted(clf.classes_, 1))
+
+        def predict(X_test: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+            Xt = np.asarray(X_test, dtype=np.float64)
+            p = np.asarray(clf.predict_proba(Xt))[:, pos_col]
+            # Latent posterior variance (Rasmussen & Williams eq. 3.24), the
+            # same computation sklearn's predict_proba runs before it integrates.
+            K_star = est.kernel_(est.X_train_, Xt)
+            f_star = K_star.T.dot(est.y_train_ - est.pi_)
+            v = solve_triangular(est.L_, est.W_sr_[:, np.newaxis] * K_star, lower=True)
+            var_f = est.kernel_.diag(Xt) - np.einsum("ij,ij->j", v, v)
+            std_f = np.sqrt(np.clip(var_f, 0.0, None))
+            std_p = _sigmoid_posterior_std(f_star, std_f)
+            return p.astype(np.float64), std_p.astype(np.float64)
+
+        return predict
+
+    return trainer
+
+
 def _train_svm_factory(kernel: str, **svm_kwargs: Any) -> TrainerFn:
     """Build a sweep-shaped trainer that fits an SVM with the given kernel.
 
@@ -167,11 +286,52 @@ SWEEP_TRAINERS: dict[str, TrainerFn] = {
     "mlp_ens5": _train_mlp_ensemble_factory(5),
     "mlp_ens7": _train_mlp_ensemble_factory(7),
     "mlp_ens10": _train_mlp_ensemble_factory(10),
+    # Gaussian-process classifiers (issue #3954), hyperparameters fitted by
+    # marginal likelihood.  ``gp_<kernel>@ls=..,amp=..,fixed`` pins them instead
+    # - see :func:`_parse_gp_spec`.
+    "gp_rbf": _train_gp_factory("rbf"),
+    "gp_dot": _train_gp_factory("dot"),
 }
 
 
 # Kernels that :func:`resolve_trainer` accepts as ``svm_<kernel>[@params]``.
 _SVM_KERNELS = {"linear": "linear", "rbf": "rbf", "poly": "poly", "sigmoid": "sigmoid"}
+
+
+def _parse_gp_spec(name: str) -> tuple[str, dict[str, Any]]:
+    """Split ``"gp_rbf@ls=0.5,amp=2,fixed"`` into ``("rbf", {...factory kwargs})``.
+
+    Tokens: ``ls=<float>`` (the RBF length scale, or ``DotProduct``'s
+    ``sigma_0``), ``amp=<float>`` (the kernel amplitude) and the bare flag
+    ``fixed`` (skip ML-II and keep the values given).  Raises ``KeyError`` for a
+    name that is not a ``gp_<kernel>`` spec and ``ValueError`` for a malformed
+    parameter, so a typo fails loudly.
+    """
+    base, _, param_str = name.partition("@")
+    if not base.startswith("gp_"):
+        raise KeyError(f"Unknown trainer {name!r}; not a gp_<kernel>[@ls=..,amp=..,fixed] spec")
+    kernel = base[len("gp_") :]
+    if kernel not in _GP_KERNELS:
+        raise KeyError(f"Unknown GP kernel {kernel!r}; choices: {sorted(_GP_KERNELS)}")
+    kwargs: dict[str, Any] = {}
+    if param_str:
+        for token in param_str.split(","):
+            if not token:
+                continue
+            key, sep, value = token.partition("=")
+            key = key.strip()
+            if key == "fixed" and not sep:
+                kwargs["optimize"] = False
+                continue
+            if not sep:
+                raise ValueError(f"Malformed GP trainer parameter {token!r} in {name!r} (expected key=value)")
+            if key == "ls":
+                kwargs["length_scale"] = float(value)
+            elif key == "amp":
+                kwargs["amplitude"] = float(value)
+            else:
+                raise ValueError(f"Unknown GP trainer parameter {key!r} (expected ls, amp, or fixed)")
+    return kernel, kwargs
 
 
 def _coerce_param(key: str, value: str) -> Any:
@@ -205,7 +365,8 @@ def _parse_trainer_spec(name: str) -> tuple[str, dict[str, Any]]:
     base, _, param_str = name.partition("@")
     if not base.startswith("svm_"):
         raise KeyError(
-            f"Unknown trainer {name!r}; choices: {sorted(SWEEP_TRAINERS)} or svm_<kernel>[@C=..,gamma=..,degree=..]"
+            f"Unknown trainer {name!r}; choices: {sorted(SWEEP_TRAINERS)}, "
+            "svm_<kernel>[@C=..,gamma=..,degree=..] or gp_<kernel>[@ls=..,amp=..,fixed]"
         )
     kernel_key = base[len("svm_") :]
     if kernel_key not in _SVM_KERNELS:
@@ -226,14 +387,18 @@ def _parse_trainer_spec(name: str) -> tuple[str, dict[str, Any]]:
 def resolve_trainer(name: str) -> TrainerFn:
     """Return the :class:`TrainerFn` for *name*.
 
-    Accepts both a fixed registry key (``"mlp"``, ``"svm_linear"``, an ensemble)
-    and a parameterised SVM spec (``"svm_rbf@C=3,gamma=scale"``,
-    ``"svm_poly@degree=2,C=0.3"``, ``"svm_linear@C=0.03"``).  The bare
+    Accepts a fixed registry key (``"mlp"``, ``"svm_linear"``, an ensemble,
+    ``"gp_rbf"``), a parameterised SVM spec (``"svm_rbf@C=3,gamma=scale"``,
+    ``"svm_poly@degree=2,C=0.3"``, ``"svm_linear@C=0.03"``) or a parameterised
+    GP spec (``"gp_rbf@ls=0.5,fixed"``, see :func:`_parse_gp_spec`).  The bare
     ``"svm_linear"`` / ``"svm_rbf"`` names resolve to the registry entries
     unchanged, so existing callers are byte-identical.
     """
     if name in SWEEP_TRAINERS:
         return SWEEP_TRAINERS[name]
+    if name.startswith("gp_"):
+        gp_kernel, gp_kwargs = _parse_gp_spec(name)
+        return _train_gp_factory(gp_kernel, **gp_kwargs)
     kernel, kwargs = _parse_trainer_spec(name)
     return _train_svm_factory(kernel, **kwargs)
 

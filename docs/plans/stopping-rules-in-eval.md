@@ -17,8 +17,13 @@ What already exists, and is therefore *not* owed:
 - The harness runs the app's phase machine on every autopilot-fidelity run and
   has emitted **`phase`** on every metric row since 2026-07-31.
 - Since #3560 it also emits the three indicator lights (`smart` / `stable` /
-  `span`) and the raw span counts (`span_level` / `span_depth`), which say
-  *which* rule held a run short of stopping.
+  `span`) and the raw span counts (`span_level` / `span_depth` / `span_target`),
+  which say *which* rule held a run short of stopping — and, beside them, the
+  **margins**: the continuous quantities those gates are thresholds on
+  (`smart_slope`, `smart_slope_t`, and the four Stable flip rates), which say
+  *how close* each came. `stopping.margins()` / `summarise_margins()` /
+  `margin_table()` report them, and attribute a Stable block to one of its three
+  gates. See [`docs/EVAL.md`](../EVAL.md#stopping-point-and-stopping-cost-issue-3560).
 - [`scripts/experiments/calibration/stopping.py`](../../scripts/experiments/calibration/stopping.py)
   derives the stopping point and stopping cost from those columns, with the
   censoring and flapping handled; `curves.quality_vs_clicks(..., stops=…)` marks
@@ -53,9 +58,12 @@ issue. No study gets slower for reporting a stopping point.
   empty frame rather than a table of zeros.
 
   What the re-analysis **cannot** answer is which of Smart and Stable was
-  binding, since those cells predate the lights. `stopping.binding_note` says so
-  in as many words instead of guessing. That question needs a re-run, and is the
-  only thing here that does.
+  binding, since those cells predate the lights — nor how close either came,
+  since they predate the margins too, and unlike the lights those can never be
+  back-filled (the slope and flip-rate windows are per-step state the run
+  discarded). `stopping.binding_note` and `stopping.has_margins` say so instead
+  of guessing. Those two questions need a re-run, and are the only things here
+  that do.
 
 <!-- item-sep -->
 
@@ -67,6 +75,18 @@ issue. No study gets slower for reporting a stopping point.
   `stopping.stopping_table` emits:
 
   | arm | runs | fired | stop click (KM) | stop click (median of fired) | cost at stop | cost at budget | Δcost (paired) | clicks after stop |
+
+  On a post-margins study a second block goes beside it, from
+  `stopping.margin_table` — the same arms, read as how close each gate came
+  rather than whether it fired:
+
+  | arm | runs | held | Smart slope | Smart t | Stable avg | Stable max | Span nodes | Stable blocked by |
+
+  The two are complementary and neither substitutes for the other: the first
+  is about the runs that stopped, the second is about the steps that were held.
+  An arm can look identical in the first (nothing fired) and completely
+  different in the second (one arm was a hair short throughout, the other never
+  close).
 
   The two qualifications are not optional decoration. **`fired`** comes before
   every other column because each of them is conditional on it, and the runs it
@@ -91,7 +111,11 @@ issue. No study gets slower for reporting a stopping point.
     so it needs a re-run — but only of a grid small enough to answer it. A local
     probe on synthetic data had Stable holding runs far more often than Smart or
     Span, which if it reproduces means the stopping rule is in practice a
-    prediction-flip rule with two decorations.
+    prediction-flip rule with two decorations. The margins sharpen the same
+    grid's answer: `stable_block_avg` / `stable_block_max` /
+    `stable_block_falling` say *which of Stable's three gates* was doing it, and
+    a gate with a median margin barely short of zero and a green share near half
+    is a rule flapping rather than a detector failing.
   - **Does the rule flap because the rule is noisy, or because the detector
     is?** `n_done_episodes` above 1 is common. Answered for Smart in #3832 - the
     rule was - and the fix went into the app's indicator rather than the eval:

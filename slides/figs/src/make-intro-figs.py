@@ -278,15 +278,17 @@ BAND_EDGE_ROOM = 0.25
 #: This figure's own title reserve, in slide pixels — the deck standard's
 #: rectangle with its *height* trimmed to the headline this slide actually
 #: carries. "Pics on a Plane" is one line and its box measures 56.8px, so
-#: `slide_figure.TITLE_NOTCH_PX`'s 200px reserve — sized for the deck's
-#: longest, four-line headline — left 100px of band under the title with no
-#: title in it and, because the field is rejected from the whole reserve, no
-#: items either. On a schematic that costs nothing; here the field *is* the
-#: slide, and a hole in it reads as a mistake rather than as a margin (#3254).
-#: 88px is the measured box plus one `OBJECT_GAP_PT` (16pt renders at ~28px on
-#: this figure), so the nearest circle still clears the headline by a gap of
-#: the deck's own standard size. Re-measure if the headline changes; the
-#: recipe is in `slides/STYLE.md`.
+#: `slide_figure.TITLE_NOTCH_PX`'s reserve — sized for a two-line headline —
+#: leaves a band under the title with no title in it and, because the field is
+#: rejected from the whole reserve, no items either. On a schematic that costs
+#: nothing; here the field *is* the slide, and a hole in it reads as a mistake
+#: rather than as a margin (#3254). 88px is the measured box plus one
+#: `OBJECT_GAP_PT` (16pt renders at ~28px on this figure), so the nearest
+#: circle still clears the headline by a gap of the deck's own standard size.
+#:
+#: The band this closes was 112px when the standard was 200 and is 42px now
+#: that #3969 has it at 130 — smaller, but still a hole, so the trim stays.
+#: Re-measure if the headline changes; the recipe is in `slides/STYLE.md`.
 VOTE_NOTCH_PX = (60.0, 42.0, 300.0, 88.0)
 
 #: The ten pages of the build. See `vote_boundary_fig`.
@@ -1561,14 +1563,13 @@ ARROW_CLEAR = FLOW_GAP
 #: to both than either arrow sits to anything else (`slides/STYLE.md`).
 SIGLIP_XY = (6.30, 4.10)
 
-#: This figure's own title reserve, in slide pixels — the deck standard's
-#: rectangle with its *height* trimmed to the headline this slide carries.
-#: "Embed-time Stories" wraps to two lines and its box measures 101.6px
-#: (measured by `slides/STYLE.md`'s recipe, on this slide), so 130 is that box
-#: plus one `OBJECT_GAP_PT` — 16pt renders at 27.8px on this figure — and the
-#: photo stack, the only object under the headline, clears it by the deck's own
-#: standard gap. Re-measure if the headline changes.
-EMBED_NOTCH_PX = (60.0, 42.0, 300.0, 130.0)
+#: This figure carried its own title reserve until #3969: "Embed-time Stories"
+#: wraps to two lines and its box measures 101.6px, so its trimmed rectangle
+#: was that plus one `OBJECT_GAP_PT` (27.8px here) = 130. That is now exactly
+#: what `slide_figure.TITLE_NOTCH_PX` reserves for every full-bleed slide, so
+#: the override said nothing the standard did not — and, being a literal, would
+#: have gone on saying 130 after the standard next moved. It takes the deck
+#: standard now; the photo stack still clears the headline by the same gap.
 
 
 def _flow_arrow_len(label: str) -> float:
@@ -1780,7 +1781,6 @@ def embed_flow_fig() -> None:
             f"embed-flow.build{stage}.png",
             column=FULL_BLEED,
             tight=False,
-            notch=EMBED_NOTCH_PX,
         )
     save(
         _embed_flow_stage(EMBED_FLOW_STAGES),
@@ -1788,7 +1788,6 @@ def embed_flow_fig() -> None:
         "embed-flow.png",
         column=FULL_BLEED,
         tight=False,
-        notch=EMBED_NOTCH_PX,
     )
 
 

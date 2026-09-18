@@ -258,7 +258,7 @@ plot_eval_results(results, output_dir="eval_seeds")
 
 The voting-iterations evaluation measures how classification quality improves as more votes are cast. This is useful for understanding how many labels a user needs to provide before the model converges.
 
-Votes are cast in the order the app's **Autopilot** would present them — the eval reproduces the real user flow rather than an academic active-learning heuristic. Autopilot seeds the first few positives from text sort when available (pass `seed_scores`, a per-media cosine-to-query ranking), else from a handful of random known-good examples, then gathers the initial negatives and works through the standard Good / Bad / Hard / New phases. `autopilot` is the only vote-order strategy; every result row carries `strategy="autopilot"`.
+Votes are cast in the order the app's **Autopilot** would present them — the eval reproduces the real user flow rather than an academic active-learning heuristic. Autopilot seeds the first few positives from text sort when available (pass `seed_scores`, a per-media cosine-to-query ranking), else from a handful of random known-good examples, then gathers the initial negatives and works through the standard Good / Bad / Hard / New phases. `autopilot` is the vote-order strategy every study's headline numbers are read off, and every default-arm result row carries `strategy="autopilot"`. Two experiment arms sit beside it (issue #3954): `autopilot_uncertainty` and `autopilot_maxvar` keep every Autopilot phase and replace only the Hard pick with a rule that reads the detector's posterior spread — the straddle `argmax 1.96·std − |p − cut|` and plain `argmax std` respectively. They run only against a trainer that reports a spread (the `gp_*` trainers below) and raise otherwise, so a run can never attribute the app's own picks to a GP rule.
 
 #### Autopilot fidelity (`autopilot_fidelity`, default `True`)
 
@@ -289,12 +289,31 @@ A study's headline number is its **final cost** — the metric at the last click
 | **stopping point** | the click at which the rules first fired — the *width* | first `t` where `phase == "done"` |
 | **stopping cost** | the metric at that click — the *height* | that row's `cost` (and `average_precision` beside it) |
 
-`phase` has been on every metric row since the harness adopted the app's phase machine, so **this needs no re-run**: a finished study's cells carry it already. Five columns beside it (added by #3560) say *which* rule was doing the holding, which `phase` alone cannot:
+`phase` has been on every metric row since the harness adopted the app's phase machine, so **this needs no re-run**: a finished study's cells carry it already. Columns beside it (added by #3560) say *which* rule was doing the holding, which `phase` alone cannot:
 
 - **`smart` / `stable` / `span`** — the three indicator lights that produced the phase, each `red` / `yellow` / `green`. `done` is all three green and `new` is Span alone short, so the phase already encodes those; what it cannot encode is whether Smart, Stable or both hold a run in `hard`.
-- **`span_level` / `span_depth`** — the raw atlas counts the Span light thresholds (`level >= min(autopilot_goal_diversity, depth)`), so a run can say how far short it fell rather than only that it did.
+- **`span_level` / `span_depth` / `span_target`** — the raw atlas counts the Span light thresholds, and the bar itself: the light is exactly `span_level >= span_target`, where the target is `min(autopilot_goal_diversity, span_depth)`. The bar is emitted rather than assumed to be 40 because it is a per-run knob *and* a per-step quantity (a small atlas caps it, and the atlas grows).
 
-All five are blank / `-1` where no phase machine ran (a non-`autopilot` strategy, `autopilot_fidelity=False`) and throughout a startup schedule's rounds, which own the phase without consulting the indicators — *not measured* is deliberately distinguishable from *not green*. They cost nothing: the phase machine already computed all three every step and threw them away.
+All of them are blank / `-1` where no phase machine ran (a non-`autopilot` strategy, `autopilot_fidelity=False`) and throughout a startup schedule's rounds, which own the phase without consulting the indicators — *not measured* is deliberately distinguishable from *not green*. They cost nothing: the phase machine already computed all three every step and threw them away.
+
+##### The margins: how close each rule came
+
+A light is a threshold test, and a study that records only the answer cannot say whether a run sat one noisy window short of green for a hundred clicks or was never within reach of it. Those are different findings — the first wants the rule de-flapped, the second wants a better embedding — and "Stable held it" is three of them, because Stable is a conjunction of three gates. So every step also carries the continuous quantities those gates are thresholds **on**:
+
+| column | the gate it feeds | green when |
+|---|---|---|
+| `smart_slope` | error-cost flatness | `>= SMART_FLAT_THRESHOLD` (−0.015) |
+| `smart_slope_t` | that slope against the window's own scatter (#3832) | `> -SMART_SLOPE_T` (−2.0) |
+| `stable_confident_flip_rate` | confident-flip average over the pool | `< STABLE_RATE_THRESHOLD` (0.005) |
+| `stable_max_confident_flip_rate` | its worst single step in the window | `< STABLE_MAX_THRESHOLD` (0.01) |
+| `stable_flip_rate_early` / `stable_flip_rate_late` | the raw rate having stopped falling | not (`late >= 0.005` and `late < STABLE_FALLING_RATIO × early`) |
+| `stable_flip_rate` | — (the window average the app's panel quotes) | |
+
+Smart's two are a **disjunction** — either clears it — so neither alone says a run was held; Stable's three and Span's one are conjunctive. Every value is read off the dict the rule itself built (`autopilot_flow.smart_detail` / `stable_detail`), so a margin can never disagree with the light beside it, and `NaN` means the rule **declined to fit** one — below `MIN_PER_CLASS` votes of either class, under three model steps for Smart, under five entries for Stable — never "far from green".
+
+**These cost nothing to record and cannot be back-filled.** The rules fit all of it on every step already, because the vote order depends on the lights they produce; before #3560 the numbers were discarded and only the three-way status kept. But unlike `phase` and the lights, a finished study's cells *cannot* be enriched with them — the slope and flip-rate windows are per-step state the run threw away — so this half, and only this half, needs a re-run to answer on an old grid. `stopping.has_margins()` is the guard, and every margin function returns an empty frame rather than a table of zeros on a frame that predates them.
+
+`stopping.margins()` / `summarise_margins()` / `margin_table()` report them per run over its **held** steps (everything before its first fire, or the whole trajectory when it never fired — a converged run sits at a comfortable margin for the rest of its budget and would otherwise swamp the steps that actually held it). One sign convention throughout: **positive means the gate is satisfied with that much room, negative means the run is short by that much**, whichever way the underlying inequality points. Beside each margin is the share of held steps that gate was satisfied at, which is what separates a flap from a wall, and `stable_block_avg` / `stable_block_max` / `stable_block_falling` attribute a Stable block to one of its three gates in the rule's own short-circuit order.
 
 **Do not truncate the run at `done`.** The simulated user keeps clicking to the budget exactly as before, because the stretch past the stopping point is what says whether stopping there was the right call — and because arms can only be compared at a fixed `t`.
 
@@ -524,7 +543,7 @@ Both functions:
 
 The voting simulation takes two knobs that both sound like "which model?". They are not the same question, and until issue #3764 they also shared the string `"mlp"`.
 
-**`trainer` picks the pipeline.** `trainer="app"` (the default) runs VTSearch's own: `train_model` plus production fold calibration, the arm every study's headline numbers are read off. Any `svm_*` value instead fits a standalone sklearn/cuML estimator that thresholds itself, from the registry in `vtscore/eval/sweep_trainers.py`. The arm was spelled `"mlp"` before #3764, which named no MLP — its default head is the linear SVM — so the old spelling is now accepted as an input alias and normalised away; result rows always record `app`.
+**`trainer` picks the pipeline.** `trainer="app"` (the default) runs VTSearch's own: `train_model` plus production fold calibration, the arm every study's headline numbers are read off. Any `svm_*` value instead fits a standalone sklearn/cuML estimator that thresholds itself, from the registry in `vtscore/eval/sweep_trainers.py`; any `gp_*` value fits a standalone Gaussian-process classifier the same way (issue #3954) and additionally exposes its posterior spread as `StepModel.predict_std`, which is what the two uncertainty strategies read. Both standalone families take the plain cross-calibration cut: their fold models are not the app's head, so the fold-anchored fusion has nothing to anchor on and `safe_thresholds` lands them on the blend fallback — compare them against `trainer="app", safe_thresholds=False`, not against the shipped cut, when the question is the head. The `gp_*` arms additionally take `standalone_cut="rank"`, which carries that cut from the fold models to the final one by rank instead of as a raw score; [`docs/experiments/2026-09-17-gp-head-3954/REPORT.md`](experiments/2026-09-17-gp-head-3954/REPORT.md) measures both transfers (and the blend) on a GP and finds the rule, not the head, decides the outcome. The arm was spelled `"mlp"` before #3764, which named no MLP — its default head is the linear SVM — so the old spelling is now accepted as an input alias and normalised away; result rows always record `app`.
 
 **`head` picks the model that pipeline fits**, and applies to `trainer="app"` alone:
 
@@ -534,7 +553,7 @@ The voting simulation takes two knobs that both sound like "which model?". They 
 | `linear` | The same `Linear(d, 1)` fitted by balanced BCE — the logistic head the SVM replaced (#2790/#2809). |
 | `mlp` | An auto-sized hidden layer, BCE — the head shipped before #2790 (#2781). |
 
-Passing `head=` alongside an `svm_*` trainer is an error: those arms fit their own estimator and have no head to choose, which is why their rows carry an empty `head` column.
+Passing `head=` alongside an `svm_*` or `gp_*` trainer is an error: those arms fit their own estimator and have no head to choose, which is why their rows carry an empty `head` column.
 
 Two names are worth reading slowly. `svm_linear` is a **trainer**: a standalone SVM scored through its own `predict_proba`. `linear_svm` is a **head**: the app's `Linear(d, 1)` whose weights come from liblinear, scored and thresholded exactly as production does. A run of `trainer="svm_linear"` and a run of `trainer="app", head="linear_svm"` fit a similar boundary by very different routes, and only the second measures the shipped detector.
 

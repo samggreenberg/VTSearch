@@ -15,6 +15,7 @@ from vtscore.eval.label_curve import (
     _brier,
     _build_split_pool,
     _cross_calibrated_threshold,
+    _ece,
     _f1_at,
     _sample_labels,
     evaluate_one,
@@ -78,6 +79,23 @@ class TestMetricHelpers:
         scores = np.array([1.0, 0.0, 1.0])
         labels = np.array([1, 0, 1])
         assert _brier(scores, labels) == pytest.approx(0.0)
+
+    def test_ece_zero_for_perfect_calibration(self):
+        scores = np.array([1.0, 0.0, 1.0])
+        labels = np.array([1, 0, 1])
+        assert _ece(scores, labels) == pytest.approx(0.0)
+
+    def test_ece_half_for_a_constant_half_on_a_balanced_set(self):
+        scores = np.array([0.5, 0.5, 0.5, 0.5])
+        labels = np.array([1, 1, 1, 1])
+        assert _ece(scores, labels) == pytest.approx(0.5)
+
+    def test_ece_weights_bins_by_population(self):
+        # Bin [0.9, 1.0): three items claiming 0.9, all hits -> gap 0.1, weight 3/4.
+        # Bin [0.1, 0.2): one item claiming 0.1, a miss -> gap 0.1, weight 1/4.
+        scores = np.array([0.9, 0.9, 0.9, 0.1])
+        labels = np.array([1, 1, 1, 0])
+        assert _ece(scores, labels) == pytest.approx(0.1)
 
     def test_brier_max_for_inverted_predictions(self):
         scores = np.array([0.0, 1.0])

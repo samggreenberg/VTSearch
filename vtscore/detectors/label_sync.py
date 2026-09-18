@@ -130,18 +130,28 @@ def merge_labelsets_across_datasets(
 def _refresh_detector_caches(
     det_ctx: DetectorContext,
     merged: LabelSet,
-    path: Path,
     media_type: str,
 ) -> None:
-    """Refresh the cached labelset, mtime, and vote counters after a write.
+    """Refresh the cached labelset and vote counters once the merge is composed.
 
-    Keeps ``ensure_votes_match_active_dataset`` from re-hydrating the file
-    we just rewrote.
+    This is the in-memory half: it runs on the request thread, before the
+    write is queued, so every reader sees the new labels immediately.  The
+    on-disk half (:func:`_refresh_detector_file_caches`) has to wait for the
+    file's new mtime.
     """
     det_ctx.labelset_good_count = sum(1 for el in merged.elements if el.label == "good")
     det_ctx.labelset_bad_count = sum(1 for el in merged.elements if el.label == "bad")
     det_ctx.cached_labelset = merged
     det_ctx.cached_labelset_media_type = media_type or det_ctx.cached_labelset_media_type
+
+
+def _refresh_detector_file_caches(det_ctx: DetectorContext, path: Path) -> None:
+    """Record the mtime of the file just written.
+
+    Keeps ``ensure_votes_match_active_dataset`` from re-hydrating the file we
+    just rewrote.  Runs on whichever thread landed the write - the background
+    writer in ``async`` mode - immediately after ``os.replace``.
+    """
     try:
         det_ctx.cached_labelset_mtime = path.stat().st_mtime
     except OSError:
@@ -186,7 +196,7 @@ def _sync_labels_to_loaded_detector_locked() -> None:
 
     from vtscore.detectors.dataset_sync import validated_vote_snapshot
     from vtscore.detectors.registry import update_detector
-    from vtscore.detectors.store import _write_detector
+    from vtscore.detectors.store import queue_detector_write
 
     vote_snap = validated_vote_snapshot()
     clock.mark("snapshot")
@@ -217,12 +227,22 @@ def _sync_labels_to_loaded_detector_locked() -> None:
     merged = merge_labelsets_across_datasets(existing_ls, current_ls, snap)
     data["labelset"] = merged.to_dict()
     clock.mark("merge")
-    _write_detector(path, data)
-    clock.mark("write")
 
-    _refresh_detector_caches(det_ctx, merged, path, data.get("media_type", "") or "")
+    # The in-memory caches are the truth from here on; the file follows.
+    _refresh_detector_caches(det_ctx, merged, data.get("media_type", "") or "")
 
-    import time as _time
+    entry_id = entry["id"]
+    label_count = len(merged)
 
-    update_detector(entry["id"], num_training=len(merged), last_trained_at=_time.time())
-    clock.finish(labels=len(merged), corpus=len(snap))
+    def _after_write() -> None:
+        import time as _time
+
+        _refresh_detector_file_caches(det_ctx, path)
+        update_detector(entry_id, num_training=label_count, last_trained_at=_time.time())
+
+    # Off the request thread in ``async`` mode (issue #3853): the fsync +
+    # rename of a 650 KB file to a busy NFS export is what held the panel
+    # black.  ``queue_detector_write`` serialises inline and returns.
+    queue_detector_write(path, data, after=_after_write)
+    clock.mark("queue")
+    clock.finish(labels=label_count, corpus=len(snap))

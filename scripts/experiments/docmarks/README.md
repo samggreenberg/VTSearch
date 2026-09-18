@@ -5,6 +5,10 @@ scanned documents** — finding a given stamp, seal or letterhead logo in a pile
 of pages. Built for the feature the structural embedder is heading toward, and
 for the experiments that will decide how it should work.
 
+**What the data is, and what a study may conclude from it:
+[`DATASHEET.md`](DATASHEET.md)** (corpus version, composition, label provenance,
+scoring pools, known gaps, and the use register).
+
 The 2026-07-13 study found the first configuration where structural search beats
 the deep embedder on a real corpus (SuperPoint+LightGlue, AP 0.395/0.481 vs
 SigLIP's 0.204/0.235), then ran out of road: its two document corpora are 259
@@ -16,7 +20,7 @@ python build_corpus.py --probe                       # can I reach every source?
 python build_corpus.py --sources spods               # cluster into candidates
 python shortlist.py --corpus <dir> --write-roster     # rank them, draft a roster
 $EDITOR <dir>/roster.json                             # pick your two dozen
-python build_corpus.py --sources spods --roster <dir>/roster.json
+python build_corpus.py --sources spods --roster <dir>/roster.json --new-version
 
 python make_audit_slate.py --task merge               # which classes are one mark?
 python make_audit_slate.py --task membership          # verify every instance
@@ -235,6 +239,16 @@ Not all distractors are equal, and the manifest keeps them distinct:
   individually. Fine in bulk, and the only way to reach 200k.
 - **excluded** — a contamination risk, never scored.
 
+**For the anchor sources, a class's own source is a known negative** (decided
+2026-09-16, #3913). `CONTAMINATES` lists each anchor source as contaminating
+itself, which is right for a source nobody checked. But SPODS, Tobacco800 and
+StaVer marks are all boxed and clustered, so a same-source page that is not a
+member is verified not to carry the mark. Excluding those pages instead is worse
+than conservative. It leaves the positives as the only pages in their source's
+style, and on the first evaluation (#3904) a control that ranks by source alone,
+ignoring the mark, scored **AP 1.00**. `eval_retrieval.py` passes the class's
+own source as `verified_negative_sources` for its headline pool.
+
 The trap that last category exists for: RVL-CDIP, Tobacco800 and UCSF's Tobacco
 industry all descend from IIT-CDIP, so an American Tobacco letterhead is
 *certain* to appear in an RVL-CDIP "distractor" pool. Unlabelled positives don't
@@ -262,6 +276,11 @@ Two stability promises are on offer and they genuinely conflict:
 
 Without pinning, a build over a different page set is a **new corpus version**.
 Both behaviours are pinned by tests, including the negative one.
+
+Neither is chosen by default once a corpus exists: a build into an `--out` that
+already holds a `build_report.json` is refused before the pull unless it passes
+`--pin-tiers` or `--new-version` (#3903), and the report records which under
+`tier_provenance`.
 
 ## The human passes
 
@@ -296,6 +315,78 @@ In the order you run them. Only the first two are needed for a first eval.
 6. **`letterhead`** — for the later UCSF expansion: sample bands per candidate
    author and count how many carry a printed mark at all. Decides whether that
    pool is worth clustering.
+7. **`completeness`** — the other half of `membership`. `membership` checks
+   every instance a class *has*; this looks for instances it *lacks*: pages
+   carrying a roster mark that clustering filed under another class, or that
+   the source never boxed. A strong matcher proposes and a person decides:
+   `completeness.py` reads an `inliers.json` from `eval_sift_rank.py` (SIFT at
+   8,192 keypoints against every anchor page of tier `s`), re-verifies the
+   top candidates per class to find *where* the match is, and draws each beside
+   the query crop with the page's existing mark outlined. The answer is the
+   candidate numbers that carry the mark. `audit_to_corrections.py --task
+   completeness` reassigns an existing mark, or adds a new one with
+   `provenance="completeness"` and records it in `added_marks.json`, which
+   `build_corpus.py` replays before clustering so a new box survives a rebuild.
+   Rejected candidates become cannot-links: permanent hard negatives.
+   Measured on the v3 roster (#3927): SPODS's elephant stamp was split across
+   ten classes, and 104 missing members turned up over 23 classes. Candidates
+   are ranked, so extend `--top` for a class whose sheet ends on real copies.
+   **Second pass, non-SIFT proposers (#3951).** SIFT proposed all 108 missing
+   members, so the members still missing are the ones SIFT cannot see.
+   `completeness_multi.py` takes `proposals-<method>.json` files
+   (`{method, classes: {class_id: [[page_id, score, box|null], ...]}}`, best
+   first) from independent matchers: `propose_embed.py siglip_tiles` (max over
+   page tiles) and `dinov3_patches` (dense patch correspondence at the query's
+   own-page resolution), plus OCR and template NCC. It drops members,
+   cannot-linked marks, pages an earlier pass rejected and candidates an earlier
+   slate showed, then ranks the rest by how many methods agree and captions each
+   sheet cell with them (`SIG+DINO`). Apply with `audit_to_corrections.py --task
+   completeness --audit-dir completeness2`. A SigLIP box is a whole tile, so a
+   `SIG`-only candidate marked NO BOX needs a box drawn, not accepting as is.
+8. **`query_crops`** — extra queries, chosen by a person. Every result used to
+   rest on one crop per class, so it mixed how good the method is with how good
+   that crop happens to be. `query_crops.py` ranks a class's members by SIFT
+   inliers against the current query (the same `inliers.json` as
+   `completeness`), keeps one per source document (only Tobacco800 page ids
+   share a document), and draws up to 12 of them in context with their box on
+   one screen. The answer is the candidate numbers to keep, in order.
+   `audit_to_corrections.py --task query_crops` stores them in
+   `query_crops.json`, cuts `queries/<class>__q<n>.png`, and gives the class a
+   `query_crops` list: the primary first, then the extras. `build_corpus.py`
+   replays the store after it writes the primary crops, and warns about a
+   stored crop that no longer fits the build. `query_crop` itself is
+   unchanged, so existing studies keep reading the same query.
+9. **`box_tighten`** — boxes that hold more than the mark. Some StaVer
+   boxes take in the separate EINGEGANGEN AM date stamp beside the form stamp
+   (`staver/stampds-00218`: 570x414 against ~556x282). `box_tighten.py` fits
+   the class's query crop to each member with SIFT (a similarity transform,
+   searched in the page region around the current box) and proposes the bounds of the query
+   crop's ink (pixels far from its paper colour) projected onto the page -- not
+   the crop's rectangle, whose corner margin on an askew query added ~25% to
+   every box's height -- clamped to the current box plus 15%.
+   It flags few inliers, inliers that span little of the proposal, a proposal
+   that grows the old box (the first slate found every `stampds-00230_0` source
+   box clipping its stamp's frame), a clamp, and "unchanged". The sheets show the current
+   box in grey and the proposal in red; the answer is the member numbers whose
+   red box to accept. `audit_to_corrections.py --task box_tighten` replaces
+   each accepted box **in place** (same page, same mark index, so every
+   adjudication still names the same mark), records it in
+   `box_overrides.json`, and re-cuts the primary query crop when the query
+   page's box moved. `build_corpus.py` replays the store right after the
+   added marks and warns about a mark that has neither its old nor its new box.
+   Defaults to StaVer's roster classes; `--classes` picks others and
+   `--loose-only` keeps only members whose proposal is at most 80% of the
+   current box.
+
+**Reviewing in VTSearch.** Visual passes that can be put as Good/Bad questions
+(UCSF members and relations, query crops, box tightening, completeness) are
+answered in the VTSearch app, not on sheets: `binary_review.py emit --task <t>`
+renders one image per question (references left, one enlarged candidate right)
+into `/expscratch/sgreenberg/docmarks/binary/<queue>/`, `load` makes each queue a
+dataset plus same-named detector (`docmarks <class> -- <question>`, one per
+class), and `bank` writes the votes back as `audit/<task>/verdicts.from_vtsearch.jsonl`
+for `audit_to_corrections.py`. `bank` reads only `docmarks` detectors and deletes
+nothing; the dashboard is shared with vg_scale.
 
 Query crops come from each class's largest boxed instance automatically (the
 prior study measured a 2.2× AP advantage for a clean query over a small in-scene

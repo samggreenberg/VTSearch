@@ -2,7 +2,7 @@
 
 ![bg fit](figs/calib-region-max.png)
 
-## Extreme Measures
+## Extreme<br>Measures
 
 <!-- build: figs/calib-region-max.build1.png -->
 

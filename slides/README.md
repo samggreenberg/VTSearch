@@ -15,7 +15,8 @@ _out/       rendered decks (gitignored)
 ```
 
 `build.py --check` runs as a `./run-tests.sh` gate, so a deck that names a
-missing fragment or figure fails the suite rather than rotting quietly.
+missing fragment or figure — or a headline that has grown to three lines —
+fails the suite rather than rotting quietly.
 
 **Test a deck change with `./run-tests.sh slides`** — about four seconds, versus
 three and a half minutes for the full suite. It is not a shortcut you are
@@ -48,12 +49,63 @@ Needs node and python3. Nothing to install — `npx` fetches Marp on first run
 ./build.py --list                   # decks, slide counts, unused fragments
 ```
 
+Headline breaks are decided by measurement rather than by eye —
+`node balance-titles.mjs _out/<deck>.html [--write]` against a rendered HTML
+build. See *A title is two lines at most* in [`STYLE.md`](STYLE.md) for what it
+is enforcing and why the browser's own wrap is the wrong answer.
+
+## Publishing (the always-current PDF)
+
+The newest render of every deck lives on a rolling GitHub release, so the
+current talk has a stable URL that nobody has to clone the repo and run Marp to
+read:
+
+```
+https://github.com/samggreenberg/VTSearch/releases/download/slides-latest/hold-the-line.pdf
+https://github.com/samggreenberg/VTSearch/releases/download/slides-latest/hold-the-line.speaker.pdf
+```
+
+Release assets are the only GitHub surface that stores a binary *against* a
+repository without putting it *in* one — which is exactly the split a rendered
+deck wants. `_out/` stays gitignored and no PDF is ever committed, so the
+derivation (fragments, manifests, figures, theme) remains the tracked thing and
+the artifact is just the newest build of it. The near-misses all fail on
+durability: an issue attachment gets a fresh URL per upload, an Actions artifact
+expires and needs a login, and Pages would put the bytes back on a branch.
+
+**It republishes itself.** [`.github/workflows/publish-slides.yml`](../.github/workflows/publish-slides.yml)
+runs on every push to `dev` that touches `slides/`, rendering the audience and
+speaker cuts of every deck in `decks/` and uploading them with `--clobber`. The
+tag moves to the commit that triggered the run, so the release always names the
+source of the PDF hanging off it, and a deck deleted from `decks/` has its
+assets swept off the release rather than left to go stale.
+
+To publish by hand — a deck rendered from a branch that is not going to `dev`
+soon, say — run the same script the workflow runs:
+
+```bash
+./scripts/publish-slides.sh                  # every deck
+./scripts/publish-slides.sh hold-the-line    # just this one
+./scripts/publish-slides.sh --dry-run        # render, print the plan, upload nothing
+```
+
+(Publishing by hand is also the only manual route for now: GitHub offers a
+workflow's "Run workflow" button only on the *default* branch, and ours is
+`main`, so the dispatch trigger stays dark until a release carries the workflow
+there. The push trigger from `dev` is unaffected.)
+
+It needs `gh` authenticated with write access, which a Claude Code on the web
+container does not have — that is the reason the work happens in a workflow
+rather than at the end of a session. It also refuses to publish while `slides/`
+has uncommitted changes (`--allow-dirty` overrides), because the release body
+names the commit the PDFs came from and a dirty tree would make that a lie.
+
 ## Exporting a pile of images
 
 `./render.sh <deck> png` renders one PNG per page and zips the pile:
 
 ```bash
-./render.sh scale-readout png --no-pageno   # -> _out/scale-readout.unnumbered-pngs*.zip
+./render.sh hold-the-line png --no-pageno   # -> _out/hold-the-line.unnumbered-pngs*.zip
 PNG_SCALE=3 ./render.sh hold-the-line png   # 3840x2160 instead of 2560x1440
 ```
 

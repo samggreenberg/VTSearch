@@ -6,6 +6,7 @@
 <div class="vote-buttons">
   <button
     class="btn-bad"
+    [disabled]="unavailable()"
     [class.voted]="isBad()"
     [class.vote-flash]="badFlash()"
     (click)="onVoteBad($event)"
@@ -16,6 +17,7 @@
   </button>
   <button
     class="btn-good"
+    [disabled]="unavailable()"
     [class.voted]="isGood()"
     [class.vote-flash]="goodFlash()"
     (click)="onVoteGood($event)"

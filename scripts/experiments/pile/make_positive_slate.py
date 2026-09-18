@@ -32,13 +32,9 @@ import sys
 from pathlib import Path
 
 import pile_config as pc
+from slate_render import inset_crop
 
 pc.setup_env()
-
-#: How big the inset may get, as a fraction of the image's shorter side.
-INSET_FRAC = 0.42
-#: The inset magnifies at least this much, so a sub-patch box is actually visible.
-MIN_ZOOM = 3.0
 
 
 def log(msg: str) -> None:
@@ -46,42 +42,20 @@ def log(msg: str) -> None:
 
 
 def draw_with_inset(src: Path, box: tuple[float, float, float, float], dest: Path) -> tuple[int, int]:
-    """Write *src* with *box* outlined and a magnified inset of its contents."""
+    """Write *src* with *box* outlined and a magnified inset of its contents over a bottom corner.
+
+    The crop is :func:`slate_render.inset_crop`, shared with the side-padded framing
+    (``slate_render.draw_with_side_inset``), which leaves the whole photo visible.
+    """
     from PIL import Image, ImageDraw  # noqa: PLC0415
 
     with Image.open(src) as im:
         im = im.convert("RGB")
         W, H = im.size
-        # VG boxes are not guaranteed to lie inside their image -- some run past
-        # the edge, and a few are inverted -- so clamp before any arithmetic
-        # that assumes a well-formed rectangle.
-        x0, x1 = sorted((box[0] * W, box[2] * W))
-        y0, y1 = sorted((box[1] * H, box[3] * H))
-        x0, x1 = max(0.0, min(x0, W - 1.0)), max(1.0, min(x1, float(W)))
-        y0, y1 = max(0.0, min(y0, H - 1.0)), max(1.0, min(y1, float(H)))
-        bw, bh = max(1.0, x1 - x0), max(1.0, y1 - y0)
-
-        # The crop is padded around the box so the object keeps its context --
-        # a box cropped exactly to its edges is often unrecognisable, and for a
-        # sub-patch object it is a smudge at any magnification. What makes a
-        # 20-pixel backpack identifiable is seeing the person wearing it, so the
-        # padding has a floor in absolute image terms rather than being a
-        # multiple of a tiny box.
-        pad = max(max(bw, bh) * 0.6, min(W, H) * 0.10)
-        cx0, cy0 = max(0, int(x0 - pad)), max(0, int(y0 - pad))
-        cx1, cy1 = min(W, int(x1 + pad)), min(H, int(y1 + pad))
-        cx1, cy1 = max(cx1, cx0 + 2), max(cy1, cy0 + 2)
-        crop = im.crop((cx0, cy0, min(cx1, W), min(cy1, H)))
-
-        target = int(min(W, H) * INSET_FRAC)
-        zoom = max(MIN_ZOOM, target / max(crop.width, crop.height))
-        iw, ih = int(crop.width * zoom), int(crop.height * zoom)
-        iw, ih = min(iw, target), min(ih, target)
-        crop = crop.resize((max(1, iw), max(1, ih)), Image.LANCZOS)
+        crop, (x0, y0, x1, y1), lw = inset_crop(im, box)
 
         out = im.copy()
         d = ImageDraw.Draw(out)
-        lw = max(2, int(min(W, H) * 0.006))
         d.rectangle([x0, y0, x1, y1], outline=(255, 32, 32), width=lw)
 
         # Inset in whichever bottom corner is furthest from the box, so the

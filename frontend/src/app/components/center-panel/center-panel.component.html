@@ -1,10 +1,26 @@
 <div
   class="center-panel"
-  [class.empty]="!media()"
+  [class.empty]="!media() && !exhausted()"
   [class.region-draw]="regionDrawActive"
   (mousedown)="onPanelMouseDown($event)"
 >
-  @if (!media()) {
+  @if (exhausted()) {
+    <div class="exhausted-pane" role="status">
+      <p class="exhausted-heading">{{ exhaustedHeading() }}</p>
+      <p class="exhausted-body">{{ exhaustedDetail() }}</p>
+    </div>
+
+    <!-- The vote row stays put so the panel does not reflow out from under the
+         user on their last vote; both buttons are inert and unhighlighted,
+         because there is no item on screen for either to be about. -->
+    <vt-voting-overlay
+      [isGood]="false"
+      [isBad]="false"
+      [unavailable]="true"
+      [spinningVote]="null"
+      [showHint]="false"
+    ></vt-voting-overlay>
+  } @else if (!media()) {
     <p class="placeholder-text">Select a media item to view</p>
   } @else {
     <div class="media-swipe-wrapper" [class]="mediaType === 'audio' ? '' : swipeClass()">
@@ -91,7 +107,7 @@
         <button class="btn btn--toolbar ivc-btn" (click)="imageViewer.rotateLeft()" title="Rotate left ([)" aria-label="Rotate image left"><vt-icon type="rotate-ccw" [size]="16"></vt-icon></button>
         <button class="btn btn--toolbar ivc-btn" (click)="imageViewer.rotateRight()" title="Rotate right (])" aria-label="Rotate image right"><vt-icon type="rotate-cw" [size]="16"></vt-icon></button>
         <button class="btn btn--toolbar ivc-btn" (click)="imageViewer.zoomOut()" title="Zoom out (-)" aria-label="Zoom out"><vt-icon type="zoom-out" [size]="16"></vt-icon></button>
-        <button class="btn btn--toolbar ivc-btn" (click)="imageViewer.zoomIn()" title="Zoom in (+)" aria-label="Zoom in"><vt-icon type="zoom-in" [size]="16"></vt-icon></button>
+        <button class="btn btn--toolbar ivc-btn" (click)="imageViewer.zoomIn()" title="Zoom in (+, or double-click the image)" aria-label="Zoom in"><vt-icon type="zoom-in" [size]="16"></vt-icon></button>
         <label for="ivc-zoom" class="sr-only">Zoom</label>
         <input
           type="range"

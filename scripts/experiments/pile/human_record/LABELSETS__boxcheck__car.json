@@ -1,0 +1,153 @@
+{
+ "bad": [],
+ "class": "car",
+ "detector_name": "car incl SUVs and minivans -- box check",
+ "exported": "2026-09-16",
+ "good": [
+  {
+   "cid": null,
+   "filename": "3209.jpg",
+   "id": "c4192626f8f204d4",
+   "label": "good",
+   "md5": "c7b27c8b75ab4b8b5dbf6160beb39c23",
+   "media_type": "image",
+   "name": "3209.jpg",
+   "origin_name": "3209.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "cid": null,
+   "filename": "2400825.jpg",
+   "id": "9693931bda94132d",
+   "label": "good",
+   "md5": "e487e4a5de04ce9311365084dc6f7283",
+   "media_type": "image",
+   "name": "2400825.jpg",
+   "origin_name": "2400825.jpg",
+   "region_box": [
+    0.5572706935123043,
+    0.3503355704697987,
+    0.6950782997762863,
+    0.44966442953020136
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "cid": null,
+   "filename": "2415747.jpg",
+   "id": "486b6de80b4107ff",
+   "label": "good",
+   "md5": "1490cd71f6ede4f4251f83af4aff2ec5",
+   "media_type": "image",
+   "name": "2415747.jpg",
+   "origin_name": "2415747.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "cid": null,
+   "filename": "2413101.jpg",
+   "id": "17a5dd02713767ae",
+   "label": "good",
+   "md5": "121a80c4e53ad1a45f34b2c29a3a7840",
+   "media_type": "image",
+   "name": "2413101.jpg",
+   "origin_name": "2413101.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "cid": null,
+   "filename": "1498.jpg",
+   "id": "8bdd2fbd8f6e575a",
+   "label": "good",
+   "md5": "fafd810a4293ce2cb5d83ded6627ac9c",
+   "media_type": "image",
+   "name": "1498.jpg",
+   "origin_name": "1498.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "cid": null,
+   "filename": "2392177.jpg",
+   "id": "ff6c42b1afce5c77",
+   "label": "good",
+   "md5": "d33bbe13a56a4f66128bff957bda521b",
+   "media_type": "image",
+   "name": "2392177.jpg",
+   "origin_name": "2392177.jpg",
+   "region_box": [
+    0.0,
+    0.636241610738255,
+    0.13053691275167784,
+    0.7114093959731543
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "cid": null,
+   "filename": "3424.jpg",
+   "id": "8ae9ce40ac94de07",
+   "label": "good",
+   "md5": "385404d5530be5c4309d5beed54d3bd1",
+   "media_type": "image",
+   "name": "3424.jpg",
+   "origin_name": "3424.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "cid": null,
+   "filename": "2396590.jpg",
+   "id": "635df8e141b5be6a",
+   "label": "good",
+   "md5": "16abac71fc1023a110e0bfb977744ba5",
+   "media_type": "image",
+   "name": "2396590.jpg",
+   "origin_name": "2396590.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "cid": null,
+   "filename": "2377566.jpg",
+   "id": "1124e561078e088b",
+   "label": "good",
+   "md5": "e10238c8d49088a5285250a25b38d08b",
+   "media_type": "image",
+   "name": "2377566.jpg",
+   "origin_name": "2377566.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "cid": null,
+   "filename": "2340777.jpg",
+   "id": "491914a024fccc5a",
+   "label": "good",
+   "md5": "4488014ef65070d134bafee2a2472a82",
+   "media_type": "image",
+   "name": "2340777.jpg",
+   "origin_name": "2340777.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  }
+ ],
+ "kind": "boxcheck",
+ "question": "is the stored box on an instance of the class?",
+ "rule": "car incl SUVs and minivans",
+ "rule_digest": "ff564039c8de",
+ "source": "OWLv2-screened per-class review, exported from the live app"
+}

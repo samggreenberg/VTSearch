@@ -150,8 +150,14 @@ Copy `shortlist.png` and `roster.json` somewhere you can look at them, pick your
 two dozen, edit the file, then rebuild in roster mode:
 
 ```bash
-python build_corpus.py --sources spods,staver,tobacco800,ucsf --roster $VTS_DOCMARKS_OUT/roster.json
+python build_corpus.py --sources spods,staver,tobacco800,ucsf --roster $VTS_DOCMARKS_OUT/roster.json --new-version
 ```
+
+`--new-version` because `--out` already holds the candidate build, and a build
+into an existing corpus is refused unless it says which tier promise it makes
+(#3903). Picking a roster changes which pages are positives, so the tiers do
+move; before any cell exists nothing depends on them, and that is exactly what
+`--new-version` records. Once cells exist, see "Growing the corpus later".
 
 Rebuilding is cheap — the sources are cached, so only clustering and manifest
 writing re-run.
@@ -245,6 +251,40 @@ quote an ETA from a tier-`s` cell for tier `l` without accounting for
 `sift_vlad`'s per-image feature extraction, which dominates and is roughly
 linear in page count.
 
+### Memory, and `--chunk`
+
+Cells are built in chunks of `--chunk` pages (default 1000): each chunk's pages
+are read, embedded, appended to the cell and dropped before the next is read.
+Without it this stage could not build tier `l` at all — measured on tier `s`
+(#3842), the straight-through build peaked at **34.5 GB of RSS for 5,000
+pages**, because every page in the tier is held as raster bytes while
+`local_features` accumulate beside them and nothing is released until the cell
+is pickled at the very end. At 200,000 pages that is ~50 GB of bytes plus a
+~34 GB cell, both resident at once.
+
+Chunked, the working set is ~7 MB × `--chunk` — about 7 GB at the default —
+whatever the tier. Lower it on a shared node; `--chunk 0` restores the
+one-shot build, which is the right thing for a tier-`s` cell you want
+byte-identical to an older one and the wrong thing for anything larger.
+
+**This does not make the run faster.** `sift_vlad` is ~1.3 pages/s measured
+(8 CPUs; ~200% CPU throughout, so it is CPU-bound and does not use the cores it
+is given), which puts tier `m` at ~11 h and tier `l` at ~43 h. Size the
+`--time` limit for that, not for the memory fix.
+
+A chunked cell is written to `<name>.pkl.part` and renamed on clean exit, so a
+job killed at hour 40 leaves nothing behind for `--verify` to accept as a
+finished cell. There is no mid-cell resume: a re-run restarts the tier.
+
+`--verify`, `--relabel` and `--repair` stream the same way, so none of them
+needs the memory the build no longer needs. `--relabel` reads the cell twice —
+once to count, which is what the dry run reports, and once to write, only if
+something changed — and `--repair` holds just the vectorless medias while the
+rest pass straight from the old cell into the new one. Both write beside the
+original and rename last, so a rewrite killed part way leaves the cell entirely
+as it was: never truncated, and never half-relabelled, which is the failure
+`--verify` could not see.
+
 Cells land in `$VTS_PILE/embeddings/docmarks_<tier>__<embedder>.pkl`. Verify
 before trusting:
 
@@ -295,3 +335,10 @@ python build_corpus.py ... --pin-tiers $VTS_DOCMARKS_OUT/build_report.json
 Pinning keeps tier membership stable so the new numbers stay comparable to the
 old ones, at the cost of letting the page counts drift. Without it, say plainly
 that it is a new version and re-run the baselines.
+
+This is enforced, not advice (#3903). A build whose `--out` already holds a
+`build_report.json` stops before the pull unless it passes `--pin-tiers` or
+`--new-version`, and `launch_docmarks.sh build` refuses before submitting unless
+`VTS_DOCMARKS_PIN_TIERS` or `VTS_DOCMARKS_NEW_VERSION=1` is set. The choice is
+recorded under `tier_provenance` in the new report, including the cutoffs a new
+version superseded.

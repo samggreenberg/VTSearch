@@ -15,7 +15,43 @@ not list every commit. Use `git log` for the full history.
 
 ## Unreleased
 
+### Fixed
+
+- **Pressing Enter on a Text sort query now hands focus back, so you can vote
+  with the arrow keys straight away** (issue #3935). In Manual mode, typing a
+  keyword and hitting Enter resorted the left panel and selected a new item in
+  the centre, but focus stayed in the query box - and keyboard shortcuts are
+  deliberately suppressed while focus sits in a text field, so left/right did
+  nothing until you clicked elsewhere. Submitting the sort now blurs the box.
+  A query you are still typing keeps focus, as before.
+
+### Changed
+
+- **Structural (instance-matching) search is ~3x faster on both of its hot
+  paths** (#3900). Ingest with the `sift_vlad` embedder no longer runs SIFT
+  detection at the source's full resolution: detection cost scales with pixel
+  count while the keypoint set is capped regardless, so a high-resolution
+  source was paying many times over for the same descriptors. Detection is now
+  bounded by `VTSEARCH_MAX_STRUCTURAL_DETECT_PIXELS` (default 2 MP, `0` opts
+  out) — measured 2.8x faster on a 4.5 MP corpus, and it *improves* the
+  verified-pair rate, because the keypoints an uncapped detection spends its
+  budget on sit in fine texture that does not survive a rescale. Separately,
+  the Stage-2 geometric re-rank now matches the whole shortlist in one batched
+  `torch` computation instead of a `cv2.BFMatcher` call per pair — 2.9x on CPU
+  with identical ranking, and it is the one part of the pipeline that uses a
+  GPU when there is one.
+
 ### Added
+
+- **Double-click the image to zoom in** (#3934). Looking closer at a borderline
+  item meant reaching for the zoom control below the image, which breaks the
+  rhythm of keyboard voting. A double-click on the image in the Train / Find
+  centre panel now zooms 2x about the point you clicked, the way it already
+  does on the Browse map. Repeat to go deeper; because the viewer caps at 5x,
+  a double-click *at* the cap returns to fit instead of doing nothing, so the
+  mouse alone gets you both in and out. Any rotation you applied is kept, and
+  the gesture stands aside while a region draw owns it (Shift held, or the
+  Marquee toggle on).
 
 - **Stall diagnostics, on by default** (#3853). A rare 5-20 s freeze during
   labeling in which every in-flight request finishes at once could not be
@@ -32,7 +68,50 @@ not list every commit. Use `git log` for the full history.
   `data/logs/`, so the pane scrolling away no longer loses the evidence. See
   `docs/DEPLOYMENT.md` → "Diagnosing a stall".
 
+- **`gc.freeze()` after the model preload** (#3870). A labeling session logged
+  a gen-2 collection of ~300 ms every ~2 minutes - 35 of them over 2,400 votes,
+  flat with label count - and each one holds the GIL, so whatever was in flight
+  froze with it (a vote POST to 333 ms, a learned sort to 351 ms). The pause is
+  dominated by the object graph the process starts with: `transformers`,
+  `torch`, `sklearn`, `cuml`/`numba` contribute millions of tracked containers
+  that every full collection traverses and never frees. The app now freezes
+  that graph into the permanent generation once the preload finishes, which
+  full collections skip. Measured on the GRID over an otherwise identical
+  600-vote run: **ten pauses of 290-360 ms became zero**, and vote POST max
+  fell 377 ms → 121 ms. Datasets and detectors load lazily afterwards and stay
+  collectable, so unloading one still frees its cycles. `VTSEARCH_GC_FREEZE=0`
+  skips it.
+
+- **One switch for a diagnostic session, and a log that says what its bars
+  were** (#3853). `VTSEARCH_DIAGNOSE=1` sets the whole set together — INFO
+  level, a 400 ms request bar, a 150 ms phase bar, and by the coupling a 75 ms
+  GC bar — each as a default, so a variable you set yourself still wins. It
+  deliberately does not pin `VTSEARCH_GC_WARN_MS`, since that would bypass the
+  coupling. Two sessions in that issue produced inconclusive logs for
+  configuration reasons alone: one ran at the shipped 1 s request bar, so a
+  600–900 ms vote was invisible to it, and one got lower bars only through
+  uncommitted edits to two source files. Every run now also logs a
+  `diagnostics config:` line at startup (at WARNING, so a stock deployment has
+  it), because a log that omits its own thresholds makes every absence in it
+  ambiguous — "no slow requests" reads as *nothing was slow* and as *the bar
+  was a second* equally well.
+
 ### Changed
+
+- **Every request and phase now reports CPU and GC time beside wall time**
+  (#3853). A 4918 ms vote POST that did 12 ms of work and one that did 4900 ms
+  are the same number to a `perf_counter` pair, which is why the captured stall
+  could be seen but not explained: six of the eight slow votes in that trace
+  were slow *alone*, so something released the GIL, and nothing recorded
+  whether it had blocked or merely been descheduled. `slow request` and
+  `slow phase` lines now carry `cpu=` and `gc=`, and below the slow bar (at
+  `VTSEARCH_LOG_LEVEL=INFO`) every request is logged as `request trace:` with
+  the same figures, so a diagnostic run can add up a vote cycle instead of
+  hunting for an outlier in it -- the shape the remaining felt pauses actually
+  have. `VTSEARCH_GC_WARN_MS`, left unset, now tracks `VTSEARCH_SLOW_PHASE_MS`
+  rather than sitting at a fixed 200 ms: a collection under the GC bar is
+  invisible but still lands inside whatever phase was running, so the old
+  default silently inflated phases whenever the phase bar was lowered below it.
 
 - **The Smart indicator no longer flaps on a category that has plateaued**
   (#3832). Smart called the error cost "still declining" whenever a line
@@ -77,6 +156,26 @@ not list every commit. Use `git log` for the full history.
   Pacing only: nothing about what is loaded or stored changes.
 
 ### Fixed
+
+- **A `PluginField`'s `default` is now a value everywhere, not just on the CLI**
+  (issue #3874). A plugin declaring `default=DEFAULT_EMAIL` on a field showed
+  an empty box in the GUI, and saving the form without touching the field
+  stored a blank - so a default the plugin author could set programmatically
+  was invisible to the user and absent from what ran. Three layers disagreed
+  about what a blank meant. Marshmallow's `load_default` fires on a *missing*
+  key, but a form posts every input it rendered, an untouched one as `""`: the
+  plugin-arg schema now drops a blank for a defaulted field before loading, so
+  a blank loads exactly as an omitted key does (which also lets a blank
+  `number` take its default instead of failing to parse). `normalize_field_values`
+  - the only pass a schema-less caller such as the Auto-Find results exporter
+  gets - fills a missing or blank field from its default before the required
+  check, so a declared default now satisfies `required` rather than raising
+  `"<Label> is required."`; the CLI's presence check defers to it too, so
+  `--email-address ""` no longer fails where omitting the flag succeeds. And
+  the Auto-Find settings tab seeds defaults on every arrival at an exporter
+  rather than only on the first pick, so an exporter restored from saved
+  settings - or a field that *gained* a default after the exporter was first
+  configured - shows and persists it.
 
 - **A plugin's `checkbox` field now renders as a checkbox everywhere, not as a
   text box you were invited to type `true` into** (issue #3851). The SPA has

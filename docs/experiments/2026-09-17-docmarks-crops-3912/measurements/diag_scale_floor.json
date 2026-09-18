@@ -1,0 +1,4122 @@
+[
+  {
+    "class_id": "spods/logo_00003_0",
+    "crop_kp": 716,
+    "own": [
+      {
+        "page": "spods/00531",
+        "inliers": 184,
+        "scale": 0.1337,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "pos": [
+      {
+        "page": "spods/00592",
+        "inliers": 122,
+        "scale": 0.1245,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00504",
+        "inliers": 130,
+        "scale": 0.1202,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00150",
+        "inliers": 122,
+        "scale": 0.1185,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00795",
+        "inliers": 113,
+        "scale": 0.1231,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00292",
+        "inliers": 123,
+        "scale": 0.1235,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00438",
+        "inliers": 119,
+        "scale": 0.1254,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00691",
+        "inliers": 135,
+        "scale": 0.1208,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00612",
+        "inliers": 124,
+        "scale": 0.1237,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "neg": [
+      {
+        "page": "spods/00401",
+        "inliers": 27,
+        "scale": 0.0025,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00582",
+        "inliers": 8,
+        "scale": 0.0596,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00570",
+        "inliers": 7,
+        "scale": 0.0139,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00005",
+        "inliers": 17,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00747",
+        "inliers": 15,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00520",
+        "inliers": 3,
+        "scale": 0.2056,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00845",
+        "inliers": 15,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00456",
+        "inliers": 3,
+        "scale": 0.0513,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      }
+    ]
+  },
+  {
+    "class_id": "spods/logo_00011_0",
+    "crop_kp": 1025,
+    "own": [
+      {
+        "page": "spods/00047",
+        "inliers": 115,
+        "scale": 0.1877,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "pos": [
+      {
+        "page": "spods/00179",
+        "inliers": 85,
+        "scale": 0.1307,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00956",
+        "inliers": 95,
+        "scale": 0.143,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00685",
+        "inliers": 94,
+        "scale": 0.1882,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00083",
+        "inliers": 82,
+        "scale": 0.1402,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00864",
+        "inliers": 83,
+        "scale": 0.1899,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00772",
+        "inliers": 99,
+        "scale": 0.104,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00412",
+        "inliers": 85,
+        "scale": 0.1814,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00563",
+        "inliers": 85,
+        "scale": 0.1739,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "neg": [
+      {
+        "page": "spods/00883",
+        "inliers": 30,
+        "scale": 0.0035,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00639",
+        "inliers": 25,
+        "scale": 0.0501,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00400",
+        "inliers": 29,
+        "scale": 0.0046,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00798",
+        "inliers": 4,
+        "scale": 0.0057,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00613",
+        "inliers": 19,
+        "scale": 0.0215,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00723",
+        "inliers": 4,
+        "scale": 0.0233,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00174",
+        "inliers": 10,
+        "scale": 0.0024,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00127",
+        "inliers": 24,
+        "scale": 0.0063,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      }
+    ]
+  },
+  {
+    "class_id": "spods/logo_00014_0",
+    "crop_kp": 1024,
+    "own": [
+      {
+        "page": "spods/00379",
+        "inliers": 206,
+        "scale": 0.1386,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "pos": [
+      {
+        "page": "spods/00014",
+        "inliers": 142,
+        "scale": 0.1396,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00721",
+        "inliers": 127,
+        "scale": 0.1156,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00157",
+        "inliers": 153,
+        "scale": 0.1353,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00538",
+        "inliers": 134,
+        "scale": 0.1197,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00959",
+        "inliers": 151,
+        "scale": 0.1367,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00815",
+        "inliers": 165,
+        "scale": 0.1382,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00668",
+        "inliers": 147,
+        "scale": 0.1352,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/01012",
+        "inliers": 150,
+        "scale": 0.1371,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "neg": [
+      {
+        "page": "spods/00192",
+        "inliers": 5,
+        "scale": 0.0303,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00782",
+        "inliers": 4,
+        "scale": 0.2333,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00430",
+        "inliers": 7,
+        "scale": 0.0259,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00943",
+        "inliers": 4,
+        "scale": 0.0055,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00873",
+        "inliers": 4,
+        "scale": 0.0286,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00745",
+        "inliers": 7,
+        "scale": 0.0333,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00810",
+        "inliers": 8,
+        "scale": 0.0007,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00101",
+        "inliers": 11,
+        "scale": 0.0655,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ]
+  },
+  {
+    "class_id": "spods/logo_00023_0",
+    "crop_kp": 879,
+    "own": [
+      {
+        "page": "spods/00196",
+        "inliers": 221,
+        "scale": 0.1319,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "pos": [
+      {
+        "page": "spods/00842",
+        "inliers": 161,
+        "scale": 0.1311,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00274",
+        "inliers": 175,
+        "scale": 0.1294,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00569",
+        "inliers": 159,
+        "scale": 0.1311,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00297",
+        "inliers": 167,
+        "scale": 0.1309,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00167",
+        "inliers": 178,
+        "scale": 0.1293,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00735",
+        "inliers": 160,
+        "scale": 0.1313,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00763",
+        "inliers": 113,
+        "scale": 0.1066,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00487",
+        "inliers": 146,
+        "scale": 0.1317,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "neg": [
+      {
+        "page": "spods/01021",
+        "inliers": 4,
+        "scale": 0.121,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00690",
+        "inliers": 10,
+        "scale": 0.0752,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00657",
+        "inliers": 5,
+        "scale": 0.0815,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00536",
+        "inliers": 7,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/01076",
+        "inliers": 3,
+        "scale": 0.7074,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/01056",
+        "inliers": 4,
+        "scale": 0.1141,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00373",
+        "inliers": 4,
+        "scale": 0.7773,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00895",
+        "inliers": 12,
+        "scale": 0.038,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ]
+  },
+  {
+    "class_id": "spods/logo_00029_0",
+    "crop_kp": 454,
+    "own": [
+      {
+        "page": "spods/00894",
+        "inliers": 177,
+        "scale": 0.1363,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "pos": [
+      {
+        "page": "spods/00645",
+        "inliers": 89,
+        "scale": 0.1145,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00248",
+        "inliers": 135,
+        "scale": 0.1358,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00841",
+        "inliers": 77,
+        "scale": 0.0972,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00206",
+        "inliers": 136,
+        "scale": 0.1365,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00768",
+        "inliers": 120,
+        "scale": 0.1379,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00423",
+        "inliers": 113,
+        "scale": 0.1128,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00305",
+        "inliers": 138,
+        "scale": 0.1373,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00523",
+        "inliers": 99,
+        "scale": 0.1125,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "neg": [
+      {
+        "page": "spods/00358",
+        "inliers": 4,
+        "scale": 0.0177,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00273",
+        "inliers": 9,
+        "scale": 0.089,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00107",
+        "inliers": 6,
+        "scale": 0.0221,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00204",
+        "inliers": 2,
+        "scale": 0.5846,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00153",
+        "inliers": 2,
+        "scale": 2.2516,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00090",
+        "inliers": 4,
+        "scale": 0.0488,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00682",
+        "inliers": 7,
+        "scale": 0.0124,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/01033",
+        "inliers": 3,
+        "scale": 0.2208,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      }
+    ]
+  },
+  {
+    "class_id": "spods/stamp_00293_1",
+    "crop_kp": 910,
+    "own": [
+      {
+        "page": "spods/00302",
+        "inliers": 183,
+        "scale": 0.0884,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "pos": [
+      {
+        "page": "spods/00336",
+        "inliers": 51,
+        "scale": 0.0861,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00340",
+        "inliers": 57,
+        "scale": 0.0855,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00341",
+        "inliers": 54,
+        "scale": 0.0843,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00293",
+        "inliers": 64,
+        "scale": 0.085,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00304",
+        "inliers": 63,
+        "scale": 0.0869,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00301",
+        "inliers": 62,
+        "scale": 0.087,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00347",
+        "inliers": 75,
+        "scale": 0.0864,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00338",
+        "inliers": 52,
+        "scale": 0.0864,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "neg": [
+      {
+        "page": "spods/00784",
+        "inliers": 3,
+        "scale": 0.218,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00746",
+        "inliers": 16,
+        "scale": 0.0005,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00974",
+        "inliers": 5,
+        "scale": 0.1437,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00119",
+        "inliers": 3,
+        "scale": 0.2023,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00931",
+        "inliers": 2,
+        "scale": 0.335,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00022",
+        "inliers": 5,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00210",
+        "inliers": 5,
+        "scale": 0.0209,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00840",
+        "inliers": 3,
+        "scale": 0.03,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      }
+    ]
+  },
+  {
+    "class_id": "spods/stamp_00546_1",
+    "crop_kp": 434,
+    "own": [
+      {
+        "page": "spods/00563",
+        "inliers": 95,
+        "scale": 0.1199,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "pos": [
+      {
+        "page": "spods/00570",
+        "inliers": 54,
+        "scale": 0.0866,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00555",
+        "inliers": 56,
+        "scale": 0.1328,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00549",
+        "inliers": 53,
+        "scale": 0.0772,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00569",
+        "inliers": 52,
+        "scale": 0.1455,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00552",
+        "inliers": 61,
+        "scale": 0.1454,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00559",
+        "inliers": 54,
+        "scale": 0.1419,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00553",
+        "inliers": 56,
+        "scale": 0.1435,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00558",
+        "inliers": 49,
+        "scale": 0.1416,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "neg": [
+      {
+        "page": "spods/00827",
+        "inliers": 3,
+        "scale": 1.3412,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00680",
+        "inliers": 39,
+        "scale": 0.1499,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00643",
+        "inliers": 11,
+        "scale": 0.0112,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00999",
+        "inliers": 6,
+        "scale": 0.0392,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/01061",
+        "inliers": 4,
+        "scale": 0.7212,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00294",
+        "inliers": 2,
+        "scale": 0.4541,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00905",
+        "inliers": 8,
+        "scale": 0.0081,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/01087",
+        "inliers": 8,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      }
+    ]
+  },
+  {
+    "class_id": "spods/stamp_00577_1",
+    "crop_kp": 898,
+    "own": [
+      {
+        "page": "spods/00602",
+        "inliers": 200,
+        "scale": 0.14,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "pos": [
+      {
+        "page": "spods/00580",
+        "inliers": 72,
+        "scale": 0.1123,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00595",
+        "inliers": 72,
+        "scale": 0.1237,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00599",
+        "inliers": 48,
+        "scale": 0.0868,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00583",
+        "inliers": 65,
+        "scale": 0.1197,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00601",
+        "inliers": 65,
+        "scale": 0.0976,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00596",
+        "inliers": 64,
+        "scale": 0.1064,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00598",
+        "inliers": 59,
+        "scale": 0.1279,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00590",
+        "inliers": 43,
+        "scale": 0.0846,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "neg": [
+      {
+        "page": "spods/01077",
+        "inliers": 9,
+        "scale": 0.0093,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00073",
+        "inliers": 7,
+        "scale": 0.0012,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00234",
+        "inliers": 12,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00758",
+        "inliers": 21,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00675",
+        "inliers": 11,
+        "scale": 0.0248,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/01038",
+        "inliers": 15,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00586",
+        "inliers": 59,
+        "scale": 0.1213,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00904",
+        "inliers": 5,
+        "scale": 0.0745,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ]
+  },
+  {
+    "class_id": "spods/stamp_00612_1",
+    "crop_kp": 761,
+    "own": [
+      {
+        "page": "spods/00639",
+        "inliers": 266,
+        "scale": 0.163,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "pos": [
+      {
+        "page": "spods/00620",
+        "inliers": 62,
+        "scale": 0.1774,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00613",
+        "inliers": 66,
+        "scale": 0.1744,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00638",
+        "inliers": 79,
+        "scale": 0.1769,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00615",
+        "inliers": 82,
+        "scale": 0.1736,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00623",
+        "inliers": 65,
+        "scale": 0.1426,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00630",
+        "inliers": 80,
+        "scale": 0.1696,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00624",
+        "inliers": 49,
+        "scale": 0.1714,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00621",
+        "inliers": 50,
+        "scale": 0.1617,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "neg": [
+      {
+        "page": "spods/00659",
+        "inliers": 13,
+        "scale": 0.048,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/01014",
+        "inliers": 5,
+        "scale": 0.4416,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00395",
+        "inliers": 5,
+        "scale": 0.0726,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00719",
+        "inliers": 9,
+        "scale": 0.1071,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00306",
+        "inliers": 9,
+        "scale": 0.05,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00820",
+        "inliers": 6,
+        "scale": 0.0386,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00320",
+        "inliers": 6,
+        "scale": 0.0464,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/01086",
+        "inliers": 10,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      }
+    ]
+  },
+  {
+    "class_id": "spods/stamp_00769_1",
+    "crop_kp": 239,
+    "own": [
+      {
+        "page": "spods/00782",
+        "inliers": 105,
+        "scale": 0.1239,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "pos": [
+      {
+        "page": "spods/00799",
+        "inliers": 35,
+        "scale": 0.1404,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00794",
+        "inliers": 43,
+        "scale": 0.1403,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00772",
+        "inliers": 40,
+        "scale": 0.1289,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00783",
+        "inliers": 49,
+        "scale": 0.1386,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00788",
+        "inliers": 62,
+        "scale": 0.1359,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00779",
+        "inliers": 58,
+        "scale": 0.1394,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00784",
+        "inliers": 59,
+        "scale": 0.1309,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00790",
+        "inliers": 38,
+        "scale": 0.1384,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "neg": [
+      {
+        "page": "spods/00754",
+        "inliers": 18,
+        "scale": 0.0045,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00344",
+        "inliers": 4,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00649",
+        "inliers": 5,
+        "scale": 0.5135,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00571",
+        "inliers": 49,
+        "scale": 0.1442,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00836",
+        "inliers": 7,
+        "scale": 0.0661,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00729",
+        "inliers": 2,
+        "scale": 1.6998,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00135",
+        "inliers": 10,
+        "scale": 0.0193,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00578",
+        "inliers": 9,
+        "scale": 0.167,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ]
+  },
+  {
+    "class_id": "spods/stamp_00931_1",
+    "crop_kp": 133,
+    "own": [
+      {
+        "page": "spods/00955",
+        "inliers": 38,
+        "scale": 0.0654,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "pos": [
+      {
+        "page": "spods/00953",
+        "inliers": 14,
+        "scale": 0.0947,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00940",
+        "inliers": 16,
+        "scale": 0.1442,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00931",
+        "inliers": 26,
+        "scale": 0.1107,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00946",
+        "inliers": 19,
+        "scale": 0.0342,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00937",
+        "inliers": 18,
+        "scale": 0.1057,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00942",
+        "inliers": 19,
+        "scale": 0.1222,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00934",
+        "inliers": 21,
+        "scale": 0.0591,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00949",
+        "inliers": 19,
+        "scale": 0.125,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "neg": [
+      {
+        "page": "spods/00989",
+        "inliers": 2,
+        "scale": 2.5047,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00499",
+        "inliers": 3,
+        "scale": 0.7962,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00895",
+        "inliers": 6,
+        "scale": 0.0633,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00441",
+        "inliers": 4,
+        "scale": 0.053,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "spods/00670",
+        "inliers": 3,
+        "scale": 0.8113,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00122",
+        "inliers": 2,
+        "scale": 0.0992,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00030",
+        "inliers": 2,
+        "scale": 1.1313,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "spods/00782",
+        "inliers": 5,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      }
+    ]
+  },
+  {
+    "class_id": "staver/stamp_stampds-00213_1",
+    "crop_kp": 1024,
+    "own": [
+      {
+        "page": "staver/stampds-00219",
+        "inliers": 55,
+        "scale": 0.1436,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "pos": [
+      {
+        "page": "staver/stampds-00215",
+        "inliers": 6,
+        "scale": 0.3587,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "staver/stampds-00224",
+        "inliers": 9,
+        "scale": 0.1362,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "staver/stampds-00228",
+        "inliers": 14,
+        "scale": 0.1436,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "staver/stampds-00216",
+        "inliers": 9,
+        "scale": 0.0634,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "staver/stampds-00223",
+        "inliers": 9,
+        "scale": 0.0653,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "staver/stampds-00218",
+        "inliers": 9,
+        "scale": 0.1452,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "staver/stampds-00217",
+        "inliers": 9,
+        "scale": 0.0988,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "staver/stampds-00213",
+        "inliers": 11,
+        "scale": 0.1396,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "neg": [
+      {
+        "page": "staver/stampds-00305",
+        "inliers": 151,
+        "scale": 0.0003,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "staver/stampds-00071",
+        "inliers": 39,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "staver/stampds-00347",
+        "inliers": 8,
+        "scale": 0.0223,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": true
+      },
+      {
+        "page": "staver/stampds-00290",
+        "inliers": 39,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "staver/stampds-00321",
+        "inliers": 70,
+        "scale": 0.0012,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "staver/stampds-00208",
+        "inliers": 21,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "staver/stampds-00288",
+        "inliers": 103,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "staver/stampds-00024",
+        "inliers": 24,
+        "scale": 0.0029,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      }
+    ]
+  },
+  {
+    "class_id": "staver/stamp_stampds-00230_0",
+    "crop_kp": 451,
+    "own": [
+      {
+        "page": "staver/stampds-00230",
+        "inliers": 123,
+        "scale": 0.1745,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "pos": [
+      {
+        "page": "staver/stampds-00231",
+        "inliers": 62,
+        "scale": 0.1813,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "staver/stampds-00234",
+        "inliers": 56,
+        "scale": 0.1944,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "staver/stampds-00233",
+        "inliers": 48,
+        "scale": 0.1976,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "staver/stampds-00236",
+        "inliers": 66,
+        "scale": 0.1953,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "staver/stampds-00235",
+        "inliers": 51,
+        "scale": 0.1981,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "staver/stampds-00237",
+        "inliers": 42,
+        "scale": 0.1938,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "staver/stampds-00232",
+        "inliers": 42,
+        "scale": 0.197,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "neg": [
+      {
+        "page": "staver/stampds-00128",
+        "inliers": 5,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "staver/stampds-00012",
+        "inliers": 7,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "staver/stampds-00342",
+        "inliers": 2,
+        "scale": 1.5618,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "staver/stampds-00120",
+        "inliers": 3,
+        "scale": 0.9935,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "staver/stampds-00177",
+        "inliers": 6,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "staver/stampds-00369",
+        "inliers": 8,
+        "scale": 0.0083,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "staver/stampds-00363",
+        "inliers": 4,
+        "scale": 0.4988,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "staver/stampds-00046",
+        "inliers": 10,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      }
+    ]
+  },
+  {
+    "class_id": "tobacco800/logo_aah97e00-page02_1_0",
+    "crop_kp": 1024,
+    "own": [
+      {
+        "page": "tobacco800/gpq38e00-page02_1",
+        "inliers": 160,
+        "scale": 0.1288,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "pos": [
+      {
+        "page": "tobacco800/yte65e00",
+        "inliers": 18,
+        "scale": 0.092,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/cmw44e00",
+        "inliers": 31,
+        "scale": 0.1216,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/zrz94a00-page02_1",
+        "inliers": 28,
+        "scale": 0.0892,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/qqb56e00",
+        "inliers": 27,
+        "scale": 0.0889,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/gko55e00-page02_1",
+        "inliers": 12,
+        "scale": 0.0824,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/zlw44e00-page02_1",
+        "inliers": 11,
+        "scale": 0.123,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/qyx61c00",
+        "inliers": 19,
+        "scale": 0.0806,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/rhr75e00",
+        "inliers": 28,
+        "scale": 0.103,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "neg": [
+      {
+        "page": "tobacco800/jpi68d00",
+        "inliers": 4,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/mcl21e00",
+        "inliers": 4,
+        "scale": 0.9991,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/vad45f00-page03_2",
+        "inliers": 2,
+        "scale": 0.3616,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/xoi68d00",
+        "inliers": 4,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/mzt43f00-page3_1",
+        "inliers": 3,
+        "scale": 1.4764,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/njk79d00-page02_1",
+        "inliers": 0,
+        "scale": 1.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/dmy31e00-page02_2",
+        "inliers": 4,
+        "scale": 0.7182,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/cnk41e00-page02_2",
+        "inliers": 3,
+        "scale": 2.8438,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      }
+    ]
+  },
+  {
+    "class_id": "tobacco800/logo_aeq93a00_1",
+    "crop_kp": 211,
+    "own": [
+      {
+        "page": "tobacco800/jbs53d00",
+        "inliers": 58,
+        "scale": 0.0958,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "pos": [
+      {
+        "page": "tobacco800/bea69d00",
+        "inliers": 5,
+        "scale": 0.0309,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/nea69d00",
+        "inliers": 5,
+        "scale": 0.0368,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/aeq93a00",
+        "inliers": 25,
+        "scale": 0.0151,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/orn43d00",
+        "inliers": 23,
+        "scale": 0.1148,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/ukk18c00-page03_3",
+        "inliers": 7,
+        "scale": 0.0436,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/tum33a00",
+        "inliers": 18,
+        "scale": 0.0142,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/jyf35a00",
+        "inliers": 7,
+        "scale": 0.0025,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/rxm78d00-page02_1",
+        "inliers": 6,
+        "scale": 0.0578,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "neg": [
+      {
+        "page": "tobacco800/qit05f00-page2_2",
+        "inliers": 3,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/aee44c00",
+        "inliers": 4,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/ixp01f00_1",
+        "inliers": 2,
+        "scale": 0.7359,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/juo75f00_18",
+        "inliers": 2,
+        "scale": 1.9216,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/yqi08e00",
+        "inliers": 5,
+        "scale": 0.0301,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/vjk79d00-page04_1",
+        "inliers": 2,
+        "scale": 0.6474,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/yyj15f00-page3_2",
+        "inliers": 5,
+        "scale": 0.0176,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/ehi41f00",
+        "inliers": 2,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      }
+    ]
+  },
+  {
+    "class_id": "tobacco800/logo_afm90c00-first_1_0",
+    "crop_kp": 892,
+    "own": [
+      {
+        "page": "tobacco800/mlk12d00",
+        "inliers": 219,
+        "scale": 0.0984,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "pos": [
+      {
+        "page": "tobacco800/mmk15f00",
+        "inliers": 17,
+        "scale": 0.0633,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/ivw54f00_1",
+        "inliers": 24,
+        "scale": 0.063,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/wma35f00",
+        "inliers": 6,
+        "scale": 0.0832,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/qma35f00",
+        "inliers": 6,
+        "scale": 0.0625,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/cgx54f00_1",
+        "inliers": 4,
+        "scale": 0.1224,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/qtz54f00_1",
+        "inliers": 16,
+        "scale": 0.0629,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/ljz54f00_1",
+        "inliers": 20,
+        "scale": 0.0679,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/chg15f00-full_1",
+        "inliers": 60,
+        "scale": 0.0992,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "neg": [
+      {
+        "page": "tobacco800/axp01f00_1",
+        "inliers": 2,
+        "scale": 1.4714,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/pvx38c00-page06_1",
+        "inliers": 2,
+        "scale": 0.8554,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/ogg70f00-page3_8",
+        "inliers": 0,
+        "scale": 1.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/fzh11c00-var",
+        "inliers": 3,
+        "scale": 0.0745,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/mtq30d00_3",
+        "inliers": 3,
+        "scale": 8.4429,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/qxf80f00-page01_2",
+        "inliers": 2,
+        "scale": 0.3496,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/juo75f00_9",
+        "inliers": 3,
+        "scale": 2.4661,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/qit05f00-page2_36",
+        "inliers": 2,
+        "scale": 2.8115,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      }
+    ]
+  },
+  {
+    "class_id": "tobacco800/logo_ajj10e00_1",
+    "crop_kp": 376,
+    "own": [
+      {
+        "page": "tobacco800/rzo50e00",
+        "inliers": 63,
+        "scale": 0.2787,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "pos": [
+      {
+        "page": "tobacco800/nff41e00",
+        "inliers": 33,
+        "scale": 0.2669,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/ajz31e00",
+        "inliers": 32,
+        "scale": 0.1845,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/qyt81e00-page02_1",
+        "inliers": 34,
+        "scale": 0.2688,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/nrl43c00",
+        "inliers": 25,
+        "scale": 0.2392,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/ajj10e00",
+        "inliers": 28,
+        "scale": 0.1835,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/yaq00e00",
+        "inliers": 19,
+        "scale": 0.2035,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/bat60e00",
+        "inliers": 22,
+        "scale": 0.3041,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/dgi64c00",
+        "inliers": 16,
+        "scale": 0.1647,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "neg": [
+      {
+        "page": "tobacco800/mnq44a00",
+        "inliers": 3,
+        "scale": 0.5352,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/pnt08d00",
+        "inliers": 2,
+        "scale": 0.9353,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/xik90c00_2",
+        "inliers": 5,
+        "scale": 0.016,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/dlu7aa00_1",
+        "inliers": 9,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/kle30a00",
+        "inliers": 3,
+        "scale": 1.175,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/tkj51f00_4",
+        "inliers": 9,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/sks41a00",
+        "inliers": 10,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/oly45f00",
+        "inliers": 4,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      }
+    ]
+  },
+  {
+    "class_id": "tobacco800/logo_ald41a00-ernest_1",
+    "crop_kp": 813,
+    "own": [
+      {
+        "page": "tobacco800/ege23f00_1",
+        "inliers": 122,
+        "scale": 0.1454,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "pos": [
+      {
+        "page": "tobacco800/jgs60f00-page03_1",
+        "inliers": 15,
+        "scale": 0.1143,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/xmw13f00",
+        "inliers": 56,
+        "scale": 0.1534,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/kmw13f00",
+        "inliers": 50,
+        "scale": 0.1505,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/iqb70f00-page02_1",
+        "inliers": 21,
+        "scale": 0.1427,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/mbw13f00-page2_1",
+        "inliers": 57,
+        "scale": 0.1488,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/ikw83f00",
+        "inliers": 44,
+        "scale": 0.1364,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/wab91d00-var",
+        "inliers": 15,
+        "scale": 0.0839,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/ypz83f00_1",
+        "inliers": 15,
+        "scale": 0.1441,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "neg": [
+      {
+        "page": "tobacco800/jcv75f00_1",
+        "inliers": 7,
+        "scale": 0.7083,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/pkc56d00",
+        "inliers": 4,
+        "scale": 2.2547,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/rkc33a00-page02_2",
+        "inliers": 4,
+        "scale": 0.7718,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/eez35f00-page02_2",
+        "inliers": 4,
+        "scale": 0.4045,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/avc85f00-page02_1",
+        "inliers": 2,
+        "scale": 0.4329,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/gxp01f00_2",
+        "inliers": 4,
+        "scale": 1.2921,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/cry54f00_1",
+        "inliers": 3,
+        "scale": 4.1414,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/hyb45f00",
+        "inliers": 6,
+        "scale": 0.1094,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ]
+  },
+  {
+    "class_id": "tobacco800/logo_asg54f00_1",
+    "crop_kp": 482,
+    "own": [
+      {
+        "page": "tobacco800/dqn43c00",
+        "inliers": 151,
+        "scale": 0.1038,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "pos": [
+      {
+        "page": "tobacco800/nrg54f00-page02_1",
+        "inliers": 7,
+        "scale": 0.0981,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/bjn43c00-page02_1",
+        "inliers": 10,
+        "scale": 0.1097,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/bjn43c00-page02_1",
+        "inliers": 10,
+        "scale": 0.1097,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/bjn43c00-page02_1",
+        "inliers": 10,
+        "scale": 0.1097,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/asg54f00",
+        "inliers": 13,
+        "scale": 0.0984,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/vam30f00-page01_1",
+        "inliers": 4,
+        "scale": 0.0582,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/nrg54f00-page02_1",
+        "inliers": 7,
+        "scale": 0.0981,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/bjn43c00-page02_2",
+        "inliers": 9,
+        "scale": 0.0966,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "neg": [
+      {
+        "page": "tobacco800/kef61f00-page2_7",
+        "inliers": 0,
+        "scale": 1.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/qyt81e00-page02_2",
+        "inliers": 2,
+        "scale": 0.9575,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/yhw13f00_2",
+        "inliers": 0,
+        "scale": 1.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/crr09c00_2",
+        "inliers": 0,
+        "scale": 1.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/dkb01a00-page03_1",
+        "inliers": 6,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/sks41a00",
+        "inliers": 9,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/vad45f00-page03_4",
+        "inliers": 12,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/yme01e00-page01_1",
+        "inliers": 2,
+        "scale": 0.5872,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      }
+    ]
+  },
+  {
+    "class_id": "tobacco800/logo_azb11c00_1",
+    "crop_kp": 228,
+    "own": [
+      {
+        "page": "tobacco800/cqc13f00",
+        "inliers": 72,
+        "scale": 0.0565,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "pos": [
+      {
+        "page": "tobacco800/bwu60f00_1",
+        "inliers": 32,
+        "scale": 0.0537,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/odm51f00",
+        "inliers": 55,
+        "scale": 0.0561,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/lin01f00",
+        "inliers": 35,
+        "scale": 0.0544,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/azb11c00",
+        "inliers": 36,
+        "scale": 0.0574,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/nnj41f00",
+        "inliers": 13,
+        "scale": 0.0349,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/enj41f00",
+        "inliers": 16,
+        "scale": 0.0352,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/ldh93f00",
+        "inliers": 46,
+        "scale": 0.0539,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/xyf43a00-page02_1",
+        "inliers": 31,
+        "scale": 0.0582,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "neg": [
+      {
+        "page": "tobacco800/kcv85f00_2",
+        "inliers": 2,
+        "scale": 0.5529,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/kgi60e00",
+        "inliers": 0,
+        "scale": 1.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/ftf1aa00",
+        "inliers": 0,
+        "scale": 1.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/thi93f00_6",
+        "inliers": 0,
+        "scale": 1.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/osv63f00_1",
+        "inliers": 2,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/hbk41e00",
+        "inliers": 7,
+        "scale": 0.0142,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/mzm72e00-page06_2",
+        "inliers": 3,
+        "scale": 1.0772,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/dvr41a00",
+        "inliers": 0,
+        "scale": 1.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      }
+    ]
+  },
+  {
+    "class_id": "tobacco800/logo_bqz95d00_1",
+    "crop_kp": 566,
+    "own": [
+      {
+        "page": "tobacco800/wfo00a00",
+        "inliers": 157,
+        "scale": 0.0959,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "pos": [
+      {
+        "page": "tobacco800/qei59c00",
+        "inliers": 93,
+        "scale": 0.0951,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/vib56d00",
+        "inliers": 55,
+        "scale": 0.0931,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/hpz95d00",
+        "inliers": 87,
+        "scale": 0.0951,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/bqz95d00",
+        "inliers": 45,
+        "scale": 0.0926,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/qfj59c00",
+        "inliers": 84,
+        "scale": 0.0928,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/ppz95d00",
+        "inliers": 106,
+        "scale": 0.0957,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/cxi59c00_1",
+        "inliers": 40,
+        "scale": 0.0928,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/cxi59c00_2",
+        "inliers": 51,
+        "scale": 0.0931,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "neg": [
+      {
+        "page": "tobacco800/yeo49d00-page02_2",
+        "inliers": 4,
+        "scale": 0.1114,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/bex05f00_2",
+        "inliers": 7,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/jyf35a00",
+        "inliers": 3,
+        "scale": 0.7697,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/kcv85f00_5",
+        "inliers": 0,
+        "scale": 1.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/ifw98c00",
+        "inliers": 2,
+        "scale": 0.2686,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/bji44a00",
+        "inliers": 4,
+        "scale": 0.781,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/eiv46d00",
+        "inliers": 5,
+        "scale": 0.0178,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/jpi68d00",
+        "inliers": 2,
+        "scale": 0.6253,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      }
+    ]
+  },
+  {
+    "class_id": "tobacco800/logo_cgr96c00_1",
+    "crop_kp": 117,
+    "own": [
+      {
+        "page": "tobacco800/ecn9aa00",
+        "inliers": 39,
+        "scale": 0.0681,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "pos": [
+      {
+        "page": "tobacco800/rzk3aa00",
+        "inliers": 10,
+        "scale": 0.0686,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/sia26d00",
+        "inliers": 15,
+        "scale": 0.0445,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/cgr96c00",
+        "inliers": 12,
+        "scale": 0.0638,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/uvk3aa00",
+        "inliers": 8,
+        "scale": 0.0667,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/getdoc",
+        "inliers": 14,
+        "scale": 0.0659,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/hzq96c00-first",
+        "inliers": 12,
+        "scale": 0.0048,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/jzq96c00",
+        "inliers": 11,
+        "scale": 0.0638,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "neg": [
+      {
+        "page": "tobacco800/nff41e00",
+        "inliers": 0,
+        "scale": 1.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/zjy03e00-page02_2",
+        "inliers": 2,
+        "scale": 0.1226,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/zqr09c00",
+        "inliers": 0,
+        "scale": 1.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/tkj51f00_3",
+        "inliers": 3,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/pti31a00_1",
+        "inliers": 2,
+        "scale": 0.8937,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/sdm51f00",
+        "inliers": 0,
+        "scale": 1.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/ecv85f00",
+        "inliers": 2,
+        "scale": 1.5256,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/pqw02f00-page07_1",
+        "inliers": 0,
+        "scale": 1.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      }
+    ]
+  },
+  {
+    "class_id": "tobacco800/logo_ciy01a00-page02_1_0",
+    "crop_kp": 1024,
+    "own": [
+      {
+        "page": "tobacco800/jci90c00",
+        "inliers": 245,
+        "scale": 0.1221,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "pos": [
+      {
+        "page": "tobacco800/gcv85f00",
+        "inliers": 18,
+        "scale": 0.1371,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/ecv85f00",
+        "inliers": 19,
+        "scale": 0.1382,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/sfp41a00-page5_2",
+        "inliers": 35,
+        "scale": 0.1335,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/wut05f00",
+        "inliers": 85,
+        "scale": 0.1273,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/xtm90c00",
+        "inliers": 78,
+        "scale": 0.1274,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/wtm90c00",
+        "inliers": 102,
+        "scale": 0.1258,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/hku85f00",
+        "inliers": 3,
+        "scale": 0.5076,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/jzx41a00",
+        "inliers": 44,
+        "scale": 0.1295,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ],
+    "neg": [
+      {
+        "page": "tobacco800/hyb45f00",
+        "inliers": 2,
+        "scale": 0.3692,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/dvw54f00_2",
+        "inliers": 6,
+        "scale": 0.0127,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": true
+      },
+      {
+        "page": "tobacco800/kle30a00",
+        "inliers": 2,
+        "scale": 0.4599,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/tjr72f00-page02_2",
+        "inliers": 2,
+        "scale": 0.7025,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/miw83f00",
+        "inliers": 8,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/ksf09c00_2",
+        "inliers": 6,
+        "scale": 0.0,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/kpu96c00",
+        "inliers": 2,
+        "scale": 1.2181,
+        "reflection": false,
+        "ok@0.1": false,
+        "ok@0.05": false,
+        "ok@0.03": false,
+        "ok@0.01": false
+      },
+      {
+        "page": "tobacco800/drm00d00",
+        "inliers": 4,
+        "scale": 1.9229,
+        "reflection": false,
+        "ok@0.1": true,
+        "ok@0.05": true,
+        "ok@0.03": true,
+        "ok@0.01": true
+      }
+    ]
+  }
+]

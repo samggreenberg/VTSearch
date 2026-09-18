@@ -32,9 +32,11 @@ from __future__ import annotations
 import functools
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Protocol, runtime_checkable
+from typing import Optional, Protocol, Sequence, runtime_checkable
 
 import numpy as np
+
+from vtscore.config import MAX_STRUCTURAL_DETECT_PIXELS
 
 # --------------------------------------------------------------------------
 # Constants (pinned by the pre-impl spike; see the design doc's open questions)
@@ -332,6 +334,121 @@ def load_vlad_codebook() -> np.ndarray:
 
 
 # --------------------------------------------------------------------------
+# Batched descriptor matching (the GPU-able half of Stage 2)
+# --------------------------------------------------------------------------
+
+# Element budget for one batched distance matrix (candidates x M x N).  32M
+# float32 elements is 128 MB, which keeps the transient off a small GPU and out
+# of cache-thrashing territory on CPU; a larger shortlist is chunked.
+_MATCH_CHUNK_ELEMENTS = 32_000_000
+
+
+def _match_device() -> str:
+    """Device for batched descriptor matching.
+
+    Follows the app-wide device resolution, so a CUDA box matches on the GPU and
+    everything else falls back to CPU torch - still vectorised, and measurably
+    faster than the per-pair ``cv2.BFMatcher`` loop it replaces.
+    """
+    from vtscore.config import resolve_device  # noqa: PLC0415
+
+    return resolve_device()
+
+
+def ratio_test_matches(
+    template_desc: np.ndarray,
+    candidate_descs: Sequence[np.ndarray],
+    *,
+    ratio: float,
+    device: Optional[str] = None,
+) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Brute-force L2 kNN + Lowe ratio test of one template against many candidates.
+
+    This is what ``cv2.BFMatcher(NORM_L2).knnMatch(..., k=2)`` plus the ratio
+    loop does per pair, re-expressed as a single batched ``torch`` distance
+    computation so a whole Stage-2 shortlist is matched in one pass - on the GPU
+    when one is available.  It is the *only* part of the structural pipeline a
+    GPU can help with: SIFT detection is OpenCV C++ on the CPU (the shipped
+    ``opencv-python-headless`` wheel carries no CUDA module at all) and VLAD
+    aggregation is under 4% of ingest cost.
+
+    Returns one ``(template_idx, candidate_idx)`` pair of ``int64`` index arrays
+    per entry of *candidate_descs*, listing the correspondences that survive the
+    ratio test - the same set ``knnMatch`` produces, up to floating-point ties:
+    the batched path computes distances by the expanded
+    ``|a|^2 + |b|^2 - 2ab`` form, so a match sitting exactly on the ratio
+    boundary can fall either way.
+
+    A candidate with fewer than 2 descriptors yields an empty correspondence
+    set, matching ``knnMatch``'s need for a second-nearest neighbour.
+    """
+    import torch  # noqa: PLC0415
+
+    empty = (np.zeros(0, dtype=np.int64), np.zeros(0, dtype=np.int64))
+    tmpl = np.asarray(template_desc, dtype=np.float32)
+    if tmpl.ndim != 2 or tmpl.shape[0] < 2 or not candidate_descs:
+        return [empty for _ in candidate_descs]
+
+    # Candidates too small to supply a second-nearest neighbour are answered
+    # directly; only the usable ones are padded into the batch.
+    usable = [(i, np.asarray(c, dtype=np.float32)) for i, c in enumerate(candidate_descs)]
+    usable = [(i, c) for i, c in usable if c.ndim == 2 and c.shape[0] >= 2 and c.shape[1] == tmpl.shape[1]]
+
+    results: dict[int, tuple[np.ndarray, np.ndarray]] = {}
+    if usable:
+        dev = device or _match_device()
+        m, d = tmpl.shape
+        t = torch.from_numpy(tmpl).to(dev)
+        widest = max(c.shape[0] for _, c in usable)
+        per_chunk = max(1, _MATCH_CHUNK_ELEMENTS // max(1, m * widest))
+        for start in range(0, len(usable), per_chunk):
+            chunk = usable[start : start + per_chunk]
+            pad = max(c.shape[0] for _, c in chunk)
+            batch = torch.zeros((len(chunk), pad, d), dtype=torch.float32)
+            for row, (_, c) in enumerate(chunk):
+                batch[row, : c.shape[0]] = torch.from_numpy(c)
+            dist = torch.cdist(t.unsqueeze(0).expand(len(chunk), -1, -1), batch.to(dev))
+            # A padded row is an all-zero descriptor at a real distance from the
+            # template, so mask it out before the nearest-neighbour search rather
+            # than letting it win one.
+            for row, (_, c) in enumerate(chunk):
+                if c.shape[0] < pad:
+                    dist[row, :, c.shape[0] :] = float("inf")
+            best, idx = torch.topk(dist, 2, dim=2, largest=False)
+            keep = (best[..., 0] < ratio * best[..., 1]).cpu().numpy()
+            nn = idx[..., 0].cpu().numpy()
+            for row, (orig, _) in enumerate(chunk):
+                sel = np.nonzero(keep[row])[0].astype(np.int64)
+                results[orig] = (sel, nn[row][sel].astype(np.int64))
+
+    return [results.get(i, empty) for i in range(len(candidate_descs))]
+
+
+def cap_detect_resolution(image_gray: np.ndarray, max_pixels: int = MAX_STRUCTURAL_DETECT_PIXELS) -> np.ndarray:
+    """Downsample *image_gray* to at most *max_pixels*, preserving aspect ratio.
+
+    Local-feature detection cost scales with pixel count while the keypoint set
+    is capped at :data:`DEFAULT_MAX_FEATURES` regardless, so an uncapped
+    high-resolution source pays many times over for the same descriptors - and
+    spends them on fine texture that does not survive a rescale or re-shoot, so
+    it matches *worse* as well as slower.  See
+    :data:`~vtscore.config.MAX_STRUCTURAL_DETECT_PIXELS`.  ``max_pixels <= 0``
+    returns the image untouched.
+    """
+    gray = np.asarray(image_gray)
+    if max_pixels <= 0 or gray.ndim != 2:
+        return gray
+    h, w = gray.shape
+    if h * w <= max_pixels or h < 2 or w < 2:
+        return gray
+
+    import cv2  # noqa: PLC0415
+
+    scale = (max_pixels / float(h * w)) ** 0.5
+    return cv2.resize(gray, (max(1, int(w * scale)), max(1, int(h * scale))), interpolation=cv2.INTER_AREA)
+
+
+# --------------------------------------------------------------------------
 # SIFT matcher (v1 backend)
 # --------------------------------------------------------------------------
 
@@ -340,7 +457,20 @@ _LOWE_RATIO = 0.75
 # RANSAC reprojection tolerance, in normalised image units.
 _RANSAC_REPROJ_THRESHOLD = 0.02
 # Plausible-scale window for the fitted similarity model.
-_MIN_SANE_SCALE = 0.1
+#
+# The scale is measured in *normalised* coordinates, so it is not a
+# magnification: a template matched to a larger candidate fits at roughly
+# (template width / candidate width) times the true magnification.  A query crop
+# of a 158 px logo on a 2,544 px page therefore fits its own page at ~0.06, and
+# the old 0.1 floor rejected it -- no Tobacco800 logo under a tenth of its page's
+# width could verify against the page it was cut from (#3912).  The floor still
+# does real work: collapsed RANSAC fits, which map every template point onto one
+# spot, land at scale ~0 and carry up to 151 inliers on unrelated DocMarks pages.
+# Measured on the 23-class DocMarks roster at a 16,384-keypoint page budget, 0.03
+# verifies all 23 crops against their own page (0.1: 16) and lifts positives
+# with 8+ inliers from 111 to 166 of 182, while negatives with 8+ go from 5 to 13
+# of 184; the smallest true own-page fit was 0.057.
+_MIN_SANE_SCALE = 0.03
 _MAX_SANE_SCALE = 10.0
 # Minimum inlier support for a model to count as plausible.  A similarity
 # transform is fit from a 2-point minimal sample, so a 2-inlier fit has *zero*
@@ -357,8 +487,14 @@ class SiftMatcher:
     to :class:`StructuralMatcher`.
     """
 
-    def __init__(self, *, ransac_threshold: float = _RANSAC_REPROJ_THRESHOLD) -> None:
+    def __init__(
+        self,
+        *,
+        ransac_threshold: float = _RANSAC_REPROJ_THRESHOLD,
+        max_detect_pixels: int = MAX_STRUCTURAL_DETECT_PIXELS,
+    ) -> None:
         self._ransac_threshold = float(ransac_threshold)
+        self._max_detect_pixels = int(max_detect_pixels)
         self._sift = None  # lazily created cv2.SIFT instance
 
     def _get_sift(self, max_features: int):
@@ -387,6 +523,11 @@ class SiftMatcher:
             raise ValueError(f"image_gray must be 2-D (H, W); got shape {gray.shape}")
         if gray.dtype != np.uint8:
             gray = np.clip(gray, 0, 255).astype(np.uint8)
+        # Detect at a bounded resolution: cost scales with pixel count while the
+        # keypoint budget does not, and the capped detection also matches better
+        # (see :func:`cap_detect_resolution`).  Coordinates are normalised just
+        # below, so the cap is invisible to everything downstream.
+        gray = cap_detect_resolution(gray, self._max_detect_pixels)
         h, w = gray.shape
         sift = self._get_sift(max_features)
         kps, desc = sift.detectAndCompute(gray, None)
@@ -410,33 +551,44 @@ class SiftMatcher:
         the best similarity fit.  A degenerate input (too few matches, no model)
         returns a zero-inlier, ``model_ok=False`` result.
         """
+        return self.verify_many(template, [candidate])[0]
+
+    def verify_many(self, template: StructuralFeatures, candidates: Sequence[StructuralFeatures]) -> list[MatchStats]:
+        """Verify *template* against every candidate, matching them all in one batch.
+
+        Semantically ``[self.verify(template, c) for c in candidates]``, but the
+        descriptor-matching half - ~75% of a pair's cost, and what a Stage-2
+        re-rank spends its latency on - runs as a single batched ``torch``
+        distance computation over the whole shortlist, on the GPU when one is
+        available (:func:`ratio_test_matches`).  The RANSAC fit stays per-pair on
+        the CPU: it sees only the surviving correspondences, so it is already
+        cheap.
+        """
+        if not candidates:
+            return []
+        t_desc = template.descriptors_f32()
+        # A fit needs >= 2 correspondences (a similarity transform has 2 DoF
+        # pairs), and the ratio test needs a second-nearest neighbour.
+        if t_desc.shape[0] < 2:
+            return [MatchStats() for _ in candidates]
+
+        pairs = ratio_test_matches(t_desc, [c.descriptors_f32() for c in candidates], ratio=_LOWE_RATIO)
+        t_kp = template.keypoints_f32()
+        return [
+            self._fit_similarity(t_kp, cand.keypoints_f32(), t_idx, c_idx)
+            for cand, (t_idx, c_idx) in zip(candidates, pairs)
+        ]
+
+    def _fit_similarity(self, t_kp: np.ndarray, c_kp: np.ndarray, t_idx: np.ndarray, c_idx: np.ndarray) -> MatchStats:
+        """RANSAC-fit a similarity transform to one pair's ratio-tested correspondences."""
         import cv2  # noqa: PLC0415
 
-        t_desc = template.descriptors_f32()
-        c_desc = candidate.descriptors_f32()
-        # knnMatch needs at least 2 candidate descriptors; a fit needs >= 2
-        # correspondences (a similarity transform has 2 DoF pairs).
-        if t_desc.shape[0] < 2 or c_desc.shape[0] < 2:
-            return MatchStats()
-
-        matcher = cv2.BFMatcher(cv2.NORM_L2)
-        knn = matcher.knnMatch(t_desc, c_desc, k=2)
-        good: list = []
-        for pair in knn:
-            if len(pair) < 2:
-                continue
-            m, n = pair[0], pair[1]
-            if m.distance < _LOWE_RATIO * n.distance:
-                good.append(m)
-
-        tentative = len(good)
+        tentative = int(t_idx.shape[0])
         if tentative < 2:
             return MatchStats(tentative_count=tentative)
 
-        t_kp = template.keypoints_f32()
-        c_kp = candidate.keypoints_f32()
-        src = np.array([t_kp[m.queryIdx, :2] for m in good], dtype=np.float32)
-        dst = np.array([c_kp[m.trainIdx, :2] for m in good], dtype=np.float32)
+        src = np.ascontiguousarray(t_kp[t_idx, :2], dtype=np.float32)
+        dst = np.ascontiguousarray(c_kp[c_idx, :2], dtype=np.float32)
 
         # estimateAffinePartial2D fits exactly a 4-DoF similarity (translation,
         # rotation, uniform scale - no shear, no anisotropic scale), which is the

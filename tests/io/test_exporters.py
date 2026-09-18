@@ -1007,15 +1007,33 @@ class TestExportEndpoint:
             written = json.loads(fpath.read_text())
             assert written["detectors_run"] == 2
 
-    def test_server_json_exporter_missing_filepath_returns_422(self, client):
-        # Phase B: empty required fields are rejected by the per-plugin
-        # marshmallow schema (422 with the standard ``errors`` envelope)
-        # before ``.export()`` is called.
+    def test_server_json_exporter_blank_filepath_uses_the_default(self, client):
+        """A blank is the caller saying nothing, so the default applies (#3874).
+
+        ``filepath`` is required *and* declares a ``{YYYYMMDD-HHMMSS}``-stamped
+        default, and a form posts every input it rendered - an untouched one as
+        ``""``. Rejecting that while the next test's omitted key succeeds made
+        the two spellings of "I didn't fill this in" disagree, which is what
+        hid a plugin author's default from the UI entirely.
+        """
         res = client.post(
             "/api/exporters/export",
             json={
                 "exporter_name": "server_json_file",
                 "field_values": {"filepath": ""},
+                "results": SAMPLE_RESULTS,
+            },
+        )
+        assert res.status_code == 200
+
+    def test_exporter_blank_required_field_without_a_default_still_422s(self, client):
+        # The guard rail for the test above: a required field with nothing to
+        # fall back to must still be rejected before ``.export()`` runs.
+        res = client.post(
+            "/api/exporters/export",
+            json={
+                "exporter_name": "email_smtp",
+                "field_values": {"from": "me@my-domain.example", "to": ""},
                 "results": SAMPLE_RESULTS,
             },
         )
@@ -1034,6 +1052,7 @@ class TestExportEndpoint:
             json={
                 "exporter_name": "server_json_file",
                 "field_values": {},  # 'filepath' omitted; load_default kicks in
+                # (a blank string takes the same path — see the test above)
                 "results": SAMPLE_RESULTS,
             },
         )

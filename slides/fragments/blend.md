@@ -2,7 +2,7 @@
 
 ![bg fit](figs/calib-blend-flow.png)
 
-## Cross Examination
+## Cross<br>Examination
 
 <!-- build: figs/calib-blend-flow.build1.png -->
 

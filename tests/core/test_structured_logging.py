@@ -575,10 +575,10 @@ class TestSlowRequestLogging:
 
     def test_unparseable_threshold_falls_back_to_default(self, monkeypatch):
         """Bad config must not fault every request."""
-        from vtsearch.hooks import _DEFAULT_SLOW_REQUEST_MS, _slow_request_threshold_ms
+        from vtsearch.hooks import _DEFAULT_SLOW_REQUEST_MS, slow_request_threshold_ms
 
         monkeypatch.setenv("VTSEARCH_SLOW_REQUEST_MS", "not-a-number")
-        assert _slow_request_threshold_ms() == _DEFAULT_SLOW_REQUEST_MS
+        assert slow_request_threshold_ms() == _DEFAULT_SLOW_REQUEST_MS
 
     def test_timer_runs_last_so_it_brackets_the_other_hooks(self):
         """Flask runs ``after_request`` in reverse registration order, so the
@@ -592,6 +592,57 @@ class TestSlowRequestLogging:
         register_hooks(app)
         funcs = app.after_request_funcs[None]
         assert funcs[0] is _log_slow_request, "timer must be registered first to run last"
+
+    def test_slow_line_carries_cpu_and_gc(self, client, caplog, monkeypatch):
+        """Wall time alone cannot say what a slow request was doing.
+
+        #3853's captured 4918ms vote POST and a 4918ms wait on a lock are the
+        same number; ``cpu`` separates work from blocking and ``gc`` names a
+        collection that froze every thread.
+        """
+        monkeypatch.setenv("VTSEARCH_SLOW_REQUEST_MS", "0")
+        with caplog.at_level(logging.WARNING, logger="vtsearch.hooks"):
+            client.get("/api/auth/status")
+        msg = [r for r in caplog.records if "slow request" in r.getMessage()][-1].getMessage()
+        assert "cpu=" in msg and "gc=" in msg
+
+
+class TestRequestTrace:
+    """Below the slow bar, every request is traced at INFO.
+
+    A felt pause in #3853 is a *sum* - a chain of requests, a retrain and a
+    collection, each below every threshold. A per-request bar cannot see a sum
+    by construction, so a diagnostic run needs the whole chain recorded.
+    """
+
+    def test_every_request_traced_at_info(self, client, caplog, monkeypatch):
+        monkeypatch.setenv("VTSEARCH_SLOW_REQUEST_MS", "600000")
+        with caplog.at_level(logging.INFO, logger="vtsearch.hooks"):
+            resp = client.get("/api/auth/status")
+        traces = [r for r in caplog.records if "request trace" in r.getMessage()]
+        assert traces, "no trace line at INFO"
+        msg = traces[-1].getMessage()
+        assert traces[-1].levelno == logging.INFO
+        assert resp.headers["X-Request-Id"] in msg
+        assert "/api/auth/status" in msg
+        assert "cpu=" in msg and "gc=" in msg
+
+    def test_silent_at_warning(self, client, caplog, monkeypatch):
+        """A stock deployment logs at WARNING and must not pay for the trace."""
+        monkeypatch.setenv("VTSEARCH_SLOW_REQUEST_MS", "600000")
+        with caplog.at_level(logging.WARNING, logger="vtsearch.hooks"):
+            client.get("/api/auth/status")
+        assert not [r for r in caplog.records if "request trace" in r.getMessage()]
+
+    def test_a_request_is_never_both_slow_and_traced(self, client, caplog, monkeypatch):
+        """The two prefixes are exclusive, so a reader adding up a trace does
+        not double-count the requests that also crossed the slow bar."""
+        monkeypatch.setenv("VTSEARCH_SLOW_REQUEST_MS", "0")
+        with caplog.at_level(logging.INFO, logger="vtsearch.hooks"):
+            client.get("/api/auth/status")
+        msgs = [r.getMessage() for r in caplog.records]
+        assert [m for m in msgs if "slow request" in m]
+        assert not [m for m in msgs if "request trace" in m]
 
 
 # ---------------------------------------------------------------------------

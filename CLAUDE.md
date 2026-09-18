@@ -321,6 +321,87 @@ If a plan fully ships and no follow-ups remain, deleting it (after absorbing any
 
 Never ask the user whether to subscribe to PR activity, and never call `subscribe_pr_activity`. The user does not want Claude to watch PRs or respond to review comments / CI. This overrides the default GitHub Integration instruction to offer PR subscription after creating a PR.
 
+## Claude.ai Projects: one project, one repository (CRITICAL)
+
+A [project](https://code.claude.com/docs/en/claude-projects) at claude.ai/code is one
+coordinating conversation plus N parallel cloud sessions ("threads"), each on its own
+branch with its own PR. Projects are scoped to a **stream of work**, not to a
+repository, so one repo can back several projects and one project can clone several
+repos. VTSearch uses **one project, holding this repository alone.**
+
+**Never add a second repository to a VTSearch project.** This is not a preference; it
+silently disables the three hooks this repo depends on. Threads read permission rules,
+hooks and `env` only from the `.claude/settings.json` *in the directory the thread
+starts in* — inside the repository when the project has one, and **above the clones
+when it has several, where no repository's file is read for them.** Our
+`.claude/settings.json` carries the SessionStart hook that lands the working branch on
+`origin/dev` (see Branch Policy) plus the `ensure-test-deps-gate.py` and
+`require-issue-labels.py` `PreToolUse` gates. With one repository all three run; with
+two they are gone, with nothing in the thread saying so. A thread whose task needs
+another repo can add it to *itself* — that is the supported path, and it leaves the
+project single-repo.
+
+`CLAUDE.md` (this file) is read by every thread from its clone, so it stays the home
+for repo rules. Project memory (`MEMORY.md`, written by Claude, edited in **Project
+settings > Memory**) is for notes about the *project*; do not restate repo rules there.
+
+**Three project defaults contradict rules above, and project instructions must
+override each one:**
+
+- **Threads branch from the repository's default branch**, which is `main`. Branch
+  Policy requires `dev`. The SessionStart hook corrects this — but only because the
+  project is single-repo, so state `dev` in the project instructions too.
+- **A thread that opens a PR watches it with auto-fix on**, "whether or not auto-fix
+  is on for your other cloud sessions." That is exactly what *PR Activity
+  Subscription (do not ask)* forbids, and it also spends plan quota every time CI
+  fails on an otherwise-idle thread. Instruct threads to stop watching after opening
+  the PR.
+- **A new project runs every thread on Opus at high effort.** Size it to the work
+  instead, per *Recommend a Claude model in every issue you file* — the same ladder
+  applies.
+
+**These are settings outside this repository, so paste the override text.** Nothing in
+this file and no hook can enforce the three bullets above: they live in the project,
+not the clone, and take effect only once this is in **Project settings > Memory >
+Project instructions**. Paste it verbatim when creating a VTSearch project.
+
+```text
+Base every branch on dev, not main, and target dev with every pull request.
+
+After you open a pull request, stop watching it. Do not call subscribe_pr_activity,
+and if auto-fix is on for your pull request, turn it off. Report the PR number in
+your final message and stop; I review and merge pull requests myself.
+
+Choose the model per thread, sized to the work; do not leave every thread on Opus.
+```
+
+**Then verify the watch half rather than assuming it.** Project instructions are
+instructions Claude keeps to, not an enforced setting — the docs say as much of thread
+limits, and nothing promises more for auto-fix, which the project turns on *around* the
+thread rather than inside it. So a thread can obey *PR Activity Subscription (do not
+ask)* to the letter, never calling `subscribe_pr_activity`, and still end up watching
+its own PR. Check once, after pasting: open a throwaway PR from a thread and confirm
+the thread's CI status bar at claude.ai/code shows **Auto-fix** cleared. A watch left
+on pushes commits and review replies to the PR under the owner's account, and wakes the
+otherwise-idle thread — spending plan quota — every time a review comment arrives.
+There is no CI here to fail (`./run-tests.sh` is the only gate; the repo has no GitHub
+Actions), but review comments alone are enough, and every open PR leaves a wakeable
+thread behind.
+
+If it does not stick, give up the *Auto-PR* convenience for threads rather than the
+rule: instruct them to push the branch and report the compare URL instead of opening
+the PR. That costs a step and is enforceable by instruction, which a toggle Claude does
+not own may not be.
+
+**What does not belong in a thread.** Anything reaching the GRID: the
+`grid-experiments` skill drives SLURM over `ssh grid`, which a cloud sandbox cannot
+do, and the docs put work needing machine-only services in a local session. So an
+`experiment`-labelled issue is laptop work. A thread *can* do the analysis half —
+reading finished cells, writing a `REPORT.md` — once the run exists.
+
+Plan limits are shared with every other session and a project spends them faster;
+the enforced ceiling is 200 new threads per day across all projects.
+
 ## Versioning (do NOT bump by hand)
 
 `vtsearch.__version__` is the UTC timestamp of `HEAD`'s commit (ISO 8601, Z-terminated), computed from git at import time in `vtsearch/__init__.py`. There is no tracked version constant to bump; every commit on `dev` automatically becomes the new version, and parallel branches cannot collide on a hand-edited version line. Do not add a `VERSION` file, do not write a hand-bumped string into `vtsearch/__init__.py`, and do not include version bumps in feature PRs. For Docker images (where `.git` is excluded from the build context), the host passes `--build-arg VTSEARCH_VERSION=$(TZ=UTC git log -1 --format=%cd --date=format:%Y-%m-%dT%H:%M:%SZ HEAD)` and the Dockerfile bakes it into `vtsearch/_version.txt` (gitignored). If git is unavailable and the baked file is missing, the version falls back to `0.0.0-unknown`.
@@ -384,6 +465,14 @@ VTSearch is a desktop web app. **Do not design, implement, or test for mobile or
 - **How:** `cd slides && ./render.sh <deck> pdf` for each affected deck. The cloud container has a browser; if Marp can't find it, use `CHROME_PATH=/opt/pw-browsers/chromium`. When presenter notes or the speaker pipeline changed, also render `./render.sh <deck> pdf --speaker` and attach that variant too.
 - **When:** at the end of the session, from the final state of the branch (after the last commit that touches `slides/`), so what the user sees is what the PR ships. Attach with a one-line caption naming the deck(s).
 - Rendered PDFs stay in gitignored `slides/_out/` — attach them, never commit them.
+  Publishing them is not your job either: `.github/workflows/publish-slides.yml`
+  re-renders every deck on each push to `dev` that touches `slides/` and uploads
+  the audience and speaker PDFs to the rolling `slides-latest` release, which is
+  where the always-current deck lives
+  (`https://github.com/samggreenberg/VTSearch/releases/download/slides-latest/<deck>.pdf`).
+  A cloud session has no `gh` credentials and could not publish anyway; attach the
+  PDFs here, merge to `dev`, and the release follows. `scripts/publish-slides.sh`
+  is the same path by hand, from a laptop with `gh`. See `slides/README.md`.
 
 ## Screenshot reshoots (when you change the GUI)
 
@@ -447,7 +536,7 @@ This applies to:
 - Frontend unit-test failures from the Vitest suite (`cd frontend && npm run test:ci`, also run by `./run-tests.sh` and `./run-tests.sh frontend`).
 - Angular build warnings of any kind, including `anyComponentStyle` budget warnings (e.g. `▲ [WARNING] ... exceeded maximum budget`). `run-tests.sh` treats every `▲ [WARNING]` line from `build:prod` as a hard test failure, so do not just bump budgets to silence them: fix the underlying bloat (split the component, extract shared styles, or remove dead rules). Bumping a budget is only acceptable when the size is genuinely justified, and requires the user's explicit approval.
 - Python test failures from `./run-tests.sh` and `pytest` runs.
-- Linter errors from `ruff check` (including the flake8-bandit `S` ruleset), formatting drift from `ruff format --check`, typos from `codespell`, documentation drift from `scripts/check-docs.py`, dependency issues from `deptry`, known CVEs from `pip-audit`, type errors from `pyright`, and OpenAPI snapshot drift. All of these run as the first steps of `./run-tests.sh`, so the test loop catches them before pytest. There is no CI backstop: VTSearch has no GitHub Actions workflows; `./run-tests.sh` is the source of truth, so do not push a change without running it.
+- Linter errors from `ruff check` (including the flake8-bandit `S` ruleset), formatting drift from `ruff format --check`, typos from `codespell`, documentation drift from `scripts/check-docs.py`, dependency issues from `deptry`, known CVEs from `pip-audit`, type errors from `pyright`, and OpenAPI snapshot drift. All of these run as the first steps of `./run-tests.sh`, so the test loop catches them before pytest. There is no CI backstop: VTSearch's one GitHub Actions workflow only republishes rendered slide decks and gates nothing, so `./run-tests.sh` is the source of truth — do not push a change without running it.
 - Any other diagnostics surfaced by tooling you invoke.
 
 If a failure is genuinely outside the scope of the current task (e.g. a flaky network test, a failure in unrelated infrastructure you cannot reproduce), explicitly call it out in your end-of-turn summary with one sentence explaining why you did not fix it. The default is **fix it**; skipping requires justification.
@@ -509,7 +598,7 @@ A flow can legitimately carry both: a nested view shows `← Back` at the top to
 
 ## What `run-tests.sh` gates
 
-There is no CI: a **full** `./run-tests.sh` is the only gate, and it still runs every check. **This list is derived from `run-tests.sh`; when you add or remove a gate there, update it here in the same commit.** The run is staged: cheap gates run serially and stop at the first failure with a `TESTS BLOCKED: ...` banner naming which one; the heavy, mutually independent gates then run **concurrently with pytest**, each runs to completion, and every failure is reported (so one pass surfaces every problem instead of one per rerun). A final `RUN PASSED` / `RUN FAILED: <gates>` banner closes the run.
+No CI runs tests — the repo's one workflow only publishes slide decks — so a **full** `./run-tests.sh` is the only gate, and it still runs every check. **This list is derived from `run-tests.sh`; when you add or remove a gate there, update it here in the same commit.** The run is staged: cheap gates run serially and stop at the first failure with a `TESTS BLOCKED: ...` banner naming which one; the heavy, mutually independent gates then run **concurrently with pytest**, each runs to completion, and every failure is reported (so one pass surfaces every problem instead of one per rerun). A final `RUN PASSED` / `RUN FAILED: <gates>` banner closes the run.
 
 Wrapping everything: a wall-clock cap (`VTSEARCH_TEST_TIMEOUT`, default **1800s = 30 min**, `0` opts out for a deliberately long run) and `.claude/hooks/ensure-test-deps.sh` (minutes on a cold container, near-instant after).
 
@@ -530,7 +619,7 @@ Wrapping everything: a wall-clock cap (`VTSEARCH_TEST_TIMEOUT`, default **1800s 
 | vtscore package docs | `scripts/check-vtscore-docs.py` | |
 | Extension docs | `scripts/check-extension-docs.py` | Holds `docs/EXTENDING-*.md` and `vtscore/docs/extending/` to the plugin ABCs they both document: every member named in a contract table must exist, and neither set may present a public wrapper as the override point when the class defines an `_impl` hook behind it. AST sweep, imports nothing. Register a new contract section in `SECTIONS` — an unregistered one fails the gate rather than going unchecked. |
 | Calibration script index | `scripts/check-calibration-index.py` | Every `.py`/`.sh` in `scripts/experiments/calibration/` is filed under exactly one study (or the shared layer) in that directory's `README.md`, and every file the index names exists. That directory is flat by decision (#3409), so the table *is* the navigation; unchecked, it decays back into 120 unclassified files. |
-| Slide decks | `slides/build.py --check` | Preflights every deck manifest: fragments exist, figures resolve. Marp only warns on a missing figure and exits 0, so a rotted deck is otherwise silent. |
+| Slide decks | `slides/build.py --check` | Preflights every deck manifest: fragments exist, figures resolve, no headline breaks more than once (the two-line ceiling in `slides/STYLE.md`; *where* a two-line headline breaks needs a browser and lives in `slides/balance-titles.mjs`). Marp only warns on a missing figure and exits 0, so a rotted deck is otherwise silent. |
 | Eval/app sync | `scripts/check-eval-app-sync.py` | Digests both sides of every mirror, so `harness-changed` is as loud as `app-changed`. Re-pin with `--update` **after** reconciling the two. |
 
 **Stage 2 — frontend production build, serial (full run and the `core` / `frontend` groups):** `cd frontend && npm run build:prod`. Any `▲ [WARNING]` line is a hard failure. Runs *before* pytest because some tests serve the built bundle out of `static/`. Skipped with a notice if `frontend/node_modules` is absent.

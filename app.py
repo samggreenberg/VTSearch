@@ -15,8 +15,15 @@ os.environ["MKL_NUM_THREADS"] = _torch_threads
 # request_id / dataset_id / detector_id / user fields. Override via:
 #   VTSEARCH_LOG_LEVEL=INFO   (default WARNING)
 #   VTSEARCH_LOG_FORMAT=text  (default json; switch to text for local dev)
+from vtsearch.diagnose import apply_diagnostic_preset  # noqa: E402
 from vtsearch.logging_config import setup_logging  # noqa: E402
 
+# ``VTSEARCH_DIAGNOSE=1`` sets the whole diagnostic bar set at once (issue
+# #3853, where two sessions were run at the wrong bars and a third only got
+# the right ones through uncommitted edits). It must run before
+# ``setup_logging``, which reads VTSEARCH_LOG_LEVEL once. An explicit env var
+# still wins over the preset.
+apply_diagnostic_preset()
 setup_logging()
 
 # All HF models we use are public, so no token is *required*.  Each
@@ -348,6 +355,13 @@ def initialize_server(mode_label: str = "PRODUCTION") -> None:
     from vtscore.concurrency.stalls import start_stall_diagnostics_from_env
 
     start_stall_diagnostics_from_env()
+    # Record the bars this process will report at. A log that cannot say what
+    # thresholds produced it makes every absence in it ambiguous -- "no slow
+    # requests" read as "nothing was slow" for a whole session in #3853 that
+    # was in fact running a 1000ms bar.
+    from vtsearch.diagnose import log_effective_settings
+
+    log_effective_settings()
 
     print("\U0001f4da Loading ML libraries...", flush=True)
     initialize_models(on_progress=lambda *a, **k: None)
@@ -367,6 +381,18 @@ def initialize_server(mode_label: str = "PRODUCTION") -> None:
     )
     if preloaded:
         print(f"✅ Preloaded embedders: {', '.join(preloaded)}", flush=True)
+
+    # Everything alive now - the ML libraries and the preloaded embedders -
+    # lives for the process, so move it out of the generations a full
+    # collection traverses (issue #3870: ~300ms gen-2 pauses every ~2 min,
+    # each freezing whatever request was in flight). After the preload and
+    # before serving on purpose; datasets and detectors load lazily later
+    # and stay collectable. ``VTSEARCH_GC_FREEZE=0`` skips it.
+    from vtscore.concurrency.stalls import freeze_gc_after_preload
+
+    frozen = freeze_gc_after_preload()
+    if frozen is not None:
+        print(f"🧊 Froze {frozen[0]} objects for GC in {frozen[1]:.0f}ms", flush=True)
 
     print("✅ VTSearch is ready!", flush=True)
 

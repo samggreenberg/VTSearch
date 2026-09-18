@@ -271,6 +271,78 @@ def assign_tiers(
     return out, cutoffs
 
 
+class TierStabilityError(ValueError):
+    """A build would silently re-tier a corpus that already exists."""
+
+
+def tier_provenance(out: Path, *, pin_tiers: Optional[Path], new_version: bool) -> dict[str, Any]:
+    """Decide, before any work starts, which tier promise this build makes.
+
+    ``assign_tiers`` offers two promises and says which one to pick; nothing used
+    to make anyone pick.  Pointed at an ``--out`` that already holds a finished
+    build, an unpinned build recomputes the cutoffs from the new page set, pages
+    move between ``s`` / ``m`` / ``l``, and every cell and number measured on the
+    old tiers stops being comparable to the new ones -- with nothing reporting
+    it (#3903).  Pinning was advice in the runbook, and advice is what a
+    rebuild three weeks later does not read.
+
+    So a build into an existing corpus has to say which it is:
+
+    * ``--pin-tiers <build_report.json>`` -- the same corpus, grown or rebuilt;
+      tier membership is held by the recorded cutoffs.
+    * ``--new-version`` -- a new, incomparable corpus version.  The cutoffs it
+      supersedes are recorded in the new report, so the break is on disk rather
+      than in someone's memory.
+
+    Refused (``TierStabilityError``) rather than warned, and *before* the pull:
+    a warning at the end of a multi-day build is read after the manifest the
+    cells are keyed on has already been replaced.  A ``--pin-tiers`` report that
+    carries no cutoffs is refused here too, instead of after clustering.
+
+    Returns what ``build_report.json`` records under ``tier_provenance``;
+    ``pinned_cutoffs`` is what ``assign_tiers`` is handed.
+    """
+    if pin_tiers is not None and new_version:
+        raise TierStabilityError(
+            "--pin-tiers and --new-version contradict each other: pinning keeps this build "
+            "comparable to an earlier one, --new-version declares that it is not"
+        )
+
+    pinned: Optional[dict[str, float]] = None
+    if pin_tiers is not None:
+        try:
+            pinned = json.loads(Path(pin_tiers).read_text(encoding="utf-8")).get("tier_cutoffs")
+        except (OSError, ValueError) as exc:
+            raise TierStabilityError(f"--pin-tiers {pin_tiers}: cannot read it ({exc})") from exc
+        if not pinned:
+            raise TierStabilityError(f"--pin-tiers {pin_tiers}: no tier_cutoffs recorded in it")
+
+    existing = Path(out) / "build_report.json"
+    superseded: Optional[dict[str, float]] = None
+    if existing.exists():
+        try:
+            superseded = json.loads(existing.read_text(encoding="utf-8")).get("tier_cutoffs")
+        except (OSError, ValueError):
+            # Unreadable is not "no corpus here": a report exists, so something
+            # was built, and guessing that nothing depends on it is the bet
+            # this guard exists not to make.
+            superseded = {}
+        if superseded is not None and pin_tiers is None and not new_version:
+            raise TierStabilityError(
+                f"{existing} already records a finished build, and this build would re-tier it: "
+                "pages would move between tiers and every cell built on the old tiers would stop "
+                f"being comparable. Pass --pin-tiers {existing} to keep the tiers, or --new-version "
+                "to declare a new, incomparable corpus version."
+            )
+
+    return {
+        "pinned_from": str(pin_tiers) if pin_tiers is not None else None,
+        "pinned_cutoffs": pinned,
+        "new_version": bool(new_version),
+        "superseded_cutoffs": superseded if new_version else None,
+    }
+
+
 # --------------------------------------------------------------------------
 # Query crops
 # --------------------------------------------------------------------------
@@ -753,6 +825,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
         help="an earlier build_report.json; reuse its tier cutoffs so this build stays comparable to it",
     )
     ap.add_argument(
+        "--new-version",
+        action="store_true",
+        help="--out already holds a build and this one is a new, incomparable corpus version (see --pin-tiers)",
+    )
+    ap.add_argument(
         "--probe",
         action="store_true",
         help="metadata-only reachability check for every source (downloads nothing), then exit",
@@ -780,6 +857,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
     unknown = set(selected) - set(ALL_SOURCES)
     if unknown:
         ap.error(f"unknown source(s): {sorted(unknown)}")
+
+    try:
+        provenance = tier_provenance(args.out, pin_tiers=args.pin_tiers, new_version=args.new_version)
+    except TierStabilityError as exc:
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        return 2
 
     args.out.mkdir(parents=True, exist_ok=True)
     images_dir = args.out / "images"
@@ -821,6 +904,24 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
     # `collect_refs` already takes only `class_id is None` marks of the queryable
     # kinds, so listing the source here clusters the logos and cannot disturb a
     # signature identity.
+    # Hand-added marks (the completeness pass, #3927) before clustering: they
+    # are real marks the sources never boxed, and the must-links that bind them
+    # to a class name them by index, so they must be on the page -- unclassed,
+    # in store order -- when those links are replayed.
+    from completeness import ADDED_MARKS, load_added_marks, replay_added_marks
+
+    replayed = replay_added_marks(pages, load_added_marks(args.out / ADDED_MARKS), warnings)
+    if replayed:
+        print(f"replayed {replayed} hand-added mark(s) from {ADDED_MARKS}")
+    # Hand-tightened boxes (box_tighten.py) next: an override may name an added
+    # mark, and clustering and the query crops should see the reviewed box.
+    # Replaced in place, so the mark indices the adjudications name hold.
+    from box_tighten import STORE as BOX_OVERRIDES, load_store as load_box_overrides, replay_box_overrides
+
+    tightened = replay_box_overrides(pages, load_box_overrides(args.out / BOX_OVERRIDES), warnings)
+    if tightened:
+        print(f"replayed {tightened} hand-tightened box(es) from {BOX_OVERRIDES}")
+
     from cluster_marks import cluster_source, load_adjudications, write_cluster_report
 
     same, different = load_adjudications(args.out / "adjudications.json")
@@ -920,6 +1021,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
         roster=chosen,
     )
 
+    # Reviewed negatives (#3921) live in their own store, like hand-added marks:
+    # this build regenerates every class's metadata, and the reviewed-only pool
+    # rule would otherwise silently lose every page a person rejected.
+    import roster as _reviewed  # noqa: PLC0415
+
+    _store = args.out / _reviewed.REVIEWED_NEGATIVES
+    attached = _reviewed.attach_reviewed_negatives(
+        admitted, _reviewed.load_reviewed_negatives(_store), _reviewed.load_reviewed_negatives(_store, "excluded")
+    )
+    if attached:
+        print(f"attached {attached} reviewed negative page(s) from {_reviewed.REVIEWED_NEGATIVES}")
+
     if chosen is not None:
         _present, missing = _roster.check(chosen, list(inventory))
         if missing:
@@ -949,9 +1062,24 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
         print(f"  {len(needs_hand_crop)} weak-label class(es) need a hand-drawn query crop")
     warnings.extend(crop_warnings)
 
-    pinned: Optional[dict[str, float]] = None
-    if args.pin_tiers:
-        pinned = json.loads(args.pin_tiers.read_text(encoding="utf-8")).get("tier_cutoffs")
+    # Hand-chosen extra query crops (query_crops.py) after the primaries, so a
+    # rebuild reproduces each class's `query_crops` list rather than dropping it.
+    from query_crops import STORE as QUERY_CROP_STORE, load_store as load_query_crops, materialise
+
+    extra = materialise(
+        admitted,
+        load_query_crops(args.out / QUERY_CROP_STORE),
+        {p.page_id: p for p in pages},
+        args.out / "queries",
+        warnings,
+    )
+    if extra:
+        print(f"  replayed {extra} hand-chosen extra query crop(s)")
+
+    # Read at the start by `tier_provenance`, not here: this file may be the
+    # very report this build is about to overwrite.
+    pinned = provenance["pinned_cutoffs"]
+    if pinned:
         print(f"\npinning tier cutoffs from {args.pin_tiers}: {pinned}")
 
     tier_of, tier_cutoffs = assign_tiers(
@@ -982,6 +1110,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
         cumulative[t] = running
 
     report = {
+        "corpus_version": cfg.CORPUS_VERSION,
         "pages_written": n,
         "pages_dropped_over_budget": dropped,
         "tier_counts": tier_counts,
@@ -989,6 +1118,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
         # Feed these back with --pin-tiers to keep a later, larger build's tier
         # membership comparable to this one.
         "tier_cutoffs": tier_cutoffs,
+        "tier_provenance": provenance,
         "classes_admitted": len(admitted),
         "classes_rejected": len(rejected),
         "roster": chosen.name if chosen is not None else None,

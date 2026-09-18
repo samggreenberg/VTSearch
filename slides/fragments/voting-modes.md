@@ -1,6 +1,6 @@
 <!-- _class: full -->
 
-## Region of Interest
+## Region of<br>Interest
 
 ![bg fit](figs/ui-region-voting.webp)
 

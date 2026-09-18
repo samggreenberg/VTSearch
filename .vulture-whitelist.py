@@ -131,15 +131,6 @@ set_dataset_display_name  # noqa: F821 - vtscore.state; docs/packages/state.md
 make_plugin_route_schema  # noqa: F821 - vtscore.plugins.schema; kept for out-of-tree app tiers that mint a route per plugin (see the docstring)
 
 # ---------------------------------------------------------------------------
-# ``SplgMatcher`` is the SuperPoint + LightGlue structural backend that the
-# structural-embedder design reserves alongside the shipped SIFT one: a
-# StructuralMatcher-conformant alternative, evaluated in the 2026-07-13
-# iconography study and wired in by choosing it, not by being called from
-# here. A zero-registrant extension point is the shape of a working one.
-# ---------------------------------------------------------------------------
-SplgMatcher  # noqa: F821
-
-# ---------------------------------------------------------------------------
 # Public context managers exported from ``vtsearch.state`` for callers
 # that need explicit, scoped switching of the active dataset/detector
 # without going through the per-request middleware.
@@ -338,3 +329,18 @@ ERROR_SCHEMA  # noqa: F821
 # in-repo reader by design.
 # ---------------------------------------------------------------------------
 last_report  # noqa: F821
+
+# ---------------------------------------------------------------------------
+# ``AutopilotFlow`` stopping-rule margin attributes read reflectively via
+# ``getattr(flow, col) for col in STOPPING_MARGIN_COLUMNS`` in
+# ``vtscore/eval/voting_iterations.py`` when emitting per-step voting rows.
+# Vulture sees the assignments in ``__init__`` and ``update()`` but not the
+# dynamic reads. The two also-in-the-tuple names (``smart_slope`` and
+# ``stable_confident_flip_rate``) are read directly by
+# ``tests_lib/detectors/test_stopping_columns.py`` and don't need entries.
+# ---------------------------------------------------------------------------
+smart_slope_t  # noqa: F821
+stable_flip_rate  # noqa: F821
+stable_max_confident_flip_rate  # noqa: F821
+stable_flip_rate_early  # noqa: F821
+stable_flip_rate_late  # noqa: F821

@@ -39,7 +39,7 @@
 # ---------------------------------------------------------------------------
 # How the run is staged
 #
-# There is no CI, so a *full* `./run-tests.sh` remains the only real gate and
+# Nothing tests in CI, so a *full* `./run-tests.sh` remains the only real gate and
 # still runs every check. What changed is the shape of the run, because the
 # stages are independent of each other and the box has more than one core:
 #

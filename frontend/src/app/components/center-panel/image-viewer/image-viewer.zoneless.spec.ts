@@ -73,6 +73,20 @@ describe('ImageViewerComponent (zoneless Shift-drag canary)', () => {
     expect(wrap().classList.contains('region-mode')).toBe(false);
   });
 
+  // The double-click zoom is a bound template listener, so CD is not the risk
+  // here; the risk is the transform going stale. `imageTransform` is a getter,
+  // and it only repaints because it reads the `zoom` signal — this drives the
+  // gesture through the real DOM and asserts on the rendered transform with no
+  // manual detectChanges.
+  it('zooms the rendered image on a real double-click over the canvas', async () => {
+    const img = (): HTMLImageElement => fixture.nativeElement.querySelector('img');
+    expect(img().style.transform).toContain('scale(1)');
+
+    wrap().dispatchEvent(new MouseEvent('dblclick', { button: 0, bubbles: true }));
+    await settleZoneless(fixture);
+    expect(img().style.transform).toContain('scale(2)');
+  });
+
   it('clears region-mode on window blur via the un-bound blur listener', async () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift' }));
     await settleZoneless(fixture);
@@ -610,6 +624,110 @@ describe('ImageViewerComponent', () => {
       fixture.componentRef.setInput('media', next);
       TestBed.tick();
       expect(component.marqueeMode()).toBe(true);
+    });
+  });
+
+  // Issue #3934: reaching for the toolbar to look closer at a borderline item
+  // breaks the keyboard voting rhythm; a double-click is what people try first.
+  describe('double-click zoom', () => {
+    function setupWrap(component: ImageViewerComponent) {
+      component.renderedW.set(100);
+      component.renderedH.set(100);
+      (component as unknown as { wrapRef: () => ElementRef<HTMLDivElement> }).wrapRef = () => ({
+        nativeElement: {
+          clientWidth: 100,
+          clientHeight: 100,
+          getBoundingClientRect: () => ({
+            left: 0,
+            top: 0,
+            width: 100,
+            height: 100,
+            right: 100,
+            bottom: 100,
+            x: 0,
+            y: 0,
+            toJSON: () => ({}),
+          }),
+        } as unknown as HTMLDivElement,
+      } as ElementRef<HTMLDivElement>);
+    }
+
+    function dblclick(clientX: number, clientY: number): MouseEvent {
+      return { button: 0, clientX, clientY, preventDefault: () => {} } as unknown as MouseEvent;
+    }
+
+    it('zooms in by the double-click factor', () => {
+      setupWrap(component);
+      component.onDoubleClick(dblclick(50, 50));
+      expect(component.zoom()).toBeCloseTo(2, 6);
+      // Clicking dead centre has nothing to counter-pan for.
+      expect(component.panX()).toBeCloseTo(0, 6);
+      expect(component.panY()).toBeCloseTo(0, 6);
+    });
+
+    it('anchors on the cursor: the clicked image point stays under the pointer', () => {
+      setupWrap(component);
+      const at = dblclick(75, 30);
+      const before = component.screenToImageNormalized(at)!;
+      component.onDoubleClick(at);
+      const after = component.screenToImageNormalized(at)!;
+      expect(after.x).toBeCloseTo(before.x, 5);
+      expect(after.y).toBeCloseTo(before.y, 5);
+      // ...which is only interesting because the zoom really did change.
+      expect(component.zoom()).toBeCloseTo(2, 6);
+    });
+
+    it('clamps to maxZoom rather than overshooting it', () => {
+      setupWrap(component);
+      component.zoom.set(4);
+      component.onDoubleClick(dblclick(50, 50));
+      expect(component.zoom()).toBe(component.maxZoom);
+    });
+
+    it('returns to fit once already at maxZoom, keeping the rotation', () => {
+      setupWrap(component);
+      component.zoom.set(component.maxZoom);
+      component.panX.set(30);
+      component.panY.set(-20);
+      component.rotation.set(90);
+
+      component.onDoubleClick(dblclick(20, 20));
+
+      expect(component.zoom()).toBe(component.minZoom);
+      expect(component.panX()).toBe(0);
+      expect(component.panY()).toBe(0);
+      // A zoom control, not resetView(): the user rotated on purpose.
+      expect(component.rotation()).toBe(90);
+    });
+
+    it('does not zoom while Shift is held (that gesture belongs to the region draw)', () => {
+      setupWrap(component);
+      component.shiftHeld.set(true);
+      component.onDoubleClick(dblclick(50, 50));
+      expect(component.zoom()).toBe(1);
+    });
+
+    it('does not zoom while the Marquee toggle is on', () => {
+      setupWrap(component);
+      component.marqueeMode.set(true);
+      component.onDoubleClick(dblclick(50, 50));
+      expect(component.zoom()).toBe(1);
+    });
+
+    it('ignores non-left buttons', () => {
+      setupWrap(component);
+      component.onDoubleClick({ button: 2, clientX: 50, clientY: 50, preventDefault: () => {} } as unknown as MouseEvent);
+      expect(component.zoom()).toBe(1);
+    });
+
+    it('leaves a drawn region box anchored to the same image pixels', () => {
+      setupWrap(component);
+      const box: RegionBox = [0.2, 0.2, 0.6, 0.6];
+      component.regionBox.set(box);
+      component.onDoubleClick(dblclick(70, 40));
+      // Normalised coords are zoom-invariant by construction; this pins that the
+      // gesture never reaches for the box.
+      expect(component.regionBox()).toEqual(box);
     });
   });
 

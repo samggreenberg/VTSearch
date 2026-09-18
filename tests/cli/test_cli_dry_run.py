@@ -284,15 +284,35 @@ class TestDryRunExporterValidation:
 
         from vtscore.cli import autodetect_main
 
-        # server_json_file requires "filepath".
+        # email_smtp requires "to" and "from", neither of which declares a
+        # default. (A required field that *does* declare one is not missing:
+        # the framework fills it in - see issue #3874 - which is why this
+        # stopped being a useful case for server_json_file's "filepath".)
         with pytest.raises(SystemExit):
             autodetect_main(
                 str(dataset_path),
                 settings_path=str(settings_path),
-                exporter_name="server_json_file",
+                exporter_name="email_smtp",
                 exporter_field_values={},
                 dry_run=True,
             )
 
         err = capsys.readouterr().err
-        assert "--filepath" in err or "Missing required" in err
+        assert "--to" in err or "--from" in err or "Missing required" in err
+
+    def test_dry_run_accepts_a_required_exporter_field_left_to_its_default(self, client, tmp_path, capsys):
+        # The other half of #3874: "filepath" is required but declares a
+        # {YYYYMMDD-HHMMSS}-stamped default, so omitting it is not an error.
+        _write_trainable_model("dry-tm", _make_labelset_with_two_audio_labels())
+        dataset_path = _make_dataset_file(tmp_path, medias)
+        settings_path = _settings_file_with_detectors(tmp_path, ["dry-tm"])
+
+        from vtscore.cli import autodetect_main
+
+        autodetect_main(
+            str(dataset_path),
+            settings_path=str(settings_path),
+            exporter_name="server_json_file",
+            exporter_field_values={},
+            dry_run=True,
+        )

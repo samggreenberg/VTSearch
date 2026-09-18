@@ -69,9 +69,11 @@ def _labels(n_good, n_bad, start=1000):
 
 
 class TestRegistry:
-    def test_autopilot_is_the_only_strategy(self):
-        assert set(STRATEGIES) == {"autopilot"}
-        assert available_strategies() == ["autopilot"]
+    def test_autopilot_plus_the_two_gp_experiment_arms(self):
+        # ``autopilot`` is the app; the other two are the #3954 experiment arms
+        # that keep its phases and swap only the Hard pick.  Nothing else.
+        assert set(STRATEGIES) == {"autopilot", "autopilot_uncertainty", "autopilot_maxvar"}
+        assert available_strategies() == ["autopilot", "autopilot_maxvar", "autopilot_uncertainty"]
 
     def test_random_and_academic_strategies_are_gone(self):
         for name in ["random", "margin", "entropy", "bald", "eig", "coreset", "balanced", "ensemble_std"]:

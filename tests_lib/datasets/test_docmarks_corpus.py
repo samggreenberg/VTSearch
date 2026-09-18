@@ -1227,6 +1227,112 @@ class TestTiers:
         assert len(pages) > len(tier_of)
 
 
+class TestRebuildingAnExistingCorpusMustChooseATierPromise:
+    """#3903: an unpinned build into an existing corpus used to re-tier it silently.
+
+    ``assign_tiers`` recomputes cutoffs from whatever page set it is given, so a
+    later build over a grown pool moves pages between tiers and every cell built
+    on the old ones stops being comparable -- a well-formed corpus, reported as
+    exact, that no longer matches the numbers measured on it.
+    """
+
+    @staticmethod
+    def _finished(tmp_path, cutoffs=None):
+        out = tmp_path / "corpus"
+        out.mkdir()
+        report = out / "build_report.json"
+        report.write_text(json.dumps({"tier_cutoffs": cutoffs or {"s": 0.01, "m": 0.2, "l": 1.0}}), encoding="utf-8")
+        return out, report
+
+    @staticmethod
+    def _no_pull(mods, monkeypatch):
+        """Make the first real step of a build fatal, and record whether it was reached."""
+        reached = []
+
+        def pull(*args, **kwargs):
+            reached.append(True)
+            raise RuntimeError("reached the pull")
+
+        monkeypatch.setattr(mods["build"], "load_anchor_sources", pull)
+        return reached
+
+    def test_an_unpinned_build_into_a_finished_corpus_is_refused_before_the_pull(self, mods, monkeypatch, tmp_path):
+        out, _ = self._finished(tmp_path)
+        reached = self._no_pull(mods, monkeypatch)
+
+        assert mods["build"].main(["--sources", "spods", "--out", str(out)]) == 2
+        assert not reached, "the refusal came after work had started"
+        assert sorted(p.name for p in out.iterdir()) == ["build_report.json"], "a refused build wrote into --out"
+
+    def test_the_refusal_names_both_ways_out(self, mods, tmp_path):
+        out, report = self._finished(tmp_path)
+        with pytest.raises(mods["build"].TierStabilityError) as exc:
+            mods["build"].tier_provenance(out, pin_tiers=None, new_version=False)
+        assert "--pin-tiers" in str(exc.value) and "--new-version" in str(exc.value)
+        assert str(report) in str(exc.value)
+
+    def test_pinning_reuses_the_recorded_cutoffs_and_gets_past_the_guard(self, mods, monkeypatch, tmp_path):
+        cutoffs = {"s": 0.013, "m": 0.25, "l": 1.0}
+        out, report = self._finished(tmp_path, cutoffs)
+        prov = mods["build"].tier_provenance(out, pin_tiers=report, new_version=False)
+        assert prov["pinned_cutoffs"] == cutoffs
+        assert prov["pinned_from"] == str(report) and prov["new_version"] is False
+
+        reached = self._no_pull(mods, monkeypatch)
+        with pytest.raises(RuntimeError, match="reached the pull"):
+            mods["build"].main(["--sources", "spods", "--out", str(out), "--pin-tiers", str(report)])
+        assert reached
+
+    def test_pinned_cutoffs_keep_a_rebuild_on_the_same_tiers(self, mods):
+        # What pinning is *for*, end to end through the recorded cutoffs: the
+        # same page set, rebuilt with the cutoffs a report recorded, is the same
+        # tier membership page for page.
+        tiers = TestTiers()
+        budgets = {"s": 60, "m": 200, "l": 400}
+        first, cutoffs = tiers._assign(mods, tiers._pages(mods, 500), budgets)
+        again, _ = tiers._assign(mods, tiers._pages(mods, 500), budgets, pinned=json.loads(json.dumps(cutoffs)))
+        assert again == first
+
+    def test_a_new_version_is_allowed_and_records_what_it_superseded(self, mods, monkeypatch, tmp_path):
+        old = {"s": 0.01, "m": 0.2, "l": 1.0}
+        out, _ = self._finished(tmp_path, old)
+        prov = mods["build"].tier_provenance(out, pin_tiers=None, new_version=True)
+        assert prov == {"pinned_from": None, "pinned_cutoffs": None, "new_version": True, "superseded_cutoffs": old}
+
+        reached = self._no_pull(mods, monkeypatch)
+        with pytest.raises(RuntimeError, match="reached the pull"):
+            mods["build"].main(["--sources", "spods", "--out", str(out), "--new-version"])
+        assert reached
+
+    def test_an_empty_out_builds_as_before(self, mods, monkeypatch, tmp_path):
+        out = tmp_path / "fresh"
+        prov = mods["build"].tier_provenance(out, pin_tiers=None, new_version=False)
+        assert prov == {"pinned_from": None, "pinned_cutoffs": None, "new_version": False, "superseded_cutoffs": None}
+
+        reached = self._no_pull(mods, monkeypatch)
+        with pytest.raises(RuntimeError, match="reached the pull"):
+            mods["build"].main(["--sources", "spods", "--out", str(out)])
+        assert reached
+
+    def test_an_unreadable_report_still_counts_as_a_corpus(self, mods, tmp_path):
+        out = tmp_path / "corpus"
+        out.mkdir()
+        (out / "build_report.json").write_text("{not json", encoding="utf-8")
+        with pytest.raises(mods["build"].TierStabilityError):
+            mods["build"].tier_provenance(out, pin_tiers=None, new_version=False)
+
+    def test_a_pin_file_without_cutoffs_is_refused_up_front(self, mods, tmp_path):
+        bad = tmp_path / "report.json"
+        bad.write_text(json.dumps({"pages_written": 5}), encoding="utf-8")
+        with pytest.raises(mods["build"].TierStabilityError, match="no tier_cutoffs"):
+            mods["build"].tier_provenance(tmp_path / "fresh", pin_tiers=bad, new_version=False)
+
+    def test_pinning_and_a_new_version_contradict_each_other(self, mods, tmp_path):
+        out, report = self._finished(tmp_path)
+        with pytest.raises(mods["build"].TierStabilityError, match="contradict"):
+            mods["build"].tier_provenance(out, pin_tiers=report, new_version=True)
+
+
 # --------------------------------------------------------------- clustering
 
 
@@ -1874,31 +1980,48 @@ class TestRepairingACellWithoutRebuildingIt:
     The real case: ``ucsf/qkmg0227#0`` was truncated on write during the UCSF
     pull and decoded to half a page of black; re-rendered from the cached PDF it
     needed a vector in two tier-``m`` cells that cost 11 h to build.
+
+    These run against the **real** ``_cells_io``, writing a real cell to
+    ``tmp_path`` and reading back what repair left there.  A faked IO cannot
+    check the thing #3881 is about -- that the cell is streamed rather than held
+    -- because the fake is what decides whether it is held, and a fake still
+    offering ``load_medias`` would go on passing after a regression restored it.
     """
 
     @staticmethod
     def _cell(mods, monkeypatch, tmp_path, medias, pages):
-        """Point `repair` at one fake siglip cell and record what it writes."""
-        dumped: dict[str, dict] = {}
-
-        class _IO:
-            @staticmethod
-            def load_medias(path):
-                return medias
-
-            @staticmethod
-            def dump_medias(m, path):
-                dumped[Path(path).name] = {k: dict(v) for k, v in m.items()}
-                return 1
-
+        """Write *medias* to a real cell and point `repair` at it."""
+        io = mods["embed"]._cells_io()
         cell = tmp_path / "docmarks_s__siglip.pkl"
-        cell.write_bytes(b"not read: load_medias is faked")
-        monkeypatch.setattr(mods["embed"], "_cells_io", lambda: _IO)
+        with io.CellWriter(cell) as writer:
+            writer.write(medias)
         monkeypatch.setattr(mods["embed"], "EMBEDDERS", {"siglip": {}})
         monkeypatch.setattr(mods["embed"].cfg, "TIER_ORDER", ["s"])
         monkeypatch.setattr(mods["embed"], "cell_path", lambda tier, emb: cell)
         monkeypatch.setattr(mods["embed"], "pages_for_tier", lambda corpus, tier: pages)
-        return dumped
+        return cell
+
+    @staticmethod
+    def _no_whole_load(mods, monkeypatch):
+        """Make `io.load_medias` fatal: a repair that calls it is holding the cell.
+
+        The memory claim stated as a test rather than a comment.  `load_medias`
+        is the one entry point that materialises a cell, so forbidding it is
+        exactly the assertion, and it survives a refactor that reaches for it
+        again "just for the scan".
+        """
+        io = mods["embed"]._cells_io()
+
+        def no_load(path):
+            raise AssertionError("repair materialised the whole cell")
+
+        monkeypatch.setattr(io, "load_medias", no_load)
+        monkeypatch.setattr(mods["embed"], "_cells_io", lambda: io)
+
+    @staticmethod
+    def _written(mods, cell):
+        """What the cell holds now, read back through the real reader."""
+        return dict(mods["embed"]._cells_io().iter_medias(cell))
 
     @staticmethod
     def _embedder(monkeypatch, *, succeeds=True):
@@ -1923,9 +2046,9 @@ class TestRepairingACellWithoutRebuildingIt:
         img = tmp_path / "readable.png"
         Image.new("RGB", (40, 30), "white").save(img)
         medias = {
-            0: {"origin_name": "ucsf/a#0", "embeddings": {"siglip": [1.0]}, "categories": ["ucsf/x"]},
-            1: {"origin_name": "ucsf/b#0", "embeddings": {}, "categories": ["ucsf/y"]},
-            2: {"origin_name": "ucsf/c#0", "embeddings": {"siglip": [2.0]}, "categories": []},
+            0: {"id": 0, "origin_name": "ucsf/a#0", "embeddings": {"siglip": [1.0]}, "categories": ["ucsf/x"]},
+            1: {"id": 1, "origin_name": "ucsf/b#0", "embeddings": {}, "categories": ["ucsf/y"]},
+            2: {"id": 2, "origin_name": "ucsf/c#0", "embeddings": {"siglip": [2.0]}, "categories": []},
         }
         # The already-embedded pages point at files that do not exist: if repair
         # ever re-read them the test would fail with OSError, which is the
@@ -1939,78 +2062,333 @@ class TestRepairingACellWithoutRebuildingIt:
 
     def test_only_the_media_without_a_vector_is_embedded(self, mods, monkeypatch, tmp_path):
         medias, pages = self._three(mods, tmp_path)
-        dumped = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        cell = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        self._no_whole_load(mods, monkeypatch)
         handed = self._embedder(monkeypatch)
 
         assert mods["embed"].repair(tmp_path, apply=True) == 0
         assert handed == [{1}], "embed_missing was handed more than the vectorless media"
-        assert dumped["docmarks_s__siglip.pkl"][1]["embeddings"] == {"siglip": [0.5, 0.5]}
+        assert self._written(mods, cell)[1]["embeddings"] == {"siglip": [0.5, 0.5]}
 
     def test_the_neighbours_keep_their_vectors_and_the_repaired_page_keeps_its_labels(
         self, mods, monkeypatch, tmp_path
     ):
         # A repair is not a relabel: it must not touch what a page is called.
         medias, pages = self._three(mods, tmp_path)
-        dumped = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        cell = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        self._no_whole_load(mods, monkeypatch)
         self._embedder(monkeypatch)
 
         mods["embed"].repair(tmp_path, apply=True)
-        written = dumped["docmarks_s__siglip.pkl"]
+        written = self._written(mods, cell)
         assert written[0]["embeddings"] == {"siglip": [1.0]}
         assert written[2]["embeddings"] == {"siglip": [2.0]}
         assert written[1]["categories"] == ["ucsf/y"]
 
-    def test_the_raster_bytes_are_dropped_again_afterwards(self, mods, monkeypatch, tmp_path):
-        # `dump_medias` strips them, but the dict stays live for the rest of the
-        # loop -- holding 50,000 pages of PNG would cost the memory the thin
-        # pickle exists to avoid.
+    def test_every_untouched_media_survives_the_rewrite_unchanged(self, mods, monkeypatch, tmp_path):
+        """The cell is streamed *through* the rewrite, so the rest must come out identical.
+
+        The whole-dict version could not lose a media it was not repairing; a
+        streamed one can, by dropping a chunk or a final partial buffer.  Stated
+        across a media count that is not a multiple of the chunk size, because
+        that is the shape a mishandled last buffer loses.
+        """
         medias, pages = self._three(mods, tmp_path)
-        self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        before = {cid: dict(m) for cid, m in medias.items()}
+        cell = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        self._no_whole_load(mods, monkeypatch)
+        self._embedder(monkeypatch)
+
+        mods["embed"].repair(tmp_path, apply=True, chunk=2)
+        written = self._written(mods, cell)
+        assert sorted(written) == [0, 1, 2]
+        assert written[0] == before[0] and written[2] == before[2]
+
+    def test_the_raster_bytes_never_reach_the_cell(self, mods, monkeypatch, tmp_path):
+        # Repair re-reads the pixels of the page it is repairing; the cell is
+        # the thin pickle either way, and holding 50,000 pages of PNG in it
+        # would cost exactly the memory that pickle exists to avoid.
+        medias, pages = self._three(mods, tmp_path)
+        cell = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        self._no_whole_load(mods, monkeypatch)
         self._embedder(monkeypatch)
 
         mods["embed"].repair(tmp_path, apply=True)
+        assert all("media_bytes" not in m for m in self._written(mods, cell).values())
         assert all("media_bytes" not in m for m in medias.values())
 
     def test_a_dry_run_writes_nothing(self, mods, monkeypatch, tmp_path, capsys):
         medias, pages = self._three(mods, tmp_path)
-        dumped = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        cell = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        self._no_whole_load(mods, monkeypatch)
+        before = cell.read_bytes()
         handed = self._embedder(monkeypatch)
 
         assert mods["embed"].repair(tmp_path, apply=False) == 0
-        assert not dumped and not handed
+        assert cell.read_bytes() == before and not handed
         out = capsys.readouterr().out
         assert "1 without a vector, 1 re-readable" in out
         assert "dry run" in out
 
     def test_a_page_missing_from_the_manifest_is_reported_not_raised(self, mods, monkeypatch, tmp_path, capsys):
         medias, _ = self._three(mods, tmp_path)
-        dumped = self._cell(mods, monkeypatch, tmp_path, medias, [])
+        cell = self._cell(mods, monkeypatch, tmp_path, medias, [])
+        self._no_whole_load(mods, monkeypatch)
+        before = cell.read_bytes()
         self._embedder(monkeypatch)
 
         assert mods["embed"].repair(tmp_path, apply=True) == 1
-        assert not dumped, "a cell nothing could be repaired in was rewritten"
+        assert cell.read_bytes() == before, "a cell nothing could be repaired in was rewritten"
         assert "not in the manifest" in capsys.readouterr().out
 
     def test_a_page_that_still_will_not_embed_leaves_the_cell_alone(self, mods, monkeypatch, tmp_path, capsys):
         # Re-rendering is the repair for the page; if it did not take, the cell
         # must be left exactly as it was and the exit code must say so.
         medias, pages = self._three(mods, tmp_path)
-        dumped = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        cell = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        self._no_whole_load(mods, monkeypatch)
+        before = cell.read_bytes()
         self._embedder(monkeypatch, succeeds=False)
 
         assert mods["embed"].repair(tmp_path, apply=True) == 1
-        assert not dumped
+        assert cell.read_bytes() == before
         assert "1 still missing" in capsys.readouterr().out
 
     def test_a_complete_cell_is_left_untouched(self, mods, monkeypatch, tmp_path, capsys):
         medias, pages = self._three(mods, tmp_path)
         medias[1]["embeddings"] = {"siglip": [3.0]}
-        dumped = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        cell = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        self._no_whole_load(mods, monkeypatch)
+        before = cell.read_bytes()
         handed = self._embedder(monkeypatch)
 
         assert mods["embed"].repair(tmp_path, apply=True) == 0
-        assert not dumped and not handed
+        assert cell.read_bytes() == before and not handed
         assert "no vector missing" in capsys.readouterr().out
+
+    def test_a_rewrite_that_dies_part_way_leaves_the_original_cell_in_place(self, mods, monkeypatch, tmp_path):
+        """Neither a truncated cell nor a half-repaired one -- the old cell, whole.
+
+        The failure a `.part` rename guards against is not really data loss; it
+        is a cell that *looks* finished.  A half-written one would be accepted
+        by `--verify` as a shorter cell, and a half-repaired one as a complete
+        one, and a study reading either would be quietly wrong.
+        """
+        medias, pages = self._three(mods, tmp_path)
+        cell = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        self._no_whole_load(mods, monkeypatch)
+        self._embedder(monkeypatch)
+        before = cell.read_bytes()
+
+        io = mods["embed"]._cells_io()
+        real_write = io.CellWriter.write
+        calls: list[int] = []
+
+        def die_on_the_second(self, chunk):
+            calls.append(len(chunk))
+            if len(calls) == 2:
+                raise MemoryError("node ran out")
+            return real_write(self, chunk)
+
+        monkeypatch.setattr(io.CellWriter, "write", die_on_the_second)
+
+        with pytest.raises(MemoryError):
+            mods["embed"].repair(tmp_path, apply=True, chunk=1)
+
+        assert cell.read_bytes() == before
+        assert not list(tmp_path.glob("*.part")), "a partial cell was left behind"
+
+
+class TestRelabellingStreamsRatherThanHoldingTheCell:
+    """`--relabel` must not need the cell resident to change fifteen labels.
+
+    It was `load_medias` -> mutate -> `dump_medias`, which is the right *shape*
+    -- the point of relabelling is that it costs a rewrite rather than a
+    re-embed -- carrying the wrong ceiling: ~34 GB resident at tier `l` to
+    rewrite a label on fifteen pages (#3881), the exact cost the chunked build
+    had just removed from `build_cell`.
+    """
+
+    @staticmethod
+    def _cell(mods, monkeypatch, tmp_path, medias, pages):
+        io = mods["embed"]._cells_io()
+        cell = tmp_path / "docmarks_s__siglip.pkl"
+        with io.CellWriter(cell) as writer:
+            writer.write(medias)
+        monkeypatch.setattr(mods["embed"], "EMBEDDERS", {"siglip": {}})
+        monkeypatch.setattr(mods["embed"].cfg, "TIER_ORDER", ["s"])
+        monkeypatch.setattr(mods["embed"], "cell_path", lambda tier, emb: cell)
+        monkeypatch.setattr(mods["embed"], "pages_for_tier", lambda corpus, tier: pages)
+
+        def no_load(path):
+            raise AssertionError("relabel materialised the whole cell")
+
+        monkeypatch.setattr(io, "load_medias", no_load)
+        monkeypatch.setattr(mods["embed"], "_cells_io", lambda: io)
+        return cell
+
+    def _stale(self, mods, tmp_path):
+        """A cell built before a merge: page `t/b` still names the absorbed class.
+
+        The v3 case in miniature -- `t/old` was merged away, and the manifest now
+        calls that page `t/new` while the cell does not.
+        """
+        pages = [
+            _page(mods, "t/a", "t", [("logo", (0, 0, 10, 10), "t/keep", "clustered")]),
+            _page(mods, "t/b", "t", [("logo", (0, 0, 10, 10), "t/new", "clustered")]),
+            _page(mods, "t/c", "t", [("logo", (0, 0, 10, 10), "t/keep", "clustered")]),
+        ]
+        medias = {
+            0: {"id": 0, "origin_name": "t/a", "embeddings": {"siglip": [1.0]}},
+            1: {"id": 1, "origin_name": "t/b", "embeddings": {"siglip": [2.0]}},
+            2: {"id": 2, "origin_name": "t/c", "embeddings": {"siglip": [3.0]}},
+        }
+        for cid, page in zip(medias, pages):
+            categories, regions = mods["embed"].labels_for(page)
+            medias[cid]["category"] = categories[0]
+            medias[cid]["categories"] = list(categories)
+            medias[cid]["regions"] = regions
+        # ...except the one the merge overtook.
+        medias[1]["category"] = "t/old"
+        medias[1]["categories"] = ["t/old"]
+        medias[1]["regions"] = [dict(medias[1]["regions"][0], label="t/old")]
+        return medias, pages
+
+    def _read(self, mods, cell):
+        return dict(mods["embed"]._cells_io().iter_medias(cell))
+
+    def test_the_stale_label_is_rewritten_and_the_vectors_are_untouched(self, mods, monkeypatch, tmp_path):
+        medias, pages = self._stale(mods, tmp_path)
+        cell = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+
+        assert mods["embed"].relabel(tmp_path, apply=True, chunk=2) == 0
+
+        written = self._read(mods, cell)
+        assert written[1]["categories"] == ["t/new"]
+        assert written[1]["category"] == "t/new"
+        assert [r["label"] for r in written[1]["regions"]] == ["t/new"]
+        assert [written[cid]["embeddings"] for cid in (0, 1, 2)] == [
+            {"siglip": [1.0]},
+            {"siglip": [2.0]},
+            {"siglip": [3.0]},
+        ]
+
+    def test_the_pages_it_did_not_relabel_come_through_the_rewrite_whole(self, mods, monkeypatch, tmp_path):
+        medias, pages = self._stale(mods, tmp_path)
+        before = {cid: dict(m) for cid, m in medias.items()}
+        cell = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+
+        mods["embed"].relabel(tmp_path, apply=True, chunk=2)
+
+        written = self._read(mods, cell)
+        assert sorted(written) == [0, 1, 2]
+        assert written[0] == before[0] and written[2] == before[2]
+
+    def test_the_chunk_size_changes_nothing_about_the_result(self, mods, monkeypatch, tmp_path):
+        """A chunk boundary is a write boundary and nothing else."""
+        results = []
+        for chunk in (1, 2, 3, 100):
+            medias, pages = self._stale(mods, tmp_path)
+            cell = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+            mods["embed"].relabel(tmp_path, apply=True, chunk=chunk)
+            results.append(self._read(mods, cell))
+            cell.unlink()
+        assert results[1:] == results[:-1]
+
+    def test_a_dry_run_counts_without_writing(self, mods, monkeypatch, tmp_path, capsys):
+        medias, pages = self._stale(mods, tmp_path)
+        cell = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        before = cell.read_bytes()
+
+        assert mods["embed"].relabel(tmp_path, apply=False) == 0
+
+        assert cell.read_bytes() == before
+        out = capsys.readouterr().out
+        assert "3 medias, 1 relabelled" in out
+        assert "dry run" in out
+
+    def test_a_cell_the_manifest_agrees_with_is_not_rewritten(self, mods, monkeypatch, tmp_path, capsys):
+        # Nothing to change is not the same as nothing to do: rewriting a 34 GB
+        # cell to write back exactly what it held is the cost, not the safety.
+        medias, pages = self._stale(mods, tmp_path)
+        medias[1]["category"] = "t/new"
+        medias[1]["categories"] = ["t/new"]
+        medias[1]["regions"] = [dict(medias[1]["regions"][0], label="t/new")]
+        cell = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        before = cell.read_bytes()
+
+        assert mods["embed"].relabel(tmp_path, apply=True) == 0
+        assert cell.read_bytes() == before
+        assert "3 medias, 0 relabelled" in capsys.readouterr().out
+
+    def test_the_dry_run_count_is_what_the_write_pass_changes(self, mods, monkeypatch, tmp_path, capsys):
+        """The two passes share a class so they cannot report different cells.
+
+        A streamed relabel counts in one pass and writes in another, and the
+        count is what decides whether the write happens at all -- so a drift
+        between them is not a wrong number, it is a cell that does not get
+        rewritten.
+        """
+        medias, pages = self._stale(mods, tmp_path)
+        cell = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+
+        mods["embed"].relabel(tmp_path, apply=False)
+        assert "1 relabelled" in capsys.readouterr().out
+
+        mods["embed"].relabel(tmp_path, apply=True)
+        capsys.readouterr()
+        # Relabelled once, the cell now agrees with the manifest: the second dry
+        # run reports the zero that proves the first pass wrote what it counted.
+        mods["embed"].relabel(tmp_path, apply=False)
+        assert "0 relabelled" in capsys.readouterr().out
+        assert self._read(mods, cell)[1]["categories"] == ["t/new"]
+
+    def test_an_orphan_and_an_off_roster_label_are_counted_not_hidden(self, mods, monkeypatch, tmp_path, capsys):
+        # A label naming a class the roster did not admit is expected and is not
+        # damage; a media the manifest has no page for is neither relabelled nor
+        # dropped.  Both are reported by the streamed pass exactly as before.
+        medias, pages = self._stale(mods, tmp_path)
+        medias[2]["origin_name"] = "t/gone"
+        (tmp_path / "classes.json").write_text(json.dumps(["t/keep"]), encoding="utf-8")
+        self._cell(mods, monkeypatch, tmp_path, medias, pages)
+
+        mods["embed"].relabel(tmp_path, apply=False)
+
+        out = capsys.readouterr().out
+        assert "1 not in the manifest" in out
+        # `t/new` on the relabelled page, and the orphan's own stale `t/keep` is
+        # on the roster -- so exactly one label is off it.
+        assert "1 label(s) on candidate classes not on the roster" in out
+
+    def test_a_rewrite_that_dies_part_way_leaves_the_original_cell_in_place(self, mods, monkeypatch, tmp_path):
+        """Not a truncated cell, and not a half-relabelled one.
+
+        The second is the worse outcome and the one only the rename prevents: a
+        cell where some pages carry the new verdict and some the old is
+        well-formed, passes `--verify`, and is wrong in a way nothing downstream
+        can see.
+        """
+        medias, pages = self._stale(mods, tmp_path)
+        cell = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        before = cell.read_bytes()
+
+        io = mods["embed"]._cells_io()
+        real_write = io.CellWriter.write
+        calls: list[int] = []
+
+        def die_on_the_second(self, chunk):
+            calls.append(len(chunk))
+            if len(calls) == 2:
+                raise MemoryError("node ran out")
+            return real_write(self, chunk)
+
+        monkeypatch.setattr(io.CellWriter, "write", die_on_the_second)
+
+        with pytest.raises(MemoryError):
+            mods["embed"].relabel(tmp_path, apply=True, chunk=1)
+
+        assert cell.read_bytes() == before
+        assert not list(tmp_path.glob("*.part")), "a partial cell was left behind"
 
 
 class TestAMergeReconcilesDistinctFrom:
@@ -2718,6 +3096,11 @@ class TestTheCellWriterLoadsBeforeAnythingIsEmbedded:
     def test_the_cells_io_module_imports(self, mods):
         io = mods["embed"]._cells_io()
         assert hasattr(io, "dump_medias") and hasattr(io, "load_medias")
+        # The streaming half is checked by the same preflight, for the same
+        # reason: a chunked build discovers an unreachable writer at the end of
+        # its *first* chunk rather than the end of the cell, which is better and
+        # still hours in on tier `l`.
+        assert hasattr(io, "CellWriter") and hasattr(io, "iter_medias")
 
     def test_loading_by_path_puts_the_module_directory_on_sys_path(self, mods):
         # The mechanism, stated so a later refactor cannot quietly drop it.
@@ -2790,6 +3173,157 @@ class TestEmbedCells:
         forward = mods["embed"].load_medias(pages, {}, "siglip")
         reverse = mods["embed"].load_medias(list(reversed(pages)), {}, "siglip")
         assert {i: m["origin_name"] for i, m in forward.items()} == {i: m["origin_name"] for i, m in reverse.items()}
+
+
+class TestABigCellIsStreamedRatherThanAssembled:
+    """A cell must never be held whole -- neither its pages nor itself.
+
+    The straight-through build reads every page in the tier into one dict,
+    embeds them all, and pickles the dict at the end.  Measured on tier ``s``
+    (#3842): **34.5 GB of peak RSS for 5,000 pages**, and an 847 MB cell = 169
+    KB/page.  Neither extrapolates.  Tier ``l`` is 200,000 pages: ~50 GB of
+    raster bytes resident at once and a ~34 GB cell assembled in memory before
+    a byte of it is written, on a node that has neither.
+
+    That was never a *time* problem, which is why the arithmetic in the issue
+    is worth restating: ``sift_vlad`` runs at ~1.3 pages/s either way, so tier
+    ``l`` is ~43 h streamed or not.  Chunking does not make the run fast; it
+    makes it possible.
+
+    What chunking invites in exchange is an off-by-a-chunk in the *ids*, which
+    is why half of these are about ordering rather than memory: a cell whose
+    pages are numbered per chunk instead of continuously is not smaller or
+    slower, it is silently wrong.
+    """
+
+    @staticmethod
+    def _pages(mods, tmp_path, n):
+        """*n* one-pixel pages, named so page_id order is NOT input order."""
+        from PIL import Image
+
+        pages = []
+        for i in range(n):
+            img = tmp_path / f"page{i:03d}.png"
+            Image.new("RGB", (8, 8), "white").save(img)
+            # Reversed ids: the sort has to do real work, so a chunked build
+            # that sorted per chunk would disagree with a one-shot one.
+            pages.append(_page(mods, f"spods/{n - 1 - i:03d}", "spods", path=str(img)))
+        return pages
+
+    @staticmethod
+    def _wire(mods, monkeypatch, tmp_path, pages):
+        """Point `build_cell` at a real `_cells_io` and a tmp cell path."""
+        cell = tmp_path / "docmarks_s__siglip.pkl"
+        monkeypatch.setattr(mods["embed"], "pages_for_tier", lambda corpus, tier: list(pages))
+        monkeypatch.setattr(mods["embed"], "cell_path", lambda tier, emb: cell)
+        return cell
+
+    @staticmethod
+    def _embedder(monkeypatch):
+        """Replace `embed_missing`, recording the size of each chunk handed to it."""
+        import vtscore.datasets.stages.embedding as emb
+
+        sizes: list[int] = []
+
+        def fake(medias, embedder_name="", on_progress=None):
+            sizes.append(len(medias))
+            for media in medias.values():
+                assert media.get("media_bytes"), "a page reached the embedder without its pixels"
+                media["embeddings"] = {embedder_name: [0.25]}
+                media["local_features"] = [[0.5]]
+
+        monkeypatch.setattr(emb, "embed_missing", fake)
+        return sizes
+
+    def test_no_more_than_one_chunk_of_pages_is_ever_resident(self, mods, monkeypatch, tmp_path):
+        pages = self._pages(mods, tmp_path, 10)
+        self._wire(mods, monkeypatch, tmp_path, pages)
+        sizes = self._embedder(monkeypatch)
+
+        summary = mods["embed"].build_cell(tmp_path, "s", "siglip", chunk=3)
+
+        assert sizes == [3, 3, 3, 1], "the embedder was handed more than a chunk at a time"
+        assert summary["n_chunks"] == 4
+        assert summary["n_medias"] == 10
+
+    def test_chunking_changes_nothing_about_what_the_cell_holds(self, mods, monkeypatch, tmp_path):
+        """The cell is page-for-page and id-for-id what one-shot would write.
+
+        This is the claim that lets tier `l` be built differently from tier `s`
+        without the two being different experiments.
+        """
+        pages = self._pages(mods, tmp_path, 10)
+        cell = self._wire(mods, monkeypatch, tmp_path, pages)
+        self._embedder(monkeypatch)
+
+        mods["embed"].build_cell(tmp_path, "s", "siglip", chunk=0)
+        whole = mods["embed"]._cells_io().load_medias(cell)
+
+        mods["embed"].build_cell(tmp_path, "s", "siglip", chunk=3, force=True)
+        streamed = mods["embed"]._cells_io().load_medias(cell)
+
+        assert streamed == whole
+        # Stated separately, because `==` on the dicts would still pass if both
+        # builds were wrong in the same way: ids follow the global page_id sort.
+        assert [m["origin_name"] for _, m in sorted(streamed.items())] == [f"spods/{i:03d}" for i in range(10)]
+
+    def test_a_chunked_cell_carries_no_pixels(self, mods, monkeypatch, tmp_path):
+        pages = self._pages(mods, tmp_path, 7)
+        cell = self._wire(mods, monkeypatch, tmp_path, pages)
+        self._embedder(monkeypatch)
+
+        mods["embed"].build_cell(tmp_path, "s", "siglip", chunk=2)
+        medias = mods["embed"]._cells_io().load_medias(cell)
+
+        assert len(medias) == 7
+        assert all("media_bytes" not in m for m in medias.values())
+        assert all(m["embeddings"] == {"siglip": [0.25]} for m in medias.values())
+
+    def test_a_build_that_dies_part_way_leaves_no_cell_to_mistake_for_a_whole_one(self, mods, monkeypatch, tmp_path):
+        """43 h in, a killed job must leave nothing `--verify` would accept."""
+        import vtscore.datasets.stages.embedding as emb
+
+        pages = self._pages(mods, tmp_path, 10)
+        cell = self._wire(mods, monkeypatch, tmp_path, pages)
+
+        calls: list[int] = []
+
+        def fake(medias, embedder_name="", on_progress=None):
+            calls.append(len(medias))
+            if len(calls) == 3:
+                raise MemoryError("node ran out")
+            for media in medias.values():
+                media["embeddings"] = {embedder_name: [0.25]}
+
+        monkeypatch.setattr(emb, "embed_missing", fake)
+
+        with pytest.raises(MemoryError):
+            mods["embed"].build_cell(tmp_path, "s", "siglip", chunk=3)
+
+        assert not cell.exists()
+        assert not list(tmp_path.glob("*.part")), "a partial cell was left behind"
+
+    def test_verify_reads_a_chunked_cell_without_loading_it(self, mods, monkeypatch, tmp_path, capsys):
+        """`--verify` on a 34 GB cell must not be the step that cannot hold it."""
+        pages = self._pages(mods, tmp_path, 6)
+        cell = self._wire(mods, monkeypatch, tmp_path, pages)
+        self._embedder(monkeypatch)
+        mods["embed"].build_cell(tmp_path, "s", "siglip", chunk=2)
+
+        monkeypatch.setattr(mods["embed"], "EMBEDDERS", {"siglip": {}})
+        monkeypatch.setattr(mods["embed"].cfg, "TIER_ORDER", ["s"])
+
+        io = mods["embed"]._cells_io()
+
+        def no_load(path):
+            raise AssertionError("verify materialised the whole cell")
+
+        monkeypatch.setattr(io, "load_medias", no_load)
+        monkeypatch.setattr(mods["embed"], "_cells_io", lambda: io)
+
+        assert mods["embed"].verify(tmp_path) == 0
+        assert "6 medias, 0 labelled, ok" in capsys.readouterr().out
+        assert cell.exists()
 
 
 class TestKaggleCredentialGate:
@@ -3757,3 +4291,11 @@ class TestSlateDescriptorChoice:
         groups = mods["slate"].subgroups(tmp_path, "siglip2_l", 0.5)["a"]
         assert groups["p0"] == groups["p1"] == groups["p2"] == 1
         assert groups["p3"] == 2
+
+
+class TestCorpusVersion:
+    def test_the_version_is_a_major_minor_stamp_the_datasheet_names(self, mods):
+        version = mods["build"].cfg.CORPUS_VERSION
+        assert re.fullmatch(r"v\d+\.\d+", version)
+        datasheet = Path(mods["build"].__file__).with_name("DATASHEET.md").read_text(encoding="utf-8")
+        assert f"**Corpus version {version}**" in datasheet

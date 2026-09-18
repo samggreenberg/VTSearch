@@ -49,6 +49,27 @@ export class CenterPanelComponent implements OnDestroy {
 
   readonly media = input<Media | null>(null);
   readonly disabled = input(false);
+
+  /**
+   * The host has nothing left to show: every item its queue knows about is
+   * labeled (Train) or verified (Find).
+   *
+   * Distinct from {@link disabled}, which means "voting is momentarily blocked"
+   * and also gates undo/redo. Undo is the *exit* from an exhausted queue — it
+   * makes an item unlabeled again — so it must keep working here.
+   *
+   * Distinct from a null {@link media} too: the item just voted on is still
+   * selected, so the viewer's own empty state does not fire. Left to itself the
+   * pane renders blank, because the vote-swipe animation pins the outgoing node
+   * off-screen with `forwards` until a new item replaces it and nothing ever
+   * does (#3887).
+   */
+  readonly exhausted = input(false);
+  readonly exhaustedHeading = input('Nothing left to label');
+  readonly exhaustedDetail = input(
+    'Every item in the current ranking has been labeled. Load more results, ' +
+      'change the sort, or export your labels.',
+  );
   readonly mediaVoted = output<{
     id: number;
     vote: 'good' | 'bad';
@@ -182,7 +203,7 @@ export class CenterPanelComponent implements OnDestroy {
     this.keyboard.action$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((action) => {
       switch (action.type) {
         case 'vote':
-          if (this.media() && action.direction && !this.disabled()) {
+          if (this.media() && action.direction && !this.disabled() && !this.exhausted()) {
             this.castVote(action.direction);
           }
           break;
@@ -367,7 +388,7 @@ export class CenterPanelComponent implements OnDestroy {
 
   castVote(vote: 'good' | 'bad'): void {
     const media = this.media();
-    if (!media || this.isVoting()) return;
+    if (!media || this.isVoting() || this.exhausted()) return;
 
     // Region annotations only attach to yes-votes (salient-area semantics).
     // A no-vote with a box drawn arms a sticky discard-confirm state; the first

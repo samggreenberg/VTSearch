@@ -100,6 +100,20 @@ MAX_UPLOAD_MB = max(0, int(os.environ.get("VTSEARCH_MAX_UPLOAD_MB", "2048")))
 # ``VTSEARCH_MAX_DECODE_PIXELS=0`` to disable bounding entirely.
 MAX_DECODE_PIXELS = max(0, int(os.environ.get("VTSEARCH_MAX_DECODE_PIXELS", str(64_000_000))))
 
+# Detection-resolution budget for the structural (instance-matching) embedders.
+#
+# SIFT detection cost scales linearly with pixel count while the keypoint set is
+# capped at ``DEFAULT_MAX_FEATURES`` regardless, so a high-resolution source pays
+# many times over for the *same* number of descriptors: measured on one machine,
+# the same 1024 keypoints cost 33 ms at 0.3 MP and 1475 ms at 12 MP.  Worse, the
+# top-M-by-response keypoints of a very large image concentrate in fine-grained
+# texture that does not survive a rescale or re-shoot, so the uncapped detection
+# is both slower *and* a weaker matcher.  Capping the grayscale handed to the
+# detector fixes both.  Keypoints are stored in normalised coordinates and SIFT
+# is scale-invariant, so features detected under different caps still match.
+# Set ``VTSEARCH_MAX_STRUCTURAL_DETECT_PIXELS=0`` to detect at native size.
+MAX_STRUCTURAL_DETECT_PIXELS = max(0, int(os.environ.get("VTSEARCH_MAX_STRUCTURAL_DETECT_PIXELS", str(2_000_000))))
+
 # Training
 #
 # ``TRAIN_EPOCHS`` is an *upper bound*; :func:`vtscore.training.mlp.train_model`

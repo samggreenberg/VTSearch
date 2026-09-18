@@ -76,6 +76,8 @@ UNPAGINATED_RE = re.compile(r"<!--\s*_paginate:\s*false\s*-->")
 CLASS_RE = re.compile(r"<!--\s*_class:\s*(.+?)\s*-->")
 # A line that is exactly a Marp slide separator.
 RULE_RE = re.compile(r"^-{3,}\s*$")
+#: A line break inside a headline. See `check_headline`.
+BR_RE = re.compile(r"<br\s*/?>", re.I)
 # An HTML comment, possibly spanning lines.
 COMMENT_RE = re.compile(r"<!--(.*?)-->", re.DOTALL)
 # A line that sets a Marp/Marpit directive (`_class: lead`, `paginate: false`,
@@ -486,6 +488,28 @@ def check_note_letters(name: str, text: str, pages: int, problems: list[str]) ->
         )
 
 
+def check_headline(name: str, text: str, problems: list[str]) -> None:
+    """A headline may break once, and only once.
+
+    The half of `slides/STYLE.md`'s *A title is two lines at most* that can be
+    seen from the markdown. **Where** a two-line headline breaks is a fact about
+    rendered pixels and belongs to `balance-titles.mjs`, which needs a browser
+    and so cannot run in this gate — but two `<br>`s are three lines however
+    they measure, and that is worth catching here rather than in a render
+    somebody has to look at.
+    """
+    for lineno, line in enumerate(text.splitlines(), 1):
+        if not line.startswith("## "):
+            continue
+        breaks = len(BR_RE.findall(line))
+        if breaks > 1:
+            problems.append(
+                f"fragments/{name}.md:{lineno}: headline breaks {breaks} times, so it is "
+                f"{breaks + 1} lines; a title is two lines at most (slides/STYLE.md). "
+                f"Use fewer words, not a third line"
+            )
+
+
 def check_fragment(name: str, text: str, problems: list[str]) -> None:
     for lineno, line in enumerate(text.splitlines(), 1):
         if RULE_RE.match(line):
@@ -493,6 +517,7 @@ def check_fragment(name: str, text: str, problems: list[str]) -> None:
                 f"fragments/{name}.md:{lineno}: bare `---` splits this fragment into two "
                 f"slides; use `***` for a horizontal rule"
             )
+    check_headline(name, text, problems)
     check_build_markers(name, text, problems)
     for match in IMAGE_RE.finditer(text):
         target = match.group(1)

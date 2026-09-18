@@ -44,7 +44,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from marshmallow import Schema, ValidationError, fields, validate
+from marshmallow import Schema, ValidationError, fields, pre_load, validate
 
 if TYPE_CHECKING:
     from vtscore.plugins import PluginBase, PluginField
@@ -73,6 +73,47 @@ def _coerce_checkbox(value: object) -> bool:
     if isinstance(value, (int, float)):
         return bool(value)
     raise ValidationError("Not a valid boolean.")
+
+
+def _blank_defaulted_dropper(plugin: PluginBase):
+    """Build the ``pre_load`` hook that lets a declared default win a blank.
+
+    A default is a *value*, so a field the user never touched must load as
+    that value rather than as ``""``.  Marshmallow only applies
+    ``load_default`` to a **missing** key, and a GUI form posts every input
+    it rendered - an untouched one as the empty string - so without this the
+    web path never reached the default at all: a required field 422'd
+    ("Field may not be empty.") and an optional one loaded as ``""``
+    (issue #3874).  The CLI never had the problem, because an omitted
+    ``argparse`` flag really is absent.
+
+    Deleting the key ahead of ``load()`` is what keeps this type-agnostic:
+    every field type's ``load_default`` then fires through marshmallow's own
+    machinery, so a blank ``number`` takes its default instead of failing to
+    parse and a blank ``select`` takes its default instead of failing
+    ``OneOf``.  A blank therefore loads *identically* to an omitted key -
+    including marshmallow's rule that a ``load_default`` skips the field's
+    validators, so a plugin author's bad default is no more (and no less)
+    checked here than it already was.  What does still see it is
+    :func:`~vtscore.plugins.normalize.normalize_field_values`, which
+    ``validate_plugin_args`` runs straight after ``load()``: a defaulted
+    ``url`` or ``server_path`` goes through the security validators either
+    way.
+    """
+    blank_defaulted = frozenset(pf.key for pf in plugin.fields if pf.default and pf.field_type != "file")
+
+    def drop_blank_defaulted(self, data, **kwargs):  # noqa: ARG001 - marshmallow hook signature
+        if not isinstance(data, dict):
+            return data
+        blanks = [k for k in blank_defaulted if isinstance(data.get(k), str) and not data[k].strip()]
+        if not blanks:
+            return data
+        trimmed = dict(data)
+        for key in blanks:
+            del trimmed[key]
+        return trimmed
+
+    return pre_load(drop_blank_defaulted)
 
 
 def _presence_kwargs(pf: PluginField) -> dict:
@@ -190,6 +231,7 @@ def make_plugin_arg_schema(plugin: PluginBase) -> type[Schema]:
         if mf is not None:
             attrs[pf.key] = mf
 
+    attrs["_drop_blank_defaulted"] = _blank_defaulted_dropper(plugin)
     attrs["Meta"] = type("Meta", (), {"unknown": "exclude"})
     cls_name = f"{type(plugin).__name__}ArgSchema"
     return type(cls_name, (Schema,), attrs)
@@ -245,6 +287,7 @@ def make_plugin_route_schema(
         if key not in attrs:
             attrs[key] = fields.Raw(load_default=None)
 
+    attrs["_drop_blank_defaulted"] = _blank_defaulted_dropper(plugin)
     attrs["Meta"] = type("Meta", (), {"unknown": "include"})
     cls_name = f"{route_id}_{type(plugin).__name__}_Args"
     return type(cls_name, (Schema,), attrs)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Pack a deck's rendered slide images into zips small enough to send.
 
-    ./pack_pngs.py _out/scale-readout-png scale-readout --max-mb 25
+    ./pack_pngs.py _out/hold-the-line-png hold-the-line --max-mb 25
 
 `render.sh <deck> png` renders one PNG per page and then calls this. The zips
 exist because the pile is the deliverable: a deck exported as images, every one

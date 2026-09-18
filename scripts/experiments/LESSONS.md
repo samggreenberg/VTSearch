@@ -72,6 +72,8 @@ correct union of the two branches with no judgement involved.
 
 | Date | Lesson | Issue |
 |---|---|---|
+| 2026-09-17 | [merged worktrees filled the 50 GB /exp home](lessons/2026-09-17-merged-worktrees-filled-exp.md) | #3877 |
+| 2026-09-15 | [the diagnosis kit did not match the deployment](lessons/2026-09-15-the-diagnosis-kit-did-not-match-the-deployment.md) | #3853 |
 | 2026-09-13 | [a harness fitted at the library default, not the shipped one](lessons/2026-09-13-a-harness-fitted-at-the-library-default.md) | #3825 |
 | 2026-09-13 | [A single-seed harness fixture is a trajectory, and a threshold change re-rolls it](lessons/2026-09-13-a-single-seed-harness-fixture-is-a-trajectory.md) | — |
 | 2026-09-07 | [the launch output never named the checkout](lessons/2026-09-07-the-launch-output-never-named-the-checkout.md) | #3693 |

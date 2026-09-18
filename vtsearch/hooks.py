@@ -35,6 +35,19 @@ def state_sync_exempt(view):
     worker's threads (2026-06-19: one stuck job parked 23 threads on the
     futex and froze the whole UI).
 
+    **What "off the lock" covers, and what it rests on.** The marker itself
+    only skips the rehydrate. The rest of :func:`_set_request_context` still
+    runs for an exempt route -- the SPA sends ``X-Dataset-Id`` /
+    ``X-Detector-Id`` on every request, so every request resolves them
+    through ``get_context`` / ``get_detector_context``. Those two take
+    ``_context_registry_lock`` (a dict lookup, never held across a call-out)
+    rather than ``_state_lock``, which is what makes the exemption worth
+    anything: before #3869 they took ``_state_lock``, so an exempt route
+    blocked for exactly as long as the blocker ran -- a ``jobs/active`` poll
+    sat 2425 ms behind a vote in the #3853 capture, and the resulting
+    diagnosis blamed the GIL. If either resolver ever starts taking
+    ``_state_lock`` again, this decorator stops buying anything.
+
     The marker lives on the **view function** rather than in a URL-prefix
     list next to the hook, so renaming a route cannot silently drop its
     exemption — which would reintroduce exactly the hang the exemption
@@ -237,7 +250,10 @@ def _set_request_context():
     # Skip the lock-taking state-sync for endpoints whose handlers never
     # read the proxies (e.g. the jobs/active spinner poll), so a frequent
     # poll cannot queue on `_state_lock` behind a long-running job. The
-    # opt-out is a `@state_sync_exempt` marker on the view itself.
+    # opt-out is a `@state_sync_exempt` marker on the view itself. The header
+    # resolution above is already lock-free with respect to `_state_lock`
+    # (see that decorator's docstring), so skipping this block is the last
+    # thing an exempt route needs to stay off the lock entirely.
     if not _is_state_sync_exempt():
         try:
             from vtscore.detectors.dataset_sync import (
@@ -298,7 +314,7 @@ _SLOW_REQUEST_MS_ENV = "VTSEARCH_SLOW_REQUEST_MS"
 _DEFAULT_SLOW_REQUEST_MS = 1000.0
 
 
-def _slow_request_threshold_ms() -> float:
+def slow_request_threshold_ms() -> float:
     """Milliseconds above which a request counts as slow.
 
     Read per call rather than captured at import, so a restart with a
@@ -317,8 +333,19 @@ def _slow_request_threshold_ms() -> float:
 
 
 def _set_request_start() -> None:
-    """Stamp a monotonic start time for :func:`_log_slow_request`."""
+    """Stamp the counters :func:`_log_slow_request` reports a difference of.
+
+    Wall time alone cannot say what a slow request was doing, which is what
+    stalled #3853 for a week: a 4918ms vote POST and a 4918ms wait on a lock
+    look identical to a ``perf_counter`` pair.  CPU time separates "did the
+    work" from "blocked or was descheduled", and the GC total separates "a
+    collection froze every thread" from both.
+    """
+    from vtscore.concurrency.stalls import gc_pause_ms_total, thread_cpu_ms
+
     g.request_start = time.perf_counter()
+    g.request_cpu_start = thread_cpu_ms()
+    g.request_gc_start = gc_pause_ms_total()
 
 
 def _log_slow_request(response):
@@ -332,20 +359,51 @@ def _log_slow_request(response):
     The per-request id is included because the browser reads that same id off
     the ``X-Request-Id`` response header (:func:`_echo_request_id`), so a
     stall seen in DevTools can be matched to the server line explaining it.
+
+    Below the threshold, and only when the logger is enabled for INFO, the
+    same figures are written as a ``request trace`` line so a diagnostic run
+    has the whole chain to add up rather than just its outliers.  The two
+    prefixes are distinct (not ``request:`` and ``slow request:``) so a log
+    reader can match either one without matching the other.
     """
+    from vtscore.concurrency.stalls import gc_pause_ms_total, thread_cpu_ms
+
     start = getattr(g, "request_start", None)
     if start is None:
         # No start stamp: the request failed before ``_set_request_start``
         # ran, or a test built a bare request context. Nothing to report.
         return response
     elapsed_ms = (time.perf_counter() - start) * 1000.0
-    if elapsed_ms >= _slow_request_threshold_ms():
-        logging.getLogger(__name__).warning(
-            "slow request: %s %s -> %s in %.0fms (request_id=%s)",
+    cpu_ms = max(0.0, thread_cpu_ms() - getattr(g, "request_cpu_start", 0.0))
+    gc_ms = max(0.0, gc_pause_ms_total() - getattr(g, "request_gc_start", 0.0))
+    logger = logging.getLogger(__name__)
+    if elapsed_ms >= slow_request_threshold_ms():
+        logger.warning(
+            "slow request: %s %s -> %s in %.0fms cpu=%.0fms gc=%.0fms (request_id=%s)",
             request.method,
             request.path,
             response.status_code,
             elapsed_ms,
+            cpu_ms,
+            gc_ms,
+            getattr(g, "request_id", None),
+        )
+    elif logger.isEnabledFor(logging.INFO):
+        # Every request, at INFO, so a *felt* pause that no single request is
+        # long enough to explain can still be accounted for. #3853's residue
+        # is exactly that shape: a vote's chain of ~10 requests, a retrain and
+        # a collection each costing less than any threshold, summing to the
+        # half-second the reviewer feels.  A per-request bar cannot see a sum
+        # by construction, so the analysis has to be done over the whole
+        # trace; this is the line ``analyze_app_log.py`` adds up.
+        logger.info(
+            "request trace: %s %s -> %s in %.0fms cpu=%.0fms gc=%.0fms (request_id=%s)",
+            request.method,
+            request.path,
+            response.status_code,
+            elapsed_ms,
+            cpu_ms,
+            gc_ms,
             getattr(g, "request_id", None),
         )
     return response

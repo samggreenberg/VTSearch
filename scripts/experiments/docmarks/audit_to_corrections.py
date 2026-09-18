@@ -6,6 +6,10 @@
     python audit_to_corrections.py --task cluster --apply
     python audit_to_corrections.py --task confusable --apply
     python audit_to_corrections.py --task letterhead          # dry run (default)
+    python audit_to_corrections.py --task completeness --reviewer <name> --apply
+    python audit_to_corrections.py --task ucsf_classes --reviewer <name> --apply
+    python audit_to_corrections.py --task query_crops --reviewer <name> --apply
+    python audit_to_corrections.py --task box_tighten --reviewer <name> --apply
     python audit_to_corrections.py --migrate-adjudications --apply
 
 Without ``--apply`` it prints what it would change and touches nothing.
@@ -958,9 +962,26 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument(
         "--task",
-        choices=("merge", "membership", "cluster", "confusable", "distinctive", "letterhead"),
+        choices=(
+            "merge",
+            "membership",
+            "cluster",
+            "confusable",
+            "distinctive",
+            "letterhead",
+            "completeness",
+            "ucsf_classes",
+            "query_crops",
+            "box_tighten",
+        ),
     )
     ap.add_argument("--corpus", type=Path, default=cfg.OUT)
+    ap.add_argument(
+        "--audit-dir",
+        default=None,
+        help="read verdicts from <corpus>/audit/<this> instead of audit/<task>, e.g. completeness2 for the "
+        "multi-method completeness slate",
+    )
     ap.add_argument("--apply", action="store_true", help="write the changes (default is a dry run)")
     ap.add_argument(
         "--supersede",
@@ -1021,20 +1042,39 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     if not args.task:
         ap.error("--task is required unless --migrate-adjudications is given")
-    audit_dir = args.corpus / "audit" / args.task
+    audit_dir = args.corpus / "audit" / (args.audit_dir or args.task)
     slate_problems: list[str] = []
     if args.task == "merge":
         # The slate is an input *format*, not a second way of recording ground
         # truth: it compiles to the same same/different rows the pairwise pass
         # produces and goes through the same applier.
         verdicts, slate_problems = load_merge_answer(audit_dir)
+    elif args.task == "ucsf_classes":
+        # Every row, answered or not: a relation row carries no `verdict`, and an
+        # unanswered sheet is still counted as unreviewed.
+        path = audit_dir / "verdicts.jsonl"
+        if not path.exists():
+            raise SystemExit(f"no verdict file at {path} — run ucsf_classes.py slates first")
+        verdicts = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
     else:
         verdicts = load_verdicts(audit_dir / "verdicts.jsonl")
 
-    mutates_pages = args.task in ("cluster", "membership", "confusable", "merge")
+    mutates_pages = args.task in (
+        "cluster",
+        "membership",
+        "confusable",
+        "merge",
+        "completeness",
+        "ucsf_classes",
+        "box_tighten",
+    )
     pages = list(read_manifest(manifest_path)) if mutates_pages else []
     new_separations: list[dict[str, Any]] = []
     new_merges: list[dict[str, Any]] = []
+    new_added_marks: list[dict[str, Any]] = []
+    new_reviewed_negatives: dict[str, list[str]] = {}
+    new_exclusions: dict[str, list[str]] = {}
+    new_class_ids: list[str] = []
     resplit: list[str] = []
 
     if args.task == "membership":
@@ -1052,6 +1092,32 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 for meta in classes.values():
                     meta.setdefault("audit", {})["partition_reviewed"] = True
                 changes.append(f"{len(classes)} class(es) marked partition_reviewed")
+    elif args.task == "completeness":
+        from completeness import apply_completeness  # noqa: PLC0415
+
+        changes, problems, new_merges, new_separations, new_added_marks = apply_completeness(
+            pages, classes, verdicts, reviewer=args.reviewer
+        )
+    elif args.task == "ucsf_classes":
+        from ucsf_classes import apply_ucsf_classes  # noqa: PLC0415
+
+        before = set(classes)
+        changes, problems, new_added_marks, new_reviewed_negatives, new_exclusions = apply_ucsf_classes(
+            pages, classes, verdicts, reviewer=args.reviewer
+        )
+        new_class_ids = sorted(set(classes) - before)
+    elif args.task == "query_crops":
+        from query_crops import STORE, apply_query_crops, load_store  # noqa: PLC0415
+
+        crop_store = load_store(args.corpus / STORE)
+        changes, problems = apply_query_crops(classes, verdicts, crop_store, reviewer=args.reviewer)
+    elif args.task == "box_tighten":
+        from box_tighten import STORE as BOX_STORE, apply_box_tighten, load_store as load_box_store  # noqa: PLC0415
+
+        box_store = load_box_store(args.corpus / BOX_STORE)
+        changes, problems, stale_queries = apply_box_tighten(
+            pages, classes, verdicts, box_store, reviewer=args.reviewer
+        )
     elif args.task == "distinctive":
         changes, problems = apply_distinctive(classes, verdicts)
     else:
@@ -1108,6 +1174,68 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             adjudications_path,
         )
         print(f"  wrote {len(new_merges)} merge(s) and {len(new_separations)} separation(s) to {adjudications_path}")
+
+    if new_added_marks:
+        from completeness import ADDED_MARKS, load_added_marks, save_added_marks  # noqa: PLC0415
+
+        # Before classes.json and the manifest: a new box that is on a page but
+        # not in the store would vanish at the next rebuild while its must-link
+        # still names it, which is the drift this store exists to prevent.
+        store = args.corpus / ADDED_MARKS
+        save_added_marks(load_added_marks(store) + new_added_marks, store)
+        print(f"  appended {len(new_added_marks)} hand-added mark(s) to {store}")
+
+    if new_reviewed_negatives or new_exclusions:
+        import roster  # noqa: PLC0415
+
+        # The only UCSF negatives a class gets (#3921); stored apart from
+        # classes.json so a rebuild's regenerated metadata gets them back.
+        store_path = args.corpus / roster.REVIEWED_NEGATIVES
+        store = roster.load_reviewed_negatives(store_path)
+        excluded = roster.load_reviewed_negatives(store_path, "excluded")
+        for cid in set(new_reviewed_negatives) | set(new_exclusions):
+            positives = set(classes.get(cid, {}).get("page_ids", []))
+            excluded[cid] = sorted((set(excluded.get(cid, [])) | set(new_exclusions.get(cid, []))) - positives)
+            store[cid] = sorted(
+                (set(store.get(cid, [])) | set(new_reviewed_negatives.get(cid, []))) - positives - set(excluded[cid])
+            )
+        roster.save_reviewed_negatives(store, store_path, excluded)
+        print(f"  wrote reviewed negatives for {len(store)} class(es) to {store_path}")
+
+    if new_class_ids:
+        import roster  # noqa: PLC0415
+
+        # A new class is rebuilt only if the roster names it.
+        roster_path = args.corpus / "roster.json"
+        current = roster.load(roster_path)
+        current.classes = list(dict.fromkeys(current.classes + new_class_ids))
+        roster.save(current, roster_path)
+        print(f"  added {len(new_class_ids)} class(es) to {roster_path}: {new_class_ids}")
+    if args.task == "box_tighten":
+        from box_tighten import STORE as BOX_STORE, recut_query_crop, save_store as save_box_store  # noqa: PLC0415
+
+        # The store before the manifest, for the same reason as added_marks: a
+        # box on the page but not in the store would revert at the next rebuild.
+        save_box_store(box_store, args.corpus / BOX_STORE)
+        print(f"  wrote {len(box_store)} box override(s) to {args.corpus / BOX_STORE}")
+        by_page = {p.page_id: p for p in pages}
+        for class_id in sorted(stale_queries):
+            # The primary crop was cut from the box just replaced.
+            path = recut_query_crop(classes[class_id], by_page[classes[class_id]["query_page_id"]], class_id)
+            print(f"  re-cut {class_id} query crop -> {path}")
+
+    if args.task == "query_crops":
+        from query_crops import STORE, materialise, save_store  # noqa: PLC0415
+
+        # The store first: it is what a rebuild replays, so a crop that exists
+        # on disk but not in the store would silently vanish at the next build.
+        save_store(crop_store, args.corpus / STORE)
+        crop_pages = {p.page_id: p for p in read_manifest(manifest_path)}
+        crop_warnings: list[str] = []
+        n = materialise(classes, crop_store, crop_pages, args.corpus / "queries", crop_warnings)
+        for w in crop_warnings:
+            print(f"  WARNING: {w}")
+        print(f"  wrote {n} extra query crop(s) and {args.corpus / STORE}")
 
     classes_path.write_text(json.dumps(classes, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     if mutates_pages:

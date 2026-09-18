@@ -216,7 +216,9 @@ different from the on-disk dataset registry in
 | `unregister_detector_context(id)` | detector | Remove and clear the progress cache |
 | `get_detector_context(id)` | detector | Look up, or `None` |
 | `list_loaded_detector_ids()` | detector | All registered IDs |
+| `loaded_detector_contexts()` | detector | Snapshot of every registered context |
 | `clear_all_detector_contexts()` | detector | Drop every context (tests) |
+| `rekey_dataset_context(old, new)` | dataset | Move an entry to a new ID (returns whether one moved) |
 
 ```python
 from vtscore.state import DatasetContext, register_context, get_context
@@ -228,6 +230,23 @@ assert get_context("nope") is None
 
 `unregister_*` also clears the thread-local pointer if it happened to
 point at the context being removed.
+
+**The lookups are lock-free with respect to `_state_lock`.** Registry
+membership - which IDs are loaded - is guarded by its own
+`_context_registry_lock`, held only across a dict get/set/pop and never
+while calling out, so `get_context` / `get_detector_context` /
+`list_loaded_*` answer immediately even while a vote or a dataset load
+holds `_state_lock`. That matters because the app resolves an
+`X-Dataset-Id` / `X-Detector-Id` header on *every* request: when these
+took `_state_lock`, the routes marked `@state_sync_exempt` (the
+jobs/active spinner poll, the SSE reconnect) blocked for exactly as long
+as the blocker ran, which is what the exemption exists to prevent.
+Writers take `_state_lock` first and the registry lock inside it; that
+ordering is one-way, and nothing may take `_state_lock` while holding
+the registry lock. Anything that re-keys or drops an entry must go
+through these functions (`rekey_dataset_context` exists for that reason)
+rather than touching `_contexts` directly, or the readers lose their one
+source of truth.
 
 ---
 
@@ -600,6 +619,11 @@ Cross-cutting helpers shipped at the package level: `snapshot_medias()`
   context registries, every per-context dict, the coverage atlas, and
   the setting cache. RLock so that compound operations like
   `clear_all()` don't deadlock.
+- **One narrow lock beside it.** `_context_registry_lock` (a plain
+  `Lock`) guards *only* the two registry dicts' membership, so a lookup
+  never waits on a long `_state_lock` holder - see [Context
+  registries](#context-registries). It is always innermost: take it
+  under `_state_lock`, never the reverse.
 - **`__slots__` on both contexts** prevents accidental attribute
   shadowing. Adding a new field requires editing `__slots__`.
 - **No global "active" pointer.** The resolver/thread-local/empty
