@@ -128,8 +128,27 @@ and it is cheap to settle — see the first item below.
   annotated, so a cell is a filter over a fixed set rather than a build-time
   designation: `SCALE_N_POS` / `SCALE_N_NEG` stop being re-embeds and a class-list
   change stops being a rebuild. Together with #3986 this is what turns the
-  benchmark into a dataset — and it is what makes the embed a one-time cost
-  (123,287 images, ~5.3 h for all five embedders) instead of a treadmill. (Opus 4.8)
+  benchmark into a dataset. (Opus 4.8)
+
+<!-- item-sep -->
+
+- [ ] #3988 — embed all of COCO once: six columns, ~7 h, ~81 GB (Sonnet 5)
+
+<!-- item-sep -->
+
+- **The embedder roster, decided 2026-09-18.** Six columns:
+  `siglip`, `siglip2_l`, `clip`, `clip_l`, `dinov2_patch`, `dinov3_patch`. Sized
+  in #3988 from the repo's own measured `cuda+cuml` fit
+  (`vtscore/datasets/stages/_load_cost_model.py`) over 123,287 images.
+
+  Two rulings are worth keeping here rather than only in the issue, because both
+  are easy to undo by accident. **DINOv2 is a patch column, not
+  `dinov2_single`** — DINOv3 is already a patch column, so pairing it with a
+  single-vector DINOv2 would confound generation with embedder *kind*, the same
+  trap `pile_config` documents for `siglip` → `siglip2_l`. And **storage is the
+  binding cost, not GPU time**: the two patch columns are 98% of the 81 GB while
+  the four single-vector ones total 1.5 GB, so a future column is cheap if it is
+  single-vector and a real decision if it is not. (Sonnet 5)
 
 <!-- item-sep -->
 
