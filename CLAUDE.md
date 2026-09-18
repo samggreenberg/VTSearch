@@ -50,6 +50,45 @@ When the user's whole prompt is just a number — `#3421`, or bare `3421` — it
 
 It is conflicted, and the ask is to **resolve the conflicts so the PR can merge into `dev`** — nothing more. Fetch, merge `origin/dev` into the PR's head branch, resolve, run the tests, and push. Do not rewrite the branch's history (no rebase, amend, or force-push) and do not fold in unrelated changes while you are there; a reviewer should see conflict resolution and nothing else.
 
+## Every `#N` you write to the user is a link (CRITICAL)
+
+When you mention a GitHub issue or PR in a message to the user, write it as a markdown link to GitHub — **every occurrence, not just the first one in the turn:**
+
+```markdown
+[#3421](https://github.com/samggreenberg/VTSearch/issues/3421)
+```
+
+Keep `#3421` as the link text; the number is what the user reads and what they'd search for. Only the target is new.
+
+**You never need to know whether `N` is an issue or a PR.** GitHub redirects `/issues/N` to `/pull/N` when the number turns out to be a pull request, so the `issues` URL is correct for both. There is no lookup to do first and therefore no case where "I'm not sure which it is" justifies leaving a reference bare.
+
+**Why every one, rather than the first mention.** Linking only the first is the convention that prose style guides inherited from print, where a repeated footnote is clutter. It is actively wrong here. A turn that links `#3421` in its opening sentence and leaves the next five bare teaches the reader that a bare `#3421` means something — a repeat, a different register, an unlinked *something* — when it means nothing at all. Worse, the reference the user actually wants to click is almost never the first: it is the one in the summary table at the bottom, or the one in the sentence that says *this is the issue that's still open*. Making them scroll back up to find the linked copy costs more than the link would have. Linking costs you nothing but the characters, so spend them uniformly.
+
+**This applies on every surface Claude talks to the user on** — the web app, Claude Code in the terminal, the desktop app, a cloud session's final message. Like the bare-`#N` convention above, it is repo policy rather than a per-session preference, so it holds wherever this file is loaded. Within a message it covers prose, end-of-turn summaries, bullet lists and tables alike, repeats inside a single sentence included.
+
+**What decides is the direction of the message, not the surface it's typed on.** Anything travelling *to the user* gets links, because the user is the one who would otherwise be pasting a number into a URL bar. Anything travelling *to GitHub* — or into git — does not, for the reasons in the four carve-outs below. That split is the whole rule; a surface you haven't seen before is on the user's side of it unless it's one of those four.
+
+### Where `#N` stays bare
+
+Four places, and the reason is the same each time: the link either doesn't render or actively breaks something.
+
+- **Inside code fences and inline code spans.** A markdown link renders as literal brackets there. `git log --grep '#3421'` is a command, not a reference.
+- **Anything written to GitHub** — issue comments, PR titles and bodies, review replies. GitHub **autolinks `#N` natively** in those fields, so a markdown link adds a second URL to something that was already clickable. Write `Addressed in #3421`, as the sections below already say.
+- **Closing keywords, specifically.** `Closes #3421` — never `Closes [#3421](https://github.com/samggreenberg/VTSearch/issues/3421)`. That keyword is parsed by GitHub and by `scripts/reconcile-solved-labels.py`; both expect the bare form, and this is the one place where dressing up a reference can silently cost an issue its close. See "Linking a fix PR to its GitHub issue" below for what rides on that keyword.
+- **Commit messages and branch names.** No renderer, so a link is just noise in `git log`.
+
+Tracked markdown in the repo — this file, `docs/`, `docs/plans/` — is **out of scope** and keeps its bare `#N` convention (plan pointers like `- [ ] #2355 — …` stay exactly as documented below). This rule is about messages, not files.
+
+### Not every `#` followed by digits is a reference
+
+Link what actually names an issue or PR in this repo. Leave alone: ordinals and rankings (this file's own "**#1 rule**" at the top is the canonical false positive), list positions, heading anchors, CSS ids, and any `#N` that came out of a code sample. If you can't say which issue a number names, it probably isn't one.
+
+While you're at it, prefer the `#N` spelling over "PR 3984" or "issue 3421" in the first place — the `#` form is what the trip-wire below catches, and a prose number is a reference that will never get linked because nothing looks for it.
+
+### Trip-wire: scan your turn before sending
+
+Before sending, scan the turn for `#` followed by digits. **Every hit outside a code span is a link** — not the first hit, every hit. If you find a bare one, fix it before sending; you are already in the message, and re-editing it costs nothing, whereas the user reaching for a URL bar costs a round-trip.
+
 ## Branch Policy (CRITICAL)
 
 - **Always base work on `dev`.** The `.claude/hooks/session-start.sh` SessionStart hook fetches `origin --prune` and then lands the working branch on `origin/dev` automatically in remote sessions. The harness cuts the working branch off `main` (the GitHub default), so this is required to pick up work already merged to `dev`. The GitHub default stays `main` so new users land on the stable branch: `dev` is Claude's starting point, not the public default.
