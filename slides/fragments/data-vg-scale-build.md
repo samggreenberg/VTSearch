@@ -25,7 +25,9 @@
      `medium` tops out at the smallest region it can pool. That is what makes
      a small-versus-large result a statement about the method rather than
      about a threshold we picked. Size means the *union* box over the class's
-     instances, because that is what one Good vote actually drags. -->
+     instances -- which is what the harness's simulated Good vote drags. A real
+     vote carries one box a person drew, so the union is our modelling choice,
+     not a fact about the app. -->
 
 <!-- **c** — Repair. About 51K of these images are COCO images too,
      and there COCO's exhaustive boxes replace VG's outright. The rest went

@@ -160,15 +160,29 @@ SCALE_CROSS_CLASS_NEGATIVES = True
 #: is not a region, it is the image.
 #:
 #: **The band is a VIEW over every instance, not a replacement for them, and
-#: that is a decision** (2026-09-07, ``docs/plans/vg-scale-exhaustive-annotation.md``).
+#: that is a decision** (2026-09-07).
 #: :func:`~pilebuild.loaders.vg_scale.band_for` summarises a class's boxes in an
-#: image by their **union**, which is what one Good vote drags in the app and is
-#: what #3156 measured -- and the build keeps every instance box behind it
+#: image by their **union**, which is what the harness's SIMULATED Good vote
+#: drags and is what #3156 measured -- and the build keeps every instance box
+#: behind it
 #: (``band_candidates`` stores them all; ``_emit_medias`` writes one region per
 #: box). Keep it that way. The union is derivable from the instances and the
 #: instances are not derivable from the union, so a summary chosen at eval time
 #: -- largest, smallest, count, density -- stays available at no cost, while
 #: collapsing the set at build time would end that permanently and silently.
+#:
+#: **The union is a modelling choice, not a reproduction of the app** (2026-09-18).
+#: A real Good vote carries at most ONE box -- ``MediaVoteRequest.region_box`` is
+#: four numbers and ``good_region_boxes`` holds one box per media -- drawn by a
+#: person around one object, plausibly the most prominent. The union is what
+#: :func:`vtscore.eval.labels.region_box_for_category` returns when it has to
+#: invent that drag from *N* ground-truth boxes, and its own docstring justifies
+#: it only against picking one **arbitrarily** ("would depend on annotation
+#: order"), which does not rule out picking the **largest**. So the union is an
+#: assumption about the simulated user that nothing has validated against a real
+#: one. It is not eval/app drift -- there is no app function to mirror, because
+#: the app has a human -- but it is not a fact about the app either, and this
+#: file used to say it was.
 #:
 #: The shipped band statistic does **not** move as a result: changing it now
 #: would restate what #3156 measured under its own name. What the decision buys
@@ -1644,6 +1658,82 @@ class ClassRule(NamedTuple):
 #: :func:`review_name` falls back to the bare class name for them. A class need
 #: not be in :data:`SCALE_CLASSES` to appear here: `cell phone` is a #3588
 #: candidate whose first slate is already voted.
+#: What each class in *C* is actually MADE OF, measured rather than asserted.
+#:
+#: :data:`SCALE_CLASS_RULES` says what a reviewer should count as Good. This says
+#: what COCO's annotators *did* count -- which is a different fact, and under a
+#: pure-COCO build it is the one that governs, because nobody reviews COCO's
+#: labels. A result on `cup` is a result on whatever COCO put in `cup`, and that
+#: turns out to be three things.
+#:
+#: Measured by matching COCO boxes to LVIS boxes on the same image (mutual best
+#: match, IoU >= 0.7) and reading off what LVIS's 1,203 *defined* synsets call
+#: them -- ``coco_class_purity.py``, study
+#: ``docs/experiments/2026-09-18-coco-only-supply-3983/``. COCO's own vocabulary
+#: cannot answer this: it is curated and disjoint, so an annotator records one
+#: label and no disagreement, and two COCO classes almost never box the same
+#: pixels (3.4% collision, with no separation between the classes whose reviews
+#: split and the rest). A finer vocabulary over the same pixels is the only way
+#: to see inside a class without a review pass.
+#:
+#: **Read these as composition, not as error.** Three different things appear:
+#:
+#: * **Subtype spread** -- `bottle` is wine/water/beer bottles, `bird` is
+#:   duck/gull/pigeon. Harmless; the class is what it says, at finer grain.
+#: * **A genuine boundary contest** -- 17% of `truck` is what LVIS calls a car,
+#:   against 2% the other way, and both are in *C*. That asymmetry is real and is
+#:   the one open decision the measurement surfaced.
+#: * **A minority a reader would not expect** -- `stop sign` is 20% generic
+#:   `street_sign`, `book` 6% magazines, `cell phone` 4% landlines. Small, and
+#:   exactly the cases that split #3612's review: a 4% minority splits two
+#:   reviewers as surely as a 40% one when neither has a rule to consult.
+#:
+#: So **share does not rank difficulty** and no threshold should be read off this
+#: table. Every class whose review actually split is homogeneous -- `book` 85%,
+#: `cell phone` 89%, `knife` 93%, `bench` 93%. The table's job is to be quotable
+#: beside a published number, and to be the source text when a rule is written.
+#:
+#: Percentages are of matched boxes and members under 1% are dropped, so a row
+#: need not sum to 100. Regenerate with ``coco_class_purity.py --out``.
+SCALE_CLASS_CONTENTS: dict[str, str] = {
+    "fire hydrant": "fireplug 100% -- the only class in C with no second member at all",
+    "fork": "fork 97%",
+    "bicycle": "bicycle 96%, wheel 2%",
+    "umbrella": "umbrella 94%, awning 4% -- an awning is not an umbrella; small but not zero",
+    "dog": "dog 94%, puppy 2%, pet 1%",
+    "boat": "boat 93%, canoe 2%, raft 1%",
+    "knife": "knife 93%, handle 3%, spatula 2%",
+    "bench": "bench 93%, table 2%, desk 1%, chair 1%, pew 1%",
+    "kite": "kite 92%, parasail 4%, flag 2%",
+    "clock": "clock 90%, wall_clock 3%, watch 2%, alarm_clock 2%, clock_tower 2% -- a"
+    " wristwatch and a clock tower are both `clock`",
+    "cell phone": "cellular_telephone 89%, telephone 4%, camera 3%, iPod 1% -- the 4% landlines"
+    " are what split the first slate (#3612), at 4%",
+    "bus": "bus_(vehicle) 88%, school_bus 5%, car_(automobile) 4%",
+    "vase": "vase 87%, flowerpot 6%, pitcher 1%, pottery 1% -- planters are in, though #3784"
+    " retired 21 of them under the reviewer rule",
+    "book": "book 85%, magazine 6%, notebook 2%, binder 2% -- the 6% magazines are the whole of #3612's 21-vs-49 split",
+    "car": "car_(automobile) 82%, minivan 9%, cab_(taxi) 4%, pickup_truck 2%, truck 1%",
+    "backpack": "backpack 82%, suitcase 8%, duffel_bag 3%, handbag 2%",
+    "stop sign": "stop_sign 79%, street_sign 20%, signboard 1% -- a fifth of this class is a"
+    " sign that is not a stop sign, the largest unexpected minority in C",
+    "spoon": "spoon 78%, ladle 6%, fork 5%, wooden_spoon 4%, soupspoon 3%, spatula 2%, knife 2%",
+    "sink": "sink 76%, kitchen_sink 20%, bathtub 2% -- a subtype split, not a boundary",
+    "bird": "bird 76%, duck 7%, gull 5%, pigeon 3%, goose 2%, pelican 1% -- subtype spread",
+    "bowl": "bowl 72%, plate 5%, basket 3%, pot 3%, dish 3%, cup 2%, bucket 2%, pan 1%",
+    "chair": "chair 66%, armchair 11%, deck_chair 8%, stool 5%, bench 2%, folding_chair 1%,"
+    " sofa 1%, rocking_chair 1% -- a stool has no back, and is still `chair` here",
+    "bottle": "bottle 42%, wine_bottle 18%, water_bottle 9%, beer_bottle 7%, soap 4%,"
+    " condiment 2%, jar 2%, alcohol 2%, soda 2%, shampoo 2% -- mostly subtype spread,"
+    " but the soap/shampoo/jar tail is ~8% of non-drink containers",
+    "cup": "glass_(drink_container) 39%, cup 28%, mug 17%, bowl 2%, teacup 1%, pitcher 1% --"
+    " NOT predominantly cups: COCO's `cup` is three vessels, and a drinking glass is the"
+    " plurality. The most heterogeneous class in C",
+    "truck": "truck 38%, car_(automobile) 17%, pickup_truck 16%, trailer_truck 8%, minivan 8%,"
+    " fire_engine 5%, bus_(vehicle) 2%, garbage_truck 1% -- the open decision: 17% of"
+    " `truck` is what LVIS calls a car, against 2% the other way, and `car` is also in C",
+}
+
 SCALE_CLASS_RULES: dict[str, ClassRule] = {
     # Candidates from #3588, each rule measured with `coco_folds.py` before it
     # was written: the fold-in names the boundary case a reviewer will actually

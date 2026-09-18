@@ -1,12 +1,20 @@
 #!/usr/bin/env python3
 """The worklist for `vg_scale`'s exhaustive annotation pass (#3720, #3668).
 
-`docs/plans/vg-scale-exhaustive-annotation.md` moves `vg_scale` from a
-designation to an exhaustively annotated set, and its debt is one stratum: the
-**off-COCO positives**. Every class in *C* is a COCO-2017 class and since #3670
-the negative pool and the spares are drawn from the COCO-anchored half alone, so
-COCO already answers for everything except the positives VG contributed on the
-half COCO never annotated.
+**The pass this feeds is not owed, and this script is kept only as the record of
+how its stratum was counted (2026-09-18, #3983).** The plan it served moved
+`vg_scale` from a designation to an exhaustively annotated set by answering one
+stratum -- the **off-COCO positives** -- by hand. That stratum exists only
+because the image pool is Visual Genome's: measured over COCO 2017 train+val
+instead, every cell is supplied with margin and there is no off-COCO half to
+answer. See `docs/plans/coco-quarry.md` and
+`docs/experiments/2026-09-18-coco-only-supply-3983/REPORT.md`. This script goes
+when the rest of the VG inference machinery does.
+
+Everything below describes the construction as it stood. Every class in *C* is a
+COCO-2017 class and since #3670 the negative pool and the spares are drawn from
+the COCO-anchored half alone, so COCO already answers for everything except the
+positives VG contributed on the half COCO never annotated.
 
 A reviewer cannot start on that stratum without being handed it. **Whether COCO
 also annotated an image is not visible in the image** -- it is a join between VG
