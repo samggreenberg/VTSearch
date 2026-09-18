@@ -33,7 +33,7 @@ neighbouring question in August and is read as having answered this one. It
 reported **20 of 36 shipped cells** short of 300 COCO-anchored positives, which
 is the founding measurement of the 3,391-image exhaustive annotation pass (the
 plan that carried it was retired by this study; see the migration plan,
-[`docs/plans/vg-scale-image-source.md`](../../plans/vg-scale-image-source.md)).
+[`docs/plans/coco-quarry.md`](../../plans/coco-quarry.md)).
 
 It draws its candidates from `vg_source()`:
 
@@ -513,6 +513,13 @@ things it therefore does not establish:
   images come from. `SCALE_CLASS_RULES` keeps its job of writing that down.
 
 ## Consequences
+
+**The result is named `coco_quarry`** — a fixed body of material you cut blocks
+out of to spec, which is what it becomes once band, prevalence and class list are
+export-time queries (#3987). Nothing parameter-like is in the name on purpose:
+`vg_scale_any` and `vg_scale_deep` exist *because* band and depth were baked into
+one, so every new question needed a new dataset. A version is described by its
+parameters instead — `bus@small`, 200:20k, π = 0.99%.
 
 The retired exhaustive-annotation plan existed to answer the off-COCO half by
 hand: 3,391 images, one exhaustive 25-way judgement each. Its premise was the

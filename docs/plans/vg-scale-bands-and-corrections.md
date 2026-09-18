@@ -168,6 +168,6 @@ still live; only its image source moves.
 
 <!-- item-sep -->
 
-- [ ] What remains is the migration itself — see [`vg-scale-image-source.md`](vg-scale-image-source.md)
+- [ ] What remains is the migration itself — see [`coco-quarry.md`](coco-quarry.md)
 
 <!-- item-sep -->

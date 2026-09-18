@@ -1,8 +1,20 @@
-# Migrate `vg_scale` off Visual Genome onto COCO
+# `coco_quarry`: migrate `vg_scale` off Visual Genome onto COCO
 
 **Decided 2026-09-18.** `vg_scale` moves to COCO 2017 train+val as its image
-pool, and Visual Genome leaves the construction entirely. This plan holds the
-migration and the work it retires.
+pool, Visual Genome leaves the construction entirely, and the result is named
+**`coco_quarry`**. This plan holds the migration and the work it retires.
+
+**Why that name.** It is a fixed body of material you cut blocks out of to spec,
+which is what the thing actually is once band, prevalence and class list become
+export-time queries (#3987). Nothing parameter-like is baked in, and that is the
+point: `vg_scale_any` and `vg_scale_deep` exist *because* band and depth were
+baked into a name, so every new question needed a new dataset. A `coco_quarry`
+version is described by its parameters — `bus@small`, 200:20k, π = 0.99% — and
+the dataset keeps one name however many versions are cut from it. "Banded-COCO"
+was the proposal it replaces; it names one queryable axis as though it were the
+defining property, which is the shape that produced the `_any` / `_deep`
+siblings. ("Pile" was unavailable: it already means the shared pre-embedded
+cache.)
 
 The decision rests on one measurement, not on preference:
 [`docs/experiments/2026-09-18-coco-only-supply-3983/`](../experiments/2026-09-18-coco-only-supply-3983/REPORT.md)
@@ -64,13 +76,12 @@ and it is cheap to settle — see the first item below.
 
 <!-- item-sep -->
 
-- **Decide what the new set is called, and do not overwrite the old one.**
-  `pile_config` already warns that rebuilding a cell silently changes what it is,
-  and five-plus studies (#3115, #3196, #3287, #3290, #3318, #3319) are conditioned
-  on the VG-built cells. Reproducing those is no longer a reason to keep cleaning
-  VG — they can be re-run — but it is a reason not to reuse the *name*. A new
-  dataset key leaves the old cells readable while nothing new is built on them.
-  (human)
+- **Keep the old cells readable under their own name.** `pile_config` warns that
+  rebuilding a cell silently changes what it is, and five-plus studies (#3115,
+  #3196, #3287, #3290, #3318, #3319) are conditioned on the VG-built ones.
+  Reproducing those is no longer a reason to keep cleaning VG — they can be
+  re-run — but it is a reason not to reuse the key. `coco_quarry` is a new
+  dataset; `vg_scale*` stays readable and nothing new is built on it. (Sonnet 5)
 
 <!-- item-sep -->
 
