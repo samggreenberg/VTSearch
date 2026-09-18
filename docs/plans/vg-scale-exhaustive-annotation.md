@@ -48,6 +48,16 @@ short of 300 COCO-anchored positives (`dog@small` 114, `spoon@large` 106), so
 the off-COCO half cannot simply be dropped — it has to be answered. See
 [the class-list study](../experiments/2026-09-03-vg-scale-classes/REPORT.md).
 
+**That measurement is bounded by VG, and #3983 asks whether it should be.**
+`exact_supply.py` draws its candidates from `vg_source()`, so "the COCO half"
+means the VG∩COCO overlap (~51,497 images) rather than COCO 2017 train+val
+(123,287). The ~72,000 COCO images outside VG were never candidates — their
+annotations are already read by `coco_anchor.py`, only their pixels are absent.
+Until #3983 reports, read the claim above as *the COCO half of VG does not
+reach*, which is what was measured. If the widened pool does reach, this plan's
+pass is not owed at all — see
+[`vg-scale-image-source.md`](vg-scale-image-source.md).
+
 ## Why it is worth more than the pass costs
 
 The annotation retires the machinery that exists **only** to substitute
@@ -152,6 +162,10 @@ now covers all 25 classes, so #3618's "before the next rebuild" warning is spent
 <!-- item-sep -->
 
 - [ ] #3669 — slate import re-embeds vectors the pile already holds (bills the pass three times over for its own images)
+
+<!-- item-sep -->
+
+- [ ] #3983 — the pass may not be owed: "the COCO half does not reach" was measured over a VG-bounded pool
 
 <!-- item-sep -->
 
