@@ -160,7 +160,7 @@ SCALE_CROSS_CLASS_NEGATIVES = True
 #: is not a region, it is the image.
 #:
 #: **The band is a VIEW over every instance, not a replacement for them, and
-#: that is a decision** (2026-09-07, ``docs/plans/vg-scale-exhaustive-annotation.md``).
+#: that is a decision** (2026-09-07).
 #: :func:`~pilebuild.loaders.vg_scale.band_for` summarises a class's boxes in an
 #: image by their **union**, which is what one Good vote drags in the app and is
 #: what #3156 measured -- and the build keeps every instance box behind it
