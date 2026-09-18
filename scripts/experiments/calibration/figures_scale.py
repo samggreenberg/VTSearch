@@ -31,6 +31,8 @@ from _cells_paths import main_frame_files
 # a second place for the wrap rule to be different.
 from figures_overview import legend_in_spare, panel_grid
 
+from study_paths import require_study_dir
+
 BANDS = ("small", "medium", "large")
 COLORS = {"small": "#c2410c", "medium": "#0f766e", "large": "#3730a3"}
 
@@ -59,6 +61,8 @@ def main() -> int:
     ap.add_argument("--exp", default=f"/expscratch/{os.environ.get('USER', 'sgreenberg')}/scale-3156")
     ap.add_argument("--out", default="")
     args = ap.parse_args()
+
+    args.exp = str(require_study_dir(args.exp, "--exp"))
 
     import matplotlib
 

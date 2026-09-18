@@ -15,6 +15,14 @@
 
 set -euo pipefail
 EXP=/expscratch/sgreenberg/drive-3521
+
+# The study output dir is read, not created: fail naming it (#4001).
+if [ ! -d "$EXP" ]; then
+  echo "$EXP does not exist: this study's output was deleted 2026-09-18 (see #4001 and /expscratch/sgreenberg/keep/deleted-20260918.md)." >&2
+  echo "Re-run the study, or set EXP to a directory that has its results." >&2
+  exit 2
+fi
+
 WT=/exp/sgreenberg/projects/vts-drive-3521
 
 module load python/3.12.3

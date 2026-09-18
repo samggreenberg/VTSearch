@@ -8,6 +8,14 @@
 #   bash status_acq_2877.sh
 set -uo pipefail
 BASE="${ACQ_BASE:-/expscratch/$USER/acq-2877}"
+
+# The study output dir is read, not created: fail naming it (#4001).
+if [ ! -d "$BASE" ]; then
+  echo "$BASE does not exist: this study's output was deleted 2026-09-18 (see #4001 and /expscratch/sgreenberg/keep/deleted-20260918.md)." >&2
+  echo "Re-run the study, or set ACQ_BASE to a directory that has its results." >&2
+  exit 2
+fi
+
 SEEDS="${ACQ_SEEDS:-16}"
 NENV="${ACQ_NENV:-12}"
 WANT=$(( SEEDS * NENV ))

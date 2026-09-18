@@ -45,6 +45,8 @@ from pathlib import Path
 from _cells_paths import main_frame_files
 from figures_overview import band_of, class_of
 
+from study_paths import require_study_dir
+
 #: For each metric, whether a LARGE value is the bad end.
 BAD_IS_HIGH = {"cost": True, "regret": True, "average_precision": False, "auroc": False}
 
@@ -115,6 +117,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--step", type=int, default=150)
     ap.add_argument("--quantile", type=float, default=0.10)
     args = ap.parse_args(argv)
+
+    args.exp = str(require_study_dir(args.exp, "--exp"))
 
     bad_high = BAD_IS_HIGH.get(args.metric, True)
     per_mode = final_values(args.exp, args.metric, args.step)

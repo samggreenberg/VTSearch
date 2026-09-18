@@ -32,6 +32,8 @@ from pathlib import Path
 
 from _cells_paths import main_frame_files
 
+from study_paths import require_study_dir
+
 BANDS = ("small", "medium", "large")
 BAND_COLORS = {"small": "#c2410c", "medium": "#0f766e", "large": "#3730a3"}
 MODE_COLORS = {
@@ -138,6 +140,8 @@ def main() -> int:
     ap.add_argument("--floor", type=float, default=0.9)
     ap.add_argument("--max-run-lines", type=int, default=900, help="cap on figure 2's spaghetti, for legibility")
     args = ap.parse_args()
+
+    args.exp = str(require_study_dir(args.exp, "--exp"))
 
     import matplotlib
 

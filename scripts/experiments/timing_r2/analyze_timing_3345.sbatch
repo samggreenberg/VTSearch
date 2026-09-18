@@ -17,6 +17,14 @@
 set -euo pipefail
 
 EXP=/expscratch/sgreenberg/timing-3345
+
+# The study output dir is read, not created: fail naming it (#4001).
+if [ ! -d "$EXP" ]; then
+  echo "$EXP does not exist: this study's output was deleted 2026-09-18 (see #4001 and /expscratch/sgreenberg/keep/deleted-20260918.md)." >&2
+  echo "Re-run the study, or set EXP to a directory that has its results." >&2
+  exit 2
+fi
+
 WT=/exp/sgreenberg/projects/vts-timing-3345
 FIGS="$WT/docs/experiments/2026-09-02-timing-r2-3345/figures"
 

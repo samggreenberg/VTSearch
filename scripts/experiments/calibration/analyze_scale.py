@@ -43,6 +43,8 @@ from pathlib import Path
 
 from _cells_io import main_frame_files
 
+from study_paths import require_study_dir
+
 BANDS = ("small", "medium", "large")
 
 
@@ -137,6 +139,8 @@ def main() -> int:
     )
     ap.add_argument("--out", default="")
     args = ap.parse_args()
+
+    args.exp = str(require_study_dir(args.exp, "--exp"))
 
     cells = Path(args.exp) / "results" / "cells"
     expect = args.expect

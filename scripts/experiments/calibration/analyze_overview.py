@@ -59,6 +59,8 @@ from pathlib import Path
 
 from _cells_paths import main_frame_files
 
+from study_paths import require_study_dir
+
 STEPS = (20, 50, 150)
 DEEP = 150
 BANDS = ("small", "medium", "large")
@@ -201,6 +203,8 @@ def main() -> int:
         "whether the clicking beat typing the query, which is the first thing a reader asks.",
     )
     args = ap.parse_args()
+
+    args.exp = str(require_study_dir(args.exp, "--exp"))
 
     cells = Path(args.exp) / "results" / "cells"
     paths = main_frame_files(cells)
