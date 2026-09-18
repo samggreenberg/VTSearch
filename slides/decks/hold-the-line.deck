@@ -71,6 +71,24 @@ slides:
   # the sweep that justified it, and it comes up only if someone asks.
   split-fraction-result
 
+  # Appendix — the Coverage Atlas: how autopilot decides what to ask when the
+  # answer is not "whatever is nearest the line". Parked after the end for now
+  # because section 1 is deliberately three beats to the threshold and this is
+  # a fourth; the argument it belongs in is *Pics on a Plane*'s last page, which
+  # already says the threshold decides what gets asked, and the honest reading
+  # of these four is "and here is the half of that the threshold does not do".
+  # Move them in front of section 2 when section 1 can afford them.
+  #
+  # The order is the argument, not the code: the blind spot the atlas exists
+  # for, the structure, the geometry that makes the structure work, and then
+  # the second job it does badly. That last one stays last whatever happens to
+  # the rest — it is the only slide here that reports a loss, and a loss read
+  # before the mechanism is just a reason not to listen.
+  atlas-blindspot
+  atlas-cells
+  atlas-cone
+  atlas-pvalues
+
   # Appendix — what "logo detection" actually means. Parked after the end for
   # now, to be worked into the argument later: it is the `book` slide's claim
   # made a second time, in the one domain where a room expects a concept to
