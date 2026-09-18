@@ -1,0 +1,7688 @@
+{
+ "bad": [
+  {
+   "boxes_shown": [
+    [
+     0.67182,
+     0.09077,
+     0.73611,
+     0.16745
+    ]
+   ],
+   "cid": null,
+   "filename": "2334377.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "879b301b55585076",
+   "label": "bad",
+   "md5": "52947df104b602ac81d46ca57cdaed38",
+   "media_type": "image",
+   "name": "2334377.jpg",
+   "origin_name": "2334377.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.21816,
+     0.60816,
+     0.25569,
+     0.63391
+    ]
+   ],
+   "cid": null,
+   "filename": "4865.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "7c52364e54da270e",
+   "label": "bad",
+   "md5": "25fed32c9ee5a6336a958ef6f61350ff",
+   "media_type": "image",
+   "name": "4865.jpg",
+   "origin_name": "4865.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.32451,
+     0.5353,
+     0.35161,
+     0.55848
+    ]
+   ],
+   "cid": null,
+   "filename": "713891.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "6ec122f6516e5ae3",
+   "label": "bad",
+   "md5": "377aa56f76d76bda7afb8178a61505a9",
+   "media_type": "image",
+   "name": "713891.jpg",
+   "origin_name": "713891.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  }
+ ],
+ "class": "bowl",
+ "complete": true,
+ "detector_name": "bowl incl plates not planters or wrappers -- seat check",
+ "exported": "2026-09-17",
+ "framings": "Every element was voted on a side-padded render (slate_render.draw_with_side_inset): the photo at the canvas origin with the magnified box beside it on black padding. A drawn region_box is normalised to that CANVAS, so it is kept as region_box_canvas and region_box is converted to the photo with slate_render.side_inset_to_original, clipped at the photo's edge. boxes_shown is what the reviewer was shown; group says which population the seat came from.",
+ "good": [
+  {
+   "boxes_shown": [
+    [
+     0.56739,
+     0.5941,
+     0.64263,
+     0.64354
+    ]
+   ],
+   "cid": null,
+   "filename": "1039.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "0f5019b05463e744",
+   "label": "good",
+   "md5": "2b0ce4b17766c1d46d57b37fbd9050d6",
+   "media_type": "image",
+   "name": "1039.jpg",
+   "origin_name": "1039.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.13252,
+     0.26645,
+     0.17354,
+     0.30284
+    ]
+   ],
+   "cid": null,
+   "filename": "1217.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "b73c4adcc8afc13e",
+   "label": "good",
+   "md5": "341595b327a40bb9a0f8b3ca0ae71691",
+   "media_type": "image",
+   "name": "1217.jpg",
+   "origin_name": "1217.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.88994,
+     0.62016,
+     1.0,
+     0.70283
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 690,
+    "canvas_w": 1359,
+    "orig_h": 690,
+    "orig_w": 800
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "124.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "5d901ef8dd0b866e",
+   "label": "good",
+   "md5": "a2c52fba7f2be98a4c3681589428623d",
+   "media_type": "image",
+   "name": "124.jpg",
+   "origin_name": "124.jpg",
+   "region_box": [
+    0.05981124161073827,
+    0.8590604026845637,
+    0.3619756711409396,
+    0.978523489932886
+   ],
+   "region_box_canvas": [
+    0.03520897225061855,
+    0.8590604026845637,
+    0.21308354445382757,
+    0.978523489932886
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.10953,
+     0.47565,
+     0.99883,
+     1.0
+    ]
+   ],
+   "cid": null,
+   "filename": "1338.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "cede961b5932eebd",
+   "label": "good",
+   "md5": "e1609b57f3755a10b7f5ca1c1ae62577",
+   "media_type": "image",
+   "name": "1338.jpg",
+   "origin_name": "1338.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.94947,
+     0.8195,
+     0.99821,
+     0.86228
+    ]
+   ],
+   "cid": null,
+   "filename": "1367.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "918ba9c217eddf71",
+   "label": "good",
+   "md5": "54faef22d2252d9aade4947ba995c9b9",
+   "media_type": "image",
+   "name": "1367.jpg",
+   "origin_name": "1367.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.50459,
+     0.82479,
+     0.71797,
+     0.91611
+    ]
+   ],
+   "cid": null,
+   "filename": "1592178.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "f72d1ee15a036007",
+   "label": "good",
+   "md5": "875b12d87a9afbeedc78919a5d47360f",
+   "media_type": "image",
+   "name": "1592178.jpg",
+   "origin_name": "1592178.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.00037,
+     0.85872,
+     0.10559,
+     0.99965
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 600,
+    "canvas_w": 1320,
+    "orig_h": 600,
+    "orig_w": 800
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "1592592.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "a034fff1416cd7c5",
+   "label": "good",
+   "md5": "9b56ef36d2842e1ab92771f822fec9ce",
+   "media_type": "image",
+   "name": "1592592.jpg",
+   "origin_name": "1592592.jpg",
+   "region_box": [
+    0.0,
+    0.26264667535853975,
+    0.22910691003911343,
+    0.4906779661016949
+   ],
+   "region_box_canvas": [
+    0.0,
+    0.26264667535853975,
+    0.13885267275097785,
+    0.4906779661016949
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.88161,
+     0.14405,
+     0.90983,
+     0.17526
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 515,
+    "canvas_w": 1446,
+    "orig_h": 515,
+    "orig_w": 1024
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "1592935.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "282072bb546138bd",
+   "label": "good",
+   "md5": "c6b725d8e30f4716d1b4098e9bf9a67f",
+   "media_type": "image",
+   "name": "1592935.jpg",
+   "origin_name": "1592935.jpg",
+   "region_box": [
+    0.33967950415580184,
+    0.7516740294426653,
+    0.4400184362777053,
+    0.8285490057087885
+   ],
+   "region_box_canvas": [
+    0.2405475880052151,
+    0.7516740294426653,
+    0.3116036505867014,
+    0.8285490057087885
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.34606,
+     0.45358,
+     0.38847,
+     0.50625
+    ]
+   ],
+   "cid": null,
+   "filename": "1593148.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "4f9a141586a09596",
+   "label": "good",
+   "md5": "cbbf46333e1870359444d4cc85a3e61b",
+   "media_type": "image",
+   "name": "1593148.jpg",
+   "origin_name": "1593148.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.65581,
+     0.3058,
+     0.97352,
+     0.57023
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 306,
+    "canvas_w": 708,
+    "orig_h": 306,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "200.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "2180866a6b293d5c",
+   "label": "good",
+   "md5": "ad6c83866070aeea48217b782ed678c4",
+   "media_type": "image",
+   "name": "200.jpg",
+   "origin_name": "200.jpg",
+   "region_box": [
+    0.02676923076923077,
+    0.30165912518853694,
+    0.7052307692307692,
+    0.966817496229261
+   ],
+   "region_box_canvas": [
+    0.018904823989569754,
+    0.30165912518853694,
+    0.4980443285528031,
+    0.966817496229261
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.15981,
+     0.45345,
+     0.26774,
+     0.49877
+    ]
+   ],
+   "cid": null,
+   "filename": "2150.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "7a1ba30757d9d151",
+   "label": "good",
+   "md5": "7c86a46cf29ef077d47eee674417d2fe",
+   "media_type": "image",
+   "name": "2150.jpg",
+   "origin_name": "2150.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.09674,
+     0.27919,
+     0.13043,
+     0.31549
+    ]
+   ],
+   "cid": null,
+   "filename": "2175.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "923323ade503b75f",
+   "label": "good",
+   "md5": "709494b7ab41bbad9053268c9f4b940a",
+   "media_type": "image",
+   "name": "2175.jpg",
+   "origin_name": "2175.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.76207,
+     0.41764,
+     0.82077,
+     0.45071
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 669,
+    "canvas_w": 1472,
+    "orig_h": 669,
+    "orig_w": 800
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2194.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "632b1bcdd5b5fb8b",
+   "label": "good",
+   "md5": "8acf395c9552e26c176970af6452e528",
+   "media_type": "image",
+   "name": "2194.jpg",
+   "origin_name": "2194.jpg",
+   "region_box": [
+    0.6920990873533247,
+    0.377362737589233,
+    0.7448761408083443,
+    0.44621172701282147
+   ],
+   "region_box_canvas": [
+    0.37614080834419816,
+    0.377362737589233,
+    0.4048239895697523,
+    0.44621172701282147
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.15227,
+     0.23422,
+     0.20803,
+     0.27166
+    ]
+   ],
+   "cid": null,
+   "filename": "2200.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "57bcdf939bd81f5a",
+   "label": "good",
+   "md5": "4127e875d464ca4073651a050edd1f81",
+   "media_type": "image",
+   "name": "2200.jpg",
+   "origin_name": "2200.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.11065,
+     0.54177,
+     0.22694,
+     0.69897
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 334,
+    "canvas_w": 735,
+    "orig_h": 334,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "230.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "fa1fd2e887596a53",
+   "label": "good",
+   "md5": "27cb01372e5a22d68dd96547ab821906",
+   "media_type": "image",
+   "name": "230.jpg",
+   "origin_name": "230.jpg",
+   "region_box": [
+    0.24627770534550197,
+    0.5365810100789294,
+    0.6784615384615384,
+    0.9569039886329037
+   ],
+   "region_box_canvas": [
+    0.16753585397653195,
+    0.5365810100789294,
+    0.46153846153846156,
+    0.9569039886329037
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.14359,
+     0.39956,
+     0.2115,
+     0.42477
+    ]
+   ],
+   "cid": null,
+   "filename": "2315544.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "f2d25ad2ecea7556",
+   "label": "good",
+   "md5": "6b816c87b4376427c15e9f89d83aaf6b",
+   "media_type": "image",
+   "name": "2315544.jpg",
+   "origin_name": "2315544.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.00029,
+     0.44373,
+     0.08663,
+     0.5613
+    ]
+   ],
+   "cid": null,
+   "filename": "2316623.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "3b806384e1a69677",
+   "label": "good",
+   "md5": "5bd12ed4774455d62d17aaa212da41d2",
+   "media_type": "image",
+   "name": "2316623.jpg",
+   "origin_name": "2316623.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.00289,
+     0.31593,
+     0.55581,
+     0.99944
+    ]
+   ],
+   "cid": null,
+   "filename": "2317994.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "791826b381d53644",
+   "label": "good",
+   "md5": "a502da50879799855d3200279734198d",
+   "media_type": "image",
+   "name": "2317994.jpg",
+   "origin_name": "2317994.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.14553,
+     0.05298,
+     0.9013,
+     1.0
+    ]
+   ],
+   "cid": null,
+   "filename": "2319620.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "e6a09e739c96e784",
+   "label": "good",
+   "md5": "87e7602f9c20c390c1eba0fc2ac264cb",
+   "media_type": "image",
+   "name": "2319620.jpg",
+   "origin_name": "2319620.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.16174496644295303,
+     0.6416107382550336,
+     0.5769574944071588,
+     0.8966442953020134
+    ]
+   ],
+   "cid": null,
+   "filename": "2320596.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "bd18902547e8dab6",
+   "label": "good",
+   "md5": "db3922d6ce089514e498cd42c05eb52a",
+   "media_type": "image",
+   "name": "2320596.jpg",
+   "origin_name": "2320596.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.87666,
+     0.79313,
+     1.0,
+     0.83868
+    ]
+   ],
+   "cid": null,
+   "filename": "2320856.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "87a3eeb809624303",
+   "label": "good",
+   "md5": "36424eda9b94ce8052aac95548548ed5",
+   "media_type": "image",
+   "name": "2320856.jpg",
+   "origin_name": "2320856.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.42382,
+     0.54117,
+     0.45114,
+     0.55952
+    ]
+   ],
+   "cid": null,
+   "filename": "2321254.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "3c6e7dd9387e29ed",
+   "label": "good",
+   "md5": "9e768efcee3ad82ee14f7b03950d6ee6",
+   "media_type": "image",
+   "name": "2321254.jpg",
+   "origin_name": "2321254.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.00148,
+     0.00141,
+     0.32533,
+     0.24191
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 825,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "across both",
+   "filename": "2322645.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "2c4cb20925fdc738",
+   "label": "good",
+   "md5": "ff25c436ff8934739dc800a22f534bba",
+   "media_type": "image",
+   "name": "2322645.jpg",
+   "origin_name": "2322645.jpg",
+   "region_box": [
+    0.08820078226857887,
+    0.15365058670143414,
+    1.0,
+    1.0
+   ],
+   "region_box_canvas": [
+    0.05345501955671447,
+    0.15365058670143414,
+    0.6075619295958279,
+    1.0
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.9297,
+     0.58181,
+     0.99779,
+     0.62684
+    ]
+   ],
+   "cid": null,
+   "filename": "2322749.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "6b864c7239ad4f0f",
+   "label": "good",
+   "md5": "81bd89cc47195b9a5ac86f67f8fa1435",
+   "media_type": "image",
+   "name": "2322749.jpg",
+   "origin_name": "2322749.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.76612,
+     0.42719,
+     0.98027,
+     0.58694
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 374,
+    "canvas_w": 823,
+    "orig_h": 374,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2323875.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "c38498a7ca758339",
+   "label": "good",
+   "md5": "6a73de96e60d2fb265f2bccba31de940",
+   "media_type": "image",
+   "name": "2323875.jpg",
+   "origin_name": "2323875.jpg",
+   "region_box": [
+    0.2929322033898305,
+    0.5537940374680156,
+    0.9775136897001303,
+    1.0
+   ],
+   "region_box_canvas": [
+    0.17796610169491525,
+    0.5537940374680156,
+    0.5938722294654498,
+    1.0
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.24124,
+     0.2562,
+     0.78454,
+     0.82088
+    ]
+   ],
+   "cid": null,
+   "filename": "2323969.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "39f750c694d22d52",
+   "label": "good",
+   "md5": "e869a89eec96b1be88ce39b96398547f",
+   "media_type": "image",
+   "name": "2323969.jpg",
+   "origin_name": "2323969.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.53596,
+     0.3106,
+     0.60092,
+     0.36275
+    ]
+   ],
+   "cid": null,
+   "filename": "2324242.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "4d888dec0c751366",
+   "label": "good",
+   "md5": "ef6d2c79c8b1b4e699456a72e9fb35f2",
+   "media_type": "image",
+   "name": "2324242.jpg",
+   "origin_name": "2324242.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.28513825503355705,
+     0.4885906040268456,
+     0.9317315436241611,
+     0.9691275167785235
+    ]
+   ],
+   "cid": null,
+   "filename": "2325479.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "95b6e009bd15916d",
+   "label": "good",
+   "md5": "5ace22ccc15a1020f6c82456623defb4",
+   "media_type": "image",
+   "name": "2325479.jpg",
+   "origin_name": "2325479.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.2072,
+     0.45895,
+     0.4832,
+     0.82789
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 333,
+    "canvas_w": 733,
+    "orig_h": 333,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "across both",
+   "filename": "2326066.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "377c5cd2d11a3e31",
+   "label": "good",
+   "md5": "418898bf3a3fb3b05b80f14df8ac4180",
+   "media_type": "image",
+   "name": "2326066.jpg",
+   "origin_name": "2326066.jpg",
+   "region_box": [
+    0.07167535853976531,
+    0.2438628328458837,
+    1.0,
+    1.0
+   ],
+   "region_box_canvas": [
+    0.04889178617992177,
+    0.2438628328458837,
+    0.6857887874837028,
+    1.0
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.09103,
+     0.6472,
+     0.21277,
+     0.71354
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 825,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2326091.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "317e369cd58bee75",
+   "label": "good",
+   "md5": "a3833678b219b98c19d04731fa346c28",
+   "media_type": "image",
+   "name": "2326091.jpg",
+   "origin_name": "2326091.jpg",
+   "region_box": [
+    0.5980443285528031,
+    0.5968057366362451,
+    0.7776727509778356,
+    0.6785528031290743
+   ],
+   "region_box_canvas": [
+    0.3624511082138201,
+    0.5968057366362451,
+    0.47131681877444587,
+    0.6785528031290743
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.21219,
+     0.49517,
+     0.23437,
+     0.54381
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 334,
+    "canvas_w": 735,
+    "orig_h": 334,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2328137.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "294945ac21164f87",
+   "label": "good",
+   "md5": "2d97dc8aea0a37778a27a571b7117d7e",
+   "media_type": "image",
+   "name": "2328137.jpg",
+   "origin_name": "2328137.jpg",
+   "region_box": [
+    0.5366362451108214,
+    0.8808728696453247,
+    0.7838722294654498,
+    0.9726840321963635
+   ],
+   "region_box_canvas": [
+    0.3650586701434159,
+    0.8808728696453247,
+    0.5332464146023468,
+    0.9726840321963635
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.45485,
+     0.70456,
+     0.52129,
+     0.73231
+    ]
+   ],
+   "cid": null,
+   "filename": "2328788.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "a8287e715541c5ba",
+   "label": "good",
+   "md5": "609f35fe979df162f2e2436d94eb7c89",
+   "media_type": "image",
+   "name": "2328788.jpg",
+   "origin_name": "2328788.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.25905,
+     0.65243,
+     0.35039,
+     0.67413
+    ]
+   ],
+   "cid": null,
+   "filename": "2328892.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "9cad0e561d710e90",
+   "label": "good",
+   "md5": "e5dfd80477dadc35f26a754466f89edc",
+   "media_type": "image",
+   "name": "2328892.jpg",
+   "origin_name": "2328892.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.94915,
+     0.75676,
+     0.9994,
+     0.81349
+    ]
+   ],
+   "cid": null,
+   "filename": "2329083.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "2d98c500209d4f14",
+   "label": "good",
+   "md5": "63eacbb3da70c4aa2bcb158611a53ef1",
+   "media_type": "image",
+   "name": "2329083.jpg",
+   "origin_name": "2329083.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.09543,
+     0.45231,
+     0.45504,
+     0.85221
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 825,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2329158.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "d46ecda6686207f2",
+   "label": "good",
+   "md5": "4d768696f6413c7841474ae5d86a8f30",
+   "media_type": "image",
+   "name": "2329158.jpg",
+   "origin_name": "2329158.jpg",
+   "region_box": [
+    0.0408735332464146,
+    0.11492829204693611,
+    0.7895045632333767,
+    1.0
+   ],
+   "region_box_canvas": [
+    0.024771838331160364,
+    0.11492829204693611,
+    0.4784876140808344,
+    1.0
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.44222,
+     0.38065,
+     0.47639,
+     0.4259
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 333,
+    "canvas_w": 733,
+    "orig_h": 333,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2329436.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "703a8da43a73c5f8",
+   "label": "good",
+   "md5": "f1c980300145c74a893c5d553b657601",
+   "media_type": "image",
+   "name": "2329436.jpg",
+   "origin_name": "2329436.jpg",
+   "region_box": [
+    0.7855619295958279,
+    0.39453175470124624,
+    0.844813559322034,
+    0.45479932344339125
+   ],
+   "region_box_canvas": [
+    0.5358539765319427,
+    0.39453175470124624,
+    0.576271186440678,
+    0.45479932344339125
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.39078,
+     0.37739,
+     0.70122,
+     0.49383
+    ]
+   ],
+   "cid": null,
+   "filename": "2329513.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "fbdff56e0018b66d",
+   "label": "good",
+   "md5": "4c4f4751b0907401d7f0c8047a3e0e29",
+   "media_type": "image",
+   "name": "2329513.jpg",
+   "origin_name": "2329513.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.50867,
+     0.51794,
+     0.58672,
+     0.59708
+    ]
+   ],
+   "cid": null,
+   "filename": "2330008.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "da4ce2dfca8b663f",
+   "label": "good",
+   "md5": "dfc334154eee0445b686199fee0ccf37",
+   "media_type": "image",
+   "name": "2330008.jpg",
+   "origin_name": "2330008.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.41885,
+     0.63091,
+     0.46898,
+     0.67302
+    ]
+   ],
+   "cid": null,
+   "filename": "2330331.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "f0e8e93f67f40b73",
+   "label": "good",
+   "md5": "7d8adcd678d03515df1d0eb13c47bdfc",
+   "media_type": "image",
+   "name": "2330331.jpg",
+   "origin_name": "2330331.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.05233,
+     0.11017,
+     0.74484,
+     1.0
+    ]
+   ],
+   "cid": null,
+   "filename": "2330985.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "a93ab3adceb3e21d",
+   "label": "good",
+   "md5": "c6d885c27cbe14ff03802f4c24fd4da6",
+   "media_type": "image",
+   "name": "2330985.jpg",
+   "origin_name": "2330985.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.0042,
+     0.63944,
+     0.99336,
+     1.0
+    ]
+   ],
+   "cid": null,
+   "filename": "2331009.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "227a932727eff0f8",
+   "label": "good",
+   "md5": "5542bbf27a0cce0031a7930c2da1c8c7",
+   "media_type": "image",
+   "name": "2331009.jpg",
+   "origin_name": "2331009.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.59756,
+     0.31483,
+     0.98629,
+     0.79315
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 374,
+    "canvas_w": 820,
+    "orig_h": 374,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2331413.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "606aa0b15ccc39f0",
+   "label": "good",
+   "md5": "903c3912b74d825c40318ab0b6a6f537",
+   "media_type": "image",
+   "name": "2331413.jpg",
+   "origin_name": "2331413.jpg",
+   "region_box": [
+    0.0,
+    0.10051663192241463,
+    0.5238591916558017,
+    0.8365951097755684
+   ],
+   "region_box_canvas": [
+    0.0,
+    0.10051663192241463,
+    0.3194263363754889,
+    0.8365951097755684
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.74383,
+     0.367,
+     0.99775,
+     0.6953
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 374,
+    "canvas_w": 780,
+    "orig_h": 374,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2332170.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "c6887ec5885952ce",
+   "label": "good",
+   "md5": "cf1c038416f4bb215a838d7e8901e365",
+   "media_type": "image",
+   "name": "2332170.jpg",
+   "origin_name": "2332170.jpg",
+   "region_box": [
+    0.0,
+    0.35928577902655673,
+    0.6813559322033899,
+    0.8664007976071784
+   ],
+   "region_box_canvas": [
+    0.0,
+    0.35928577902655673,
+    0.4367666232073012,
+    0.8664007976071784
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.221,
+     0.65291,
+     0.64339,
+     0.88978
+    ]
+   ],
+   "cid": null,
+   "filename": "2332262.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "fdec458b86376754",
+   "label": "good",
+   "md5": "9cef1ff5f691307e54cd95e8d6f0d63c",
+   "media_type": "image",
+   "name": "2332262.jpg",
+   "origin_name": "2332262.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.17274,
+     0.27846,
+     0.43269,
+     0.37622
+    ]
+   ],
+   "cid": null,
+   "filename": "2332333.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "05053d76adb9975b",
+   "label": "good",
+   "md5": "6bcf8cdaa138166b04de95758e8ea784",
+   "media_type": "image",
+   "name": "2332333.jpg",
+   "origin_name": "2332333.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.55003,
+     0.32391,
+     0.60707,
+     0.38439
+    ]
+   ],
+   "cid": null,
+   "filename": "2332981.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "f1d27bb233762a50",
+   "label": "good",
+   "md5": "8ccb99889a9f412af53c6e60c3931908",
+   "media_type": "image",
+   "name": "2332981.jpg",
+   "origin_name": "2332981.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.67322,
+     0.75632,
+     0.7841,
+     0.78721
+    ]
+   ],
+   "cid": null,
+   "filename": "2333352.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "b3122d6d8169c3bc",
+   "label": "good",
+   "md5": "4df334876a98b591b61e86696cce1b25",
+   "media_type": "image",
+   "name": "2333352.jpg",
+   "origin_name": "2333352.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.7601422818791946,
+     0.789261744966443,
+     0.8459624161073825,
+     0.8416107382550335
+    ]
+   ],
+   "cid": null,
+   "filename": "2334244.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "db368628d04a8b04",
+   "label": "good",
+   "md5": "9470c763a7e1cb5c32a3ba0a91595cfd",
+   "media_type": "image",
+   "name": "2334244.jpg",
+   "origin_name": "2334244.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.69365,
+     0.40391,
+     0.79663,
+     0.50815
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 406,
+    "canvas_w": 893,
+    "orig_h": 406,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2334438.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "b7490d05ebec7c8c",
+   "label": "good",
+   "md5": "27ccba221cfd24a3aef6bebd96649a1b",
+   "media_type": "image",
+   "name": "2334438.jpg",
+   "origin_name": "2334438.jpg",
+   "region_box": [
+    0.3970182529335072,
+    0.6010855742737683,
+    0.6845945241199478,
+    0.9179637574582051
+   ],
+   "region_box_canvas": [
+    0.22229465449804434,
+    0.6010855742737683,
+    0.3833116036505867,
+    0.9179637574582051
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.0,
+     0.71465,
+     0.24192,
+     1.0
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 825,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2335360.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "c43828bfa01f1e57",
+   "label": "good",
+   "md5": "f1d2d65f6eebabea2609f0947060a2c2",
+   "media_type": "image",
+   "name": "2335360.jpg",
+   "origin_name": "2335360.jpg",
+   "region_box": [
+    0.0,
+    0.6455671447196871,
+    0.6883963494132985,
+    1.0
+   ],
+   "region_box_canvas": [
+    0.0,
+    0.6455671447196871,
+    0.4172099087353325,
+    1.0
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.01713,
+     0.54577,
+     0.24629,
+     0.63149
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 500,
+    "canvas_w": 912,
+    "orig_h": 500,
+    "orig_w": 409
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2335408.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "b9186716d98d05ec",
+   "label": "good",
+   "md5": "4da1a48e5c210f5f58bbc21e37241f98",
+   "media_type": "image",
+   "name": "2335408.jpg",
+   "origin_name": "2335408.jpg",
+   "region_box": [
+    0.383059024302194,
+    0.6013422818791946,
+    0.9196435897015146,
+    0.8818791946308725
+   ],
+   "region_box_canvas": [
+    0.17178853173201464,
+    0.6013422818791946,
+    0.4124278817849994,
+    0.8818791946308725
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.55219,
+     0.80375,
+     0.72999,
+     0.91427
+    ]
+   ],
+   "cid": null,
+   "filename": "2335516.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "97fdfb4fbc6ba0dd",
+   "label": "good",
+   "md5": "09b87055f3ce5aa6097c2d2197d6235c",
+   "media_type": "image",
+   "name": "2335516.jpg",
+   "origin_name": "2335516.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.59145,
+     0.59271,
+     0.74885,
+     0.70693
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 825,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2335811.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "a505516b9d31e7b0",
+   "label": "good",
+   "md5": "1f034f1315d336a94cf20ec93fc95e56",
+   "media_type": "image",
+   "name": "2335811.jpg",
+   "origin_name": "2335811.jpg",
+   "region_box": [
+    0.45176010430247715,
+    0.8004563233376792,
+    0.9056714471968709,
+    0.9553455019556715
+   ],
+   "region_box_canvas": [
+    0.2737940026075619,
+    0.8004563233376792,
+    0.5488917861799217,
+    0.9553455019556715
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.06425,
+     0.04043,
+     0.93892,
+     0.91965
+    ]
+   ],
+   "cid": null,
+   "filename": "2337198.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "e3965f6472d30ad0",
+   "label": "good",
+   "md5": "d923613f84ccf95a8e74cac55fea345c",
+   "media_type": "image",
+   "name": "2337198.jpg",
+   "origin_name": "2337198.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.00051,
+     0.45894,
+     0.18948,
+     1.0
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 282,
+    "canvas_w": 708,
+    "orig_h": 282,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2337481.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "57117de0c2611c47",
+   "label": "good",
+   "md5": "be5607d16c7c2bafc3028ee756a16162",
+   "media_type": "image",
+   "name": "2337481.jpg",
+   "origin_name": "2337481.jpg",
+   "region_box": [
+    0.13753846153846153,
+    0.0,
+    0.9507692307692307,
+    1.0
+   ],
+   "region_box_canvas": [
+    0.09713168187744459,
+    0.0,
+    0.6714471968709257,
+    1.0
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.02182,
+     0.02921,
+     0.36383,
+     0.45218
+    ]
+   ],
+   "cid": null,
+   "filename": "2338373.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "9dc73510b4ab6419",
+   "label": "good",
+   "md5": "dbdc7380e156a114547f4dece404543f",
+   "media_type": "image",
+   "name": "2338373.jpg",
+   "origin_name": "2338373.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.46052,
+     0.05328,
+     0.6888,
+     0.24161
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 333,
+    "canvas_w": 733,
+    "orig_h": 333,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2338917.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "79bc96290120dbdf",
+   "label": "good",
+   "md5": "016c208545f623c77277412e209d0dd0",
+   "media_type": "image",
+   "name": "2338917.jpg",
+   "origin_name": "2338917.jpg",
+   "region_box": [
+    0.07645371577574968,
+    0.3844871599108887,
+    0.5800925684485007,
+    0.948419410283817
+   ],
+   "region_box_canvas": [
+    0.05215123859191656,
+    0.3844871599108887,
+    0.3956975228161669,
+    0.948419410283817
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.21155,
+     0.34468,
+     0.76209,
+     0.94684
+    ]
+   ],
+   "cid": null,
+   "filename": "2338953.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "03a6a4d89b891296",
+   "label": "good",
+   "md5": "ce8613e73147df8e46f96685beb11b05",
+   "media_type": "image",
+   "name": "2338953.jpg",
+   "origin_name": "2338953.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.44256,
+     0.47365,
+     0.80482,
+     0.99911
+    ]
+   ],
+   "cid": null,
+   "filename": "2339083.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "821eb6e37f3162cc",
+   "label": "good",
+   "md5": "bf7c38f677a7fdf564333ffdc265e72d",
+   "media_type": "image",
+   "name": "2339083.jpg",
+   "origin_name": "2339083.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.11842,
+     0.08061,
+     0.83397,
+     0.92439
+    ]
+   ],
+   "cid": null,
+   "filename": "2339134.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "c827abd3cf37436e",
+   "label": "good",
+   "md5": "9cbf6623efde770cda368f26c92cff46",
+   "media_type": "image",
+   "name": "2339134.jpg",
+   "origin_name": "2339134.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.65113,
+     0.73312,
+     0.69506,
+     0.77671
+    ]
+   ],
+   "cid": null,
+   "filename": "2339451.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "f0080017e0b71a07",
+   "label": "good",
+   "md5": "a12283bd4face3545c160be2622b86f1",
+   "media_type": "image",
+   "name": "2339451.jpg",
+   "origin_name": "2339451.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.60012,
+     0.10221,
+     0.93525,
+     0.48937
+    ]
+   ],
+   "cid": null,
+   "filename": "2339569.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "7a9d0b7530732cf6",
+   "label": "good",
+   "md5": "b532254a667942b45117cc264a3b3147",
+   "media_type": "image",
+   "name": "2339569.jpg",
+   "origin_name": "2339569.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.0,
+     0.63852,
+     0.30925,
+     1.0
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 333,
+    "canvas_w": 733,
+    "orig_h": 333,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "across both",
+   "filename": "2339645.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "e7d48072420b332e",
+   "label": "good",
+   "md5": "de59d6e22eb1c25ea1cb051ee3d8d7a5",
+   "media_type": "image",
+   "name": "2339645.jpg",
+   "origin_name": "2339645.jpg",
+   "region_box": [
+    0.3344850065189048,
+    0.5007174710564541,
+    1.0,
+    1.0
+   ],
+   "region_box_canvas": [
+    0.22816166883963493,
+    0.5007174710564541,
+    0.6831812255541069,
+    1.0
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.91517,
+     0.54498,
+     0.95993,
+     0.57242
+    ]
+   ],
+   "cid": null,
+   "filename": "2339856.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "161515b735930370",
+   "label": "good",
+   "md5": "6880fa2d21c81631fa3fac7256f976f4",
+   "media_type": "image",
+   "name": "2339856.jpg",
+   "origin_name": "2339856.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.26081,
+     0.12849,
+     0.74826,
+     0.85871
+    ]
+   ],
+   "cid": null,
+   "filename": "2340004.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "e190fe6df4236e43",
+   "label": "good",
+   "md5": "dac94486b0dcf60fe1d691a9869c748f",
+   "media_type": "image",
+   "name": "2340004.jpg",
+   "origin_name": "2340004.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.2876,
+     0.0464,
+     0.70037,
+     0.59252
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 825,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2340262.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "1e8269fffabab9f0",
+   "label": "good",
+   "md5": "d3e17c75ddaccb79219c9dc42a74a2d7",
+   "media_type": "image",
+   "name": "2340262.jpg",
+   "origin_name": "2340262.jpg",
+   "region_box": [
+    0.15596479791395046,
+    0.18376792698826597,
+    0.7938070404172098,
+    0.9467405475880052
+   ],
+   "region_box_canvas": [
+    0.09452411994784876,
+    0.18376792698826597,
+    0.4810951760104302,
+    0.9467405475880052
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.00039,
+     0.57037,
+     0.05303,
+     0.65838
+    ]
+   ],
+   "cid": null,
+   "filename": "2341294.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "81437e03a1a048a7",
+   "label": "good",
+   "md5": "107283ce6fe224d27f9e148938a0e0e8",
+   "media_type": "image",
+   "name": "2341294.jpg",
+   "origin_name": "2341294.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.23253,
+     0.77229,
+     0.32845,
+     0.84284
+    ]
+   ],
+   "cid": null,
+   "filename": "2341834.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "737f7d4f1cda6629",
+   "label": "good",
+   "md5": "24005fcedd383e1fae09fde9c8db10c4",
+   "media_type": "image",
+   "name": "2341834.jpg",
+   "origin_name": "2341834.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.6175,
+     0.37192,
+     1.0,
+     0.76762
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 825,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "across both",
+   "filename": "2342031.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "70f194fd9dbb3ed1",
+   "label": "good",
+   "md5": "0f0debcddac16dc41a6877ed9ef971f5",
+   "media_type": "image",
+   "name": "2342031.jpg",
+   "origin_name": "2342031.jpg",
+   "region_box": [
+    0.1419817470664928,
+    0.271251629726206,
+    1.0,
+    0.9711212516297262
+   ],
+   "region_box_canvas": [
+    0.08604954367666232,
+    0.271251629726206,
+    0.6088657105606258,
+    0.9711212516297262
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.83938,
+     0.7473,
+     0.9187,
+     0.805
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 399,
+    "canvas_w": 878,
+    "orig_h": 399,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2342151.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "0a6651dd683202ea",
+   "label": "good",
+   "md5": "cd1a19feb9e2da030b10ab0788eaca7e",
+   "media_type": "image",
+   "name": "2342151.jpg",
+   "origin_name": "2342151.jpg",
+   "region_box": [
+    0.8047379400260756,
+    0.7460143187172626,
+    0.970722294654498,
+    0.853600755474083
+   ],
+   "region_box_canvas": [
+    0.45827900912646674,
+    0.7460143187172626,
+    0.5528031290743155,
+    0.853600755474083
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.48922,
+     0.17507,
+     0.52266,
+     0.22662
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 395,
+    "canvas_w": 869,
+    "orig_h": 395,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2342157.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "f0c386a07f5849e0",
+   "label": "good",
+   "md5": "8eb7894010093b977b973020f901c0e4",
+   "media_type": "image",
+   "name": "2342157.jpg",
+   "origin_name": "2342157.jpg",
+   "region_box": [
+    0.11896349413298565,
+    0.3056714471968709,
+    0.3829491525423729,
+    0.5279661016949152
+   ],
+   "region_box_canvas": [
+    0.06844850065189048,
+    0.3056714471968709,
+    0.22033898305084745,
+    0.5279661016949152
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.56407,
+     0.53754,
+     0.74802,
+     0.74715
+    ]
+   ],
+   "cid": null,
+   "filename": "2342242.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "3cd14bbce9f5c807",
+   "label": "good",
+   "md5": "f446d40032eccec1fe3e7efbd3e1223d",
+   "media_type": "image",
+   "name": "2342242.jpg",
+   "origin_name": "2342242.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.12008,
+     0.00129,
+     0.41716,
+     0.32418
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 825,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "across both",
+   "filename": "2342675.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "caf5ed5bc0271e1b",
+   "label": "good",
+   "md5": "555dfe46ef20301491e80dd0eecba9d9",
+   "media_type": "image",
+   "name": "2342675.jpg",
+   "origin_name": "2342675.jpg",
+   "region_box": [
+    0.34419817470664926,
+    0.2698174706649283,
+    1.0,
+    1.0
+   ],
+   "region_box_canvas": [
+    0.20860495436766624,
+    0.2698174706649283,
+    0.6069100391134289,
+    1.0
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.29451,
+     0.0033,
+     0.89557,
+     0.29322
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 330,
+    "canvas_w": 726,
+    "orig_h": 330,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2343107.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "070356c9ed6d0748",
+   "label": "good",
+   "md5": "ce78e818f0bf137c9aa183b86f8689ec",
+   "media_type": "image",
+   "name": "2343107.jpg",
+   "origin_name": "2343107.jpg",
+   "region_box": [
+    0.0,
+    0.2726857887874837,
+    0.9986049543676663,
+    0.9926336375488918
+   ],
+   "region_box_canvas": [
+    0.0,
+    0.2726857887874837,
+    0.6877444589308996,
+    0.9926336375488918
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.47057,
+     0.00074,
+     0.99812,
+     0.26889
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 500,
+    "canvas_w": 1100,
+    "orig_h": 500,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "across both",
+   "filename": "2343588.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "87aa369a049c4003",
+   "label": "good",
+   "md5": "0f095901675e2da24cae33a0fb283c1b",
+   "media_type": "image",
+   "name": "2343588.jpg",
+   "origin_name": "2343588.jpg",
+   "region_box": [
+    0.005736636245110822,
+    0.21388526727509777,
+    1.0,
+    1.0
+   ],
+   "region_box_canvas": [
+    0.002607561929595828,
+    0.21388526727509777,
+    0.4576271186440678,
+    1.0
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.475,
+     0.14766,
+     0.71384,
+     0.39504
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 328,
+    "canvas_w": 722,
+    "orig_h": 328,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2343735.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "b1d8594c8b94ea75",
+   "label": "good",
+   "md5": "fccb21b0b3b375612b4eed7202b59bd5",
+   "media_type": "image",
+   "name": "2343735.jpg",
+   "origin_name": "2343735.jpg",
+   "region_box": [
+    0.24662842242503258,
+    0.3830512449518237,
+    0.891439374185137,
+    1.0
+   ],
+   "region_box_canvas": [
+    0.17079530638852672,
+    0.3830512449518237,
+    0.6173402868318123,
+    1.0
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.57124,
+     0.36251,
+     0.58653,
+     0.37692
+    ]
+   ],
+   "cid": null,
+   "filename": "2343858.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "2db00dc22e368929",
+   "label": "good",
+   "md5": "ee9b7411853a4cf160fcbfa7cf6bf3ba",
+   "media_type": "image",
+   "name": "2343858.jpg",
+   "origin_name": "2343858.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.04672,
+     0.02979,
+     0.78235,
+     0.38359
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 500,
+    "canvas_w": 1100,
+    "orig_h": 500,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2344444.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "2749ea38350ddb8f",
+   "label": "good",
+   "md5": "7985693502863e0ebf985e7a5837ebbf",
+   "media_type": "image",
+   "name": "2344444.jpg",
+   "origin_name": "2344444.jpg",
+   "region_box": [
+    0.0258148631029987,
+    0.3859843546284224,
+    0.8705345501955672,
+    1.0
+   ],
+   "region_box_canvas": [
+    0.011734028683181226,
+    0.3859843546284224,
+    0.3956975228161669,
+    1.0
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.40781,
+     0.55526,
+     0.71618,
+     0.87754
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 825,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2346009.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "3254324305825467",
+   "label": "good",
+   "md5": "d7d89f55b2691b50a6773ae116dbdca3",
+   "media_type": "image",
+   "name": "2346009.jpg",
+   "origin_name": "2346009.jpg",
+   "region_box": [
+    0.02151238591916558,
+    0.5609517601043025,
+    0.41303780964797915,
+    0.9266623207301173
+   ],
+   "region_box_canvas": [
+    0.01303780964797914,
+    0.5609517601043025,
+    0.2503259452411995,
+    0.9266623207301173
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.59273,
+     0.47651,
+     0.6282,
+     0.5011
+    ]
+   ],
+   "cid": null,
+   "filename": "2346701.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "d9687bc1ca465cf2",
+   "label": "good",
+   "md5": "dfc0c355578e057d614aaa6ff137ce28",
+   "media_type": "image",
+   "name": "2346701.jpg",
+   "origin_name": "2346701.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.5029,
+     0.38535,
+     0.98957,
+     0.71576
+    ]
+   ],
+   "cid": null,
+   "filename": "2346844.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "79dadf13b7ba4818",
+   "label": "good",
+   "md5": "a029f491188eec7e5b83adf93953e09c",
+   "media_type": "image",
+   "name": "2346844.jpg",
+   "origin_name": "2346844.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.80804,
+     0.71064,
+     0.97814,
+     0.92602
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 374,
+    "canvas_w": 823,
+    "orig_h": 374,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2347501.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "9a2ac7a2e4fee71d",
+   "label": "good",
+   "md5": "ecea2e50e64c6ac9c2fbc07280463e83",
+   "media_type": "image",
+   "name": "2347501.jpg",
+   "origin_name": "2347501.jpg",
+   "region_box": [
+    0.3551668839634941,
+    0.5537940374680156,
+    0.6996036505867014,
+    0.8191779556435589
+   ],
+   "region_box_canvas": [
+    0.21577574967405475,
+    0.5537940374680156,
+    0.42503259452411996,
+    0.8191779556435589
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.19514,
+     0.5447,
+     0.26495,
+     0.59441
+    ]
+   ],
+   "cid": null,
+   "filename": "2347919.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "099e92c93a68b7f3",
+   "label": "good",
+   "md5": "7654affed757848fd940579c72e360a4",
+   "media_type": "image",
+   "name": "2347919.jpg",
+   "origin_name": "2347919.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.03755,
+     0.14259,
+     0.96325,
+     0.9238
+    ]
+   ],
+   "cid": null,
+   "filename": "2348062.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "b477f32d4ddbfa73",
+   "label": "good",
+   "md5": "9b8b39225fec02939b0975733b11876b",
+   "media_type": "image",
+   "name": "2348062.jpg",
+   "origin_name": "2348062.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.97809,
+     0.06762,
+     0.99912,
+     0.19054
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 333,
+    "canvas_w": 659,
+    "orig_h": 333,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "across both",
+   "filename": "2348596.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "68b5557de6973256",
+   "label": "good",
+   "md5": "8374fa92304ee5e0cf4345a3209c1a06",
+   "media_type": "image",
+   "name": "2348596.jpg",
+   "origin_name": "2348596.jpg",
+   "region_box": [
+    0.28621879194630867,
+    0.24966442953020135,
+    1.0,
+    0.9986577181208054
+   ],
+   "region_box_canvas": [
+    0.21716145064211584,
+    0.24966442953020135,
+    0.7597773726716297,
+    0.9986577181208054
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.12064,
+     0.65485,
+     0.36475,
+     0.92037
+    ]
+   ],
+   "cid": null,
+   "filename": "2348941.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "fd80a454340f0929",
+   "label": "good",
+   "md5": "f39d1199b6012ee87035f553a01786db",
+   "media_type": "image",
+   "name": "2348941.jpg",
+   "origin_name": "2348941.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.13188,
+     0.00047,
+     0.83901,
+     1.0
+    ]
+   ],
+   "cid": null,
+   "filename": "2349602.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "ec1d983a7fd5eb50",
+   "label": "good",
+   "md5": "0e0ba4f579b2725030aad282b52551cb",
+   "media_type": "image",
+   "name": "2349602.jpg",
+   "origin_name": "2349602.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.9282,
+     0.63706,
+     0.99589,
+     0.68739
+    ]
+   ],
+   "cid": null,
+   "filename": "2349829.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "7f87d6602a33ccb3",
+   "label": "good",
+   "md5": "7d852b19a5a3fc885251db1af8e1ef75",
+   "media_type": "image",
+   "name": "2349829.jpg",
+   "origin_name": "2349829.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.07097,
+     0.13531,
+     0.99877,
+     0.85521
+    ]
+   ],
+   "cid": null,
+   "filename": "2349868.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "74259dea77d835ab",
+   "label": "good",
+   "md5": "cfe72a143da77efc4c4aa7e60243ba26",
+   "media_type": "image",
+   "name": "2349868.jpg",
+   "origin_name": "2349868.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.62691,
+     0.28077,
+     0.68015,
+     0.31364
+    ]
+   ],
+   "cid": null,
+   "filename": "2350375.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "412381f9d34e59b0",
+   "label": "good",
+   "md5": "06988d8d5051c9145ea21a0f717e2578",
+   "media_type": "image",
+   "name": "2350375.jpg",
+   "origin_name": "2350375.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.10056,
+     0.68055,
+     0.20179,
+     0.72553
+    ]
+   ],
+   "cid": null,
+   "filename": "2350904.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "d15be3c2e352024e",
+   "label": "good",
+   "md5": "d8be1fd641e3ec51ef065ba2f6308c15",
+   "media_type": "image",
+   "name": "2350904.jpg",
+   "origin_name": "2350904.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.4764,
+     0.61538,
+     0.54908,
+     0.65723
+    ]
+   ],
+   "cid": null,
+   "filename": "2351453.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "19e676ae1362cf18",
+   "label": "good",
+   "md5": "168690631f1b978833b0b8d9657c9f5f",
+   "media_type": "image",
+   "name": "2351453.jpg",
+   "origin_name": "2351453.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.07104,
+     0.61809,
+     0.29647,
+     0.8989
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 333,
+    "canvas_w": 733,
+    "orig_h": 333,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2351470.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "086dba08b1724985",
+   "label": "good",
+   "md5": "17948674f93b243f78ff98072520b601",
+   "media_type": "image",
+   "name": "2351470.jpg",
+   "origin_name": "2351470.jpg",
+   "region_box": [
+    0.0028670143415906128,
+    0.506457239508087,
+    0.703374185136897,
+    1.0
+   ],
+   "region_box_canvas": [
+    0.001955671447196871,
+    0.506457239508087,
+    0.47979139504563234,
+    1.0
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.51657,
+     0.81478,
+     0.58184,
+     0.86675
+    ]
+   ],
+   "cid": null,
+   "filename": "2352262.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "5dd201e6542849f3",
+   "label": "good",
+   "md5": "df6a308238458e422fe256db9a105867",
+   "media_type": "image",
+   "name": "2352262.jpg",
+   "origin_name": "2352262.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.7268,
+     0.27902,
+     0.88421,
+     0.3435
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 500,
+    "canvas_w": 785,
+    "orig_h": 500,
+    "orig_w": 242
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2352471.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "a0797e8f60a1d56a",
+   "label": "good",
+   "md5": "f1bba2989e13faba30059c843cfa225d",
+   "media_type": "image",
+   "name": "2352471.jpg",
+   "origin_name": "2352471.jpg",
+   "region_box": [
+    0.27961894725165026,
+    0.8295302013422818,
+    0.9479865771812082,
+    1.0
+   ],
+   "region_box_canvas": [
+    0.08620100029923485,
+    0.8295302013422818,
+    0.29224554353866544,
+    1.0
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.61766,
+     0.45997,
+     0.89359,
+     0.76944
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 374,
+    "canvas_w": 823,
+    "orig_h": 374,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2353111.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "fd883f7047d1d811",
+   "label": "good",
+   "md5": "d1c65285d6f829833b2e8523eaeb3079",
+   "media_type": "image",
+   "name": "2353111.jpg",
+   "origin_name": "2353111.jpg",
+   "region_box": [
+    0.0,
+    0.023026201116928893,
+    0.9678565840938721,
+    1.0
+   ],
+   "region_box_canvas": [
+    0.0,
+    0.023026201116928893,
+    0.5880052151238592,
+    1.0
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.47643,
+     0.90115,
+     0.86327,
+     0.99966
+    ]
+   ],
+   "cid": null,
+   "filename": "2354186.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "7154804a3fe95787",
+   "label": "good",
+   "md5": "28ba5bcdc1d41104c2c1559ada061584",
+   "media_type": "image",
+   "name": "2354186.jpg",
+   "origin_name": "2354186.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.12914,
+     0.22426,
+     0.20032,
+     0.28474
+    ]
+   ],
+   "cid": null,
+   "filename": "2354541.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "0220847d1a14e5c0",
+   "label": "good",
+   "md5": "7b2473e3138924daefe9c11813a3a99c",
+   "media_type": "image",
+   "name": "2354541.jpg",
+   "origin_name": "2354541.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.05192,
+     0.08654,
+     0.87247,
+     0.98458
+    ]
+   ],
+   "cid": null,
+   "filename": "2355075.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "f23f8f328d9e462d",
+   "label": "good",
+   "md5": "5f2af07e6af0e491aab93cc96dc5868f",
+   "media_type": "image",
+   "name": "2355075.jpg",
+   "origin_name": "2355075.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.36243,
+     0.69165,
+     0.48777,
+     0.76059
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 825,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2355173.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "0b48cc726614a883",
+   "label": "good",
+   "md5": "b61a292bff0cb845edf66237f485ec77",
+   "media_type": "image",
+   "name": "2355173.jpg",
+   "origin_name": "2355173.jpg",
+   "region_box": [
+    0.44100391134289435,
+    0.6871577574967406,
+    0.7034550195567144,
+    0.7717731421121252
+   ],
+   "region_box_canvas": [
+    0.26727509778357234,
+    0.6871577574967406,
+    0.42633637548891784,
+    0.7717731421121252
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.00152,
+     0.17121,
+     0.7338,
+     1.0
+    ]
+   ],
+   "cid": null,
+   "filename": "2355204.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "61f5cb18078d37d2",
+   "label": "good",
+   "md5": "44951151f6dd2aa5f3c7187ef51937e3",
+   "media_type": "image",
+   "name": "2355204.jpg",
+   "origin_name": "2355204.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.00061,
+     0.12662,
+     0.17012,
+     0.42243
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 756,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2355902.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "3818ac0a403cca42",
+   "label": "good",
+   "md5": "fff3fc5570d902acdf3d860ca52e8a71",
+   "media_type": "image",
+   "name": "2355902.jpg",
+   "origin_name": "2355902.jpg",
+   "region_box": [
+    0.0,
+    0.2295302013422819,
+    0.9966040268456375,
+    1.0
+   ],
+   "region_box_canvas": [
+    0.0,
+    0.2295302013422819,
+    0.6591296473846809,
+    1.0
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.30069,
+     0.74283,
+     0.45067,
+     0.88622
+    ]
+   ],
+   "cid": null,
+   "filename": "2356533.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "d78f343d33705832",
+   "label": "good",
+   "md5": "57908a2ea266b9937ad14f9cfe7b80cb",
+   "media_type": "image",
+   "name": "2356533.jpg",
+   "origin_name": "2356533.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.45257,
+     0.43143,
+     0.99858,
+     0.88716
+    ]
+   ],
+   "cid": null,
+   "filename": "2356931.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "0b0d6448f6f6a8e1",
+   "label": "good",
+   "md5": "9ccfa3b8d9d79a96db8c472f7f75478c",
+   "media_type": "image",
+   "name": "2356931.jpg",
+   "origin_name": "2356931.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.65926,
+     0.51131,
+     0.83949,
+     0.5634
+    ]
+   ],
+   "cid": null,
+   "filename": "2357198.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "9a38f9782d0f96f5",
+   "label": "good",
+   "md5": "07c19ff56f79a9645e79c2f024df6921",
+   "media_type": "image",
+   "name": "2357198.jpg",
+   "origin_name": "2357198.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.09613,
+     0.08343,
+     0.9543,
+     0.94643
+    ]
+   ],
+   "cid": null,
+   "filename": "2357446.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "e6d91789e8ed1dce",
+   "label": "good",
+   "md5": "ab2b59eaac5a895a88ba4f0a8c176190",
+   "media_type": "image",
+   "name": "2357446.jpg",
+   "origin_name": "2357446.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.14608,
+     0.36365,
+     0.2033,
+     0.39512
+    ]
+   ],
+   "cid": null,
+   "filename": "2357738.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "0bec67fa72fda8a6",
+   "label": "good",
+   "md5": "03db65085550e3fa5d75035c0cb7bf07",
+   "media_type": "image",
+   "name": "2357738.jpg",
+   "origin_name": "2357738.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.80656,
+     0.10161,
+     0.84719,
+     0.21408
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 333,
+    "canvas_w": 733,
+    "orig_h": 333,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2358801.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "b8a6bd263fad7a2e",
+   "label": "good",
+   "md5": "4a8365bc602568067a9ad53083c098fa",
+   "media_type": "image",
+   "name": "2358801.jpg",
+   "origin_name": "2358801.jpg",
+   "region_box": [
+    0.621186440677966,
+    0.6628659298150824,
+    0.8343011734028684,
+    0.8637578256222324
+   ],
+   "region_box_canvas": [
+    0.423728813559322,
+    0.6628659298150824,
+    0.5691003911342895,
+    0.8637578256222324
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.80388,
+     0.40907,
+     0.91239,
+     0.50901
+    ]
+   ],
+   "cid": null,
+   "filename": "2358843.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "667cd3a347456de3",
+   "label": "good",
+   "md5": "47d1a25daddd04af0d946e7c6e02b23f",
+   "media_type": "image",
+   "name": "2358843.jpg",
+   "origin_name": "2358843.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.23566,
+     0.16436,
+     0.63125,
+     0.44065
+    ]
+   ],
+   "cid": null,
+   "filename": "2359009.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "78b821081b823389",
+   "label": "good",
+   "md5": "0dbf5286fa25dc4e14ebc880d5ccaebd",
+   "media_type": "image",
+   "name": "2359009.jpg",
+   "origin_name": "2359009.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.52448,
+     0.75979,
+     0.61505,
+     0.78087
+    ]
+   ],
+   "cid": null,
+   "filename": "2359772.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "74f995ccbeb7eac9",
+   "label": "good",
+   "md5": "2794a45fcab3912a69c8a9abc31aa722",
+   "media_type": "image",
+   "name": "2359772.jpg",
+   "origin_name": "2359772.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.10558,
+     0.46003,
+     0.14226,
+     0.48674
+    ]
+   ],
+   "cid": null,
+   "filename": "2360897.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "1750a12ea1dbf517",
+   "label": "good",
+   "md5": "23a41f481a67bfec19ab9ff106487d56",
+   "media_type": "image",
+   "name": "2360897.jpg",
+   "origin_name": "2360897.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.33243,
+     0.20531,
+     0.36958,
+     0.22127
+    ]
+   ],
+   "cid": null,
+   "filename": "2361300.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "00216ae54e51d62e",
+   "label": "good",
+   "md5": "08bc8e9fb79c66e6b68cbf5c1db27bdd",
+   "media_type": "image",
+   "name": "2361300.jpg",
+   "origin_name": "2361300.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.14901,
+     0.57206,
+     0.95682,
+     0.86215
+    ]
+   ],
+   "cid": null,
+   "filename": "2362768.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "99faf32856183090",
+   "label": "good",
+   "md5": "e727242898be62e9429fa71e121036c5",
+   "media_type": "image",
+   "name": "2362768.jpg",
+   "origin_name": "2362768.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.07053,
+     0.70097,
+     0.11178,
+     0.73292
+    ]
+   ],
+   "cid": null,
+   "filename": "2362812.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "bd804df963c2b5f3",
+   "label": "good",
+   "md5": "10ce80524cca8a68c8439817f2b87b63",
+   "media_type": "image",
+   "name": "2362812.jpg",
+   "origin_name": "2362812.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.0,
+     0.3476510067114094,
+     1.0,
+     0.785234899328859
+    ]
+   ],
+   "cid": null,
+   "filename": "2362932.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "f2cc5a7a4fc898c1",
+   "label": "good",
+   "md5": "0784e8a7c4dbf1cbcdc5fcfbf9f24ebe",
+   "media_type": "image",
+   "name": "2362932.jpg",
+   "origin_name": "2362932.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.65572,
+     0.69792,
+     0.72284,
+     0.73833
+    ]
+   ],
+   "cid": null,
+   "filename": "2363427.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "b67f6cd3e7470142",
+   "label": "good",
+   "md5": "8c1f19a40615e21407daf993e247b1ea",
+   "media_type": "image",
+   "name": "2363427.jpg",
+   "origin_name": "2363427.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.2114,
+     0.15016,
+     0.284,
+     0.19981
+    ]
+   ],
+   "cid": null,
+   "filename": "2363436.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "586636bfc4978408",
+   "label": "good",
+   "md5": "1041d9225fc41ebd04a6f35c6829a173",
+   "media_type": "image",
+   "name": "2363436.jpg",
+   "origin_name": "2363436.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.72351,
+     0.86634,
+     0.75275,
+     0.90603
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 432,
+    "canvas_w": 936,
+    "orig_h": 432,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2364852.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "0c42c5c782b92388",
+   "label": "good",
+   "md5": "7335be0958c095aae9784d2f07ce5a9d",
+   "media_type": "image",
+   "name": "2364852.jpg",
+   "origin_name": "2364852.jpg",
+   "region_box": [
+    0.24040677966101695,
+    0.8877118644067796,
+    0.38806779661016955,
+    0.9738700564971752
+   ],
+   "region_box_canvas": [
+    0.12842242503259452,
+    0.8877118644067796,
+    0.20730117340286833,
+    0.9738700564971752
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.83908,
+     0.86653,
+     0.9842,
+     0.95214
+    ]
+   ],
+   "cid": null,
+   "filename": "2364883.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "ecaa35a9e255ed7e",
+   "label": "good",
+   "md5": "e74c09881d10d02f61ddf825670628e4",
+   "media_type": "image",
+   "name": "2364883.jpg",
+   "origin_name": "2364883.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.07278,
+     0.51363,
+     0.33025,
+     0.63601
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 500,
+    "canvas_w": 1058,
+    "orig_h": 500,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2366390.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "e3f9e368583b44ae",
+   "label": "good",
+   "md5": "941d50f1cf28abfffb02053faeb0f02c",
+   "media_type": "image",
+   "name": "2366390.jpg",
+   "origin_name": "2366390.jpg",
+   "region_box": [
+    0.0,
+    0.6993233376792699,
+    0.9297157757496741,
+    1.0
+   ],
+   "region_box_canvas": [
+    0.0,
+    0.6993233376792699,
+    0.439374185136897,
+    1.0
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.39879,
+     0.5257,
+     0.46764,
+     0.5544
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 398,
+    "canvas_w": 876,
+    "orig_h": 398,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2367682.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "80b9e0840224b641",
+   "label": "good",
+   "md5": "0c87b763918b2e22285ca19c7e05dacb",
+   "media_type": "image",
+   "name": "2367682.jpg",
+   "origin_name": "2367682.jpg",
+   "region_box": [
+    0.3209335071707953,
+    0.5581099762174628,
+    0.4511342894393742,
+    0.6083284741831714
+   ],
+   "region_box_canvas": [
+    0.1831812255541069,
+    0.5581099762174628,
+    0.25749674054758803,
+    0.6083284741831714
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.35956,
+     0.63145,
+     0.4213,
+     0.70328
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 825,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2367853.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "e0dbc666f4b7a7df",
+   "label": "good",
+   "md5": "ead0ebeb643304790ac6c90808ae0198",
+   "media_type": "image",
+   "name": "2367853.jpg",
+   "origin_name": "2367853.jpg",
+   "region_box": [
+    0.6012711864406779,
+    0.801890482398957,
+    0.8088657105606257,
+    0.9940677966101695
+   ],
+   "region_box_canvas": [
+    0.3644067796610169,
+    0.801890482398957,
+    0.49022164276401564,
+    0.9940677966101695
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.0007,
+     0.23126,
+     0.31108,
+     0.52182
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 500,
+    "canvas_w": 877,
+    "orig_h": 500,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2368002.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "be0a2f0c6451ba65",
+   "label": "good",
+   "md5": "474a5c5587399d0895bf0298682326b6",
+   "media_type": "image",
+   "name": "2368002.jpg",
+   "origin_name": "2368002.jpg",
+   "region_box": [
+    0.21793959731543625,
+    0.3932885906040268,
+    0.9991476510067115,
+    0.9932885906040269
+   ],
+   "region_box_canvas": [
+    0.12425290610914268,
+    0.3932885906040268,
+    0.5696394817598127,
+    0.9932885906040269
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.66011,
+     0.38386,
+     0.94764,
+     0.80114
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 345,
+    "canvas_w": 759,
+    "orig_h": 345,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2368992.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "40af04842c6e7348",
+   "label": "good",
+   "md5": "ae659d5c3899dc171772b69a757ecccb",
+   "media_type": "image",
+   "name": "2368992.jpg",
+   "origin_name": "2368992.jpg",
+   "region_box": [
+    0.1593207301173403,
+    0.407496740547588,
+    0.6887405475880052,
+    0.899413298565841
+   ],
+   "region_box_canvas": [
+    0.10495436766623208,
+    0.407496740547588,
+    0.45371577574967403,
+    0.899413298565841
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.2366,
+     0.23218,
+     0.78095,
+     0.80802
+    ]
+   ],
+   "cid": null,
+   "filename": "2369375.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "dc1431ff6dc30d9a",
+   "label": "good",
+   "md5": "6810bff03763aedb69e6bc7195c4ce0a",
+   "media_type": "image",
+   "name": "2369375.jpg",
+   "origin_name": "2369375.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.40489,
+     0.15796,
+     0.4709,
+     0.22797
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 825,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2369571.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "c1849bde093b88d4",
+   "label": "good",
+   "md5": "a27b02f5a1ab23b10d400ab53c5c3f01",
+   "media_type": "image",
+   "name": "2369571.jpg",
+   "origin_name": "2369571.jpg",
+   "region_box": [
+    0.3786179921773142,
+    0.529400260756193,
+    0.6916232073011734,
+    1.0
+   ],
+   "region_box_canvas": [
+    0.22946544980443284,
+    0.529400260756193,
+    0.41916558018252936,
+    1.0
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     4e-05,
+     0.63921,
+     0.06804,
+     0.70601
+    ]
+   ],
+   "cid": null,
+   "filename": "2369847.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "9b0911f86e81513e",
+   "label": "good",
+   "md5": "c55c14a4aa79c44854e0b0ca54de11de",
+   "media_type": "image",
+   "name": "2369847.jpg",
+   "origin_name": "2369847.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.0,
+     0.69533,
+     0.07697,
+     0.81788
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 737,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2370328.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "95f4d3a7f86dd9aa",
+   "label": "good",
+   "md5": "e38fc8cf1ffa6b330db51c32967c43c2",
+   "media_type": "image",
+   "name": "2370328.jpg",
+   "origin_name": "2370328.jpg",
+   "region_box": [
+    0.07760402684563762,
+    0.5342281879194631,
+    0.28498657718120807,
+    0.6885906040268457
+   ],
+   "region_box_canvas": [
+    0.052648593518071655,
+    0.5342281879194631,
+    0.19334231830475446,
+    0.6885906040268457
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.01579,
+     0.57106,
+     0.49178,
+     0.97901
+    ]
+   ],
+   "cid": null,
+   "filename": "2370904.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "c1de5b8dfbe7515e",
+   "label": "good",
+   "md5": "a1003ba8335d0ad5934b1fb029ef907a",
+   "media_type": "image",
+   "name": "2370904.jpg",
+   "origin_name": "2370904.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.10123,
+     0.29267,
+     0.99456,
+     1.0
+    ]
+   ],
+   "cid": null,
+   "filename": "2372350.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "aac87e0da6efaaa4",
+   "label": "good",
+   "md5": "e51e6179bfe932640fa85ae0e8e08b8c",
+   "media_type": "image",
+   "name": "2372350.jpg",
+   "origin_name": "2372350.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.78859,
+     0.62473,
+     0.88957,
+     0.67228
+    ]
+   ],
+   "cid": null,
+   "filename": "2372563.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "8df66540e89ed8ff",
+   "label": "good",
+   "md5": "2d05748f8310b4c5f3390732170f49ce",
+   "media_type": "image",
+   "name": "2372563.jpg",
+   "origin_name": "2372563.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.50335,
+     0.13812,
+     0.79243,
+     0.25462
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 333,
+    "canvas_w": 733,
+    "orig_h": 333,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "across both",
+   "filename": "2372984.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "c87b8576dbcbb543",
+   "label": "good",
+   "md5": "a0f40767a90a5a3b91a4062685392b6c",
+   "media_type": "image",
+   "name": "2372984.jpg",
+   "origin_name": "2372984.jpg",
+   "region_box": [
+    0.0,
+    0.3658329124430819,
+    1.0,
+    0.9598989471870828
+   ],
+   "region_box_canvas": [
+    0.0,
+    0.3658329124430819,
+    0.6890482398956975,
+    0.9598989471870828
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.36046,
+     0.06574,
+     0.98202,
+     0.9583
+    ]
+   ],
+   "cid": null,
+   "filename": "2373459.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "7d84bea173cf6371",
+   "label": "good",
+   "md5": "716ec3c4b5f0cec513911c523c65481c",
+   "media_type": "image",
+   "name": "2373459.jpg",
+   "origin_name": "2373459.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.13723,
+     0.73842,
+     0.40079,
+     0.90142
+    ]
+   ],
+   "cid": null,
+   "filename": "2373582.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "57eb57a5b46eb9ec",
+   "label": "good",
+   "md5": "2c372cce218388efa6d409eba4a87a7a",
+   "media_type": "image",
+   "name": "2373582.jpg",
+   "origin_name": "2373582.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.05693,
+     0.55751,
+     0.09547,
+     0.59288
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 825,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2374382.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "d7b51a46e71d77a1",
+   "label": "good",
+   "md5": "f9930009f2d05537d4333f67aa98d178",
+   "media_type": "image",
+   "name": "2374382.jpg",
+   "origin_name": "2374382.jpg",
+   "region_box": [
+    0.5388852672750978,
+    0.49641460234680573,
+    0.659354628422425,
+    0.6254889178617993
+   ],
+   "region_box_canvas": [
+    0.32659713168187743,
+    0.49641460234680573,
+    0.39960886571056065,
+    0.6254889178617993
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.17831,
+     0.94688,
+     0.56483,
+     1.0
+    ]
+   ],
+   "cid": null,
+   "filename": "2375755.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "7cb0fd95523b5031",
+   "label": "good",
+   "md5": "f8ea5c9de1f4f88e6bc68e195b5c7cd3",
+   "media_type": "image",
+   "name": "2375755.jpg",
+   "origin_name": "2375755.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.57983,
+     0.61052,
+     0.66736,
+     0.65687
+    ]
+   ],
+   "cid": null,
+   "filename": "2375806.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "550a9e3711b89488",
+   "label": "good",
+   "md5": "6d25555e698b9608b839e6875b4e9131",
+   "media_type": "image",
+   "name": "2375806.jpg",
+   "origin_name": "2375806.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.92278,
+     0.66712,
+     0.99954,
+     0.85542
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 697,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2376013.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "f53590a5eef8a32c",
+   "label": "good",
+   "md5": "0426f9f1aa9be9c6867692a5f40c618e",
+   "media_type": "image",
+   "name": "2376013.jpg",
+   "origin_name": "2376013.jpg",
+   "region_box": [
+    0.4876040268456376,
+    0.574496644295302,
+    0.8741812080536913,
+    0.9221476510067114
+   ],
+   "region_box_canvas": [
+    0.3497876806640155,
+    0.574496644295302,
+    0.6271027317458331,
+    0.9221476510067114
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.31661,
+     0.70447,
+     0.3782,
+     0.76929
+    ]
+   ],
+   "cid": null,
+   "filename": "2378436.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "99f11b7ab9c149ea",
+   "label": "good",
+   "md5": "f6949f1ae39b1beea4a80846bd4700d5",
+   "media_type": "image",
+   "name": "2378436.jpg",
+   "origin_name": "2378436.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.16991,
+     0.72223,
+     0.28544,
+     0.82167
+    ]
+   ],
+   "cid": null,
+   "filename": "2378719.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "06e231884f74ebfe",
+   "label": "good",
+   "md5": "56dc0e8f26c3c9e388006366280ed382",
+   "media_type": "image",
+   "name": "2378719.jpg",
+   "origin_name": "2378719.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.86638,
+     0.58529,
+     0.95303,
+     0.6437
+    ]
+   ],
+   "cid": null,
+   "filename": "2379271.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "cec9fcf64c6dce88",
+   "label": "good",
+   "md5": "ab50f1a0efc81882ba418f1891ddd99f",
+   "media_type": "image",
+   "name": "2379271.jpg",
+   "origin_name": "2379271.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.83187,
+     0.60646,
+     0.96756,
+     0.70236
+    ]
+   ],
+   "cid": null,
+   "filename": "2381255.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "5055e1e84e0369fc",
+   "label": "good",
+   "md5": "5beb7ee45256f4b4139c1cf89e5da929",
+   "media_type": "image",
+   "name": "2381255.jpg",
+   "origin_name": "2381255.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.32692,
+     0.3595,
+     0.5883,
+     0.60398
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 825,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2381592.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "479effc339a61cc6",
+   "label": "good",
+   "md5": "e0120a12c8c097516cf2c5824f148dc5",
+   "media_type": "image",
+   "name": "2381592.jpg",
+   "origin_name": "2381592.jpg",
+   "region_box": [
+    0.0,
+    0.5150586701434159,
+    0.4614406779661016,
+    0.9911994784876141
+   ],
+   "region_box_canvas": [
+    0.0,
+    0.5150586701434159,
+    0.2796610169491525,
+    0.9911994784876141
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.00201,
+     0.47815,
+     0.39519,
+     0.90628
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 825,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2382780.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "65d1e441854c1a21",
+   "label": "good",
+   "md5": "6a2a085b74cdd7fc8b11d61947e7351f",
+   "media_type": "image",
+   "name": "2382780.jpg",
+   "origin_name": "2382780.jpg",
+   "region_box": [
+    0.018285528031290743,
+    0.36877444589308994,
+    0.6421447196870925,
+    0.9496088657105607
+   ],
+   "region_box_canvas": [
+    0.01108213820078227,
+    0.36877444589308994,
+    0.3891786179921773,
+    0.9496088657105607
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.25719,
+     0.45221,
+     0.52218,
+     0.55916
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 500,
+    "canvas_w": 1005,
+    "orig_h": 500,
+    "orig_w": 375
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2383218.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "f723b309ae3fbd81",
+   "label": "good",
+   "md5": "671bbcd64ab6f55c0a706c00f7ffd75f",
+   "media_type": "image",
+   "name": "2383218.jpg",
+   "origin_name": "2383218.jpg",
+   "region_box": [
+    0.5561073825503355,
+    0.6268456375838927,
+    0.9516331096196868,
+    0.7906040268456376
+   ],
+   "region_box_canvas": [
+    0.207502754682961,
+    0.6268456375838927,
+    0.35508698120137566,
+    0.7906040268456376
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.86903,
+     0.07057,
+     0.99782,
+     0.22111
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 824,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2383337.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "94e47496b0dbd83f",
+   "label": "good",
+   "md5": "163c7891af2cd67727416076e2d2e687",
+   "media_type": "image",
+   "name": "2383337.jpg",
+   "origin_name": "2383337.jpg",
+   "region_box": [
+    0.21271447196870927,
+    0.4763650586701434,
+    0.6381434159061278,
+    1.0
+   ],
+   "region_box_canvas": [
+    0.1290743155149935,
+    0.4763650586701434,
+    0.38722294654498046,
+    1.0
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.18594,
+     0.58299,
+     0.44347,
+     0.93174
+    ]
+   ],
+   "cid": null,
+   "filename": "2384329.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "fe8e67c3cbc0519f",
+   "label": "good",
+   "md5": "b95b87a27e76c1000930a40e281b5fb8",
+   "media_type": "image",
+   "name": "2384329.jpg",
+   "origin_name": "2384329.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.69565,
+     0.73592,
+     0.76581,
+     0.76917
+    ]
+   ],
+   "cid": null,
+   "filename": "2385151.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "b4b65bbb7855f38a",
+   "label": "good",
+   "md5": "6c25d65ab3662c67b6c69f74bb14bba4",
+   "media_type": "image",
+   "name": "2385151.jpg",
+   "origin_name": "2385151.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.28604,
+     0.36715,
+     0.32448,
+     0.4025
+    ]
+   ],
+   "cid": null,
+   "filename": "2385887.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "edad12c7e31b20ea",
+   "label": "good",
+   "md5": "d9f63fc5698c575ec282c9f0d591b049",
+   "media_type": "image",
+   "name": "2385887.jpg",
+   "origin_name": "2385887.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.37818,
+     0.22633,
+     0.74629,
+     0.71778
+    ]
+   ],
+   "cid": null,
+   "filename": "2386712.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "f2a35775cd0cf5dc",
+   "label": "good",
+   "md5": "a9408394912e8f8836ffc531cd8f3777",
+   "media_type": "image",
+   "name": "2386712.jpg",
+   "origin_name": "2386712.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.78122,
+     0.72281,
+     0.9961,
+     1.0
+    ]
+   ],
+   "cid": null,
+   "filename": "2388367.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "f788de381c6388f5",
+   "label": "good",
+   "md5": "d22f246617c1de8f16a3989c8df6f09b",
+   "media_type": "image",
+   "name": "2388367.jpg",
+   "origin_name": "2388367.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.73804,
+     0.52404,
+     0.77061,
+     0.54117
+    ]
+   ],
+   "cid": null,
+   "filename": "2388695.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "b8a30b5fa8702d17",
+   "label": "good",
+   "md5": "0475facabbfe934eb8e3f0bd4acbfb04",
+   "media_type": "image",
+   "name": "2388695.jpg",
+   "origin_name": "2388695.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.17133,
+     0.40808,
+     0.76238,
+     0.94884
+    ]
+   ],
+   "cid": null,
+   "filename": "2388836.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "80891b7a03643f25",
+   "label": "good",
+   "md5": "f49e37562c2cfa34b70882d94184087a",
+   "media_type": "image",
+   "name": "2388836.jpg",
+   "origin_name": "2388836.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.43363,
+     0.38414,
+     0.9642,
+     0.77003
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 500,
+    "canvas_w": 974,
+    "orig_h": 500,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2389165.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "539019dec7d1d3c5",
+   "label": "good",
+   "md5": "0add96932104acb92bec91bb78a5de5c",
+   "media_type": "image",
+   "name": "2389165.jpg",
+   "origin_name": "2389165.jpg",
+   "region_box": [
+    0.06259060402684563,
+    0.35704697986577183,
+    0.9807114093959732,
+    0.9852348993288591
+   ],
+   "region_box_canvas": [
+    0.032130700219119936,
+    0.35704697986577183,
+    0.5034452820307871,
+    0.9852348993288591
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.22346,
+     0.56501,
+     0.731,
+     0.97663
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 500,
+    "canvas_w": 1100,
+    "orig_h": 500,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2390587.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "8f65bdc346cbb8b3",
+   "label": "good",
+   "md5": "51d71ca30631738e66d1b0886ec6ecca",
+   "media_type": "image",
+   "name": "2390587.jpg",
+   "origin_name": "2390587.jpg",
+   "region_box": [
+    0.1835723598435463,
+    0.04178617992177313,
+    0.7371577574967406,
+    0.6125814863102998
+   ],
+   "region_box_canvas": [
+    0.08344198174706649,
+    0.04178617992177313,
+    0.3350717079530639,
+    0.6125814863102998
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.85105,
+     0.11373,
+     0.90735,
+     0.16132
+    ]
+   ],
+   "cid": null,
+   "filename": "2390985.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "2fdbcd6934cc0734",
+   "label": "good",
+   "md5": "1e067172f6703c14bc5836814869ec2e",
+   "media_type": "image",
+   "name": "2390985.jpg",
+   "origin_name": "2390985.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.00147,
+     0.42921,
+     0.16956,
+     0.56779
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 333,
+    "canvas_w": 733,
+    "orig_h": 333,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2391303.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "989c94633b02915c",
+   "label": "good",
+   "md5": "cf57fab864a90617893b0f73b37b6cd0",
+   "media_type": "image",
+   "name": "2391303.jpg",
+   "origin_name": "2391303.jpg",
+   "region_box": [
+    0.3115488917861799,
+    0.6772153509441645,
+    0.5466440677966101,
+    0.9139807995740199
+   ],
+   "region_box_canvas": [
+    0.21251629726205998,
+    0.6772153509441645,
+    0.3728813559322034,
+    0.9139807995740199
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.78169,
+     0.15217,
+     0.80738,
+     0.18031
+    ]
+   ],
+   "cid": null,
+   "filename": "2391914.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "69e710ceeb8fc2de",
+   "label": "good",
+   "md5": "f09e92cffb9edcf892f46b52f3654921",
+   "media_type": "image",
+   "name": "2391914.jpg",
+   "origin_name": "2391914.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.04527,
+     0.7748,
+     0.08707,
+     0.82315
+    ]
+   ],
+   "cid": null,
+   "filename": "2392305.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "2dd0a1510fcab7fc",
+   "label": "good",
+   "md5": "599ee47085acd8bab2650063715379f0",
+   "media_type": "image",
+   "name": "2392305.jpg",
+   "origin_name": "2392305.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.01319,
+     0.00106,
+     0.32031,
+     0.15126
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 825,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "across both",
+   "filename": "2392453.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "d47df98105d21f5c",
+   "label": "good",
+   "md5": "833a2171954294bf34d5141c129ca9e4",
+   "media_type": "image",
+   "name": "2392453.jpg",
+   "origin_name": "2392453.jpg",
+   "region_box": [
+    0.09357887874837026,
+    0.13070404172099087,
+    1.0,
+    1.0
+   ],
+   "region_box_canvas": [
+    0.056714471968709254,
+    0.13070404172099087,
+    0.6075619295958279,
+    1.0
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.00288,
+     0.50815,
+     0.40869,
+     0.77507
+    ]
+   ],
+   "cid": null,
+   "filename": "2393137.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "9e641cc76f90b1df",
+   "label": "good",
+   "md5": "65a19784a4db3d3a3a5fcb14bb7c7385",
+   "media_type": "image",
+   "name": "2393137.jpg",
+   "origin_name": "2393137.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.3102,
+     0.32499,
+     0.39913,
+     0.36198
+    ]
+   ],
+   "cid": null,
+   "filename": "2393420.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "1b304ce219018496",
+   "label": "good",
+   "md5": "f06296cecba930bfb7d0042e6962dcf2",
+   "media_type": "image",
+   "name": "2393420.jpg",
+   "origin_name": "2393420.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.00044,
+     0.3631,
+     0.12429,
+     0.44455
+    ]
+   ],
+   "cid": null,
+   "filename": "2393568.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "c6601bc2d02b4482",
+   "label": "good",
+   "md5": "1821c1831918b7a063c66d981f2bad9b",
+   "media_type": "image",
+   "name": "2393568.jpg",
+   "origin_name": "2393568.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.59136,
+     0.60372,
+     0.68221,
+     0.65401
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 331,
+    "canvas_w": 728,
+    "orig_h": 331,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2393845.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "05cad9d882fb6409",
+   "label": "good",
+   "md5": "cffe1f95cc22f65724c121b555e80c63",
+   "media_type": "image",
+   "name": "2393845.jpg",
+   "origin_name": "2393845.jpg",
+   "region_box": [
+    0.7261016949152542,
+    0.6957089456705412,
+    0.8741694915254237,
+    0.8003738030621127
+   ],
+   "region_box_canvas": [
+    0.49869621903520206,
+    0.6957089456705412,
+    0.6003911342894394,
+    0.8003738030621127
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.23797,
+     0.79557,
+     0.32508,
+     0.84063
+    ]
+   ],
+   "cid": null,
+   "filename": "2394004.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "149d8de00a2aec5e",
+   "label": "good",
+   "md5": "af7a035f49f75c9febfd37afc04b120b",
+   "media_type": "image",
+   "name": "2394004.jpg",
+   "origin_name": "2394004.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.39844,
+     0.72638,
+     0.52851,
+     0.76755
+    ]
+   ],
+   "cid": null,
+   "filename": "2394210.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "65ace09c17c2b392",
+   "label": "good",
+   "md5": "5161819abb3986cd1fc09757956d0d4c",
+   "media_type": "image",
+   "name": "2394210.jpg",
+   "origin_name": "2394210.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.89051,
+     0.56387,
+     0.96007,
+     0.64052
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 333,
+    "canvas_w": 733,
+    "orig_h": 333,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2394579.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "3f04176bf090925f",
+   "label": "good",
+   "md5": "0afe51d5e3f21d4f35b9627a683a0e38",
+   "media_type": "image",
+   "name": "2394579.jpg",
+   "origin_name": "2394579.jpg",
+   "region_box": [
+    0.39660365058670144,
+    0.6384719138956427,
+    0.6278761408083442,
+    0.8422336939286091
+   ],
+   "region_box_canvas": [
+    0.27053455019556716,
+    0.6384719138956427,
+    0.4282920469361147,
+    0.8422336939286091
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.05083,
+     0.26681,
+     0.91706,
+     0.79989
+    ]
+   ],
+   "cid": null,
+   "filename": "2394713.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "1d0f14d91df32307",
+   "label": "good",
+   "md5": "90e667043f3653dc722ac8f820d231ad",
+   "media_type": "image",
+   "name": "2394713.jpg",
+   "origin_name": "2394713.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.18681,
+     0.15714,
+     0.22793,
+     0.18021
+    ]
+   ],
+   "cid": null,
+   "filename": "2394840.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "3515713cb50389c6",
+   "label": "good",
+   "md5": "d9dd10b9f684fe788660fd49b6633da3",
+   "media_type": "image",
+   "name": "2394840.jpg",
+   "origin_name": "2394840.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.40358,
+     0.60351,
+     0.61268,
+     0.92415
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 333,
+    "canvas_w": 733,
+    "orig_h": 333,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2394863.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "4d7048697b513943",
+   "label": "good",
+   "md5": "eff1a6de3b275511fe124a576d45fd9b",
+   "media_type": "image",
+   "name": "2394863.jpg",
+   "origin_name": "2394863.jpg",
+   "region_box": [
+    0.1538631029986962,
+    0.18933503255537154,
+    0.8687053455019558,
+    1.0
+   ],
+   "region_box_canvas": [
+    0.10495436766623208,
+    0.18933503255537154,
+    0.5925684485006519,
+    1.0
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.1781,
+     0.21316,
+     0.27198,
+     0.28816
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 500,
+    "canvas_w": 1028,
+    "orig_h": 500,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2397404.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "c6bb79470b1fa1d9",
+   "label": "good",
+   "md5": "afdf6ef5a9cbfdafb04e572a657e5362",
+   "media_type": "image",
+   "name": "2397404.jpg",
+   "origin_name": "2397404.jpg",
+   "region_box": [
+    0.5206174496644296,
+    0.6469798657718121,
+    0.9098791946308724,
+    0.8375838926174497
+   ],
+   "region_box_canvas": [
+    0.25321860392238793,
+    0.6469798657718121,
+    0.442548246415794,
+    0.8375838926174497
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.63931,
+     0.0,
+     0.88251,
+     0.21948
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 332,
+    "canvas_w": 730,
+    "orig_h": 332,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2397668.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "84983c9e54ae2f4e",
+   "label": "good",
+   "md5": "1f561ec2b99bb2395db3ff92dcce267f",
+   "media_type": "image",
+   "name": "2397668.jpg",
+   "origin_name": "2397668.jpg",
+   "region_box": [
+    0.2741069100391134,
+    0.0,
+    0.6348239895697523,
+    0.19254135184807025
+   ],
+   "region_box_canvas": [
+    0.1877444589308996,
+    0.0,
+    0.4348109517601043,
+    0.19254135184807025
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.11001,
+     0.97228,
+     0.28853,
+     0.99989
+    ]
+   ],
+   "cid": null,
+   "filename": "2398108.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "45d41c221cb41ea9",
+   "label": "good",
+   "md5": "2404ce3b8c03f61c167c051921529e31",
+   "media_type": "image",
+   "name": "2398108.jpg",
+   "origin_name": "2398108.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.4621,
+     0.55141,
+     0.54727,
+     0.60747
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 500,
+    "canvas_w": 894,
+    "orig_h": 500,
+    "orig_w": 375
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2398153.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "5250bb08014afe3e",
+   "label": "good",
+   "md5": "149c42580c6d6f1f1fa23c096b6dc0c9",
+   "media_type": "image",
+   "name": "2398153.jpg",
+   "origin_name": "2398153.jpg",
+   "region_box": [
+    0.50117225950783,
+    0.5503355704697986,
+    0.6532975391498881,
+    0.625503355704698
+   ],
+   "region_box_canvas": [
+    0.21022326321637164,
+    0.5503355704697986,
+    0.27403420266354367,
+    0.625503355704698
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.6159,
+     0.10243,
+     0.85943,
+     0.40123
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 825,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2398760.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "33d9768dc4423678",
+   "label": "good",
+   "md5": "a42a336d99adf26a853440dc15854ca2",
+   "media_type": "image",
+   "name": "2398760.jpg",
+   "origin_name": "2398760.jpg",
+   "region_box": [
+    0.12584745762711866,
+    0.2167535853976532,
+    0.6668839634941329,
+    0.913754889178618
+   ],
+   "region_box_canvas": [
+    0.07627118644067797,
+    0.2167535853976532,
+    0.4041720990873533,
+    0.913754889178618
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.0002,
+     0.48825,
+     0.08972,
+     0.53323
+    ]
+   ],
+   "cid": null,
+   "filename": "2398901.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "2571e46bd69c2ff8",
+   "label": "good",
+   "md5": "7637a882b6698226f2826249dfdb5a55",
+   "media_type": "image",
+   "name": "2398901.jpg",
+   "origin_name": "2398901.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.18843,
+     0.08023,
+     0.70313,
+     0.22735
+    ]
+   ],
+   "cid": null,
+   "filename": "2399155.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "8553cfd64ca0bd93",
+   "label": "good",
+   "md5": "e134b07b8259cd046e0b7fcfe5043d7e",
+   "media_type": "image",
+   "name": "2399155.jpg",
+   "origin_name": "2399155.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.00256,
+     0.24093,
+     0.50636,
+     0.85915
+    ]
+   ],
+   "cid": null,
+   "filename": "2399391.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "3c8fb96e63fb3983",
+   "label": "good",
+   "md5": "99e95cd760cdb90fa40fe3f26576ab2d",
+   "media_type": "image",
+   "name": "2399391.jpg",
+   "origin_name": "2399391.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.05448,
+     0.14071,
+     0.53406,
+     0.80291
+    ]
+   ],
+   "cid": null,
+   "filename": "2399822.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "3abd4f47a1e60974",
+   "label": "good",
+   "md5": "1869390b521db0a4ee85b854d6263092",
+   "media_type": "image",
+   "name": "2399822.jpg",
+   "origin_name": "2399822.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.00388,
+     0.00108,
+     0.63692,
+     0.78824
+    ]
+   ],
+   "cid": null,
+   "filename": "2399866.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "d0ac3c68a2c64d82",
+   "label": "good",
+   "md5": "8d519f34abd33d44e73eeeaafd366f21",
+   "media_type": "image",
+   "name": "2399866.jpg",
+   "origin_name": "2399866.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.68865,
+     0.59119,
+     0.73231,
+     0.63934
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 333,
+    "canvas_w": 733,
+    "orig_h": 333,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2399910.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "52aa7e97e6b299b9",
+   "label": "good",
+   "md5": "dd60dc179d5d9d79263ee49bd9b6d25b",
+   "media_type": "image",
+   "name": "2399910.jpg",
+   "origin_name": "2399910.jpg",
+   "region_box": [
+    0.7167535853976532,
+    0.8049251989929956,
+    0.984341590612777,
+    0.9340699891547349
+   ],
+   "region_box_canvas": [
+    0.48891786179921776,
+    0.8049251989929956,
+    0.6714471968709257,
+    0.9340699891547349
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.06844,
+     0.14781,
+     0.88019,
+     0.9986
+    ]
+   ],
+   "cid": null,
+   "filename": "2399921.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "7526135090b8a243",
+   "label": "good",
+   "md5": "3027000657753d18e072bd893302e7fa",
+   "media_type": "image",
+   "name": "2399921.jpg",
+   "origin_name": "2399921.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.81922,
+     0.34657,
+     0.85398,
+     0.37786
+    ]
+   ],
+   "cid": null,
+   "filename": "2399937.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "2104b469c34bb9de",
+   "label": "good",
+   "md5": "98e51015e2844ab7231202d7629e3739",
+   "media_type": "image",
+   "name": "2399937.jpg",
+   "origin_name": "2399937.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.66686,
+     0.57038,
+     0.89857,
+     0.65943
+    ]
+   ],
+   "cid": null,
+   "filename": "2400036.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "89cb2e15759c8581",
+   "label": "good",
+   "md5": "41a60ac53c88fa6e65a5654fd9634001",
+   "media_type": "image",
+   "name": "2400036.jpg",
+   "origin_name": "2400036.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.07681,
+     0.1104,
+     0.24389,
+     0.2614
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 500,
+    "canvas_w": 992,
+    "orig_h": 500,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2400060.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "72e361a4a6d7738f",
+   "label": "good",
+   "md5": "cf8fd3ca9e7633b52c440847f82b1eee",
+   "media_type": "image",
+   "name": "2400060.jpg",
+   "origin_name": "2400060.jpg",
+   "region_box": [
+    0.36918120805369126,
+    0.5073825503355704,
+    0.915489932885906,
+    0.912751677852349
+   ],
+   "region_box_canvas": [
+    0.18607923793028794,
+    0.5073825503355704,
+    0.46143645810781553,
+    0.912751677852349
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.8345,
+     0.30769,
+     0.96033,
+     0.47322
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 333,
+    "canvas_w": 733,
+    "orig_h": 333,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2400857.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "b0d949c53dc3f354",
+   "label": "good",
+   "md5": "2200a0d17b25969d41b2abef42aacf6a",
+   "media_type": "image",
+   "name": "2400857.jpg",
+   "origin_name": "2400857.jpg",
+   "region_box": [
+    0.2532529335071708,
+    0.15059159550684972,
+    0.49408213820078223,
+    0.3844871599108887
+   ],
+   "region_box_canvas": [
+    0.1727509778357236,
+    0.15059159550684972,
+    0.33702737940026073,
+    0.3844871599108887
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.73803,
+     0.62252,
+     0.8418,
+     0.71865
+    ]
+   ],
+   "cid": null,
+   "filename": "2401061.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "0aac224083f1d4ff",
+   "label": "good",
+   "md5": "a19e13acd65789132afbd52469577f0a",
+   "media_type": "image",
+   "name": "2401061.jpg",
+   "origin_name": "2401061.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.65041,
+     0.23143,
+     0.81722,
+     0.32191
+    ]
+   ],
+   "cid": null,
+   "filename": "2401502.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "0b374ccfbef9f2c8",
+   "label": "good",
+   "md5": "96e3ec6b4697866becb2fc11036dcb60",
+   "media_type": "image",
+   "name": "2401502.jpg",
+   "origin_name": "2401502.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.51267,
+     0.13744,
+     0.81446,
+     0.41469
+    ]
+   ],
+   "cid": null,
+   "filename": "2401511.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "2c8ff3a7a0817956",
+   "label": "good",
+   "md5": "a970333911497454a766c4bc801bd324",
+   "media_type": "image",
+   "name": "2401511.jpg",
+   "origin_name": "2401511.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.43009,
+     0.26136,
+     0.84915,
+     0.62025
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 825,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2401700.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "e8ceaf18d36f9d4e",
+   "label": "good",
+   "md5": "42b12ad70d1e1daab56ecfcc92a4ab0c",
+   "media_type": "image",
+   "name": "2401700.jpg",
+   "origin_name": "2401700.jpg",
+   "region_box": [
+    0.0,
+    0.271251629726206,
+    0.9788135593220338,
+    0.7818122555410691
+   ],
+   "region_box_canvas": [
+    0.0,
+    0.271251629726206,
+    0.5932203389830508,
+    0.7818122555410691
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.21156,
+     0.57957,
+     0.61591,
+     0.94963
+    ]
+   ],
+   "cid": null,
+   "filename": "2401785.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "aa509e16ce65bca9",
+   "label": "good",
+   "md5": "f77d280fe4b2cd38b6a840309bd510f1",
+   "media_type": "image",
+   "name": "2401785.jpg",
+   "origin_name": "2401785.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.77202,
+     0.00015,
+     0.91116,
+     0.11281
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 333,
+    "canvas_w": 733,
+    "orig_h": 333,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2402104.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "bb1cb7234588de2b",
+   "label": "good",
+   "md5": "c2a49fdf13d04b74f435e51b52b54537",
+   "media_type": "image",
+   "name": "2402104.jpg",
+   "origin_name": "2402104.jpg",
+   "region_box": [
+    0.015290743155149934,
+    0.2854761541202219,
+    0.9996323337679269,
+    1.0
+   ],
+   "region_box_canvas": [
+    0.010430247718383311,
+    0.2854761541202219,
+    0.681877444589309,
+    1.0
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.5978,
+     0.15231,
+     1.0,
+     0.6905
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 824,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2402467.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "1dad4650dba581e5",
+   "label": "good",
+   "md5": "d44b3f25888cc63db07c456c2058ac8e",
+   "media_type": "image",
+   "name": "2402467.jpg",
+   "origin_name": "2402467.jpg",
+   "region_box": [
+    0.0,
+    0.1984754454584963,
+    0.9991134289439374,
+    1.0
+   ],
+   "region_box_canvas": [
+    0.0,
+    0.1984754454584963,
+    0.60625814863103,
+    1.0
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.07298,
+     0.47202,
+     0.12447,
+     0.50547
+    ]
+   ],
+   "cid": null,
+   "filename": "2402864.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "e27f93bdc642d2f7",
+   "label": "good",
+   "md5": "ec27468702c9dca12e111f56e6d79521",
+   "media_type": "image",
+   "name": "2402864.jpg",
+   "origin_name": "2402864.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.46532,
+     0.47688,
+     0.99089,
+     0.98762
+    ]
+   ],
+   "cid": null,
+   "filename": "2403443.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "e55e9168ec9cc02e",
+   "label": "good",
+   "md5": "9e9fcac49e1d70b93d6a3272e1d5b462",
+   "media_type": "image",
+   "name": "2403443.jpg",
+   "origin_name": "2403443.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.30981,
+     0.55093,
+     0.37306,
+     0.60873
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 302,
+    "canvas_w": 708,
+    "orig_h": 302,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2403704.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "bc4d78dd68bbf0d5",
+   "label": "good",
+   "md5": "7c4d068cbead5be582aa4198beaab0a6",
+   "media_type": "image",
+   "name": "2403704.jpg",
+   "origin_name": "2403704.jpg",
+   "region_box": [
+    0.15692307692307692,
+    0.6276107997962302,
+    0.3905418060200669,
+    0.7288976500033223
+   ],
+   "region_box_canvas": [
+    0.11082138200782268,
+    0.6276107997962302,
+    0.27580636018366306,
+    0.7288976500033223
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.37388,
+     0.61785,
+     0.42712,
+     0.67182
+    ]
+   ],
+   "cid": null,
+   "filename": "2403860.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "683913c72d2fc639",
+   "label": "good",
+   "md5": "d8a38ba1faea6b7ff086755c2f08ea2d",
+   "media_type": "image",
+   "name": "2403860.jpg",
+   "origin_name": "2403860.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.09015,
+     0.00325,
+     0.8325,
+     1.0
+    ]
+   ],
+   "cid": null,
+   "filename": "2403932.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "1cc4d41221c14ef4",
+   "label": "good",
+   "md5": "98d73428f97286b054c03b69c0504798",
+   "media_type": "image",
+   "name": "2403932.jpg",
+   "origin_name": "2403932.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.11144,
+     0.90398,
+     0.23082,
+     0.99958
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 333,
+    "canvas_w": 733,
+    "orig_h": 333,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2404235.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "51330e30c339d788",
+   "label": "good",
+   "md5": "8809dcb0c21aac12684824341798664d",
+   "media_type": "image",
+   "name": "2404235.jpg",
+   "origin_name": "2404235.jpg",
+   "region_box": [
+    0.2331838331160365,
+    0.6944346562990631,
+    0.4577666232073012,
+    0.9168506837998364
+   ],
+   "region_box_canvas": [
+    0.1590612777053455,
+    0.6944346562990631,
+    0.3122555410691004,
+    0.9168506837998364
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.14869,
+     0.62657,
+     0.32956,
+     0.78333
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 326,
+    "canvas_w": 717,
+    "orig_h": 326,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2404280.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "711b74178a5cf6ac",
+   "label": "good",
+   "md5": "c67420a808ff3da39aad6f494f976863",
+   "media_type": "image",
+   "name": "2404280.jpg",
+   "origin_name": "2404280.jpg",
+   "region_box": [
+    0.09441590612777054,
+    0.6526953471816734,
+    0.3785984354628422,
+    0.8491203477815726
+   ],
+   "region_box_canvas": [
+    0.06584093872229466,
+    0.6526953471816734,
+    0.26401564537157757,
+    0.8491203477815726
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.04635,
+     0.0741,
+     0.71311,
+     0.96717
+    ]
+   ],
+   "cid": null,
+   "filename": "2404837.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "9db1c9a9273c654c",
+   "label": "good",
+   "md5": "c68dc987b6e3d8e569952b1290d8737d",
+   "media_type": "image",
+   "name": "2404837.jpg",
+   "origin_name": "2404837.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.39622,
+     0.56292,
+     0.60635,
+     0.68851
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 500,
+    "canvas_w": 855,
+    "orig_h": 500,
+    "orig_w": 332
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2404927.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "aefbb729ea505849",
+   "label": "good",
+   "md5": "e3046c83909b3cf9e890d9e055e620e3",
+   "media_type": "image",
+   "name": "2404927.jpg",
+   "origin_name": "2404927.jpg",
+   "region_box": [
+    0.042401148217029234,
+    0.3288590604026846,
+    0.7640798091695642,
+    0.48053691275167787
+   ],
+   "region_box_canvas": [
+    0.016464539424624218,
+    0.3288590604026846,
+    0.2966953177126261,
+    0.48053691275167787
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.95445,
+     0.29703,
+     0.99844,
+     0.32585
+    ]
+   ],
+   "cid": null,
+   "filename": "2405316.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "17abec6c33fd1d56",
+   "label": "good",
+   "md5": "343054505f08c991cc510f3bed13ef81",
+   "media_type": "image",
+   "name": "2405316.jpg",
+   "origin_name": "2405316.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.2635,
+     0.52564,
+     0.85075,
+     1.0
+    ]
+   ],
+   "cid": null,
+   "filename": "2406118.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "c2ce11a84e71afde",
+   "label": "good",
+   "md5": "566a09a68ebed426a3319a4b0c63fe1b",
+   "media_type": "image",
+   "name": "2406118.jpg",
+   "origin_name": "2406118.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.93216,
+     0.82606,
+     0.99821,
+     0.92093
+    ]
+   ],
+   "cid": null,
+   "filename": "2406899.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "f9815a564b678109",
+   "label": "good",
+   "md5": "1edfd3c9ce324d0d6b36aabfb7cc1a40",
+   "media_type": "image",
+   "name": "2406899.jpg",
+   "origin_name": "2406899.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.54032,
+     0.78448,
+     0.66897,
+     0.83273
+    ]
+   ],
+   "cid": null,
+   "filename": "2407180.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "e2429af02780732d",
+   "label": "good",
+   "md5": "70b936d375572420b320c943c4f416dd",
+   "media_type": "image",
+   "name": "2407180.jpg",
+   "origin_name": "2407180.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.58638,
+     0.34629,
+     0.70032,
+     0.50387
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 282,
+    "canvas_w": 708,
+    "orig_h": 282,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2407276.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "61b55cfce983066f",
+   "label": "good",
+   "md5": "e8649aace75a681c8265a197c9d984eb",
+   "media_type": "image",
+   "name": "2407276.jpg",
+   "origin_name": "2407276.jpg",
+   "region_box": [
+    0.3793846153846154,
+    0.3649754500818331,
+    0.5990769230769231,
+    0.6006546644844517
+   ],
+   "region_box_canvas": [
+    0.26792698826597133,
+    0.3649754500818331,
+    0.4230769230769231,
+    0.6006546644844517
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.38302,
+     9e-05,
+     0.55315,
+     0.1936
+    ]
+   ],
+   "cid": null,
+   "filename": "2407290.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "8bb8ae876cf20230",
+   "label": "good",
+   "md5": "9f33d79b6051079a7e1a402dbf39d43a",
+   "media_type": "image",
+   "name": "2407290.jpg",
+   "origin_name": "2407290.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.46461,
+     0.25775,
+     0.52583,
+     0.30709
+    ]
+   ],
+   "cid": null,
+   "filename": "2407399.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "2534da238dabb393",
+   "label": "good",
+   "md5": "6c76cee64322c69c7a7ece31c99de444",
+   "media_type": "image",
+   "name": "2407399.jpg",
+   "origin_name": "2407399.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.34079,
+     0.5759,
+     0.37797,
+     0.60545
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 333,
+    "canvas_w": 733,
+    "orig_h": 333,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2407426.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "8ce6fbd01943e40e",
+   "label": "good",
+   "md5": "98f4b86b7754778ebd732600cea95a71",
+   "media_type": "image",
+   "name": "2407426.jpg",
+   "origin_name": "2407426.jpg",
+   "region_box": [
+    0.49981616688396346,
+    0.6241224927665606,
+    0.629787483702738,
+    0.7059141932023288
+   ],
+   "region_box_canvas": [
+    0.3409387222946545,
+    0.6241224927665606,
+    0.42959582790091266,
+    0.7059141932023288
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.0,
+     0.63112,
+     0.06038,
+     0.6919
+    ]
+   ],
+   "cid": null,
+   "filename": "2407546.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "aa31c6a3663e7528",
+   "label": "good",
+   "md5": "caf0094535d1879de743896547a9424d",
+   "media_type": "image",
+   "name": "2407546.jpg",
+   "origin_name": "2407546.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.09094,
+     0.38601,
+     0.54493,
+     0.91805
+    ]
+   ],
+   "cid": null,
+   "filename": "2407837.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "3f9e630f8f8bbf08",
+   "label": "good",
+   "md5": "c5e1db34191651fe4aae67f00f3e154c",
+   "media_type": "image",
+   "name": "2407837.jpg",
+   "origin_name": "2407837.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.00228,
+     0.47704,
+     0.12386,
+     0.68528
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 332,
+    "canvas_w": 728,
+    "orig_h": 332,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2408848.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "f7ec18c1dea1a86a",
+   "label": "good",
+   "md5": "c6b8213dfc33de6b0dcb0248a283777a",
+   "media_type": "image",
+   "name": "2408848.jpg",
+   "origin_name": "2408848.jpg",
+   "region_box": [
+    0.29803389830508475,
+    0.5478864610986318,
+    0.632135593220339,
+    1.0
+   ],
+   "region_box_canvas": [
+    0.2046936114732725,
+    0.5478864610986318,
+    0.43415906127770537,
+    1.0
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.57213,
+     0.71199,
+     0.61576,
+     0.76124
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 376,
+    "canvas_w": 827,
+    "orig_h": 376,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2409205.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "fd5dc8a51d8ce172",
+   "label": "good",
+   "md5": "8e5d14ce14ae969de60699a4c7ed3718",
+   "media_type": "image",
+   "name": "2409205.jpg",
+   "origin_name": "2409205.jpg",
+   "region_box": [
+    0.5736166883963494,
+    0.7545016852062472,
+    0.8065136897001304,
+    1.0
+   ],
+   "region_box_canvas": [
+    0.3468057366362451,
+    0.7545016852062472,
+    0.4876140808344198,
+    1.0
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.08525,
+     0.19107,
+     0.12635,
+     0.23763
+    ]
+   ],
+   "cid": null,
+   "filename": "2409571.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "c5254a1a5ba2815f",
+   "label": "good",
+   "md5": "1561c3973882ee5f9099dbeea5b42587",
+   "media_type": "image",
+   "name": "2409571.jpg",
+   "origin_name": "2409571.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.26619,
+     0.8705,
+     0.32312,
+     0.91087
+    ]
+   ],
+   "cid": null,
+   "filename": "2409682.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "3a90aa681a9fa0f6",
+   "label": "good",
+   "md5": "a6c224fc48deb3a47ebe88f774871c81",
+   "media_type": "image",
+   "name": "2409682.jpg",
+   "origin_name": "2409682.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.28893,
+     0.57558,
+     0.50487,
+     0.87956
+    ]
+   ],
+   "cid": null,
+   "filename": "2410239.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "51b61ce846eac64e",
+   "label": "good",
+   "md5": "bb9cb0720a9dc5e70c36c2adecfb9273",
+   "media_type": "image",
+   "name": "2410239.jpg",
+   "origin_name": "2410239.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.33993,
+     0.39189,
+     0.38887,
+     0.43921
+    ]
+   ],
+   "cid": null,
+   "filename": "2410291.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "a806524e4cfbc8fb",
+   "label": "good",
+   "md5": "e9988e5f0f47254d83d1b48763e1cd51",
+   "media_type": "image",
+   "name": "2410291.jpg",
+   "origin_name": "2410291.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.79211,
+     0.97095,
+     0.94993,
+     0.9995
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 825,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2411450.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "82d353f0b3e64df2",
+   "label": "good",
+   "md5": "f39dfb9bae8d107db2202b0c455258a7",
+   "media_type": "image",
+   "name": "2411450.jpg",
+   "origin_name": "2411450.jpg",
+   "region_box": [
+    0.5076923076923077,
+    0.6140156453715776,
+    0.7142112125162973,
+    0.7947196870925685
+   ],
+   "region_box_canvas": [
+    0.3076923076923077,
+    0.6140156453715776,
+    0.43285528031290743,
+    0.7947196870925685
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.23072,
+     0.54151,
+     0.59198,
+     0.69361
+    ]
+   ],
+   "cid": null,
+   "filename": "2412337.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "63cfcc730a18faff",
+   "label": "good",
+   "md5": "27c9159aa99e612056e1820512bf41ec",
+   "media_type": "image",
+   "name": "2412337.jpg",
+   "origin_name": "2412337.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.94164,
+     0.90991,
+     0.99862,
+     0.99998
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 825,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2412966.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "d01baf977dd59a88",
+   "label": "good",
+   "md5": "3ce68ad3060a3fe7bce2c06eda959b0a",
+   "media_type": "image",
+   "name": "2412966.jpg",
+   "origin_name": "2412966.jpg",
+   "region_box": [
+    0.435625814863103,
+    0.3788135593220339,
+    0.6754889178617992,
+    0.4906779661016949
+   ],
+   "region_box_canvas": [
+    0.26401564537157757,
+    0.3788135593220339,
+    0.409387222946545,
+    0.4906779661016949
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.50758,
+     0.59829,
+     0.99448,
+     0.91734
+    ]
+   ],
+   "cid": null,
+   "filename": "2414086.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "4288264bf2a610a2",
+   "label": "good",
+   "md5": "475e73667672045596d41c6a32b6cafa",
+   "media_type": "image",
+   "name": "2414086.jpg",
+   "origin_name": "2414086.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.00018,
+     0.30567,
+     0.08859,
+     0.51594
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 702,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "2414545.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "c3d49bb0b373e328",
+   "label": "good",
+   "md5": "c3c1c8f5a84e33a4ce5470aaf02a7bd2",
+   "media_type": "image",
+   "name": "2414545.jpg",
+   "origin_name": "2414545.jpg",
+   "region_box": [
+    0.26911409395973157,
+    0.4469798657718121,
+    0.8268322147651006,
+    0.9463087248322147
+   ],
+   "region_box_canvas": [
+    0.19167670509952392,
+    0.4469798657718121,
+    0.5889118338782768,
+    0.9463087248322147
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.152,
+     0.06136,
+     0.84299,
+     0.98773
+    ]
+   ],
+   "cid": null,
+   "filename": "2415188.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "c203ca800f151871",
+   "label": "good",
+   "md5": "3f9f6a59d6472c79e1b4255683e0f6c3",
+   "media_type": "image",
+   "name": "2415188.jpg",
+   "origin_name": "2415188.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.81393,
+     0.48249,
+     0.87311,
+     0.53659
+    ]
+   ],
+   "cid": null,
+   "filename": "2415357.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "f7bf13ce90f9ab2e",
+   "label": "good",
+   "md5": "368858466cf992bf00f6af8c85ebc173",
+   "media_type": "image",
+   "name": "2415357.jpg",
+   "origin_name": "2415357.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.43254,
+     0.00503,
+     0.99864,
+     0.69447
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 825,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "across both",
+   "filename": "2415957.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "f74bb5b48d6e8af3",
+   "label": "good",
+   "md5": "7d6850f9215d55bdac5c737e1d6a0748",
+   "media_type": "image",
+   "name": "2415957.jpg",
+   "origin_name": "2415957.jpg",
+   "region_box": [
+    0.0,
+    0.003063885267275083,
+    1.0,
+    0.9969361147327249
+   ],
+   "region_box_canvas": [
+    0.0,
+    0.003063885267275083,
+    0.6069100391134289,
+    0.9969361147327249
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.14964,
+     0.27617,
+     0.74938,
+     0.85749
+    ]
+   ],
+   "cid": null,
+   "filename": "2416747.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "949836d5ba81f7c8",
+   "label": "good",
+   "md5": "1cac3d31f191b8d8698782130dfec453",
+   "media_type": "image",
+   "name": "2416747.jpg",
+   "origin_name": "2416747.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.76539,
+     0.57842,
+     0.8238,
+     0.63378
+    ]
+   ],
+   "cid": null,
+   "filename": "2416793.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "2d90ce82be71bff5",
+   "label": "good",
+   "md5": "48fe918491b30fa5599b2ec9d62fa7ca",
+   "media_type": "image",
+   "name": "2416793.jpg",
+   "origin_name": "2416793.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.87409,
+     0.80998,
+     0.95357,
+     0.87198
+    ]
+   ],
+   "cid": null,
+   "filename": "2417029.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "81851ca520ec5de4",
+   "label": "good",
+   "md5": "2d91c5d52a7f18d6cec1af273aa6cd36",
+   "media_type": "image",
+   "name": "2417029.jpg",
+   "origin_name": "2417029.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.15687,
+     0.72357,
+     0.31514,
+     0.83679
+    ]
+   ],
+   "cid": null,
+   "filename": "28.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "e7d47dd8545628f4",
+   "label": "good",
+   "md5": "5bc0d1083ba5e06c9de7162bdf55eade",
+   "media_type": "image",
+   "name": "28.jpg",
+   "origin_name": "28.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.58316,
+     0.35239,
+     0.6584,
+     0.40574
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 714,
+    "canvas_w": 1571,
+    "orig_h": 714,
+    "orig_w": 1024
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "285853.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "7b709c3c2dcf71f4",
+   "label": "good",
+   "md5": "5b1d58656d156f903924b4654b872c6d",
+   "media_type": "image",
+   "name": "285853.jpg",
+   "origin_name": "285853.jpg",
+   "region_box": [
+    0.5990701648060626,
+    0.7660703786077665,
+    0.7760908979791395,
+    0.9037671783185243
+   ],
+   "region_box_canvas": [
+    0.39048239895697523,
+    0.7660703786077665,
+    0.5058670143415906,
+    0.9037671783185243
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.96529,
+     0.13012,
+     1.0,
+     0.22405
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 600,
+    "canvas_w": 1104,
+    "orig_h": 600,
+    "orig_w": 800
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "3390.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "7bebe67303661652",
+   "label": "good",
+   "md5": "902f76a040f9bd51dea30f00cffd8058",
+   "media_type": "image",
+   "name": "3390.jpg",
+   "origin_name": "3390.jpg",
+   "region_box": [
+    0.11617449664429529,
+    0.15436241610738255,
+    0.8842953020134228,
+    1.0
+   ],
+   "region_box_canvas": [
+    0.08418441785818499,
+    0.15436241610738255,
+    0.640793697111176,
+    1.0
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.41521,
+     0.57656,
+     0.62475,
+     0.80998
+    ]
+   ],
+   "cid": null,
+   "filename": "3548.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "4e9b9895e789a7f6",
+   "label": "good",
+   "md5": "497e48ff2073885de93eeffeea33f79a",
+   "media_type": "image",
+   "name": "3548.jpg",
+   "origin_name": "3548.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.25001,
+     0.61513,
+     0.3861,
+     0.66879
+    ]
+   ],
+   "cid": null,
+   "filename": "36.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "0b26cbc34a82005c",
+   "label": "good",
+   "md5": "c2ed4e4bb29b9227cd5c399712022030",
+   "media_type": "image",
+   "name": "36.jpg",
+   "origin_name": "36.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.05722,
+     0.0185,
+     0.08037,
+     0.05675
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 534,
+    "canvas_w": 1175,
+    "orig_h": 534,
+    "orig_w": 800
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "4299.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "25979d8d9e31be39",
+   "label": "good",
+   "md5": "63c0de1731fdbbd05a475b99a5962f53",
+   "media_type": "image",
+   "name": "4299.jpg",
+   "origin_name": "4299.jpg",
+   "region_box": [
+    0.8665050521512386,
+    0.7804258285357124,
+    0.9909753911342895,
+    0.8837028600168955
+   ],
+   "region_box_canvas": [
+    0.589960886571056,
+    0.7804258285357124,
+    0.6747066492829205,
+    0.8837028600168955
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.48571,
+     0.35806,
+     0.52667,
+     0.39265
+    ]
+   ],
+   "cid": null,
+   "filename": "4363.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "8aaa35bb6c45f225",
+   "label": "good",
+   "md5": "335852be94c7e0d596e31116df6ddefc",
+   "media_type": "image",
+   "name": "4363.jpg",
+   "origin_name": "4363.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.7978,
+     0.44627,
+     0.85673,
+     0.51163
+    ]
+   ],
+   "cid": null,
+   "filename": "4659.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "9d15adaf66d89ef8",
+   "label": "good",
+   "md5": "2638a1a60e454c8be991609e53a642c3",
+   "media_type": "image",
+   "name": "4659.jpg",
+   "origin_name": "4659.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.31946,
+     0.32376,
+     0.61855,
+     0.65738
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 825,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "4800.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "71cbab393a6dca2d",
+   "label": "good",
+   "md5": "4e455fa44b9ee7f0cccc735525d8ad98",
+   "media_type": "image",
+   "name": "4800.jpg",
+   "origin_name": "4800.jpg",
+   "region_box": [
+    0.20221642764015643,
+    0.26121251629726205,
+    0.7238917861799217,
+    0.8635593220338983
+   ],
+   "region_box_canvas": [
+    0.12255541069100391,
+    0.26121251629726205,
+    0.438722294654498,
+    0.8635593220338983
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.08664,
+     0.10967,
+     0.88775,
+     0.98962
+    ]
+   ],
+   "cid": null,
+   "filename": "4806.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "6eb929ee2120f3e1",
+   "label": "good",
+   "md5": "cf35cef42834740589c242ae15b1a4f2",
+   "media_type": "image",
+   "name": "4806.jpg",
+   "origin_name": "4806.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.07293,
+     0.46396,
+     0.224,
+     0.65837
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 333,
+    "canvas_w": 733,
+    "orig_h": 333,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "4814.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "4fe2c59bdc87dc66",
+   "label": "good",
+   "md5": "3b831734ba869c75c39725b8f5f6ed51",
+   "media_type": "image",
+   "name": "4814.jpg",
+   "origin_name": "4814.jpg",
+   "region_box": [
+    0.16819817470664927,
+    0.6284273191052853,
+    0.5619348109517601,
+    0.9096759732352953
+   ],
+   "region_box_canvas": [
+    0.11473272490221642,
+    0.6284273191052853,
+    0.3833116036505867,
+    0.9096759732352953
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.15332,
+     0.30072,
+     0.97878,
+     0.79773
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 500,
+    "canvas_w": 752,
+    "orig_h": 500,
+    "orig_w": 375
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "4816.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "38ac1181423cb4e1",
+   "label": "good",
+   "md5": "250e83c4bcc0615dd6a7c09848e8e4af",
+   "media_type": "image",
+   "name": "4816.jpg",
+   "origin_name": "4816.jpg",
+   "region_box": [
+    0.0,
+    0.22013422818791947,
+    0.9972975391498881,
+    0.9959731543624161
+   ],
+   "region_box_canvas": [
+    0.0,
+    0.22013422818791947,
+    0.4973225760388405,
+    0.9959731543624161
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.93766,
+     0.30406,
+     0.99959,
+     0.50041
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 333,
+    "canvas_w": 668,
+    "orig_h": 333,
+    "orig_w": 500
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "4825.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "d8d22dec4a23257c",
+   "label": "good",
+   "md5": "8c3a59e45b1e89139cbb22e1e34632a1",
+   "media_type": "image",
+   "name": "4825.jpg",
+   "origin_name": "4825.jpg",
+   "region_box": [
+    0.30505234899328865,
+    0.5422818791946309,
+    0.8745046979865772,
+    0.9557046979865772
+   ],
+   "region_box_canvas": [
+    0.22833259655186275,
+    0.5422818791946309,
+    0.6545693847204919,
+    0.9557046979865772
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.24683,
+     0.16031,
+     0.80382,
+     0.89158
+    ]
+   ],
+   "cid": null,
+   "filename": "4834.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "9ed7e300c4893e7c",
+   "label": "good",
+   "md5": "47cc2851648a2b9bf1168b072965445f",
+   "media_type": "image",
+   "name": "4834.jpg",
+   "origin_name": "4834.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.77663,
+     0.60123,
+     0.83077,
+     0.64779
+    ]
+   ],
+   "cid": null,
+   "filename": "497929.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "5b37298d74b97111",
+   "label": "good",
+   "md5": "46c593009e599492a8503d3141095594",
+   "media_type": "image",
+   "name": "497929.jpg",
+   "origin_name": "497929.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.67583,
+     0.23153,
+     0.74639,
+     0.29782
+    ]
+   ],
+   "cid": null,
+   "filename": "498276.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "9634510b5e03298e",
+   "label": "good",
+   "md5": "3638b7a6dab57ea28f88ce74a9678853",
+   "media_type": "image",
+   "name": "498276.jpg",
+   "origin_name": "498276.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.28915,
+     0.15627,
+     0.33188,
+     0.17991
+    ]
+   ],
+   "cid": null,
+   "filename": "575.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "25b9e752465d1821",
+   "label": "good",
+   "md5": "e72deeccaa5cc93cb2f17843c0dc8ec2",
+   "media_type": "image",
+   "name": "575.jpg",
+   "origin_name": "575.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.36677,
+     0.56715,
+     0.40684,
+     0.6201
+    ]
+   ],
+   "cid": null,
+   "filename": "578.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "d29be4cc447b9d7a",
+   "label": "good",
+   "md5": "5c9becbb1a558bbd5458f41da5ce047f",
+   "media_type": "image",
+   "name": "578.jpg",
+   "origin_name": "578.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.52649,
+     0.24272,
+     0.82254,
+     0.47595
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 600,
+    "canvas_w": 1320,
+    "orig_h": 600,
+    "orig_w": 800
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "6.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "19b7ccb53d1cdacf",
+   "label": "good",
+   "md5": "0607c8adce0b531fac5f5784aca37c48",
+   "media_type": "image",
+   "name": "6.jpg",
+   "origin_name": "6.jpg",
+   "region_box": [
+    0.045176010430247715,
+    0.1636897001303781,
+    0.34527379400260755,
+    0.3515645371577575
+   ],
+   "region_box_canvas": [
+    0.027379400260756193,
+    0.1636897001303781,
+    0.20925684485006518,
+    0.3515645371577575
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.46141,
+     0.3902,
+     0.54178,
+     0.43374
+    ]
+   ],
+   "cid": null,
+   "filename": "67.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "c332181e668d64dc",
+   "label": "good",
+   "md5": "f311ec5b6a84e6d7e2b98d8938b03a5c",
+   "media_type": "image",
+   "name": "67.jpg",
+   "origin_name": "67.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.7732,
+     0.14702,
+     0.88235,
+     0.21633
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 612,
+    "canvas_w": 1314,
+    "orig_h": 612,
+    "orig_w": 612
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "713137.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "67e8bb7706a1a050",
+   "label": "good",
+   "md5": "b1f5af9f8a79842b0b78a356795bf464",
+   "media_type": "image",
+   "name": "713137.jpg",
+   "origin_name": "713137.jpg",
+   "region_box": [
+    0.0,
+    0.4489128767543523,
+    0.6704310146483626,
+    0.9009989262980289
+   ],
+   "region_box_canvas": [
+    0.0,
+    0.4489128767543523,
+    0.3122555410691004,
+    0.9009989262980289
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.45152,
+     0.52926,
+     0.50593,
+     0.56272
+    ]
+   ],
+   "cid": null,
+   "filename": "713745.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "bdae175115048278",
+   "label": "good",
+   "md5": "974bc95d1dd3f5223a85696fa32171af",
+   "media_type": "image",
+   "name": "713745.jpg",
+   "origin_name": "713745.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.57868,
+     0.54818,
+     0.70591,
+     0.65465
+    ]
+   ],
+   "cid": null,
+   "filename": "713861.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "09256e6e6268f306",
+   "label": "good",
+   "md5": "9fbc46d253b16a9e3da4966fe08dde77",
+   "media_type": "image",
+   "name": "713861.jpg",
+   "origin_name": "713861.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.72862,
+     0.83991,
+     0.82951,
+     0.96929
+    ]
+   ],
+   "cid": null,
+   "filename": "72.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "bc51f453c04a7673",
+   "label": "good",
+   "md5": "afdd02c7c92cf77d049efdff1ea021d9",
+   "media_type": "image",
+   "name": "72.jpg",
+   "origin_name": "72.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.32935,
+     0.40616,
+     0.37815,
+     0.42882
+    ]
+   ],
+   "cid": null,
+   "filename": "90.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "1b6b847e86ddefb8",
+   "label": "good",
+   "md5": "97934527e0da8bd13ee42abf114e6e2f",
+   "media_type": "image",
+   "name": "90.jpg",
+   "origin_name": "90.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.18659,
+     0.38255,
+     0.67471,
+     0.86832
+    ]
+   ],
+   "cid": null,
+   "filename": "92.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "7f68006120d1a6e9",
+   "label": "good",
+   "md5": "feb0028e47455462bed22e1e2aef6f4e",
+   "media_type": "image",
+   "name": "92.jpg",
+   "origin_name": "92.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.56652,
+     0.56237,
+     0.661,
+     0.66799
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 480,
+    "canvas_w": 1056,
+    "orig_h": 480,
+    "orig_w": 640
+   },
+   "cid": null,
+   "drawn_on": "photo",
+   "filename": "936.jpg",
+   "framing": "side-right",
+   "group": "pass_prominence",
+   "id": "9ab12e39affa3684",
+   "label": "good",
+   "md5": "594dea270a52980c71e0b723ba80fc62",
+   "media_type": "image",
+   "name": "936.jpg",
+   "origin_name": "936.jpg",
+   "region_box": [
+    0.42056714471968704,
+    0.5250977835723598,
+    0.5603976531942634,
+    0.6312255541069101
+   ],
+   "region_box_canvas": [
+    0.25488917861799215,
+    0.5250977835723598,
+    0.3396349413298566,
+    0.6312255541069101
+   ],
+   "score": -1.0,
+   "time": -1.0
+  }
+ ],
+ "kind": "seatcheck",
+ "question": "is the box on an instance of the class, and the most prominent one? (redraw if not; bad if none)",
+ "rule": "bowl incl plates not planters or wrappers",
+ "rule_digest": "6c7c2d74d335",
+ "source": "OWLv2-screened per-class review, exported from the live app"
+}
