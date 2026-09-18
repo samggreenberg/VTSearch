@@ -80,8 +80,11 @@ class TestRender:
         r, gg, b = px[:3]
         assert abs(r - 0) < 20 and abs(gg - 90) < 20 and abs(b - 200) < 20
 
-    def test_every_instance_is_outlined_when_there_are_several(self, sr, tmp_path):
-        """A VG positive is banded by ALL its instances, so the review render must show each one."""
+    def test_several_instances_are_drawn_thin_under_the_red_union(self, sr, tmp_path):
+        """The band comes from the union, so the union is the red box and each annotation is amber.
+
+        VG holds 21 overlapping boxes for one bench; all-red made the image unreadable.
+        """
         from PIL import Image
 
         src = _photo(tmp_path, 640, 480)
@@ -89,11 +92,10 @@ class TestRender:
         g = sr.draw_with_side_inset(src, (0.05, 0.05, 0.15, 0.15), dest, also=[(0.60, 0.60, 0.75, 0.75)])
         with Image.open(dest) as im:
             assert im.size == (g["canvas_w"], g["canvas_h"])
-            # the left edge of the SECOND box, at its vertical middle, is drawn red
-            px = im.getpixel((int(0.60 * 640) + 1, int(0.675 * 480)))
-        assert isinstance(px, tuple)
-        r, gg, b = px[:3]
-        assert r > 180 and gg < 90 and b < 90
+            second = im.getpixel((int(0.60 * 640), int(0.675 * 480)))  # the second annotation's edge
+            union_left = im.getpixel((int(0.05 * 640) + 1, int(0.40 * 480)))  # union's left edge, between the two
+        assert isinstance(second, tuple) and second[0] > 180 and second[1] > 140, "an annotation is amber"
+        assert isinstance(union_left, tuple) and union_left[0] > 180 and union_left[1] < 90, "the union is red"
 
     def test_no_extra_boxes_renders_exactly_as_before(self, sr, tmp_path):
         src = _photo(tmp_path, 640, 480)
@@ -132,3 +134,25 @@ class TestRender:
         src = _photo(tmp_path, 800, 534)
         g = sr.draw_with_side_inset(src, (0.05, 0.02, 0.08, 0.06), tmp_path / "wide.jpg")
         assert g["canvas_w"] / g["canvas_h"] <= sr.MAX_CANVAS_ASPECT + 0.01
+
+    def test_near_duplicate_annotations_are_collapsed_for_display(self, sr):
+        """VG annotates one object many times; only distinct ones are outlined."""
+        big = [0.10, 0.10, 0.50, 0.50]
+        nudged = [0.11, 0.11, 0.51, 0.51]  # the same object, annotated again
+        inside = [0.20, 0.20, 0.25, 0.25]  # wholly within the big one
+        other = [0.70, 0.70, 0.90, 0.90]
+
+        kept = sr.distinct_boxes([big, nudged, inside, other])
+
+        assert [list(b) for b in kept] == [big, other]
+
+    def test_the_union_still_comes_from_every_annotation(self, sr, tmp_path):
+        """Dedupe is for drawing only: a duplicate outside the kept boxes still widens the red union."""
+        from PIL import Image
+
+        src = _photo(tmp_path, 640, 480)
+        dest = tmp_path / "dup.jpg"
+        sr.draw_with_side_inset(src, (0.10, 0.10, 0.50, 0.50), dest, also=[(0.11, 0.11, 0.95, 0.95)])
+        with Image.open(dest) as im:
+            edge = im.getpixel((int(0.95 * 640) - 1, int(0.50 * 480)))
+        assert isinstance(edge, tuple) and edge[0] > 180 and edge[1] < 90, "the union reaches the far annotation"
