@@ -11,7 +11,10 @@ Covers:
 from __future__ import annotations
 
 import json
+import os
 from unittest.mock import patch
+
+import pytest
 
 
 from tests import wait_for_detector_task
@@ -239,21 +242,68 @@ class TestLabelImportEndpoint:
         assert updated is not None
         assert updated["num_training"] == 1
 
-    def test_path_traversal_absolute_rejected(self, client):
-        """Absolute paths outside the allowed directory must be rejected."""
-        res = client.post(
-            "/api/label-importers/import/server_json_file",
-            json={"filepath": "/etc/passwd"},
-        )
-        assert res.status_code == 400
+    # -----------------------------------------------------------------
+    # A bad path is the caller's error, so it is a 400 and never a 500.
+    #
+    # Two tests here used to post `/etc/passwd` and `../../../etc/shadow`
+    # and assert 400 under the names `test_path_traversal_*_rejected`.
+    # Neither asserted a traversal control (#3995). These fixtures run in
+    # single-user / no-auth mode, where `get_file_access_base_dir()` returns
+    # None and server paths are unrestricted **by design** -- the whole point
+    # of a "Server CSV File" importer is reading a file the operator names.
+    # The 400 came from `File not found`, so the relative one flipped to a
+    # 500 whenever the checkout was shallow enough for `../../../etc/shadow`
+    # to be the real `/etc/shadow`: the file exists, the importer opened it,
+    # and PermissionError is not a ValueError.
+    #
+    # Confinement itself belongs to `confine_server_filepath` and is covered
+    # against a pinned base dir in `tests/api/test_path_validation.py`; the
+    # multi-user case is asserted end-to-end below.
+    # -----------------------------------------------------------------
 
-    def test_path_traversal_relative_rejected(self, client):
-        """Relative paths that escape the base directory must be rejected."""
+    def test_missing_file_is_a_client_error(self, client, tmp_path):
+        """A path that names nothing is a 400, whatever the CWD happens to be."""
         res = client.post(
             "/api/label-importers/import/server_csv_file",
-            json={"filepath": "../../../etc/shadow"},
+            json={"filepath": str(tmp_path / "no_such_file.csv")},
         )
         assert res.status_code == 400
+        assert "not found" in res.get_json()["message"].lower()
+
+    def test_unreadable_file_is_a_client_error_not_a_500(self, client, tmp_path):
+        """A real file the process cannot open is a 400, not a stack trace.
+
+        This is the shape #3995 hit: a path that resolves onto something like
+        ``/etc/shadow`` exists and is a regular file, so the existence checks
+        pass and the read raises PermissionError.
+        """
+        secret = tmp_path / "unreadable.csv"
+        secret.write_text("md5,label\n")
+        secret.chmod(0o000)
+        if os.access(secret, os.R_OK):  # root ignores the mode bits
+            pytest.skip("Process can read a 0o000 file; cannot exercise the branch")
+        try:
+            res = client.post(
+                "/api/label-importers/import/server_csv_file",
+                json={"filepath": str(secret)},
+            )
+        finally:
+            secret.chmod(0o600)
+        assert res.status_code == 400
+        assert "cannot read file" in res.get_json()["message"].lower()
+
+    def test_traversal_rejected_under_multi_user_confinement(self, client, tmp_path):
+        """With a base dir in force, an escaping path is refused before any read."""
+        with patch(
+            "vtscore.security.path_validation.get_file_access_base_dir",
+            return_value=tmp_path,
+        ):
+            res = client.post(
+                "/api/label-importers/import/server_csv_file",
+                json={"filepath": "../../../etc/shadow"},
+            )
+        assert res.status_code in (400, 422)
+        assert "within" in res.get_json()["message"].lower()
 
 
 # ---------------------------------------------------------------------------

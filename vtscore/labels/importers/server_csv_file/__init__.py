@@ -6,8 +6,8 @@ where the Python process is running), as opposed to the local
 browser.  The file format is identical: a header row with ``md5`` and
 ``label`` columns.
 
-No additional pip packages are required; uses only Python's ``csv``,
-``io``, and ``pathlib`` stdlib modules.
+No additional pip packages are required; uses only Python's ``csv``
+and ``io`` stdlib modules.
 """
 
 from __future__ import annotations
@@ -15,11 +15,10 @@ from __future__ import annotations
 import csv
 import io
 import json
-from pathlib import Path
 from typing import Any
 
 from vtscore.config import DATA_DIR
-from vtscore.io import desanitize_csv_cell
+from vtscore.io import desanitize_csv_cell, read_server_bytes
 from vtscore.labels.importers.base import LabelImporter, PluginField
 
 
@@ -54,13 +53,8 @@ class ServerCsvLabelImporter(LabelImporter):
 
     def run(self, field_values: dict[str, Any]) -> list[dict[str, Any]]:
         """Read and parse the CSV labels file from the server filesystem."""
-        path = Path(field_values["filepath"])
-        if not path.exists():
-            raise ValueError(f"File not found: {path}")
-        if not path.is_file():
-            raise ValueError(f"Not a file: {path}")
-
-        raw = path.read_bytes()
+        raw = read_server_bytes(field_values["filepath"])
+        assert raw is not None  # missing_ok defaults to False, so a miss raises
         return _parse_csv_bytes(raw)
 
     def run_cli(self, field_values: dict[str, Any]) -> list[dict[str, Any]]:
