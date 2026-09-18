@@ -139,6 +139,52 @@ classes VG could not carry because free text collapsed them onto `bike` and
 barred by `scale_study_exclusion` because its head noun `light` is not an object;
 COCO's vocabulary has no head nouns to exclude.
 
+## What actually caps the class list
+
+If classes are selected on the count requirement alone — every class clearing
+`SCALE_N_POS` in all three bands — *C* goes from 25 to **54**. The question that
+decides whether that is takeable is not per-class supply, which is the point of
+the rule; it is the **shared negative pool**, which needs images holding *none*
+of *C*. Every class added shrinks it, and #3604 measured four classes evicting
+34% of it on VG.
+
+Measured over COCO, adding classes in supply order:
+
+| \|C\| | clean pool | vs `SCALE_N_NEG` | last added |
+|---:|---:|---:|---|
+| 25 | 49,503 | 5.0x | `fire hydrant` |
+| 30 | 23,052 | 2.3x | `skis` |
+| 40 | 20,775 | 2.1x | `suitcase` |
+| 50 | 16,967 | 1.7x | `airplane` |
+| **54** | **16,058** | **1.6x** | `mouse` |
+
+**All 54 clear it.** The pool needs 9,900 negatives plus 1,000 spares — 10,900 —
+and 16,058 candidates cover that at **1.5x**, against 4.5x for the current 25.
+Thinner, and enough. (The table's column is against `SCALE_N_NEG` alone, which is
+why it reads 1.6x there; the spares are what make the honest figure 1.5x.)
+
+The cliff between 25 and 30 is almost entirely one class. `person` holds 66,808
+images and costs the pool **26,132** on its own, more than the other 28 candidates
+combined:
+
+| candidate | images it holds | new to the pool |
+|---|---:|---:|
+| `person` | 66,808 | **26,132** |
+| `surfboard` | 3,635 | 2,810 |
+| `tennis racket` | 3,561 | 2,333 |
+| … | | |
+| `parking meter` | 742 | 149 |
+
+Without `person` the 53 remaining leave **22,476** clean (2.1x). So `person` is
+the one class whose inclusion is a real trade rather than a free addition, and it
+is a trade about the negative pool — not about `person` being awkward.
+
+**What this does not settle** is headroom. At 1.6x, 68% of the clean pool is
+consumed by the pool and its spares, which leaves little room to retire a
+contaminated negative later — the reason spares exist at all (#3670). That is an
+argument for measuring the retirement rate before fixing `SCALE_N_NEG`, not
+against widening.
+
 ## What is inside a COCO class, and why that is not the review problem
 
 Choosing a class list raised a second question: **which classes have boundaries
@@ -188,7 +234,7 @@ nothing to consult, and decides. So a purity threshold would select the wrong
 classes. Read the **name list** instead — it is exactly the text
 `SCALE_CLASS_RULES` needs, and it costs a minute per class against a review pass.
 
-### The signal that does select: the scatter rate
+### Scatter: a characteristic to record, not a criterion to select on
 
 A third number is worth more than either for *choosing* classes, and has nothing
 to do with definitions.
@@ -243,9 +289,29 @@ Measured over COCO for the current *C* and the shortlist:
 | `kite` | 45% | `baseball bat` | 15% |
 | `bird` | 43% | `mouse` | 15% |
 
-`car` discards 59% of its images; `fire hydrant` 5%. That is a real, measured
-difference in what a class costs to build and to review, and unlike purity it
-points the same way as every other consideration.
+`car` discards 59% of its images; `fire hydrant` 5%.
+
+**This report's first draft proposed selecting classes on that number. That was
+wrong**, and the reason is worth recording because it is easy to repeat: *scatter
+is a proxy for detection difficulty*. A class that appears as many small
+scattered instances is harder to find than one that fills the frame, so building
+*C* out of low-scatter classes would make the benchmark systematically easier and
+bias every result it produces optimistically. A selection rule that quietly
+correlates with the quantity being measured is not a convenience, it is a
+confound.
+
+Scatter is real and worth **tracking** — it costs supply, render legibility and
+band meaning — but it belongs beside a result as a covariate, not in front of one
+as a filter. If the widened class list happens to span the scatter range, that is
+a property worth having, not a cost to manage.
+
+The mechanism this report first offered in support — that dropping high-scatter
+classes would preferentially strip the `small` band, attacking the study's own
+axis — is only weakly borne out and should not be leaned on. Over the 54
+qualifying classes the correlation between scatter rate and small-band share of
+supply is **0.21**: the highest-scatter third carries 23.3% of its supply in the
+`small` band against 19.6% for the lowest-scatter third. Real, but small. The
+argument against selecting on scatter rests on the confound, not on this.
 
 One genuine boundary contest does fall out of the table, and it is actionable:
 **17% of COCO `truck` boxes are objects LVIS calls `car_(automobile)`**, while

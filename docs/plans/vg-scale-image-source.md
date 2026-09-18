@@ -118,26 +118,42 @@ and it is cheap to settle — see the first item below.
 
 <!-- item-sep -->
 
-- **Widen the class list on the measured shortlist, and select on scatter rather
-  than on definitions.** 29 classes beyond the current 25 clear the shipped floor
-  in all three bands. Two things the #3983 census settles in advance: the classes
-  VG blocked for *vocabulary* reasons all return (`motorcycle`, `surfboard`,
-  `skateboard`, `snowboard` stop being aliases of `bike`/`board`; `potted plant`
-  goes from 1 small-band image to 299), while #3603's structural finding is
-  independently confirmed and still binds — `giraffe` has 3 small-band images in
-  all of COCO against 14 in VG, because a class that owns its scene is
-  photographed filling the frame whatever the source. So the easy end still
-  cannot be widened; everything else can.
+- **Widen *C* to every class meeting the count requirement — 54 of COCO's 80.**
+  The selection rule is the count and nothing else: a class is in if it clears
+  `SCALE_N_POS` in all three bands. Measured, that is **54 classes, 29 beyond the
+  current 25**, and the shared negative pool survives all of them — 16,058 clean
+  images against the 10,900 the pool and its spares need (**1.5x**, against 4.5x
+  at 25). Per-class supply is therefore not what caps the list; the pool is, and
+  it does not bind.
 
-  **Do not select for tidy boundaries.** #3983's second half measured what is
-  inside each COCO class and found that heterogeneity does not predict review
-  pain: `book` is 85% pure with `magazine` at 6%, `cell phone` 89% with
-  `telephone` at 4%, `knife` 93%, `bench` 93% — every class whose review split is
-  homogeneous. What splits a reviewer is an unwritten rule meeting a minority
-  case, at 4% as surely as at 40%. Select on the **scatter rate** instead, which
-  is a real cost and is measured in the same pass: `chair` 52%, `car` 59%,
-  `book` 58%, `bottle` 50% against `fire hydrant` 5%, `microwave` 6%, `stop sign`
-  8%, `frisbee` 11%, `sink` 13%, `dog` 13%. (Sonnet 5)
+  **Do not select on scatter, purity, or anything else correlated with
+  difficulty.** Scatter is a proxy for how hard a class is to detect, so building
+  *C* out of low-scatter classes would make the benchmark systematically easier
+  and bias every result optimistically — a selection rule that correlates with
+  the quantity being measured is a confound, not a convenience. Record scatter as
+  a **covariate** beside a result instead; scatter-diversity across a wider *C*
+  is a property worth having rather than a cost to manage. The same logic retires
+  the purity idea: #3983 showed it does not predict review pain anyway, and even
+  had it, it would have been the wrong axis to filter on.
+
+  Two facts the census settles in advance. The classes VG blocked for
+  *vocabulary* reasons all return (`motorcycle`, `surfboard`, `skateboard`,
+  `snowboard` stop being aliases of `bike`/`board`; `potted plant` goes from 1
+  small-band image to 299). And #3603's structural finding is independently
+  confirmed and still binds — `giraffe` has 3 small-band images in all of COCO
+  against 14 in VG — so the scene-exclusive easy end cannot be widened whatever
+  the source; everything else can. (Sonnet 5)
+
+<!-- item-sep -->
+
+- **Decide `person` separately from the other 28.** It qualifies on counts, and
+  it is the only candidate whose inclusion is a genuine trade: it holds 66,808
+  images and costs the shared negative pool **26,132** on its own, more than the
+  other 28 candidates combined. With it the pool sits at 1.5x over-subscription,
+  without it 2.1x. That is a decision about pool headroom, not about `person`
+  being awkward, and it wants a measured negative-retirement rate rather than a
+  feel — at 1.6x, 68% of the clean pool is spoken for and there is little room to
+  retire a contaminated negative later, which is what spares are for (#3670). (human)
 
 <!-- item-sep -->
 

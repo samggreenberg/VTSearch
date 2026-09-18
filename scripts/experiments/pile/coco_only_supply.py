@@ -72,21 +72,32 @@ def read_coco(ann: Path) -> tuple[dict[int, tuple[int, int]], dict[int, dict[str
     return dims, boxes, names
 
 
-def band_counts(dims, boxes) -> tuple[collections.Counter, collections.Counter, dict[str, set]]:
-    """Per-``(class, band)`` and band-free candidate counts, by the shipped rule."""
+def band_counts(dims, boxes):
+    """``(cell, bandfree, holders, scattered, seen)`` by the shipped rule.
+
+    ``scattered`` / ``seen`` give the scatter rate, which is reported as a
+    per-class **characteristic**. It is never used to include or exclude a class:
+    scatter correlates with how hard a class is to detect, so selecting on it
+    would bias the benchmark toward easy classes and flatter every result.
+    """
     cell: collections.Counter = collections.Counter()
     bandfree: collections.Counter = collections.Counter()
     holders: dict[str, set] = collections.defaultdict(set)
+    scattered: collections.Counter = collections.Counter()
+    seen: collections.Counter = collections.Counter()
     for iid, per_class in boxes.items():
         w, h = dims[iid]
         for cls, bs in per_class.items():
             holders[cls].add(iid)
+            seen[cls] += 1
             band = band_for(bs, w, h)
+            if band == SCATTERED:
+                scattered[cls] += 1
             if band in (SCATTERED, OVERSIZE):
                 continue
             cell[(cls, band)] += 1
             bandfree[cls] += 1
-    return cell, bandfree, holders
+    return cell, bandfree, holders, scattered, seen
 
 
 def main() -> None:
@@ -99,7 +110,11 @@ def main() -> None:
     args = ap.parse_args()
 
     dims, boxes, names = read_coco(args.annotations)
-    cell, bandfree, holders = band_counts(dims, boxes)
+    cell, bandfree, holders, scattered, seen = band_counts(dims, boxes)
+
+    def scatter_pct(cls: str) -> float:
+        """Share of a class's images the scatter guard rejects. A covariate, not a filter."""
+        return 100 * scattered[cls] / seen[cls] if seen[cls] else 0.0
 
     classes = list(pc.SCALE_CLASSES)
     clean = set(dims) - set().union(*(holders[c] for c in classes))
@@ -120,10 +135,29 @@ def main() -> None:
     print("-" * 66)
     print(f"cells short of {args.floor}: {short} of {len(classes) * 3}")
 
+    # The roster: every class clearing the floor, and nothing else. Scatter is
+    # printed beside it as a CHARACTERISTIC, never as a criterion -- it is a proxy
+    # for detection difficulty, so selecting on it would make the benchmark
+    # systematically easier and flatter every result (#3983 follow-up).
     wide = [c for c in sorted(names) if min(cell[(c, b)] for b in BANDS) >= args.floor]
     print(
-        f"\nCOCO classes clearing {args.floor} in all three bands: {len(wide)} of {len(names)} "
+        f"\nROSTER -- classes clearing {args.floor} in all three bands: {len(wide)} of {len(names)} "
         f"({len([c for c in wide if c not in set(classes)])} beyond the current {len(classes)})"
+    )
+    print(f"\n{'class':<16}" + "".join(f"{b:>9}" for b in BANDS) + f"{'scatter':>9}   in C?")
+    print("-" * 62)
+    for c in sorted(wide, key=lambda c: -scatter_pct(c)):
+        print(
+            f"{c:<16}"
+            + "".join(f"{cell[(c, b)]:>9,}" for b in BANDS)
+            + f"{scatter_pct(c):>8.0f}%   {'yes' if c in set(classes) else ''}"
+        )
+
+    # The pool is what actually caps the roster: a negative must hold NONE of C.
+    roster_clean = len(dims) - len(set().union(*(holders[c] for c in wide)))
+    need = pc.SCALE_N_NEG + pc.SCALE_N_NEG_SPARE
+    print(
+        f"\nshared pool at |C|={len(wide)}: {roster_clean:,} clean against {need:,} needed ({roster_clean / need:.1f}x)"
     )
 
     if args.out:
@@ -135,7 +169,9 @@ def main() -> None:
                     "floor": args.floor,
                     "cells": {f"{c}@{b}": cell[(c, b)] for c in classes for b in BANDS},
                     "band_free": {c: bandfree[c] for c in classes},
-                    "all_classes_clearing_floor": wide,
+                    "roster": wide,
+                    "roster_clean_pool": roster_clean,
+                    "scatter_pct": {c: round(scatter_pct(c), 1) for c in wide},
                 },
                 indent=2,
             )
