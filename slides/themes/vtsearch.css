@@ -355,6 +355,11 @@ section.speaker .speaker-visual {
   width: 40%;
   margin-right: 34px;
 }
+/* An equal-weight overview carries the whole slide rather than a hero plus
+   footnotes, so it gets a wider column: at 40% its frames would come out half
+   the size of the hero they replaced, which is the opposite of the point. The
+   notes give up width beside it and take it all back underneath. */
+section.speaker .speaker-visual--equal { width: 52%; }
 section.speaker .speaker-visual img {
   width: 100%;
   display: block;

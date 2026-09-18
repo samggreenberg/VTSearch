@@ -16,10 +16,10 @@
 <!-- build: figs/ui-train-loop.build5.webp -->
 
 <!-- **a** — Train, one second after opening it, and the interaction is already
-     complete: one item in the middle, **Good** and **Bad** under it, the answers
-     so far — none — on the right. The sliver on the far left is autopilot,
-     folded to a rail: it picks what to put in front of you, so nobody is
-     scrolling a result list deciding what to judge. -->
+     complete: one item in the middle, **Good** and **Bad** under it, the
+     answers so far — none — on the right. The sliver on the left is autopilot,
+     folded to a rail: it picks what you see, so nobody scrolls a list deciding
+     what to judge. -->
 
 <!-- **b** — First answer, and it lands in the Good pile. Behind it, the head
      retrains and all 228 items re-rank. That is a fraction of a second, because
@@ -28,10 +28,10 @@
 
 <!-- **c** — Second. Watch the middle as much as the right: the item changed,
      because the model that just retrained went looking for what it could least
-     call. Which is why it is showing you three teddy bears in front of a shelf
-     of DVD box sets — **the frame from slide 2**, the one the room could not
-     agree about. Not an accident: it is the nearest thing this corpus has to
-     the edge of the concept. -->
+     call. Which is why it shows three teddy bears in front of a shelf of DVD
+     box sets — **the frame from slide 2**, the one the room could not agree
+     about. Not an accident: it is the nearest thing this corpus has to the
+     edge of the concept. -->
 
 <!-- **d** — Third, and the first **No**. Box sets are not books to the person
      doing the asking. Say it out loud — it is the whole argument of slide 2
@@ -47,11 +47,10 @@
 
 <!-- **f** — Twenty-eight questions in — twelve Good, sixteen Bad, a few
      minutes, the whole budget this task was ever going to get. Note what it
-     asks *now*: a man on an exercise bike, a bookcase over his shoulder. The
-     obvious ones are settled, so what is left is the frames where the books are
-     *present* and the picture is not about them — exactly the line the rest of
-     the talk is about. -->
+     asks *now*: a man on an exercise bike, a bookcase over his shoulder. What
+     is left is the frames where the books are *present* and the picture is not
+     about them — exactly the line the rest of the talk is about. -->
 
 <!-- If someone asks where the rest of the corpus went: there is a manual mode
-     with the whole pile in a grid, sort controls and a threshold slider. That
-     slider is a character in the second half of the talk. -->
+     with the whole pile in a grid, sort controls and a threshold slider — a
+     character in the second half of the talk. -->

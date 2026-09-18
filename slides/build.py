@@ -340,6 +340,11 @@ SPEAKER_H = 720 - 2 * SPEAKER_PAD_Y
 #: That reflow is what buys a wordy slide its one page: a note that starts
 #: beside a 478px column finishes across the full 1196.
 VISUAL_FRACTION = 0.40
+#: An equal-weight overview gets a wider column, because it is carrying the
+#: whole slide rather than a hero plus footnotes: at 40% its frames would be
+#: half the size of the hero they replaced, which is the opposite of the point.
+#: The notes lose a little width beside it and get it all back underneath.
+VISUAL_FRACTION_EQUAL = 0.52
 VISUAL_W = VISUAL_FRACTION * SPEAKER_W
 VISUAL_GUTTER = 34
 FRAME_GAP = 10
@@ -366,12 +371,12 @@ NOTES_LINES = int(SPEAKER_H // NOTES_LINE_PX)
 NOTES_PARAGRAPH_GAP = 0.4
 
 
-#: How tall a build-up's strip of earlier frames may stand, in px. It is a
-#: budget rather than a column count because the two things the strip trades
-#: against each other — how big a thumbnail is, and how many lines of notes run
-#: full width under it — are both measured in pixels. Set where a ten-page
-#: build still leaves the notes more than half the page.
-STRIP_MAX_H = 100
+#: How tall a build-up's strip of earlier frames may stand, in px. A budget
+#: rather than a column count, because the two things the strip trades against
+#: each other — how big a thumbnail is, and how many lines of notes run full
+#: width under it — are both measured in pixels. Set where a ten-frame build
+#: still leaves the notes two thirds of the page.
+STRIP_MAX_H = 150
 
 
 def frame_columns(count: int, style: str) -> int:
@@ -384,26 +389,33 @@ def frame_columns(count: int, style: str) -> int:
 
     A **build-up** strip is an afterthought under the hero, and the presenter
     only has to recognise those frames rather than read them, so it is sized to
-    a height budget instead: the fewest columns (hence the largest thumbnails)
-    whose strip still fits `STRIP_MAX_H`. That keeps a nine-frame build from
-    spending two thirds of the page on thumbnails of one picture, and it is why
-    a long build's frames are smaller than a short one's.
+    a height budget instead: the fewest columns — hence the largest thumbnails
+    — whose strip still fits `STRIP_MAX_H`. That keeps a ten-frame build from
+    spending most of the page on thumbnails of one picture, and it is why a
+    long build's frames come out smaller than a short one's.
     """
     if style == "equal":
         return count if count <= 3 else (2 if count == 4 else 3)
-    # Six is the ceiling because the theme defines --c2 through --c6. Past
-    # twelve frames the strip grows a third row rather than a seventh column,
-    # which is the right trade anyway: a seventh column is 66px wide.
-    for cols in range(2, 6):
-        if _strip_height(count, cols) <= STRIP_MAX_H:
+    # Never fewer than three columns: at two, a two-frame build's lone earlier
+    # frame comes out half the size of the hero above it and stops reading as
+    # subordinate to it. Six is the ceiling because the theme defines --c2
+    # through --c6; past twelve frames the strip grows a third row rather than a
+    # seventh column, which is the right trade anyway — a seventh column is 66px.
+    for cols in range(3, 6):
+        if _grid_height(count, cols) <= STRIP_MAX_H:
             return cols
     return 6
 
 
-def _strip_height(count: int, cols: int) -> float:
+def _grid_height(count: int, cols: int, width: float = VISUAL_W) -> float:
     rows = math.ceil(count / cols)
-    cell = (VISUAL_W - (cols - 1) * FRAME_GAP) / cols
+    cell = (width - (cols - 1) * FRAME_GAP) / cols
     return rows * _cell_height(cell) + (rows - 1) * FRAME_GAP
+
+
+def visual_width(style: str) -> float:
+    """How wide the floated visual column stands, in px. See `frame_overview`."""
+    return (VISUAL_FRACTION_EQUAL if style == "equal" else VISUAL_FRACTION) * SPEAKER_W
 
 
 def _cell_height(width: float) -> float:
@@ -417,17 +429,15 @@ def speaker_visual_height(frames: int, style: str) -> float:
     pictures) and how much is full width (below them), so it has to agree with
     the theme to the pixel rather than approximately.
     """
+    width = visual_width(style)
     if frames < 2:
-        return _cell_height(VISUAL_W)
+        return _cell_height(width)
     if style == "equal":
-        cols = frame_columns(frames, style)
-        rows = math.ceil(frames / cols)
-        cell = (VISUAL_W - (cols - 1) * FRAME_GAP) / cols
-        return rows * _cell_height(cell) + (rows - 1) * FRAME_GAP
-    return _cell_height(VISUAL_W) + STRIP_TOP + _strip_height(frames - 1, frame_columns(frames - 1, style))
+        return _grid_height(frames, frame_columns(frames, style), width)
+    return _cell_height(width) + STRIP_TOP + _grid_height(frames - 1, frame_columns(frames - 1, style))
 
 
-def notes_lines_used(notes: list[str], visual_height: float) -> float:
+def notes_lines_used(notes: list[str], visual_height: float, visual_width_px: float = VISUAL_W) -> float:
     """Estimate how many lines *notes* occupy beside and below the visual column.
 
     Lines above the float's bottom edge are narrow; everything after it runs
@@ -437,7 +447,7 @@ def notes_lines_used(notes: list[str], visual_height: float) -> float:
     worth having.
     """
     beside = math.ceil(visual_height / NOTES_LINE_PX)
-    narrow = SPEAKER_W - VISUAL_W - VISUAL_GUTTER
+    narrow = SPEAKER_W - visual_width_px - VISUAL_GUTTER
     line = 0.0
     for index, note in enumerate(notes):
         if index:
@@ -454,7 +464,7 @@ def notes_lines_used(notes: list[str], visual_height: float) -> float:
 
 def notes_overflow(notes: list[str], frames: int, style: str) -> float:
     """Lines by which *notes* miss fitting one speaker page; 0.0 when they fit."""
-    used = notes_lines_used(notes, speaker_visual_height(frames, style))
+    used = notes_lines_used(notes, speaker_visual_height(frames, style), visual_width(style))
     return max(0.0, used - NOTES_LINES)
 
 
@@ -548,11 +558,12 @@ def speaker_page(deck: str, pages: list[int], group: list[int], text: str) -> st
     by `check_speaker_fit`, not a continuation page: a presenter mid-sentence
     does not turn over, so notes split across two pages are notes half read.
     """
-    visual = frame_overview(deck, pages, group, fragment_frame_style(text))
+    style = fragment_frame_style(text)
+    visual = frame_overview(deck, pages, group, style)
     notes = showing_notes(text, pages, group) or ["*(no presenter notes on this slide)*"]
     return (
         "<!-- _class: speaker -->\n<!-- _paginate: false -->\n\n"
-        '<div class="speaker-page">\n<div class="speaker-visual">\n'
+        f'<div class="speaker-page">\n<div class="speaker-visual speaker-visual--{style}">\n'
         f"{visual}"
         '</div>\n<div class="speaker-notes">\n\n' + "\n\n".join(notes) + "\n\n</div>\n</div>"
     )
