@@ -594,7 +594,9 @@ def cone_fig() -> None:
     degrees across where every cosine is high and nothing is far from anything;
     the mean it is packed around; that mean subtracted; and the renormalisation
     that puts the difference back on the sphere. Both cosine ranges in the
-    captions are computed from the points on screen rather than asserted.
+    captions are computed from the points on screen rather than asserted —
+    and `fragments/atlas-cone.md` quotes the first of them in its notes, so a
+    change to the seed or the cap angle is a change to that note too.
 
     **Drawn on a sphere rather than on a circle, and the dimension is the whole
     reason.** Centring a narrow cap moves its points into the cap's tangent
@@ -676,7 +678,9 @@ def _pvalues_stage(stage: int) -> plt.Figure:
         zorder=4,
     )
     ax.axhline(0.0, color=GREEN, linewidth=2.0, zorder=1)
-    ax.text(0.352, 0.006, "calibrated", color=GREEN, fontsize=NOTE_PT, ha="right", va="bottom", zorder=4)
+    # Left end of the line it names: the right end is where the patch-embedder
+    # note goes, and two labels in one corner is one label nobody reads.
+    ax.text(0.004, 0.006, "calibrated", color=GREEN, fontsize=NOTE_PT, ha="left", va="bottom", zorder=4)
 
     drawn = [r for r in rows if r["shipped"]] if stage == 1 else rows
     for record in drawn:

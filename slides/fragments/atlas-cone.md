@@ -17,7 +17,7 @@
 <!-- **a** — Every stored embedding is a unit vector, so the collection lives on
      a sphere — and a contrastive embedder does not spread it over that sphere.
      It packs the whole corpus into a cap a few degrees across. Every pair of
-     items on screen is at cosine **0.93 or better**: a photograph of a shelf
+     items on screen is at cosine **0.89 or better**: a photograph of a shelf
      and a photograph of a bicycle are, by this measure, almost the same thing. -->
 
 <!-- **b** — Which means the number carrying nearly all of that similarity is
