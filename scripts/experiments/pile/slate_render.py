@@ -2,13 +2,20 @@
 
 Two framings share one crop:
 
-* :func:`inset_crop` -- the magnified, context-padded crop of the box, used by both.
-* ``make_positive_slate.draw_with_inset`` pastes it *over* a bottom corner of the photo.
+* :func:`inset_crop` -- the magnified, context-padded crop of the box.
+  :func:`draw_with_inset` pastes it *over* a bottom corner of the photo.
   Fine for "is this box one?", where the reviewer looks at the box.
-* :func:`draw_with_side_inset` extends the canvas with black padding and places it
-  *beside* the photo, so no part of the scene is covered. Needed for any question
-  about *other* instances in the frame -- a prominence triage asks whether a more
+* :func:`draw_with_side_inset` derives its own crop (:func:`side_crop_rect`) and places it
+  on black padding *beside* the photo, so no part of the scene is covered. Needed for any
+  question about *other* instances in the frame -- a prominence triage asks whether a more
   prominent instance exists, and the corner inset can hide exactly that instance.
+
+Both magnify with **one scale for both axes**, and neither draws anything over the
+magnified view: the photo says WHERE the box is, the magnified view says WHAT IS UNDER
+IT, and an outline across a magnified small object hides the pixels the question is about.
+Their surrounds are grey (:data:`PANEL_EDGE`) for the same reason -- a red one reads as
+the box. The corner inset acquired all three only in #3961; until then it capped width
+and height to the same target independently, squashing every non-square crop.
 
 **The side framing changes the canvas, and a drawn box is normalised to the canvas.**
 The app stores ``region_box`` in [0, 1] relative to the image as displayed, so a box
@@ -26,10 +33,13 @@ from __future__ import annotations
 from collections.abc import Sequence
 from pathlib import Path
 
-#: How big the inset may get, as a fraction of the image's shorter side.
+#: How big the inset may get, as a fraction of the image's shorter side. The inset fits
+#: inside a square this wide; its LONGER side is what touches the edge, so a 3:1 crop is
+#: drawn 3:1 rather than squared off.
 INSET_FRAC = 0.42
-#: The inset magnifies at least this much, so a sub-patch box is actually visible.
-MIN_ZOOM = 3.0
+#: Outline of a magnified view itself, in either framing -- deliberately NOT red, so it cannot
+#: be read as the box. The corner inset used red until #3961, around the padded *context*.
+PANEL_EDGE = (110, 110, 110)
 
 
 def inset_crop(im, box: tuple[float, float, float, float]):
@@ -61,13 +71,57 @@ def inset_crop(im, box: tuple[float, float, float, float]):
     cx1, cy1 = max(cx1, cx0 + 2), max(cy1, cy0 + 2)
     crop = im.crop((cx0, cy0, min(cx1, W), min(cy1, H)))
 
+    # ONE scale for both axes, so the crop keeps its shape. This used to be
+    # ``zoom = max(MIN_ZOOM, fit)`` followed by capping width and height to *target*
+    # independently, which resized any crop wider or taller than the target into a
+    # square (#3961). That was not the rare case it read as: the padding floor above
+    # keeps the crop at roughly 0.2 * min(W, H) or more per side, so the 3x floor
+    # essentially always won and essentially every inset came out target-by-target.
+    # Fitting the longer side reproduces what the old expression did on the crops
+    # small enough to escape the cap, and is honest about the rest.
     target = int(min(W, H) * INSET_FRAC)
-    zoom = max(MIN_ZOOM, target / max(crop.width, crop.height))
-    iw, ih = int(crop.width * zoom), int(crop.height * zoom)
-    iw, ih = min(iw, target), min(ih, target)
-    crop = crop.resize((max(1, iw), max(1, ih)), Image.LANCZOS)
+    zoom = target / max(crop.width, crop.height)
+    iw, ih = max(1, round(crop.width * zoom)), max(1, round(crop.height * zoom))
+    crop = crop.resize((iw, ih), Image.LANCZOS)
     lw = max(2, int(min(W, H) * 0.006))
     return crop, (x0, y0, x1, y1), lw
+
+
+def draw_with_inset(src: Path, box: tuple[float, float, float, float], dest: Path) -> tuple[int, int]:
+    """Write *src* with *box* outlined and a magnified inset of its contents over a bottom corner.
+
+    The crop is :func:`inset_crop`. :func:`draw_with_side_inset` is the other framing, which
+    pays canvas geometry to leave the whole photo visible. The canvas is untouched here, so a
+    box drawn on this render is already in photo coordinates and needs no conversion.
+
+    **The box is drawn on the photo only, and the inset's surround is grey.** The photo says
+    WHERE the box is; the inset says WHAT IS UNDER IT, so nothing is drawn across the
+    magnified object. A red surround here framed the padded *context* rather than the box,
+    and read as the box itself -- which, with the squashed crop that :func:`inset_crop` used
+    to produce, is how a reviewer could not tell whether a speck near the edge was inside
+    it (#3961). Both were fixed on the side panel first (#3960).
+    """
+    from PIL import Image, ImageDraw  # noqa: PLC0415
+
+    with Image.open(src) as im:
+        im = im.convert("RGB")
+        W, H = im.size
+        crop, (x0, y0, x1, y1), lw = inset_crop(im, box)
+
+        out = im.copy()
+        d = ImageDraw.Draw(out)
+        d.rectangle([x0, y0, x1, y1], outline=(255, 32, 32), width=lw)
+
+        # Inset in whichever bottom corner is furthest from the box, so the
+        # magnifier never covers the thing it is magnifying.
+        ix = 0 if (x0 + x1) / 2 > W / 2 else W - crop.width
+        iy = H - crop.height
+        out.paste(crop, (ix, iy))
+        d.rectangle([ix, iy, ix + crop.width - 1, iy + crop.height - 1], outline=PANEL_EDGE, width=lw)
+        # No chroma subsampling: at the default 4:2:0 a 2 px red outline blurs to a dull
+        # purple, and the outline is exactly what the reviewer is reading.
+        out.save(dest, quality=92, subsampling=0)
+        return out.size
 
 
 def _box_px(im, box: Sequence[float]) -> tuple[float, float, float, float]:
@@ -96,8 +150,6 @@ INSTANCE_EDGE = (255, 190, 0)
 #: Two annotations overlapping by at least this much are the same object annotated twice, for
 #: DISPLAY only: VG holds 21 boxes on one bench image and 23 on one bird image, mostly repeats.
 DUPLICATE_IOU = 0.5
-#: Outline of the side panel itself -- deliberately NOT red, so it cannot be read as the box.
-PANEL_EDGE = (110, 110, 110)
 
 
 def distinct_boxes(boxes: Sequence[Sequence[float]], iou: float = DUPLICATE_IOU) -> list[Sequence[float]]:
@@ -151,11 +203,12 @@ def draw_with_side_inset(
     height, where padding below would shrink it. The photo sits at the canvas origin, so
     :func:`side_inset_to_original` is a pure rescale.
 
-    **The panel is a faithful view, not the corner inset moved sideways.** The corner inset
-    (:func:`inset_crop`) caps width and height to the same target independently, which squashes
-    any crop that is not square (#3926). Here the crop keeps its aspect ratio and the panel's own
-    edge is grey. The context padding is the corner inset's, so a small object still comes with
-    its surroundings.
+    **The panel is a faithful view, not the corner inset moved sideways.** It derives its own
+    crop (:func:`side_crop_rect`), covering every annotation rather than one box, and scales it to
+    the photo's height rather than to a fraction of it. What it shares with the fixed corner inset
+    is the shape of the thing: one scale for both axes, a grey edge, and the context padding, so a
+    small object still comes with its surroundings. (Both of those were the panel's alone until
+    #3961; the corner inset squashed non-square crops and framed them in red.)
 
     **Nothing is drawn over the panel.** The photo carries the outlines, so the reviewer reads
     *where* the box is there, and the panel shows *what is under it* -- an outline drawn across a

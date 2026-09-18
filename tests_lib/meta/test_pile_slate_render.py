@@ -198,3 +198,84 @@ class TestCanvasBoxToOriginal:
         out, where = sr.canvas_box_to_original([0.05, 0.10, 640 / g["canvas_w"] + 0.01, 0.99], g, shown)
         assert where == "across both"
         assert out[2] == 1.0 and all(0.0 <= v <= 1.0 for v in out)
+
+
+class TestCornerInset:
+    """The corner framing (#3961): one scale for both axes, and a grey surround.
+
+    It used to cap the magnified crop's width and height to the same target
+    independently, which resized every non-square crop into a square, and to frame
+    the result in red -- around the padded context rather than around the box.
+    """
+
+    @pytest.mark.parametrize(("w", "h"), [(800, 600), (480, 800), (333, 500), (600, 600)])
+    def test_a_frame_filling_crop_is_magnified_at_the_photos_own_aspect(self, sr, tmp_path, w, h):
+        """Box plus context padding reaches every edge, so the crop IS the photo: no re-derivation."""
+        from PIL import Image
+
+        with Image.open(_photo(tmp_path, w, h, f"{w}x{h}.jpg")) as im:
+            crop, _, _ = sr.inset_crop(im.convert("RGB"), (0.03, 0.03, 0.97, 0.97))
+        assert abs(crop.width / crop.height / (w / h) - 1.0) < 0.02, f"{crop.size} is not {w}:{h}"
+
+    def test_a_non_square_crop_is_not_squashed_into_a_square(self, sr, tmp_path):
+        """The bug itself: on a SQUARE photo, only the crop's own shape can make the inset non-square."""
+        from PIL import Image
+
+        with Image.open(_photo(tmp_path, 600, 600, "sq.jpg")) as im:
+            im = im.convert("RGB")
+            wide, _, _ = sr.inset_crop(im, (0.20, 0.47, 0.80, 0.53))  # 10:1 box -> a wide crop
+            tall, _, _ = sr.inset_crop(im, (0.47, 0.20, 0.53, 0.80))  # its transpose
+        assert wide.width > wide.height, f"wide crop rendered {wide.size}"
+        assert tall.height > tall.width, f"tall crop rendered {tall.size}"
+        assert wide.size == (tall.height, tall.width), "transposed boxes should transpose the inset"
+
+    def test_the_inset_fills_its_target_on_the_longer_side_and_never_exceeds_it(self, sr, tmp_path):
+        """The magnification the old 3x floor was meant to give, without the squash paying for it."""
+        from PIL import Image
+
+        with Image.open(_photo(tmp_path, 800, 600)) as im:
+            im = im.convert("RGB")
+            target = int(600 * sr.INSET_FRAC)
+            for box in ((0.10, 0.40, 0.60, 0.52), (0.50, 0.50, 0.52, 0.53), (0.40, 0.05, 0.47, 0.75)):
+                crop, _, _ = sr.inset_crop(im, box)
+                assert max(crop.size) == target, f"{box}: {crop.size} does not reach {target}"
+                assert min(crop.size) <= target, f"{box}: {crop.size} exceeds {target}"
+
+    def test_the_inset_is_framed_in_grey_not_red(self, sr, tmp_path):
+        """A red frame around the padded context reads as the box, which is drawn red too."""
+        from PIL import Image
+
+        box = (0.40, 0.40, 0.60, 0.60)
+        src = _photo(tmp_path, 640, 480)
+        dest = tmp_path / "corner.jpg"
+        sr.draw_with_inset(src, box, dest)
+        with Image.open(dest) as im:
+            assert im.size == (640, 480), "the corner framing leaves the canvas alone"
+            crop, _, _ = sr.inset_crop(im.convert("RGB"), box)
+            inset = [im.getpixel((x, y)) for x in range(640 - crop.width, 640) for y in range(480 - crop.height, 480)]
+            photo_box_edge = [im.getpixel((x, int(0.40 * 480) + 1)) for x in range(640 - crop.width)]
+        red = lambda p: isinstance(p, tuple) and p[0] > 150 and p[1] < 110 and p[2] < 110  # noqa: E731
+        assert sum(map(red, photo_box_edge)) >= 2, "the photo still carries the red box"
+        assert not any(map(red, inset)), "nothing red is drawn in or around the inset"
+
+    def test_the_inset_goes_in_whichever_bottom_corner_is_furthest_from_the_box(self, sr, tmp_path):
+        """So the magnifier never covers the thing it is magnifying."""
+        from PIL import Image
+
+        src = _photo(tmp_path, 640, 480)
+        for box, left in (((0.70, 0.70, 0.90, 0.90), True), ((0.10, 0.70, 0.30, 0.90), False)):
+            dest = tmp_path / f"c{left}.jpg"
+            sr.draw_with_inset(src, box, dest)
+            with Image.open(dest) as im:
+                crop, _, _ = sr.inset_crop(im.convert("RGB"), box)
+                ix = 0 if left else 640 - crop.width
+                # The photo is a flat colour and the inset magnifies more of the same, so the
+                # grey frame is what says which corner it landed in.
+                edge = im.getpixel((ix + 1, 480 - crop.height))
+                far = im.getpixel(((640 - crop.width if left else 0) + 2, 478))
+            assert isinstance(edge, tuple) and all(abs(c - 110) < 45 for c in edge[:3]), (
+                f"{box}: no grey frame in the {'left' if left else 'right'} corner, got {edge}"
+            )
+            assert isinstance(far, tuple) and all(
+                abs(a - b) < 25 for a, b in zip(far[:3], (0, 90, 200), strict=False)
+            ), f"{box}: the other corner should be untouched photo, got {far}"
