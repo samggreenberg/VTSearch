@@ -402,27 +402,71 @@ ordinary boxes, so it takes a second opinion to see —
 Instance counts alone cannot answer it, because lumping and plain incompleteness
 both raise LVIS's count. Box **area** separates them:
 
-| class | count ratio | COCO box | LVIS box | **area ratio** | |
-|---|---:|---:|---:|---:|---|
-| `banana` | 7.58 | 13.0% | 7.4% | **8.15** | lumps |
-| `apple` | 4.48 | 7.2% | 3.8% | **5.69** | lumps |
-| `car` | 1.40 | 4.6% | 5.7% | **2.09** | lumps |
-| `kite` | 1.20 | 6.2% | 6.5% | **2.08** | lumps |
-| **`book`** | **2.46** | **3.3%** | **3.0%** | **1.83** | **lumps** |
-| `boat` | 1.29 | 11.2% | 9.8% | **1.76** | lumps |
-| `bottle` | 1.36 | 2.6% | 2.3% | 1.44 | agree |
-| `donut` | **1.81** | 8.5% | 8.1% | 1.17 | incompleteness, not lumping |
-| `dog` | 1.05 | 19.7% | 19.3% | 1.07 | agree |
+| class | count ratio | COCO box | LVIS box | **area ratio** | median | ≥1.6 | |
+|---|---:|---:|---:|---:|---:|---:|---|
+| `banana` | 7.58 | 13.0% | 7.4% | **8.15** | 2.15 | 61% | lumps |
+| `apple` | 4.48 | 7.2% | 3.8% | **5.69** | 1.42 | 46% | lumps |
+| `car` | 1.40 | 4.6% | 5.7% | **2.09** | 0.99 | 7% | lumps |
+| `kite` | 1.20 | 6.2% | 6.5% | **2.08** | 1.01 | 16% | lumps |
+| **`book`** | **2.46** | **3.3%** | **3.0%** | **1.83** | **1.22** | **31%** | **lumps** |
+| `boat` | 1.29 | 11.2% | 9.8% | **1.76** | 1.01 | 18% | lumps |
+| `bottle` | 1.36 | 2.6% | 2.3% | 1.44 | 1.02 | 8% | agree (floor) |
+| `sink` | 1.10 | 11.1% | 10.3% | 1.42 | 1.01 | **18%** | agree |
+| `bench` | 1.14 | 15.2% | 15.0% | 1.36 | 1.00 | 10% | agree |
+| `bird` | 1.24 | 10.3% | 9.9% | 1.32 | 1.02 | 8% | agree (floor) |
+| `truck` | 1.09 | 18.0% | 16.6% | 1.18 | 1.01 | 12% | agree |
+| `donut` | **1.81** | 8.5% | 8.1% | 1.17 | 1.02 | 9% | incompleteness, not lumping |
+| `chair` | 1.45 | 7.8% | 7.7% | 1.16 | 1.00 | 8% | agree |
+| `bowl` | 1.26 | 17.6% | 16.8% | 1.15 | 1.01 | 12% | agree |
+| `cup` | 1.22 | 3.9% | 3.9% | 1.15 | 1.02 | 10% | agree (floor) |
+| `spoon` · `backpack` · `fork` · `vase` | 1.12–1.26 | | | 1.08–1.13 | ~1.00 | 5–8% | agree |
+| `umbrella` · `bicycle` · `dog` · `knife` | 1.05–1.21 | | | 1.06–1.07 | ~1.00 | 4–11% | agree |
+| `bus` · `stop sign` · `clock` · `cell phone` | 1.03–1.10 | | | 1.03–1.05 | ~1.00 | 3–6% | agree |
 
-The split is clean — agreeing classes 1.04–1.44, lumping ones 1.76–8.15, nothing
-between — and `donut` shows the discriminator working: 1.81 more instances in
-LVIS, same box size, so COCO simply annotated fewer.
+`fire hydrant` is the one class in *C* with no reading: 295 COCO images, fewer
+than 40 of them carrying LVIS's `fire_hydrant`.
+
+The split is clean **in the means** — agreeing classes 1.03–1.44, lumping ones
+1.76–8.15, with `sink` 1.42 and `bench` 1.36 the closest below — and `donut`
+shows the discriminator working: 1.81 more instances in LVIS, same box size, so
+COCO simply annotated fewer.
 
 **Four classes in *C* are affected — `book`, `car`, `kite`, `boat`** — and the
 bias runs *upward*, toward `large` and away from the `small` band that binds
 everywhere. It is the mirror image of #3924's 8.3% "box on a smaller instance",
 which moves an image one band *down*; both survive the scatter guard, and they
 partly cancel in aggregate while both corrupt individual cells.
+
+### Read the median beside the mean: a class verdict is a tail
+
+The area ratio is a mean over per-image ratios, and it rides on a tail. **Every
+class in *C* has a median of ~1.00** — `boat` 1.01, `car` 0.99, `kite` 1.01, and
+only `book` moves at 1.22. So "COCO lumps `boat`" states that a *minority* of
+boat images carry a pile (18%, the marinas), not that its boxes are typically
+around groups; `car`'s 2.09 rests on 7% of its images.
+
+The per-image rate also refuses to split *C* the way the means do. Classes called
+clean here carry their own pile tail — `sink` 18%, `bowl` and `truck` 12%, `cup`
+10%, `bench` 10% — which is the same order as `car`'s 7% and half of `boat`'s.
+**Dropping the four named classes would therefore not leave a clean *C*.** The
+error is per image, so a per-image guard (#3985 option 4, now #3992) is what this
+distribution argues for, and a class-level drop is not.
+
+Two caveats on the numbers themselves:
+
+- **A fragmented LVIS counterpart makes a reading a floor.** LVIS spells 676 of
+  the birds on COCO's `bird` images `pigeon`/`gull`/`flamingo`/`duck` against
+  1,883 plain `bird`, and on `cup` images writes `glass_(drink_container)` 1,094
+  and `wineglass` 415 beside `cup` 760. Those instances are invisible to a 1:1
+  name match, so `bird` 1.32, `cup` 1.15 and `bottle` 1.44 are lower bounds.
+- **Coverage is thin where COCO is richest.** LVIS's federated design caps each
+  category at a few hundred images, so `car` is read on 17% of its COCO images,
+  `cup` 16%, `chair` 16%, `truck` 16% — against `banana` 90% and `kite` 88%.
+
+The first pass reported 13 rows of the 21 its class map held, and the map itself
+was missing ten classes of *C*. Neither omission was visible in the output, which
+is the defect the script's `NOT COMPARED` line and this table now close: a class
+with no reading and a class with a clean reading are not the same claim.
 
 Filed as **#3985**, with four options and no obviously right one. The two
 findings interact: banding on the **largest instance** would fix lumping and
