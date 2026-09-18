@@ -114,20 +114,19 @@ class TestRender:
         assert g["canvas_h"] == 500
         assert abs(pw / ph - 333 / 500) < 0.01, f"panel {pw}x{ph} is not 333:500"
 
-    def test_the_box_is_drawn_inside_the_panel_where_it_sits_on_the_photo(self, sr, tmp_path):
-        """What the reviewer compares: a pixel on the box's edge in the panel is red, a pixel inside is not."""
+    def test_the_panel_carries_no_outline_at_all(self, sr, tmp_path):
+        """The photo says WHERE the box is; the panel says what is UNDER it, so nothing is drawn on it."""
         from PIL import Image
 
         src = _photo(tmp_path, 640, 480)
         dest = tmp_path / "boxed.jpg"
         g = sr.draw_with_side_inset(src, (0.40, 0.40, 0.60, 0.60), dest)
         with Image.open(dest) as im:
-            W = 640
-            rows = [im.getpixel((x, 240)) for x in range(W, g["canvas_w"])]
-            centre = im.getpixel(((W + g["canvas_w"]) // 2, 240))
-        panel = [p for p in rows if isinstance(p, tuple) and p[0] > 180 and p[1] < 90]
-        assert len(panel) >= 2, "the box's left and right edges are drawn in the panel"
-        assert isinstance(centre, tuple) and centre[2] > 150, "the box's interior shows the photo, not a frame"
+            photo = [im.getpixel((x, 240)) for x in range(640)]
+            panel = [im.getpixel((x, y)) for x in range(646, g["canvas_w"]) for y in range(10, 470, 7)]
+        red = lambda p: isinstance(p, tuple) and p[0] > 150 and p[1] < 110 and p[2] < 110  # noqa: E731
+        assert sum(map(red, photo)) >= 2, "the photo still carries the box"
+        assert not any(map(red, panel)), "nothing red is drawn over the panel"
 
     def test_the_canvas_stays_within_the_wide_screen_aspect(self, sr, tmp_path):
         """A small box on a landscape photo would magnify to a panel as wide as the photo; it is capped."""

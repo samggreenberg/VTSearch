@@ -139,12 +139,14 @@ def draw_with_side_inset(
 
     **The panel is a faithful view, not the corner inset moved sideways.** The corner inset
     (:func:`inset_crop`) caps width and height to the same target independently, which squashes
-    any crop that is not square, and its red frame surrounds the padded context rather than the
-    box -- so the reviewer could not tell whether something near the box's edge was inside it
-    (#3926, reported on a seat-check render). Here the crop keeps its aspect ratio, the box
-    itself is drawn in red INSIDE the panel at the same place it has on the photo, and the
-    panel's own edge is grey. The context padding is the corner inset's, so a small object still
-    comes with its surroundings.
+    any crop that is not square (#3926). Here the crop keeps its aspect ratio and the panel's own
+    edge is grey. The context padding is the corner inset's, so a small object still comes with
+    its surroundings.
+
+    **Nothing is drawn over the panel.** The photo carries the outlines, so the reviewer reads
+    *where* the box is there, and the panel shows *what is under it* -- an outline drawn across a
+    magnified small object hides the very pixels the question is about. Both framings before this
+    one drew it in the panel too; the reviewer asked for the earlier, unobstructed view back.
 
     *also* carries the class's further annotations in this image. The band comes from the
     UNION of them all (``vg_scale.band_for``), so the union is what is drawn in red -- it is
@@ -183,16 +185,10 @@ def draw_with_side_inset(
         out.paste(panel, (ix, iy))
         d = ImageDraw.Draw(out)
         d.rectangle([ix - 1, iy - 1, ix + pw, iy + ph], outline=PANEL_EDGE, width=1)
-        sx, sy = pw / crw, ph / crh
 
         def outline(b, colour, width):
-            x0, y0, x1, y1 = b
-            d.rectangle([x0, y0, x1, y1], outline=colour, width=width)
-            d.rectangle(
-                [ix + (x0 - cx0) * sx, iy + (y0 - cy0) * sy, ix + (x1 - cx0) * sx, iy + (y1 - cy0) * sy],
-                outline=colour,
-                width=width,
-            )
+            # On the photo only -- the panel stays clear so the object under the box is visible.
+            d.rectangle([b[0], b[1], b[2], b[3]], outline=colour, width=width)
 
         shown = distinct_boxes(boxes)
         if len(shown) > 1:
