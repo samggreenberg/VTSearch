@@ -52,7 +52,6 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib import patheffects
 from sklearn.cluster import KMeans
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -100,13 +99,6 @@ NOTCH = INTRO.VOTE_NOTCH_PX
 #: ~11.5pt; `slide_figure.save` refuses a figure that does.
 LABEL_PT = 15
 NOTE_PT = 13
-
-#: A caption on the plane figures sits *over* a field of items — there is no
-#: margin to put it in, because the field is the slide. A white halo lets it
-#: cross a circle without either of them becoming unreadable, which a plain
-#: label does not: the deck's own rule is that a label binds to the thing it is
-#: nearest, and a caption tangled in three circles binds to all of them.
-HALO = [patheffects.withStroke(linewidth=6.0, foreground="white")]
 
 #: The atlas's own splitting rule, at the scale this drawing works on. The
 #: shipped values are k = 3 and `min_node_size = 20` against tens of thousands
@@ -294,31 +286,6 @@ def _blindspot_stage(stage: int) -> plt.Figure:
         else:
             INTRO._circle(ax, p)
 
-    if stage >= 2:
-        ax.text(
-            CANVAS[0] - 0.45,
-            0.5,
-            "every question the loop asks comes from this strip",
-            color=BLUE,
-            fontsize=LABEL_PT,
-            ha="right",
-            va="baseline",
-            zorder=7,
-            path_effects=HALO,
-        )
-    if stage >= 3:
-        ax.text(
-            centre[0],
-            centre[1] - RING_R - 0.52,
-            "and nothing has ever asked in here" if stage == 3 else "which is full of books",
-            color=SOFT if stage == 3 else GREEN,
-            fontsize=LABEL_PT,
-            fontweight="normal" if stage == 3 else "bold",
-            ha="center",
-            va="baseline",
-            zorder=7,
-            path_effects=HALO,
-        )
     return fig
 
 
@@ -429,26 +396,6 @@ def _cells_stage(stage: int) -> plt.Figure:
         else:
             INTRO._circle(ax, p)
 
-    caption_xy = (CANVAS[0] - 0.45, CANVAS[1] - 0.72)
-    captions = {
-        2: "split the collection in three",
-        3: "and again, until a cell is small",
-        4: "every vote marks its cell, and every cell above it",
-        5: "the walk stops at the biggest cell nobody has voted in",
-        6: "and asks the one item most likely to prove that cell wrong",
-    }
-    if stage in captions:
-        ax.text(
-            *caption_xy,
-            captions[stage],
-            color=INK if stage >= 5 else SOFT,
-            fontsize=LABEL_PT,
-            fontweight="bold" if stage >= 5 else "normal",
-            ha="right",
-            va="baseline",
-            zorder=7,
-            path_effects=HALO,
-        )
     return fig
 
 
@@ -472,11 +419,17 @@ DEPTH_STAGES = 5
 #: The scene, in world units: a box `BOX_U` x `BOX_V` on the floor and `BOX_H`
 #: tall. The floor is the space the votes explored; the height is a direction
 #: they never varied in.
-BOX_U, BOX_V, BOX_H = 8.4, 5.0, 5.0
+BOX_U, BOX_V, BOX_H = 8.4, 4.6, 5.6
 #: Cavalier projection: the floor's receding axis goes up and to the right, and
 #: height goes straight up. No perspective — a vanishing point would make two
 #: items the same size only by accident, and this figure counts items.
-PROJ_X0, PROJ_Y0 = 4.95, 1.35
+#:
+#: `PROJ_SCALE` sizes the whole drawing at once. It is set as large as the two
+#: things boxing it in allow: the headline's notch, which the left wall must
+#: clear, and the slide's own edges. Nothing else competes for the space —
+#: this figure carries no text, like every other figure in the deck.
+PROJ_X0, PROJ_Y0 = 4.78, 0.58
+PROJ_SCALE = 1.045
 PROJ_U, PROJ_V, PROJ_VY = 0.93, 0.55, 0.38
 #: Where the detector's boundary sits on the floor. The region it admits runs
 #: to the lid and is drawn dashed there, because it does not stop at the lid —
@@ -497,7 +450,7 @@ DOME_H = 1.95
 
 def proj(u: float, v: float, h: float) -> np.ndarray:
     """One world point on the page. See `PROJ_*`."""
-    return np.array([PROJ_X0 + u * PROJ_U + v * PROJ_V, PROJ_Y0 + v * PROJ_VY + h])
+    return np.array([PROJ_X0 + PROJ_SCALE * (u * PROJ_U + v * PROJ_V), PROJ_Y0 + PROJ_SCALE * (v * PROJ_VY + h)])
 
 
 def _spaced(count: int, ulim: tuple[float, float], vlim: tuple[float, float], gap: float, seed: int = 5) -> np.ndarray:
@@ -509,17 +462,31 @@ def _spaced(count: int, ulim: tuple[float, float], vlim: tuple[float, float], ga
     """
     rng = np.random.default_rng(seed)
     out: list[np.ndarray] = []
-    for _ in range(8000):
+    for _ in range(40000):
         if len(out) == count:
-            break
+            return np.array(out)
         q = np.array([rng.uniform(*ulim), rng.uniform(*vlim)])
         if all(float(np.hypot(*(q - o))) > gap for o in out):
             out.append(q)
-    return np.array(out)
+    # Loud, because the failure is invisible in the output: a sampler that gives
+    # up early just draws a thinner domain, and "the same number of items on the
+    # ceiling as on the floor" is the whole claim of the picture.
+    raise SystemExit(
+        f"could not place {count} items at gap {gap} in {ulim} x {vlim} (got {len(out)}) — "
+        f"lower the gap or enlarge the plane"
+    )
 
 
-def _inside(u: float, v: float) -> bool:
-    return ((u - CURVE_U) / CURVE_RU) ** 2 + ((v - CURVE_V) / CURVE_RV) ** 2 < 1.0
+def _inside(u: float, v: float, margin: float = 1.0) -> bool:
+    """Whether (u, v) is inside the detector's boundary, at *margin* of its size.
+
+    The margin is what keeps a vote off the line. An item the curve passes
+    through reads as one the detector has cut in two rather than one it has
+    called, which is a lesson `make-intro-figs.py` learned the hard way and
+    spends a settling pass on; here it costs one parameter, because this
+    figure is free to choose which items carry a mark.
+    """
+    return ((u - CURVE_U) / (CURVE_RU * margin)) ** 2 + ((v - CURVE_V) / (CURVE_RV * margin)) ** 2 < 1.0
 
 
 def _wireframe(ax: plt.Axes) -> None:
@@ -589,25 +556,14 @@ def _item(ax: plt.Axes, point: np.ndarray, zorder: int) -> None:
 
 def _floor_items(ax: plt.Axes) -> None:
     """The corpus the votes came from, lying on the floor of the room."""
-    for index, (u, v) in enumerate(_spaced(46, (0.4, BOX_U - 0.4), (0.4, BOX_V - 0.4), 0.78)):
+    for index, (u, v) in enumerate(_spaced(46, (0.4, BOX_U - 0.4), (0.4, BOX_V - 0.4), 0.66)):
         point = proj(u, v, 0.0)
-        if _inside(u, v) and index % 3 == 0:
+        if _inside(u, v, 0.86) and index % 3 == 0:
             INTRO._check(ax, point)
-        elif not _inside(u, v) and index % 9 == 4:
+        elif not _inside(u, v, 1.16) and index % 9 == 4:
             INTRO._cross(ax, point)
         else:
             _item(ax, point, 6)
-
-
-#: What each page says, and in which colour. The last two are the argument, so
-#: they are the two drawn bold.
-DEPTH_CAPTIONS = {
-    1: ("every item you have ever voted on is on this floor", "INK"),
-    2: ("the detector, drawn where it cuts", "BLUE"),
-    3: ("and it says the same thing at every height", "BLUE"),
-    4: ("a whole second collection, sorted by the same cut", "BLUE"),
-    5: ("unless the concept stops here, and nothing on the floor says", "GREEN"),
-}
 
 
 def _depth_stage(stage: int) -> plt.Figure:
@@ -630,22 +586,9 @@ def _depth_stage(stage: int) -> plt.Figure:
     _floor_items(ax)
 
     if stage >= 4:
-        for u, v in _spaced(46, (0.4, BOX_U - 0.4), (0.4, BOX_V - 0.4), 0.78, seed=NEW_SEED):
+        for u, v in _spaced(46, (0.4, BOX_U - 0.4), (0.4, BOX_V - 0.4), 0.66, seed=NEW_SEED):
             _item(ax, proj(u, v, NEW_H), 7)
 
-    text, colour = DEPTH_CAPTIONS[stage]
-    ax.text(
-        CANVAS[0] - 0.45,
-        0.52,
-        text,
-        color={"INK": INK, "BLUE": BLUE, "GREEN": GREEN}[colour],
-        fontsize=LABEL_PT,
-        fontweight="bold" if stage >= 4 else "normal",
-        ha="right",
-        va="baseline",
-        zorder=8,
-        path_effects=HALO,
-    )
     return fig
 
 
@@ -676,7 +619,7 @@ def depth_fig() -> None:
 # 4. The p-values — the second job, and what is wrong with it
 # ──────────────────────────────────────────────────────────────────────────────
 
-PVALUES_STAGES = 3
+PVALUES_STAGES = 2
 #: Printed names for the combiners the study compared, in the CSV's own order.
 COMBINER_LABELS = {
     "median": "median",
@@ -718,7 +661,7 @@ def _pvalues_stage(stage: int) -> plt.Figure:
 
     ax.set_xlim(0, 0.36)
     ax.set_ylim(-0.012, 0.36)
-    ax.set_xlabel("of its own held-out data, the share it calls atypical", fontsize=LABEL_PT, color=INK, labelpad=9)
+    ax.set_xlabel("share of its own held-out data called atypical", fontsize=LABEL_PT, color=INK, labelpad=9)
     ax.set_ylabel("distance from a calibrated p-value", fontsize=LABEL_PT, color=INK, labelpad=9)
     ax.tick_params(labelsize=NOTE_PT, colors=SOFT, length=4)
     for side in ("top", "right"):
@@ -730,7 +673,7 @@ def _pvalues_stage(stage: int) -> plt.Figure:
     ax.text(
         nominal + 0.006,
         0.352,
-        f"what it promises: {nominal:.0%}",
+        f"\u03b1 = {nominal:g}",
         color=BLUE,
         fontsize=NOTE_PT,
         ha="left",
@@ -767,18 +710,6 @@ def _pvalues_stage(stage: int) -> plt.Figure:
             zorder=6,
         )
 
-    if stage >= 3:
-        ax.text(
-            0.352,
-            0.062,
-            "and on a patch embedder it calls 12% of its own\ndata strange, so the route refuses one",
-            color=RED,
-            fontsize=LABEL_PT,
-            ha="right",
-            va="top",
-            linespacing=1.45,
-            zorder=6,
-        )
     return fig
 
 
