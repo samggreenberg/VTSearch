@@ -385,6 +385,11 @@ def main() -> int:
     ap.add_argument("--out", default="")
     args = ap.parse_args()
 
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "calibration"))
+    from study_paths import require_study_file  # noqa: PLC0415
+
+    # Deleted with its study dir (#4001); `annotation_queue.py` rebuilds it.
+    require_study_file(args.queue, "--queue", "annotation_queue.py")
     rate = json.loads(Path(args.rate).read_text())
     eligible = sorted(set(rate["pooled"]["classes"]))
     queue = [json.loads(x) for x in Path(args.queue).read_text().splitlines() if x.strip()]

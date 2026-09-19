@@ -25,6 +25,7 @@ import argparse
 import json
 import random
 import shutil
+import sys
 from collections import defaultdict
 from pathlib import Path
 
@@ -55,6 +56,11 @@ def main() -> int:
         help="comma-separated classes to build; default is FINISHED, the #3768 six",
     )
     args = ap.parse_args()
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "calibration"))
+    from study_paths import require_study_file  # noqa: PLC0415
+
+    # The vlm-3720 defaults are intact; only the queue was in a deleted dir.
+    require_study_file(args.queue, "--queue", "annotation_queue.py")
     classes = [c.strip() for c in args.classes.split(",") if c.strip()] or list(FINISHED)
 
     manifest = json.loads((Path(args.slates) / "slates.json").read_text())

@@ -76,9 +76,18 @@ from pilebuild.vgsource import vg_image_paths, vg_source  # noqa: E402
 OUT = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("negpool_coverage.json")
 
 
+#: #3729's committed record, as `verdicts_to_corrections.py` resolves it.
+HUMAN_RECORD = Path(__file__).resolve().parent / "human_record"
+
+
 def reviewed_populations(base: Path) -> dict[str, set[int]]:
-    """The negative populations `check_review_coverage` judges, by name."""
-    verdicts = json.loads((base / "verdicts_20260820b.json").read_text())
+    """The negative populations `check_review_coverage` judges, by name.
+
+    The verdicts come from the committed record; *base* is still read for the
+    triage sheet indexes, which are not in it and were deleted with the study
+    dir (#4001), so that population is simply absent rather than wrong.
+    """
+    verdicts = json.loads((HUMAN_RECORD / "WORK__verdicts_20260820b.json").read_text())
     out = {"reviewed negatives": {v["image_id"] for v in verdicts if v["stratum"] in ("boundary", "random")}}
     triaged: set[int] = set()
     for p in glob.glob(str(base / "sheets_neg" / "*" / "index.json")):

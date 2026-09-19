@@ -22,7 +22,13 @@ import pile_config as pc  # noqa: E402
 from _cells_io import load_medias  # noqa: E402
 from coco_anchor import coco_truth, ensure_sources  # noqa: E402
 
+from study_paths import require_study_dir  # noqa: E402
+
+#: The reviewer's negative-pass labelsets. Deleted with the study dir on
+#: 2026-09-18 (#4001) and not in #3729's record, which covers verdicts,
+#: adjudications and slate manifests but never held these.
 DETS = Path("/expscratch/sgreenberg/classes-3588/negbank")
+require_study_dir(DETS, "the negbank labelsets")
 GROUPS = {
     "Vehicles": ("car", "truck", "bus", "bicycle"),
     "Outdoor Objects": ("bird", "kite", "boat", "dog"),
