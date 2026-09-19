@@ -587,8 +587,18 @@ PLANE_FILL = "#e7ecf2"
 WATERLINE_K = PROJ_VY / math.hypot(PROJ_U, PROJ_V)
 
 
-@functools.lru_cache(maxsize=1)
-def _submerged_outline() -> np.ndarray:
+#: How far the clip used for in-plane markings runs past the crescent it is
+#: taken from, in canvas units. The crescent's boundary is the *centreline* of
+#: the sphere's rim, so a clip taken from it exactly leaves the rim's outer half
+#: standing on top of whatever is drawn through it — and a grey rim arc lying
+#: over the boundary curve says the same wrong thing the crescent did before it:
+#: that the sphere sits on the plane rather than in it. Half the rim's width,
+#: rounded up: 1.7pt at 46pt to the unit.
+CLIP_PAD = 0.03
+
+
+@functools.lru_cache(maxsize=2)
+def _submerged_outline(pad: float = 0.0) -> np.ndarray:
     """The half of a sphere that is under the plane it sits in, as a polygon.
 
     An item centred on a plane is cut by it at the equator. From above, the
@@ -599,9 +609,9 @@ def _submerged_outline() -> np.ndarray:
     one, which is the whole difference between a surface and a backdrop.
     """
     theta = np.linspace(0, math.pi, 48)
-    waterline = np.stack([ITEM_R * np.cos(theta), -WATERLINE_K * ITEM_R * np.sin(theta)], axis=1)
+    waterline = np.stack([(ITEM_R + pad) * np.cos(theta), -WATERLINE_K * ITEM_R * np.sin(theta) + pad], axis=1)
     phi = np.linspace(math.pi, 2 * math.pi, 64)
-    silhouette = np.stack([ITEM_R * np.cos(phi), ITEM_R * np.sin(phi)], axis=1)
+    silhouette = np.stack([(ITEM_R + pad) * np.cos(phi), (ITEM_R + pad) * np.sin(phi)], axis=1)
     return np.vstack([waterline, silhouette])
 
 
@@ -658,7 +668,7 @@ def _item(ax: plt.Axes, point: np.ndarray, zorder: float, plane: plt.Polygon | N
         ax.add_patch(ring)
         if clip is not None:
             ring.set_clip_path(clip)
-    return submerged
+    return _submerged_outline(CLIP_PAD) + point
 
 
 #: The closest two items may come on the page — the item diameter plus a little
@@ -826,13 +836,12 @@ def _painted_back_to_front(points: np.ndarray, base_z: float) -> list[tuple[int,
     return [(i, base_z + 0.9 * k / max(len(order) - 1, 1)) for k, i in enumerate(order)]
 
 
-def _floor_items(ax: plt.Axes, plane: plt.Polygon, pillar: bool) -> list[np.ndarray]:
+def _floor_items(ax: plt.Axes, floor: np.ndarray, plane: plt.Polygon, pillar: bool) -> list[np.ndarray]:
     """The corpus the votes came from, lying in the floor of the room.
 
-    Returns the submerged crescents, which the caller needs: anything lying *in*
-    the floor has to be drawn over them.
+    Returns each sphere's submerged region, grown by `CLIP_PAD`: anything lying
+    *in* the floor has to be drawn over it, rim included.
     """
-    floor = _spaced(46, (EDGE_MARGIN, BOX_U - EDGE_MARGIN), (EDGE_MARGIN, BOX_V - EDGE_MARGIN), ITEM_GAP)
     voted = _votes(floor)
     behind = {i for i, (u, v) in enumerate(floor) if _occluded_by_pillar(u, v, 0.0)} if pillar else set()
     crescents: list[np.ndarray] = []
@@ -873,6 +882,21 @@ def _draw_in_plane(ax: plt.Axes, xy: np.ndarray, crescents: list[np.ndarray], **
     )
 
 
+def _dome_zorder(floor: np.ndarray) -> float:
+    """Where the dome's profile falls in the floor's own paint order.
+
+    The arc is drawn at a single `v`, so it lies in one plane parallel to the
+    page and a single z is exactly right for all of it — but which z is not a
+    free choice. Items nearer the eye than that plane have to cover it and
+    items behind it have to be covered, or the dome reads as a decal on the
+    floor rather than a surface rising off it. `_painted_back_to_front` lays the
+    floor out far-to-near over a 0.9-wide band, so the dome's place in that band
+    is just the share of items standing behind it.
+    """
+    behind = float(np.mean(floor[:, 1] > CURVE_V))
+    return Z_IN_FRONT + 0.9 * behind
+
+
 def _depth_stage(stage: int) -> plt.Figure:
     fig, ax = _canvas()
     planes = _wireframe(ax)
@@ -880,28 +904,27 @@ def _depth_stage(stage: int) -> plt.Figure:
     angles = np.linspace(0, 2 * np.pi, 180)
     curve = np.stack([CURVE_U + CURVE_RU * np.cos(angles), CURVE_V + CURVE_RV * np.sin(angles)], axis=1)
     base = np.array([proj(u, v, 0.0) for u, v in curve])
+    floor = _spaced(46, (EDGE_MARGIN, BOX_U - EDGE_MARGIN), (EDGE_MARGIN, BOX_V - EDGE_MARGIN), ITEM_GAP)
 
     # The floor goes down first, because what lies *in* the floor has to be
     # drawn over its spheres' submerged halves and needs their outlines to do
     # it. Call order is not paint order — every artist here carries a z.
-    crescents = _floor_items(ax, planes[0], pillar=stage >= 3)
+    crescents = _floor_items(ax, floor, planes[0], pillar=stage == 5)
 
-    top = np.array([proj(u, v, TUBE_H) for u, v in curve])
-    if stage >= 3:
-        _tube(ax, base, top, angles)
-    if stage >= 5:
-        # The alternative truth: same footprint, but it stops. Under the pillar,
-        # like anything else standing inside it: the dome is behind the near
-        # wall, so it takes the single tint the wall gives, and an untinted dome
-        # drawn over the glass was the last thing on the page claiming to be in
-        # front of something it is inside.
+    if stage == 4:
+        # What the room is implicitly assumed to look like: same footprint, and
+        # it closes. Nothing is drawn through here, so the arc takes its depth
+        # from the floor rather than from any glass in front of it.
         dome = np.array([proj(CURVE_U + CURVE_RU * math.cos(a), CURVE_V, DOME_H * math.sin(a)) for a in angles[:91]])
-        ax.plot(dome[:, 0], dome[:, 1], color=GREEN, linewidth=3.0, linestyle=(0, (7, 5)), zorder=1.95)
+        ax.plot(dome[:, 0], dome[:, 1], color=GREEN, linewidth=3.0, linestyle=(0, (7, 5)), zorder=_dome_zorder(floor))
+    top = np.array([proj(u, v, TUBE_H) for u, v in curve])
+    if stage == 5:
+        _tube(ax, base, top, angles)
     if stage >= 2:
         _draw_in_plane(ax, base, crescents, color=BLUE, linewidth=2.6, zorder=5)
 
     lids: list[np.ndarray] = []
-    if stage >= 4:
+    if stage >= 3:
         ceiling = _spaced(
             46, (EDGE_MARGIN, BOX_U - EDGE_MARGIN), (EDGE_MARGIN, BOX_V - EDGE_MARGIN), ITEM_GAP, seed=NEW_SEED
         )
@@ -909,7 +932,7 @@ def _depth_stage(stage: int) -> plt.Figure:
             crescent = _item(ax, proj(*ceiling[index], NEW_H), Z_CEILING + depth_z, planes[1])
             if crescent is not None:
                 lids.append(crescent)
-    if stage >= 3:
+    if stage == 5:
         _draw_in_plane(ax, top, lids, color=BLUE, linewidth=2.6, zorder=4)
 
     return fig
@@ -919,15 +942,23 @@ def depth_fig() -> None:
     """Domain shift, as a floor in a room.
 
     Five pages. The corpus the votes came from lies on the floor of a box; the
-    detector cuts it; that cut has no lid, because the shipped head is a single
-    `Linear(D, 1)` and a linear score is *exactly* constant along every
-    direction its weight vector does not point in (`vtscore/training/mlp.py`,
-    the `LINEAR_SVM_HEAD` sentinel). So the boundary extrudes to a tube, and a
-    second collection lying on the ceiling — the same count and spread as the
-    first, because it is a domain and not a handful of outliers — is *sorted*
-    by it, into matches and non-matches, with no hint that anything is being
-    extrapolated. The dashed dome is the alternative the votes cannot rule out
-    — and cannot confirm, which is the point.
+    detector cuts it; a second collection arrives on the ceiling — the same
+    count and spread as the first, because it is a domain and not a handful of
+    outliers. Then the two readings of what the cut says about that collection,
+    one per page and never together, because they are rival claims about the
+    same picture and a page holding both asks the room to compare rather than
+    to be surprised.
+
+    The dashed dome goes first: the concept stops, which is what anybody
+    drawing a boundary through a corpus assumes without saying so. The tube
+    goes second, because it is the one nobody pictures and it is the one that
+    ships. That cut has no lid: the shipped head is a single `Linear(D, 1)` and
+    a linear score is *exactly* constant along every direction its weight
+    vector does not point in (`vtscore/training/mlp.py`, the `LINEAR_SVM_HEAD`
+    sentinel). So the boundary extrudes, and the new collection is *sorted* by
+    it, into matches and non-matches, with no hint that anything is being
+    extrapolated. Every vote in the picture is on the floor, so nothing in the
+    picture chooses between the two.
 
     The box is the reason this reads at all. The earlier attempt at this slide
     drew the same idea on a sphere and the room had nothing to judge position

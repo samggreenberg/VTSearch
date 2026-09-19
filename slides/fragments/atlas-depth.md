@@ -23,27 +23,29 @@
 <!-- **b** — The detector, cutting the floor, exactly as on the earlier
      slides. Nothing new yet. -->
 
-<!-- **c** — And here is the turn: that cut has no ceiling. The shipped head is
-     a **single linear layer** — the score is one number, a projection — so it
-     is *exactly* constant along every direction that projection does not point
-     in. Not an approximation of the model. That **is** the model. -->
+<!-- **c** — A whole second collection, a long way up a direction nobody ever
+     voted along — not a few odd items, a domain. What does the cut say about
+     *these*? -->
 
-<!-- **d** — Now a whole second collection, a long way up a direction nobody
-     ever voted along — not a few odd items, a domain. Watch what the detector
-     does with it. It does not say Good to all of it; it **sorts** it, cleanly,
-     into the ones inside the tube and the ones outside. And every one of those
-     verdicts is a copy, item for item, of a verdict about a different
-     collection. Ordinary scores, an ordinary ranking, an ordinary cut. Nothing
-     in the output says the word *extrapolating*. -->
+<!-- **d** — Here is the answer everybody pictures without noticing they have.
+     The concept stops. It has bounded extent, it sits where the votes were,
+     and whatever is up here is simply outside it. Every vote on that floor is
+     consistent with this. -->
 
-<!-- **e** — And the honest alternative: the concept stops. The dome fits every
-     vote on that floor exactly as well as the tube does. No amount of further
-     voting separates them, because **every vote is on the floor** — that is
-     what makes this different from the last two slides, where more clicks were
-     the answer. -->
+<!-- **e** — And here is what actually ships. The head is a **single linear
+     layer** — the score is one number, a projection — so it is *exactly*
+     constant along every direction that projection does not point in. Not an
+     approximation of the model. That **is** the model. The cut has no
+     ceiling. It **sorts** the new collection, cleanly, into the ones inside
+     and the ones outside. Every one of those verdicts is a
+     copy, item for item, of one about a different collection. Ordinary scores,
+     an ordinary ranking, an ordinary cut. Nothing in the output says the word
+     *extrapolating*. -->
 
-<!-- Which is why the fix cannot come from the detector. It has to come from
-     something that models where the data *was*, and that is the atlas: it does
-     not need to know the truth up there, only to say "this is nowhere near
-     anything I was built on". That is the typicality p-value — and the next
-     slide is about how well it says it. -->
+<!-- Nothing here chooses between those last two frames, because **every vote
+     is on the floor** — which is what makes this unlike the last two slides,
+     where more clicks were the answer. So the fix cannot
+     come from the detector, but from something that models where the data
+     *was* — the atlas: it does not need to know the truth up there, only to
+     say "this is nowhere near anything I was built on". That is the typicality
+     p-value, and the next slide is about how well it says it. -->
