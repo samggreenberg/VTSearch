@@ -140,3 +140,110 @@ class TestCompleteness2:
     def test_sig_only_candidates_are_tiles(self, br):
         assert br.tile_box({"methods": "SIG"})
         assert not br.tile_box({"methods": "OCR+SIG"})
+
+
+def _archive(root: Path, queue: str, name: str, votes: dict) -> None:
+    """A ``votes_<date>.json`` beside a queue, in the shape ``bank`` writes."""
+    import json
+
+    d = root / queue
+    d.mkdir(parents=True, exist_ok=True)
+    labels = {"good": [], "bad": []}
+    for fn, label in votes.items():
+        labels[label].append({"filename": fn, "label": label})
+    (d / "votes_2026-09-19.json").write_text(
+        json.dumps({"detector": {"name": name}, "labels": labels}), encoding="utf-8"
+    )
+
+
+def _cleared(root: Path, name: str, votes: dict) -> None:
+    """A ``.cleared`` detector backup, in the shape the app exports."""
+    import json
+
+    d = root / "detectors-cleared-20260919"
+    d.mkdir(parents=True, exist_ok=True)
+    labels = [{"filename": fn, "label": label} for fn, label in votes.items()]
+    (d / f"{name.replace(' ', '_')}.json.cleared").write_text(
+        json.dumps({"name": name, "labelset": {"labels": labels}}), encoding="utf-8"
+    )
+
+
+class TestBankMergesEveryVoteSource:
+    """#3964: banking from the app alone emptied the verdicts of every CLEARED queue."""
+
+    def test_a_cleared_queue_survives_a_later_bank(self, br, tmp_path):
+        root, keep = tmp_path / "binary", tmp_path / "keep"
+        name = "docmarks pm_crest -- right logo same as left?"
+        # banked, then cleared off the dashboard: the app no longer holds it
+        _archive(root, "docmarks_pm_crest", name, {"a.jpg": "good", "b.jpg": "bad"})
+        _cleared(keep, name, {"a.jpg": "good", "b.jpg": "bad"})
+        votes, sources = br.collect_votes(None, root, keep)
+        assert votes[name] == {"a.jpg": "good", "b.jpg": "bad"}
+        assert sources == {"archive": 1, "cleared backup": 1}
+
+    def test_the_live_app_wins_where_sources_disagree(self, br, tmp_path, monkeypatch):
+        root, keep = tmp_path / "binary", tmp_path / "keep"
+        name = "docmarks rjr_block -- right logo same as left?"
+        _cleared(keep, name, {"a.jpg": "bad"})
+        monkeypatch.setattr(br, "docmarks_detectors", lambda _d: [{"name": name}])
+        monkeypatch.setattr(
+            br,
+            "api",
+            lambda base, path, *a, **k: (
+                {"good": [{"filename": "a.jpg"}], "bad": []} if "labels-detail" in path else {"detectors": []}
+            ),
+        )
+        votes, _ = br.collect_votes("http://app", root, keep)
+        assert votes[name]["a.jpg"] == "good"  # the later vote, not the backup's
+
+    def test_a_backup_without_labels_is_not_a_queue(self, br, tmp_path):
+        keep = tmp_path / "keep"
+        _cleared(keep, "docmarks empty -- same?", {})
+        votes, sources = br.collect_votes(None, tmp_path / "binary", keep)
+        assert votes == {} and sources == {}
+
+
+class TestGuardWrite:
+    """The same shape as ``dropped_rows``: the thing overwritten is human work."""
+
+    ANSWERED = [{"verdict_source": "vtsearch", "verdict": "all"}, {"verdict_source": "vtsearch", "verdict": "none"}]
+
+    def _dest(self, tmp_path, rows):
+        import json
+
+        d = tmp_path / "verdicts.from_vtsearch.jsonl"
+        d.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+        return d
+
+    def test_a_shrinking_write_is_refused_and_names_the_backups(self, br, tmp_path):
+        dest = self._dest(tmp_path, self.ANSWERED)
+        with pytest.raises(SystemExit) as exc:
+            br.guard_write(dest, [{"verdict": ""}], tmp_path / "keep", allow_loss=False)
+        assert "answers 2 item(s) and this run answers 0" in str(exc.value)
+        assert ".cleared" in str(exc.value)
+
+    def test_allow_loss_is_the_way_past_it(self, br, tmp_path):
+        dest = self._dest(tmp_path, self.ANSWERED)
+        br.guard_write(dest, [{"verdict": ""}], tmp_path / "keep", allow_loss=True)
+
+    def test_growing_and_equal_writes_pass(self, br, tmp_path):
+        dest = self._dest(tmp_path, self.ANSWERED)
+        br.guard_write(dest, self.ANSWERED + [{"verdict_source": "vtsearch"}], tmp_path / "keep", allow_loss=False)
+        br.guard_write(dest, self.ANSWERED, tmp_path / "keep", allow_loss=False)
+
+    def test_a_first_write_has_nothing_to_lose(self, br, tmp_path):
+        br.guard_write(tmp_path / "missing.jsonl", [], tmp_path / "keep", allow_loss=False)
+
+
+class TestArchiveVotes:
+    def test_an_archive_is_never_shrunk(self, br, tmp_path):
+        import json
+
+        q = tmp_path / "docmarks_pm_crest"
+        q.mkdir()
+        big = {"detector": {"name": "x"}, "labels": {"good": [{"filename": f"{i}.jpg"} for i in range(5)], "bad": []}}
+        first = br.archive_votes(q, "2026-09-19", big)
+        second = br.archive_votes(q, "2026-09-19", {"detector": {"name": "x"}, "labels": {"good": [], "bad": []}})
+        assert first.name == "votes_2026-09-19.json"
+        assert second != first  # the fuller archive is still there
+        assert len(json.loads(first.read_text())["labels"]["good"]) == 5

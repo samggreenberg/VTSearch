@@ -26,6 +26,23 @@ Sub-commands::
 nothing here deletes a dataset or a detector: the vg_scale campaign shares the
 dashboard, and a detector is often the only copy of a human review.
 
+**``bank`` merges; it never rewrites a verdict file from the app alone.** A
+finished queue is cleared off the dashboard once its votes are banked, so the
+app is a record of the *unfinished* work only.  Banking again from ``--api``
+after a clear therefore found no votes for the cleared queues and wrote their
+verdicts back empty -- 1,725 answered questions in one afternoon.  Votes are now
+read from three places and merged, in increasing precedence: the ``.cleared``
+detector backups taken when a queue was removed, the ``votes_*.json`` archive
+this command writes beside every queue on every run, and the live app.  A write
+that would answer fewer items than the file already on disk is refused unless
+``--allow-loss`` is passed.
+
+Nothing here clears a queue -- that is done by hand against the registry API --
+but the order matters, and is why the backups exist: **copy the detector JSON to**
+:data:`CLEARED` ``/detectors-cleared-<date>/<name>.json.cleared`` **before deleting
+the pair**, because the labels in that file are the votes themselves, where a
+verdict file holds only what they were translated into.
+
 Other passes (``completeness_multi.py``) build :class:`Question` objects and
 call :func:`emit`; their ``bank`` translation is a :data:`TRANSLATORS` entry.
 
@@ -55,6 +72,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 #: Every queue name starts with this; ``bank`` ignores any other detector.
 PREFIX = "docmarks"
 ROOT = Path("/expscratch/sgreenberg/docmarks/binary")
+#: Detector JSONs copied out of the app before a finished queue was cleared, under
+#: ``detectors-cleared-<date>/``.  A cleared queue is gone from the dashboard, so
+#: these are the only record of its votes and ``bank`` reads them as a source.
+CLEARED = Path("/expscratch/sgreenberg/keep")
 CANVAS = (1400, 700)
 LEFT_W = 540
 HEADER_H = 78
@@ -724,24 +745,112 @@ def load_queue(base: str, queue: Path, wait: int = 1800) -> str:
     return f"{name}: dataset {got}/{n} items, detector ok"
 
 
-def bank(base: str, root: Path, corpus: Path, date: str) -> int:
+def labels_of(detector: dict[str, Any]) -> dict[str, str]:
+    """A detector JSON -- a ``.cleared`` backup or a live export -- to {filename: "good"|"bad"}."""
+    votes: dict[str, str] = {}
+    for row in (detector.get("labelset") or {}).get("labels") or []:
+        fn = row.get("filename") or row.get("origin_name")
+        if fn and row.get("label") in ("good", "bad"):
+            votes[fn] = row["label"]
+    return votes
+
+
+def collect_votes(base: Optional[str], root: Path, cleared: Path) -> tuple[dict[str, dict[str, str]], dict[str, int]]:
+    """Every vote ever cast, per queue, whether or not the queue is still on the dashboard.
+
+    Later sources win, so a live answer overrides an archived one for the same
+    image.  ``base`` of ``None`` reads the on-disk sources only, which is what a
+    test (and a run against a dead app) needs.
+    """
+    votes: dict[str, dict[str, str]] = defaultdict(dict)
+    seen: dict[str, int] = defaultdict(int)
+    for path in sorted(cleared.glob("detectors-cleared-*/*.json.cleared")):
+        backup = json.loads(path.read_text(encoding="utf-8"))
+        name, got = backup.get("name"), labels_of(backup)
+        if name and got:
+            votes[name].update(got)
+            seen["cleared backup"] += 1
+    for path in sorted(root.glob("*/votes_*.json")):
+        d = json.loads(path.read_text(encoding="utf-8"))
+        name = (d.get("detector") or {}).get("name")
+        got = votes_from_labels(d.get("labels") or {})
+        if name and got:
+            votes[name].update(got)
+            seen["archive"] += 1
+    if base:
+        for d in docmarks_detectors(api(base, "/api/detectors/registry").get("detectors", [])):
+            got = votes_from_labels(api(base, f"/api/detectors/{urllib.parse.quote(d['name'])}/labels-detail"))
+            if got:
+                votes[d["name"]].update(got)
+                seen["live detector"] += 1
+    return dict(votes), dict(seen)
+
+
+def archive_votes(qdir: Path, date: str, payload: dict[str, Any]) -> Path:
+    """Keep this run's votes beside the queue, without shrinking an earlier archive.
+
+    A re-imported queue can answer with fewer votes than the archive already
+    holds, and that archive may be the only copy once the queue is cleared.
+    """
+    n = sum(len((payload.get("labels") or {}).get(k) or []) for k in ("good", "bad"))
+    dest = qdir / f"votes_{date}.json"
+    if dest.exists():
+        old = json.loads(dest.read_text(encoding="utf-8")).get("labels") or {}
+        have = sum(len(old.get(k) or []) for k in ("good", "bad"))
+        if have > n:
+            dest = qdir / f"votes_{date}T{datetime.datetime.now():%H%M%S}.json"
+            print(f"  WARNING {qdir.name}: app has {n} vote(s), archive has {have}; wrote {dest.name} instead")
+    dest.write_text(json.dumps(payload, indent=1) + "\n", encoding="utf-8")
+    return dest
+
+
+def answered(rows: Sequence[dict[str, Any]]) -> int:
+    """Rows a translator has filled in from votes."""
+    return sum(1 for r in rows if r.get("verdict_source") == "vtsearch")
+
+
+def guard_write(dest: Path, out_rows: Sequence[dict[str, Any]], cleared: Path, allow_loss: bool) -> None:
+    """Refuse a write that answers fewer items than the file already on disk.
+
+    The same shape as ``pilebuild.corrections.dropped_rows``: the guard exists
+    because the thing being overwritten is human work, and the flag that skips it
+    has to be typed on purpose.
+    """
+    before = answered(read_jsonl(dest)) if dest.exists() else 0
+    now = answered(out_rows)
+    if now < before and not allow_loss:
+        raise SystemExit(
+            f"refusing to write {dest}: it answers {before} item(s) and this run answers {now}.\n"
+            f"  Votes for a cleared queue live only in its votes_*.json archive or a .cleared backup "
+            f"under {cleared} -- check those are readable before overwriting, or pass --allow-loss."
+        )
+
+
+def bank(
+    base: str,
+    root: Path,
+    corpus: Path,
+    date: str,
+    cleared: Path = CLEARED,
+    allow_loss: bool = False,
+) -> int:
     manifests = {}
     for mf in sorted(root.glob("*/manifest.json")):
         m = json.loads(mf.read_text(encoding="utf-8"))
         manifests[m["dataset_name"]] = (mf.parent, m)
-    dets = docmarks_detectors(api(base, "/api/detectors/registry").get("detectors", []))
-    by_task: dict[str, tuple[dict[str, Any], dict[str, str]]] = defaultdict(lambda: ({}, {}))
-    for d in dets:
+    # archive what the app holds now, before reading anything back
+    for d in docmarks_detectors(api(base, "/api/detectors/registry").get("detectors", [])) if base else []:
         name = d["name"]
         if name not in manifests:
             print(f"  {name}: no manifest under {root}, skipped")
             continue
-        qdir, m = manifests[name]
         detail = api(base, f"/api/detectors/{urllib.parse.quote(name)}/labels-detail")
-        (qdir / f"votes_{date}.json").write_text(
-            json.dumps({"detector": d, "labels": detail}, indent=1) + "\n", encoding="utf-8"
-        )
-        votes = votes_from_labels(detail)
+        archive_votes(manifests[name][0], date, {"detector": d, "labels": detail})
+    by_queue, sources = collect_votes(base, root, cleared)
+    print(f"  vote sources: {', '.join(f'{v} {k}(s)' for k, v in sorted(sources.items())) or 'none'}")
+    by_task: dict[str, tuple[dict[str, Any], dict[str, str]]] = defaultdict(lambda: ({}, {}))
+    for name, (_qdir, m) in sorted(manifests.items()):
+        votes = by_queue.get(name, {})
         print(f"  {name}: {len(votes)} of {len(m['questions'])} answered")
         for fn, q in m["questions"].items():
             src = TRANSLATORS[q["task"]][0](corpus)
@@ -755,6 +864,7 @@ def bank(base: str, root: Path, corpus: Path, date: str) -> int:
         rows = read_jsonl(src)
         out_rows, unanswered = translator(rows, qs, vs)
         dest = src.with_name("verdicts.from_vtsearch.jsonl")
+        guard_write(dest, out_rows, cleared, allow_loss)
         dest.write_text("".join(json.dumps(r) + "\n" for r in out_rows), encoding="utf-8")
         print(f"{src.parent.name}: wrote {dest} ({len(vs)} votes); {len(unanswered)} item(s) not fully answered")
         for u in unanswered[:40]:
@@ -784,6 +894,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     b.add_argument("--root", type=Path, default=ROOT)
     b.add_argument("--api", default=None)
     b.add_argument("--date", default=datetime.date.today().isoformat())
+    b.add_argument("--cleared", type=Path, default=CLEARED, help="root holding detectors-cleared-*/ backups")
+    b.add_argument(
+        "--allow-loss",
+        action="store_true",
+        help="write even when the result answers fewer items than the file on disk (it is human work)",
+    )
     args = ap.parse_args(argv)
 
     if args.cmd == "load":
@@ -792,7 +908,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(load_queue(base, q), flush=True)
         return 0
     if args.cmd == "bank":
-        return bank(args.api or app_base(), args.root, args.corpus, args.date)
+        return bank(args.api or app_base(), args.root, args.corpus, args.date, args.cleared, args.allow_loss)
 
     classes = json.loads((args.corpus / "classes.json").read_text(encoding="utf-8"))
     pages = {p.page_id: p for p in read_manifest(args.corpus / "corpus.jsonl")}
