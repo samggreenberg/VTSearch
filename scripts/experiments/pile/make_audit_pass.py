@@ -34,6 +34,31 @@ import pile_config as pc
 pc.setup_env()
 
 
+#: The pass this script built is committed; the script itself cannot be re-run.
+#: Naming the survivor matters more than naming the loss: the measurement the
+#: pass exists for is still computable, and a guard that only lists missing
+#: inputs reads as "the answer is gone" when it is not (#4012).
+SURVIVING_PASS = "scripts/experiments/pile/human_record/LABELSETS__verdicts_audit_20260825.json"
+
+RETIRED = f"""make_audit_pass.py is retired: neither stratum can be rebuilt (#4012).
+
+  `tri_flags_all.json` and `sheets_neg/` were deleted 2026-09-18 (#4001) and are in no
+  record. #4003's frozen 122 triage rows are the DEFINITE flags only -- a strict subset --
+  so they reconstruct neither `flag` (which needs every flag, `maybe` kinds included) nor
+  `audit` (which needs the unflagged complement, and so the sheet index to enumerate the
+  population at all).
+
+  The pass this built SURVIVES, committed at
+    {SURVIVING_PASS}
+  460 rows, `flag` 260 and `audit` 200, stratum on every row -- so the triage's precision
+  (from `flag`) and the residual error after it (from `audit`) are both still computable.
+
+  LIMIT: every row's `triage` kind reads None, so precision cannot be split by definite
+  versus maybe. That qualifier died with the inputs.
+
+  Pass --triage/--sheets explicitly if a copy of either is ever found."""
+
+
 def log(msg: str) -> None:
     print(f"[audit] {msg}", flush=True)
 
@@ -58,6 +83,9 @@ def main() -> int:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "calibration"))
     from study_paths import require_study_dir, require_study_file  # noqa: PLC0415
 
+    if not Path(args.triage).is_file() or not Path(args.sheets).is_dir():
+        print(RETIRED, file=sys.stderr)
+        raise SystemExit(2)
     require_study_file(args.triage, "--triage")
     require_study_dir(args.sheets, "--sheets")
     require_study_dir(args.slates, "--slates")

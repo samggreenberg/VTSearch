@@ -43,6 +43,14 @@ Usage::
 JSONs on scratch and in the running app's data dir and rewrites
 ``verdicts.csv``, so the archive can be checked against the source rather than
 trusted. Everything else reads the CSV and needs neither.
+
+**``--rebank`` is now permanently guarded, and cannot be repointed at the CSV**
+(#4012). Its whole purpose is to re-derive that CSV *from its sources* so the
+archive can be checked rather than trusted; sourcing it from the CSV would check
+the file against itself. The sources are gone -- `negbank/`, `polarity.json` and
+`seeded.json` were deleted on 2026-09-18 (#4001), and the app's detector store
+holds only the current confirm-the-box pass -- so the honest outcome is that the
+analysis keeps working from the committed CSV and the re-derivation does not.
 """
 
 from __future__ import annotations
@@ -375,8 +383,15 @@ def candidate_pool_error() -> dict[str, tuple[int, int]]:
     The comparison this study exists to make is *shipped against candidate*, and
     a number retyped out of a table is not evidence about the table.
     """
-    src = BANK / "verdicts_20260904.json"
-    if not src.exists():
+    # #3729's record holds this verdicts file; the scratch copy went with the
+    # study dir (#4001). Reading the record means the comparison this study
+    # exists to make survives the deletion -- it used to return {} here, which
+    # dropped the candidates' column from the report with no word said.
+    src = HUMAN_RECORD / "WORK3588__verdicts_20260904.json"
+    if not src.exists():  # pragma: no cover - the record is committed
+        src = BANK / "verdicts_20260904.json"
+    if not src.exists():  # pragma: no cover - and if neither, say so
+        print(f"NOTE: no candidate verdicts at {src}; the candidates' column is omitted (#4001)", file=sys.stderr)
         return {}
     per: dict[str, list] = defaultdict(list)
     for v in json.loads(src.read_text()):

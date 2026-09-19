@@ -28,18 +28,22 @@ RECORD = PILE / "human_record"
 #: A rename in the record breaks these before it breaks someone's run.
 RECORD_DEFAULTS = {
     "check_review_coverage.py": "WORK__verdicts_20260820b.json",
-    "negative_pass_strata.py": "WORK3588__slates__Table_Objects__manifest.csv",
     "negpool_coverage.py": "WORK__verdicts_20260820b.json",
     "shipped_pool_error.py": "WORK3588__slates__Table_Objects__manifest.csv",
 }
+
+#: #4012's third disposition, added after #4006's two: a reader whose input is
+#: gone but whose ANSWER is committed elsewhere is restored against that copy,
+#: not guarded. `negative_pass_strata.py` left RECORD_DEFAULTS at the same time:
+#: it used to open the stratum manifest for a fact `verdicts.csv` already
+#: carries, and one input beats two for the same thing.
+CSV_BACKED = ("negative_pass_strata.py", "score_negative_pass.py")
 
 #: Readers that must refuse to run when their input is gone, rather than dying on
 #: whatever `open()` came first.
 GUARDED = (
     "import_slates.py",
     "make_audit_pass.py",
-    "negative_pass_strata.py",
-    "score_negative_pass.py",
     "silence_rate.py",
     "shipped_pool_error.py",
     "make_belowcut.py",
@@ -146,6 +150,16 @@ def test_a_partial_read_is_reported_rather_than_fatal_or_silent(script: str) -> 
     text = (PILE / script).read_text()
     assert "require_study" not in text, f"{script} still works without the deleted dir; it must not exit"
     assert "NOTE:" in text and "#4001" in text, f"{script} must say which population it could not judge"
+
+
+@pytest.mark.parametrize("script", CSV_BACKED)
+def test_a_restored_reader_reads_the_committed_csv_and_is_not_guarded(script: str) -> None:
+    """Restored, not retired: the judgements survive, so the script must run."""
+    text = (PILE / script).read_text()
+    assert "negative_pass_verdicts" in text, f"{script} must read the committed verdicts"
+    assert "require_study" not in text, f"{script} works from the repository; it must not exit 2"
+    # Naming the deleted dir in prose is fine and useful; opening it is not.
+    assert "classes-3588" not in text, f"{script} still reads the deleted study dir"
 
 
 @pytest.mark.parametrize("script", WRITERS)

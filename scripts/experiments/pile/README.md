@@ -714,9 +714,28 @@ which reads the negative pass back out per class and scores it against
 
 ```bash
 python shipped_pool_error.py                  # the ORIGINAL twelve, from the committed verdicts
-python shipped_pool_error.py --rebank         # re-distil verdicts.csv from the passes on scratch
+python shipped_pool_error.py --rebank         # RETIRED: its sources are gone (#4012)
 python shipped_pool_error.py --figures        # + the report's figures (needs the VG pixels)
 ```
+
+**The pass's raw material is gone and its judgements are not** (#4012). `negbank/`,
+`polarity.json` and `seeded.json` were deleted with the study dir on 2026-09-18
+(#4001) and are in no record, so `--rebank` cannot run and cannot be repointed at
+`verdicts.csv` either -- re-deriving that file *from* itself would check it
+against itself, which is the one thing `--rebank` exists to prevent. Everything
+else survives, because the CSV stores each answer **polarity-resolved**: the raw
+labels meant `good == clean` for some detectors and `good == present` for
+others, and the file that said which went with the directory. `negative_pass_verdicts.py`
+is the one reader; `score_negative_pass.py` and `negative_pass_strata.py` go
+through it, and `tests_lib/meta/test_negative_pass_verdicts.py` holds the
+restoration to its published numbers -- 1.40% [0.68, 2.86] shipped and 2.09%
+[1.34, 3.24] candidate, reproduced from the repository alone.
+
+`make_audit_pass.py` is the other outcome: it is **retired**, because neither of
+its strata can be rebuilt, and its guard names
+`human_record/LABELSETS__verdicts_audit_20260825.json` -- the 460-row pass it
+built, which keeps triage precision and residual error computable. Storing what
+an answer *meant* is what separates these two cases.
 
 **A group pass is not a per-class rate**, and that is the whole reason this
 script is not three lines. A *clean* verdict on "none of these four" is a
