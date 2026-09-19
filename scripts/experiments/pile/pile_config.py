@@ -80,6 +80,15 @@ COCO_TRAIN_ZIP = COCO_ROOT / "images" / "train2017.zip"
 #: while the builder opened the zip.
 COCO_TRAIN_IMAGES = COCO_ROOT / "images" / "train2017"
 
+#: The COCO 2017 *annotations* -- `instances_train2017.json` and
+#: `instances_val2017.json` -- as `coco_anchor.py --fetch` stages them. Named
+#: here because `coco_quarry` reads them at build time and a build input spelled
+#: only in an `--anchor-dir` argument is a build input nobody can check (#3299).
+#:
+#: Not the same file as :data:`COCO_ANNOTATIONS`, which is the val-only flattened
+#: `.jsonl.gz` the `coco_val` loader reads. Two sources, two names, on purpose.
+COCO_ANCHOR_DIR = Path(os.environ.get("VTS_COCO_ANCHOR_DIR", str(PILE / "coco_anchor")))
+
 #: Datasets in the pile. ``boxed`` means the medias carry ground-truth region
 #: boxes, which is what a region-voting arm drags — necessary but not
 #: sufficient (the embedder must also be patch-capable; see region_capable).
@@ -90,6 +99,14 @@ DATASETS: dict[str, dict] = {
     "visual_genome_m": {"boxed": True, "kind": "demo", "source_dir": "visual_genome"},
     "caltech101_m": {"boxed": False, "kind": "demo", "source_dir": "caltech-101"},
     "coco_val": {"boxed": True, "kind": "coco"},
+    # `vg_scale`'s question asked of COCO 2017 with no Visual Genome at all
+    # (#3983): the same 25 classes and three bands, drawn from 123,287 images
+    # instead of the half of VG that COCO sourced. A separate dataset rather
+    # than a rebuild of `vg_scale`, because rebuilding a cell silently changes
+    # what it is and five-plus shipped studies are conditioned on the VG-built
+    # ones -- they stay readable under their own name, and nothing new is built
+    # on them.
+    "coco_quarry": {"boxed": True, "kind": "coco_quarry"},
     # Box-size-banded VG, drawn from the WHOLE source (all 108k images, full
     # free-text vocabulary) rather than the demo pipeline's 100 curated
     # categories on a 4% slice.  The `_s`/`_m`/`_l` on `visual_genome_*` is a
