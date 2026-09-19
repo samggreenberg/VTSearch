@@ -636,6 +636,57 @@ ITEM_GAP = 2 * ITEM_R + 0.10
 EDGE_MARGIN = 0.05
 
 
+#: The submerged shades of the two vote colours: the deck's own red and green,
+#: darkened. A mark standing in the plane is cut by it exactly as a sphere is,
+#: and the half underneath is seen through the same wash — which darkens what
+#: is under it, as the spheres show by going from white to grey. A shade of a
+#: pinned hue is a shade, not a second identity, so this stays inside the
+#: theme's rule that colour means one thing.
+RED_SUNK = "#6f1010"
+GREEN_SUNK = "#07533a"
+
+
+def _above_water(ax: plt.Axes, point: np.ndarray, reach: float) -> plt.Polygon:
+    """An invisible patch covering everything above the waterline at *point*.
+
+    The same curve the spheres are cut by, widened to *reach* so it spans a
+    glyph rather than a circle. Used as a clip, so one mark can be drawn twice —
+    dark underneath, bright above the line — without either copy knowing the
+    shape of the other.
+    """
+    theta = np.linspace(math.pi, 0, 48)
+    arc = np.stack([reach * np.cos(theta), -WATERLINE_K * reach * np.sin(theta)], axis=1) + point
+    corners = np.array([[point[0] + reach, point[1] + 2 * reach], [point[0] - reach, point[1] + 2 * reach]])
+    patch = plt.Polygon(np.vstack([arc, corners]), closed=True, facecolor="none", edgecolor="none", zorder=0)
+    ax.add_patch(patch)
+    return patch
+
+
+def _sunk_glyph(ax: plt.Axes, point: np.ndarray, draw, sunk: str) -> None:
+    """One vote mark, half of it under the plane.
+
+    The glyph is drawn by the deck's own `_check` / `_cross`, then duplicated in
+    the submerged shade underneath and the original clipped to the water's
+    surface. Reading the geometry back off the artists rather than restating it
+    is what keeps this from drifting away from the marks every other slide
+    uses.
+    """
+    first = len(ax.lines)
+    draw(ax, point)
+    surface = _above_water(ax, point, INTRO.R * 1.35)
+    for stroke in ax.lines[first:]:
+        ax.plot(
+            stroke.get_xdata(),
+            stroke.get_ydata(),
+            color=sunk,
+            linewidth=stroke.get_linewidth(),
+            solid_capstyle=stroke.get_solid_capstyle(),
+            solid_joinstyle=stroke.get_solid_joinstyle(),
+            zorder=stroke.get_zorder() - 0.5,
+        )
+        stroke.set_clip_path(surface)
+
+
 #: How many of the floor's items carry a vote. A handful: the slide is not about
 #: the voting, it is about what the votes could not reach, and the corpus has to
 #: look voted-on without looking laboured over.
@@ -693,9 +744,9 @@ def _floor_items(ax: plt.Axes, plane: plt.Polygon) -> None:
     for index, (u, v) in enumerate(floor):
         point = proj(u, v, 0.0)
         if voted.get(index) == "good":
-            INTRO._check(ax, point)
+            _sunk_glyph(ax, point, INTRO._check, GREEN_SUNK)
         elif voted.get(index) == "bad":
-            INTRO._cross(ax, point)
+            _sunk_glyph(ax, point, INTRO._cross, RED_SUNK)
         else:
             _item(ax, point, 6, plane)
 
