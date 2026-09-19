@@ -433,9 +433,9 @@ PROJ_X0, PROJ_Y0 = 4.78, 0.58
 PROJ_SCALE = 1.045
 PROJ_U, PROJ_V, PROJ_VY = 0.93, 0.55, 0.38
 #: Where the detector's boundary sits on the floor. The region it admits runs
-#: to the lid and is drawn dashed there, because it does not stop at the lid —
-#: the box stops. A tube with a top on it would say the model had an opinion
-#: about how high is too high, which is the one thing it does not have.
+#: all the way to the lid, because it does not stop at the lid — the box stops.
+#: A tube with a top on it would say the model had an opinion about how high is
+#: too high, which is the one thing it does not have.
 CURVE_U, CURVE_V, CURVE_RU, CURVE_RV = 5.5, 2.5, 2.05, 1.40
 TUBE_H = BOX_H
 #: The second collection lies on the ceiling exactly as the first lies on the
@@ -445,7 +445,8 @@ TUBE_H = BOX_H
 #: than a whole collection the detector has never seen.
 NEW_H = BOX_H
 NEW_SEED = 17
-#: How high the alternative truth stops.
+#: How high the alternative truth stops. Well clear of the ceiling, so the dome
+#: visibly does not reach the collection it is being asked about.
 DOME_H = 1.95
 
 
@@ -540,7 +541,7 @@ def _wireframe(ax: plt.Axes) -> dict[int, plt.Polygon]:
             *zip(corners[a], corners[b]),
             color=CELL_LINE if wide else RULE,
             linewidth=1.6 if wide else 1.2,
-            zorder=1,
+            zorder=Z_WIREFRAME,
         )
     return planes
 
@@ -568,11 +569,50 @@ def _tube(ax: plt.Axes, base: np.ndarray, top: np.ndarray, angles: np.ndarray) -
                 facecolor=INTRO.BAND,
                 edgecolor="none",
                 alpha=PILLAR_ALPHA,
-                zorder=2,
+                zorder=Z_PILLAR,
             )
         )
     for k in range(0, len(angles) - 1, 22):
-        ax.plot(*zip(base[k], top[k]), color=BLUE, linewidth=1.2, alpha=0.75, zorder=3)
+        ax.plot(*zip(base[k], top[k]), color=BLUE, linewidth=1.2, alpha=0.75, zorder=Z_PILLAR + 0.1)
+
+
+def _dome(ax: plt.Axes, angles: np.ndarray) -> None:
+    """The alternative pillar: same footprint, same glass, but it closes.
+
+    Drawn exactly as `_tube` is, and for the same reason — it is the same claim
+    about the same boundary, differing only in whether it has a lid, so a
+    picture that drew it in another hand would be answering a different
+    question. The surface is cut into gores rather than wall quads, one per
+    angle step and each running the whole way up, so the near and far halves
+    overlap in projection and the compositor tints what is behind them once and
+    twice on its own.
+    """
+    meridians = [
+        np.array(
+            [
+                proj(
+                    CURVE_U + CURVE_RU * math.cos(a) * math.cos(t),
+                    CURVE_V + CURVE_RV * math.sin(a) * math.cos(t),
+                    DOME_H * math.sin(t),
+                )
+                for t in np.linspace(0, math.pi / 2, 24)
+            ]
+        )
+        for a in angles
+    ]
+    for i in range(len(angles) - 1):
+        ax.add_patch(
+            plt.Polygon(
+                np.vstack([meridians[i], meridians[i + 1][::-1]]),
+                closed=True,
+                facecolor=INTRO.BAND,
+                edgecolor="none",
+                alpha=PILLAR_ALPHA,
+                zorder=Z_PILLAR,
+            )
+        )
+    for k in range(0, len(angles) - 1, 22):
+        ax.plot(meridians[k][:, 0], meridians[k][:, 1], color=BLUE, linewidth=1.2, alpha=0.75, zorder=Z_PILLAR + 0.1)
 
 
 #: The item radius, on the page.
@@ -784,18 +824,36 @@ def _clear_of_edge(u: float, v: float) -> bool:
     return VOTE_EDGE_MARGIN < u < BOX_U - VOTE_EDGE_MARGIN and VOTE_EDGE_MARGIN < v < BOX_V - VOTE_EDGE_MARGIN
 
 
-#: Where the items sit in the paint order. Anything the pillar stands in front
-#: of is painted *under* it, which is what makes the blue shading right without
-#: computing any of it: each of the pillar's wall quads is half-transparent, a
-#: point inside the pillar is behind one wall, and a point beyond it is behind
-#: two, so the compositor tints them once and twice on its own. The alternative
-#: — drawing everything on top and tinting by hand — was what made the pillar
-#: look like it stood behind every sphere it should have hidden.
-Z_BEHIND_PILLAR, Z_IN_FRONT, Z_CEILING = 1.0, 6.0, 7.0
-#: Above every item, for the second stroke of anything lying in a plane. It
-#: only ever shows through a crescent-shaped clip, so it cannot cover a
-#: sphere's above-water half however high it sits.
-Z_IN_PLANE_OVERLAY = 9.0
+#: The paint order, as bands rather than as numbers. Anything the pillar stands
+#: in front of is painted *under* it, which is what makes the blue shading right
+#: without computing any of it: each of the pillar's wall quads is
+#: half-transparent, a point inside the pillar is behind one wall, and a point
+#: beyond it is behind two, so the compositor tints them once and twice on its
+#: own. The alternative — drawing everything on top and tinting by hand — was
+#: what made the pillar look like it stood behind every sphere it should have
+#: hidden.
+#:
+#: Each band of items is 1.2 wide: `_painted_back_to_front` spends 0.9 of it on
+#: depth and `_item` another 0.3 on one sphere's own fill, waterline and rims.
+#: The `*_OVERLAY` levels sit just above their band and the pillar's glass just
+#: above the first of them, so a behind-the-glass item is tinted from its fill
+#: to its rim and so is the piece of boundary showing through it. Getting that
+#: wrong is not subtle — the widest item's rim used to poke through the glass —
+#: but it is invisible, so the arithmetic is written down rather than eyeballed.
+Z_WIREFRAME = 0.3
+Z_BEHIND_PILLAR, Z_BEHIND_OVERLAY = 1.0, 2.4
+Z_PILLAR = 3.0
+Z_IN_FRONT, Z_FRONT_OVERLAY = 6.0, 7.4
+Z_CEILING, Z_CEILING_OVERLAY = 8.0, 9.4
+#: And under every item, for the first stroke of anything lying in a plane.
+#: Above the plane's own fill and the box's edges, below the glass — so the far
+#: half of the pillar's foot, which is genuinely seen through the near wall,
+#: takes the wall's tint without anything being computed for it.
+Z_IN_PLANE = 0.6
+
+#: One band's submerged regions and the level a marking lying in their plane has
+#: to be repeated at to show through them.
+Layer = tuple[list[np.ndarray], float]
 
 
 def _occluded_by_pillar(u: float, v: float, h: float) -> bool:
@@ -825,6 +883,24 @@ def _occluded_by_pillar(u: float, v: float, h: float) -> bool:
     )
 
 
+def _occluded_by_dome(u: float, v: float) -> bool:
+    """Whether the dome stands between this floor item and the eye.
+
+    Same walk as `_occluded_by_pillar`, against the half-ellipsoid instead of
+    the cylinder — so an item inside the footprint is behind the near surface,
+    an item just beyond it may be behind both, and one in front of it is behind
+    neither. No height window is needed: the dome closes, so leaving through the
+    top is leaving through the dome.
+    """
+    toward = np.array([PROJ_V / PROJ_U, -1.0, PROJ_VY])
+    du, dv = (u - CURVE_U) / CURVE_RU, (v - CURVE_V) / CURVE_RV
+    au, av, ah = toward[0] / CURVE_RU, toward[1] / CURVE_RV, toward[2] / DOME_H
+    a = au * au + av * av + ah * ah
+    b = 2 * (du * au + dv * av)
+    disc = b * b - 4 * a * (du * du + dv * dv - 1.0)
+    return disc >= 0 and (-b + math.sqrt(disc)) / (2 * a) > 1e-9
+
+
 def _painted_back_to_front(points: np.ndarray, base_z: float) -> list[tuple[int, float]]:
     """Item indices in paint order, far first, with the z-order each gets.
 
@@ -836,15 +912,17 @@ def _painted_back_to_front(points: np.ndarray, base_z: float) -> list[tuple[int,
     return [(i, base_z + 0.9 * k / max(len(order) - 1, 1)) for k, i in enumerate(order)]
 
 
-def _floor_items(ax: plt.Axes, floor: np.ndarray, plane: plt.Polygon, pillar: bool) -> list[np.ndarray]:
+def _floor_items(ax: plt.Axes, floor: np.ndarray, plane: plt.Polygon, behind: set[int]) -> list[Layer]:
     """The corpus the votes came from, lying in the floor of the room.
 
-    Returns each sphere's submerged region, grown by `CLIP_PAD`: anything lying
-    *in* the floor has to be drawn over it, rim included.
+    Returns the submerged regions, grown by `CLIP_PAD`, split into the two
+    bands: anything lying *in* the floor has to be drawn over them, rim
+    included, and a piece of boundary showing through a sphere that stands
+    behind the glass has to be drawn *under* the glass or it comes out brighter
+    than the sphere around it.
     """
     voted = _votes(floor)
-    behind = {i for i, (u, v) in enumerate(floor) if _occluded_by_pillar(u, v, 0.0)} if pillar else set()
-    crescents: list[np.ndarray] = []
+    crescents: dict[bool, list[np.ndarray]] = {True: [], False: []}
     for index, depth_z in _painted_back_to_front(floor, 0.0):
         u, v = floor[index]
         point = proj(u, v, 0.0)
@@ -856,11 +934,11 @@ def _floor_items(ax: plt.Axes, floor: np.ndarray, plane: plt.Polygon, pillar: bo
         else:
             crescent = _item(ax, point, zorder, plane)
             if crescent is not None:
-                crescents.append(crescent)
-    return crescents
+                crescents[index in behind].append(crescent)
+    return [(crescents[True], Z_BEHIND_OVERLAY), (crescents[False], Z_FRONT_OVERLAY)]
 
 
-def _draw_in_plane(ax: plt.Axes, xy: np.ndarray, crescents: list[np.ndarray], **style) -> None:
+def _draw_in_plane(ax: plt.Axes, xy: np.ndarray, layers: list[Layer], **style) -> None:
     """Draw a curve that lies *in* a plane, over the spheres' submerged halves.
 
     A sphere's crescent is the part of it under the plane, so anything painted
@@ -868,33 +946,28 @@ def _draw_in_plane(ax: plt.Axes, xy: np.ndarray, crescents: list[np.ndarray], **
     every crescent it meets says the opposite: that the crescents are sitting on
     the plane rather than cut into it.
 
-    So the curve goes down twice. Once where it belongs in the paint order, and
-    once above everything clipped to the union of the crescents, which is the
-    only place the second copy can show.
+    But the plane is also what everything standing *in* it rises out of, so the
+    same curve has to pass behind every part of every item that is above the
+    waterline: a sphere's white cap, and the bright half of a vote mark. Those
+    two rules are the same rule stated from either side of the surface, and the
+    way to satisfy both is to draw the curve under all of it and then put it
+    back exactly where the plane is what you are looking at.
+
+    So the base stroke goes below every item, and one clipped copy per band goes
+    just above that band, clipped to the union of its crescents — which is the
+    only place a copy can show. Per band rather than once over everything,
+    because a crescent behind the pillar's glass is tinted and the boundary
+    showing through it has to be tinted with it.
     """
-    ax.plot(xy[:, 0], xy[:, 1], **style)
-    if not crescents:
-        return
-    over = ax.plot(xy[:, 0], xy[:, 1], **{**style, "zorder": Z_IN_PLANE_OVERLAY})[0]
-    over.set_clip_path(
-        MplPath.make_compound_path(*(MplPath(np.vstack([c, c[:1]]), closed=True) for c in crescents)),
-        ax.transData,
-    )
-
-
-def _dome_zorder(floor: np.ndarray) -> float:
-    """Where the dome's profile falls in the floor's own paint order.
-
-    The arc is drawn at a single `v`, so it lies in one plane parallel to the
-    page and a single z is exactly right for all of it — but which z is not a
-    free choice. Items nearer the eye than that plane have to cover it and
-    items behind it have to be covered, or the dome reads as a decal on the
-    floor rather than a surface rising off it. `_painted_back_to_front` lays the
-    floor out far-to-near over a 0.9-wide band, so the dome's place in that band
-    is just the share of items standing behind it.
-    """
-    behind = float(np.mean(floor[:, 1] > CURVE_V))
-    return Z_IN_FRONT + 0.9 * behind
+    ax.plot(xy[:, 0], xy[:, 1], **{**style, "zorder": Z_IN_PLANE})
+    for crescents, zorder in layers:
+        if not crescents:
+            continue
+        over = ax.plot(xy[:, 0], xy[:, 1], **{**style, "zorder": zorder})[0]
+        over.set_clip_path(
+            MplPath.make_compound_path(*(MplPath(np.vstack([c, c[:1]]), closed=True) for c in crescents)),
+            ax.transData,
+        )
 
 
 def _depth_stage(stage: int) -> plt.Figure:
@@ -905,23 +978,25 @@ def _depth_stage(stage: int) -> plt.Figure:
     curve = np.stack([CURVE_U + CURVE_RU * np.cos(angles), CURVE_V + CURVE_RV * np.sin(angles)], axis=1)
     base = np.array([proj(u, v, 0.0) for u, v in curve])
     floor = _spaced(46, (EDGE_MARGIN, BOX_U - EDGE_MARGIN), (EDGE_MARGIN, BOX_V - EDGE_MARGIN), ITEM_GAP)
+    if stage == 4:
+        behind = {i for i, (u, v) in enumerate(floor) if _occluded_by_dome(u, v)}
+    elif stage == 5:
+        behind = {i for i, (u, v) in enumerate(floor) if _occluded_by_pillar(u, v, 0.0)}
+    else:
+        behind = set()
 
     # The floor goes down first, because what lies *in* the floor has to be
     # drawn over its spheres' submerged halves and needs their outlines to do
     # it. Call order is not paint order — every artist here carries a z.
-    crescents = _floor_items(ax, floor, planes[0], pillar=stage == 5)
+    crescents = _floor_items(ax, floor, planes[0], behind)
 
-    if stage == 4:
-        # What the room is implicitly assumed to look like: same footprint, and
-        # it closes. Nothing is drawn through here, so the arc takes its depth
-        # from the floor rather than from any glass in front of it.
-        dome = np.array([proj(CURVE_U + CURVE_RU * math.cos(a), CURVE_V, DOME_H * math.sin(a)) for a in angles[:91]])
-        ax.plot(dome[:, 0], dome[:, 1], color=GREEN, linewidth=3.0, linestyle=(0, (7, 5)), zorder=_dome_zorder(floor))
     top = np.array([proj(u, v, TUBE_H) for u, v in curve])
+    if stage == 4:
+        _dome(ax, angles)
     if stage == 5:
         _tube(ax, base, top, angles)
     if stage >= 2:
-        _draw_in_plane(ax, base, crescents, color=BLUE, linewidth=2.6, zorder=5)
+        _draw_in_plane(ax, base, crescents, color=BLUE, linewidth=2.6)
 
     lids: list[np.ndarray] = []
     if stage >= 3:
@@ -933,7 +1008,7 @@ def _depth_stage(stage: int) -> plt.Figure:
             if crescent is not None:
                 lids.append(crescent)
     if stage == 5:
-        _draw_in_plane(ax, top, lids, color=BLUE, linewidth=2.6, zorder=4)
+        _draw_in_plane(ax, top, [(lids, Z_CEILING_OVERLAY)], color=BLUE, linewidth=2.6)
 
     return fig
 
@@ -949,10 +1024,13 @@ def depth_fig() -> None:
     same picture and a page holding both asks the room to compare rather than
     to be surprised.
 
-    The dashed dome goes first: the concept stops, which is what anybody
-    drawing a boundary through a corpus assumes without saying so. The tube
-    goes second, because it is the one nobody pictures and it is the one that
-    ships. That cut has no lid: the shipped head is a single `Linear(D, 1)` and
+    The dome goes first: the concept stops, which is what anybody drawing a
+    boundary through a corpus assumes without saying so. It is built out of the
+    same glass as the tube and drawn in the same hand, because it is the same
+    claim about the same boundary and only the lid is at issue; a dome sketched
+    in another colour or another dash would be answering a different question.
+    The tube goes second, because it is the one nobody pictures and it is the
+    one that ships. That cut has no lid: the shipped head is a `Linear(D, 1)` and
     a linear score is *exactly* constant along every direction its weight
     vector does not point in (`vtscore/training/mlp.py`, the `LINEAR_SVM_HEAD`
     sentinel). So the boundary extrudes, and the new collection is *sorted* by
