@@ -6,8 +6,6 @@
 
 <!-- build: figs/atlas-pvalues.build1.png -->
 
-<!-- build: figs/atlas-pvalues.build2.png -->
-
 <!-- The atlas has a second job, and this is the slide where it loses. Having
      built a model of what a collection looks like, you can ask a new item how
      typical it is — which is how a detector trained on one dataset gets checked
@@ -25,10 +23,11 @@
      not the one closest to calibrated, and taking the **median** across the
      path instead — the obvious repair — trades one failure for the other. -->
 
-<!-- **c** — And on a patch embedder it collapses: those spaces are the least
-     concentrated, and the atlas calls **12%** of its own held-out data strange.
-     The verdict fires on 80% of in-domain runs against 93% cross-corpus, which
-     is not a test. The route refuses patch embedders rather than answer. -->
+<!-- And on a patch embedder it collapses outright — say this one, it does not
+     need a page. Those spaces are the least concentrated, and the atlas calls
+     **12%** of its own held-out data strange; the verdict fires on 80% of
+     in-domain runs against 93% cross-corpus, which is not a test. The route
+     refuses patch embedders rather than answer. -->
 
 <!-- Two things keep this honest rather than alarming. The **ranking** is
      unaffected, and ranking is all the diversity walk uses — it reads each

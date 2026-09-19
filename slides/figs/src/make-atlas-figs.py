@@ -20,14 +20,16 @@ Both are drawings and not plots, exactly as the slide they extend says of
 itself. The partition drawn on them is a real recursive k-means with the
 atlas's own splitting rule (k = 3, stop under `MIN_NODE`), but it runs on the
 two-dimensional positions. The shipped atlas centres and renormalises first and
-partitions *directions*, which in two dimensions would degenerate into wedges
-around the centroid — true to the code and a lie about the mechanism, since
-direction in 768 dimensions is not one number. `atlas-cone` is the figure that
-makes that omission good.
+partitions *directions* — a detail the deck deliberately does not teach, since
+nothing the room has to follow turns on it.
 
-`atlas-cone` is a schematic of the centred spherical frame, on the circle that
-is the honest two-dimensional analogue of the sphere. Every cosine it prints is
-measured off the points it drew, not asserted.
+`atlas-depth` is a schematic: a wireframe room whose floor is the space the
+votes explored, and a detector boundary extruded up it because the shipped
+head is a single linear layer and cannot do anything else. An earlier version
+of this slide drew the centred sphere instead and was cut for being contrived
+and hard to parse — a fair verdict, and the diagnosis worth keeping is that
+points on a sphere give the eye nothing to judge position against. A floor,
+four posts and a lid do.
 
 `atlas-pvalues` is the only plot: it re-plots published numbers from the #3329
 fit-quality study (`docs/experiments/2026-08-30-fit-quality-3329/`), read from
@@ -50,7 +52,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib import patheffects
+from matplotlib.path import Path as MplPath
 from sklearn.cluster import KMeans
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -98,13 +100,6 @@ NOTCH = INTRO.VOTE_NOTCH_PX
 #: ~11.5pt; `slide_figure.save` refuses a figure that does.
 LABEL_PT = 15
 NOTE_PT = 13
-
-#: A caption on the plane figures sits *over* a field of items — there is no
-#: margin to put it in, because the field is the slide. A white halo lets it
-#: cross a circle without either of them becoming unreadable, which a plain
-#: label does not: the deck's own rule is that a label binds to the thing it is
-#: nearest, and a caption tangled in three circles binds to all of them.
-HALO = [patheffects.withStroke(linewidth=6.0, foreground="white")]
 
 #: The atlas's own splitting rule, at the scale this drawing works on. The
 #: shipped values are k = 3 and `min_node_size = 20` against tens of thousands
@@ -292,31 +287,6 @@ def _blindspot_stage(stage: int) -> plt.Figure:
         else:
             INTRO._circle(ax, p)
 
-    if stage >= 2:
-        ax.text(
-            CANVAS[0] - 0.45,
-            0.5,
-            "every question the loop asks comes from this strip",
-            color=BLUE,
-            fontsize=LABEL_PT,
-            ha="right",
-            va="baseline",
-            zorder=7,
-            path_effects=HALO,
-        )
-    if stage >= 3:
-        ax.text(
-            centre[0],
-            centre[1] - RING_R - 0.52,
-            "and nothing has ever asked in here" if stage == 3 else "which is full of books",
-            color=SOFT if stage == 3 else GREEN,
-            fontsize=LABEL_PT,
-            fontweight="normal" if stage == 3 else "bold",
-            ha="center",
-            va="baseline",
-            zorder=7,
-            path_effects=HALO,
-        )
     return fig
 
 
@@ -427,26 +397,6 @@ def _cells_stage(stage: int) -> plt.Figure:
         else:
             INTRO._circle(ax, p)
 
-    caption_xy = (CANVAS[0] - 0.45, CANVAS[1] - 0.72)
-    captions = {
-        2: "split the collection in three",
-        3: "and again, until a cell is small",
-        4: "every vote marks its cell, and every cell above it",
-        5: "the walk stops at the biggest cell nobody has voted in",
-        6: "and asks the one item most likely to prove that cell wrong",
-    }
-    if stage in captions:
-        ax.text(
-            *caption_xy,
-            captions[stage],
-            color=INK if stage >= 5 else SOFT,
-            fontsize=LABEL_PT,
-            fontweight="bold" if stage >= 5 else "normal",
-            ha="right",
-            va="baseline",
-            zorder=7,
-            path_effects=HALO,
-        )
     return fig
 
 
@@ -463,160 +413,645 @@ def cells_fig() -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 3. The centred frame — why the partition works at all
+# 3. Domain shift — the direction your votes never varied in
 # ──────────────────────────────────────────────────────────────────────────────
 
-CONE_STAGES = 4
-#: The sphere, drawn orthographically: screen position is a vector's first two
-#: coordinates and the third is depth. Two dimensions would have been easier
-#: and would have lied — see `cone_fig`.
-CONE_C = np.array([10.1, 4.65])
-CONE_R = 2.7
-#: How tight the cone is, in degrees from its axis. Contrastive embedders
-#: really do pack a corpus into a few degrees; a drawing that spread them over
-#: a quadrant would make the fix look unnecessary.
-CONE_HALF_ANGLE = 14.0
-#: Tilted out of the screen plane so the cap reads as sitting *on* a sphere
-#: rather than as a disc pasted over one.
-CONE_AXIS = np.array([0.42, 0.52, 0.74])
+DEPTH_STAGES = 5
+#: The scene, in world units: a box `BOX_U` x `BOX_V` on the floor and `BOX_H`
+#: tall. The floor is the space the votes explored; the height is a direction
+#: they never varied in.
+BOX_U, BOX_V, BOX_H = 8.4, 4.6, 5.6
+#: Cavalier projection: the floor's receding axis goes up and to the right, and
+#: height goes straight up. No perspective — a vanishing point would make two
+#: items the same size only by accident, and this figure counts items.
+#:
+#: `PROJ_SCALE` sizes the whole drawing at once. It is set as large as the two
+#: things boxing it in allow: the headline's notch, which the left wall must
+#: clear, and the slide's own edges. Nothing else competes for the space —
+#: this figure carries no text, like every other figure in the deck.
+PROJ_X0, PROJ_Y0 = 4.78, 0.58
+PROJ_SCALE = 1.045
+PROJ_U, PROJ_V, PROJ_VY = 0.93, 0.55, 0.38
+#: Where the detector's boundary sits on the floor. The region it admits runs
+#: all the way to the lid, because it does not stop at the lid — the box stops.
+#: A tube with a top on it would say the model had an opinion about how high is
+#: too high, which is the one thing it does not have.
+CURVE_U, CURVE_V, CURVE_RU, CURVE_RV = 5.5, 2.5, 2.05, 1.40
+TUBE_H = BOX_H
+#: The second collection lies on the ceiling exactly as the first lies on the
+#: floor — same count, same spread, same relationship to its own plane. It is a
+#: *domain*, not a handful of outliers, and a scatter of a dozen items floating
+#: mid-air said the opposite: that domain shift is a few strange items rather
+#: than a whole collection the detector has never seen.
+NEW_H = BOX_H
+NEW_SEED = 17
+#: How high the alternative truth stops. Well clear of the ceiling, so the dome
+#: visibly does not reach the collection it is being asked about.
+DOME_H = 1.95
 
 
-@functools.lru_cache(maxsize=1)
-def _cone_points() -> np.ndarray:
-    """Unit vectors bunched into a narrow cap, as the embedders deliver them."""
-    rng = np.random.default_rng(7)
-    axis = CONE_AXIS / np.linalg.norm(CONE_AXIS)
-    side = np.cross(axis, [0.0, 0.0, 1.0])
-    side /= np.linalg.norm(side)
-    up = np.cross(axis, side)
-    half = math.radians(CONE_HALF_ANGLE)
-    theta = np.arccos(1 - rng.random(52) * (1 - math.cos(half)))
-    phi = rng.random(52) * 2 * math.pi
-    return (
-        np.cos(theta)[:, None] * axis
-        + (np.sin(theta) * np.cos(phi))[:, None] * side
-        + (np.sin(theta) * np.sin(phi))[:, None] * up
+def proj(u: float, v: float, h: float) -> np.ndarray:
+    """One world point on the page. See `PROJ_*`."""
+    return np.array([PROJ_X0 + PROJ_SCALE * (u * PROJ_U + v * PROJ_V), PROJ_Y0 + PROJ_SCALE * (v * PROJ_VY + h)])
+
+
+def _spaced(count: int, ulim: tuple[float, float], vlim: tuple[float, float], gap: float, seed: int = 5) -> np.ndarray:
+    """Blue-noise-ish positions in a plane, spaced by how far apart they *look*.
+
+    Uniform sampling clumps, and on a figure whose subject is *where the items
+    are* a clump reads as a cluster that means something. Rejection sampling is
+    enough at these counts.
+
+    `gap` is a distance on the page and not in the world, which is the whole
+    reason for measuring it here. This projection squashes the receding axis to
+    about a third, so two items a world-unit apart along it end up a third as
+    far apart on screen as two a world-unit apart across it: a world-space gap
+    that looks generous in one direction draws items nearly tangent in the
+    other, which is exactly what it did.
+    """
+    rng = np.random.default_rng(seed)
+    out: list[np.ndarray] = []
+    for _ in range(40000):
+        if len(out) == count:
+            return np.array(out)
+        q = np.array([rng.uniform(*ulim), rng.uniform(*vlim)])
+        here = proj(q[0], q[1], 0.0)
+        if all(float(np.hypot(*(here - proj(o[0], o[1], 0.0)))) > gap for o in out):
+            out.append(q)
+    # Loud, because the failure is invisible in the output: a sampler that gives
+    # up early just draws a thinner domain, and "the same number of items on the
+    # ceiling as on the floor" is the whole claim of the picture.
+    raise SystemExit(
+        f"could not place {count} items at gap {gap} in {ulim} x {vlim} (got {len(out)}) — "
+        f"lower the gap or enlarge the plane"
     )
 
 
-def _cosine_span(vectors: np.ndarray) -> tuple[float, float]:
-    """The smallest and largest cosine between two distinct rows."""
-    gram = vectors @ vectors.T
-    off = gram[~np.eye(len(vectors), dtype=bool)]
-    return float(off.min()), float(off.max())
+def _inside(u: float, v: float, margin: float = 1.0) -> bool:
+    """Whether (u, v) is inside the detector's boundary, at *margin* of its size.
+
+    The margin is what keeps a vote off the line. An item the curve passes
+    through reads as one the detector has cut in two rather than one it has
+    called, which is a lesson `make-intro-figs.py` learned the hard way and
+    spends a settling pass on; here it costs one parameter, because this
+    figure is free to choose which items carry a mark.
+    """
+    return ((u - CURVE_U) / (CURVE_RU * margin)) ** 2 + ((v - CURVE_V) / (CURVE_RV * margin)) ** 2 < 1.0
 
 
-def _sphere_dot(ax: plt.Axes, vector: np.ndarray) -> None:
-    """One item on the sphere, drawn solid in front of it and hollow behind."""
-    front = vector[2] >= 0
-    ax.add_patch(
-        plt.Circle(
-            tuple(CONE_C + vector[:2] * CONE_R),
-            0.115,
-            facecolor=INK if front else "white",
-            edgecolor=INK if front else SOFT,
-            linewidth=1.5,
-            zorder=4 if front else 2,
+def _wireframe(ax: plt.Axes) -> dict[int, plt.Polygon]:
+    """The box, as twelve edges and two planes. Returns the planes by level.
+
+    Every edge is drawn, none hidden. Hidden-line removal would be more correct
+    and less useful: the tube inside is translucent on purpose, so an edge
+    vanishing behind it reads as a mistake rather than as depth, and the box is
+    scaffolding — its whole job is to say "this is a volume" and then recede.
+
+    The two planes come back because the items are drawn *through* them: see
+    `_item`, which clips a sphere's submerged half to the plane it sits in.
+    """
+    corners = {(u, v, h): proj(u * BOX_U, v * BOX_V, h * BOX_H) for u in (0, 1) for v in (0, 1) for h in (0, 1)}
+    planes: dict[int, plt.Polygon] = {}
+    for h in (0, 1):
+        planes[h] = plt.Polygon(
+            [corners[0, 0, h], corners[1, 0, h], corners[1, 1, h], corners[0, 1, h]],
+            closed=True,
+            facecolor=PLANE_FILL,
+            edgecolor="none",
+            zorder=0,
         )
+        ax.add_patch(planes[h])
+    for a, b in (
+        # the floor, then the lid, then the four posts
+        ((0, 0, 0), (1, 0, 0)),
+        ((1, 0, 0), (1, 1, 0)),
+        ((1, 1, 0), (0, 1, 0)),
+        ((0, 1, 0), (0, 0, 0)),
+        ((0, 0, 1), (1, 0, 1)),
+        ((1, 0, 1), (1, 1, 1)),
+        ((1, 1, 1), (0, 1, 1)),
+        ((0, 1, 1), (0, 0, 1)),
+        ((0, 0, 0), (0, 0, 1)),
+        ((1, 0, 0), (1, 0, 1)),
+        ((1, 1, 0), (1, 1, 1)),
+        ((0, 1, 0), (0, 1, 1)),
+    ):
+        wide = a[2] == 0 and b[2] == 0  # the floor is the one edge loop items sit on
+        ax.plot(
+            *zip(corners[a], corners[b]),
+            color=CELL_LINE if wide else RULE,
+            linewidth=1.6 if wide else 1.2,
+            zorder=Z_WIREFRAME,
+        )
+    return planes
+
+
+#: How much each of the pillar's walls takes out of what is behind it. Low,
+#: because it is paid twice: a sphere inside the pillar is behind one wall and
+#: one beyond it is behind two, so the figure's darkest item keeps (1 - a)^2 of
+#: itself. At a half — the obvious first guess — that is a quarter, and the
+#: items behind the pillar stopped being items.
+PILLAR_ALPHA = 0.26
+
+
+def _tube(ax: plt.Axes, base: np.ndarray, top: np.ndarray, angles: np.ndarray) -> None:
+    """The pillar's body. Its mouth and its foot are drawn by the caller.
+
+    Both of those lie *in* a plane — the foot in the floor, the mouth in the
+    ceiling — so both have to be painted over the submerged halves of the
+    spheres in that plane, which means waiting until those spheres exist.
+    """
+    for i in range(len(angles) - 1):
+        ax.add_patch(
+            plt.Polygon(
+                [base[i], base[i + 1], top[i + 1], top[i]],
+                closed=True,
+                facecolor=INTRO.BAND,
+                edgecolor="none",
+                alpha=PILLAR_ALPHA,
+                zorder=Z_PILLAR,
+            )
+        )
+    for k in range(0, len(angles) - 1, 22):
+        ax.plot(*zip(base[k], top[k]), color=BLUE, linewidth=1.2, alpha=0.75, zorder=Z_PILLAR + 0.1)
+
+
+def _dome(ax: plt.Axes, angles: np.ndarray) -> None:
+    """The alternative pillar: same footprint, same glass, but it closes.
+
+    Drawn exactly as `_tube` is, and for the same reason — it is the same claim
+    about the same boundary, differing only in whether it has a lid, so a
+    picture that drew it in another hand would be answering a different
+    question. The surface is cut into gores rather than wall quads, one per
+    angle step and each running the whole way up, so the near and far halves
+    overlap in projection and the compositor tints what is behind them once and
+    twice on its own.
+    """
+    meridians = [
+        np.array(
+            [
+                proj(
+                    CURVE_U + CURVE_RU * math.cos(a) * math.cos(t),
+                    CURVE_V + CURVE_RV * math.sin(a) * math.cos(t),
+                    DOME_H * math.sin(t),
+                )
+                for t in np.linspace(0, math.pi / 2, 24)
+            ]
+        )
+        for a in angles
+    ]
+    for i in range(len(angles) - 1):
+        ax.add_patch(
+            plt.Polygon(
+                np.vstack([meridians[i], meridians[i + 1][::-1]]),
+                closed=True,
+                facecolor=INTRO.BAND,
+                edgecolor="none",
+                alpha=PILLAR_ALPHA,
+                zorder=Z_PILLAR,
+            )
+        )
+    for k in range(0, len(angles) - 1, 22):
+        ax.plot(meridians[k][:, 0], meridians[k][:, 1], color=BLUE, linewidth=1.2, alpha=0.75, zorder=Z_PILLAR + 0.1)
+
+
+#: The item radius, on the page.
+ITEM_R = 0.165
+#: The plane's own fill, and so also the colour of the half of a sphere that is
+#: under it. Nudged up from the old near-white so the submerged crescent reads
+#: at this size; it is the theme's `--wash`.
+PLANE_FILL = "#e7ecf2"
+#: How flat a circle drawn *in* a plane comes out on the page — the vertical
+#: squash of this projection, and therefore the shape of a waterline. Derived
+#: rather than chosen, so it stays right if the projection is re-angled.
+WATERLINE_K = PROJ_VY / math.hypot(PROJ_U, PROJ_V)
+
+
+#: How far the clip used for in-plane markings runs past the crescent it is
+#: taken from, in canvas units. The crescent's boundary is the *centreline* of
+#: the sphere's rim, so a clip taken from it exactly leaves the rim's outer half
+#: standing on top of whatever is drawn through it — and a grey rim arc lying
+#: over the boundary curve says the same wrong thing the crescent did before it:
+#: that the sphere sits on the plane rather than in it. Half the rim's width,
+#: rounded up: 1.7pt at 46pt to the unit.
+CLIP_PAD = 0.03
+
+
+@functools.lru_cache(maxsize=2)
+def _submerged_outline(pad: float = 0.0) -> np.ndarray:
+    """The half of a sphere that is under the plane it sits in, as a polygon.
+
+    An item centred on a plane is cut by it at the equator. From above, the
+    near half of that equator bulges downward, so what is left visible of the
+    lower hemisphere is a crescent: bounded above by the waterline and below by
+    the sphere's own silhouette. Drawn in the plane's colour, it reads as the
+    sphere seen *through* the plane rather than as a circle sitting on top of
+    one, which is the whole difference between a surface and a backdrop.
+    """
+    theta = np.linspace(0, math.pi, 48)
+    waterline = np.stack([(ITEM_R + pad) * np.cos(theta), -WATERLINE_K * ITEM_R * np.sin(theta) + pad], axis=1)
+    phi = np.linspace(math.pi, 2 * math.pi, 64)
+    silhouette = np.stack([(ITEM_R + pad) * np.cos(phi), (ITEM_R + pad) * np.sin(phi)], axis=1)
+    return np.vstack([waterline, silhouette])
+
+
+def _item(ax: plt.Axes, point: np.ndarray, zorder: float, plane: plt.Polygon | None = None) -> np.ndarray | None:
+    """One item: a sphere, half of it under *plane*.
+
+    With no plane it is a plain circle — an item in mid-air belongs to neither
+    surface. With one, the submerged crescent is clipped to that plane, so a
+    sphere at the plane's edge hangs over it with nothing behind its lower
+    half. That overhang is the cheapest possible statement that these are
+    volumes and the plane is a slice through them.
+
+    The outline is drawn three times, which is one more than looks necessary
+    and one fewer than it takes to get wrong. Black everywhere; then grey over
+    the plane's whole area, which is a region on the page and not a half of the
+    sphere; then black again above the waterline. What survives is a sphere
+    outlined in black where it stands clear and in grey where it is seen
+    through the plane, *including* the rim of one hanging over the plane's edge,
+    which is clear of the plane and so stays black.
+    """
+    ax.add_patch(plt.Circle(tuple(point), ITEM_R, facecolor="white", edgecolor="none", zorder=zorder))
+    if plane is None:
+        ax.add_patch(
+            plt.Circle(tuple(point), ITEM_R, facecolor="none", edgecolor=INK, linewidth=1.7, zorder=zorder + 0.3)
+        )
+        return None
+
+    submerged = _submerged_outline() + point
+    crescent = plt.Polygon(submerged, closed=True, facecolor=PLANE_FILL, edgecolor="none", zorder=zorder + 0.05)
+    ax.add_patch(crescent)
+    crescent.set_clip_path(plane)
+    # The fill alone is a few percent off white and vanishes at slide size; the
+    # waterline is what makes the cut legible from the back of a room. Clipped
+    # too, so the half of a sphere hanging over the plane's edge has no
+    # waterline drawn across it.
+    theta = np.linspace(0, math.pi, 48)
+    water = ax.plot(
+        point[0] + ITEM_R * np.cos(theta),
+        point[1] - WATERLINE_K * ITEM_R * np.sin(theta),
+        color=CELL_LINE,
+        linewidth=1.1,
+        zorder=zorder + 0.1,
+    )[0]
+    water.set_clip_path(plane)
+
+    for colour, offset, clip in (
+        (INK, 0.15, None),
+        (OUTLINE_SUNK, 0.2, plane),
+        (INK, 0.3, _above_water(ax, point, ITEM_R * 1.02)),
+    ):
+        ring = plt.Circle(
+            tuple(point), ITEM_R, facecolor="none", edgecolor=colour, linewidth=1.7, zorder=zorder + offset
+        )
+        ax.add_patch(ring)
+        if clip is not None:
+            ring.set_clip_path(clip)
+    return _submerged_outline(CLIP_PAD) + point
+
+
+#: The closest two items may come on the page — the item diameter plus a little
+#: air, so neighbours never read as one blob.
+ITEM_GAP = 2 * ITEM_R + 0.10
+#: How close to a plane's edge an item may sit. Small on purpose: an item that
+#: overhangs the edge is the one that shows it has a bottom.
+EDGE_MARGIN = 0.05
+
+
+#: The submerged shades of the two vote colours: the deck's own red and green,
+#: darkened. A mark standing in the plane is cut by it exactly as a sphere is,
+#: and the half underneath is seen through the same wash — which darkens what
+#: is under it, as the spheres show by going from white to grey. A shade of a
+#: pinned hue is a shade, not a second identity, so this stays inside the
+#: theme's rule that colour means one thing.
+RED_SUNK = "#6f1010"
+GREEN_SUNK = "#07533a"
+#: And the sphere rim, where the plane is over it. Dark grey rather than
+#: black, for the same reason and by the same rule.
+OUTLINE_SUNK = "#5b6472"
+
+
+def _above_water(ax: plt.Axes, point: np.ndarray, reach: float) -> plt.Polygon:
+    """An invisible patch covering everything above the waterline at *point*.
+
+    The same curve the spheres are cut by, widened to *reach* so it spans a
+    glyph rather than a circle. Used as a clip, so one mark can be drawn twice —
+    dark underneath, bright above the line — without either copy knowing the
+    shape of the other.
+    """
+    theta = np.linspace(math.pi, 0, 48)
+    arc = np.stack([reach * np.cos(theta), -WATERLINE_K * reach * np.sin(theta)], axis=1) + point
+    corners = np.array([[point[0] + reach, point[1] + 2 * reach], [point[0] - reach, point[1] + 2 * reach]])
+    patch = plt.Polygon(np.vstack([arc, corners]), closed=True, facecolor="none", edgecolor="none", zorder=0)
+    ax.add_patch(patch)
+    return patch
+
+
+def _sunk_glyph(ax: plt.Axes, point: np.ndarray, draw, sunk: str, zorder: float) -> None:
+    """One vote mark, half of it under the plane.
+
+    The glyph is drawn by the deck's own `_check` / `_cross`, then duplicated in
+    the submerged shade underneath and the original clipped to the water's
+    surface. Reading the geometry back off the artists rather than restating it
+    is what keeps this from drifting away from the marks every other slide
+    uses.
+    """
+    first = len(ax.lines)
+    draw(ax, point)
+    surface = _above_water(ax, point, INTRO.R * 1.35)
+    for stroke in ax.lines[first:]:
+        ax.plot(
+            stroke.get_xdata(),
+            stroke.get_ydata(),
+            color=sunk,
+            linewidth=stroke.get_linewidth(),
+            solid_capstyle=stroke.get_solid_capstyle(),
+            solid_joinstyle=stroke.get_solid_joinstyle(),
+            zorder=zorder,
+        )
+        stroke.set_zorder(zorder + 0.1)
+        stroke.set_clip_path(surface)
+
+
+#: How many of the floor's items carry a vote. A handful: the slide is not about
+#: the voting, it is about what the votes could not reach, and the corpus has to
+#: look voted-on without looking laboured over.
+N_GOOD, N_BAD = 5, 4
+
+
+def _votes(floor: np.ndarray) -> dict[int, str]:
+    """Which floor items carry a mark, spread as widely as the plane allows.
+
+    Farthest-point selection: start from the eligible item nearest the pool's
+    middle, then repeatedly take whichever is farthest from everything chosen
+    so far. Two earlier rules both failed for the same reason — they spread the
+    marks over the *sampler's* list rather than over the picture. An index
+    modulo left one check and three crosses after the field was re-spaced;
+    picking evenly along the list put all four crosses in one corner.
+
+    Eligibility carries a margin around the boundary either way, so no mark
+    lands on the curve — an item a line passes through reads as one the
+    detector cut in half rather than one it called — and a wider margin from
+    the plane's edge, so no glyph hangs off into space the way a sphere is
+    meant to.
+    """
+    pools = {
+        "good": [i for i, (u, v) in enumerate(floor) if _inside(u, v, 0.80) and _clear_of_edge(u, v)],
+        "bad": [i for i, (u, v) in enumerate(floor) if not _inside(u, v, 1.20) and _clear_of_edge(u, v)],
+    }
+    marks: dict[int, str] = {}
+    for name, count in (("good", N_GOOD), ("bad", N_BAD)):
+        pool = pools[name]
+        if len(pool) < count:
+            raise SystemExit(f"only {len(pool)} items eligible for {count} {name} votes — respace the field")
+        screen = {i: proj(floor[i][0], floor[i][1], 0.0) for i in pool}
+        centre = np.mean([screen[i] for i in pool], axis=0)
+        chosen = [min(pool, key=lambda i: float(np.hypot(*(screen[i] - centre))))]
+        while len(chosen) < count:
+            chosen.append(max(pool, key=lambda i: min(float(np.hypot(*(screen[i] - screen[j]))) for j in chosen)))
+        marks.update({i: name for i in chosen})
+    return marks
+
+
+#: How far from a plane's edge an item must sit to be allowed a vote glyph. The
+#: glyphs are drawn at full size whatever is under them, so one at the very edge
+#: hangs over nothing; a sphere may do that, a check mark may not.
+VOTE_EDGE_MARGIN = 0.55
+
+
+def _clear_of_edge(u: float, v: float) -> bool:
+    return VOTE_EDGE_MARGIN < u < BOX_U - VOTE_EDGE_MARGIN and VOTE_EDGE_MARGIN < v < BOX_V - VOTE_EDGE_MARGIN
+
+
+#: The paint order, as bands rather than as numbers. Anything the pillar stands
+#: in front of is painted *under* it, which is what makes the blue shading right
+#: without computing any of it: each of the pillar's wall quads is
+#: half-transparent, a point inside the pillar is behind one wall, and a point
+#: beyond it is behind two, so the compositor tints them once and twice on its
+#: own. The alternative — drawing everything on top and tinting by hand — was
+#: what made the pillar look like it stood behind every sphere it should have
+#: hidden.
+#:
+#: Each band of items is 1.2 wide: `_painted_back_to_front` spends 0.9 of it on
+#: depth and `_item` another 0.3 on one sphere's own fill, waterline and rims.
+#: The `*_OVERLAY` levels sit just above their band and the pillar's glass just
+#: above the first of them, so a behind-the-glass item is tinted from its fill
+#: to its rim and so is the piece of boundary showing through it. Getting that
+#: wrong is not subtle — the widest item's rim used to poke through the glass —
+#: but it is invisible, so the arithmetic is written down rather than eyeballed.
+Z_WIREFRAME = 0.3
+Z_BEHIND_PILLAR, Z_BEHIND_OVERLAY = 1.0, 2.4
+Z_PILLAR = 3.0
+Z_IN_FRONT, Z_FRONT_OVERLAY = 6.0, 7.4
+Z_CEILING, Z_CEILING_OVERLAY = 8.0, 9.4
+#: And under every item, for the first stroke of anything lying in a plane.
+#: Above the plane's own fill and the box's edges, below the glass — so the far
+#: half of the pillar's foot, which is genuinely seen through the near wall,
+#: takes the wall's tint without anything being computed for it.
+Z_IN_PLANE = 0.6
+
+#: One band's submerged regions and the level a marking lying in their plane has
+#: to be repeated at to show through them.
+Layer = tuple[list[np.ndarray], float]
+
+
+def _occluded_by_pillar(u: float, v: float, h: float) -> bool:
+    """Whether the pillar stands between this item and the eye.
+
+    The projection is a shear, so "toward the camera" is one fixed direction in
+    the world: the displacement that leaves a point where it is on the page.
+    Walk it from the item and count crossings of the pillar's wall, keeping
+    only those that happen while still inside the room's height — a ray that
+    has already left through the ceiling is not being blocked by anything.
+
+    Ceiling items come out false by construction, which is correct: from up
+    there the walk leaves the room immediately, so nothing is in the way.
+    """
+    toward = np.array([PROJ_V / PROJ_U, -1.0, PROJ_VY])
+    # ((u + a t - CU) / RU)^2 + ((v + b t - CV) / RV)^2 = 1, solved for t.
+    du, dv = (u - CURVE_U) / CURVE_RU, (v - CURVE_V) / CURVE_RV
+    au, av = toward[0] / CURVE_RU, toward[1] / CURVE_RV
+    quad = (au * au + av * av, 2 * (du * au + dv * av), du * du + dv * dv - 1.0)
+    disc = quad[1] ** 2 - 4 * quad[0] * quad[2]
+    if disc < 0:
+        return False
+    root = math.sqrt(disc)
+    return any(
+        t > 1e-9 and 0.0 <= h + toward[2] * t <= BOX_H
+        for t in ((-quad[1] - root) / (2 * quad[0]), (-quad[1] + root) / (2 * quad[0]))
     )
 
 
-def _cone_stage(stage: int) -> plt.Figure:
-    raw = _cone_points()
-    mean = raw.mean(axis=0)
-    centred = raw - mean
-    spread = centred / np.linalg.norm(centred, axis=1, keepdims=True)
+def _occluded_by_dome(u: float, v: float) -> bool:
+    """Whether the dome stands between this floor item and the eye.
 
+    Same walk as `_occluded_by_pillar`, against the half-ellipsoid instead of
+    the cylinder — so an item inside the footprint is behind the near surface,
+    an item just beyond it may be behind both, and one in front of it is behind
+    neither. No height window is needed: the dome closes, so leaving through the
+    top is leaving through the dome.
+    """
+    toward = np.array([PROJ_V / PROJ_U, -1.0, PROJ_VY])
+    du, dv = (u - CURVE_U) / CURVE_RU, (v - CURVE_V) / CURVE_RV
+    au, av, ah = toward[0] / CURVE_RU, toward[1] / CURVE_RV, toward[2] / DOME_H
+    a = au * au + av * av + ah * ah
+    b = 2 * (du * au + dv * av)
+    disc = b * b - 4 * a * (du * du + dv * dv - 1.0)
+    return disc >= 0 and (-b + math.sqrt(disc)) / (2 * a) > 1e-9
+
+
+def _painted_back_to_front(points: np.ndarray, base_z: float) -> list[tuple[int, float]]:
+    """Item indices in paint order, far first, with the z-order each gets.
+
+    Two spheres whose circles overlap have to resolve, and the one nearer the
+    eye has to win. In this projection nearer is simply smaller v, so sorting on
+    it is the whole of the depth test.
+    """
+    order = sorted(range(len(points)), key=lambda i: -points[i][1])
+    return [(i, base_z + 0.9 * k / max(len(order) - 1, 1)) for k, i in enumerate(order)]
+
+
+def _floor_items(ax: plt.Axes, floor: np.ndarray, plane: plt.Polygon, behind: set[int]) -> list[Layer]:
+    """The corpus the votes came from, lying in the floor of the room.
+
+    Returns the submerged regions, grown by `CLIP_PAD`, split into the two
+    bands: anything lying *in* the floor has to be drawn over them, rim
+    included, and a piece of boundary showing through a sphere that stands
+    behind the glass has to be drawn *under* the glass or it comes out brighter
+    than the sphere around it.
+    """
+    voted = _votes(floor)
+    crescents: dict[bool, list[np.ndarray]] = {True: [], False: []}
+    for index, depth_z in _painted_back_to_front(floor, 0.0):
+        u, v = floor[index]
+        point = proj(u, v, 0.0)
+        zorder = (Z_BEHIND_PILLAR if index in behind else Z_IN_FRONT) + depth_z
+        if voted.get(index) == "good":
+            _sunk_glyph(ax, point, INTRO._check, GREEN_SUNK, zorder)
+        elif voted.get(index) == "bad":
+            _sunk_glyph(ax, point, INTRO._cross, RED_SUNK, zorder)
+        else:
+            crescent = _item(ax, point, zorder, plane)
+            if crescent is not None:
+                crescents[index in behind].append(crescent)
+    return [(crescents[True], Z_BEHIND_OVERLAY), (crescents[False], Z_FRONT_OVERLAY)]
+
+
+def _draw_in_plane(ax: plt.Axes, xy: np.ndarray, layers: list[Layer], **style) -> None:
+    """Draw a curve that lies *in* a plane, over the spheres' submerged halves.
+
+    A sphere's crescent is the part of it under the plane, so anything painted
+    on the plane passes in front of it — and a curve that stops at the edge of
+    every crescent it meets says the opposite: that the crescents are sitting on
+    the plane rather than cut into it.
+
+    But the plane is also what everything standing *in* it rises out of, so the
+    same curve has to pass behind every part of every item that is above the
+    waterline: a sphere's white cap, and the bright half of a vote mark. Those
+    two rules are the same rule stated from either side of the surface, and the
+    way to satisfy both is to draw the curve under all of it and then put it
+    back exactly where the plane is what you are looking at.
+
+    So the base stroke goes below every item, and one clipped copy per band goes
+    just above that band, clipped to the union of its crescents — which is the
+    only place a copy can show. Per band rather than once over everything,
+    because a crescent behind the pillar's glass is tinted and the boundary
+    showing through it has to be tinted with it.
+    """
+    ax.plot(xy[:, 0], xy[:, 1], **{**style, "zorder": Z_IN_PLANE})
+    for crescents, zorder in layers:
+        if not crescents:
+            continue
+        over = ax.plot(xy[:, 0], xy[:, 1], **{**style, "zorder": zorder})[0]
+        over.set_clip_path(
+            MplPath.make_compound_path(*(MplPath(np.vstack([c, c[:1]]), closed=True) for c in crescents)),
+            ax.transData,
+        )
+
+
+def _depth_stage(stage: int) -> plt.Figure:
     fig, ax = _canvas()
-    ax.add_patch(plt.Circle(tuple(CONE_C), CONE_R, facecolor="none", edgecolor=RULE, linewidth=1.6, zorder=1))
-    ax.plot(*CONE_C, marker="+", color=SOFT, markersize=11, markeredgewidth=1.6, zorder=3)
+    planes = _wireframe(ax)
 
-    if stage == 2:
-        tip = CONE_C + mean[:2] * CONE_R
-        ax.annotate(
-            "",
-            xy=tuple(tip),
-            xytext=tuple(CONE_C),
-            arrowprops={"arrowstyle": "-|>,head_width=0.22,head_length=0.42", "color": BLUE, "linewidth": 2.6},
-            zorder=5,
-        )
-        ax.text(
-            tip[0] - 0.34,
-            tip[1] + 0.30,
-            "the collection's mean",
-            color=BLUE,
-            fontsize=LABEL_PT,
-            ha="right",
-            va="baseline",
-            zorder=6,
-            path_effects=HALO,
-        )
-
-    for point in {1: raw, 2: raw, 3: centred, 4: spread}[stage]:
-        _sphere_dot(ax, point)
-
-    low, high = _cosine_span(raw if stage < 4 else spread)
-    caption = {
-        1: f"every pair of items: cosine {low:.2f} to {high:.2f}",
-        2: "subtract it",
-        3: "nothing is a unit vector any more — renormalise",
-        4: f"every pair of items: cosine {low:.2f} to {high:.2f}",
-    }[stage]
-    ax.text(
-        CANVAS[0] - 0.45,
-        0.95,
-        caption,
-        color=INK if stage in (1, 4) else SOFT,
-        fontsize=LABEL_PT,
-        fontweight="bold" if stage == 4 else "normal",
-        ha="right",
-        va="baseline",
-        zorder=7,
-    )
+    angles = np.linspace(0, 2 * np.pi, 180)
+    curve = np.stack([CURVE_U + CURVE_RU * np.cos(angles), CURVE_V + CURVE_RV * np.sin(angles)], axis=1)
+    base = np.array([proj(u, v, 0.0) for u, v in curve])
+    floor = _spaced(46, (EDGE_MARGIN, BOX_U - EDGE_MARGIN), (EDGE_MARGIN, BOX_V - EDGE_MARGIN), ITEM_GAP)
     if stage == 4:
-        ax.text(
-            CANVAS[0] - 0.45,
-            0.34,
-            "and their mean is nothing at all, which is why the root has no direction",
-            color=SOFT,
-            fontsize=NOTE_PT,
-            ha="right",
-            va="baseline",
-            zorder=7,
+        behind = {i for i, (u, v) in enumerate(floor) if _occluded_by_dome(u, v)}
+    elif stage == 5:
+        behind = {i for i, (u, v) in enumerate(floor) if _occluded_by_pillar(u, v, 0.0)}
+    else:
+        behind = set()
+
+    # The floor goes down first, because what lies *in* the floor has to be
+    # drawn over its spheres' submerged halves and needs their outlines to do
+    # it. Call order is not paint order — every artist here carries a z.
+    crescents = _floor_items(ax, floor, planes[0], behind)
+
+    top = np.array([proj(u, v, TUBE_H) for u, v in curve])
+    if stage == 4:
+        _dome(ax, angles)
+    if stage == 5:
+        _tube(ax, base, top, angles)
+    if stage >= 2:
+        _draw_in_plane(ax, base, crescents, color=BLUE, linewidth=2.6)
+
+    lids: list[np.ndarray] = []
+    if stage >= 3:
+        ceiling = _spaced(
+            46, (EDGE_MARGIN, BOX_U - EDGE_MARGIN), (EDGE_MARGIN, BOX_V - EDGE_MARGIN), ITEM_GAP, seed=NEW_SEED
         )
+        for index, depth_z in _painted_back_to_front(ceiling, 0.0):
+            crescent = _item(ax, proj(*ceiling[index], NEW_H), Z_CEILING + depth_z, planes[1])
+            if crescent is not None:
+                lids.append(crescent)
+    if stage == 5:
+        _draw_in_plane(ax, top, [(lids, Z_CEILING_OVERLAY)], color=BLUE, linewidth=2.6)
+
     return fig
 
 
-def cone_fig() -> None:
-    """Centre, then renormalise — on a sphere, with the cosines measured.
+def depth_fig() -> None:
+    """Domain shift, as a floor in a room.
 
-    Four pages: the corpus as the embedder delivers it, packed into a cap a few
-    degrees across where every cosine is high and nothing is far from anything;
-    the mean it is packed around; that mean subtracted; and the renormalisation
-    that puts the difference back on the sphere. Both cosine ranges in the
-    captions are computed from the points on screen rather than asserted —
-    and `fragments/atlas-cone.md` quotes the first of them in its notes, so a
-    change to the seed or the cap angle is a change to that note too.
+    Five pages. The corpus the votes came from lies on the floor of a box; the
+    detector cuts it; a second collection arrives on the ceiling — the same
+    count and spread as the first, because it is a domain and not a handful of
+    outliers. Then the two readings of what the cut says about that collection,
+    one per page and never together, because they are rival claims about the
+    same picture and a page holding both asks the room to compare rather than
+    to be surprised.
 
-    **Drawn on a sphere rather than on a circle, and the dimension is the whole
-    reason.** Centring a narrow cap moves its points into the cap's tangent
-    space, so renormalising them recovers a sphere one dimension smaller than
-    the one it started on. In 768 dimensions that costs nothing anybody can
-    see. On a circle it is catastrophic — an arc is one-dimensional, so the
-    picture collapses to two antipodal clumps, and a figure drawn that way
-    says the mechanism destroys the data rather than that it rescues it. Three
-    dimensions is the smallest number that shows the spread the fix buys.
+    The dome goes first: the concept stops, which is what anybody drawing a
+    boundary through a corpus assumes without saying so. It is built out of the
+    same glass as the tube and drawn in the same hand, because it is the same
+    claim about the same boundary and only the lid is at issue; a dome sketched
+    in another colour or another dash would be answering a different question.
+    The tube goes second, because it is the one nobody pictures and it is the
+    one that ships. That cut has no lid: the shipped head is a `Linear(D, 1)` and
+    a linear score is *exactly* constant along every direction its weight
+    vector does not point in (`vtscore/training/mlp.py`, the `LINEAR_SVM_HEAD`
+    sentinel). So the boundary extrudes, and the new collection is *sorted* by
+    it, into matches and non-matches, with no hint that anything is being
+    extrapolated. Every vote in the picture is on the floor, so nothing in the
+    picture chooses between the two.
+
+    The box is the reason this reads at all. The earlier attempt at this slide
+    drew the same idea on a sphere and the room had nothing to judge position
+    against; a floor, four posts and a lid give every item a place.
     """
-    for stage in range(1, CONE_STAGES):
-        save(_cone_stage(stage), OUT, f"atlas-cone.build{stage}.png", column=FULL_BLEED, tight=False)
-    save(_cone_stage(CONE_STAGES), OUT, "atlas-cone.png", column=FULL_BLEED, tight=False)
+    for stage in range(1, DEPTH_STAGES):
+        save(_depth_stage(stage), OUT, f"atlas-depth.build{stage}.png", column=FULL_BLEED, tight=False)
+    save(_depth_stage(DEPTH_STAGES), OUT, "atlas-depth.png", column=FULL_BLEED, tight=False)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 4. The p-values — the second job, and what is wrong with it
 # ──────────────────────────────────────────────────────────────────────────────
 
-PVALUES_STAGES = 3
+PVALUES_STAGES = 2
 #: Printed names for the combiners the study compared, in the CSV's own order.
 COMBINER_LABELS = {
     "median": "median",
@@ -658,7 +1093,7 @@ def _pvalues_stage(stage: int) -> plt.Figure:
 
     ax.set_xlim(0, 0.36)
     ax.set_ylim(-0.012, 0.36)
-    ax.set_xlabel("of its own held-out data, the share it calls atypical", fontsize=LABEL_PT, color=INK, labelpad=9)
+    ax.set_xlabel("share of its own held-out data called atypical", fontsize=LABEL_PT, color=INK, labelpad=9)
     ax.set_ylabel("distance from a calibrated p-value", fontsize=LABEL_PT, color=INK, labelpad=9)
     ax.tick_params(labelsize=NOTE_PT, colors=SOFT, length=4)
     for side in ("top", "right"):
@@ -670,7 +1105,7 @@ def _pvalues_stage(stage: int) -> plt.Figure:
     ax.text(
         nominal + 0.006,
         0.352,
-        f"what it promises: {nominal:.0%}",
+        f"\u03b1 = {nominal:g}",
         color=BLUE,
         fontsize=NOTE_PT,
         ha="left",
@@ -707,18 +1142,6 @@ def _pvalues_stage(stage: int) -> plt.Figure:
             zorder=6,
         )
 
-    if stage >= 3:
-        ax.text(
-            0.352,
-            0.062,
-            "and on a patch embedder it calls 12% of its own\ndata strange, so the route refuses one",
-            color=RED,
-            fontsize=LABEL_PT,
-            ha="right",
-            va="top",
-            linespacing=1.45,
-            zorder=6,
-        )
     return fig
 
 
@@ -740,6 +1163,6 @@ def pvalues_fig() -> None:
 if __name__ == "__main__":
     blindspot_fig()
     cells_fig()
-    cone_fig()
+    depth_fig()
     pvalues_fig()
     print("wrote figures to", OUT)
