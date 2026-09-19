@@ -130,6 +130,7 @@ from pathlib import Path
 
 import pile_config as pc
 from pilebuild.corrections import dropped_rows, write_json_locked
+from pilebuild.slates import slate_manifests
 
 pc.setup_env()
 
@@ -224,11 +225,10 @@ def main() -> int:
     # (image, class) -> manifest row, for the band of a reviewed positive.
     cells: dict[tuple[int, str], str] = {}
     for root in args.slates.split(","):
-        # Two layouts, because the record flattens what the working directory
-        # nested: `slates/<class>/manifest.csv` there, `*__slates__<class>__manifest.csv`
-        # here. Globbing both means the same default works against either.
-        found = set(Path(root).glob("*/manifest.csv")) | set(Path(root).glob("*__manifest.csv"))
-        for man in sorted(found):
+        # Both layouts, resolved by `pilebuild.slates` rather than here: the same
+        # rule is needed by `make_contact_sheets.py`, and a layout spelled twice
+        # is a layout that drifts (#4006).
+        for man in slate_manifests(root):
             for r in csv.DictReader(man.open()):
                 if r.get("cell"):
                     cells[(int(r["image_id"]), r["class"])] = r["cell"]

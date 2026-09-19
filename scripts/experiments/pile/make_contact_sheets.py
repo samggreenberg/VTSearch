@@ -27,6 +27,8 @@ from pathlib import Path
 
 import pile_config as pc
 
+from pilebuild.slates import slate_manifest
+
 pc.setup_env()
 
 COLS, ROWS = 5, 4
@@ -37,7 +39,9 @@ LABEL = 22
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--class", dest="klass", required=True)
-    ap.add_argument("--slates", default=str(pc.PILE.parent / "vgscale-3156" / "slates"))
+    # The committed record, not the working directory #4001 deleted. Either
+    # layout resolves -- see `pilebuild.slates`.
+    ap.add_argument("--slates", default=str(Path(__file__).resolve().parent / "human_record"))
     ap.add_argument("--out", default=str(pc.PILE.parent / "vgscale-3156" / "sheets_neg"))
     args = ap.parse_args()
 
@@ -46,7 +50,12 @@ def main() -> int:
     from build_pile import _vg_image_paths  # noqa: PLC0415
 
     folder = args.klass.replace(" ", "_")
-    man = Path(args.slates) / folder / "manifest.csv"
+    man = slate_manifest(args.slates, folder)
+    if man is None:
+        raise SystemExit(
+            f"no slate manifest for {folder!r} under {args.slates}: neither "
+            f"{folder}/manifest.csv nor a flattened *__slates__{folder}__manifest.csv"
+        )
     rows = [r for r in csv.DictReader(man.open()) if r["stratum"] in ("boundary", "random")]
     rows.sort(key=lambda r: -float(r["text_score"]))
     paths = _vg_image_paths()
