@@ -247,3 +247,103 @@ class TestArchiveVotes:
         assert first.name == "votes_2026-09-19.json"
         assert second != first  # the fuller archive is still there
         assert len(json.loads(first.read_text())["labels"]["good"]) == 5
+
+
+def _queue(root: Path, dirname: str, name: str, questions: dict) -> Path:
+    """A per-pass queue directory: a manifest and one rendered image per question."""
+    import json
+
+    d = root / dirname
+    (d / "images").mkdir(parents=True, exist_ok=True)
+    for fn in questions:
+        (d / "images" / fn).write_bytes(b"jpeg")
+    (d / "manifest.json").write_text(
+        json.dumps(
+            {
+                "dataset_name": name,
+                "tasks": sorted({q["task"] for q in questions.values()}),
+                "questions": questions,
+            }
+        ),
+        encoding="utf-8",
+    )
+    return d
+
+
+def _crop(i, cid="t/logo_a"):
+    return {"task": "query_crops", "key": {"class_id": cid, "index": i, "n": 3}}
+
+
+def _compl(i, cid="t/logo_a"):
+    return {"task": "completeness2", "key": {"class_id": cid, "index": i, "tile_box": False}}
+
+
+class TestRegroupOnePairPerClass:
+    """Sam, 2026-09-19: one pair per class when the passes are this small; the image carries the question."""
+
+    def test_both_passes_merge_and_answered_questions_are_dropped(self, br, tmp_path):
+        root, keep = tmp_path / "binary", tmp_path / "keep"
+        _queue(root, "q", "docmarks t logo_a -- good extra query crop?", {"c0.jpg": _crop(0), "c1.jpg": _crop(1)})
+        _queue(
+            root,
+            "c",
+            "docmarks t logo_a -- right mark same as left? (completeness 2)",
+            {"m0.jpg": _compl(0), "m1.jpg": _compl(1)},
+        )
+        _archive(root, "q", "docmarks t logo_a -- good extra query crop?", {"c0.jpg": "good"})
+        (out,) = br.regroup(root, keep, base=None)
+        name, qdir, n = out
+        assert name == "docmarks t logo_a -- read the question on each image"
+        assert n == 3  # c0 is answered, so it is not asked again
+        assert sorted(x.name for x in (qdir / "images").glob("*.jpg")) == ["c1.jpg", "m0.jpg", "m1.jpg"]
+
+    def test_the_merged_manifest_keeps_each_question_task_so_bank_still_routes_it(self, br, tmp_path):
+        import json
+
+        root, keep = tmp_path / "binary", tmp_path / "keep"
+        _queue(root, "q", "docmarks t logo_a -- good extra query crop?", {"c0.jpg": _crop(0)})
+        _queue(root, "c", "docmarks t logo_a -- right mark same as left? (completeness 2)", {"m0.jpg": _compl(0)})
+        (_name, qdir, _n) = br.regroup(root, keep, base=None)[0]
+        m = json.loads((qdir / "manifest.json").read_text())
+        assert m["tasks"] == ["completeness2", "query_crops"]
+        assert {fn: q["task"] for fn, q in m["questions"].items()} == {
+            "c0.jpg": "query_crops",
+            "m0.jpg": "completeness2",
+        }
+        # bank groups by the question's own task, so one queue reaches two slates
+        assert {br.TRANSLATORS[q["task"]][1] for q in m["questions"].values()} == {
+            br.translate_query_crops,
+            br.translate_completeness2,
+        }
+
+    def test_box_tighten_is_left_as_its_own_pair(self, br, tmp_path):
+        root, keep = tmp_path / "binary", tmp_path / "keep"
+        _queue(
+            root,
+            "b",
+            "docmarks staver boxes -- red box right?",
+            {"b0.jpg": {"task": "box_tighten", "key": {"class_id": "t/logo_a", "index": 0}}},
+        )
+        assert br.regroup(root, keep, base=None) == []
+
+    def test_a_question_answered_since_the_last_regroup_is_removed_from_the_merged_queue(self, br, tmp_path):
+        root, keep = tmp_path / "binary", tmp_path / "keep"
+        _queue(root, "q", "docmarks t logo_a -- good extra query crop?", {"c0.jpg": _crop(0), "c1.jpg": _crop(1)})
+        (_n1, qdir, first) = br.regroup(root, keep, base=None)[0]
+        assert first == 2
+        _archive(root, "q", "docmarks t logo_a -- good extra query crop?", {"c0.jpg": "bad"})
+        (_n2, qdir2, second) = br.regroup(root, keep, base=None)[0]
+        assert (qdir2, second) == (qdir, 1)
+        # the stale image is gone: load_queue imports the folder, so leaving it would re-ask it
+        assert [x.name for x in (qdir / "images").glob("*.jpg")] == ["c1.jpg"]
+
+    def test_a_question_without_a_class_is_refused_rather_than_grouped_wrongly(self, br, tmp_path):
+        root, keep = tmp_path / "binary", tmp_path / "keep"
+        _queue(
+            root,
+            "u",
+            "docmarks pm_crest -- right logo same as left?",
+            {"s0.jpg": {"task": "ucsf_classes", "key": {"sheet": "p__a_00.png", "cell": 0}}},
+        )
+        with pytest.raises(SystemExit, match="key.class_id"):
+            br.regroup(root, keep, base=None)
