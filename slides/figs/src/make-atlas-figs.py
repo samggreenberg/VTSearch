@@ -454,11 +454,18 @@ def proj(u: float, v: float, h: float) -> np.ndarray:
 
 
 def _spaced(count: int, ulim: tuple[float, float], vlim: tuple[float, float], gap: float, seed: int = 5) -> np.ndarray:
-    """Blue-noise-ish floor positions.
+    """Blue-noise-ish positions in a plane, spaced by how far apart they *look*.
 
     Uniform sampling clumps, and on a figure whose subject is *where the items
-    are* a clump reads as a cluster that means something. Rejection sampling
-    is enough at these counts.
+    are* a clump reads as a cluster that means something. Rejection sampling is
+    enough at these counts.
+
+    `gap` is a distance on the page and not in the world, which is the whole
+    reason for measuring it here. This projection squashes the receding axis to
+    about a third, so two items a world-unit apart along it end up a third as
+    far apart on screen as two a world-unit apart across it: a world-space gap
+    that looks generous in one direction draws items nearly tangent in the
+    other, which is exactly what it did.
     """
     rng = np.random.default_rng(seed)
     out: list[np.ndarray] = []
@@ -466,7 +473,8 @@ def _spaced(count: int, ulim: tuple[float, float], vlim: tuple[float, float], ga
         if len(out) == count:
             return np.array(out)
         q = np.array([rng.uniform(*ulim), rng.uniform(*vlim)])
-        if all(float(np.hypot(*(q - o))) > gap for o in out):
+        here = proj(q[0], q[1], 0.0)
+        if all(float(np.hypot(*(here - proj(o[0], o[1], 0.0)))) > gap for o in out):
             out.append(q)
     # Loud, because the failure is invisible in the output: a sampler that gives
     # up early just draws a thinner domain, and "the same number of items on the
@@ -489,25 +497,28 @@ def _inside(u: float, v: float, margin: float = 1.0) -> bool:
     return ((u - CURVE_U) / (CURVE_RU * margin)) ** 2 + ((v - CURVE_V) / (CURVE_RV * margin)) ** 2 < 1.0
 
 
-def _wireframe(ax: plt.Axes) -> None:
-    """The box, as twelve edges and a floor.
+def _wireframe(ax: plt.Axes) -> dict[int, plt.Polygon]:
+    """The box, as twelve edges and two planes. Returns the planes by level.
 
     Every edge is drawn, none hidden. Hidden-line removal would be more correct
     and less useful: the tube inside is translucent on purpose, so an edge
     vanishing behind it reads as a mistake rather than as depth, and the box is
     scaffolding — its whole job is to say "this is a volume" and then recede.
+
+    The two planes come back because the items are drawn *through* them: see
+    `_item`, which clips a sphere's submerged half to the plane it sits in.
     """
     corners = {(u, v, h): proj(u * BOX_U, v * BOX_V, h * BOX_H) for u in (0, 1) for v in (0, 1) for h in (0, 1)}
+    planes: dict[int, plt.Polygon] = {}
     for h in (0, 1):
-        ax.add_patch(
-            plt.Polygon(
-                [corners[0, 0, h], corners[1, 0, h], corners[1, 1, h], corners[0, 1, h]],
-                closed=True,
-                facecolor="#f7f9fb",
-                edgecolor="none",
-                zorder=0,
-            )
+        planes[h] = plt.Polygon(
+            [corners[0, 0, h], corners[1, 0, h], corners[1, 1, h], corners[0, 1, h]],
+            closed=True,
+            facecolor=PLANE_FILL,
+            edgecolor="none",
+            zorder=0,
         )
+        ax.add_patch(planes[h])
     for a, b in (
         # the floor, then the lid, then the four posts
         ((0, 0, 0), (1, 0, 0)),
@@ -530,6 +541,7 @@ def _wireframe(ax: plt.Axes) -> None:
             linewidth=1.6 if wide else 1.2,
             zorder=1,
         )
+    return planes
 
 
 def _tube(ax: plt.Axes, base: np.ndarray, top: np.ndarray, angles: np.ndarray) -> None:
@@ -550,25 +562,147 @@ def _tube(ax: plt.Axes, base: np.ndarray, top: np.ndarray, angles: np.ndarray) -
         ax.plot(*zip(base[k], top[k]), color=BLUE, linewidth=1.2, alpha=0.75, zorder=3)
 
 
-def _item(ax: plt.Axes, point: np.ndarray, zorder: int) -> None:
-    ax.add_patch(plt.Circle(tuple(point), 0.155, facecolor="none", edgecolor=INK, linewidth=1.7, zorder=zorder))
+#: The item radius, on the page.
+ITEM_R = 0.165
+#: The plane's own fill, and so also the colour of the half of a sphere that is
+#: under it. Nudged up from the old near-white so the submerged crescent reads
+#: at this size; it is the theme's `--wash`.
+PLANE_FILL = "#e7ecf2"
+#: How flat a circle drawn *in* a plane comes out on the page — the vertical
+#: squash of this projection, and therefore the shape of a waterline. Derived
+#: rather than chosen, so it stays right if the projection is re-angled.
+WATERLINE_K = PROJ_VY / math.hypot(PROJ_U, PROJ_V)
 
 
-def _floor_items(ax: plt.Axes) -> None:
-    """The corpus the votes came from, lying on the floor of the room."""
-    for index, (u, v) in enumerate(_spaced(46, (0.4, BOX_U - 0.4), (0.4, BOX_V - 0.4), 0.66)):
+@functools.lru_cache(maxsize=1)
+def _submerged_outline() -> np.ndarray:
+    """The half of a sphere that is under the plane it sits in, as a polygon.
+
+    An item centred on a plane is cut by it at the equator. From above, the
+    near half of that equator bulges downward, so what is left visible of the
+    lower hemisphere is a crescent: bounded above by the waterline and below by
+    the sphere's own silhouette. Drawn in the plane's colour, it reads as the
+    sphere seen *through* the plane rather than as a circle sitting on top of
+    one, which is the whole difference between a surface and a backdrop.
+    """
+    theta = np.linspace(0, math.pi, 48)
+    waterline = np.stack([ITEM_R * np.cos(theta), -WATERLINE_K * ITEM_R * np.sin(theta)], axis=1)
+    phi = np.linspace(math.pi, 2 * math.pi, 64)
+    silhouette = np.stack([ITEM_R * np.cos(phi), ITEM_R * np.sin(phi)], axis=1)
+    return np.vstack([waterline, silhouette])
+
+
+def _item(ax: plt.Axes, point: np.ndarray, zorder: int, plane: plt.Polygon | None = None) -> None:
+    """One item: a sphere, half of it under *plane*.
+
+    With no plane it is a plain circle — an item in mid-air belongs to neither
+    surface. With one, the submerged crescent is clipped to that plane, so a
+    sphere at the plane's edge hangs over it with nothing behind its lower
+    half. That overhang is the cheapest possible statement that these are
+    volumes and the plane is a slice through them.
+    """
+    ax.add_patch(plt.Circle(tuple(point), ITEM_R, facecolor="white", edgecolor="none", zorder=zorder))
+    if plane is not None:
+        crescent = plt.Polygon(
+            _submerged_outline() + point, closed=True, facecolor=PLANE_FILL, edgecolor="none", zorder=zorder
+        )
+        ax.add_patch(crescent)
+        crescent.set_clip_path(plane)
+        # The fill alone is a few percent off white and vanishes at slide size;
+        # the waterline is what makes the cut legible from the back of a room.
+        # Clipped too, so the half of a sphere hanging over the plane's edge has
+        # no waterline drawn across it.
+        theta = np.linspace(0, math.pi, 48)
+        water = ax.plot(
+            point[0] + ITEM_R * np.cos(theta),
+            point[1] - WATERLINE_K * ITEM_R * np.sin(theta),
+            color=CELL_LINE,
+            linewidth=1.1,
+            zorder=zorder + 1,
+        )[0]
+        water.set_clip_path(plane)
+        ax.add_patch(
+            plt.Circle(tuple(point), ITEM_R, facecolor="none", edgecolor=INK, linewidth=1.7, zorder=zorder + 2)
+        )
+        return
+    ax.add_patch(plt.Circle(tuple(point), ITEM_R, facecolor="none", edgecolor=INK, linewidth=1.7, zorder=zorder + 1))
+
+
+#: The closest two items may come on the page — the item diameter plus a little
+#: air, so neighbours never read as one blob.
+ITEM_GAP = 2 * ITEM_R + 0.10
+#: How close to a plane's edge an item may sit. Small on purpose: an item that
+#: overhangs the edge is the one that shows it has a bottom.
+EDGE_MARGIN = 0.05
+
+
+#: How many of the floor's items carry a vote. A handful: the slide is not about
+#: the voting, it is about what the votes could not reach, and the corpus has to
+#: look voted-on without looking laboured over.
+N_GOOD, N_BAD = 5, 4
+
+
+def _votes(floor: np.ndarray) -> dict[int, str]:
+    """Which floor items carry a mark, spread as widely as the plane allows.
+
+    Farthest-point selection: start from the eligible item nearest the pool's
+    middle, then repeatedly take whichever is farthest from everything chosen
+    so far. Two earlier rules both failed for the same reason — they spread the
+    marks over the *sampler's* list rather than over the picture. An index
+    modulo left one check and three crosses after the field was re-spaced;
+    picking evenly along the list put all four crosses in one corner.
+
+    Eligibility carries a margin around the boundary either way, so no mark
+    lands on the curve — an item a line passes through reads as one the
+    detector cut in half rather than one it called — and a wider margin from
+    the plane's edge, so no glyph hangs off into space the way a sphere is
+    meant to.
+    """
+    pools = {
+        "good": [i for i, (u, v) in enumerate(floor) if _inside(u, v, 0.80) and _clear_of_edge(u, v)],
+        "bad": [i for i, (u, v) in enumerate(floor) if not _inside(u, v, 1.20) and _clear_of_edge(u, v)],
+    }
+    marks: dict[int, str] = {}
+    for name, count in (("good", N_GOOD), ("bad", N_BAD)):
+        pool = pools[name]
+        if len(pool) < count:
+            raise SystemExit(f"only {len(pool)} items eligible for {count} {name} votes — respace the field")
+        screen = {i: proj(floor[i][0], floor[i][1], 0.0) for i in pool}
+        centre = np.mean([screen[i] for i in pool], axis=0)
+        chosen = [min(pool, key=lambda i: float(np.hypot(*(screen[i] - centre))))]
+        while len(chosen) < count:
+            chosen.append(max(pool, key=lambda i: min(float(np.hypot(*(screen[i] - screen[j]))) for j in chosen)))
+        marks.update({i: name for i in chosen})
+    return marks
+
+
+#: How far from a plane's edge an item must sit to be allowed a vote glyph. The
+#: glyphs are drawn at full size whatever is under them, so one at the very edge
+#: hangs over nothing; a sphere may do that, a check mark may not.
+VOTE_EDGE_MARGIN = 0.55
+
+
+def _clear_of_edge(u: float, v: float) -> bool:
+    return VOTE_EDGE_MARGIN < u < BOX_U - VOTE_EDGE_MARGIN and VOTE_EDGE_MARGIN < v < BOX_V - VOTE_EDGE_MARGIN
+
+
+def _floor_items(ax: plt.Axes, plane: plt.Polygon) -> None:
+    """The corpus the votes came from, lying in the floor of the room."""
+    floor = _spaced(46, (EDGE_MARGIN, BOX_U - EDGE_MARGIN), (EDGE_MARGIN, BOX_V - EDGE_MARGIN), ITEM_GAP)
+    voted = _votes(floor)
+    for index, (u, v) in enumerate(floor):
         point = proj(u, v, 0.0)
-        if _inside(u, v, 0.86) and index % 3 == 0:
+        if voted.get(index) == "good":
             INTRO._check(ax, point)
-        elif not _inside(u, v, 1.16) and index % 9 == 4:
+        elif voted.get(index) == "bad":
             INTRO._cross(ax, point)
         else:
-            _item(ax, point, 6)
+            _item(ax, point, 6, plane)
 
 
 def _depth_stage(stage: int) -> plt.Figure:
     fig, ax = _canvas()
-    _wireframe(ax)
+    planes = _wireframe(ax)
 
     angles = np.linspace(0, 2 * np.pi, 180)
     curve = np.stack([CURVE_U + CURVE_RU * np.cos(angles), CURVE_V + CURVE_RV * np.sin(angles)], axis=1)
@@ -583,11 +717,13 @@ def _depth_stage(stage: int) -> plt.Figure:
     if stage >= 2:
         ax.plot(base[:, 0], base[:, 1], color=BLUE, linewidth=2.6, zorder=5)
 
-    _floor_items(ax)
+    _floor_items(ax, planes[0])
 
     if stage >= 4:
-        for u, v in _spaced(46, (0.4, BOX_U - 0.4), (0.4, BOX_V - 0.4), 0.66, seed=NEW_SEED):
-            _item(ax, proj(u, v, NEW_H), 7)
+        for u, v in _spaced(
+            46, (EDGE_MARGIN, BOX_U - EDGE_MARGIN), (EDGE_MARGIN, BOX_V - EDGE_MARGIN), ITEM_GAP, seed=NEW_SEED
+        ):
+            _item(ax, proj(u, v, NEW_H), 7, planes[1])
 
     return fig
 
