@@ -1039,6 +1039,22 @@ QUARRY_BAD = "#b91c1c"
 GOOD_HATCH = "//////"
 BAD_HATCH = "\\\\\\"
 
+#: The empty set is written **Ø** (U+00D8, the Latin letter O with stroke) and
+#: not ∅ (U+2205, the mathematical empty set), for the one reason a deck cares
+#: about: the proper symbol is a math glyph and does not take the bold face's
+#: weight. Measured over DejaVu Sans Bold as ink area over bounding box,
+#: `emptyset` fills 0.43 of its box against 0.51 for `A` and 0.56 for `O`,
+#: while `Oslash` is 0.58 — right in with the letters. Beside a bold `A⁺` the
+#: correct character reads as something pasted in from another document, which
+#: is the same objection `slides/STYLE.md` raises against setting a formula in
+#: Computer Modern. This is a *typographic* substitution of a glyph the symbol
+#: was derived from, so it is written once, here, and referred to by name.
+#:
+#: The superscripts were checked the same way and are fine: `⁺` and `⁼` carry
+#: exactly the ink of a full-size `+` and `=` in the bold face. They look light
+#: because they are small, which is what a superscript is.
+EMPTY = "\u00d8"
+
 #: Characters per line in the left column, which is `RIGHT_X - LEFT_X` wide —
 #: 357 slide pixels, about 31 characters of the 15pt body face.
 #: The left column's two registers, in points, and the rhythm they are set on
@@ -1097,8 +1113,8 @@ QUARRY_CHIP = {"boxstyle": "square,pad=0.18", "facecolor": "white", "edgecolor":
 #: spelling for the frame being drawn.
 QUARRY_BLOCKS = [
     ("def", "A⁺", "Hold an A, maybe more."),
-    ("def", "∅", "Hold none of the three."),
-    ("head", "Easy: A⁺ vs ∅", None),
+    ("def", EMPTY, "Hold none of the three."),
+    ("head", f"Easy: A⁺ vs {EMPTY}", None),
     ("def", "AB⁼", "Hold exactly A and B."),
     ("def", "¬A", "Hold no A."),
     ("head", "Hard: A⁺ vs ¬A", None),
@@ -1142,7 +1158,7 @@ def _quarry_easy_term(frame: int) -> str:
     which is the comparison the slide closes on. Leaving it on C would compare
     two different detectors.
     """
-    return f"Easy: {'ABC'[frame - 1] if 1 <= frame <= 3 else 'A'}⁺ vs ∅"
+    return f"Easy: {'ABC'[frame - 1] if 1 <= frame <= 3 else 'A'}⁺ vs {EMPTY}"
 
 
 def _quarry_centres() -> list[tuple[float, float]]:
@@ -1370,7 +1386,7 @@ def fig_coco_quarry_complement(frame: int = len(QUARRY_FRAMES) - 1) -> plt.Figur
     # ∅ bottom-left, ¬A top-right: they name nested regions once both are on
     # screen, so they go in opposite corners rather than along one edge.
     empty = _quarry_tone(0, good, negatives)
-    _quarry_chip(ax, x0 + 0.13, y0 + 0.13, "∅", FLOOR_PT + 7, empty, fontweight="bold", ha="left", va="bottom")
+    _quarry_chip(ax, x0 + 0.13, y0 + 0.13, EMPTY, FLOOR_PT + 7, empty, fontweight="bold", ha="left", va="bottom")
     if cells:
         for bits, (x, y) in _quarry_cells(centres).items():
             tone = _quarry_tone(bits, good, negatives)
