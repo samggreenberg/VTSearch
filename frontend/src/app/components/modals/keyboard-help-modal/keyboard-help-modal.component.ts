@@ -122,14 +122,16 @@ export class KeyboardHelpModalComponent implements OnInit {
           shortcuts: [
             { keys: ['→'], description: 'Vote good' },
             { keys: ['←'], description: 'Vote bad' },
+            { keys: ['↓'], description: 'Back to the item you just voted on (again to step further back)' },
+            { keys: ['↑'], description: 'Forward to the next unlabeled item' },
           ],
         },
         {
           title: 'Playback',
           shortcuts: [
             { keys: ['Space'], description: 'Play / pause audio or video' },
-            { keys: ['↑'], description: 'Volume up' },
-            { keys: ['↓'], description: 'Volume down' },
+            { keys: ['Shift', '↑'], description: 'Volume up' },
+            { keys: ['Shift', '↓'], description: 'Volume down' },
           ],
         },
         {

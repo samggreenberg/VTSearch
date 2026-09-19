@@ -38,24 +38,44 @@ describe('KeyboardService', () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }));
   }));
 
-  it('should emit volume up on ArrowUp', () => new Promise<void>((done) => {
+  it('should emit forward navigation on ArrowUp', () => new Promise<void>((done) => {
+    service.start();
+    service.action$.subscribe((action: KeyboardAction) => {
+      expect(action.type).toBe('navigate');
+      expect(action.navDirection).toBe('forward');
+      done();
+    });
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+  }));
+
+  it('should emit back navigation on ArrowDown', () => new Promise<void>((done) => {
+    service.start();
+    service.action$.subscribe((action: KeyboardAction) => {
+      expect(action.type).toBe('navigate');
+      expect(action.navDirection).toBe('back');
+      done();
+    });
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+  }));
+
+  it('should emit volume up on Shift+ArrowUp', () => new Promise<void>((done) => {
     service.start();
     service.action$.subscribe((action: KeyboardAction) => {
       expect(action.type).toBe('volume');
       expect(action.volumeDelta).toBe(0.05);
       done();
     });
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', shiftKey: true }));
   }));
 
-  it('should emit volume down on ArrowDown', () => new Promise<void>((done) => {
+  it('should emit volume down on Shift+ArrowDown', () => new Promise<void>((done) => {
     service.start();
     service.action$.subscribe((action: KeyboardAction) => {
       expect(action.type).toBe('volume');
       expect(action.volumeDelta).toBe(-0.05);
       done();
     });
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', shiftKey: true }));
   }));
 
   it('should emit playback on Space', () => new Promise<void>((done) => {
@@ -89,14 +109,25 @@ describe('KeyboardService', () => {
     expect(actions[0].direction).toBe('bad');
   });
 
-  it('should still emit volume on auto-repeat ArrowUp (held key adjusts)', () => {
+  it('should still emit volume on auto-repeat Shift+ArrowUp (held key adjusts)', () => {
     service.start();
     const actions: KeyboardAction[] = [];
     service.action$.subscribe((a) => actions.push(a));
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', repeat: true }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', shiftKey: true }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', shiftKey: true, repeat: true }));
     expect(actions.length).toBe(2);
     expect(actions.every((a) => a.type === 'volume')).toBe(true);
+  });
+
+  it('should not emit navigation on auto-repeat ArrowDown (held key)', () => {
+    service.start();
+    const actions: KeyboardAction[] = [];
+    service.action$.subscribe((a) => actions.push(a));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', repeat: true }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', repeat: true }));
+    expect(actions.length).toBe(1);
+    expect(actions[0].navDirection).toBe('back');
   });
 
   it('should not emit when modifier keys are held', () => {

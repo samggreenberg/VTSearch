@@ -8,6 +8,7 @@ import { adaptivePoll } from './adaptive-poll';
 import { MediasApiService } from './medias-api.service';
 import { SortingApiService } from './sorting-api.service';
 import { VoteFlow, VoteProvenanceService } from './vote-provenance.service';
+import { VoteHistoryService } from './vote-history.service';
 
 /**
  * One vote captured for Cmd/Ctrl-Z undo.  `previousPolarity` is the polarity
@@ -65,6 +66,7 @@ export class VoteStateService implements OnDestroy {
   private sortingApi = inject(SortingApiService);
   private mediasApi = inject(MediasApiService);
   private provenance = inject(VoteProvenanceService);
+  private history = inject(VoteHistoryService);
 
   private readonly _goodVotes = signal<Set<number>>(new Set());
   private readonly _badVotes = signal<Set<number>>(new Set());
@@ -390,6 +392,9 @@ export class VoteStateService implements OnDestroy {
         });
         if (this.past.length > UNDO_STACK_MAX) this.past.shift();
         this.future = [];
+        // Remember where the user has been, so the down-arrow walk can bring
+        // them back here (#4032).
+        this.history.record(id);
       }),
     );
   }
@@ -541,6 +546,7 @@ export class VoteStateService implements OnDestroy {
     this.pendingRegionBoxes.clear();
     this.past = [];
     this.future = [];
+    this.history.clear();
     // Discard any /api/votes read issued before this clear (e.g. an in-flight
     // poll from the previous dataset/detector context): treat everything up to
     // the current issue id as already-superseded so a late pre-clear response
@@ -574,6 +580,7 @@ export class VoteStateService implements OnDestroy {
     });
     if (this.past.length > UNDO_STACK_MAX) this.past.shift();
     this.future = [];
+    this.history.record(mediaId);
   }
 
   /**
