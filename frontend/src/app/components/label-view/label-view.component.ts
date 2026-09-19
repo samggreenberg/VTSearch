@@ -125,14 +125,6 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       && !this.viewingPick(),
   );
 
-  /** True while the selection is still the item {@link pickedWhileDone}
-   *  recorded. Both being `null` is not a match: that is "nothing picked and
-   *  nothing selected", which is the state a fresh entry is in. */
-  private readonly viewingPick = computed(() => {
-    const picked = this.pickedWhileDone();
-    return picked !== null && this.mediaState.selectedId() === picked;
-  });
-
   /**
    * The item the user picked by hand while the "nothing left" pane was up, or
    * `null`.
@@ -149,6 +141,14 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * the point again.
    */
   private readonly pickedWhileDone = signal<number | null>(null);
+
+  /** True while the selection is still the item {@link pickedWhileDone}
+   *  recorded. Both being `null` is not a match: that is "nothing picked and
+   *  nothing selected", which is the state a fresh entry is in. */
+  private readonly viewingPick = computed(() => {
+    const picked = this.pickedWhileDone();
+    return picked !== null && this.mediaState.selectedId() === picked;
+  });
 
   /** Whether the dataset is finished (no more items anywhere) or merely the
    *  loaded ranking is. Autopilot reaching `exhausted` means the former: its
