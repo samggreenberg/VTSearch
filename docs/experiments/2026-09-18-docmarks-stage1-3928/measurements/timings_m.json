@@ -1,0 +1,32 @@
+[
+  {
+    "cell": "d512",
+    "dim": 512,
+    "gib": 2.168,
+    "bytes_per_page": 46982.6,
+    "load_s": 4.2,
+    "prepare_all_s": 0.05,
+    "search_ms_mean": 3672.3,
+    "search_ms_p50": 3671.4
+  },
+  {
+    "cell": "d256",
+    "dim": 256,
+    "gib": 1.084,
+    "bytes_per_page": 23708.8,
+    "load_s": 2.2,
+    "prepare_all_s": 0.01,
+    "search_ms_mean": 1846.8,
+    "search_ms_p50": 1846.0
+  },
+  {
+    "cell": "d128",
+    "dim": 128,
+    "gib": 0.542,
+    "bytes_per_page": 12071.9,
+    "load_s": 1.2,
+    "prepare_all_s": 0.01,
+    "search_ms_mean": 925.5,
+    "search_ms_p50": 925.1
+  }
+]

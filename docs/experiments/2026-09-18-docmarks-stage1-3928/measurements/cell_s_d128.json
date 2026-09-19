@@ -1,0 +1,13 @@
+{
+  "dim": 128,
+  "projected": true,
+  "budget": 8192,
+  "tile": [
+    0.25,
+    0.18
+  ],
+  "min_tile_kp": 20,
+  "pages": 5000,
+  "bytes": 68095234,
+  "bytes_per_page": 13619.0
+}
