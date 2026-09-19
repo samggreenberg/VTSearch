@@ -56,7 +56,9 @@ from __future__ import annotations
 
 import datetime
 import json
+import os
 import re
+import shutil
 import sys
 import time
 import urllib.error
@@ -72,6 +74,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 #: Every queue name starts with this; ``bank`` ignores any other detector.
 PREFIX = "docmarks"
 ROOT = Path("/expscratch/sgreenberg/docmarks/binary")
+#: A regrouped queue's directory; kept apart so the per-pass dirs stay readable as vote archives.
+MERGED_SUFFIX = "__merged"
 #: Detector JSONs copied out of the app before a finished queue was cleared, under
 #: ``detectors-cleared-<date>/``.  A cleared queue is gone from the dashboard, so
 #: these are the only record of its votes and ``bank`` reads them as a source.
@@ -501,6 +505,82 @@ def emit_completeness2(source: Path, classes, pages) -> list[tuple[str, list[Que
     return queues
 
 
+def merged_name(class_id: str) -> str:
+    """The one pair a class gets once its passes are regrouped."""
+    return f"{PREFIX} {short_class(class_id)} -- read the question on each image"
+
+
+def regroup(
+    root: Path,
+    cleared: Path = CLEARED,
+    base: Optional[str] = None,
+    skip_tasks: Sequence[str] = ("box_tighten",),
+) -> list[tuple[str, Path, int]]:
+    """Rebuild what is left of every pass as ONE queue per class, dropping answered questions.
+
+    A class reaches the dashboard twice -- a 4-12 question ``query_crops`` pair and
+    a 36-question ``completeness2`` one -- for what is a single sitting, and every
+    image already carries its own question in large type.  This merges what is
+    still unanswered, **copying the rendered images rather than re-rendering
+    them**, so a question seen after the regroup is pixel-identical to the one
+    before it.
+
+    Answered questions are dropped, which is the point: re-asking one wastes the
+    reviewer's time and invites a second, contradicting vote.  The per-pass
+    directories are left in place because their ``votes_*.json`` archives are
+    what :func:`collect_votes` reads for a queue that is no longer on the
+    dashboard.
+
+    ``box_tighten`` is skipped by default: "is this red box right?" is a
+    different act from "is this the same mark", and mixing the two is the
+    confusion this is meant to remove.
+    """
+    by_queue, _ = collect_votes(base, root, cleared)
+    remaining: dict[str, list[tuple[Path, str, dict[str, Any]]]] = defaultdict(list)
+    for mf in sorted(root.glob("*/manifest.json")):
+        if mf.parent.name.endswith(MERGED_SUFFIX):
+            continue
+        m = json.loads(mf.read_text(encoding="utf-8"))
+        votes = by_queue.get(m["dataset_name"], {})
+        for fn, q in sorted(m["questions"].items()):
+            if fn in votes or q["task"] in skip_tasks:
+                continue
+            class_id = (q.get("key") or {}).get("class_id")
+            if not class_id:
+                raise SystemExit(f"{mf}: {fn} has no key.class_id, so it cannot be grouped by class")
+            remaining[class_id].append((mf.parent / "images" / fn, fn, q))
+    out = []
+    for class_id, items in sorted(remaining.items()):
+        name = merged_name(class_id)
+        qdir = root / (slug(name.split(" -- ")[0]) + MERGED_SUFFIX)
+        images = qdir / "images"
+        images.mkdir(parents=True, exist_ok=True)
+        wanted = {fn for _src, fn, _q in items}
+        for stale in sorted(images.glob("*.jpg")):
+            # a question answered since the last regroup: leaving the file would re-ask it
+            if stale.name not in wanted:
+                stale.unlink()
+                print(f"  {name}: dropped {stale.name}, answered since the last regroup")
+        for src, fn, _q in items:
+            dest = images / fn
+            if dest.exists():
+                continue
+            try:
+                os.link(src, dest)  # same filesystem: no second copy of the bytes
+            except OSError:
+                shutil.copy2(src, dest)
+        manifest = {
+            "dataset_name": name,
+            "tasks": sorted({q["task"] for _src, _fn, q in items}),
+            "created": datetime.date.today().isoformat(),
+            "merged_from": sorted({src.parent.parent.name for src, _fn, _q in items}),
+            "questions": {fn: q for _src, fn, q in items},
+        }
+        (qdir / "manifest.json").write_text(json.dumps(manifest, indent=1) + "\n", encoding="utf-8")
+        out.append((name, qdir, len(items)))
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Banking: votes -> each audit's verdict rows
 # ---------------------------------------------------------------------------
@@ -889,6 +969,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ld = sub.add_parser("load")
     ld.add_argument("--queue", type=Path, action="append", required=True)
     ld.add_argument("--api", default=None)
+    rg = sub.add_parser("regroup")
+    rg.add_argument("--root", type=Path, default=ROOT)
+    rg.add_argument("--api", default=None, help="read live votes too, so an in-flight answer is not re-asked")
+    rg.add_argument("--cleared", type=Path, default=CLEARED)
     b = sub.add_parser("bank")
     b.add_argument("--corpus", type=Path, default=cfg.OUT)
     b.add_argument("--root", type=Path, default=ROOT)
@@ -909,6 +993,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 0
     if args.cmd == "bank":
         return bank(args.api or app_base(), args.root, args.corpus, args.date, args.cleared, args.allow_loss)
+    if args.cmd == "regroup":
+        for name, qdir, n in regroup(args.root, args.cleared, args.api or app_base()):
+            print(f"  {name}: {n} question(s) -> {qdir}", flush=True)
+        return 0
 
     classes = json.loads((args.corpus / "classes.json").read_text(encoding="utf-8"))
     pages = {p.page_id: p for p in read_manifest(args.corpus / "corpus.jsonl")}
