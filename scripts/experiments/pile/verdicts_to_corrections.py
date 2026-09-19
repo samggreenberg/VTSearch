@@ -30,8 +30,10 @@ Attribution of the 4,709, so a partial run can be recognised for what it is:
   as the extra ``--verdicts`` file ``pass_verdicts.py`` writes.
 
 **Running this script alone and reading its output as "the recipe" is the trap**,
-and it is an easy one: this file is named after the output, its docstring opens
-on a near-loss, and nothing composes the three steps. A short regeneration is
+and it is an easy one: this file is named after the output and its docstring opens
+on a near-loss. ``regenerate_corrections.py`` now runs all three steps as one
+command and diffs the result against the committed copy, so reach for that rather
+than this (#4007). A short regeneration is
 therefore the expected result of a partial run, not evidence that the file is
 unreproducible -- :func:`~pilebuild.corrections.dropped_rows` refuses it, and
 that refusal is the guard working. **Never reach for ``--allow-loss`` to get past
@@ -146,6 +148,17 @@ pc.setup_env()
 HUMAN_RECORD = Path(__file__).resolve().parent / "human_record"
 
 
+#: The #3156/#3588 campaign verdicts this step owns, as files rather than a
+#: string, so `regenerate_corrections.py` can append the pass to them without
+#: spelling the list a second time -- a default spelled twice is a default that
+#: drifts, which is how the #3588 campaign went missing in the first place.
+DEFAULT_VERDICTS = (
+    HUMAN_RECORD / "WORK__verdicts_20260820b.json",
+    HUMAN_RECORD / "LABELSETS__verdicts_audit_20260825.json",
+    HUMAN_RECORD / "LABELSETS__verdicts_redef_20260825.json",
+)
+
+
 def log(msg: str) -> None:
     print(f"[corrections] {msg}", flush=True)
 
@@ -190,13 +203,7 @@ def main() -> int:
     base = pc.PILE.parent / "vgscale-3156"
     ap.add_argument(
         "--verdicts",
-        default=",".join(
-            [
-                str(HUMAN_RECORD / "WORK__verdicts_20260820b.json"),
-                str(HUMAN_RECORD / "LABELSETS__verdicts_audit_20260825.json"),
-                str(HUMAN_RECORD / "LABELSETS__verdicts_redef_20260825.json"),
-            ]
-        ),
+        default=",".join(str(p) for p in DEFAULT_VERDICTS),
         help="verdict files, comma-separated; later files win",
     )
     ap.add_argument(

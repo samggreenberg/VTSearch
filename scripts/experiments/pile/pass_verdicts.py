@@ -26,7 +26,10 @@ check caught it.
 
 Rule stamps are carried from the labelset, never re-derived (#3814).
 
-Usage (then ALWAYS ``apply_recheck.py`` on the same file -- see #3926)::
+Usage: prefer ``regenerate_corrections.py``, which runs all three steps and
+diffs the result against the committed copy -- this step alone, or steps 1 and 2
+without 3, produces a plausible file that is quietly wrong (#4007). The chain it
+composes, for the times one step is wanted by hand::
 
     python pass_verdicts.py --out pass.json
     python verdicts_to_corrections.py --verdicts "<the three defaults>,pass.json" --out scratch.json
@@ -118,7 +121,11 @@ def build(slates: dict) -> tuple[list[dict], Counter, Counter]:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--slates", default="/expscratch/sgreenberg/vlm-3720/slates/slates.json")
+    # The record, not scratch: #4007 committed this file precisely because the
+    # scratch copy was its only home and a tidy-up would have taken an input to
+    # 3,837 corrections with it. A default pointing back at scratch would keep
+    # the chain un-runnable from a fresh checkout.
+    ap.add_argument("--slates", type=Path, default=HR / "VLM3720__slates.json")
     ap.add_argument("--out", required=True, help="never a live file: this feeds the converter, not the build")
     args = ap.parse_args()
     verdicts, tally, over = build(json.loads(Path(args.slates).read_text()))
