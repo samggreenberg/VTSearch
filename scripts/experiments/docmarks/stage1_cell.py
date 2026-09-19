@@ -188,6 +188,11 @@ class Cell:
         self.meta: dict[str, Any] = json.loads((self.path / "meta.json").read_text(encoding="utf-8"))
         proj = self.path / "projection.npz"
         self.projection: Optional[Projection] = Projection.load(proj) if proj.exists() else None
+        if not self.meta.get("complete", False):
+            raise ValueError(
+                f"{self.path} is a PARTIAL cell: its build did not finish, so a search over it would "
+                "silently miss pages.  Rebuild it, or pass the shards you trust explicitly."
+            )
         ids: list[str] = []
         counts: list[np.ndarray] = []
         tiles: list[np.ndarray] = []
@@ -198,6 +203,11 @@ class Cell:
                 tiles.append(z["tiles"])
         if not ids:
             raise ValueError(f"no shards in {self.path}")
+        if len(ids) != int(self.meta["pages"]):
+            raise ValueError(
+                f"{self.path} holds {len(ids)} pages but its meta claims {self.meta['pages']}: "
+                "a shard is missing or was written twice"
+            )
         self.page_ids: list[str] = ids
         self.counts: np.ndarray = np.concatenate(counts)
         self.tiles: np.ndarray = np.concatenate(tiles)
@@ -259,18 +269,38 @@ def build(
     workers: int,
     sample_pages: int = SAMPLE_PAGES,
     log: Callable[[str], None] = print,
+    projection: Optional[Path] = None,
 ) -> dict[int, Path]:
-    """Build one cell per requested width, in a single pass over the pages."""
+    """Build one cell per requested width, in a single pass over the pages.
+
+    ``projection`` reuses a fit from an earlier run rather than refitting, which
+    is what lets a tier be built in shards that stay comparable: two shards
+    projected by two different fits are not the same cell.
+    """
     from multiprocessing import get_context  # noqa: PLC0415
+
+    # Every worker projects a (tiles x 8,192) matrix, which is big enough for
+    # OpenBLAS to go multi-threaded -- and with one pool worker per core that is
+    # cores^2 threads fighting over cores.  Measured on tier m: 1.05 pages/s
+    # against 20 for the probe, whose per-page matmul was too small to trigger
+    # it.  The launcher pins OMP_NUM_THREADS=1; warn if it did not.
+    if os.environ.get("OMP_NUM_THREADS") != "1":
+        log("  WARNING: OMP_NUM_THREADS is not 1; BLAS threads will oversubscribe the pool (see #3928)")
 
     items = [(p.page_id, p.path) for p in pages]
     widest = max(d for d in dims if d > 0) if any(d > 0 for d in dims) else 0
 
     projections: dict[int, Optional[Projection]] = {d: None for d in dims if d == 0}
     if widest:
-        sample = _raw_sample(items[:: max(1, len(items) // sample_pages)][:sample_pages], budget, workers, log)
-        log(f"  fitting PCA {sample.shape[0]} tiles x {sample.shape[1]} -> {widest}")
-        fitted = fit_projection(sample, widest)
+        if projection is not None:
+            fitted = Projection.load(projection)
+            log(f"  reusing the projection at {projection} ({fitted.dim} dims)")
+            if fitted.dim < widest:
+                raise ValueError(f"saved projection is {fitted.dim}-wide, too narrow for {widest}")
+        else:
+            sample = _raw_sample(items[:: max(1, len(items) // sample_pages)][:sample_pages], budget, workers, log)
+            log(f"  fitting PCA {sample.shape[0]} tiles x {sample.shape[1]} -> {widest}")
+            fitted = fit_projection(sample, widest)
         for d in dims:
             if d > 0:
                 projections[d] = fitted.slice(d)
@@ -313,6 +343,8 @@ def build(
                     "tile": [TILE_W, TILE_H],
                     "min_tile_kp": MIN_TILE_KP,
                     "pages": written,
+                    "complete": written == len(items),
+                    "expected_pages": len(items),
                     "bytes": size,
                     "bytes_per_page": round(size / max(1, written), 1),
                 },
@@ -375,6 +407,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     b.add_argument("--sample-pages", type=int, default=SAMPLE_PAGES)
     b.add_argument("--workers", type=int, default=int(os.environ.get("SLURM_CPUS_PER_TASK", "8")))
     b.add_argument("--out", type=Path, required=True)
+    b.add_argument("--projection", type=Path, help="reuse this projection.npz instead of fitting one")
 
     s = sub.add_parser("search")
     s.add_argument("--corpus", type=Path, default=cfg.OUT)
@@ -389,7 +422,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         dims = [int(d) for d in args.dims.split(",")]
         pages = embed_corpus.pages_for_tier(args.corpus, args.tier)
         print(f"tier {args.tier}: {len(pages)} pages, dims {dims}", flush=True)
-        build(pages, args.out, dims, args.budget, args.workers, args.sample_pages)
+        build(pages, args.out, dims, args.budget, args.workers, args.sample_pages, projection=args.projection)
         return 0
 
     classes = json.loads((args.corpus / "classes.json").read_text(encoding="utf-8"))

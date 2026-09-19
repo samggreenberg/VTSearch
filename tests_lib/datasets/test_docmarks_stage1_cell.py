@@ -140,7 +140,9 @@ class TestCellRoundTrip:
             tiles=tiles,
             boxes=np.zeros((5, 4), dtype=np.float16),
         )
-        (dirs[0] / "meta.json").write_text('{"dim": 16, "budget": 8192, "pages": 2}', encoding="utf-8")
+        (dirs[0] / "meta.json").write_text(
+            '{"dim": 16, "budget": 8192, "pages": 2, "complete": true}', encoding="utf-8"
+        )
 
         cell = s1.Cell(dirs[0])
         assert cell.page_ids == ["p1", "p2"] and list(cell.starts) == [0, 2]
@@ -149,6 +151,24 @@ class TestCellRoundTrip:
         assert hits[0][1] == pytest.approx(1.0, abs=2e-3)
 
     def test_a_cell_with_no_shards_is_an_error(self, s1, tmp_path):
-        (tmp_path / "meta.json").write_text("{}", encoding="utf-8")
+        (tmp_path / "meta.json").write_text('{"complete": true, "pages": 0}', encoding="utf-8")
         with pytest.raises(ValueError, match="no shards"):
+            s1.Cell(tmp_path)
+
+    def test_a_partial_cell_refuses_to_open(self, s1, tmp_path):
+        """A killed build leaves shards behind; searching them would miss pages silently."""
+        (tmp_path / "meta.json").write_text('{"pages": 2, "complete": false}', encoding="utf-8")
+        with pytest.raises(ValueError, match="PARTIAL"):
+            s1.Cell(tmp_path)
+
+    def test_a_cell_whose_shards_do_not_match_its_meta_is_an_error(self, s1, tmp_path):
+        np.savez(
+            tmp_path / "shard-0000.npz",
+            page_ids=np.array(["p1"]).astype("U"),
+            counts=np.array([1], dtype=np.int32),
+            tiles=np.zeros((1, 4), dtype=np.float16),
+            boxes=np.zeros((1, 4), dtype=np.float16),
+        )
+        (tmp_path / "meta.json").write_text('{"pages": 9, "complete": true}', encoding="utf-8")
+        with pytest.raises(ValueError, match="claims 9"):
             s1.Cell(tmp_path)
