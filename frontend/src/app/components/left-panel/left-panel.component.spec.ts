@@ -167,13 +167,13 @@ describe('LeftPanelComponent', () => {
   /**
    * The grid lists every item, labeled or not, each with its own vote badge —
    * so the count in the header says nothing about whether any of them are
-   * still worth clicking. The chip is what distinguishes "there is nothing
+   * still worth clicking. The note is what distinguishes "there is nothing
    * left to pick" from "what I want is further down" (#4028).
    */
-  describe('the "all labeled" chip (#4028)', () => {
+  describe('the "All labeled" note (#4028)', () => {
     const stub = (id: number): Media => ({ id, media_type: 'image' }) as Media;
-    const chip = () =>
-      (fixture.nativeElement as HTMLElement).querySelector('.all-labeled-chip');
+    const note = () =>
+      (fixture.nativeElement as HTMLElement).querySelector('.all-labeled-note');
 
     function show(inputs: Record<string, unknown>): void {
       component.setTab('manual');
@@ -188,7 +188,7 @@ describe('LeftPanelComponent', () => {
         badVotes: new Set<number>(),
       });
       expect(component.allLabeled()).toBe(false);
-      expect(chip()).toBeNull();
+      expect(note()).toBeNull();
     });
 
     it('appears once every item in the grid carries a label', () => {
@@ -198,7 +198,7 @@ describe('LeftPanelComponent', () => {
         badVotes: new Set([2]),
       });
       expect(component.allLabeled()).toBe(true);
-      expect(chip()!.textContent).toContain('all labeled');
+      expect(note()!.textContent).toContain('All labeled');
     });
 
     it('stays away in Find mode, where the queue is measured by verified', () => {

@@ -120,39 +120,11 @@ export class SortRunnerService {
    * Derived rather than latched, for the same reason {@link queueExhausted} is:
    * an undo un-labels a row and puts the user straight back to work.
    */
-  readonly datasetExhausted = computed(() =>
-    allItemsLabeled(this.mediaState.mediasSignal(), this.voteState.goodVotes, this.voteState.badVotes),
-  );
-
-  /**
-   * The item a vote left the pane stranded on, or `null`. See
-   * {@link advanceStranded}.
-   */
-  private readonly strandedOn = signal<number | null>(null);
-
-  /**
-   * A vote has landed, the advance had nowhere to go, and the pane is blank as
-   * a result — with items still left to label elsewhere in the dataset.
-   *
-   * This is the un-ranked half of #3887's blank pane, and the one the
-   * exhaustion flags cannot speak for. Voting with no ranking loaded (manual
-   * labelling straight out of the left grid, before any sort) takes the
-   * `kind: 'none'` branch of the pick rule on *every* vote, not just the last
-   * one — so the swipe pins the outgoing node off-screen, nothing replaces it,
-   * and the pane goes blank while the dataset is nowhere near finished.
-   *
-   * Deliberately narrower than "the pick found nothing": it is latched by a
-   * vote and holds only while that item is still the selection *and* still
-   * labeled. Selecting something else ends it because the pane is showing that
-   * item; an undo ends it because the item comes back unlabeled and visible.
-   * Re-selecting the stranded item does not, and should not — the swipe has
-   * already pinned that node away, so the pane really is still blank.
-   */
-  readonly advanceStranded = computed(() => {
-    const id = this.strandedOn();
-    if (id === null || this.mediaState.selectedId() !== id) return false;
-    return this.voteState.goodVotes.has(id) || this.voteState.badVotes.has(id);
-  });
+  readonly datasetExhausted = computed(() => allItemsLabeled(
+    this.mediaState.mediasSignal(),
+    this.voteState.goodVotes,
+    this.voteState.badVotes,
+  ));
 
   private learnedSortPending = false;
 
@@ -593,11 +565,6 @@ export class SortRunnerService {
 
   autoSelectNext(excludeId?: number): void {
     const pick = this.peekNextMedia(excludeId);
-    // A vote that cannot advance strands the pane on the item just voted on —
-    // see {@link advanceStranded}. Recorded here because this is the only place
-    // that knows a *vote* asked for the advance: the same `kind: 'none'` from a
-    // plain re-rank means nothing is queued up yet, which is not the same fact.
-    this.strandedOn.set(pick.kind === 'none' && excludeId !== undefined ? excludeId : null);
     if (pick.kind === 'media') {
       this.mediaState.selectMedia(pick.id);
       this.diversityExhausted.set(false);

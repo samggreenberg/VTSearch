@@ -630,6 +630,49 @@ describe('CenterPanelComponent', () => {
   });
 
   /**
+   * The vote-swipe animation ends `forwards`, so the outgoing node stays
+   * parked off-screen until the class that put it there is cleared — and the
+   * only thing that clears it is the media-change effect. A host with nowhere
+   * to advance never produces that change, so mid-dataset votes left the pane
+   * blank with the item still selected (#4028).
+   */
+  describe('the swipe un-pins itself when nothing replaces the item (#4028)', () => {
+    const docMedia: Media = { ...mockMedia, media_type: 'document' };
+
+    afterEach(() => {
+      document.documentElement.classList.remove(ANIMATIONS_ON_CLASS);
+      document.documentElement.classList.add(ANIMATIONS_OFF_CLASS);
+    });
+
+    it('clears the swipe class once the vote has been handed to the host', async () => {
+      // jsdom reports `prefers-reduced-motion: reduce`, which would take the
+      // un-animated branch; opt in the way the id-pinning specs above do.
+      document.documentElement.classList.remove(ANIMATIONS_OFF_CLASS);
+      document.documentElement.classList.add(ANIMATIONS_ON_CLASS);
+      fixture.componentRef.setInput('media', docMedia);
+      component.showAnimations.set(true);
+      TestBed.tick();
+
+      component.castVote('good');
+      httpMock.expectOne('/api/medias/1/vote').flush({ state: 'good', click_time: 1 });
+      TestBed.tick();
+      // Mid-animation the node is deliberately off-screen.
+      expect(component.swipeClass()).toBe('swipe-right');
+
+      // The host is free not to advance, and with no ranking loaded it never
+      // does — the media input stays on the item just voted on.
+      await new Promise<void>((resolve) => setTimeout(resolve, 250));
+      TestBed.tick();
+
+      expect(component.swipeClass()).toBe('');
+      const wrapper = fixture.nativeElement.querySelector('.media-swipe-wrapper') as HTMLElement;
+      expect(wrapper).toBeTruthy();
+      expect(wrapper.className).not.toContain('swipe-right');
+      expect(wrapper.className).not.toContain('swipe-left');
+    });
+  });
+
+  /**
    * The other empty pane: nothing is selected at all. It used to be one line of
    * grey text in an otherwise black rectangle, which reads as a broken view
    * rather than as a state — and it says "select a media item" without saying

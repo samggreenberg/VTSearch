@@ -286,23 +286,25 @@ describe('LabelViewComponent', () => {
       expect(component.exhaustedDetail()).toContain('Load more results');
     });
 
-    it('says nothing is queued up when a vote could not advance', async () => {
-      flushInitialRequests();
+    /**
+     * The pane replaces the viewer, and its own message sends the user to the
+     * side panels to review their labels — so it must not swallow the click
+     * that gets them there.
+     */
+    it('yields to an item the user picks, and comes back on the next vote', async () => {
+      flushInitialRequests(allLabeled);
       await settleResource();
-
-      // Manual labelling straight out of the left grid: no ranking, so the
-      // pick rule has nowhere to go and the swipe leaves the pane blank — on
-      // this vote, with item 2 still unlabeled.
-      component.mediaState.selectMedia(1);
-      component.voteState.applyOptimisticState(1, 'good');
-      component.onMediaVoted({ id: 1, vote: 'good' });
-      TestBed.tick();
-
-      expect(component.datasetExhausted()).toBe(false);
-      expect(component.queueExhausted()).toBe(false);
       expect(component.centreExhausted()).toBe(true);
-      expect(component.exhaustedHeading()).toBe('Nothing queued up');
-      expect(component.exhaustedDetail()).toContain('Pick the next item');
+
+      component.onMediaSelect(2);
+      TestBed.tick();
+      expect(component.centreExhausted()).toBe(false);
+      expect(pane()).toBeNull();
+
+      // Voting is going back to labelling, so the message is the point again.
+      component.onMediaVoted({ id: 2, vote: 'good' });
+      TestBed.tick();
+      expect(component.centreExhausted()).toBe(true);
     });
 
     /**

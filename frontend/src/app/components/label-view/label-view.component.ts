@@ -113,23 +113,42 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  it without {@link queueExhausted} ever being true (#4028). */
   readonly datasetExhausted = this.sortRunner.datasetExhausted;
 
-  /** True when a vote left the pane blank with nowhere to advance to, while
-   *  the dataset still has unlabeled items. Aliased from
-   *  {@link SortRunnerService}; this is what voting with no ranking loaded
-   *  does on every vote, not just the last one (#4028). */
-  readonly advanceStranded = this.sortRunner.advanceStranded;
-
   /**
-   * The centre pane has nothing to show and should say so, for any of the four
-   * reasons below. They are one input because the pane renders one message; they
-   * are kept apart in {@link exhaustedHeading} / {@link exhaustedDetail} because
-   * the way out differs — a finished dataset has none, a finished window has
-   * "load more", and a stranded advance has "pick the next one yourself".
+   * The centre pane has nothing left to show and should say so, for any of the
+   * three reasons below. They are one input because the pane renders one
+   * message; they are kept apart in {@link exhaustedHeading} /
+   * {@link exhaustedDetail} because the way out differs — a finished ranking
+   * has "load more", a finished dataset has only undo and export.
    */
   readonly centreExhausted = computed(
-    () => this.autopilotExhausted() || this.datasetExhausted() || this.queueExhausted()
-      || this.advanceStranded(),
+    () => (this.autopilotExhausted() || this.datasetExhausted() || this.queueExhausted())
+      && !this.viewingPick(),
   );
+
+  /** True while the selection is still the item {@link pickedWhileDone}
+   *  recorded. Both being `null` is not a match: that is "nothing picked and
+   *  nothing selected", which is the state a fresh entry is in. */
+  private readonly viewingPick = computed(() => {
+    const picked = this.pickedWhileDone();
+    return picked !== null && this.mediaState.selectedId() === picked;
+  });
+
+  /**
+   * The item the user picked by hand while the "nothing left" pane was up, or
+   * `null`.
+   *
+   * The pane replaces the viewer, so without this it swallows every click in
+   * the grid and in the vote piles — and the pane's own message sends the user
+   * to those piles to review their labels. Picking something is an explicit
+   * "show me this one", so it wins over a message about the queue.
+   *
+   * Stored as the id rather than as a flag so it expires on its own: a pair
+   * change clears the selection, which no longer matches, and the pane comes
+   * back for the new pair without anything having to reset it. A vote clears it
+   * outright — that is the user going back to labelling, where the message is
+   * the point again.
+   */
+  private readonly pickedWhileDone = signal<number | null>(null);
 
   /** Whether the dataset is finished (no more items anywhere) or merely the
    *  loaded ranking is. Autopilot reaching `exhausted` means the former: its
@@ -138,11 +157,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     () => this.autopilotExhausted() || this.datasetExhausted(),
   );
 
-  readonly exhaustedHeading = computed(() => {
-    if (this.wholeDatasetDone()) return 'Nothing left to label';
-    if (this.queueExhausted()) return 'Nothing left in this ranking';
-    return 'Nothing queued up';
-  });
+  readonly exhaustedHeading = computed(() =>
+    this.wholeDatasetDone() ? 'Nothing left to label' : 'Nothing left in this ranking',
+  );
 
   readonly exhaustedDetail = computed(() => {
     // Deliberately one sentence for both halves of `wholeDatasetDone`. The
@@ -154,12 +171,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       return 'Every item in this dataset is labeled. Review your labels in the side panels, '
         + 'export them, or press Cmd/Ctrl-Z to undo the last one.';
     }
-    if (this.queueExhausted()) {
-      return 'Every item in the current ranking is labeled. Load more results, change the sort, '
-        + 'or pick an item from the list on the left.';
-    }
-    return 'That one is labeled, and nothing is ranked to move on to. Pick the next item from '
-      + 'the list on the left, or run a sort and the next one comes up on its own.';
+    return 'Every item in the current ranking is labeled. Load more results, change the sort, '
+      + 'or pick an item from the list on the left.';
   });
   progressModalMetric: ProgressMetric | null = null;
 
@@ -835,6 +848,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   // --- Media selection ---
 
   onMediaSelect(id: number): void {
+    this.pickedWhileDone.set(id);
     this.mediaState.selectMedia(id);
   }
 
@@ -992,6 +1006,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onMediaVoted(event: { id: number; vote: 'good' | 'bad' }): void {
+    // Back to labelling, so the "nothing left" pane is welcome again if the
+    // advance below has nowhere to go — see {@link pickedWhileDone}.
+    this.pickedWhileDone.set(null);
     // Local vote state is already reconciled from the POST response inside
     // submitToggleVote; loadVotes() only refreshes derived counters.
     this.voteState.loadVotes();

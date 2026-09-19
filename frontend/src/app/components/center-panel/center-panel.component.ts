@@ -432,6 +432,22 @@ export class CenterPanelComponent implements OnDestroy {
             setTimeout(() => {
               this.mediaVoted.emit({ id: votedId, vote });
               this.isVoting.set(false);
+              // Un-pin the swipe. The animation ends `forwards`, so the node
+              // stays parked off-screen until something clears the class —
+              // and the only thing that does is the media-change effect
+              // above. When the host has nowhere to advance (no ranking
+              // loaded, so every vote takes the pick rule's `none` branch)
+              // that change never comes, and the pane goes blank mid-dataset
+              // with the item still selected: #3887's symptom, from a cause
+              // its `exhausted` flag does not cover (#4028).
+              //
+              // Unconditional, and it has to run after the emit rather than
+              // instead of it: if the host *did* advance, the media-change
+              // effect clears the class to the same '' a beat later, so this
+              // is a no-op; if it did not, the item slides back into view
+              // with its vote registered — which is exactly what the
+              // animations-off path has always done.
+              this.swipeClass.set('');
             }, 180);
           } else {
             this.mediaVoted.emit({ id: votedId, vote });

@@ -518,6 +518,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   // --- Media selection ---
 
   onMediaSelect(id: number): void {
+    this.pickedWhileDone.set(id);
     this.mediaState.selectMedia(id);
   }
 
@@ -558,6 +559,9 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onMediaVoted(event: { id: number; vote: 'good' | 'bad' }): void {
+    // Back to reviewing, so the "all items reviewed" pane is welcome again —
+    // see {@link pickedWhileDone}.
+    this.pickedWhileDone.set(null);
     // A single-item manual vote (big button or hover) verifies the item: it
     // moves out of the left work queue into the right verified pile. Mirror
     // the server's mark-verified optimistically so the move feels instant —
@@ -569,7 +573,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.voteState.loadVotes();
     // Auto-advance to the next item on the boundary walk, so "just sit and
     // vote" samples both faces of the cutoff instead of only the positives.
-    this.advanceToBoundary(event.id);
+    this.advanceToBoundary();
   }
 
   /**
@@ -585,16 +589,10 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * The queue is empty only when no unverified item remains on *either* side;
    * that is the done state.
    */
-  private advanceToBoundary(votedId?: number): void {
+  private advanceToBoundary(): void {
     const order = this.sortState.sortOrder;
     const threshold = this.sortState.threshold;
-    if (!order || threshold == null) {
-      // Nothing is scored, so there is no boundary to walk. A vote cast from
-      // the pre-score list therefore advances nowhere and leaves the pane
-      // blank — see {@link advanceStranded}.
-      this.strandedOn.set(votedId ?? null);
-      return;
-    }
+    if (!order || threshold == null) return;
     const verified = this.voteState.verifiedIds;
     // `order` is descending by score. The unverified item closest above the
     // line is the *lowest* one still ≥ threshold (keep overwriting as we
@@ -627,7 +625,6 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
         [target, took] = [closestAbove, 'above'];
       }
     }
-    this.strandedOn.set(target == null ? (votedId ?? null) : null);
     if (target != null && took != null) {
       // Flip so the next advance samples the opposite face of the boundary.
       this.nextFindSide = took === 'above' ? 'below' : 'above';
@@ -666,28 +663,23 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * un-verifies a row and puts the user straight back to work. False before a
    * score has landed: that is the placeholder state, not an exhausted one.
    */
-  /** The item a vote left the pane stranded on. See {@link advanceStranded}. */
-  private readonly strandedOn = signal<number | null>(null);
-
   /**
-   * A vote landed, {@link advanceToBoundary} had nowhere to go, and the pane is
-   * blank as a result — with the queue not actually finished.
+   * The item the user picked by hand while the "all items reviewed" pane was
+   * up, or `null`. The pane replaces the viewer, so without this it swallows
+   * every click in the work queue and in the verified piles; an explicit pick
+   * wins over a message about the queue.
    *
-   * The reachable case is voting before anything is scored: the left list shows
-   * the dataset from the moment the view opens, so an item can be picked out of
-   * it and voted with no ranking and no cutoff to walk. The walk then returns
-   * at its first line, the vote-swipe keeps the outgoing node pinned off-screen
-   * (#3887), and nothing ever replaces it.
-   *
-   * Held only while that item is still selected and still verified, so moving
-   * on or undoing ends it without anything having to notice. `queueEmpty` is
-   * the neighbouring case and stays separate: it means the walk is *finished*,
-   * which wants the opposite advice from this one.
+   * Stored as the id rather than as a flag so it expires on its own — see
+   * `LabelViewComponent.pickedWhileDone`, which is the same mechanism.
    */
-  readonly advanceStranded = computed(() => {
-    const id = this.strandedOn();
-    if (id === null || this.mediaState.selectedId() !== id) return false;
-    return this.voteState.verifiedIds.has(id);
+  private readonly pickedWhileDone = signal<number | null>(null);
+
+  /** {@link queueEmpty}, unless the user has picked an item to look at. Both
+   *  ids being `null` is not a pick: that is the fresh-entry state. */
+  readonly centreExhausted = computed(() => {
+    if (!this.queueEmpty()) return false;
+    const picked = this.pickedWhileDone();
+    return !(picked !== null && this.mediaState.selectedId() === picked);
   });
 
   readonly queueEmpty = computed(() => {
