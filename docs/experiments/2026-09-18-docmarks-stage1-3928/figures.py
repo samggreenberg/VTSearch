@@ -54,7 +54,10 @@ def fig_width() -> None:
         ax.grid(alpha=0.3, lw=0.5)
     axes[0][0].set_ylabel("mean AP over 23 classes")
     axes[0][-1].legend(fontsize=8, loc="lower right")
-    fig.suptitle("Whitened projection is 32x smaller at 256 dims and ranks BETTER than the raw tile", fontsize=11)
+    fig.suptitle(
+        "35x smaller than the raw tile: better than it at 5,000 pages, and at 50,000 the width starts to matter",
+        fontsize=11,
+    )
     fig.tight_layout()
     fig.savefig(HERE / "fig_width.png", dpi=150)
 
