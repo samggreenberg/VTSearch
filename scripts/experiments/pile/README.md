@@ -213,6 +213,22 @@ python verdict_store.py restore    # write them back out after a purge
 declared healthy. A `human` divergence fails it; a `derived` one is a note,
 since every build rewrites those.
 
+`corrections.json` is the one row in that inventory a rebuild cannot recreate,
+and regenerating it takes **three** steps, not the one script named after it:
+
+```bash
+python regenerate_corrections.py           # all three steps, to scratch, then diff
+python regenerate_corrections.py --check   # diff only; exit 1 on any drift
+```
+
+Step 2 alone (`verdicts_to_corrections.py`) reproduces 872 of the 4,709 rows and
+looks like a whole answer, which is how the file came to be called
+unreproducible for weeks (#4003, #4007). The diff is the verdict, never the exit
+status: the drift that mattered last time was 81 rows that differed while the
+count matched. `tests_lib/meta/test_pile_regenerate_corrections.py` runs the
+chain every suite for that reason — a check nobody exercises stops being true
+quietly.
+
 ## Why this exists
 
 Before it, each study embedded its own datadir and then later studies
