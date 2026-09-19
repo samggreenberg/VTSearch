@@ -347,3 +347,104 @@ class TestRegroupOnePairPerClass:
         )
         with pytest.raises(SystemExit, match="key.class_id"):
             br.regroup(root, keep, base=None)
+
+
+class TestVotesRouteByQuestionNotByFolder:
+    """Sam, 2026-09-19: he loaded a second dataset into one detector while voting.
+
+    The 90 labels that detector held were answers to two classes' questions, and
+    keying votes by the folder they sat in dropped all 47 belonging to the other
+    class.  A vote answers the QUESTION its filename names.
+    """
+
+    def _two_queues(self, br, tmp_path):
+        root = tmp_path / "binary"
+        _queue(root, "a", "docmarks t logo_a -- read the question on each image", {"qcrop__a__c0.jpg": _crop(0)})
+        _queue(
+            root,
+            "b",
+            "docmarks t logo_b -- read the question on each image",
+            {"compl2__b__c0.jpg": _compl(0, "t/logo_b")},
+        )
+        manifests = {}
+        for mf in sorted(root.glob("*/manifest.json")):
+            import json
+
+            m = json.loads(mf.read_text())
+            manifests[m["dataset_name"]] = (mf.parent, m)
+        return root, manifests
+
+    def test_a_detector_holding_two_queues_routes_each_vote_to_its_own_slate(self, br, tmp_path):
+        root, manifests = self._two_queues(br, tmp_path)
+        # both votes cast in queue a's detector, as the merged dataset produced
+        by_queue = {
+            "docmarks t logo_a -- read the question on each image": {
+                "qcrop__a__c0.jpg": "good",
+                "compl2__b__c0.jpg": "bad",
+            }
+        }
+        questions = br.question_index(manifests)
+        index, conflicts, unplaceable = br.vote_index(by_queue, questions)
+        assert (conflicts, unplaceable) == ([], [])
+        assert index == {"qcrop__a__c0.jpg": "good", "compl2__b__c0.jpg": "bad"}
+        # and they land on different slates
+        assert questions["qcrop__a__c0.jpg"]["task"] == "query_crops"
+        assert questions["compl2__b__c0.jpg"]["task"] == "completeness2"
+
+    def test_the_same_question_in_several_manifests_is_not_a_conflict(self, br, tmp_path):
+        """A regrouped queue hardlinks its predecessor's images: 770 of 2,738 filenames are claimed twice."""
+        root = tmp_path / "binary"
+        _queue(root, "old", "docmarks t logo_a -- good extra query crop?", {"c0.jpg": _crop(0)})
+        _queue(root, "new", "docmarks t logo_a -- read the question on each image", {"c0.jpg": _crop(0)})
+        import json
+
+        manifests = {
+            json.loads(mf.read_text())["dataset_name"]: (mf.parent, json.loads(mf.read_text()))
+            for mf in sorted(root.glob("*/manifest.json"))
+        }
+        assert br.question_index(manifests)["c0.jpg"] == _crop(0)
+
+    def test_a_filename_claimed_twice_with_different_questions_raises(self, br, tmp_path):
+        root = tmp_path / "binary"
+        _queue(root, "one", "docmarks t logo_a -- read the question on each image", {"c0.jpg": _crop(0)})
+        _queue(root, "two", "docmarks t logo_b -- read the question on each image", {"c0.jpg": _compl(0, "t/logo_b")})
+        import json
+
+        manifests = {
+            json.loads(mf.read_text())["dataset_name"]: (mf.parent, json.loads(mf.read_text()))
+            for mf in sorted(root.glob("*/manifest.json"))
+        }
+        with pytest.raises(SystemExit, match="claimed by"):
+            br.question_index(manifests)
+
+    def test_a_vote_naming_no_question_is_reported_not_dropped(self, br, tmp_path):
+        _root, manifests = self._two_queues(br, tmp_path)
+        questions = br.question_index(manifests)
+        index, _conflicts, unplaceable = br.vote_index(
+            {"docmarks t logo_a -- read the question on each image": {"ghost.jpg": "good"}}, questions
+        )
+        assert index == {}
+        assert len(unplaceable) == 1 and "ghost.jpg" in unplaceable[0]
+
+    def test_one_question_voted_both_ways_in_two_queues_is_reported_not_guessed(self, br, tmp_path):
+        _root, manifests = self._two_queues(br, tmp_path)
+        questions = br.question_index(manifests)
+        index, conflicts, _unplaceable = br.vote_index(
+            {
+                "docmarks t logo_a -- read the question on each image": {"qcrop__a__c0.jpg": "good"},
+                "docmarks t logo_b -- read the question on each image": {"qcrop__a__c0.jpg": "bad"},
+            },
+            questions,
+        )
+        assert index == {}  # no rule can say which click was later
+        assert len(conflicts) == 1 and "qcrop__a__c0.jpg" in conflicts[0]
+
+    def test_regroup_does_not_re_ask_a_question_answered_in_a_foreign_detector(self, br, tmp_path):
+        root, keep = tmp_path / "binary", tmp_path / "keep"
+        _queue(root, "q", "docmarks t logo_a -- good extra query crop?", {"c0.jpg": _crop(0), "c1.jpg": _crop(1)})
+        # c0 was answered while the queue was loaded into some OTHER detector
+        _archive(root, "q", "docmarks t logo_z -- read the question on each image", {"c0.jpg": "good"})
+        (out,) = br.regroup(root, keep, base=None)
+        _name, qdir, n = out
+        assert n == 1
+        assert [x.name for x in (qdir / "images").glob("*.jpg")] == ["c1.jpg"]
