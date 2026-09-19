@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, input, OnDestroy, output, signal, untracked, viewChild } from '@angular/core';
 import { NgStyle } from '@angular/common';
 import { Media, PayloadVariant } from '../../../models/api.models';
+import { MediaPrefetchService } from '../../../services/media-prefetch.service';
 import { ActiveContextService } from '../../../services/active-context.service';
 
 export type RegionBox = readonly [number, number, number, number];
@@ -37,6 +38,7 @@ const OFF_CANVAS_DRAW_EXCLUDED =
 })
 export class ImageViewerComponent implements OnDestroy {
   private activeContext = inject(ActiveContextService);
+  private mediaPrefetch = inject(MediaPrefetchService);
 
   readonly media = input.required<Media>();
   /**
@@ -164,7 +166,11 @@ export class ImageViewerComponent implements OnDestroy {
       this.lastMediaId = media.id;
       this.lastVariant = variant;
       this.imageReady.set(false);
-      this.imageSrc.set(this.activeContext.mediaUrl(`/api/medias/${media.id}/image`, { variant }));
+      // `resolve` returns the warmed object URL when the prefetch (#3896)
+      // already holds these bytes, and the network URL otherwise — so this is
+      // the same request it always was, minus the wait, when it hits.
+      const src = this.activeContext.mediaUrl(`/api/medias/${media.id}/image`, { variant });
+      this.imageSrc.set(this.mediaPrefetch.resolve(src));
       // A variant flip is the same item shown differently: keep the user's
       // zoom / pan and their voting box instead of resetting as for a new item.
       if (sameMedia) return;

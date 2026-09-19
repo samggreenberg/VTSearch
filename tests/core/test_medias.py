@@ -501,6 +501,18 @@ class TestMediaImage:
         assert resp.data[:8] == b"\x89PNG\r\n\x1a\n"
 
     def test_returns_404_for_invalid_id(self, client):
+        resp = client.get("/api/medias/1/image")
+        # Pins the premise the reviewer-side image prefetch is built on (#3896):
+        # `no-cache` with no validator. The browser may keep these bytes but may
+        # not reuse them without revalidating, and with neither an ETag nor a
+        # Last-Modified there is nothing to revalidate against -- so a reuse is a
+        # fresh download of the whole body. That is why `MediaPrefetchService`
+        # holds the bytes client-side instead of warming the HTTP cache. Giving
+        # this route a validator would be a real improvement; it would also make
+        # that store redundant, so it should change this test too.
+        assert resp.headers.get("Cache-Control") == "no-cache"
+        assert "ETag" not in resp.headers and "Last-Modified" not in resp.headers
+
         resp = client.get("/api/medias/9999/image")
         assert resp.status_code == 404
 
