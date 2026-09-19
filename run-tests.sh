@@ -444,6 +444,50 @@ if $_is_docs_run; then
 fi
 
 # ---------------------------------------------------------------------------
+# The skip ledger.
+#
+# A gate that does not run must say so in the verdict, because the failure this
+# answers (#4019) is not a gate that broke -- it is a gate that was never
+# exercised while the banner still read `RUN PASSED (all gates green)`. A
+# reviewer cannot tell that apart from a run that checked everything, which is
+# the same shape as the globbing coverage gate in #4011 and the stale recipe
+# docstring in #4007: a check that quietly judges less than it claims.
+#
+# The fast paths above do NOT record here. They verify against the diff that
+# what they skip could not have seen the change, and each prints its own
+# verdict saying so -- a proven-irrelevant gate is not an unjudged one.
+# ---------------------------------------------------------------------------
+_skipped_gates=()
+_note_skipped() { _skipped_gates+=("$1"); }
+
+# Frontend gates vs a worktree with no node_modules.
+#
+# Decided by scripts/check-frontend-gate.py against the branch diff, and
+# decided HERE rather than at the gates themselves so a frontend change fails
+# in the first seconds instead of after pytest. An unreadable answer is a
+# block: a gate that cannot say what it checked must not read as having
+# checked everything.
+_fe_gate_decision=""
+if $_run_frontend_check || $_run_frontend_unit; then
+    _fe_gate_decision=$(python scripts/check-frontend-gate.py || true)
+    case "$_fe_gate_decision" in
+        run) ;;
+        skip)
+            _note_skipped "frontend build (no frontend/node_modules)"
+            _note_skipped "npm audit (no frontend/node_modules)"
+            $_run_frontend_unit && _note_skipped "frontend unit tests (no frontend/node_modules)"
+            ;;
+        *)
+            _blocked "the frontend gates cannot run in this worktree"
+            echo ""
+            echo "This run would otherwise have skipped the frontend build, npm audit"
+            echo "and the Vitest suite and still reported every gate green (#4019)."
+            exit 1
+            ;;
+    esac
+fi
+
+# ---------------------------------------------------------------------------
 # Stage 1: cheap gates. Serial and fail-fast — the whole set is ~8s, so
 # stopping at the first failure costs nothing.
 # ---------------------------------------------------------------------------
@@ -662,7 +706,9 @@ if $_run_frontend_check && [ -d "frontend/node_modules" ]; then
     fi
     rm -f "$_fe_log"
 elif $_run_frontend_check && [ ! -d "frontend/node_modules" ]; then
-    echo "Skipping frontend build check (node_modules not installed; run: cd frontend && npm install)"
+    # Already recorded in the ledger, and already proven harmless against the
+    # diff by check-frontend-gate.py; this only says it out loud in place.
+    echo "Skipping frontend build check (no node_modules; diff touches no frontend/ path)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -754,11 +800,14 @@ if $_run_whole_repo_gates; then
 fi
 if $_run_frontend_check && [ -d "frontend/node_modules" ]; then
     _start_lane "npm audit" _lane_npm_audit
+elif $_run_frontend_check; then
+    # This one used to vanish without even a line of output.
+    echo "Skipping npm audit (no node_modules; diff touches no frontend/ path)"
 fi
 if $_run_frontend_unit && [ -d "frontend/node_modules" ]; then
     _start_lane "frontend unit tests (Vitest)" _lane_frontend_unit
 elif $_run_frontend_unit && [ ! -d "frontend/node_modules" ]; then
-    echo "Skipping frontend unit tests (node_modules not installed; run: cd frontend && npm install)"
+    echo "Skipping frontend unit tests (no node_modules; diff touches no frontend/ path)"
 fi
 
 if [[ ${#_lane_names[@]} -gt 0 ]]; then
@@ -779,6 +828,9 @@ elif $_is_docs_run; then
     echo "pip-audit, the vulture whitelist check and the frontend lanes are"
     echo "skipped — none of them can see a markdown file."
 elif ! $_run_whole_repo_gates; then
+    _note_skipped "pyright"
+    _note_skipped "pip-audit"
+    _note_skipped "vulture whitelist"
     echo "Group run: skipping pyright, pip-audit and the vulture whitelist check."
     echo "A full './run-tests.sh' is the gate before pushing (or set"
     echo "VTSEARCH_FULL_GATES=1 to force them)."
@@ -894,6 +946,15 @@ if [[ ${#_failed_lanes[@]} -gt 0 || $_pytest_status -ne 0 ]]; then
 fi
 if $_is_docs_run; then
     echo "RUN PASSED (markdown-only; this is the full gate for a markdown-only change)"
+elif [[ ${#_skipped_gates[@]} -gt 0 ]]; then
+    # Deliberately not "all gates green": everything that ran is green, and
+    # these did not run. Naming them is the whole point of #4019.
+    echo "RUN PASSED, EXCEPT ${#_skipped_gates[@]} GATE(S) THAT DID NOT RUN:"
+    for _g in "${_skipped_gates[@]}"; do
+        echo "  - $_g"
+    done
+    echo ""
+    echo "Everything that ran is green. This is not the full gate."
 elif $_run_pytest; then
     echo "RUN PASSED (all gates green; pytest summary above)"
 elif $_is_slides_run; then
