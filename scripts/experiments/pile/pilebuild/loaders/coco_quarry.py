@@ -33,6 +33,16 @@ no user would ever drag, which is #3985's defect arriving through the front door
 that was measured. VG has no equivalent concept, so this has no counterpart in
 the older loader — it is a decision COCO makes available, not a divergence.
 
+**A patch column is sharded, and that is a memory limit rather than a taste.**
+``build_pile.py`` assembles a whole cell in RAM and writes it with one
+``pickle.dump``, and every consumer reads it back through ``load_medias`` into a
+single dict. Measured: the full corpus holds 20.9 GB of pixel bytes at peak, and
+a full-corpus ``dinov3_patch`` cell is a further ~37 GB of grids (123,287 x
+301,056 bytes, read off a built cell) plus a ~37 GB thinned copy at dump. Cut
+into shards each is ~4.7 GB -- the size of the ``vg_scale`` patch cell that
+already works -- and a study loads only the shards it needs. The single-vector
+columns need none of this and stay whole.
+
 **Every image is ``coco_scored``.** In `vg_scale` that flag separates images
 where "holds none of *C*" is a fact from those where it is VG's silence, and the
 negative pool is stratified on it (#3670). Here the distinction is empty: COCO
@@ -195,7 +205,19 @@ def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
     # holds a class in no valid band -- scattered, or oversize -- is in neither,
     # so taking the union here would drop it and call the result "everything".
     emit_ids = set(labels) if full else (set(positive_in) | neg_set | set(spares))
-    log(f"  coco_quarry: emitting {len(emit_ids):,} medias" + (" (FULL CORPUS)" if full else ""))
+
+    # A shard is a slice of the EMIT set, never of the question. Supply, banding
+    # and the clean pool above are computed over the whole corpus and only then
+    # filtered, because a cell computed within a shard would be a different cell:
+    # `band_for` is per image, but "holds none of C" and every count are not.
+    # Modulo rather than a contiguous range so each shard carries every class and
+    # band in proportion, which makes one shard a usable sample on its own.
+    shard = pc.DATASETS.get(dataset, {}).get("shard")
+    if shard:
+        index, count = shard
+        emit_ids = {iid for iid in emit_ids if iid % count == index}
+    where = f" (FULL CORPUS shard {shard[0]}/{shard[1]})" if shard else (" (FULL CORPUS)" if full else "")
+    log(f"  coco_quarry: emitting {len(emit_ids):,} medias{where}")
     for iid in sorted(emit_ids):
         found = members.get(Path(filenames[iid]).name)
         if found is None:

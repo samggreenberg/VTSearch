@@ -221,3 +221,51 @@ class TestFullCorpusMode:
         mod.read_coco_labels(anchor, ("bus", "clock"))
         assert len(mod._CORPUS) == 2, "a different class list is a different answer"
         mod._CORPUS.clear()
+
+
+class TestPatchShards:
+    """The patch column is cut into shards, and the cut must not change a cell.
+
+    One full-corpus `dinov3_patch` cell is ~37 GB of grids: unwritable in one
+    `pickle.dump` and unreadable through `load_medias` afterwards. Sharding is
+    the way round that, and the thing it must not do is change what a cell means.
+    """
+
+    def test_every_shard_is_declared(self):
+        import pile_config as pc
+
+        shards = [d for d in pc.DATASETS if d.startswith("coco_quarry_full_s")]
+        assert len(shards) == pc.COCO_QUARRY_SHARDS
+        for i, name in enumerate(sorted(shards, key=lambda d: int(d.rsplit("s", 1)[1]))):
+            spec = pc.DATASETS[name]
+            assert spec["shard"] == (i, pc.COCO_QUARRY_SHARDS)
+            assert spec["full_corpus"] is True, "a shard is a slice of the full corpus"
+            assert spec["kind"] == "coco_quarry", "one loader, many datasets"
+
+    def test_the_shards_partition_the_corpus_exactly(self):
+        """Every image in exactly one shard: no gap, no overlap.
+
+        A gap is a silently smaller corpus and an overlap double-counts an image
+        in any study that loads two shards -- both look like a working build.
+        """
+        import pile_config as pc
+
+        n = pc.COCO_QUARRY_SHARDS
+        corpus = range(1, 20_000)
+        seen = [{iid for iid in corpus if iid % n == i} for i in range(n)]
+        union = set().union(*seen)
+        assert union == set(corpus), "a gap would be a quietly smaller corpus"
+        assert sum(len(s) for s in seen) == len(union), "an overlap would double-count"
+
+    def test_a_shard_carries_every_class(self, mod, tmp_path: Path):
+        """Modulo, not a contiguous range, so one shard is a usable sample.
+
+        A contiguous slice of COCO ids is not random with respect to class: the
+        ids carry collection order, so a range could miss a class entirely.
+        """
+        import pile_config as pc
+
+        anchor = _corpus(tmp_path)
+        labels, _, _ = mod.read_coco_labels(anchor, ("bus",))
+        per_shard = [{i for i in labels if i % pc.COCO_QUARRY_SHARDS == k} for k in range(pc.COCO_QUARRY_SHARDS)]
+        assert sum(len(s) for s in per_shard) == len(labels)
