@@ -213,6 +213,18 @@ python verdict_store.py restore    # write them back out after a purge
 declared healthy. A `human` divergence fails it; a `derived` one is a note,
 since every build rewrites those.
 
+`CLEARED__*` are raw app exports of **retired** detectors, committed for
+protection rather than as chain inputs (#4035). 47 of them, 13,967 votes; the
+fourteen whose `why` begins **UNBANKED HISTORICAL PASS** carry **2,264 votes on
+images that appear nowhere else in the record**, and their only other copy is a
+scratch filesystem. Whether those belong in today's `corrections.json` is
+deliberately undecided — protection first, interpretation second — so **do not
+feed a `CLEARED__` file to the chain** until that is ruled on.
+
+That count is a lower bound: a vote is a judgement about an `(image, detector)`
+pair and the check matched on the image alone, so a differently-questioned vote
+on a covered image counts as covered.
+
 `corrections.json` is the one row in that inventory a rebuild cannot recreate,
 and regenerating it takes **three** steps, not the one script named after it:
 

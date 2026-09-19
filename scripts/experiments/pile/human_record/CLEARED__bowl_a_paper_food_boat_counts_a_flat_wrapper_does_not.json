@@ -1,0 +1,72 @@
+{
+  "name": "bowl a paper food boat counts a flat wrapper does not",
+  "text_query": "bowl",
+  "media_example": "",
+  "media_type": "image",
+  "examples": [
+    {
+      "type": "text",
+      "value": "bowl"
+    }
+  ],
+  "created_at": 1788464900.1531372,
+  "embedder_type": "semantic",
+  "labelset": {
+    "labels": [
+      {
+        "md5": "cf9f4bce6d774067f1d8ec2b38602b25",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/classes-3588/hotdog/bowl_paper_boats",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2319673.jpg",
+        "filename": "2319673.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "autopilot",
+            "phase": "good",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 0,
+            "score_at_vote": 0.034
+          }
+        }
+      },
+      {
+        "md5": "cce866575c2e49d53e697720c81309fd",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/classes-3588/hotdog/bowl_paper_boats",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2331786.jpg",
+        "filename": "2331786.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "autopilot",
+            "phase": "good",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 1,
+            "score_at_vote": 0.0016
+          }
+        }
+      }
+    ]
+  }
+}
