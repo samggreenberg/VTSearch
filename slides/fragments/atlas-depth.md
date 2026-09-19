@@ -16,36 +16,33 @@
      at a collection it was not trained on and it does not hesitate, decline,
      or look uncertain. It scores. -->
 
-<!-- **a** — A room, and every item anybody has ever voted on lying on its
-     floor. The floor is not the space — it is the part of the space this
-     corpus happened to occupy. -->
+<!-- **a** — Nothing new yet: the corpus, the votes and the boundary, exactly
+     as the last few slides left them. -->
 
-<!-- **b** — The detector, cutting the floor, exactly as on the earlier
-     slides. Nothing new yet. -->
+<!-- **b** — One move, and not one new item. That plane is the *floor* of a
+     room. The floor is not the space — it is the part of the space this corpus
+     happened to occupy. -->
 
-<!-- **c** — A whole second collection, a long way up a direction nobody ever
-     voted along — not a few odd items, a domain. What does the cut say about
-     *these*? -->
+<!-- **c** — And a whole second collection, a long way up a direction nobody
+     ever voted along. Not a few odd items: the same count and the same spread
+     as the floor, because it is a domain. -->
 
-<!-- **d** — Here is the answer everybody pictures without noticing they have.
-     The concept stops. It has bounded extent, it sits where the votes were,
-     and whatever is up here is simply outside it. Every vote on that floor is
-     consistent with this. -->
-
-<!-- **e** — And here is what actually ships. The head is a **single linear
+<!-- **d** — What the detector says about them. The head is a **single linear
      layer** — the score is one number, a projection — so it is *exactly*
-     constant along every direction that projection does not point in. Not an
-     approximation of the model. That **is** the model. The cut has no
-     ceiling. It **sorts** the new collection, cleanly, into the ones inside
-     and the ones outside. Every one of those verdicts is a
-     copy, item for item, of one about a different collection. Ordinary scores,
-     an ordinary ranking, an ordinary cut. Nothing in the output says the word
+     constant along every direction that projection misses. Not an
+     approximation of the model. That **is** the model. So the cut has no lid,
+     and it **sorts** the new collection, cleanly, into the ones inside and the
+     ones outside. Every one of those verdicts is a copy, item for item, of one
+     about a different collection. Nothing in the output says the word
      *extrapolating*. -->
 
-<!-- Nothing here chooses between those last two frames, because **every vote
-     is on the floor** — which is what makes this unlike the last two slides,
-     where more clicks were the answer. So the fix cannot
-     come from the detector, but from something that models where the data
-     *was* — the atlas: it does not need to know the truth up there, only to
-     say "this is nowhere near anything I was built on". That is the typicality
-     p-value, and the next slide is about how well it says it. -->
+<!-- **e** — And the honest alternative: the concept stops. It fits every vote
+     on that floor exactly as well as the pillar does, and no amount of further
+     voting separates the two, because **every vote is on the floor** — which is
+     what makes this unlike the last two slides, where more clicks were the
+     answer. -->
+
+<!-- So the fix cannot come from the detector, but from something that models
+     where the data *was* — the atlas: it does not need to know the truth up
+     there, only to say "this is nowhere near anything I was built on". That is
+     the typicality p-value, and the next slide is about how well it says it. -->
