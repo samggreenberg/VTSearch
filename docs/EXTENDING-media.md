@@ -356,6 +356,7 @@ embedder per media type should override the `is_default` property to return
 | `image/embedder_eupe_patch.py` | `ImageEupePatchEmbedder` | `eupe_patch` | `image` |  |
 | `image/embedder_eupe_single.py` | `ImageEupeSingleEmbedder` | `eupe_single` | `image` |  |
 | `image/embedder_sift_vlad.py` | `ImageSiftVladEmbedder` | `sift_vlad` | `image` |  |
+| `image/embedder_sift_vlad_doc.py` | `ImageSiftVladDocEmbedder` | `sift_vlad_doc` | `image` |  |
 | `image/embedder_siglip2.py` | `ImageSiglip2Embedder` | `siglip2` | `image` |  |
 | `image/embedder_siglip2_l.py` | `ImageSiglip2LEmbedder` | `siglip2_l` | `image` |  |
 | `image/embedder_siglip_l.py` | `ImageSiglipLEmbedder` | `siglip_l` | `image` |  |

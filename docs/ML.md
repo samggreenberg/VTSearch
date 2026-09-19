@@ -218,6 +218,7 @@ Each embedder produces fixed-size embedding vectors from a pretrained model. The
 | `image` | `eupe_patch` | EUPE patch (region-aware images) | `https://huggingface.co/facebook/EUPE-ViT-B/resolve/main/EUPE-ViT-B.pt` | 768 | no text queries; patch grid (region-aware); restricted model license |
 | `image` | `eupe_single` | EUPE single (image vector) | `https://huggingface.co/facebook/EUPE-ViT-B/resolve/main/EUPE-ViT-B.pt` | 768 | no text queries; restricted model license |
 | `image` | `sift_vlad` | SIFT/VLAD (instance matching) | — | 8192 | no text queries; geometric verification |
+| `image` | `sift_vlad_doc` | SIFT/VLAD (document scans) | — | 8192 | no text queries; geometric verification |
 | `image` | `siglip2` | SigLIP 2 (general images) | `google/siglip2-base-patch16-224` | 768 | — |
 | `image` | `siglip2_l` | SigLIP2-L (SO400M/384) | `google/siglip2-so400m-patch14-384` | 1152 | — |
 | `image` | `siglip_l` | SigLIP-L (SO400M/384) | `ViT-SO400M-14-SigLIP-384` | 1152 | — |
