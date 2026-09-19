@@ -1,0 +1,2618 @@
+{
+  "name": "truck incl vans not SUVs (any in image, no box)",
+  "text_query": "truck",
+  "media_example": "",
+  "media_type": "image",
+  "examples": [
+    {
+      "type": "text",
+      "value": "truck"
+    }
+  ],
+  "created_at": 1789582456.6029108,
+  "embedder_type": "semantic",
+  "labelset": {
+    "labels": [
+      {
+        "md5": "73eda47a069de586313802a9a438e4fb",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2328892.jpg",
+        "filename": "2328892.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 99,
+            "score_at_vote": -0.0473
+          }
+        }
+      },
+      {
+        "md5": "578718228fbbc9cee5a0f457f87a4f13",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2409682.jpg",
+        "filename": "2409682.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 0,
+            "score_at_vote": 0.0447
+          }
+        }
+      },
+      {
+        "md5": "22465a804f9705d20433d72445136200",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2325292.jpg",
+        "filename": "2325292.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 0,
+            "score_at_vote": 0.0372
+          }
+        }
+      },
+      {
+        "md5": "ba1bfd8882f994dad01955e6c143bb2b",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2414782.jpg",
+        "filename": "2414782.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 1,
+            "score_at_vote": 0.0224
+          }
+        }
+      },
+      {
+        "md5": "695f0be9623a46ef6942bb33c151bea5",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2410058.jpg",
+        "filename": "2410058.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 2,
+            "score_at_vote": 0.0195
+          }
+        }
+      },
+      {
+        "md5": "6c9196105ed2ce4261fd9a9b1beec264",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2357402.jpg",
+        "filename": "2357402.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 3,
+            "score_at_vote": 0.0146
+          }
+        }
+      },
+      {
+        "md5": "e23215cf39c9d18f9cb469e00aec787d",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2335626.jpg",
+        "filename": "2335626.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 4,
+            "score_at_vote": 0.0138
+          }
+        }
+      },
+      {
+        "md5": "1e79b2dac70855690a45fc5a74df4371",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2328955.jpg",
+        "filename": "2328955.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 5,
+            "score_at_vote": 0.011
+          }
+        }
+      },
+      {
+        "md5": "e2236af319c8415ab62049ed2c74e745",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2383677.jpg",
+        "filename": "2383677.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 6,
+            "score_at_vote": 0.0097
+          }
+        }
+      },
+      {
+        "md5": "9c8f15a2a16fc01a41b3b8abba3a3ad2",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2401766.jpg",
+        "filename": "2401766.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 7,
+            "score_at_vote": 0.0065
+          }
+        }
+      },
+      {
+        "md5": "48bef41bd52be34066dc5460fa474dba",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2365868.jpg",
+        "filename": "2365868.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 8,
+            "score_at_vote": 0.005
+          }
+        }
+      },
+      {
+        "md5": "78cc5e287bcaeb19d38b3e31efd4e565",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2365149.jpg",
+        "filename": "2365149.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 9,
+            "score_at_vote": 0.0047
+          }
+        }
+      },
+      {
+        "md5": "389281d96190a15026628d415f98c341",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2384127.jpg",
+        "filename": "2384127.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 10,
+            "score_at_vote": 0.0018
+          }
+        }
+      },
+      {
+        "md5": "c064bee6e457db3296bef01359e4f8e7",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2399049.jpg",
+        "filename": "2399049.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 11,
+            "score_at_vote": 0.0007
+          }
+        }
+      },
+      {
+        "md5": "5b6b45fddb3a129552eb81218d5cd2b9",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "1520.jpg",
+        "filename": "1520.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 12,
+            "score_at_vote": -0.0011
+          }
+        }
+      },
+      {
+        "md5": "37a7ba848d625ae35313e5e321bb3da9",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2332138.jpg",
+        "filename": "2332138.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 13,
+            "score_at_vote": -0.0015
+          }
+        }
+      },
+      {
+        "md5": "17fa5234355783ef791b99be6c95f435",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "1912.jpg",
+        "filename": "1912.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 14,
+            "score_at_vote": -0.0025
+          }
+        }
+      },
+      {
+        "md5": "324b25878d2fc407b25ab21edf5cbb63",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2335060.jpg",
+        "filename": "2335060.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 15,
+            "score_at_vote": -0.0029
+          }
+        }
+      },
+      {
+        "md5": "85bac621bb4b7503675000cbda01f1bc",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2396857.jpg",
+        "filename": "2396857.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 16,
+            "score_at_vote": -0.0034
+          }
+        }
+      },
+      {
+        "md5": "4e84291f29d1479fec29717e8d254c17",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2345781.jpg",
+        "filename": "2345781.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 17,
+            "score_at_vote": -0.0046
+          }
+        }
+      },
+      {
+        "md5": "497f59c899dd07ba219273a9642045df",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2370639.jpg",
+        "filename": "2370639.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 18,
+            "score_at_vote": -0.0059
+          }
+        }
+      },
+      {
+        "md5": "e08957adc2d896aa1a6ee58331e14cd1",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2370121.jpg",
+        "filename": "2370121.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 19,
+            "score_at_vote": -0.0095
+          }
+        }
+      },
+      {
+        "md5": "0c34f84aaf1c20aa9cc2665d2ed9a751",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2375927.jpg",
+        "filename": "2375927.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 20,
+            "score_at_vote": -0.0103
+          }
+        }
+      },
+      {
+        "md5": "4e10119c2d785c7d7b41c9892ae810ec",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2359621.jpg",
+        "filename": "2359621.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 21,
+            "score_at_vote": -0.0103
+          }
+        }
+      },
+      {
+        "md5": "70e6760a15f316cda460f20b09a81c52",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2353092.jpg",
+        "filename": "2353092.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 22,
+            "score_at_vote": -0.0115
+          }
+        }
+      },
+      {
+        "md5": "4543c192cffeac49478558a4184b45e5",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2417022.jpg",
+        "filename": "2417022.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 23,
+            "score_at_vote": -0.0125
+          }
+        }
+      },
+      {
+        "md5": "33dff4d5e813a06f8a7e183e6602ae11",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2347925.jpg",
+        "filename": "2347925.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 24,
+            "score_at_vote": -0.0135
+          }
+        }
+      },
+      {
+        "md5": "a5b887dd621e7aceaa3fd9fd24b74914",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2365798.jpg",
+        "filename": "2365798.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 25,
+            "score_at_vote": -0.0138
+          }
+        }
+      },
+      {
+        "md5": "c2ef6db0ce3ba4e279eef18b10727cb6",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "497988.jpg",
+        "filename": "497988.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 26,
+            "score_at_vote": -0.0147
+          }
+        }
+      },
+      {
+        "md5": "2570e219ab8b63468afc776d99056bc4",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2376465.jpg",
+        "filename": "2376465.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 27,
+            "score_at_vote": -0.0151
+          }
+        }
+      },
+      {
+        "md5": "183fa483992399ef5876673b7f464d0f",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2342285.jpg",
+        "filename": "2342285.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 28,
+            "score_at_vote": -0.0155
+          }
+        }
+      },
+      {
+        "md5": "8ccedef38912a9e32b79cb68193cc44f",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2333179.jpg",
+        "filename": "2333179.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 29,
+            "score_at_vote": -0.016
+          }
+        }
+      },
+      {
+        "md5": "1e8166e1a8402b56ce40ffe8b8b402ff",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2367497.jpg",
+        "filename": "2367497.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 30,
+            "score_at_vote": -0.0162
+          }
+        }
+      },
+      {
+        "md5": "71f6e9a352de2fd009453ef2cb1b6f5a",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2395312.jpg",
+        "filename": "2395312.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 31,
+            "score_at_vote": -0.0168
+          }
+        }
+      },
+      {
+        "md5": "bc2d96053f42c9141374b797c2357196",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2333538.jpg",
+        "filename": "2333538.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 32,
+            "score_at_vote": -0.0169
+          }
+        }
+      },
+      {
+        "md5": "9b7143559c74d2f61733396e065489d4",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2326066.jpg",
+        "filename": "2326066.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 33,
+            "score_at_vote": -0.017
+          }
+        }
+      },
+      {
+        "md5": "5c9e5ffe723601af2aaa6153185bfb27",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2366853.jpg",
+        "filename": "2366853.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 34,
+            "score_at_vote": -0.0171
+          }
+        }
+      },
+      {
+        "md5": "aa5cbe97fcdf109ebd5062b1145ad42a",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2324307.jpg",
+        "filename": "2324307.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 35,
+            "score_at_vote": -0.0176
+          }
+        }
+      },
+      {
+        "md5": "dbf0c9d35ba990d801812cbb3e036c21",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2394713.jpg",
+        "filename": "2394713.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 36,
+            "score_at_vote": -0.0191
+          }
+        }
+      },
+      {
+        "md5": "d5e5f0d9b0dc29870a663957f40a4136",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "4834.jpg",
+        "filename": "4834.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 37,
+            "score_at_vote": -0.0192
+          }
+        }
+      },
+      {
+        "md5": "af2a910ce47ded2436492af34af974f8",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2353503.jpg",
+        "filename": "2353503.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 38,
+            "score_at_vote": -0.02
+          }
+        }
+      },
+      {
+        "md5": "92e10efbd6764e0438fd6ae0b2a44e0d",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2325565.jpg",
+        "filename": "2325565.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 39,
+            "score_at_vote": -0.0205
+          }
+        }
+      },
+      {
+        "md5": "14537e1e0c7321e00f7b5191f9d5e524",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2370344.jpg",
+        "filename": "2370344.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 40,
+            "score_at_vote": -0.0207
+          }
+        }
+      },
+      {
+        "md5": "f56b3f6efaec7acc7bd7ba79884e7144",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2400362.jpg",
+        "filename": "2400362.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 41,
+            "score_at_vote": -0.0239
+          }
+        }
+      },
+      {
+        "md5": "2729736d80dc28617b3758a4d4513257",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "1108.jpg",
+        "filename": "1108.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 42,
+            "score_at_vote": -0.0247
+          }
+        }
+      },
+      {
+        "md5": "982beee1f3354cabfee66ed4516b7113",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2375234.jpg",
+        "filename": "2375234.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 43,
+            "score_at_vote": -0.0249
+          }
+        }
+      },
+      {
+        "md5": "111c98f1fd130a6c53323abba9419ea6",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2367980.jpg",
+        "filename": "2367980.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 44,
+            "score_at_vote": -0.0254
+          }
+        }
+      },
+      {
+        "md5": "4770095e8789497eddc0a94774f6842a",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2365222.jpg",
+        "filename": "2365222.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 45,
+            "score_at_vote": -0.0254
+          }
+        }
+      },
+      {
+        "md5": "c28195af52fcd2082b8fbf35f651b39a",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2341840.jpg",
+        "filename": "2341840.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 46,
+            "score_at_vote": -0.0259
+          }
+        }
+      },
+      {
+        "md5": "7b46c95437d037e22704e0f07f5af980",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2316641.jpg",
+        "filename": "2316641.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 48,
+            "score_at_vote": -0.0268
+          }
+        }
+      },
+      {
+        "md5": "60bf15f848d2e9b407d978b8c21a45a6",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2406097.jpg",
+        "filename": "2406097.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 49,
+            "score_at_vote": -0.027
+          }
+        }
+      },
+      {
+        "md5": "baebb4d6689ec206c8397d233640da75",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2373825.jpg",
+        "filename": "2373825.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 50,
+            "score_at_vote": -0.0272
+          }
+        }
+      },
+      {
+        "md5": "7f06f54b5a8c22e1ad3722aba89aa8df",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2397404.jpg",
+        "filename": "2397404.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 51,
+            "score_at_vote": -0.0275
+          }
+        }
+      },
+      {
+        "md5": "1e2cab9964218ef3e6f9d70a243e5bb4",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2344818.jpg",
+        "filename": "2344818.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 52,
+            "score_at_vote": -0.0282
+          }
+        }
+      },
+      {
+        "md5": "7ec68451f8b6c3dce8d31a0d63227762",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2401750.jpg",
+        "filename": "2401750.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 53,
+            "score_at_vote": -0.0285
+          }
+        }
+      },
+      {
+        "md5": "2e88885bf841c7bf3b1b2da655480f07",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2407803.jpg",
+        "filename": "2407803.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 54,
+            "score_at_vote": -0.03
+          }
+        }
+      },
+      {
+        "md5": "9015ad6ef8f80224883b622146efbb02",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "713943.jpg",
+        "filename": "713943.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 55,
+            "score_at_vote": -0.0306
+          }
+        }
+      },
+      {
+        "md5": "d33d95532c278a41d686521c23e9d4d6",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2383847.jpg",
+        "filename": "2383847.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 56,
+            "score_at_vote": -0.0309
+          }
+        }
+      },
+      {
+        "md5": "f1bd0695c720061037bc50cddb8ce89d",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2336878.jpg",
+        "filename": "2336878.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 57,
+            "score_at_vote": -0.0318
+          }
+        }
+      },
+      {
+        "md5": "99158c5d38f72079f202175bb96ada41",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2322785.jpg",
+        "filename": "2322785.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 58,
+            "score_at_vote": -0.0319
+          }
+        }
+      },
+      {
+        "md5": "3afc3d4de2ea3ef2c885f0686fd58c72",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "28.jpg",
+        "filename": "28.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 59,
+            "score_at_vote": -0.0319
+          }
+        }
+      },
+      {
+        "md5": "0c2428b5051b70e5e3969ad4915f5417",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2345297.jpg",
+        "filename": "2345297.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 60,
+            "score_at_vote": -0.032
+          }
+        }
+      },
+      {
+        "md5": "f31807771d1bfe0db5cac1e44232ff57",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2354888.jpg",
+        "filename": "2354888.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 61,
+            "score_at_vote": -0.0322
+          }
+        }
+      },
+      {
+        "md5": "00f8875be77727bbeaa8e971f10f6859",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2323071.jpg",
+        "filename": "2323071.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 62,
+            "score_at_vote": -0.0338
+          }
+        }
+      },
+      {
+        "md5": "b9e35b7670bb7cb80931d3571990a73f",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2385993.jpg",
+        "filename": "2385993.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 63,
+            "score_at_vote": -0.0348
+          }
+        }
+      },
+      {
+        "md5": "c0f3a4ad5a0ec48a23cc6d29089c787b",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "1293.jpg",
+        "filename": "1293.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 64,
+            "score_at_vote": -0.0352
+          }
+        }
+      },
+      {
+        "md5": "deef6c4145c31bfc77c51ae742bd2466",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2339645.jpg",
+        "filename": "2339645.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 65,
+            "score_at_vote": -0.0355
+          }
+        }
+      },
+      {
+        "md5": "bf49f556089623de417d9b0cdcce4851",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2368093.jpg",
+        "filename": "2368093.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 66,
+            "score_at_vote": -0.0358
+          }
+        }
+      },
+      {
+        "md5": "bc07a2d2067773aaadd4b9ce537a67fe",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2369762.jpg",
+        "filename": "2369762.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 67,
+            "score_at_vote": -0.0359
+          }
+        }
+      },
+      {
+        "md5": "cddfd790dbd2eb8f16706f2aec7f2513",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2408683.jpg",
+        "filename": "2408683.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 69,
+            "score_at_vote": -0.0369
+          }
+        }
+      },
+      {
+        "md5": "c54627177b4b68944ee4733fd3241875",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2413136.jpg",
+        "filename": "2413136.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 70,
+            "score_at_vote": -0.038
+          }
+        }
+      },
+      {
+        "md5": "b0f88d0b48cb0769a7421c01ee3f245b",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2349100.jpg",
+        "filename": "2349100.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 71,
+            "score_at_vote": -0.0384
+          }
+        }
+      },
+      {
+        "md5": "ce4d0d1f064a300c4504b3ef7ab0a141",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2341622.jpg",
+        "filename": "2341622.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 72,
+            "score_at_vote": -0.0387
+          }
+        }
+      },
+      {
+        "md5": "92ac99748d28d442c8779d5801aae677",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2409571.jpg",
+        "filename": "2409571.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 73,
+            "score_at_vote": -0.0388
+          }
+        }
+      },
+      {
+        "md5": "b606b2812acb1316940d96a481b44239",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2415869.jpg",
+        "filename": "2415869.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 74,
+            "score_at_vote": -0.0396
+          }
+        }
+      },
+      {
+        "md5": "1af3d7bbb6d3d7e1eb840c3fb16c583c",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2388650.jpg",
+        "filename": "2388650.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 75,
+            "score_at_vote": -0.0399
+          }
+        }
+      },
+      {
+        "md5": "10effbdd1c47ba84db59e8fd76e8268b",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2386352.jpg",
+        "filename": "2386352.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 76,
+            "score_at_vote": -0.041
+          }
+        }
+      },
+      {
+        "md5": "6309410a44221faad4078f48d5b039e0",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2344400.jpg",
+        "filename": "2344400.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 77,
+            "score_at_vote": -0.041
+          }
+        }
+      },
+      {
+        "md5": "e7f1b9072a3093de0ccae867f5c023d5",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2363150.jpg",
+        "filename": "2363150.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 78,
+            "score_at_vote": -0.0432
+          }
+        }
+      },
+      {
+        "md5": "d1644a18b2775874f09e9b220e883e49",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2357166.jpg",
+        "filename": "2357166.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 79,
+            "score_at_vote": -0.0436
+          }
+        }
+      },
+      {
+        "md5": "0e84e4eab408753ee8776073e4c3915d",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2367231.jpg",
+        "filename": "2367231.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 80,
+            "score_at_vote": -0.0445
+          }
+        }
+      },
+      {
+        "md5": "bcae5bc439834375e7447f38d815493d",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2345065.jpg",
+        "filename": "2345065.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 81,
+            "score_at_vote": -0.0455
+          }
+        }
+      },
+      {
+        "md5": "3a4a0beb225ca040843fcba130b0cf72",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2416528.jpg",
+        "filename": "2416528.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 82,
+            "score_at_vote": -0.0457
+          }
+        }
+      },
+      {
+        "md5": "a37133fc350627d4f14c053e7cf8985a",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2383791.jpg",
+        "filename": "2383791.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 83,
+            "score_at_vote": -0.0472
+          }
+        }
+      },
+      {
+        "md5": "8176d563360f873c49ea9ca7d612af05",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2321186.jpg",
+        "filename": "2321186.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 84,
+            "score_at_vote": -0.0488
+          }
+        }
+      },
+      {
+        "md5": "a5b60e323a60e2a157651a9ea1ea1d3a",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2373602.jpg",
+        "filename": "2373602.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 85,
+            "score_at_vote": -0.05
+          }
+        }
+      },
+      {
+        "md5": "572700d9ce00a36bf0537e6701390a32",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2357122.jpg",
+        "filename": "2357122.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 86,
+            "score_at_vote": -0.0506
+          }
+        }
+      },
+      {
+        "md5": "6f3e216cbe110156c2d69d4324ff03d6",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2400985.jpg",
+        "filename": "2400985.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 87,
+            "score_at_vote": -0.0508
+          }
+        }
+      },
+      {
+        "md5": "526d92c7bb1ae197c8176bd53dc20cc8",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2396792.jpg",
+        "filename": "2396792.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 88,
+            "score_at_vote": -0.0508
+          }
+        }
+      },
+      {
+        "md5": "6118e5b96d32a12606904276fb0d7072",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2351400.jpg",
+        "filename": "2351400.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 89,
+            "score_at_vote": -0.051
+          }
+        }
+      },
+      {
+        "md5": "2d682b0a5e414790b6c1bd4f49aa8cc6",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2392672.jpg",
+        "filename": "2392672.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 90,
+            "score_at_vote": -0.0518
+          }
+        }
+      },
+      {
+        "md5": "757bb11ebeadf0a8fe9478b43afca260",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "3390.jpg",
+        "filename": "3390.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 91,
+            "score_at_vote": -0.0534
+          }
+        }
+      },
+      {
+        "md5": "4c4d24567acfa6579189de17ad461084",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "4468.jpg",
+        "filename": "4468.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 92,
+            "score_at_vote": -0.0546
+          }
+        }
+      },
+      {
+        "md5": "8a3dc16b8d5fa47304b976399f2e0520",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "150292.jpg",
+        "filename": "150292.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 93,
+            "score_at_vote": -0.0574
+          }
+        }
+      },
+      {
+        "md5": "50fd8c80dd74478d6240f3d624a4e93a",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2408848.jpg",
+        "filename": "2408848.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 94,
+            "score_at_vote": -0.0603
+          }
+        }
+      },
+      {
+        "md5": "c396eb6e9d946b73578d211683661496",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2344508.jpg",
+        "filename": "2344508.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 95,
+            "score_at_vote": -0.0646
+          }
+        }
+      },
+      {
+        "md5": "cdd18efd36d5ba3861b97b302cfb5030",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "713657.jpg",
+        "filename": "713657.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 96,
+            "score_at_vote": -0.0695
+          }
+        }
+      },
+      {
+        "md5": "c557c0727f526ae0c0e29051d66b5444",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2331080.jpg",
+        "filename": "2331080.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 97,
+            "score_at_vote": -0.0697
+          }
+        }
+      },
+      {
+        "md5": "7a2668f6d0ed33c1bc645c148683c2bc",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2317447.jpg",
+        "filename": "2317447.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 98,
+            "score_at_vote": -0.0764
+          }
+        }
+      },
+      {
+        "md5": "e916bbdfcf1f9eb8c9af051dbb962981",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/truck/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2619.jpg",
+        "filename": "2619.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 99,
+            "score_at_vote": -0.0778
+          }
+        }
+      }
+    ]
+  }
+}

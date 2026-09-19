@@ -1,4 +1,380 @@
 {
+  "CLEARED__backpack_not_handbags_or_luggage_any_in_image_no_box.json": {
+    "bytes": 75545,
+    "rel": "backpack_not_handbags_or_luggage_any_in_image_no_box.json.cleared",
+    "sha256": "d13fbfb23a834d8f99894d9c8d2351f673305874ea465eeec9ed9d0076eb8e3a",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 100 votes on 'backpack not handbags or luggage (any in image, no box)', all of them already represented in the record (100 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__bench_not_chairs.json": {
+    "bytes": 235301,
+    "rel": "bench_not_chairs.json.cleared",
+    "sha256": "9d61e441e8a5d6ad760c04416da0b38ebc5ebdb0ce4e705c6e47b7c0dc489daa",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "**UNBANKED HISTORICAL PASS.** 300 votes on 'bench not chairs', of which 184 are on images that appear nowhere else in this record and 10 are banked under this detector's own name. Committed as-is (#4035) so the judgements survive; whether they belong in today's corrections.json is deliberately undecided. Do not treat this file as an input to the chain until that is ruled on."
+  },
+  "CLEARED__bench_not_chairs_any_in_image_no_box.json": {
+    "bytes": 75098,
+    "rel": "bench_not_chairs_any_in_image_no_box.json.cleared",
+    "sha256": "d9008d87c6e27551663b130a1b8132531a0571d151e65c411d3529be499d80d1",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 100 votes on 'bench not chairs (any in image, no box)', all of them already represented in the record (100 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__bicycle_not_signs_or_pictograms_of_bicycles.json": {
+    "bytes": 3437,
+    "rel": "bicycle_not_signs_or_pictograms_of_bicycles.json.cleared",
+    "sha256": "31525526689cf1f605af9b7dc43ea53564f000c87e013c21df467fa03501a7e1",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 4 votes on 'bicycle not signs or pictograms of bicycles', all of them already represented in the record (0 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__bird_incl_dead_not_food_any_in_image_no_box.json": {
+    "bytes": 74825,
+    "rel": "bird_incl_dead_not_food_any_in_image_no_box.json.cleared",
+    "sha256": "51304c5b31711c7eba1ab380d946cd4fce415a26261f0f15acf3e89a09db165e",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 100 votes on 'bird incl dead not food (any in image, no box)', all of them already represented in the record (100 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__bird_incl_dead_not_food_confirm_the_box.json": {
+    "bytes": 497349,
+    "rel": "bird_incl_dead_not_food_confirm_the_box.json.cleared",
+    "sha256": "7e4d0ad41894403e043bc7a8c3968d297d8374cc6730533d155b4ccc800efe2a",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 645 votes on 'bird incl dead not food (confirm the box)', all of them already represented in the record (645 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__book_incl_magazines_any_in_image_no_box.json": {
+    "bytes": 74847,
+    "rel": "book_incl_magazines_any_in_image_no_box.json.cleared",
+    "sha256": "109bdb71e5aa646ac6950798f804e8f81e0c0b3c2d9cdae017128705ac818ebe",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 100 votes on 'book incl magazines (any in image, no box)', all of them already represented in the record (100 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__bottle_incl_jars.json": {
+    "bytes": 240858,
+    "rel": "bottle_incl_jars.json.cleared",
+    "sha256": "ccdc7b8ed7ce4856e8f0735396105ab9cf67d8df6fdfe69f2be32e454cf9d46a",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "**UNBANKED HISTORICAL PASS.** 300 votes on 'bottle incl jars', of which 155 are on images that appear nowhere else in this record and 0 are banked under this detector's own name. Committed as-is (#4035) so the judgements survive; whether they belong in today's corrections.json is deliberately undecided. Do not treat this file as an input to the chain until that is ruled on."
+  },
+  "CLEARED__bottle_incl_jars_any_in_image_no_box.json": {
+    "bytes": 75193,
+    "rel": "bottle_incl_jars_any_in_image_no_box.json.cleared",
+    "sha256": "bba2a9417aa643255e50b809821275e9b14c2f8d346c590d4d42bd9e806e4eb8",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 100 votes on 'bottle incl jars (any in image, no box)', all of them already represented in the record (100 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__bottle_incl_jars_confirm_the_box.json": {
+    "bytes": 636897,
+    "rel": "bottle_incl_jars_confirm_the_box.json.cleared",
+    "sha256": "898c8e4ec45894f13e4fd87fc9c8d1684d0b3dd6c76431fb85d91373182d3b44",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 822 votes on 'bottle incl jars (confirm the box)', all of them already represented in the record (822 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__bowl_a_paper_food_boat_counts_a_flat_wrapper_does_not.json": {
+    "bytes": 1878,
+    "rel": "bowl_a_paper_food_boat_counts_a_flat_wrapper_does_not.json.cleared",
+    "sha256": "06dbca42f5835a7659423dc6900d90ee733f87666bb77d72e6414de1bed394aa",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "**UNBANKED HISTORICAL PASS.** 2 votes on 'bowl a paper food boat counts a flat wrapper does not', of which 2 are on images that appear nowhere else in this record and 0 are banked under this detector's own name. Committed as-is (#4035) so the judgements survive; whether they belong in today's corrections.json is deliberately undecided. Do not treat this file as an input to the chain until that is ruled on."
+  },
+  "CLEARED__bowl_incl_plates_and_food_containers_not_wrappers.json": {
+    "bytes": 240482,
+    "rel": "bowl_incl_plates_and_food_containers_not_wrappers.json.cleared",
+    "sha256": "35cf66b07a60b1da1ec56734b5915e9fa2f951f673fbe8c4b9c4b4d768a5a18f",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "**UNBANKED HISTORICAL PASS.** 300 votes on 'bowl incl plates and food containers not wrappers', of which 180 are on images that appear nowhere else in this record and 0 are banked under this detector's own name. Committed as-is (#4035) so the judgements survive; whether they belong in today's corrections.json is deliberately undecided. Do not treat this file as an input to the chain until that is ruled on."
+  },
+  "CLEARED__bowl_incl_plates_not_planters_or_wrappers_any_in_image_no_box.json": {
+    "bytes": 75779,
+    "rel": "bowl_incl_plates_not_planters_or_wrappers_any_in_image_no_box.json.cleared",
+    "sha256": "71857b3a6a36a04f673bda2b4133d8da9426ac7bab3b9e925fb21532a4da5966",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 100 votes on 'bowl incl plates not planters or wrappers (any in image, no box)', all of them already represented in the record (100 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__bowl_incl_plates_not_planters_or_wrappers_confirm_the_box.json": {
+    "bytes": 456703,
+    "rel": "bowl_incl_plates_not_planters_or_wrappers_confirm_the_box.json.cleared",
+    "sha256": "cb4a961ff3ed6f29e0124341b573d5c30cd8ac693f455d0674006aa6b6fc6579",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 592 votes on 'bowl incl plates not planters or wrappers (confirm the box)', all of them already represented in the record (592 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__bus_incl_coaches_not_trams_any_in_image_no_box.json": {
+    "bytes": 77678,
+    "rel": "bus_incl_coaches_not_trams_any_in_image_no_box.json.cleared",
+    "sha256": "31fd5eaac96bea6dae3c1e51c21fbae348b426e56e47e6e571650ba8870a1b0b",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 104 votes on 'bus incl coaches not trams (any in image, no box)', all of them already represented in the record (100 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__car_incl_suvs_and_minivans.json": {
+    "bytes": 243028,
+    "rel": "car_incl_suvs_and_minivans.json.cleared",
+    "sha256": "feb2e904c8dc99619379f2ba58ebf27201a0680bb3a134798b7b0b6a75fa3afd",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "**UNBANKED HISTORICAL PASS.** 300 votes on 'car incl SUVs and minivans', of which 165 are on images that appear nowhere else in this record and 0 are banked under this detector's own name. Committed as-is (#4035) so the judgements survive; whether they belong in today's corrections.json is deliberately undecided. Do not treat this file as an input to the chain until that is ruled on."
+  },
+  "CLEARED__car_incl_suvs_and_minivans_any_in_image_no_box.json": {
+    "bytes": 74733,
+    "rel": "car_incl_suvs_and_minivans_any_in_image_no_box.json.cleared",
+    "sha256": "8e22876b6ff77c7df8884924866e54b58b357443c222976cbcf10c44f354001b",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 100 votes on 'car incl SUVs and minivans (any in image, no box)', all of them already represented in the record (100 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__car_incl_suvs_and_minivans_confirm_the_box.json": {
+    "bytes": 450819,
+    "rel": "car_incl_suvs_and_minivans_confirm_the_box.json.cleared",
+    "sha256": "c545924d87dc76cafeb11068c2ff71dbe70a93867ca94194b7d76528180e96f6",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 588 votes on 'car incl SUVs and minivans (confirm the box)', all of them already represented in the record (588 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__cell_phone_not_landlines.json": {
+    "bytes": 236548,
+    "rel": "cell_phone_not_landlines.json.cleared",
+    "sha256": "2d16e953f18f8e8c9a4a5385e7d3447f799c4367564aaa1699b3ae016f2abb97",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "**UNBANKED HISTORICAL PASS.** 300 votes on 'cell phone not landlines', of which 171 are on images that appear nowhere else in this record and 0 are banked under this detector's own name. Committed as-is (#4035) so the judgements survive; whether they belong in today's corrections.json is deliberately undecided. Do not treat this file as an input to the chain until that is ruled on."
+  },
+  "CLEARED__cell_phone_not_landlines_any_in_image_no_box.json": {
+    "bytes": 75606,
+    "rel": "cell_phone_not_landlines_any_in_image_no_box.json.cleared",
+    "sha256": "71580e838f3ccc6f34ac64899ce12c61872753d31e869f34ccd151062ccee0ed",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 100 votes on 'cell phone not landlines (any in image, no box)', all of them already represented in the record (100 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__cell_phone_not_landlines_confirm_the_box.json": {
+    "bytes": 533788,
+    "rel": "cell_phone_not_landlines_confirm_the_box.json.cleared",
+    "sha256": "c434bcb84210785dfaf6d75b9df4fe9955b274de44c50f6aa4cda3a161617426",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 687 votes on 'cell phone not landlines (confirm the box)', all of them already represented in the record (687 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__chair_incl_stools_not_couches.json": {
+    "bytes": 239139,
+    "rel": "chair_incl_stools_not_couches.json.cleared",
+    "sha256": "03cec8df9e9ae47ca15e8e53637b44620ba2a2cdec0aa5037589c3a9d8a46e6e",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "**UNBANKED HISTORICAL PASS.** 300 votes on 'chair incl stools not couches', of which 180 are on images that appear nowhere else in this record and 0 are banked under this detector's own name. Committed as-is (#4035) so the judgements survive; whether they belong in today's corrections.json is deliberately undecided. Do not treat this file as an input to the chain until that is ruled on."
+  },
+  "CLEARED__chair_incl_stools_not_couches_any_in_image_no_box.json": {
+    "bytes": 75102,
+    "rel": "chair_incl_stools_not_couches_any_in_image_no_box.json.cleared",
+    "sha256": "ec9e666493dbdd8853f9a46d3796b1cf09dc07721193d3fbb3c5e2658af512c5",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 100 votes on 'chair incl stools not couches (any in image, no box)', all of them already represented in the record (100 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__chair_incl_stools_not_couches_confirm_the_box.json": {
+    "bytes": 650657,
+    "rel": "chair_incl_stools_not_couches_confirm_the_box.json.cleared",
+    "sha256": "b78bb8d1d61a5ac18ae2cbc1a7a4a853fb5aaa8caa85edd906cda4885a6464b2",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 841 votes on 'chair incl stools not couches (confirm the box)', all of them already represented in the record (841 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__clock_not_watches_any_in_image_no_box.json": {
+    "bytes": 74956,
+    "rel": "clock_not_watches_any_in_image_no_box.json.cleared",
+    "sha256": "613e682ece61d2bb2c3ca26923f495ab4cbb0bcbe2d6e9ae37f37e99e2a3b69e",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 100 votes on 'clock not watches (any in image, no box)', all of them already represented in the record (100 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__clock_not_watches_confirm_the_box.json": {
+    "bytes": 487481,
+    "rel": "clock_not_watches_confirm_the_box.json.cleared",
+    "sha256": "dba291ec853d47edb5a078a086bef4f11b832247989524f07240dbea213f5584",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 632 votes on 'clock not watches (confirm the box)', all of them already represented in the record (632 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__cup_incl_mugs_glasses_and_stemware.json": {
+    "bytes": 245771,
+    "rel": "cup_incl_mugs_glasses_and_stemware.json.cleared",
+    "sha256": "c9ded2b7489c18a8a826fd81daa40d3325e67cca7a5688a6da11542e765b4680",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "**UNBANKED HISTORICAL PASS.** 300 votes on 'cup incl mugs glasses and stemware', of which 170 are on images that appear nowhere else in this record and 0 are banked under this detector's own name. Committed as-is (#4035) so the judgements survive; whether they belong in today's corrections.json is deliberately undecided. Do not treat this file as an input to the chain until that is ruled on."
+  },
+  "CLEARED__cup_incl_mugs_glasses_and_stemware_any_in_image_no_box.json": {
+    "bytes": 74646,
+    "rel": "cup_incl_mugs_glasses_and_stemware_any_in_image_no_box.json.cleared",
+    "sha256": "57b4f38d09d5618660843f33e8c0da3f6c24bea28195167460913d8d3f2468a4",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 100 votes on 'cup incl mugs glasses and stemware (any in image, no box)', all of them already represented in the record (100 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__cup_incl_mugs_glasses_and_stemware_confirm_the_box.json": {
+    "bytes": 520627,
+    "rel": "cup_incl_mugs_glasses_and_stemware_confirm_the_box.json.cleared",
+    "sha256": "be6a16fc654c0698b0f4ed10aea6eb2dad21a9f67a1832f6aad8a7719f317f9c",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 676 votes on 'cup incl mugs glasses and stemware (confirm the box)', all of them already represented in the record (676 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__fire_hydrant_not_standpipes.json": {
+    "bytes": 238207,
+    "rel": "fire_hydrant_not_standpipes.json.cleared",
+    "sha256": "a2c2c2e81820e191c4bfc43b242b28cb6b8a451054ed6c66cd0262bccd31426d",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "**UNBANKED HISTORICAL PASS.** 300 votes on 'fire hydrant not standpipes', of which 158 are on images that appear nowhere else in this record and 0 are banked under this detector's own name. Committed as-is (#4035) so the judgements survive; whether they belong in today's corrections.json is deliberately undecided. Do not treat this file as an input to the chain until that is ruled on."
+  },
+  "CLEARED__fork_incl_plastic.json": {
+    "bytes": 235753,
+    "rel": "fork_incl_plastic.json.cleared",
+    "sha256": "ed736dac177c5e586fb3c89ad4bcc0ff429afa8b41ce459651220871a57d9044",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "**UNBANKED HISTORICAL PASS.** 300 votes on 'fork incl plastic', of which 189 are on images that appear nowhere else in this record and 0 are banked under this detector's own name. Committed as-is (#4035) so the judgements survive; whether they belong in today's corrections.json is deliberately undecided. Do not treat this file as an input to the chain until that is ruled on."
+  },
+  "CLEARED__fork_incl_sporks_not_strainers_any_in_image_no_box.json": {
+    "bytes": 74774,
+    "rel": "fork_incl_sporks_not_strainers_any_in_image_no_box.json.cleared",
+    "sha256": "852e2b484aed2f4a271bd58dd5efc9bbcd52d3b5caa9be8248f9938c84d887c1",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 100 votes on 'fork incl sporks not strainers (any in image, no box)', all of them already represented in the record (100 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__kite_incl_parasails_and_parachutes_any_in_image_no_box.json": {
+    "bytes": 74834,
+    "rel": "kite_incl_parasails_and_parachutes_any_in_image_no_box.json.cleared",
+    "sha256": "e15158668e0d5ddcfb9db752bdf9f6a5154c7a73a4c404d282e2cc2b7b95d688",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 100 votes on 'kite incl parasails and parachutes (any in image, no box)', all of them already represented in the record (100 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__kite_incl_parasails_and_parachutes_confirm_the_box.json": {
+    "bytes": 321841,
+    "rel": "kite_incl_parasails_and_parachutes_confirm_the_box.json.cleared",
+    "sha256": "2347ec7935e69de17a9ff592e6338622b892deab90d9b9eb07afb8f7ffb46cb9",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 423 votes on 'kite incl parasails and parachutes (confirm the box)', all of them already represented in the record (423 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__knife_incl_butter_knives_and_servers_any_in_image_no_box.json": {
+    "bytes": 75329,
+    "rel": "knife_incl_butter_knives_and_servers_any_in_image_no_box.json.cleared",
+    "sha256": "b045e7124657d17937662ac4b90a0899467ebf51b48a8667ab25146205faa827",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 100 votes on 'knife incl butter knives and servers (any in image, no box)', all of them already represented in the record (100 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__knife_incl_butter_knives_and_servers_confirm_the_box.json": {
+    "bytes": 358609,
+    "rel": "knife_incl_butter_knives_and_servers_confirm_the_box.json.cleared",
+    "sha256": "7366894c4ea2623a68569e67e0c9a5b9178bea7ba083755ccbc85698586bd525",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 465 votes on 'knife incl butter knives and servers (confirm the box)', all of them already represented in the record (465 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__sink_basin_not_counter.json": {
+    "bytes": 239396,
+    "rel": "sink_basin_not_counter.json.cleared",
+    "sha256": "f5280e2300633166a88adb14d417533d26cfa289efbee64e967d78daad40f2cc",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "**UNBANKED HISTORICAL PASS.** 300 votes on 'sink basin not counter', of which 181 are on images that appear nowhere else in this record and 0 are banked under this detector's own name. Committed as-is (#4035) so the judgements survive; whether they belong in today's corrections.json is deliberately undecided. Do not treat this file as an input to the chain until that is ruled on."
+  },
+  "CLEARED__spoon_incl_plastic_not_spatulas.json": {
+    "bytes": 239976,
+    "rel": "spoon_incl_plastic_not_spatulas.json.cleared",
+    "sha256": "8ae3933f0b0a677f87a44522310df0ae11f8c291199aa8def6e20b13687a0174",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "**UNBANKED HISTORICAL PASS.** 300 votes on 'spoon incl plastic not spatulas', of which 179 are on images that appear nowhere else in this record and 0 are banked under this detector's own name. Committed as-is (#4035) so the judgements survive; whether they belong in today's corrections.json is deliberately undecided. Do not treat this file as an input to the chain until that is ruled on."
+  },
+  "CLEARED__spoon_incl_plastic_not_spatulas_or_sporks_any_in_image_no_box.json": {
+    "bytes": 74915,
+    "rel": "spoon_incl_plastic_not_spatulas_or_sporks_any_in_image_no_box.json.cleared",
+    "sha256": "1e0898ebf4fdf2acdc507a949716e0a21159e2d26fde18d8b19151d468fd51ef",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 100 votes on 'spoon incl plastic not spatulas or sporks (any in image, no box)', all of them already represented in the record (100 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__spoon_incl_plastic_not_spatulas_or_sporks_confirm_the_box.json": {
+    "bytes": 409636,
+    "rel": "spoon_incl_plastic_not_spatulas_or_sporks_confirm_the_box.json.cleared",
+    "sha256": "aa3ffa871715e745a5b4400e976b85cadfce99761087ff234855c471b8eed7d6",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 541 votes on 'spoon incl plastic not spatulas or sporks (confirm the box)', all of them already represented in the record (541 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__truck_incl_vans_not_suvs.json": {
+    "bytes": 241854,
+    "rel": "truck_incl_vans_not_suvs.json.cleared",
+    "sha256": "62732cc6da910b3b2038e8e63b1d1eba58cff645ab0f7af4edb5631d305b6e55",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "**UNBANKED HISTORICAL PASS.** 300 votes on 'truck incl vans not SUVs', of which 182 are on images that appear nowhere else in this record and 0 are banked under this detector's own name. Committed as-is (#4035) so the judgements survive; whether they belong in today's corrections.json is deliberately undecided. Do not treat this file as an input to the chain until that is ruled on."
+  },
+  "CLEARED__truck_incl_vans_not_suvs_any_in_image_no_box.json": {
+    "bytes": 74917,
+    "rel": "truck_incl_vans_not_suvs_any_in_image_no_box.json.cleared",
+    "sha256": "3ae6732a1602107e72e107a192b20632dcd0c78e803f0d949d732074a374420f",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 100 votes on 'truck incl vans not SUVs (any in image, no box)', all of them already represented in the record (100 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__truck_incl_vans_not_suvs_confirm_the_box.json": {
+    "bytes": 521366,
+    "rel": "truck_incl_vans_not_suvs_confirm_the_box.json.cleared",
+    "sha256": "dbd0ba5508c0960b4a9bd802e67fdc6010d6396e962b2cd1cd3590a374d68f6e",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 674 votes on 'truck incl vans not SUVs (confirm the box)', all of them already represented in the record (674 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__umbrella_incl_parasols_not_canopies_any_in_image_no_box.json": {
+    "bytes": 75202,
+    "rel": "umbrella_incl_parasols_not_canopies_any_in_image_no_box.json.cleared",
+    "sha256": "66717a8db28db85ae0d02ccf6bb390be197456645d233d6e2fd1c16fb9b2e9af",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 100 votes on 'umbrella incl parasols not canopies (any in image, no box)', all of them already represented in the record (100 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__umbrella_incl_parasols_not_canopies_confirm_the_box.json": {
+    "bytes": 432203,
+    "rel": "umbrella_incl_parasols_not_canopies_confirm_the_box.json.cleared",
+    "sha256": "84c97b0bd2c908494684a5021e3bc8cd927568fa4729acf8fc772d99cc3494c1",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 571 votes on 'umbrella incl parasols not canopies (confirm the box)', all of them already represented in the record (571 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
+  "CLEARED__vase_incl_pots_and_planters.json": {
+    "bytes": 241936,
+    "rel": "vase_incl_pots_and_planters.json.cleared",
+    "sha256": "8f45494c3717c0c5b9162e716501f79dd57e708bc4921816223185a94d3a8184",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "**UNBANKED HISTORICAL PASS.** 300 votes on 'vase incl pots and planters', of which 168 are on images that appear nowhere else in this record and 0 are banked under this detector's own name. Committed as-is (#4035) so the judgements survive; whether they belong in today's corrections.json is deliberately undecided. Do not treat this file as an input to the chain until that is ruled on."
+  },
+  "CLEARED__vase_not_planters_any_in_image_no_box.json": {
+    "bytes": 74818,
+    "rel": "vase_not_planters_any_in_image_no_box.json.cleared",
+    "sha256": "8b6bae9fd0bb16f38e6da2ad2dd3ad5e9f9ab886a7e39080bb349e86136d1365",
+    "source": "{DETECTORS}/*.json.cleared",
+    "tier": "human",
+    "why": "a retired detector's raw export: 100 votes on 'vase not planters (any in image, no box)', all of them already represented in the record (100 under this detector's own name). Kept as the raw form the app wrote rather than as a second source of truth."
+  },
   "EXP__verdicts_snapshot_20260820.json": {
     "bytes": 190224,
     "rel": "verdicts_snapshot_20260820.json",

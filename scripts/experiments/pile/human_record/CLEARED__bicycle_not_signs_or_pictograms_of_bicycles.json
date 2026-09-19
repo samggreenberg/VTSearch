@@ -1,0 +1,126 @@
+{
+  "name": "bicycle not signs or pictograms of bicycles",
+  "text_query": "bicycle",
+  "media_example": "",
+  "media_type": "image",
+  "examples": [
+    {
+      "type": "text",
+      "value": "bicycle"
+    }
+  ],
+  "created_at": 1788460661.3832664,
+  "embedder_type": "semantic",
+  "labelset": {
+    "labels": [
+      {
+        "md5": "29a523159ce648452a30ac0fe8c6006c",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/classes-3588/bikesigns/bicycle_not_signs",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2374765.jpg",
+        "filename": "2374765.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "autopilot",
+            "phase": "good",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 0,
+            "score_at_vote": 0.0288
+          }
+        }
+      },
+      {
+        "md5": "44d7e21c23b4c8ee8817859f872f2939",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/classes-3588/bikesigns/bicycle_not_signs",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "3819.jpg",
+        "filename": "3819.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "autopilot",
+            "phase": "good",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 1,
+            "score_at_vote": 0.0248
+          }
+        }
+      },
+      {
+        "md5": "137c382668499053ba5f5c8b19be5e3d",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/classes-3588/bikesigns/bicycle_not_signs",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2383865.jpg",
+        "filename": "2383865.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "autopilot",
+            "phase": "good",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 2,
+            "score_at_vote": 0.0223
+          }
+        }
+      },
+      {
+        "md5": "1eb5ab6884ef56c081eb3be615d7cbca",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/classes-3588/bikesigns/bicycle_not_signs",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2379908.jpg",
+        "filename": "2379908.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "autopilot",
+            "phase": "good",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 3,
+            "score_at_vote": 0.0221
+          }
+        }
+      }
+    ]
+  }
+}

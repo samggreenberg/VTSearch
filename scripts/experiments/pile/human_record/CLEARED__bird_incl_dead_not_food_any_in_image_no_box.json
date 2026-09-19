@@ -1,0 +1,2618 @@
+{
+  "name": "bird incl dead not food (any in image, no box)",
+  "text_query": "bird",
+  "media_example": "",
+  "media_type": "image",
+  "examples": [
+    {
+      "type": "text",
+      "value": "bird"
+    }
+  ],
+  "created_at": 1789582442.518839,
+  "embedder_type": "semantic",
+  "labelset": {
+    "labels": [
+      {
+        "md5": "afcd369b49b6430bcfd2b8a3a9500dd0",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "1062.jpg",
+        "filename": "1062.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 98,
+            "score_at_vote": -0.0592
+          }
+        }
+      },
+      {
+        "md5": "c5a000bf7bc72900f8453acf49fc066c",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2364933.jpg",
+        "filename": "2364933.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 0,
+            "score_at_vote": 0.0232
+          }
+        }
+      },
+      {
+        "md5": "22946c7ad9da876231967ee8a4d49066",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2331806.jpg",
+        "filename": "2331806.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 1,
+            "score_at_vote": 0.0172
+          }
+        }
+      },
+      {
+        "md5": "2942fc4deadaf76b4c588e91e56e2f15",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2323333.jpg",
+        "filename": "2323333.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 2,
+            "score_at_vote": 0.005
+          }
+        }
+      },
+      {
+        "md5": "98bc7630b142e243580dc9fbc38b6e66",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2370759.jpg",
+        "filename": "2370759.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 3,
+            "score_at_vote": 0.0021
+          }
+        }
+      },
+      {
+        "md5": "664382a44ba1b801c26f037ffdd1e398",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2407321.jpg",
+        "filename": "2407321.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 4,
+            "score_at_vote": 0.0014
+          }
+        }
+      },
+      {
+        "md5": "333ed515f45f17c02484a5c08eacf454",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2340150.jpg",
+        "filename": "2340150.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 5,
+            "score_at_vote": -0.0011
+          }
+        }
+      },
+      {
+        "md5": "e23215cf39c9d18f9cb469e00aec787d",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2335626.jpg",
+        "filename": "2335626.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 6,
+            "score_at_vote": -0.0034
+          }
+        }
+      },
+      {
+        "md5": "b4e4d2ecc87e59b4944a1b4cf4d94d18",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2390.jpg",
+        "filename": "2390.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 7,
+            "score_at_vote": -0.0034
+          }
+        }
+      },
+      {
+        "md5": "1d3d7786eadfb2eddd0857137af24ded",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2329853.jpg",
+        "filename": "2329853.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 8,
+            "score_at_vote": -0.0063
+          }
+        }
+      },
+      {
+        "md5": "e01e2a9489d5fd6a3bf96cac7852e6f2",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2369611.jpg",
+        "filename": "2369611.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 9,
+            "score_at_vote": -0.0064
+          }
+        }
+      },
+      {
+        "md5": "64d9c87c66dd8d5c6727680a59814b2e",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2333409.jpg",
+        "filename": "2333409.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 10,
+            "score_at_vote": -0.0071
+          }
+        }
+      },
+      {
+        "md5": "1bdeb211c60b62b78dd79e613550a15b",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2369452.jpg",
+        "filename": "2369452.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 11,
+            "score_at_vote": -0.0075
+          }
+        }
+      },
+      {
+        "md5": "98a3ee807baa76f6c16fb0753a705734",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2316112.jpg",
+        "filename": "2316112.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 12,
+            "score_at_vote": -0.0099
+          }
+        }
+      },
+      {
+        "md5": "256948c58fffbf88e691fe4471780cfd",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2337031.jpg",
+        "filename": "2337031.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 13,
+            "score_at_vote": -0.0107
+          }
+        }
+      },
+      {
+        "md5": "fe7993283448a367f74144a9306f150a",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2369251.jpg",
+        "filename": "2369251.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 14,
+            "score_at_vote": -0.0131
+          }
+        }
+      },
+      {
+        "md5": "de429fbe71ad7a68644a7282c180035b",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2411881.jpg",
+        "filename": "2411881.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 15,
+            "score_at_vote": -0.0132
+          }
+        }
+      },
+      {
+        "md5": "da9580d4b1fdf29b38ccf4fb148a1d59",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "713137.jpg",
+        "filename": "713137.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 16,
+            "score_at_vote": -0.0134
+          }
+        }
+      },
+      {
+        "md5": "3634356bdddbd2cf26b51a157a1661b9",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2367413.jpg",
+        "filename": "2367413.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 17,
+            "score_at_vote": -0.0138
+          }
+        }
+      },
+      {
+        "md5": "ad8428fb4234bb24e89a0c18f6d21659",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2336839.jpg",
+        "filename": "2336839.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 18,
+            "score_at_vote": -0.014
+          }
+        }
+      },
+      {
+        "md5": "44efb098e503188496752248f0744840",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2379594.jpg",
+        "filename": "2379594.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 19,
+            "score_at_vote": -0.0144
+          }
+        }
+      },
+      {
+        "md5": "0dc24f43a84251df5ee8bd35cd81ebff",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2355064.jpg",
+        "filename": "2355064.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 20,
+            "score_at_vote": -0.0147
+          }
+        }
+      },
+      {
+        "md5": "5e5c732a376e6a8c5dd0f73f9ca3b481",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2396159.jpg",
+        "filename": "2396159.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 21,
+            "score_at_vote": -0.0156
+          }
+        }
+      },
+      {
+        "md5": "bf6248780f795e7a7ffe79e888ea256f",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2355204.jpg",
+        "filename": "2355204.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 22,
+            "score_at_vote": -0.0158
+          }
+        }
+      },
+      {
+        "md5": "deeb4ad8462173cb2b040bb9cb7533e2",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2323463.jpg",
+        "filename": "2323463.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 23,
+            "score_at_vote": -0.0162
+          }
+        }
+      },
+      {
+        "md5": "e393fc34d950a7c4c9aa7716fe571b44",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2318084.jpg",
+        "filename": "2318084.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 24,
+            "score_at_vote": -0.0163
+          }
+        }
+      },
+      {
+        "md5": "918643a65c18651b0ae7d0e3b9e2bb58",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2394717.jpg",
+        "filename": "2394717.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 25,
+            "score_at_vote": -0.0188
+          }
+        }
+      },
+      {
+        "md5": "bee2b7f34e1a95fc01ab9bc07b23a0a0",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2368462.jpg",
+        "filename": "2368462.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 26,
+            "score_at_vote": -0.0191
+          }
+        }
+      },
+      {
+        "md5": "4782c0fa8e575f255b82ab32b0193101",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2028.jpg",
+        "filename": "2028.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 27,
+            "score_at_vote": -0.0201
+          }
+        }
+      },
+      {
+        "md5": "d0bcba5bee63d13406aeee643ad781d2",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2370602.jpg",
+        "filename": "2370602.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 28,
+            "score_at_vote": -0.0205
+          }
+        }
+      },
+      {
+        "md5": "b797c70908e3c895bb8a27a9b8b1e20b",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "4036.jpg",
+        "filename": "4036.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 29,
+            "score_at_vote": -0.0207
+          }
+        }
+      },
+      {
+        "md5": "a972b4f568a324f0da7aa703a0be9577",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2340783.jpg",
+        "filename": "2340783.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 30,
+            "score_at_vote": -0.0209
+          }
+        }
+      },
+      {
+        "md5": "32b9243327261dfc6bd51177a0d9fc42",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2316093.jpg",
+        "filename": "2316093.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 31,
+            "score_at_vote": -0.0209
+          }
+        }
+      },
+      {
+        "md5": "0a8b0ec543750c3c92701b170a63b191",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2416190.jpg",
+        "filename": "2416190.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 32,
+            "score_at_vote": -0.0217
+          }
+        }
+      },
+      {
+        "md5": "f9b8e7b241b05687f9848122181ffe99",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2385455.jpg",
+        "filename": "2385455.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 33,
+            "score_at_vote": -0.0227
+          }
+        }
+      },
+      {
+        "md5": "5b825e59fc0a94ca88f89a5c9e97d7f1",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2391944.jpg",
+        "filename": "2391944.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 34,
+            "score_at_vote": -0.0232
+          }
+        }
+      },
+      {
+        "md5": "36ba26217ec72e866fa1abdfd378fc59",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2416698.jpg",
+        "filename": "2416698.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 35,
+            "score_at_vote": -0.0237
+          }
+        }
+      },
+      {
+        "md5": "6b9cfc921da1c2954eddcf95e1ca2f2a",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2386695.jpg",
+        "filename": "2386695.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 36,
+            "score_at_vote": -0.0238
+          }
+        }
+      },
+      {
+        "md5": "584e4bbf594257a86a59f5f532f1aeef",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2414617.jpg",
+        "filename": "2414617.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 37,
+            "score_at_vote": -0.0239
+          }
+        }
+      },
+      {
+        "md5": "99beebb3a7225b58fa8748c2699aa842",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2356834.jpg",
+        "filename": "2356834.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 38,
+            "score_at_vote": -0.0249
+          }
+        }
+      },
+      {
+        "md5": "7f4a7f7e33ccccbed0c205b00c7ddc47",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "1592100.jpg",
+        "filename": "1592100.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 39,
+            "score_at_vote": -0.0261
+          }
+        }
+      },
+      {
+        "md5": "b0bcb254604e13bdd2ddbf697a32ad21",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "4465.jpg",
+        "filename": "4465.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 40,
+            "score_at_vote": -0.0263
+          }
+        }
+      },
+      {
+        "md5": "c953174ef502c6d9f507184f476f255b",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2340705.jpg",
+        "filename": "2340705.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 41,
+            "score_at_vote": -0.0265
+          }
+        }
+      },
+      {
+        "md5": "c534874a34d22f96b997181f74f999da",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "1666.jpg",
+        "filename": "1666.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 42,
+            "score_at_vote": -0.0269
+          }
+        }
+      },
+      {
+        "md5": "a44b870e1a785dbd8d0f63fad1eceb8c",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2358155.jpg",
+        "filename": "2358155.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 43,
+            "score_at_vote": -0.0271
+          }
+        }
+      },
+      {
+        "md5": "4bd893e8f52dc6242d0e6830c52ad673",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2387404.jpg",
+        "filename": "2387404.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 44,
+            "score_at_vote": -0.0277
+          }
+        }
+      },
+      {
+        "md5": "fd875a6c5a4a7f6ec44cfa4ecf6fb4a2",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2322980.jpg",
+        "filename": "2322980.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 45,
+            "score_at_vote": -0.0278
+          }
+        }
+      },
+      {
+        "md5": "0c74b54256069b68f2c148c5ff5d906f",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2319159.jpg",
+        "filename": "2319159.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 46,
+            "score_at_vote": -0.0279
+          }
+        }
+      },
+      {
+        "md5": "5f13b6af6560da00432482d23cb4330c",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2351685.jpg",
+        "filename": "2351685.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 47,
+            "score_at_vote": -0.0284
+          }
+        }
+      },
+      {
+        "md5": "cb430ef9b740d34225a8f02af027efd7",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2327872.jpg",
+        "filename": "2327872.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 48,
+            "score_at_vote": -0.0287
+          }
+        }
+      },
+      {
+        "md5": "8b482a700888d2cf282d934a34e2c7c1",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "1348.jpg",
+        "filename": "1348.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 49,
+            "score_at_vote": -0.0292
+          }
+        }
+      },
+      {
+        "md5": "90cf0c45a34521d25914428e8d6a79bd",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2343735.jpg",
+        "filename": "2343735.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 50,
+            "score_at_vote": -0.0307
+          }
+        }
+      },
+      {
+        "md5": "e6a65f028407592d30825e4df3f1449e",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2360120.jpg",
+        "filename": "2360120.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 51,
+            "score_at_vote": -0.0308
+          }
+        }
+      },
+      {
+        "md5": "d1987aa5bc3d0b075f7521b9dad53518",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2333703.jpg",
+        "filename": "2333703.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 52,
+            "score_at_vote": -0.0308
+          }
+        }
+      },
+      {
+        "md5": "4a6a5c9cd4a5b2be5aa2a50e9d929ec4",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2336787.jpg",
+        "filename": "2336787.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 53,
+            "score_at_vote": -0.0316
+          }
+        }
+      },
+      {
+        "md5": "09fe310b992e89e7c4bfd95e908c69a1",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2324523.jpg",
+        "filename": "2324523.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 54,
+            "score_at_vote": -0.0318
+          }
+        }
+      },
+      {
+        "md5": "fc7c6352120f6bcb403c293a8d1d69aa",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "498003.jpg",
+        "filename": "498003.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 55,
+            "score_at_vote": -0.032
+          }
+        }
+      },
+      {
+        "md5": "27e0f9e448293efe6a77163ecc1369e5",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2352186.jpg",
+        "filename": "2352186.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 56,
+            "score_at_vote": -0.0323
+          }
+        }
+      },
+      {
+        "md5": "f16b4bebd10b4f3e8052a191313faa88",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2358232.jpg",
+        "filename": "2358232.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 57,
+            "score_at_vote": -0.0324
+          }
+        }
+      },
+      {
+        "md5": "016464636a082a6eba9c533227345d8f",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2328037.jpg",
+        "filename": "2328037.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 58,
+            "score_at_vote": -0.0337
+          }
+        }
+      },
+      {
+        "md5": "d3d956d39a46323c327f5ba161cb13b4",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "3214.jpg",
+        "filename": "3214.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 59,
+            "score_at_vote": -0.0341
+          }
+        }
+      },
+      {
+        "md5": "7f166b985fddae205a3dac3f16716b0e",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2368923.jpg",
+        "filename": "2368923.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 60,
+            "score_at_vote": -0.0348
+          }
+        }
+      },
+      {
+        "md5": "06efbded8b1c4e928b1d5db2f3b3ceca",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2406118.jpg",
+        "filename": "2406118.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 61,
+            "score_at_vote": -0.035
+          }
+        }
+      },
+      {
+        "md5": "f58ce0a077b11d93ab2ab78459c2a6d5",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2338116.jpg",
+        "filename": "2338116.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 62,
+            "score_at_vote": -0.0354
+          }
+        }
+      },
+      {
+        "md5": "48ae596625b2cb7546be176c1d00596f",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2355764.jpg",
+        "filename": "2355764.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 63,
+            "score_at_vote": -0.0359
+          }
+        }
+      },
+      {
+        "md5": "c8b2a21cb2ea667d00df3ff21f0e4bd7",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2351384.jpg",
+        "filename": "2351384.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 64,
+            "score_at_vote": -0.0362
+          }
+        }
+      },
+      {
+        "md5": "6a5b568b3c3f384a95a3472000917481",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2323017.jpg",
+        "filename": "2323017.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 65,
+            "score_at_vote": -0.0366
+          }
+        }
+      },
+      {
+        "md5": "040a0b27b35148a6701b6759cc8d3b9f",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2362323.jpg",
+        "filename": "2362323.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 66,
+            "score_at_vote": -0.0369
+          }
+        }
+      },
+      {
+        "md5": "236cf0d3c3cf52574a306a39d853990a",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2363396.jpg",
+        "filename": "2363396.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 67,
+            "score_at_vote": -0.037
+          }
+        }
+      },
+      {
+        "md5": "d36c05029a7b4189062c93c96637e685",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2398535.jpg",
+        "filename": "2398535.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 68,
+            "score_at_vote": -0.0372
+          }
+        }
+      },
+      {
+        "md5": "4bbe9a269f02ca7aad0c5f11ee825840",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2393894.jpg",
+        "filename": "2393894.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 69,
+            "score_at_vote": -0.0374
+          }
+        }
+      },
+      {
+        "md5": "c5f986125eab288166a083178bbfb296",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2379816.jpg",
+        "filename": "2379816.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 70,
+            "score_at_vote": -0.0375
+          }
+        }
+      },
+      {
+        "md5": "eda7936f37a3c3eec255aa78e43e2fd4",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2399822.jpg",
+        "filename": "2399822.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 71,
+            "score_at_vote": -0.0378
+          }
+        }
+      },
+      {
+        "md5": "fca047d4f20e6ad4fa7c7affde74f524",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2344927.jpg",
+        "filename": "2344927.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 72,
+            "score_at_vote": -0.0383
+          }
+        }
+      },
+      {
+        "md5": "842387d822f464ac30f7f77110c0b9fb",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2404360.jpg",
+        "filename": "2404360.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 73,
+            "score_at_vote": -0.0387
+          }
+        }
+      },
+      {
+        "md5": "813cbf95882ed64731435e2637f33c7d",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2410427.jpg",
+        "filename": "2410427.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 74,
+            "score_at_vote": -0.0387
+          }
+        }
+      },
+      {
+        "md5": "342a22fd60fd7d860c9d69aaedc6e35e",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2355403.jpg",
+        "filename": "2355403.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 75,
+            "score_at_vote": -0.0387
+          }
+        }
+      },
+      {
+        "md5": "2f9c0551372e6c495689a1cd3ce48427",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2385487.jpg",
+        "filename": "2385487.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 76,
+            "score_at_vote": -0.0391
+          }
+        }
+      },
+      {
+        "md5": "43beb80a2e3156e9abee402a455fcd2a",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2398760.jpg",
+        "filename": "2398760.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 77,
+            "score_at_vote": -0.0404
+          }
+        }
+      },
+      {
+        "md5": "78dca8248f9736639b9acf2a4a91c23b",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2321018.jpg",
+        "filename": "2321018.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 78,
+            "score_at_vote": -0.0406
+          }
+        }
+      },
+      {
+        "md5": "b80aa33a0ca923cbb9e9244611eeec6c",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2328412.jpg",
+        "filename": "2328412.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 79,
+            "score_at_vote": -0.0412
+          }
+        }
+      },
+      {
+        "md5": "36131084c5f3d6433da9ac661c6a8e33",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2400712.jpg",
+        "filename": "2400712.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 80,
+            "score_at_vote": -0.0413
+          }
+        }
+      },
+      {
+        "md5": "4c04736667326f1cdb2f453355248129",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "713129.jpg",
+        "filename": "713129.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 81,
+            "score_at_vote": -0.0417
+          }
+        }
+      },
+      {
+        "md5": "6f0326d6ea59da07b82321a026ac0dfd",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2354541.jpg",
+        "filename": "2354541.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 82,
+            "score_at_vote": -0.0422
+          }
+        }
+      },
+      {
+        "md5": "f2723da75d256aa4ef1748816a1a0828",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2365233.jpg",
+        "filename": "2365233.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 83,
+            "score_at_vote": -0.0423
+          }
+        }
+      },
+      {
+        "md5": "66f6fb0d1cf0b7e3594bf7b81b47a122",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2333739.jpg",
+        "filename": "2333739.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 84,
+            "score_at_vote": -0.0435
+          }
+        }
+      },
+      {
+        "md5": "c436c245a6687757c9b55b6a51eb45b8",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2379777.jpg",
+        "filename": "2379777.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 85,
+            "score_at_vote": -0.0442
+          }
+        }
+      },
+      {
+        "md5": "fa3a8e6a4e4cec461baca9269ebec78e",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "1980.jpg",
+        "filename": "1980.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 86,
+            "score_at_vote": -0.0446
+          }
+        }
+      },
+      {
+        "md5": "b70f168d7c9f6107517536c474a4c60a",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2318229.jpg",
+        "filename": "2318229.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 87,
+            "score_at_vote": -0.0457
+          }
+        }
+      },
+      {
+        "md5": "a1578f5b85cdb6ca7ddb47bd365cbaee",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2374972.jpg",
+        "filename": "2374972.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 88,
+            "score_at_vote": -0.0476
+          }
+        }
+      },
+      {
+        "md5": "908e936033bc641679ef5531a2723428",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2342652.jpg",
+        "filename": "2342652.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 89,
+            "score_at_vote": -0.0495
+          }
+        }
+      },
+      {
+        "md5": "f30de759df4c039ac6474b7c2e227ae3",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "285639.jpg",
+        "filename": "285639.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 90,
+            "score_at_vote": -0.0498
+          }
+        }
+      },
+      {
+        "md5": "2d6ac5296017d864bbe9336245b942c9",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2377111.jpg",
+        "filename": "2377111.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 91,
+            "score_at_vote": -0.0507
+          }
+        }
+      },
+      {
+        "md5": "f823f4e4a030125fe20aedcde98c7097",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2357481.jpg",
+        "filename": "2357481.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 92,
+            "score_at_vote": -0.0516
+          }
+        }
+      },
+      {
+        "md5": "5d6c8c293f3e37edf81b549a94065cd1",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2317377.jpg",
+        "filename": "2317377.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 93,
+            "score_at_vote": -0.0529
+          }
+        }
+      },
+      {
+        "md5": "876bf95bf3f8977240466d5c8c90d341",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "3833.jpg",
+        "filename": "3833.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 94,
+            "score_at_vote": -0.0556
+          }
+        }
+      },
+      {
+        "md5": "40f0c76bbb95b770cf01e46cac819332",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "3253.jpg",
+        "filename": "3253.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 95,
+            "score_at_vote": -0.0559
+          }
+        }
+      },
+      {
+        "md5": "76fb38d133901174848a359b3e5e63ae",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2341440.jpg",
+        "filename": "2341440.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 96,
+            "score_at_vote": -0.0572
+          }
+        }
+      },
+      {
+        "md5": "4f89816451048a3b856e5c1da70c6892",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2376085.jpg",
+        "filename": "2376085.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 97,
+            "score_at_vote": -0.0579
+          }
+        }
+      },
+      {
+        "md5": "9e406f1e7b03aa3b83270a1245f7ebbc",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/bird/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2416679.jpg",
+        "filename": "2416679.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 99,
+            "score_at_vote": -0.0594
+          }
+        }
+      }
+    ]
+  }
+}
