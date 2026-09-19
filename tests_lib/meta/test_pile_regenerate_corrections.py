@@ -35,9 +35,10 @@ ATTRIBUTION = {"pass": 3837, "campaigns": 791, "recheck_revisited": 81, "total":
 
 
 def _load(name: str):
+    """Import one pile script by path, without importing the package."""
     spec = importlib.util.spec_from_file_location(name, _PILE_DIR / f"{name}.py")
+    assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
     sys.path.insert(0, str(_PILE_DIR))
     try:
         spec.loader.exec_module(module)
