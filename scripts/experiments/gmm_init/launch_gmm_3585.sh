@@ -62,6 +62,7 @@ export VTS_REPO="$WT"
 export CALIB_EXP="${CALIB_EXP:-/expscratch/$USER/gmm-3585}"
 export CALIB_RESULTS="${CALIB_RESULTS:-$CALIB_EXP/results}"
 REUSE_PREPARE="${REUSE_PREPARE:-/expscratch/$USER/bench-overview/results}"
+SCALE_PREPARE="${SCALE_PREPARE:-/expscratch/$USER/scale-3679/results}"
 CORPUS="${CORPUS:-$CALIB_EXP/corpus}"
 ANALYSIS="${ANALYSIS:-$CALIB_EXP/analysis}"
 
@@ -227,6 +228,19 @@ sorts)
   # Two prepares, because the shapes that matter are at two SIZES: the overview
   # grid's three datasets are 838-4952 medias, and vg_scale's cells are 18,050 -
   # the closest thing in the pile to the ~250k a GUI Find subsamples from.
+  #
+  # Both are READ by the wrap, and neither is created by it, so check them HERE
+  # rather than on the compute node (#4006). A stale default inside a `--wrap`
+  # is the expensive shape of this failure: the job is accepted, waits in the
+  # queue, and only then dies on a directory the submitter could have been told
+  # about instantly. `scale-3679` is one of the study dirs #4001 deleted.
+  for prep in "$REUSE_PREPARE" "$SCALE_PREPARE"; do
+    [[ -d "$prep" ]] || {
+      echo "$prep does not exist, and this job READS it." >&2
+      echo "If it is one of the study dirs deleted 2026-09-18 (see #4001 and /expscratch/sgreenberg/keep/deleted-20260918.md), re-run that study." >&2
+      echo "Otherwise set REUSE_PREPARE / SCALE_PREPARE to a directory that has its results." >&2
+      exit 2; }
+  done
   submit sorts --job-name="$JOB_NAME-sorts" --mem=32G --cpus-per-task=4 \
     --time=3:00:00 --partition="$PARTITION" --export=ALL \
     --output="$LOGS/sorts-%j.out" \
@@ -234,7 +248,7 @@ sorts)
   submit sortscale --job-name="$JOB_NAME-sortscale" --mem=32G --cpus-per-task=4 \
     --time=3:00:00 --partition="$PARTITION" --export=ALL \
     --output="$LOGS/sortscale-%j.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python capture_sorts_3585.py --results ${SCALE_PREPARE:-/expscratch/$USER/scale-3679/results} --embedders siglip,clip --max-categories 10 --out $CORPUS/sorts_vgscale.npz"
+    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python capture_sorts_3585.py --results $SCALE_PREPARE --embedders siglip,clip --max-categories 10 --out $CORPUS/sorts_vgscale.npz"
   ;;
 
 ab)
