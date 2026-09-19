@@ -4,7 +4,7 @@ import { Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { EmbedderInfo, Media, PayloadVariant } from '../../models/api.models';
 import { MediasApiService } from '../../services/medias-api.service';
-import { KeyboardService } from '../../services/keyboard.service';
+import { KeyboardService, NavDirection } from '../../services/keyboard.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { SortStateService } from '../../services/sort-state.service';
@@ -84,6 +84,15 @@ export class CenterPanelComponent implements OnDestroy {
     id: number;
     vote: 'good' | 'bad';
 }>();
+
+  /**
+   * Down / Up: walk back to an item already voted on, or return to the queue
+   * (#4032).  Emitted rather than handled here because "the next unlabeled
+   * item" is the host's rule, not the pane's — Train advances down the
+   * ranking, Find walks outward from the cutoff — and the host also owns the
+   * selection the walk moves.
+   */
+  readonly navigateRequested = output<NavDirection>();
 
   readonly audioPlayer = viewChild(AudioPlayerComponent);
   readonly imageViewer = viewChild(ImageViewerComponent);
@@ -239,6 +248,15 @@ export class CenterPanelComponent implements OnDestroy {
           }
           break;
         }
+        case 'navigate':
+          // Navigation moves the selection, never the labels, so an exhausted
+          // queue is no reason to block it — walking back to a voted item is
+          // one of the ways *out* of that state. `disabled` still gates it:
+          // there the host is mid-score and owns the selection.
+          if (action.navDirection && !this.disabled()) {
+            this.navigateRequested.emit(action.navDirection);
+          }
+          break;
         case 'undo':
           if (!this.disabled() && !this.isVoting()) this.voteState.undo();
           break;

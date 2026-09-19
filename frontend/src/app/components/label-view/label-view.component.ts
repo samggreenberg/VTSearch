@@ -4,6 +4,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subscription, pairwise } from 'rxjs';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
+import type { NavDirection } from '../../services/keyboard.service';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
 import {
   ContextMenuComponent,
@@ -24,6 +25,7 @@ import { DetectorsRegistryApiService } from '../../services/detectors-registry-a
 import { LabelSessionService } from '../../services/label-session.service';
 import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
+import { VoteHistoryService } from '../../services/vote-history.service';
 import { LabelsetStateService } from '../../services/labelset-state.service';
 import { SortStateService, SortMode, SelectMode } from '../../services/sort-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
@@ -65,6 +67,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private labelSession = inject(LabelSessionService);
   mediaState = inject(MediaStateService);
   voteState = inject(VoteStateService);
+  private voteHistory = inject(VoteHistoryService);
   private labelsetState = inject(LabelsetStateService);
   sortState = inject(SortStateService);
   private settingsState = inject(SettingsStateService);
@@ -850,6 +853,25 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   onMediaSelect(id: number): void {
     this.pickedWhileDone.set(id);
     this.mediaState.selectMedia(id);
+  }
+
+  /**
+   * Down / Up from the centre pane (#4032).
+   *
+   * `back` walks the trail of items already voted on, one press per step, and
+   * counts as an explicit pick (so the "nothing left" pane gets out of the
+   * way, exactly as clicking the item in a pile would). `forward` is the same
+   * advance a vote makes — the top unlabeled item of the ranking — and is the
+   * user saying they are done looking back, so it releases that pick.
+   */
+  onNavigate(direction: NavDirection): void {
+    if (direction === 'back') {
+      const id = this.voteHistory.stepBack(this.mediaState.selectedId());
+      if (id !== null) this.onMediaSelect(id);
+      return;
+    }
+    this.pickedWhileDone.set(null);
+    this.sortRunner.autoSelectNext();
   }
 
   // --- Right-click media context menu ---

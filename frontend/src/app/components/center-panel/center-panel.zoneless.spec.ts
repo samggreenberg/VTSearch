@@ -160,6 +160,48 @@ describe('CenterPanelComponent (zoneless keyboard canary)', () => {
 
     expect(component.voteState.goodVotes.has(1)).toBe(false);
   });
+
+  /**
+   * Down/Up emit the navigation request rather than acting on it: the host owns
+   * the selection and the "next unlabeled" rule (#4032). They stay live while
+   * the queue is exhausted — walking back to a voted item is one of the ways
+   * out of that pane — and go quiet while the host is mid-score (`disabled`).
+   */
+  it('emits navigation on ArrowDown / ArrowUp, including while exhausted', async () => {
+    const seen: string[] = [];
+    fixture.componentRef.instance.navigateRequested.subscribe((d) => seen.push(d));
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+    await settleZoneless(fixture);
+    expect(seen).toEqual(['back', 'forward']);
+
+    fixture.componentRef.setInput('exhausted', true);
+    await settleZoneless(fixture);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+    await settleZoneless(fixture);
+    expect(seen).toEqual(['back', 'forward', 'back']);
+
+    fixture.componentRef.setInput('disabled', true);
+    await settleZoneless(fixture);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+    await settleZoneless(fixture);
+    expect(seen).toEqual(['back', 'forward', 'back']);
+  });
+
+  it('adjusts volume on Shift+ArrowUp / Shift+ArrowDown', async () => {
+    const start = component.volume();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', shiftKey: true }));
+    await settleZoneless(fixture);
+    for (const req of httpMock.match((r) => r.url.includes('settings'))) req.flush({});
+    expect(component.volume()).toBeCloseTo(start - 0.05, 5);
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', shiftKey: true }));
+    await settleZoneless(fixture);
+    for (const req of httpMock.match((r) => r.url.includes('settings'))) req.flush({});
+    expect(component.volume()).toBeCloseTo(start, 5);
+  });
 });
 
 describe('CenterPanelComponent', () => {

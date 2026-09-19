@@ -5,6 +5,7 @@ import { EMPTY, Subject, timer } from 'rxjs';
 import { catchError, finalize, switchMap } from 'rxjs/operators';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
+import type { NavDirection } from '../../services/keyboard.service';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { ExportModalComponent } from '../modals/export-modal/export-modal.component';
@@ -20,6 +21,7 @@ import { ActiveContextService } from '../../services/active-context.service';
 import { ActiveDetectorService } from '../../services/active-detector.service';
 import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
+import { VoteHistoryService } from '../../services/vote-history.service';
 import { SortStateService, SortedItem } from '../../services/sort-state.service';
 import { SortingApiService } from '../../services/sorting-api.service';
 import { PairScopeService } from '../../services/pair-scope.service';
@@ -79,6 +81,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private activeDetector = inject(ActiveDetectorService);
   mediaState = inject(MediaStateService);
   voteState = inject(VoteStateService);
+  private voteHistory = inject(VoteHistoryService);
   sortState = inject(SortStateService);
   private sortingApi = inject(SortingApiService);
   private settingsState = inject(SettingsStateService);
@@ -520,6 +523,25 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   onMediaSelect(id: number): void {
     this.pickedWhileDone.set(id);
     this.mediaState.selectMedia(id);
+  }
+
+  /**
+   * Down / Up from the centre pane (#4032).
+   *
+   * `back` walks the trail of items already voted on, one press per step, and
+   * counts as an explicit pick (so the "all items reviewed" pane gets out of
+   * the way, exactly as clicking the item in the verified pile would).
+   * `forward` is the same boundary walk a vote makes, and is the user saying
+   * they are done looking back, so it releases that pick.
+   */
+  onNavigate(direction: NavDirection): void {
+    if (direction === 'back') {
+      const id = this.voteHistory.stepBack(this.mediaState.selectedId());
+      if (id !== null) this.onMediaSelect(id);
+      return;
+    }
+    this.pickedWhileDone.set(null);
+    this.advanceToBoundary();
   }
 
   /**
