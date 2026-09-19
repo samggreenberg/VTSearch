@@ -238,6 +238,90 @@ describe('LabelViewComponent', () => {
     expect(component.mediaState.mediasSignal().length).toBe(2);
   });
 
+  /**
+   * #4028: the centre pane could run out in three more ways than #3887 named,
+   * and every one of them left it blank — or, worse, showing "Select a media
+   * item to view" when there was nothing left to select.
+   *
+   * These go through the component rather than the runner because the point is
+   * the *wording*: the way out differs per state, and the pane renders one
+   * message, so picking the wrong one is the whole bug.
+   */
+  describe('running out of things to label (#4028)', () => {
+    const allLabeled = { good: [1], bad: [2], click_times: {}, learned_scores: {} };
+    const pane = () => fixture.nativeElement.querySelector('vt-center-panel .exhausted-pane');
+
+    it('says the dataset is done on a fresh entry to a finished detector', async () => {
+      // A fresh entry ranks nothing (`seedRankingIfUnranked` is armed by a pair
+      // *reload*, not by ngOnInit), so this is the state the user comes back
+      // to: every item labeled, `sortOrder` empty.
+      flushInitialRequests(allLabeled);
+      await settleResource();
+
+      expect(component.sortState.sortOrder ?? []).toEqual([]);
+      // Which is why the #3887 flag cannot cover it.
+      expect(component.queueExhausted()).toBe(false);
+      expect(component.datasetExhausted()).toBe(true);
+
+      expect(component.exhaustedHeading()).toBe('Nothing left to label');
+      // Not credited to Autopilot: its phase machine reaches `exhausted` off
+      // the same vote counts whether or not Autopilot is what the user ran.
+      expect(component.exhaustedDetail()).toContain('Every item in this dataset is labeled');
+      // And not the "pick something" placeholder, which is what used to show.
+      expect(pane()).toBeTruthy();
+      expect(fixture.nativeElement.querySelector('vt-center-panel .placeholder-pane')).toBeNull();
+    });
+
+    it('says the ranking is done, not the dataset, when the window runs out', async () => {
+      flushInitialRequests({ good: [1], bad: [], click_times: {}, learned_scores: {} });
+      await settleResource();
+      component.sortState.setSelectMode('top');
+      component.sortState.setSortResults([{ id: 1, score: 0.9 }], 0.5);
+      TestBed.tick();
+
+      // Item 2 is still unlabeled — it is just not in the loaded window.
+      expect(component.datasetExhausted()).toBe(false);
+      expect(component.queueExhausted()).toBe(true);
+      expect(component.exhaustedHeading()).toBe('Nothing left in this ranking');
+      expect(component.exhaustedDetail()).toContain('Load more results');
+    });
+
+    it('says nothing is queued up when a vote could not advance', async () => {
+      flushInitialRequests();
+      await settleResource();
+
+      // Manual labelling straight out of the left grid: no ranking, so the
+      // pick rule has nowhere to go and the swipe leaves the pane blank — on
+      // this vote, with item 2 still unlabeled.
+      component.mediaState.selectMedia(1);
+      component.voteState.applyOptimisticState(1, 'good');
+      component.onMediaVoted({ id: 1, vote: 'good' });
+      TestBed.tick();
+
+      expect(component.datasetExhausted()).toBe(false);
+      expect(component.queueExhausted()).toBe(false);
+      expect(component.centreExhausted()).toBe(true);
+      expect(component.exhaustedHeading()).toBe('Nothing queued up');
+      expect(component.exhaustedDetail()).toContain('Pick the next item');
+    });
+
+    /**
+     * The Autopilot pane used to render *instead of* the centre panel, taking
+     * the keyboard handler with it — and undo is the exit from an exhausted
+     * queue, so it has to keep working there.
+     */
+    it('keeps the centre panel mounted when Autopilot reaches its terminal phase', async () => {
+      flushInitialRequests(allLabeled);
+      await settleResource();
+      component.autopilotExhausted.set(true);
+      TestBed.tick();
+
+      expect(fixture.nativeElement.querySelector('vt-center-panel')).toBeTruthy();
+      expect(component.exhaustedHeading()).toBe('Nothing left to label');
+      expect(component.exhaustedDetail()).toContain('Every item in this dataset is labeled');
+    });
+  });
+
   it('should load votes on init', () => {
     flushInitialRequests();
     expect(component.voteState.goodVotes.size).toBe(0);

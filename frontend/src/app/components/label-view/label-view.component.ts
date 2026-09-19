@@ -145,11 +145,12 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   });
 
   readonly exhaustedDetail = computed(() => {
-    if (this.autopilotExhausted()) {
-      return 'Autopilot has labeled every item in this dataset. Review your labels in the '
-        + 'side panels, export them, or press Cmd/Ctrl-Z to undo the last one.';
-    }
-    if (this.datasetExhausted()) {
+    // Deliberately one sentence for both halves of `wholeDatasetDone`. The
+    // pane used to credit Autopilot by name here, but `autopilotExhausted`
+    // tracks the phase machine whether or not Autopilot is the thing the user
+    // is running — so a hand-labeled dataset was told Autopilot had labeled it.
+    // "Every item is labeled" is true either way and costs nothing.
+    if (this.wholeDatasetDone()) {
       return 'Every item in this dataset is labeled. Review your labels in the side panels, '
         + 'export them, or press Cmd/Ctrl-Z to undo the last one.';
     }

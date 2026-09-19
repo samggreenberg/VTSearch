@@ -630,6 +630,35 @@ describe('CenterPanelComponent', () => {
   });
 
   /**
+   * The other empty pane: nothing is selected at all. It used to be one line of
+   * grey text in an otherwise black rectangle, which reads as a broken view
+   * rather than as a state — and it says "select a media item" without saying
+   * where from (#4028).
+   */
+  describe('nothing-selected placeholder (#4028)', () => {
+    it('names where to pick one from, and takes the host\'s wording', () => {
+      TestBed.tick();
+      const pane = fixture.nativeElement.querySelector('.placeholder-pane');
+      expect(pane).toBeTruthy();
+      expect(pane.querySelector('.placeholder-text').textContent).toContain('Select a media item');
+      expect(pane.querySelector('.placeholder-hint').textContent).toContain('on the left');
+
+      fixture.componentRef.setInput('placeholderHint', 'Score the dataset to build a queue.');
+      TestBed.tick();
+      expect(fixture.nativeElement.querySelector('.placeholder-hint').textContent)
+        .toContain('Score the dataset to build a queue.');
+    });
+
+    it('yields to the exhausted pane, which is a different fact', () => {
+      fixture.componentRef.setInput('exhausted', true);
+      TestBed.tick();
+
+      expect(fixture.nativeElement.querySelector('.placeholder-pane')).toBeNull();
+      expect(fixture.nativeElement.querySelector('.exhausted-pane')).toBeTruthy();
+    });
+  });
+
+  /**
    * #3887: voting on the last unlabeled item left this pane blank. The swipe
    * animation pins the outgoing media node off-screen with `forwards` until a
    * new item replaces it; the host has nothing to advance to, and `media()` is

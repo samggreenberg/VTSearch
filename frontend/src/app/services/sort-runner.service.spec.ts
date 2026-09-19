@@ -9,6 +9,7 @@ import { VoteStateService } from './vote-state.service';
 import { AutopilotStateService } from './autopilot-state.service';
 import { configureZoneless } from '../testing/zoneless-testbed';
 import { provideHttpTesting } from '../testing/test-providers';
+import { settleResource } from '../testing/settle-resource';
 
 /**
  * `SortRunnerService` in isolation.
@@ -362,6 +363,128 @@ describe('SortRunnerService', () => {
         .flush({ id: 7, coverage_level: 3 });
       expect(runner.queueExhausted()).toBe(false);
       expect(mediaState.selectedId()).toBe(7);
+    });
+  });
+
+  // --- the dataset, and the advance, running out (#4028) -------------------
+
+  /** Answer the dataset stub load with `ids`, and let the resource settle. */
+  async function seedMedias(...ids: number[]): Promise<void> {
+    mediaState.loadMedias();
+    // The `rxResource` loader runs in an effect, so the GET is not issued until
+    // the TestBed ticks (see `settle-resource.ts`).
+    TestBed.tick();
+    httpMock
+      .expectOne('/api/medias/ids')
+      .flush(ids.map((id) => ({ id, media_type: 'image' })));
+    await settleResource();
+  }
+
+  /**
+   * `queueExhausted` is about the loaded *ranking*, so it is false whenever no
+   * sort has run — which is exactly the state manual labelling and a fresh
+   * entry to a finished detector are both in.
+   */
+  describe('datasetExhausted', () => {
+    it('is false before the dataset stubs have loaded', () => {
+      expect(runner.datasetExhausted()).toBe(false);
+    });
+
+    it('is false while one item in the dataset is still unlabeled', async () => {
+      await seedMedias(1, 2);
+      voteState.applyOptimisticState(1, 'good');
+
+      expect(runner.datasetExhausted()).toBe(false);
+    });
+
+    it('is true once every item is labeled, with no sort ever having run', async () => {
+      await seedMedias(1, 2);
+      voteState.applyOptimisticState(1, 'good');
+      voteState.applyOptimisticState(2, 'bad');
+
+      // The ranking is empty, so the #3887 flag cannot speak for this state.
+      expect(runner.queueExhausted()).toBe(false);
+      expect(runner.datasetExhausted()).toBe(true);
+    });
+
+    it('goes back to false when an undo un-votes a row', async () => {
+      await seedMedias(1);
+      voteState.applyOptimisticState(1, 'good');
+      expect(runner.datasetExhausted()).toBe(true);
+
+      voteState.applyOptimisticState(1, 'none');
+      expect(runner.datasetExhausted()).toBe(false);
+    });
+  });
+
+  /**
+   * The un-ranked half of the blank pane: with nothing to advance to, the
+   * vote-swipe pins the outgoing item off-screen and nothing replaces it —
+   * on every vote, not only the last one.
+   */
+  describe('advanceStranded', () => {
+    it('is false before anything has been voted on', () => {
+      expect(runner.advanceStranded()).toBe(false);
+    });
+
+    it('is true after a vote that could not advance, mid-dataset', async () => {
+      await seedMedias(1, 2, 3);
+      mediaState.selectMedia(1);
+      voteState.applyOptimisticState(1, 'good');
+
+      runner.autoSelectNext(1);
+
+      // Two items are still unlabeled, so this is not exhaustion of anything.
+      expect(runner.datasetExhausted()).toBe(false);
+      expect(runner.queueExhausted()).toBe(false);
+      expect(runner.advanceStranded()).toBe(true);
+    });
+
+    it('is false when the advance had somewhere to go', () => {
+      sortState.setSelectMode('top');
+      sortState.setSortResults([{ id: 1, score: 0.9 }, { id: 2, score: 0.8 }], 0.5);
+      voteState.applyOptimisticState(1, 'good');
+
+      runner.autoSelectNext(1);
+
+      expect(mediaState.selectedId()).toBe(2);
+      expect(runner.advanceStranded()).toBe(false);
+    });
+
+    it('is not latched by a re-rank that happens to find nothing', () => {
+      sortState.setSelectMode('top');
+      sortState.setSortResults([{ id: 1, score: 0.9 }], 0.5);
+      voteState.applyOptimisticState(1, 'good');
+      mediaState.selectMedia(1);
+
+      // No `excludeId`: nobody voted, so nothing is stranded on anything.
+      runner.autoSelectNext();
+
+      expect(runner.advanceStranded()).toBe(false);
+    });
+
+    it('releases when the user selects something else', async () => {
+      await seedMedias(1, 2);
+      mediaState.selectMedia(1);
+      voteState.applyOptimisticState(1, 'good');
+      runner.autoSelectNext(1);
+      expect(runner.advanceStranded()).toBe(true);
+
+      mediaState.selectMedia(2);
+
+      expect(runner.advanceStranded()).toBe(false);
+    });
+
+    it('releases on an undo, which brings the item back unlabeled', async () => {
+      await seedMedias(1, 2);
+      mediaState.selectMedia(1);
+      voteState.applyOptimisticState(1, 'good');
+      runner.autoSelectNext(1);
+      expect(runner.advanceStranded()).toBe(true);
+
+      voteState.applyOptimisticState(1, 'none');
+
+      expect(runner.advanceStranded()).toBe(false);
     });
   });
 });
