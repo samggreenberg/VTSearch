@@ -792,6 +792,96 @@ def _evaluable(
     return sorted(out)
 
 
+def scale_media(
+    *,
+    iid: int,
+    data: bytes,
+    filename: str,
+    origin_name: str,
+    box_dims: tuple[int, int],
+    cats: list[str],
+    boxes_for: dict[tuple[int, str], list[list[float]]],
+    cells: list[str],
+    neg_set: set[int],
+    labels: dict[int, dict[str, list[list[float]]]],
+    coco_scored: set[int],
+    exhaustive: set[int],
+    reviewed_absent: set[tuple[int, str]],
+    reviewed_present: set[tuple[int, str]],
+    embedder_name: str,
+    importer: str,
+) -> dict | None:
+    """One scale-family media dict, or ``None`` if the bytes do not decode.
+
+    **Single-sourced because comparability lives in the shape, not just the
+    rule.** `coco_quarry` and `vg_scale` are only comparable if a cell means the
+    same thing in both, and that is as true of `evaluable_categories` and
+    `coco_scored` as it is of the band: a second copy of this dict would drift
+    in a field nobody diffs. The same argument split :func:`band_for` out, and
+    the loaders differ in the one place they genuinely must -- where the pixels
+    come from. `vg_scale` reads a file per image; `coco_quarry` reads a member
+    out of a staged zip (#3991).
+
+    *data* is decoded header-only as a corruption check: a file that will not
+    open here would fail later inside the embedder, where the failure is a
+    stack trace in a six-hour job rather than one skipped image.
+    """
+    import io  # noqa: PLC0415
+
+    from PIL import Image  # noqa: PLC0415
+
+    try:
+        with Image.open(io.BytesIO(data)) as im:
+            vw, vh = im.size
+    except Exception:  # noqa: BLE001 - a corrupt file just drops out
+        return None
+    if vw <= 0 or vh <= 0:
+        return None
+
+    # Normalised region boxes are resolution-independent, so they must be
+    # divided by the size of the image the coordinates came from -- which is
+    # the COCO original for a repaired image, not the VG copy carrying the
+    # pixels.
+    W, H = box_dims
+    regions = [
+        {"box": [b[0] / W, b[1] / H, b[2] / W, b[3] / H], "label": cell}
+        for cell in cats
+        for b in boxes_for.get((iid, cell), [])
+    ]
+    return {
+        "id": iid,
+        "media_type": "image",
+        "embedder": embedder_name,
+        "duration": 0,
+        "file_size": 0,
+        "md5": "",
+        "embeddings": {},
+        "media_bytes": data,
+        "media_string": None,
+        "filename": filename,
+        "category": cats[0] if cats else "",
+        "categories": cats,
+        # A designated cell membership, not a closed world: a positive is
+        # scorable only in the cells it was drawn for, and the shared
+        # negatives are scorable everywhere.
+        "evaluable_categories": _evaluable(
+            iid, cats, cells, neg_set, labels, coco_scored, reviewed_absent, reviewed_present
+        ),
+        # Whether this image's labels rest on an exhaustive reference (COCO,
+        # or a human who looked). False means VG's silence is the only
+        # evidence of absence -- which is what the review slates target.
+        "labels_exhaustive": iid in exhaustive,
+        # The strict half of the flag above, and the one #3670's composition
+        # is defined on. `labels_exhaustive` is also set by a human looking
+        # at ONE class; this says COCO answered for all eighty at once, which
+        # is what makes a negative provable rather than merely reviewed.
+        "coco_scored": iid in coco_scored,
+        "regions": regions,
+        "origin": {"importer": importer, "params": {"embedder": embedder_name, "labels": "coco"}},
+        "origin_name": origin_name,
+    }
+
+
 def _emit_medias(
     medias: dict[int, dict],
     paths: dict,
@@ -817,8 +907,6 @@ def _emit_medias(
     A missing measurement must not be expressible as a measurement of zero; the
     ``vg_box_*`` picker lost a day to the same shape (#3299).
     """
-    from PIL import Image  # noqa: PLC0415
-
     # media id -> the cells it is a positive for. Negatives get every cell.
     positive_in: dict[int, list[str]] = defaultdict(list)
     for cell, ids in chosen.items():
@@ -829,56 +917,29 @@ def _emit_medias(
     for iid in sorted(set(positive_in) | set(negatives) | set(spares)):
         path = paths[iid]
         try:
-            with Image.open(path) as im:
-                vw, vh = im.size
             data = path.read_bytes()
         except Exception:  # noqa: BLE001 - a corrupt file just drops out
             continue
-        if vw <= 0 or vh <= 0:
-            continue
-        # Normalised region boxes are resolution-independent, so they must be
-        # divided by the size of the image the coordinates came from -- which is
-        # the COCO original for a repaired image, not the VG copy carrying the
-        # pixels.
-        W, H = box_dims[iid]
-        cats = sorted(positive_in.get(iid, []))
-        regions = [
-            {"box": [b[0] / W, b[1] / H, b[2] / W, b[3] / H], "label": cell}
-            for cell in cats
-            for b in boxes_for.get((iid, cell), [])
-        ]
-        medias[iid] = {
-            "id": iid,
-            "media_type": "image",
-            "embedder": embedder_name,
-            "duration": 0,
-            "file_size": 0,
-            "md5": "",
-            "embeddings": {},
-            "media_bytes": data,
-            "media_string": None,
-            "filename": path.name,
-            "category": cats[0] if cats else "",
-            "categories": cats,
-            # A designated cell membership, not a closed world: a positive is
-            # scorable only in the cells it was drawn for, and the shared
-            # negatives are scorable everywhere.
-            "evaluable_categories": _evaluable(
-                iid, cats, cells, neg_set, labels, coco_scored, reviewed_absent, reviewed_present
-            ),
-            # Whether this image's labels rest on an exhaustive reference (COCO,
-            # or a human who looked). False means VG's silence is the only
-            # evidence of absence -- which is what the review slates target.
-            "labels_exhaustive": iid in exhaustive,
-            # The strict half of the flag above, and the one #3670's composition
-            # is defined on. `labels_exhaustive` is also set by a human looking
-            # at ONE class; this says COCO answered for all eighty at once, which
-            # is what makes a negative provable rather than merely reviewed.
-            "coco_scored": iid in coco_scored,
-            "regions": regions,
-            "origin": {"importer": "vg_scale", "params": {"embedder": embedder_name, "labels": "coco"}},
-            "origin_name": str(path),
-        }
+        media = scale_media(
+            iid=iid,
+            data=data,
+            filename=path.name,
+            origin_name=str(path),
+            box_dims=box_dims[iid],
+            cats=sorted(positive_in.get(iid, [])),
+            boxes_for=boxes_for,
+            cells=cells,
+            neg_set=neg_set,
+            labels=labels,
+            coco_scored=coco_scored,
+            exhaustive=exhaustive,
+            reviewed_absent=reviewed_absent,
+            reviewed_present=reviewed_present,
+            embedder_name=embedder_name,
+            importer="vg_scale",
+        )
+        if media is not None:
+            medias[iid] = media
 
 
 def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
