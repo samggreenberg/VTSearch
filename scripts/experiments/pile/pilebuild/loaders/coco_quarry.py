@@ -137,8 +137,10 @@ def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
 
     cells = sorted(chosen)
     short = [c for c in cells if len(chosen[c]) < pc.SCALE_N_POS]
-    log(f"  coco_quarry: {len(cells)} cells, {sum(len(v) for v in chosen.values()):,} positives, "
-        f"{len(negatives):,} negatives (+{len(spares):,} spares)")
+    log(
+        f"  coco_quarry: {len(cells)} cells, {sum(len(v) for v in chosen.values()):,} positives, "
+        f"{len(negatives):,} negatives (+{len(spares):,} spares)"
+    )
     if short:
         log(f"  coco_quarry: WARNING {len(short)} cells under SCALE_N_POS: {', '.join(short[:6])}")
 
