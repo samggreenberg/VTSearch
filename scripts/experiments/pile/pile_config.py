@@ -150,9 +150,6 @@ DATASETS: dict[str, dict] = {
     # free-text vocabulary) rather than the demo pipeline's 100 curated
     # categories on a 4% slice.  The `_s`/`_m`/`_l` on `visual_genome_*` is a
     # dataset *size* tier and says nothing about boxes; these are the box bands.
-    "vg_box_small": {"boxed": True, "kind": "vg_band", "band": "small"},
-    "vg_box_medium": {"boxed": True, "kind": "vg_band", "band": "medium"},
-    "vg_box_large": {"boxed": True, "kind": "vg_band", "band": "large"},
     # The same-class-across-bands set (#3156). One pickle, one class list, one
     # negative pool; the band lives on the category name (`bus@small`). Not a
     # replacement for `vg_box_*` -- those measured what they measured and stay
@@ -165,7 +162,6 @@ DATASETS: dict[str, dict] = {
     # is 0.76, and 1.4% of the images it calls negative actually hold the object
     # (`coco_anchor.py`). At 80 positives per cell that would be ~54 hidden
     # positives sitting in the negatives.
-    "vg_scale": {"boxed": True, "kind": "vg_scale", "labels": "coco"},
     # `vg_scale` with the box-size band collapsed away (#3115): the same images,
     # boxes and corrections, keyed on the bare class.  A calibration study wants
     # uniform prevalence across cells and does not care how big the box is;
@@ -183,7 +179,6 @@ DATASETS: dict[str, dict] = {
     # is now enforced twice -- `build_pile.py` pulls this dataset into any run
     # that rebuilds its parent, and `--verify` compares the parent-label digest
     # stamped on each derived media against the parent's live one.
-    "vg_scale_any": {"boxed": True, "kind": "vg_scale_any"},
     # `vg_scale_any`'s construction with the BAND DROPPED FROM SELECTION rather
     # than from the key, and sized for a long labelling session (#3547).
     #
@@ -208,7 +203,6 @@ DATASETS: dict[str, dict] = {
     # the default sweep. A bare `build_pile.py` would otherwise quietly add five
     # cells nobody asked for, one of them a ~7 GB `dinov3_patch` grid. Name it
     # to build it: `--datasets vg_scale_deep --embedders siglip`.
-    "vg_scale_deep": {"boxed": True, "kind": "vg_scale_deep", "on_request": True},
 }
 
 #: Box-size bands, as a fraction of image area, anchored to the patch

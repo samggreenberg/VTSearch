@@ -34,7 +34,7 @@ with COCO's wherever COCO annotates, and since #3670 the negative pool is 100%
 COCO-scored with VG-silence contamination zero by construction. What remained
 VG's was ~43% of the positives — and the entire apparatus built to guess at
 labels VG cannot give: `SCALE_VG_NAMES`, `SCALE_VG_AMBIGUOUS`,
-`name_evidence.py`, `coco_folds.py`, `vg_name_families.py`,
+`name_evidence.py`, `coco_folds.py` (retired with Visual Genome — see `docs/plans/coco-quarry.md`), `vg_name_families.py`,
 `scan_name_overlap.py`, `pool_contamination.py`, `withheld_difficulty.py`.
 
 The price of that half: **4,709 correction rows** and **5,904 human judgements**,
@@ -65,7 +65,7 @@ and it is cheap to settle — see the first item below.
 <!-- item-sep -->
 
 - **Build the COCO loader, and keep the band rule identical.** A `kind: "coco"`
-  sibling of `pilebuild/loaders/vg_scale.py` reading `instances_*2017.json`
+  sibling of `vg_scale.py` reading `instances_*2017.json`
   directly: no `anchor_to_coco`, no `canonicalise`, no `lift_ambiguous`, no
   corrections file. `band_for` is imported unchanged — that is what makes the old
   and new sets comparable at all, and

@@ -40,7 +40,7 @@ feasible rather than a silently thinner set.
 
 ## The draw reproduces the designated build
 
-Positives are ordered by :func:`~pilebuild.loaders.vg_scale.rank`, the same
+Positives are ordered by :func:`~pilebuild.scale_core.rank`, the same
 hash-of-(cell, image_id) the builder uses, so an export at ``SCALE_N_POS`` with
 no other constraint selects the same images `coco_quarry` designated. That is
 what makes a query-time cell comparable with a build-time one rather than merely
@@ -62,7 +62,7 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "calibration"))
 
 import pile_config as pc  # noqa: E402
-from pilebuild.loaders.vg_scale import rank  # noqa: E402
+from pilebuild.scale_core import rank  # noqa: E402
 
 #: The cheapest full-corpus column to read membership from. Cell membership is
 #: identical across columns -- it comes from the annotations, not the vectors --

@@ -19,7 +19,7 @@ python figures_3983.py --supply supply.json --outdir docs/experiments/2026-09-18
 |---|---:|
 | COCO 2017 train+val images | **123,287** |
 | VG images, for comparison | 108,077 |
-| VG∩COCO — the pool `exact_supply.py` measured | **51,497** |
+| VG∩COCO — the pool `exact_supply.py` (retired with Visual Genome — see `docs/plans/coco-quarry.md`) measured | **51,497** |
 | cells short of `SCALE_N_POS` = 100 | **0 of 75** |
 | cells short of 300 (`exact_supply.py`'s `NEED`) | **5 of 75**, all `small` |
 | thinnest cell | `bus@small`, **177** |
@@ -28,7 +28,7 @@ python figures_3983.py --supply supply.json --outdir docs/experiments/2026-09-18
 
 ## Why this was not already known
 
-[`exact_supply.py`](../../../scripts/experiments/pile/exact_supply.py) asked a
+`exact_supply.py` asked a
 neighbouring question in August and is read as having answered this one. It
 reported **20 of 36 shipped cells** short of 300 COCO-anchored positives, which
 is the founding measurement of the 3,391-image exhaustive annotation pass (the

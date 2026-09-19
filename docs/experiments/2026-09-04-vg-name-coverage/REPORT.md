@@ -16,7 +16,7 @@ and why #3604's pending rebuild should carry it.
 
 ### 1. The measurement the issue specifies cannot make the decision on its own
 
-#3618 says to read `coco_folds.py`'s **fold-in** column and act on any VG name
+#3618 says to read `coco_folds.py` (retired with Visual Genome — see `docs/plans/coco-quarry.md`)'s **fold-in** column and act on any VG name
 reaching a material share. Fold-in is a *box* test: does a VG box named *n* land
 on a COCO box of class *c* at IoU ≥ 0.5? Run against the twelve it produces a
 clean ranking, and the two entries at opposite ends of it show why a ranking is
@@ -291,9 +291,9 @@ from the cluster.
 
 | script | what it answers |
 |---|---|
-| [`coco_folds.py`](../../../scripts/experiments/pile/coco_folds.py) | which VG names land on a class's COCO boxes (fold-in / fold-out) — the search, added by #3606 |
-| [`vg_name_families.py`](../../../scripts/experiments/pile/vg_name_families.py) | every VG name sharing a class's head noun, with its supply — the half of the search fold-in cannot see |
-| [`name_evidence.py`](../../../scripts/experiments/pile/name_evidence.py) | repair precision, box agreement, and the derived verdict per name |
-| [`name_coverage.py`](../../../scripts/experiments/pile/name_coverage.py) | what a proposed table buys and costs: coverage, repaired, withheld, band ledger |
-| [`scan_name_overlap.py`](../../../scripts/experiments/pile/scan_name_overlap.py) | box overlap between two names — the confirmation #3618 asks for, and result 4 above |
+| `coco_folds.py` | which VG names land on a class's COCO boxes (fold-in / fold-out) — the search, added by #3606 |
+| `vg_name_families.py` | every VG name sharing a class's head noun, with its supply — the half of the search fold-in cannot see |
+| `name_evidence.py` | repair precision, box agreement, and the derived verdict per name |
+| `name_coverage.py` | what a proposed table buys and costs: coverage, repaired, withheld, band ledger |
+| `scan_name_overlap.py` | box overlap between two names — the confirmation #3618 asks for, and result 4 above |
 | [`figures.py`](figures.py) | the three figures, from `measurements/` |

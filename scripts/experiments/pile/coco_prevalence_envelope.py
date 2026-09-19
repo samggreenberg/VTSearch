@@ -41,7 +41,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import pile_config as pc  # noqa: E402
-from pilebuild.loaders.vg_scale import band_for  # noqa: E402
+from pilebuild.scale_core import band_for  # noqa: E402
 
 BANDS = ("small", "medium", "large")
 #: Prevalences to report reach for. 5% is roughly today's realised figure; 0.1%

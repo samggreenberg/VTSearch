@@ -53,7 +53,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import pile_config as pc  # noqa: E402
-from pilebuild.loaders.vg_scale import band_for  # noqa: E402
+from pilebuild.scale_core import band_for  # noqa: E402
 
 BANDS = ("small", "medium", "large")
 #: Pool sizes to report. The interesting one is whichever first serves every class.

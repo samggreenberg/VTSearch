@@ -57,13 +57,13 @@ make the gap impossible to miss (§7).
 | `vg_scale_deep` | pinned at 11,700 negatives, deliberately (#3690) |
 
 Scripts:
-[`negpool_supply.py`](../../../scripts/experiments/pile/negpool_supply.py) (what
+`negpool_supply.py` (what
 the pool can be made of),
 [`provenance_probe.py`](../../../scripts/experiments/pile/provenance_probe.py)
 (is provenance readable at all),
 [`provenance_shortcut.py`](../../../scripts/experiments/pile/provenance_shortcut.py)
 (would a head use it),
-[`negpool_coverage.py`](../../../scripts/experiments/pile/negpool_coverage.py)
+`negpool_coverage.py` (retired with Visual Genome — see `docs/plans/coco-quarry.md`)
 (what it costs the review, and the realised prevalence),
 [`contamination_identity.py`](../../../scripts/experiments/pile/contamination_identity.py)
 (why the two probe arms are one route).
