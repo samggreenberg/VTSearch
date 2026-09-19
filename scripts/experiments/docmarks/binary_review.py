@@ -536,12 +536,14 @@ def regroup(
     confusion this is meant to remove.
     """
     by_queue, _ = collect_votes(base, root, cleared)
+    # by filename, not by queue: a question answered in some other detector is
+    # still answered, and re-asking it is the thing this is meant to avoid
+    votes, _conflicts, _unplaceable = vote_index(by_queue)
     remaining: dict[str, list[tuple[Path, str, dict[str, Any]]]] = defaultdict(list)
     for mf in sorted(root.glob("*/manifest.json")):
         if mf.parent.name.endswith(MERGED_SUFFIX):
             continue
         m = json.loads(mf.read_text(encoding="utf-8"))
-        votes = by_queue.get(m["dataset_name"], {})
         for fn, q in sorted(m["questions"].items()):
             if fn in votes or q["task"] in skip_tasks:
                 continue
@@ -866,6 +868,62 @@ def collect_votes(base: Optional[str], root: Path, cleared: Path) -> tuple[dict[
     return dict(votes), dict(seen)
 
 
+def question_index(manifests: dict[str, tuple[Path, dict[str, Any]]]) -> dict[str, dict[str, Any]]:
+    """``{filename: question}`` across every queue.
+
+    A filename is claimed by several manifests as a matter of course: a regrouped
+    queue hardlinks its predecessors' images, so the same question appears in the
+    pass that first asked it and in the merged pair that still asks it.  That is
+    benign only while the two describe the *same* question, so a filename claimed
+    twice with differing entries raises rather than letting one silently win.
+    """
+    index: dict[str, dict[str, Any]] = {}
+    claimed: dict[str, list[str]] = defaultdict(list)
+    for name, (_qdir, m) in sorted(manifests.items()):
+        for fn, q in (m.get("questions") or {}).items():
+            claimed[fn].append(name)
+            prev = index.get(fn)
+            if prev is not None and json.dumps(prev, sort_keys=True) != json.dumps(q, sort_keys=True):
+                raise SystemExit(
+                    f"{fn} is claimed by {claimed[fn]} with different questions; "
+                    "a vote on it cannot be routed, so nothing was banked"
+                )
+            index[fn] = q
+    return index
+
+
+def vote_index(
+    by_queue: dict[str, dict[str, str]], questions: Optional[dict[str, dict[str, Any]]] = None
+) -> tuple[dict[str, str], list[str], list[str]]:
+    """``{filename: label}`` for every vote, whatever detector it was cast in.
+
+    A vote is an answer to the QUESTION its filename names, not to the dataset
+    folder it happens to sit in: loading a second dataset into one detector puts
+    a foreign queue's votes there, and keying by folder drops every one of them.
+    Returns the index plus what could not be resolved -- ``conflicts`` (one
+    filename voted both ways in different queues, where no rule can say which
+    click was later) and ``unplaceable`` (a vote naming a question no manifest
+    has).  Both are reported rather than guessed at or dropped in silence.
+    """
+    per_file: dict[str, dict[str, str]] = defaultdict(dict)
+    for queue, votes in by_queue.items():
+        for fn, label in votes.items():
+            per_file[fn][queue] = label
+    index: dict[str, str] = {}
+    conflicts: list[str] = []
+    unplaceable: list[str] = []
+    for fn, per in sorted(per_file.items()):
+        if questions is not None and fn not in questions:
+            unplaceable.append(f"{fn}: voted in {sorted(per)} but no manifest asks it")
+            continue
+        labels = set(per.values())
+        if len(labels) > 1:
+            conflicts.append(f"{fn}: {', '.join(f'{q}={v}' for q, v in sorted(per.items()))}")
+            continue
+        index[fn] = next(iter(labels))
+    return index, conflicts, unplaceable
+
+
 def archive_votes(qdir: Path, date: str, payload: dict[str, Any]) -> Path:
     """Keep this run's votes beside the queue, without shrinking an earlier archive.
 
@@ -928,10 +986,16 @@ def bank(
         archive_votes(manifests[name][0], date, {"detector": d, "labels": detail})
     by_queue, sources = collect_votes(base, root, cleared)
     print(f"  vote sources: {', '.join(f'{v} {k}(s)' for k, v in sorted(sources.items())) or 'none'}")
+    questions = question_index(manifests)
+    votes, conflicts, unplaceable = vote_index(by_queue, questions)
+    for line in conflicts:
+        print(f"  CONFLICT {line}")
+    for line in unplaceable:
+        print(f"  UNPLACEABLE {line}")
     by_task: dict[str, tuple[dict[str, Any], dict[str, str]]] = defaultdict(lambda: ({}, {}))
     for name, (_qdir, m) in sorted(manifests.items()):
-        votes = by_queue.get(name, {})
-        print(f"  {name}: {len(votes)} of {len(m['questions'])} answered")
+        got = sum(1 for fn in m["questions"] if fn in votes)
+        print(f"  {name}: {got} of {len(m['questions'])} answered")
         for fn, q in m["questions"].items():
             src = TRANSLATORS[q["task"]][0](corpus)
             qs, vs = by_task[str(src)]
