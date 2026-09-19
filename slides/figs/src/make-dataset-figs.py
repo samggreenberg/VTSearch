@@ -6,7 +6,7 @@ Run from the repo root:
     python slides/figs/src/make-dataset-figs.py            # everything it can draw offline
     python slides/figs/src/make-dataset-figs.py --no-media # skip the cards that need pixels
 
-Two kinds of figure, and the difference matters more than it looks.
+Three kinds of figure, and the differences matter more than they look.
 
 **Story figures** say how a dataset *came about* — the sources it started from,
 what was done to them, and what a reader may conclude. `vg_scale` and DocMarks
@@ -16,6 +16,14 @@ the construction assemble rather than reading a paragraph.
 **Cards** say what a dataset *is*: how much of it there is, where to download
 it, and — the part a drawing cannot fake — what the media look like. Every
 card's strip is real pixels, fetched by `dataset_samples.py`.
+
+**Argument figures** say why a dataset is *shaped* the way it is. There is one,
+`coco_quarry`'s complement build, and it draws set theory rather than data: it
+carries no counts at all, because the thing it is arguing about — that an
+exhaustively annotated corpus can name the images a class is *absent* from —
+is true of three classes and eighty alike. A dataset gets one of these only
+where the design decision is the interesting part and a number would not say
+it.
 
 **Where the numbers come from.** Nothing here is typed in twice.
 
@@ -46,6 +54,7 @@ import argparse
 import contextlib
 import importlib.util
 import io
+import math
 import re
 import sys
 import textwrap
@@ -56,7 +65,8 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
-from matplotlib.patches import Rectangle  # noqa: E402
+import numpy as np  # noqa: E402
+from matplotlib.patches import Circle, Rectangle  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -1001,6 +1011,255 @@ def fig_card_vg_box(pc: Any) -> plt.Figure:
 
 
 # --------------------------------------------------------------------------
+# coco_quarry
+# --------------------------------------------------------------------------
+
+#: The Venn, in the drawing's own units. `QUARRY_D` is how far each circle's
+#: centre sits from the group's, and the ratio to `QUARRY_R` is what decides
+#: how big the three-way cell in the middle comes out — the one that has to
+#: hold `ABC` and a superscript. At 0.46 / 0.70 that cell is 0.24 units of
+#: inradius, which is 108 slide pixels across against a 45px label; the
+#: textbook 0.55 / 0.70 halves it and the label spills over the lens edges.
+QUARRY_R = 0.70
+QUARRY_D = 0.46
+#: The universe rectangle: every image there is, drawn so that "outside the
+#: circles" is a *region* with room to be labelled rather than the margin of
+#: the page. `QUARRY_HEADROOM` is the strip above it that carries the caption,
+#: which stays outside the rectangle so that no fill ever runs underneath it.
+QUARRY_RECT = (-1.55, -1.35, 3.10, 2.70)
+QUARRY_HEADROOM = 0.24
+
+#: Tints rather than the deck's own `POS` / `NEG`, because these fills carry
+#: labels on top of them. The hue is the deck's (green is the positive side,
+#: red the negative one, `slides/STYLE.md`); the value is whatever leaves
+#: `INK` legible over it.
+POS_FILL = "#d9ebe1"
+NEG_FILL = "#f7ddd9"
+
+#: Characters per line in the left column, which is `RIGHT_X - LEFT_X` wide —
+#: 357 slide pixels, about 31 characters of the 15pt body face.
+QUARRY_WRAP = 31
+
+#: The notation, in the order the build introduces it. Each entry is one
+#: reveal, and the whole column is what the room is being taught to read: the
+#: two definitions the easy path needs, the easy path and why it is hollow,
+#: the definition exhaustive annotation adds, and the path that opens up.
+QUARRY_BLOCKS = [
+    ("A⁺", "holds an A, maybe more"),
+    ("∅", "holds none of the three"),
+    ("Easy: A⁺ vs ∅", "an A-or-B-or-C detector wins it too"),
+    ("AB⁼", "exhaustively annotated: exactly A and B"),
+    ("Better: A⁺ vs ¬A", "no image sits the question out"),
+]
+
+
+def _quarry_centres() -> list[tuple[float, float]]:
+    """The three circle centres, as a group centred on the universe rectangle.
+
+    The triangle of centres is not symmetric about its own midline — one
+    circle is up and two are down — so placing them at `QUARRY_D` from the
+    origin and stopping would hang the whole Venn above centre by half a
+    radius. The drop is the group's own midline, computed rather than nudged.
+    """
+    raw = [
+        (QUARRY_D * math.cos(math.radians(angle)), QUARRY_D * math.sin(math.radians(angle)))
+        for angle in (90.0, 210.0, 330.0)
+    ]
+    drop = ((QUARRY_D + QUARRY_R) + (-QUARRY_D / 2 - QUARRY_R)) / 2
+    return [(x, y - drop) for x, y in raw]
+
+
+def _quarry_cells(centres: list[tuple[float, float]]) -> dict[int, tuple[float, float]]:
+    """Where each of the seven exact-set labels goes: `{membership bits: (x, y)}`.
+
+    Measured off a raster of the drawing rather than derived from the centres.
+    The seven regions of a three-circle Venn are four different shapes, and the
+    three single-class ones are crescents whose middle is nowhere near the
+    circle's own centre — so arithmetic on the centres puts `A` on the rim of
+    the lens below it. Each centroid is then checked to fall inside the cell it
+    names, which is what makes a later edit to `QUARRY_R` or `QUARRY_D` fail
+    here instead of printing `AB` into the wrong lens.
+    """
+    axis = np.linspace(-1.2, 1.2, 601)
+    grid_x, grid_y = np.meshgrid(axis, axis)
+    inside = [((grid_x - cx) ** 2 + (grid_y - cy) ** 2) <= QUARRY_R**2 for cx, cy in centres]
+    cells: dict[int, tuple[float, float]] = {}
+    for bits in range(1, 8):
+        want = [bool(bits >> i & 1) for i in range(3)]
+        selected = np.ones_like(grid_x, dtype=bool)
+        for i in range(3):
+            selected &= inside[i] if want[i] else ~inside[i]
+        x, y = float(grid_x[selected].mean()), float(grid_y[selected].mean())
+        held = [((x - cx) ** 2 + (y - cy) ** 2) <= QUARRY_R**2 for cx, cy in centres]
+        if held != want:
+            raise SystemExit(
+                f"venn cells: the centroid of {quarry_cell_name(bits)} lands outside its own cell "
+                f"at ({x:.3f}, {y:.3f}). QUARRY_R / QUARRY_D have moved far enough that a region "
+                f"is no longer convex about its own middle — place that label by hand, or put the "
+                f"circles back."
+            )
+        cells[bits] = (x, y)
+    return cells
+
+
+def quarry_cell_name(bits: int) -> str:
+    """`AB⁼` for the cell holding exactly A and B, and so on."""
+    return "".join(c for i, c in enumerate("ABC") if bits >> i & 1) + "⁼"
+
+
+def _quarry_stack(fig: plt.Figure, upto: int) -> None:
+    """The left column: the notation, one block per reveal.
+
+    Laid out by flow from the same top in the same order whatever `upto` is, so
+    a reveal adds a block and moves nothing (`slides/STYLE.md`, *Builds*). The
+    overflow guard measures the *whole* stack rather than the part this stage
+    draws, so a reworded gloss fails on the first figure rather than on the
+    last one.
+    """
+    lead, line, gap, floor = 0.050, 0.038, 0.028, 0.035
+    y = LEFT_TOP
+    for index, (term, gloss) in enumerate(QUARRY_BLOCKS):
+        wrapped = textwrap.wrap(gloss, QUARRY_WRAP)
+        if index < upto:
+            fig.text(LEFT_X, y, term, fontsize=FLOOR_PT + 7, color=INK, fontweight="bold", va="top")
+            fig.text(
+                LEFT_X,
+                y - lead,
+                "\n".join(wrapped),
+                fontsize=FLOOR_PT,
+                color=SOFT,
+                va="top",
+                linespacing=1.5,
+            )
+        y -= lead + line * len(wrapped) + gap
+    if y < floor:
+        raise SystemExit(
+            f"notation stack: the five blocks overflow the slide (bottom at {y:.3f}, floor {floor}). "
+            f"Shorten a gloss to {QUARRY_WRAP} characters or fewer — the column is only "
+            f"{QUARRY_WRAP} characters wide, and every extra wrapped line comes out of the last block."
+        )
+
+
+def fig_coco_quarry_complement(upto: int = len(QUARRY_BLOCKS)) -> plt.Figure:
+    """Why `coco_quarry` needs COCO's exhaustive annotation: the complement.
+
+    Six frames over one Venn. The circles are the three classes, the rectangle
+    is every image there is, and the build walks the two ways to pick negatives
+    for an A-detector: the outside of all three circles, which is free and
+    asks nothing, and the outside of *A*, which is only nameable because COCO
+    answers for all eighty of its classes on every image it touches.
+
+    Nothing moves between frames and no fill is ever repainted a second colour:
+    the crescents go white to red at the last reveal because the white union
+    that was covering the rectangle stops being drawn, which is the same
+    reveal as any other — ink appearing where there was none.
+    """
+    fig = _blank_fig()
+    x0, y0, w, h = QUARRY_RECT
+    ax = fig.add_axes((0.345, 0.045, 0.545, 0.91))
+    ax.set_aspect("equal")
+    ax.axis("off")
+    ax.set_xlim(x0, x0 + w)
+    ax.set_ylim(y0, y0 + h + QUARRY_HEADROOM)
+
+    centres = _quarry_centres()
+    ax.add_patch(
+        Rectangle(
+            (x0, y0),
+            w,
+            h,
+            facecolor=NEG_FILL if upto >= 2 else "white",
+            edgecolor=SOFT,
+            linewidth=1.6,
+            zorder=1,
+        )
+    )
+    if 2 <= upto <= 4:
+        # The circles knocked back out of the negative fill: on these frames
+        # only ∅ is a negative, and everything inside a circle is untouched.
+        for centre in centres:
+            ax.add_patch(Circle(centre, QUARRY_R, facecolor="white", edgecolor="none", zorder=2))
+    if upto >= 1:
+        ax.add_patch(Circle(centres[0], QUARRY_R, facecolor=POS_FILL, edgecolor="none", zorder=3))
+    for centre in centres:
+        ax.add_patch(Circle(centre, QUARRY_R, facecolor="none", edgecolor=INK, linewidth=2.0, zorder=4))
+
+    ax.text(
+        x0,
+        y0 + h + 0.07,
+        "every image there is",
+        fontsize=FLOOR_PT,
+        color=SOFT,
+        ha="left",
+        va="bottom",
+        zorder=5,
+    )
+    # Each circle is named from just outside its own rim, anchored by the
+    # corner facing the circle so the word grows *away* from the drawing —
+    # centring it on the radial instead straddles the outline, and a label
+    # lying across the thing it names is the one placement that reads as a
+    # mistake rather than as a gap (`slides/STYLE.md`, *A label is closer*).
+    for (cx, cy), (dx, dy), anchor, name in zip(
+        centres,
+        ((0.0, 1.0), (-0.866, -0.5), (0.866, -0.5)),
+        (("center", "bottom"), ("right", "top"), ("left", "top")),
+        "ABC",
+    ):
+        ax.text(
+            cx + dx * (QUARRY_R + 0.06),
+            cy + dy * (QUARRY_R + 0.06),
+            f"{name}⁺",
+            fontsize=FLOOR_PT + 5,
+            color=INK,
+            fontweight="bold",
+            ha=anchor[0],
+            va=anchor[1],
+            zorder=5,
+        )
+    if upto >= 2:
+        # Bottom-left, because the top edge already carries A⁺ and, at the last
+        # reveal, ¬A — three bold labels along one edge is a row to read.
+        ax.text(
+            x0 + 0.13,
+            y0 + 0.13,
+            "∅",
+            fontsize=FLOOR_PT + 7,
+            color=INK,
+            fontweight="bold",
+            ha="left",
+            va="bottom",
+            zorder=5,
+        )
+    if upto >= 4:
+        for bits, (x, y) in _quarry_cells(centres).items():
+            ax.text(
+                x,
+                y,
+                quarry_cell_name(bits),
+                fontsize=FLOOR_PT,
+                color=INK,
+                ha="center",
+                va="center",
+                zorder=5,
+            )
+    if upto >= 5:
+        ax.text(
+            x0 + w - 0.11,
+            y0 + h - 0.11,
+            "¬A",
+            fontsize=FLOOR_PT + 7,
+            color=INK,
+            fontweight="bold",
+            ha="right",
+            va="top",
+            zorder=5,
+        )
+
+    _quarry_stack(fig, upto)
+    return fig
+
+
+# --------------------------------------------------------------------------
 
 
 def main() -> int:
@@ -1036,6 +1295,17 @@ def main() -> int:
         )
     save(fig_docmarks_build(dc, facts), OUT, "dataset-docmarks-build.png", column=FULL_BLEED, tight=False)
     save(fig_docmarks_shape(dc, facts), OUT, "dataset-docmarks-shape.png", column=FULL_BLEED, tight=False)
+
+    frames = len(QUARRY_BLOCKS) + 1
+    for n in range(frames - 1):
+        save(
+            fig_coco_quarry_complement(upto=n),
+            OUT,
+            f"dataset-coco-quarry-complement.build{n + 1}.png",
+            column=FULL_BLEED,
+            tight=False,
+        )
+    save(fig_coco_quarry_complement(), OUT, "dataset-coco-quarry-complement.png", column=FULL_BLEED, tight=False)
 
     save(fig_card_vg_box(pc), OUT, "dataset-card-vg-box.png", column=FULL_BLEED, tight=False)
     if args.no_media:
