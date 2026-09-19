@@ -13,6 +13,7 @@
   <vt-vote-grid
     [entries]="sortedEntries()"
     [label]="label()"
+    [emptyHint]="emptyHint()"
     [gridGoalWidth]="gridGoalWidth()"
     [focusMode]="focusMode()"
     (entrySelected)="onEntrySelected($event)"

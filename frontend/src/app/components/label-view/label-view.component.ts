@@ -1,4 +1,4 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, DestroyRef, effect, ElementRef, inject, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, inject, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { Subscription, pairwise } from 'rxjs';
@@ -108,6 +108,72 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  pane the vote-swipe animation otherwise leaves behind (#3887). Aliased
    *  from {@link SortRunnerService}, which owns the advance rule. */
   readonly queueExhausted = this.sortRunner.queueExhausted;
+  /** True when every item in the *dataset* is labeled, sort or no sort. Aliased
+   *  from {@link SortRunnerService}; see its doc for the two paths that reach
+   *  it without {@link queueExhausted} ever being true (#4028). */
+  readonly datasetExhausted = this.sortRunner.datasetExhausted;
+
+  /**
+   * The centre pane has nothing left to show and should say so, for any of the
+   * three reasons below. They are one input because the pane renders one
+   * message; they are kept apart in {@link exhaustedHeading} /
+   * {@link exhaustedDetail} because the way out differs — a finished ranking
+   * has "load more", a finished dataset has only undo and export.
+   */
+  readonly centreExhausted = computed(
+    () => (this.autopilotExhausted() || this.datasetExhausted() || this.queueExhausted())
+      && !this.viewingPick(),
+  );
+
+  /**
+   * The item the user picked by hand while the "nothing left" pane was up, or
+   * `null`.
+   *
+   * The pane replaces the viewer, so without this it swallows every click in
+   * the grid and in the vote piles — and the pane's own message sends the user
+   * to those piles to review their labels. Picking something is an explicit
+   * "show me this one", so it wins over a message about the queue.
+   *
+   * Stored as the id rather than as a flag so it expires on its own: a pair
+   * change clears the selection, which no longer matches, and the pane comes
+   * back for the new pair without anything having to reset it. A vote clears it
+   * outright — that is the user going back to labelling, where the message is
+   * the point again.
+   */
+  private readonly pickedWhileDone = signal<number | null>(null);
+
+  /** True while the selection is still the item {@link pickedWhileDone}
+   *  recorded. Both being `null` is not a match: that is "nothing picked and
+   *  nothing selected", which is the state a fresh entry is in. */
+  private readonly viewingPick = computed(() => {
+    const picked = this.pickedWhileDone();
+    return picked !== null && this.mediaState.selectedId() === picked;
+  });
+
+  /** Whether the dataset is finished (no more items anywhere) or merely the
+   *  loaded ranking is. Autopilot reaching `exhausted` means the former: its
+   *  own terminal state is "every item in this dataset is labeled". */
+  private readonly wholeDatasetDone = computed(
+    () => this.autopilotExhausted() || this.datasetExhausted(),
+  );
+
+  readonly exhaustedHeading = computed(() =>
+    this.wholeDatasetDone() ? 'Nothing left to label' : 'Nothing left in this ranking',
+  );
+
+  readonly exhaustedDetail = computed(() => {
+    // Deliberately one sentence for both halves of `wholeDatasetDone`. The
+    // pane used to credit Autopilot by name here, but `autopilotExhausted`
+    // tracks the phase machine whether or not Autopilot is the thing the user
+    // is running — so a hand-labeled dataset was told Autopilot had labeled it.
+    // "Every item is labeled" is true either way and costs nothing.
+    if (this.wholeDatasetDone()) {
+      return 'Every item in this dataset is labeled. Review your labels in the side panels, '
+        + 'export them, or press Cmd/Ctrl-Z to undo the last one.';
+    }
+    return 'Every item in the current ranking is labeled. Load more results, change the sort, '
+      + 'or pick an item from the list on the left.';
+  });
   progressModalMetric: ProgressMetric | null = null;
 
   // SortStateService / VoteStateService are now signal-backed (their value
@@ -782,6 +848,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   // --- Media selection ---
 
   onMediaSelect(id: number): void {
+    this.pickedWhileDone.set(id);
     this.mediaState.selectMedia(id);
   }
 
@@ -939,6 +1006,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onMediaVoted(event: { id: number; vote: 'good' | 'bad' }): void {
+    // Back to labelling, so the "nothing left" pane is welcome again if the
+    // advance below has nowhere to go — see {@link pickedWhileDone}.
+    this.pickedWhileDone.set(null);
     // Local vote state is already reconciled from the POST response inside
     // submitToggleVote; loadVotes() only refreshes derived counters.
     this.voteState.loadVotes();

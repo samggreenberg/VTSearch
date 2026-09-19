@@ -1,4 +1,9 @@
-@if (useVirtual) {
+@if (entries().length === 0) {
+  <!-- An empty pile is otherwise a heading reading "(0)" over nothing at all,
+       which leaves a brand-new detector with no hint that the two piles are
+       where its labels are supposed to land (#4028). -->
+  <p class="vote-empty" role="status">{{ emptyText() }}</p>
+} @else if (useVirtual) {
   <!-- Virtual scrolling for large piles: cells are chunked into rows so only
        the visible rows are mounted, instead of every thumbnail at once. -->
   <cdk-virtual-scroll-viewport

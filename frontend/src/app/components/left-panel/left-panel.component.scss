@@ -141,6 +141,20 @@
   flex-shrink: 0;
 }
 
+// "All labeled": the grid still lists every item, so the count in the header
+// says nothing about whether any of them are still worth clicking. Its own
+// full-width line rather than a chip beside the count — this panel collapses to
+// ~260px, where anything added to that row squeezes the view controls onto a
+// second line (#4028). Muted: it is a state, not an alert.
+.all-labeled-note {
+  margin: 0;
+  padding: 0 var(--space-xs) var(--space-2xs);
+  font-size: var(--font-2xs);
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
 .view-controls-slot {
   margin-left: var(--space-xs);
 }

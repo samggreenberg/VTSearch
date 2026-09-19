@@ -9,6 +9,7 @@ import { VoteStateService } from './vote-state.service';
 import { AutopilotStateService } from './autopilot-state.service';
 import { configureZoneless } from '../testing/zoneless-testbed';
 import { provideHttpTesting } from '../testing/test-providers';
+import { settleResource } from '../testing/settle-resource';
 
 /**
  * `SortRunnerService` in isolation.
@@ -362,6 +363,57 @@ describe('SortRunnerService', () => {
         .flush({ id: 7, coverage_level: 3 });
       expect(runner.queueExhausted()).toBe(false);
       expect(mediaState.selectedId()).toBe(7);
+    });
+  });
+
+  // --- the dataset, and the advance, running out (#4028) -------------------
+
+  /** Answer the dataset stub load with `ids`, and let the resource settle. */
+  async function seedMedias(...ids: number[]): Promise<void> {
+    mediaState.loadMedias();
+    // The `rxResource` loader runs in an effect, so the GET is not issued until
+    // the TestBed ticks (see `settle-resource.ts`).
+    TestBed.tick();
+    httpMock
+      .expectOne('/api/medias/ids')
+      .flush(ids.map((id) => ({ id, media_type: 'image' })));
+    await settleResource();
+  }
+
+  /**
+   * `queueExhausted` is about the loaded *ranking*, so it is false whenever no
+   * sort has run — which is exactly the state manual labelling and a fresh
+   * entry to a finished detector are both in.
+   */
+  describe('datasetExhausted', () => {
+    it('is false before the dataset stubs have loaded', () => {
+      expect(runner.datasetExhausted()).toBe(false);
+    });
+
+    it('is false while one item in the dataset is still unlabeled', async () => {
+      await seedMedias(1, 2);
+      voteState.applyOptimisticState(1, 'good');
+
+      expect(runner.datasetExhausted()).toBe(false);
+    });
+
+    it('is true once every item is labeled, with no sort ever having run', async () => {
+      await seedMedias(1, 2);
+      voteState.applyOptimisticState(1, 'good');
+      voteState.applyOptimisticState(2, 'bad');
+
+      // The ranking is empty, so the #3887 flag cannot speak for this state.
+      expect(runner.queueExhausted()).toBe(false);
+      expect(runner.datasetExhausted()).toBe(true);
+    });
+
+    it('goes back to false when an undo un-votes a row', async () => {
+      await seedMedias(1);
+      voteState.applyOptimisticState(1, 'good');
+      expect(runner.datasetExhausted()).toBe(true);
+
+      voteState.applyOptimisticState(1, 'none');
+      expect(runner.datasetExhausted()).toBe(false);
     });
   });
 });

@@ -16,6 +16,17 @@
   min-height: 0;
 }
 
+// The empty pile's one line. Left-aligned and small: it sits directly under a
+// section heading in a narrow column, where the centred `.empty-state` block
+// would wrap into a ragged stack.
+.vote-empty {
+  margin: 0;
+  padding: var(--space-2xs) var(--space-xs) var(--space-xs);
+  font-size: var(--font-xs);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
 .vote-list-plain {
   display: grid;
   grid-template-columns: repeat(auto-fill, var(--grid-goal-width, 80px));

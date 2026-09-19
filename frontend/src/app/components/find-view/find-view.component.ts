@@ -518,6 +518,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   // --- Media selection ---
 
   onMediaSelect(id: number): void {
+    this.pickedWhileDone.set(id);
     this.mediaState.selectMedia(id);
   }
 
@@ -558,6 +559,9 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onMediaVoted(event: { id: number; vote: 'good' | 'bad' }): void {
+    // Back to reviewing, so the "all items reviewed" pane is welcome again —
+    // see {@link pickedWhileDone}.
+    this.pickedWhileDone.set(null);
     // A single-item manual vote (big button or hover) verifies the item: it
     // moves out of the left work queue into the right verified pile. Mirror
     // the server's mark-verified optimistically so the move feels instant —
@@ -659,6 +663,25 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * un-verifies a row and puts the user straight back to work. False before a
    * score has landed: that is the placeholder state, not an exhausted one.
    */
+  /**
+   * The item the user picked by hand while the "all items reviewed" pane was
+   * up, or `null`. The pane replaces the viewer, so without this it swallows
+   * every click in the work queue and in the verified piles; an explicit pick
+   * wins over a message about the queue.
+   *
+   * Stored as the id rather than as a flag so it expires on its own — see
+   * `LabelViewComponent.pickedWhileDone`, which is the same mechanism.
+   */
+  private readonly pickedWhileDone = signal<number | null>(null);
+
+  /** {@link queueEmpty}, unless the user has picked an item to look at. Both
+   *  ids being `null` is not a pick: that is the fresh-entry state. */
+  readonly centreExhausted = computed(() => {
+    if (!this.queueEmpty()) return false;
+    const picked = this.pickedWhileDone();
+    return !(picked !== null && this.mediaState.selectedId() === picked);
+  });
+
   readonly queueEmpty = computed(() => {
     const order = this.sortState.sortOrder;
     if (!order || order.length === 0 || this.sortState.threshold == null) return false;

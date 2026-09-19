@@ -42,6 +42,10 @@ export class LabelListComponent {
    * (Browse / Export / To Dataset) act on alongside the shown verified items.
    */
   readonly foldedNote = input<string | null>(null);
+  /** Forwarded to the grid's empty-pile line; '' keeps the grid's own default.
+   *  Find mode overrides it, where an empty pile means "nothing verified yet"
+   *  rather than "no labels yet". */
+  readonly emptyHint = input('');
   readonly medias = input<Media[]>([]);
   readonly clickTimes = input<Record<string, number>>({});
   readonly learnedScores = input<Record<string, number>>({});

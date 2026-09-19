@@ -40,6 +40,37 @@ describe('VoteGridComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  /**
+   * An empty pile is otherwise a heading reading "(0)" over nothing at all, so
+   * a brand-new detector gets no hint that the piles are where labels land
+   * (#4028).
+   */
+  describe('the empty pile (#4028)', () => {
+    it('says how to fill it, phrased for the pile\'s polarity', async () => {
+      await setInputs({ entries: [], label: 'bad' });
+      const line = (fixture.nativeElement as HTMLElement).querySelector('.vote-empty');
+      expect(line).not.toBeNull();
+      expect(line!.textContent).toContain('No bads yet');
+
+      await setInputs({ label: 'good' });
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelector('.vote-empty')!.textContent,
+      ).toContain('No goods yet');
+    });
+
+    it('takes the host\'s wording when one is given', async () => {
+      await setInputs({ entries: [], label: 'good', emptyHint: 'Nothing confirmed good yet.' });
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelector('.vote-empty')!.textContent,
+      ).toContain('Nothing confirmed good yet.');
+    });
+
+    it('is gone the moment the pile has an entry', async () => {
+      await setInputs({ entries: makeEntries(1) });
+      expect((fixture.nativeElement as HTMLElement).querySelector('.vote-empty')).toBeNull();
+    });
+  });
+
   it('renders small piles as a plain grid (no CDK viewport)', async () => {
     await setInputs({ entries: makeEntries(5) });
     const el = fixture.nativeElement as HTMLElement;

@@ -175,6 +175,14 @@
             class="view-controls-slot" />
         </div>
 
+        @if (allLabeled()) {
+          <p
+            class="all-labeled-note"
+            role="status"
+            title="Every item below carries a good or bad label. Undo (Cmd/Ctrl-Z) puts one back."
+          >All labeled &mdash; nothing left to pick.</p>
+        }
+
         <div class="media-list-container">
           <vt-media-list
             [medias]="medias()"

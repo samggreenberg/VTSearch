@@ -28,6 +28,7 @@ import { DatasetsListingsApiService } from '../../services/datasets-listings-api
 import { EmbedderCapabilityService } from '../../services/embedder-capability.service';
 import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
 import { SortMode, SelectMode, SortedItem } from '../../services/sort-state.service';
+import { allItemsLabeled } from '../../utils/all-labeled';
 
 export type { SortMode, SelectMode, SortedItem };
 
@@ -177,6 +178,22 @@ export class LeftPanelComponent implements OnInit {
     const info = this.mediaTypeInfos().find((mt) => mt.type_id === typeId);
     return info?.name ?? typeId.charAt(0).toUpperCase() + typeId.slice(1);
   });
+
+  /**
+   * Every item in the grid below carries a label, so the list has nothing left
+   * to offer. Drives the header chip — the grid itself still shows every item
+   * (with its vote badge), so without a word in the header "there is nothing
+   * left to pick" and "the thing I am looking for is further down" look the
+   * same (#4028).
+   *
+   * Label mode only: under Find the list is a work queue measured by
+   * *verified*, not by good/bad, so the same two sets would read as a
+   * different fact.
+   */
+  readonly allLabeled = computed(
+    () => this.panelMode() === 'label'
+      && allItemsLabeled(this.medias(), this.goodVotes(), this.badVotes()),
+  );
 
   /**
    * Whether the active dataset's embedder can embed text queries.  If the
