@@ -61,8 +61,13 @@ class TestDocumentProfile:
 
     def test_registered_and_listed_for_images(self):
         from vtscore.media import embedders_for_type, get_embedder
+        from vtscore.media.image._structural_shared import _StructuralImageBase
 
-        assert get_embedder("sift_vlad_doc").max_features == 8192
+        registered = get_embedder("sift_vlad_doc")
+        # `get_embedder` is typed to the MediaEmbedder base; `max_features` is a
+        # structural-embedder property, so narrow before reading it.
+        assert isinstance(registered, _StructuralImageBase)
+        assert registered.max_features == 8192
         assert "sift_vlad_doc" in [e.name for e in embedders_for_type("image")]
 
     def test_detection_cap_stays_the_shared_one(self):
@@ -72,6 +77,10 @@ class TestDocumentProfile:
         only and silently leave documents on a stale pairing."""
         from vtscore.config import MAX_STRUCTURAL_DETECT_PIXELS
         from vtscore.media.image.embedder_sift_vlad_doc import ImageSiftVladDocEmbedder
+        from vtscore.media.structural import SiftMatcher
 
         matcher = ImageSiftVladDocEmbedder()._make_matcher()
+        # `_make_matcher` is typed to the StructuralMatcher protocol; the cap is
+        # SiftMatcher's own state, so narrow before reading it.
+        assert isinstance(matcher, SiftMatcher)
         assert matcher._max_detect_pixels == MAX_STRUCTURAL_DETECT_PIXELS
