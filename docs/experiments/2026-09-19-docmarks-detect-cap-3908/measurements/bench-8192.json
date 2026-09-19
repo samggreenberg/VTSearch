@@ -1,0 +1,4561 @@
+{
+  "budget": 8192,
+  "parent_rss_mb": 31.2,
+  "arms": [
+    {
+      "cap": 0,
+      "label": "uncapped",
+      "budget": 8192,
+      "peak_rss_mb": 14411.1,
+      "rows": [
+        {
+          "page_id": "ucsf/rnhl0226#0",
+          "mp": 0.13,
+          "detect_ms": 192.8,
+          "keypoints": 295
+        },
+        {
+          "page_id": "ucsf/znfg0227#0",
+          "mp": 1.19,
+          "detect_ms": 264.1,
+          "keypoints": 3195
+        },
+        {
+          "page_id": "tobacco800/ald41a00-ernest",
+          "mp": 1.89,
+          "detect_ms": 533.0,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/cdq65f00",
+          "mp": 1.89,
+          "detect_ms": 308.4,
+          "keypoints": 2612
+        },
+        {
+          "page_id": "tobacco800/dfb44f00-page4_2",
+          "mp": 1.89,
+          "detect_ms": 460.1,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "tobacco800/egg15f00-page2-full_1",
+          "mp": 1.89,
+          "detect_ms": 447.9,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/gsp65f00",
+          "mp": 1.89,
+          "detect_ms": 275.1,
+          "keypoints": 2617
+        },
+        {
+          "page_id": "tobacco800/ixp01f00_1",
+          "mp": 1.89,
+          "detect_ms": 369.6,
+          "keypoints": 5633
+        },
+        {
+          "page_id": "tobacco800/juo75f00_19",
+          "mp": 1.89,
+          "detect_ms": 252.0,
+          "keypoints": 1534
+        },
+        {
+          "page_id": "tobacco800/kef61f00-page2_1",
+          "mp": 1.89,
+          "detect_ms": 450.1,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/mcm24f00_6",
+          "mp": 1.89,
+          "detect_ms": 205.5,
+          "keypoints": 436
+        },
+        {
+          "page_id": "tobacco800/nlu01f00",
+          "mp": 1.89,
+          "detect_ms": 429.4,
+          "keypoints": 7695
+        },
+        {
+          "page_id": "tobacco800/osv63f00_1",
+          "mp": 1.89,
+          "detect_ms": 281.9,
+          "keypoints": 2628
+        },
+        {
+          "page_id": "tobacco800/qit05f00-page2_32",
+          "mp": 1.89,
+          "detect_ms": 211.5,
+          "keypoints": 189
+        },
+        {
+          "page_id": "tobacco800/sfp41a00-page5_4",
+          "mp": 1.89,
+          "detect_ms": 241.1,
+          "keypoints": 355
+        },
+        {
+          "page_id": "tobacco800/tpz83f00",
+          "mp": 1.89,
+          "detect_ms": 463.6,
+          "keypoints": 8165
+        },
+        {
+          "page_id": "tobacco800/wdf61f00-page2_2",
+          "mp": 1.89,
+          "detect_ms": 403.8,
+          "keypoints": 6939
+        },
+        {
+          "page_id": "tobacco800/yyj15f00-page3_5",
+          "mp": 1.89,
+          "detect_ms": 409.7,
+          "keypoints": 6805
+        },
+        {
+          "page_id": "ucsf/tqmd0228#0",
+          "mp": 1.97,
+          "detect_ms": 481.6,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/fhxb0028#0",
+          "mp": 2.01,
+          "detect_ms": 460.8,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/lrww0227#0",
+          "mp": 2.06,
+          "detect_ms": 386.6,
+          "keypoints": 5756
+        },
+        {
+          "page_id": "ucsf/glwk0226#0",
+          "mp": 2.09,
+          "detect_ms": 299.0,
+          "keypoints": 2469
+        },
+        {
+          "page_id": "ucsf/ffjm0426#0",
+          "mp": 2.1,
+          "detect_ms": 520.9,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/fgjp0424#0",
+          "mp": 2.1,
+          "detect_ms": 488.9,
+          "keypoints": 7799
+        },
+        {
+          "page_id": "ucsf/fhmd0433#0",
+          "mp": 2.1,
+          "detect_ms": 277.2,
+          "keypoints": 1022
+        },
+        {
+          "page_id": "ucsf/fjpw0427#0",
+          "mp": 2.1,
+          "detect_ms": 519.1,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "ucsf/flfh0429#0",
+          "mp": 2.1,
+          "detect_ms": 403.7,
+          "keypoints": 4487
+        },
+        {
+          "page_id": "ucsf/fmnh0429#0",
+          "mp": 2.1,
+          "detect_ms": 267.7,
+          "keypoints": 746
+        },
+        {
+          "page_id": "ucsf/gmvp0279#0",
+          "mp": 2.1,
+          "detect_ms": 540.4,
+          "keypoints": 8196
+        },
+        {
+          "page_id": "ucsf/qxgn0226#0",
+          "mp": 2.1,
+          "detect_ms": 404.4,
+          "keypoints": 4564
+        },
+        {
+          "page_id": "ucsf/hngw0217#0",
+          "mp": 2.11,
+          "detect_ms": 485.2,
+          "keypoints": 8194
+        },
+        {
+          "page_id": "ucsf/fjyc0389#0",
+          "mp": 2.11,
+          "detect_ms": 493.4,
+          "keypoints": 8051
+        },
+        {
+          "page_id": "ucsf/jkkv0228#0",
+          "mp": 2.11,
+          "detect_ms": 514.8,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/ffby0251#0",
+          "mp": 2.14,
+          "detect_ms": 244.6,
+          "keypoints": 610
+        },
+        {
+          "page_id": "ucsf/fgcd0351#0",
+          "mp": 2.14,
+          "detect_ms": 262.1,
+          "keypoints": 954
+        },
+        {
+          "page_id": "ucsf/fgyc0255#0",
+          "mp": 2.14,
+          "detect_ms": 318.5,
+          "keypoints": 1847
+        },
+        {
+          "page_id": "ucsf/fhxy0242#0",
+          "mp": 2.14,
+          "detect_ms": 350.4,
+          "keypoints": 3227
+        },
+        {
+          "page_id": "ucsf/fjyh0347#0",
+          "mp": 2.14,
+          "detect_ms": 339.5,
+          "keypoints": 3042
+        },
+        {
+          "page_id": "ucsf/fkny0351#0",
+          "mp": 2.14,
+          "detect_ms": 455.1,
+          "keypoints": 6820
+        },
+        {
+          "page_id": "ucsf/fljf0332#0",
+          "mp": 2.14,
+          "detect_ms": 276.1,
+          "keypoints": 994
+        },
+        {
+          "page_id": "ucsf/fmjm0350#0",
+          "mp": 2.14,
+          "detect_ms": 456.4,
+          "keypoints": 6116
+        },
+        {
+          "page_id": "ucsf/fnhf0362#0",
+          "mp": 2.14,
+          "detect_ms": 326.2,
+          "keypoints": 2587
+        },
+        {
+          "page_id": "ucsf/fmvd0076#0",
+          "mp": 2.14,
+          "detect_ms": 353.7,
+          "keypoints": 3476
+        },
+        {
+          "page_id": "ucsf/fgkf0357#0",
+          "mp": 2.14,
+          "detect_ms": 415.9,
+          "keypoints": 5379
+        },
+        {
+          "page_id": "ucsf/fjlv0248#0",
+          "mp": 2.14,
+          "detect_ms": 262.2,
+          "keypoints": 711
+        },
+        {
+          "page_id": "ucsf/fmdy0312#0",
+          "mp": 2.14,
+          "detect_ms": 468.5,
+          "keypoints": 7513
+        },
+        {
+          "page_id": "ucsf/jtdm0226#0",
+          "mp": 2.14,
+          "detect_ms": 346.6,
+          "keypoints": 3121
+        },
+        {
+          "page_id": "ucsf/ffmv0424#0",
+          "mp": 2.15,
+          "detect_ms": 412.0,
+          "keypoints": 4843
+        },
+        {
+          "page_id": "ucsf/fjgw0420#0",
+          "mp": 2.15,
+          "detect_ms": 440.3,
+          "keypoints": 5688
+        },
+        {
+          "page_id": "ucsf/fmbl0436#0",
+          "mp": 2.15,
+          "detect_ms": 501.8,
+          "keypoints": 8127
+        },
+        {
+          "page_id": "ucsf/ffwj0389#0",
+          "mp": 2.15,
+          "detect_ms": 269.8,
+          "keypoints": 844
+        },
+        {
+          "page_id": "ucsf/fkcj0390#0",
+          "mp": 2.15,
+          "detect_ms": 286.5,
+          "keypoints": 729
+        },
+        {
+          "page_id": "ucsf/ffbm0392#0",
+          "mp": 2.15,
+          "detect_ms": 394.4,
+          "keypoints": 4481
+        },
+        {
+          "page_id": "ucsf/fjck0406#0",
+          "mp": 2.15,
+          "detect_ms": 547.1,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/fnjp0387#0",
+          "mp": 2.15,
+          "detect_ms": 299.2,
+          "keypoints": 1769
+        },
+        {
+          "page_id": "ucsf/hsyb0230#0",
+          "mp": 2.16,
+          "detect_ms": 525.0,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/fhhk0281#0",
+          "mp": 2.17,
+          "detect_ms": 399.2,
+          "keypoints": 4420
+        },
+        {
+          "page_id": "ucsf/fjxn0258#0",
+          "mp": 2.17,
+          "detect_ms": 326.0,
+          "keypoints": 2515
+        },
+        {
+          "page_id": "ucsf/fmwc0266#0",
+          "mp": 2.17,
+          "detect_ms": 339.0,
+          "keypoints": 2334
+        },
+        {
+          "page_id": "ucsf/zqxk0229#0",
+          "mp": 2.18,
+          "detect_ms": 461.0,
+          "keypoints": 6276
+        },
+        {
+          "page_id": "ucsf/zzmm0229#0",
+          "mp": 2.18,
+          "detect_ms": 510.5,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "ucsf/kthf0228#0",
+          "mp": 2.19,
+          "detect_ms": 407.0,
+          "keypoints": 5047
+        },
+        {
+          "page_id": "ucsf/jzwp0228#0",
+          "mp": 2.2,
+          "detect_ms": 463.7,
+          "keypoints": 6213
+        },
+        {
+          "page_id": "ucsf/qylk0230#0",
+          "mp": 2.21,
+          "detect_ms": 511.4,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/xsbd0228#0",
+          "mp": 2.22,
+          "detect_ms": 528.9,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/tzny0227#0",
+          "mp": 2.22,
+          "detect_ms": 521.8,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/lyxf0227#0",
+          "mp": 2.23,
+          "detect_ms": 478.2,
+          "keypoints": 6961
+        },
+        {
+          "page_id": "ucsf/rgwm0227#0",
+          "mp": 2.24,
+          "detect_ms": 404.5,
+          "keypoints": 5145
+        },
+        {
+          "page_id": "ucsf/mfnf0227#0",
+          "mp": 2.25,
+          "detect_ms": 511.9,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/rrfd0227#0",
+          "mp": 2.27,
+          "detect_ms": 341.4,
+          "keypoints": 3370
+        },
+        {
+          "page_id": "ucsf/tzxy0227#0",
+          "mp": 2.28,
+          "detect_ms": 636.4,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/mngw0227#0",
+          "mp": 2.29,
+          "detect_ms": 382.0,
+          "keypoints": 3507
+        },
+        {
+          "page_id": "ucsf/rqmx0227#0",
+          "mp": 2.31,
+          "detect_ms": 479.3,
+          "keypoints": 5528
+        },
+        {
+          "page_id": "ucsf/jhxw0228#0",
+          "mp": 2.36,
+          "detect_ms": 468.0,
+          "keypoints": 6356
+        },
+        {
+          "page_id": "ucsf/kxhk0228#0",
+          "mp": 2.99,
+          "detect_ms": 587.8,
+          "keypoints": 6969
+        },
+        {
+          "page_id": "staver/stampds-00395",
+          "mp": 3.66,
+          "detect_ms": 622.8,
+          "keypoints": 6727
+        },
+        {
+          "page_id": "staver/stampds-00010",
+          "mp": 3.76,
+          "detect_ms": 712.2,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "staver/stampds-00046",
+          "mp": 3.76,
+          "detect_ms": 609.9,
+          "keypoints": 6611
+        },
+        {
+          "page_id": "staver/stampds-00082",
+          "mp": 3.76,
+          "detect_ms": 718.4,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "staver/stampds-00117",
+          "mp": 3.76,
+          "detect_ms": 660.1,
+          "keypoints": 7334
+        },
+        {
+          "page_id": "staver/stampds-00153",
+          "mp": 3.76,
+          "detect_ms": 727.8,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "staver/stampds-00190",
+          "mp": 3.76,
+          "detect_ms": 718.1,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "staver/stampds-00225",
+          "mp": 3.76,
+          "detect_ms": 547.7,
+          "keypoints": 4154
+        },
+        {
+          "page_id": "staver/stampds-00261",
+          "mp": 3.76,
+          "detect_ms": 517.2,
+          "keypoints": 2238
+        },
+        {
+          "page_id": "staver/stampds-00297",
+          "mp": 3.76,
+          "detect_ms": 640.8,
+          "keypoints": 6457
+        },
+        {
+          "page_id": "staver/stampds-00333",
+          "mp": 3.76,
+          "detect_ms": 676.1,
+          "keypoints": 7654
+        },
+        {
+          "page_id": "tobacco800/acr64d00",
+          "mp": 3.96,
+          "detect_ms": 755.4,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/dny38c00_2",
+          "mp": 3.96,
+          "detect_ms": 748.2,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/fsh23c00-page04_1",
+          "mp": 3.96,
+          "detect_ms": 799.8,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/jyf35a00",
+          "mp": 3.96,
+          "detect_ms": 731.3,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "tobacco800/nvz52d00-page02_2",
+          "mp": 3.96,
+          "detect_ms": 566.0,
+          "keypoints": 4208
+        },
+        {
+          "page_id": "tobacco800/pym00d00-page14_14",
+          "mp": 3.96,
+          "detect_ms": 754.6,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "tobacco800/ufw98c00",
+          "mp": 3.96,
+          "detect_ms": 596.7,
+          "keypoints": 4911
+        },
+        {
+          "page_id": "tobacco800/zqr09c00",
+          "mp": 3.96,
+          "detect_ms": 761.5,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/mlk12d00",
+          "mp": 7.56,
+          "detect_ms": 1117.8,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "tobacco800/yum00a00",
+          "mp": 7.87,
+          "detect_ms": 1355.7,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/law8aa00",
+          "mp": 8.13,
+          "detect_ms": 1653.1,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "tobacco800/lpi68d00",
+          "mp": 8.26,
+          "detect_ms": 1561.7,
+          "keypoints": 6957
+        },
+        {
+          "page_id": "tobacco800/rxm78d00-page02_2",
+          "mp": 8.29,
+          "detect_ms": 1428.0,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/kfw39d00",
+          "mp": 8.33,
+          "detect_ms": 1509.3,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/dwr29e00_2",
+          "mp": 8.35,
+          "detect_ms": 1509.7,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/vaw13f00",
+          "mp": 8.38,
+          "detect_ms": 1168.5,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "tobacco800/enk41e00-page2_1",
+          "mp": 8.39,
+          "detect_ms": 1239.3,
+          "keypoints": 8194
+        },
+        {
+          "page_id": "tobacco800/nyk41e00",
+          "mp": 8.41,
+          "detect_ms": 1426.5,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "tobacco800/gpq38e00-page02_1",
+          "mp": 8.44,
+          "detect_ms": 1820.4,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "tobacco800/chw80e00_1",
+          "mp": 8.48,
+          "detect_ms": 1157.4,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "spods/00214",
+          "mp": 8.58,
+          "detect_ms": 1327.5,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00887",
+          "mp": 8.58,
+          "detect_ms": 1359.7,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00112",
+          "mp": 8.59,
+          "detect_ms": 1301.7,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00329",
+          "mp": 8.59,
+          "detect_ms": 1154.3,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00630",
+          "mp": 8.59,
+          "detect_ms": 1426.9,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "spods/00890",
+          "mp": 8.59,
+          "detect_ms": 1479.1,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00345",
+          "mp": 8.59,
+          "detect_ms": 1400.0,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00790",
+          "mp": 8.59,
+          "detect_ms": 1421.7,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00335",
+          "mp": 8.6,
+          "detect_ms": 1333.8,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "spods/00899",
+          "mp": 8.6,
+          "detect_ms": 1420.3,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "spods/00470",
+          "mp": 8.6,
+          "detect_ms": 1320.8,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00256",
+          "mp": 8.6,
+          "detect_ms": 1314.4,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00537",
+          "mp": 8.6,
+          "detect_ms": 1438.8,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00825",
+          "mp": 8.6,
+          "detect_ms": 1390.8,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00095",
+          "mp": 8.61,
+          "detect_ms": 1299.3,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00423",
+          "mp": 8.61,
+          "detect_ms": 1289.4,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00721",
+          "mp": 8.61,
+          "detect_ms": 1360.0,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/01024",
+          "mp": 8.61,
+          "detect_ms": 1347.9,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00176",
+          "mp": 8.61,
+          "detect_ms": 1436.1,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00944",
+          "mp": 8.61,
+          "detect_ms": 1366.6,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "spods/00284",
+          "mp": 8.62,
+          "detect_ms": 1263.2,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00592",
+          "mp": 8.62,
+          "detect_ms": 1357.7,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "spods/00880",
+          "mp": 8.62,
+          "detect_ms": 1267.7,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00437",
+          "mp": 8.62,
+          "detect_ms": 1297.5,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/01015",
+          "mp": 8.62,
+          "detect_ms": 1313.9,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00236",
+          "mp": 8.63,
+          "detect_ms": 1442.7,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "spods/00875",
+          "mp": 8.63,
+          "detect_ms": 1453.7,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00495",
+          "mp": 8.63,
+          "detect_ms": 1307.3,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00686",
+          "mp": 8.63,
+          "detect_ms": 1342.1,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00315",
+          "mp": 8.64,
+          "detect_ms": 1367.8,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/01077",
+          "mp": 8.72,
+          "detect_ms": 1367.1,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/ffjp0274#0",
+          "mp": 37.67,
+          "detect_ms": 6058.2,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/fkmc0281#0",
+          "mp": 37.67,
+          "detect_ms": 6272.8,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/fgpf0266#0",
+          "mp": 37.68,
+          "detect_ms": 6274.2,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/fncl0258#0",
+          "mp": 37.68,
+          "detect_ms": 6159.7,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/fncw0258#0",
+          "mp": 37.68,
+          "detect_ms": 6096.8,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/fhkp0271#0",
+          "mp": 41.0,
+          "detect_ms": 6993.0,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "ucsf/fjcv0273#0",
+          "mp": 41.0,
+          "detect_ms": 6921.9,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/xlfv0233#0",
+          "mp": 43.74,
+          "detect_ms": 7513.7,
+          "keypoints": 8203
+        },
+        {
+          "page_id": "ucsf/sqhw0229#0",
+          "mp": 50.67,
+          "detect_ms": 9260.7,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "ucsf/xrgw0229#0",
+          "mp": 52.56,
+          "detect_ms": 9210.8,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/qnhw0229#0",
+          "mp": 54.22,
+          "detect_ms": 9817.5,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "ucsf/mzgw0229#0",
+          "mp": 57.06,
+          "detect_ms": 10230.7,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/shhw0229#0",
+          "mp": 63.16,
+          "detect_ms": 11283.4,
+          "keypoints": 8193
+        }
+      ],
+      "wall_s": 225.9,
+      "parent_rss_mb": 31.2,
+      "peak_rss_delta_mb": 14379.9
+    },
+    {
+      "cap": 4000000,
+      "label": "4MP",
+      "budget": 8192,
+      "peak_rss_mb": 1111.4,
+      "rows": [
+        {
+          "page_id": "ucsf/rnhl0226#0",
+          "mp": 0.13,
+          "detect_ms": 175.7,
+          "keypoints": 295
+        },
+        {
+          "page_id": "ucsf/znfg0227#0",
+          "mp": 1.19,
+          "detect_ms": 267.2,
+          "keypoints": 3195
+        },
+        {
+          "page_id": "tobacco800/ald41a00-ernest",
+          "mp": 1.89,
+          "detect_ms": 544.5,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/cdq65f00",
+          "mp": 1.89,
+          "detect_ms": 311.8,
+          "keypoints": 2612
+        },
+        {
+          "page_id": "tobacco800/dfb44f00-page4_2",
+          "mp": 1.89,
+          "detect_ms": 485.7,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "tobacco800/egg15f00-page2-full_1",
+          "mp": 1.89,
+          "detect_ms": 456.4,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/gsp65f00",
+          "mp": 1.89,
+          "detect_ms": 278.2,
+          "keypoints": 2617
+        },
+        {
+          "page_id": "tobacco800/ixp01f00_1",
+          "mp": 1.89,
+          "detect_ms": 376.0,
+          "keypoints": 5633
+        },
+        {
+          "page_id": "tobacco800/juo75f00_19",
+          "mp": 1.89,
+          "detect_ms": 265.2,
+          "keypoints": 1534
+        },
+        {
+          "page_id": "tobacco800/kef61f00-page2_1",
+          "mp": 1.89,
+          "detect_ms": 510.7,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/mcm24f00_6",
+          "mp": 1.89,
+          "detect_ms": 230.0,
+          "keypoints": 436
+        },
+        {
+          "page_id": "tobacco800/nlu01f00",
+          "mp": 1.89,
+          "detect_ms": 549.4,
+          "keypoints": 7695
+        },
+        {
+          "page_id": "tobacco800/osv63f00_1",
+          "mp": 1.89,
+          "detect_ms": 325.0,
+          "keypoints": 2628
+        },
+        {
+          "page_id": "tobacco800/qit05f00-page2_32",
+          "mp": 1.89,
+          "detect_ms": 253.9,
+          "keypoints": 189
+        },
+        {
+          "page_id": "tobacco800/sfp41a00-page5_4",
+          "mp": 1.89,
+          "detect_ms": 311.1,
+          "keypoints": 355
+        },
+        {
+          "page_id": "tobacco800/tpz83f00",
+          "mp": 1.89,
+          "detect_ms": 507.0,
+          "keypoints": 8165
+        },
+        {
+          "page_id": "tobacco800/wdf61f00-page2_2",
+          "mp": 1.89,
+          "detect_ms": 439.4,
+          "keypoints": 6939
+        },
+        {
+          "page_id": "tobacco800/yyj15f00-page3_5",
+          "mp": 1.89,
+          "detect_ms": 445.6,
+          "keypoints": 6805
+        },
+        {
+          "page_id": "ucsf/tqmd0228#0",
+          "mp": 1.97,
+          "detect_ms": 556.0,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/fhxb0028#0",
+          "mp": 2.01,
+          "detect_ms": 465.2,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/lrww0227#0",
+          "mp": 2.06,
+          "detect_ms": 395.9,
+          "keypoints": 5756
+        },
+        {
+          "page_id": "ucsf/glwk0226#0",
+          "mp": 2.09,
+          "detect_ms": 309.9,
+          "keypoints": 2469
+        },
+        {
+          "page_id": "ucsf/ffjm0426#0",
+          "mp": 2.1,
+          "detect_ms": 501.0,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/fgjp0424#0",
+          "mp": 2.1,
+          "detect_ms": 511.5,
+          "keypoints": 7799
+        },
+        {
+          "page_id": "ucsf/fhmd0433#0",
+          "mp": 2.1,
+          "detect_ms": 303.7,
+          "keypoints": 1022
+        },
+        {
+          "page_id": "ucsf/fjpw0427#0",
+          "mp": 2.1,
+          "detect_ms": 530.8,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "ucsf/flfh0429#0",
+          "mp": 2.1,
+          "detect_ms": 435.4,
+          "keypoints": 4487
+        },
+        {
+          "page_id": "ucsf/fmnh0429#0",
+          "mp": 2.1,
+          "detect_ms": 286.7,
+          "keypoints": 746
+        },
+        {
+          "page_id": "ucsf/gmvp0279#0",
+          "mp": 2.1,
+          "detect_ms": 518.9,
+          "keypoints": 8196
+        },
+        {
+          "page_id": "ucsf/qxgn0226#0",
+          "mp": 2.1,
+          "detect_ms": 428.6,
+          "keypoints": 4564
+        },
+        {
+          "page_id": "ucsf/hngw0217#0",
+          "mp": 2.11,
+          "detect_ms": 516.8,
+          "keypoints": 8194
+        },
+        {
+          "page_id": "ucsf/fjyc0389#0",
+          "mp": 2.11,
+          "detect_ms": 475.5,
+          "keypoints": 8051
+        },
+        {
+          "page_id": "ucsf/jkkv0228#0",
+          "mp": 2.11,
+          "detect_ms": 515.7,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/ffby0251#0",
+          "mp": 2.14,
+          "detect_ms": 307.4,
+          "keypoints": 610
+        },
+        {
+          "page_id": "ucsf/fgcd0351#0",
+          "mp": 2.14,
+          "detect_ms": 292.5,
+          "keypoints": 954
+        },
+        {
+          "page_id": "ucsf/fgyc0255#0",
+          "mp": 2.14,
+          "detect_ms": 318.0,
+          "keypoints": 1847
+        },
+        {
+          "page_id": "ucsf/fhxy0242#0",
+          "mp": 2.14,
+          "detect_ms": 375.6,
+          "keypoints": 3227
+        },
+        {
+          "page_id": "ucsf/fjyh0347#0",
+          "mp": 2.14,
+          "detect_ms": 376.0,
+          "keypoints": 3042
+        },
+        {
+          "page_id": "ucsf/fkny0351#0",
+          "mp": 2.14,
+          "detect_ms": 496.9,
+          "keypoints": 6820
+        },
+        {
+          "page_id": "ucsf/fljf0332#0",
+          "mp": 2.14,
+          "detect_ms": 302.6,
+          "keypoints": 994
+        },
+        {
+          "page_id": "ucsf/fmjm0350#0",
+          "mp": 2.14,
+          "detect_ms": 436.4,
+          "keypoints": 6116
+        },
+        {
+          "page_id": "ucsf/fnhf0362#0",
+          "mp": 2.14,
+          "detect_ms": 349.5,
+          "keypoints": 2587
+        },
+        {
+          "page_id": "ucsf/fmvd0076#0",
+          "mp": 2.14,
+          "detect_ms": 354.3,
+          "keypoints": 3476
+        },
+        {
+          "page_id": "ucsf/fgkf0357#0",
+          "mp": 2.14,
+          "detect_ms": 405.1,
+          "keypoints": 5379
+        },
+        {
+          "page_id": "ucsf/fjlv0248#0",
+          "mp": 2.14,
+          "detect_ms": 246.7,
+          "keypoints": 711
+        },
+        {
+          "page_id": "ucsf/fmdy0312#0",
+          "mp": 2.14,
+          "detect_ms": 607.7,
+          "keypoints": 7513
+        },
+        {
+          "page_id": "ucsf/jtdm0226#0",
+          "mp": 2.14,
+          "detect_ms": 433.6,
+          "keypoints": 3121
+        },
+        {
+          "page_id": "ucsf/ffmv0424#0",
+          "mp": 2.15,
+          "detect_ms": 428.7,
+          "keypoints": 4843
+        },
+        {
+          "page_id": "ucsf/fjgw0420#0",
+          "mp": 2.15,
+          "detect_ms": 444.2,
+          "keypoints": 5688
+        },
+        {
+          "page_id": "ucsf/fmbl0436#0",
+          "mp": 2.15,
+          "detect_ms": 509.8,
+          "keypoints": 8127
+        },
+        {
+          "page_id": "ucsf/ffwj0389#0",
+          "mp": 2.15,
+          "detect_ms": 273.3,
+          "keypoints": 844
+        },
+        {
+          "page_id": "ucsf/fkcj0390#0",
+          "mp": 2.15,
+          "detect_ms": 330.2,
+          "keypoints": 729
+        },
+        {
+          "page_id": "ucsf/ffbm0392#0",
+          "mp": 2.15,
+          "detect_ms": 459.6,
+          "keypoints": 4481
+        },
+        {
+          "page_id": "ucsf/fjck0406#0",
+          "mp": 2.15,
+          "detect_ms": 630.3,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/fnjp0387#0",
+          "mp": 2.15,
+          "detect_ms": 400.3,
+          "keypoints": 1769
+        },
+        {
+          "page_id": "ucsf/hsyb0230#0",
+          "mp": 2.16,
+          "detect_ms": 637.6,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/fhhk0281#0",
+          "mp": 2.17,
+          "detect_ms": 470.9,
+          "keypoints": 4420
+        },
+        {
+          "page_id": "ucsf/fjxn0258#0",
+          "mp": 2.17,
+          "detect_ms": 418.2,
+          "keypoints": 2515
+        },
+        {
+          "page_id": "ucsf/fmwc0266#0",
+          "mp": 2.17,
+          "detect_ms": 404.1,
+          "keypoints": 2334
+        },
+        {
+          "page_id": "ucsf/zqxk0229#0",
+          "mp": 2.18,
+          "detect_ms": 458.7,
+          "keypoints": 6276
+        },
+        {
+          "page_id": "ucsf/zzmm0229#0",
+          "mp": 2.18,
+          "detect_ms": 511.5,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "ucsf/kthf0228#0",
+          "mp": 2.19,
+          "detect_ms": 408.0,
+          "keypoints": 5047
+        },
+        {
+          "page_id": "ucsf/jzwp0228#0",
+          "mp": 2.2,
+          "detect_ms": 462.7,
+          "keypoints": 6213
+        },
+        {
+          "page_id": "ucsf/qylk0230#0",
+          "mp": 2.21,
+          "detect_ms": 508.9,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/xsbd0228#0",
+          "mp": 2.22,
+          "detect_ms": 540.2,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/tzny0227#0",
+          "mp": 2.22,
+          "detect_ms": 614.3,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/lyxf0227#0",
+          "mp": 2.23,
+          "detect_ms": 493.8,
+          "keypoints": 6961
+        },
+        {
+          "page_id": "ucsf/rgwm0227#0",
+          "mp": 2.24,
+          "detect_ms": 455.5,
+          "keypoints": 5145
+        },
+        {
+          "page_id": "ucsf/mfnf0227#0",
+          "mp": 2.25,
+          "detect_ms": 587.2,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/rrfd0227#0",
+          "mp": 2.27,
+          "detect_ms": 338.8,
+          "keypoints": 3370
+        },
+        {
+          "page_id": "ucsf/tzxy0227#0",
+          "mp": 2.28,
+          "detect_ms": 603.3,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/mngw0227#0",
+          "mp": 2.29,
+          "detect_ms": 390.4,
+          "keypoints": 3507
+        },
+        {
+          "page_id": "ucsf/rqmx0227#0",
+          "mp": 2.31,
+          "detect_ms": 504.0,
+          "keypoints": 5528
+        },
+        {
+          "page_id": "ucsf/jhxw0228#0",
+          "mp": 2.36,
+          "detect_ms": 500.2,
+          "keypoints": 6356
+        },
+        {
+          "page_id": "ucsf/kxhk0228#0",
+          "mp": 2.99,
+          "detect_ms": 726.4,
+          "keypoints": 6969
+        },
+        {
+          "page_id": "staver/stampds-00395",
+          "mp": 3.66,
+          "detect_ms": 816.1,
+          "keypoints": 6727
+        },
+        {
+          "page_id": "staver/stampds-00010",
+          "mp": 3.76,
+          "detect_ms": 900.1,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "staver/stampds-00046",
+          "mp": 3.76,
+          "detect_ms": 773.1,
+          "keypoints": 6611
+        },
+        {
+          "page_id": "staver/stampds-00082",
+          "mp": 3.76,
+          "detect_ms": 779.6,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "staver/stampds-00117",
+          "mp": 3.76,
+          "detect_ms": 628.8,
+          "keypoints": 7334
+        },
+        {
+          "page_id": "staver/stampds-00153",
+          "mp": 3.76,
+          "detect_ms": 666.5,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "staver/stampds-00190",
+          "mp": 3.76,
+          "detect_ms": 714.7,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "staver/stampds-00225",
+          "mp": 3.76,
+          "detect_ms": 552.7,
+          "keypoints": 4154
+        },
+        {
+          "page_id": "staver/stampds-00261",
+          "mp": 3.76,
+          "detect_ms": 598.9,
+          "keypoints": 2238
+        },
+        {
+          "page_id": "staver/stampds-00297",
+          "mp": 3.76,
+          "detect_ms": 910.5,
+          "keypoints": 6457
+        },
+        {
+          "page_id": "staver/stampds-00333",
+          "mp": 3.76,
+          "detect_ms": 890.9,
+          "keypoints": 7654
+        },
+        {
+          "page_id": "tobacco800/acr64d00",
+          "mp": 3.96,
+          "detect_ms": 941.0,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/dny38c00_2",
+          "mp": 3.96,
+          "detect_ms": 868.4,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/fsh23c00-page04_1",
+          "mp": 3.96,
+          "detect_ms": 811.6,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/jyf35a00",
+          "mp": 3.96,
+          "detect_ms": 748.5,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "tobacco800/nvz52d00-page02_2",
+          "mp": 3.96,
+          "detect_ms": 572.5,
+          "keypoints": 4208
+        },
+        {
+          "page_id": "tobacco800/pym00d00-page14_14",
+          "mp": 3.96,
+          "detect_ms": 750.1,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "tobacco800/ufw98c00",
+          "mp": 3.96,
+          "detect_ms": 675.9,
+          "keypoints": 4911
+        },
+        {
+          "page_id": "tobacco800/zqr09c00",
+          "mp": 3.96,
+          "detect_ms": 824.9,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/mlk12d00",
+          "mp": 7.56,
+          "detect_ms": 823.7,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/yum00a00",
+          "mp": 7.87,
+          "detect_ms": 923.1,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "tobacco800/law8aa00",
+          "mp": 8.13,
+          "detect_ms": 817.1,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/lpi68d00",
+          "mp": 8.26,
+          "detect_ms": 722.0,
+          "keypoints": 7101
+        },
+        {
+          "page_id": "tobacco800/rxm78d00-page02_2",
+          "mp": 8.29,
+          "detect_ms": 783.3,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/kfw39d00",
+          "mp": 8.33,
+          "detect_ms": 771.5,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/dwr29e00_2",
+          "mp": 8.35,
+          "detect_ms": 849.1,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/vaw13f00",
+          "mp": 8.38,
+          "detect_ms": 820.3,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/enk41e00-page2_1",
+          "mp": 8.39,
+          "detect_ms": 745.8,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "tobacco800/nyk41e00",
+          "mp": 8.41,
+          "detect_ms": 742.5,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/gpq38e00-page02_1",
+          "mp": 8.44,
+          "detect_ms": 1001.1,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "tobacco800/chw80e00_1",
+          "mp": 8.48,
+          "detect_ms": 925.1,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00214",
+          "mp": 8.58,
+          "detect_ms": 969.8,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00887",
+          "mp": 8.58,
+          "detect_ms": 727.3,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00112",
+          "mp": 8.59,
+          "detect_ms": 839.9,
+          "keypoints": 7475
+        },
+        {
+          "page_id": "spods/00329",
+          "mp": 8.59,
+          "detect_ms": 860.6,
+          "keypoints": 7845
+        },
+        {
+          "page_id": "spods/00630",
+          "mp": 8.59,
+          "detect_ms": 839.4,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "spods/00890",
+          "mp": 8.59,
+          "detect_ms": 760.2,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00345",
+          "mp": 8.59,
+          "detect_ms": 841.8,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00790",
+          "mp": 8.59,
+          "detect_ms": 734.7,
+          "keypoints": 8194
+        },
+        {
+          "page_id": "spods/00335",
+          "mp": 8.6,
+          "detect_ms": 772.1,
+          "keypoints": 7396
+        },
+        {
+          "page_id": "spods/00899",
+          "mp": 8.6,
+          "detect_ms": 681.7,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00470",
+          "mp": 8.6,
+          "detect_ms": 756.2,
+          "keypoints": 6724
+        },
+        {
+          "page_id": "spods/00256",
+          "mp": 8.6,
+          "detect_ms": 800.7,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00537",
+          "mp": 8.6,
+          "detect_ms": 851.6,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "spods/00825",
+          "mp": 8.6,
+          "detect_ms": 778.1,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00095",
+          "mp": 8.61,
+          "detect_ms": 729.4,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00423",
+          "mp": 8.61,
+          "detect_ms": 708.4,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00721",
+          "mp": 8.61,
+          "detect_ms": 706.6,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "spods/01024",
+          "mp": 8.61,
+          "detect_ms": 861.7,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00176",
+          "mp": 8.61,
+          "detect_ms": 841.9,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00944",
+          "mp": 8.61,
+          "detect_ms": 683.9,
+          "keypoints": 7896
+        },
+        {
+          "page_id": "spods/00284",
+          "mp": 8.62,
+          "detect_ms": 772.4,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00592",
+          "mp": 8.62,
+          "detect_ms": 698.3,
+          "keypoints": 7772
+        },
+        {
+          "page_id": "spods/00880",
+          "mp": 8.62,
+          "detect_ms": 785.7,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00437",
+          "mp": 8.62,
+          "detect_ms": 729.7,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/01015",
+          "mp": 8.62,
+          "detect_ms": 855.3,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00236",
+          "mp": 8.63,
+          "detect_ms": 753.5,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00875",
+          "mp": 8.63,
+          "detect_ms": 680.4,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "spods/00495",
+          "mp": 8.63,
+          "detect_ms": 711.8,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00686",
+          "mp": 8.63,
+          "detect_ms": 835.2,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00315",
+          "mp": 8.64,
+          "detect_ms": 864.4,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/01077",
+          "mp": 8.72,
+          "detect_ms": 598.4,
+          "keypoints": 5539
+        },
+        {
+          "page_id": "ucsf/ffjp0274#0",
+          "mp": 37.67,
+          "detect_ms": 708.4,
+          "keypoints": 5709
+        },
+        {
+          "page_id": "ucsf/fkmc0281#0",
+          "mp": 37.67,
+          "detect_ms": 757.8,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/fgpf0266#0",
+          "mp": 37.68,
+          "detect_ms": 803.8,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "ucsf/fncl0258#0",
+          "mp": 37.68,
+          "detect_ms": 631.2,
+          "keypoints": 4714
+        },
+        {
+          "page_id": "ucsf/fncw0258#0",
+          "mp": 37.68,
+          "detect_ms": 699.1,
+          "keypoints": 6093
+        },
+        {
+          "page_id": "ucsf/fhkp0271#0",
+          "mp": 41.0,
+          "detect_ms": 901.2,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/fjcv0273#0",
+          "mp": 41.0,
+          "detect_ms": 820.4,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/xlfv0233#0",
+          "mp": 43.74,
+          "detect_ms": 884.8,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/sqhw0229#0",
+          "mp": 50.67,
+          "detect_ms": 825.0,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/xrgw0229#0",
+          "mp": 52.56,
+          "detect_ms": 801.8,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/qnhw0229#0",
+          "mp": 54.22,
+          "detect_ms": 817.7,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/mzgw0229#0",
+          "mp": 57.06,
+          "detect_ms": 788.5,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/shhw0229#0",
+          "mp": 63.16,
+          "detect_ms": 766.9,
+          "keypoints": 5619
+        }
+      ],
+      "wall_s": 112.5,
+      "parent_rss_mb": 31.2,
+      "peak_rss_delta_mb": 1080.2
+    },
+    {
+      "cap": 2000000,
+      "label": "2MP",
+      "budget": 8192,
+      "peak_rss_mb": 774.6,
+      "rows": [
+        {
+          "page_id": "ucsf/rnhl0226#0",
+          "mp": 0.13,
+          "detect_ms": 176.5,
+          "keypoints": 295
+        },
+        {
+          "page_id": "ucsf/znfg0227#0",
+          "mp": 1.19,
+          "detect_ms": 275.5,
+          "keypoints": 3195
+        },
+        {
+          "page_id": "tobacco800/ald41a00-ernest",
+          "mp": 1.89,
+          "detect_ms": 549.2,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/cdq65f00",
+          "mp": 1.89,
+          "detect_ms": 361.5,
+          "keypoints": 2612
+        },
+        {
+          "page_id": "tobacco800/dfb44f00-page4_2",
+          "mp": 1.89,
+          "detect_ms": 525.3,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "tobacco800/egg15f00-page2-full_1",
+          "mp": 1.89,
+          "detect_ms": 498.5,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/gsp65f00",
+          "mp": 1.89,
+          "detect_ms": 326.6,
+          "keypoints": 2617
+        },
+        {
+          "page_id": "tobacco800/ixp01f00_1",
+          "mp": 1.89,
+          "detect_ms": 418.7,
+          "keypoints": 5633
+        },
+        {
+          "page_id": "tobacco800/juo75f00_19",
+          "mp": 1.89,
+          "detect_ms": 272.6,
+          "keypoints": 1534
+        },
+        {
+          "page_id": "tobacco800/kef61f00-page2_1",
+          "mp": 1.89,
+          "detect_ms": 486.5,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/mcm24f00_6",
+          "mp": 1.89,
+          "detect_ms": 233.7,
+          "keypoints": 436
+        },
+        {
+          "page_id": "tobacco800/nlu01f00",
+          "mp": 1.89,
+          "detect_ms": 459.8,
+          "keypoints": 7695
+        },
+        {
+          "page_id": "tobacco800/osv63f00_1",
+          "mp": 1.89,
+          "detect_ms": 312.3,
+          "keypoints": 2628
+        },
+        {
+          "page_id": "tobacco800/qit05f00-page2_32",
+          "mp": 1.89,
+          "detect_ms": 228.0,
+          "keypoints": 189
+        },
+        {
+          "page_id": "tobacco800/sfp41a00-page5_4",
+          "mp": 1.89,
+          "detect_ms": 286.1,
+          "keypoints": 355
+        },
+        {
+          "page_id": "tobacco800/tpz83f00",
+          "mp": 1.89,
+          "detect_ms": 511.7,
+          "keypoints": 8165
+        },
+        {
+          "page_id": "tobacco800/wdf61f00-page2_2",
+          "mp": 1.89,
+          "detect_ms": 465.3,
+          "keypoints": 6939
+        },
+        {
+          "page_id": "tobacco800/yyj15f00-page3_5",
+          "mp": 1.89,
+          "detect_ms": 475.0,
+          "keypoints": 6805
+        },
+        {
+          "page_id": "ucsf/tqmd0228#0",
+          "mp": 1.97,
+          "detect_ms": 562.9,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/fhxb0028#0",
+          "mp": 2.01,
+          "detect_ms": 503.6,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/lrww0227#0",
+          "mp": 2.06,
+          "detect_ms": 469.3,
+          "keypoints": 6382
+        },
+        {
+          "page_id": "ucsf/glwk0226#0",
+          "mp": 2.09,
+          "detect_ms": 347.3,
+          "keypoints": 3130
+        },
+        {
+          "page_id": "ucsf/ffjm0426#0",
+          "mp": 2.1,
+          "detect_ms": 497.0,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "ucsf/fgjp0424#0",
+          "mp": 2.1,
+          "detect_ms": 497.1,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/fhmd0433#0",
+          "mp": 2.1,
+          "detect_ms": 278.9,
+          "keypoints": 1149
+        },
+        {
+          "page_id": "ucsf/fjpw0427#0",
+          "mp": 2.1,
+          "detect_ms": 485.5,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/flfh0429#0",
+          "mp": 2.1,
+          "detect_ms": 420.4,
+          "keypoints": 4828
+        },
+        {
+          "page_id": "ucsf/fmnh0429#0",
+          "mp": 2.1,
+          "detect_ms": 271.5,
+          "keypoints": 826
+        },
+        {
+          "page_id": "ucsf/gmvp0279#0",
+          "mp": 2.1,
+          "detect_ms": 511.2,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/qxgn0226#0",
+          "mp": 2.1,
+          "detect_ms": 434.9,
+          "keypoints": 4894
+        },
+        {
+          "page_id": "ucsf/hngw0217#0",
+          "mp": 2.11,
+          "detect_ms": 522.9,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/fjyc0389#0",
+          "mp": 2.11,
+          "detect_ms": 525.6,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/jkkv0228#0",
+          "mp": 2.11,
+          "detect_ms": 538.7,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "ucsf/ffby0251#0",
+          "mp": 2.14,
+          "detect_ms": 252.7,
+          "keypoints": 667
+        },
+        {
+          "page_id": "ucsf/fgcd0351#0",
+          "mp": 2.14,
+          "detect_ms": 277.9,
+          "keypoints": 1001
+        },
+        {
+          "page_id": "ucsf/fgyc0255#0",
+          "mp": 2.14,
+          "detect_ms": 311.4,
+          "keypoints": 1958
+        },
+        {
+          "page_id": "ucsf/fhxy0242#0",
+          "mp": 2.14,
+          "detect_ms": 328.7,
+          "keypoints": 3610
+        },
+        {
+          "page_id": "ucsf/fjyh0347#0",
+          "mp": 2.14,
+          "detect_ms": 342.3,
+          "keypoints": 3807
+        },
+        {
+          "page_id": "ucsf/fkny0351#0",
+          "mp": 2.14,
+          "detect_ms": 449.5,
+          "keypoints": 7848
+        },
+        {
+          "page_id": "ucsf/fljf0332#0",
+          "mp": 2.14,
+          "detect_ms": 245.7,
+          "keypoints": 1022
+        },
+        {
+          "page_id": "ucsf/fmjm0350#0",
+          "mp": 2.14,
+          "detect_ms": 438.6,
+          "keypoints": 7245
+        },
+        {
+          "page_id": "ucsf/fnhf0362#0",
+          "mp": 2.14,
+          "detect_ms": 331.0,
+          "keypoints": 2294
+        },
+        {
+          "page_id": "ucsf/fmvd0076#0",
+          "mp": 2.14,
+          "detect_ms": 400.2,
+          "keypoints": 3712
+        },
+        {
+          "page_id": "ucsf/fgkf0357#0",
+          "mp": 2.14,
+          "detect_ms": 398.6,
+          "keypoints": 6140
+        },
+        {
+          "page_id": "ucsf/fjlv0248#0",
+          "mp": 2.14,
+          "detect_ms": 266.9,
+          "keypoints": 770
+        },
+        {
+          "page_id": "ucsf/fmdy0312#0",
+          "mp": 2.14,
+          "detect_ms": 495.1,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/jtdm0226#0",
+          "mp": 2.14,
+          "detect_ms": 372.9,
+          "keypoints": 3472
+        },
+        {
+          "page_id": "ucsf/ffmv0424#0",
+          "mp": 2.15,
+          "detect_ms": 426.4,
+          "keypoints": 5620
+        },
+        {
+          "page_id": "ucsf/fjgw0420#0",
+          "mp": 2.15,
+          "detect_ms": 469.4,
+          "keypoints": 6450
+        },
+        {
+          "page_id": "ucsf/fmbl0436#0",
+          "mp": 2.15,
+          "detect_ms": 506.8,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/ffwj0389#0",
+          "mp": 2.15,
+          "detect_ms": 241.5,
+          "keypoints": 931
+        },
+        {
+          "page_id": "ucsf/fkcj0390#0",
+          "mp": 2.15,
+          "detect_ms": 236.3,
+          "keypoints": 827
+        },
+        {
+          "page_id": "ucsf/ffbm0392#0",
+          "mp": 2.15,
+          "detect_ms": 371.7,
+          "keypoints": 5255
+        },
+        {
+          "page_id": "ucsf/fjck0406#0",
+          "mp": 2.15,
+          "detect_ms": 525.3,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/fnjp0387#0",
+          "mp": 2.15,
+          "detect_ms": 282.0,
+          "keypoints": 2120
+        },
+        {
+          "page_id": "ucsf/hsyb0230#0",
+          "mp": 2.16,
+          "detect_ms": 500.8,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "ucsf/fhhk0281#0",
+          "mp": 2.17,
+          "detect_ms": 403.6,
+          "keypoints": 4854
+        },
+        {
+          "page_id": "ucsf/fjxn0258#0",
+          "mp": 2.17,
+          "detect_ms": 342.8,
+          "keypoints": 3054
+        },
+        {
+          "page_id": "ucsf/fmwc0266#0",
+          "mp": 2.17,
+          "detect_ms": 306.3,
+          "keypoints": 2760
+        },
+        {
+          "page_id": "ucsf/zqxk0229#0",
+          "mp": 2.18,
+          "detect_ms": 497.1,
+          "keypoints": 6953
+        },
+        {
+          "page_id": "ucsf/zzmm0229#0",
+          "mp": 2.18,
+          "detect_ms": 501.0,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/kthf0228#0",
+          "mp": 2.19,
+          "detect_ms": 402.9,
+          "keypoints": 5568
+        },
+        {
+          "page_id": "ucsf/jzwp0228#0",
+          "mp": 2.2,
+          "detect_ms": 454.7,
+          "keypoints": 6480
+        },
+        {
+          "page_id": "ucsf/qylk0230#0",
+          "mp": 2.21,
+          "detect_ms": 535.5,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "ucsf/xsbd0228#0",
+          "mp": 2.22,
+          "detect_ms": 517.0,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/tzny0227#0",
+          "mp": 2.22,
+          "detect_ms": 517.7,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/lyxf0227#0",
+          "mp": 2.23,
+          "detect_ms": 481.7,
+          "keypoints": 6272
+        },
+        {
+          "page_id": "ucsf/rgwm0227#0",
+          "mp": 2.24,
+          "detect_ms": 419.7,
+          "keypoints": 4619
+        },
+        {
+          "page_id": "ucsf/mfnf0227#0",
+          "mp": 2.25,
+          "detect_ms": 533.6,
+          "keypoints": 7453
+        },
+        {
+          "page_id": "ucsf/rrfd0227#0",
+          "mp": 2.27,
+          "detect_ms": 388.1,
+          "keypoints": 3904
+        },
+        {
+          "page_id": "ucsf/tzxy0227#0",
+          "mp": 2.28,
+          "detect_ms": 615.5,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/mngw0227#0",
+          "mp": 2.29,
+          "detect_ms": 379.6,
+          "keypoints": 3545
+        },
+        {
+          "page_id": "ucsf/rqmx0227#0",
+          "mp": 2.31,
+          "detect_ms": 401.5,
+          "keypoints": 5075
+        },
+        {
+          "page_id": "ucsf/jhxw0228#0",
+          "mp": 2.36,
+          "detect_ms": 395.3,
+          "keypoints": 5722
+        },
+        {
+          "page_id": "ucsf/kxhk0228#0",
+          "mp": 2.99,
+          "detect_ms": 414.8,
+          "keypoints": 6022
+        },
+        {
+          "page_id": "staver/stampds-00395",
+          "mp": 3.66,
+          "detect_ms": 422.8,
+          "keypoints": 4953
+        },
+        {
+          "page_id": "staver/stampds-00010",
+          "mp": 3.76,
+          "detect_ms": 518.8,
+          "keypoints": 7713
+        },
+        {
+          "page_id": "staver/stampds-00046",
+          "mp": 3.76,
+          "detect_ms": 377.0,
+          "keypoints": 4105
+        },
+        {
+          "page_id": "staver/stampds-00082",
+          "mp": 3.76,
+          "detect_ms": 453.7,
+          "keypoints": 6764
+        },
+        {
+          "page_id": "staver/stampds-00117",
+          "mp": 3.76,
+          "detect_ms": 414.0,
+          "keypoints": 4791
+        },
+        {
+          "page_id": "staver/stampds-00153",
+          "mp": 3.76,
+          "detect_ms": 463.2,
+          "keypoints": 7563
+        },
+        {
+          "page_id": "staver/stampds-00190",
+          "mp": 3.76,
+          "detect_ms": 477.6,
+          "keypoints": 7684
+        },
+        {
+          "page_id": "staver/stampds-00225",
+          "mp": 3.76,
+          "detect_ms": 341.2,
+          "keypoints": 2765
+        },
+        {
+          "page_id": "staver/stampds-00261",
+          "mp": 3.76,
+          "detect_ms": 280.2,
+          "keypoints": 2000
+        },
+        {
+          "page_id": "staver/stampds-00297",
+          "mp": 3.76,
+          "detect_ms": 379.6,
+          "keypoints": 4090
+        },
+        {
+          "page_id": "staver/stampds-00333",
+          "mp": 3.76,
+          "detect_ms": 436.4,
+          "keypoints": 5512
+        },
+        {
+          "page_id": "tobacco800/acr64d00",
+          "mp": 3.96,
+          "detect_ms": 551.9,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "tobacco800/dny38c00_2",
+          "mp": 3.96,
+          "detect_ms": 495.0,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "tobacco800/fsh23c00-page04_1",
+          "mp": 3.96,
+          "detect_ms": 515.6,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "tobacco800/jyf35a00",
+          "mp": 3.96,
+          "detect_ms": 496.9,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "tobacco800/nvz52d00-page02_2",
+          "mp": 3.96,
+          "detect_ms": 303.2,
+          "keypoints": 2716
+        },
+        {
+          "page_id": "tobacco800/pym00d00-page14_14",
+          "mp": 3.96,
+          "detect_ms": 455.0,
+          "keypoints": 6681
+        },
+        {
+          "page_id": "tobacco800/ufw98c00",
+          "mp": 3.96,
+          "detect_ms": 359.6,
+          "keypoints": 2783
+        },
+        {
+          "page_id": "tobacco800/zqr09c00",
+          "mp": 3.96,
+          "detect_ms": 529.8,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/mlk12d00",
+          "mp": 7.56,
+          "detect_ms": 515.6,
+          "keypoints": 7061
+        },
+        {
+          "page_id": "tobacco800/yum00a00",
+          "mp": 7.87,
+          "detect_ms": 574.1,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/law8aa00",
+          "mp": 8.13,
+          "detect_ms": 541.3,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/lpi68d00",
+          "mp": 8.26,
+          "detect_ms": 429.5,
+          "keypoints": 4378
+        },
+        {
+          "page_id": "tobacco800/rxm78d00-page02_2",
+          "mp": 8.29,
+          "detect_ms": 574.5,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/kfw39d00",
+          "mp": 8.33,
+          "detect_ms": 487.4,
+          "keypoints": 7507
+        },
+        {
+          "page_id": "tobacco800/dwr29e00_2",
+          "mp": 8.35,
+          "detect_ms": 480.8,
+          "keypoints": 6879
+        },
+        {
+          "page_id": "tobacco800/vaw13f00",
+          "mp": 8.38,
+          "detect_ms": 465.4,
+          "keypoints": 7005
+        },
+        {
+          "page_id": "tobacco800/enk41e00-page2_1",
+          "mp": 8.39,
+          "detect_ms": 486.3,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/nyk41e00",
+          "mp": 8.41,
+          "detect_ms": 500.8,
+          "keypoints": 7208
+        },
+        {
+          "page_id": "tobacco800/gpq38e00-page02_1",
+          "mp": 8.44,
+          "detect_ms": 610.7,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/chw80e00_1",
+          "mp": 8.48,
+          "detect_ms": 375.5,
+          "keypoints": 4585
+        },
+        {
+          "page_id": "spods/00214",
+          "mp": 8.58,
+          "detect_ms": 520.5,
+          "keypoints": 7890
+        },
+        {
+          "page_id": "spods/00887",
+          "mp": 8.58,
+          "detect_ms": 432.2,
+          "keypoints": 5579
+        },
+        {
+          "page_id": "spods/00112",
+          "mp": 8.59,
+          "detect_ms": 416.4,
+          "keypoints": 4749
+        },
+        {
+          "page_id": "spods/00329",
+          "mp": 8.59,
+          "detect_ms": 406.5,
+          "keypoints": 4448
+        },
+        {
+          "page_id": "spods/00630",
+          "mp": 8.59,
+          "detect_ms": 496.4,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "spods/00890",
+          "mp": 8.59,
+          "detect_ms": 437.4,
+          "keypoints": 4868
+        },
+        {
+          "page_id": "spods/00345",
+          "mp": 8.59,
+          "detect_ms": 458.6,
+          "keypoints": 5727
+        },
+        {
+          "page_id": "spods/00790",
+          "mp": 8.59,
+          "detect_ms": 430.4,
+          "keypoints": 6634
+        },
+        {
+          "page_id": "spods/00335",
+          "mp": 8.6,
+          "detect_ms": 355.2,
+          "keypoints": 4224
+        },
+        {
+          "page_id": "spods/00899",
+          "mp": 8.6,
+          "detect_ms": 541.2,
+          "keypoints": 7573
+        },
+        {
+          "page_id": "spods/00470",
+          "mp": 8.6,
+          "detect_ms": 369.0,
+          "keypoints": 4194
+        },
+        {
+          "page_id": "spods/00256",
+          "mp": 8.6,
+          "detect_ms": 446.5,
+          "keypoints": 6772
+        },
+        {
+          "page_id": "spods/00537",
+          "mp": 8.6,
+          "detect_ms": 468.5,
+          "keypoints": 7542
+        },
+        {
+          "page_id": "spods/00825",
+          "mp": 8.6,
+          "detect_ms": 484.3,
+          "keypoints": 6897
+        },
+        {
+          "page_id": "spods/00095",
+          "mp": 8.61,
+          "detect_ms": 482.6,
+          "keypoints": 6476
+        },
+        {
+          "page_id": "spods/00423",
+          "mp": 8.61,
+          "detect_ms": 494.8,
+          "keypoints": 7499
+        },
+        {
+          "page_id": "spods/00721",
+          "mp": 8.61,
+          "detect_ms": 444.3,
+          "keypoints": 5336
+        },
+        {
+          "page_id": "spods/01024",
+          "mp": 8.61,
+          "detect_ms": 541.1,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "spods/00176",
+          "mp": 8.61,
+          "detect_ms": 475.1,
+          "keypoints": 7076
+        },
+        {
+          "page_id": "spods/00944",
+          "mp": 8.61,
+          "detect_ms": 362.6,
+          "keypoints": 4792
+        },
+        {
+          "page_id": "spods/00284",
+          "mp": 8.62,
+          "detect_ms": 430.3,
+          "keypoints": 6710
+        },
+        {
+          "page_id": "spods/00592",
+          "mp": 8.62,
+          "detect_ms": 376.8,
+          "keypoints": 4870
+        },
+        {
+          "page_id": "spods/00880",
+          "mp": 8.62,
+          "detect_ms": 427.6,
+          "keypoints": 4924
+        },
+        {
+          "page_id": "spods/00437",
+          "mp": 8.62,
+          "detect_ms": 442.6,
+          "keypoints": 7021
+        },
+        {
+          "page_id": "spods/01015",
+          "mp": 8.62,
+          "detect_ms": 551.9,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/00236",
+          "mp": 8.63,
+          "detect_ms": 463.8,
+          "keypoints": 5766
+        },
+        {
+          "page_id": "spods/00875",
+          "mp": 8.63,
+          "detect_ms": 436.8,
+          "keypoints": 5551
+        },
+        {
+          "page_id": "spods/00495",
+          "mp": 8.63,
+          "detect_ms": 402.0,
+          "keypoints": 5763
+        },
+        {
+          "page_id": "spods/00686",
+          "mp": 8.63,
+          "detect_ms": 480.5,
+          "keypoints": 8011
+        },
+        {
+          "page_id": "spods/00315",
+          "mp": 8.64,
+          "detect_ms": 498.1,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "spods/01077",
+          "mp": 8.72,
+          "detect_ms": 381.1,
+          "keypoints": 3185
+        },
+        {
+          "page_id": "ucsf/ffjp0274#0",
+          "mp": 37.67,
+          "detect_ms": 379.8,
+          "keypoints": 2713
+        },
+        {
+          "page_id": "ucsf/fkmc0281#0",
+          "mp": 37.67,
+          "detect_ms": 542.2,
+          "keypoints": 6297
+        },
+        {
+          "page_id": "ucsf/fgpf0266#0",
+          "mp": 37.68,
+          "detect_ms": 402.4,
+          "keypoints": 4487
+        },
+        {
+          "page_id": "ucsf/fncl0258#0",
+          "mp": 37.68,
+          "detect_ms": 325.0,
+          "keypoints": 2706
+        },
+        {
+          "page_id": "ucsf/fncw0258#0",
+          "mp": 37.68,
+          "detect_ms": 394.4,
+          "keypoints": 3726
+        },
+        {
+          "page_id": "ucsf/fhkp0271#0",
+          "mp": 41.0,
+          "detect_ms": 532.5,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/fjcv0273#0",
+          "mp": 41.0,
+          "detect_ms": 566.2,
+          "keypoints": 8000
+        },
+        {
+          "page_id": "ucsf/xlfv0233#0",
+          "mp": 43.74,
+          "detect_ms": 596.8,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "ucsf/sqhw0229#0",
+          "mp": 50.67,
+          "detect_ms": 535.0,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "ucsf/xrgw0229#0",
+          "mp": 52.56,
+          "detect_ms": 413.9,
+          "keypoints": 4338
+        },
+        {
+          "page_id": "ucsf/qnhw0229#0",
+          "mp": 54.22,
+          "detect_ms": 619.8,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "ucsf/mzgw0229#0",
+          "mp": 57.06,
+          "detect_ms": 539.2,
+          "keypoints": 8193
+        },
+        {
+          "page_id": "ucsf/shhw0229#0",
+          "mp": 63.16,
+          "detect_ms": 390.1,
+          "keypoints": 2896
+        }
+      ],
+      "wall_s": 87.2,
+      "parent_rss_mb": 31.2,
+      "peak_rss_delta_mb": 743.4
+    },
+    {
+      "cap": 1000000,
+      "label": "1MP",
+      "budget": 8192,
+      "peak_rss_mb": 734.4,
+      "rows": [
+        {
+          "page_id": "ucsf/rnhl0226#0",
+          "mp": 0.13,
+          "detect_ms": 176.6,
+          "keypoints": 295
+        },
+        {
+          "page_id": "ucsf/znfg0227#0",
+          "mp": 1.19,
+          "detect_ms": 280.4,
+          "keypoints": 3068
+        },
+        {
+          "page_id": "tobacco800/ald41a00-ernest",
+          "mp": 1.89,
+          "detect_ms": 434.1,
+          "keypoints": 8144
+        },
+        {
+          "page_id": "tobacco800/cdq65f00",
+          "mp": 1.89,
+          "detect_ms": 195.2,
+          "keypoints": 1383
+        },
+        {
+          "page_id": "tobacco800/dfb44f00-page4_2",
+          "mp": 1.89,
+          "detect_ms": 367.2,
+          "keypoints": 7107
+        },
+        {
+          "page_id": "tobacco800/egg15f00-page2-full_1",
+          "mp": 1.89,
+          "detect_ms": 327.8,
+          "keypoints": 5387
+        },
+        {
+          "page_id": "tobacco800/gsp65f00",
+          "mp": 1.89,
+          "detect_ms": 196.5,
+          "keypoints": 1428
+        },
+        {
+          "page_id": "tobacco800/ixp01f00_1",
+          "mp": 1.89,
+          "detect_ms": 237.2,
+          "keypoints": 3230
+        },
+        {
+          "page_id": "tobacco800/juo75f00_19",
+          "mp": 1.89,
+          "detect_ms": 181.8,
+          "keypoints": 1063
+        },
+        {
+          "page_id": "tobacco800/kef61f00-page2_1",
+          "mp": 1.89,
+          "detect_ms": 325.6,
+          "keypoints": 5939
+        },
+        {
+          "page_id": "tobacco800/mcm24f00_6",
+          "mp": 1.89,
+          "detect_ms": 152.3,
+          "keypoints": 465
+        },
+        {
+          "page_id": "tobacco800/nlu01f00",
+          "mp": 1.89,
+          "detect_ms": 283.1,
+          "keypoints": 4343
+        },
+        {
+          "page_id": "tobacco800/osv63f00_1",
+          "mp": 1.89,
+          "detect_ms": 203.7,
+          "keypoints": 1528
+        },
+        {
+          "page_id": "tobacco800/qit05f00-page2_32",
+          "mp": 1.89,
+          "detect_ms": 136.3,
+          "keypoints": 122
+        },
+        {
+          "page_id": "tobacco800/sfp41a00-page5_4",
+          "mp": 1.89,
+          "detect_ms": 165.7,
+          "keypoints": 246
+        },
+        {
+          "page_id": "tobacco800/tpz83f00",
+          "mp": 1.89,
+          "detect_ms": 316.2,
+          "keypoints": 4404
+        },
+        {
+          "page_id": "tobacco800/wdf61f00-page2_2",
+          "mp": 1.89,
+          "detect_ms": 272.9,
+          "keypoints": 3857
+        },
+        {
+          "page_id": "tobacco800/yyj15f00-page3_5",
+          "mp": 1.89,
+          "detect_ms": 282.3,
+          "keypoints": 4156
+        },
+        {
+          "page_id": "ucsf/tqmd0228#0",
+          "mp": 1.97,
+          "detect_ms": 366.7,
+          "keypoints": 6290
+        },
+        {
+          "page_id": "ucsf/fhxb0028#0",
+          "mp": 2.01,
+          "detect_ms": 326.9,
+          "keypoints": 5201
+        },
+        {
+          "page_id": "ucsf/lrww0227#0",
+          "mp": 2.06,
+          "detect_ms": 227.8,
+          "keypoints": 2671
+        },
+        {
+          "page_id": "ucsf/glwk0226#0",
+          "mp": 2.09,
+          "detect_ms": 208.3,
+          "keypoints": 1924
+        },
+        {
+          "page_id": "ucsf/ffjm0426#0",
+          "mp": 2.1,
+          "detect_ms": 323.0,
+          "keypoints": 5189
+        },
+        {
+          "page_id": "ucsf/fgjp0424#0",
+          "mp": 2.1,
+          "detect_ms": 255.7,
+          "keypoints": 3571
+        },
+        {
+          "page_id": "ucsf/fhmd0433#0",
+          "mp": 2.1,
+          "detect_ms": 176.3,
+          "keypoints": 687
+        },
+        {
+          "page_id": "ucsf/fjpw0427#0",
+          "mp": 2.1,
+          "detect_ms": 270.6,
+          "keypoints": 3815
+        },
+        {
+          "page_id": "ucsf/flfh0429#0",
+          "mp": 2.1,
+          "detect_ms": 268.8,
+          "keypoints": 3706
+        },
+        {
+          "page_id": "ucsf/fmnh0429#0",
+          "mp": 2.1,
+          "detect_ms": 146.5,
+          "keypoints": 409
+        },
+        {
+          "page_id": "ucsf/gmvp0279#0",
+          "mp": 2.1,
+          "detect_ms": 371.0,
+          "keypoints": 7375
+        },
+        {
+          "page_id": "ucsf/qxgn0226#0",
+          "mp": 2.1,
+          "detect_ms": 226.7,
+          "keypoints": 2289
+        },
+        {
+          "page_id": "ucsf/hngw0217#0",
+          "mp": 2.11,
+          "detect_ms": 359.5,
+          "keypoints": 6199
+        },
+        {
+          "page_id": "ucsf/fjyc0389#0",
+          "mp": 2.11,
+          "detect_ms": 273.8,
+          "keypoints": 3513
+        },
+        {
+          "page_id": "ucsf/jkkv0228#0",
+          "mp": 2.11,
+          "detect_ms": 383.4,
+          "keypoints": 7289
+        },
+        {
+          "page_id": "ucsf/ffby0251#0",
+          "mp": 2.14,
+          "detect_ms": 162.6,
+          "keypoints": 391
+        },
+        {
+          "page_id": "ucsf/fgcd0351#0",
+          "mp": 2.14,
+          "detect_ms": 166.5,
+          "keypoints": 633
+        },
+        {
+          "page_id": "ucsf/fgyc0255#0",
+          "mp": 2.14,
+          "detect_ms": 172.3,
+          "keypoints": 771
+        },
+        {
+          "page_id": "ucsf/fhxy0242#0",
+          "mp": 2.14,
+          "detect_ms": 190.5,
+          "keypoints": 1445
+        },
+        {
+          "page_id": "ucsf/fjyh0347#0",
+          "mp": 2.14,
+          "detect_ms": 201.2,
+          "keypoints": 1460
+        },
+        {
+          "page_id": "ucsf/fkny0351#0",
+          "mp": 2.14,
+          "detect_ms": 246.3,
+          "keypoints": 2872
+        },
+        {
+          "page_id": "ucsf/fljf0332#0",
+          "mp": 2.14,
+          "detect_ms": 154.2,
+          "keypoints": 625
+        },
+        {
+          "page_id": "ucsf/fmjm0350#0",
+          "mp": 2.14,
+          "detect_ms": 225.6,
+          "keypoints": 2679
+        },
+        {
+          "page_id": "ucsf/fnhf0362#0",
+          "mp": 2.14,
+          "detect_ms": 179.8,
+          "keypoints": 1045
+        },
+        {
+          "page_id": "ucsf/fmvd0076#0",
+          "mp": 2.14,
+          "detect_ms": 188.7,
+          "keypoints": 1497
+        },
+        {
+          "page_id": "ucsf/fgkf0357#0",
+          "mp": 2.14,
+          "detect_ms": 214.4,
+          "keypoints": 2373
+        },
+        {
+          "page_id": "ucsf/fjlv0248#0",
+          "mp": 2.14,
+          "detect_ms": 136.3,
+          "keypoints": 341
+        },
+        {
+          "page_id": "ucsf/fmdy0312#0",
+          "mp": 2.14,
+          "detect_ms": 242.6,
+          "keypoints": 2817
+        },
+        {
+          "page_id": "ucsf/jtdm0226#0",
+          "mp": 2.14,
+          "detect_ms": 170.9,
+          "keypoints": 1397
+        },
+        {
+          "page_id": "ucsf/ffmv0424#0",
+          "mp": 2.15,
+          "detect_ms": 198.3,
+          "keypoints": 1944
+        },
+        {
+          "page_id": "ucsf/fjgw0420#0",
+          "mp": 2.15,
+          "detect_ms": 227.7,
+          "keypoints": 2904
+        },
+        {
+          "page_id": "ucsf/fmbl0436#0",
+          "mp": 2.15,
+          "detect_ms": 258.6,
+          "keypoints": 4087
+        },
+        {
+          "page_id": "ucsf/ffwj0389#0",
+          "mp": 2.15,
+          "detect_ms": 146.8,
+          "keypoints": 511
+        },
+        {
+          "page_id": "ucsf/fkcj0390#0",
+          "mp": 2.15,
+          "detect_ms": 136.0,
+          "keypoints": 416
+        },
+        {
+          "page_id": "ucsf/ffbm0392#0",
+          "mp": 2.15,
+          "detect_ms": 192.4,
+          "keypoints": 2232
+        },
+        {
+          "page_id": "ucsf/fjck0406#0",
+          "mp": 2.15,
+          "detect_ms": 293.1,
+          "keypoints": 4924
+        },
+        {
+          "page_id": "ucsf/fnjp0387#0",
+          "mp": 2.15,
+          "detect_ms": 157.3,
+          "keypoints": 877
+        },
+        {
+          "page_id": "ucsf/hsyb0230#0",
+          "mp": 2.16,
+          "detect_ms": 260.7,
+          "keypoints": 4151
+        },
+        {
+          "page_id": "ucsf/fhhk0281#0",
+          "mp": 2.17,
+          "detect_ms": 204.3,
+          "keypoints": 2189
+        },
+        {
+          "page_id": "ucsf/fjxn0258#0",
+          "mp": 2.17,
+          "detect_ms": 171.8,
+          "keypoints": 1189
+        },
+        {
+          "page_id": "ucsf/fmwc0266#0",
+          "mp": 2.17,
+          "detect_ms": 169.2,
+          "keypoints": 1021
+        },
+        {
+          "page_id": "ucsf/zqxk0229#0",
+          "mp": 2.18,
+          "detect_ms": 221.8,
+          "keypoints": 2459
+        },
+        {
+          "page_id": "ucsf/zzmm0229#0",
+          "mp": 2.18,
+          "detect_ms": 326.2,
+          "keypoints": 5248
+        },
+        {
+          "page_id": "ucsf/kthf0228#0",
+          "mp": 2.19,
+          "detect_ms": 224.4,
+          "keypoints": 2397
+        },
+        {
+          "page_id": "ucsf/jzwp0228#0",
+          "mp": 2.2,
+          "detect_ms": 283.9,
+          "keypoints": 4378
+        },
+        {
+          "page_id": "ucsf/qylk0230#0",
+          "mp": 2.21,
+          "detect_ms": 353.4,
+          "keypoints": 6186
+        },
+        {
+          "page_id": "ucsf/xsbd0228#0",
+          "mp": 2.22,
+          "detect_ms": 358.8,
+          "keypoints": 6841
+        },
+        {
+          "page_id": "ucsf/tzny0227#0",
+          "mp": 2.22,
+          "detect_ms": 324.1,
+          "keypoints": 5445
+        },
+        {
+          "page_id": "ucsf/lyxf0227#0",
+          "mp": 2.23,
+          "detect_ms": 277.7,
+          "keypoints": 3676
+        },
+        {
+          "page_id": "ucsf/rgwm0227#0",
+          "mp": 2.24,
+          "detect_ms": 256.9,
+          "keypoints": 3190
+        },
+        {
+          "page_id": "ucsf/mfnf0227#0",
+          "mp": 2.25,
+          "detect_ms": 288.1,
+          "keypoints": 4181
+        },
+        {
+          "page_id": "ucsf/rrfd0227#0",
+          "mp": 2.27,
+          "detect_ms": 194.4,
+          "keypoints": 1408
+        },
+        {
+          "page_id": "ucsf/tzxy0227#0",
+          "mp": 2.28,
+          "detect_ms": 417.4,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/mngw0227#0",
+          "mp": 2.29,
+          "detect_ms": 181.0,
+          "keypoints": 1476
+        },
+        {
+          "page_id": "ucsf/rqmx0227#0",
+          "mp": 2.31,
+          "detect_ms": 248.8,
+          "keypoints": 3650
+        },
+        {
+          "page_id": "ucsf/jhxw0228#0",
+          "mp": 2.36,
+          "detect_ms": 197.8,
+          "keypoints": 2047
+        },
+        {
+          "page_id": "ucsf/kxhk0228#0",
+          "mp": 2.99,
+          "detect_ms": 215.9,
+          "keypoints": 2676
+        },
+        {
+          "page_id": "staver/stampds-00395",
+          "mp": 3.66,
+          "detect_ms": 209.1,
+          "keypoints": 2221
+        },
+        {
+          "page_id": "staver/stampds-00010",
+          "mp": 3.76,
+          "detect_ms": 261.9,
+          "keypoints": 3815
+        },
+        {
+          "page_id": "staver/stampds-00046",
+          "mp": 3.76,
+          "detect_ms": 190.8,
+          "keypoints": 1949
+        },
+        {
+          "page_id": "staver/stampds-00082",
+          "mp": 3.76,
+          "detect_ms": 235.6,
+          "keypoints": 3154
+        },
+        {
+          "page_id": "staver/stampds-00117",
+          "mp": 3.76,
+          "detect_ms": 217.1,
+          "keypoints": 2377
+        },
+        {
+          "page_id": "staver/stampds-00153",
+          "mp": 3.76,
+          "detect_ms": 246.6,
+          "keypoints": 3588
+        },
+        {
+          "page_id": "staver/stampds-00190",
+          "mp": 3.76,
+          "detect_ms": 261.4,
+          "keypoints": 3656
+        },
+        {
+          "page_id": "staver/stampds-00225",
+          "mp": 3.76,
+          "detect_ms": 192.4,
+          "keypoints": 1161
+        },
+        {
+          "page_id": "staver/stampds-00261",
+          "mp": 3.76,
+          "detect_ms": 175.5,
+          "keypoints": 869
+        },
+        {
+          "page_id": "staver/stampds-00297",
+          "mp": 3.76,
+          "detect_ms": 214.8,
+          "keypoints": 2004
+        },
+        {
+          "page_id": "staver/stampds-00333",
+          "mp": 3.76,
+          "detect_ms": 277.0,
+          "keypoints": 2684
+        },
+        {
+          "page_id": "tobacco800/acr64d00",
+          "mp": 3.96,
+          "detect_ms": 401.0,
+          "keypoints": 7047
+        },
+        {
+          "page_id": "tobacco800/dny38c00_2",
+          "mp": 3.96,
+          "detect_ms": 305.8,
+          "keypoints": 4587
+        },
+        {
+          "page_id": "tobacco800/fsh23c00-page04_1",
+          "mp": 3.96,
+          "detect_ms": 327.2,
+          "keypoints": 5652
+        },
+        {
+          "page_id": "tobacco800/jyf35a00",
+          "mp": 3.96,
+          "detect_ms": 308.6,
+          "keypoints": 4779
+        },
+        {
+          "page_id": "tobacco800/nvz52d00-page02_2",
+          "mp": 3.96,
+          "detect_ms": 162.1,
+          "keypoints": 841
+        },
+        {
+          "page_id": "tobacco800/pym00d00-page14_14",
+          "mp": 3.96,
+          "detect_ms": 231.2,
+          "keypoints": 2422
+        },
+        {
+          "page_id": "tobacco800/ufw98c00",
+          "mp": 3.96,
+          "detect_ms": 192.9,
+          "keypoints": 1220
+        },
+        {
+          "page_id": "tobacco800/zqr09c00",
+          "mp": 3.96,
+          "detect_ms": 290.3,
+          "keypoints": 4249
+        },
+        {
+          "page_id": "tobacco800/mlk12d00",
+          "mp": 7.56,
+          "detect_ms": 228.2,
+          "keypoints": 2673
+        },
+        {
+          "page_id": "tobacco800/yum00a00",
+          "mp": 7.87,
+          "detect_ms": 369.4,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/law8aa00",
+          "mp": 8.13,
+          "detect_ms": 333.0,
+          "keypoints": 5859
+        },
+        {
+          "page_id": "tobacco800/lpi68d00",
+          "mp": 8.26,
+          "detect_ms": 247.8,
+          "keypoints": 2662
+        },
+        {
+          "page_id": "tobacco800/rxm78d00-page02_2",
+          "mp": 8.29,
+          "detect_ms": 325.5,
+          "keypoints": 6003
+        },
+        {
+          "page_id": "tobacco800/kfw39d00",
+          "mp": 8.33,
+          "detect_ms": 280.0,
+          "keypoints": 4246
+        },
+        {
+          "page_id": "tobacco800/dwr29e00_2",
+          "mp": 8.35,
+          "detect_ms": 261.4,
+          "keypoints": 3661
+        },
+        {
+          "page_id": "tobacco800/vaw13f00",
+          "mp": 8.38,
+          "detect_ms": 265.9,
+          "keypoints": 3462
+        },
+        {
+          "page_id": "tobacco800/enk41e00-page2_1",
+          "mp": 8.39,
+          "detect_ms": 317.9,
+          "keypoints": 4607
+        },
+        {
+          "page_id": "tobacco800/nyk41e00",
+          "mp": 8.41,
+          "detect_ms": 271.4,
+          "keypoints": 3431
+        },
+        {
+          "page_id": "tobacco800/gpq38e00-page02_1",
+          "mp": 8.44,
+          "detect_ms": 433.7,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/chw80e00_1",
+          "mp": 8.48,
+          "detect_ms": 207.8,
+          "keypoints": 2375
+        },
+        {
+          "page_id": "spods/00214",
+          "mp": 8.58,
+          "detect_ms": 243.5,
+          "keypoints": 3444
+        },
+        {
+          "page_id": "spods/00887",
+          "mp": 8.58,
+          "detect_ms": 250.9,
+          "keypoints": 2821
+        },
+        {
+          "page_id": "spods/00112",
+          "mp": 8.59,
+          "detect_ms": 203.5,
+          "keypoints": 1914
+        },
+        {
+          "page_id": "spods/00329",
+          "mp": 8.59,
+          "detect_ms": 196.5,
+          "keypoints": 2030
+        },
+        {
+          "page_id": "spods/00630",
+          "mp": 8.59,
+          "detect_ms": 312.7,
+          "keypoints": 5380
+        },
+        {
+          "page_id": "spods/00890",
+          "mp": 8.59,
+          "detect_ms": 248.5,
+          "keypoints": 2826
+        },
+        {
+          "page_id": "spods/00345",
+          "mp": 8.59,
+          "detect_ms": 225.8,
+          "keypoints": 2366
+        },
+        {
+          "page_id": "spods/00790",
+          "mp": 8.59,
+          "detect_ms": 214.0,
+          "keypoints": 2622
+        },
+        {
+          "page_id": "spods/00335",
+          "mp": 8.6,
+          "detect_ms": 214.9,
+          "keypoints": 2012
+        },
+        {
+          "page_id": "spods/00899",
+          "mp": 8.6,
+          "detect_ms": 302.2,
+          "keypoints": 4862
+        },
+        {
+          "page_id": "spods/00470",
+          "mp": 8.6,
+          "detect_ms": 183.9,
+          "keypoints": 1708
+        },
+        {
+          "page_id": "spods/00256",
+          "mp": 8.6,
+          "detect_ms": 231.5,
+          "keypoints": 3130
+        },
+        {
+          "page_id": "spods/00537",
+          "mp": 8.6,
+          "detect_ms": 242.6,
+          "keypoints": 3526
+        },
+        {
+          "page_id": "spods/00825",
+          "mp": 8.6,
+          "detect_ms": 229.3,
+          "keypoints": 3031
+        },
+        {
+          "page_id": "spods/00095",
+          "mp": 8.61,
+          "detect_ms": 240.0,
+          "keypoints": 3097
+        },
+        {
+          "page_id": "spods/00423",
+          "mp": 8.61,
+          "detect_ms": 251.1,
+          "keypoints": 3085
+        },
+        {
+          "page_id": "spods/00721",
+          "mp": 8.61,
+          "detect_ms": 229.6,
+          "keypoints": 2247
+        },
+        {
+          "page_id": "spods/01024",
+          "mp": 8.61,
+          "detect_ms": 301.5,
+          "keypoints": 4365
+        },
+        {
+          "page_id": "spods/00176",
+          "mp": 8.61,
+          "detect_ms": 233.1,
+          "keypoints": 2214
+        },
+        {
+          "page_id": "spods/00944",
+          "mp": 8.61,
+          "detect_ms": 201.1,
+          "keypoints": 1706
+        },
+        {
+          "page_id": "spods/00284",
+          "mp": 8.62,
+          "detect_ms": 215.3,
+          "keypoints": 2762
+        },
+        {
+          "page_id": "spods/00592",
+          "mp": 8.62,
+          "detect_ms": 194.7,
+          "keypoints": 2000
+        },
+        {
+          "page_id": "spods/00880",
+          "mp": 8.62,
+          "detect_ms": 227.0,
+          "keypoints": 2923
+        },
+        {
+          "page_id": "spods/00437",
+          "mp": 8.62,
+          "detect_ms": 241.2,
+          "keypoints": 3130
+        },
+        {
+          "page_id": "spods/01015",
+          "mp": 8.62,
+          "detect_ms": 270.8,
+          "keypoints": 4221
+        },
+        {
+          "page_id": "spods/00236",
+          "mp": 8.63,
+          "detect_ms": 220.3,
+          "keypoints": 2729
+        },
+        {
+          "page_id": "spods/00875",
+          "mp": 8.63,
+          "detect_ms": 237.1,
+          "keypoints": 3086
+        },
+        {
+          "page_id": "spods/00495",
+          "mp": 8.63,
+          "detect_ms": 224.2,
+          "keypoints": 2504
+        },
+        {
+          "page_id": "spods/00686",
+          "mp": 8.63,
+          "detect_ms": 263.3,
+          "keypoints": 3421
+        },
+        {
+          "page_id": "spods/00315",
+          "mp": 8.64,
+          "detect_ms": 293.3,
+          "keypoints": 4390
+        },
+        {
+          "page_id": "spods/01077",
+          "mp": 8.72,
+          "detect_ms": 195.6,
+          "keypoints": 1472
+        },
+        {
+          "page_id": "ucsf/ffjp0274#0",
+          "mp": 37.67,
+          "detect_ms": 208.0,
+          "keypoints": 1159
+        },
+        {
+          "page_id": "ucsf/fkmc0281#0",
+          "mp": 37.67,
+          "detect_ms": 280.0,
+          "keypoints": 3041
+        },
+        {
+          "page_id": "ucsf/fgpf0266#0",
+          "mp": 37.68,
+          "detect_ms": 257.8,
+          "keypoints": 2286
+        },
+        {
+          "page_id": "ucsf/fncl0258#0",
+          "mp": 37.68,
+          "detect_ms": 200.9,
+          "keypoints": 1125
+        },
+        {
+          "page_id": "ucsf/fncw0258#0",
+          "mp": 37.68,
+          "detect_ms": 239.2,
+          "keypoints": 1585
+        },
+        {
+          "page_id": "ucsf/fhkp0271#0",
+          "mp": 41.0,
+          "detect_ms": 283.7,
+          "keypoints": 3551
+        },
+        {
+          "page_id": "ucsf/fjcv0273#0",
+          "mp": 41.0,
+          "detect_ms": 300.1,
+          "keypoints": 3425
+        },
+        {
+          "page_id": "ucsf/xlfv0233#0",
+          "mp": 43.74,
+          "detect_ms": 475.7,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "ucsf/sqhw0229#0",
+          "mp": 50.67,
+          "detect_ms": 432.0,
+          "keypoints": 7091
+        },
+        {
+          "page_id": "ucsf/xrgw0229#0",
+          "mp": 52.56,
+          "detect_ms": 267.2,
+          "keypoints": 2075
+        },
+        {
+          "page_id": "ucsf/qnhw0229#0",
+          "mp": 54.22,
+          "detect_ms": 364.5,
+          "keypoints": 5227
+        },
+        {
+          "page_id": "ucsf/mzgw0229#0",
+          "mp": 57.06,
+          "detect_ms": 355.7,
+          "keypoints": 4269
+        },
+        {
+          "page_id": "ucsf/shhw0229#0",
+          "mp": 63.16,
+          "detect_ms": 226.0,
+          "keypoints": 1291
+        }
+      ],
+      "wall_s": 59.6,
+      "parent_rss_mb": 31.2,
+      "peak_rss_delta_mb": 703.2
+    },
+    {
+      "cap": 500000,
+      "label": "0.5MP",
+      "budget": 8192,
+      "peak_rss_mb": 691.4,
+      "rows": [
+        {
+          "page_id": "ucsf/rnhl0226#0",
+          "mp": 0.13,
+          "detect_ms": 170.9,
+          "keypoints": 295
+        },
+        {
+          "page_id": "ucsf/znfg0227#0",
+          "mp": 1.19,
+          "detect_ms": 131.9,
+          "keypoints": 1282
+        },
+        {
+          "page_id": "tobacco800/ald41a00-ernest",
+          "mp": 1.89,
+          "detect_ms": 192.0,
+          "keypoints": 3592
+        },
+        {
+          "page_id": "tobacco800/cdq65f00",
+          "mp": 1.89,
+          "detect_ms": 115.5,
+          "keypoints": 566
+        },
+        {
+          "page_id": "tobacco800/dfb44f00-page4_2",
+          "mp": 1.89,
+          "detect_ms": 183.2,
+          "keypoints": 3438
+        },
+        {
+          "page_id": "tobacco800/egg15f00-page2-full_1",
+          "mp": 1.89,
+          "detect_ms": 183.7,
+          "keypoints": 2672
+        },
+        {
+          "page_id": "tobacco800/gsp65f00",
+          "mp": 1.89,
+          "detect_ms": 96.8,
+          "keypoints": 709
+        },
+        {
+          "page_id": "tobacco800/ixp01f00_1",
+          "mp": 1.89,
+          "detect_ms": 124.1,
+          "keypoints": 1429
+        },
+        {
+          "page_id": "tobacco800/juo75f00_19",
+          "mp": 1.89,
+          "detect_ms": 92.1,
+          "keypoints": 493
+        },
+        {
+          "page_id": "tobacco800/kef61f00-page2_1",
+          "mp": 1.89,
+          "detect_ms": 178.4,
+          "keypoints": 2975
+        },
+        {
+          "page_id": "tobacco800/mcm24f00_6",
+          "mp": 1.89,
+          "detect_ms": 78.9,
+          "keypoints": 213
+        },
+        {
+          "page_id": "tobacco800/nlu01f00",
+          "mp": 1.89,
+          "detect_ms": 139.8,
+          "keypoints": 1956
+        },
+        {
+          "page_id": "tobacco800/osv63f00_1",
+          "mp": 1.89,
+          "detect_ms": 103.8,
+          "keypoints": 898
+        },
+        {
+          "page_id": "tobacco800/qit05f00-page2_32",
+          "mp": 1.89,
+          "detect_ms": 76.1,
+          "keypoints": 31
+        },
+        {
+          "page_id": "tobacco800/sfp41a00-page5_4",
+          "mp": 1.89,
+          "detect_ms": 101.3,
+          "keypoints": 98
+        },
+        {
+          "page_id": "tobacco800/tpz83f00",
+          "mp": 1.89,
+          "detect_ms": 165.3,
+          "keypoints": 2057
+        },
+        {
+          "page_id": "tobacco800/wdf61f00-page2_2",
+          "mp": 1.89,
+          "detect_ms": 135.7,
+          "keypoints": 1931
+        },
+        {
+          "page_id": "tobacco800/yyj15f00-page3_5",
+          "mp": 1.89,
+          "detect_ms": 128.2,
+          "keypoints": 1752
+        },
+        {
+          "page_id": "ucsf/tqmd0228#0",
+          "mp": 1.97,
+          "detect_ms": 219.7,
+          "keypoints": 3478
+        },
+        {
+          "page_id": "ucsf/fhxb0028#0",
+          "mp": 2.01,
+          "detect_ms": 149.6,
+          "keypoints": 2475
+        },
+        {
+          "page_id": "ucsf/lrww0227#0",
+          "mp": 2.06,
+          "detect_ms": 110.7,
+          "keypoints": 1040
+        },
+        {
+          "page_id": "ucsf/glwk0226#0",
+          "mp": 2.09,
+          "detect_ms": 99.5,
+          "keypoints": 870
+        },
+        {
+          "page_id": "ucsf/ffjm0426#0",
+          "mp": 2.1,
+          "detect_ms": 168.3,
+          "keypoints": 2856
+        },
+        {
+          "page_id": "ucsf/fgjp0424#0",
+          "mp": 2.1,
+          "detect_ms": 143.7,
+          "keypoints": 2053
+        },
+        {
+          "page_id": "ucsf/fhmd0433#0",
+          "mp": 2.1,
+          "detect_ms": 87.2,
+          "keypoints": 382
+        },
+        {
+          "page_id": "ucsf/fjpw0427#0",
+          "mp": 2.1,
+          "detect_ms": 142.5,
+          "keypoints": 2107
+        },
+        {
+          "page_id": "ucsf/flfh0429#0",
+          "mp": 2.1,
+          "detect_ms": 147.2,
+          "keypoints": 2319
+        },
+        {
+          "page_id": "ucsf/fmnh0429#0",
+          "mp": 2.1,
+          "detect_ms": 79.0,
+          "keypoints": 138
+        },
+        {
+          "page_id": "ucsf/gmvp0279#0",
+          "mp": 2.1,
+          "detect_ms": 222.9,
+          "keypoints": 3681
+        },
+        {
+          "page_id": "ucsf/qxgn0226#0",
+          "mp": 2.1,
+          "detect_ms": 92.3,
+          "keypoints": 983
+        },
+        {
+          "page_id": "ucsf/hngw0217#0",
+          "mp": 2.11,
+          "detect_ms": 189.1,
+          "keypoints": 3677
+        },
+        {
+          "page_id": "ucsf/fjyc0389#0",
+          "mp": 2.11,
+          "detect_ms": 131.1,
+          "keypoints": 2069
+        },
+        {
+          "page_id": "ucsf/jkkv0228#0",
+          "mp": 2.11,
+          "detect_ms": 193.4,
+          "keypoints": 3778
+        },
+        {
+          "page_id": "ucsf/ffby0251#0",
+          "mp": 2.14,
+          "detect_ms": 69.8,
+          "keypoints": 204
+        },
+        {
+          "page_id": "ucsf/fgcd0351#0",
+          "mp": 2.14,
+          "detect_ms": 103.1,
+          "keypoints": 400
+        },
+        {
+          "page_id": "ucsf/fgyc0255#0",
+          "mp": 2.14,
+          "detect_ms": 81.0,
+          "keypoints": 410
+        },
+        {
+          "page_id": "ucsf/fhxy0242#0",
+          "mp": 2.14,
+          "detect_ms": 95.3,
+          "keypoints": 780
+        },
+        {
+          "page_id": "ucsf/fjyh0347#0",
+          "mp": 2.14,
+          "detect_ms": 93.5,
+          "keypoints": 737
+        },
+        {
+          "page_id": "ucsf/fkny0351#0",
+          "mp": 2.14,
+          "detect_ms": 112.7,
+          "keypoints": 1648
+        },
+        {
+          "page_id": "ucsf/fljf0332#0",
+          "mp": 2.14,
+          "detect_ms": 72.3,
+          "keypoints": 391
+        },
+        {
+          "page_id": "ucsf/fmjm0350#0",
+          "mp": 2.14,
+          "detect_ms": 108.5,
+          "keypoints": 1385
+        },
+        {
+          "page_id": "ucsf/fnhf0362#0",
+          "mp": 2.14,
+          "detect_ms": 74.4,
+          "keypoints": 517
+        },
+        {
+          "page_id": "ucsf/fmvd0076#0",
+          "mp": 2.14,
+          "detect_ms": 80.8,
+          "keypoints": 674
+        },
+        {
+          "page_id": "ucsf/fgkf0357#0",
+          "mp": 2.14,
+          "detect_ms": 98.1,
+          "keypoints": 1202
+        },
+        {
+          "page_id": "ucsf/fjlv0248#0",
+          "mp": 2.14,
+          "detect_ms": 65.5,
+          "keypoints": 144
+        },
+        {
+          "page_id": "ucsf/fmdy0312#0",
+          "mp": 2.14,
+          "detect_ms": 128.6,
+          "keypoints": 1321
+        },
+        {
+          "page_id": "ucsf/jtdm0226#0",
+          "mp": 2.14,
+          "detect_ms": 82.3,
+          "keypoints": 673
+        },
+        {
+          "page_id": "ucsf/ffmv0424#0",
+          "mp": 2.15,
+          "detect_ms": 93.7,
+          "keypoints": 1045
+        },
+        {
+          "page_id": "ucsf/fjgw0420#0",
+          "mp": 2.15,
+          "detect_ms": 98.9,
+          "keypoints": 1170
+        },
+        {
+          "page_id": "ucsf/fmbl0436#0",
+          "mp": 2.15,
+          "detect_ms": 119.5,
+          "keypoints": 1756
+        },
+        {
+          "page_id": "ucsf/ffwj0389#0",
+          "mp": 2.15,
+          "detect_ms": 70.7,
+          "keypoints": 319
+        },
+        {
+          "page_id": "ucsf/fkcj0390#0",
+          "mp": 2.15,
+          "detect_ms": 71.1,
+          "keypoints": 243
+        },
+        {
+          "page_id": "ucsf/ffbm0392#0",
+          "mp": 2.15,
+          "detect_ms": 96.9,
+          "keypoints": 1090
+        },
+        {
+          "page_id": "ucsf/fjck0406#0",
+          "mp": 2.15,
+          "detect_ms": 146.2,
+          "keypoints": 2404
+        },
+        {
+          "page_id": "ucsf/fnjp0387#0",
+          "mp": 2.15,
+          "detect_ms": 76.1,
+          "keypoints": 416
+        },
+        {
+          "page_id": "ucsf/hsyb0230#0",
+          "mp": 2.16,
+          "detect_ms": 124.5,
+          "keypoints": 1962
+        },
+        {
+          "page_id": "ucsf/fhhk0281#0",
+          "mp": 2.17,
+          "detect_ms": 97.0,
+          "keypoints": 990
+        },
+        {
+          "page_id": "ucsf/fjxn0258#0",
+          "mp": 2.17,
+          "detect_ms": 80.0,
+          "keypoints": 535
+        },
+        {
+          "page_id": "ucsf/fmwc0266#0",
+          "mp": 2.17,
+          "detect_ms": 81.3,
+          "keypoints": 496
+        },
+        {
+          "page_id": "ucsf/zqxk0229#0",
+          "mp": 2.18,
+          "detect_ms": 97.6,
+          "keypoints": 1150
+        },
+        {
+          "page_id": "ucsf/zzmm0229#0",
+          "mp": 2.18,
+          "detect_ms": 137.8,
+          "keypoints": 2420
+        },
+        {
+          "page_id": "ucsf/kthf0228#0",
+          "mp": 2.19,
+          "detect_ms": 103.7,
+          "keypoints": 1195
+        },
+        {
+          "page_id": "ucsf/jzwp0228#0",
+          "mp": 2.2,
+          "detect_ms": 133.0,
+          "keypoints": 2106
+        },
+        {
+          "page_id": "ucsf/qylk0230#0",
+          "mp": 2.21,
+          "detect_ms": 151.7,
+          "keypoints": 3048
+        },
+        {
+          "page_id": "ucsf/xsbd0228#0",
+          "mp": 2.22,
+          "detect_ms": 138.5,
+          "keypoints": 2404
+        },
+        {
+          "page_id": "ucsf/tzny0227#0",
+          "mp": 2.22,
+          "detect_ms": 131.0,
+          "keypoints": 2075
+        },
+        {
+          "page_id": "ucsf/lyxf0227#0",
+          "mp": 2.23,
+          "detect_ms": 115.8,
+          "keypoints": 1628
+        },
+        {
+          "page_id": "ucsf/rgwm0227#0",
+          "mp": 2.24,
+          "detect_ms": 105.9,
+          "keypoints": 1263
+        },
+        {
+          "page_id": "ucsf/mfnf0227#0",
+          "mp": 2.25,
+          "detect_ms": 118.9,
+          "keypoints": 1751
+        },
+        {
+          "page_id": "ucsf/rrfd0227#0",
+          "mp": 2.27,
+          "detect_ms": 87.3,
+          "keypoints": 679
+        },
+        {
+          "page_id": "ucsf/tzxy0227#0",
+          "mp": 2.28,
+          "detect_ms": 186.7,
+          "keypoints": 3943
+        },
+        {
+          "page_id": "ucsf/mngw0227#0",
+          "mp": 2.29,
+          "detect_ms": 85.1,
+          "keypoints": 668
+        },
+        {
+          "page_id": "ucsf/rqmx0227#0",
+          "mp": 2.31,
+          "detect_ms": 106.1,
+          "keypoints": 1373
+        },
+        {
+          "page_id": "ucsf/jhxw0228#0",
+          "mp": 2.36,
+          "detect_ms": 112.1,
+          "keypoints": 1116
+        },
+        {
+          "page_id": "ucsf/kxhk0228#0",
+          "mp": 2.99,
+          "detect_ms": 96.4,
+          "keypoints": 1032
+        },
+        {
+          "page_id": "staver/stampds-00395",
+          "mp": 3.66,
+          "detect_ms": 106.7,
+          "keypoints": 1249
+        },
+        {
+          "page_id": "staver/stampds-00010",
+          "mp": 3.76,
+          "detect_ms": 139.1,
+          "keypoints": 2212
+        },
+        {
+          "page_id": "staver/stampds-00046",
+          "mp": 3.76,
+          "detect_ms": 105.5,
+          "keypoints": 1164
+        },
+        {
+          "page_id": "staver/stampds-00082",
+          "mp": 3.76,
+          "detect_ms": 151.7,
+          "keypoints": 1861
+        },
+        {
+          "page_id": "staver/stampds-00117",
+          "mp": 3.76,
+          "detect_ms": 118.8,
+          "keypoints": 1542
+        },
+        {
+          "page_id": "staver/stampds-00153",
+          "mp": 3.76,
+          "detect_ms": 161.4,
+          "keypoints": 2116
+        },
+        {
+          "page_id": "staver/stampds-00190",
+          "mp": 3.76,
+          "detect_ms": 123.5,
+          "keypoints": 1779
+        },
+        {
+          "page_id": "staver/stampds-00225",
+          "mp": 3.76,
+          "detect_ms": 87.4,
+          "keypoints": 661
+        },
+        {
+          "page_id": "staver/stampds-00261",
+          "mp": 3.76,
+          "detect_ms": 87.3,
+          "keypoints": 595
+        },
+        {
+          "page_id": "staver/stampds-00297",
+          "mp": 3.76,
+          "detect_ms": 106.1,
+          "keypoints": 1254
+        },
+        {
+          "page_id": "staver/stampds-00333",
+          "mp": 3.76,
+          "detect_ms": 120.3,
+          "keypoints": 1560
+        },
+        {
+          "page_id": "tobacco800/acr64d00",
+          "mp": 3.96,
+          "detect_ms": 184.3,
+          "keypoints": 3844
+        },
+        {
+          "page_id": "tobacco800/dny38c00_2",
+          "mp": 3.96,
+          "detect_ms": 149.0,
+          "keypoints": 2505
+        },
+        {
+          "page_id": "tobacco800/fsh23c00-page04_1",
+          "mp": 3.96,
+          "detect_ms": 194.8,
+          "keypoints": 3243
+        },
+        {
+          "page_id": "tobacco800/jyf35a00",
+          "mp": 3.96,
+          "detect_ms": 157.9,
+          "keypoints": 2460
+        },
+        {
+          "page_id": "tobacco800/nvz52d00-page02_2",
+          "mp": 3.96,
+          "detect_ms": 75.8,
+          "keypoints": 396
+        },
+        {
+          "page_id": "tobacco800/pym00d00-page14_14",
+          "mp": 3.96,
+          "detect_ms": 102.0,
+          "keypoints": 1192
+        },
+        {
+          "page_id": "tobacco800/ufw98c00",
+          "mp": 3.96,
+          "detect_ms": 86.8,
+          "keypoints": 700
+        },
+        {
+          "page_id": "tobacco800/zqr09c00",
+          "mp": 3.96,
+          "detect_ms": 131.2,
+          "keypoints": 2211
+        },
+        {
+          "page_id": "tobacco800/mlk12d00",
+          "mp": 7.56,
+          "detect_ms": 115.0,
+          "keypoints": 1326
+        },
+        {
+          "page_id": "tobacco800/yum00a00",
+          "mp": 7.87,
+          "detect_ms": 200.9,
+          "keypoints": 4000
+        },
+        {
+          "page_id": "tobacco800/law8aa00",
+          "mp": 8.13,
+          "detect_ms": 162.4,
+          "keypoints": 2728
+        },
+        {
+          "page_id": "tobacco800/lpi68d00",
+          "mp": 8.26,
+          "detect_ms": 120.2,
+          "keypoints": 1173
+        },
+        {
+          "page_id": "tobacco800/rxm78d00-page02_2",
+          "mp": 8.29,
+          "detect_ms": 151.5,
+          "keypoints": 2536
+        },
+        {
+          "page_id": "tobacco800/kfw39d00",
+          "mp": 8.33,
+          "detect_ms": 125.7,
+          "keypoints": 1832
+        },
+        {
+          "page_id": "tobacco800/dwr29e00_2",
+          "mp": 8.35,
+          "detect_ms": 111.7,
+          "keypoints": 1504
+        },
+        {
+          "page_id": "tobacco800/vaw13f00",
+          "mp": 8.38,
+          "detect_ms": 129.3,
+          "keypoints": 1545
+        },
+        {
+          "page_id": "tobacco800/enk41e00-page2_1",
+          "mp": 8.39,
+          "detect_ms": 149.3,
+          "keypoints": 2540
+        },
+        {
+          "page_id": "tobacco800/nyk41e00",
+          "mp": 8.41,
+          "detect_ms": 126.9,
+          "keypoints": 1919
+        },
+        {
+          "page_id": "tobacco800/gpq38e00-page02_1",
+          "mp": 8.44,
+          "detect_ms": 337.0,
+          "keypoints": 8192
+        },
+        {
+          "page_id": "tobacco800/chw80e00_1",
+          "mp": 8.48,
+          "detect_ms": 101.1,
+          "keypoints": 1008
+        },
+        {
+          "page_id": "spods/00214",
+          "mp": 8.58,
+          "detect_ms": 133.9,
+          "keypoints": 1555
+        },
+        {
+          "page_id": "spods/00887",
+          "mp": 8.58,
+          "detect_ms": 127.3,
+          "keypoints": 1641
+        },
+        {
+          "page_id": "spods/00112",
+          "mp": 8.59,
+          "detect_ms": 100.5,
+          "keypoints": 988
+        },
+        {
+          "page_id": "spods/00329",
+          "mp": 8.59,
+          "detect_ms": 108.5,
+          "keypoints": 1127
+        },
+        {
+          "page_id": "spods/00630",
+          "mp": 8.59,
+          "detect_ms": 154.3,
+          "keypoints": 2320
+        },
+        {
+          "page_id": "spods/00890",
+          "mp": 8.59,
+          "detect_ms": 119.3,
+          "keypoints": 1519
+        },
+        {
+          "page_id": "spods/00345",
+          "mp": 8.59,
+          "detect_ms": 112.6,
+          "keypoints": 1245
+        },
+        {
+          "page_id": "spods/00790",
+          "mp": 8.59,
+          "detect_ms": 111.0,
+          "keypoints": 1291
+        },
+        {
+          "page_id": "spods/00335",
+          "mp": 8.6,
+          "detect_ms": 111.4,
+          "keypoints": 1183
+        },
+        {
+          "page_id": "spods/00899",
+          "mp": 8.6,
+          "detect_ms": 160.9,
+          "keypoints": 2773
+        },
+        {
+          "page_id": "spods/00470",
+          "mp": 8.6,
+          "detect_ms": 97.3,
+          "keypoints": 835
+        },
+        {
+          "page_id": "spods/00256",
+          "mp": 8.6,
+          "detect_ms": 117.6,
+          "keypoints": 1419
+        },
+        {
+          "page_id": "spods/00537",
+          "mp": 8.6,
+          "detect_ms": 124.8,
+          "keypoints": 1593
+        },
+        {
+          "page_id": "spods/00825",
+          "mp": 8.6,
+          "detect_ms": 115.8,
+          "keypoints": 1412
+        },
+        {
+          "page_id": "spods/00095",
+          "mp": 8.61,
+          "detect_ms": 118.7,
+          "keypoints": 1518
+        },
+        {
+          "page_id": "spods/00423",
+          "mp": 8.61,
+          "detect_ms": 131.6,
+          "keypoints": 1896
+        },
+        {
+          "page_id": "spods/00721",
+          "mp": 8.61,
+          "detect_ms": 115.1,
+          "keypoints": 1366
+        },
+        {
+          "page_id": "spods/01024",
+          "mp": 8.61,
+          "detect_ms": 144.8,
+          "keypoints": 2244
+        },
+        {
+          "page_id": "spods/00176",
+          "mp": 8.61,
+          "detect_ms": 113.5,
+          "keypoints": 1367
+        },
+        {
+          "page_id": "spods/00944",
+          "mp": 8.61,
+          "detect_ms": 104.9,
+          "keypoints": 896
+        },
+        {
+          "page_id": "spods/00284",
+          "mp": 8.62,
+          "detect_ms": 115.2,
+          "keypoints": 1379
+        },
+        {
+          "page_id": "spods/00592",
+          "mp": 8.62,
+          "detect_ms": 99.6,
+          "keypoints": 940
+        },
+        {
+          "page_id": "spods/00880",
+          "mp": 8.62,
+          "detect_ms": 120.4,
+          "keypoints": 1533
+        },
+        {
+          "page_id": "spods/00437",
+          "mp": 8.62,
+          "detect_ms": 135.5,
+          "keypoints": 1929
+        },
+        {
+          "page_id": "spods/01015",
+          "mp": 8.62,
+          "detect_ms": 139.6,
+          "keypoints": 2146
+        },
+        {
+          "page_id": "spods/00236",
+          "mp": 8.63,
+          "detect_ms": 111.4,
+          "keypoints": 1226
+        },
+        {
+          "page_id": "spods/00875",
+          "mp": 8.63,
+          "detect_ms": 124.1,
+          "keypoints": 1698
+        },
+        {
+          "page_id": "spods/00495",
+          "mp": 8.63,
+          "detect_ms": 113.9,
+          "keypoints": 1352
+        },
+        {
+          "page_id": "spods/00686",
+          "mp": 8.63,
+          "detect_ms": 132.0,
+          "keypoints": 1788
+        },
+        {
+          "page_id": "spods/00315",
+          "mp": 8.64,
+          "detect_ms": 144.3,
+          "keypoints": 2292
+        },
+        {
+          "page_id": "spods/01077",
+          "mp": 8.72,
+          "detect_ms": 90.7,
+          "keypoints": 643
+        },
+        {
+          "page_id": "ucsf/ffjp0274#0",
+          "mp": 37.67,
+          "detect_ms": 113.3,
+          "keypoints": 546
+        },
+        {
+          "page_id": "ucsf/fkmc0281#0",
+          "mp": 37.67,
+          "detect_ms": 163.5,
+          "keypoints": 1970
+        },
+        {
+          "page_id": "ucsf/fgpf0266#0",
+          "mp": 37.68,
+          "detect_ms": 137.6,
+          "keypoints": 1177
+        },
+        {
+          "page_id": "ucsf/fncl0258#0",
+          "mp": 37.68,
+          "detect_ms": 116.2,
+          "keypoints": 595
+        },
+        {
+          "page_id": "ucsf/fncw0258#0",
+          "mp": 37.68,
+          "detect_ms": 139.6,
+          "keypoints": 857
+        },
+        {
+          "page_id": "ucsf/fhkp0271#0",
+          "mp": 41.0,
+          "detect_ms": 170.5,
+          "keypoints": 1992
+        },
+        {
+          "page_id": "ucsf/fjcv0273#0",
+          "mp": 41.0,
+          "detect_ms": 182.0,
+          "keypoints": 1958
+        },
+        {
+          "page_id": "ucsf/xlfv0233#0",
+          "mp": 43.74,
+          "detect_ms": 271.9,
+          "keypoints": 4901
+        },
+        {
+          "page_id": "ucsf/sqhw0229#0",
+          "mp": 50.67,
+          "detect_ms": 234.7,
+          "keypoints": 4201
+        },
+        {
+          "page_id": "ucsf/xrgw0229#0",
+          "mp": 52.56,
+          "detect_ms": 151.5,
+          "keypoints": 1123
+        },
+        {
+          "page_id": "ucsf/qnhw0229#0",
+          "mp": 54.22,
+          "detect_ms": 207.9,
+          "keypoints": 3147
+        },
+        {
+          "page_id": "ucsf/mzgw0229#0",
+          "mp": 57.06,
+          "detect_ms": 222.0,
+          "keypoints": 2991
+        },
+        {
+          "page_id": "ucsf/shhw0229#0",
+          "mp": 63.16,
+          "detect_ms": 153.6,
+          "keypoints": 804
+        }
+      ],
+      "wall_s": 41.4,
+      "parent_rss_mb": 31.2,
+      "peak_rss_delta_mb": 660.2
+    }
+  ]
+}
