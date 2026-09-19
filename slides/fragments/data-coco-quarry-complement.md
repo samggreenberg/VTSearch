@@ -2,7 +2,7 @@
 
 ![bg fit](figs/dataset-coco-quarry-complement.png)
 
-## Not A,<br>Not Nothing
+## Everything<br>That Isn't
 
 <!-- build: figs/dataset-coco-quarry-complement.build1.png -->
 
