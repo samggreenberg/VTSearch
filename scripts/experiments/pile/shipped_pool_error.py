@@ -62,6 +62,8 @@ import pile_config as pc  # noqa: E402
 #: `--rebank` distils out of it into the committed CSV rather than the analysis
 #: reading it directly.
 BANK = Path("/expscratch/sgreenberg/classes-3588")
+#: #3729's committed record, which holds the stratum manifest `--rebank` reads.
+HUMAN_RECORD = Path(__file__).resolve().parent / "human_record"
 #: The running app's detector store. Two passes (`Backpack`, `Umbrella`) were
 #: finished after the last banking run and exist only here.
 LIVE = Path("/exp/sgreenberg/projects/VTSearch/data/detectors")
@@ -305,10 +307,19 @@ def rebank(out: Path) -> None:
       detector store, which is why both directories are read and the live copy
       wins.
     """
+    # Only `--rebank` reads the bank: the analysis reads the committed CSV this
+    # distils, which is why the deletion (#4001) costs the default path nothing.
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "calibration"))
+    from study_paths import require_study_dir  # noqa: PLC0415
+
+    require_study_dir(BANK, "--rebank")
     pol = json.loads((BANK / "polarity.json").read_text())
     old, new = pol["old"]["detectors"], pol["new"]["detectors"]
     seeded = json.loads((BANK / "seeded.json").read_text())
-    man = {int(r["image_id"]): r for r in csv.DictReader((BANK / "slates/Table_Objects/manifest.csv").open())}
+    man = {
+        int(r["image_id"]): r
+        for r in csv.DictReader((HUMAN_RECORD / "WORK3588__slates__Table_Objects__manifest.csv").open())
+    }
 
     rows, seen = [], set()
     for p in sorted(list(LIVE.glob("*.json")) + list((BANK / "negbank").glob("*.json"))):

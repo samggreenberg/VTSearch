@@ -91,6 +91,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import sys
 from collections import Counter
 from pathlib import Path
 
@@ -507,6 +508,14 @@ def main() -> int:
     ap.add_argument("--out", default="", help="write the measurement as JSON")
     args = ap.parse_args()
 
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "calibration"))
+    from study_paths import require_study_file  # noqa: PLC0415
+
+    # Both defaults lived in the study dir deleted on 2026-09-18 (#4001). They
+    # are derived, so the fix is to re-run what wrote them rather than to find a
+    # copy -- which is what the message says.
+    require_study_file(args.queue, "--queue", "annotation_queue.py")
+    require_study_file(args.controls, "--controls", "make_pass25.py")
     queue = [json.loads(x) for x in Path(args.queue).read_text().splitlines() if x.strip()]
     manifest = json.loads(Path(args.slates).read_text())
     cuts = {cls: float(body["cut"]) for cls, body in manifest.items()}

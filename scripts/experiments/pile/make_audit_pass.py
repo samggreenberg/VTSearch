@@ -26,6 +26,7 @@ import csv
 import json
 import random
 import shutil
+import sys
 from pathlib import Path
 
 import pile_config as pc
@@ -48,6 +49,18 @@ def main() -> int:
     ap.add_argument("--audit-per-class", type=int, default=20, help="unflagged negatives sampled per class")
     ap.add_argument("--seed", type=int, default=20260824)
     args = ap.parse_args()
+
+    # `tri_flags_all.json` and `sheets_neg/` are the two inputs #4003 found to
+    # be unrecoverable: the triage pass's flags and the sheet indexes that map
+    # its coordinates back to image ids. Neither is in the record, and the study
+    # dir that held them was deleted (#4001), so this pass cannot be re-run as
+    # it stands -- which is worth saying at the top rather than three opens in.
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "calibration"))
+    from study_paths import require_study_dir, require_study_file  # noqa: PLC0415
+
+    require_study_file(args.triage, "--triage")
+    require_study_dir(args.sheets, "--sheets")
+    require_study_dir(args.slates, "--slates")
 
     from build_pile import _vg_image_paths  # noqa: PLC0415
 

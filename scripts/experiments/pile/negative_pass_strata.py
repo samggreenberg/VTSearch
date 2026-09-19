@@ -9,10 +9,26 @@ did exactly that.
 
 import csv
 import json
+import sys
 from pathlib import Path
 
+#: #3729's committed record. The stratum manifest is in it; what follows is not.
+HUMAN_RECORD = Path(__file__).resolve().parent / "human_record"
 BANK = Path("/expscratch/sgreenberg/classes-3588")
-man = {int(r["image_id"]): r["stratum"] for r in csv.DictReader((BANK / "slates/Table_Objects/manifest.csv").open())}
+
+man = {
+    int(r["image_id"]): r["stratum"]
+    for r in csv.DictReader((HUMAN_RECORD / "WORK3588__slates__Table_Objects__manifest.csv").open())
+}
+
+# `polarity.json` and the `negbank/` labelsets are NOT in the record, and the
+# study dir that held them was deleted on 2026-09-18 (#4001). The labelsets are
+# the reviewer's own clicks on the negative pass, so this cannot be re-derived
+# from anything committed -- it needs the pass run again.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "calibration"))
+from study_paths import require_study_dir  # noqa: E402
+
+require_study_dir(BANK, "the negative-pass bank")
 POL = json.loads((BANK / "polarity.json").read_text())
 OLD = set(POL["old"]["detectors"])
 

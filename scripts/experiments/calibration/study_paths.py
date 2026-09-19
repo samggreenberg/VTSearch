@@ -17,6 +17,27 @@ import sys
 from pathlib import Path
 
 RECORD = "/expscratch/sgreenberg/keep/deleted-20260918.md"
+_GONE = "was deleted 2026-09-18 (see #4001 and {record})."
+
+
+def require_study_file(path: str | Path, flag: str, produced_by: str = "") -> Path:
+    """Return *path*, or exit naming it, the deletion, and what rebuilds it.
+
+    The file variant of :func:`require_study_dir`, for the derived artefacts the
+    `pile/` readers take as input -- ``annotation_queue.jsonl``, a pass's
+    ``controls.json``.  Those are *regenerable*, and a reader that dies on a
+    missing one should say by what, because re-running the producer is the whole
+    recovery path rather than a consolation.
+    """
+    p = Path(path)
+    if p.is_file():
+        return p
+    how = f"Re-run {produced_by} to rebuild it" if produced_by else "Re-run the study"
+    print(
+        f"{p} does not exist: this study's output {_GONE.format(record=RECORD)}\n{how}, or point {flag} at a copy.",
+        file=sys.stderr,
+    )
+    raise SystemExit(2)
 
 
 def require_study_dir(path: str | Path, flag: str = "--exp") -> Path:
