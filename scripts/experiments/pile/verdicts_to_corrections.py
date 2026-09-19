@@ -11,25 +11,31 @@ reproduce the live file exactly -- 0 rows dropped, 0 changed once the
 `box_space` field and the `claude_triage` -> `human_review` relabel that later
 commits introduced are accounted for.
 
-**What it reproduces today: 872 of the live file's 4,709 rows (2026-09-18).** The
-claim above was true when it was written and is not a claim about the file as it
-now stands. Measured by regenerating and diffing:
+**This script is step 2 of 3, and step 2 alone reproduces 872 of the live file's
+4,709 rows.** That is not a defect in the file; it is what this script covers.
+The full chain is documented in ``pass_verdicts.py``'s usage block, and running
+all three steps reproduces `corrections.json` **exactly** -- 4,709 rows, 0 rows
+only-live, 0 only-new, 0 differing, verified 2026-09-18::
 
-* **3,837 rows are live-only**, every one `human_review` -- #3926's exhaustive
-  annotation pass, which is applied through `load_corrections` + replay and has
-  no declared recipe here;
-* of the 872 rows this recipe does produce, **81 differ from the live copy**: all
-  81 in `rule` text, and 21 of those also in `present`, `source`, `note` and
-  `box_space`, because a later `human_recheck` pass re-asked those pairs and some
-  answers flipped.
+    python pass_verdicts.py --out pass.json
+    python verdicts_to_corrections.py --verdicts "<the three defaults>,pass.json" --out scratch.json
+    python apply_recheck.py --corrections scratch.json
 
-So `corrections.json` is **not** a derived artifact today: it is the accumulated
-product of at least three passes, one of which is described here. Regenerating
-over it would drop 3,837 rows of human work, which is exactly what
-:func:`~pilebuild.corrections.dropped_rows` refuses -- that guard is not a
-backstop for an unlikely mistake, it is the only thing standing between a
-well-intentioned `--out` and the loss of most of the file. Treat a regeneration
-as a way to check this campaign's arithmetic, never as a way to rebuild the file.
+Attribution of the 4,709, so a partial run can be recognised for what it is:
+
+* **791** from the #3156/#3588 two-campaign recipe this script owns;
+* **81** that this script produces and ``apply_recheck.py`` then re-answers (21
+  retired) or stamps with the rule they were given under (60);
+* **3,837** from the #3926/#3940 per-class pass, which reaches this script only
+  as the extra ``--verdicts`` file ``pass_verdicts.py`` writes.
+
+**Running this script alone and reading its output as "the recipe" is the trap**,
+and it is an easy one: this file is named after the output, its docstring opens
+on a near-loss, and nothing composes the three steps. A short regeneration is
+therefore the expected result of a partial run, not evidence that the file is
+unreproducible -- :func:`~pilebuild.corrections.dropped_rows` refuses it, and
+that refusal is the guard working. **Never reach for ``--allow-loss`` to get past
+it**: from step 2 alone it would destroy 3,837 rows of human work.
 
 Keep it that way: an input added to a campaign has to be added here, or the next
 regeneration is a deletion. :func:`~pilebuild.corrections.dropped_rows` refuses
