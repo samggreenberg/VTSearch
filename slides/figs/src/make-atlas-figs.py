@@ -544,6 +544,14 @@ def _wireframe(ax: plt.Axes) -> dict[int, plt.Polygon]:
     return planes
 
 
+#: How much each of the pillar's walls takes out of what is behind it. Low,
+#: because it is paid twice: a sphere inside the pillar is behind one wall and
+#: one beyond it is behind two, so the figure's darkest item keeps (1 - a)^2 of
+#: itself. At a half — the obvious first guess — that is a quarter, and the
+#: items behind the pillar stopped being items.
+PILLAR_ALPHA = 0.26
+
+
 def _tube(ax: plt.Axes, base: np.ndarray, top: np.ndarray, angles: np.ndarray) -> None:
     """The region the detector admits, extruded to the lid of the room."""
     for i in range(len(angles) - 1):
@@ -553,11 +561,11 @@ def _tube(ax: plt.Axes, base: np.ndarray, top: np.ndarray, angles: np.ndarray) -
                 closed=True,
                 facecolor=INTRO.BAND,
                 edgecolor="none",
-                alpha=0.5,
+                alpha=PILLAR_ALPHA,
                 zorder=2,
             )
         )
-    ax.plot(top[:, 0], top[:, 1], color=BLUE, linewidth=1.8, linestyle=(0, (6, 4)), zorder=4)
+    ax.plot(top[:, 0], top[:, 1], color=BLUE, linewidth=2.6, zorder=4)
     for k in range(0, len(angles) - 1, 22):
         ax.plot(*zip(base[k], top[k]), color=BLUE, linewidth=1.2, alpha=0.75, zorder=3)
 
@@ -592,7 +600,7 @@ def _submerged_outline() -> np.ndarray:
     return np.vstack([waterline, silhouette])
 
 
-def _item(ax: plt.Axes, point: np.ndarray, zorder: int, plane: plt.Polygon | None = None) -> None:
+def _item(ax: plt.Axes, point: np.ndarray, zorder: float, plane: plt.Polygon | None = None) -> None:
     """One item: a sphere, half of it under *plane*.
 
     With no plane it is a plain circle — an item in mid-air belongs to neither
@@ -600,32 +608,52 @@ def _item(ax: plt.Axes, point: np.ndarray, zorder: int, plane: plt.Polygon | Non
     sphere at the plane's edge hangs over it with nothing behind its lower
     half. That overhang is the cheapest possible statement that these are
     volumes and the plane is a slice through them.
+
+    The outline is drawn three times, which is one more than looks necessary
+    and one fewer than it takes to get wrong. Black everywhere; then grey over
+    the plane's whole area, which is a region on the page and not a half of the
+    sphere; then black again above the waterline. What survives is a sphere
+    outlined in black where it stands clear and in grey where it is seen
+    through the plane, *including* the rim of one hanging over the plane's edge,
+    which is clear of the plane and so stays black.
     """
     ax.add_patch(plt.Circle(tuple(point), ITEM_R, facecolor="white", edgecolor="none", zorder=zorder))
-    if plane is not None:
-        crescent = plt.Polygon(
-            _submerged_outline() + point, closed=True, facecolor=PLANE_FILL, edgecolor="none", zorder=zorder
-        )
-        ax.add_patch(crescent)
-        crescent.set_clip_path(plane)
-        # The fill alone is a few percent off white and vanishes at slide size;
-        # the waterline is what makes the cut legible from the back of a room.
-        # Clipped too, so the half of a sphere hanging over the plane's edge has
-        # no waterline drawn across it.
-        theta = np.linspace(0, math.pi, 48)
-        water = ax.plot(
-            point[0] + ITEM_R * np.cos(theta),
-            point[1] - WATERLINE_K * ITEM_R * np.sin(theta),
-            color=CELL_LINE,
-            linewidth=1.1,
-            zorder=zorder + 1,
-        )[0]
-        water.set_clip_path(plane)
+    if plane is None:
         ax.add_patch(
-            plt.Circle(tuple(point), ITEM_R, facecolor="none", edgecolor=INK, linewidth=1.7, zorder=zorder + 2)
+            plt.Circle(tuple(point), ITEM_R, facecolor="none", edgecolor=INK, linewidth=1.7, zorder=zorder + 0.3)
         )
         return
-    ax.add_patch(plt.Circle(tuple(point), ITEM_R, facecolor="none", edgecolor=INK, linewidth=1.7, zorder=zorder + 1))
+
+    crescent = plt.Polygon(
+        _submerged_outline() + point, closed=True, facecolor=PLANE_FILL, edgecolor="none", zorder=zorder + 0.05
+    )
+    ax.add_patch(crescent)
+    crescent.set_clip_path(plane)
+    # The fill alone is a few percent off white and vanishes at slide size; the
+    # waterline is what makes the cut legible from the back of a room. Clipped
+    # too, so the half of a sphere hanging over the plane's edge has no
+    # waterline drawn across it.
+    theta = np.linspace(0, math.pi, 48)
+    water = ax.plot(
+        point[0] + ITEM_R * np.cos(theta),
+        point[1] - WATERLINE_K * ITEM_R * np.sin(theta),
+        color=CELL_LINE,
+        linewidth=1.1,
+        zorder=zorder + 0.1,
+    )[0]
+    water.set_clip_path(plane)
+
+    for colour, offset, clip in (
+        (INK, 0.15, None),
+        (OUTLINE_SUNK, 0.2, plane),
+        (INK, 0.3, _above_water(ax, point, ITEM_R * 1.02)),
+    ):
+        ring = plt.Circle(
+            tuple(point), ITEM_R, facecolor="none", edgecolor=colour, linewidth=1.7, zorder=zorder + offset
+        )
+        ax.add_patch(ring)
+        if clip is not None:
+            ring.set_clip_path(clip)
 
 
 #: The closest two items may come on the page — the item diameter plus a little
@@ -644,6 +672,9 @@ EDGE_MARGIN = 0.05
 #: theme's rule that colour means one thing.
 RED_SUNK = "#6f1010"
 GREEN_SUNK = "#07533a"
+#: And the sphere rim, where the plane is over it. Dark grey rather than
+#: black, for the same reason and by the same rule.
+OUTLINE_SUNK = "#5b6472"
 
 
 def _above_water(ax: plt.Axes, point: np.ndarray, reach: float) -> plt.Polygon:
@@ -662,7 +693,7 @@ def _above_water(ax: plt.Axes, point: np.ndarray, reach: float) -> plt.Polygon:
     return patch
 
 
-def _sunk_glyph(ax: plt.Axes, point: np.ndarray, draw, sunk: str) -> None:
+def _sunk_glyph(ax: plt.Axes, point: np.ndarray, draw, sunk: str, zorder: float) -> None:
     """One vote mark, half of it under the plane.
 
     The glyph is drawn by the deck's own `_check` / `_cross`, then duplicated in
@@ -682,8 +713,9 @@ def _sunk_glyph(ax: plt.Axes, point: np.ndarray, draw, sunk: str) -> None:
             linewidth=stroke.get_linewidth(),
             solid_capstyle=stroke.get_solid_capstyle(),
             solid_joinstyle=stroke.get_solid_joinstyle(),
-            zorder=stroke.get_zorder() - 0.5,
+            zorder=zorder,
         )
+        stroke.set_zorder(zorder + 0.1)
         stroke.set_clip_path(surface)
 
 
@@ -737,18 +769,69 @@ def _clear_of_edge(u: float, v: float) -> bool:
     return VOTE_EDGE_MARGIN < u < BOX_U - VOTE_EDGE_MARGIN and VOTE_EDGE_MARGIN < v < BOX_V - VOTE_EDGE_MARGIN
 
 
-def _floor_items(ax: plt.Axes, plane: plt.Polygon) -> None:
+#: Where the items sit in the paint order. Anything the pillar stands in front
+#: of is painted *under* it, which is what makes the blue shading right without
+#: computing any of it: each of the pillar's wall quads is half-transparent, a
+#: point inside the pillar is behind one wall, and a point beyond it is behind
+#: two, so the compositor tints them once and twice on its own. The alternative
+#: — drawing everything on top and tinting by hand — was what made the pillar
+#: look like it stood behind every sphere it should have hidden.
+Z_BEHIND_PILLAR, Z_IN_FRONT, Z_CEILING = 1.0, 6.0, 7.0
+
+
+def _occluded_by_pillar(u: float, v: float, h: float) -> bool:
+    """Whether the pillar stands between this item and the eye.
+
+    The projection is a shear, so "toward the camera" is one fixed direction in
+    the world: the displacement that leaves a point where it is on the page.
+    Walk it from the item and count crossings of the pillar's wall, keeping
+    only those that happen while still inside the room's height — a ray that
+    has already left through the ceiling is not being blocked by anything.
+
+    Ceiling items come out false by construction, which is correct: from up
+    there the walk leaves the room immediately, so nothing is in the way.
+    """
+    toward = np.array([PROJ_V / PROJ_U, -1.0, PROJ_VY])
+    # ((u + a t - CU) / RU)^2 + ((v + b t - CV) / RV)^2 = 1, solved for t.
+    du, dv = (u - CURVE_U) / CURVE_RU, (v - CURVE_V) / CURVE_RV
+    au, av = toward[0] / CURVE_RU, toward[1] / CURVE_RV
+    quad = (au * au + av * av, 2 * (du * au + dv * av), du * du + dv * dv - 1.0)
+    disc = quad[1] ** 2 - 4 * quad[0] * quad[2]
+    if disc < 0:
+        return False
+    root = math.sqrt(disc)
+    return any(
+        t > 1e-9 and 0.0 <= h + toward[2] * t <= BOX_H
+        for t in ((-quad[1] - root) / (2 * quad[0]), (-quad[1] + root) / (2 * quad[0]))
+    )
+
+
+def _painted_back_to_front(points: np.ndarray, base_z: float) -> list[tuple[int, float]]:
+    """Item indices in paint order, far first, with the z-order each gets.
+
+    Two spheres whose circles overlap have to resolve, and the one nearer the
+    eye has to win. In this projection nearer is simply smaller v, so sorting on
+    it is the whole of the depth test.
+    """
+    order = sorted(range(len(points)), key=lambda i: -points[i][1])
+    return [(i, base_z + 0.9 * k / max(len(order) - 1, 1)) for k, i in enumerate(order)]
+
+
+def _floor_items(ax: plt.Axes, plane: plt.Polygon, pillar: bool) -> None:
     """The corpus the votes came from, lying in the floor of the room."""
     floor = _spaced(46, (EDGE_MARGIN, BOX_U - EDGE_MARGIN), (EDGE_MARGIN, BOX_V - EDGE_MARGIN), ITEM_GAP)
     voted = _votes(floor)
-    for index, (u, v) in enumerate(floor):
+    behind = {i for i, (u, v) in enumerate(floor) if _occluded_by_pillar(u, v, 0.0)} if pillar else set()
+    for index, depth_z in _painted_back_to_front(floor, 0.0):
+        u, v = floor[index]
         point = proj(u, v, 0.0)
+        zorder = (Z_BEHIND_PILLAR if index in behind else Z_IN_FRONT) + depth_z
         if voted.get(index) == "good":
-            _sunk_glyph(ax, point, INTRO._check, GREEN_SUNK)
+            _sunk_glyph(ax, point, INTRO._check, GREEN_SUNK, zorder)
         elif voted.get(index) == "bad":
-            _sunk_glyph(ax, point, INTRO._cross, RED_SUNK)
+            _sunk_glyph(ax, point, INTRO._cross, RED_SUNK, zorder)
         else:
-            _item(ax, point, 6, plane)
+            _item(ax, point, zorder, plane)
 
 
 def _depth_stage(stage: int) -> plt.Figure:
@@ -764,17 +847,22 @@ def _depth_stage(stage: int) -> plt.Figure:
     if stage >= 5:
         # The alternative truth: same footprint, but it stops.
         dome = np.array([proj(CURVE_U + CURVE_RU * math.cos(a), CURVE_V, DOME_H * math.sin(a)) for a in angles[:91]])
-        ax.plot(dome[:, 0], dome[:, 1], color=GREEN, linewidth=2.4, linestyle=(0, (7, 5)), zorder=6)
+        # Under the pillar, like anything else standing inside it: the dome is
+        # behind the near wall, so it takes the single tint the wall gives, and
+        # an untinted dome drawn over the glass was the last thing on the page
+        # claiming to be in front of something it is inside.
+        ax.plot(dome[:, 0], dome[:, 1], color=GREEN, linewidth=2.4, linestyle=(0, (7, 5)), zorder=1.95)
     if stage >= 2:
         ax.plot(base[:, 0], base[:, 1], color=BLUE, linewidth=2.6, zorder=5)
 
-    _floor_items(ax, planes[0])
+    _floor_items(ax, planes[0], pillar=stage >= 3)
 
     if stage >= 4:
-        for u, v in _spaced(
+        ceiling = _spaced(
             46, (EDGE_MARGIN, BOX_U - EDGE_MARGIN), (EDGE_MARGIN, BOX_V - EDGE_MARGIN), ITEM_GAP, seed=NEW_SEED
-        ):
-            _item(ax, proj(u, v, NEW_H), 7, planes[1])
+        )
+        for index, depth_z in _painted_back_to_front(ceiling, 0.0):
+            _item(ax, proj(*ceiling[index], NEW_H), Z_CEILING + depth_z, planes[1])
 
     return fig
 
