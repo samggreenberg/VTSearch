@@ -254,6 +254,37 @@ describe('SortRunnerService', () => {
     httpMock.expectNone((req) => req.url.startsWith('/api/coverage-atlas/next'));
   });
 
+  it('peeks the same pick it would select, and selects nothing (#3896)', () => {
+    sortState.setSelectMode('top');
+    sortState.setSortResults(
+      [
+        { id: 1, score: 0.9 },
+        { id: 2, score: 0.8 },
+      ],
+      0.5,
+    );
+
+    // The image prefetch runs off this while the reviewer is still looking at
+    // item 1, so it must answer for the item *after* the one on screen without
+    // moving anybody off it.
+    expect(runner.peekNextMedia(1)).toEqual({ kind: 'media', id: 2 });
+    expect(mediaState.selectedId()).toBeNull();
+
+    runner.autoSelectNext(1);
+    expect(mediaState.selectedId()).toBe(2);
+  });
+
+  it('peeks `diversity` without firing the atlas probe (#3896)', () => {
+    sortState.setSelectMode('new');
+    sortState.setSortResults([{ id: 1, score: 0.9 }], 0.5);
+
+    // A `new`-mode pick is a server round-trip, which a prefetch must not fire:
+    // the probe is what *chooses* the next item, so calling it speculatively
+    // would consume a choice the reviewer has not arrived at yet.
+    expect(runner.peekNextMedia(1)).toEqual({ kind: 'diversity' });
+    httpMock.expectNone((req) => req.url.startsWith('/api/coverage-atlas/next'));
+  });
+
   // --- inclusion ------------------------------------------------------------
 
   it('pushes the inclusion value and re-advances the selection', () => {

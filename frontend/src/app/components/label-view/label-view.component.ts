@@ -36,6 +36,7 @@ import { ResortPromptModalComponent, ResortResult } from '../modals/resort-promp
 import type { LabelingStatusResponse } from '../../generated/api-client/models/labeling-status-response';
 import { snapPanelWidthToGridColumns, iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 import { PanelResizeDirective } from '../../directives/panel-resize.directive';
+import { MediaPrefetchService } from '../../services/media-prefetch.service';
 import { LabelViewPanelStateService } from './label-view-panel-state.service';
 import { buildMediaContextMenuItems } from './media-context-menu-items';
 
@@ -79,6 +80,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  `autoSelectNext` each one ends on. Private — the template's surface is the
    *  one-line handlers below, which forward to it. */
   private readonly sortRunner = inject(SortRunnerService);
+  private readonly mediaPrefetch = inject(MediaPrefetchService);
 
   readonly layoutRef = viewChild.required<ElementRef<HTMLElement>>('layout');
   readonly centerPanel = viewChild(CenterPanelComponent);
@@ -193,6 +195,21 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private pendingSelectOnPairChange = false;
 
   constructor() {
+    // Warm the next review image while the reviewer is looking at this one
+    // (#3896). The fetch used to be issued only once the vote POST had come
+    // back, so its ~300 ms client gap, its transfer and its decode were all
+    // paid with somebody waiting; think time is ~600 ms-2 s of idle network.
+    //
+    // Keyed off the *selection*, not the vote, so the warm starts as soon as an
+    // item is on screen. The prediction can be wrong — a learned re-sort lands,
+    // or the reviewer clicks a different item — and a wrong prediction costs
+    // one unused fetch, never a wrong image: the store hands bytes back only
+    // for the URL they were fetched from.
+    effect(() => {
+      const id = this.mediaState.selectedId();
+      untracked(() => this.warmNextImage(id));
+    });
+
     effect(() => {
       const settings = this.settingsState.settingsSignal();
       if (!settings) return;
@@ -904,6 +921,21 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private mediaDisplayName(id: number): string {
     const m = this.mediaState.getMedia(id);
     return m?.filename || m?.origin_name || `#${id}`;
+  }
+
+  /**
+   * Prefetch the image the auto-advance would land on next (#3896).
+   *
+   * Only for `image` media: the other types paint through their own viewers
+   * (audio waveform, video frame), which this store does not feed. A non-image
+   * selection simply warms nothing.
+   */
+  private warmNextImage(currentId: number | null): void {
+    if (currentId === null) return;
+    const pick = this.sortRunner.peekNextMedia(currentId);
+    if (pick.kind !== 'media') return;
+    if (this.mediaState.getMedia(pick.id)?.media_type !== 'image') return;
+    this.mediaPrefetch.warm(this.activeContext.mediaUrl(`/api/medias/${pick.id}/image`));
   }
 
   onMediaVoted(event: { id: number; vote: 'good' | 'bad' }): void {

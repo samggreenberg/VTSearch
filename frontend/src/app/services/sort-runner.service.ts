@@ -13,7 +13,7 @@ import { SortStateService, SortMode, SelectMode } from './sort-state.service';
 import { SortingApiService } from './sorting-api.service';
 import { ToastService } from './toast.service';
 import { VoteStateService } from './vote-state.service';
-import { autoSelectNext as pickNextMedia } from '../utils/auto-select-next';
+import { autoSelectNext as pickNextMedia, type AutoSelectPick } from '../utils/auto-select-next';
 import type { LearnedSortResponse } from '../generated/api-client/models/learned-sort-response';
 
 /**
@@ -514,8 +514,16 @@ export class SortRunnerService {
    * applying the selection, or firing the coverage-atlas probe the `new` mode
    * asks for.
    */
-  autoSelectNext(excludeId?: number): void {
-    const pick = pickNextMedia({
+  /**
+   * What {@link autoSelectNext} *would* pick, with nothing applied.
+   *
+   * Exists so the image prefetch (#3896) can warm the next item during the
+   * reviewer's think time through the same rule that will later select it —
+   * a second copy of the rule would prefetch the wrong item every time the
+   * two drifted, which is worse than not prefetching at all.
+   */
+  peekNextMedia(excludeId?: number): AutoSelectPick {
+    return pickNextMedia({
       sortOrder: this.sortState.sortOrder,
       selectMode: this.sortState.selectMode,
       acqThreshold: this.sortState.acqThreshold,
@@ -523,6 +531,10 @@ export class SortRunnerService {
       badVotes: this.voteState.badVotes,
       excludeId,
     });
+  }
+
+  autoSelectNext(excludeId?: number): void {
+    const pick = this.peekNextMedia(excludeId);
     if (pick.kind === 'media') {
       this.mediaState.selectMedia(pick.id);
       this.diversityExhausted.set(false);
