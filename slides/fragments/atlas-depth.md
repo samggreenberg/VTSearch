@@ -28,9 +28,12 @@
      is *exactly* constant along every direction that projection does not point
      in. Not an approximation of the model. That **is** the model. -->
 
-<!-- **d** — So when a second collection arrives a long way up a direction
-     nobody ever voted along, every one of those items comes back Good, with
-     ordinary-looking scores and a threshold cut in the ordinary way. Nothing
+<!-- **d** — Now a whole second collection, a long way up a direction nobody
+     ever voted along — not a few odd items, a domain. Watch what the detector
+     does with it. It does not say Good to all of it; it **sorts** it, cleanly,
+     into the ones inside the tube and the ones outside. And every one of those
+     verdicts is a copy, item for item, of a verdict about a different
+     collection. Ordinary scores, an ordinary ranking, an ordinary cut. Nothing
      in the output says the word *extrapolating*. -->
 
 <!-- **e** — And the honest alternative: the concept stops. The dome fits every

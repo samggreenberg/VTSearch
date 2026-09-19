@@ -484,8 +484,14 @@ PROJ_U, PROJ_V, PROJ_VY = 0.93, 0.55, 0.38
 #: about how high is too high, which is the one thing it does not have.
 CURVE_U, CURVE_V, CURVE_RU, CURVE_RV = 5.5, 2.5, 2.05, 1.40
 TUBE_H = BOX_H
-#: How high the second corpus floats, and how high the alternative truth stops.
-NEW_H = 3.55
+#: The second collection lies on the ceiling exactly as the first lies on the
+#: floor — same count, same spread, same relationship to its own plane. It is a
+#: *domain*, not a handful of outliers, and a scatter of a dozen items floating
+#: mid-air said the opposite: that domain shift is a few strange items rather
+#: than a whole collection the detector has never seen.
+NEW_H = BOX_H
+NEW_SEED = 17
+#: How high the alternative truth stops.
 DOME_H = 1.95
 
 
@@ -494,14 +500,14 @@ def proj(u: float, v: float, h: float) -> np.ndarray:
     return np.array([PROJ_X0 + u * PROJ_U + v * PROJ_V, PROJ_Y0 + v * PROJ_VY + h])
 
 
-def _spaced(count: int, ulim: tuple[float, float], vlim: tuple[float, float], gap: float) -> np.ndarray:
+def _spaced(count: int, ulim: tuple[float, float], vlim: tuple[float, float], gap: float, seed: int = 5) -> np.ndarray:
     """Blue-noise-ish floor positions.
 
     Uniform sampling clumps, and on a figure whose subject is *where the items
     are* a clump reads as a cluster that means something. Rejection sampling
     is enough at these counts.
     """
-    rng = np.random.default_rng(5)
+    rng = np.random.default_rng(seed)
     out: list[np.ndarray] = []
     for _ in range(8000):
         if len(out) == count:
@@ -525,15 +531,16 @@ def _wireframe(ax: plt.Axes) -> None:
     scaffolding — its whole job is to say "this is a volume" and then recede.
     """
     corners = {(u, v, h): proj(u * BOX_U, v * BOX_V, h * BOX_H) for u in (0, 1) for v in (0, 1) for h in (0, 1)}
-    ax.add_patch(
-        plt.Polygon(
-            [corners[0, 0, 0], corners[1, 0, 0], corners[1, 1, 0], corners[0, 1, 0]],
-            closed=True,
-            facecolor="#f7f9fb",
-            edgecolor="none",
-            zorder=0,
+    for h in (0, 1):
+        ax.add_patch(
+            plt.Polygon(
+                [corners[0, 0, h], corners[1, 0, h], corners[1, 1, h], corners[0, 1, h]],
+                closed=True,
+                facecolor="#f7f9fb",
+                edgecolor="none",
+                zorder=0,
+            )
         )
-    )
     for a, b in (
         # the floor, then the lid, then the four posts
         ((0, 0, 0), (1, 0, 0)),
@@ -598,7 +605,7 @@ DEPTH_CAPTIONS = {
     1: ("every item you have ever voted on is on this floor", "INK"),
     2: ("the detector, drawn where it cuts", "BLUE"),
     3: ("and it says the same thing at every height", "BLUE"),
-    4: ("so this corpus comes back Good, confidently", "BLUE"),
+    4: ("a whole second collection, sorted by the same cut", "BLUE"),
     5: ("unless the concept stops here, and nothing on the floor says", "GREEN"),
 }
 
@@ -623,7 +630,7 @@ def _depth_stage(stage: int) -> plt.Figure:
     _floor_items(ax)
 
     if stage >= 4:
-        for u, v in _spaced(11, (CURVE_U - 1.8, CURVE_U + 1.8), (CURVE_V - 1.0, CURVE_V + 1.0), 0.70):
+        for u, v in _spaced(46, (0.4, BOX_U - 0.4), (0.4, BOX_V - 0.4), 0.78, seed=NEW_SEED):
             _item(ax, proj(u, v, NEW_H), 7)
 
     text, colour = DEPTH_CAPTIONS[stage]
@@ -650,9 +657,11 @@ def depth_fig() -> None:
     `Linear(D, 1)` and a linear score is *exactly* constant along every
     direction its weight vector does not point in (`vtscore/training/mlp.py`,
     the `LINEAR_SVM_HEAD` sentinel). So the boundary extrudes to a tube, and a
-    second corpus floating a long way up it is scored Good with no hint that
-    anything is being extrapolated. The dashed dome is the alternative the
-    votes cannot rule out — and cannot confirm, which is the point.
+    second collection lying on the ceiling — the same count and spread as the
+    first, because it is a domain and not a handful of outliers — is *sorted*
+    by it, into matches and non-matches, with no hint that anything is being
+    extrapolated. The dashed dome is the alternative the votes cannot rule out
+    — and cannot confirm, which is the point.
 
     The box is the reason this reads at all. The earlier attempt at this slide
     drew the same idea on a sphere and the room had nothing to judge position
