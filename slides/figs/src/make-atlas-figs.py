@@ -52,6 +52,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.path import Path as MplPath
 from sklearn.cluster import KMeans
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -553,7 +554,12 @@ PILLAR_ALPHA = 0.26
 
 
 def _tube(ax: plt.Axes, base: np.ndarray, top: np.ndarray, angles: np.ndarray) -> None:
-    """The region the detector admits, extruded to the lid of the room."""
+    """The pillar's body. Its mouth and its foot are drawn by the caller.
+
+    Both of those lie *in* a plane — the foot in the floor, the mouth in the
+    ceiling — so both have to be painted over the submerged halves of the
+    spheres in that plane, which means waiting until those spheres exist.
+    """
     for i in range(len(angles) - 1):
         ax.add_patch(
             plt.Polygon(
@@ -565,7 +571,6 @@ def _tube(ax: plt.Axes, base: np.ndarray, top: np.ndarray, angles: np.ndarray) -
                 zorder=2,
             )
         )
-    ax.plot(top[:, 0], top[:, 1], color=BLUE, linewidth=2.6, zorder=4)
     for k in range(0, len(angles) - 1, 22):
         ax.plot(*zip(base[k], top[k]), color=BLUE, linewidth=1.2, alpha=0.75, zorder=3)
 
@@ -600,7 +605,7 @@ def _submerged_outline() -> np.ndarray:
     return np.vstack([waterline, silhouette])
 
 
-def _item(ax: plt.Axes, point: np.ndarray, zorder: float, plane: plt.Polygon | None = None) -> None:
+def _item(ax: plt.Axes, point: np.ndarray, zorder: float, plane: plt.Polygon | None = None) -> np.ndarray | None:
     """One item: a sphere, half of it under *plane*.
 
     With no plane it is a plain circle — an item in mid-air belongs to neither
@@ -622,11 +627,10 @@ def _item(ax: plt.Axes, point: np.ndarray, zorder: float, plane: plt.Polygon | N
         ax.add_patch(
             plt.Circle(tuple(point), ITEM_R, facecolor="none", edgecolor=INK, linewidth=1.7, zorder=zorder + 0.3)
         )
-        return
+        return None
 
-    crescent = plt.Polygon(
-        _submerged_outline() + point, closed=True, facecolor=PLANE_FILL, edgecolor="none", zorder=zorder + 0.05
-    )
+    submerged = _submerged_outline() + point
+    crescent = plt.Polygon(submerged, closed=True, facecolor=PLANE_FILL, edgecolor="none", zorder=zorder + 0.05)
     ax.add_patch(crescent)
     crescent.set_clip_path(plane)
     # The fill alone is a few percent off white and vanishes at slide size; the
@@ -654,6 +658,7 @@ def _item(ax: plt.Axes, point: np.ndarray, zorder: float, plane: plt.Polygon | N
         ax.add_patch(ring)
         if clip is not None:
             ring.set_clip_path(clip)
+    return submerged
 
 
 #: The closest two items may come on the page — the item diameter plus a little
@@ -777,6 +782,10 @@ def _clear_of_edge(u: float, v: float) -> bool:
 #: — drawing everything on top and tinting by hand — was what made the pillar
 #: look like it stood behind every sphere it should have hidden.
 Z_BEHIND_PILLAR, Z_IN_FRONT, Z_CEILING = 1.0, 6.0, 7.0
+#: Above every item, for the second stroke of anything lying in a plane. It
+#: only ever shows through a crescent-shaped clip, so it cannot cover a
+#: sphere's above-water half however high it sits.
+Z_IN_PLANE_OVERLAY = 9.0
 
 
 def _occluded_by_pillar(u: float, v: float, h: float) -> bool:
@@ -817,11 +826,16 @@ def _painted_back_to_front(points: np.ndarray, base_z: float) -> list[tuple[int,
     return [(i, base_z + 0.9 * k / max(len(order) - 1, 1)) for k, i in enumerate(order)]
 
 
-def _floor_items(ax: plt.Axes, plane: plt.Polygon, pillar: bool) -> None:
-    """The corpus the votes came from, lying in the floor of the room."""
+def _floor_items(ax: plt.Axes, plane: plt.Polygon, pillar: bool) -> list[np.ndarray]:
+    """The corpus the votes came from, lying in the floor of the room.
+
+    Returns the submerged crescents, which the caller needs: anything lying *in*
+    the floor has to be drawn over them.
+    """
     floor = _spaced(46, (EDGE_MARGIN, BOX_U - EDGE_MARGIN), (EDGE_MARGIN, BOX_V - EDGE_MARGIN), ITEM_GAP)
     voted = _votes(floor)
     behind = {i for i, (u, v) in enumerate(floor) if _occluded_by_pillar(u, v, 0.0)} if pillar else set()
+    crescents: list[np.ndarray] = []
     for index, depth_z in _painted_back_to_front(floor, 0.0):
         u, v = floor[index]
         point = proj(u, v, 0.0)
@@ -831,7 +845,32 @@ def _floor_items(ax: plt.Axes, plane: plt.Polygon, pillar: bool) -> None:
         elif voted.get(index) == "bad":
             _sunk_glyph(ax, point, INTRO._cross, RED_SUNK, zorder)
         else:
-            _item(ax, point, zorder, plane)
+            crescent = _item(ax, point, zorder, plane)
+            if crescent is not None:
+                crescents.append(crescent)
+    return crescents
+
+
+def _draw_in_plane(ax: plt.Axes, xy: np.ndarray, crescents: list[np.ndarray], **style) -> None:
+    """Draw a curve that lies *in* a plane, over the spheres' submerged halves.
+
+    A sphere's crescent is the part of it under the plane, so anything painted
+    on the plane passes in front of it — and a curve that stops at the edge of
+    every crescent it meets says the opposite: that the crescents are sitting on
+    the plane rather than cut into it.
+
+    So the curve goes down twice. Once where it belongs in the paint order, and
+    once above everything clipped to the union of the crescents, which is the
+    only place the second copy can show.
+    """
+    ax.plot(xy[:, 0], xy[:, 1], **style)
+    if not crescents:
+        return
+    over = ax.plot(xy[:, 0], xy[:, 1], **{**style, "zorder": Z_IN_PLANE_OVERLAY})[0]
+    over.set_clip_path(
+        MplPath.make_compound_path(*(MplPath(np.vstack([c, c[:1]]), closed=True) for c in crescents)),
+        ax.transData,
+    )
 
 
 def _depth_stage(stage: int) -> plt.Figure:
@@ -842,27 +881,36 @@ def _depth_stage(stage: int) -> plt.Figure:
     curve = np.stack([CURVE_U + CURVE_RU * np.cos(angles), CURVE_V + CURVE_RV * np.sin(angles)], axis=1)
     base = np.array([proj(u, v, 0.0) for u, v in curve])
 
+    # The floor goes down first, because what lies *in* the floor has to be
+    # drawn over its spheres' submerged halves and needs their outlines to do
+    # it. Call order is not paint order — every artist here carries a z.
+    crescents = _floor_items(ax, planes[0], pillar=stage >= 3)
+
+    top = np.array([proj(u, v, TUBE_H) for u, v in curve])
     if stage >= 3:
-        _tube(ax, base, np.array([proj(u, v, TUBE_H) for u, v in curve]), angles)
+        _tube(ax, base, top, angles)
     if stage >= 5:
-        # The alternative truth: same footprint, but it stops.
+        # The alternative truth: same footprint, but it stops. Under the pillar,
+        # like anything else standing inside it: the dome is behind the near
+        # wall, so it takes the single tint the wall gives, and an untinted dome
+        # drawn over the glass was the last thing on the page claiming to be in
+        # front of something it is inside.
         dome = np.array([proj(CURVE_U + CURVE_RU * math.cos(a), CURVE_V, DOME_H * math.sin(a)) for a in angles[:91]])
-        # Under the pillar, like anything else standing inside it: the dome is
-        # behind the near wall, so it takes the single tint the wall gives, and
-        # an untinted dome drawn over the glass was the last thing on the page
-        # claiming to be in front of something it is inside.
-        ax.plot(dome[:, 0], dome[:, 1], color=GREEN, linewidth=2.4, linestyle=(0, (7, 5)), zorder=1.95)
+        ax.plot(dome[:, 0], dome[:, 1], color=GREEN, linewidth=3.0, linestyle=(0, (7, 5)), zorder=1.95)
     if stage >= 2:
-        ax.plot(base[:, 0], base[:, 1], color=BLUE, linewidth=2.6, zorder=5)
+        _draw_in_plane(ax, base, crescents, color=BLUE, linewidth=2.6, zorder=5)
 
-    _floor_items(ax, planes[0], pillar=stage >= 3)
-
+    lids: list[np.ndarray] = []
     if stage >= 4:
         ceiling = _spaced(
             46, (EDGE_MARGIN, BOX_U - EDGE_MARGIN), (EDGE_MARGIN, BOX_V - EDGE_MARGIN), ITEM_GAP, seed=NEW_SEED
         )
         for index, depth_z in _painted_back_to_front(ceiling, 0.0):
-            _item(ax, proj(*ceiling[index], NEW_H), Z_CEILING + depth_z, planes[1])
+            crescent = _item(ax, proj(*ceiling[index], NEW_H), Z_CEILING + depth_z, planes[1])
+            if crescent is not None:
+                lids.append(crescent)
+    if stage >= 3:
+        _draw_in_plane(ax, top, lids, color=BLUE, linewidth=2.6, zorder=4)
 
     return fig
 
