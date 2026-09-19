@@ -108,8 +108,56 @@ class TestRegenerationMatchesTheCommittedCopy:
         )
 
 
+class TestWriteLiveRefusesToOverwriteUnbankedWork:
+    """The #4016 review's hazard: the guard checked the file it MATCHED, not the one it OVERWROTE.
+
+    Matching the regeneration against the committed copy says the repository is
+    self-consistent. The live file is a different file, and the two agree only
+    until somebody banks. #4002's 93 judgements are queued to do exactly that.
+    """
+
+    def test_live_drift_sees_a_banked_row_the_committed_copy_lacks(self, regen, tmp_path):
+        reference = [{"image_id": 1, "class": "bowl", "present": True}]
+        live = tmp_path / "corrections.json"
+        live.write_text(json.dumps([*reference, {"image_id": 2, "class": "cup", "present": True}]))
+        assert regen.live_drift(live, reference)["only_new"] == [(2, "cup")]
+
+    def test_live_drift_is_empty_when_they_agree(self, regen, tmp_path):
+        reference = [{"image_id": 1, "class": "bowl", "present": True}]
+        live = tmp_path / "corrections.json"
+        live.write_text(json.dumps(reference))
+        assert not any(regen.live_drift(live, reference).values())
+
+    def test_a_missing_live_file_is_not_drift(self, regen, tmp_path):
+        """Restoring live from the repository after a purge is the capability this keeps."""
+        assert not any(regen.live_drift(tmp_path / "gone.json", []).values())
+
+    def test_write_live_refuses_and_writes_nothing_when_live_is_ahead(self, regen, tmp_path, monkeypatch):
+        """The 93 rows, in miniature: banked-but-not-exported work must survive a regeneration."""
+        committed = json.loads(regen.COMMITTED.read_text())
+        banked = [*committed, {"image_id": 999_000_001, "class": "bowl", "present": True, "source": "human_review"}]
+        live = tmp_path / "corrections.json"
+        live.write_text(json.dumps(banked))
+        before = live.read_bytes()
+        monkeypatch.setattr(regen.pc, "PILE", tmp_path)
+
+        with pytest.raises(SystemExit) as excinfo:
+            regen.main(["--write-live", "--quiet"])
+
+        assert "drifted" in str(excinfo.value) and "verdict_store.py export" in str(excinfo.value)
+        assert live.read_bytes() == before, "the banked row was overwritten"
+
+
 class TestCompareReportsTheThreeKindsSeparately:
     """A count that matches is not rows that match — 81 shared rows differed in #4005."""
+
+    def test_a_string_id_is_one_drift_not_two(self, regen):
+        """Untyped, a writer emitting "56" reads as an added row AND a lost row (#4016 review)."""
+        reference = [{"image_id": 56, "class": "bowl", "present": True}]
+        new = [{"image_id": "56", "class": "bowl", "present": True}]
+        diff = regen.compare(new, reference)
+        assert diff["only_new"] == [] and diff["only_reference"] == []
+        assert diff["differing"] == [(56, "bowl")], "one row, one drift: a type mismatch, not a pair of them"
 
     def test_only_new_only_reference_and_differing_are_distinct(self, regen):
         reference = [

@@ -27,10 +27,13 @@ alone:
 
 **The default output is a scratch path and never the live file.** Writing the
 file the build reads is `--write-live`, spelled out, because this script's whole
-subject is a regeneration that silently meant less than it looked like. Even then
-the live write is `verdicts_to_corrections.py`'s own, with its `dropped_rows`
-guard intact: **never reach for ``--allow-loss``**, which from a partial chain
-would destroy 3,837 rows of human work.
+subject is a regeneration that silently meant less than it looked like. It
+refuses twice before it writes: once if the regeneration does not match the
+committed copy, and once if the *live* file has drifted from it -- that second
+check is :func:`live_drift`, and without it a bank-then-regenerate would have
+overwritten freshly banked judgements while reporting success. **Never reach for
+``--allow-loss``** either, which from a partial chain would destroy 3,837 rows of
+human work.
 
 **Judge a run by the diff, never by whether it ran.** `--check` compares
 row-by-row against the committed `human_record/PILE__corrections.json` and reports
@@ -99,15 +102,49 @@ def regenerate(out: Path, workdir: Path, quiet: bool = False) -> list[dict]:
     return json.loads(out.read_text())
 
 
+def _key(row: dict) -> tuple[int, str]:
+    """The pair a row is about, with the id COERCED.
+
+    Every writer emits an int today. One that emitted ``"56"`` would key
+    differently from ``56`` and show up as a spurious ``only_new`` *and* a
+    spurious ``only_reference`` for the same row -- two unrelated drifts to read,
+    for what is one type mismatch.
+    """
+    return int(row["image_id"]), row["class"]
+
+
 def compare(new: list[dict], reference: list[dict]) -> dict[str, list]:
     """Row-by-row, keyed on the pair a row is about — never a count (#4007)."""
-    kn = {(r["image_id"], r["class"]): r for r in new}
-    kr = {(r["image_id"], r["class"]): r for r in reference}
+    kn = {_key(r): r for r in new}
+    kr = {_key(r): r for r in reference}
     return {
         "only_new": sorted(kn.keys() - kr.keys()),
         "only_reference": sorted(kr.keys() - kn.keys()),
         "differing": sorted(k for k in kn.keys() & kr.keys() if kn[k] != kr[k]),
     }
+
+
+def live_drift(live: Path, reference: list[dict]) -> dict[str, list]:
+    """How the live file differs from the committed copy; empty when it does not.
+
+    **This is the check that makes ``--write-live`` safe, and its absence was a
+    way to destroy human work with a run that reported success.** Matching the
+    regeneration against `COMMITTED` says the repository is self-consistent. It
+    says nothing about the file being overwritten, and the two agree only while
+    nothing has been banked since the last ``verdict_store.py export``.
+
+    The failure, concretely (#4002 is queued for exactly this): 93 judgements are
+    banked into live, taking it to 4,802 rows; the committed copy still reads
+    4,709; a regeneration produces 4,709, matches `COMMITTED`, exits 0, and
+    writes 4,709 rows over the live file. `dropped_rows` does not fire, because
+    step 2 wrote a file that was correct for its inputs -- the loss is in the copy
+    afterwards, which is downstream of every guard the chain has.
+
+    A drift here is therefore read as *unbanked work*, not as corruption, and the
+    run refuses rather than resolving it: the repository cannot tell which of the
+    two files is the one somebody meant to keep.
+    """
+    return compare(json.loads(live.read_text()) if live.exists() else [], reference)
 
 
 def report(diff: dict[str, list], new: list[dict], reference: list[dict]) -> int:
@@ -154,6 +191,14 @@ def main(argv: list[str] | None = None) -> int:
             live = pc.PILE / "corrections.json"
             if status:
                 raise SystemExit(f"refusing --write-live: the regeneration does not match {COMMITTED.name}")
+            drift = live_drift(live, reference)
+            if any(drift.values()):
+                counts = ", ".join(f"{k}={len(v)}" for k, v in drift.items() if v)
+                raise SystemExit(
+                    f"refusing --write-live: {live} has drifted from {COMMITTED.name} ({counts}). "
+                    "Run `verdict_store.py export` first, or that drift is unbanked human work "
+                    "this would destroy."
+                )
             # Locked and atomic, like every other writer of this file: it is
             # shared by every session on this pile and has no history (#3729).
             write_json_locked(live, new)
