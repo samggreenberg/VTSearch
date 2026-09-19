@@ -107,6 +107,19 @@ DATASETS: dict[str, dict] = {
     # ones -- they stay readable under their own name, and nothing new is built
     # on them.
     "coco_quarry": {"boxed": True, "kind": "coco_quarry"},
+    # The same corpus with NO designation draw: every COCO 2017 image embedded,
+    # so a cell is a filter over a fixed set rather than a build-time choice.
+    # That is what lets `SCALE_N_POS`/`SCALE_N_NEG` and the prevalence axis
+    # (#3987) become export-time queries instead of re-embeds. `on_request`
+    # because it is ~6.8x the designated build and nobody wants it by default.
+    #
+    # Single-vector columns only, and that is a measured limit rather than a
+    # preference: `build_pile.py` holds the whole cell in RAM and writes it in
+    # one `pickle.dump`, and every consumer reads it back through `load_medias`
+    # into one dict. A full-corpus `dinov3_patch` cell is ~37 GB of patch grids
+    # -- unwritable at any sane `--mem` once the thinned copy is counted, and
+    # unreadable afterwards. The patch column stays on `coco_quarry`.
+    "coco_quarry_full": {"boxed": True, "kind": "coco_quarry", "full_corpus": True, "on_request": True},
     # Box-size-banded VG, drawn from the WHOLE source (all 108k images, full
     # free-text vocabulary) rather than the demo pipeline's 100 curated
     # categories on a 4% slice.  The `_s`/`_m`/`_l` on `visual_genome_*` is a

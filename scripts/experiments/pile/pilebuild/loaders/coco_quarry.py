@@ -56,6 +56,14 @@ from pilebuild.loaders.vg_scale import band_candidates, designate_cells, draw_ne
 #: The two splits, in the order the census read them.
 SPLITS = ("val2017", "train2017")
 
+#: ``(anchor, classes) -> (labels, box_dims, filenames)``. The builder calls
+#: :func:`load` once per embedder in one process, and re-reading 490 MB of
+#: annotations and re-banding 123,287 images five times is 2.5 minutes of the
+#: designated build and proportionally more of a full-corpus one. The inputs are
+#: files on disk that do not change mid-run, so the answer is cached rather than
+#: recomputed.
+_CORPUS: dict[tuple[str, tuple[str, ...]], tuple[dict, dict, dict]] = {}
+
 
 def read_coco_labels(
     anchor: Path, classes: tuple[str, ...]
@@ -71,6 +79,10 @@ def read_coco_labels(
 
     ``iscrowd`` regions are skipped — see this module's docstring.
     """
+    key = (str(anchor), tuple(classes))
+    if key in _CORPUS:
+        return _CORPUS[key]
+
     labels: dict[int, dict[str, list[list[float]]]] = {}
     dims: dict[int, tuple[int, int]] = {}
     filenames: dict[int, str] = {}
@@ -100,7 +112,18 @@ def read_coco_labels(
             labels[int(ann["image_id"])].setdefault(name, []).append([x, y, x + w, y + h])
 
     log(f"  coco_quarry: {len(labels):,} images, {crowd:,} iscrowd regions dropped")
+    _CORPUS[key] = (labels, dims, filenames)
     return labels, dims, filenames
+
+
+def _cells_of(cls: str, supply: dict[str, dict[str, list[int]]]) -> dict[str, list[int]]:
+    """``{"class@band": ids}`` for one class, straight off the banded supply.
+
+    `designate_cells` caps each cell at ``SCALE_N_POS`` and prefers reviewed
+    membership; neither applies when the whole corpus is embedded, because the
+    cap is the thing being deferred to export time.
+    """
+    return {f"{cls}@{band}": ids for band, ids in supply.get(cls, {}).items() if ids}
 
 
 def _zip_members() -> dict[str, tuple[Path, str]]:
@@ -131,9 +154,21 @@ def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
     # review whose membership has to be preserved. Both helpers take the empty
     # case rather than a separate code path.
     supply, boxes_for, clean = band_candidates(labels, box_dims, unbanded=set(), classes=classes)
-    chosen = designate_cells(supply, corrections={}, roster={})
     coco_scored = set(labels)  # every image; COCO answered for all eighty
-    negatives, spares = draw_negatives(clean, roster={}, coco_scored=coco_scored, coco_fraction=1.0)
+
+    full = bool(pc.DATASETS.get(dataset, {}).get("full_corpus"))
+    if full:
+        # Every image in the corpus, and no draw. A designated cell freezes
+        # SCALE_N_POS and SCALE_N_NEG into the embedding, so changing either --
+        # or the prevalence #3987 wants down to 0.1%, which needs ~100k
+        # negatives against 100 positives -- costs a re-embed of everything.
+        # Embedded whole, a cell is a FILTER over a fixed set and those become
+        # export-time queries, which is the point of the quarry.
+        chosen = {cell: list(ids) for cls in supply for cell, ids in _cells_of(cls, supply).items()}
+        negatives, spares = sorted(clean), []
+    else:
+        chosen = designate_cells(supply, corrections={}, roster={})
+        negatives, spares = draw_negatives(clean, roster={}, coco_scored=coco_scored, coco_fraction=1.0)
 
     cells = sorted(chosen)
     short = [c for c in cells if len(chosen[c]) < pc.SCALE_N_POS]
@@ -155,7 +190,13 @@ def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
     # counted once rather than once per archive, and each zip is opened once.
     by_zip: dict[Path, list[tuple[int, str]]] = defaultdict(list)
     missing = 0
-    for iid in sorted(set(positive_in) | neg_set | set(spares)):
+    # In full-corpus mode the emit set is the CORPUS, not the union of the draws.
+    # `band_candidates` returns banded supply and the clean pool; an image that
+    # holds a class in no valid band -- scattered, or oversize -- is in neither,
+    # so taking the union here would drop it and call the result "everything".
+    emit_ids = set(labels) if full else (set(positive_in) | neg_set | set(spares))
+    log(f"  coco_quarry: emitting {len(emit_ids):,} medias" + (" (FULL CORPUS)" if full else ""))
+    for iid in sorted(emit_ids):
         found = members.get(Path(filenames[iid]).name)
         if found is None:
             missing += 1
