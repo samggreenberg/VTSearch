@@ -3,7 +3,7 @@
 
 ![bg fit](figs/dataset-coco-quarry-complement.png)
 
-## Venn Nothing Isn't Enough
+## Venn Nothing<br>Isn't Enough
 
 <!-- build: figs/dataset-coco-quarry-complement.build1.png -->
 
