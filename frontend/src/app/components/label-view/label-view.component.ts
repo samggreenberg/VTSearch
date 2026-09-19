@@ -1,4 +1,4 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, DestroyRef, effect, ElementRef, inject, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, inject, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { Subscription, pairwise } from 'rxjs';
@@ -108,6 +108,58 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  pane the vote-swipe animation otherwise leaves behind (#3887). Aliased
    *  from {@link SortRunnerService}, which owns the advance rule. */
   readonly queueExhausted = this.sortRunner.queueExhausted;
+  /** True when every item in the *dataset* is labeled, sort or no sort. Aliased
+   *  from {@link SortRunnerService}; see its doc for the two paths that reach
+   *  it without {@link queueExhausted} ever being true (#4028). */
+  readonly datasetExhausted = this.sortRunner.datasetExhausted;
+
+  /** True when a vote left the pane blank with nowhere to advance to, while
+   *  the dataset still has unlabeled items. Aliased from
+   *  {@link SortRunnerService}; this is what voting with no ranking loaded
+   *  does on every vote, not just the last one (#4028). */
+  readonly advanceStranded = this.sortRunner.advanceStranded;
+
+  /**
+   * The centre pane has nothing to show and should say so, for any of the four
+   * reasons below. They are one input because the pane renders one message; they
+   * are kept apart in {@link exhaustedHeading} / {@link exhaustedDetail} because
+   * the way out differs — a finished dataset has none, a finished window has
+   * "load more", and a stranded advance has "pick the next one yourself".
+   */
+  readonly centreExhausted = computed(
+    () => this.autopilotExhausted() || this.datasetExhausted() || this.queueExhausted()
+      || this.advanceStranded(),
+  );
+
+  /** Whether the dataset is finished (no more items anywhere) or merely the
+   *  loaded ranking is. Autopilot reaching `exhausted` means the former: its
+   *  own terminal state is "every item in this dataset is labeled". */
+  private readonly wholeDatasetDone = computed(
+    () => this.autopilotExhausted() || this.datasetExhausted(),
+  );
+
+  readonly exhaustedHeading = computed(() => {
+    if (this.wholeDatasetDone()) return 'Nothing left to label';
+    if (this.queueExhausted()) return 'Nothing left in this ranking';
+    return 'Nothing queued up';
+  });
+
+  readonly exhaustedDetail = computed(() => {
+    if (this.autopilotExhausted()) {
+      return 'Autopilot has labeled every item in this dataset. Review your labels in the '
+        + 'side panels, export them, or press Cmd/Ctrl-Z to undo the last one.';
+    }
+    if (this.datasetExhausted()) {
+      return 'Every item in this dataset is labeled. Review your labels in the side panels, '
+        + 'export them, or press Cmd/Ctrl-Z to undo the last one.';
+    }
+    if (this.queueExhausted()) {
+      return 'Every item in the current ranking is labeled. Load more results, change the sort, '
+        + 'or pick an item from the list on the left.';
+    }
+    return 'That one is labeled, and nothing is ranked to move on to. Pick the next item from '
+      + 'the list on the left, or run a sort and the next one comes up on its own.';
+  });
   progressModalMetric: ProgressMetric | null = null;
 
   // SortStateService / VoteStateService are now signal-backed (their value

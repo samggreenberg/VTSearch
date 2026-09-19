@@ -70,6 +70,14 @@ export class CenterPanelComponent implements OnDestroy {
     'Every item in the current ranking has been labeled. Load more results, ' +
       'change the sort, or export your labels.',
   );
+  /**
+   * The line under "Select a media item to view". The host knows what the list
+   * beside the pane actually is — a ranking to label, or a work queue to verify
+   * — so it names the way out rather than leaving the pane to imply one (#4028).
+   */
+  readonly placeholderHint = input(
+    'Pick one from the list on the left, or run a sort to rank them.',
+  );
   readonly mediaVoted = output<{
     id: number;
     vote: 'good' | 'bad';

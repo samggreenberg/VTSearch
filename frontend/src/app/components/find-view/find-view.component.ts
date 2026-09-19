@@ -569,7 +569,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.voteState.loadVotes();
     // Auto-advance to the next item on the boundary walk, so "just sit and
     // vote" samples both faces of the cutoff instead of only the positives.
-    this.advanceToBoundary();
+    this.advanceToBoundary(event.id);
   }
 
   /**
@@ -585,10 +585,16 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * The queue is empty only when no unverified item remains on *either* side;
    * that is the done state.
    */
-  private advanceToBoundary(): void {
+  private advanceToBoundary(votedId?: number): void {
     const order = this.sortState.sortOrder;
     const threshold = this.sortState.threshold;
-    if (!order || threshold == null) return;
+    if (!order || threshold == null) {
+      // Nothing is scored, so there is no boundary to walk. A vote cast from
+      // the pre-score list therefore advances nowhere and leaves the pane
+      // blank — see {@link advanceStranded}.
+      this.strandedOn.set(votedId ?? null);
+      return;
+    }
     const verified = this.voteState.verifiedIds;
     // `order` is descending by score. The unverified item closest above the
     // line is the *lowest* one still ≥ threshold (keep overwriting as we
@@ -621,6 +627,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
         [target, took] = [closestAbove, 'above'];
       }
     }
+    this.strandedOn.set(target == null ? (votedId ?? null) : null);
     if (target != null && took != null) {
       // Flip so the next advance samples the opposite face of the boundary.
       this.nextFindSide = took === 'above' ? 'below' : 'above';
@@ -659,6 +666,30 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * un-verifies a row and puts the user straight back to work. False before a
    * score has landed: that is the placeholder state, not an exhausted one.
    */
+  /** The item a vote left the pane stranded on. See {@link advanceStranded}. */
+  private readonly strandedOn = signal<number | null>(null);
+
+  /**
+   * A vote landed, {@link advanceToBoundary} had nowhere to go, and the pane is
+   * blank as a result — with the queue not actually finished.
+   *
+   * The reachable case is voting before anything is scored: the left list shows
+   * the dataset from the moment the view opens, so an item can be picked out of
+   * it and voted with no ranking and no cutoff to walk. The walk then returns
+   * at its first line, the vote-swipe keeps the outgoing node pinned off-screen
+   * (#3887), and nothing ever replaces it.
+   *
+   * Held only while that item is still selected and still verified, so moving
+   * on or undoing ends it without anything having to notice. `queueEmpty` is
+   * the neighbouring case and stays separate: it means the walk is *finished*,
+   * which wants the opposite advice from this one.
+   */
+  readonly advanceStranded = computed(() => {
+    const id = this.strandedOn();
+    if (id === null || this.mediaState.selectedId() !== id) return false;
+    return this.voteState.verifiedIds.has(id);
+  });
+
   readonly queueEmpty = computed(() => {
     const order = this.sortState.sortOrder;
     if (!order || order.length === 0 || this.sortState.threshold == null) return false;

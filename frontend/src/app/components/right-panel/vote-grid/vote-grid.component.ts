@@ -79,6 +79,23 @@ export class VoteGridComponent implements AfterViewChecked, OnDestroy {
 
   readonly entries = input<VoteGridEntry[]>([]);
   readonly label = input<'good' | 'bad'>('good');
+
+  /**
+   * What to say when the pile is empty. Names the gesture that fills it, since
+   * the piles are the only place a vote goes and a fresh detector starts with
+   * both of them at zero (#4028). Overridable so a host that fills the pile
+   * some other way (an import, a saved labelset) is not left telling the user
+   * to press an arrow key.
+   */
+  readonly emptyHint = input('');
+
+  /** {@link emptyHint}, or the default phrased for this pile's polarity. */
+  readonly emptyText = computed(
+    () => this.emptyHint()
+      || (this.label() === 'good'
+        ? 'No goods yet. Press \u2192 (or Good) on an item to put it here.'
+        : 'No bads yet. Press \u2190 (or Bad) on an item to put it here.'),
+  );
   readonly gridGoalWidth = input<number>(80);
   readonly focusMode = input<'click' | 'hover'>('click');
 

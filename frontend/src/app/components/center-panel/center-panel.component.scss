@@ -26,7 +26,6 @@
   &.empty {
     justify-content: center;
     color: var(--text-placeholder);
-    font-size: var(--font-xl);
   }
 
   // A Shift-drag (or the sticky Marquee toggle) can anchor a region box from
@@ -47,8 +46,27 @@
   }
 }
 
+// Shown when nothing is selected. Built on the shared `.empty-state` primitive
+// so it reads as the same kind of notice as the exhausted pane below it rather
+// than as a stray line of grey text in a black rectangle (#4028).
+.placeholder-pane {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  gap: var(--space-xs);
+}
+
 .placeholder-text {
   margin: 0;
+  font-size: var(--font-xl);
+  color: var(--text-placeholder);
+}
+
+.placeholder-hint {
+  margin: 0;
+  max-width: 44ch;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
 }
 
 // Shown in place of the viewer when the host's queue is empty (#3887). Takes
@@ -59,13 +77,14 @@
   flex: 1;
   min-height: 0;
   width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
   gap: var(--space-xs);
   padding: var(--space-lg);
-  text-align: center;
+}
+
+.exhausted-pane .empty-state__icon,
+.placeholder-pane .empty-state__icon {
+  color: var(--text-muted);
+  margin-bottom: var(--space-2xs);
 }
 
 .exhausted-heading {

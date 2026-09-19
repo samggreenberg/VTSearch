@@ -141,6 +141,21 @@
   flex-shrink: 0;
 }
 
+// "all labeled": the grid still lists every item, so the count beside it says
+// nothing about whether any of them are still worth clicking. Muted and
+// lowercase — it is a state, not an alert (#4028).
+.all-labeled-chip {
+  margin-left: var(--space-xs);
+  padding: 0 var(--space-2xs);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-2xs);
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .view-controls-slot {
   margin-left: var(--space-xs);
 }

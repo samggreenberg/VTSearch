@@ -169,6 +169,13 @@
           <h3 class="images-header-title">
             {{ mediaTypeName() }}s ({{ medias().length | number }})
           </h3>
+          @if (allLabeled()) {
+            <span
+              class="all-labeled-chip"
+              role="status"
+              title="Every item in this dataset carries a good or bad label. Undo (Cmd/Ctrl-Z) puts one back."
+            >all labeled</span>
+          }
           <vt-view-controls
             side="left"
             [currentMediaType]="medias().length > 0 ? medias()[0].media_type : ''"

@@ -5,7 +5,8 @@
   (mousedown)="onPanelMouseDown($event)"
 >
   @if (exhausted()) {
-    <div class="exhausted-pane" role="status">
+    <div class="exhausted-pane empty-state" role="status">
+      <span class="empty-state__icon" aria-hidden="true"><vt-icon type="check" [size]="32"></vt-icon></span>
       <p class="exhausted-heading">{{ exhaustedHeading() }}</p>
       <p class="exhausted-body">{{ exhaustedDetail() }}</p>
     </div>
@@ -21,7 +22,11 @@
       [showHint]="false"
     ></vt-voting-overlay>
   } @else if (!media()) {
-    <p class="placeholder-text">Select a media item to view</p>
+    <div class="placeholder-pane empty-state" role="status">
+      <span class="empty-state__icon" aria-hidden="true"><vt-icon type="cursor-click" [size]="32"></vt-icon></span>
+      <p class="placeholder-text">Select a media item to view</p>
+      <p class="placeholder-hint">{{ placeholderHint() }}</p>
+    </div>
   } @else {
     <div class="media-swipe-wrapper" [class]="mediaType === 'audio' ? '' : swipeClass()">
       @switch (mediaType) {
