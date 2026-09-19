@@ -1041,24 +1041,63 @@ BAD_HATCH = "\\\\\\"
 
 #: Characters per line in the left column, which is `RIGHT_X - LEFT_X` wide —
 #: 357 slide pixels, about 31 characters of the 15pt body face.
-QUARRY_WRAP = 31
+#: The left column's two registers, in points, and the rhythm they are set on
+#: in figure fractions. A *definition* is one line — bold term, then its gloss
+#: in the body face on the same baseline — because a term over its own gloss is
+#: two lines that look exactly like a heading over its own caption, and the
+#: column then reads as six headings with no hierarchy at all (which is what it
+#: did). A *heading* is the other register: half again the size, on its own
+#: line, with room above it, so the two experiments read as the titles of the
+#: two halves of the argument rather than as two more entries in a list.
+TERM_PT = FLOOR_PT + 3
+HEAD_PT = FLOOR_PT + 11
+#: Gap between a term and its gloss on the shared baseline. Wider than a word
+#: space: the point is that the two are different registers, not one phrase.
+TERM_GAP = 0.009
+#: Four gaps, and their *order* is the hierarchy the column is asking the eye
+#: to read: tightest between two definitions, wider after a heading's verdict
+#: where the argument moves on, widest of all above a heading. `HEAD_TO_NOTE`
+#: is not a choice — it is the drop from a 26pt baseline to the 15pt one under
+#: it. Sized together so the last line lands near the foot of the column
+#: rather than leaving a third of it empty.
+DEF_PITCH = 0.083
+HEAD_LEAD = 0.052
+HEAD_TO_NOTE = 0.052
+NOTE_PITCH = 0.110
+#: The column starts a shade above `LEFT_TOP` because these are baselines and
+#: that one is a top: the tallest thing here rises about 0.025 over its own
+#: baseline, so 0.706 puts the first cap-height at 0.731, still clear of the
+#: title notch's 0.761. The floor is the last baseline, not the flow position
+#: after it — trailing air is not overflow.
+STACK_TOP = LEFT_TOP - 0.010
+STACK_FLOOR = 0.035
+#: How wide a definition line may be, in figure fractions: the left column's
+#: own width, less the gutter before the drawing starts.
+STACK_MAX_W = 0.275
 
 #: Every label sits on a chip of its own background, because most of them land
 #: on hatching. Tight padding: the chip is there to stop the strokes running
 #: through the glyphs, not to box the word.
 QUARRY_CHIP = {"boxstyle": "square,pad=0.18", "facecolor": "white", "edgecolor": "none"}
 
-#: The notation, in the order the build introduces it, as `(term, gloss)`. The
-#: third entry's term is the one that moves: the easy experiment is shown three
-#: times, once per class, and `_quarry_easy_term` supplies the spelling for the
-#: frame being drawn.
+#: The column, in the order the build introduces it, as `(kind, term, gloss)`.
+#:
+#: The two kinds alternate by accident of the argument rather than by design,
+#: and the grouping they produce is the reason the order is worth reading:
+#: two definitions, the easy experiment they buy, two more definitions, and the
+#: hard experiment *those* buy. A heading's gloss is its one-line verdict, set
+#: under it rather than beside it.
+#:
+#: The `Easy:` heading is the one entry whose term moves — the experiment is
+#: shown three times, once per class, and `_quarry_easy_term` supplies the
+#: spelling for the frame being drawn.
 QUARRY_BLOCKS = [
-    ("A⁺", "holds an A, maybe more"),
-    ("∅", "holds none of the three"),
-    ("Easy: A⁺ vs ∅", "an A-or-B-or-C detector wins"),
-    ("AB⁼", "holds exactly A and B"),
-    ("¬A", "every image without an A"),
-    ("Better: A⁺ vs ¬A", "no image sits it out"),
+    ("def", "A⁺", "holds an A, maybe more"),
+    ("def", "∅", "holds none of the three"),
+    ("head", "Easy: A⁺ vs ∅", "an A-or-B-or-C detector wins"),
+    ("def", "AB⁼", "holds exactly A and B"),
+    ("def", "¬A", "every image without an A"),
+    ("head", "Hard: A⁺ vs ¬A", "no image sits it out"),
 ]
 
 #: One entry per frame: `(good, negatives, cells, blocks)`.
@@ -1156,45 +1195,64 @@ def quarry_cell_name(bits: int) -> str:
     return "".join(c for i, c in enumerate("ABC") if bits >> i & 1) + "⁼"
 
 
+def _text_width(fig: plt.Figure, text: "matplotlib.text.Text") -> float:
+    """`text`'s rendered width as a fraction of the figure's own width."""
+    return text.get_window_extent(fig.canvas.get_renderer()).width / fig.bbox.width
+
+
 def _quarry_stack(fig: plt.Figure, frame: int) -> None:
     """The left column: the notation, introduced one block per frame.
 
     Laid out by flow over *every* block whether this frame draws it or not, so
     a block arriving never moves the ones above it and the `Easy:` term can
-    change spelling without anything below it shifting. The overflow guard
-    measures the whole stack for the same reason — a reworded gloss fails on
+    change spelling without anything below it shifting. Both guards below
+    measure the whole column for the same reason — a reworded gloss fails on
     the first figure rather than on the last one.
+
+    Definitions set their gloss on the term's own baseline, which means
+    measuring the term: the gap between the two is a gap between *registers*
+    and has to be the same however wide the term is, so it cannot be a column
+    position. `A⁺` and `AB⁼` differ by half the gloss's own indent.
     """
     shown = QUARRY_FRAMES[frame][3]
-    lead, line, gap, floor = 0.047, 0.037, 0.026, 0.030
-    y = LEFT_TOP
-    for index, (term, gloss) in enumerate(QUARRY_BLOCKS):
-        wrapped = textwrap.wrap(gloss, QUARRY_WRAP)
-        if index < shown:
-            fig.text(
-                LEFT_X,
-                y,
-                _quarry_easy_term(frame) if index == 2 else term,
-                fontsize=FLOOR_PT + 7,
-                color=INK,
-                fontweight="bold",
-                va="top",
+    y = lowest = STACK_TOP
+    for index, (kind, term, gloss) in enumerate(QUARRY_BLOCKS):
+        draw = index < shown
+        if kind == "head":
+            y -= HEAD_LEAD
+            if draw:
+                fig.text(
+                    LEFT_X,
+                    y,
+                    _quarry_easy_term(frame) if index == 2 else term,
+                    fontsize=HEAD_PT,
+                    color=INK,
+                    fontweight="bold",
+                    va="baseline",
+                )
+                fig.text(LEFT_X, y - HEAD_TO_NOTE, gloss, fontsize=FLOOR_PT, color=SOFT, va="baseline")
+            lowest = y - HEAD_TO_NOTE
+            y = lowest - NOTE_PITCH
+            continue
+        head = fig.text(LEFT_X, y, term, fontsize=TERM_PT, color=INK, fontweight="bold", va="baseline")
+        width = _text_width(fig, head)
+        body = fig.text(LEFT_X + width + TERM_GAP, y, gloss, fontsize=FLOOR_PT, color=SOFT, va="baseline")
+        line = width + TERM_GAP + _text_width(fig, body)
+        if line > STACK_MAX_W:
+            raise SystemExit(
+                f'notation column: "{term} {gloss}" sets {line:.3f} of the figure wide, over the '
+                f"{STACK_MAX_W} the left column has. A definition is one line by design — shorten "
+                f"the gloss rather than letting it wrap, which would make it look like a heading."
             )
-            fig.text(
-                LEFT_X,
-                y - lead,
-                "\n".join(wrapped),
-                fontsize=FLOOR_PT,
-                color=SOFT,
-                va="top",
-                linespacing=1.5,
-            )
-        y -= lead + line * len(wrapped) + gap
-    if y < floor:
+        if not draw:
+            head.remove()
+            body.remove()
+        lowest, y = y, y - DEF_PITCH
+    if lowest < STACK_FLOOR:
         raise SystemExit(
-            f"notation stack: the {len(QUARRY_BLOCKS)} blocks overflow the slide (bottom at "
-            f"{y:.3f}, floor {floor}). Shorten a gloss to {QUARRY_WRAP} characters or fewer — the "
-            f"column is only that wide, and every extra wrapped line comes out of the last block."
+            f"notation column: the {len(QUARRY_BLOCKS)} blocks overflow the slide (last baseline "
+            f"at {lowest:.3f}, floor {STACK_FLOOR}). Drop a block, or tighten DEF_PITCH / "
+            f"NOTE_PITCH."
         )
 
 
