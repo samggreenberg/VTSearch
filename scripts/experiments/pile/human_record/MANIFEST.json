@@ -341,7 +341,7 @@
     "sha256": "b2990a063e8f405dc496b6b5aaa250ea04baf1d98c8d5877526226eeba60fc8f",
     "source": "{PILE}/corrections.json",
     "tier": "human",
-    "why": "the verdicts the build actually reads; reproducible only from the recovered two-campaign recipe in `verdicts_to_corrections.py`, and only while `{WORK3588}` survives"
+    "why": "the verdicts the build actually reads. Reproducible EXACTLY -- 4,709 rows, verified 2026-09-18 -- but only from all three steps of the chain in pass_verdicts.py's usage block, not from verdicts_to_corrections.py alone, which is step 2 and covers 791 rows plus the 81 apply_recheck.py revisits. The other 3,837 come from the #3926/#3940 per-class pass. This copy is content-identical to the live file, so it is a second home rather than a fallback."
   },
   "PILE__vg_scale_deep_roster.json": {
     "bytes": 488665,
@@ -358,6 +358,14 @@
     "source": "{PILE}/vg_scale_roster.json",
     "tier": "derived",
     "why": "the membership a review was carried out against; a build rewrites it, and losing it means the next rebuild reshuffles reviewed images away"
+  },
+  "VLM3720__slates.json": {
+    "bytes": 2849803,
+    "rel": "slates.json",
+    "sha256": "354071fe189a9cb2bddff017301eca98da741582f66f3cbbef260f0cf9776615",
+    "source": "{VLM3720}/slates/slates.json",
+    "tier": "support",
+    "why": "the OWLv2 boxes the #3720 pass showed reviewers. A Good carries a box -- the reviewer's redraw if there was one, otherwise the box they were shown and confirmed -- so this file is an input to 3,837 of corrections.json's rows via pass_verdicts.py, and it was the ONLY copy: it lived outside the record on scratch until #4007. A committed labelset says a reviewer said Good; without this, what they agreed to is gone."
   },
   "WORK3588__corrections_13.json": {
     "bytes": 112411,
