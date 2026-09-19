@@ -22,7 +22,12 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --time=3:00:00
-#SBATCH --output=/expscratch/sgreenberg/timing-3345/slurm-%j.out
+# Deliberately NOT inside the study dir. `--output=` is opened by slurmd before
+# the first line of this script runs, so a path under a deleted study dir kills
+# the job before any in-body guard can speak -- and the failure has nowhere to
+# be written, because the log IS the missing file (#4006). The scratch root
+# outlives any one study, so the job name carries the study instead.
+#SBATCH --output=/expscratch/sgreenberg/slurm-timing3345-%j.out
 
 set -euo pipefail
 
