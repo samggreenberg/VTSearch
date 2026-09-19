@@ -80,13 +80,13 @@ slides:
   # Move them in front of section 2 when section 1 can afford them.
   #
   # The order is the argument, not the code: the blind spot the atlas exists
-  # for, the structure, the geometry that makes the structure work, and then
-  # the second job it does badly. That last one stays last whatever happens to
-  # the rest — it is the only slide here that reports a loss, and a loss read
-  # before the mechanism is just a reason not to listen.
+  # for, the structure, the second job that structure also does, and how badly
+  # it does it. That last one stays last whatever happens to the rest — it is
+  # the only slide here that reports a loss, and a loss read before the
+  # mechanism is just a reason not to listen.
   atlas-blindspot
   atlas-cells
-  atlas-cone
+  atlas-depth
   atlas-pvalues
 
   # Appendix — what "logo detection" actually means. Parked after the end for

@@ -20,14 +20,16 @@ Both are drawings and not plots, exactly as the slide they extend says of
 itself. The partition drawn on them is a real recursive k-means with the
 atlas's own splitting rule (k = 3, stop under `MIN_NODE`), but it runs on the
 two-dimensional positions. The shipped atlas centres and renormalises first and
-partitions *directions*, which in two dimensions would degenerate into wedges
-around the centroid — true to the code and a lie about the mechanism, since
-direction in 768 dimensions is not one number. `atlas-cone` is the figure that
-makes that omission good.
+partitions *directions* — a detail the deck deliberately does not teach, since
+nothing the room has to follow turns on it.
 
-`atlas-cone` is a schematic of the centred spherical frame, on the circle that
-is the honest two-dimensional analogue of the sphere. Every cosine it prints is
-measured off the points it drew, not asserted.
+`atlas-depth` is a schematic: a wireframe room whose floor is the space the
+votes explored, and a detector boundary extruded up it because the shipped
+head is a single linear layer and cannot do anything else. An earlier version
+of this slide drew the centred sphere instead and was cut for being contrived
+and hard to parse — a fair verdict, and the diagnosis worth keeping is that
+points on a sphere give the eye nothing to judge position against. A floor,
+four posts and a lid do.
 
 `atlas-pvalues` is the only plot: it re-plots published numbers from the #3329
 fit-quality study (`docs/experiments/2026-08-30-fit-quality-3329/`), read from
@@ -463,153 +465,202 @@ def cells_fig() -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 3. The centred frame — why the partition works at all
+# 3. Domain shift — the direction your votes never varied in
 # ──────────────────────────────────────────────────────────────────────────────
 
-CONE_STAGES = 4
-#: The sphere, drawn orthographically: screen position is a vector's first two
-#: coordinates and the third is depth. Two dimensions would have been easier
-#: and would have lied — see `cone_fig`.
-CONE_C = np.array([10.1, 4.65])
-CONE_R = 2.7
-#: How tight the cone is, in degrees from its axis. Contrastive embedders
-#: really do pack a corpus into a few degrees; a drawing that spread them over
-#: a quadrant would make the fix look unnecessary.
-CONE_HALF_ANGLE = 14.0
-#: Tilted out of the screen plane so the cap reads as sitting *on* a sphere
-#: rather than as a disc pasted over one.
-CONE_AXIS = np.array([0.42, 0.52, 0.74])
+DEPTH_STAGES = 5
+#: The scene, in world units: a box `BOX_U` x `BOX_V` on the floor and `BOX_H`
+#: tall. The floor is the space the votes explored; the height is a direction
+#: they never varied in.
+BOX_U, BOX_V, BOX_H = 8.4, 5.0, 5.0
+#: Cavalier projection: the floor's receding axis goes up and to the right, and
+#: height goes straight up. No perspective — a vanishing point would make two
+#: items the same size only by accident, and this figure counts items.
+PROJ_X0, PROJ_Y0 = 4.95, 1.35
+PROJ_U, PROJ_V, PROJ_VY = 0.93, 0.55, 0.38
+#: Where the detector's boundary sits on the floor. The region it admits runs
+#: to the lid and is drawn dashed there, because it does not stop at the lid —
+#: the box stops. A tube with a top on it would say the model had an opinion
+#: about how high is too high, which is the one thing it does not have.
+CURVE_U, CURVE_V, CURVE_RU, CURVE_RV = 5.5, 2.5, 2.05, 1.40
+TUBE_H = BOX_H
+#: How high the second corpus floats, and how high the alternative truth stops.
+NEW_H = 3.55
+DOME_H = 1.95
 
 
-@functools.lru_cache(maxsize=1)
-def _cone_points() -> np.ndarray:
-    """Unit vectors bunched into a narrow cap, as the embedders deliver them."""
-    rng = np.random.default_rng(7)
-    axis = CONE_AXIS / np.linalg.norm(CONE_AXIS)
-    side = np.cross(axis, [0.0, 0.0, 1.0])
-    side /= np.linalg.norm(side)
-    up = np.cross(axis, side)
-    half = math.radians(CONE_HALF_ANGLE)
-    theta = np.arccos(1 - rng.random(52) * (1 - math.cos(half)))
-    phi = rng.random(52) * 2 * math.pi
-    return (
-        np.cos(theta)[:, None] * axis
-        + (np.sin(theta) * np.cos(phi))[:, None] * side
-        + (np.sin(theta) * np.sin(phi))[:, None] * up
-    )
+def proj(u: float, v: float, h: float) -> np.ndarray:
+    """One world point on the page. See `PROJ_*`."""
+    return np.array([PROJ_X0 + u * PROJ_U + v * PROJ_V, PROJ_Y0 + v * PROJ_VY + h])
 
 
-def _cosine_span(vectors: np.ndarray) -> tuple[float, float]:
-    """The smallest and largest cosine between two distinct rows."""
-    gram = vectors @ vectors.T
-    off = gram[~np.eye(len(vectors), dtype=bool)]
-    return float(off.min()), float(off.max())
+def _spaced(count: int, ulim: tuple[float, float], vlim: tuple[float, float], gap: float) -> np.ndarray:
+    """Blue-noise-ish floor positions.
+
+    Uniform sampling clumps, and on a figure whose subject is *where the items
+    are* a clump reads as a cluster that means something. Rejection sampling
+    is enough at these counts.
+    """
+    rng = np.random.default_rng(5)
+    out: list[np.ndarray] = []
+    for _ in range(8000):
+        if len(out) == count:
+            break
+        q = np.array([rng.uniform(*ulim), rng.uniform(*vlim)])
+        if all(float(np.hypot(*(q - o))) > gap for o in out):
+            out.append(q)
+    return np.array(out)
 
 
-def _sphere_dot(ax: plt.Axes, vector: np.ndarray) -> None:
-    """One item on the sphere, drawn solid in front of it and hollow behind."""
-    front = vector[2] >= 0
+def _inside(u: float, v: float) -> bool:
+    return ((u - CURVE_U) / CURVE_RU) ** 2 + ((v - CURVE_V) / CURVE_RV) ** 2 < 1.0
+
+
+def _wireframe(ax: plt.Axes) -> None:
+    """The box, as twelve edges and a floor.
+
+    Every edge is drawn, none hidden. Hidden-line removal would be more correct
+    and less useful: the tube inside is translucent on purpose, so an edge
+    vanishing behind it reads as a mistake rather than as depth, and the box is
+    scaffolding — its whole job is to say "this is a volume" and then recede.
+    """
+    corners = {(u, v, h): proj(u * BOX_U, v * BOX_V, h * BOX_H) for u in (0, 1) for v in (0, 1) for h in (0, 1)}
     ax.add_patch(
-        plt.Circle(
-            tuple(CONE_C + vector[:2] * CONE_R),
-            0.115,
-            facecolor=INK if front else "white",
-            edgecolor=INK if front else SOFT,
-            linewidth=1.5,
-            zorder=4 if front else 2,
+        plt.Polygon(
+            [corners[0, 0, 0], corners[1, 0, 0], corners[1, 1, 0], corners[0, 1, 0]],
+            closed=True,
+            facecolor="#f7f9fb",
+            edgecolor="none",
+            zorder=0,
         )
     )
+    for a, b in (
+        # the floor, then the lid, then the four posts
+        ((0, 0, 0), (1, 0, 0)),
+        ((1, 0, 0), (1, 1, 0)),
+        ((1, 1, 0), (0, 1, 0)),
+        ((0, 1, 0), (0, 0, 0)),
+        ((0, 0, 1), (1, 0, 1)),
+        ((1, 0, 1), (1, 1, 1)),
+        ((1, 1, 1), (0, 1, 1)),
+        ((0, 1, 1), (0, 0, 1)),
+        ((0, 0, 0), (0, 0, 1)),
+        ((1, 0, 0), (1, 0, 1)),
+        ((1, 1, 0), (1, 1, 1)),
+        ((0, 1, 0), (0, 1, 1)),
+    ):
+        wide = a[2] == 0 and b[2] == 0  # the floor is the one edge loop items sit on
+        ax.plot(
+            *zip(corners[a], corners[b]),
+            color=CELL_LINE if wide else RULE,
+            linewidth=1.6 if wide else 1.2,
+            zorder=1,
+        )
 
 
-def _cone_stage(stage: int) -> plt.Figure:
-    raw = _cone_points()
-    mean = raw.mean(axis=0)
-    centred = raw - mean
-    spread = centred / np.linalg.norm(centred, axis=1, keepdims=True)
+def _tube(ax: plt.Axes, base: np.ndarray, top: np.ndarray, angles: np.ndarray) -> None:
+    """The region the detector admits, extruded to the lid of the room."""
+    for i in range(len(angles) - 1):
+        ax.add_patch(
+            plt.Polygon(
+                [base[i], base[i + 1], top[i + 1], top[i]],
+                closed=True,
+                facecolor=INTRO.BAND,
+                edgecolor="none",
+                alpha=0.5,
+                zorder=2,
+            )
+        )
+    ax.plot(top[:, 0], top[:, 1], color=BLUE, linewidth=1.8, linestyle=(0, (6, 4)), zorder=4)
+    for k in range(0, len(angles) - 1, 22):
+        ax.plot(*zip(base[k], top[k]), color=BLUE, linewidth=1.2, alpha=0.75, zorder=3)
 
+
+def _item(ax: plt.Axes, point: np.ndarray, zorder: int) -> None:
+    ax.add_patch(plt.Circle(tuple(point), 0.155, facecolor="none", edgecolor=INK, linewidth=1.7, zorder=zorder))
+
+
+def _floor_items(ax: plt.Axes) -> None:
+    """The corpus the votes came from, lying on the floor of the room."""
+    for index, (u, v) in enumerate(_spaced(46, (0.4, BOX_U - 0.4), (0.4, BOX_V - 0.4), 0.78)):
+        point = proj(u, v, 0.0)
+        if _inside(u, v) and index % 3 == 0:
+            INTRO._check(ax, point)
+        elif not _inside(u, v) and index % 9 == 4:
+            INTRO._cross(ax, point)
+        else:
+            _item(ax, point, 6)
+
+
+#: What each page says, and in which colour. The last two are the argument, so
+#: they are the two drawn bold.
+DEPTH_CAPTIONS = {
+    1: ("every item you have ever voted on is on this floor", "INK"),
+    2: ("the detector, drawn where it cuts", "BLUE"),
+    3: ("and it says the same thing at every height", "BLUE"),
+    4: ("so this corpus comes back Good, confidently", "BLUE"),
+    5: ("unless the concept stops here, and nothing on the floor says", "GREEN"),
+}
+
+
+def _depth_stage(stage: int) -> plt.Figure:
     fig, ax = _canvas()
-    ax.add_patch(plt.Circle(tuple(CONE_C), CONE_R, facecolor="none", edgecolor=RULE, linewidth=1.6, zorder=1))
-    ax.plot(*CONE_C, marker="+", color=SOFT, markersize=11, markeredgewidth=1.6, zorder=3)
+    _wireframe(ax)
 
-    if stage == 2:
-        tip = CONE_C + mean[:2] * CONE_R
-        ax.annotate(
-            "",
-            xy=tuple(tip),
-            xytext=tuple(CONE_C),
-            arrowprops={"arrowstyle": "-|>,head_width=0.22,head_length=0.42", "color": BLUE, "linewidth": 2.6},
-            zorder=5,
-        )
-        ax.text(
-            tip[0] - 0.34,
-            tip[1] + 0.30,
-            "the collection's mean",
-            color=BLUE,
-            fontsize=LABEL_PT,
-            ha="right",
-            va="baseline",
-            zorder=6,
-            path_effects=HALO,
-        )
+    angles = np.linspace(0, 2 * np.pi, 180)
+    curve = np.stack([CURVE_U + CURVE_RU * np.cos(angles), CURVE_V + CURVE_RV * np.sin(angles)], axis=1)
+    base = np.array([proj(u, v, 0.0) for u, v in curve])
 
-    for point in {1: raw, 2: raw, 3: centred, 4: spread}[stage]:
-        _sphere_dot(ax, point)
+    if stage >= 3:
+        _tube(ax, base, np.array([proj(u, v, TUBE_H) for u, v in curve]), angles)
+    if stage >= 5:
+        # The alternative truth: same footprint, but it stops.
+        dome = np.array([proj(CURVE_U + CURVE_RU * math.cos(a), CURVE_V, DOME_H * math.sin(a)) for a in angles[:91]])
+        ax.plot(dome[:, 0], dome[:, 1], color=GREEN, linewidth=2.4, linestyle=(0, (7, 5)), zorder=6)
+    if stage >= 2:
+        ax.plot(base[:, 0], base[:, 1], color=BLUE, linewidth=2.6, zorder=5)
 
-    low, high = _cosine_span(raw if stage < 4 else spread)
-    caption = {
-        1: f"every pair of items: cosine {low:.2f} to {high:.2f}",
-        2: "subtract it",
-        3: "nothing is a unit vector any more — renormalise",
-        4: f"every pair of items: cosine {low:.2f} to {high:.2f}",
-    }[stage]
+    _floor_items(ax)
+
+    if stage >= 4:
+        for u, v in _spaced(11, (CURVE_U - 1.8, CURVE_U + 1.8), (CURVE_V - 1.0, CURVE_V + 1.0), 0.70):
+            _item(ax, proj(u, v, NEW_H), 7)
+
+    text, colour = DEPTH_CAPTIONS[stage]
     ax.text(
         CANVAS[0] - 0.45,
-        0.95,
-        caption,
-        color=INK if stage in (1, 4) else SOFT,
+        0.52,
+        text,
+        color={"INK": INK, "BLUE": BLUE, "GREEN": GREEN}[colour],
         fontsize=LABEL_PT,
-        fontweight="bold" if stage == 4 else "normal",
+        fontweight="bold" if stage >= 4 else "normal",
         ha="right",
         va="baseline",
-        zorder=7,
+        zorder=8,
+        path_effects=HALO,
     )
-    if stage == 4:
-        ax.text(
-            CANVAS[0] - 0.45,
-            0.34,
-            "and their mean is nothing at all, which is why the root has no direction",
-            color=SOFT,
-            fontsize=NOTE_PT,
-            ha="right",
-            va="baseline",
-            zorder=7,
-        )
     return fig
 
 
-def cone_fig() -> None:
-    """Centre, then renormalise — on a sphere, with the cosines measured.
+def depth_fig() -> None:
+    """Domain shift, as a floor in a room.
 
-    Four pages: the corpus as the embedder delivers it, packed into a cap a few
-    degrees across where every cosine is high and nothing is far from anything;
-    the mean it is packed around; that mean subtracted; and the renormalisation
-    that puts the difference back on the sphere. Both cosine ranges in the
-    captions are computed from the points on screen rather than asserted —
-    and `fragments/atlas-cone.md` quotes the first of them in its notes, so a
-    change to the seed or the cap angle is a change to that note too.
+    Five pages. The corpus the votes came from lies on the floor of a box; the
+    detector cuts it; that cut has no lid, because the shipped head is a single
+    `Linear(D, 1)` and a linear score is *exactly* constant along every
+    direction its weight vector does not point in (`vtscore/training/mlp.py`,
+    the `LINEAR_SVM_HEAD` sentinel). So the boundary extrudes to a tube, and a
+    second corpus floating a long way up it is scored Good with no hint that
+    anything is being extrapolated. The dashed dome is the alternative the
+    votes cannot rule out — and cannot confirm, which is the point.
 
-    **Drawn on a sphere rather than on a circle, and the dimension is the whole
-    reason.** Centring a narrow cap moves its points into the cap's tangent
-    space, so renormalising them recovers a sphere one dimension smaller than
-    the one it started on. In 768 dimensions that costs nothing anybody can
-    see. On a circle it is catastrophic — an arc is one-dimensional, so the
-    picture collapses to two antipodal clumps, and a figure drawn that way
-    says the mechanism destroys the data rather than that it rescues it. Three
-    dimensions is the smallest number that shows the spread the fix buys.
+    The box is the reason this reads at all. The earlier attempt at this slide
+    drew the same idea on a sphere and the room had nothing to judge position
+    against; a floor, four posts and a lid give every item a place.
     """
-    for stage in range(1, CONE_STAGES):
-        save(_cone_stage(stage), OUT, f"atlas-cone.build{stage}.png", column=FULL_BLEED, tight=False)
-    save(_cone_stage(CONE_STAGES), OUT, "atlas-cone.png", column=FULL_BLEED, tight=False)
+    for stage in range(1, DEPTH_STAGES):
+        save(_depth_stage(stage), OUT, f"atlas-depth.build{stage}.png", column=FULL_BLEED, tight=False)
+    save(_depth_stage(DEPTH_STAGES), OUT, "atlas-depth.png", column=FULL_BLEED, tight=False)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -740,6 +791,6 @@ def pvalues_fig() -> None:
 if __name__ == "__main__":
     blindspot_fig()
     cells_fig()
-    cone_fig()
+    depth_fig()
     pvalues_fig()
     print("wrote figures to", OUT)
