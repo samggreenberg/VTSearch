@@ -28,7 +28,6 @@ RECORD = PILE / "human_record"
 #: A rename in the record breaks these before it breaks someone's run.
 RECORD_DEFAULTS = {
     "check_review_coverage.py": "WORK__verdicts_20260820b.json",
-    "negpool_coverage.py": "WORK__verdicts_20260820b.json",
     "shipped_pool_error.py": "WORK3588__slates__Table_Objects__manifest.csv",
 }
 
@@ -47,7 +46,6 @@ GUARDED = (
     "silence_rate.py",
     "shipped_pool_error.py",
     "make_belowcut.py",
-    "folded_supply.py",
 )
 
 #: Writers from #4006's table. They `mkdir -p` their output, so the deletion

@@ -83,7 +83,7 @@ two of them are where this pile's expensive bugs have lived — `apply_correctio
 (the single normalised→pixel crossing, #3281) and `designate_cells` (whether a
 rebuild keeps the images a human reviewed). Both are ordinary functions taking
 what they read and returning what they produce, so
-`tests_lib/meta/test_pile_vg_scale.py` exercises them without the VG source.
+`test_pile_vg_scale.py` exercises them without the VG source.
 
 **VG's vocabulary is free text, and the read matches an object's primary name
 only** — so a class is built from one spelling out of several, and on the ~52% of
@@ -490,7 +490,7 @@ table from the study's own adjudication. Every refusal is printed with its note,
 and a refused class with no entry in `SCALE_CLASS_RULES` is named as a ruling
 somebody owes (#3673).
 
-`audit_band_drift.py` asks how much of the same error the *un*-reviewed half is
+`audit_band_drift.py` (retired with Visual Genome — see `docs/plans/coco-quarry.md`) asks how much of the same error the *un*-reviewed half is
 still hiding, without spending a human on it. The COCO-anchored half has both
 readings available — VG's boxes and COCO's exhaustive ones — so banding each
 anchored image twice and counting the disagreements measures the rate directly,

@@ -141,13 +141,13 @@ def test_check_names_both_archives(mod, tmp_path: Path, monkeypatch):
 
 def test_media_shape_is_the_same_object_as_vg_scale(mod):
     """Both loaders build their media dict with the same function, not a copy."""
-    from pilebuild.loaders import vg_scale
+    from pilebuild import scale_core as vg_scale
 
     assert mod.scale_media is vg_scale.scale_media
 
 
 def test_scale_media_carries_the_importer_and_skips_undecodable_bytes():
-    from pilebuild.loaders.vg_scale import scale_media
+    from pilebuild.scale_core import scale_media
 
     common = {
         "iid": 7,

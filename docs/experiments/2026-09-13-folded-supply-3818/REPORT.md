@@ -192,7 +192,7 @@ exposed #3696's denominator bug; here it is again, a perfectly ordinary
 
 ## Reproducing it
 
-`scripts/experiments/pile/folded_supply.py` on the GRID; three minutes of CPU,
+`folded_supply.py` (retired with Visual Genome — see `docs/plans/coco-quarry.md`) on the GRID; three minutes of CPU,
 ~12 GB, no GPU and no rebuild. It reads VG's object table once and shares that
 parse between `silence_source`'s classification and the loader's own read.
 

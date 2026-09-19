@@ -261,7 +261,7 @@ under a minute each.
 
 | script | what it answers |
 |---|---|
-| [`name_evidence.py`](../../../scripts/experiments/pile/name_evidence.py) | `--pooled`: the group's repair precision and box agreement, the homogeneity gate, and which names inherit |
-| [`name_coverage.py`](../../../scripts/experiments/pile/name_coverage.py) | what a proposed table buys and costs: coverage, repaired, withheld, band ledger |
+| `name_evidence.py` | `--pooled`: the group's repair precision and box agreement, the homogeneity gate, and which names inherit |
+| `name_coverage.py` (retired with Visual Genome — see `docs/plans/coco-quarry.md`) | what a proposed table buys and costs: coverage, repaired, withheld, band ledger |
 | [`pile_config.py`](../../../scripts/experiments/pile/pile_config.py) | `SCALE_VG_CONSTRUCTIONS` and `SCALE_VG_GROUPS` — the grouping itself, declared beside the tables it fills |
 | [`figures.py`](figures.py) | the three figures, from `measurements/` |

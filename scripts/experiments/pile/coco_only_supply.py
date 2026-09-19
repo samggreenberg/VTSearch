@@ -10,7 +10,7 @@ This asks the question with the pool unbounded by VG. It needs **no VG source
 and no pile** -- only ``instances_train2017.json`` and ``instances_val2017.json``
 -- so it runs anywhere, in about a minute, against ~490 MB of JSON.
 
-It imports the SHIPPED band rule (:func:`pilebuild.loaders.vg_scale.band_for`)
+It imports the SHIPPED band rule (:func:`pilebuild.scale_core.band_for`)
 rather than restating it, for the reason that function's own docstring gives: a
 second copy of the rule would answer a supply question with its own drift. The
 scatter guard and `BOX_BANDS` therefore apply exactly as the builder applies
@@ -41,7 +41,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import pile_config as pc  # noqa: E402
-from pilebuild.loaders.vg_scale import OVERSIZE, SCATTERED, band_for  # noqa: E402
+from pilebuild.scale_core import OVERSIZE, SCATTERED, band_for  # noqa: E402
 
 BANDS = ("small", "medium", "large")
 

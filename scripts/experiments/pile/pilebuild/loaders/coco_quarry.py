@@ -16,11 +16,11 @@ is left. COCO annotates all eighty classes exhaustively on every image in its ow
 vocabulary, so **none of that apparatus has a question to answer here**: no name
 tables, no fold-in, no ambiguity lifting, no anchoring, no corrections file.
 
-**What it reuses is also the point.** :func:`~pilebuild.loaders.vg_scale.band_for`,
+**What it reuses is also the point.** :func:`~pilebuild.scale_core.band_for`,
 :func:`~pilebuild.loaders.vg_scale.band_candidates`,
 :func:`~pilebuild.loaders.vg_scale.designate_cells` and
 :func:`~pilebuild.loaders.vg_scale.draw_negatives` are imported unchanged, and the
-media dict is built by the shared :func:`~pilebuild.loaders.vg_scale.scale_media`.
+media dict is built by the shared :func:`~pilebuild.scale_core.scale_media`.
 A cell here and a cell there are comparable only if the rule that banded them is
 the same object rather than the same intention — the reason `band_for` was split
 out in the first place, and the reason `coco_only_supply.py` imports it rather
@@ -61,7 +61,7 @@ from pathlib import Path
 import pile_config as pc
 
 from pilebuild.env import log
-from pilebuild.loaders.vg_scale import band_candidates, designate_cells, draw_negatives, scale_media
+from pilebuild.scale_core import band_candidates, designate_cells, draw_negatives, scale_media
 
 #: The two splits, in the order the census read them.
 SPLITS = ("val2017", "train2017")
