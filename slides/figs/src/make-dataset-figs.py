@@ -1054,16 +1054,12 @@ HEAD_PT = FLOOR_PT + 11
 #: Gap between a term and its gloss on the shared baseline. Wider than a word
 #: space: the point is that the two are different registers, not one phrase.
 TERM_GAP = 0.009
-#: Four gaps, and their *order* is the hierarchy the column is asking the eye
-#: to read: tightest between two definitions, wider after a heading's verdict
-#: where the argument moves on, widest of all above a heading. `HEAD_TO_NOTE`
-#: is not a choice — it is the drop from a 26pt baseline to the 15pt one under
-#: it. Sized together so the last line lands near the foot of the column
-#: rather than leaving a third of it empty.
-DEF_PITCH = 0.083
-HEAD_LEAD = 0.052
-HEAD_TO_NOTE = 0.052
-NOTE_PITCH = 0.110
+#: Three gaps, and their *order* is the hierarchy the column is asking the eye
+#: to read: tightest between two definitions, wider after a heading where the
+#: argument moves on, widest of all above a heading.
+DEF_PITCH = 0.075
+HEAD_LEAD = 0.050
+HEAD_PITCH = 0.095
 #: The column starts a shade above `LEFT_TOP` because these are baselines and
 #: that one is a top: the tallest thing here rises about 0.025 over its own
 #: baseline, so 0.706 puts the first cap-height at 0.731, still clear of the
@@ -1081,23 +1077,31 @@ STACK_MAX_W = 0.275
 QUARRY_CHIP = {"boxstyle": "square,pad=0.18", "facecolor": "white", "edgecolor": "none"}
 
 #: The column, in the order the build introduces it, as `(kind, term, gloss)`.
+#: A heading carries no gloss: the verdict on each experiment is a thing the
+#: presenter says, and a slide that also writes it down is asking the room to
+#: read the sentence it is being told.
 #:
 #: The two kinds alternate by accident of the argument rather than by design,
 #: and the grouping they produce is the reason the order is worth reading:
 #: two definitions, the easy experiment they buy, two more definitions, and the
-#: hard experiment *those* buy. A heading's gloss is its one-line verdict, set
-#: under it rather than beside it.
+#: hard experiment *those* buy.
+#:
+#: **A gloss is an instruction to the images, not a description of the set.**
+#: `A⁺` does not hold an A — the pictures in it do, every one of them — so the
+#: gloss is written as the entry requirement each of them meets: *Hold an A,
+#: maybe more.* Which is also why all four start with the same verb: the sets
+#: differ in what they demand, not in what kind of demand it is.
 #:
 #: The `Easy:` heading is the one entry whose term moves — the experiment is
 #: shown three times, once per class, and `_quarry_easy_term` supplies the
 #: spelling for the frame being drawn.
 QUARRY_BLOCKS = [
-    ("def", "A⁺", "holds an A, maybe more"),
-    ("def", "∅", "holds none of the three"),
-    ("head", "Easy: A⁺ vs ∅", "an A-or-B-or-C detector wins"),
-    ("def", "AB⁼", "holds exactly A and B"),
-    ("def", "¬A", "every image without an A"),
-    ("head", "Hard: A⁺ vs ¬A", "no image sits it out"),
+    ("def", "A⁺", "Hold an A, maybe more."),
+    ("def", "∅", "Hold none of the three."),
+    ("head", "Easy: A⁺ vs ∅", None),
+    ("def", "AB⁼", "Hold exactly A and B."),
+    ("def", "¬A", "Hold no A."),
+    ("head", "Hard: A⁺ vs ¬A", None),
 ]
 
 #: One entry per frame: `(good, negatives, cells, blocks)`.
@@ -1230,9 +1234,7 @@ def _quarry_stack(fig: plt.Figure, frame: int) -> None:
                     fontweight="bold",
                     va="baseline",
                 )
-                fig.text(LEFT_X, y - HEAD_TO_NOTE, gloss, fontsize=FLOOR_PT, color=SOFT, va="baseline")
-            lowest = y - HEAD_TO_NOTE
-            y = lowest - NOTE_PITCH
+            lowest, y = y, y - HEAD_PITCH
             continue
         head = fig.text(LEFT_X, y, term, fontsize=TERM_PT, color=INK, fontweight="bold", va="baseline")
         width = _text_width(fig, head)
@@ -1252,13 +1254,32 @@ def _quarry_stack(fig: plt.Figure, frame: int) -> None:
         raise SystemExit(
             f"notation column: the {len(QUARRY_BLOCKS)} blocks overflow the slide (last baseline "
             f"at {lowest:.3f}, floor {STACK_FLOOR}). Drop a block, or tighten DEF_PITCH / "
-            f"NOTE_PITCH."
+            f"HEAD_PITCH."
         )
 
 
-def _quarry_chip(ax: plt.Axes, x: float, y: float, text: str, size: float, **kwargs) -> None:
+def _quarry_chip(ax: plt.Axes, x: float, y: float, text: str, size: float, colour: str = INK, **kwargs) -> None:
     """A label on a chip of background, so hatching does not run through it."""
-    ax.text(x, y, text, fontsize=size, color=INK, bbox=dict(QUARRY_CHIP), zorder=6, **kwargs)
+    ax.text(x, y, text, fontsize=size, color=colour, bbox=dict(QUARRY_CHIP), zorder=6, **kwargs)
+
+
+def _quarry_tone(bits: int, good: int | None, negatives: str | None) -> str:
+    """The colour a region's own label takes: the colour that region is shaded.
+
+    `bits` is a membership mask over (A, B, C), with `0` meaning the outside.
+    A label names one pile or it names none, so this answers only for regions
+    that are *entirely* one pile — every cell of the Venn, and the outside. It
+    is not true of a whole circle once A is the positive side: B is then green
+    where it crosses A and red where it does not, and its label stays ink.
+    Circle labels are coloured by the caller for that reason.
+    """
+    if good is not None and bits and bits >> good & 1:
+        return QUARRY_GOOD
+    if negatives == "outside" and not bits:
+        return QUARRY_BAD
+    if negatives == "not_a" and not bits & 1:
+        return QUARRY_BAD
+    return INK
 
 
 def fig_coco_quarry_complement(frame: int = len(QUARRY_FRAMES) - 1) -> plt.Figure:
@@ -1327,11 +1348,13 @@ def fig_coco_quarry_complement(frame: int = len(QUARRY_FRAMES) - 1) -> plt.Figur
     # centring it on the radial instead straddles the outline, and a label
     # lying across the thing it names is the one placement that reads as a
     # mistake rather than as a gap (`slides/STYLE.md`, *A label is closer*).
-    for (cx, cy), (dx, dy), anchor, name in zip(
-        centres,
-        ((0.0, 1.0), (-0.866, -0.5), (0.866, -0.5)),
-        (("center", "bottom"), ("right", "top"), ("left", "top")),
-        "ABC",
+    for index, ((cx, cy), (dx, dy), anchor, name) in enumerate(
+        zip(
+            centres,
+            ((0.0, 1.0), (-0.866, -0.5), (0.866, -0.5)),
+            (("center", "bottom"), ("right", "top"), ("left", "top")),
+            "ABC",
+        )
     ):
         _quarry_chip(
             ax,
@@ -1339,18 +1362,24 @@ def fig_coco_quarry_complement(frame: int = len(QUARRY_FRAMES) - 1) -> plt.Figur
             cy + dy * (QUARRY_R + 0.06),
             f"{name}⁺",
             FLOOR_PT + 5,
+            QUARRY_GOOD if good == index else INK,
             fontweight="bold",
             ha=anchor[0],
             va=anchor[1],
         )
     # ∅ bottom-left, ¬A top-right: they name nested regions once both are on
     # screen, so they go in opposite corners rather than along one edge.
-    _quarry_chip(ax, x0 + 0.13, y0 + 0.13, "∅", FLOOR_PT + 7, fontweight="bold", ha="left", va="bottom")
+    empty = _quarry_tone(0, good, negatives)
+    _quarry_chip(ax, x0 + 0.13, y0 + 0.13, "∅", FLOOR_PT + 7, empty, fontweight="bold", ha="left", va="bottom")
     if cells:
         for bits, (x, y) in _quarry_cells(centres).items():
-            _quarry_chip(ax, x, y, quarry_cell_name(bits), FLOOR_PT, ha="center", va="center")
+            tone = _quarry_tone(bits, good, negatives)
+            _quarry_chip(ax, x, y, quarry_cell_name(bits), FLOOR_PT, tone, ha="center", va="center")
     if negatives == "not_a":
-        _quarry_chip(ax, x0 + w - 0.13, y0 + h - 0.13, "¬A", FLOOR_PT + 7, fontweight="bold", ha="right", va="top")
+        # ¬A is red throughout by construction — it *is* the Bad pile here.
+        _quarry_chip(
+            ax, x0 + w - 0.13, y0 + h - 0.13, "¬A", FLOOR_PT + 7, QUARRY_BAD, fontweight="bold", ha="right", va="top"
+        )
 
     _quarry_stack(fig, frame)
     return fig

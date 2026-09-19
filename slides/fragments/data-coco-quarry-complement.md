@@ -45,6 +45,7 @@
      without an A is three of those cells plus the empty one. You can only
      name that region if absence is annotated rather than inferred. -->
 
-<!-- **g** — Same positives, honest negatives. The line now has to fall
-     **between** classes, and the A-or-B-or-C detector fails it — which is
-     the benchmark worth building. -->
+<!-- **g** — Same positives, honest negatives, and no image sits the question
+     out: every one of them is on one side or the other. The line now has to
+     fall **between** classes, and the A-or-B-or-C detector fails it — which
+     is the benchmark worth building. -->
