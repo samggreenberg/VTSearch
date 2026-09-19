@@ -89,6 +89,11 @@ COCO_TRAIN_IMAGES = COCO_ROOT / "images" / "train2017"
 #: `.jsonl.gz` the `coco_val` loader reads. Two sources, two names, on purpose.
 COCO_ANCHOR_DIR = Path(os.environ.get("VTS_COCO_ANCHOR_DIR", str(PILE / "coco_anchor")))
 
+#: How many shards the full-corpus patch column is cut into. Chosen so each cell
+#: lands near 4.7 GB, which is what `vg_scale__dinov3_patch.pkl` already is and
+#: therefore a size the harness is known to load.
+COCO_QUARRY_SHARDS = 8
+
 #: Datasets in the pile. ``boxed`` means the medias carry ground-truth region
 #: boxes, which is what a region-voting arm drags — necessary but not
 #: sufficient (the embedder must also be patch-capable; see region_capable).
@@ -120,6 +125,27 @@ DATASETS: dict[str, dict] = {
     # -- unwritable at any sane `--mem` once the thinned copy is counted, and
     # unreadable afterwards. The patch column stays on `coco_quarry`.
     "coco_quarry_full": {"boxed": True, "kind": "coco_quarry", "full_corpus": True, "on_request": True},
+    # The patch column over the same full corpus, in shards. One cell would be
+    # ~37 GB of grids: `build_pile.py` holds a whole cell in RAM and writes it
+    # with one `pickle.dump`, and every consumer reads it back through
+    # `load_medias` into one dict, so a single cell is unwritable at any sane
+    # `--mem` and unreadable afterwards. At COCO_QUARRY_SHARDS each is ~4.7 GB --
+    # the size of the `vg_scale` patch cell studies already load.
+    #
+    # The shard is a slice of the EMIT set only. Supply, banding and the clean
+    # pool are computed over the whole corpus first, so a cell means the same
+    # thing in every shard; the split is by `image_id % n`, so each carries every
+    # class and band in proportion rather than an arbitrary contiguous range.
+    **{
+        f"coco_quarry_full_s{i}": {
+            "boxed": True,
+            "kind": "coco_quarry",
+            "full_corpus": True,
+            "on_request": True,
+            "shard": (i, COCO_QUARRY_SHARDS),
+        }
+        for i in range(COCO_QUARRY_SHARDS)
+    },
     # Box-size-banded VG, drawn from the WHOLE source (all 108k images, full
     # free-text vocabulary) rather than the demo pipeline's 100 curated
     # categories on a 4% slice.  The `_s`/`_m`/`_l` on `visual_genome_*` is a
