@@ -50,9 +50,13 @@ and it is cheap to settle — see the first item below.
 
 ## Open work
 
+**State, 2026-09-19.** The build is finished: `coco_quarry` and `coco_quarry_full` are built and verified, the export layer is in, and the VG machinery is retired. What is left is four things — the band re-validation, widening *C*, the `truck`/`car` ruling, and the studies the set exists to support. Items below marked **DONE** keep their original argument, because a plan whose history is deleted reads as though every decision was obvious.
+
 <!-- item-sep -->
 
-- **Settle the diversity claim before the rebuild, not after.** The only
+- **DONE — #3997, merged in #3998.** Off-COCO is *differently distributed* (AUC 0.53–0.54 matched within `class@band`, five embedders) and **not harder**: on the shipped head every statistic leans the other way, 34–37 of 58 cells agreeing. The difficulty argument for keeping VG is gone.
+
+  **Settle the diversity claim before the rebuild, not after.** The only
   remaining argument for VG is that its non-COCO half is *differently
   distributed*, not merely additional. Measure it: are off-COCO positives harder,
   or differently composed, than COCO-anchored ones at matched band and class?
@@ -64,7 +68,9 @@ and it is cheap to settle — see the first item below.
 
 <!-- item-sep -->
 
-- **Build the COCO loader, and keep the band rule identical.** A `kind: "coco"`
+- **DONE — #4008.** `pilebuild/loaders/coco_quarry.py`, 200 lines against `vg_scale`'s 1,064, importing `band_for` unchanged. Against the real corpus: 75 cells, 7,500 positives, 0 short of `SCALE_N_POS`. `iscrowd` dropped explicitly, as the census did.
+
+  **Build the COCO loader, and keep the band rule identical.** A `kind: "coco"`
   sibling of `vg_scale.py` reading `instances_*2017.json`
   directly: no `anchor_to_coco`, no `canonicalise`, no `lift_ambiguous`, no
   corrections file. `band_for` is imported unchanged — that is what makes the old
@@ -76,7 +82,9 @@ and it is cheap to settle — see the first item below.
 
 <!-- item-sep -->
 
-- **Keep the old cells readable under their own name.** `pile_config` warns that
+- **DONE — #4038 made this the settled position.** `vg_scale*` cells stay on disk and load by path; nothing can rebuild one. Studies conditioned on them keep working, and nothing new is built on them.
+
+  **Keep the old cells readable under their own name.** `pile_config` warns that
   rebuilding a cell silently changes what it is, and five-plus studies (#3115,
   #3196, #3287, #3290, #3318, #3319) are conditioned on the VG-built ones.
   Reproducing those is no longer a reason to keep cleaning VG — they can be
@@ -95,7 +103,9 @@ and it is cheap to settle — see the first item below.
 
 <!-- item-sep -->
 
-- **Retire the inference machinery, and delete it.** The name tables, the
+- **DONE — #4038.** 38 files, 11,188 deletions: four loaders, the seven scripts named below, thirteen VG-bound analysis scripts, and their tests. The source-agnostic core was lifted to `pilebuild/scale_core.py` first, because `coco_quarry` imported all of it from the VG loader. Published reports keep their citations, re-captioned rather than unlinked.
+
+  **Retire the inference machinery, and delete it.** The name tables, the
   two-search candidate hunt, pooled adjudication, `pool_contamination.py`,
   `withheld_difficulty.py`, the `provable`/`matched` composition switch (#3702),
   #3655's global ambiguous exclusion and #3659's silent un-banding all exist to
@@ -109,7 +119,9 @@ and it is cheap to settle — see the first item below.
 
 <!-- item-sep -->
 
-- **Keep `SCALE_CLASS_RULES`, and re-aim it.** Under VG it recorded where a
+- **DONE.** `SCALE_CLASS_CONTENTS` carries all 25 classes and says what COCO's annotators counted rather than what a reviewer should. Re-measured 2026-09-19 and it reproduces exactly (`cup` 39% glass, `truck` 38% with 17% car, `stop sign` 79%, `book` 85%).
+
+  **Keep `SCALE_CLASS_RULES`, and re-aim it.** Under VG it recorded where a
   reviewer's reading had to be pinned down. Under COCO the definitions become
   *inherited* — COCO annotates magazines as `book`, which is what split #3612's
   review — so the table's job changes from adjudicating to **documenting where
@@ -119,11 +131,13 @@ and it is cheap to settle — see the first item below.
 
 <!-- item-sep -->
 
-- [ ] #3987 — prevalence becomes an axis: one meta-dataset exporting versions from 5% to 0.1% (Opus 4.8)
+- [x] #3987 — prevalence is an axis (#4034). π = 0.001 is reachable for **every** cell at 100 positives; it is reachable at full positives **nowhere** (`car@large` would need 1.29M negatives against 96,458), so the envelope is two-dimensional and the exporter refuses an infeasible ask with the shortfall named.
 
 <!-- item-sep -->
 
-- **Move band and class list to eval-time queries too.** #3987 does prevalence;
+- **DONE — #4034.** `quarry_export.py` selects positives and negatives from the embedded corpus at any prevalence the data supports, so `SCALE_N_POS`, `SCALE_N_NEG` and π are filters rather than rebuilds. All 75 cells reproduce the designated membership exactly at `SCALE_N_POS`.
+
+  **Move band and class list to eval-time queries too.** #3987 does prevalence;
   the other two are the same change and should land with it. COCO is exhaustively
   annotated, so a cell is a filter over a fixed set rather than a build-time
   designation: `SCALE_N_POS` / `SCALE_N_NEG` stop being re-embeds and a class-list
@@ -132,7 +146,7 @@ and it is cheap to settle — see the first item below.
 
 <!-- item-sep -->
 
-- [ ] #3988 — embed all of COCO once: six columns, ~7 h, ~81 GB (Sonnet 5)
+- [x] #3988 — COCO is embedded (#4017, #4022). **Five columns, not six**: `dinov2_patch` dropped by the owner. The four single-vector columns cover all 123,287 images (1.8 GB, 3 h 41 m); `dinov3_patch` is 8 shards of 4.7 GB, because one full-corpus patch cell is ~37 GB — unwritable in a single `pickle.dump` and unreadable through `load_medias`.
 
 <!-- item-sep -->
 
@@ -180,7 +194,7 @@ and it is cheap to settle — see the first item below.
 
 <!-- item-sep -->
 
-- [ ] #3986 — drop the shared negative pool; per-class negatives, one pool filtered by `evaluable_categories` (Opus 4.8)
+- [x] #3986 — per-class negatives are the default (#4034). ~100,000 per cell against the designated 9,900, about half holding another class in *C* where the shared pool is 0% by construction. `--pool shared` reproduces the old shape for arms compared against a published number. **What a detector's numbers do under each pool is still unmeasured.**
 
 <!-- item-sep -->
 
@@ -202,7 +216,9 @@ and it is cheap to settle — see the first item below.
 
 <!-- item-sep -->
 
-- **Write the class notes from the purity table, once, and ship them.**
+- **DONE — the table already existed** and was verified by re-running the instrument. Worth recording what it establishes: **share does not rank difficulty**. Every class whose review actually split is homogeneous — `book` 85%, `cell phone` 89%, `knife` 93% — so a 4% minority meeting an unwritten rule splits reviewers as surely as a 40% one.
+
+  **Write the class notes from the purity table, once, and ship them.**
   [`coco_class_purity.py`](../../scripts/experiments/pile/coco_class_purity.py)'s
   name list is the text `SCALE_CLASS_RULES` needs — `cup` is
   glass/cup/mug, `book` includes magazines, `stop sign` includes 20% generic
