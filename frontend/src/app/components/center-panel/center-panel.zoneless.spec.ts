@@ -8,6 +8,7 @@ import { RegionBox } from './image-viewer/image-viewer.component';
 import { ANIMATIONS_OFF_CLASS, ANIMATIONS_ON_CLASS } from '../../utils/reduced-motion';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleZoneless } from '../../testing/settle-resource';
+import { provideRouter, Router } from '@angular/router';
 import { provideHttpTesting } from '../../testing/test-providers';
 import { voteBodyWithoutProvenance } from '../../testing/mocks';
 
@@ -48,7 +49,7 @@ describe('CenterPanelComponent (zoneless keyboard canary)', () => {
   beforeEach(async () => {
     configureZoneless({
       imports: [CenterPanelComponent],
-      providers: [...provideHttpTesting()],
+      providers: [...provideHttpTesting(), provideRouter([])],
     });
     fixture = TestBed.createComponent(CenterPanelComponent);
     component = fixture.componentInstance;
@@ -747,6 +748,39 @@ describe('CenterPanelComponent', () => {
         .toContain('All items reviewed');
       expect(fixture.nativeElement.querySelector('.exhausted-body').textContent)
         .toContain('Check Stats or export.');
+    });
+
+    /**
+     * Picking another dataset or detector is the likely next move once a
+     * detector is finished, and both live on the Dashboard — so the pane that
+     * announces the end offers the way there rather than leaving the user to
+     * find the top bar.
+     */
+    it('offers the way out to the Dashboard, and takes it', async () => {
+      const router = TestBed.inject(Router);
+      const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+      exhaust();
+
+      const action = fixture.nativeElement.querySelector(
+        '.exhausted-pane .empty-state__action',
+      ) as HTMLButtonElement;
+      expect(action).toBeTruthy();
+      expect(action.textContent).toContain('Return to Dashboard');
+      expect(action.disabled).toBe(false);
+
+      action.click();
+      await settleZoneless(fixture);
+
+      expect(navigate).toHaveBeenCalledWith(['/dashboard']);
+    });
+
+    it('keeps the way out to itself — the placeholder is not a dead end', () => {
+      // Nothing selected is a "pick one" state, not a finished one: the grid
+      // beside the pane is full of items, so an exit button there would compete
+      // with the thing the user should actually click.
+      TestBed.tick();
+      expect(fixture.nativeElement.querySelector('.placeholder-pane .empty-state__action'))
+        .toBeNull();
     });
 
     it('renders both vote buttons disabled and unhighlighted', () => {

@@ -9,6 +9,12 @@
       <span class="empty-state__icon" aria-hidden="true"><vt-icon type="check" [size]="32"></vt-icon></span>
       <p class="exhausted-heading">{{ exhaustedHeading() }}</p>
       <p class="exhausted-body">{{ exhaustedDetail() }}</p>
+      <button
+        type="button"
+        class="empty-state__action btn btn--secondary"
+        (click)="goToDashboard()"
+        title="Back to the Dashboard, where datasets and detectors are picked"
+      >Return to Dashboard</button>
     </div>
 
     <!-- The vote row stays put so the panel does not reflow out from under the

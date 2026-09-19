@@ -81,6 +81,12 @@
   padding: var(--space-lg);
 }
 
+// The way out. The pane's own `gap` is tight enough for the icon/heading/body
+// stack; the action wants visible separation from the sentence above it.
+.exhausted-pane .empty-state__action {
+  margin-top: var(--space-md);
+}
+
 .exhausted-pane .empty-state__icon,
 .placeholder-pane .empty-state__icon {
   color: var(--text-muted);

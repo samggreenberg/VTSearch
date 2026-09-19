@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, input, OnDestroy, output, signal, untracked, viewChild } from '@angular/core';
 import { KeyValuePipe, TitleCasePipe } from '@angular/common';
+import { Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { EmbedderInfo, Media, PayloadVariant } from '../../models/api.models';
 import { MediasApiService } from '../../services/medias-api.service';
@@ -45,6 +46,7 @@ export class CenterPanelComponent implements OnDestroy {
   private settingsState = inject(SettingsStateService);
   private sortState = inject(SortStateService);
   private datasetsListingsApi = inject(DatasetsListingsApiService);
+  private router = inject(Router);
   private destroyRef = inject(DestroyRef);
 
   readonly media = input<Media | null>(null);
@@ -377,6 +379,16 @@ export class CenterPanelComponent implements OnDestroy {
     if (!media) return {};
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (media as any)['custom_metadata'] as Record<string, unknown> || {};
+  }
+
+  /**
+   * Leave for the Dashboard. Offered from the "nothing left" pane because that
+   * is where the work ends: the remaining moves are picking another dataset or
+   * detector, and both live there. Every other exit from this pane — undo,
+   * export, reviewing the piles — is already a control the user can see.
+   */
+  goToDashboard(): void {
+    this.router.navigate(['/dashboard']);
   }
 
   /** Human-readable label for an item used in undo toasts. */
