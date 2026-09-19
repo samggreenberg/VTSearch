@@ -1107,7 +1107,8 @@ class TestAllEmbeddersRegistration:
         # 7 original + 11 image embedders (clip, clip_l, siglip2, siglip2_l,
         # siglip_l, plus single/patch variants for dinov2, dinov3, eupe)
         # + 1 face embedder
-        # + 1 structural image embedder (sift_vlad)
+        # + 2 structural image embedders (sift_vlad, and sift_vlad_doc: the same
+        #   backend at the document keypoint budget, #3908/#3911/#4021)
         # + 1 vision-only video embedder (videomae)
         # + 5 audio embedders (ast, beats, clap_general, whisper_encoder, paraspeechclap).
         #
@@ -1116,7 +1117,7 @@ class TestAllEmbeddersRegistration:
         # app builds from are `embedders_for_type` / `all_embedders_dict`; the
         # `embedders_for_type("image")` set below is unchanged by `clip_l`, which
         # is the check that the withholding actually works.
-        assert len(embedders) == 26
+        assert len(embedders) == 27
 
     def test_all_embedders_dict_includes_supports_text(self):
         """The new ``supports_text`` flag must round-trip through ``to_dict``
@@ -1147,6 +1148,7 @@ class TestAllEmbeddersRegistration:
             "eupe_single",
             "eupe_patch",
             "sift_vlad",
+            "sift_vlad_doc",
             "videomae",
             "ast",
             "beats",
@@ -1179,6 +1181,7 @@ class TestAllEmbeddersRegistration:
             "eupe_single",
             "eupe_patch",
             "sift_vlad",
+            "sift_vlad_doc",
             "e5",
             "bge",
             "xclip",
@@ -1211,6 +1214,7 @@ class TestAllEmbeddersRegistration:
             "eupe_single",
             "eupe_patch",
             "sift_vlad",
+            "sift_vlad_doc",
         }
 
     def test_embedders_for_face(self):
@@ -1282,10 +1286,11 @@ class TestAllEmbeddersRegistration:
         dicts = all_embedders_dict()
         # 7 original + 10 image embedders (clip, siglip2, siglip2_l, siglip_l,
         # plus single/patch variants for dinov2, dinov3, eupe) + 1 face embedder
-        # + 1 structural image embedder (sift_vlad)
+        # + 2 structural image embedders (sift_vlad, and sift_vlad_doc: the same
+        #   backend at the document keypoint budget, #3908/#3911/#4021)
         # + 1 vision-only video embedder (videomae)
         # + 5 audio embedders (ast, beats, clap_general, whisper_encoder, paraspeechclap).
-        assert len(dicts) == 25
+        assert len(dicts) == 26
         for d in dicts:
             assert "name" in d
             assert "media_type_id" in d
