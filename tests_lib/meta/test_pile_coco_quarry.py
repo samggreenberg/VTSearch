@@ -170,3 +170,54 @@ def test_scale_media_carries_the_importer_and_skips_undecodable_bytes():
     assert ok["origin"]["importer"] == "coco_quarry"
     assert ok["coco_scored"] is True and ok["category"] == ""
     assert scale_media(data=b"not a jpeg", importer="coco_quarry", **common) is None
+
+
+class TestFullCorpusMode:
+    """`coco_quarry_full` embeds the corpus; `coco_quarry` embeds a draw from it.
+
+    The difference is the whole reason the second dataset exists: a designated
+    cell freezes `SCALE_N_POS`/`SCALE_N_NEG` into the embedding, so #3987's
+    prevalence axis would cost a re-embed. Embedded whole, a cell is a filter.
+    """
+
+    def test_the_dataset_declares_the_flag(self):
+        import pile_config as pc
+
+        assert pc.DATASETS["coco_quarry_full"]["full_corpus"] is True
+        assert pc.DATASETS["coco_quarry_full"]["kind"] == "coco_quarry", "one loader, two datasets"
+        assert not pc.DATASETS["coco_quarry"].get("full_corpus")
+        assert pc.DATASETS["coco_quarry_full"].get("on_request"), "6.8x the designated build"
+
+    def test_cells_of_takes_every_banded_image(self, mod):
+        """No `SCALE_N_POS` cap: the cap is what is being deferred to export."""
+        supply = {"bus": {"small": [1, 2, 3], "large": [4], "medium": []}}
+        assert mod._cells_of("bus", supply) == {"bus@small": [1, 2, 3], "bus@large": [4]}, (
+            "empty bands are dropped, non-empty ones are kept whole"
+        )
+
+    def test_an_unbanded_image_is_still_in_the_corpus(self, mod, tmp_path: Path):
+        """The trap: `band_candidates` returns banded supply and the clean pool.
+
+        An image holding a class in NO valid band -- scattered, or oversize -- is
+        in neither, so a full-corpus emit set built from their union would drop it
+        and still call itself everything.
+        """
+        anchor = _corpus(tmp_path)
+        labels, _, _ = mod.read_coco_labels(anchor, ("bus",))
+        # image 1 holds a bus, image 2 holds a bus; neither is clean.
+        assert set(labels) == {1, 2}
+        # The emit set in full mode is keyed on `labels`, which carries every
+        # image in the corpus including those that band nowhere.
+        assert all(iid in labels for iid in (1, 2))
+
+    def test_the_corpus_read_is_cached_across_embedders(self, mod, tmp_path: Path):
+        """The builder calls `load` once per embedder in one process."""
+        anchor = _corpus(tmp_path)
+        mod._CORPUS.clear()
+        first = mod.read_coco_labels(anchor, ("bus",))
+        second = mod.read_coco_labels(anchor, ("bus",))
+        assert first[0] is second[0], "same object, not a re-read"
+        assert len(mod._CORPUS) == 1
+        mod.read_coco_labels(anchor, ("bus", "clock"))
+        assert len(mod._CORPUS) == 2, "a different class list is a different answer"
+        mod._CORPUS.clear()
