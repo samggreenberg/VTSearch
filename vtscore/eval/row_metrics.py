@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import numpy as np
 
-from vtscore.eval.voting_columns import SKYLINE_COLUMNS
+from vtscore.eval.voting_columns import BAND_COLUMNS, SKYLINE_COLUMNS
 from vtscore.training.thresholds import CUT_KIND_INTERIOR
 
 #: ``fold_anchored[2/4]`` / ``fold_conformal_qmean[3/4]`` - *a* of *k*.
@@ -196,6 +196,12 @@ def operating_metrics(
 
     return {
         "pool_variant": pool_variant,
+        # The per-size breakdown (#4044): NaN here, and overwritten for every row
+        # a *step* emits by the one block `voting_iterations` computes at the
+        # shipped cut.  Declared here so the rows that never see that block --
+        # the skyline arms, which belong to no step and cut their own threshold
+        # -- still carry the full schema rather than a short dict.
+        **{col: nan for col in BAND_COLUMNS},
         # Safe-threshold study columns (issue #2799): defaults here; the base
         # row and the per-variant rows overwrite them where they apply.
         "gmm_variant": "",

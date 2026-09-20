@@ -341,6 +341,7 @@ def main(argv: list[str] | None = None) -> int:
             trainer="app",
             head=cfg.HEAD,
             style=style,
+            test_bands=cfg.TEST_BANDS,
             emit_calibration_metrics=True,
             repool_variants=variants,
             repool_topk=cfg.REPOOL_TOPK,
