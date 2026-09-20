@@ -3,6 +3,7 @@
 The issue quotes #3670's vg_scale figure (evaluable pool ~1,900 larger than
 SCALE_N_NEG, ~84% barren). coco_quarry is a different build, so measure it.
 """
+
 import collections
 import statistics
 import sys
