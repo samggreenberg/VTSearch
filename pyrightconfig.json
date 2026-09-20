@@ -7,13 +7,24 @@
     "scripts",
     "data"
   ],
-  "extraPaths": ["tests", "tests_lib", "scripts/experiments", "scripts/experiments/pile"],
+  "extraPaths": [
+    "tests",
+    "tests_lib",
+    "scripts/experiments",
+    "scripts/experiments/pile",
+    "scripts/experiments/calibration"
+  ],
   // `scripts` stays excluded from checking, but the modules its tests import
   // must still RESOLVE. `tests_lib/meta/test_pile_*.py` put the pile directory
   // on `sys.path` and import `pile_config` / `pilebuild` from it, exactly as
   // `build_pile.py` and its sibling scripts do; `test_experiments_common.py`
   // does the same for `_expcommon`, which every study's `common.py` (and
   // `pile_config`) reaches by the same sys.path trick.
+  //
+  // `calibration` joined them for `test_calibration_dataset_registry.py`, which
+  // imports `experiment_config` by bare name the way every launcher and
+  // `run_cells.py` do. It is the same claim as the two above -- a directory the
+  // harness puts on `sys.path` at runtime -- and not a new kind of exception.
   "pythonVersion": "3.10",
   "typeCheckingMode": "basic",
   "useLibraryCodeForTypes": true,
