@@ -1003,8 +1003,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument(
         "--tidy-added-marks",
         action="store_true",
-        help="rewrite added_marks.json without rows repeating a (page_id, box, class_id) already "
-        "in it, then exit",
+        help="rewrite added_marks.json without rows repeating a (page_id, box, class_id) already in it, then exit",
     )
     ap.add_argument("--cluster-backend", default=cfg.CLUSTER_BACKEND, choices=("phash", "siglip"))
     ap.add_argument("--cluster-threshold", type=float, default=cfg.CLUSTER_THRESHOLD)
