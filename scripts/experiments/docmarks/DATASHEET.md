@@ -14,12 +14,26 @@ covers what the data *is* and what a study may *conclude* from it.
 | | |
 |---|---|
 | pages | **200,000**, in three nested tiers: `s` = 5,000 ⊂ `m` = 50,000 ⊂ `l` = 200,000 |
-| roster | **23 classes**, **721 instances**, one instance per page (no roster class appears twice on a page) |
+| roster | **23 classes**, **721 instances**, almost always one instance per page — one class repeats, see [Repeated marks on a page](#repeated-marks-on-a-page) |
 | instances per class | 8 to 82, median 31 |
 | other labels | 695 must-link and 789 cannot-link rows in `adjudications.json`, keyed on `(page_id, mark_index)` |
 | query | one crop per class (`query_crop`). Extra hand-chosen crops are pending (#3949) |
 | cells | tiers `s` and `m`: `siglip` and `sift_vlad`. Tier `l`: `siglip` only (`sift_vlad` was cancelled because its keypoint budget starves it, #3911) |
 | lives at | `/expscratch/sgreenberg/docmarks/corpus/` (`corpus.jsonl`, `classes.json`, `adjudications.json`, `added_marks.json`, `roster.json`); cells under `vts-cache/datadir/embeddings/docmarks_<tier>__<embedder>.pkl` |
+
+### Repeated marks on a page
+
+One roster class breaks the otherwise one-instance-per-page rule.
+`tobacco800/logo_asg54f00_1` is a letterhead mark printed **three times on each
+of four pages** — `asg54f00`, `bjn43c00-page02_1`, `dqn43c00` and
+`nrg54f00-page02_1` — and once on six others: 18 instances over 10 pages.
+
+This is the data, not a labelling error; the letterhead really does carry the
+logo three times. A study that assumes one instance per page will undercount
+this class, so **rank by mark, not by page**, and count a page-level hit as
+correct when it matches any instance on that page.
+
+Every other roster class has at most one instance per page.
 
 ### Sources
 
