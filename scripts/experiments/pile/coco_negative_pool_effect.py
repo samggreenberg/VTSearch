@@ -13,8 +13,13 @@ comparable rather than two scales that both say "harder".
 
 Same positives, same query, two negative sets, one number each:
 
-* **shared** -- the shipped 9,900. Today's rule: an image holding no class in C.
-* **per-class** -- 9,900 drawn from `{i : i does not hold A}`, which is COCO's
+* **baseline** -- the cell's shipped negatives. NOT the barren 9,900 alone:
+  `coco_quarry` inherits #3667's fix, so a designated positive of another class
+  is an evaluable negative here. Measured on the built cell that is 16,535
+  images, 60% barren and 40% cross-class -- not the ~84% barren the issue
+  quotes, which is #3670's `vg_scale` figure and does not transfer.
+  `--baseline barren` measures the pre-#3667 pool instead, for the contrast.
+* **per-class** -- the same number drawn from `{i : i does not hold A}`, COCO's
   own co-occurrence rate. This is what "one pool, filtered per class" delivers;
   a finite *P* only changes which images are available, not the distribution,
   and `coco_negative_pool.py` already reports the |P| each class needs.
@@ -132,6 +137,12 @@ def main() -> int:
     ap_.add_argument("--embedder", default="siglip")
     ap_.add_argument("--anchor-dir", type=Path, default=pc.COCO_ANCHOR_DIR)
     ap_.add_argument("--seed", type=int, default=0)
+    ap_.add_argument(
+        "--baseline",
+        choices=("shipped", "barren"),
+        default="shipped",
+        help="shipped = the cell's real evaluable negatives (#3667 included); barren = the pre-#3667 pool",
+    )
     ap_.add_argument("--json", type=Path, default=None)
     args = ap_.parse_args()
 
@@ -162,16 +173,20 @@ def main() -> int:
     # The SHIPPED cell: its designated positives, and the one shared pool every
     # cell in it is scored against.
     pos_of: dict[str, list[int]] = collections.defaultdict(list)
-    shared: list[int] = []
+    # The cell's REAL negatives: marked evaluable for it, not designated into it.
+    ev_of: dict[str, list[int]] = collections.defaultdict(list)
+    barren: list[int] = []
     for i, d in des.items():
-        cats = d.get("categories") or []
-        if cats:
-            for cell in cats:
-                pos_of[cell].append(int(i))
-        elif d.get("evaluable_categories"):
-            shared.append(int(i))
-    shared.sort()
-    n_neg = len(shared)
+        cats = set(d.get("categories") or [])
+        for cell in cats:
+            pos_of[cell].append(int(i))
+        for cell in d.get("evaluable_categories") or []:
+            if cell not in cats:
+                ev_of[cell].append(int(i))
+        if not cats and d.get("evaluable_categories"):
+            barren.append(int(i))
+    barren.sort()
+    barren_set = set(barren)
 
     # How often a negative holds SOME other class in C. 0% for the shared pool
     # by construction; this is the quantity the whole issue turns on.
@@ -182,23 +197,26 @@ def main() -> int:
 
     cells = [pc.scale_cell(c, b) for c in classes for b in pc.BOX_BANDS]
     rows = []
-    print(f"{args.embedder}: |C| = {len(classes)}, n_neg pinned at {n_neg:,} in both arms\n")
-    print(f"{'cell':<20}{'AUC shr':>9}{'AUC p/c':>9}{'d':>8}{'AUC co':>8}{'AP shr':>8}{'AP p/c':>8}{'d':>8}")
+    print(f"{args.embedder}: |C| = {len(classes)}, baseline={args.baseline}, n_neg matched per cell\n")
+    print(f"{'cell':<20}{'AUC base':>10}{'AUC p/c':>9}{'d':>8}{'AUC co':>8}{'AP base':>9}{'AP p/c':>8}{'d':>8}")
     print("-" * 78)
     for cell in cells:
         c = cell.split("@", 1)[0]
         p = np.array([idx[i] for i in sorted(pos_of[cell])])
         if not len(p):
             continue
+        base_ids = sorted(barren) if args.baseline == "barren" else sorted(ev_of[cell])
+        n_neg = len(base_ids)
+        base_set = set(base_ids)
         # Per-class negatives: COCO's own co-occurrence rate, same size as the
-        # shared pool so prevalence is identical and AP is comparable.
-        cand = [i for i in every if i not in holders[c]]
+        # baseline so prevalence is identical and AP is comparable.
+        cand = [i for i in every if i not in holders[c] and i not in base_set]
         rng = random.Random(args.seed)
         perclass = sorted(rng.sample(cand, n_neg))
         cooccur = [i for i in perclass if in_c[i] > 0]
 
         sims = matrix @ qvec[c]
-        ns = np.array([idx[i] for i in shared])
+        ns = np.array([idx[i] for i in base_ids])
         np_ = np.array([idx[i] for i in perclass])
         nc = np.array([idx[i] for i in cooccur])
 
@@ -215,7 +233,7 @@ def main() -> int:
                 "cell": cell,
                 "n_pos": len(p),
                 "n_neg": n_neg,
-                "cooccur_shared": 0.0,
+                "cooccur_baseline": float(sum(1 for i in base_ids if i not in barren_set) / n_neg),
                 "cooccur_perclass": len(cooccur) / len(perclass),
                 "auc_shared": a_s,
                 "auc_perclass": a_p,
@@ -236,10 +254,12 @@ def main() -> int:
     se = lambda a: float(a.std(ddof=1) / np.sqrt(len(a)))  # noqa: E731
     co = float(np.mean([r["cooccur_perclass"] for r in rows]))
     print(f"\n{len(rows)} cells, {len(classes)} classes")
-    print(f"co-occurrence with another class in C:  shared 0.0%   per-class {100 * co:.0f}%")
-    print(f"paired dAUC (shared -> per-class):      {d_auc.mean():+.3f} +- {se(d_auc):.3f}")
-    print(f"paired dAUC (shared -> CO-OCCURRING):   {d_co.mean():+.3f} +- {se(d_co):.3f}")
-    print(f"paired dAP  (shared -> per-class):      {d_ap.mean():+.3f} +- {se(d_ap):.3f}")
+    base_co = float(np.mean([r["cooccur_baseline"] for r in rows]))
+    print(f"n_neg per cell: {int(np.median([r['n_neg'] for r in rows])):,} (median)")
+    print(f"co-occurrence with another class in C:  baseline {100 * base_co:.0f}%   per-class {100 * co:.0f}%")
+    print(f"paired dAUC (baseline -> per-class):    {d_auc.mean():+.3f} +- {se(d_auc):.3f}")
+    print(f"paired dAUC (baseline -> CO-OCCURRING): {d_co.mean():+.3f} +- {se(d_co):.3f}")
+    print(f"paired dAP  (baseline -> per-class):    {d_ap.mean():+.3f} +- {se(d_ap):.3f}")
     print(
         f"mean AP {np.mean([r['ap_shared'] for r in rows]):.3f} -> "
         f"{np.mean([r['ap_perclass'] for r in rows]):.3f}  (prevalence identical)"
@@ -253,7 +273,7 @@ def main() -> int:
                     "embedder": args.embedder,
                     "n_classes": len(classes),
                     "n_cells": len(rows),
-                    "n_neg": n_neg,
+                    "baseline": args.baseline,
                     "seed": args.seed,
                     "cooccur_perclass_mean": co,
                     "d_auc_mean": float(d_auc.mean()),

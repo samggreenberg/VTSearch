@@ -11,27 +11,34 @@ would have concluded there was nothing there.
 
 So this trains the head the benchmark trains, exactly as `coco_quarry` poses it:
 
-1. Fit a linear head on the cell as SHIPPED -- positives against the shared
-   pool, every image of which holds no class in C, which is all the cell offers.
-2. Score three held-out sets with it: unseen **shared-pool** negatives, a
-   **representative** per-class draw (`{i : i does not hold A}`, COCO's own
-   co-occurrence rate), and the **co-occurring subset** of that draw.
+1. Fit a linear head on the cell as SHIPPED. That is NOT the barren shared pool
+   alone: `coco_quarry` inherits #3667's fix, so a designated positive of one
+   class is an evaluable negative for the other 73 cells. Measured on the built
+   cell, a cell's shipped negative set is 16,535 images, **60% barren and 40%
+   cross-class** -- not the ~84% barren the issue quotes, which is #3670's
+   figure for `vg_scale` and does not transfer. Training on the barren 9,900
+   alone measures the PRE-#3667 benchmark, which is not the one that ships;
+   `--train-pool barren` does that on purpose, for the contrast.
+2. Score two held-out sets with it: unseen **shipped** negatives, and a
+   **representative** per-class draw (`{i : i does not hold A}`, at COCO's own
+   co-occurrence rate) of the same size, plus the **co-occurring subset** of
+   that draw.
 3. Read the false-positive rate on each, at a threshold pinned to 5% on the
-   held-out shared pool.
+   held-out shipped negatives.
 
-The three are there because they answer different questions. The representative
-draw is *what would ship* under one-pool-filtered-per-class, so its FPR is the
-cost of the change. The co-occurring subset is the apples-to-apples with #3667's
-1.88 -- that study's "added" set was other classes' positives, so every image in
-it held something, where ~40% of a representative draw is barren like the
-training pool and dilutes the ratio by construction.
+Both are there because they answer different questions. The representative draw
+is *what would ship* under one-pool-filtered-per-class, so its FPR is the cost of
+the change. The co-occurring subset is the apples-to-apples with #3667's 1.88 --
+that study's "added" set was other classes' positives, so every image in it held
+something, where a representative draw is only ~63% co-occurring and dilutes the
+ratio by construction.
 
 **AP is reported against a size-matched pair** as well, because "every published
 cell is conditioned on this" is a claim about the numbers a ship decision reads.
 Same head, same positives, n_neg pinned, so any AP move is composition.
 
-Folded 5 ways over the positives and the shared pool together, so the shared-pool
-FPR is out-of-sample rather than the training set's own.
+Folded 5 ways over the positives and the negatives together, so the baseline FPR
+is out-of-sample rather than the training set's own.
 
 Usage::
 
@@ -67,7 +74,13 @@ def main() -> int:
     ap.add_argument("--embedder", default="siglip")
     ap.add_argument("--anchor-dir", type=Path, default=pc.COCO_ANCHOR_DIR)
     ap.add_argument("--folds", type=int, default=5)
-    ap.add_argument("--fpr", type=float, default=0.05, help="shared-pool FPR the threshold is pinned to")
+    ap.add_argument("--fpr", type=float, default=0.05, help="baseline FPR the threshold is pinned to")
+    ap.add_argument(
+        "--train-pool",
+        choices=("shipped", "barren"),
+        default="shipped",
+        help="shipped = the cell's real evaluable negatives (#3667 included); barren = the pre-#3667 pool",
+    )
     ap.add_argument("--json", type=Path, default=None)
     args = ap.parse_args()
 
@@ -84,17 +97,22 @@ def main() -> int:
     X = np.stack([unit(media_vec(full[i])) for i in ids])
 
     pos_of: dict[str, list[int]] = collections.defaultdict(list)
-    shared: list[int] = []
+    # The cell's REAL negatives: every media the build marks evaluable for it and
+    # does not designate into it. On `coco_quarry` that is the barren pool plus
+    # #3667's cross-class negatives, which are 40% of it.
+    ev_of: dict[str, list[int]] = collections.defaultdict(list)
+    barren: list[int] = []
     for i, d in des.items():
-        cats = d.get("categories") or []
-        if cats:
-            for cell in cats:
-                pos_of[cell].append(int(i))
-        elif d.get("evaluable_categories"):
-            shared.append(int(i))
-    shared.sort()
-    shared_set = set(shared)
-    n_neg = len(shared)
+        cats = set(d.get("categories") or [])
+        for cell in cats:
+            pos_of[cell].append(int(i))
+        for cell in d.get("evaluable_categories") or []:
+            if cell not in cats:
+                ev_of[cell].append(int(i))
+        if not cats and d.get("evaluable_categories"):
+            barren.append(int(i))
+    barren.sort()
+    barren_set = set(barren)
 
     in_c: collections.Counter = collections.Counter()
     for c in classes:
@@ -104,20 +122,23 @@ def main() -> int:
     cells = [pc.scale_cell(c, b) for c in classes for b in pc.BOX_BANDS]
     rng = np.random.RandomState(SEED)
     rows = []
-    print(f"{args.embedder}: {len(classes)} classes, shared pool {n_neg:,}, {args.folds}-fold\n")
-    print(f"{'cell':<20}{'FPR shr':>9}{'FPR p/c':>9}{'ratio':>7}{'FPR co':>8}{'ratio':>7}{'AP shr':>8}{'AP p/c':>8}")
+    print(f"{args.embedder}: {len(classes)} classes, train-pool={args.train_pool}, {args.folds}-fold\n")
+    print(f"{'cell':<20}{'FPR base':>10}{'FPR p/c':>9}{'ratio':>7}{'FPR co':>8}{'ratio':>7}{'AP base':>9}{'AP p/c':>8}")
     print("-" * 76)
     for cell in cells:
         c = cell.split("@", 1)[0]
         p = np.array([idx[i] for i in sorted(pos_of[cell])])
         if len(p) < 10:
             continue
-        nb = np.array([idx[i] for i in shared])
+        neg_ids = sorted(barren) if args.train_pool == "barren" else sorted(ev_of[cell])
+        n_neg = len(neg_ids)
+        neg_set = set(neg_ids)
+        nb = np.array([idx[i] for i in neg_ids])
         # Representative negatives, held out of training by construction: the
-        # shipped pool is excluded because it IS the training set. That removes
-        # ~8% of the candidates and shifts the barren share a little, so the
-        # realised co-occurrence rate is reported rather than assumed.
-        cand = [i for i in every if i not in holders[c] and i not in shared_set]
+        # baseline pool is excluded because it IS the training set. It is ~15% of
+        # the candidates, and dropping it shifts the barren share a little, so
+        # the realised co-occurrence rate is reported rather than assumed.
+        cand = [i for i in every if i not in holders[c] and i not in neg_set]
         r = random.Random(SEED)
         rep = sorted(r.sample(cand, n_neg))
         nr = np.array([idx[i] for i in rep])
@@ -151,6 +172,7 @@ def main() -> int:
                 "n_pos": len(p),
                 "n_neg": n_neg,
                 "cooccur_rate": float(co_mask.mean()),
+                "cooccur_rate_baseline": float(np.mean([i not in barren_set for i in neg_ids])),
                 "fpr_shared": fpr_s,
                 "fpr_perclass": fpr_r,
                 "fpr_cooccur": fpr_c,
@@ -187,14 +209,20 @@ def main() -> int:
     d_auc = np.array([r["auc_perclass"] - r["auc_shared"] for r in rows])
     rp, rp_se = agg("ratio_perclass")
     rc, rc_se = agg("ratio_cooccur")
-    print(f"\n{len(rows)} cells, threshold pinned to {args.fpr:.0%} FPR on the shared pool")
-    print(f"realised co-occurrence of the representative draw: {100 * np.mean([r['cooccur_rate'] for r in rows]):.0f}%")
-    print(f"FPR ratio (representative / shared):  {rp:.2f} +- {rp_se:.2f}")
-    print(f"FPR ratio (co-occurring  / shared):   {rc:.2f} +- {rc_se:.2f}   <- comparable to #3667's 1.88")
+    base_co = 100 * np.mean([r["cooccur_rate_baseline"] for r in rows])
+    print(f"\n{len(rows)} cells, train-pool={args.train_pool}, threshold pinned to {args.fpr:.0%} FPR on it")
+    print(f"n_neg per cell: {int(np.median([r['n_neg'] for r in rows])):,} (median)")
     print(
-        f"paired dAUC (shared -> representative): {d_auc.mean():+.3f} +- {d_auc.std(ddof=1) / np.sqrt(len(d_auc)):.3f}"
+        f"co-occurrence: baseline pool {base_co:.0f}%, representative draw {100 * np.mean([r['cooccur_rate'] for r in rows]):.0f}%"
     )
-    print(f"paired dAP  (shared -> representative): {d_ap.mean():+.3f} +- {d_ap.std(ddof=1) / np.sqrt(len(d_ap)):.3f}")
+    print(f"FPR ratio (representative / baseline):  {rp:.2f} +- {rp_se:.2f}")
+    print(f"FPR ratio (co-occurring  / baseline):   {rc:.2f} +- {rc_se:.2f}   <- comparable to #3667's 1.88")
+    print(
+        f"paired dAUC (baseline -> representative): {d_auc.mean():+.3f} +- {d_auc.std(ddof=1) / np.sqrt(len(d_auc)):.3f}"
+    )
+    print(
+        f"paired dAP  (baseline -> representative): {d_ap.mean():+.3f} +- {d_ap.std(ddof=1) / np.sqrt(len(d_ap)):.3f}"
+    )
     print(f"mean AP {np.mean([r['ap_shared'] for r in rows]):.3f} -> {np.mean([r['ap_perclass'] for r in rows]):.3f}")
     print("\nby band (co-occurring ratio, representative ratio):")
     for b, (rc_b, rp_b) in by_band.items():
@@ -207,6 +235,7 @@ def main() -> int:
                 {
                     "embedder": args.embedder,
                     "folds": args.folds,
+                    "train_pool": args.train_pool,
                     "fpr_target": args.fpr,
                     "n_cells": len(rows),
                     "n_neg": n_neg,
