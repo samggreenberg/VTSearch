@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import importlib
+import json
 import sys
 from pathlib import Path
 
@@ -209,3 +210,43 @@ class TestAddedMarksSurviveARebuild:
         rows = [{"page_id": "tobacco800/gone", "box": [0, 0, 1, 1]}]
         assert mods["c"].replay_added_marks(pages, rows, warnings) == 0
         assert warnings and "gone" in warnings[0]
+
+
+class TestReApplyingDoesNotGrowTheStore:
+    """#4042: re-applying a class re-proposes every box it already contributed."""
+
+    def _rows(self, mods):
+        pages, classes = _corpus(mods)
+        _, _, _, _, added = mods["c"].apply_completeness(pages, classes, [_row([NOBOX], "0")])
+        return added
+
+    def test_saving_the_same_row_twice_writes_it_once(self, mods, tmp_path):
+        added = self._rows(mods)
+        store = tmp_path / mods["c"].ADDED_MARKS
+        mods["c"].save_added_marks(added, store)
+        written = mods["c"].save_added_marks(mods["c"].load_added_marks(store) + added, store)
+
+        assert len(written) == 1
+        assert mods["c"].load_added_marks(store) == written
+
+    def test_a_differing_note_is_still_the_same_mark_and_the_first_is_kept(self, mods):
+        first = self._rows(mods)[0]
+        again = dict(first, note="a later re-apply")
+        kept = mods["c"].dedupe_added_marks([first, again])
+        assert kept == [first]
+
+    def test_a_different_box_or_class_is_a_different_mark(self, mods):
+        row = self._rows(mods)[0]
+        moved = dict(row, box=[301, 400, 80, 90])
+        reclassed = dict(row, class_id="tobacco800/logo_z")
+        assert mods["c"].dedupe_added_marks([row, moved, reclassed]) == [row, moved, reclassed]
+
+    def test_a_box_stored_as_a_tuple_matches_the_same_box_as_a_list(self, mods):
+        row = self._rows(mods)[0]
+        assert mods["c"].dedupe_added_marks([row, dict(row, box=tuple(row["box"]))]) == [row]
+
+    def test_a_store_written_before_the_dedupe_is_tidied_by_the_next_save(self, mods, tmp_path):
+        row = self._rows(mods)[0]
+        store = tmp_path / mods["c"].ADDED_MARKS
+        store.write_text(json.dumps({"marks": [row, row, row]}), encoding="utf-8")
+        assert len(mods["c"].save_added_marks(mods["c"].load_added_marks(store), store)) == 1
