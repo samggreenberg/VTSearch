@@ -89,6 +89,41 @@ _VG_SCALE_TEXTS = {
     "sink": "a sink",
     "cell phone": "a cell phone",
     "fire hydrant": "a fire hydrant",
+    # The twenty-eight #4056 added, taken VERBATIM from `_COCO_TEXTS` on the
+    # same terms as the thirteen above -- `a person wearing a necktie` and
+    # `a laptop computer` included, scene and qualifier untouched. The class
+    # RULE for several of these settles a boundary the query deliberately does
+    # not mention (`tv` admits computer monitors, `potted plant` is mostly cut
+    # flowers, `mouse` is never the animal), because nobody hunting any of them
+    # types the ruling into the search box.
+    "airplane": "an airplane",
+    "apple": "an apple",
+    "banana": "a banana",
+    "baseball bat": "a baseball bat",
+    "dining table": "a dining table",
+    "frisbee": "a frisbee",
+    "handbag": "a handbag",
+    "keyboard": "a computer keyboard",
+    "laptop": "a laptop computer",
+    "microwave": "a microwave oven",
+    "motorcycle": "a motorcycle",
+    "mouse": "a computer mouse",
+    "orange": "an orange fruit",
+    "parking meter": "a parking meter",
+    "person": "a person",
+    "potted plant": "a potted plant",
+    "remote": "a tv remote control",
+    "scissors": "a pair of scissors",
+    "skateboard": "a skateboard",
+    "skis": "a pair of skis",
+    "snowboard": "a snowboard",
+    "suitcase": "a suitcase",
+    "surfboard": "a surfboard",
+    "tennis racket": "a tennis racket",
+    "tie": "a person wearing a necktie",
+    "toothbrush": "a toothbrush",
+    "traffic light": "a traffic light",
+    "tv": "a television screen",
 }
 
 #: COCO-2017-val's 80 categories as **typed queries**.
