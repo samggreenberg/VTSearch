@@ -1,9 +1,30 @@
 """``coco_quarry``: `vg_scale`'s question, asked of COCO 2017 with no Visual Genome.
 
-The same 25 classes, the same three bands, the same shared negative pool — drawn
-from COCO 2017 train+val (123,287 images) instead of the half of Visual Genome
-COCO happens to have sourced. #3983 measured that this supplies every one of the
-75 cells at the shipped ``SCALE_N_POS``, with the thinnest at 1.8x the floor.
+The same three bands and the same shared negative pool, drawn from COCO 2017
+train+val (123,287 images) instead of the half of Visual Genome COCO happens to
+have sourced. #3983 measured that this supplies every cell at the shipped
+``SCALE_N_POS``, with the thinnest at 1.8x the floor.
+
+**53 classes since #4056, not the 25 this loader was written for.** The roster is
+whatever :data:`pile_config.SCALE_CLASSES` holds — read once, below — so widening
+*C* needs no change here. What it does need is a **rebuild**: the roster is a
+declaration and the cells are data, and between the merge and the rebuild the two
+disagree. Two things to know before running that rebuild.
+
+**It is not a fill, it is a replace.** Every existing cell's negatives were drawn
+as *holds none of the 25*. Under a wider *C* that pool is not what "the shared
+pool" means any more, so ``--force`` is required and the old cells are gone
+afterwards. The 25-class build is preserved at
+``/expscratch/sgreenberg/keep/coco-quarry-25-20260920/`` and is reproducible from
+:data:`pile_config.SCALE_CLASSES_25`.
+
+**The rebuild moves published numbers, and it moves them two ways at once.**
+Widening empties the barren pool — the mean count of *C*-classes held by a clean
+pool image falls 1.163 to 0.000 — which makes cells *easier* by **+0.24 AP**
+(#4056). But #3667's cross-class negatives grow with *C* at the same time: 75
+cells' designated positives become 159 cells', which makes them *harder*. #4056
+measured only the first. The net on a real rebuilt cell is unmeasured, and it is
+the number to take before anything is republished.
 
 **What this loader does NOT do is the point of it.** `vg_scale` spends most of
 its length repairing an annotation source that cannot answer the question asked
