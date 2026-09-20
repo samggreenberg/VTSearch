@@ -77,8 +77,10 @@ class TestCohorts:
             pool = evaluable_pool(medias, cell)
             _, test_ids = _split_media_ids(pool, 0.5, np.random.RandomState(7))
             expected = sorted(cid for cid in test_ids if media_is_positive(pool[cid], cell))
+            band = sb.parse_cell(cell)[1]
+            assert band is not None
             got = sb.band_cohorts(medias, cell, sim_fraction=0.5, seed=7)
-            assert sorted(got[sb.parse_cell(cell)[1]]) == expected
+            assert sorted(got[band]) == expected
 
     def test_a_bands_cohort_does_not_depend_on_which_arm_asks(self):
         """What makes the 3x3 a matrix: one column, one set of images."""
@@ -238,10 +240,18 @@ class TestThroughTheHarness:
             **kw,
         )
 
-    def test_off_emits_no_band_columns_at_all(self):
+    def test_off_still_emits_the_columns_as_nan(self):
+        """A fixed schema, so a frame with the breakdown concatenates with one
+        without it -- the shape SKYLINE_COLUMNS already takes.  NaN rather than
+        0 for the counts: nobody looked is not the same as none were found."""
+        import math
+
+        from vtscore.eval.voting_columns import BAND_COLUMNS
+
         rows = self._run()
         assert rows
-        assert not any(k.startswith(("fnr_", "recall_", "n_test_pos_")) for k in rows[0])
+        assert set(BAND_COLUMNS) <= set(rows[0])
+        assert all(math.isnan(rows[0][col]) for col in BAND_COLUMNS)
 
     def test_the_headline_columns_do_not_move(self):
         """The whole safety property: an arm's shipped numbers are bit-identical

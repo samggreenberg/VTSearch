@@ -570,7 +570,7 @@ def _band_metrics(
     step: StepModel,
     threshold: float,
     clips_dict: dict[int, dict[str, Any]],
-    cohorts: dict[str, list[int]],
+    cohorts: Optional[dict[str, list[int]]],
     *,
     region_aware: bool = False,
     style_obj: Any = None,
@@ -590,17 +590,32 @@ def _band_metrics(
     ``fnr`` restricted to positives, which is what
     ``test_the_own_band_column_agrees_with_the_headline_fnr`` checks -- the
     cheapest available guard against a cohort built off the wrong pool.
+
+    *cohorts* is ``None`` when the run did not ask for the breakdown, and the
+    columns are emitted anyway, all NaN -- the same shape
+    :data:`~vtscore.eval.voting_columns.SKYLINE_COLUMNS` takes, and for the same
+    reason: the result frame's schema is fixed, so a frame from a run with the
+    breakdown and one from a run without it have to concatenate.  ``None`` and
+    an empty dict are **not** the same answer: nobody looked, versus the band
+    has no held-out positives, which is why the counts go NaN in the first case
+    and 0 in the second.
     """
     import numpy as np  # noqa: PLC0415
 
+    nan = float("nan")
     out: dict[str, float] = {}
     for band in scale_bands.REPORTED_BANDS:
+        if cohorts is None:
+            out[f"n_test_pos_{band}"] = nan
+            out[f"fnr_{band}"] = nan
+            out[f"recall_{band}"] = nan
+            continue
         ids = cohorts.get(band) or []
         n = len(ids)
         out[f"n_test_pos_{band}"] = float(n)
         if not n:
-            out[f"fnr_{band}"] = float("nan")
-            out[f"recall_{band}"] = float("nan")
+            out[f"fnr_{band}"] = nan
+            out[f"recall_{band}"] = nan
             continue
         scores = np.asarray(
             _score_media_ids(step, clips_dict, ids, region_aware=region_aware, style_obj=style_obj),
@@ -2155,17 +2170,13 @@ def simulate_voting_iterations(  # noqa: C901
         # same on every row this step emits -- including the calibration study's
         # per-pooling rows, whose own thresholds re-cut the headline columns and
         # not this one.
-        band_metrics = (
-            _band_metrics(
-                step,
-                threshold,
-                unfiltered,
-                band_cohorts,
-                region_aware=region_aware,
-                style_obj=style_obj,
-            )
-            if band_cohorts
-            else {}
+        band_metrics = _band_metrics(
+            step,
+            threshold,
+            unfiltered,
+            band_cohorts if test_bands else None,
+            region_aware=region_aware,
+            style_obj=style_obj,
         )
 
         # Score the remaining pool with the fresh model so the next step's
