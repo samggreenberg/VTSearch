@@ -1000,6 +1000,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         action="store_true",
         help="stamp the mark index onto legacy page-id-only adjudications, then exit",
     )
+    ap.add_argument(
+        "--tidy-added-marks",
+        action="store_true",
+        help="rewrite added_marks.json without rows repeating a (page_id, box, class_id) already "
+        "in it, then exit",
+    )
     ap.add_argument("--cluster-backend", default=cfg.CLUSTER_BACKEND, choices=("phash", "siglip"))
     ap.add_argument("--cluster-threshold", type=float, default=cfg.CLUSTER_THRESHOLD)
     ap.add_argument("--min-mark-px", type=int, default=cfg.MIN_MARK_PX)
@@ -1009,6 +1015,31 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     manifest_path = args.corpus / "corpus.jsonl"
     adjudications_path = args.corpus / "adjudications.json"
     classes = json.loads(classes_path.read_text(encoding="utf-8"))
+
+    if args.tidy_added_marks:
+        # The repair for a store written before saving deduped (#4042): a
+        # re-applied class stored every box it had already contributed again.
+        from completeness import ADDED_MARKS, added_mark_key, load_added_marks, save_added_marks  # noqa: PLC0415
+
+        store = args.corpus / ADDED_MARKS
+        rows = load_added_marks(store)
+        seen: set[Any] = set()
+        kept, duplicates = [], []
+        for row in rows:
+            key = added_mark_key(row)
+            (duplicates if key in seen else kept).append(row)
+            seen.add(key)
+        for row in duplicates:
+            print(f"  duplicate: {row['page_id']} {row['box']} {row.get('class_id')}")
+        print(f"{len(duplicates)} duplicate row(s) of {len(rows)} in {store}")
+        if not duplicates:
+            return 0
+        if args.apply:
+            save_added_marks(kept, store)
+            print(f"wrote {store} with {len(kept)} row(s)")
+        else:
+            print("dry run — pass --apply to write")
+        return 0
 
     if args.migrate_adjudications:
         from cluster_marks import load_adjudication_rows, save_adjudications
@@ -1176,14 +1207,27 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(f"  wrote {len(new_merges)} merge(s) and {len(new_separations)} separation(s) to {adjudications_path}")
 
     if new_added_marks:
-        from completeness import ADDED_MARKS, load_added_marks, save_added_marks  # noqa: PLC0415
+        from completeness import (  # noqa: PLC0415
+            ADDED_MARKS,
+            dedupe_added_marks,
+            load_added_marks,
+            save_added_marks,
+        )
 
         # Before classes.json and the manifest: a new box that is on a page but
         # not in the store would vanish at the next rebuild while its must-link
         # still names it, which is the drift this store exists to prevent.
         store = args.corpus / ADDED_MARKS
-        save_added_marks(load_added_marks(store) + new_added_marks, store)
-        print(f"  appended {len(new_added_marks)} hand-added mark(s) to {store}")
+        # Re-applying a class proposes every box it already contributed again
+        # (#4042), so count what the store actually gained rather than what the
+        # pass offered.
+        before = dedupe_added_marks(load_added_marks(store))
+        written = save_added_marks(before + new_added_marks, store)
+        already = len(new_added_marks) - (len(written) - len(before))
+        print(
+            f"  appended {len(written) - len(before)} hand-added mark(s) to {store}"
+            + (f" ({already} already on file)" if already else "")
+        )
 
     if new_reviewed_negatives or new_exclusions:
         import roster  # noqa: PLC0415

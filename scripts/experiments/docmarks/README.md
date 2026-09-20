@@ -327,6 +327,9 @@ In the order you run them. Only the first two are needed for a first eval.
    completeness` reassigns an existing mark, or adds a new one with
    `provenance="completeness"` and records it in `added_marks.json`, which
    `build_corpus.py` replays before clustering so a new box survives a rebuild.
+   That store is written deduped on `(page_id, box, class_id)`, so re-applying a
+   class does not record its boxes twice; `audit_to_corrections.py
+   --tidy-added-marks` drops the duplicates a store written before that carries.
    Rejected candidates become cannot-links: permanent hard negatives.
    Measured on the v3 roster (#3927): SPODS's elephant stamp was split across
    ten classes, and 104 missing members turned up over 23 classes. Candidates
