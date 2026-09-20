@@ -506,6 +506,56 @@ Only the bottom bands are audited by default: the defect can only push an image
 disagreement in the other direction is an extent error in VG's box, which is a
 different problem and is counted separately.
 
+## Size is an axis on both sides of the split (#4044)
+
+A cell is `class@band`, and until now that band was the training set **and** the
+test set: train on small cars, test on small cars. Two changes make size a
+query on each side independently.
+
+**Testing across bands.** `quarry_export.py --cell car@small --test-bands all`
+lists the class's other bands beside the cell, and the harness knob
+`CALIB_TEST_BANDS=all` scores them, adding `fnr_small` / `fnr_medium` /
+`fnr_large` (with `recall_*` and `n_test_pos_*`) to every row. Three arms per
+class become a 3x3 matrix.
+
+The three bands of a class **share one negative pool** by construction — that is
+the `3 *` in `SCALE_PREVALENCE` — which is what makes the matrix readable and
+which `--check-bands <class>` asserts rather than assumes. It is also the answer
+to "what would FPR per size mean": **nothing.** A negative holds no instance of
+the class, so it has no size *for the class*, and an arm has exactly one
+false-positive rate — the row's own `fpr`. Only the miss rate decomposes,
+because only a positive has a size. (What *is* available, and is a different
+axis, is banding a negative by the largest object it does hold. COCO boxes
+everything, so that is one query away — but it answers "does a small-car
+detector fire on small things", which is not the same question and must not be
+labelled as though it were.)
+
+**Each cohort is the one the diagonal arm holds out.** A sibling band's test set
+is taken by replaying the harness's own split against that band's evaluable pool
+at the same seed, so the images behind `fnr_medium` are the same whether the arm
+trained on `small`, `medium` or `large`. That is what makes the off-diagonal
+comparable with the diagonal; buy precision by exporting more positives per cell,
+not by testing the off-diagonal on the whole band.
+
+**Training on a size mix.** `--train-mix natural` draws positives across bands at
+the shares the corpus actually has (`--mix-census` prints them per class);
+`--train-mix small=1,medium=2,large=1` sets them by hand. In the harness the same
+thing is `vtscore.eval.scale_bands.project_mix`, which **retags** the drawn
+positives into one synthetic `car@mix` cell so every downstream consumer — the
+pool filter, the prevalence accounting, the vote order, the region boxes — sees
+an ordinary cell.
+
+**Only the train side needs a run.** An FNR over disjoint per-band cohorts is
+linear in the mix, so any *test*-side mix is the mix-weighted average of a row of
+a matrix already measured — `n_test_pos_*` is emitted so it can be re-derived
+without going back to the cells. Training is not linear in its input, so each
+train-side mix is a genuinely new arm.
+
+A band that cannot fill its share makes the set **smaller**, never a different
+mix: handing its seats to the bands with headroom would keep the count round
+while quietly running an arm nobody asked for. `realised_mix` beside
+`requested_mix` is where that shows.
+
 ## Voted-box scale bands (`--bands`)
 
 Orthogonal to the `_s`/`_m`/`_l` suffix, which is a **dataset size tier** (a

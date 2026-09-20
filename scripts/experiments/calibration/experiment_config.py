@@ -407,6 +407,26 @@ REPOOL_STYLE = "max_patch_pca_hac"
 REPOOL_VARIANTS = [v for v in os.environ.get("CALIB_REPOOL_VARIANTS", "").split(",") if v]
 REPOOL_TOPK = int(os.environ.get("CALIB_REPOOL_TOPK", "4"))
 
+#: Report the miss rate per **size band** beside the headline one (#4044), off
+#: by default.  ``CALIB_TEST_BANDS=all`` takes every band the cell's class has;
+#: a comma list names them.
+#:
+#: A cell is ``class@band`` and until now that band was the train set *and* the
+#: test set -- train on small cars, test on small cars.  With this set, an arm
+#: trained at one size is scored at all three, which is what turns three
+#: independent arms into a 3x3 matrix.  Only the FNR decomposes: the bands share
+#: one negative pool by construction, so a negative has no size for the class and
+#: there is exactly one FPR per arm.  Adds
+#: :data:`vtscore.eval.voting_columns.BAND_COLUMNS` and moves no existing column.
+#:
+#: Cannot be combined with a prevalence-thinned arm; the harness refuses that
+#: pair at the door rather than reporting a table whose cells do not pair.
+TEST_BANDS = os.environ.get("CALIB_TEST_BANDS", "").strip() or None
+if TEST_BANDS and TEST_BANDS != "all":
+    TEST_BANDS = [b.strip() for b in TEST_BANDS.split(",") if b.strip()]
+elif TEST_BANDS == "all":
+    TEST_BANDS = "auto"
+
 #: Inclusion values the fold orderings are re-thresholded at for the budget sweep.
 INCLUSION_SWEEP_KS = [int(k) for k in os.environ.get("CALIB_SWEEP_KS", "-4,-2,-1,0,1,2,4").split(",")]
 

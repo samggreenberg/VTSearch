@@ -74,6 +74,7 @@ from vtscore.eval.step_trainers import (
     _score_pool,
     _train_and_calibrate,
 )
+from vtscore.eval import scale_bands
 from vtscore.eval.labels import evaluable_pool, media_is_positive
 from vtscore.eval.score_dumps import maybe_dump_predictions
 from vtscore.eval.voting_columns import (
@@ -442,6 +443,177 @@ def _safe_threshold_for_step(
     return blended, all_scores, ids, fold_haystacks, "gmm_blend", None
 
 
+def _check_test_bands(
+    test_bands: Optional[list[str] | str],
+    target_category: str,
+    target_prevalence: Optional[float],
+) -> None:
+    """Refuse a ``test_bands`` request the run cannot honour, at the door.
+
+    Two of them.  A target with no band suffix has no size axis, so there is
+    nothing to break down and an empty breakdown would read as three bands that
+    happened to be empty.  And ``target_prevalence`` draws from the split RNG
+    before the split and changes which images are in the pool at all, so a
+    sibling band's replayed cohort would no longer be the one that band's own
+    arm holds out -- a 3x3 table whose cells are not comparable, which is worse
+    than no table.
+    """
+    if not test_bands:
+        return
+    if scale_bands.parse_cell(target_category)[1] is None:
+        raise ValueError(
+            f"test_bands was asked for on {target_category!r}, which carries no band suffix; "
+            "cross-band testing needs a scale-banded cell such as 'car@small'"
+        )
+    if target_prevalence is not None:
+        raise ValueError(
+            "test_bands and target_prevalence cannot both be set: prevalence thinning draws "
+            "from the split RNG and changes the pool, so a sibling band's cohort would no "
+            "longer be the one that band's own arm holds out, and the 3x3 table would not pair"
+        )
+
+
+def _resolve_band_cohorts(
+    unfiltered: dict[int, dict[str, Any]],
+    target_category: str,
+    *,
+    test_bands: Optional[list[str] | str],
+    sim_fraction: float,
+    seed: int,
+    own_test_ids: list[int],
+    target_prevalence: Optional[float],
+) -> dict[str, list[int]]:
+    """The per-band held-out positive cohorts, or ``{}`` when the run asks for none.
+
+    ``test_bands="auto"`` takes every band the class has; a list names them.
+
+    **Refused rather than approximated under prevalence thinning.**  A cohort is
+    the set the arm trained on *that* band would have held out, which is only
+    true while the split is a function of ``(pool, seed)`` alone.
+    ``target_prevalence`` draws from the same RNG before the split and changes
+    which images are in the pool at all, so the replay would silently pick a
+    different cohort -- and an off-diagonal reading against a cohort that is not
+    the diagonal's is a 3x3 table whose cells cannot be compared.  Say so
+    instead: an unavailable arm is visible, a mis-paired one is not.
+
+    The own band's cohort is asserted against the harness's real split, so the
+    replay in :func:`~vtscore.eval.scale_bands.holdout_ids` cannot drift from
+    :func:`_split_media_ids` without a run failing here.
+    """
+    if not test_bands:
+        return {}
+    cls, band = scale_bands.parse_cell(target_category)
+    assert band is not None  # `_check_test_bands` refused this before any work ran
+    wanted = None if test_bands == "auto" else list(test_bands)
+    cohorts = scale_bands.band_cohorts(unfiltered, target_category, sim_fraction=sim_fraction, seed=seed, bands=wanted)
+    stray = scale_bands.unreportable_bands(unfiltered, cls)
+    if stray:
+        import warnings  # noqa: PLC0415
+
+        warnings.warn(
+            f"{cls!r} carries bands {stray} that have no reported column "
+            f"(reported: {list(scale_bands.REPORTED_BANDS)}); they are measured into nothing",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+    own = cohorts.get(band)
+    if own is not None:
+        expected = sorted(cid for cid in own_test_ids if media_is_positive(unfiltered[cid], target_category))
+        if sorted(own) != expected:
+            raise AssertionError(
+                "the replayed own-band cohort is not the harness's own held-out positives; "
+                "scale_bands.holdout_ids has drifted from _split_media_ids"
+            )
+    return cohorts
+
+
+def _score_media_ids(
+    step: StepModel,
+    clips_dict: dict[int, dict[str, Any]],
+    ids: list[int],
+    *,
+    region_aware: bool = False,
+    style_obj: Any = None,
+) -> list[float]:
+    """Score *ids* with *step*, in whichever geometry the run is using.
+
+    Extracted from :func:`_evaluate_on_test` so the cross-band cohorts (#4044)
+    are scored by the **same** rule as the headline test set rather than by a
+    second copy of the three branches.  A per-band FNR read off a different
+    scoring geometry than the FNR it sits beside would be the one number in the
+    row that is not comparable with its neighbours.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    if not ids:
+        return []
+    if style_obj is not None:
+        # Explicit detection style (see vtscore.eval.patch_styles): the style
+        # owns the whole image-scoring rule (whole-image / region max-pool /
+        # raw-patch max-pool), replacing both branches below.
+        assert step.torch_model is not None
+        clips = {cid: clips_dict[cid] for cid in ids}
+        score_map = style_obj.score_media(step.torch_model, clips)
+        return [score_map[cid] for cid in ids]
+    if region_aware:
+        from vtscore.detectors.training import score_media_with_model  # noqa: PLC0415
+
+        assert step.torch_model is not None
+        clips = {cid: clips_dict[cid] for cid in ids}
+        score_map = {r["id"]: r["score"] for r in score_media_with_model(step.torch_model, clips)}
+        return [score_map[cid] for cid in ids]
+    embs = np.array([media_embedding(clips_dict[cid]) for cid in ids])
+    return np.asarray(step.predict(embs)).ravel().tolist()
+
+
+def _band_metrics(
+    step: StepModel,
+    threshold: float,
+    clips_dict: dict[int, dict[str, Any]],
+    cohorts: dict[str, list[int]],
+    *,
+    region_aware: bool = False,
+    style_obj: Any = None,
+) -> dict[str, float]:
+    """FNR per size band at the shipped cut, plus the count behind each (#4044).
+
+    **One threshold, one FPR, three FNRs.**  The bands of a class share their
+    negative pool by construction, so a negative has no size *for the class* and
+    there is exactly one false-positive rate per arm -- the row's own ``fpr``.
+    What decomposes is the miss rate, because a positive does have a size.
+
+    Measured at *threshold*, the cut the app would actually be running, so these
+    columns do **not** move with ``pool_variant``: every row a step emits
+    carries the same band breakdown, read at the shipped operating point.
+
+    ``fnr_<band>`` for the arm's **own** band is the same quantity as the row's
+    ``fnr`` restricted to positives, which is what
+    ``test_the_own_band_column_agrees_with_the_headline_fnr`` checks -- the
+    cheapest available guard against a cohort built off the wrong pool.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    out: dict[str, float] = {}
+    for band in scale_bands.REPORTED_BANDS:
+        ids = cohorts.get(band) or []
+        n = len(ids)
+        out[f"n_test_pos_{band}"] = float(n)
+        if not n:
+            out[f"fnr_{band}"] = float("nan")
+            out[f"recall_{band}"] = float("nan")
+            continue
+        scores = np.asarray(
+            _score_media_ids(step, clips_dict, ids, region_aware=region_aware, style_obj=style_obj),
+            dtype=np.float64,
+        )
+        # Every id in a cohort is a positive of its own band's cell, so the miss
+        # rate is just the share scoring under the cut.
+        fnr = float(np.mean(scores < threshold))
+        out[f"fnr_{band}"] = round(fnr, 6)
+        out[f"recall_{band}"] = round(1.0 - fnr, 6)
+    return out
+
+
 def _evaluate_on_test(
     step: StepModel,
     threshold: float,
@@ -487,24 +659,7 @@ def _evaluate_on_test(
             "average_precision": nan,
         }
 
-    if style_obj is not None:
-        # Explicit detection style (see vtscore.eval.patch_styles): the style
-        # owns the whole image-scoring rule (whole-image / region max-pool /
-        # raw-patch max-pool), replacing both branches below.
-        assert step.torch_model is not None
-        test_clips = {cid: clips_dict[cid] for cid in test_ids}
-        score_map = style_obj.score_media(step.torch_model, test_clips)
-        scores = [score_map[cid] for cid in test_ids]
-    elif region_aware:
-        from vtscore.detectors.training import score_media_with_model  # noqa: PLC0415
-
-        assert step.torch_model is not None
-        test_clips = {cid: clips_dict[cid] for cid in test_ids}
-        score_map = {r["id"]: r["score"] for r in score_media_with_model(step.torch_model, test_clips)}
-        scores = [score_map[cid] for cid in test_ids]
-    else:
-        embs = np.array([media_embedding(clips_dict[cid]) for cid in test_ids])
-        scores = np.asarray(step.predict(embs)).ravel().tolist()
+    scores = _score_media_ids(step, clips_dict, test_ids, region_aware=region_aware, style_obj=style_obj)
 
     true_labels = [1.0 if media_is_positive(clips_dict[cid], target_category) else 0.0 for cid in test_ids]
 
@@ -1246,6 +1401,7 @@ def simulate_voting_iterations(  # noqa: C901
     skyline_arms: Optional[list[str]] = None,
     calibration_seed: Optional[int] = None,
     standalone_cut: str = "raw",
+    test_bands: Optional[list[str] | str] = None,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -1487,6 +1643,21 @@ def simulate_voting_iterations(  # noqa: C901
             :func:`vtscore.eval.step_trainers._rank_transferred_threshold`.
             Only the ``gp_*`` trainers honour it; ``"rank"`` with any other
             trainer is an error, as is a region-aware dataset.
+        test_bands: Report the miss rate **per size band** beside the headline
+            one (issue #4044).  ``"auto"`` takes every band the target's class
+            has; a list names them; ``None`` (the default) turns the whole thing
+            off and changes nothing.  Only meaningful on a scale-banded cell
+            (``car@small``), where an image holding the class at another size is
+            excluded from the cell by
+            :func:`~vtscore.eval.labels.media_is_evaluable` and so was
+            previously unreachable at any size but the trained one.
+            Each band's cohort is the held-out set *that band's own arm* would
+            have tested against, so the three FNRs of one arm and the same
+            band's FNR under a different arm are paired -- see
+            :mod:`vtscore.eval.scale_bands`.  There is deliberately no per-band
+            FPR: the bands share their negatives, so the row's single ``fpr`` is
+            the whole of that half.  Incompatible with ``target_prevalence``,
+            which moves the pool the replay depends on.
 
     Returns:
         List of row dicts.  Keys: ``seed, dataset, category, strategy, trainer,
@@ -1498,9 +1669,19 @@ def simulate_voting_iterations(  # noqa: C901
         and a many-vs-many one.  ``app_trained`` is 1 exactly when the app would
         have had a trained detector on screen at that step: a threshold recorded
         where it is 0 is one no user would ever see, which is what issue #2788's
-        cold-start degenerates turned out to be.
+        cold-start degenerates turned out to be.  Under ``test_bands`` each row
+        also carries :data:`~vtscore.eval.voting_columns.BAND_COLUMNS`.
     """
     import numpy as np  # noqa: PLC0415
+
+    # Refused before any work, not on the way past the split: a run that dies
+    # three minutes in on an argument combination readable at the door is a
+    # SLURM array slot spent to learn nothing (#4044).
+    _check_test_bands(test_bands, target_category, target_prevalence)
+
+    # Cross-band cohorts are built from the images the filter below REMOVES, so
+    # they have to be taken off the unfiltered pool (#4044).
+    unfiltered = clips_dict
 
     # One filter for the whole cell, before anything reads a label: on a
     # scale-banded dataset an image can hold the category at the wrong size,
@@ -1551,6 +1732,16 @@ def simulate_voting_iterations(  # noqa: C901
     realized_prevalence = round(_prevalence(clips_dict, target_category), 6)
 
     sim_ids, test_ids = _split_media_ids(clips_dict, sim_fraction, rng)
+
+    band_cohorts = _resolve_band_cohorts(
+        unfiltered,
+        target_category,
+        test_bands=test_bands,
+        sim_fraction=sim_fraction,
+        seed=seed,
+        own_test_ids=test_ids,
+        target_prevalence=target_prevalence,
+    )
 
     # Ensure the test set has both positive and negative medias.  Routes through
     # ``media_is_positive`` so multi-label (Visual Genome) images - where the
@@ -1960,6 +2151,23 @@ def simulate_voting_iterations(  # noqa: C901
             )
         test_score_seconds = time.monotonic() - t_test
 
+        # The per-size breakdown (#4044), at the shipped cut and therefore the
+        # same on every row this step emits -- including the calibration study's
+        # per-pooling rows, whose own thresholds re-cut the headline columns and
+        # not this one.
+        band_metrics = (
+            _band_metrics(
+                step,
+                threshold,
+                unfiltered,
+                band_cohorts,
+                region_aware=region_aware,
+                style_obj=style_obj,
+            )
+            if band_cohorts
+            else {}
+        )
+
         # Score the remaining pool with the fresh model so the next step's
         # autopilot Hard pick can rank it - in the geometry the cut it will be
         # compared against was fitted in (#2943).  The safe-threshold path has
@@ -2202,7 +2410,7 @@ def simulate_voting_iterations(  # noqa: C901
                     )
                 )
             for mr in metric_rows:
-                rows.append({**base_row, **mr, **timing_cols})
+                rows.append({**base_row, **mr, **band_metrics, **timing_cols})
             # The near-free inclusion-budget sweep, into the side sink.
             if inclusion_sweep_ks and sweep_sink is not None:
                 for sr in _inclusion_sweep_rows(details, base_scores, base_labels, inclusion_sweep_ks):
@@ -2229,7 +2437,7 @@ def simulate_voting_iterations(  # noqa: C901
                 ):
                     cut_inclusion_sink.append({**base_row, **cr})
         else:
-            rows.append({**base_row, **metrics, **timing_cols})
+            rows.append({**base_row, **metrics, **band_metrics, **timing_cols})
 
     # --- The supervised skyline (issue #3322), once per run. ---
     #
