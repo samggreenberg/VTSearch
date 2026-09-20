@@ -769,7 +769,7 @@ _start_lane() {
 # (see `pyrightconfig.json` for the gated scope). The PYRIGHT_PYTHON_FORCE_VERSION
 # pin keeps everyone on the same underlying pyright binary regardless of
 # what the `pyright` PyPI wrapper would otherwise pull.
-_lane_pyright() { PYRIGHT_PYTHON_FORCE_VERSION=1.1.408 pyright; }
+_lane_pyright() { PYRIGHT_PYTHON_FORCE_VERSION=1.1.414 pyright; }
 _lane_pip_audit() { pip-audit "${PIP_AUDIT_IGNORE[@]}"; }
 # Vulture whitelist hygiene. NOT the dead-code audit itself: a vulture hit on a
 # public vtscore name is not evidence of anything (out-of-tree extensions import

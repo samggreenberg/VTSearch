@@ -79,8 +79,11 @@ def solid_edge_box(
         analysis = img
 
     arr = np.asarray(analysis.convert("RGB"), dtype=np.int16)
-    near_white = np.all(arr >= 255 - edge_tol, axis=2)
-    near_black = np.all(arr <= edge_tol, axis=2)
+    # `np.all(..., axis=...)` is stubbed as `Any`, and pyright reads `Any | Any`
+    # as a PEP 604 `UnionType` rather than an array - which loses `.any()` and
+    # `.shape` below.  Annotating the two masks pins them to arrays instead.
+    near_white: np.ndarray = np.all(arr >= 255 - edge_tol, axis=2)
+    near_black: np.ndarray = np.all(arr <= edge_tol, axis=2)
     content = ~(near_white | near_black)
     if not content.any():
         return None  # nothing but solid tone - no content to pull the box toward
