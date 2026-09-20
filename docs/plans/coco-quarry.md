@@ -50,7 +50,7 @@ and it is cheap to settle — see the first item below.
 
 ## Open work
 
-**State, 2026-09-19.** The build is finished: `coco_quarry` and `coco_quarry_full` are built and verified, the export layer is in, and the VG machinery is retired. What is left is four things — the band re-validation, widening *C*, the `truck`/`car` ruling, and the studies the set exists to support. Items below marked **DONE** keep their original argument, because a plan whose history is deleted reads as though every decision was obvious.
+**State, 2026-09-19.** The build is finished: `coco_quarry` and `coco_quarry_full` are built and verified, the export layer is in, and the VG machinery is retired. What is left is three things — the band re-validation, the `truck`/`car` ruling, and the studies the set exists to support. Widening *C* landed 2026-09-20 (#4056) and is marked DONE below. Items below marked **DONE** keep their original argument, because a plan whose history is deleted reads as though every decision was obvious.
 
 <!-- item-sep -->
 
@@ -166,7 +166,20 @@ and it is cheap to settle — see the first item below.
 
 <!-- item-sep -->
 
-- **Widen *C* to every class meeting the count requirement — 54 of COCO's 80.**
+- [x] #4056 — ***C* is 53** (PR pending). The count rule admitted 54; `wine glass` is
+  held out by owner ruling, because `SCALE_CLASS_MERGES` folds it into `cup` and
+  admitting it would redefine `cup`. 159 cells, **0 short** of `SCALE_N_POS`, pool
+  headroom **1.48x**. **The widening is a hard break in comparability and the break
+  is measured**: a cell read against the widened pool is **+0.24 AP** higher
+  (`@small` +0.37, `@large` +0.08), because the pool stops being *images without
+  these 25 things* and becomes *empty scenes* — mean classes held per pool image
+  **1.163 → 0.000**. #3986 asked the same pool question with *C* held still and got
+  −0.002, so composition is harmless at a fixed roster and dominant under a roster
+  change. Owner ruled widen-and-renumber; `SCALE_CLASSES_25` freezes the old roster
+  so its pool can be reproduced. Per-class pools should be immune and are
+  unmeasured. The original argument follows.
+
+  **Widen *C* to every class meeting the count requirement — 54 of COCO's 80.**
   The selection rule is the count and nothing else: a class is in if it clears
   `SCALE_N_POS` in all three bands. Measured, that is **54 classes, 29 beyond the
   current 25**. The shared negative pool survives all of them at 1.5x (16,058
@@ -194,7 +207,7 @@ and it is cheap to settle — see the first item below.
 
 <!-- item-sep -->
 
-- [x] #3986 — per-class negatives are the default (#4034). ~100,000 per cell against the designated 9,900, about half holding another class in *C* where the shared pool is 0% by construction. `--pool shared` reproduces the old shape for arms compared against a published number. **What a detector's numbers do under each pool is still unmeasured.**
+- [x] #3986 — per-class negatives are the default (#4034). ~100,000 per cell against the designated 9,900, about half holding another class in *C* where the shared pool is 0% by construction. `--pool shared` reproduces the old shape for arms compared against a published number. **Measured 2026-09-20 (#3986 report): −0.002 AP, 0 of 75 cells changing winning column** — the shortcut is undiminished at 2.0-2.3x co-occurring over barren, but #3667's fix already put 40% of every cell's negatives into the hard kind, so the rest of the way costs nothing. Make the change for supply, not accuracy.
 
 <!-- item-sep -->
 
