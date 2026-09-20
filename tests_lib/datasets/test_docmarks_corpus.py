@@ -83,6 +83,48 @@ def _page(mods, page_id, source, marks=(), path="x.png", w=1000, h=1400):
 # ---------------------------------------------------------------- primitives
 
 
+class TestDedupePages:
+    """#4054: a build once admitted the same UCSF page more than once."""
+
+    def _dup(self, mods, marks_a, marks_b):
+        return [
+            _page(mods, "ucsf/x#0", "ucsf", marks=marks_a),
+            _page(mods, "ucsf/x#0", "ucsf", marks=marks_b),
+        ]
+
+    BAND = ("band", (0, 0, 100, 40), None, "build")
+    LOGO = ("logo", (10, 10, 20, 20), "ucsf/logo_bat_leaf", "completeness")
+    OTHER = ("logo", (50, 50, 20, 20), "ucsf/logo_other", "completeness")
+
+    def test_identical_copies_collapse_to_one(self, mods):
+        pages, counts = mods["common"].dedupe_pages(self._dup(mods, [self.BAND], [self.BAND]))
+        assert len(pages) == 1
+        assert counts["records"] == 2 and counts["kept"] == 1 and counts["dropped"] == 1
+
+    def test_the_copy_carrying_the_mark_wins_whichever_came_first(self, mods):
+        for a, b in (([self.BAND], [self.BAND, self.LOGO]), ([self.BAND, self.LOGO], [self.BAND])):
+            pages, _ = mods["common"].dedupe_pages(self._dup(mods, a, b))
+            assert len(pages) == 1
+            assert [m.class_id for m in pages[0].marks] == [None, "ucsf/logo_bat_leaf"]
+
+    def test_surviving_mark_indices_are_the_ones_adjudications_name(self, mods):
+        # the shorter list must stay a PREFIX, so index 0 still means the band
+        pages, _ = mods["common"].dedupe_pages(self._dup(mods, [self.BAND], [self.BAND, self.LOGO]))
+        assert pages[0].marks[0].kind == "band" and pages[0].marks[0].class_id is None
+        assert pages[0].marks[1].class_id == "ucsf/logo_bat_leaf"
+
+    def test_irreconcilable_copies_raise_rather_than_guess(self, mods):
+        with pytest.raises(mods["common"].DuplicatePageConflict):
+            mods["common"].dedupe_pages(self._dup(mods, [self.OTHER], [self.BAND, self.LOGO]))
+
+    def test_write_manifest_cannot_put_a_duplicate_on_disk(self, mods, tmp_path):
+        out = tmp_path / "corpus.jsonl"
+        n = mods["common"].write_manifest(self._dup(mods, [self.BAND], [self.BAND, self.LOGO]), out)
+        assert n == 1
+        back = list(mods["common"].read_manifest(out))
+        assert len(back) == 1 and len(back[0].marks) == 2
+
+
 class TestStableRank:
     def test_is_deterministic_and_in_range(self, mods):
         rank = mods["common"].stable_rank

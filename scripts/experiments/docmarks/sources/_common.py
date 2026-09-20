@@ -88,8 +88,64 @@ class Page:
         )
 
 
+class DuplicatePageConflict(ValueError):
+    """Two records share a ``page_id`` and disagree about the marks irreconcilably."""
+
+
+def _mark_key(mark: "Mark") -> tuple[Any, ...]:
+    return (mark.kind, tuple(mark.box), mark.class_id)
+
+
+def dedupe_pages(pages: Iterable[Page]) -> tuple[list[Page], dict[str, int]]:
+    """One record per ``page_id``, keeping the longest mark list.
+
+    ``Page.page_id`` is documented as globally unique and the whole corpus is
+    keyed on it, but a build once admitted the same UCSF page more than once
+    (#4054): 137 ids over 145 extra records.  124 of those groups were
+    byte-identical and harmless; in 13 one copy carried the roster mark and the
+    other did not, so a reader that builds a dict kept whichever came last and
+    lost the mark, while one that *streams* saw the page as a positive and a
+    negative for the same class.
+
+    **Mark order is load-bearing**: ``adjudications.json`` is keyed on
+    ``(page_id, mark_index)``.  So the merge never reorders or unions -- it
+    keeps the longest list and requires every shorter one to be a prefix of it,
+    which is what makes the surviving indices mean what they meant before.
+    Anything else raises rather than guessing.
+    """
+    by_id: dict[str, Page] = {}
+    counts: dict[str, int] = {"records": 0, "kept": 0, "dropped": 0, "merged": 0}
+    for page in pages:
+        counts["records"] += 1
+        seen = by_id.get(page.page_id)
+        if seen is None:
+            by_id[page.page_id] = page
+            continue
+        counts["dropped"] += 1
+        long, short = (seen, page) if len(seen.marks) >= len(page.marks) else (page, seen)
+        prefix = [_mark_key(m) for m in long.marks][: len(short.marks)]
+        if prefix != [_mark_key(m) for m in short.marks]:
+            raise DuplicatePageConflict(
+                f"{page.page_id}: duplicate records disagree about the marks and neither "
+                f"is a prefix of the other, so no merge preserves the mark indices "
+                f"adjudications.json is keyed on"
+            )
+        if long is not seen:
+            counts["merged"] += 1
+            by_id[page.page_id] = long
+        elif len(seen.marks) != len(short.marks):
+            counts["merged"] += 1
+    counts["kept"] = len(by_id)
+    return list(by_id.values()), counts
+
+
 def write_manifest(pages: Iterable[Page], path: Path) -> int:
-    """Write ``corpus.jsonl``.  Returns the number of records written."""
+    """Write ``corpus.jsonl``, one record per page.  Returns the number written.
+
+    Deduped on ``page_id`` on the way out, so a duplicate can never reach disk
+    in the first place (#4054).
+    """
+    pages, _counts = dedupe_pages(pages)
     path.parent.mkdir(parents=True, exist_ok=True)
     n = 0
     tmp = path.with_suffix(path.suffix + ".tmp")
