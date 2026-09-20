@@ -319,8 +319,18 @@ def apply_completeness(
             problems.append(f"{class_id}: no existing instance to link accepted candidates to")
             continue
 
+        # Indices the reviewer voted Good on but that were parked for a hand-drawn
+        # box.  They are NOT rejections: every index outside ``verdict`` falls to
+        # the else-branch below, which writes a cannot-link or an unboxed
+        # rejection, and ``completeness_multi.decided()`` reads both back so the
+        # mark would never be proposed again.  That is #4040 -- a held vote
+        # recorded as its opposite -- and a hold has to sit outside the verdict
+        # entirely or not exist at all.
+        held = {int(i) for i in (row.get("needs_tight_box") or [])}
         added, reassigned, rejected_pages = 0, 0, []
         for i, cand in enumerate(cands):
+            if i in held:
+                continue
             page = by_id.get(cand["page_id"])
             if page is None:
                 problems.append(f"{class_id}: candidate {i} page {cand['page_id']} is not in the manifest")
@@ -388,11 +398,14 @@ def apply_completeness(
             "reviewed_on": date.today().isoformat(),
             "n_candidates": len(cands),
             "accepted": len(accepted),
+            "held_for_box": sorted(held),
             "unboxed_rejected_page_ids": sorted(rejected_pages),
         }
         changes.append(
             f"{class_id}: {len(accepted)} of {len(cands)} candidate(s) accepted "
-            f"({reassigned} reassigned, {added} new box(es)); {meta['n_instances']} instance(s)"
+            f"({reassigned} reassigned, {added} new box(es)"
+            + (f", {len(held)} held for a box" if held else "")
+            + f"); {meta['n_instances']} instance(s)"
         )
     return changes, problems, merges, separations, added_rows
 

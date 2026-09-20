@@ -163,6 +163,25 @@ class TestApply:
         audit = classes["tobacco800/logo_a"]["audit"]["completeness_checked"]
         assert audit["unboxed_rejected_page_ids"] == ["tobacco800/nobox"] and audit["accepted"] == 0
 
+    def test_a_held_candidate_is_neither_accepted_nor_rejected(self, mods):
+        """#4040: a Good vote parked for a hand-drawn box must not become a rejection."""
+        pages, classes = _corpus(mods)
+        row = dict(_row([NOBOX], "none"), needs_tight_box=[0])
+        _, problems, merges, seps, added = mods["c"].apply_completeness(pages, classes, [row])
+        assert problems == [] and merges == [] and seps == [] and added == []
+        audit = classes["tobacco800/logo_a"]["audit"]["completeness_checked"]
+        # the page must NOT be written off, or decided() never re-proposes the mark
+        assert audit["unboxed_rejected_page_ids"] == []
+        assert audit["held_for_box"] == [0]
+        assert pages[2].marks == []
+
+    def test_a_held_candidate_over_a_mark_is_not_a_cannot_link(self, mods):
+        pages, classes = _corpus(mods)
+        row = dict(_row([OFFROSTER], "none"), needs_tight_box=[0])
+        _, problems, merges, seps, _ = mods["c"].apply_completeness(pages, classes, [row])
+        assert problems == [] and merges == [] and seps == []
+        assert pages[1].marks[1].class_id == "tobacco800/logo_z"
+
     def test_an_instance_of_another_roster_class_is_a_merge_not_a_member(self, mods):
         pages, classes = _corpus(mods)
         other = {
