@@ -1,6 +1,6 @@
 # DocMarks — datasheet and use register
 
-**Corpus version v4** (`docmarks_config.CORPUS_VERSION`), 2026-09-20. DocMarks
+**Corpus version v4.0** (`docmarks_config.CORPUS_VERSION`), 2026-09-20. DocMarks
 is a benchmark for **finding a given stamp or printed logo in a pile of scanned
 pages**, from one query crop. It exists so that ideas about that task (matchers,
 shortlists, embedders, query handling) can be tested against labels someone has
@@ -42,14 +42,14 @@ Every other roster class has at most one instance per page.
 | SPODS | pseudo-official documents made for the dataset, carrying logos, stamps and signatures | 1,088 | 11 (5 logos, 6 stamps) | 349 |
 | Tobacco800 | 1980s–90s tobacco-litigation scans (IIT-CDIP), binarised; boxed logos and signatures | 1,290 | 10 logos | 1,312 |
 | StaVer | German scanned invoices carrying rubber stamps | 400 | 2 stamps | 28 |
-| UCSF Industry Documents | real scanned pages from six industries; **distractors, and since v4 four roster classes of its own** | 197,077 | 4 logos | 315 |
+| UCSF Industry Documents | real scanned pages from six industries; **distractors, and since v4.0 four roster classes of its own** | 197,077 | 4 logos | 315 |
 
 **Every anchor page is in tier `s`.** The 2,778 SPODS, Tobacco800 and StaVer
 pages all sit in the smallest tier, next to 2,221 UCSF pages. Tiers `m` and `l`
 add **only UCSF pages**, so a class's same-source hard negatives are the same
 pages in every tier.
 
-**But since v4 a larger tier adds positives too, not only distractors.** The
+**But since v4.0 a larger tier adds positives too, not only distractors.** The
 four UCSF roster classes put **10 instances in `s`, 256 more in `m` and 55 more
 in `l`**. For those four classes the positive set grows with the tier, so their
 tier-`s` and tier-`l` numbers are not measured over the same ground truth and
@@ -73,7 +73,7 @@ UCSF pages carry 13,857 `letterhead_author` band boxes, none of which belongs
 to a class: they were the raw material for the proposed UCSF classes (#3921,
 #3922).
 
-**Those classes passed their audit, so as of v4 UCSF does hold positives.**
+**Those classes passed their audit, so as of v4.0 UCSF does hold positives.**
 Four of them — `bat_leaf`, `bw_oval_emblem`, `p_lorillard_crest` and
 `rjr_script` — carry 315 instances over 315 UCSF pages. Anything that scored
 every UCSF page as a negative on the strength of the older claim is wrong for
@@ -126,7 +126,7 @@ See [`2026-09-13-docmarks-v3`](../../../docs/experiments/2026-09-13-docmarks-v3/
 |---|---|---|---:|
 | v3 | 2026-09-14 | roster countersigned; every instance and all 276 pairs adjudicated | 613 |
 | v3.1 | 2026-09-17 | completeness pass applied (#3927); cells relabelled, no pages added or removed | 721 |
-| **v4** | 2026-09-20 | UCSF classes admitted (#3953), second completeness pass, query-crop alternates; duplicate page records removed (#4054) | **2,004** |
+| **v4.0** | 2026-09-20 | UCSF classes admitted (#3953), second completeness pass, query-crop alternates; duplicate page records removed (#4054) | **2,004** |
 
 The pages and tiers are identical between v3 and v3.1. Only labels moved: 108
 pages that v3 scored as **negatives** for a class are positives in v3.1.
@@ -134,20 +134,20 @@ pages that v3 scored as **negatives** for a class are positives in v3.1.
 Versioning rule: a label-only change to the same page set bumps the minor
 version; a new page set, tier cut or roster bumps the major.
 
-**v4 is a major bump, and by that rule it had to be.** The roster went from 23
+**v4.0 is a major bump, and by that rule it had to be.** The roster went from 23
 classes to 27, which is the clause that decides it; the page set moved as well,
 from 200,000 records to 199,855, when 137 UCSF pages that had been ingested more
 than once were collapsed to one record each (#4054).
 
-- **A number measured on v3 or v3.1 is not a v4 number.** That covers every
+- **A number measured on v3 or v3.1 is not a v4.0 number.** That covers every
   study up to and including #3904, #3911, #3912, #3914 and #3928.
 - A minor bump is comparable after re-scoring against the relabelled cells. A
-  major one is not: at v4 the baselines are **re-run**, because the roster, the
+  major one is not: at v4.0 the baselines are **re-run**, because the roster, the
   positive sets and the page list all moved.
 
 `build_report.json` records `corpus_version` from builds after v3.1. The
 on-disk v3.1 corpus predates that field, and is recognisable by
-`added_marks.json` holding 7 boxes and 721 roster instances; v4 holds 1,268
+`added_marks.json` holding 7 boxes and 721 roster instances; v4.0 holds 1,268
 boxes and 2,004 roster instances.
 
 ## Where the labels come from
