@@ -683,12 +683,24 @@ def translate_box_tighten(rows, questions, votes):
     return out, unanswered
 
 
+def needs_drawn_box(tile: bool, candidate: Optional[dict[str, Any]]) -> bool:
+    """A tile-box Good that no existing mark can stand in for.
+
+    A tile says "the mark is somewhere in here", so it cannot become a mark's box.
+    But when a boxed mark already sits under the tile, ``apply_completeness``
+    reassigns *that* mark and never reads the tile box -- nothing needs drawing.
+    Only a tile over bare page does (#4040).
+    """
+    return bool(tile) and (candidate is None or candidate.get("mark_index") is None)
+
+
 def translate_completeness2(rows, questions, votes):
-    """Good candidates become the completeness verdict -- except tile boxes.
+    """Good candidates become the completeness verdict -- except undrawn tile boxes.
 
     A Good vote on a SigLIP-tile candidate says the mark is on that page, but its
-    box is the tile.  Passing it through would add a tile-sized mark, so those
-    indices go to ``needs_tight_box`` and stay out of ``verdict`` until a box is drawn.
+    box is the tile.  Where no mark is already boxed under that tile, passing it
+    through would add a tile-sized mark, so those indices go to ``needs_tight_box``
+    and stay out of ``verdict`` until a box is drawn.
     """
     got: dict[str, dict[int, tuple[Optional[str], bool]]] = defaultdict(dict)
     for fn, q in questions.items():
@@ -705,8 +717,12 @@ def translate_completeness2(rows, questions, votes):
             )
             out.append(r)
             continue
-        keep = sorted(i for i, (v, tile) in asked.items() if v == "good" and not tile)
-        tight = sorted(i for i, (v, tile) in asked.items() if v == "good" and tile)
+        # The row's own candidates, not the manifest, say whether a mark is already
+        # boxed under a tile: a queue built before #4040 has no such key to read.
+        cands = {int(c["index"]): c for c in r.get("candidates", []) if c.get("index") is not None}
+        good = [i for i, (v, _tile) in asked.items() if v == "good"]
+        keep = sorted(i for i in good if not needs_drawn_box(asked[i][1], cands.get(i)))
+        tight = sorted(i for i in good if needs_drawn_box(asked[i][1], cands.get(i)))
         r["verdict"] = ",".join(map(str, keep)) if keep else "none"
         r["needs_tight_box"] = tight
         r["verdict_source"] = "vtsearch"

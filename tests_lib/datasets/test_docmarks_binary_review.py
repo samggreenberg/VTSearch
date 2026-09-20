@@ -137,6 +137,36 @@ class TestCompleteness2:
         assert rows[0]["verdict"] == "0" and rows[0]["needs_tight_box"] == [1]
         assert any("tile box" in n for n in notes)
 
+    def test_a_tile_over_a_boxed_mark_is_an_ordinary_accept(self, br):
+        """#4040: the applier reassigns the mark under the tile and never reads the tile box.
+
+        Holding these back did not merely delay them: the un-accepted indices were
+        written to ``adjudications.json`` as cannot-links, recording the opposite
+        of the vote that was cast.
+        """
+        qs = {
+            "c0": {"task": "completeness2", "key": {"class_id": "c", "index": 0, "tile_box": True}},
+            "c1": {"task": "completeness2", "key": {"class_id": "c", "index": 1, "tile_box": True}},
+        }
+        row = {
+            "class_id": "c",
+            "verdict": "none",
+            "candidates": [
+                {"index": 0, "page_id": "p0", "box": [0, 0, 216, 206], "mark_index": 5},
+                {"index": 1, "page_id": "p1", "box": [0, 0, 216, 206], "mark_index": None},
+            ],
+        }
+        rows, notes = br.translate_completeness2([row], qs, {"c0": "good", "c1": "good"})
+        assert rows[0]["verdict"] == "0", "a tile over a boxed mark is a reassignment"
+        assert rows[0]["needs_tight_box"] == [1], "only a tile over bare page needs drawing"
+        assert any("tile box" in n for n in notes)
+
+    def test_a_tile_box_without_candidates_still_needs_a_box(self, br):
+        """A queue built before #4040 carries no candidate list to consult."""
+        qs = {"c0": {"task": "completeness2", "key": {"class_id": "c", "index": 0, "tile_box": True}}}
+        rows, _ = br.translate_completeness2([{"class_id": "c", "verdict": "none"}], qs, {"c0": "good"})
+        assert rows[0]["verdict"] == "none" and rows[0]["needs_tight_box"] == [0]
+
     def test_sig_only_candidates_are_tiles(self, br):
         assert br.tile_box({"methods": "SIG"})
         assert not br.tile_box({"methods": "OCR+SIG"})
