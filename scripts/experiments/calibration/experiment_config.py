@@ -195,6 +195,20 @@ EXPERIMENT_QUERIES: dict[str, dict[str, str]] = {
     "vg_scale": {
         f"{cls}@{band}": text for cls, text in _VG_SCALE_TEXTS.items() for band in ("small", "medium", "large")
     },
+    # `coco_quarry` (#4044/#4051) is `vg_scale`'s question asked of COCO with no
+    # Visual Genome, on the SAME 25 `SCALE_CLASSES` and the same three bands -- so
+    # it takes the same texts, under the same `class@band` keying.
+    #
+    # The VG-named constant serving a COCO dataset is deliberate, not an
+    # oversight. Every entry in it was taken byte-identically from `_COCO_TEXTS`
+    # in the first place (see its own note), and `vg_scale` vs `coco_quarry` is
+    # exactly the comparison a drifted query would ruin: the two sets exist to be
+    # read against each other, so an opening that differed between them would put
+    # a seeding axis inside the source axis. Sharing the dict is what makes that
+    # impossible rather than merely unlikely.
+    "coco_quarry": {
+        f"{cls}@{band}": text for cls, text in _VG_SCALE_TEXTS.items() for band in ("small", "medium", "large")
+    },
     "coco_val": _COCO_TEXTS,
     # `vg_scale` with the band collapsed away (#3115): the same verified images
     # under the bare class name, so the same twelve texts serve it.  Without this
@@ -315,6 +329,20 @@ DATASET_EMBEDDERS: dict[str, list[str]] = {
     # `run_cells.py --index`, a preflight run without the env -- which are
     # exactly the ones with no launcher comment to warn them.
     "vg_scale": os.environ.get("CALIB_VGSCALE_EMBEDDERS", "siglip,siglip+dinov3_patch").split(","),
+    # `coco_quarry` (#4051): `vg_scale`'s construction on COCO 2017, same 25
+    # classes, same three bands. Its own env var rather than sharing
+    # `CALIB_VGSCALE_EMBEDDERS`, because the two datasets are meant to be run
+    # against each other and a shared knob would move both columns at once --
+    # which is the one edit that could silently make a source contrast into a
+    # column contrast.
+    #
+    # The region arm is the PAIR `siglip+dinov3_patch`, for the reason spelled
+    # out on `vg_scale` above and not because the pile happens to offer it: bare
+    # `dinov3_patch` has no text tower, so it would open on three random
+    # known-goods while the whole-image arms opened on a text sort, putting a
+    # seeding difference inside the voting-mode axis (#3276, #3278). Both halves
+    # are built for this dataset, so the pair is available rather than aspirational.
+    "coco_quarry": os.environ.get("CALIB_COCO_QUARRY_EMBEDDERS", "siglip,siglip+dinov3_patch").split(","),
 }
 
 #: Region voting (drag the ground-truth box) only makes sense on a boxed dataset.
@@ -364,6 +392,15 @@ BOXED_BY_DATASET: dict[str, bool] = {
     # same passes. Necessary but not sufficient: no patch cell is built, so in
     # practice every `vg_scale_deep` arm binary-votes (see the note above).
     "vg_scale_deep": True,
+    # Boxed, and the boxes are COCO's own rather than VG's carried through
+    # (#4051). This entry is load-bearing in the silent direction: with it
+    # missing, `styles_for` reads the dataset as boxless and falls the patch
+    # embedder back to `whole_image` without a word, so the region arm of a
+    # 7,500-cell grid would run as a second binary arm and every output would
+    # look like success. That is what the note above cost 108 cells to learn, and
+    # `test_pile_boxed_datasets_are_registered` is now the guard rather than this
+    # comment.
+    "coco_quarry": True,
 }
 
 
