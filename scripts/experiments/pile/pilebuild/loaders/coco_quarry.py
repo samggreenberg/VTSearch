@@ -18,13 +18,17 @@ afterwards. The 25-class build is preserved at
 ``/expscratch/sgreenberg/keep/coco-quarry-25-20260920/`` and is reproducible from
 :data:`pile_config.SCALE_CLASSES_25`.
 
-**The rebuild moves published numbers, and it moves them two ways at once.**
-Widening empties the barren pool — the mean count of *C*-classes held by a clean
-pool image falls 1.163 to 0.000 — which makes cells *easier* by **+0.24 AP**
-(#4056). But #3667's cross-class negatives grow with *C* at the same time: 75
-cells' designated positives become 159 cells', which makes them *harder*. #4056
-measured only the first. The net on a real rebuilt cell is unmeasured, and it is
-the number to take before anything is republished.
+**The rebuild costs a published cell -0.03 AP, and almost all of it is
+prevalence.** Measured against the preserved 25-class build over the 75 cells
+that existed before: **-0.030 +- 0.004** as shipped, **-0.003** once the
+negative count is held still, dAUC **+0.002**. A rebuilt cell carries 23,891
+negatives against 16,535, and AP falls when the haystack grows.
+
+Widening does empty the barren pool -- the mean count of *C*-classes held by a
+clean pool image falls 1.163 to 0.000 -- but that never reaches the benchmark,
+because the barren draw is capped at ``SCALE_N_NEG`` in both builds while
+#3667's cross-class negatives more than double (6,635 -> 13,991). Sizing the
+barren pool off its candidate set instead of a cap would inherit the effect.
 
 **What this loader does NOT do is the point of it.** `vg_scale` spends most of
 its length repairing an annotation source that cannot answer the question asked

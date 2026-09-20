@@ -433,15 +433,28 @@ def scale_study_exclusion(name: str) -> str | None:
 #: owner ruling because :data:`SCALE_CLASS_MERGES` folds it into `cup`, which
 #: leaves 53. That is the ONLY exception, and it is about class identity.
 #:
-#: **The widening is a hard break in comparability, by measurement.** The
-#: shared pool is drawn as *holds none of C*, so a wider C leaves fewer and
-#: EMPTIER candidates: 49,503 clean images at 25 against 16,058 at 54, and the
-#: mean number of C-classes held by a pool image falls 1.168 -> 0.000. Emptier
-#: negatives are easier, so a cell measured on the widened pool reads
-#: **+0.25 AP** higher (`@small` +0.38, `@large` +0.09; #4056). No published
-#: `coco_quarry` number is comparable across this change, and the roster it
-#: was drawn against is frozen as :data:`SCALE_CLASSES_25` so that it can be
-#: reproduced rather than merely disclaimed.
+#: **Rebuilding across the widening costs a published cell -0.03 AP, and
+#: almost all of that is prevalence.** Measured on the rebuilt set against the
+#: preserved 25-class build, over the 75 cells that existed before: paired dAP
+#: **-0.030 +- 0.004** (`siglip`) and **-0.028 +- 0.004** (`siglip2_l`) as
+#: shipped, but **-0.003 / +0.001** once the negative count is held still, and
+#: dAUC **+0.002** -- and AUC cannot see prevalence. A rebuilt cell simply
+#: carries 23,891 negatives against 16,535.
+#:
+#: The shared pool IS drawn as *holds none of C*, so a wider C leaves fewer and
+#: emptier candidates -- 49,503 clean images at 25 against 16,091 at 53, and the
+#: mean count of C-classes held by a clean pool image falls 1.163 -> 0.000.
+#: **That mechanism is real and does not reach the benchmark**, because the
+#: barren draw is capped at :data:`SCALE_N_NEG` in both builds while #3667's
+#: cross-class negatives more than double (6,635 -> 13,991). An earlier
+#: measurement varied the barren component alone and read +0.24 AP; that is a
+#: pool `coco_quarry` never ships, and the #4056 report records the correction.
+#: A design that let the barren pool scale with its candidate set WOULD inherit
+#: it, so this constrains any future change to how the pool is sized.
+#:
+#: :data:`SCALE_CLASSES_25` still freezes the old roster, and the 25-class build
+#: is preserved at ``/expscratch/sgreenberg/keep/coco-quarry-25-20260920/``, so
+#: a published number can be reproduced rather than merely disclaimed.
 #:
 #: **Twenty-five since #3588**, and the thirteen were added on the same terms as
 #: the first twelve: measured supply, a measured name audit, and a human review
