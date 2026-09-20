@@ -1968,6 +1968,77 @@ class TestRelabellingACellWithoutReEmbedding:
         assert mods["embed"].labels_for(page) == ([], [])
 
 
+class TestPruningACellWithoutRebuildingIt:
+    """A duplicated page costs the cell a row, not a vector (#4054).
+
+    ``corpus.jsonl`` held the same UCSF page more than once and the cells were
+    built from that list, so deduping the manifest left them holding rows the
+    corpus no longer lists -- and a duplicated page is scored twice.  Nothing
+    about a page changed, so the repair is to drop the row: re-embedding would
+    spend ~15 h of GPU recomputing the vectors already on disk.
+
+    Against the **real** ``_cells_io``, for the reason the repair tests give:
+    a fake is what decides whether the cell is held, so it cannot check that
+    it is not.
+    """
+
+    @staticmethod
+    def _cell(mods, monkeypatch, tmp_path, medias, pages):
+        io = mods["embed"]._cells_io()
+        cell = tmp_path / "docmarks_s__siglip.pkl"
+        with io.CellWriter(cell) as writer:
+            writer.write(medias)
+        monkeypatch.setattr(mods["embed"], "EMBEDDERS", {"siglip": {}})
+        monkeypatch.setattr(mods["embed"].cfg, "TIER_ORDER", ["s"])
+        monkeypatch.setattr(mods["embed"], "cell_path", lambda tier, emb: cell)
+        monkeypatch.setattr(mods["embed"], "pages_for_tier", lambda corpus, tier: pages)
+        return cell
+
+    def _dupe(self, mods, tmp_path):
+        """Three rows over two pages: ``a`` appears twice, and ``gone`` is not in the manifest."""
+        medias = {
+            0: {"id": 0, "origin_name": "ucsf/a#0", "embeddings": {"siglip": [1.0]}, "categories": ["ucsf/x"]},
+            1: {"id": 1, "origin_name": "ucsf/a#0", "embeddings": {"siglip": [1.0]}, "categories": []},
+            2: {"id": 2, "origin_name": "ucsf/b#0", "embeddings": {"siglip": [2.0]}, "categories": []},
+            3: {"id": 3, "origin_name": "ucsf/gone#0", "embeddings": {"siglip": [3.0]}, "categories": []},
+        }
+        pages = [_page(mods, "ucsf/a#0", "ucsf"), _page(mods, "ucsf/b#0", "ucsf")]
+        return medias, pages
+
+    def test_a_dry_run_writes_nothing(self, mods, monkeypatch, tmp_path):
+        medias, pages = self._dupe(mods, tmp_path)
+        cell = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        assert mods["embed"].prune(tmp_path, apply=False) == 0
+        assert len(dict(mods["embed"]._cells_io().iter_medias(cell))) == 4
+
+    def test_the_duplicate_row_and_the_unlisted_page_both_go(self, mods, monkeypatch, tmp_path):
+        medias, pages = self._dupe(mods, tmp_path)
+        cell = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        assert mods["embed"].prune(tmp_path, apply=True) == 0
+        left = dict(mods["embed"]._cells_io().iter_medias(cell))
+        assert sorted(m["origin_name"] for m in left.values()) == ["ucsf/a#0", "ucsf/b#0"]
+
+    def test_the_surviving_rows_keep_their_vectors_and_labels(self, mods, monkeypatch, tmp_path):
+        # A prune is not a relabel and not a re-embed: it drops rows and nothing else.
+        medias, pages = self._dupe(mods, tmp_path)
+        cell = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        mods["embed"].prune(tmp_path, apply=True)
+        left = {m["origin_name"]: m for m in dict(mods["embed"]._cells_io().iter_medias(cell)).values()}
+        assert left["ucsf/a#0"]["embeddings"] == {"siglip": [1.0]}
+        assert left["ucsf/a#0"]["categories"] == ["ucsf/x"], "kept the first row, labels intact"
+        assert left["ucsf/b#0"]["embeddings"] == {"siglip": [2.0]}
+
+    def test_a_clean_cell_is_left_alone(self, mods, monkeypatch, tmp_path):
+        medias = {
+            0: {"id": 0, "origin_name": "ucsf/a#0", "embeddings": {"siglip": [1.0]}, "categories": []},
+        }
+        pages = [_page(mods, "ucsf/a#0", "ucsf")]
+        cell = self._cell(mods, monkeypatch, tmp_path, medias, pages)
+        before = cell.stat().st_mtime_ns
+        assert mods["embed"].prune(tmp_path, apply=True) == 0
+        assert cell.stat().st_mtime_ns == before, "an unchanged cell must not be rewritten"
+
+
 class TestRepairingACellWithoutRebuildingIt:
     """A page that will not decode costs the cell a vector, not a row.
 
