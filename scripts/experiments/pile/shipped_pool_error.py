@@ -97,7 +97,8 @@ PREDICTED_3635 = Path("/expscratch/sgreenberg/stopsign-3635/contam-sign.json")
 #:   unverifiable -- the pixels do not settle it
 #:
 #: **A fold-in count is not admission, and reading one as admission mis-ruled two
-#: of these nine.** `coco_folds.py` (run over the twelve for #3673) shows COCO's
+#: of these nine.** `coco_folds.py` (run over the twelve for #3673, and retired
+#: with Visual Genome since -- #4038) showed COCO's
 #: annotators landing `watch` on a COCO clock box 35 times, and `canopy` 32 +
 #: `tent` 26 on umbrella boxes -- which looks like the `book`/magazine split, and
 #: is not. Fold-in is a BOX test conditioned the wrong way round (#3618): the
