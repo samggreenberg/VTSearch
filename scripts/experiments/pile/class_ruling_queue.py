@@ -53,6 +53,20 @@ IOU_MIN = 0.5
 #: evidence -- and a crop of the whole image cannot be read at a glance.
 CONTEXT = 0.45
 MAX_SIDE = 900
+#: A crop is only useful if the reviewer can SEE the thing. Cropping to the box
+#: is already an auto-zoom, but the first build of these queues only ever scaled
+#: DOWN, so a small box stayed a small picture: 88% of the `tv` crops came out
+#: under 400px and the smallest was 20px, which is not a question anyone can
+#: answer. Two fixes, in this order, because they fail differently:
+#:
+#: * widen the window until it is at least ``MIN_WINDOW`` of REAL pixels, so a
+#:   small object is judged from its surroundings rather than from mush;
+#: * only then upscale, to ``MIN_SIDE``.
+#:
+#: Widening makes "which object is the question?" ambiguous, so the target is
+#: outlined -- the same convention the DocMarks queues use.
+MIN_WINDOW = 480
+MIN_SIDE = 640
 QUALITY = 85
 
 
@@ -92,15 +106,13 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--klass", "--class", dest="klass", required=True)
     ap.add_argument("--annotations", type=Path, default=Path("/expscratch/sgreenberg/vts-cache/coco_anchor"))
-    ap.add_argument(
-        "--lvis", type=Path, default=Path("/exp/scale26/datasets/external/LVIS/annotations/lvis_v1_val.json")
-    )
+    ap.add_argument("--lvis", type=Path, default=Path("/exp/scale26/datasets/external/LVIS/annotations/lvis_v1_val.json"))
     ap.add_argument("--n", type=int, default=40, help="questions per queue")
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--seed", type=int, default=20260920)
     args = ap.parse_args()
 
-    from PIL import Image  # noqa: PLC0415
+    from PIL import Image, ImageDraw  # noqa: PLC0415
 
     coco: dict[int, list] = collections.defaultdict(list)
     sizes: dict[int, tuple] = {}
@@ -172,11 +184,27 @@ def main() -> int:
             im = Image.open(_io.BytesIO(fh.read())).convert("RGB")
         x, y, bw, bh = r["bbox"]
         pad = CONTEXT * max(bw, bh)
-        box = (max(0, x - pad), max(0, y - pad), min(w, x + bw + pad), min(h, y + bh + pad))
-        crop = im.crop(tuple(int(v) for v in box))
+        # Widen symmetrically until the window has MIN_WINDOW real pixels on its
+        # longer side, or we run out of image.
+        while max(bw + 2 * pad, bh + 2 * pad) < MIN_WINDOW and (pad < w or pad < h):
+            pad *= 1.5
+        x0, y0 = max(0, x - pad), max(0, y - pad)
+        x1, y1 = min(w, x + bw + pad), min(h, y + bh + pad)
+        crop = im.crop((int(x0), int(y0), int(x1), int(y1)))
+        # Outline the target, since a widened window no longer says which object
+        # is being asked about. Two strokes so it reads on light and dark alike.
+        draw = ImageDraw.Draw(crop)
+        bx0, by0, bx1, by1 = x - x0, y - y0, x + bw - x0, y + bh - y0
+        lw = max(2, int(0.004 * max(crop.size)))
+        draw.rectangle([bx0 - lw, by0 - lw, bx1 + lw, by1 + lw], outline=(255, 255, 255), width=lw)
+        draw.rectangle([bx0, by0, bx1, by1], outline=(255, 64, 0), width=lw)
+        scale = None
         if max(crop.size) > MAX_SIDE:
-            s = MAX_SIDE / max(crop.size)
-            crop = crop.resize((int(crop.width * s), int(crop.height * s)), Image.LANCZOS)
+            scale = MAX_SIDE / max(crop.size)
+        elif max(crop.size) < MIN_SIDE:
+            scale = MIN_SIDE / max(crop.size)
+        if scale:
+            crop = crop.resize((max(1, int(crop.width * scale)), max(1, int(crop.height * scale))), Image.LANCZOS)
         # The filename must not leak the stratum: a reviewer who can see which
         # arm a crop is from is answering a different question.
         stem = hashlib.sha1(f"{args.seed}:{r['ann_id']}".encode()).hexdigest()[:12]  # noqa: S324

@@ -22,9 +22,18 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+#: The question is the RETRIEVAL one, not a definitional one about objects.
+#: "Is this a tv?" cannot be answered for COCO's `tv`, because the class is 50%
+#: television and 47% computer monitor and the honest answer depends on USE --
+#: the same panel is a tv with a console on it and not a tv with a spreadsheet
+#: on it, which is a property COCO's annotators never conditioned on. The
+#: benchmark issues the query `a tv` (verbatim from `_COCO_TEXTS`) against
+#: COCO's designation, and the two disagree on ~47% of the positives. Asking
+#: what the query should return measures the thing the cell actually scores, and
+#: it absorbs the use distinction for free.
 QUESTION = {
-    "tv": "coco_quarry tv - is this a tv?",
-    "dining table": "coco_quarry dining table - is this a dining table?",
+    "tv": "coco_quarry tv - would you want this back searching for a tv?",
+    "dining table": "coco_quarry dining table - would you want this back searching for a dining table?",
 }
 TEXT = {"tv": "a tv", "dining table": "a dining table"}
 
@@ -60,11 +69,38 @@ def main() -> int:
     ap.add_argument("--api", default="http://rack5n04:11850")
     ap.add_argument("--queues", type=Path, default=Path("/expscratch/sgreenberg/ruling-queues"))
     ap.add_argument("--wait", type=int, default=600)
+    ap.add_argument(
+        "--replace",
+        action="store_true",
+        help="delete an existing queue of the same name first; REFUSED if it holds any image vote",
+    )
+    ap.add_argument("--also-drop", action="append", default=[], help="an older queue name to remove too")
     args = ap.parse_args()
 
     have = datasets(args.api)
-    dets = {d["name"] for d in api(args.api, "/api/detectors/registry").get("detectors", [])}
+    det_rows = {d["name"]: d for d in api(args.api, "/api/detectors/registry").get("detectors", [])}
+    dets = set(det_rows)
     print(f"{len(have)} datasets, {len(dets)} detectors already registered")
+
+    # A queue is only ever removed when it is provably unanswered. The seeded
+    # text query is not a vote; an image example is. Banking after a clear once
+    # cost 1,725 answers, so the guard is on the votes, not on who made it.
+    for name in list(args.also_drop) + ([q for q in QUESTION.values()] if args.replace else []):
+        d = det_rows.get(name)
+        if d is not None:
+            votes = [e for e in (d.get("examples") or []) if e.get("type") != "text"]
+            if votes:
+                print(f"  {name}: REFUSING to replace, it holds {len(votes)} image vote(s)")
+                return 1
+            api(args.api, f"/api/detectors/registry/{d['id']}", method="DELETE")
+            print(f"  {name}: detector removed (0 votes)")
+        ds = have.get(name)
+        if ds is not None:
+            api(args.api, f"/api/datasets/registry/{ds.get('id')}", method="DELETE")
+            print(f"  {name}: dataset removed")
+    if args.also_drop or args.replace:
+        have = datasets(args.api)
+        dets = {d["name"] for d in api(args.api, "/api/detectors/registry").get("detectors", [])}
 
     rc = 0
     for klass, name in QUESTION.items():
