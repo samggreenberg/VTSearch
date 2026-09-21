@@ -54,7 +54,7 @@ def _tracked_basenames() -> frozenset[str]:
     """Every tracked file's basename.  `git ls-files` rather than a walk, so an
     untracked build artefact can never make a dangling reference look resolved."""
     out = subprocess.run(
-        ["git", "ls-files"],
+        ["git", "ls-files"],  # noqa: S607 - git resolved from PATH
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
