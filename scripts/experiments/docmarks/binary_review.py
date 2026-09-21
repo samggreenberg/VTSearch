@@ -132,6 +132,41 @@ class Question:
     outline: bool = True
     #: Small print under the image (e.g. which methods proposed the candidate).
     detail: str = ""
+    #: Shave the near-solid margin off the candidate before fitting it to the
+    #: panel.  A scanned page is mostly white paper, so the mark renders small
+    #: while the reviewer pays for margin -- twice, since the sheet is fetched
+    #: whole and then again as a thumbnail.  Uses
+    #: :func:`vtscore.media.image.edge_trim.solid_edge_box`, the same detector
+    #: the thumbnailer and the embedding cleaner use, so a page whose border is
+    #: not near-solid (a skewed scan frame, a black ring that is not uniform)
+    #: simply does not trim rather than trimming wrongly.
+    #:
+    #: **Only for questions that draw no box.**  ``outline`` coordinates are
+    #: relative to the untrimmed region, so trimming under a drawn box would
+    #: move the box off the thing it points at.
+    trim_border: bool = False
+    #: Render greyscale and at this JPEG quality.  A scanned page IS greyscale,
+    #: so three colour channels at q90 buy nothing and cost a lot: the review
+    #: sheet is fetched whole over a tunnel for every vote, and the centre panel
+    #: goes black until it lands.  Measured on these sheets, RGB q90 is a 198 KB
+    #: median / 450 KB p90; greyscale q80 at 0.9 scale is 111 KB / 245 KB --
+    #: lighter than the 124 KB median of the passes that reviewed at a page a
+    #: second.  Only for sheets whose colour carries nothing; a task that draws
+    #: the red proposal box needs the default.
+    greyscale: bool = False
+    quality: int = 90
+    #: Suppress the page id in the footer.  A planted control is only a check
+    #: on attention while it is indistinguishable from the rest of the queue,
+    #: and a footer reading ``spods/00882`` among twenty ``ucsf/...`` pages
+    #: announces it.
+    anonymous: bool = False
+    #: Canvas override, ``(width, height)``.  The default is landscape, which
+    #: letterboxes a *portrait* page into a third of the panel -- fine for a box
+    #: on a page, useless for "is the mark anywhere on this page", where the
+    #: page itself has to be legible.  A contamination question renders the page
+    #: 2.3x wider this way, which is the difference between a 35 px letterhead
+    #: crest and an 87 px one.
+    canvas: Optional[list[int]] = None
 
 
 def short_class(class_id: str) -> str:
@@ -178,6 +213,25 @@ def panel_scale(region: tuple[int, int, int, int], mark_long: int, panel: tuple[
     return min(fit, max(want, 1.0))
 
 
+def sheet_size(q: "Question") -> tuple[int, int]:
+    """Canvas for *q* -- its override, else the shared landscape default."""
+    return (int(q.canvas[0]), int(q.canvas[1])) if q.canvas else CANVAS
+
+
+def footer_text(q: "Question") -> str:
+    """The small print under the sheet.
+
+    An ``anonymous`` question shows only its ``detail``: a planted attention
+    control is a check on whether the reviewer looked, and a footer naming
+    ``spods/00882`` among twenty ``ucsf/...`` pages answers the question for
+    them.  The same applies to the arm a question was drawn from -- knowing a
+    page was ranked highly by SigLIP is a reason to look harder at it.
+    """
+    if q.anonymous:
+        return q.detail
+    return f"{q.item}   ·   {q.page_id}" + (f"   ·   {q.detail}" if q.detail else "")
+
+
 def _open_page(page: Any, corpus: Path):
     from PIL import Image  # noqa: PLC0415
 
@@ -198,8 +252,9 @@ def render(q: Question, pages: dict[str, Any], corpus: Path, out: Path) -> Path:
 
     from completeness import _font  # noqa: PLC0415
 
-    W, H = CANVAS
-    img = Image.new("RGB", CANVAS, "white")
+    size = sheet_size(q)
+    W, H = size
+    img = Image.new("RGB", size, "white")
     draw = ImageDraw.Draw(img)
     draw.rectangle([0, 0, W, HEADER_H], fill="#111111")
     draw.text((20, 16), q.question, fill="white", font=_font(38, bold=True))
@@ -234,7 +289,18 @@ def render(q: Question, pages: dict[str, Any], corpus: Path, out: Path) -> Path:
     with _open_page(page, corpus) as im:
         crop = im.convert("RGB").crop(region)
     panel = (W - LEFT_W - 32, body_h)
-    s = panel_scale(region, max(q.box[2], q.box[3]), panel)
+    if q.trim_border and not q.outline:
+        from vtscore.media.image.edge_trim import solid_edge_box  # noqa: PLC0415
+
+        trimmed = solid_edge_box(crop)
+        if trimmed:
+            crop = crop.crop(trimmed)
+        # The mark-size enlargement below is keyed to the untrimmed region, so
+        # a trimmed crop just fills the panel: there is no box to keep legible,
+        # only the page.
+        s = min(panel[0] / crop.width, panel[1] / crop.height)
+    else:
+        s = panel_scale(region, max(q.box[2], q.box[3]), panel)
     crop = crop.resize((max(1, int(crop.width * s)), max(1, int(crop.height * s))), Image.Resampling.LANCZOS)
     ox = LEFT_W + 16 + (panel[0] - crop.width) // 2
     oy = body_top + (panel[1] - crop.height) // 2
@@ -259,10 +325,12 @@ def render(q: Question, pages: dict[str, Any], corpus: Path, out: Path) -> Path:
     if q.outline:
         outline(q.box, "#e0201c")
     draw.rectangle([0, H - FOOTER_H, W, H], fill="#eeeeee")
-    footer = f"{q.item}   ·   {q.page_id}" + (f"   ·   {q.detail}" if q.detail else "")
+    footer = footer_text(q)
     draw.text((16, H - FOOTER_H + 6), footer, fill="#333333", font=_font(18))
     path = out / q.filename
-    img.save(path, quality=90)
+    if q.greyscale:
+        img = img.convert("L")
+    img.save(path, quality=q.quality, optimize=True)
     return path
 
 

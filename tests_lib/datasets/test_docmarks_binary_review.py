@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import sys
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -122,6 +123,109 @@ class TestRendering:
 
     def test_class_name_leads_the_queue_name(self, br):
         assert br.short_class("tobacco800/logo_ajj10e00_1") == "t800 logo_ajj10e00_1"
+
+
+class TestSheetPresentation:
+    """A review sheet is fetched whole for every vote, so how it is drawn is not cosmetic.
+
+    Two failures this covers, both found the hard way on 2026-09-20:
+
+    * a portrait page letterboxed into the landscape default rendered ~448 px
+      wide, where a letterhead crest is ~35 px and cannot be ruled in or out;
+    * RGB at quality 90 made the sheets 198 KB median / 450 KB p90 against the
+      124 KB the reviewer labels at a page a second, and he got six-second
+      stalls waiting on the centre panel.
+    """
+
+    def _q(self, br, **kw):
+        base = {
+            "filename": "x.jpg",
+            "task": "contamination",
+            "question": "is the mark on this page?",
+            "refs": [],
+            "page_id": "ucsf/a#0",
+            "box": [0, 0, 100, 100],
+        }
+        return br.Question(**{**base, **kw})
+
+    def test_canvas_defaults_to_the_shared_landscape_sheet(self, br):
+        assert br.sheet_size(self._q(br)) == br.CANVAS
+
+    def test_a_portrait_question_overrides_the_canvas(self, br):
+        assert br.sheet_size(self._q(br, canvas=[1530, 1350])) == (1530, 1350)
+
+    def test_the_footer_names_the_page_by_default(self, br):
+        q = self._q(br, item="7/50", detail="ranked")
+        assert br.footer_text(q) == "7/50   ·   ucsf/a#0   ·   ranked"
+
+    def test_an_anonymous_question_gives_the_reviewer_no_tell(self, br):
+        """A planted control must not be identifiable from its footer."""
+        q = self._q(br, item="7/50", detail="", anonymous=True)
+        assert br.footer_text(q) == ""
+        assert "ucsf" not in br.footer_text(q)
+
+    def test_anonymous_still_shows_detail_when_one_is_set(self, br):
+        assert br.footer_text(self._q(br, detail="note", anonymous=True)) == "note"
+
+
+class TestRenderedSheetWeight:
+    """The knobs that decide what a sheet costs, exercised through a real render."""
+
+    @staticmethod
+    def _page(tmp_path, w=600, h=800):
+        from PIL import Image
+
+        path = tmp_path / "page.png"
+        img = Image.new("RGB", (w, h), "white")
+        # a dark block in the middle, white margin all round: something to find,
+        # and something for the border trim to shave.
+        for x in range(w // 4, 3 * w // 4):
+            for y in range(h // 3, 2 * h // 3):
+                img.putpixel((x, y), (10, 10, 10) if (x + y) % 3 else (200, 30, 30))
+        img.save(path)
+
+        return SimpleNamespace(page_id="ucsf/a#0", path=str(path), width=w, height=h, marks=[])
+
+    def _q(self, br, **kw):
+        base = {
+            "filename": "sheet.jpg",
+            "task": "contamination",
+            "question": "is the mark on this page?",
+            "refs": [],
+            "page_id": "ucsf/a#0",
+            "box": [0, 0, 600, 800],
+            "outline": False,
+        }
+        return br.Question(**{**base, **kw})
+
+    def test_greyscale_writes_a_single_channel_sheet(self, br, tmp_path):
+        from PIL import Image
+
+        page = self._page(tmp_path)
+        out = tmp_path / "out"
+        out.mkdir()
+        br.render(self._q(br, greyscale=True, quality=80), {"ucsf/a#0": page}, tmp_path, out)
+        with Image.open(out / "sheet.jpg") as im:
+            assert im.mode == "L", "a scanned page is greyscale; three channels are paid for and unused"
+
+    def test_greyscale_at_q80_is_smaller_than_rgb_at_q90(self, br, tmp_path):
+        page = self._page(tmp_path)
+        pages = {"ucsf/a#0": page}
+        heavy, light = tmp_path / "heavy", tmp_path / "light"
+        heavy.mkdir()
+        light.mkdir()
+        br.render(self._q(br), pages, tmp_path, heavy)
+        br.render(self._q(br, greyscale=True, quality=80), pages, tmp_path, light)
+        assert (light / "sheet.jpg").stat().st_size < (heavy / "sheet.jpg").stat().st_size
+
+    def test_the_canvas_override_reaches_the_written_sheet(self, br, tmp_path):
+        from PIL import Image
+
+        out = tmp_path / "out"
+        out.mkdir()
+        br.render(self._q(br, canvas=[900, 1100]), {"ucsf/a#0": self._page(tmp_path)}, tmp_path, out)
+        with Image.open(out / "sheet.jpg") as im:
+            assert im.size == (900, 1100)
 
 
 class TestCompleteness2:
