@@ -72,8 +72,14 @@ def build(slates: dict) -> tuple[list[dict], Counter, Counter]:
         for f in sorted(HR.glob(f"LABELSETS__{kind}__*.json")):
             d = json.loads(f.read_text())
             cls = d["class"]
-            if d.get("rule") != pc.review_name(cls):
-                raise SystemExit(f"{f.name}: voted under {d.get('rule')!r}, rule in force is {pc.review_name(cls)!r}")
+            # A retired class's name is accepted as HISTORY (pile_config.
+            # SCALE_CLASS_RULES_RETIRED): #4056 merged three classes away and the
+            # record was voted under their old rules.
+            if d.get("rule") not in pc.rule_names_ever(cls):
+                raise SystemExit(
+                    f"{f.name}: voted under {d.get('rule')!r}, "
+                    f"rules ever in force for {cls!r}: {sorted(pc.rule_names_ever(cls))}"
+                )
             owl = (
                 {int(r["image_id"]): _clipped(r.get("box")) for r in slates.get(cls, {}).get("rows", [])}
                 if kind == "slate"
@@ -101,7 +107,7 @@ def build(slates: dict) -> tuple[list[dict], Counter, Counter]:
     for f in sorted(HR.glob("LABELSETS__prominent__*.json")):
         d = json.loads(f.read_text())
         cls = d["class"]
-        if d.get("rule") != pc.review_name(cls):
+        if d.get("rule") not in pc.rule_names_ever(cls):
             raise SystemExit(f"{f.name}: voted under a superseded rule")
         owl = {int(r["image_id"]): _clipped(r.get("box")) for r in slates[cls]["rows"]}
         for side, human in (("good", "present"), ("bad", "absent")):

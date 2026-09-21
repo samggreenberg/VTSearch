@@ -121,7 +121,11 @@ def read_coco_labels(
     labels: dict[int, dict[str, list[list[float]]]] = {}
     dims: dict[int, tuple[int, int]] = {}
     filenames: dict[int, str] = {}
-    wanted = set(classes)
+    # A class in C may be a UNION of COCO classes (pile_config.SCALE_CLASS_MERGES),
+    # so membership is a reverse map rather than a name test. Until #4074 this
+    # table was declared and never read, and the union it described -- priced in
+    # its own docstring -- was simply absent from every cell.
+    member_of = {coco: cls for cls in classes for coco in pc.coco_classes_for(cls)}
     crowd = 0
 
     for split in SPLITS:
@@ -140,11 +144,11 @@ def read_coco_labels(
             if ann.get("iscrowd"):
                 crowd += 1
                 continue
-            name = cats.get(ann["category_id"])
-            if name not in wanted:
+            cls = member_of.get(cats.get(ann["category_id"]))
+            if cls is None:
                 continue
             x, y, w, h = ann["bbox"]
-            labels[int(ann["image_id"])].setdefault(name, []).append([x, y, x + w, y + h])
+            labels[int(ann["image_id"])].setdefault(cls, []).append([x, y, x + w, y + h])
 
     log(f"  coco_quarry: {len(labels):,} images, {crowd:,} iscrowd regions dropped")
     _CORPUS[key] = (labels, dims, filenames)

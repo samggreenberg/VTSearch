@@ -269,3 +269,37 @@ class TestPatchShards:
         labels, _, _ = mod.read_coco_labels(anchor, ("bus",))
         per_shard = [{i for i in labels if i % pc.COCO_QUARRY_SHARDS == k} for k in range(pc.COCO_QUARRY_SHARDS)]
         assert sum(len(s) for s in per_shard) == len(labels)
+
+
+def test_a_declared_merge_actually_changes_what_is_admitted(mod, tmp_path: Path, monkeypatch):
+    """#4074: `SCALE_CLASS_MERGES` was declared for months and never read.
+
+    The table said `cup` was `cup` U `wine glass` and its own docstring priced the
+    union at +8,180 boxes; measured on the built cell, 0 of 300 `cup` positives had
+    been admitted on a wine glass. A merge nothing applies is indistinguishable
+    from no merge, so this pins the BEHAVIOUR rather than the table's contents.
+    """
+    import pile_config as pc  # noqa: PLC0415
+
+    anchor = _corpus(tmp_path)
+    monkeypatch.setattr(pc, "SCALE_CLASS_MERGES", {"road timepiece": ("bus", "clock")})
+    mod._CORPUS.clear()  # the reader memoises on (anchor, classes)
+    labels, _, _ = mod.read_coco_labels(anchor, ("road timepiece",))
+    mod._CORPUS.clear()
+
+    # The `bus` boxes land under the MERGED name, in both splits. The crowd
+    # `clock` stays dropped -- a merge must not smuggle one back in.
+    assert labels[1] == {"road timepiece": [[10.0, 10.0, 50.0, 50.0]]}
+    assert labels[2] == {"road timepiece": [[20.0, 20.0, 50.0, 50.0]]}
+
+
+def test_every_declared_merge_is_a_real_union_named_in_c():
+    """A merge key that is not in *C*, or names one class, is a no-op in disguise."""
+    import pile_config as pc  # noqa: PLC0415
+
+    stray = sorted(set(pc.SCALE_CLASS_MERGES) - set(pc.SCALE_CLASSES))
+    assert not stray, f"merge declared for a class not in C: {stray}"
+    for cls, parts in pc.SCALE_CLASS_MERGES.items():
+        assert len(set(parts)) > 1, f"{cls!r} merges one class, which is not a merge"
+        assert pc.coco_classes_for(cls) == set(parts), f"{cls!r} does not resolve to its own parts"
+        assert cls not in parts, f"{cls!r} is named as its own part; the roster name must be the NEW one"

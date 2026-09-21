@@ -106,7 +106,9 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--klass", "--class", dest="klass", required=True)
     ap.add_argument("--annotations", type=Path, default=Path("/expscratch/sgreenberg/vts-cache/coco_anchor"))
-    ap.add_argument("--lvis", type=Path, default=Path("/exp/scale26/datasets/external/LVIS/annotations/lvis_v1_val.json"))
+    ap.add_argument(
+        "--lvis", type=Path, default=Path("/exp/scale26/datasets/external/LVIS/annotations/lvis_v1_val.json")
+    )
     ap.add_argument("--n", type=int, default=40, help="questions per queue")
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--seed", type=int, default=20260920)
