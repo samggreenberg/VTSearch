@@ -1,0 +1,570 @@
+{
+ "class": "tv",
+ "seed": 20260920,
+ "strata": {
+  "television_set": 21,
+  "monitor_(computer_equipment) computer_monitor": 19
+ },
+ "items": [
+  {
+   "file": "tv_bc217ab46948.jpg",
+   "order": 0,
+   "image_id": 551344,
+   "bbox": [
+    369.98,
+    45.3,
+    247.01,
+    220.05
+   ],
+   "ann_id": 30351,
+   "lvis": "monitor_(computer_equipment) computer_monitor",
+   "stratum": "monitor_(computer_equipment) computer_monitor"
+  },
+  {
+   "file": "tv_1b7e615247ec.jpg",
+   "order": 1,
+   "image_id": 572495,
+   "bbox": [
+    199.09,
+    99.51,
+    226.94,
+    133.29
+   ],
+   "ann_id": 34702,
+   "lvis": "monitor_(computer_equipment) computer_monitor",
+   "stratum": "monitor_(computer_equipment) computer_monitor"
+  },
+  {
+   "file": "tv_608562c9b94c.jpg",
+   "order": 2,
+   "image_id": 33042,
+   "bbox": [
+    32.04,
+    43.03,
+    145.56,
+    127.25
+   ],
+   "ann_id": 34686,
+   "lvis": "television_set",
+   "stratum": "television_set"
+  },
+  {
+   "file": "tv_8d71aa39b207.jpg",
+   "order": 3,
+   "image_id": 37198,
+   "bbox": [
+    223.27,
+    75.19,
+    55.45,
+    48.19
+   ],
+   "ann_id": 1969648,
+   "lvis": "monitor_(computer_equipment) computer_monitor",
+   "stratum": "monitor_(computer_equipment) computer_monitor"
+  },
+  {
+   "file": "tv_8d7e0a39bf95.jpg",
+   "order": 4,
+   "image_id": 347766,
+   "bbox": [
+    166.11,
+    74.5,
+    196.32,
+    153.17
+   ],
+   "ann_id": 29062,
+   "lvis": "monitor_(computer_equipment) computer_monitor",
+   "stratum": "monitor_(computer_equipment) computer_monitor"
+  },
+  {
+   "file": "tv_14c3db6ec006.jpg",
+   "order": 5,
+   "image_id": 232088,
+   "bbox": [
+    53.93,
+    140.22,
+    160.72,
+    120.81
+   ],
+   "ann_id": 31287,
+   "lvis": "television_set",
+   "stratum": "television_set"
+  },
+  {
+   "file": "tv_e9bbf111cf2a.jpg",
+   "order": 6,
+   "image_id": 225757,
+   "bbox": [
+    319.33,
+    40.86,
+    161.93,
+    154.37
+   ],
+   "ann_id": 34192,
+   "lvis": "monitor_(computer_equipment) computer_monitor",
+   "stratum": "monitor_(computer_equipment) computer_monitor"
+  },
+  {
+   "file": "tv_61b934468b82.jpg",
+   "order": 7,
+   "image_id": 398133,
+   "bbox": [
+    280.28,
+    28.52,
+    136.64,
+    68.33
+   ],
+   "ann_id": 1968694,
+   "lvis": "television_set",
+   "stratum": "television_set"
+  },
+  {
+   "file": "tv_e218b381bd60.jpg",
+   "order": 8,
+   "image_id": 159562,
+   "bbox": [
+    260.54,
+    35.8,
+    71.28,
+    60.43
+   ],
+   "ann_id": 28308,
+   "lvis": "monitor_(computer_equipment) computer_monitor",
+   "stratum": "monitor_(computer_equipment) computer_monitor"
+  },
+  {
+   "file": "tv_052af168ea48.jpg",
+   "order": 9,
+   "image_id": 530229,
+   "bbox": [
+    1.52,
+    91.1,
+    34.03,
+    131.55
+   ],
+   "ann_id": 32129,
+   "lvis": "television_set",
+   "stratum": "television_set"
+  },
+  {
+   "file": "tv_904f34241541.jpg",
+   "order": 10,
+   "image_id": 140122,
+   "bbox": [
+    426.19,
+    0.0,
+    213.81,
+    235.64
+   ],
+   "ann_id": 30445,
+   "lvis": "monitor_(computer_equipment) computer_monitor",
+   "stratum": "monitor_(computer_equipment) computer_monitor"
+  },
+  {
+   "file": "tv_9c1fb731457f.jpg",
+   "order": 11,
+   "image_id": 555009,
+   "bbox": [
+    266.78,
+    1.31,
+    223.51,
+    169.29
+   ],
+   "ann_id": 33654,
+   "lvis": "monitor_(computer_equipment) computer_monitor",
+   "stratum": "monitor_(computer_equipment) computer_monitor"
+  },
+  {
+   "file": "tv_548a8b2b81c9.jpg",
+   "order": 12,
+   "image_id": 379522,
+   "bbox": [
+    36.67,
+    324.01,
+    68.39,
+    59.14
+   ],
+   "ann_id": 1624967,
+   "lvis": "monitor_(computer_equipment) computer_monitor",
+   "stratum": "monitor_(computer_equipment) computer_monitor"
+  },
+  {
+   "file": "tv_bfc53ed7ca66.jpg",
+   "order": 13,
+   "image_id": 86696,
+   "bbox": [
+    444.94,
+    88.38,
+    58.25,
+    48.54
+   ],
+   "ann_id": 31729,
+   "lvis": "television_set",
+   "stratum": "television_set"
+  },
+  {
+   "file": "tv_d02849695459.jpg",
+   "order": 14,
+   "image_id": 500257,
+   "bbox": [
+    164.25,
+    139.44,
+    8.65,
+    10.24
+   ],
+   "ann_id": 1626569,
+   "lvis": "monitor_(computer_equipment) computer_monitor",
+   "stratum": "monitor_(computer_equipment) computer_monitor"
+  },
+  {
+   "file": "tv_843c7ebe2282.jpg",
+   "order": 15,
+   "image_id": 435003,
+   "bbox": [
+    334.51,
+    128.32,
+    90.66,
+    118.63
+   ],
+   "ann_id": 1968274,
+   "lvis": "monitor_(computer_equipment) computer_monitor",
+   "stratum": "monitor_(computer_equipment) computer_monitor"
+  },
+  {
+   "file": "tv_a45cd5c71ba4.jpg",
+   "order": 16,
+   "image_id": 83968,
+   "bbox": [
+    5.81,
+    224.29,
+    203.96,
+    95.08
+   ],
+   "ann_id": 32904,
+   "lvis": "television_set",
+   "stratum": "television_set"
+  },
+  {
+   "file": "tv_b27f741fea65.jpg",
+   "order": 17,
+   "image_id": 570179,
+   "bbox": [
+    404.96,
+    180.51,
+    60.79,
+    73.14
+   ],
+   "ann_id": 124656,
+   "lvis": "monitor_(computer_equipment) computer_monitor",
+   "stratum": "monitor_(computer_equipment) computer_monitor"
+  },
+  {
+   "file": "tv_9286d7209469.jpg",
+   "order": 18,
+   "image_id": 319100,
+   "bbox": [
+    466.95,
+    231.23,
+    32.92,
+    72.59
+   ],
+   "ann_id": 29148,
+   "lvis": "television_set",
+   "stratum": "television_set"
+  },
+  {
+   "file": "tv_08a3f233f717.jpg",
+   "order": 19,
+   "image_id": 9483,
+   "bbox": [
+    458.8,
+    210.25,
+    120.19,
+    139.24
+   ],
+   "ann_id": 31409,
+   "lvis": "monitor_(computer_equipment) computer_monitor",
+   "stratum": "monitor_(computer_equipment) computer_monitor"
+  },
+  {
+   "file": "tv_66e404b0e29f.jpg",
+   "order": 20,
+   "image_id": 462791,
+   "bbox": [
+    332.22,
+    170.25,
+    88.45,
+    71.19
+   ],
+   "ann_id": 29127,
+   "lvis": "television_set",
+   "stratum": "television_set"
+  },
+  {
+   "file": "tv_42d918c87744.jpg",
+   "order": 21,
+   "image_id": 84214,
+   "bbox": [
+    0.0,
+    84.57,
+    200.73,
+    261.82
+   ],
+   "ann_id": 1968330,
+   "lvis": "monitor_(computer_equipment) computer_monitor",
+   "stratum": "monitor_(computer_equipment) computer_monitor"
+  },
+  {
+   "file": "tv_1186697438f9.jpg",
+   "order": 22,
+   "image_id": 70660,
+   "bbox": [
+    37.75,
+    37.75,
+    118.65,
+    88.09
+   ],
+   "ann_id": 30774,
+   "lvis": "television_set",
+   "stratum": "television_set"
+  },
+  {
+   "file": "tv_0f4536d8a053.jpg",
+   "order": 23,
+   "image_id": 409568,
+   "bbox": [
+    8.97,
+    26.91,
+    272.42,
+    244.39
+   ],
+   "ann_id": 32412,
+   "lvis": "television_set",
+   "stratum": "television_set"
+  },
+  {
+   "file": "tv_455c05f4e976.jpg",
+   "order": 24,
+   "image_id": 302076,
+   "bbox": [
+    288.97,
+    222.35,
+    48.03,
+    46.89
+   ],
+   "ann_id": 34756,
+   "lvis": "television_set",
+   "stratum": "television_set"
+  },
+  {
+   "file": "tv_3ae11d870285.jpg",
+   "order": 25,
+   "image_id": 513073,
+   "bbox": [
+    295.37,
+    57.33,
+    63.84,
+    63.39
+   ],
+   "ann_id": 32647,
+   "lvis": "television_set",
+   "stratum": "television_set"
+  },
+  {
+   "file": "tv_8a7c08275d39.jpg",
+   "order": 26,
+   "image_id": 387098,
+   "bbox": [
+    40.58,
+    30.52,
+    200.9,
+    192.0
+   ],
+   "ann_id": 34652,
+   "lvis": "monitor_(computer_equipment) computer_monitor",
+   "stratum": "monitor_(computer_equipment) computer_monitor"
+  },
+  {
+   "file": "tv_2c01e323fb4c.jpg",
+   "order": 27,
+   "image_id": 128148,
+   "bbox": [
+    605.16,
+    202.4,
+    34.84,
+    125.43
+   ],
+   "ann_id": 1968967,
+   "lvis": "television_set",
+   "stratum": "television_set"
+  },
+  {
+   "file": "tv_cc700945e2f1.jpg",
+   "order": 28,
+   "image_id": 79783,
+   "bbox": [
+    421.88,
+    242.8,
+    217.4,
+    228.16
+   ],
+   "ann_id": 32236,
+   "lvis": "television_set",
+   "stratum": "television_set"
+  },
+  {
+   "file": "tv_34df88a11d2d.jpg",
+   "order": 29,
+   "image_id": 219413,
+   "bbox": [
+    503.14,
+    211.77,
+    94.66,
+    90.29
+   ],
+   "ann_id": 33201,
+   "lvis": "television_set",
+   "stratum": "television_set"
+  },
+  {
+   "file": "tv_cf08ca23d7b3.jpg",
+   "order": 30,
+   "image_id": 273142,
+   "bbox": [
+    64.27,
+    184.01,
+    73.95,
+    109.17
+   ],
+   "ann_id": 35084,
+   "lvis": "monitor_(computer_equipment) computer_monitor",
+   "stratum": "monitor_(computer_equipment) computer_monitor"
+  },
+  {
+   "file": "tv_0b2a3509e14e.jpg",
+   "order": 31,
+   "image_id": 152994,
+   "bbox": [
+    247.06,
+    76.47,
+    152.94,
+    247.06
+   ],
+   "ann_id": 124465,
+   "lvis": "monitor_(computer_equipment) computer_monitor",
+   "stratum": "monitor_(computer_equipment) computer_monitor"
+  },
+  {
+   "file": "tv_03878df536c9.jpg",
+   "order": 32,
+   "image_id": 77177,
+   "bbox": [
+    295.09,
+    92.24,
+    78.58,
+    75.61
+   ],
+   "ann_id": 30571,
+   "lvis": "television_set",
+   "stratum": "television_set"
+  },
+  {
+   "file": "tv_0bcb49bf6899.jpg",
+   "order": 33,
+   "image_id": 437218,
+   "bbox": [
+    379.91,
+    233.33,
+    158.21,
+    137.76
+   ],
+   "ann_id": 31561,
+   "lvis": "television_set",
+   "stratum": "television_set"
+  },
+  {
+   "file": "tv_f8f7da297ac2.jpg",
+   "order": 34,
+   "image_id": 122335,
+   "bbox": [
+    246.96,
+    55.24,
+    393.04,
+    341.19
+   ],
+   "ann_id": 30104,
+   "lvis": "television_set",
+   "stratum": "television_set"
+  },
+  {
+   "file": "tv_0ba2b72af4f4.jpg",
+   "order": 35,
+   "image_id": 63081,
+   "bbox": [
+    32.21,
+    242.95,
+    74.7,
+    116.47
+   ],
+   "ann_id": 1968267,
+   "lvis": "television_set",
+   "stratum": "television_set"
+  },
+  {
+   "file": "tv_dd0ffbb16c3f.jpg",
+   "order": 36,
+   "image_id": 88603,
+   "bbox": [
+    266.98,
+    30.42,
+    83.52,
+    85.76
+   ],
+   "ann_id": 29091,
+   "lvis": "television_set",
+   "stratum": "television_set"
+  },
+  {
+   "file": "tv_117b61ba8867.jpg",
+   "order": 37,
+   "image_id": 150830,
+   "bbox": [
+    0.0,
+    218.11,
+    64.74,
+    190.49
+   ],
+   "ann_id": 1968807,
+   "lvis": "television_set",
+   "stratum": "television_set"
+  },
+  {
+   "file": "tv_8f0f90ff0d65.jpg",
+   "order": 38,
+   "image_id": 337490,
+   "bbox": [
+    315.12,
+    128.1,
+    107.35,
+    116.57
+   ],
+   "ann_id": 2134050,
+   "lvis": "monitor_(computer_equipment) computer_monitor",
+   "stratum": "monitor_(computer_equipment) computer_monitor"
+  },
+  {
+   "file": "tv_8d57ebf5767c.jpg",
+   "order": 39,
+   "image_id": 355863,
+   "bbox": [
+    87.8,
+    7.29,
+    310.45,
+    209.69
+   ],
+   "ann_id": 1968407,
+   "lvis": "monitor_(computer_equipment) computer_monitor",
+   "stratum": "monitor_(computer_equipment) computer_monitor"
+  }
+ ]
+}

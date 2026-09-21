@@ -2757,6 +2757,14 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
     "tv": ClassRule(
         name="tv incl computer monitors",
         test=(
+            "OWNER RULED 2026-09-20 over 40 questions: monitors are IN, at the same rate "
+            "as televisions -- `television_set` 20/21 Good, `monitor_(computer_equipment)` "
+            "18/19. The question put was the retrieval one a cell actually scores (the "
+            "query is `a tv`), not a definitional one about objects, because the honest "
+            "answer to `is this a tv` depends on USE -- the same panel is a tv with a "
+            "console on it and arguably not one with a spreadsheet on it, and COCO's "
+            "annotators never conditioned on that. In practice the distinction did not "
+            "survive the images. "
             "Good: televisions AND desktop computer monitors -- both, deliberately. The "
             "class is 50.4% `television_set` and 46.9% "
             "`monitor_(computer_equipment)`, so it is a SCREEN class, not a television "
@@ -2768,18 +2776,25 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
         ),
     ),
     "dining table": ClassRule(
-        name="dining table surface incl cloth",
+        name="dining table surface in dining use",
         test=(
-            "Good: dining tables, and coffee tables (3.3%) or desks (2.5%) in a dining "
-            "role, WITH whatever covers them -- the class is 34.2% `tablecloth` and "
-            "30.5% generic `table` against only 10.4% `dining_table`, so what COCO "
-            "boxed is the covered SURFACE, not a piece of furniture identified as a "
-            "dining table. Bad: the things ON it (`plate` 4.5%, `place_mat` 4.7%, `tray` "
-            "2.9%, `chopping_board` 1.1%), which are separate objects; and CHAIRS and "
-            "BENCHES, their own classes in C. At 34% this is the lowest-purity class in "
-            "C, admitted because the selection rule is the count and nothing else -- so "
-            "the composition note is a covariate a reader must quote beside any "
-            "`dining table` number."
+            "THE RULE IS FUNCTION, NOT FURNITURE. Owner ruled 2026-09-20 over 48 "
+            "questions, and the answer separates sharply by what the surface is DOING: "
+            "`tray` 4/4 Good, `plate` 4/4, `place_mat` 4/4, `dining_table` 4/4, "
+            "`tablecloth` 14/15 -- against generic `table` 7/13 and `coffee_table` 1/4. "
+            "Good: any surface in dining use and whatever covers it -- a laid table, a "
+            "cloth-covered table, a tray or place setting shot close enough that the "
+            "surface fills the frame. A close-up whose best LVIS match is the `plate` is "
+            "still the surface, and is Good; an earlier version of this rule called "
+            "those Bad and the ruling overturned it. "
+            "Bad: coffee tables and other living-room furniture with no meal on them "
+            "(3 of 4 rejected); CHAIRS and BENCHES, their own classes in C. A bare "
+            "generic table is genuinely a coin-flip (7/13) -- if nothing says dining, it "
+            "is not this class. "
+            "The class is 34.2% `tablecloth`, 30.5% generic `table` and only 10.4% "
+            "`dining_table` by LVIS, the lowest purity in C, admitted because the "
+            "selection rule is the count and nothing else. Quote the composition note "
+            "beside any `dining table` number; the name does not describe the class."
         ),
     ),
 }
