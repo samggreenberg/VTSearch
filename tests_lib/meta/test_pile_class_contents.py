@@ -48,19 +48,28 @@ def test_notes_name_a_share_so_they_cannot_become_assertions():
         assert "%" in note, f"{cls}'s note quotes no share: {note!r}"
 
 
-def test_the_three_classes_the_measurement_singled_out_say_so():
+def test_the_classes_the_measurement_singled_out_say_so():
     """The rows a reader is most likely to misread must carry their warning.
 
-    `cup` is not predominantly cups, `stop sign` is a fifth generic street signs,
-    and `truck` overlaps `car` asymmetrically while both are in *C*. Each is a
-    fact a published number can be misread without, so each is pinned rather
-    than left to survive an edit.
+    Three were singled out originally: `cup` was not predominantly cups, `truck`
+    overlapped `car` asymmetrically while both were in *C*, and `stop sign` is a
+    fifth generic street signs. **Two of the three were merged away in #4056 for
+    exactly that reason**, so what has to be pinned now is that their successors
+    say what they contain -- a merged class whose note reads like its name would
+    reintroduce the defect the merge was for.
     """
-    assert "glass_(drink_container) 39%" in pc.SCALE_CLASS_CONTENTS["cup"]
     assert "street_sign 20%" in pc.SCALE_CLASS_CONTENTS["stop sign"]
-    truck = pc.SCALE_CLASS_CONTENTS["truck"]
-    assert "car_(automobile) 17%" in truck
-    assert "car" in truck and "also in C" in truck
+
+    veh = pc.SCALE_CLASS_CONTENTS["enclosed road vehicle"]
+    assert "car_(automobile)" in veh and "truck" in veh, "the union must name both halves"
+    assert "minivan" in veh, "minivan is the type COCO splits, and the reason for the merge"
+
+    vessel = pc.SCALE_CLASS_CONTENTS["single serving drinking vessel"]
+    assert "glass_(drink_container)" in vessel, "the stemless glass is the type COCO cannot place"
+    assert "wineglass" in vessel and "mug" in vessel, "stem and no stem both live here now"
+    # `cup` proper is a fifth of its own former class; a note that hid that is
+    # what made `cup` misleading in the first place.
+    assert "cup 20%" in vessel
 
 
 def test_contents_and_rules_cover_the_same_classes():

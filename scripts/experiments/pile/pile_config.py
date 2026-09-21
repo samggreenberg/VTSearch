@@ -471,6 +471,15 @@ def scale_study_exclusion(name: str) -> str | None:
 #: / #3666 numbers are conditioned on that list, and re-running those scripts
 #: against twenty-five would silently restate what they measured.
 SCALE_CLASSES: tuple[str, ...] = (
+    # #3588 added `truck` beside `car`; #4056 merged them, owner ruling
+    # 2026-09-20. COCO carries the boundary well at the IMAGE level -- 0.01%
+    # contradictory negatives -- but not at the BOX level, which is the unit
+    # REGION VOTING uses: 9.6% of car/truck boxes carry the MINORITY COCO label
+    # for their own LVIS object type (107 sedans called `truck`, 50 minivans
+    # called `truck`, 23 pickups called `car`). Merging reaches all 203 and needs
+    # no LVIS, which covers 16% of the corpus; excluding minivans would have
+    # fixed 50 of 203.
+    "enclosed road vehicle",
     "clock",
     "bird",
     "boat",
@@ -485,11 +494,19 @@ SCALE_CLASSES: tuple[str, ...] = (
     "stop sign",
     # Added by #3588, in the order that issue ranked them: the four same-scene
     # partners first, then the nine whose surroundings ARE their negative pool.
-    "truck",
-    "car",
     "fork",
     "spoon",
-    "cup",
+    # `cup` U `wine glass`, owner ruling 2026-09-20 (#4056, resolving #4074).
+    # COCO's stem branch WORKS -- mugs and teacups are `cup` 100% of the time,
+    # real stemware is `wine glass` 97% -- but the STEMLESS GLASS is not
+    # classifiable: `glass_(drink_container)`, 817 boxes and the largest type,
+    # is called `cup` 75% and `wine glass` 25%. 36% of the pair's boxes sit in a
+    # 20-80% split type and 10.7% carry the minority label, which is the
+    # region-voting rate and worse than the vehicles' 9.6%. Holding `wine glass`
+    # OUT did not protect `cup` -- `cup` already held 613 plain glasses and 17
+    # wineglasses -- it only left 204 identical glasses outside the roster, free
+    # to serve as negative regions against positives they cannot be told from.
+    "single serving drinking vessel",
     "bowl",
     "bottle",
     "vase",
@@ -1879,6 +1896,8 @@ class ClassRule(NamedTuple):
 #: Percentages are of matched boxes and members under 1% are dropped, so a row
 #: need not sum to 100. Regenerate with ``coco_class_purity.py --out``.
 SCALE_CLASS_CONTENTS: dict[str, str] = {
+    "single serving drinking vessel": "glass_(drink_container) 34%, wineglass 24%, cup 20%, mug 12%, bowl 1%, Dixie_cup 1%, candle 1%, teacup 1%, vase 1%, pitcher_(vessel_for_liquid) 1%, bucket 1% -- the union of COCO `cup` and `wine glass` (#4056), n=2196",
+    "enclosed road vehicle": "car_(automobile) 63%, truck 12%, minivan 9%, pickup_truck 6%, cab_(taxi) 2%, trailer_truck 2%, fire_engine 2%, bus_(vehicle) 1%, police_cruiser 1% -- the union of COCO `car` and `truck` (#4056), n=1935",
     "dining table": "tablecloth 34%, table 31%, dining_table 10%, place_mat 5%, plate 5%, coffee_table 3%, tray 3%, desk 3%, chopping_board 1%, pizza 1%, kitchen_table 1%, cabinet 1%, bench 1%",
     "tv": "television_set 50%, monitor_(computer_equipment) computer_monitor 47%, signboard 1%, fireplace 1%",
     "remote": "remote_control 56%, control 41%, cellular_telephone 1%, telephone 1%",
@@ -1924,7 +1943,6 @@ SCALE_CLASS_CONTENTS: dict[str, str] = {
     "vase": "vase 87%, flowerpot 6%, pitcher 1%, pottery 1% -- planters are in, though #3784"
     " retired 21 of them under the reviewer rule",
     "book": "book 85%, magazine 6%, notebook 2%, binder 2% -- the 6% magazines are the whole of #3612's 21-vs-49 split",
-    "car": "car_(automobile) 82%, minivan 9%, cab_(taxi) 4%, pickup_truck 2%, truck 1%",
     "backpack": "backpack 82%, suitcase 8%, duffel_bag 3%, handbag 2%",
     "stop sign": "stop_sign 79%, street_sign 20%, signboard 1% -- a fifth of this class is a"
     " sign that is not a stop sign, the largest unexpected minority in C",
@@ -1937,84 +1955,51 @@ SCALE_CLASS_CONTENTS: dict[str, str] = {
     "bottle": "bottle 42%, wine_bottle 18%, water_bottle 9%, beer_bottle 7%, soap 4%,"
     " condiment 2%, jar 2%, alcohol 2%, soda 2%, shampoo 2% -- mostly subtype spread,"
     " but the soap/shampoo/jar tail is ~8% of non-drink containers",
-    "cup": "glass_(drink_container) 39%, cup 28%, mug 17%, bowl 2%, teacup 1%, pitcher 1% --"
-    " NOT predominantly cups: COCO's `cup` is three vessels, and a drinking glass is the"
-    " plurality. The most heterogeneous class in C",
-    "truck": "truck 38%, car_(automobile) 17%, pickup_truck 16%, trailer_truck 8%, minivan 8%,"
-    " fire_engine 5%, bus_(vehicle) 2%, garbage_truck 1% -- the open decision: 17% of"
-    " `truck` is what LVIS calls a car, against 2% the other way, and `car` is also in C",
 }
 
 SCALE_CLASS_RULES: dict[str, ClassRule] = {
+    "single serving drinking vessel": ClassRule(
+        name="single serving drinking vessel any stem",
+        test=(
+            "Good: anything a person drinks a single serving from -- mugs, teacups, "
+            "paper and plastic cups, tumblers and highballs, wine glasses, champagne "
+            "flutes, martini glasses, goblets, beer glasses. STEM OR NO STEM IS "
+            "IRRELEVANT, which is the point of the class. Bad: BOWLS and BOTTLES, their "
+            "own classes in C; jugs, pitchers, carafes and teapots, which serve more than "
+            "one; vases; and a candle that happens to sit in a cup. "
+            "THE CUP/WINE-GLASS DISTINCTION IS DELIBERATELY GONE (#4056, owner ruling "
+            "2026-09-20, resolving #4074). COCO's stem branch works where a stem is "
+            "visible -- `mug` and `teacup` are `cup` 100% of the time, `wineglass` is "
+            "`wine glass` 97% -- but the STEMLESS GLASS defeats it: "
+            "`glass_(drink_container)`, 817 boxes and the pair's largest type, is called "
+            "`cup` 75% and `wine glass` 25%. 10.7% of the pair's boxes carry the minority "
+            "COCO label for their own object type, which is the rate REGION VOTING reads "
+            "and worse than the vehicles' 9.6%."
+        ),
+    ),
+    "enclosed road vehicle": ClassRule(
+        name="enclosed road vehicle not bus or bike",
+        test=(
+            "Good: cars, taxis, minivans, SUVs, pickups, vans, box trucks, semis and "
+            "tractor units, flatbeds, tow, fire and garbage trucks -- anything that is a "
+            "SELF-PROPELLED, ENCLOSED road vehicle carrying people or goods. Bad: BUSES "
+            "and MOTORCYCLES, their own classes in C; bicycles; a detached trailer, which "
+            "is not self-propelled; and plant machinery that WORKS AT A SITE rather than "
+            "carrying down a road -- cranes on tracks, tractors, forklifts, bulldozers. "
+            "THE CAR/TRUCK DISTINCTION IS DELIBERATELY GONE (#4056, owner ruling "
+            "2026-09-20). COCO draws it well at the IMAGE level and badly at the BOX "
+            "level, and region voting reads boxes: 9.6% of its car/truck boxes carry the "
+            "MINORITY COCO label for their own LVIS object type -- 107 sedans called "
+            "`truck`, 50 minivans called `truck`, 23 pickups called `car` -- so a reviewer "
+            "applying goods-versus-people would contradict the ground truth about once in "
+            "ten. `enclosed` excludes motorcycles without a size rule, `road` excludes "
+            "boats and aircraft, and `bus` stays out because COCO annotates it separately "
+            "and consistently (88% `bus_(vehicle)`)."
+        ),
+    ),
     # Candidates from #3588, each rule measured with `coco_folds.py` before it
     # was written: the fold-in names the boundary case a reviewer will actually
     # meet. Long form, with the counts, in the annotation guide.
-    "truck": ClassRule(
-        name="truck incl vans not SUVs",
-        test=(
-            "Good: pickups, box trucks, semis and tractor units, flatbeds, tow, fire and "
-            "food trucks, full-size cargo and panel vans. Bad: SUVs, crossovers and "
-            "passenger minivans (those are `car`), and a detached trailer with no cab. "
-            "Three tests, in order. (1) Is it a self-propelled road vehicle, or the "
-            "powered unit of one? No -> neither Car nor Truck, whatever it is carrying: "
-            "that excludes a detached trailer, a bike trailer, a handcart, a caravan "
-            "under tow, and it keeps a bobtail tractor unit as the powered half. Not "
-            "`does it have a cab`, which fails on any open driving position. "
-            "(2) Does the body CARRY a load down a road, or PERFORM WORK at a site? "
-            "Carrying is a Truck -- fire engine (fire truck 35 / fire engine 11 / "
-            "firetruck 12, none on car), ambulance 19, dump truck 18, tow truck 7, "
-            "garbage truck 4, cement mixer 3. Working is neither: a CRANE, and likewise "
-            "tractor 24, forklift 2, bulldozer, excavator, backhoe. Plant machinery is "
-            "the real reason those are excluded; the old `towed and pushed things` "
-            "rationale was wrong about a tractor. A crane on a road-going lorry chassis "
-            "is a Truck, a tracked or lattice-boom one is not, and `crane` occurs twice "
-            "in the whole overlap. (3) Use the BODY, not the badge, and ask what it was "
-            "BUILT FOR: goods is a Truck, people is a Car. Cargo space is the cue, not "
-            "the definition -- a bobtail tractor has no cargo space and is a Truck (its "
-            "fifth wheel says so), while a car with a tow hitch is still a Car. A "
-            "two-seater sportscar is a Car (sports car/coupe/convertible/hatchback are "
-            "0 Truck to 15 Car). Accessories change nothing. Never squint inside to "
-            "count rows. A long-exposure night shot where traffic is only headlight "
-            "streaks has no locatable instance at all: vote Good with NO box, which "
-            "excludes the image rather than filing a photograph of traffic as confirmed "
-            "no-Car. Same for a photo taken from INSIDE a car -- the Car contains the "
-            "camera, so it has no box, and boxing the sun visor would band the visor; "
-            "MAX_VOTED_AREA says the same thing, over 80% is not a region but the image. "
-            "Car vs BUS is barely a boundary (car->bus 15, bus->car 19, ~0.5% each way) "
-            "-- do not spend time there; the case that needs a call is a minibus, which "
-            "is boarded through its own door rather than entered by row. A TAXI is not "
-            "the hard case either: `taxi` lands on bus ONCE against 62 on car. Service "
-            "is a borrowing, not a property -- built-as beats used-as, the same rule "
-            "that makes a jar of flowers a Bottle -- so a saloon cab is a Car and a "
-            "minibus running as a shared taxi is a Bus. `van` names THREE vehicles and "
-            "COCO splits it 261 truck / 318 car / 37 bus; `suv` "
-            "does not (62 / 222, an SUV is a Car) and neither does `minivan` (5 / 51). "
-            "Disagreement on vans is a known cost of this class, not a mistake."
-        ),
-    ),
-    "car": ClassRule(
-        name="car incl SUVs and minivans",
-        test=(
-            "Good: sedans, hatchbacks, coupes, estates, SUVs, crossovers, passenger "
-            "minivans, taxis and cabs -- COCO folds every passenger body into `car`. "
-            "Bad: pickups and cargo vans, which are `truck`."
-        ),
-    ),
-    # Ruled 2026-09-10 by the owner, on finishing the fork slate. Three cases the
-    # enumeration did not cover, and one principle that decides all of them: a
-    # SPORK is a fork (it has tines); a PASTA STRAINER is not, even the kind with
-    # protruding fingers, because those are for separating pasta from water rather
-    # than piercing; a CARVING FORK is, on two tines, so the count never mattered.
-    #
-    # Written as a test rather than three more list entries, because the list was
-    # what let these through. `spoon` is amended in the same change to disclaim the
-    # spork: leaving both rules silent about one object is how `vase` and `bowl`
-    # came to contradict each other about planters (#3784), found only when a
-    # reviewer hit it mid-pass.
-    #
-    # The fork pass was already complete (396 of 396, 134 good) when this was
-    # ruled. The verdicts stand: no spork or strainer case was reported as
-    # contested, and the ruling names what was already being done.
     "fork": ClassRule(
         name="fork incl sporks not strainers",
         test=(
@@ -2046,25 +2031,6 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "every partly buried spoon."
         ),
     ),
-    "cup": ClassRule(
-        name="cup incl mugs glasses and stemware",
-        test=(
-            "Good: a plain drinking glass IS a cup, as are mugs, teacups, paper and "
-            "plastic cups, tumblers, pints -- and STEMWARE, which this class was merged "
-            "with (see SCALE_CLASS_MERGES): a wine glass, champagne flute, martini glass "
-            "or snifter counts. A glass holding cut flowers is still a cup, since `vase` "
-            "is only a vessel made as one. Bad: a JAR however it is drunk from (a jar is "
-            "a `bottle`; 25 jar boxes are COCO cups), a can, a tin, a carton, and "
-            "anything that serves MORE THAN ONE -- a pitcher, jug, carafe, teapot or "
-            "thermos is a `bottle`; a bucket is a general-purpose container made for "
-            "nothing in particular. The test is portion, not shape: A CUP IS HAND-HELD "
-            "AND A SINGLE SERVING."
-        ),
-    ),
-    # `bowl` is the class whose plain name misleads most: `container` is its
-    # fourth-largest fold-in (143 boxes), ahead of `pot` and `basket`, and the
-    # first name -- "incl plates and dishes" -- said nothing about it. Renamed
-    # mid-slate once that showed up.
     "bowl": ClassRule(
         name="bowl incl plates not planters or wrappers",
         test=(
@@ -3637,13 +3603,51 @@ def scale_ambiguous_for(cls: str) -> tuple[str, ...]:
 #: (#3603). It costs a negative-pool redraw at build time for those 1,469, and
 #: it makes `cup` the first class in this study that is not a plain COCO class.
 SCALE_CLASS_MERGES: dict[str, tuple[str, ...]] = {
-    "cup": ("cup", "wine glass"),
+    # `car` U `truck`, owner ruling 2026-09-20 (#4056). See the roster comment.
+    "enclosed road vehicle": ("car", "truck"),
+    # `cup` U `wine glass`, owner ruling 2026-09-20. Declared here for months and
+    # never applied (#4074): measured on the built cell, 0 of 300 `cup` positives
+    # had been admitted on a wine glass, so the union its own docstring priced
+    # was simply absent. Now applied, and the class renamed -- `cup` was never a
+    # fair name for a set that is 27% plain glasses and 26% stemware.
+    "single serving drinking vessel": ("cup", "wine glass"),
 }
 
 
 def coco_classes_for(cls: str) -> set[str]:
     """The COCO classes whose boxes count as *cls*, merges applied."""
     return set(SCALE_CLASS_MERGES.get(cls, (cls,)))
+
+
+#: Rule names for classes that have LEFT *C*, frozen so the committed human
+#: record stays readable.
+#:
+#: #3814 made a labelset carry the rule it was voted under, and the readers
+#: REFUSE a file whose rule is not the one in force -- which is the right
+#: behaviour, because a verdict cast under a different definition is not a
+#: verdict about this class. But #4056 merged `car` + `truck` and `cup` +
+#: `wine glass`, and `scripts/experiments/pile/human_record/` holds thousands of
+#: vg_scale-era verdicts voted under the retired names. Without this table every
+#: one of them fails the check at once, which reads as corruption rather than as
+#: history.
+#:
+#: This is a record of what WAS, exactly like :data:`SCALE_CLASSES_ORIGINAL` and
+#: :data:`SCALE_CLASSES_25`. Nothing here licenses voting under a retired name
+#: again: :func:`review_name` still returns only the current rule.
+SCALE_CLASS_RULES_RETIRED: dict[str, str] = {
+    "car": "car incl SUVs and minivans",
+    "truck": "truck incl vans not SUVs",
+    "cup": "cup incl mugs glasses and stemware",
+}
+
+
+def rule_names_ever(cls: str) -> set[str]:
+    """Every rule name *cls* has been voted under -- the current one, then retired."""
+    names = {review_name(cls)}
+    retired = SCALE_CLASS_RULES_RETIRED.get(cls)
+    if retired:
+        names.add(retired)
+    return names
 
 
 def scale_class_dataset_name(category: str) -> str:

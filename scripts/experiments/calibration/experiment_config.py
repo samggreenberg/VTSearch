@@ -76,11 +76,8 @@ _VG_SCALE_TEXTS = {
     # is `cup` U `wine glass` (SCALE_CLASS_MERGES) and `truck` excludes SUVs
     # (SCALE_CLASS_RULES), but nobody hunting either types the boundary into the
     # search box. Encoding the ruling here would measure an opening no user has.
-    "truck": "a truck",
-    "car": "a car on the street",
     "fork": "a fork",
     "spoon": "a spoon",
-    "cup": "a cup",
     "bowl": "a bowl",
     "bottle": "a bottle",
     "vase": "a vase",
@@ -89,6 +86,13 @@ _VG_SCALE_TEXTS = {
     "sink": "a sink",
     "cell phone": "a cell phone",
     "fire hydrant": "a fire hydrant",
+    # The two merged classes (#4056). Neither is a COCO category, so neither
+    # can be taken verbatim from `_COCO_TEXTS` the way every other entry here
+    # is; each names BOTH halves, because that is what the class contains and
+    # what someone hunting it would type. Naming one half would make the
+    # opening a biased sort over a class that is half something else.
+    "enclosed road vehicle": "a car or truck",
+    "single serving drinking vessel": "a cup or glass",
     # The twenty-eight #4056 added, taken VERBATIM from `_COCO_TEXTS` on the
     # same terms as the thirteen above -- `a person wearing a necktie` and
     # `a laptop computer` included, scene and qualifier untouched. The class
