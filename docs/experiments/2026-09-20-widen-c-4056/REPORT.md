@@ -1,81 +1,83 @@
-# Widening *C* to 53 costs nothing in supply and breaks every published number
+# Widening *C* to 53 costs nothing in supply, and almost nothing in accuracy
 
 **Issue:** #4056. **Dataset:** `coco_quarry`, COCO 2017 train+val, 123,287
-images. **Date:** 2026-09-20.
+images. **Date:** 2026-09-20. **Corrected 2026-09-20** — see *The correction*.
 
 ## Verdict
 
-**The count rule admits 53 classes and the shared pool supports all of them —
-but a cell measured against the widened pool reads +0.24 AP higher, so no
-published `coco_quarry` number survives the change.**
+**The count rule admits 53 classes, the shared pool supports all of them, and
+rebuilding costs a published cell −0.03 AP — almost all of it prevalence.**
 
-Supply was never the constraint, and #3983 already said so. What nobody had
-measured is what widening does to the *negatives*. The shared pool is drawn as
-*holds none of C*, so every class added shrinks the candidate set — and, more
-importantly, changes what is left in it. At *C* = 25 a clean pool image still
-holds **1.163** classes of the wider roster on average. At *C* = 53 it holds
-**0.000**. The filter stops selecting images without these 25 things and starts
-selecting **empty scenes**, and an empty scene is trivially easy to tell from a
-positive.
-
-![Widening C makes every cell look better, because the pool empties](figures/widening-empties-the-pool.png)
+*C* goes from 25 to 53 (`wine glass` held out; see below). Rebuilt and measured
+against the preserved 25-class build, on the 75 cells that existed before:
 
 | | `siglip` | `siglip2_l` |
 |---|---:|---:|
-| paired ΔAP, shipped pool → widened | **+0.2447 ± 0.0230** | **+0.2057 ± 0.0217** |
-| paired ΔAUC | +0.0232 ± 0.0031 | +0.0175 ± 0.0027 |
-| FPR ratio, widened / shipped | 0.54 ± 0.04 | 0.54 ± 0.04 |
-| mean AP | 0.602 → 0.846 | 0.680 → 0.885 |
-| `@small` ΔAP | +0.3658 | +0.3190 |
-| `@medium` ΔAP | +0.2843 | +0.2322 |
-| `@large` ΔAP | +0.0841 | +0.0659 |
+| paired ΔAP, **as shipped** | **−0.0301 ± 0.0039** | **−0.0281 ± 0.0037** |
+| paired ΔAP, **size-matched** | −0.0034 ± 0.0031 | **+0.0008 ± 0.0033** |
+| paired ΔAUC | +0.0020 ± 0.0015 | +0.0024 ± 0.0014 |
+| mean AP | 0.411 → 0.381 | 0.472 → 0.444 |
 
-**Read that against #3986**, which asked the same question about pool
-composition with *C* held still and answered **−0.002 AP**. The two differ by
-two orders of magnitude and in sign. Pool composition is harmless when the
-roster is fixed; under a roster change it is the largest effect measured on this
-benchmark.
+Three statistics agree on the same reading, and they are not redundant:
 
-**Nothing about this looks broken from the outside.** Every cell still has 100
-positives and 9,900 negatives, every script runs, the suite is green. The
-benchmark just gets easier. That is the failure mode worth naming: a change that
-silently improves every number is indistinguishable from a change that improved
-the method.
+- **Size-matched ΔAP straddles zero** — −0.003 and +0.001, opposite signs, both
+  inside one standard error. Hold the negative count still and widening *C*
+  changes nothing about how hard a cell is.
+- **ΔAUC is +0.002**, and AUC is prevalence-invariant by construction. Same
+  answer from a statistic that cannot see the haystack's size.
+- **So the −0.03 as shipped is prevalence**, and only prevalence: a rebuilt cell
+  carries 23,891 negatives against 16,535, 44% more, and AP falls mechanically
+  when the haystack grows.
 
-## The mechanism, measured rather than argued
+![The pool really does empty, and it reaches the benchmark anyway](figures/widening-empties-the-pool.png)
 
-`coco_roster_width_pool.py` draws `SCALE_N_NEG` from each roster's clean set,
-**size-matched at 9,900 in both arms**, fits the head the benchmark fits
-(5-fold, threshold pinned to 5% FPR on the shipped arm), and reports the mean
-number of *C*-classes held per pool image beside the result — so the mechanism is
-visible in the output, not inferred from the effect.
+**What a reader should do with a published `coco_quarry` number:** nothing, for
+any conclusion that survives 0.03 AP, and re-read the cell against the current
+build for anything finer. Rankings are untouched.
 
-| | \|C\| = 25 | \|C\| = 53 |
+## The correction
+
+**An earlier version of this report headlined +0.24 AP and said no published
+number survived the change. That was wrong in sign and an order of magnitude
+too large, and it was merged before it was caught (PR #4063).**
+
+The first instrument drew both arms from each roster's **clean set** — the
+barren component alone — and found that widening empties it: the mean count of
+*C*-classes held by a clean pool image falls **1.163 → 0.000**, which made cells
+read **+0.2447 ± 0.0230** (`siglip`) easier. Every number in that measurement is
+reproducible and none of it is retracted.
+
+**What was wrong was treating it as what a rebuild does.** A real
+`coco_quarry` cell's negatives are barren **plus** #3667's cross-class
+negatives, and the rebuild moves both:
+
+| | *C* = 25 | *C* = 53 |
 |---|---:|---:|
-| clean candidates | 49,503 | **16,091** |
-| mean classes held per pool image | 1.163 | **0.000** |
-| headroom over the 10,900 the pool and spares need | 4.5x | **1.48x** |
+| clean candidates the barren pool is drawn from | 49,503 | **16,091** |
+| classes of *C* held per clean pool image | 1.163 | **0.000** |
+| barren negatives per cell | 9,900 | **9,900** |
+| #3667 cross-class negatives per cell | 6,635 | **13,991** |
+| total negatives per cell (median) | 16,535 | **23,891** |
+| co-occurring share | 40% | **58%** |
 
-The band gradient follows the mechanism exactly. `@large` moves least (+0.08)
-because a large target already dominates its frame and the background was never
-what separated it; `@small` moves most (+0.37) because a small target leaves the
-rest of the frame to context, and it is precisely the context that the widened
-pool deletes. The largest individual moves are the classes whose negatives
-were ordinary furnished scenes: on `siglip`, `backpack@medium` **+0.707**
-(AP 0.174 → 0.881), `chair@small` **+0.691**, `car@medium` **+0.625**,
-`bench@small` **+0.625**. Once every image holding any of 53 classes is
-excluded, almost no furniture and no street survives in the pool, and a `chair`
-detector has nothing left to be confused by. **Only 2 of 75 cells get worse**
-(5 of 75 on `siglip2_l`), so this is a near-uniform lift, not a redistribution.
+**The barren pool never shrinks.** It is capped at `SCALE_N_NEG` = 9,900 in both
+builds, so the emptiness the first instrument found is real but reaches a
+fixed-size slice — and that slice's share of the cell falls from 60% to 42% as
+the cross-class negatives more than double. The configuration the simulation
+measured, where the barren component is the whole pool *and* varies with the
+roster, is not a state `coco_quarry` ever occupies.
 
-**This was predicted before it was run.** The direction is stated in the
-instrument's own docstring, because the intuitive reading — a smaller pool is a
-worse pool, so numbers should get *worse* — has the sign backwards.
+**The lesson is the one #3986 learned the hard way two hours earlier and this
+report did not apply to itself**: a probe that changes one component of a
+composite pool is measuring a benchmark nobody runs unless the other components
+are held as they ship. The first instrument's `Limits` said it did "not build
+the 84 new cells"; what it never said is that building them is exactly what
+doubles the cross-class negatives and cancels the effect.
 
 ## The roster
 
-All 25 shipped classes survive; 28 join. Re-measured today, `coco_only_supply.py`
-reproduces #3983: **159 cells, 0 short of `SCALE_N_POS` = 100**.
+All 25 shipped classes survive; 28 join. `coco_only_supply.py` reproduces #3983:
+**159 cells, 0 short of `SCALE_N_POS` = 100**, pool headroom **1.48x**.
 
 ```
 airplane, apple, banana, baseball bat, dining table, frisbee, handbag,
@@ -87,19 +89,48 @@ suitcase, surfboard, tennis racket, tie, toothbrush, traffic light, tv
 **The rule is the count and nothing else.** Selection deliberately ignores
 scatter and purity: both correlate with how hard a class is to detect, so
 screening on either would make the benchmark easier and bias every result
-optimistically — a selection rule that correlates with the quantity being
-measured is a confound, not a convenience. Scatter is recorded as a covariate.
+optimistically. Scatter is recorded as a covariate.
 
 ### One exception, and it is about identity
 
 `wine glass` clears the count rule and is **held out** (owner ruling,
 2026-09-20). `SCALE_CLASS_MERGES` folds it into `cup`, so admitting it would
 redefine `cup` and cost every published `cup` number its meaning. The purity
-measurement says the same from the other side: `cup` is 39%
-`glass_(drink_container)` and `wine glass` is 24% of that *same* synset, so these
-are not two disjoint classes waiting to be split. Dropping it returns 33 images
-to the clean pool (16,058 → 16,091). This is the only exception, and it is about
-class **identity** — it is not a licence to exclude a class for being hard.
+measurement agrees from the other side: `cup` is 39% `glass_(drink_container)`
+and `wine glass` is 24% of that *same* synset, so these are not two disjoint
+classes waiting to be split. Dropping it returns 33 images to the clean pool
+(16,058 → 16,091). It is the only exception, and it is about class **identity**,
+not difficulty.
+
+## The rebuild
+
+`--force`, from a clean checkout at `573c1908a`, 57 minutes on a V100S:
+
+| | |
+|---|---:|
+| cells | 75 → **159** |
+| designated positives | 7,500 → **15,900** |
+| medias in the cell | 18,135 → **25,760** |
+| columns rebuilt | 5 (`siglip`, `siglip2_l`, `clip`, `clip_l`, `dinov3_patch`) |
+
+**Positives are identical in all 75 pre-existing cells**, which is what makes
+the comparison paired rather than two different benchmarks; the instrument
+asserts it and refuses to report a difference if it fails. `build_pile.py
+--verify` passes.
+
+**The 25-class build is preserved** at
+`/expscratch/sgreenberg/keep/coco-quarry-25-20260920/`, byte-for-byte, because a
+rebuild here is a *replace*: every old cell's negatives were drawn as *holds
+none of the 25* and cannot survive a wider *C*. `SCALE_CLASSES_25` freezes the
+roster; the copy is what makes that promise keepable rather than rhetorical.
+
+**A first rebuild was discarded.** It stamped `WARNING: that checkout had
+uncommitted tracked changes -- this cell is not reproducible` on all five
+columns, because the loader docstring was edited and not committed before
+launch. The diff was docstring-only and the cells were behaviourally identical,
+but a reader following the provenance cannot tell a docstring edit from a logic
+edit, so it was rebuilt from a committed tree rather than shipped with a
+permanent asterisk.
 
 ## What COCO actually put in the 28
 
@@ -110,20 +141,18 @@ badly enough that a reader who trusts the name will misreport the result:
 |---|---|
 | `dining table` | **10.4%** `dining_table` — 34.2% `tablecloth`, 30.5% `table`. The object is the covered *surface*. |
 | `tv` | 50.4% `television_set`, **46.9%** computer monitor. A screen class, not a television class. |
-| `potted plant` | **75.1%** `flower_arrangement`, 20.7% `flowerpot`. Mostly cut flowers, not potted plants. |
+| `potted plant` | **75.1%** `flower_arrangement`, 20.7% `flowerpot`. Mostly cut flowers. |
 | `remote` | 56.2% `remote_control`, 41.2% `control` — one object under two LVIS names, so effectively ~97% pure. |
 
 `mouse` is **99.3%** `mouse_(computer_equipment)` and not once an animal, so an
-animal in that class is an annotation error rather than a boundary case.
-`person` reads as 64% pure, but that is an **artefact**: LVIS boxes the garment
-(`wet_suit` 7.8%, `jacket` 5.4%) where COCO boxes the wearer, and mutual best
-match pairs the two. The object is always the person.
+animal there is an annotation error rather than a boundary case. `person` reads
+64% pure, but that is an **artefact**: LVIS boxes the garment where COCO boxes
+the wearer, and mutual best match pairs the two.
 
 **Five of the 28 are cross-class pairs inside *C*** — the `truck`/`car`
-situation, where each side looks right alone and a reviewer gets it wrong
-silently: `skis`/`snowboard` (4.6% of `snowboard`'s boxes are `ski`),
-`backpack`/`handbag`/`suitcase` (`handbag` is 7.8% suitcase and 6.5% backpack),
-`apple`/`orange`, `tv`/`laptop`, `potted plant`/`vase`.
+situation, where each side looks right alone: `skis`/`snowboard`,
+`backpack`/`handbag`/`suitcase`, `apple`/`orange`, `tv`/`laptop`,
+`potted plant`/`vase`.
 
 ## The briefs, and the instrument that no longer exists
 
@@ -131,47 +160,49 @@ Every class in *C* needs a `SCALE_CLASS_RULES` brief —
 `test_contents_and_rules_cover_the_same_classes` enforces parity with the
 composition notes — so 28 were written.
 
-They could not be written the way the first 25 were. `pile_config.py` says each
+They could not be written the way the first 25 were. `pile_config.py` said each
 of those was "measured with `coco_folds.py` before it was written", and
 **`coco_folds.py` was deleted by the VG retirement** (`e466e3a19`, #4038). That
-was correct: fold-in asked which *VG name* lands on a COCO box, and there are no
-VG names now. But three live documents still instruct a reader to run it, which
-is filed as **#4060**.
+was correct — fold-in asked which *VG name* lands on a COCO box, and there are
+no VG names now — but three live documents still instruct a reader to run it,
+filed as **#4060**.
 
-So the briefs are written against `coco_class_purity.py` instead. That is the
-right replacement rather than a fallback: under a pure-COCO build nobody reviews
-COCO's labels, so the question a brief answers has changed from "which VG name
-lands here" to "what did COCO's annotators actually put in this class" — which is
-exactly what the composition note measures.
+So the briefs are written against `coco_class_purity.py`, which is the right
+replacement rather than a fallback: under a pure-COCO build nobody reviews
+COCO's labels, so the question changed to "what did COCO's annotators actually
+put in this class".
 
 ## What this does and does not settle
 
-**Settled:** the roster, the supply, and the size of the comparability break.
-53 classes, 159 cells, none short, 1.48x pool headroom, and +0.24 AP of
-inflation that no published number survives.
+**Settled:** the roster (53 classes, 159 cells, none short, 1.48x headroom), and
+the cost of the rebuild (−0.03 AP, prevalence; composition null at −0.003 to
++0.001 and ΔAUC +0.002).
 
-**Decided rather than measured:** that we take the break. The owner's ruling is
-to widen and renumber — every published `coco_quarry` number is re-read against
-*C* = 53, with this report as the reason old and new cannot be compared. The
-roster they were drawn against is frozen as `SCALE_CLASSES_25` so the old pool
-can be **reproduced**, not merely disclaimed.
+**Settled, and worth keeping separate from the above:** the emptiness mechanism
+is real. The clean candidate set does collapse 49,503 → 16,091 and does empty
+out 1.163 → 0.000. It fails to reach the benchmark only because `SCALE_N_NEG`
+caps the barren draw. **A design that let the barren pool scale with its
+candidate set would inherit the +0.24**, so this is a live constraint on any
+future change to how the pool is sized, not a curiosity.
 
-**Not settled, and the obvious next question:** whether per-class pools remove
-the artefact. A per-class pool is drawn as *{i : i does not hold A}*, which does
-not shrink or empty out as *C* grows, so in principle it is immune to this
-entirely — and #4034 already made the pool a query at export. Measuring that is
-the natural follow-on, and it would also say whether the widening should
-eventually be re-based on per-class pools rather than carrying the break.
+**Not settled:** whether per-class pools behave the same way. A per-class pool
+is drawn as *{i : i does not hold A}*, which does not depend on *C* at all, so
+it should be immune by construction; #4034 already made the pool a query at
+export. Worth confirming rather than assuming.
+
+**Unmeasured:** the 84 new cells' own numbers. This report measures what the
+rebuild did to the cells that already existed, not how hard the new ones are.
 
 ## Limits
 
-- **Two columns, not four.** `siglip` and `siglip2_l` agree closely (+0.2447 vs
-  +0.2057) and #3986 found the four single-vector columns behave alike on the
-  neighbouring question, but `clip` and `clip_l` are not measured here.
-- **One head family.** A linear head on whole-image embeddings, the production
-  head, as in #3986. The patch and region arms are unmeasured (#4043).
-- **The widened arm is a simulation of the pool, not a rebuild.** It draws from
-  the clean set the widened roster implies and measures the 75 shipped cells;
-  it does not build the 84 new cells, whose own numbers are unmeasured.
-- **AP is per cell** (100 positives against 9,900 negatives), matching #3986's
-  convention, not the three-band 300-positive figure a shipped cell quotes.
+- **Two columns**, `siglip` and `siglip2_l`. They agree to 0.002 AP on the
+  as-shipped arm and straddle zero on the size-matched one; `clip` and `clip_l`
+  are not measured here.
+- **One head family** — a linear head on whole-image embeddings, the production
+  head, as in #3986. Patch and region arms unmeasured (#4043).
+- **AP is per cell** (100 positives against the cell's negatives), matching
+  #3986's convention, not the three-band 300-positive figure a shipped cell
+  quotes.
+- **The superseded simulation's numbers are kept** in `measurements/` and in the
+  correction above rather than deleted, because the mechanism they measure is
+  real and a future pool-sizing change will need them.

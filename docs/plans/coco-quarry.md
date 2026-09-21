@@ -169,15 +169,21 @@ and it is cheap to settle — see the first item below.
 - [x] #4056 — ***C* is 53** (PR pending). The count rule admitted 54; `wine glass` is
   held out by owner ruling, because `SCALE_CLASS_MERGES` folds it into `cup` and
   admitting it would redefine `cup`. 159 cells, **0 short** of `SCALE_N_POS`, pool
-  headroom **1.48x**. **The widening is a hard break in comparability and the break
-  is measured**: a cell read against the widened pool is **+0.24 AP** higher
-  (`@small` +0.37, `@large` +0.08), because the pool stops being *images without
-  these 25 things* and becomes *empty scenes* — mean classes held per pool image
-  **1.163 → 0.000**. #3986 asked the same pool question with *C* held still and got
-  −0.002, so composition is harmless at a fixed roster and dominant under a roster
-  change. Owner ruled widen-and-renumber; `SCALE_CLASSES_25` freezes the old roster
-  so its pool can be reproduced. Per-class pools should be immune and are
-  unmeasured. The original argument follows.
+  headroom **1.48x**. **Rebuilt 2026-09-20 and measured against the preserved
+  25-class build: −0.030 ± 0.004 AP** (`siglip`; `siglip2_l` −0.028 ± 0.004) on
+  the 75 cells that existed before — and **−0.003 / +0.001 once the negative
+  count is held still**, with ΔAUC **+0.002**. The cost is prevalence: a rebuilt
+  cell carries 23,891 negatives against 16,535. Rankings are untouched.
+  **An earlier reading of +0.24 AP was wrong in sign and is corrected in the
+  report**; it varied the barren component alone, and the barren draw is capped
+  at `SCALE_N_NEG` in both builds while #3667's cross-class negatives more than
+  double. The emptiness mechanism is real (clean candidates 49,503 → 16,091,
+  classes held per clean pool image **1.163 → 0.000**) and constrains any future
+  change to how the pool is SIZED, but it does not reach a capped draw. Owner
+  ruled widen-and-renumber; `SCALE_CLASSES_25` freezes the old roster and the
+  25-class build is preserved at `keep/coco-quarry-25-20260920/`. Per-class pools
+  should be immune by construction and are unmeasured. The original argument
+  follows.
 
   **Widen *C* to every class meeting the count requirement — 54 of COCO's 80.**
   The selection rule is the count and nothing else: a class is in if it clears

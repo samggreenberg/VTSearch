@@ -1,9 +1,34 @@
 """``coco_quarry``: `vg_scale`'s question, asked of COCO 2017 with no Visual Genome.
 
-The same 25 classes, the same three bands, the same shared negative pool — drawn
-from COCO 2017 train+val (123,287 images) instead of the half of Visual Genome
-COCO happens to have sourced. #3983 measured that this supplies every one of the
-75 cells at the shipped ``SCALE_N_POS``, with the thinnest at 1.8x the floor.
+The same three bands and the same shared negative pool, drawn from COCO 2017
+train+val (123,287 images) instead of the half of Visual Genome COCO happens to
+have sourced. #3983 measured that this supplies every cell at the shipped
+``SCALE_N_POS``, with the thinnest at 1.8x the floor.
+
+**53 classes since #4056, not the 25 this loader was written for.** The roster is
+whatever :data:`pile_config.SCALE_CLASSES` holds — read once, below — so widening
+*C* needs no change here. What it does need is a **rebuild**: the roster is a
+declaration and the cells are data, and between the merge and the rebuild the two
+disagree. Two things to know before running that rebuild.
+
+**It is not a fill, it is a replace.** Every existing cell's negatives were drawn
+as *holds none of the 25*. Under a wider *C* that pool is not what "the shared
+pool" means any more, so ``--force`` is required and the old cells are gone
+afterwards. The 25-class build is preserved at
+``/expscratch/sgreenberg/keep/coco-quarry-25-20260920/`` and is reproducible from
+:data:`pile_config.SCALE_CLASSES_25`.
+
+**The rebuild costs a published cell -0.03 AP, and almost all of it is
+prevalence.** Measured against the preserved 25-class build over the 75 cells
+that existed before: **-0.030 +- 0.004** as shipped, **-0.003** once the
+negative count is held still, dAUC **+0.002**. A rebuilt cell carries 23,891
+negatives against 16,535, and AP falls when the haystack grows.
+
+Widening does empty the barren pool -- the mean count of *C*-classes held by a
+clean pool image falls 1.163 to 0.000 -- but that never reaches the benchmark,
+because the barren draw is capped at ``SCALE_N_NEG`` in both builds while
+#3667's cross-class negatives more than double (6,635 -> 13,991). Sizing the
+barren pool off its candidate set instead of a cap would inherit the effect.
 
 **What this loader does NOT do is the point of it.** `vg_scale` spends most of
 its length repairing an annotation source that cannot answer the question asked
