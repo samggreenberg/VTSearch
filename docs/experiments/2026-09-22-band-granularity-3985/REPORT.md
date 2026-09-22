@@ -1,7 +1,7 @@
 # COCO boxes a pile as one object — and it is three faults, not one
 
 **Issues:** #3985, #3992. **Dataset:** `coco_quarry`, *C* = 52.
-**Date:** 2026-09-22. **Unit rulings made 2026-09-22**; per-image votes pending.
+**Date:** 2026-09-22. **Unit rulings and 120 owner votes, 2026-09-22.** Fruit remedy pending.
 
 ## Verdict
 
@@ -9,6 +9,12 @@
 the worst-affected classes had never been measured, the single "area ratio"
 turns out to conflate three different faults that want different fixes, and
 three of the four classes #3985 named as lumpers are not lumping.
+
+**The owner's votes (120) confirm lumping for the three fruit classes only.**
+An estimated ~56% of `banana`'s images, ~39% of `apple`'s and ~23% of
+`orange`'s have a box around a pile. For `skis` and `potted plant` the high
+ratio flags a legitimate unit, so any guard must exempt them. No COCO-only
+signal separates the piles; the LVIS ratio does.
 
 | fault | classes in *C* | signature |
 |---|---|---|
@@ -91,25 +97,60 @@ queue's name:
 `unit` is separate from `test` on purpose. A bunch of bananas is all `banana`,
 so it belongs to the class, but it is still more than one banana.
 
-## What is not settled
+## The votes — 120 owner answers, 2026-09-22
 
-**Which images break the unit, and whether COCO can find them itself.** Five
-VTSearch queues ask that: 24 questions each, half of them images the
-measurement calls lumped and half it calls clean, shuffled. Which arm a crop
-came from cannot be read from its filename, so how the answers split between
-the arms is itself the attention control:
+Five queues of 24, half **lumped** (per-image ratio ≥ 1.6) and half **clean**
+(< 1.2), shuffled. The arm could not be read from the filename. Raw answers:
+[`votes-20260922.jsonl`](votes-20260922.jsonl), one row per question, joined
+to the image, annotation, box and ratio.
 
-```
-coco_quarry <class> - is the red box around <ClassRule.unit>?
-    banana · apple · orange · potted plant · skis
-```
+| class | clean arm: Bad | lumped arm: Bad | images ≥ 1.6 | est. share of images with a pile box |
+|---|---:|---:|---:|---:|
+| `banana` | 1 / 12 | **11 / 12** | 61% | ~56% |
+| `apple` | 0 / 12 | **10 / 12** | 46% | ~39% |
+| `orange` | 0 / 12 | **7 / 12** | 40% | ~23% |
+| `potted plant` | 0 / 12 | 1 / 12 | 67% | — |
+| `skis` | 0 / 12 | **0 / 12** | 62% | — |
 
-With the rulings above, skis and potted plant should now come back mostly Good
-in BOTH arms. If they do, the ratio is flagging a legitimate unit and must not
-drive a guard for those classes.
+(The estimate multiplies the share of images at ≥ 1.6 by the lumped arm's Bad
+rate. It covers LVIS-annotated images only, and with 12 votes per arm its
+interval is wide: read it as "about half", "about a third", "about a fifth".)
 
-`queues/*.json` maps each crop back to its image, annotation and per-image
-ratio, so the votes can be read against the exact boxes that produced them.
+**The attention control passed.** The clean arms are 59 Good out of 60, so the
+Bad votes are real answers and not a button pressed on every question.
+
+**For `skis` and `potted plant`, the high ratio is not a fault.** 23 of the 24
+lumped-arm answers are Good: under the unit rulings, COCO's box is the object
+and LVIS's finer box is a part of it (one ski, the pot). A guard built on the
+ratio must **exempt these two classes**, or it would delete about two thirds of
+their images for nothing. The one Bad is a single `potted plant` box around
+several pots (ratio 14.9; COCO drew 2 boxes where LVIS drew 13).
+
+**For the fruit, lumping is real and common.** At the 1.6 cut, the ratio flags
+36 of the 72 fruit questions and catches 28 of the 29 Bads (precision 0.78).
+Raising the cut trades recall for precision:
+
+| cut | flagged | Bad caught | precision | recall |
+|---:|---:|---:|---:|---:|
+| 1.6 | 36 | 28 | 0.78 | 0.97 |
+| 3.0 | 25 | 23 | 0.92 | 0.79 |
+| 4.5 | 22 | 21 | 0.95 | 0.72 |
+
+For example, `apple` at 18.1 is one COCO box where LVIS drew 7 separate
+apples, and it was voted Bad. `orange` at 6.6 is a single large orange that
+LVIS boxed tighter, and it was voted Good.
+
+**No COCO-only signal separates the piles in this sample.** COCO's box count
+for the class runs from 1 to 13 in both groups, and so does the raw box area.
+Every signal that works needs LVIS, which covers 90% of `banana`'s images, 62%
+of `apple`'s and 57% of `orange`'s. #3992's COCO-only guard is still not
+found, and on this evidence it may not exist.
+
+## What is still not settled
+
+**The remedy for the three fruit classes.** The candidates are: keep only
+LVIS-covered images below a ratio cut; use LVIS's per-fruit boxes wherever
+LVIS covers the image; or drop the three classes from *C*.
 
 ## Limits
 
