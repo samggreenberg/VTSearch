@@ -32,17 +32,25 @@ So the rulings are worth more than the sampling, and they are cheap: every one
 below was decided from data that already existed, before any human labelled
 anything.
 
-## Two measurements decide a rule, and the cheap one gets it wrong
+## Two measurements decided a rule, and the cheap one got it wrong
 
-Both come from the ~51k images that are in **both** VG and COCO, where the two
+Both came from the ~51k images that are in **both** VG and COCO, where the two
 vocabularies annotate the same pixels.
 
-| test | script | asks | what it settles |
+**Both instruments are gone.** `coco_folds.py` and `name_evidence.py` were
+[retired with Visual Genome](README.md#retired-with-visual-genome-4038) (#4038),
+because fold-in asks which *VG name* lands on a COCO box and there are no VG
+names any more. The rulings below are what they measured and still stand; the
+measurements cannot be re-run, and a rule for a class added since is written
+against `coco_class_purity.py` instead — under a pure-COCO build the question
+changed to what COCO's annotators actually put in the class (#4056).
+
+| test | script | asked | what it settled |
 |---|---|---|---|
 | **fold-in** (box) | `coco_folds.py` | which VG names land on a COCO box of the class | what a reviewer on COCO's reading must **accept** |
 | **repair precision** (image) | `name_evidence.py` | where a VG name is the **only** evidence, does COCO find the class? | whether the name means the class at all |
 
-**Run only the first and you will mis-rule.** It says COCO's annotators call a
+**Read only the first and you will mis-rule.** It says COCO's annotators call a
 wristwatch a `clock` **35** times, and a `canopy` **32** or a `tent` **26** an
 `umbrella` — together more than `parasol`'s 38. Both look like the
 `book`/magazine split that cost #3588 a whole pass. Neither is:

@@ -30,21 +30,21 @@ because the barren draw is capped at ``SCALE_N_NEG`` in both builds while
 #3667's cross-class negatives more than double (6,635 -> 13,991). Sizing the
 barren pool off its candidate set instead of a cap would inherit the effect.
 
-**What this loader does NOT do is the point of it.** `vg_scale` spends most of
+**What this loader does NOT do is the point of it.** `vg_scale` spent most of
 its length repairing an annotation source that cannot answer the question asked
-of it: :func:`~pilebuild.loaders.vg_scale.canonicalise` and
-:data:`pile_config.SCALE_VG_NAMES` guess which free-text spellings mean the
-class, :func:`~pilebuild.loaders.vg_scale.lift_ambiguous` withholds the ones that
-might not, :func:`~pilebuild.loaders.vg_scale.anchor_to_coco` replaces VG's
-labels with COCO's wherever COCO annotates, and 4,709 correction rows patch what
-is left. COCO annotates all eighty classes exhaustively on every image in its own
+of it -- ``canonicalise`` and :data:`pile_config.SCALE_VG_NAMES` guessed which
+free-text spellings mean the class, ``lift_ambiguous`` withheld the ones that
+might not, ``anchor_to_coco`` replaced VG's labels with COCO's wherever COCO
+annotates, and 4,709 correction rows patched what was left.  That loader was
+retired with Visual Genome (#4038), so those four are named rather than linked;
+the tables they read survive in ``pile_config``. COCO annotates all eighty classes exhaustively on every image in its own
 vocabulary, so **none of that apparatus has a question to answer here**: no name
 tables, no fold-in, no ambiguity lifting, no anchoring, no corrections file.
 
 **What it reuses is also the point.** :func:`~pilebuild.scale_core.band_for`,
-:func:`~pilebuild.loaders.vg_scale.band_candidates`,
-:func:`~pilebuild.loaders.vg_scale.designate_cells` and
-:func:`~pilebuild.loaders.vg_scale.draw_negatives` are imported unchanged, and the
+:func:`~pilebuild.scale_core.band_candidates`,
+:func:`~pilebuild.scale_core.designate_cells` and
+:func:`~pilebuild.scale_core.draw_negatives` are imported unchanged, and the
 media dict is built by the shared :func:`~pilebuild.scale_core.scale_media`.
 A cell here and a cell there are comparable only if the rule that banded them is
 the same object rather than the same intention — the reason `band_for` was split
