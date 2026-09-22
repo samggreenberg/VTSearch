@@ -58,11 +58,21 @@ class LocalFolderSource(MediaSource):
         """Return a :class:`FetchedItem` for *key* (a relative path within the folder).
 
         ``item.path`` is ``None`` if the file doesn't exist or escapes the root.
+
+        Containment is checked **lexically**: *key* is joined onto the resolved
+        root and normalised with :func:`os.path.normpath`, which collapses
+        ``..`` without following symlinks.  The candidate itself is deliberately
+        *not* resolved, so a symlink inside the root whose target lives outside
+        it stays reachable.  That matches :meth:`list_items`, which walks with
+        ``followlinks=True`` and therefore hands out keys for exactly those
+        files; resolving here instead rejected every key the walk had just
+        emitted, which broke origin resolution for symlink farms.
         """
-        candidate = (self._folder / key).resolve()
-        # Prevent path traversal
+        root = self._folder.resolve()
+        candidate = Path(os.path.normpath(root / key))
+        # Prevent path traversal ("..", absolute keys) without defeating symlinks.
         try:
-            candidate.relative_to(self._folder.resolve())
+            candidate.relative_to(root)
         except ValueError:
             return FetchedItem(path=None)
         return FetchedItem(path=candidate if candidate.is_file() else None)
