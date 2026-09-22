@@ -1,4 +1,4 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, inject, NgZone, OnDestroy, OnInit, signal, viewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, inject, NgZone, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { EMPTY, Subject, timer } from 'rxjs';
@@ -25,6 +25,12 @@ import { VoteHistoryService } from '../../services/vote-history.service';
 import { SortStateService, SortedItem } from '../../services/sort-state.service';
 import { SortingApiService } from '../../services/sorting-api.service';
 import { PairScopeService } from '../../services/pair-scope.service';
+import {
+  MediaPrefetchService,
+  PREFETCH_DEPTH,
+  imageUrlsWhileImages,
+} from '../../services/media-prefetch.service';
+import { type FindSide, peekBoundaryQueue, pickBoundaryNext } from '../../utils/find-boundary-next';
 import {
   SettingsStateService,
   type PerMediaTypePref,
@@ -90,6 +96,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   browsePrep = inject(BrowseSubsetPrepService);
   /** Component-provided. Public: the header binds `pairScope.datasetName()`. */
   readonly pairScope = inject(PairScopeService);
+  private readonly mediaPrefetch = inject(MediaPrefetchService);
 
   readonly layoutRef = viewChild.required<ElementRef<HTMLElement>>('layout');
   readonly centerPanel = viewChild(CenterPanelComponent);
@@ -264,6 +271,39 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
         this.currentMediaType.set(medias[0].media_type);
       }
     });
+
+    // Warm the images the boundary walk will show next while the reviewer is
+    // looking at this one (#3896) — the same fix as the Train view's, for the
+    // same shape: {@link advanceToBoundary} runs only once the vote POST is
+    // back, so without this the next image's fetch starts with somebody
+    // waiting on it.
+    //
+    // Tracks the ranking, the cutoff and the verified set as well as the
+    // selection, so a re-score, an inclusion move or a vote reconciling with
+    // the same item on screen retargets the warm instead of leaving it on a
+    // stale prediction. `nextFindSide` is a plain field; it only ever changes
+    // in the same step that changes the selection, so reading it here is
+    // enough.
+    effect(() => {
+      const id = this.mediaState.selectedId();
+      const upcoming = peekBoundaryQueue(
+        this.sortState.sortOrder,
+        this.sortState.threshold,
+        this.voteState.verifiedIds,
+        this.nextFindSide,
+        id,
+        PREFETCH_DEPTH,
+      );
+      untracked(() =>
+        this.mediaPrefetch.prefetch(
+          imageUrlsWhileImages(upcoming, (m) => this.mediaState.getMedia(m)?.media_type, (path) =>
+            this.activeContext.mediaUrl(path),
+          ),
+          id === null ? [] : [this.activeContext.mediaUrl(`/api/medias/${id}/image`)],
+        ),
+      );
+    });
+    this.destroyRef.onDestroy(() => this.mediaPrefetch.prefetch([]));
   }
 
   ngOnInit(): void {
@@ -616,37 +656,9 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     const threshold = this.sortState.threshold;
     if (!order || threshold == null) return;
     const verified = this.voteState.verifiedIds;
-    // `order` is descending by score. The unverified item closest above the
-    // line is the *lowest* one still ≥ threshold (keep overwriting as we
-    // descend); the closest below is the *highest* one < threshold (the first
-    // sub-threshold item we hit). One pass finds both.
-    let closestAbove: number | null = null;
-    let closestBelow: number | null = null;
-    for (const item of order) {
-      if (verified.has(item.id)) continue;
-      if (item.score >= threshold) {
-        closestAbove = item.id;
-      } else if (closestBelow == null) {
-        closestBelow = item.id;
-      }
-    }
-    // Prefer the side it's this turn; fall back to the other side when the
-    // preferred one is exhausted so the walk continues until both are empty.
-    let target: number | null = null;
-    let took: 'above' | 'below' | null = null;
-    if (this.nextFindSide === 'above') {
-      if (closestAbove != null) {
-        [target, took] = [closestAbove, 'above'];
-      } else if (closestBelow != null) {
-        [target, took] = [closestBelow, 'below'];
-      }
-    } else {
-      if (closestBelow != null) {
-        [target, took] = [closestBelow, 'below'];
-      } else if (closestAbove != null) {
-        [target, took] = [closestAbove, 'above'];
-      }
-    }
+    const pick = pickBoundaryNext(order, threshold, (id) => verified.has(id), this.nextFindSide);
+    const target = pick?.id ?? null;
+    const took = pick?.took ?? null;
     if (target != null && took != null) {
       // Flip so the next advance samples the opposite face of the boundary.
       this.nextFindSide = took === 'above' ? 'below' : 'above';
@@ -667,7 +679,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * `'above'` (so the seed is the marginal positive) and flips after each pick,
    * alternating above/below as the user votes down the boundary.
    */
-  private nextFindSide: 'above' | 'below' = 'above';
+  private nextFindSide: FindSide = 'above';
 
   private queueEmptyNotified = false;
 

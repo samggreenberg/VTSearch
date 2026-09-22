@@ -101,6 +101,9 @@ export class ImageViewerComponent implements OnDestroy {
   // Same guard for the payload variant: flipping Clean/Original keeps the media
   // id, so the effect has to notice the variant changed to refetch the image.
   private lastVariant: PayloadVariant = '';
+  /** The network URL whose in-flight prefetch this viewer is waiting on, or
+   *  `null`. See {@link showImage}. */
+  private claimedSrc: string | null = null;
 
   // Region voting state (v2 of the patch-embedder plan, UI only; see docs/plans/patch-embedder.md).
   // These are signals because they are written from un-patched callbacks (window
@@ -166,11 +169,8 @@ export class ImageViewerComponent implements OnDestroy {
       this.lastMediaId = media.id;
       this.lastVariant = variant;
       this.imageReady.set(false);
-      // `resolve` returns the warmed object URL when the prefetch (#3896)
-      // already holds these bytes, and the network URL otherwise — so this is
-      // the same request it always was, minus the wait, when it hits.
       const src = this.activeContext.mediaUrl(`/api/medias/${media.id}/image`, { variant });
-      this.imageSrc.set(this.mediaPrefetch.resolve(src));
+      this.showImage(src);
       // A variant flip is the same item shown differently: keep the user's
       // zoom / pan and their voting box instead of resetting as for a new item.
       if (sameMedia) return;
@@ -181,17 +181,62 @@ export class ImageViewerComponent implements OnDestroy {
     });
   }
 
+  /**
+   * Point the `<img>` at `src`, preferring bytes the review prefetch (#3896)
+   * already holds.
+   *
+   * Three cases. The bytes are held: show them now, no request at all. They are
+   * still in flight (the vote beat the prefetch): wait for that fetch rather
+   * than starting a second download of the same image, and fall back to the
+   * network if it fails. Nothing is held: the network URL, i.e. the request
+   * this always made.
+   */
+  private showImage(src: string): void {
+    this.releaseClaim();
+    const held = this.mediaPrefetch.resolve(src);
+    if (held !== src) {
+      this.imageSrc.set(held);
+      return;
+    }
+    const pending = this.mediaPrefetch.claim(src);
+    if (!pending) {
+      this.imageSrc.set(src);
+      return;
+    }
+    this.claimedSrc = src;
+    void pending.then((objectUrl) => {
+      // The viewer moved on while the bytes were in the air.
+      if (this.claimedSrc !== src) return;
+      this.claimedSrc = null;
+      this.imageSrc.set(objectUrl ?? src);
+    });
+  }
+
+  /** Drop a pending {@link showImage} claim, so a fetch for an item no longer
+   *  on screen goes back to being an ordinary prefetch. */
+  private releaseClaim(): void {
+    if (this.claimedSrc === null) return;
+    this.mediaPrefetch.release(this.claimedSrc);
+    this.claimedSrc = null;
+  }
+
   onImageLoad(): void {
+    // While a claim is pending the `<img>` still carries the previous item's
+    // src; a load or error from it must not unhide the element under the new
+    // item's id.
+    if (this.claimedSrc !== null) return;
     this.imageReady.set(true);
     this.recomputeRenderedSize();
     this.attachWrapResizeObserver();
   }
 
   onImageError(): void {
+    if (this.claimedSrc !== null) return;
     this.imageReady.set(true);
   }
 
   ngOnDestroy(): void {
+    this.releaseClaim();
     this.removeWindowMouseListeners();
     this.removeWindowKeyListeners();
     if (this.resizeObserver) {
