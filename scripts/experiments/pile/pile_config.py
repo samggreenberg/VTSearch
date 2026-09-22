@@ -1843,6 +1843,9 @@ class ClassRule(NamedTuple):
     #: They differ: a bunch of bananas is all `banana` and still not one banana.
     #: Written into the queue's name, because "one object" alone left a pair of
     #: skis undecidable. Empty means the class name's own count noun is the unit.
+    #: The count is of objects, not pieces: one apple cut into slices is ONE
+    #: apple, so Good. Slices plainly from several fruit are Bad; slices whose
+    #: source can't be told are cannot-tell, so Good.
     #: Owner rulings, 2026-09-22.
     unit: str = ""
 
