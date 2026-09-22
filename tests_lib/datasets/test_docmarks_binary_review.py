@@ -582,3 +582,46 @@ class TestVotesRouteByQuestionNotByFolder:
         _name, qdir, n = out
         assert n == 1
         assert [x.name for x in (qdir / "images").glob("*.jpg")] == ["c1.jpg"]
+
+
+@pytest.fixture(scope="module")
+def cs():
+    sys.path.insert(0, str(_DOCMARKS))
+    try:
+        yield importlib.import_module("contamination_sample")
+    finally:
+        sys.path.remove(str(_DOCMARKS))
+
+
+class TestUcsfUnbandedFrame:
+    """The #3922 draw: UCSF pages the letterhead pull never looked at, Food-weighted."""
+
+    @staticmethod
+    def _page(source, author=None):
+        return SimpleNamespace(source=source, meta={"letterhead_author": author} if author else {})
+
+    def test_a_banded_page_or_another_source_is_never_in_the_frame(self, cs):
+        pages = {
+            "ucsf/a": self._page("ucsf"),
+            "ucsf/b": self._page("ucsf", author="Philip Morris"),
+            "ucsf/c": self._page("ucsf"),
+            "tobacco800/d": self._page("tobacco800"),
+        }
+        food, other = cs.unbanded_ucsf(pages, {"ucsf/a": "Food", "ucsf/c": "Opioids", "ucsf/b": "Tobacco"})
+        assert (food, other) == (["ucsf/a"], ["ucsf/c"])
+
+    def test_the_draw_takes_the_food_share_and_fills_the_rest_elsewhere(self, cs):
+        import random
+
+        food = [f"f{i}" for i in range(100)]
+        other = [f"o{i}" for i in range(100)]
+        drawn = cs.food_weighted(food, other, random.Random(0), 40)
+        assert len(drawn) == len(set(drawn)) == 40
+        assert sum(p.startswith("f") for p in drawn) == round(40 * cs.FOOD_SHARE)
+
+    def test_a_short_stratum_is_taken_whole_rather_than_padded(self, cs):
+        import random
+
+        drawn = cs.food_weighted(["f0", "f1"], [f"o{i}" for i in range(100)], random.Random(0), 40)
+        assert {"f0", "f1"} <= set(drawn)
+        assert len(drawn) == len(set(drawn))
