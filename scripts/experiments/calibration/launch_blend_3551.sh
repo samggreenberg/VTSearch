@@ -4,6 +4,7 @@
 #
 #   bash launch_blend_3551.sh prepare        # stage 0, ONCE (cpu, reads the pile in place)
 #   bash launch_blend_3551.sh size [cell]    # time ONE cell before committing
+#   bash launch_blend_3551.sh baseline       # the click-0 text anchor
 #   bash launch_blend_3551.sh screen         # the tuning screen (one array)
 #   bash launch_blend_3551.sh ab ARM [ARM..] # A/B trajectories for promoted arms
 #   bash launch_blend_3551.sh analyze        # re-analyse finished cells
@@ -18,9 +19,10 @@
 #
 #   Q1 fallback: on fallback steps, which schedule should combine the GMM cut
 #      with the "admit nothing" sentinel?  Here `rare` behaves nothing like it
-#      did in #2841 - a single-class step has n_rare = 0, so every rare ramp is
-#      pure GMM there - and the corridor clamps the sentinel to a point between
-#      the midpoint and the upper component mean.
+#      did in #2841 - a fallback step holds ONE vote of its rarer class (no row
+#      exists before both classes do), so every rare ramp with lo >= 1 is pure
+#      GMM there - and the corridor clamps the sentinel to a point between the
+#      midpoint and the upper component mean.
 #   Q2 replacement: on fused steps, would a TUNED blend of the raw x-cal cut and
 #      the GMM midpoint beat the fused cut?  #2864 found `cap50` tied fusion on
 #      COCO binary and beat it on caltech101, on a stack four threshold changes
@@ -120,13 +122,18 @@ export CALIB_MAX_STEPS="${CALIB_MAX_STEPS:-150}"
 export CALIB_PARTITION=cpu
 export CALIB_GRES=none
 export CALIB_CPUS=1
-# Sized by `size` on THIS pile (see PLAN.md): set after measuring, not carried.
-export CALIB_MEM="${CALIB_MEM:-10G}"
-export CALIB_TIME="${CALIB_TIME:-4:00:00}"
+# Measured by `size` on THIS pile, 2026-09-22, not carried from #2865:
+#   cell   0  visual_genome_m x siglip+dinov3_patch (region)  7m25s  5.7 GB
+#   cell 335  caltech101_m x siglip (binary)                  0m46s  1.4 GB
+# 8G is 40% over the region peak (an OOM is a LOST cell); 1h is 8x the slowest.
+export CALIB_MEM="${CALIB_MEM:-8G}"
+export CALIB_TIME="${CALIB_TIME:-1:00:00}"
 # The cpu_limit QOS (cpu=240, mem=1.1T, 2 CPUs charged per task) is PER USER and
 # two peer sessions share it; %50 x 2 = 100 CPUs and 500G leaves them room.
 export CALIB_CONC="${CALIB_CONC:-50}"
-export CALIB_ANALYZE=analyze_blend_3551.py
+# Word-split on purpose by launch_cells.sh (`python $ANALYZE`), which is how the
+# chained analyzer gets the click-0 anchor.
+export CALIB_ANALYZE="analyze_blend_3551.py --baseline $BASE/text_baseline.csv"
 export CALIB_ANALYZE_MEM="${CALIB_ANALYZE_MEM:-64G}"
 export CALIB_ANALYZE_TIME="${CALIB_ANALYZE_TIME:-2:00:00}"
 
@@ -224,18 +231,31 @@ case "$MODE" in
     done
     ;;
 
+  baseline)
+    # The click-0 text-sort anchor for the quality-over-clicks figures.  It is
+    # draw-independent (no detector exists at click 0), so one file serves
+    # every calibration draw; the analyzer replicates it per draw.
+    set_exp prepare
+    T=$(sbatch --parsable --job-name=blend3551-baseline --mem=32G --cpus-per-task=2 \
+      --time=1:00:00 --partition=cpu --export=ALL \
+      --output="$BASE/prepare/logs/baseline-%j.out" \
+      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python text_baseline.py --results $BASE/prepare/results --out $BASE/text_baseline.csv")
+    require_jobid "$T" "text baseline"
+    echo "baseline job: $T -> $BASE/text_baseline.csv"
+    ;;
+
   analyze)
     set_exp "${2:-screen}"
     A=$(sbatch --parsable --job-name="$CALIB_JOB_NAME-analyze" --mem="$CALIB_ANALYZE_MEM" \
       --cpus-per-task=4 --time="$CALIB_ANALYZE_TIME" --partition=cpu --export=ALL \
       --output="$CALIB_EXP/logs/analyze-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python $CALIB_ANALYZE")
+      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python $CALIB_ANALYZE --results $CALIB_RESULTS --out $CALIB_EXP/analysis --baseline $BASE/text_baseline.csv")
     require_jobid "$A" "analyze"
     echo "analyze job: $A"
     ;;
 
   *)
-    echo "usage: $0 {prepare|size [cell]|screen|ab ARM..|analyze [grid]}" >&2
+    echo "usage: $0 {prepare|size [cell]|baseline|screen|ab ARM..|analyze [grid]}" >&2
     exit 2
     ;;
 esac

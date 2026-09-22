@@ -49,18 +49,20 @@ def _scores(seed: int = 0) -> list[float]:
 
 class TestFallbackFidelity:
     def test_shipped_schedule_row_is_what_the_app_ships_on_a_fallback_step(self):
-        """A single-class step past the ramp: the app blends ``NO_GOOD_THRESHOLD``
-        with the GMM under the shipped schedule, and so must the row."""
+        """One positive among 31 votes - the folds cannot calibrate with a single
+        vote of a class, so the app blends ``NO_GOOD_THRESHOLD`` with the GMM
+        under the shipped schedule, and so must the row."""
         pool = _scores()
         test_scores, test_labels = np.array([0.1, 0.9]), np.array([0.0, 1.0])
-        details = _details("gmm_blend", 0.5, n_good=0, n_bad=30)
+        details = _details("gmm_blend", 0.5, n_good=1, n_bad=30)
         rows = _schedule_variant_rows(details, test_scores, test_labels, pool, 0, 1.0, _VARIANTS)
         by = {r["schedule"]: r for r in rows}
-        app = calculate_safe_threshold(NO_GOOD_THRESHOLD, pool, BlendContext(30, 0, 30), schedule=_SHIPPED)
+        ctx = BlendContext(31, 1, 30)
+        app = calculate_safe_threshold(NO_GOOD_THRESHOLD, pool, ctx, schedule=_SHIPPED)
         assert by[_SHIPPED]["threshold"] == pytest.approx(app, abs=1e-6)
-        # ... and the rarer-class ramp reads zero positives as "no calibration":
-        # pure GMM, whatever the total.
-        gmm_only = calculate_safe_threshold(NO_GOOD_THRESHOLD, pool, BlendContext(30, 0, 30), schedule="pure_gmm")
+        # ... and a rarer-class ramp starting at one vote reads a lone positive
+        # as "no calibration": pure GMM, whatever the total.
+        gmm_only = calculate_safe_threshold(NO_GOOD_THRESHOLD, pool, ctx, schedule="pure_gmm")
         assert by["rare:lo=1:hi=8"]["threshold"] == pytest.approx(gmm_only, abs=1e-6)
 
     def test_unscorable_media_are_dropped_before_the_fit_as_the_app_drops_them(self):
