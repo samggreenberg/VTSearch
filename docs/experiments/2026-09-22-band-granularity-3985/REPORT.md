@@ -1,7 +1,7 @@
 # COCO boxes a pile as one object — and it is three faults, not one
 
 **Issues:** #3985, #3992. **Dataset:** `coco_quarry`, *C* = 52.
-**Date:** 2026-09-22. **Rulings pending** — see *What is not settled*.
+**Date:** 2026-09-22. **Unit rulings made 2026-09-22**; per-image votes pending.
 
 ## Verdict
 
@@ -73,19 +73,40 @@ Nor is a COCO-only guard obviously reachable. #3992 asks for one and the
 candidates it lists are all repetition signals — which by construction cannot
 see the **wider extent** fault, where COCO's box count is already correct.
 
+## What one object is — owner rulings, 2026-09-22
+
+The first issue of the queues asked *"is the red box around ONE object?"* and
+could not be answered: nothing said whether a pair of skis is one object. That
+is a definition, not something an image can show, so it is ruled once per class
+and recorded as `ClassRule.unit` in `pile_config`. The unit now appears in each
+queue's name:
+
+| class | one object is | so the fault is |
+|---|---|---|
+| `skis` | the pair one skier uses, or one loose ski | **not an error**: COCO's plural name, like `scissors` |
+| `potted plant` | one pot or vase **with** its plant or flowers | **not an error**: LVIS's pot-only `flowerpot` box is the odd one out |
+| `banana` / `apple` / `orange` | one fruit; a bunch, hand, pile or bowl is Bad | **an error**, joined at the stem or not |
+| `scissors` | one pair, i.e. one tool | no fault: COCO and LVIS agree, count ratio 1.00 |
+
+`unit` is separate from `test` on purpose. A bunch of bananas is all `banana`,
+so it belongs to the class, but it is still more than one banana.
+
 ## What is not settled
 
-**Which of the three faults is an error.** The measurement says what COCO did;
-it cannot say whether a pair of skis or a boxed flower arrangement is a
-legitimate single object for this benchmark. Five VTSearch queues put that to
-the owner — 24 questions each, half images the measurement calls lumped and half
-it calls clean, shuffled, with the arm unreadable from the filename so the split
-in the answers is itself the attention control:
+**Which images break the unit, and whether COCO can find them itself.** Five
+VTSearch queues ask that: 24 questions each, half of them images the
+measurement calls lumped and half it calls clean, shuffled. Which arm a crop
+came from cannot be read from its filename, so how the answers split between
+the arms is itself the attention control:
 
 ```
-coco_quarry <class> - is the red box around ONE object?
+coco_quarry <class> - is the red box around <ClassRule.unit>?
     banana · apple · orange · potted plant · skis
 ```
+
+With the rulings above, skis and potted plant should now come back mostly Good
+in BOTH arms. If they do, the ratio is flagging a legitimate unit and must not
+drive a guard for those classes.
 
 `queues/*.json` maps each crop back to its image, annotation and per-image
 ratio, so the votes can be read against the exact boxes that produced them.

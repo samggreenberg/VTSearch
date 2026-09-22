@@ -1837,6 +1837,14 @@ class ClassRule(NamedTuple):
     #: never been recorded. Fill one in when a slate of that class is issued --
     #: an unwritten test is the state #3612 exists to end.
     test: str = ""
+    #: What ONE object of the class is, for a question about the BOX rather than
+    #: the membership (#3985's "is the red box around ONE object?"). ``test``
+    #: says which objects belong; this says how many of them one box may hold.
+    #: They differ: a bunch of bananas is all `banana` and still not one banana.
+    #: Written into the queue's name, because "one object" alone left a pair of
+    #: skis undecidable. Empty means the class name's own count noun is the unit.
+    #: Owner rulings, 2026-09-22.
+    unit: str = ""
 
 
 #: Per-class review definitions, for the classes whose plain English name is not
@@ -2469,8 +2477,10 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "tree or a plate. Bad: plantains presented as plantains, and banana in a cut "
             "fruit mix where no whole fruit survives. 99% pure; pineapple, pear and "
             "carrot at 0.2% each are the only competing names, so the BOX is the whole "
-            "question and membership almost never is."
+            "question and membership almost never is. A bunch belongs to the class but "
+            "is not ONE object: see ``unit``."
         ),
+        unit="ONE banana, not a bunch or a hand",
     ),
     "skateboard": ClassRule(
         name="skateboard deck",
@@ -2558,6 +2568,8 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "and tongs (0.5%). The test is the pivot and TWO RING HANDLES; a sprung tool "
             "with no rings is not scissors. 98% pure."
         ),
+        # Plural name, one tool. COCO and LVIS agree box for box (count ratio 1.00).
+        unit="ONE pair of scissors, i.e. one tool",
     ),
     "traffic light": ClassRule(
         name="traffic light not street sign",
@@ -2580,6 +2592,9 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "which are never this class however tightly they sit beside it. 96.8% is "
             "`ski`."
         ),
+        # Plural like `scissors`: COCO boxes the pair (count ratio 2.09 against
+        # LVIS's single `ski`), and ruling one ski would reject ~62% of its boxes.
+        unit="ONE pair on one skier or one loose ski, not a rack",
     ),
     "laptop": ClassRule(
         name="laptop not a monitor",
@@ -2659,6 +2674,7 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "so a mixed fruit bowl is where a reviewer's accuracy goes. Judge each "
             "FRUIT, never the bowl."
         ),
+        unit="ONE apple, not a pile or bowl",
     ),
     "orange": ClassRule(
         name="orange citrus fruit",
@@ -2669,6 +2685,7 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "class in C, at 1.4%. 77% pure, second-lowest in C. Colour alone is not the "
             "test -- a green orange and a lime look alike."
         ),
+        unit="ONE orange, not a pile or bowl",
     ),
     "potted plant": ClassRule(
         name="potted plant incl cut arrangements",
@@ -2682,6 +2699,9 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "Where a vase holds flowers both classes can be right on one image, and each "
             "is judged on its own object."
         ),
+        # Container WITH its contents, so COCO's box is right and LVIS's pot-only
+        # `flowerpot` box is the odd one out (area ratio 5.92, count 1.40).
+        unit="ONE pot or vase with its plant or flowers, not several",
     ),
     "person": ClassRule(
         name="person whole not garment",

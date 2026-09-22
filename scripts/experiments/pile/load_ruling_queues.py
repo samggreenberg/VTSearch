@@ -17,10 +17,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import pile_config as pc  # noqa: E402
 
 #: The question is the RETRIEVAL one, not a definitional one about objects.
 #: "Is this a tv?" cannot be answered for COCO's `tv`, because the class is 50%
@@ -71,8 +76,9 @@ def main() -> int:
     ap.add_argument(
         "--name-template",
         default="",
-        help="e.g. 'coco_quarry {cls} - is the red box around ONE object?'. When given, every "
-        "subdirectory of --queues is registered under it and QUESTION is ignored.",
+        help="e.g. 'coco_quarry {cls} - is the red box around {unit}?'. When given, every "
+        "subdirectory of --queues is registered under it and QUESTION is ignored. {unit} is "
+        "the class's ClassRule.unit, falling back to 'ONE <class>'.",
     )
     ap.add_argument("--wait", type=int, default=600)
     ap.add_argument(
@@ -120,7 +126,9 @@ def main() -> int:
             if not man.exists():
                 continue
             cls = json.loads(man.read_text())["class"]
-            questions[cls] = args.name_template.format(cls=cls)
+            rule = pc.SCALE_CLASS_RULES.get(cls)
+            unit = (rule.unit if rule else "") or f"ONE {cls}"
+            questions[cls] = args.name_template.format(cls=cls, unit=unit)
     for klass, name in questions.items():
         folder = args.queues / klass.replace(" ", "_") / "images"
         n = len(list(folder.glob("*.jpg")))
