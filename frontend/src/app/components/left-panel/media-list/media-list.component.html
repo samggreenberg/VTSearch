@@ -69,8 +69,8 @@
       />
     }
 
-    @if (medias().length === 0) {
-      <div class="empty-list">No media loaded</div>
+    @if (cachedOrderedItems.length === 0) {
+      <div class="empty-list" role="status">{{ emptyListMessage }}</div>
     }
 
     @if (hasMore()) {
