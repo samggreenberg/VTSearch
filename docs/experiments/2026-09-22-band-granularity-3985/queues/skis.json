@@ -1,0 +1,369 @@
+{
+ "class": "skis",
+ "lvis_names": [
+  "ski"
+ ],
+ "seed": 20260922,
+ "items": [
+  {
+   "file": "skis_766c84daddc9.jpg",
+   "image_id": 103166,
+   "bbox": [
+    239.92,
+    344.35,
+    78.61,
+    32.74
+   ],
+   "ann_id": 2200664,
+   "ratio": 0.9865245030910514,
+   "n_coco": 2,
+   "n_lvis": 2,
+   "arm": "clean"
+  },
+  {
+   "file": "skis_4b7e25cc9259.jpg",
+   "image_id": 309655,
+   "bbox": [
+    0.0,
+    283.24,
+    56.24,
+    4.2
+   ],
+   "ann_id": 1848565,
+   "ratio": 0.12789347478199048,
+   "n_coco": 5,
+   "n_lvis": 4,
+   "arm": "clean"
+  },
+  {
+   "file": "skis_c8b399794281.jpg",
+   "image_id": 5032,
+   "bbox": [
+    247.34,
+    397.4,
+    268.28,
+    82.6
+   ],
+   "ann_id": 609347,
+   "ratio": 2.3268913387352597,
+   "n_coco": 2,
+   "n_lvis": 4,
+   "arm": "lumped"
+  },
+  {
+   "file": "skis_59bd06f3b211.jpg",
+   "image_id": 76822,
+   "bbox": [
+    75.95,
+    428.26,
+    59.59,
+    22.86
+   ],
+   "ann_id": 614301,
+   "ratio": 0.40614678662683207,
+   "n_coco": 1,
+   "n_lvis": 4,
+   "arm": "clean"
+  },
+  {
+   "file": "skis_d7f4d491f1f8.jpg",
+   "image_id": 132217,
+   "bbox": [
+    186.76,
+    418.63,
+    269.81,
+    218.48
+   ],
+   "ann_id": 606643,
+   "ratio": 1.8288728192098125,
+   "n_coco": 1,
+   "n_lvis": 2,
+   "arm": "lumped"
+  },
+  {
+   "file": "skis_295de991fefb.jpg",
+   "image_id": 33104,
+   "bbox": [
+    215.9,
+    415.03,
+    91.43,
+    27.43
+   ],
+   "ann_id": 1450071,
+   "ratio": 0.7067398983224392,
+   "n_coco": 2,
+   "n_lvis": 3,
+   "arm": "clean"
+  },
+  {
+   "file": "skis_46001c010088.jpg",
+   "image_id": 452468,
+   "bbox": [
+    533.41,
+    292.96,
+    35.58,
+    3.46
+   ],
+   "ann_id": 607182,
+   "ratio": 0.9510284470974576,
+   "n_coco": 3,
+   "n_lvis": 3,
+   "arm": "clean"
+  },
+  {
+   "file": "skis_34719385e039.jpg",
+   "image_id": 132576,
+   "bbox": [
+    318.88,
+    190.11,
+    31.08,
+    48.33
+   ],
+   "ann_id": 1453797,
+   "ratio": 3.2166251587330477,
+   "n_coco": 1,
+   "n_lvis": 2,
+   "arm": "lumped"
+  },
+  {
+   "file": "skis_b9726f274df7.jpg",
+   "image_id": 417742,
+   "bbox": [
+    151.01,
+    381.12,
+    155.33,
+    163.96
+   ],
+   "ann_id": 609638,
+   "ratio": 2.3320206259853578,
+   "n_coco": 2,
+   "n_lvis": 4,
+   "arm": "lumped"
+  },
+  {
+   "file": "skis_616fe753fa04.jpg",
+   "image_id": 343960,
+   "bbox": [
+    507.25,
+    528.18,
+    84.65,
+    12.32
+   ],
+   "ann_id": 2198867,
+   "ratio": 1.0013990734019558,
+   "n_coco": 3,
+   "n_lvis": 3,
+   "arm": "clean"
+  },
+  {
+   "file": "skis_929ae7f759f0.jpg",
+   "image_id": 573258,
+   "bbox": [
+    225.66,
+    432.62,
+    157.09,
+    41.15
+   ],
+   "ann_id": 2200401,
+   "ratio": 0.7784729339646007,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "clean"
+  },
+  {
+   "file": "skis_6cad94f277e6.jpg",
+   "image_id": 188946,
+   "bbox": [
+    49.63,
+    480.86,
+    164.27,
+    82.13
+   ],
+   "ann_id": 606170,
+   "ratio": 2.52961571904885,
+   "n_coco": 1,
+   "n_lvis": 2,
+   "arm": "lumped"
+  },
+  {
+   "file": "skis_d6bd69be7a5b.jpg",
+   "image_id": 567740,
+   "bbox": [
+    55.01,
+    395.69,
+    221.12,
+    67.95
+   ],
+   "ann_id": 606221,
+   "ratio": 1.1784713634719088,
+   "n_coco": 2,
+   "n_lvis": 4,
+   "arm": "clean"
+  },
+  {
+   "file": "skis_6c2af9fa4bf5.jpg",
+   "image_id": 453738,
+   "bbox": [
+    119.6,
+    480.58,
+    153.6,
+    37.01
+   ],
+   "ann_id": 1449076,
+   "ratio": 0.4537225105467149,
+   "n_coco": 1,
+   "n_lvis": 2,
+   "arm": "clean"
+  },
+  {
+   "file": "skis_38e6b22054fb.jpg",
+   "image_id": 249786,
+   "bbox": [
+    278.43,
+    164.15,
+    92.81,
+    25.96
+   ],
+   "ann_id": 605855,
+   "ratio": 4.522935413470824,
+   "n_coco": 1,
+   "n_lvis": 7,
+   "arm": "lumped"
+  },
+  {
+   "file": "skis_dd5373a278a1.jpg",
+   "image_id": 80153,
+   "bbox": [
+    98.74,
+    371.59,
+    301.54,
+    131.78
+   ],
+   "ann_id": 1452391,
+   "ratio": 2.5251314208394184,
+   "n_coco": 1,
+   "n_lvis": 2,
+   "arm": "lumped"
+  },
+  {
+   "file": "skis_135de375394f.jpg",
+   "image_id": 147623,
+   "bbox": [
+    14.29,
+    305.85,
+    159.12,
+    117.2
+   ],
+   "ann_id": 606926,
+   "ratio": 1.743680891858561,
+   "n_coco": 1,
+   "n_lvis": 2,
+   "arm": "lumped"
+  },
+  {
+   "file": "skis_1036ceeb3ca2.jpg",
+   "image_id": 166376,
+   "bbox": [
+    148.02,
+    258.79,
+    491.98,
+    101.23
+   ],
+   "ann_id": 606501,
+   "ratio": 2.192035854906635,
+   "n_coco": 1,
+   "n_lvis": 2,
+   "arm": "lumped"
+  },
+  {
+   "file": "skis_b741548ad559.jpg",
+   "image_id": 577073,
+   "bbox": [
+    269.29,
+    197.39,
+    141.71,
+    15.49
+   ],
+   "ann_id": 2200447,
+   "ratio": 2.026396285759731,
+   "n_coco": 1,
+   "n_lvis": 2,
+   "arm": "lumped"
+  },
+  {
+   "file": "skis_d4c2dbd080eb.jpg",
+   "image_id": 119244,
+   "bbox": [
+    457.33,
+    318.91,
+    77.15,
+    11.8
+   ],
+   "ann_id": 1847078,
+   "ratio": 3.902043646979428,
+   "n_coco": 1,
+   "n_lvis": 4,
+   "arm": "lumped"
+  },
+  {
+   "file": "skis_3f9ed9a3ba52.jpg",
+   "image_id": 404495,
+   "bbox": [
+    158.06,
+    356.68,
+    355.97,
+    25.07
+   ],
+   "ann_id": 1453152,
+   "ratio": 0.9717374909940675,
+   "n_coco": 2,
+   "n_lvis": 3,
+   "arm": "clean"
+  },
+  {
+   "file": "skis_fd45fb1e8196.jpg",
+   "image_id": 390269,
+   "bbox": [
+    450.85,
+    194.01,
+    76.66,
+    73.28
+   ],
+   "ann_id": 611230,
+   "ratio": 3.4396432561937322,
+   "n_coco": 1,
+   "n_lvis": 2,
+   "arm": "lumped"
+  },
+  {
+   "file": "skis_78a02d79630d.jpg",
+   "image_id": 406611,
+   "bbox": [
+    41.79,
+    416.21,
+    133.4,
+    29.55
+   ],
+   "ann_id": 1453800,
+   "ratio": 0.534367946628419,
+   "n_coco": 9,
+   "n_lvis": 11,
+   "arm": "clean"
+  },
+  {
+   "file": "skis_17f8d602b889.jpg",
+   "image_id": 405516,
+   "bbox": [
+    188.93,
+    106.68,
+    120.83,
+    313.05
+   ],
+   "ann_id": 2200522,
+   "ratio": 1.0355658242733994,
+   "n_coco": 1,
+   "n_lvis": 2,
+   "arm": "clean"
+  }
+ ]
+}
