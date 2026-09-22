@@ -1,0 +1,369 @@
+{
+ "class": "banana",
+ "lvis_names": [
+  "banana"
+ ],
+ "seed": 20260922,
+ "items": [
+  {
+   "file": "banana_fdfc5ae66a58.jpg",
+   "image_id": 131565,
+   "bbox": [
+    364.07,
+    12.13,
+    156.16,
+    111.77
+   ],
+   "ann_id": 1041659,
+   "ratio": 1.0169632535801503,
+   "n_coco": 4,
+   "n_lvis": 4,
+   "arm": "clean"
+  },
+  {
+   "file": "banana_e90836dd5fe5.jpg",
+   "image_id": 12667,
+   "bbox": [
+    283.84,
+    48.74,
+    163.77,
+    241.29
+   ],
+   "ann_id": 1043443,
+   "ratio": 1.1264500048816746,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "clean"
+  },
+  {
+   "file": "banana_5e3fa06143b0.jpg",
+   "image_id": 139944,
+   "bbox": [
+    290.16,
+    297.53,
+    179.05,
+    176.9
+   ],
+   "ann_id": 1543122,
+   "ratio": 20.11916361253181,
+   "n_coco": 13,
+   "n_lvis": 222,
+   "arm": "lumped"
+  },
+  {
+   "file": "banana_2868c4175e14.jpg",
+   "image_id": 207573,
+   "bbox": [
+    0.84,
+    95.52,
+    295.12,
+    261.49
+   ],
+   "ann_id": 1042324,
+   "ratio": 0.6186390672533908,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "clean"
+  },
+  {
+   "file": "banana_c0f0a014faf3.jpg",
+   "image_id": 342478,
+   "bbox": [
+    60.89,
+    131.3,
+    326.23,
+    376.44
+   ],
+   "ann_id": 1042646,
+   "ratio": 1.8731328305658812,
+   "n_coco": 1,
+   "n_lvis": 3,
+   "arm": "lumped"
+  },
+  {
+   "file": "banana_ff659e5465f6.jpg",
+   "image_id": 191731,
+   "bbox": [
+    243.38,
+    247.44,
+    85.18,
+    155.49
+   ],
+   "ann_id": 1045883,
+   "ratio": 1.0463703351495663,
+   "n_coco": 13,
+   "n_lvis": 18,
+   "arm": "clean"
+  },
+  {
+   "file": "banana_900b1c5fb928.jpg",
+   "image_id": 138315,
+   "bbox": [
+    100.67,
+    93.48,
+    153.89,
+    447.28
+   ],
+   "ann_id": 1043378,
+   "ratio": 0.8121381504353348,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "clean"
+  },
+  {
+   "file": "banana_b4aa733af010.jpg",
+   "image_id": 154155,
+   "bbox": [
+    79.4,
+    11.66,
+    81.76,
+    149.78
+   ],
+   "ann_id": 2186217,
+   "ratio": 10.967949659608736,
+   "n_coco": 2,
+   "n_lvis": 2,
+   "arm": "lumped"
+  },
+  {
+   "file": "banana_978729c6227f.jpg",
+   "image_id": 76130,
+   "bbox": [
+    214.55,
+    273.03,
+    320.79,
+    153.97
+   ],
+   "ann_id": 1043987,
+   "ratio": 11.557724464755267,
+   "n_coco": 1,
+   "n_lvis": 14,
+   "arm": "lumped"
+  },
+  {
+   "file": "banana_47574309c1f3.jpg",
+   "image_id": 345987,
+   "bbox": [
+    103.44,
+    56.65,
+    32.64,
+    72.04
+   ],
+   "ann_id": 1043795,
+   "ratio": 1.0305970057015847,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "clean"
+  },
+  {
+   "file": "banana_f9296085260a.jpg",
+   "image_id": 352618,
+   "bbox": [
+    3.01,
+    147.35,
+    131.31,
+    168.39
+   ],
+   "ann_id": 1044692,
+   "ratio": 1.1056520446766782,
+   "n_coco": 2,
+   "n_lvis": 2,
+   "arm": "clean"
+  },
+  {
+   "file": "banana_589bbadf8273.jpg",
+   "image_id": 468029,
+   "bbox": [
+    291.36,
+    223.74,
+    90.43,
+    126.6
+   ],
+   "ann_id": 1046081,
+   "ratio": 1.9785542187753615,
+   "n_coco": 5,
+   "n_lvis": 11,
+   "arm": "lumped"
+  },
+  {
+   "file": "banana_6fd8fbf5ac5f.jpg",
+   "image_id": 185802,
+   "bbox": [
+    33.13,
+    111.26,
+    200.28,
+    353.88
+   ],
+   "ann_id": 1045593,
+   "ratio": 0.9020813712424522,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "clean"
+  },
+  {
+   "file": "banana_4aadef40c37b.jpg",
+   "image_id": 307884,
+   "bbox": [
+    589.74,
+    198.29,
+    14.68,
+    11.8
+   ],
+   "ann_id": 1542383,
+   "ratio": 1.0029917669953734,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "clean"
+  },
+  {
+   "file": "banana_8e9ae491a7ed.jpg",
+   "image_id": 358576,
+   "bbox": [
+    482.31,
+    9.07,
+    35.94,
+    39.03
+   ],
+   "ann_id": 1045072,
+   "ratio": 1.8705521995552223,
+   "n_coco": 5,
+   "n_lvis": 11,
+   "arm": "lumped"
+  },
+  {
+   "file": "banana_3d4a0deb0a20.jpg",
+   "image_id": 452414,
+   "bbox": [
+    17.26,
+    378.25,
+    408.74,
+    250.24
+   ],
+   "ann_id": 1043746,
+   "ratio": 8.216350884984243,
+   "n_coco": 6,
+   "n_lvis": 51,
+   "arm": "lumped"
+  },
+  {
+   "file": "banana_2c4bcff9c118.jpg",
+   "image_id": 249166,
+   "bbox": [
+    481.86,
+    122.44,
+    67.88,
+    52.37
+   ],
+   "ann_id": 2111101,
+   "ratio": 5.167468704085549,
+   "n_coco": 13,
+   "n_lvis": 66,
+   "arm": "lumped"
+  },
+  {
+   "file": "banana_f102aea0c0c0.jpg",
+   "image_id": 88116,
+   "bbox": [
+    115.93,
+    191.21,
+    113.68,
+    98.62
+   ],
+   "ann_id": 1042995,
+   "ratio": 2.4588989315211274,
+   "n_coco": 13,
+   "n_lvis": 49,
+   "arm": "lumped"
+  },
+  {
+   "file": "banana_b74a83a2b62c.jpg",
+   "image_id": 371683,
+   "bbox": [
+    229.62,
+    163.37,
+    172.1,
+    455.47
+   ],
+   "ann_id": 1042250,
+   "ratio": 127.86394211253369,
+   "n_coco": 1,
+   "n_lvis": 73,
+   "arm": "lumped"
+  },
+  {
+   "file": "banana_ec2cedfefc1d.jpg",
+   "image_id": 62203,
+   "bbox": [
+    50.53,
+    301.57,
+    172.87,
+    70.48
+   ],
+   "ann_id": 1042522,
+   "ratio": 14.006415703994264,
+   "n_coco": 13,
+   "n_lvis": 293,
+   "arm": "lumped"
+  },
+  {
+   "file": "banana_bb3738dcb595.jpg",
+   "image_id": 510080,
+   "bbox": [
+    343.0,
+    108.3,
+    297.0,
+    143.0
+   ],
+   "ann_id": 1044291,
+   "ratio": 0.7574307503808714,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "clean"
+  },
+  {
+   "file": "banana_fa94696c7a02.jpg",
+   "image_id": 362348,
+   "bbox": [
+    337.08,
+    305.61,
+    187.25,
+    101.23
+   ],
+   "ann_id": 2110536,
+   "ratio": 4.670572135018531,
+   "n_coco": 13,
+   "n_lvis": 127,
+   "arm": "lumped"
+  },
+  {
+   "file": "banana_65435095a29a.jpg",
+   "image_id": 521540,
+   "bbox": [
+    39.91,
+    67.96,
+    407.73,
+    403.41
+   ],
+   "ann_id": 1042596,
+   "ratio": 0.9985758132100399,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "clean"
+  },
+  {
+   "file": "banana_28ff768f92b2.jpg",
+   "image_id": 323475,
+   "bbox": [
+    217.17,
+    131.88,
+    149.57,
+    254.56
+   ],
+   "ann_id": 1543286,
+   "ratio": 0.9734277967792161,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "clean"
+  }
+ ]
+}
