@@ -5,11 +5,12 @@ import { of, throwError } from 'rxjs';
 import { catchError, filter, take, tap } from 'rxjs/operators';
 
 import { adaptivePoll } from './adaptive-poll';
+import { ActiveContextService } from './active-context.service';
 import { AutopilotStateService } from './autopilot-state.service';
 import { DetectorsFindApiService } from './detectors-find-api.service';
 import { MediaStateService } from './media-state.service';
 import { PairScopeService } from './pair-scope.service';
-import { SortStateService, SortMode, SelectMode } from './sort-state.service';
+import { SortStateService, SortMode, SelectMode, type LoadSortSource } from './sort-state.service';
 import { SortingApiService } from './sorting-api.service';
 import { ToastService } from './toast.service';
 import { VoteStateService } from './vote-state.service';
@@ -59,6 +60,7 @@ export class SortRunnerService {
   private readonly mediaState = inject(MediaStateService);
   private readonly autopilotState = inject(AutopilotStateService);
   private readonly pairScope = inject(PairScopeService);
+  private readonly activeContext = inject(ActiveContextService);
   private readonly toast = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -108,9 +110,9 @@ export class SortRunnerService {
    * - **Manual labelling with no sort.** Clicking items out of the left grid
    *   and voting never populates a ranking, so the last vote hits the same
    *   pinned-off-screen blank pane #3887 named, with `queueExhausted` false.
-   * - **Coming back to a finished detector.** A fresh entry ranks nothing (see
-   *   `seedRankingIfUnranked`), so the centre falls to its "Select a media
-   *   item" placeholder — which asks the user to pick something when there is
+   * - **Coming back to a finished detector.** A fresh entry with no sort to
+   *   carry over ranks nothing (see `seedRankingIfUnranked`), so the centre
+   *   falls to its "Select a media item" placeholder — which asks the user to pick something when there is
    *   nothing left to pick.
    *
    * Both are the *dataset* being finished rather than the window, and they want
@@ -374,9 +376,10 @@ export class SortRunnerService {
     }
   }
 
-  onModelSelected(modelId: string): void {
+  onModelSelected(modelId: string, autoSelect = true): void {
     if (!modelId) return;
     this.sortState.setSortMode('load');
+    this.sortState.setLoadSortSource({ kind: 'detector', detectorId: modelId });
     this.sortState.setSortBusy(true);
     this.sortState.setSortStatus('Scoring with detector…');
     this.sortState.setSortProgress(0, 0);
@@ -398,7 +401,7 @@ export class SortRunnerService {
         this.sortState.setSortBusy(false);
         this.sortState.setSortStatus('');
         this.sortState.setSortProgress(0, 0);
-        this.autoSelectNext();
+        if (autoSelect) this.autoSelectNext();
       },
       error: () => {
         this.sortState.stopFindProgressTracking();
@@ -409,17 +412,38 @@ export class SortRunnerService {
     });
   }
 
-  onExampleSortStarted(data: unknown): void {
+  /**
+   * Install an example sort the Load modal already ran. The modal attaches the
+   * `source` it ranked against, so the sort can be re-run on another pair
+   * (#4092); a response without one simply can't be.
+   */
+  onExampleSortStarted(data: unknown, autoSelect = true): void {
     const response = data as {
       results: { id: number; similarity: number; best_region?: number[] }[];
       threshold: number;
+      source?: LoadSortSource;
     };
     this.sortState.setSortMode('load');
     this.applySortWindow(response);
     this.sortState.setLoadSortLabel('Example media');
+    this.sortState.setLoadSortSource(response.source ?? null);
     this.sortState.setSortBusy(false);
     this.sortState.setSortStatus('');
-    this.autoSelectNext();
+    if (autoSelect) this.autoSelectNext();
+  }
+
+  /** Re-run an uploaded example sort (the Load modal's upload path) against
+   *  the pair now active. */
+  private uploadExampleSort(file: File, cropParams: Record<string, unknown> | undefined, autoSelect: boolean): void {
+    this.sortState.setSortBusy(true);
+    this.sortState.setSortStatus('Sorting by example…');
+    this.sortingApi.exampleSort(file, cropParams).pipe(this.pairScope.scoped()).subscribe({
+      next: (response) => this.onExampleSortStarted({ ...response, source: { kind: 'upload', file, cropParams } }, autoSelect),
+      error: () => {
+        this.sortState.setSortBusy(false);
+        this.sortState.setSortStatus('Example sort failed');
+      },
+    });
   }
 
   /**
@@ -430,7 +454,15 @@ export class SortRunnerService {
    *              here because the view already owns that lookup for its vote
    *              toasts, and it is not a sort concern.
    */
-  runExampleSortById(mediaId: number, label: string, cropParams?: Record<string, unknown>): void {
+  runExampleSortById(
+    mediaId: number,
+    label: string,
+    cropParams?: Record<string, unknown>,
+    autoSelect = true,
+  ): void {
+    // Captured before the request: the source names the dataset the id belongs
+    // to, which is the one active when the sort was asked for.
+    const datasetId = this.activeContext.datasetId;
     this.sortState.setSortBusy(true);
     this.sortState.setSortStatus('Sorting by example…');
     this.sortingApi
@@ -441,9 +473,10 @@ export class SortRunnerService {
           this.sortState.setSortMode('load');
           this.applySortWindow(response);
           this.sortState.setLoadSortLabel(label);
+          this.sortState.setLoadSortSource({ kind: 'media', datasetId, mediaId, cropParams });
           this.sortState.setSortBusy(false);
           this.sortState.setSortStatus('');
-          this.autoSelectNext();
+          if (autoSelect) this.autoSelectNext();
         },
         error: (err) => {
           this.sortState.setSortBusy(false);
@@ -471,6 +504,7 @@ export class SortRunnerService {
         this.sortState.setSortBusy(false);
         this.sortState.setSortStatus('');
         this.sortState.setSortMode('load');
+        this.sortState.setLoadSortSource({ kind: 'files', filenames });
         if (autoSelect) this.autoSelectNext();
       },
       error: () => {
@@ -478,6 +512,74 @@ export class SortRunnerService {
         this.sortState.setSortStatus('Example sort failed');
       },
     });
+  }
+
+  // --- Carrying a sort to a new pair ---
+
+  /**
+   * Re-run the sort the controls show against the pair now on screen (#4092).
+   *
+   * The rule for a Train entry or a pair switch is "the sort carries over, the
+   * ranking does not": Sort mode, Select mode and the text query are the user's
+   * and survive the move, while the ranking — a list of per-dataset media ids —
+   * is always dropped and re-derived here by running the same sort again. Before
+   * this, the controls carried over but nothing re-ran them, so a Train window on
+   * a new pair showed the last session's query and mode above an empty (or,
+   * from the dashboard, foreign) ranking.
+   *
+   * A sort the new pair cannot run falls back to Text — the controls must never
+   * claim a sort that is not the one on screen:
+   *
+   * - **Learned** needs a good and a bad label for the new detector; its radio
+   *   is disabled without them.
+   * - **Load** needs a {@link LoadSortSource} it can re-run. A "Sort by this"
+   *   media id means nothing outside its own dataset, and a ranking installed
+   *   with no recorded source (Find's scoring) has nothing to re-run.
+   *
+   * Text then re-runs the carried query, when there is one and the dataset's
+   * embedder can embed text; otherwise the pair is left unranked, as a fresh
+   * entry with an empty box would be.
+   *
+   * Every sort runs with `autoSelect: false`: the caller owns seeding the centre
+   * viewer, and must not move someone who has already started labelling.
+   *
+   * @param textSupported Whether the active dataset's embedder embeds text.
+   */
+  rerunCarriedSort(textSupported: boolean): void {
+    const mode = this.sortState.sortMode;
+    if (mode === 'learned' && this.voteState.learnedSortAvailable) {
+      this.onLearnedSort(false);
+      return;
+    }
+    if (mode === 'load' && this.rerunLoadSource(this.sortState.loadSortSource)) return;
+    if (mode !== 'text') {
+      this.sortState.setSortMode('text');
+      this.sortState.setLoadSortLabel('');
+      this.sortState.setLoadSortSource(null);
+    }
+    const query = this.sortState.textQuery.trim();
+    if (query && textSupported) this.onTextSort(query, false);
+  }
+
+  /** Re-run a Load sort's source; false when it can't be re-run here. */
+  private rerunLoadSource(source: LoadSortSource | null): boolean {
+    switch (source?.kind) {
+      case 'detector':
+        this.onModelSelected(source.detectorId, false);
+        return true;
+      case 'files':
+        this.exampleSortByFilenames(source.filenames, false);
+        return true;
+      case 'upload':
+        this.uploadExampleSort(source.file, source.cropParams, false);
+        return true;
+      case 'media':
+        if (source.datasetId !== this.activeContext.datasetId) return false;
+        this.runExampleSortById(source.mediaId, this.sortState.loadSortLabel, source.cropParams, false);
+        return true;
+      default:
+        return false;
+    }
   }
 
   // --- Select mode ---
