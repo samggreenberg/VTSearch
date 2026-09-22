@@ -43,6 +43,30 @@ OPTION = {
 }
 
 
+#: Arms labelled on the trade-off plot (the rest sit in the cluster at shipped's
+#: height and are identified by colour), with label offsets that do not collide.
+LABELS = {
+    "shipped": (6, -12),
+    "fallback": (6, 3),
+    "stall1e-3": (6, 3),
+    "stall1e-4": (6, 3),
+    "ll1e-6": (-10, 8),
+    "cap400": (6, 3),
+    "cap1000": (-40, -14),
+    "cap2000": (-4, 8),
+}
+
+#: The ECDF's curves, each with its own line style so no two share colour AND dash.
+ECDF_STYLE = {
+    "shipped": (INK, "-"),
+    "cap400": (OPTION["cap"], ":"),
+    "cap1000": (OPTION["cap"], "--"),
+    "cap2000": (OPTION["cap"], "-"),
+    "stall1e-4": (OPTION["stall"], "-"),
+    "fallback": (OPTION["fallback"], "-"),
+}
+
+
 def _color(arm: str) -> str:
     for k, c in OPTION.items():
         if arm.startswith(k):
@@ -85,7 +109,17 @@ def main(argv: "list[str] | None" = None) -> int:
         cost = anch[anch["arm"] == arm]["n_iter"].mean() / base_iters
         y = 100 * mv.quantile(0.9)
         ax.scatter(cost, y, s=70, color=_color(arm), zorder=3, marker="s" if arm == "shipped" else "o")
-        ax.annotate(arm, (cost, y), xytext=(6, 3), textcoords="offset points", fontsize=8, color=INK)
+        if arm in LABELS:
+            ax.annotate(arm, (cost, y), xytext=LABELS[arm], textcoords="offset points", fontsize=8, color=INK)
+    for lab, c in (
+        ("option 1: budget", OPTION["cap"]),
+        ("option 1: tolerance", OPTION["ll"]),
+        ("option 2: stall / relative / Aitken", OPTION["stall"]),
+        ("option 3: fallback", OPTION["fallback"]),
+        ("shipped", INK),
+    ):
+        ax.scatter([], [], color=c, s=40, label=lab, marker="s" if lab == "shipped" else "o")
+    ax.legend(fontsize=8, frameon=False, loc="upper right")
     ax.set_xlabel("mean refit iterations, relative to shipped (cost)", color=INK)
     ax.set_ylabel("p90 distance from the converged answer\n(% of haystack, cases with a capped fold)", color=INK)
     ax.set_title("Only a bigger budget moves TOWARD the converged fit", fontsize=10, color=INK)
@@ -126,19 +160,11 @@ def main(argv: "list[str] | None" = None) -> int:
 
     # 3. ECDF on capped cases
     fig, ax = plt.subplots(figsize=(7.0, 4.6))
-    for arm in ("shipped", "cap400", "cap1000", "cap2000", "cap5000", "stall1e-4", "aitken1e-7", "fallback"):
+    for arm, (c, ls) in ECDF_STYLE.items():
         if arm not in ecdf:
             continue
         x = np.clip(100 * ecdf[arm], 1e-3, None)
-        ax.step(
-            x,
-            np.arange(1, len(x) + 1) / len(x),
-            where="post",
-            color=_color(arm),
-            lw=1.6,
-            ls="-" if arm in ("shipped", "cap1000", "cap2000") else ":",
-            label=arm,
-        )
+        ax.step(x, np.arange(1, len(x) + 1) / len(x), where="post", color=c, lw=1.6, ls=ls, label=arm)
     ax.set_xscale("log")
     ax.set_xlabel("admitted-set distance from limit, % of haystack (floored at 0.001)", color=INK)
     ax.set_ylabel(f"share of the {len(capped)} capped cases", color=INK)
