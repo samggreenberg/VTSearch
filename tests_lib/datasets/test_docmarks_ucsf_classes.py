@@ -336,7 +336,8 @@ class TestApply:
         assert problems == []
         meta = classes["ucsf/logo_bat"]
         assert meta["source"] == "ucsf" and meta["on_roster"] and meta["page_ids"] == ["ucsf/c#0"]
-        assert "ucsf" not in meta["eligible_distractor_sources"] and meta["query_crop"] == "/crops/x.png"
+        # v4.1: UCSF is an eligible source, and the per-page rule keeps its Tobacco industry out.
+        assert "ucsf" in meta["eligible_distractor_sources"] and meta["query_crop"] == "/crops/x.png"
         assert added[0]["provenance"] == "ucsf_classes_band"
 
     def test_suggestions_and_unanswered_sheets_are_never_applied(self, mods):
@@ -405,6 +406,20 @@ class TestPoolsAfterApply:
             assert "ucsf/rej" in pools[name]
             assert not {"ucsf/unseen", "ucsf/food"} & pools[name]
         assert {"tobacco800/t", "spods/x"} <= pools["own_verified"]
+
+    def test_a_v41_ucsf_class_takes_unbanded_industries_but_no_unreviewed_tobacco_page(self, mods):
+        # The v4.1 rule (2026-09-22 contamination check): UCSF's un-banded
+        # industries are presumed negatives; an unreviewed Tobacco page is not.
+        meta = {
+            "source": "ucsf",
+            "page_ids": ["ucsf/acc"],
+            "reviewed_negative_page_ids": ["ucsf/rej"],
+            "eligible_distractor_sources": ["spods", "staver", "synth", "tobacco800", "ucsf"],
+        }
+        pools = mods["ev"].class_pools(meta, self.PAGES, self.INDUSTRY)
+        for name in ("own_verified", "eligible"):
+            assert {"ucsf/rej", "ucsf/food"} <= pools[name]
+            assert "ucsf/unseen" not in pools[name]
 
     def test_a_ucsf_class_with_no_review_record_gets_no_ucsf_negatives(self, mods):
         meta = {"source": "ucsf", "page_ids": ["ucsf/acc"], "eligible_distractor_sources": ["spods", "tobacco800"]}
