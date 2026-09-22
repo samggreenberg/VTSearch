@@ -86,7 +86,7 @@ from pathlib import Path
 import pile_config as pc
 
 from pilebuild.env import log
-from pilebuild.scale_core import band_candidates, designate_cells, draw_negatives, scale_media
+from pilebuild.scale_core import band_candidates, designate_cells, draw_negatives, largest_box, scale_media
 
 #: The two splits, in the order the census read them.
 SPLITS = ("val2017", "train2017")
@@ -159,19 +159,19 @@ def lump_exclusions(
     labels: dict[int, dict[str, list[list[float]]]],
     lvis_dir: Path | None = None,
 ) -> set[tuple[int, str]]:
-    """``(image, class)`` pairs whose COCO box is a pile, or cannot be shown not to be.
+    """``(image, class)`` pairs whose picked COCO box is not ONE object by LVIS's count.
 
     Only the classes in :data:`pile_config.SCALE_LUMP_FILTER` are tested (#3985).
-    A pair is excluded when LVIS never boxed the class on that image -- nothing
-    then vouches for COCO's box -- or when COCO's mean box area is at least
-    :data:`pile_config.SCALE_LUMP_CUT` times LVIS's, which is one box round what
-    LVIS drew as several. The ratio is the one `coco_box_granularity.py`
-    measured and the owner's votes calibrated; it is per image, not per box,
-    because COCO's pile box and LVIS's fruit boxes do not pair up one to one.
+    The box tested is the one the build bands on and the simulated user drags --
+    the largest instance (:func:`largest_box`, #4096). A pair is kept only when
+    exactly one LVIS instance of the class lies inside that box, "inside" meaning
+    at least :data:`pile_config.SCALE_LUMP_CONTAIN` of the LVIS box's area. None
+    inside means nothing vouches for COCO's box; two or more means COCO drew one
+    box where LVIS drew several.
     """
     lvis_dir = lvis_dir or pc.LVIS_DIR
     wanted = {name: cls for cls, names in pc.SCALE_LUMP_FILTER.items() for name in names}
-    lvis: dict[int, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
+    lvis: dict[int, dict[str, list[list[float]]]] = defaultdict(lambda: defaultdict(list))
     for split in pc.LVIS_SPLITS:
         path = lvis_dir / f"lvis_v1_{split}.json"
         if not path.exists():
@@ -182,7 +182,8 @@ def lump_exclusions(
         for ann in data["annotations"]:
             cls = cats.get(ann["category_id"])
             if cls is not None:
-                lvis[int(ann["image_id"])][cls].append(ann["bbox"][2] * ann["bbox"][3])
+                x, y, w, h = ann["bbox"]
+                lvis[int(ann["image_id"])][cls].append([x, y, x + w, y + h])
         del data
 
     out: set[tuple[int, str]] = set()
@@ -191,14 +192,19 @@ def lump_exclusions(
             bs = by_name.get(cls)
             if not bs:
                 continue
-            lb = lvis.get(iid, {}).get(cls)
-            if not lb:
-                out.add((iid, cls))
-                continue
-            coco_mean = sum((b[2] - b[0]) * (b[3] - b[1]) for b in bs) / len(bs)
-            if coco_mean >= pc.SCALE_LUMP_CUT * (sum(lb) / len(lb)):
+            box = largest_box(bs)
+            inside = sum(_share_inside(lb, box) >= pc.SCALE_LUMP_CONTAIN for lb in lvis.get(iid, {}).get(cls, []))
+            if inside != 1:
                 out.add((iid, cls))
     return out
+
+
+def _share_inside(inner: list[float], outer: list[float]) -> float:
+    """Fraction of *inner*'s area that lies within *outer* (both ``[x0, y0, x1, y1]``)."""
+    ix = max(0.0, min(inner[2], outer[2]) - max(inner[0], outer[0]))
+    iy = max(0.0, min(inner[3], outer[3]) - max(inner[1], outer[1]))
+    area = (inner[2] - inner[0]) * (inner[3] - inner[1])
+    return ix * iy / area if area > 0 else 0.0
 
 
 def _cells_of(cls: str, supply: dict[str, dict[str, list[int]]]) -> dict[str, list[int]]:
@@ -243,8 +249,10 @@ def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
     for cls in pc.SCALE_LUMP_FILTER:
         held = sum(1 for by_name in labels.values() if by_name.get(cls))
         gone = sum(1 for _, c in excluded if c == cls)
-        log(f"  coco_quarry: {cls}: {gone:,} of {held:,} images not positives (pile or no LVIS box)")
-    supply, boxes_for, clean = band_candidates(labels, box_dims, unbanded=set(), classes=classes, excluded=excluded)
+        log(f"  coco_quarry: {cls}: {gone:,} of {held:,} images not positives (not ONE by LVIS)")
+    supply, boxes_for, clean = band_candidates(
+        labels, box_dims, unbanded=set(), classes=classes, excluded=excluded, largest=pc.SCALE_BAND_ON_LARGEST
+    )
     coco_scored = set(labels)  # every image; COCO answered for all eighty
 
     full = bool(pc.DATASETS.get(dataset, {}).get("full_corpus"))

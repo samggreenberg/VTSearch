@@ -287,17 +287,33 @@ BAND_MIN_IMAGES = int(os.environ.get("VTS_BAND_MIN_IMAGES", "50"))
 LVIS_DIR = Path(os.environ.get("VTS_LVIS_DIR", str(PILE / "lvis")))
 LVIS_SPLITS = ("train", "val")
 
-#: Classes whose COCO box must agree with LVIS before the image may be a
-#: positive, mapped to the LVIS names that count as the same object (#3985).
+#: Band each (image, class) on its LARGEST instance, not the union of all of them,
+#: and record only that box as the cell's region, so the simulated user drags one
+#: object (#4096). Under the union rule an image whose instances are spread out
+#: (union > ``BAND_MAX_INFLATION`` x the largest) was SCATTERED and never a
+#: positive: 111,324 of 287,303 image-class pairs in C, 39%, and 58% of `book`.
+#: Positives then leaned toward images holding one isolated instance and left
+#: out busy scenes -- a street of cars, a table of cups. Owner ruling, 2026-09-22:
+#: use the most obvious instance, which is the largest.
+SCALE_BAND_ON_LARGEST = True
+
+#: Classes whose picked COCO box must be ONE object by LVIS's reckoning before
+#: the image may be a positive, mapped to the LVIS names that count as the same
+#: object (#3985).
 #:
-#: COCO draws one box round a bunch of bananas, a bowl of apples or a pile of
-#: oranges, and the band is then the size of the pile, not of ONE fruit -- the
-#: unit the owner ruled (`ClassRule.unit`). 120 owner votes put that at roughly
-#: half of `banana`'s images, a third of `apple`'s and a fifth of `orange`'s, and
-#: found no COCO-only signal that separates them. An image is kept only if LVIS
-#: boxed the class there AND COCO's mean box is under :data:`SCALE_LUMP_CUT`
-#: times LVIS's. An excluded image keeps its label, so it is never scored as a
+#: COCO draws one box round a bunch of bananas, a bowl of apples or a stack of
+#: books, and the band is then the size of the pile, not of ONE object -- the
+#: unit the owner ruled (`ClassRule.unit`). The test is on the box the simulated
+#: user drags (:data:`SCALE_BAND_ON_LARGEST`): keep it only if EXACTLY ONE LVIS
+#: instance lies inside it (:data:`SCALE_LUMP_CONTAIN`). None means nothing
+#: vouches for the box; two or more means LVIS drew several objects where COCO
+#: drew one. An excluded image keeps its label, so it is never scored as a
 #: negative for its own class -- it is simply not a positive.
+#:
+#: Scored on the owner's 72 fruit votes, which were cast on exactly this box:
+#: 28 of 29 piles caught and 5 of 43 Good boxes lost. The per-image mean-area
+#: ratio it replaces (cut 1.8, #4085) caught the same 28 and lost 6, and needed a
+#: tuned cut; this needs none.
 #:
 #: NOT `skis` or `potted plant`, although their ratios are as high: there the
 #: owner ruled COCO's box IS the object (a pair; a pot with its plant) and 23 of
@@ -309,16 +325,14 @@ SCALE_LUMP_FILTER: dict[str, tuple[str, ...]] = {
     "apple": ("apple",),
     "orange": ("orange_(fruit)", "mandarin_orange"),
 }
-#: Mean-box-area ratio, COCO over LVIS, at or above which the COCO box is a pile.
-#: Chosen on the owner's votes: 1.8 catches 28 of 29 piles and loses 6 of 43 Good
-#: images (1.6 lost 8 for the same 28; 2.0 let 4 through).
-SCALE_LUMP_CUT = 1.8
+#: Share of an LVIS box that must lie inside the picked COCO box for the LVIS
+#: instance to count as inside it.
+SCALE_LUMP_CONTAIN = 0.5
 
 #: Cells not built at all, because no honest supply reaches ``SCALE_N_POS``.
-#: LVIS rarely boxes a SMALL fruit, so after :data:`SCALE_LUMP_FILTER` these
-#: hold 45 / 32 / 22 positives; built short, their prevalence -- and so their
-#: AP -- would not be comparable with any other cell. Owner ruling, 2026-09-22.
-SCALE_DROPPED_CELLS: frozenset[str] = frozenset({"banana@small", "apple@small", "orange@small"})
+#: Built short, their prevalence -- and so their AP -- would not be comparable
+#: with any other cell.
+SCALE_DROPPED_CELLS: frozenset[str] = frozenset()
 
 #: VG is annotated with free text, so its vocabulary is not a list of objects.
 #: A detector asked to find "red" or "front" is measuring nothing, so these are
