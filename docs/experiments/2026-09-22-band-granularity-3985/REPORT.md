@@ -142,8 +142,7 @@ LVIS boxed tighter, and it was voted Good.
 
 **No COCO-only signal separates the piles in this sample.** COCO's box count
 for the class runs from 1 to 13 in both groups, and so does the raw box area.
-Every signal that works needs LVIS, which covers 90% of `banana`'s images, 62%
-of `apple`'s and 57% of `orange`'s. #3992's COCO-only guard is still not
+Every signal that works needs LVIS boxes for the image. #3992's COCO-only guard is still not
 found, and on this evidence it may not exist.
 
 ## What is still not settled
@@ -154,9 +153,14 @@ LVIS covers the image; or drop the three classes from *C*.
 
 ## Limits
 
-- **LVIS covers 16% of COCO** (19,626 of 122,218 images), and per class the
-  coverage runs 14% (`dining table`) to 95% (`frisbee`). Every ratio here is
-  measured on that subset.
+- **Only LVIS v1 *val* was read: 16% of COCO** (19,626 of 122,218 images).
+  Every ratio here is measured on that subset. The `cover` column
+  (`dining table` 14% to `frisbee` 95%) is a share **within LVIS val**: of the
+  LVIS-val images where COCO has the class, the fraction where LVIS also boxed
+  it (LVIS annotates each class on only some images). It is **not** a share of
+  the class's COCO images. An earlier draft of this report, and a message to the
+  owner, read it that way: "LVIS covers 90% of banana's images" was really about
+  16% × 90%.
 - **The pair window is a heuristic and misfires.** `book` at 2.38 lands in it
   and books are not structurally paired — a shelf of books is plain lumping. The
   verdict says "check" rather than ruling, but it is not free of false flags.

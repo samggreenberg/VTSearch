@@ -280,6 +280,46 @@ BAND_MAX_IMAGES = int(os.environ.get("VTS_BAND_MAX_IMAGES", "12000"))
 BAND_MAX_INFLATION = float(os.environ.get("VTS_BAND_MAX_INFLATION", "1.5"))
 BAND_MIN_IMAGES = int(os.environ.get("VTS_BAND_MIN_IMAGES", "50"))
 
+#: LVIS v1 annotations, BOTH splits (#3985). LVIS re-annotated COCO's own images
+#: with one box per instance, so it is the referee for a COCO box drawn round a
+#: pile. Val alone is only 16% of COCO and left every fruit cell at 3-54 of 100
+#: positives; train and val together cover 119,979 of 123,287 images.
+LVIS_DIR = Path(os.environ.get("VTS_LVIS_DIR", str(PILE / "lvis")))
+LVIS_SPLITS = ("train", "val")
+
+#: Classes whose COCO box must agree with LVIS before the image may be a
+#: positive, mapped to the LVIS names that count as the same object (#3985).
+#:
+#: COCO draws one box round a bunch of bananas, a bowl of apples or a pile of
+#: oranges, and the band is then the size of the pile, not of ONE fruit -- the
+#: unit the owner ruled (`ClassRule.unit`). 120 owner votes put that at roughly
+#: half of `banana`'s images, a third of `apple`'s and a fifth of `orange`'s, and
+#: found no COCO-only signal that separates them. An image is kept only if LVIS
+#: boxed the class there AND COCO's mean box is under :data:`SCALE_LUMP_CUT`
+#: times LVIS's. An excluded image keeps its label, so it is never scored as a
+#: negative for its own class -- it is simply not a positive.
+#:
+#: NOT `skis` or `potted plant`, although their ratios are as high: there the
+#: owner ruled COCO's box IS the object (a pair; a pot with its plant) and 23 of
+#: 24 high-ratio images were voted Good. The name sets are
+#: `coco_box_granularity.SAME`'s curated ones: `apple` without `pear`, `orange`
+#: without `lemon`.
+SCALE_LUMP_FILTER: dict[str, tuple[str, ...]] = {
+    "banana": ("banana",),
+    "apple": ("apple",),
+    "orange": ("orange_(fruit)", "mandarin_orange"),
+}
+#: Mean-box-area ratio, COCO over LVIS, at or above which the COCO box is a pile.
+#: Chosen on the owner's votes: 1.8 catches 28 of 29 piles and loses 6 of 43 Good
+#: images (1.6 lost 8 for the same 28; 2.0 let 4 through).
+SCALE_LUMP_CUT = 1.8
+
+#: Cells not built at all, because no honest supply reaches ``SCALE_N_POS``.
+#: LVIS rarely boxes a SMALL fruit, so after :data:`SCALE_LUMP_FILTER` these
+#: hold 45 / 32 / 22 positives; built short, their prevalence -- and so their
+#: AP -- would not be comparable with any other cell. Owner ruling, 2026-09-22.
+SCALE_DROPPED_CELLS: frozenset[str] = frozenset({"banana@small", "apple@small", "orange@small"})
+
 #: VG is annotated with free text, so its vocabulary is not a list of objects.
 #: A detector asked to find "red" or "front" is measuring nothing, so these are
 #: excluded from the banded datasets. The policy is **concrete countable

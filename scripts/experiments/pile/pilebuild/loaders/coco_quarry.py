@@ -155,6 +155,52 @@ def read_coco_labels(
     return labels, dims, filenames
 
 
+def lump_exclusions(
+    labels: dict[int, dict[str, list[list[float]]]],
+    lvis_dir: Path | None = None,
+) -> set[tuple[int, str]]:
+    """``(image, class)`` pairs whose COCO box is a pile, or cannot be shown not to be.
+
+    Only the classes in :data:`pile_config.SCALE_LUMP_FILTER` are tested (#3985).
+    A pair is excluded when LVIS never boxed the class on that image -- nothing
+    then vouches for COCO's box -- or when COCO's mean box area is at least
+    :data:`pile_config.SCALE_LUMP_CUT` times LVIS's, which is one box round what
+    LVIS drew as several. The ratio is the one `coco_box_granularity.py`
+    measured and the owner's votes calibrated; it is per image, not per box,
+    because COCO's pile box and LVIS's fruit boxes do not pair up one to one.
+    """
+    lvis_dir = lvis_dir or pc.LVIS_DIR
+    wanted = {name: cls for cls, names in pc.SCALE_LUMP_FILTER.items() for name in names}
+    lvis: dict[int, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
+    for split in pc.LVIS_SPLITS:
+        path = lvis_dir / f"lvis_v1_{split}.json"
+        if not path.exists():
+            raise SystemExit(f"coco_quarry: missing {path}; LVIS v1 is the pile referee (#3985)")
+        with path.open() as fh:
+            data = json.load(fh)
+        cats = {c["id"]: wanted.get(c["name"]) for c in data["categories"]}
+        for ann in data["annotations"]:
+            cls = cats.get(ann["category_id"])
+            if cls is not None:
+                lvis[int(ann["image_id"])][cls].append(ann["bbox"][2] * ann["bbox"][3])
+        del data
+
+    out: set[tuple[int, str]] = set()
+    for iid, by_name in labels.items():
+        for cls in pc.SCALE_LUMP_FILTER:
+            bs = by_name.get(cls)
+            if not bs:
+                continue
+            lb = lvis.get(iid, {}).get(cls)
+            if not lb:
+                out.add((iid, cls))
+                continue
+            coco_mean = sum((b[2] - b[0]) * (b[3] - b[1]) for b in bs) / len(bs)
+            if coco_mean >= pc.SCALE_LUMP_CUT * (sum(lb) / len(lb)):
+                out.add((iid, cls))
+    return out
+
+
 def _cells_of(cls: str, supply: dict[str, dict[str, list[int]]]) -> dict[str, list[int]]:
     """``{"class@band": ids}`` for one class, straight off the banded supply.
 
@@ -162,7 +208,8 @@ def _cells_of(cls: str, supply: dict[str, dict[str, list[int]]]) -> dict[str, li
     membership; neither applies when the whole corpus is embedded, because the
     cap is the thing being deferred to export time.
     """
-    return {f"{cls}@{band}": ids for band, ids in supply.get(cls, {}).items() if ids}
+    cells = {pc.scale_cell(cls, band): ids for band, ids in supply.get(cls, {}).items() if ids}
+    return {cell: ids for cell, ids in cells.items() if cell not in pc.SCALE_DROPPED_CELLS}
 
 
 def _zip_members() -> dict[str, tuple[Path, str]]:
@@ -192,7 +239,12 @@ def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
     # No corrections and no roster: there is nothing to repair and no prior
     # review whose membership has to be preserved. Both helpers take the empty
     # case rather than a separate code path.
-    supply, boxes_for, clean = band_candidates(labels, box_dims, unbanded=set(), classes=classes)
+    excluded = lump_exclusions(labels)
+    for cls in pc.SCALE_LUMP_FILTER:
+        held = sum(1 for by_name in labels.values() if by_name.get(cls))
+        gone = sum(1 for _, c in excluded if c == cls)
+        log(f"  coco_quarry: {cls}: {gone:,} of {held:,} images not positives (pile or no LVIS box)")
+    supply, boxes_for, clean = band_candidates(labels, box_dims, unbanded=set(), classes=classes, excluded=excluded)
     coco_scored = set(labels)  # every image; COCO answered for all eighty
 
     full = bool(pc.DATASETS.get(dataset, {}).get("full_corpus"))
@@ -291,7 +343,8 @@ def check(dataset: str) -> str:
     """
     paths = [pc.COCO_ANCHOR_DIR / f"instances_{s}.json" for s in SPLITS]
     paths += [pc.COCO_VAL_ZIP, pc.COCO_TRAIN_ZIP]
+    paths += [pc.LVIS_DIR / f"lvis_v1_{s}.json" for s in pc.LVIS_SPLITS]
     for path in paths:
         if not path.exists():
             raise SystemExit(f"{dataset}: missing {path}")
-    return "COCO 2017 annotations + both image zips present"
+    return "COCO 2017 annotations + both image zips + LVIS v1 train/val present"
