@@ -101,7 +101,7 @@ export CALIB_GRES=none
 export CALIB_MEM="${CALIB_MEM:-8G}"
 export CALIB_CPUS=1
 export CALIB_TIME="${CALIB_TIME:-5:00:00}"
-# MODEST ON PURPOSE.  Two other sessions share this user's `cpu_limit` QOS
+# MODEST ON PURPOSE.  Several other studies share this user's `cpu_limit` QOS
 # (cpu=240 with 2 charged per task, mem ~1074G) today.  25 per arm x 2 arms =
 # 50 tasks = 100 CPUs and 400G: under half of either ceiling.
 export CALIB_CONC="${CALIB_CONC:-25}"
@@ -183,7 +183,7 @@ case "$MODE" in
     export CALIB_RESULTS="$PREP"
     mkdir -p "$BASE/prepare/logs" "$PREP/cells" "$PREP/crops"
     ENVX="export CALIB_EXP=$CALIB_EXP CALIB_RESULTS=$CALIB_RESULTS VTSEARCH_DATA_DIR=$VTSEARCH_DATA_DIR VTSEARCH_MODELS_DIR=$VTSEARCH_MODELS_DIR HF_HOME=$HF_HOME"
-    P=$(sbatch --parsable --job-name=hinge3557-prep --mem=24G --cpus-per-task=2 \
+    P=$(sbatch --parsable --job-name=hinge3557-prep --mem="${HINGE3557_PREP_MEM:-12G}" --cpus-per-task=2 \
       --time=1:30:00 --partition=cpu --export=ALL \
       --output="$BASE/prepare/logs/prepare-%j.out" \
       --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
