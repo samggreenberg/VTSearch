@@ -38,6 +38,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import pile_config as pc  # noqa: E402
+from pilebuild.scale_core import band_for  # noqa: E402
 
 CONTEXT = 0.45
 MIN_WINDOW = 480
@@ -73,7 +74,18 @@ def main() -> int:
     ap.add_argument("--lvis-names", required=True, help="comma-separated, from coco_box_granularity.SAME")
     ap.add_argument("--annotations", type=Path, default=Path("/expscratch/sgreenberg/vts-cache/coco_anchor"))
     ap.add_argument(
-        "--lvis", type=Path, default=Path("/exp/scale26/datasets/external/LVIS/annotations/lvis_v1_val.json")
+        "--lvis",
+        type=Path,
+        nargs="+",
+        default=[pc.LVIS_DIR / f"lvis_v1_{s}.json" for s in pc.LVIS_SPLITS],
+        help="LVIS annotation files; default both splits, since val alone is 16%% of COCO",
+    )
+    ap.add_argument(
+        "--banded-only",
+        action="store_true",
+        help="sample only images `band_for` puts in a band, i.e. ones a cell could take. Without it a "
+        "class the scatter guard mostly rejects (`book`: 3,223 of 5,562) spends votes on images no "
+        "cell will ever hold.",
     )
     ap.add_argument("--n", type=int, default=24)
     ap.add_argument("--out", type=Path, required=True)
@@ -90,7 +102,12 @@ def main() -> int:
         for iid, m in per.items():
             for cls, bs in m.items():
                 coco[iid][cls] += bs
-    lvis, _ = _read(args.lvis)
+    lvis: dict = collections.defaultdict(lambda: collections.defaultdict(list))
+    for path in args.lvis:
+        per, _ = _read(path)
+        for iid, m in per.items():
+            for cls, bs in m.items():
+                lvis[iid][cls] += bs
     names = [n.strip() for n in args.lvis_names.split(",")]
 
     rows = []
@@ -100,6 +117,10 @@ def main() -> int:
         if not cb or not lb:
             continue
         w, h, _ = dims[iid]
+        if args.banded_only:
+            xyxy = [[x, y, x + bw, y + bh] for (x, y, bw, bh), _ in cb]
+            if band_for(xyxy, w, h) not in pc.BOX_BANDS:
+                continue
         ca = sum(b[2] * b[3] for b, _ in cb) / len(cb) / (w * h)
         la = sum(b[2] * b[3] for b, _ in lb) / len(lb) / (w * h)
         if la <= 0:

@@ -2357,6 +2357,9 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "land on no COCO class, the worst of the twenty-five -- and the bound test "
             "narrows it without repairing that."
         ),
+        # A stack or a shelf is several books however tightly packed; a book is
+        # one volume, never one page (owner, 2026-09-22).
+        unit="ONE book, not a stack or a shelf of them",
     ),
     # Ruled 2026-09-10 (#3789). The rule said "any LIVE bird" and the reviewer hit
     # a case it did not reach: a dead robin held in another bird's beak, at least
