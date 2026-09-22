@@ -167,6 +167,57 @@ class Question:
     #: 2.3x wider this way, which is the difference between a 35 px letterhead
     #: crest and an 87 px one.
     canvas: Optional[list[int]] = None
+    #: Crop the candidate to its inked region (:func:`ink_box`) after any
+    #: ``trim_border``.  For whole-page questions a scan's white border is often
+    #: flecked with specks, so the near-solid-border trimmer finds nothing to
+    #: trim and the page renders at its full size with a wide white margin.
+    #: Only for questions that draw no box, like ``trim_border``.
+    crop_to_ink: bool = False
+    #: Caption each reference and title the column.  The captions are file names,
+    #: which the reviewer does not need; without them the column is narrower
+    #: (:attr:`left_w`) and each reference is larger.
+    ref_labels: bool = True
+    #: Width of the reference column; ``None`` is :data:`LEFT_W`.
+    left_w: Optional[int] = None
+
+
+#: :func:`ink_box`: a pixel darker than this is ink.
+INK_LEVEL = 128
+#: :func:`ink_box`: ink closer than this many pixels is one clump, so the broken
+#: strokes of a faint stamp count together while an isolated speck stays alone.
+INK_JOIN_PX = 6
+#: :func:`ink_box`: a clump with fewer ink pixels than this is a speck.
+INK_MIN_PX = 30
+#: :func:`ink_box`: margin kept around the inked region, as a share of its long side.
+INK_PAD = 0.03
+
+
+def ink_box(im: Any) -> Optional[tuple[int, int, int, int]]:
+    """``(left, top, right, bottom)`` of every clump of ink on *im*, specks ignored.
+
+    Ink within :data:`INK_JOIN_PX` is merged before clumps are measured, so a
+    mark made of many faint fragments survives as one clump.  ``None`` when the
+    page holds no clump at all (a blank page), which callers leave uncropped.
+    """
+    import numpy as np  # noqa: PLC0415
+    from scipy import ndimage  # noqa: PLC0415
+
+    ink = np.asarray(im.convert("L")) < INK_LEVEL
+    if not ink.any():
+        return None
+    k = 2 * INK_JOIN_PX + 1
+    labels, n = ndimage.label(ndimage.binary_dilation(ink, structure=np.ones((k, k), bool)))
+    if n == 0:
+        return None
+    counts = ndimage.sum(ink, labels, index=np.arange(1, n + 1))
+    keep = np.isin(labels, np.flatnonzero(counts >= INK_MIN_PX) + 1) & ink
+    if not keep.any():
+        return None
+    rows, cols = np.flatnonzero(keep.any(axis=1)), np.flatnonzero(keep.any(axis=0))
+    top, bottom, left, right = rows[0], rows[-1] + 1, cols[0], cols[-1] + 1
+    pad = int(INK_PAD * max(bottom - top, right - left))
+    h, w = ink.shape
+    return (max(0, left - pad), max(0, top - pad), min(w, right + pad), min(h, bottom + pad))
 
 
 def short_class(class_id: str) -> str:
@@ -261,10 +312,13 @@ def render(q: Question, pages: dict[str, Any], corpus: Path, out: Path) -> Path:
 
     # left: references in a 2x2 grid (1 ref fills the panel)
     body_top, body_h = HEADER_H + 8, H - HEADER_H - FOOTER_H - 16
-    draw.text((16, body_top), "REFERENCE", fill="#1f5fbf", font=_font(22, bold=True))
+    left_w = q.left_w or LEFT_W
+    title_h, caption_h = (34, 24) if q.ref_labels else (0, 0)
+    if q.ref_labels:
+        draw.text((16, body_top), "REFERENCE", fill="#1f5fbf", font=_font(22, bold=True))
     refs = q.refs[:4]
     grid = 1 if len(refs) == 1 else 2
-    cell_w, cell_h = (LEFT_W - 24) // grid, (body_h - 34) // grid
+    cell_w, cell_h = (left_w - 24) // grid, (body_h - title_h) // grid
     for i, ref in enumerate(refs):
         if ref.path:
             with Image.open(ref.path) as im:
@@ -273,28 +327,33 @@ def render(q: Question, pages: dict[str, Any], corpus: Path, out: Path) -> Path:
             page = pages[ref.page_id]
             with _open_page(page, corpus) as im:
                 crop = im.convert("RGB").crop(expand(ref.box, None, page.width, page.height, 0.3))
-        thumb = _fit(crop, (cell_w - 12, cell_h - 30))
+        thumb = _fit(crop, (cell_w - 12, cell_h - 6 - caption_h))
         cx = 12 + (i % grid) * cell_w
-        cy = body_top + 34 + (i // grid) * cell_h
-        img.paste(thumb, (cx + (cell_w - thumb.width) // 2, cy + (cell_h - 24 - thumb.height) // 2))
-        label, small = ref.label, _font(16)
-        while len(label) > 1 and draw.textlength(label, font=small) > cell_w - 10:
-            label = label[:-1]
-        draw.text((cx + 4, cy + cell_h - 24), label, fill="#555555", font=small)
-    draw.line([LEFT_W, HEADER_H, LEFT_W, H - FOOTER_H], fill="#999999", width=3)
+        cy = body_top + title_h + (i // grid) * cell_h
+        img.paste(thumb, (cx + (cell_w - thumb.width) // 2, cy + (cell_h - caption_h - thumb.height) // 2))
+        if q.ref_labels:
+            label, small = ref.label, _font(16)
+            while len(label) > 1 and draw.textlength(label, font=small) > cell_w - 10:
+                label = label[:-1]
+            draw.text((cx + 4, cy + cell_h - 24), label, fill="#555555", font=small)
+    draw.line([left_w, HEADER_H, left_w, H - FOOTER_H], fill="#999999", width=3)
 
     # right: one candidate, enlarged
     page = pages[q.page_id]
     region = expand(q.box, q.old_box, page.width, page.height, q.margin)
     with _open_page(page, corpus) as im:
         crop = im.convert("RGB").crop(region)
-    panel = (W - LEFT_W - 32, body_h)
-    if q.trim_border and not q.outline:
+    panel = (W - left_w - 32, body_h)
+    if (q.trim_border or q.crop_to_ink) and not q.outline:
         from vtscore.media.image.edge_trim import solid_edge_box  # noqa: PLC0415
 
+        # A solid scan frame first: its ink would otherwise hold the ink box open.
         trimmed = solid_edge_box(crop)
         if trimmed:
             crop = crop.crop(trimmed)
+        inked = ink_box(crop) if q.crop_to_ink else None
+        if inked:
+            crop = crop.crop(inked)
         # The mark-size enlargement below is keyed to the untrimmed region, so
         # a trimmed crop just fills the panel: there is no box to keep legible,
         # only the page.
@@ -302,7 +361,7 @@ def render(q: Question, pages: dict[str, Any], corpus: Path, out: Path) -> Path:
     else:
         s = panel_scale(region, max(q.box[2], q.box[3]), panel)
     crop = crop.resize((max(1, int(crop.width * s)), max(1, int(crop.height * s))), Image.Resampling.LANCZOS)
-    ox = LEFT_W + 16 + (panel[0] - crop.width) // 2
+    ox = left_w + 16 + (panel[0] - crop.width) // 2
     oy = body_top + (panel[1] - crop.height) // 2
     img.paste(crop, (ox, oy))
     lw = 4
@@ -368,18 +427,37 @@ def emit(
 # ---------------------------------------------------------------------------
 
 
+#: :func:`class_refs` skips an instance whose box covers more of its page than
+#: this: it is a region the mark is somewhere inside, not the mark, and as a
+#: reference thumbnail it shrinks to an unreadable strip of letterhead.
+REF_MAX_PAGE_FRAC = 0.10
+
+
 def class_refs(class_id: str, classes: dict[str, Any], pages: dict[str, Any], k: int = 3) -> list[Ref]:
-    """The class's query crop, then its *k* largest other boxed instances."""
+    """The class's query crop, then its *k* largest other instances boxed on the mark itself.
+
+    A band-located instance (``*_band`` provenance: the mark is somewhere in the
+    letterhead band) and any box over :data:`REF_MAX_PAGE_FRAC` of its page are
+    skipped -- ranked by size they would win, and they show the reviewer a page
+    strip instead of the mark.
+    """
     meta = classes[class_id]
     refs = [Ref(label=f"query · {class_id.split('/')[-1]}", path=meta["query_crop"])]
     inst = []
     for pid in meta.get("page_ids", []):
         if pid == meta.get("query_page_id") or pid not in pages:
             continue
-        for m in pages[pid].marks:
-            if m.class_id == class_id:
-                inst.append((m.box[2] * m.box[3], pid, list(m.box)))
-                break
+        page = pages[pid]
+        for m in page.marks:
+            if m.class_id != class_id:
+                continue
+            if (
+                str(m.provenance).endswith("_band")
+                or m.box[2] * m.box[3] > REF_MAX_PAGE_FRAC * page.width * page.height
+            ):
+                continue
+            inst.append((m.box[2] * m.box[3], pid, list(m.box)))
+            break
     for _, pid, box in sorted(inst, reverse=True)[:k]:
         refs.append(Ref(label=pid.split("/")[-1], page_id=pid, box=box))
     return refs

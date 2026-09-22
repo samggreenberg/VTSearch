@@ -43,10 +43,18 @@ import docmarks_config as cfg  # noqa: E402
 TASK = "surprise"
 AUDIT_DIR = "surprise"
 QUESTIONS_PER_CONTROL = 15
+#: Methods whose hits are worth a person's time.  A hit is only a surprise from
+#: a method that ranks above chance: on v4.1 tier m, VLAD and its re-rank score
+#: mean AP 0.001 (SigLIP 0.084), so their "top" presumed negatives are random
+#: pages -- an expensive uniform sample, which the contamination checks already
+#: are.  Restricting to SigLIP took the first pass from 1,246 pages to 516.
+DEFAULT_METHODS = ("siglip",)
 SEED = 20260923
 
 
-def pages_to_review(hits: dict[str, Any], classes: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+def pages_to_review(
+    hits: dict[str, Any], classes: dict[str, Any], methods: Optional[Sequence[str]] = None
+) -> dict[str, list[dict[str, Any]]]:
     """Per class, every hit page across tiers and methods, once, best rank first.
 
     A page someone already ruled on for the class -- a positive, a reviewed
@@ -65,6 +73,8 @@ def pages_to_review(hits: dict[str, Any], classes: dict[str, Any]) -> dict[str, 
                 | set(meta.get("excluded_page_ids", []))
             )
             for method, rows in sorted(by_method.items()):
+                if methods is not None and method not in methods:
+                    continue
                 for r in rows:
                     pid = r["page_id"]
                     if pid in ruled:
@@ -154,14 +164,24 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     e = sub.add_parser("emit")
-    e.add_argument("--hits", type=Path, required=True, help="surprise_hits.json from eval_retrieval.py")
+    e.add_argument(
+        "--hits",
+        type=Path,
+        action="append",
+        required=True,
+        help="surprise_hits.json from eval_retrieval.py; repeatable",
+    )
+    e.add_argument("--methods", default=",".join(DEFAULT_METHODS), help="comma-separated; see DEFAULT_METHODS")
     e.add_argument("--corpus", type=Path, default=cfg.OUT)
     e.add_argument("--out", type=Path, required=True, help="queue root; one directory per class")
     args = ap.parse_args(argv)
 
     classes = json.loads((args.corpus / "classes.json").read_text(encoding="utf-8"))
     pages = {p.page_id: p for p in read_manifest(args.corpus / "corpus.jsonl")}
-    todo = pages_to_review(json.loads(args.hits.read_text(encoding="utf-8")), classes)
+    hits: dict[str, Any] = {}
+    for path in args.hits:
+        hits.update(json.loads(path.read_text(encoding="utf-8")))
+    todo = pages_to_review(hits, classes, methods=args.methods.split(","))
     slate = args.corpus / "audit" / AUDIT_DIR / "verdicts.jsonl"
     if slate.exists():
         raise SystemExit(f"{slate} exists; it may hold answers, so it is never overwritten")

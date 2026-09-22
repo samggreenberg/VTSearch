@@ -65,6 +65,11 @@ class TestPagesToReview:
         assert [(h["page_id"], h["best_rank"]) for h in todo["c/x"]] == [("u/1", 2), ("u/2", 9)]
         assert sorted(todo["c/x"][0]["found_by"]) == ["m:vlad@2", "s:siglip@4"]
 
+    def test_a_method_at_chance_can_be_left_out(self, mods):
+        classes = {"c/x": {"page_ids": []}}
+        todo = mods["s"].pages_to_review(self.HITS, classes, methods=["siglip"])
+        assert [(h["page_id"], h["best_rank"]) for h in todo["c/x"]] == [("u/1", 4), ("u/2", 9)]
+
 
 class TestApply:
     def _rows(self, verdicts):

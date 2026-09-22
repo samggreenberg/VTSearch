@@ -149,7 +149,13 @@ def question(class_id: str, i: int, pid: str, arm: str, page: Any, refs, stem: O
         canvas=[1530, 1350],
         greyscale=True,
         quality=80,
-        trim_border=False,
+        # Crop to the inked region (Sam, 2026-09-22: "this looks uncropped"): a
+        # scan's white border is flecked with specks, so trimming solid borders
+        # alone left the page at full size.  No captions: the reviewer compares
+        # marks, and file names under the references were wasted space.
+        trim_border=True,
+        crop_to_ink=True,
+        ref_labels=False,
         anonymous=True,
         detail="",
     )
