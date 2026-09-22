@@ -69,6 +69,7 @@ def band_candidates(
     unbanded: set[tuple[int, str]],
     classes: tuple[str, ...] | None = None,
     designated: dict[tuple[int, str], list[list[float]]] | None = None,
+    excluded: set[tuple[int, str]] | None = None,
 ) -> tuple[dict[str, dict[str, list[int]]], dict[tuple[int, str], list[list[float]]], list[int]]:
     """Sort every image into ``(class, band)`` supply, or into the clean pool.
 
@@ -90,6 +91,11 @@ def band_candidates(
     rather than by a second implementation in the slate builder that would be
     free to drift from it (#3588). The default keeps every existing caller
     byte-identical.
+
+    *excluded* is ``(image, class)`` pairs that may never be a positive, such as
+    a COCO box :data:`pile_config.SCALE_LUMP_FILTER` found drawn round a pile
+    (#3985). The class stays in *labels*, so the image is not a negative for it
+    either, and it cannot join ``clean`` because it holds a class.
     """
     classes = tuple(classes) if classes is not None else pc.SCALE_CLASSES
     supply: dict[str, dict[str, list[int]]] = {c: {b: [] for b in pc.BOX_BANDS} for c in classes}
@@ -104,6 +110,8 @@ def band_candidates(
                 clean.append(iid)
             continue
         for name, bs in by_name.items():
+            if excluded and (iid, name) in excluded:
+                continue
             # The band is a claim about the object this cell is about, so a
             # reviewer's designation decides it and the other instances do not
             # drag it (#3726). Without a designation this is exactly the old
@@ -151,6 +159,8 @@ def designate_cells(
         for band in pc.BOX_BANDS:
             pool = sorted(supply[c][band])
             cell = pc.scale_cell(c, band)
+            if cell in pc.SCALE_DROPPED_CELLS:
+                continue
             if len(pool) < pc.SCALE_N_POS:
                 # Say so rather than quietly building a smaller cell: unequal
                 # prevalence between bands is the defect this construction

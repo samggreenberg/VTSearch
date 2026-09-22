@@ -131,6 +131,7 @@ def test_check_names_both_archives(mod, tmp_path: Path, monkeypatch):
     monkeypatch.setattr(pc, "COCO_ANCHOR_DIR", anchor)
     monkeypatch.setattr(pc, "COCO_VAL_ZIP", tmp_path / "images" / "val2017.zip")
     monkeypatch.setattr(pc, "COCO_TRAIN_ZIP", tmp_path / "images" / "train2017.zip")
+    monkeypatch.setattr(pc, "LVIS_DIR", _lvis(tmp_path, {}))
     assert "present" in mod.check("coco_quarry")
 
     monkeypatch.setattr(pc, "COCO_TRAIN_ZIP", tmp_path / "images" / "gone.zip")
@@ -303,3 +304,96 @@ def test_every_declared_merge_is_a_real_union_named_in_c():
         assert len(set(parts)) > 1, f"{cls!r} merges one class, which is not a merge"
         assert pc.coco_classes_for(cls) == set(parts), f"{cls!r} does not resolve to its own parts"
         assert cls not in parts, f"{cls!r} is named as its own part; the roster name must be the NEW one"
+
+
+def _lvis(tmp_path: Path, boxes: dict[int, list[tuple[str, list[float]]]]) -> Path:
+    """Both LVIS splits, everything in `train`: ``{image_id: [(name, xywh), ...]}``."""
+    d = tmp_path / "lvis"
+    d.mkdir(exist_ok=True)
+    names = ["banana", "apple", "orange_(fruit)", "mandarin_orange", "ski"]
+    cats = [{"id": i + 1, "name": n} for i, n in enumerate(names)]
+    anns = [
+        {"id": k, "image_id": iid, "category_id": names.index(n) + 1, "bbox": b}
+        for k, (iid, n, b) in enumerate((iid, n, b) for iid, bs in boxes.items() for n, b in bs)
+    ]
+    (d / "lvis_v1_train.json").write_text(json.dumps({"categories": cats, "annotations": anns, "images": []}))
+    (d / "lvis_v1_val.json").write_text(json.dumps({"categories": cats, "annotations": [], "images": []}))
+    return d
+
+
+class TestLumpFilter:
+    """#3985: a fruit box is a positive only if LVIS says it is ONE fruit.
+
+    COCO draws one box round a bunch or a bowl, and the band is then the size of
+    the pile. The owner voted 120 of these and the LVIS ratio was the only signal
+    that separated them.
+    """
+
+    def test_one_fruit_is_kept_and_a_pile_is_not(self, mod, tmp_path: Path):
+        labels = {
+            1: {"banana": [[0, 0, 50, 50]]},  # LVIS agrees: one banana, same size
+            2: {"banana": [[0, 0, 60, 60]]},  # LVIS saw four small ones inside it
+            3: {"banana": [[0, 0, 50, 50]]},  # LVIS never boxed a banana here
+            4: {},
+        }
+        lvis = _lvis(
+            tmp_path,
+            {1: [("banana", [0, 0, 48, 48])], 2: [("banana", [0, 0, 20, 20])] * 4},
+        )
+        assert mod.lump_exclusions(labels, lvis) == {(2, "banana"), (3, "banana")}, (
+            "a pile goes, and so does a box nothing vouches for"
+        )
+
+    def test_the_cut_is_on_the_mean_box_not_the_count(self, mod, tmp_path: Path):
+        """Two apples COCO boxed separately are two agreeing boxes, not a pile."""
+        labels = {1: {"apple": [[0, 0, 30, 30], [40, 40, 70, 70]]}}
+        lvis = _lvis(tmp_path, {1: [("apple", [0, 0, 29, 29]), ("apple", [40, 40, 29, 29])]})
+        assert mod.lump_exclusions(labels, lvis) == set()
+
+    def test_either_lvis_name_vouches_for_orange(self, mod, tmp_path: Path):
+        labels = {1: {"orange": [[0, 0, 30, 30]]}}
+        lvis = _lvis(tmp_path, {1: [("mandarin_orange", [0, 0, 30, 30])]})
+        assert mod.lump_exclusions(labels, lvis) == set()
+
+    def test_a_class_outside_the_filter_is_never_touched(self, mod, tmp_path: Path):
+        """`skis` has a ratio as high as the fruit, but COCO's pair IS the object."""
+        import pile_config as pc
+
+        assert "skis" not in pc.SCALE_LUMP_FILTER and "potted plant" not in pc.SCALE_LUMP_FILTER
+        labels = {1: {"skis": [[0, 0, 80, 20]]}}
+        assert mod.lump_exclusions(labels, _lvis(tmp_path, {})) == set()
+
+    def test_a_missing_split_is_named(self, mod, tmp_path: Path):
+        lvis = _lvis(tmp_path, {})
+        (lvis / "lvis_v1_train.json").unlink()
+        with pytest.raises(SystemExit) as err:
+            mod.lump_exclusions({}, lvis)
+        assert "lvis_v1_train.json" in str(err.value), "val alone is 16% of COCO; train is not optional"
+
+    def test_an_excluded_pair_is_neither_positive_nor_clean(self, mod):
+        from pilebuild import scale_core
+
+        labels = {1: {"banana": [[10, 10, 40, 40]]}, 2: {"banana": [[10, 10, 40, 40]]}}
+        dims = {1: (100, 100), 2: (100, 100)}
+        supply, _, clean = scale_core.band_candidates(
+            labels, dims, unbanded=set(), classes=("banana",), excluded={(1, "banana")}
+        )
+        assert [i for ids in supply["banana"].values() for i in ids] == [2]
+        assert clean == [], "it still holds a banana, so it is no negative for anything"
+
+    def test_dropped_cells_are_not_built(self, mod, monkeypatch):
+        import pile_config as pc
+        from pilebuild import scale_core
+
+        monkeypatch.setattr(pc, "SCALE_CLASSES", ("banana",))
+        supply = {"banana": {b: [1, 2] for b in pc.BOX_BANDS}}
+        chosen = scale_core.designate_cells(supply, corrections={}, roster={})
+        assert "banana@small" not in chosen and "banana@large" in chosen
+        assert "banana@small" not in mod._cells_of("banana", supply), "the full corpus drops it too"
+
+    def test_every_dropped_cell_names_a_real_cell(self):
+        import pile_config as pc
+
+        for cell in pc.SCALE_DROPPED_CELLS:
+            cls, band = cell.split("@")
+            assert cls in pc.SCALE_CLASSES and band in pc.BOX_BANDS, cell

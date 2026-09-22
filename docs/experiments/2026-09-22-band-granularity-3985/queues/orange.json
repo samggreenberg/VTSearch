@@ -1,0 +1,370 @@
+{
+ "class": "orange",
+ "lvis_names": [
+  "orange_(fruit)",
+  "mandarin_orange"
+ ],
+ "seed": 20260922,
+ "items": [
+  {
+   "file": "orange_12b22e624d61.jpg",
+   "image_id": 567616,
+   "bbox": [
+    344.7,
+    226.37,
+    176.85,
+    185.0
+   ],
+   "ann_id": 1052668,
+   "ratio": 0.9995401378285244,
+   "n_coco": 2,
+   "n_lvis": 2,
+   "arm": "clean"
+  },
+  {
+   "file": "orange_b023b33a0bf5.jpg",
+   "image_id": 276434,
+   "bbox": [
+    244.08,
+    284.05,
+    103.27,
+    41.02
+   ],
+   "ann_id": 1556422,
+   "ratio": 2.548723177780466,
+   "n_coco": 4,
+   "n_lvis": 12,
+   "arm": "lumped"
+  },
+  {
+   "file": "orange_7061f0d57785.jpg",
+   "image_id": 283070,
+   "bbox": [
+    17.31,
+    138.5,
+    137.54,
+    128.88
+   ],
+   "ann_id": 1557820,
+   "ratio": 0.9930552325415198,
+   "n_coco": 5,
+   "n_lvis": 5,
+   "arm": "clean"
+  },
+  {
+   "file": "orange_8769c7f6a865.jpg",
+   "image_id": 329141,
+   "bbox": [
+    141.64,
+    19.5,
+    63.11,
+    119.72
+   ],
+   "ann_id": 1912579,
+   "ratio": 0.8972921524561309,
+   "n_coco": 5,
+   "n_lvis": 6,
+   "arm": "clean"
+  },
+  {
+   "file": "orange_238d46a5d471.jpg",
+   "image_id": 229302,
+   "bbox": [
+    62.12,
+    103.91,
+    144.56,
+    187.48
+   ],
+   "ann_id": 1051089,
+   "ratio": 1.0774187586304564,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "clean"
+  },
+  {
+   "file": "orange_5446ce58c02b.jpg",
+   "image_id": 217753,
+   "bbox": [
+    478.73,
+    302.76,
+    161.27,
+    158.98
+   ],
+   "ann_id": 1557564,
+   "ratio": 2.795708220627783,
+   "n_coco": 9,
+   "n_lvis": 20,
+   "arm": "lumped"
+  },
+  {
+   "file": "orange_7b63bf8be92b.jpg",
+   "image_id": 322411,
+   "bbox": [
+    404.96,
+    210.12,
+    70.28,
+    67.74
+   ],
+   "ann_id": 1556145,
+   "ratio": 1.191185814782791,
+   "n_coco": 1,
+   "n_lvis": 2,
+   "arm": "clean"
+  },
+  {
+   "file": "orange_5ec06b1dd41f.jpg",
+   "image_id": 254828,
+   "bbox": [
+    2.67,
+    151.86,
+    79.5,
+    34.27
+   ],
+   "ann_id": 1557982,
+   "ratio": 5.374255472942363,
+   "n_coco": 9,
+   "n_lvis": 21,
+   "arm": "lumped"
+  },
+  {
+   "file": "orange_c1d6da20ff41.jpg",
+   "image_id": 45472,
+   "bbox": [
+    411.01,
+    173.19,
+    217.46,
+    174.55
+   ],
+   "ann_id": 1051276,
+   "ratio": 4.5404910165917745,
+   "n_coco": 1,
+   "n_lvis": 4,
+   "arm": "lumped"
+  },
+  {
+   "file": "orange_782abfca281a.jpg",
+   "image_id": 579697,
+   "bbox": [
+    39.15,
+    299.34,
+    39.69,
+    38.54
+   ],
+   "ann_id": 2114209,
+   "ratio": 1.7135187736639423,
+   "n_coco": 13,
+   "n_lvis": 65,
+   "arm": "lumped"
+  },
+  {
+   "file": "orange_a17b8f631f21.jpg",
+   "image_id": 386277,
+   "bbox": [
+    211.98,
+    101.45,
+    261.44,
+    272.55
+   ],
+   "ann_id": 1051688,
+   "ratio": 1.0064047837179404,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "clean"
+  },
+  {
+   "file": "orange_d86ec1758072.jpg",
+   "image_id": 136772,
+   "bbox": [
+    73.8,
+    30.98,
+    303.48,
+    195.69
+   ],
+   "ann_id": 1051446,
+   "ratio": 4.378330777275589,
+   "n_coco": 1,
+   "n_lvis": 3,
+   "arm": "lumped"
+  },
+  {
+   "file": "orange_67c861e5784e.jpg",
+   "image_id": 365517,
+   "bbox": [
+    409.98,
+    384.0,
+    98.26,
+    90.35
+   ],
+   "ann_id": 1051189,
+   "ratio": 0.9848622663658262,
+   "n_coco": 3,
+   "n_lvis": 3,
+   "arm": "clean"
+  },
+  {
+   "file": "orange_e821b2f36b3d.jpg",
+   "image_id": 360277,
+   "bbox": [
+    374.96,
+    141.18,
+    140.05,
+    138.91
+   ],
+   "ann_id": 1053913,
+   "ratio": 1.1302565341429314,
+   "n_coco": 13,
+   "n_lvis": 15,
+   "arm": "clean"
+  },
+  {
+   "file": "orange_858522f598b0.jpg",
+   "image_id": 375840,
+   "bbox": [
+    64.52,
+    148.09,
+    120.1,
+    113.63
+   ],
+   "ann_id": 1912341,
+   "ratio": 0.9731797315171175,
+   "n_coco": 2,
+   "n_lvis": 2,
+   "arm": "clean"
+  },
+  {
+   "file": "orange_a13238ef546d.jpg",
+   "image_id": 402632,
+   "bbox": [
+    101.74,
+    198.15,
+    70.79,
+    82.59
+   ],
+   "ann_id": 1053644,
+   "ratio": 11.469585504462147,
+   "n_coco": 3,
+   "n_lvis": 24,
+   "arm": "lumped"
+  },
+  {
+   "file": "orange_25e05ebf7aa1.jpg",
+   "image_id": 386210,
+   "bbox": [
+    208.15,
+    181.42,
+    108.63,
+    110.95
+   ],
+   "ann_id": 1051462,
+   "ratio": 4.743937543961957,
+   "n_coco": 9,
+   "n_lvis": 40,
+   "arm": "lumped"
+  },
+  {
+   "file": "orange_e95901a8bcb9.jpg",
+   "image_id": 435328,
+   "bbox": [
+    138.43,
+    172.74,
+    269.67,
+    116.82
+   ],
+   "ann_id": 1556014,
+   "ratio": 2.8468626116410025,
+   "n_coco": 2,
+   "n_lvis": 4,
+   "arm": "lumped"
+  },
+  {
+   "file": "orange_2cdf95581fd7.jpg",
+   "image_id": 110999,
+   "bbox": [
+    280.44,
+    457.79,
+    72.09,
+    63.39
+   ],
+   "ann_id": 1557331,
+   "ratio": 1.00777098145206,
+   "n_coco": 2,
+   "n_lvis": 2,
+   "arm": "clean"
+  },
+  {
+   "file": "orange_88b34e09021e.jpg",
+   "image_id": 365103,
+   "bbox": [
+    0.0,
+    132.07,
+    199.19,
+    280.02
+   ],
+   "ann_id": 1051056,
+   "ratio": 6.625429182789584,
+   "n_coco": 1,
+   "n_lvis": 4,
+   "arm": "lumped"
+  },
+  {
+   "file": "orange_c6ba94b737d0.jpg",
+   "image_id": 481407,
+   "bbox": [
+    241.05,
+    120.03,
+    91.99,
+    91.29
+   ],
+   "ann_id": 1052113,
+   "ratio": 0.9172434900780518,
+   "n_coco": 6,
+   "n_lvis": 6,
+   "arm": "clean"
+  },
+  {
+   "file": "orange_bdd0e527a128.jpg",
+   "image_id": 389152,
+   "bbox": [
+    349.48,
+    255.46,
+    116.5,
+    74.43
+   ],
+   "ann_id": 1557208,
+   "ratio": 1.7059074437877042,
+   "n_coco": 3,
+   "n_lvis": 5,
+   "arm": "lumped"
+  },
+  {
+   "file": "orange_00f34bb65aa4.jpg",
+   "image_id": 47388,
+   "bbox": [
+    119.74,
+    169.57,
+    64.15,
+    68.83
+   ],
+   "ann_id": 1051729,
+   "ratio": 1.0199110535650244,
+   "n_coco": 2,
+   "n_lvis": 2,
+   "arm": "clean"
+  },
+  {
+   "file": "orange_92a1de989622.jpg",
+   "image_id": 325548,
+   "bbox": [
+    306.87,
+    129.71,
+    218.04,
+    239.24
+   ],
+   "ann_id": 1053809,
+   "ratio": 9.178740892184203,
+   "n_coco": 4,
+   "n_lvis": 32,
+   "arm": "lumped"
+  }
+ ]
+}

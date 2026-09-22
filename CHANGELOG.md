@@ -24,7 +24,18 @@ not list every commit. Use `git log` for the full history.
   `detector_not_found` / `dataset_not_found` and a message telling you to
   reload. Loading a different detector from such a tab no longer fails on the
   stale one either.
-
+- **Opening Train on a new dataset/detector pair now re-runs the sort you
+  left it on, instead of showing a stale one** (issue #4092). The sort
+  controls (Sort mode, Select mode, the text query) carried over from the last
+  Train session, but nothing re-ran them. You could see "aaa" in the Text box
+  above a ranking that had nothing to do with it, or above the previous
+  dataset's ranking. The rule now is that the controls carry over and the
+  ranking is re-run for the new pair. This applies both when you open Train
+  from the dashboard and when you switch pairs in the top bar. If the new pair
+  can't run that sort, the controls fall back to Text with your query: Learned
+  needs a good and a bad label on the new detector, and "Sort by this" needs
+  its own dataset. When Autopilot is running, it still picks the sort, as
+  before.
 - **Pressing Enter on a Text sort query now hands focus back, so you can vote
   with the arrow keys straight away** (issue #3935). In Manual mode, typing a
   keyword and hitting Enter resorted the left panel and selected a new item in

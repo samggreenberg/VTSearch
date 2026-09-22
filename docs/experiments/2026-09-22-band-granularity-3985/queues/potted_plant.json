@@ -1,0 +1,370 @@
+{
+ "class": "potted plant",
+ "lvis_names": [
+  "flower_arrangement",
+  "flowerpot"
+ ],
+ "seed": 20260922,
+ "items": [
+  {
+   "file": "potted_plant_9f5a77f4d08c.jpg",
+   "image_id": 575970,
+   "bbox": [
+    561.01,
+    183.34,
+    33.0,
+    41.34
+   ],
+   "ann_id": 20026,
+   "ratio": 0.23011735576937345,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "clean"
+  },
+  {
+   "file": "potted_plant_2fc8193df1a2.jpg",
+   "image_id": 171742,
+   "bbox": [
+    4.31,
+    235.9,
+    175.82,
+    236.22
+   ],
+   "ann_id": 19898,
+   "ratio": 1.1436792766131356,
+   "n_coco": 7,
+   "n_lvis": 9,
+   "arm": "clean"
+  },
+  {
+   "file": "potted_plant_28d2c975c617.jpg",
+   "image_id": 526696,
+   "bbox": [
+    150.04,
+    204.41,
+    34.7,
+    62.38
+   ],
+   "ann_id": 20453,
+   "ratio": 1.1701760281354392,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "clean"
+  },
+  {
+   "file": "potted_plant_66bd6745d3c0.jpg",
+   "image_id": 177824,
+   "bbox": [
+    118.73,
+    211.39,
+    33.42,
+    38.62
+   ],
+   "ann_id": 292307,
+   "ratio": 0.9946213954348597,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "clean"
+  },
+  {
+   "file": "potted_plant_134e1f927996.jpg",
+   "image_id": 181888,
+   "bbox": [
+    507.11,
+    212.97,
+    57.6,
+    106.17
+   ],
+   "ann_id": 20609,
+   "ratio": 14.892556401473188,
+   "n_coco": 2,
+   "n_lvis": 13,
+   "arm": "lumped"
+  },
+  {
+   "file": "potted_plant_f829cbf5172a.jpg",
+   "image_id": 372870,
+   "bbox": [
+    189.68,
+    0.64,
+    449.89,
+    350.76
+   ],
+   "ann_id": 20217,
+   "ratio": 1.0346680501317105,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "clean"
+  },
+  {
+   "file": "potted_plant_e387726cd269.jpg",
+   "image_id": 578922,
+   "bbox": [
+    0.0,
+    0.0,
+    526.38,
+    634.61
+   ],
+   "ann_id": 24161,
+   "ratio": 1.000722613335698,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "clean"
+  },
+  {
+   "file": "potted_plant_b20e687395d5.jpg",
+   "image_id": 221708,
+   "bbox": [
+    309.69,
+    251.33,
+    50.7,
+    43.11
+   ],
+   "ann_id": 291903,
+   "ratio": 0.797208075503333,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "clean"
+  },
+  {
+   "file": "potted_plant_f4f5b6200c67.jpg",
+   "image_id": 5804,
+   "bbox": [
+    232.35,
+    19.83,
+    79.54,
+    110.07
+   ],
+   "ann_id": 20854,
+   "ratio": 3.977817463714266,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "lumped"
+  },
+  {
+   "file": "potted_plant_fdc9611bf9eb.jpg",
+   "image_id": 529568,
+   "bbox": [
+    0.0,
+    351.56,
+    70.13,
+    150.94
+   ],
+   "ann_id": 23607,
+   "ratio": 1.6106063532820516,
+   "n_coco": 1,
+   "n_lvis": 2,
+   "arm": "lumped"
+  },
+  {
+   "file": "potted_plant_951842b84ccb.jpg",
+   "image_id": 404484,
+   "bbox": [
+    207.4,
+    69.19,
+    106.79,
+    82.39
+   ],
+   "ann_id": 23289,
+   "ratio": 21.024157608036585,
+   "n_coco": 1,
+   "n_lvis": 2,
+   "arm": "lumped"
+  },
+  {
+   "file": "potted_plant_ebe3f28f932e.jpg",
+   "image_id": 228155,
+   "bbox": [
+    175.34,
+    13.0,
+    81.79,
+    142.32
+   ],
+   "ann_id": 1605938,
+   "ratio": 9.371352498778503,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "lumped"
+  },
+  {
+   "file": "potted_plant_154a44e910fd.jpg",
+   "image_id": 318330,
+   "bbox": [
+    16.98,
+    269.44,
+    64.31,
+    47.52
+   ],
+   "ann_id": 1954291,
+   "ratio": 0.7460801359479771,
+   "n_coco": 3,
+   "n_lvis": 3,
+   "arm": "clean"
+  },
+  {
+   "file": "potted_plant_2e9856736fc5.jpg",
+   "image_id": 223357,
+   "bbox": [
+    41.8,
+    66.45,
+    523.01,
+    406.19
+   ],
+   "ann_id": 22789,
+   "ratio": 2.238329628798439,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "lumped"
+  },
+  {
+   "file": "potted_plant_1d258655f342.jpg",
+   "image_id": 58102,
+   "bbox": [
+    545.68,
+    112.68,
+    41.2,
+    116.78
+   ],
+   "ann_id": 1608317,
+   "ratio": 1.1634197528687928,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "clean"
+  },
+  {
+   "file": "potted_plant_12c878d425ad.jpg",
+   "image_id": 137246,
+   "bbox": [
+    287.76,
+    172.87,
+    107.08,
+    126.33
+   ],
+   "ann_id": 1608386,
+   "ratio": 1.1457953873173174,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "clean"
+  },
+  {
+   "file": "potted_plant_dc599ee34c3d.jpg",
+   "image_id": 459147,
+   "bbox": [
+    261.74,
+    381.27,
+    130.26,
+    45.73
+   ],
+   "ann_id": 24317,
+   "ratio": 1.108496267750988,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "clean"
+  },
+  {
+   "file": "potted_plant_52f4712c06fd.jpg",
+   "image_id": 280971,
+   "bbox": [
+    120.0,
+    344.6,
+    43.24,
+    38.72
+   ],
+   "ann_id": 1608277,
+   "ratio": 4.228508283447028,
+   "n_coco": 6,
+   "n_lvis": 2,
+   "arm": "lumped"
+  },
+  {
+   "file": "potted_plant_105a391155ef.jpg",
+   "image_id": 375407,
+   "bbox": [
+    223.0,
+    170.61,
+    25.47,
+    56.39
+   ],
+   "ann_id": 1952615,
+   "ratio": 2.634506350131647,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "lumped"
+  },
+  {
+   "file": "potted_plant_53f2c1e2546f.jpg",
+   "image_id": 383549,
+   "bbox": [
+    509.04,
+    118.4,
+    101.77,
+    121.69
+   ],
+   "ann_id": 21448,
+   "ratio": 3.47580989649464,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "lumped"
+  },
+  {
+   "file": "potted_plant_4c561763e1c5.jpg",
+   "image_id": 435389,
+   "bbox": [
+    0.0,
+    77.42,
+    314.63,
+    336.11
+   ],
+   "ann_id": 292164,
+   "ratio": 1.9904460938125528,
+   "n_coco": 1,
+   "n_lvis": 2,
+   "arm": "lumped"
+  },
+  {
+   "file": "potted_plant_472c701f7373.jpg",
+   "image_id": 125845,
+   "bbox": [
+    398.37,
+    338.73,
+    28.63,
+    60.85
+   ],
+   "ann_id": 1608594,
+   "ratio": 1.9252083570446743,
+   "n_coco": 4,
+   "n_lvis": 4,
+   "arm": "lumped"
+  },
+  {
+   "file": "potted_plant_a41bc2b08a2b.jpg",
+   "image_id": 221502,
+   "bbox": [
+    14.09,
+    118.55,
+    121.87,
+    138.44
+   ],
+   "ann_id": 1956041,
+   "ratio": 0.9761103521136388,
+   "n_coco": 1,
+   "n_lvis": 2,
+   "arm": "clean"
+  },
+  {
+   "file": "potted_plant_b342ab4f83e2.jpg",
+   "image_id": 307156,
+   "bbox": [
+    409.41,
+    111.56,
+    74.61,
+    138.49
+   ],
+   "ann_id": 19275,
+   "ratio": 11.118643831801725,
+   "n_coco": 2,
+   "n_lvis": 1,
+   "arm": "lumped"
+  }
+ ]
+}

@@ -252,9 +252,9 @@ describe('LabelViewComponent', () => {
     const pane = () => fixture.nativeElement.querySelector('vt-center-panel .exhausted-pane');
 
     it('says the dataset is done on a fresh entry to a finished detector', async () => {
-      // A fresh entry ranks nothing (`seedRankingIfUnranked` is armed by a pair
-      // *reload*, not by ngOnInit), so this is the state the user comes back
-      // to: every item labeled, `sortOrder` empty.
+      // A fresh entry with no sort to carry over ranks nothing (the default
+      // controls are Text with an empty query, #4092), so this is the state the
+      // user comes back to: every item labeled, `sortOrder` empty.
       flushInitialRequests(allLabeled);
       await settleResource();
 
@@ -1122,6 +1122,55 @@ describe('LabelViewComponent', () => {
     });
   });
 
+  // Issue #4092: opening Train from the dashboard on a new pair kept the last
+  // session's sort controls *and* its ranking, and re-ran neither — so the
+  // controls claimed a sort ("aaa") that was not the one on screen. The rule
+  // now: the controls carry over, the ranking is dropped and re-derived.
+  describe('fresh entry carries the sort over (#4092)', () => {
+    async function enterWithVotes(): Promise<void> {
+      flushInitialRequests();
+      // The entry seed is deferred a beat, as the pair-switch one is.
+      await new Promise<void>((resolve) => setTimeout(resolve, 400));
+    }
+
+    it('drops the previous session\'s ranking', async () => {
+      component.autopilotEnabled.set(false);
+      // A ranking left behind by the last Train/Find session, on other ids.
+      component.sortState.setSortResults([{ id: 99, score: 0.9 }], 0.5);
+
+      await enterWithVotes();
+
+      expect(component.sortState.sortOrder).toEqual([]);
+    });
+
+    it('re-runs the carried text query against this pair with Autopilot off', async () => {
+      component.autopilotEnabled.set(false);
+      component.sortState.setTextQuery('aaa');
+
+      await enterWithVotes();
+
+      const textSort = httpMock.match('/api/sort');
+      expect(textSort.length).toBe(1);
+      expect(textSort[0].request.body).toEqual({ text: 'aaa' });
+      textSort[0].flush({ results: [{ id: 2, similarity: 0.9 }, { id: 1, similarity: 0.1 }], threshold: 0.5 });
+      TestBed.tick();
+      // The first ranking seeds the centre, as it does after a pair switch.
+      expect(component.mediaState.selectedId()).toBe(2);
+    });
+
+    it('leaves the sort to Autopilot when it is running', async () => {
+      component.sortState.setTextQuery('aaa');
+      TestBed.inject(LabelSessionService).textQuery = 'the hint';
+
+      await enterWithVotes();
+
+      // Only Autopilot's own seed sort, on the detector's hint — the backstop
+      // does not add a second one on the carried query.
+      const bodies = httpMock.match('/api/sort').map((r) => r.request.body);
+      expect(bodies).not.toContainEqual({ text: 'aaa' });
+    });
+  });
+
   // Issue #3510: a pair switch reloads medias and votes but re-ran no sort, so
   // the pair it landed on kept the empty ranking the reset left behind — an
   // empty work queue and a placeholder in the centre, where a fresh entry to
@@ -1251,11 +1300,52 @@ describe('LabelViewComponent', () => {
       activeContext.setActivePair('ds2', 'det2');
       await flushPairReload({ good: [], bad: [] });
 
-      // Entering the window with Autopilot off ranks nothing until the user
-      // sorts, so a switch must not rank either — and must not hijack the sort
-      // mode they chose.
+      // The carried-over sort is Text with an empty query, so there is nothing
+      // to re-run — and the detector's own hint must not hijack the sort mode
+      // they chose (#4092: the sort carries over; Autopilot owns the hint).
       httpMock.expectNone('/api/sort');
       httpMock.expectNone('/api/learned-sort');
+    });
+
+    it('re-runs the carried text sort on the new pair with Autopilot off (#4092)', async () => {
+      const activeContext = seedPair();
+      component.autopilotEnabled.set(false);
+      flushInitialRequests();
+      flushDetectorRegistry();
+      TestBed.inject(AutopilotStateService).clear();
+      await new Promise<void>((resolve) => setTimeout(resolve, 400));
+      httpMock.match('/api/sort');
+      // The user's own sort: Text, "aaa". The new detector's hint is different,
+      // and is Autopilot's to use, not the manual controls'.
+      component.sortState.setTextQuery('aaa');
+      TestBed.inject(LabelSessionService).textQuery = 'the new hint';
+
+      activeContext.setActivePair('ds2', 'det2');
+      await flushPairReload({ good: [], bad: [] });
+
+      const textSort = httpMock.match('/api/sort');
+      expect(textSort.length).toBe(1);
+      expect(textSort[0].request.body).toEqual({ text: 'aaa' });
+      expect(component.sortState.sortMode).toBe('text');
+    });
+
+    it('falls a carried learned sort back to Text when the new pair has no labelset (#4092)', async () => {
+      const activeContext = seedPair();
+      component.autopilotEnabled.set(false);
+      flushInitialRequests();
+      flushDetectorRegistry();
+      TestBed.inject(AutopilotStateService).clear();
+      await new Promise<void>((resolve) => setTimeout(resolve, 400));
+      component.sortState.setSortMode('learned');
+      component.sortState.setTextQuery('aaa');
+
+      activeContext.setActivePair('ds2', 'det2');
+      await flushPairReload({ good: [], bad: [] });
+
+      // The Learned radio is disabled on this pair, so it must not stay checked.
+      httpMock.expectNone('/api/learned-sort');
+      expect(component.sortState.sortMode).toBe('text');
+      expect(httpMock.match('/api/sort').map((r) => r.request.body)).toEqual([{ text: 'aaa' }]);
     });
 
     it('stands down when something already ranked the new pair', async () => {
