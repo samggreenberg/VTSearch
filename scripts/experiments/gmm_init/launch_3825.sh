@@ -128,6 +128,10 @@ submit() {
 n_cells() { ( cd "$CALIB" && python run_cells.py --print-cells 2>/dev/null | tail -1 ); }
 
 AB_ARMS="${AB_ARMS:-baseline ll1e-3 ll1e-6}"
+# The runner, overridable so a later study's arms module can reuse this grid
+# definition unchanged (#3839 runs `run_cells_arm_3839.py`, which reads
+# ANCHORED_RULE_ARM; both names are exported so either runner sees its arm).
+AB_RUNNER="${AB_RUNNER:-run_cells_arm_3825.py}"
 
 case "${1:-status}" in
 gate)
@@ -166,7 +170,7 @@ ab)
       --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" \
       --partition="$PARTITION" --export=ALL \
       --output="$LOGS/ab-$arm-%A_%a.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && export CALIB_RESULTS=$AB_RESULTS ANCHORED_STOP_ARM=$arm && cd $HERE && python run_cells_arm_3825.py"
+      --wrap="source $WT/gridenv.sh && $ENVX && export CALIB_RESULTS=$AB_RESULTS ANCHORED_STOP_ARM=$arm ANCHORED_RULE_ARM=$arm && cd $HERE && python $AB_RUNNER"
   done
   ;;
 
