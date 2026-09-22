@@ -676,7 +676,7 @@ def translate_ucsf(
     by_sheet: dict[str, dict[int, Optional[str]]] = defaultdict(dict)
     rel_vote: dict[str, tuple[str, str]] = {}
     for fn, q in questions.items():
-        if q["task"] == "ucsf_classes":
+        if q["task"] in ("ucsf_classes", "ucsf_banded"):
             by_sheet[q["key"]["sheet"]][q["key"]["cell"]] = votes.get(fn)
         elif q["task"] == "ucsf_classes_relation" and fn in votes:
             rel_vote[q["key"]["proposal"]] = (votes[fn], q["key"]["target"])
@@ -697,7 +697,8 @@ def translate_ucsf(
                 vote, target = rel_vote[r["proposal"]]
                 r["relation"] = f"extends {target}" if vote == "good" else "new"
                 r["verdict_source"] = "vtsearch"
-            else:
+            elif not str(r.get("relation", "")).strip():
+                # A relation ruled earlier and carried into this slate is answered.
                 unanswered.append(f"{r['proposal']}: relation unanswered")
         out.append(r)
     return out, unanswered
@@ -802,11 +803,22 @@ def translate_completeness2(rows, questions, votes):
     return out, unanswered
 
 
+def _translate_surprise(rows, questions, votes):
+    from surprise_review import translate_surprise  # noqa: PLC0415
+
+    return translate_surprise(rows, questions, votes)
+
+
 #: task (as written in a manifest) -> (verdict source for a corpus, translator)
 TRANSLATORS: dict[str, tuple[Callable[[Path], Path], Callable[..., Any]]] = {
     "ucsf_classes": (lambda corpus: corpus / "audit" / "ucsf_classes" / "verdicts.jsonl", translate_ucsf),
     "ucsf_classes_relation": (lambda corpus: corpus / "audit" / "ucsf_classes" / "verdicts.jsonl", translate_ucsf),
+    # Banded pages reviewed into known negatives (#4088): single-cell ucsf_classes
+    # sheets, in a slate of their own so the admission slate is never rewritten.
+    "ucsf_banded": (lambda corpus: corpus / "audit" / "ucsf_banded" / "verdicts.jsonl", translate_ucsf),
     "query_crops": (lambda corpus: corpus / "audit" / "query_crops" / "verdicts.jsonl", translate_query_crops),
+    # Top-ranked presumed negatives of a run (#4089); the translator lives with its pass.
+    "surprise": (lambda corpus: corpus / "audit" / "surprise" / "verdicts.jsonl", _translate_surprise),
     "box_tighten": (lambda corpus: corpus / "audit" / "box_tighten" / "verdicts.jsonl", translate_box_tighten),
     "completeness2": (lambda corpus: COMPLETENESS2, translate_completeness2),
 }
