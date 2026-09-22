@@ -36,6 +36,7 @@ __all__ = [
     "CorridorSchedule",
     "WeightSchedule",
     "get_schedule",
+    "parse_parametric_schedule",
     "schedule_names",
 ]
 
@@ -223,22 +224,25 @@ class CorridorSchedule(BlendSchedule):
     targeted version of that: it is a no-op whenever x-cal is sensible and only
     bites when it leaves the corridor the fitted GMM considers plausible.
 
-    The corridor is the interval between the two component means.  Outside it a
-    cut is nearly always degenerate - below ``mu_lo`` it admits the entire Bad
-    mode, above ``mu_hi`` it rejects the entire Good mode - while the midpoint
-    (the production GMM cut) is its exact centre.  Unramped, that corridor
-    applies at every label count: the family's own thesis is that a wild cut is
-    never acceptable, however many labels back it.
+    The corridor is centred on the GMM cut and reaches ``width`` of the way from
+    it to each component mean: ``width=1`` is the full interval between the two
+    means (the #2841 arm), ``width=0`` collapses it onto the GMM cut (pure GMM).
+    #2841 measured the full interval as a no-op on region voting (p=0.62)
+    because it is far wider than the x-cal error, so the width is the knob
+    (#3551).  Outside the full interval a cut is nearly always degenerate - below
+    ``mu_lo`` it admits the entire Bad mode, above ``mu_hi`` it rejects the entire
+    Good mode - while the midpoint (the GMM cut) is its exact centre.
 
-    With *ramped* the corridor instead opens from the midpoint at ``lo`` labels
-    (zero width == pure GMM) to the full interval at ``hi``, and then **releases
-    entirely** - past ``hi`` the x-cal cut is returned unclamped, matching the
-    production philosophy that enough labels earn full trust.  Note this makes
-    ``ramped`` discontinuous at ``hi`` for a wild x-cal: just below, the cut is
-    clamped to almost the full corridor; at ``hi`` it is not clamped at all.
-    That is deliberate (it is what "ramped" means here) but it is also in
-    tension with the unramped variant's thesis, which is why both are measured.
-    See the #2841 report for which one the data prefers.
+    Unramped, the corridor applies at every label count: the family's own thesis
+    is that a wild cut is never acceptable, however many labels back it.  With
+    *ramped* it opens from a point at ``lo`` labels to its full ``width`` at
+    ``hi`` and **stays there**.  It used to release entirely past ``hi`` (return
+    the x-cal cut unclamped), which made the threshold jump from nearly the
+    corridor edge to the raw cut between ``hi - 1`` and ``hi`` labels for any
+    wild x-cal - most visibly on the fold fallback, where the x-cal side is the
+    ``NO_GOOD_THRESHOLD`` sentinel and the jump is from ``mu_hi`` to "admit
+    nothing".  That discontinuity confounded any sweep of the corridor (#3551),
+    and holding the corridor is also what the unramped variant's thesis says.
 
     Falls back to the plain blend when no GMM fit is available (the median
     fallback path), so the corridor never silently becomes a no-op cut.
@@ -249,6 +253,13 @@ class CorridorSchedule(BlendSchedule):
     lo: float = 6.0
     hi: float = 20.0
     ramped: bool = True
+    width: float = 1.0
+
+    def openness(self, ctx: BlendContext) -> float:
+        """Fraction of the way from the GMM cut to each component mean, in ``[0, width]``."""
+        if self.ramped:
+            return self.width * _ramp(ctx.n_labels, self.lo, self.hi)
+        return self.width
 
     def weight(self, ctx: BlendContext) -> float:
         # A corridor always consults the x-cal cut (it is the value being
@@ -259,22 +270,19 @@ class CorridorSchedule(BlendSchedule):
         # weighted-average interpretation, so the 1.0 returned here should be
         # read as "x-cal is consulted", and the ``blend_weight`` column of a
         # corridor row means nothing more than that.
-        if self.ramped and _ramp(ctx.n_labels, self.lo, self.hi) <= 0.0:
-            return 0.0
-        return 1.0
+        return 0.0 if self.openness(ctx) <= 0.0 else 1.0
 
     def combine(self, xcal: float, cut: float, ctx: BlendContext, fit: object | None = None) -> float:
         mu_lo = getattr(fit, "mu_lo", None)
         mu_hi = getattr(fit, "mu_hi", None)
         if mu_lo is None or mu_hi is None:
             return super().combine(xcal, cut, ctx, fit)
-        lo_edge, hi_edge = (mu_lo, mu_hi) if mu_lo <= mu_hi else (mu_hi, mu_lo)
-        if self.ramped:
-            openness = _ramp(ctx.n_labels, self.lo, self.hi)
-            if openness >= 1.0:
-                return xcal
-            lo_edge = cut + (lo_edge - cut) * openness
-            hi_edge = cut + (hi_edge - cut) * openness
+        lo_mean, hi_mean = (mu_lo, mu_hi) if mu_lo <= mu_hi else (mu_hi, mu_lo)
+        f = self.openness(ctx)
+        lo_edge = cut + (lo_mean - cut) * f
+        hi_edge = cut + (hi_mean - cut) * f
+        if lo_edge > hi_edge:  # a cut outside its own means; keep the interval valid
+            lo_edge, hi_edge = hi_edge, lo_edge
         return max(lo_edge, min(hi_edge, xcal))
 
 
@@ -326,7 +334,7 @@ _SCHEDULES: tuple[BlendSchedule, ...] = (
     ),
     # --- family E: bound the x-cal cut instead of averaging it ---
     CorridorSchedule("corridor", "Clamp x-cal between the component means", ramped=False),
-    CorridorSchedule("corridor_ramp", "Corridor opening from the midpoint over 6→20", ramped=True),
+    CorridorSchedule("corridor_ramp", "Corridor opening from the midpoint over 6→20, then held", ramped=True),
 )
 
 SAFE_BLEND_SCHEDULES: dict[str, BlendSchedule] = {s.name: s for s in _SCHEDULES}
@@ -371,14 +379,71 @@ def production_schedule_for(*, region_voting: bool | None) -> str:
     return PRODUCTION_SCHEDULE_BY_MODE["region" if region_voting else "binary"]
 
 
+#: Families a **parametric** schedule name may instantiate (#3551), and the keys
+#: each accepts.  A parametric name is ``family:key=value:key=value``, e.g.
+#: ``rare:lo=1:hi=16`` or ``corridor:w=0.2``.  They exist so a tuning sweep can
+#: name any point of a family's grid without every point becoming a registry
+#: entry; they are never shipped (production resolves through
+#: :data:`PRODUCTION_SCHEDULE_BY_MODE`, whose values must be registry names).
+#: ``:`` is the separator because schedule lists travel comma-separated in
+#: ``CALIB_SCHEDULE_VARIANTS``.
+_PARAMETRIC_FAMILIES: dict[str, tuple[str, ...]] = {
+    "labels": ("lo", "hi", "cap", "shape"),
+    "good": ("lo", "hi", "cap", "shape"),
+    "rare": ("lo", "hi", "cap", "shape"),
+    "corridor": ("w",),
+    "corridor_ramp": ("w", "lo", "hi"),
+}
+
+
+def parse_parametric_schedule(name: str) -> BlendSchedule:
+    """Build the schedule a ``family:key=value:...`` name describes.
+
+    Raises ``ValueError`` on an unknown family, an unknown or repeated key, a
+    missing ramp endpoint, or a value out of range - a typo in a sweep grid must
+    fail the cell, not quietly measure a different schedule.
+    """
+    family, _, rest = name.partition(":")
+    if family not in _PARAMETRIC_FAMILIES or not rest:
+        raise ValueError(f"not a parametric schedule name: {name!r}")
+    params: dict[str, str] = {}
+    for part in rest.split(":"):
+        key, eq, value = part.partition("=")
+        if not eq or key not in _PARAMETRIC_FAMILIES[family] or key in params:
+            raise ValueError(f"bad parameter {part!r} in schedule {name!r}")
+        params[key] = value
+    if family.startswith("corridor"):
+        width = float(params.get("w", "1"))
+        if not 0.0 <= width <= 1.0:
+            raise ValueError(f"corridor width must lie in [0, 1]: {name!r}")
+        if family == "corridor":
+            return CorridorSchedule(name, f"Corridor at {width:g} of the mean gap", ramped=False, width=width)
+        lo, hi = float(params.get("lo", "6")), float(params.get("hi", "20"))
+        return CorridorSchedule(name, f"Corridor opening to {width:g} over {lo:g}->{hi:g}", lo=lo, hi=hi, width=width)
+    if "lo" not in params or "hi" not in params:
+        raise ValueError(f"schedule {name!r} needs both lo and hi")
+    lo, hi = float(params["lo"]), float(params["hi"])
+    cap = float(params.get("cap", "1"))
+    shape = params.get("shape", "linear")
+    if hi < lo or not 0.0 <= cap <= 1.0 or shape not in _SHAPES:
+        raise ValueError(f"out-of-range parameter in schedule {name!r}")
+    return WeightSchedule(
+        name, f"Ramp on {family} {lo:g}->{hi:g}, cap {cap:g}", lo=lo, hi=hi, stat=family, shape=shape, cap=cap
+    )
+
+
 def get_schedule(name: str | None = None) -> BlendSchedule:
     """Look up a schedule by name; ``None`` yields the mode-agnostic default.
 
     Prefer passing an explicit name resolved through
     :func:`production_schedule_for` - the default here cannot know the voting
-    mode, and the two modes want different curves.
+    mode, and the two modes want different curves.  A name containing ``:`` is
+    a parametric point of a family (:func:`parse_parametric_schedule`), which is
+    how the #3551 sweep names its tuning grid.
     """
     key = name or PRODUCTION_SCHEDULE
+    if ":" in key:
+        return parse_parametric_schedule(key)
     try:
         return SAFE_BLEND_SCHEDULES[key]
     except KeyError:

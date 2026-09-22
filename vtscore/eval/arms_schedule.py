@@ -34,6 +34,26 @@ def _schedule_variant_rows(
     same per-step model against the same held-out test scores, so the rows are
     paired within a step by construction and differ only in the mix-in rule.
 
+    **What these rows are on today's stack (#3551).**  The shipped threshold is
+    the fold-anchored fused cut; the schedule blend is only its *fallback*, for
+    steps with no usable calibration folds.  So a schedule row means two
+    different things depending on the step, and each row carries the shipped
+    path's own ``shipped_provenance`` and ``fold_fallback`` so the two are never
+    pooled by accident:
+
+    * on a **fallback** step (``shipped_provenance == "gmm_blend"``) the x-cal
+      side is production's ``NO_GOOD_THRESHOLD`` substitution and the row is
+      exactly what the app would ship under that schedule - the shipped
+      schedule's row reproduces the base row bit-for-bit, which is the fidelity
+      check;
+    * on a **fused** step it is a *replacement* counterfactual: the retired
+      blend of the raw x-cal cut and the GMM midpoint, scored against the fused
+      cut the base row carries.
+
+    The GMM is fitted on the scored population only, as
+    :func:`~vtscore.training.thresholds.calculate_safe_threshold` fits it, so the
+    fallback rows mirror production rather than approximate it.
+
     This is the study's **screen**, not its verdict.  Holding the trajectory
     fixed is precisely what makes it cheap - one simulation scores every
     schedule - but the blended threshold also feeds acquisition (Autopilot's
@@ -48,6 +68,7 @@ def _schedule_variant_rows(
         fit_gmm_threshold,
         safe_blend_weight,
     )
+    from vtscore.utils.scores import scored_only  # noqa: PLC0415
 
     xcal = float(details["xcal_threshold"])
     n_votes = int(details["n_votes"])
@@ -60,13 +81,21 @@ def _schedule_variant_rows(
     # split, so a guessed split would silently mis-score two whole families
     # rather than fail.  The caller sets both keys alongside ``n_votes``.
     ctx = BlendContext(n_labels=n_votes, n_good=int(details["n_good"]), n_bad=int(details["n_bad"]))
+    shipped_provenance = str(details.get("provenance", ""))
+    fold_fallback = details.get("fold_fallback")
     # One fit, re-combined under every schedule.  The corridor schedules need
-    # the component means, so the fit object rides along with the cut.
-    gmm_cut, gmm_fit = fit_gmm_threshold(sim_pooled_scores)
+    # the component means, so the fit object rides along with the cut.  The
+    # population is the scored one, exactly as `calculate_safe_threshold` fits
+    # it; an empty one ships the x-cal side alone there, and does here.
+    population = scored_only(sim_pooled_scores)
+    gmm_cut, gmm_fit = fit_gmm_threshold(population.tolist()) if population.size else (float("nan"), None)
 
     rows: list[dict[str, Any]] = []
     for name in schedules:
-        threshold = blend_gmm_threshold(xcal, gmm_cut, ctx, schedule=name, fit=gmm_fit)
+        if population.size:
+            threshold = blend_gmm_threshold(xcal, gmm_cut, ctx, schedule=name, fit=gmm_fit)
+        else:
+            threshold = xcal if np.isfinite(xcal) else 0.5
         weight = safe_blend_weight(ctx, name)
         row = operating_metrics(
             base_scores,
@@ -84,5 +113,7 @@ def _schedule_variant_rows(
         row["xcal_threshold"] = round6(xcal)
         row["gmm_cut"] = round6(gmm_cut)
         row["blend_weight"] = round6(weight)
+        row["shipped_provenance"] = shipped_provenance
+        row["fold_fallback"] = "" if fold_fallback is None else str(fold_fallback)
         rows.append(row)
     return rows
