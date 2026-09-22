@@ -17,6 +17,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **A tab left open on a deleted detector or dataset now says so, and can move
+  off it** (issue #4086). Requests naming an id the registry no longer lists
+  answered 409 "Detector is not loaded", which sent you looking for a load
+  that could never succeed. They now answer 404 with `error_code`
+  `detector_not_found` / `dataset_not_found` and a message telling you to
+  reload. Loading a different detector from such a tab no longer fails on the
+  stale one either.
+
 - **Pressing Enter on a Text sort query now hands focus back, so you can vote
   with the arrow keys straight away** (issue #3935). In Manual mode, typing a
   keyword and hitting Enter resorted the left panel and selected a new item in
