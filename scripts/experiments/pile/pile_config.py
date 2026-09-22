@@ -331,8 +331,10 @@ SCALE_LUMP_CONTAIN = 0.5
 
 #: Cells not built at all, because no honest supply reaches ``SCALE_N_POS``.
 #: Built short, their prevalence -- and so their AP -- would not be comparable
-#: with any other cell.
-SCALE_DROPPED_CELLS: frozenset[str] = frozenset()
+#: with any other cell. LVIS rarely boxes a SMALL fruit, so even under
+#: :data:`SCALE_BAND_ON_LARGEST` these reach only 35 / 83 / 60 positives
+#: (banana / apple / orange). Owner ruling, 2026-09-22.
+SCALE_DROPPED_CELLS: frozenset[str] = frozenset({"banana@small", "apple@small", "orange@small"})
 
 #: VG is annotated with free text, so its vocabulary is not a list of objects.
 #: A detector asked to find "red" or "front" is measuring nothing, so these are
