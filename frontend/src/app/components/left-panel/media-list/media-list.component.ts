@@ -71,6 +71,12 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnDestroy {
   readonly gridGoalWidth = input<number>(80);
   readonly focusMode = input<'click' | 'hover'>('click');
   readonly showScores = input(true);
+  /**
+   * Shown in place of the grid when a ranking exists but holds no items. Only
+   * the caller knows where those items went, so it supplies the words; the
+   * default stays neutral for callers with nothing particular to say.
+   */
+  readonly emptyRankingNote = input('Nothing to show.');
   /** True when the ranking is windowed and more rows can be paged in. */
   readonly hasMore = input(false);
   /** True while a page fetch is in flight (disables the Load-more trigger). */
@@ -201,6 +207,14 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnDestroy {
     return this.loadingMedias() && this.cachedOrderedItems.length === 0;
   }
 
+  /**
+   * What to say when the grid renders no cards. Two different facts share that
+   * empty grid: the dataset itself holds nothing, or a ranking holds nothing.
+   */
+  get emptyListMessage(): string {
+    return this.medias().length === 0 ? 'No media loaded' : this.emptyRankingNote();
+  }
+
   ngOnDestroy(): void {
     this.resizeObserver?.disconnect();
   }
@@ -228,7 +242,12 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnDestroy {
 
     const items: OrderedItem[] = [];
 
-    if (sortOrder && sortOrder.length > 0) {
+    // `null` means "nothing has ranked these items", so the dataset order
+    // below is the right fallback. An *empty* ranking is a different fact:
+    // something did rank, and nothing came back — in Find, every item has been
+    // verified and left the work queue. Treating the two alike used to dump the
+    // whole dataset, unsorted, into the panel the user had just emptied (#4080).
+    if (sortOrder) {
       let thresholdInserted = false;
       for (const sorted of sortOrder) {
         const media = enrich(sorted.id);
