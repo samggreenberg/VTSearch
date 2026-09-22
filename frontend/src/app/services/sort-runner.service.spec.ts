@@ -7,6 +7,7 @@ import { SortStateService } from './sort-state.service';
 import { MediaStateService } from './media-state.service';
 import { VoteStateService } from './vote-state.service';
 import { AutopilotStateService } from './autopilot-state.service';
+import { ActiveContextService } from './active-context.service';
 import { configureZoneless } from '../testing/zoneless-testbed';
 import { provideHttpTesting } from '../testing/test-providers';
 import { settleResource } from '../testing/settle-resource';
@@ -414,6 +415,130 @@ describe('SortRunnerService', () => {
 
       voteState.applyOptimisticState(1, 'none');
       expect(runner.datasetExhausted()).toBe(false);
+    });
+  });
+  // --- carrying a sort to a new pair (#4092) ---------------------------------
+
+  /**
+   * The rule for a Train entry or pair switch: the sort controls carry over and
+   * are re-run against the new pair; a sort the new pair cannot run falls back
+   * to Text, so the controls never claim a sort that is not the one on screen.
+   */
+  describe('rerunCarriedSort', () => {
+    it('re-runs the carried text query', () => {
+      sortState.setTextQuery('aaa');
+
+      runner.rerunCarriedSort(true);
+
+      expect(httpMock.expectOne('/api/sort').request.body).toEqual({ text: 'aaa' });
+      expect(sortState.sortMode).toBe('text');
+    });
+
+    it('ranks nothing when the carried text box is empty', () => {
+      runner.rerunCarriedSort(true);
+
+      httpMock.expectNone('/api/sort');
+    });
+
+    it('does not fire a text sort the dataset\'s embedder cannot run', () => {
+      sortState.setTextQuery('aaa');
+
+      runner.rerunCarriedSort(false);
+
+      httpMock.expectNone('/api/sort');
+    });
+
+    it('re-runs a learned sort when the new detector can train one', () => {
+      enableLearnedSort();
+      sortState.setSortMode('learned');
+
+      runner.rerunCarriedSort(true);
+
+      httpMock.expectOne('/api/learned-sort');
+      expect(sortState.sortMode).toBe('learned');
+    });
+
+    it('falls back to Text when the new detector cannot train a learned sort', () => {
+      sortState.setSortMode('learned');
+      sortState.setTextQuery('aaa');
+
+      runner.rerunCarriedSort(true);
+
+      httpMock.expectNone('/api/learned-sort');
+      expect(sortState.sortMode).toBe('text');
+      expect(httpMock.expectOne('/api/sort').request.body).toEqual({ text: 'aaa' });
+    });
+
+    it('re-scores with the same detector for a detector Load sort', () => {
+      runner.onModelSelected('det-x');
+      httpMock.expectOne('/api/find-label').flush({ results: [], threshold: 0.5, detector_name: 'X' });
+      expect(sortState.loadSortSource).toEqual({ kind: 'detector', detectorId: 'det-x' });
+
+      runner.rerunCarriedSort(true);
+
+      expect(httpMock.expectOne('/api/find-label').request.body).toEqual({ detector_id: 'det-x' });
+      expect(sortState.sortMode).toBe('load');
+    });
+
+    it('re-runs server example files', () => {
+      sortState.setSortMode('load');
+      sortState.setLoadSortSource({ kind: 'files', filenames: ['a.wav', 'b.wav'] });
+
+      runner.rerunCarriedSort(true);
+
+      expect(httpMock.expectOne('/api/example-sort-server').request.body).toEqual({
+        filenames: ['a.wav', 'b.wav'],
+      });
+    });
+
+    it('re-uploads an uploaded example', () => {
+      const file = new File(['x'], 'ex.wav', { type: 'audio/wav' });
+      sortState.setSortMode('load');
+      sortState.setLoadSortSource({ kind: 'upload', file });
+
+      runner.rerunCarriedSort(true);
+
+      httpMock.expectOne('/api/example-sort').flush({ results: [{ id: 3, similarity: 0.7 }], threshold: 0.5 });
+      expect(sortState.sortOrder).toEqual([{ id: 3, score: 0.7, bestRegion: undefined }]);
+      // The re-run keeps its recipe, so it can carry over again.
+      expect(sortState.loadSortSource).toEqual({ kind: 'upload', file, cropParams: undefined });
+    });
+
+    it('re-runs "Sort by this" while its dataset is still the active one', () => {
+      TestBed.inject(ActiveContextService).setActive('ds1', 'det1');
+      runner.runExampleSortById(4, 'clip.wav');
+      httpMock.expectOne('/api/example-sort-by-id').flush({ results: [], threshold: 0.5 });
+      TestBed.inject(ActiveContextService).setActive('ds1', 'det2');
+
+      runner.rerunCarriedSort(true);
+
+      expect(httpMock.expectOne('/api/example-sort-by-id').request.body).toEqual({ media_id: 4 });
+    });
+
+    it('falls back to Text for "Sort by this" on another dataset, whose ids mean nothing here', () => {
+      TestBed.inject(ActiveContextService).setActive('ds1', 'det1');
+      runner.runExampleSortById(4, 'clip.wav');
+      httpMock.expectOne('/api/example-sort-by-id').flush({ results: [], threshold: 0.5 });
+      sortState.setTextQuery('aaa');
+      TestBed.inject(ActiveContextService).setActive('ds2', 'det1');
+
+      runner.rerunCarriedSort(true);
+
+      httpMock.expectNone('/api/example-sort-by-id');
+      expect(sortState.sortMode).toBe('text');
+      expect(sortState.loadSortLabel).toBe('');
+      expect(sortState.loadSortSource).toBeNull();
+      expect(httpMock.expectOne('/api/sort').request.body).toEqual({ text: 'aaa' });
+    });
+
+    it('falls back to Text for a Load ranking with no recorded source', () => {
+      sortState.setSortMode('load');
+      sortState.setLoadSortLabel('Find detector');
+
+      runner.rerunCarriedSort(true);
+
+      expect(sortState.sortMode).toBe('text');
+      expect(sortState.loadSortLabel).toBe('');
     });
   });
 });

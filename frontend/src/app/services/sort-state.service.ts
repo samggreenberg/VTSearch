@@ -7,6 +7,26 @@ import type { ProgressEvent } from '../models/api.models';
 export type SortMode = 'text' | 'learned' | 'load';
 export type SelectMode = 'top' | 'hard' | 'new';
 
+/**
+ * What a `load`-mode ranking was ranked *against*, kept so the same sort can be
+ * re-run when the Train window lands on a different (dataset, detector) pair
+ * (#4092). The ranking itself is per-dataset and is always dropped on a pair
+ * change; this is the recipe that re-derives it.
+ *
+ * - `detector` — another detector's scores (Load › detector).
+ * - `files` — server-side example files (Load › server media, Autopilot's
+ *   media-seeded "good" phase).
+ * - `upload` — an example uploaded from disk. The `File` is held in memory only,
+ *   never persisted.
+ * - `media` — an item of a loaded dataset ("Sort by this"). Media ids are
+ *   per-dataset, so this re-runs only while that dataset is still the active one.
+ */
+export type LoadSortSource =
+  | { kind: 'detector'; detectorId: string }
+  | { kind: 'files'; filenames: string[] }
+  | { kind: 'upload'; file: File; cropParams?: Record<string, unknown> }
+  | { kind: 'media'; datasetId: string; mediaId: number; cropParams?: Record<string, unknown> };
+
 export interface SortedItem {
   id: number;
   score: number;
@@ -60,6 +80,7 @@ export class SortStateService {
   private readonly _sortEtaSeconds = signal<number | null>(null);
   private readonly _inclusion = signal(0);
   private readonly _loadSortLabel = signal('');
+  private readonly _loadSortSource = signal<LoadSortSource | null>(null);
   private readonly _textQuery = signal('');
   // Windowed-sort model (scalability.md S3/S17/S19). At scale the backend sends
   // only a head window of the ranking; `_sortOrder` holds the *loaded* window,
@@ -132,6 +153,11 @@ export class SortStateService {
 
   get loadSortLabel(): string {
     return this._loadSortLabel();
+  }
+
+  /** The recipe behind the current `load` ranking; see {@link LoadSortSource}. */
+  get loadSortSource(): LoadSortSource | null {
+    return this._loadSortSource();
   }
 
   get textQuery(): string {
@@ -293,6 +319,10 @@ export class SortStateService {
     this._loadSortLabel.set(label);
   }
 
+  setLoadSortSource(source: LoadSortSource | null): void {
+    this._loadSortSource.set(source);
+  }
+
   setTextQuery(query: string): void {
     this._textQuery.set(query);
   }
@@ -312,6 +342,7 @@ export class SortStateService {
     this._sortEtaSeconds.set(null);
     this._inclusion.set(0);
     this._loadSortLabel.set('');
+    this._loadSortSource.set(null);
     this._textQuery.set('');
     this._sortTotal.set(0);
     this._sortHasMore.set(false);
