@@ -28,19 +28,22 @@ describe('visibleFields', () => {
   });
 
   it('keeps a field that spells hidden out as false', () => {
-    expect(visibleFields([{ key: 'a', hidden: false }])).toHaveLength(1);
+    const shown: Field = { key: 'a', hidden: false };
+    expect(visibleFields([shown])).toHaveLength(1);
   });
 
   it('keeps a field from a server that predates `hidden`', () => {
     // The key is optional on the wire, so an older backend omits it
     // entirely; that must read as visible rather than as falsy-and-unclear.
-    expect(visibleFields([{ key: 'a' }])).toHaveLength(1);
+    const legacy: Field = { key: 'a' };
+    expect(visibleFields([legacy])).toHaveLength(1);
   });
 
   it('returns an empty list when every field is hidden', () => {
     // The case issue #4078 is about: the form renders nothing and the
     // exporter tab collapses to its action button.
-    expect(visibleFields([url, { key: 'b', hidden: true }])).toEqual([]);
+    const other: Field = { key: 'b', hidden: true };
+    expect(visibleFields([url, other])).toEqual([]);
   });
 
   it('treats null and undefined as no fields at all', () => {
