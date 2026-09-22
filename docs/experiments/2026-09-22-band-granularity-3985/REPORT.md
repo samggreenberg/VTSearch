@@ -1,11 +1,11 @@
 # COCO boxes a pile as one object — and it is three faults, not one
 
 **Issues:** #3985, #3992. **Dataset:** `coco_quarry`, *C* = 52.
-**Date:** 2026-09-22. **Unit rulings and 120 owner votes, 2026-09-22.** Fruit remedy pending.
+**Date:** 2026-09-22. **Unit rulings, 120 owner votes and the fruit remedy, 2026-09-22.**
 
 ## Verdict
 
-**The measurement is extended and corrected; the remedy is not chosen.** Two of
+**The measurement is extended and corrected, and the fruit remedy is built.** Two of
 the worst-affected classes had never been measured, the single "area ratio"
 turns out to conflate three different faults that want different fixes, and
 three of the four classes #3985 named as lumpers are not lumping.
@@ -15,6 +15,9 @@ An estimated ~56% of `banana`'s images, ~39% of `apple`'s and ~23% of
 `orange`'s have a box around a pile. For `skis` and `potted plant` the high
 ratio flags a legitimate unit, so any guard must exempt them. No COCO-only
 signal separates the piles; the LVIS ratio does.
+The rebuild uses that ratio: a fruit image is a positive only when LVIS boxed
+the class and COCO's box is under 1.8× LVIS's. The three fruit `@small` cells
+are dropped because nothing fills them, leaving **153 cells**.
 
 | fault | classes in *C* | signature |
 |---|---|---|
@@ -145,11 +148,58 @@ for the class runs from 1 to 13 in both groups, and so does the raw box area.
 Every signal that works needs LVIS boxes for the image. #3992's COCO-only guard is still not
 found, and on this evidence it may not exist.
 
-## What is still not settled
+## The remedy, as built — owner rulings, 2026-09-22
 
-**The remedy for the three fruit classes.** The candidates are: keep only
-LVIS-covered images below a ratio cut; use LVIS's per-fruit boxes wherever
-LVIS covers the image; or drop the three classes from *C*.
+**A fruit box is a positive only if LVIS says it is ONE fruit.** For `banana`,
+`apple` and `orange`, an image stays a positive only if LVIS boxed the class
+there **and** COCO's mean box area is under **1.8×** LVIS's. An excluded image
+keeps its COCO label, so it is never scored as a negative for its own class
+either. `skis` and `potted plant` are not filtered.
+
+**LVIS train had to be fetched.** Only val (16% of COCO) was on disk, and with
+val alone every fruit cell fell to 3–54 of its 100 positives. Train and val
+together cover 119,979 of COCO's 123,287 images. They now live in
+`$VTS_PILE/lvis/` (`pile_config.LVIS_DIR`).
+
+**Why 1.8, on the owner's votes:**
+
+| cut | piles caught (of 29) | Good images lost (of 43) | `apple@large` supply |
+|---:|---:|---:|---:|
+| 1.6 | 28 | 8 | 93 |
+| **1.8** | **28** | **6** | **98** |
+| 2.0 | 25 | 5 | 101 |
+
+**The three fruit `@small` cells are dropped** (`SCALE_DROPPED_CELLS`). LVIS
+rarely boxes a small fruit: only 81 of 166 small bananas have LVIS boxes, and
+the cells end at 45 / 32 / 22 positives under any cut. Built that short, their
+prevalence and therefore their AP would not be comparable with any other
+cell. **C keeps 52 classes, now in 153 cells.** `apple@large` runs at 98 of
+100, which the build logs as a warning.
+
+**What the build reported:**
+
+| class | COCO images | not positives (pile, or no LVIS box) |
+|---|---:|---:|
+| `banana` | 2,346 | 1,373 |
+| `apple` | 1,662 | 955 |
+| `orange` | 1,784 | 1,144 |
+
+The build has 153 cells, 15,298 positives and 9,900 negatives, with the same
++1,000 spares as before.
+
+**Rebuilt and verified 2026-09-22** (job 677654, v100, commit `316e078a8`).
+`--verify` passes for all five columns. Against the previous build, kept at
+`keep/coco-quarry-52-20260922/`:
+
+- **147 of 153 cells have identical membership**, and all 10,900 negatives and
+  spares are the same images. Selection is a per-image hash, so the filter
+  moved only the six fruit cells it touches.
+- **The six fruit cells kept 31–51 of their 100 images**. For example,
+  `orange@medium` kept 31 and `banana@medium` kept 51. The rest were piles, or
+  boxes LVIS never drew.
+- **Vectors are unchanged**: 24,936 of the 25,012 shared images match
+  bit-for-bit. The other 76 differ by at most 1e-6, which is batch-composition
+  noise from a changed media set (#3683), not a change of input.
 
 ## Limits
 
