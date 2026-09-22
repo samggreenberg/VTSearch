@@ -141,13 +141,17 @@ activate_venv() {
 run_preflight() {
   local job="$1"; shift
   [[ -x "$WT/scripts/experiments/preflight.sh" ]] || return 0
-  for arm in visual_genome_m:siglip+dinov3_patch coco_val:siglip+dinov3_patch; do
+  # `local`: bash scoping is dynamic, so an unqualified loop variable here named
+  # `arm` overwrote submit_arm's own `arm` - the first launch named its array
+  # after the last region premise it checked.
+  local premise
+  for premise in visual_genome_m:siglip+dinov3_patch coco_val:siglip+dinov3_patch; do
     bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --need-gb 30 \
       --reuse-prepare "$PREP" \
-      --require-region-voting "$arm" \
+      --require-region-voting "$premise" \
       "$@" \
       --job-name "$job" --mem "$CALIB_MEM" --conc "$CALIB_CONC" || {
-      echo "preflight FAILED for $job ($arm)" >&2
+      echo "preflight FAILED for $job ($premise)" >&2
       [[ "${PREFLIGHT_SKIP:-0}" == "1" ]] || exit 1
     }
   done
