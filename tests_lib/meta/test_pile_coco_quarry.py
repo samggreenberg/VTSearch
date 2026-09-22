@@ -373,7 +373,7 @@ class TestLumpFilter:
     def test_an_excluded_pair_is_neither_positive_nor_clean(self, mod):
         from pilebuild import scale_core
 
-        labels = {1: {"banana": [[10, 10, 40, 40]]}, 2: {"banana": [[10, 10, 40, 40]]}}
+        labels = {1: {"banana": [[10.0, 10.0, 40.0, 40.0]]}, 2: {"banana": [[10.0, 10.0, 40.0, 40.0]]}}
         dims = {1: (100, 100), 2: (100, 100)}
         supply, _, clean = scale_core.band_candidates(
             labels, dims, unbanded=set(), classes=("banana",), excluded={(1, "banana")}
