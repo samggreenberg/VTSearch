@@ -310,7 +310,7 @@ def _lvis(tmp_path: Path, boxes: dict[int, list[tuple[str, list[float]]]]) -> Pa
     """Both LVIS splits, everything in `train`: ``{image_id: [(name, xywh), ...]}``."""
     d = tmp_path / "lvis"
     d.mkdir(exist_ok=True)
-    names = ["banana", "apple", "orange_(fruit)", "mandarin_orange", "ski"]
+    names = ["banana", "apple", "orange_(fruit)", "mandarin_orange", "ski", "book", "magazine"]
     cats = [{"id": i + 1, "name": n} for i, n in enumerate(names)]
     anns = [
         {"id": k, "image_id": iid, "category_id": names.index(n) + 1, "bbox": b}
@@ -359,6 +359,15 @@ class TestLumpFilter:
         labels = {1: {"orange": [[0, 0, 40, 40]]}}
         lvis = _lvis(tmp_path, {1: [("orange_(fruit)", [0, 0, 40, 40]), ("orange_(fruit)", [35, 0, 40, 40])]})
         assert mod.lump_exclusions(labels, lvis) == set()
+
+    def test_book_is_a_stack_only_at_six_and_needs_no_lvis(self, mod, tmp_path: Path):
+        """LVIS sees neighbouring volumes inside one book box; only a shelf reaches six."""
+        spine = lambda i: ("book", [i * 10, 0, 9, 40])  # noqa: E731
+        labels = {1: {"book": [[0, 0, 100, 40]]}, 2: {"book": [[0, 0, 100, 40]]}, 3: {"book": [[0, 0, 100, 40]]}}
+        lvis = _lvis(tmp_path, {1: [spine(i) for i in range(3)], 2: [spine(i) for i in range(6)]})
+        assert mod.lump_exclusions(labels, lvis) == {(2, "book")}, (
+            "three inside is a book with neighbours, six is a shelf, none is no evidence at all"
+        )
 
     def test_either_lvis_name_vouches_for_orange(self, mod, tmp_path: Path):
         labels = {1: {"orange": [[0, 0, 30, 30]]}}

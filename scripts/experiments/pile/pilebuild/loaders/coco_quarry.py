@@ -163,14 +163,14 @@ def lump_exclusions(
 
     Only the classes in :data:`pile_config.SCALE_LUMP_FILTER` are tested (#3985).
     The box tested is the one the build bands on and the simulated user drags --
-    the largest instance (:func:`largest_box`, #4096). A pair is kept only when
-    exactly one LVIS instance of the class lies inside that box, "inside" meaning
-    at least :data:`pile_config.SCALE_LUMP_CONTAIN` of the LVIS box's area. None
-    inside means nothing vouches for COCO's box; two or more means COCO drew one
-    box where LVIS drew several.
+    the largest instance (:func:`largest_box`, #4096). "Inside" means at least
+    :data:`pile_config.SCALE_LUMP_CONTAIN` of an LVIS box's area. A pair is
+    excluded when the count inside reaches the class's ``pile_at`` (COCO drew
+    one box where LVIS drew several), or is zero under ``require_lvis`` (nothing
+    vouches for COCO's box).
     """
     lvis_dir = lvis_dir or pc.LVIS_DIR
-    wanted = {name: cls for cls, names in pc.SCALE_LUMP_FILTER.items() for name in names}
+    wanted = {name: cls for cls, rule in pc.SCALE_LUMP_FILTER.items() for name in rule.lvis_names}
     lvis: dict[int, dict[str, list[list[float]]]] = defaultdict(lambda: defaultdict(list))
     for split in pc.LVIS_SPLITS:
         path = lvis_dir / f"lvis_v1_{split}.json"
@@ -188,13 +188,13 @@ def lump_exclusions(
 
     out: set[tuple[int, str]] = set()
     for iid, by_name in labels.items():
-        for cls in pc.SCALE_LUMP_FILTER:
+        for cls, rule in pc.SCALE_LUMP_FILTER.items():
             bs = by_name.get(cls)
             if not bs:
                 continue
             box = largest_box(bs)
             inside = sum(_share_inside(lb, box) >= pc.SCALE_LUMP_CONTAIN for lb in lvis.get(iid, {}).get(cls, []))
-            if inside != 1:
+            if inside >= rule.pile_at or (inside == 0 and rule.require_lvis):
                 out.add((iid, cls))
     return out
 

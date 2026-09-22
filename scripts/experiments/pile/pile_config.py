@@ -297,9 +297,21 @@ LVIS_SPLITS = ("train", "val")
 #: use the most obvious instance, which is the largest.
 SCALE_BAND_ON_LARGEST = True
 
+class LumpRule(NamedTuple):
+    """How LVIS decides whether one class's picked COCO box is ONE object (#3985)."""
+
+    #: LVIS names that count as the same object.
+    lvis_names: tuple[str, ...]
+    #: This many LVIS instances inside the box make it a pile.
+    pile_at: int = 2
+    #: Whether a box with NO LVIS instance inside is excluded too. Right where
+    #: LVIS boxes the class reliably (fruit); wrong for `book`, where 63% of
+    #: picked boxes hold no LVIS book at all and absence proves nothing.
+    require_lvis: bool = True
+
+
 #: Classes whose picked COCO box must be ONE object by LVIS's reckoning before
-#: the image may be a positive, mapped to the LVIS names that count as the same
-#: object (#3985).
+#: the image may be a positive (#3985).
 #:
 #: COCO draws one box round a bunch of bananas, a bowl of apples or a stack of
 #: books, and the band is then the size of the pile, not of ONE object -- the
@@ -315,15 +327,23 @@ SCALE_BAND_ON_LARGEST = True
 #: ratio it replaces (cut 1.8, #4085) caught the same 28 and lost 6, and needed a
 #: tuned cut; this needs none.
 #:
+#: `book` is its own rule, set on 56 owner votes over two rounds. LVIS sees
+#: overlapping and neighbouring volumes inside one COCO book box: at 2-4 LVIS
+#: books inside, all 15 votes were Good; at 10+, 9 of 10 were a stack or shelf.
+#: ``pile_at=6`` catches 12 of the 13 stacks and loses 3 Good books (the edge
+#: rests on few votes: 3 Good at 5; 1 Good, 2 Bad at 6). Absence is not
+#: evidence for books, so ``require_lvis`` is off.
+#:
 #: NOT `skis` or `potted plant`, although their ratios are as high: there the
 #: owner ruled COCO's box IS the object (a pair; a pot with its plant) and 23 of
 #: 24 high-ratio images were voted Good. The name sets are
 #: `coco_box_granularity.SAME`'s curated ones: `apple` without `pear`, `orange`
 #: without `lemon`.
-SCALE_LUMP_FILTER: dict[str, tuple[str, ...]] = {
-    "banana": ("banana",),
-    "apple": ("apple",),
-    "orange": ("orange_(fruit)", "mandarin_orange"),
+SCALE_LUMP_FILTER: dict[str, LumpRule] = {
+    "banana": LumpRule(("banana",)),
+    "apple": LumpRule(("apple",)),
+    "orange": LumpRule(("orange_(fruit)", "mandarin_orange")),
+    "book": LumpRule(("book", "magazine"), pile_at=6, require_lvis=False),
 }
 #: Share of an LVIS box that must lie inside the picked COCO box for the LVIS
 #: instance to count as inside it.
