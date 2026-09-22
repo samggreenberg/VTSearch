@@ -62,57 +62,114 @@ from pathlib import Path
 
 #: COCO class -> the LVIS category that means the same thing, where exactly one
 #: does. A class whose LVIS counterpart fragments into subtypes is still listed,
-#: because a floor on a class in *C* beats no reading at all -- see
-#: :data:`SUBTYPE_FLOOR`, which is what the output warns on.
+#: because a floor on a class in *C* beats no reading at all. Since #3992 the
+#: sibling names are listed in :data:`SAME` itself, so there is no floor.
 #:
 #: Every class in *C* (:data:`pile_config.SCALE_CLASSES`) is here. The first run
 #: (#3985) carried only 21 entries and left ten of *C* unmeasured, which read as
 #: "clean" in the issue when it meant "never asked"; `sink` came back at 1.42
 #: with 18% of its images over the threshold once it was.
-SAME: dict[str, str] = {
-    "banana": "banana",
-    "apple": "apple",
-    "orange": "orange_(fruit)",
-    "book": "book",
-    "donut": "doughnut",
-    "sheep": "sheep",
-    "suitcase": "suitcase",
-    "bird": "bird",
-    "chair": "chair",
-    "umbrella": "umbrella",
-    "car": "car_(automobile)",
-    "kite": "kite",
-    "bottle": "bottle",
-    "boat": "boat",
-    "cup": "cup",
-    "bowl": "bowl",
-    "knife": "knife",
-    "dog": "dog",
-    "truck": "truck",
-    "bus": "bus_(vehicle)",
-    "clock": "clock",
-    # The ten classes in *C* the first run never asked about.
-    "backpack": "backpack",
-    "bench": "bench",
-    "bicycle": "bicycle",
-    "cell phone": "cellular_telephone",
-    "fire hydrant": "fire_hydrant",
-    "fork": "fork",
-    "sink": "sink",
-    "spoon": "spoon",
-    "stop sign": "stop_sign",
-    "vase": "vase",
+#: A COCO class, and the LVIS categories that name the SAME OBJECTS at finer
+#: resolution. Derived from `coco_class_purity.py`'s mutual-best-match table
+#: (every name below coincided with a COCO box of that class at IoU >= 0.5),
+#: then curated, because the derivation alone is not safe.
+#:
+#: **Include** a sibling that names the same kind of thing more precisely -- a
+#: species (`bird` / `duck`, `gull`), a variant (`bottle` / `wine_bottle`), a
+#: model (`car_(automobile)` / `minivan`). Those are exactly the split that makes
+#: LVIS's instance count the right second opinion.
+#:
+#: **Exclude** two shapes, both of which would manufacture the very signal this
+#: script looks for -- more LVIS instances than COCO ones:
+#:
+#: * a PART or COVERING of the object, boxed in the same place. `person` /
+#:   `jacket`, `wet_suit`: LVIS boxes the garment where COCO boxes the wearer, so
+#:   counting both reads one person as two. `dining table` / `tablecloth` is the
+#:   same relation.
+#: * a DIFFERENT object COCO mislabelled. `apple` / `pear`, `orange` / `lemon`,
+#:   `stop sign` / `street_sign`. Those are label errors (and are already
+#:   recorded in :data:`pile_config.SCALE_CLASS_CONTENTS`); folding them in here
+#:   would count another object as a finer view of this one.
+#:
+#: Sets rather than single names also retires the "(floor)" caveat the first
+#: version carried for `bird`, `cup` and `bottle`: LVIS filed those objects under
+#: sibling names, so a one-name comparison understated LVIS and INFLATED the
+#: ratio. The floors were an artefact of the table, not a property of the data.
+SAME: dict[str, tuple[str, ...]] = {
+    # --- the original twenty-five's COCO categories ---------------------------
+    "backpack": ("backpack",),
+    "bench": ("bench",),
+    "bicycle": ("bicycle",),
+    "bird": ("bird", "duck", "gull", "pigeon", "goose", "flamingo"),
+    "boat": ("boat",),
+    "book": ("book", "magazine"),
+    "bottle": ("bottle", "wine_bottle", "water_bottle", "beer_bottle"),
+    "bowl": ("bowl",),
+    "bus": ("bus_(vehicle)", "school_bus"),
+    "car": ("car_(automobile)", "minivan", "cab_(taxi)"),
+    "cell phone": ("cellular_telephone",),
+    "chair": ("chair", "armchair", "deck_chair"),
+    "clock": ("clock", "wall_clock", "alarm_clock"),
+    "cup": ("cup", "glass_(drink_container)", "mug", "teacup"),
+    "dog": ("dog",),
+    "fire hydrant": ("fireplug",),
+    "fork": ("fork",),
+    "kite": ("kite",),
+    "knife": ("knife",),
+    "sink": ("sink", "kitchen_sink"),
+    "spoon": ("spoon", "ladle"),
+    "stop sign": ("stop_sign",),  # NOT street_sign: a different sign
+    "truck": ("truck", "pickup_truck", "trailer_truck", "fire_engine", "garbage_truck"),
+    "umbrella": ("umbrella",),
+    "vase": ("vase", "flowerpot"),
+    # --- added to C by #4056's widening --------------------------------------
+    "airplane": ("airplane", "fighter_jet", "jet_plane"),
+    "apple": ("apple",),  # NOT pear: a different fruit COCO mislabelled
+    "banana": ("banana",),
+    "baseball bat": ("baseball_bat",),
+    "dining table": ("dining_table", "table"),  # NOT tablecloth: the covering
+    "frisbee": ("frisbee",),
+    "handbag": ("handbag", "shoulder_bag", "tote_bag"),
+    "keyboard": ("computer_keyboard",),
+    "laptop": ("laptop_computer",),
+    "microwave": ("microwave_oven",),
+    "motorcycle": ("motorcycle", "motor_scooter", "dirt_bike"),
+    "mouse": ("mouse_(computer_equipment)",),
+    "orange": ("orange_(fruit)", "mandarin_orange"),  # NOT lemon
+    "parking meter": ("parking_meter",),
+    "person": ("person",),  # NOT jacket/wet_suit: the garment, not the wearer
+    "potted plant": ("flower_arrangement", "flowerpot"),
+    "remote": ("remote_control", "control"),
+    "scissors": ("scissors",),
+    "skateboard": ("skateboard",),
+    "skis": ("ski",),
+    "snowboard": ("snowboard",),
+    "suitcase": ("suitcase",),
+    "surfboard": ("surfboard",),
+    "tennis racket": ("tennis_racket",),
+    "tie": ("necktie", "bow-tie"),
+    "toothbrush": ("toothbrush",),
+    "traffic light": ("traffic_light",),
+    "tv": ("television_set", "monitor_(computer_equipment) computer_monitor"),
+    "wine glass": ("wineglass",),
+    # --- context: measured but NOT in C, kept because #3985 quotes them -------
+    "donut": ("doughnut",),
+    "sheep": ("sheep",),
 }
 
 #: Classes whose LVIS counterpart is one name among several for the same objects,
 #: so the instances LVIS files under a sibling name are invisible to the 1:1
 #: match and the measured ratio is a LOWER BOUND. Value is the evidence, counted
 #: on the images where COCO names the class.
-SUBTYPE_FLOOR: dict[str, str] = {
-    "bird": "pigeon 233, gull 169, flamingo 161, duck 113 vs bird 1,883",
-    "cup": "glass_(drink_container) 1,094, wineglass 415 vs cup 760",
-    "bottle": "LVIS splits by contents (water/wine/beer)",
-}
+#: RETIRED. `bird`, `cup` and `bottle` used to be reported as lower bounds,
+#: because LVIS filed their objects under sibling names that :data:`SAME` did not
+#: list -- `pigeon`, `gull`, `flamingo`; `glass_(drink_container)`, `mug`;
+#: `water_bottle`, `wine_bottle`. A one-name comparison undercounted LVIS and so
+#: INFLATED the ratio, and the caveat described the table rather than the data.
+#: :data:`SAME` now carries the sibling sets, so there is no floor left to warn
+#: about; the entry is kept as a comment because the output used to print it and
+#: a reader coming back to an older run needs to know why it stopped.
+SUBTYPE_FLOOR: dict[str, str] = {}
 
 #: Area ratio at which COCO's box is judged to be around a group rather than an
 #: object. Set from the gap in the measured data, not from theory: over the 24
@@ -137,6 +194,43 @@ def _load(path: Path) -> tuple[dict, dict]:
     return per, dims
 
 
+#: A count ratio at or above this is COCO merging INSTANCES, not merely drawing
+#: wider. Below it, LVIS finds about as many objects as COCO does and the extra
+#: area is extent rather than lumping.
+LUMP_COUNT_RATIO = 1.5
+
+#: A count ratio in this window is suspiciously close to exactly two, which is
+#: what a class of PAIRED objects looks like -- `skis` measures 2.09. A pair of
+#: skis is arguably ONE object in use, so this is a definitional difference
+#: rather than an annotation error, and a guard that rejected it would be
+#: throwing away good data. The instrument cannot tell the two apart, so it
+#: flags rather than rules.
+PAIR_WINDOW = (1.8, 2.4)
+
+
+def _verdict(area: float, cnt: float) -> str:
+    """Which fault, if any. Three hide under a single area ratio.
+
+    The area ratio alone cannot separate them, and they want different fixes:
+
+    * **lumping** -- one box round several instances. LVIS finds many more
+      objects AND COCO's box is much bigger: `banana` 7.58 / 8.15.
+    * **wider extent** -- the same objects, drawn around more. Count ratio near
+      one, area ratio large: `potted plant` 1.40 / 5.92, which is plausibly
+      pot-plus-plant against LVIS's foliage. No guard looking for repetition
+      will ever see this one.
+    * **structural pairing** -- count ratio near exactly two, because the class
+      comes in pairs and COCO boxes the pair: `skis` 2.09.
+    """
+    if area < LUMP_AREA_RATIO:
+        return "agree" if cnt < 1.5 else "mostly incompleteness"
+    if cnt < LUMP_COUNT_RATIO:
+        return f"WIDER EXTENT, same count (area/count {area / cnt:.1f}x)"
+    if PAIR_WINDOW[0] <= cnt <= PAIR_WINDOW[1]:
+        return "LUMPS -- or a PAIRED class, check"
+    return "COCO LUMPS the pile"
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--annotations", type=Path, required=True)
@@ -156,13 +250,14 @@ def main() -> None:
     shared = set(coco) & set(lvis)
 
     rows, thin = [], []
-    for cls, lname in SAME.items():
+    for cls, lnames in SAME.items():
         counts, ratios, ca, la = [], [], [], []
         seen = 0
         for iid in shared:
             if coco[iid].get(cls):
                 seen += 1
-            cb, lb = coco[iid].get(cls), lvis[iid].get(lname)
+            cb = coco[iid].get(cls)
+            lb = [a for n in lnames for a in (lvis[iid].get(n) or [])] or None
             if not cb or not lb:
                 continue
             counts.append(len(lb) / len(cb))
@@ -172,7 +267,7 @@ def main() -> None:
         # A class LVIS barely overlaps is reported as uncompared, never dropped in
         # silence: "no row" and "a clean row" are not the same claim (#3985).
         if len(counts) < MIN_IMAGES:
-            thin.append((cls, lname, seen, len(counts)))
+            thin.append((cls, lnames, seen, len(counts)))
             continue
         rows.append(
             (
@@ -196,12 +291,7 @@ def main() -> None:
     )
     print("-" * 98)
     for cls, n, seen, cnt, area, med, over, cbox, lbox in rows:
-        if area >= LUMP_AREA_RATIO:
-            verdict = "COCO LUMPS the pile"
-        elif cnt >= 1.5:
-            verdict = "mostly incompleteness"
-        else:
-            verdict = "agree"
+        verdict = _verdict(area, cnt)
         if cls in SUBTYPE_FLOOR:
             verdict += " (floor)"
         print(
@@ -209,8 +299,8 @@ def main() -> None:
             f"{area:>7.2f}{med:>7.2f}{100 * over:>6.0f}%   {verdict}"
         )
 
-    for cls, lname, seen, n in thin:
-        print(f"{cls:<12}{n:>7,}   NOT COMPARED: {seen:,} COCO images, under {MIN_IMAGES} carry LVIS `{lname}`")
+    for cls, lnames, seen, n in thin:
+        print(f"{cls:<12}{n:>7,}   NOT COMPARED: {seen:,} COCO images, under {MIN_IMAGES} carry LVIS {list(lnames)}")
     if SUBTYPE_FLOOR:
         print("\n(floor) LVIS files the same objects under sibling names, so the ratio is a lower bound:")
         for cls, why in SUBTYPE_FLOOR.items():
@@ -240,7 +330,8 @@ def main() -> None:
                         for r in rows
                     },
                     "not_compared": {
-                        cls: {"lvis_name": lname, "coco_images": seen, "matched": n} for cls, lname, seen, n in thin
+                        cls: {"lvis_names": list(lnames), "coco_images": seen, "matched": n}
+                        for cls, lnames, seen, n in thin
                     },
                 },
                 indent=2,
