@@ -1,15 +1,28 @@
 import os
 import warnings
 
-# Limit threads to reduce memory overhead in constrained environments.  Native
-# math libraries read these env vars during *their* import, which happens the
-# moment torch / numpy / scipy are imported, so they have to be set before
-# anything triggers that.  Mirrors ``vtscore.config.TORCH_THREADS`` but
-# resolved inline to avoid importing ``vtscore.config`` (and therefore
-# everything it transitively imports) this early.
-_torch_threads = str(max(1, int(os.environ.get("VTSEARCH_TORCH_THREADS", "1"))))
+# Native math libraries read these env vars during *their* import, which happens
+# the moment torch / numpy / scipy are imported, so they have to be set before
+# anything triggers that.  ``vtsearch.torch_threads`` imports only ``os`` for
+# that reason.
+#
+# The server defaults to its CPU allocation, not to the library default of 1:
+# a person waits on every vote here.  ``scripts/slurm/vtsearch-slurm.sh`` passes
+# ``VTSEARCH_TORCH_THREADS=${SLURM_CPUS_ON_NODE:-8}`` and says why -- "the
+# default is 1 thread, which is painfully slow for SigLIP etc." -- but a server
+# started any other way silently loses that, and nothing in the log says so.
+# Batch work and tests keep the low-memory default of 1 in
+# ``vtscore.config.TORCH_THREADS``.
+from vtsearch.torch_threads import ENV_VAR as _THREADS_ENV  # noqa: E402
+from vtsearch.torch_threads import resolve as _resolve_threads  # noqa: E402
+
+_torch_threads = str(_resolve_threads())
 os.environ["OMP_NUM_THREADS"] = _torch_threads
 os.environ["MKL_NUM_THREADS"] = _torch_threads
+# Publish the resolved value so ``vtscore.config.TORCH_THREADS`` -- and
+# therefore ``torch.set_num_threads`` -- agrees with the OMP/MKL vars above.
+# Without this the two disagree and torch silently wins with 1.
+os.environ[_THREADS_ENV] = _torch_threads
 
 # Configure structured logging: JSON lines by default with per-record
 # request_id / dataset_id / detector_id / user fields. Override via:
