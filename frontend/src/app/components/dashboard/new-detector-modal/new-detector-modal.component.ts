@@ -51,6 +51,7 @@ import {
 import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
 import { apiErrorMessage } from '../../../utils/api-error';
 import { DynamicFieldOptions } from '../../../utils/dynamic-field-options';
+import { visibleFields } from '../../../utils/plugin-fields';
 import { sortRowsByColumn } from '../../../utils/sort-rows';
 import { demoSortValue } from '../dataset-importer-modal/pickers/shared/demo-sort';
 import { PluginCheckboxComponent } from '../../plugin-checkbox/plugin-checkbox.component';
@@ -1055,7 +1056,7 @@ export class NewDetectorModalComponent implements OnInit {
    *  template (the generated LabelImporterEntry types `fields` as an open
    *  dict because plugin field schemas aren't part of the OpenAPI client). */
   get selectedLabelImporterFields(): ImporterField[] {
-    return (this.selectedLabelImporter?.fields ?? []) as ImporterField[];
+    return visibleFields((this.selectedLabelImporter?.fields ?? []) as ImporterField[]);
   }
 
   selectLabelImporter(importer: LabelImporterEntry): void {

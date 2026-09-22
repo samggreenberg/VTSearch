@@ -79,8 +79,8 @@
             </label>
           }
 
-          @if (currentConverter(st); as conv) {
-            @for (f of conv.fields || []; track f.key) {
+          @if (currentConverter(st)) {
+            @for (f of visibleConverterFields(st); track f.key) {
               <label class="ssp-details-field">
                 <span class="ssp-details-field-label">{{ f.label || f.key }}:</span>
                 @if (f.field_type === 'select') {

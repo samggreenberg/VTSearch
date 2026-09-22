@@ -17,6 +17,7 @@ import {
 import type { ExporterEntry } from '../../../generated/api-client/models/exporter-entry';
 import { IconComponent } from '../../icon/icon.component';
 import { openExternalUrl, safeExternalUrl } from '../../../utils/external-url';
+import { visibleFields } from '../../../utils/plugin-fields';
 import { PluginCheckboxComponent } from '../../plugin-checkbox/plugin-checkbox.component';
 
 @Component({
@@ -39,6 +40,9 @@ export class AutoDetectResultsModalComponent implements OnInit {
   // zoneless CD trigger) yet read in the template, so they must repaint on emit.
   readonly exporters = signal<ExporterEntry[]>([]);
   readonly selectedExporter = signal('');
+  /** The active exporter's *renderable* fields. ``hidden`` fields are left
+   *  out (their values are the plugin author's, fixed via ``default``) but
+   *  are still seeded into ``exportFieldValues``. */
   readonly exporterFields = signal<ImporterField[]>([]);
   exportFieldValues: Record<string, string> = {};
 
@@ -151,7 +155,7 @@ export class AutoDetectResultsModalComponent implements OnInit {
   private updateExporterFields(): void {
     const exp = this.exporters().find((e) => e.name === this.selectedExporter());
     const fields = (exp?.fields ?? []) as ImporterField[];
-    this.exporterFields.set(fields);
+    this.exporterFields.set(visibleFields(fields));
     this.exportFieldValues = {};
     for (const field of fields) {
       if (field.default) {

@@ -94,6 +94,7 @@ is used by every family; each family's base module re-exports
 | `max` | `str` | `""` | `"number"` fields: maximum value |
 | `step` | `str` | `""` | `"number"` fields: step increment; non-integer step → `float` CLI parsing |
 | `clears` | `list[str]` | `[]` | Field keys blanked in the UI when this field gets a non-empty value ("supply A *or* B") |
+| `hidden` | `bool` | `False` | Render no GUI widget for this field; its value is fixed by the plugin author in `default` and filled in by `normalize_field_values` like any other blank field. A GUI affordance only — the CLI flag, the wire payload, validation and normalization are all unchanged, so never hide a secret behind it. All-hidden plugins present as a bare action button |
 | `include_in_origin` | `bool \| None` | `None` | Copy into the persisted origin dict. `None` = field-type default (`False` for `"file"` / `"password"`, `True` otherwise) |
 | `origin_serializer` | `Callable[[Any], str] \| None` | `None` | Custom value → origin-string conversion for list/dict values |
 | `template_vars` | `tuple[str, ...]` | `()` | Template placeholders the framework substitutes into this field's value; see [Field-value normalization](#field-value-normalization) |

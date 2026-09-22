@@ -29,6 +29,7 @@ import { SortingApiService } from '../../../services/sorting-api.service';
 import type { LabelFilter } from '../../../services/sorting-api.service';
 import { ToastService } from '../../../services/toast.service';
 import { ImporterField } from '../../../models/api.models';
+import { visibleFields } from '../../../utils/plugin-fields';
 import { DynamicFieldOptions } from '../../../utils/dynamic-field-options';
 import {
   openBlankTab,
@@ -522,9 +523,22 @@ export class ExportModalComponent implements OnInit {
 
   /** The exporter's plugin-defined fields, narrowed to the legacy
    *  ImporterField shape (the OpenAPI spec types it as an open dict
-   *  because plugin field schemas aren't part of the generated client). */
+   *  because plugin field schemas aren't part of the generated client).
+   *
+   *  Every declared field, `hidden` ones included — this is the list the
+   *  form is *seeded* from, and a hidden field still carries its default
+   *  into the submitted values. Use `visibleExporterFieldsOf` for anything
+   *  the user sees. */
   private exporterFieldsOf(exporter: ExporterEntry): ImporterField[] {
     return (exporter.fields ?? []) as ImporterField[];
+  }
+
+  /** The subset of `exporterFieldsOf` a form should render: a `hidden`
+   *  field's value is fixed by the plugin author, so there is nothing to
+   *  ask the user for. An exporter whose fields are *all* hidden therefore
+   *  presents as a bare action button (issue #4078). */
+  private visibleExporterFieldsOf(exporter: ExporterEntry): ImporterField[] {
+    return visibleFields(this.exporterFieldsOf(exporter));
   }
 
   /** Initial form value for *field*: its declared default, or the first
@@ -629,11 +643,15 @@ export class ExportModalComponent implements OnInit {
     }
   }
 
-  /** Start exporter flow: if no fields, export immediately. */
+  /** Start exporter flow: if there is nothing to ask the user, export
+   *  immediately. Hidden fields still need seeding first — their defaults
+   *  are what the export runs on — so the values go through
+   *  `initFormValues` rather than being skipped as `{}`. */
   startExporter(exporter: ExporterEntry): void {
-    const fields = this.exporterFieldsOf(exporter);
-    if (fields.length === 0) {
-      this.exportLabelsWith(exporter, {});
+    if (this.visibleExporterFieldsOf(exporter).length === 0) {
+      this.initFormValues(exporter);
+      this.applyDefaultFilename(exporter);
+      this.exportLabelsWith(exporter, { ...this.formValues });
       return;
     }
     this.selectedExporter = exporter;
@@ -672,7 +690,7 @@ export class ExportModalComponent implements OnInit {
    *  field schemas aren't part of the OpenAPI client). */
   get activeTabExporterFields(): ImporterField[] {
     const exp = this.activeTabExporter;
-    return exp ? this.exporterFieldsOf(exp) : [];
+    return exp ? this.visibleExporterFieldsOf(exp) : [];
   }
 
   /** Label for the action button on the active exporter tab. */
