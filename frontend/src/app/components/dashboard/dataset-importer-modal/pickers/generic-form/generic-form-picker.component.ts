@@ -12,6 +12,7 @@ import { DatasetsCrudApiService } from '../../../../../services/datasets-crud-ap
 import { DatasetsListingsApiService } from '../../../../../services/datasets-listings-api.service';
 import { apiErrorMessage } from '../../../../../utils/api-error';
 import { DynamicFieldOptions } from '../../../../../utils/dynamic-field-options';
+import { visibleFields } from '../../../../../utils/plugin-fields';
 import {
   CleanerInfo,
   CleanerSelection,
@@ -152,6 +153,13 @@ export class GenericFormPickerComponent {
       values[field.key] = raw;
     }
     return values;
+  }
+
+  /** The active importer's renderable fields. ``hidden`` fields keep their
+   *  seeded default in ``formValues`` and are still submitted; they just
+   *  get no widget. */
+  get visibleImporterFields(): ImporterField[] {
+    return visibleFields((this.selectedImporter()?.fields ?? []) as ImporterField[]);
   }
 
   get effectiveSoloMediaType(): string | null {

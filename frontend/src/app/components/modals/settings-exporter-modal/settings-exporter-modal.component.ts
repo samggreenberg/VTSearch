@@ -7,6 +7,7 @@ import { IconComponent } from '../../icon/icon.component';
 import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.component';
 import { SettingsIoApiService } from '../../../services/settings-io-api.service';
 import { ImporterField } from '../../../models/api.models';
+import { visibleFields } from '../../../utils/plugin-fields';
 import type { SettingsExporterEntry } from '../../../generated/api-client/models/settings-exporter-entry';
 import type { RunSettingsExportResponse } from '../../../generated/api-client/models/run-settings-export-response';
 import { apiErrorMessage } from '../../../utils/api-error';
@@ -72,7 +73,7 @@ export class SettingsExporterModalComponent implements OnDestroy {
    *  (the generated SettingsExporterEntry types `fields` as an open dict
    *  because plugin field schemas aren't part of the OpenAPI client). */
   get selectedExporterFields(): ImporterField[] {
-    return (this.selectedExporter?.fields ?? []) as ImporterField[];
+    return visibleFields((this.selectedExporter?.fields ?? []) as ImporterField[]);
   }
 
   selectExporter(exporter: SettingsExporterEntry): void {

@@ -1,7 +1,7 @@
 @if (selectedImporter(); as importer) {
   <div class="importer-form">
-    @if ((importer.fields?.length ?? 0) > 0) {
-      @for (field of importer.fields; track field.key) {
+    @if (visibleImporterFields.length > 0) {
+      @for (field of visibleImporterFields; track field.key) {
         @if (field.field_type === 'select' && field.key === 'media_type') {
           @if (!effectiveSoloMediaType) {
             <vt-import-config

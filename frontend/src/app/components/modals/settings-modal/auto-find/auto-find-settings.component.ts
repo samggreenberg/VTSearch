@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 
 import { IconComponent } from '../../../icon/icon.component';
 import { ImporterField } from '../../../../models/api.models';
+import { visibleFields } from '../../../../utils/plugin-fields';
 import { ExportersApiService } from '../../../../services/exporters-api.service';
 import { DynamicFieldOptions } from '../../../../utils/dynamic-field-options';
 import type { ExporterEntry } from '../../../../generated/api-client/models/exporter-entry';
@@ -137,11 +138,13 @@ export class AutoFindSettingsComponent implements OnInit {
     if (!this.syncFieldOptions()) this.emitChange();
   }
 
-  /** Fields of the active exporter, or ``[]`` for the "None" tab. */
+  /** Renderable fields of the active exporter, or ``[]`` for the "None"
+   *  tab. ``hidden`` fields are dropped: their values are fixed by the
+   *  plugin author and the framework fills them in server-side. */
   get activeFields(): ImporterField[] {
     if (!this.activeExporter) return [];
     const exp = this.exporters().find((e) => e.name === this.activeExporter);
-    return ((exp?.fields ?? []) as ImporterField[]) || [];
+    return visibleFields((exp?.fields ?? []) as ImporterField[]);
   }
 
   /** Current value for a field of the active exporter. */

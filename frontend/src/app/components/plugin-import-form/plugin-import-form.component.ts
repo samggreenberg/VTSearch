@@ -7,6 +7,7 @@ import { FieldOptions, ImporterField, ImporterInfo } from '../../models/api.mode
 import { DatasourceImportersApiService } from '../../services/datasource-importers-api.service';
 import { apiErrorMessage } from '../../utils/api-error';
 import { DynamicFieldOptions } from '../../utils/dynamic-field-options';
+import { visibleFields } from '../../utils/plugin-fields';
 import { FieldHintIconComponent } from '../field-hint-icon/field-hint-icon.component';
 import { FileBrowserComponent } from '../file-browser/file-browser.component';
 import { PluginCheckboxComponent } from '../plugin-checkbox/plugin-checkbox.component';
@@ -93,9 +94,11 @@ export class PluginImportFormComponent {
     });
   }
 
-  /** Typed view of the plugin's fields for the template. */
+  /** Typed view of the plugin's renderable fields for the template.
+   *  ``hidden`` fields are omitted — still seeded in `resetFor`, just not
+   *  offered for editing. */
   get importerFields(): ImporterField[] {
-    return (this.importer().fields ?? []) as ImporterField[];
+    return visibleFields((this.importer().fields ?? []) as ImporterField[]);
   }
 
   private resetFor(importer: ImporterInfo): void {

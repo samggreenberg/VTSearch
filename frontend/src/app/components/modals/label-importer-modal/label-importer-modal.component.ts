@@ -25,6 +25,7 @@ import { ImporterField, LoadingTask } from '../../../models/api.models';
 import type { LabelImporterEntry } from '../../../generated/api-client/models/label-importer-entry';
 import { apiErrorMessage } from '../../../utils/api-error';
 import { DynamicFieldOptions } from '../../../utils/dynamic-field-options';
+import { visibleFields } from '../../../utils/plugin-fields';
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
 import { formatProgressMessage, progressBarState, type ProgressBarState } from '../../../utils/format-progress';
 import { PluginCheckboxComponent } from '../../plugin-checkbox/plugin-checkbox.component';
@@ -122,7 +123,7 @@ export class LabelImporterModalComponent implements OnDestroy {
    *  (the generated LabelImporterEntry types `fields` as an open dict
    *  because plugin field schemas aren't part of the OpenAPI client). */
   get selectedImporterFields(): ImporterField[] {
-    return (this.selectedImporter?.fields ?? []) as ImporterField[];
+    return visibleFields((this.selectedImporter?.fields ?? []) as ImporterField[]);
   }
 
   selectImporter(importer: LabelImporterEntry): void {

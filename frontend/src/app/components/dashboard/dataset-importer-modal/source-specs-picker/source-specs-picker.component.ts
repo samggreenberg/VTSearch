@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 
 import { ClipperInfo, ConverterInfo, SourceSpec } from '../../../../models/api.models';
 import { PluginCheckboxComponent } from '../../../plugin-checkbox/plugin-checkbox.component';
+import { visibleFields } from '../../../../utils/plugin-fields';
 
 /** Checkbox column for choosing which source media types feed a
  *  multi-media import.  The native type sits at the top (always
@@ -184,6 +185,14 @@ export class SourceSpecsPickerComponent {
   currentConverter(sourceType: string): ConverterInfo | null {
     const name = this.currentConverterName(sourceType);
     return this.availableConverters().find((c) => c.name === name) || null;
+  }
+
+  /** The chosen converter's renderable parameter fields. A ``hidden`` one
+   *  is the converter author's to fix via ``default``; ``paramValue``
+   *  already falls back to that default, so leaving it out of the form
+   *  changes nothing but what the user sees. */
+  visibleConverterFields(sourceType: string): ConverterInfo['fields'] {
+    return visibleFields(this.currentConverter(sourceType)?.fields ?? []);
   }
 
   paramValue(sourceType: string, key: string): string | number | null {

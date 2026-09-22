@@ -10,6 +10,19 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`PluginField.hidden`, for a field the plugin author fills rather than the
+  user** (issue #4078). A field declared `hidden=True` gets no widget in any
+  GUI form; its value comes from the field's `default` and is normalized,
+  template-substituted and validated exactly as before, so the plugin body
+  cannot tell the difference. A plugin whose fields are *all* hidden presents
+  as a bare action button - the case this was added for is an `open_url`
+  subclass pointed at one in-house site, which should offer a button rather
+  than a URL box inviting the user to retype it. Additive and defaulted to
+  `False`, so no existing plugin changes. Hiding is a GUI affordance only
+  (the field-level sibling of `PluginBase.hidden_from_picker`): the CLI flag
+  survives, so a scripted or Auto-Find run can still override the fixed value,
+  and the field stays on the wire - it is not access control, and a secret
+  still belongs behind `field_type="password"`.
 - **Batched, GPU-able descriptor matching for structural search** (issue #3900).
   `vtscore.media.structural.ratio_test_matches` runs the brute-force L2 kNN +
   Lowe ratio test of one template against a whole candidate list as a single

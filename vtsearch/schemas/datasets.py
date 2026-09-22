@@ -292,6 +292,17 @@ class ImporterFieldSchema(Schema):
             )
         },
     )
+    hidden = fields.Boolean(
+        metadata={
+            "description": (
+                "When true, no GUI form renders a widget for this field: the plugin author fixes its value via "
+                "``default`` and the user only sees the remaining fields (a plugin whose fields are all hidden "
+                "presents as a bare action button). A GUI affordance only - the field still reaches the CLI, is "
+                "still normalised and validated server-side, and is still listed here, so it is never a place to "
+                "put a secret."
+            )
+        }
+    )
     template_vars = fields.List(
         fields.String(),
         metadata={

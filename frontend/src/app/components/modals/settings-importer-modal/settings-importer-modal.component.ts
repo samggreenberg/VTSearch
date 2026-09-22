@@ -7,6 +7,7 @@ import { IconComponent } from '../../icon/icon.component';
 import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.component';
 import { SettingsIoApiService } from '../../../services/settings-io-api.service';
 import { ImporterField } from '../../../models/api.models';
+import { visibleFields } from '../../../utils/plugin-fields';
 import type { SettingsImporterEntry } from '../../../generated/api-client/models/settings-importer-entry';
 import { apiErrorMessage } from '../../../utils/api-error';
 import { DynamicFieldOptions } from '../../../utils/dynamic-field-options';
@@ -76,7 +77,7 @@ export class SettingsImporterModalComponent implements OnDestroy {
    *  (the generated SettingsImporterEntry types `fields` as an open dict
    *  because plugin field schemas aren't part of the OpenAPI client). */
   get selectedImporterFields(): ImporterField[] {
-    return (this.selectedImporter?.fields ?? []) as ImporterField[];
+    return visibleFields((this.selectedImporter?.fields ?? []) as ImporterField[]);
   }
 
   selectImporter(importer: SettingsImporterEntry): void {

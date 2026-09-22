@@ -3940,6 +3940,10 @@
             ],
             "type": "string"
           },
+          "hidden": {
+            "description": "When true, no GUI form renders a widget for this field: the plugin author fixes its value via ``default`` and the user only sees the remaining fields (a plugin whose fields are all hidden presents as a bare action button). A GUI affordance only - the field still reaches the CLI, is still normalised and validated server-side, and is still listed here, so it is never a place to put a secret.",
+            "type": "boolean"
+          },
           "hint": {
             "description": "Inline format-hint text rendered as a visible chip below the input. Distinct from ``description`` (which feeds the placeholder): the hint stays visible after the user starts typing, so it is the right place for accepted extensions or a short sample file layout.",
             "type": "string"

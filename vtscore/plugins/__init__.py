@@ -227,6 +227,32 @@ class PluginField:
     #: :attr:`include_in_origin` resolves to ``False``.
     origin_serializer: Callable[[Any], str] | None = None
 
+    #: When ``True``, no GUI form renders a widget for this field: the
+    #: value is the plugin author's to supply, not the user's.  Pair it
+    #: with :attr:`default` — the framework fills a hidden field in from
+    #: that default like any other blank field, so the plugin body reads
+    #: it exactly as if the user had typed it.  Use this for a value the
+    #: deployment fixes and the user must not edit or even see: the
+    #: canonical case is an ``open_url`` subclass whose ``url_template``
+    #: points at one in-house site, which should present as a single
+    #: button rather than as a URL box the user is invited to retype.
+    #:
+    #: Hiding is a **GUI affordance only**, the field-level sibling of
+    #: :attr:`PluginBase.hidden_from_picker`.  The field keeps its CLI
+    #: flag (so a scripted or Auto-Find run can still override the fixed
+    #: value), keeps its place in ``to_dict()`` on the wire, and is
+    #: validated, normalised and template-substituted exactly like a
+    #: visible one.  It is *not* an access control: the value ships to
+    #: the browser in the plugin listing either way, so never hide a
+    #: secret behind it — use ``field_type="password"`` for that.
+    #:
+    #: A hidden field that is :attr:`required` with no :attr:`default`
+    #: is unfillable from the GUI and will fail validation on submit.
+    #: That combination is only meaningful for a CLI-only field; give a
+    #: GUI-reachable plugin a default, or mark the field
+    #: ``required=False``.
+    hidden: bool = False
+
     #: Template variables the framework should substitute into this
     #: field's value before the plugin's ``run`` / ``export`` receives
     #: it.  Each name (e.g. ``"detector_name"``) is replaced everywhere
@@ -260,6 +286,7 @@ class PluginField:
             "max": self.max,
             "step": self.step,
             "clears": list(self.clears),
+            "hidden": self.hidden,
             "template_vars": list(self.template_vars),
         }
 
