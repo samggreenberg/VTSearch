@@ -35,6 +35,7 @@ from flask_smorest import Blueprint, abort
 
 from vtsearch.errors import error_response
 from vtsearch.auth import get_current_user
+from vtscore.state.core import DetectorNotLoadedError
 from vtscore.detectors.embedder_type import detector_embedder_type_from_data
 from vtscore.detectors.store import (
     _detector_path,
@@ -615,7 +616,12 @@ def _unload_active_detector() -> dict:
     from vtscore.detectors.registry import remove_loaded_detector_id
     from vtsearch.state import get_active_detector_context
 
-    det_ctx = get_active_detector_context()
+    try:
+        det_ctx = get_active_detector_context()
+    except DetectorNotLoadedError:
+        # The request named a detector that isn't in memory (or no longer
+        # exists): there is nothing to tear down (issue #4086).
+        return {"ok": True, "labels_restored": 0, "examples_seeded": 0}
     prev_id = det_ctx.detector_id if det_ctx.detector_id else None
     if prev_id:
         from vtsearch.state import unregister_detector_context
@@ -768,7 +774,16 @@ def load_detector_route(body: dict):
         if not can_user_access_detector(detector_id, get_current_user()):
             abort(403, message="You do not have access to this detector")
 
-    if good_votes or bad_votes:
+    # Flush the outgoing detector's votes -- when there is one.  A tab still
+    # open on a deleted detector sends its id as ``X-Detector-Id``, and the
+    # proxies raise ``DetectorNotLoadedError`` for it; letting that escape
+    # refused the very load that would move the tab off the dead detector
+    # (issue #4086).  A detector that isn't in memory has no votes to flush.
+    try:
+        has_votes = bool(good_votes or bad_votes)
+    except DetectorNotLoadedError:
+        has_votes = False
+    if has_votes:
         sync_labels_to_loaded_detector()
 
     if detector_id is None:
