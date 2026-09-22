@@ -631,6 +631,11 @@ def must_contain(knob, var, shipped, effective):
 pinned("head", "CALIB_HEAD", PRODUCTION_HEAD)
 pinned("acq_offset", "CALIB_ACQ_INCLUSION_OFFSET", T.ACQUISITION_INCLUSION_OFFSET)
 pinned("calibrate_count", "CALIB_CALIBRATE_COUNT", 2)
+# The LIVE cut rule (#3557) - unset resolves to FOLD_ANCHOR_CUT_RULE inside the
+# harness.  Distinct from `cut_rule` below, which is the set of RE-CUTS riding
+# the trajectory: this one moves the trajectory itself (acquisition re-cuts the
+# same estimator), so a pinned value is a run-level arm and must be declared.
+pinned("live_cut_rule", "CALIB_LIVE_CUT_RULE", T.FOLD_ANCHOR_CUT_RULE)
 # The Train/Calibrate split of each calibration fold (#3287/#3290).  The
 # shipped default is no longer one scalar: unset resolves per embedder through
 # `production_split_for` (PRODUCTION_SPLIT_BY_SPACE), exactly as the app does,
