@@ -114,6 +114,36 @@ class TestLocalFolderSource:
         source = LocalFolderSource(root)
         assert source.fetch_item("../secret.txt").path is None
 
+    def test_fetch_item_follows_symlink_out_of_root(self, tmp_path):
+        """A symlinked file whose target is outside the root must stay fetchable.
+
+        ``list_items`` walks with ``followlinks=True``, so it hands out a key
+        for exactly this file.  A containment check that resolved the symlink
+        first rejected every such key, and origin resolution then reported
+        "N needed origin resolution, 0 resolved successfully".
+        """
+        root = tmp_path / "root"
+        (root / "neg").mkdir(parents=True)
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "img.jpg").write_bytes(b"pixels")
+        (root / "neg" / "img.jpg").symlink_to(outside / "img.jpg")
+
+        source = LocalFolderSource(root)
+
+        # The key the walk emits is the key that must fetch.
+        assert [i.key for i in source.list_items([".jpg"])] == ["neg/img.jpg"]
+
+        item = source.fetch_item("neg/img.jpg")
+        assert item.path is not None
+        assert item.path.read_bytes() == b"pixels"
+
+        # Origin resolution goes through the same path.
+        assert source.resolve_path(origin_name="neg/img.jpg").path is not None
+
+        # Lexical traversal out of the root is still refused.
+        assert source.fetch_item("neg/../../outside/img.jpg").path is None
+
     def test_resolve_path_by_origin_name(self, tmp_path):
         root = self._make_tree(tmp_path)
         source = LocalFolderSource(root)
