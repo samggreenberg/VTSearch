@@ -1,6 +1,6 @@
 # DocMarks — datasheet and use register
 
-**Corpus version v4.1** (`docmarks_config.CORPUS_VERSION`), 2026-09-22. DocMarks
+**Corpus version v4.2** (`docmarks_config.CORPUS_VERSION`), 2026-09-22. DocMarks
 is a benchmark for **finding a given stamp or printed logo in a pile of scanned
 pages**, from one query crop. It exists so that ideas about that task (matchers,
 shortlists, embedders, query handling) can be tested against labels someone has
@@ -14,7 +14,7 @@ covers what the data *is* and what a study may *conclude* from it.
 | | |
 |---|---|
 | pages | **199,855**, in three nested tiers: `s` = 4,999 ⊂ `m` = 49,969 ⊂ `l` = 199,855 |
-| roster | **27 classes**, **2,004 instances**, almost always one instance per page — one class repeats, see [Repeated marks on a page](#repeated-marks-on-a-page) |
+| roster | **27 classes**, **2,024 instances**, almost always one instance per page — one class repeats, see [Repeated marks on a page](#repeated-marks-on-a-page) |
 | instances per class | 8 to 399, median 32 |
 | other labels | 733 must-link and 1,159 cannot-link rows in `adjudications.json`, keyed on `(page_id, mark_index)` |
 | query | one primary crop per class (`query_crop`) plus up to four hand-chosen alternates (`query_crops`), **119 in all**, so a study can average over queries (#3949) |
@@ -42,7 +42,7 @@ Every other roster class has at most one instance per page.
 | SPODS | pseudo-official documents made for the dataset, carrying logos, stamps and signatures | 1,088 | 11 (5 logos, 6 stamps) | 349 |
 | Tobacco800 | 1980s–90s tobacco-litigation scans (IIT-CDIP), binarised; boxed logos and signatures | 1,290 | 10 logos | 1,312 |
 | StaVer | German scanned invoices carrying rubber stamps | 400 | 2 stamps | 28 |
-| UCSF Industry Documents | real scanned pages from six industries; **distractors, and since v4.0 four roster classes of its own** | 197,077 | 4 logos | 315 |
+| UCSF Industry Documents | real scanned pages from six industries; **distractors, and since v4.0 four roster classes of its own** | 197,077 | 4 logos | 335 |
 
 **Every anchor page is in tier `s`.** The 2,778 SPODS, Tobacco800 and StaVer
 pages all sit in the smallest tier, next to 2,221 UCSF pages. Tiers `m` and `l`
@@ -75,7 +75,8 @@ to a class: they were the raw material for the proposed UCSF classes (#3921,
 
 **Those classes passed their audit, so as of v4.0 UCSF does hold positives.**
 Four of them — `bat_leaf`, `bw_oval_emblem`, `p_lorillard_crest` and
-`rjr_script` — carry 315 instances over 315 UCSF pages. Anything that scored
+`rjr_script` — carry 335 instances over 335 UCSF pages (315 at v4.0; the
+v4.2 review of banded pages found 20 more). Anything that scored
 every UCSF page as a negative on the strength of the older claim is wrong for
 those four classes and needs re-checking (#4050).
 
@@ -106,9 +107,9 @@ those four classes and needs re-checking (#4050).
 | `tobacco800/logo_bqz95d00_1` | logo | 10 | 173 × 214 |
 | `tobacco800/logo_cgr96c00_1` | logo | 10 | 172 × 179 |
 | `tobacco800/logo_ciy01a00-page02_1_0` | logo | 24 | 192 × 184 |
-| `ucsf/logo_bat_leaf` | logo | 194 | 55 × 41 |
+| `ucsf/logo_bat_leaf` | logo | 213 | 55 × 41 |
 | `ucsf/logo_bw_oval_emblem` | logo | 30 | 100 × 33 |
-| `ucsf/logo_p_lorillard_crest` | logo | 23 | 209 × 73 |
+| `ucsf/logo_p_lorillard_crest` | logo | 24 | 209 × 73 |
 | `ucsf/logo_rjr_script` | logo | 68 | 280 × 59 |
 
 The roster was picked by hand, and deliberately not from the top of the
@@ -127,7 +128,8 @@ See [`2026-09-13-docmarks-v3`](../../../docs/experiments/2026-09-13-docmarks-v3/
 | v3 | 2026-09-14 | roster countersigned; every instance and all 276 pairs adjudicated | 613 |
 | v3.1 | 2026-09-17 | completeness pass applied (#3927); cells relabelled, no pages added or removed | 721 |
 | v4.0 | 2026-09-20 | UCSF classes admitted (#3953), second completeness pass, query-crop alternates; duplicate page records removed (#4054) | 2,004 |
-| **v4.1** | 2026-09-22 | the four UCSF classes score against UCSF's un-banded industries (#3922); no page, label or roster change | **2,004** |
+| v4.1 | 2026-09-22 | the four UCSF classes score against UCSF's un-banded industries (#3922); no page, label or roster change | 2,004 |
+| **v4.2** | 2026-09-22 | 1,610 banded pages reviewed for the UCSF classes (#4088): 20 new positives, 1,551 reviewed negatives; SigLIP's top presumed negatives checked for all 27 classes (#4089): 0 of 516 carry the mark | **2,024** |
 
 The pages and tiers are identical between v3 and v3.1. Only labels moved: 108
 pages that v3 scored as **negatives** for a class are positives in v3.1.
@@ -152,6 +154,13 @@ narrowed from all of UCSF to its Tobacco industry (below). A v4.0 number for
 any of the other 23 classes is a v4.1 number. For the four UCSF classes,
 **re-score**. The cells need no relabel, because pools are computed at scoring
 time.
+
+**v4.2 is a minor bump too:** labels only, on the same pages. Two hand passes
+moved them. The banded review (#4088) added 20 positives to the UCSF classes
+and 1,551 reviewed negatives. The top-hit review (#4089) turned 516 presumed
+negatives, spread over all 27 classes, into reviewed ones, and found no
+unlabelled positive among them. Every class's pool changed, so **re-score**
+every class. The cells need no relabel.
 
 `build_report.json` records `corpus_version` from builds after v3.1. The
 on-disk v3.1 corpus predates that field, and is recognisable by
@@ -258,14 +267,16 @@ The query crop's own page is dropped from every pool.
   source's style. A `source_prior` control that ranks pages by source and
   ignores the mark then scores **AP 1.00** under `eligible`.
 - Under `own_verified` the same control scores **0.029** (#3904, #3913).
-- **The UCSF classes still carry a style shortcut.** Every positive is on a
-  banded Tobacco-industry letter, and the only such pages among their negatives
-  are the 1–13 per class a person reviewed. At tier `m` a control that ranks
-  UCSF Tobacco pages first, ignoring the mark, scores **AP 0.53–0.97** under
-  `own_verified`. Ranking by source alone, it scored 0.20–0.97 at v4.0 and
-  0.00 at v4.1. A method that learns "tobacco letterhead" rather than
-  the mark will look good on these four. More reviewed negatives from the banded
-  pool are the fix (#3922, #4088).
+- **The UCSF classes' style shortcut is closed at tier `m` (v4.2).** Every
+  positive is on a banded Tobacco-industry letter. Until v4.2 the only such pages
+  among their negatives were the 1–13 per class a person had reviewed. So a
+  control that ranks UCSF Tobacco pages first, ignoring the mark, scored **AP
+  0.50–0.97** under `own_verified` at tier `m`. The #4088 review added 65–1,041
+  reviewed Tobacco negatives per class, and the control now scores **0.15–0.17**
+  at `m`. Two residuals remain. At tier `l` it is 0.17–0.27, because
+  `p_lorillard_crest` gains positives whose banded neighbours were not sampled.
+  At tier `s` it is 0.14–0.38, because 2–5 positives make the control noisy.
+  Ranking by source alone scored 0.20–0.97 at v4.0 and 0.00 since v4.1.
 
 ## What this dataset can and cannot be asked
 
@@ -293,7 +304,7 @@ those copies is scored down for it, and SIFT is not.
 | Telling **near-identical marks** apart | **supported** | All 276 roster pairs adjudicated; the three leaf marks, two chiefs and four Secretary stamps are separate classes by ruling, and cannot-links are permanent. |
 | **Localisation** (box IoU, detection mAP) | **not supported for StaVer, unmeasured elsewhere** | Boxes come from source masks and were never audited for tightness, except the query crops. StaVer boxes on `stampds-00213_1` are wide enough to take in the separate EINGEGANGEN AM date stamp. |
 | **Query sensitivity**: how much does the crop matter? | **not yet** | One crop per class until #3949 is applied. `tobacco800/logo_aeq93a00_1`'s crop has 211 SIFT keypoints and sits at the bottom of every ranking, so a per-class result mixes the method with that crop. |
-| Retrieval **of UCSF letterheads** (the four roster classes) | **method-vs-method only, and not as a headline** | The pools are sound to a measured bound at v4.1, but a mark-blind Tobacco-industry control scores AP 0.53–0.97 (above), so an absolute number mostly measures the shortcut. The other band classes proposed in #3902 are still audit candidates (#3921, #3922). |
+| Retrieval **of UCSF letterheads** (the four roster classes) | **supported at tier `m`, with the control beside it** | At v4.2 a mark-blind Tobacco-industry control scores AP 0.15–0.17 at `m` (above). Quote it beside any UCSF-class number, and read tiers `s` and `l` with their residuals. The other band classes proposed in #3902 are still audit candidates (#3921, #3922). |
 | Compare against a number measured **before 2026-09-17 07:40** | **not comparable** | That is v3: 108 of today's positives were negatives then. Re-score against the relabelled cells. |
 
 ### Known gaps, by class
@@ -327,21 +338,33 @@ those copies is scored down for it, and SIFT is not.
   A rate bound is not a count bound: 1% of a 46,700-page pool is ~470 pages, and
   a UCSF class has 9–181 positives there. What the bounds show is that nothing
   is common, and the ranked arms show nothing sits at the top of a SigLIP
-  ranking.
+  ranking. The top-hit review (#4089, v4.2) then checked each class's
+  highest-ranked presumed negatives from a real SigLIP run at tiers `s` and `m`:
+  **0 of 516** carried the mark. Each run can queue its own
+  (`eval_retrieval.py` writes `surprise_hits.json`; `surprise_review.py`).
 
 ### Reference points, not targets
 
-These are recorded so a new idea has something to stand next to. **All were
-measured on v3 labels**, so re-score before comparing:
+These are recorded so a new idea has something to stand next to. `own_verified`
+pool, mean over the roster. The first rows were **re-run on v4.2** (27 classes,
+#4087); the rest are **v3** numbers (23 classes), to be re-scored before
+comparing:
 
-| ranker | tier `s` AP | tier `m` AP | source |
-|---|---:|---:|---|
-| SIFT, 8,192 keypoints, every page verified | 0.78 | 0.75 | #3911 |
-| tiled VLAD top-1,000 → SIFT | 0.71 | 0.59 | #3928 |
-| tiled VLAD alone | 0.40 | 0.25 | #3928 |
-| SuperPoint + LightGlue | 0.39 | — | #3911 |
-| SigLIP | 0.12 | 0.076 | #3904 |
-| page-level VLAD (`sift_vlad` cell) | 0.029 | 0.003 | #3911 |
+| ranker | tier `s` AP | tier `m` AP | labels | source |
+|---|---:|---:|---|---|
+| SIFT, 8,192 keypoints, every page verified | 0.79 | 0.83 | v4.2 | #4087 |
+| SigLIP top-1,000 → SIFT | 0.52 | 0.30 | v4.2 | #4087 |
+| page-level VLAD top-1,000 → SIFT | 0.39 | 0.041 | v4.2 | #4087 |
+| SigLIP | 0.12 | 0.083 | v4.2 | #4087 |
+| page-level VLAD (`sift_vlad` cell) | 0.022 | 0.004 | v4.2 | #4087 |
+| tiled VLAD top-1,000 → SIFT | 0.71 | 0.59 | v3 | #3928 |
+| tiled VLAD alone | 0.40 | 0.25 | v3 | #3928 |
+| SuperPoint + LightGlue | 0.39 | — | v3 | #3911 |
+
+At tier `s`, `ucsf/logo_p_lorillard_crest` has no positive and scores 0 for
+every ranker; the tier-`s` means include it. The four UCSF classes, tier `m`,
+v4.2: SIFT 0.75–0.91, SigLIP 0.00–0.16, against the mark-blind Tobacco-first
+control at 0.15–0.17 ([report](../../../docs/experiments/2026-09-22-docmarks-review-4088-4089/REPORT.md)).
 
 The `source_prior` control, which ignores the mark, scores 0.029 on
 `own_verified`: within-source chance (#3904).
