@@ -1,0 +1,687 @@
+{
+ "class": "dining table",
+ "seed": 20260920,
+ "strata": {
+  "table": 13,
+  "tablecloth": 15,
+  "dining_table": 4,
+  "place_mat": 4,
+  "tray": 4,
+  "coffee_table": 4,
+  "plate": 4
+ },
+ "items": [
+  {
+   "file": "dining_table_f539a74bd9fb.jpg",
+   "order": 0,
+   "image_id": 416104,
+   "bbox": [
+    489.55,
+    328.28,
+    54.33,
+    31.96
+   ],
+   "ann_id": 1619165,
+   "lvis": "table",
+   "stratum": "table"
+  },
+  {
+   "file": "dining_table_57ff0444f2e2.jpg",
+   "order": 1,
+   "image_id": 117089,
+   "bbox": [
+    0.0,
+    119.47,
+    478.92,
+    507.68
+   ],
+   "ann_id": 413192,
+   "lvis": "dining_table",
+   "stratum": "dining_table"
+  },
+  {
+   "file": "dining_table_a0bde9c9babb.jpg",
+   "order": 2,
+   "image_id": 442743,
+   "bbox": [
+    1.11,
+    2.21,
+    636.23,
+    418.26
+   ],
+   "ann_id": 1962483,
+   "lvis": "plate",
+   "stratum": "plate"
+  },
+  {
+   "file": "dining_table_15d43e905fee.jpg",
+   "order": 3,
+   "image_id": 35682,
+   "bbox": [
+    7.19,
+    321.92,
+    472.81,
+    310.65
+   ],
+   "ann_id": 390467,
+   "lvis": "tray",
+   "stratum": "tray"
+  },
+  {
+   "file": "dining_table_416b3d8e7d4e.jpg",
+   "order": 4,
+   "image_id": 261062,
+   "bbox": [
+    411.04,
+    367.77,
+    131.87,
+    44.09
+   ],
+   "ann_id": 1962775,
+   "lvis": "coffee_table",
+   "stratum": "coffee_table"
+  },
+  {
+   "file": "dining_table_7aac8cfa6b6c.jpg",
+   "order": 5,
+   "image_id": 285400,
+   "bbox": [
+    0.95,
+    25.7,
+    639.05,
+    392.7
+   ],
+   "ann_id": 413917,
+   "lvis": "dining_table",
+   "stratum": "dining_table"
+  },
+  {
+   "file": "dining_table_8366458b49fb.jpg",
+   "order": 6,
+   "image_id": 450087,
+   "bbox": [
+    0.68,
+    461.56,
+    479.32,
+    178.44
+   ],
+   "ann_id": 420756,
+   "lvis": "plate",
+   "stratum": "plate"
+  },
+  {
+   "file": "dining_table_4bbeb4a42427.jpg",
+   "order": 7,
+   "image_id": 251242,
+   "bbox": [
+    28.11,
+    270.81,
+    564.32,
+    203.24
+   ],
+   "ann_id": 415424,
+   "lvis": "tablecloth",
+   "stratum": "tablecloth"
+  },
+  {
+   "file": "dining_table_f70492e5ff4f.jpg",
+   "order": 8,
+   "image_id": 271803,
+   "bbox": [
+    0.0,
+    200.32,
+    480.0,
+    439.68
+   ],
+   "ann_id": 1614443,
+   "lvis": "table",
+   "stratum": "table"
+  },
+  {
+   "file": "dining_table_213292fbd0e3.jpg",
+   "order": 9,
+   "image_id": 402448,
+   "bbox": [
+    0.0,
+    146.86,
+    607.01,
+    260.15
+   ],
+   "ann_id": 1613350,
+   "lvis": "tablecloth",
+   "stratum": "tablecloth"
+  },
+  {
+   "file": "dining_table_553d74e17fe6.jpg",
+   "order": 10,
+   "image_id": 444156,
+   "bbox": [
+    0.0,
+    97.83,
+    640.0,
+    324.61
+   ],
+   "ann_id": 1961229,
+   "lvis": "tablecloth",
+   "stratum": "tablecloth"
+  },
+  {
+   "file": "dining_table_b783a5a51d86.jpg",
+   "order": 11,
+   "image_id": 523174,
+   "bbox": [
+    0.84,
+    213.26,
+    499.16,
+    157.94
+   ],
+   "ann_id": 392910,
+   "lvis": "coffee_table",
+   "stratum": "coffee_table"
+  },
+  {
+   "file": "dining_table_fafb3447c636.jpg",
+   "order": 12,
+   "image_id": 489958,
+   "bbox": [
+    569.01,
+    371.38,
+    70.99,
+    103.66
+   ],
+   "ann_id": 118099,
+   "lvis": "table",
+   "stratum": "table"
+  },
+  {
+   "file": "dining_table_6e7a106c26fd.jpg",
+   "order": 13,
+   "image_id": 557539,
+   "bbox": [
+    0.0,
+    37.66,
+    375.0,
+    455.85
+   ],
+   "ann_id": 1965190,
+   "lvis": "tray",
+   "stratum": "tray"
+  },
+  {
+   "file": "dining_table_938e4f07cfd9.jpg",
+   "order": 14,
+   "image_id": 460950,
+   "bbox": [
+    2.15,
+    1.79,
+    637.13,
+    469.24
+   ],
+   "ann_id": 1616728,
+   "lvis": "tray",
+   "stratum": "tray"
+  },
+  {
+   "file": "dining_table_ec41f2745bdf.jpg",
+   "order": 15,
+   "image_id": 5486,
+   "bbox": [
+    315.48,
+    316.99,
+    146.69,
+    53.25
+   ],
+   "ann_id": 121333,
+   "lvis": "tablecloth",
+   "stratum": "tablecloth"
+  },
+  {
+   "file": "dining_table_67f5ae0d4a1c.jpg",
+   "order": 16,
+   "image_id": 4180,
+   "bbox": [
+    149.43,
+    275.09,
+    490.57,
+    204.91
+   ],
+   "ann_id": 119615,
+   "lvis": "tablecloth",
+   "stratum": "tablecloth"
+  },
+  {
+   "file": "dining_table_ae01416c9390.jpg",
+   "order": 17,
+   "image_id": 13129,
+   "bbox": [
+    1.25,
+    2.49,
+    638.33,
+    477.51
+   ],
+   "ann_id": 1965084,
+   "lvis": "tablecloth",
+   "stratum": "tablecloth"
+  },
+  {
+   "file": "dining_table_f22309b08921.jpg",
+   "order": 18,
+   "image_id": 288762,
+   "bbox": [
+    1.11,
+    0.0,
+    638.6,
+    419.47
+   ],
+   "ann_id": 1961279,
+   "lvis": "table",
+   "stratum": "table"
+  },
+  {
+   "file": "dining_table_866d43319bae.jpg",
+   "order": 19,
+   "image_id": 82449,
+   "bbox": [
+    0.0,
+    1.58,
+    640.0,
+    418.69
+   ],
+   "ann_id": 2225631,
+   "lvis": "tray",
+   "stratum": "tray"
+  },
+  {
+   "file": "dining_table_c0057ac7a0ed.jpg",
+   "order": 20,
+   "image_id": 540923,
+   "bbox": [
+    4.85,
+    58.2,
+    633.0,
+    368.93
+   ],
+   "ann_id": 390205,
+   "lvis": "place_mat",
+   "stratum": "place_mat"
+  },
+  {
+   "file": "dining_table_4865b8a7f4f4.jpg",
+   "order": 21,
+   "image_id": 370802,
+   "bbox": [
+    181.03,
+    301.64,
+    314.79,
+    77.36
+   ],
+   "ann_id": 119853,
+   "lvis": "tablecloth",
+   "stratum": "tablecloth"
+  },
+  {
+   "file": "dining_table_97115135829b.jpg",
+   "order": 22,
+   "image_id": 521540,
+   "bbox": [
+    2.16,
+    0.54,
+    637.84,
+    473.51
+   ],
+   "ann_id": 1618797,
+   "lvis": "plate",
+   "stratum": "plate"
+  },
+  {
+   "file": "dining_table_c1c9f09a18ca.jpg",
+   "order": 23,
+   "image_id": 128970,
+   "bbox": [
+    3.18,
+    180.74,
+    602.46,
+    422.84
+   ],
+   "ann_id": 2131846,
+   "lvis": "table",
+   "stratum": "table"
+  },
+  {
+   "file": "dining_table_9428642ae5e8.jpg",
+   "order": 24,
+   "image_id": 413626,
+   "bbox": [
+    77.07,
+    237.56,
+    81.28,
+    26.52
+   ],
+   "ann_id": 1622919,
+   "lvis": "table",
+   "stratum": "table"
+  },
+  {
+   "file": "dining_table_daaa8a004eb9.jpg",
+   "order": 25,
+   "image_id": 314125,
+   "bbox": [
+    4.31,
+    244.59,
+    467.42,
+    384.0
+   ],
+   "ann_id": 420825,
+   "lvis": "table",
+   "stratum": "table"
+  },
+  {
+   "file": "dining_table_ae8e746f9c7c.jpg",
+   "order": 26,
+   "image_id": 358065,
+   "bbox": [
+    107.27,
+    77.02,
+    504.73,
+    457.96
+   ],
+   "ann_id": 1617807,
+   "lvis": "place_mat",
+   "stratum": "place_mat"
+  },
+  {
+   "file": "dining_table_6059ed2f1798.jpg",
+   "order": 27,
+   "image_id": 397303,
+   "bbox": [
+    0.0,
+    238.61,
+    132.77,
+    90.71
+   ],
+   "ann_id": 2194130,
+   "lvis": "table",
+   "stratum": "table"
+  },
+  {
+   "file": "dining_table_6cc6d4f83d69.jpg",
+   "order": 28,
+   "image_id": 558854,
+   "bbox": [
+    0.0,
+    10.59,
+    500.0,
+    362.65
+   ],
+   "ann_id": 119827,
+   "lvis": "table",
+   "stratum": "table"
+  },
+  {
+   "file": "dining_table_5bc182768f00.jpg",
+   "order": 29,
+   "image_id": 322959,
+   "bbox": [
+    25.43,
+    34.97,
+    573.85,
+    559.54
+   ],
+   "ann_id": 1961638,
+   "lvis": "table",
+   "stratum": "table"
+  },
+  {
+   "file": "dining_table_1ea490735cb9.jpg",
+   "order": 30,
+   "image_id": 386058,
+   "bbox": [
+    1.38,
+    2.75,
+    610.62,
+    602.37
+   ],
+   "ann_id": 1620821,
+   "lvis": "table",
+   "stratum": "table"
+  },
+  {
+   "file": "dining_table_4bde9197991d.jpg",
+   "order": 31,
+   "image_id": 529300,
+   "bbox": [
+    72.04,
+    186.16,
+    24.52,
+    60.77
+   ],
+   "ann_id": 1618226,
+   "lvis": "tablecloth",
+   "stratum": "tablecloth"
+  },
+  {
+   "file": "dining_table_c67feaecb408.jpg",
+   "order": 32,
+   "image_id": 578871,
+   "bbox": [
+    1.5,
+    239.96,
+    476.63,
+    392.69
+   ],
+   "ann_id": 118128,
+   "lvis": "dining_table",
+   "stratum": "dining_table"
+  },
+  {
+   "file": "dining_table_05fd3a8e5b5d.jpg",
+   "order": 33,
+   "image_id": 186980,
+   "bbox": [
+    15.02,
+    305.88,
+    398.13,
+    323.0
+   ],
+   "ann_id": 118892,
+   "lvis": "dining_table",
+   "stratum": "dining_table"
+  },
+  {
+   "file": "dining_table_16ea5337c58b.jpg",
+   "order": 34,
+   "image_id": 129980,
+   "bbox": [
+    158.44,
+    401.68,
+    232.4,
+    94.15
+   ],
+   "ann_id": 2131258,
+   "lvis": "coffee_table",
+   "stratum": "coffee_table"
+  },
+  {
+   "file": "dining_table_b893aae3fdac.jpg",
+   "order": 35,
+   "image_id": 466035,
+   "bbox": [
+    0.0,
+    1.32,
+    428.05,
+    424.01
+   ],
+   "ann_id": 2226549,
+   "lvis": "table",
+   "stratum": "table"
+  },
+  {
+   "file": "dining_table_53f98f805197.jpg",
+   "order": 36,
+   "image_id": 268350,
+   "bbox": [
+    300.66,
+    163.98,
+    190.37,
+    88.06
+   ],
+   "ann_id": 1614253,
+   "lvis": "tablecloth",
+   "stratum": "tablecloth"
+  },
+  {
+   "file": "dining_table_bfb8bc474497.jpg",
+   "order": 37,
+   "image_id": 470924,
+   "bbox": [
+    110.02,
+    153.17,
+    400.18,
+    320.36
+   ],
+   "ann_id": 391168,
+   "lvis": "table",
+   "stratum": "table"
+  },
+  {
+   "file": "dining_table_a58f6057b2fd.jpg",
+   "order": 38,
+   "image_id": 173004,
+   "bbox": [
+    0.0,
+    48.65,
+    640.0,
+    431.35
+   ],
+   "ann_id": 390301,
+   "lvis": "place_mat",
+   "stratum": "place_mat"
+  },
+  {
+   "file": "dining_table_08afeef7bb12.jpg",
+   "order": 39,
+   "image_id": 57551,
+   "bbox": [
+    0.0,
+    0.87,
+    639.58,
+    307.95
+   ],
+   "ann_id": 2131050,
+   "lvis": "tablecloth",
+   "stratum": "tablecloth"
+  },
+  {
+   "file": "dining_table_f1b0148e092a.jpg",
+   "order": 40,
+   "image_id": 379476,
+   "bbox": [
+    186.43,
+    396.03,
+    232.42,
+    91.78
+   ],
+   "ann_id": 2194285,
+   "lvis": "place_mat",
+   "stratum": "place_mat"
+  },
+  {
+   "file": "dining_table_7f4edf0feb1e.jpg",
+   "order": 41,
+   "image_id": 363577,
+   "bbox": [
+    0.0,
+    197.97,
+    585.38,
+    221.52
+   ],
+   "ann_id": 121035,
+   "lvis": "tablecloth",
+   "stratum": "tablecloth"
+  },
+  {
+   "file": "dining_table_7d0c082e54a9.jpg",
+   "order": 42,
+   "image_id": 532780,
+   "bbox": [
+    0.0,
+    4.5,
+    640.0,
+    415.49
+   ],
+   "ann_id": 1621846,
+   "lvis": "plate",
+   "stratum": "plate"
+  },
+  {
+   "file": "dining_table_0b6f3f77f2dd.jpg",
+   "order": 43,
+   "image_id": 277197,
+   "bbox": [
+    179.84,
+    327.4,
+    204.54,
+    87.94
+   ],
+   "ann_id": 120487,
+   "lvis": "coffee_table",
+   "stratum": "coffee_table"
+  },
+  {
+   "file": "dining_table_96a4a771b5c0.jpg",
+   "order": 44,
+   "image_id": 580264,
+   "bbox": [
+    2.88,
+    215.73,
+    424.12,
+    415.64
+   ],
+   "ann_id": 1622442,
+   "lvis": "tablecloth",
+   "stratum": "tablecloth"
+  },
+  {
+   "file": "dining_table_446aa1521b5b.jpg",
+   "order": 45,
+   "image_id": 339442,
+   "bbox": [
+    21.61,
+    362.39,
+    485.4,
+    142.96
+   ],
+   "ann_id": 1960376,
+   "lvis": "tablecloth",
+   "stratum": "tablecloth"
+  },
+  {
+   "file": "dining_table_b1eb629aa713.jpg",
+   "order": 46,
+   "image_id": 277051,
+   "bbox": [
+    0.0,
+    284.03,
+    640.0,
+    138.17
+   ],
+   "ann_id": 1614983,
+   "lvis": "tablecloth",
+   "stratum": "tablecloth"
+  },
+  {
+   "file": "dining_table_603edcb5b9f1.jpg",
+   "order": 47,
+   "image_id": 444315,
+   "bbox": [
+    453.03,
+    123.64,
+    186.97,
+    133.48
+   ],
+   "ann_id": 420231,
+   "lvis": "tablecloth",
+   "stratum": "tablecloth"
+  }
+ ]
+}

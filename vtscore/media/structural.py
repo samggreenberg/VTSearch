@@ -60,6 +60,27 @@ Bounds worst-case ``media["local_features"]`` size; a typical image yields ~1-2k
 SIFT keypoints and we keep the strongest ``DEFAULT_MAX_FEATURES`` of them.
 """
 
+DOCUMENT_MAX_FEATURES = 8192
+"""Keypoint cap for *document scans*, where ``DEFAULT_MAX_FEATURES`` starves the mark.
+
+A page is mostly text, text wins the SIFT response ranking, and at 1,024
+keypoints the mark being searched for gets none of the budget (#3911).  Measured
+on DocMarks (23 classes, 721 instances): retrieval AP **0.88** at this budget
+against **0.16** at ``DEFAULT_MAX_FEATURES`` with the shipped 2 MP detection cap,
+and 0.12 for SigLIP.
+
+Used by :mod:`vtscore.media.image.embedder_sift_vlad_doc`, which is a separate
+embedder so that binding it is recorded per dataset and no existing ``sift_vlad``
+cell changes meaning.
+
+**Coupled to** :data:`~vtscore.config.MAX_STRUCTURAL_DETECT_PIXELS` **- never move
+one alone** (#4021).  At this budget the shipped 2 MP cap is optimal (1 MP ties,
+4 MP 0.76, uncapped 0.74); at ``DEFAULT_MAX_FEATURES`` the optimum is 0.5 MP.
+
+**Storage:** local features scale with the budget - a tier-`l` DocMarks cell is
+~167 GB at 2 MP / 8,192 against ~78 GB at 1 MP / 8,192 (~169 KB/page measured).
+"""
+
 DEFAULT_MIN_INLIERS = 8
 """Cold-start inlier-count threshold for ``MatchStats.is_match``.
 

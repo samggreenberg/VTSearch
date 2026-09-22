@@ -102,6 +102,7 @@ declares it via its `embedding_dim` property):
 | `eupe_patch` | `image` | 768 |
 | `eupe_single` | `image` | 768 |
 | `sift_vlad` | `image` | 8192 |
+| `sift_vlad_doc` | `image` | 8192 |
 | `siglip2` | `image` | 768 |
 | `siglip2_l` | `image` | 1152 |
 | `siglip_l` | `image` | 1152 |
@@ -389,7 +390,7 @@ A **plugin family** is a registry enumerated by `vtscore.plugins.inventory` (`py
 | `converters` | library | Media converters | 8 |
 | `media_sources` | library | Media sources | 6 |
 | `media_types` | library | Media types | 6 |
-| `embedders` | library | Media embedders | 26 |
+| `embedders` | library | Media embedders | 27 |
 | `clippers` | library | Media clippers | 16 |
 | `cleaners` | library | Media cleaners | 7 |
 | `settings_importers` | app | Settings importers | 2 |

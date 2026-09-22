@@ -9,8 +9,12 @@ VG is the first demo dataset with per-image **multi-label** ground truth (an ima
 <!-- item-sep -->
 
 - **Vocab matching quality.** Object→category matching is a case/plural-folding
-  heuristic. VG synonyms/synsets (`names` has multiple aliases; `synsets` exists)
-  are only partially exploited; a richer synonym map would recover more positives.
+  heuristic, so a category built from one spelling drops every other. **`names`
+  is not the way out**: #3618 measured all 2,516,939 VG objects and every one
+  carries a `names` list of length **one**, so there is no alias to read. A
+  richer map has to come from `synsets`, or be measured the way `vg_scale` does
+  it (`name_evidence.py` (retired with Visual Genome — see `docs/plans/coco-quarry.md`) — box agreement and repair
+  precision per spelling, rather than string similarity).
 
 <!-- item-sep -->
 

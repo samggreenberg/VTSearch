@@ -1103,6 +1103,14 @@ and hides the trophy button and unlock pop-ups until you turn it back on.
   open the help sheet. It has two tabs: a **Keyboard shortcuts**
   reference and a **User guide** that renders this document inside the
   app (matching your theme).
+- **Step back and forward through the queue.** `→` and `←` cast the
+  vote; `↓` and `↑` move you around it without casting one. **`↓`**
+  returns you to the item you just voted on - press it again to step
+  further back through the ones before it - so you can take a second
+  look or change the vote with `→` / `←`. **`↑`** is the way out
+  again: it drops you on the next unlabeled item, wherever the
+  current selection strategy says that is. Because the arrows carry
+  this, **volume moved to `Shift`+`↑` / `Shift`+`↓`**.
 - **Double-click the image to zoom in.** In Train / Find, a double-click
   on the image zooms in on the spot you clicked - the quick way to check a
   detail before voting without leaving the keyboard rhythm. Double-click

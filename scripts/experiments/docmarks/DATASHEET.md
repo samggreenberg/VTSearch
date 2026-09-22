@@ -1,6 +1,6 @@
 # DocMarks — datasheet and use register
 
-**Corpus version v3.1** (`docmarks_config.CORPUS_VERSION`), 2026-09-17. DocMarks
+**Corpus version v4.0** (`docmarks_config.CORPUS_VERSION`), 2026-09-20. DocMarks
 is a benchmark for **finding a given stamp or printed logo in a pile of scanned
 pages**, from one query crop. It exists so that ideas about that task (matchers,
 shortlists, embedders, query handling) can be tested against labels someone has
@@ -13,33 +13,55 @@ covers what the data *is* and what a study may *conclude* from it.
 
 | | |
 |---|---|
-| pages | **200,000**, in three nested tiers: `s` = 5,000 ⊂ `m` = 50,000 ⊂ `l` = 200,000 |
-| roster | **23 classes**, **721 instances**, one instance per page (no roster class appears twice on a page) |
-| instances per class | 8 to 82, median 31 |
-| other labels | 695 must-link and 789 cannot-link rows in `adjudications.json`, keyed on `(page_id, mark_index)` |
-| query | one crop per class (`query_crop`). Extra hand-chosen crops are pending (#3949) |
+| pages | **199,855**, in three nested tiers: `s` = 4,999 ⊂ `m` = 49,969 ⊂ `l` = 199,855 |
+| roster | **27 classes**, **2,004 instances**, almost always one instance per page — one class repeats, see [Repeated marks on a page](#repeated-marks-on-a-page) |
+| instances per class | 8 to 399, median 32 |
+| other labels | 733 must-link and 1,159 cannot-link rows in `adjudications.json`, keyed on `(page_id, mark_index)` |
+| query | one primary crop per class (`query_crop`) plus up to four hand-chosen alternates (`query_crops`), **119 in all**, so a study can average over queries (#3949) |
 | cells | tiers `s` and `m`: `siglip` and `sift_vlad`. Tier `l`: `siglip` only (`sift_vlad` was cancelled because its keypoint budget starves it, #3911) |
 | lives at | `/expscratch/sgreenberg/docmarks/corpus/` (`corpus.jsonl`, `classes.json`, `adjudications.json`, `added_marks.json`, `roster.json`); cells under `vts-cache/datadir/embeddings/docmarks_<tier>__<embedder>.pkl` |
+
+### Repeated marks on a page
+
+One roster class breaks the otherwise one-instance-per-page rule.
+`tobacco800/logo_asg54f00_1` is a letterhead mark printed **three times on each
+of four pages** — `asg54f00`, `bjn43c00-page02_1`, `dqn43c00` and
+`nrg54f00-page02_1` — and once on six others: 18 instances over 10 pages.
+
+This is the data, not a labelling error; the letterhead really does carry the
+logo three times. A study that assumes one instance per page will undercount
+this class, so **rank by mark, not by page**, and count a page-level hit as
+correct when it matches any instance on that page.
+
+Every other roster class has at most one instance per page.
 
 ### Sources
 
 | source | what it is | pages | roster classes | roster instances |
 |---|---|---:|---:|---:|
-| SPODS | pseudo-official documents made for the dataset, carrying logos, stamps and signatures | 1,088 | 11 (5 logos, 6 stamps) | 347 |
-| Tobacco800 | 1980s–90s tobacco-litigation scans (IIT-CDIP), binarised; boxed logos and signatures | 1,290 | 10 logos | 348 |
-| StaVer | German scanned invoices carrying rubber stamps | 400 | 2 stamps | 26 |
-| UCSF Industry Documents | real scanned pages from six industries, **distractors only** | 197,222 | 0 | 0 |
+| SPODS | pseudo-official documents made for the dataset, carrying logos, stamps and signatures | 1,088 | 11 (5 logos, 6 stamps) | 349 |
+| Tobacco800 | 1980s–90s tobacco-litigation scans (IIT-CDIP), binarised; boxed logos and signatures | 1,290 | 10 logos | 1,312 |
+| StaVer | German scanned invoices carrying rubber stamps | 400 | 2 stamps | 28 |
+| UCSF Industry Documents | real scanned pages from six industries; **distractors, and since v4.0 four roster classes of its own** | 197,077 | 4 logos | 315 |
 
 **Every anchor page is in tier `s`.** The 2,778 SPODS, Tobacco800 and StaVer
-pages all sit in the smallest tier, next to 2,222 UCSF pages. Tiers `m` and `l`
-add **only UCSF pages**. So a class's same-source hard negatives are the same
-pages in every tier, and going from `s` to `l` adds only UCSF-style distractors.
+pages all sit in the smallest tier, next to 2,221 UCSF pages. Tiers `m` and `l`
+add **only UCSF pages**, so a class's same-source hard negatives are the same
+pages in every tier.
+
+**But since v4.0 a larger tier adds positives too, not only distractors.** The
+four UCSF roster classes put **10 instances in `s`, 256 more in `m` and 55 more
+in `l`**. For those four classes the positive set grows with the tier, so their
+tier-`s` and tier-`l` numbers are not measured over the same ground truth and
+must not be compared as though they were. The other 23 classes are unaffected:
+every one of their instances is on an anchor page, and every anchor page is in
+`s`.
 
 | UCSF industry | in `s` | in `m` | in `l` |
 |---|---:|---:|---:|
 | Opioids | 1,250 | 26,954 | 112,403 |
 | Food | 744 | 15,796 | 66,198 |
-| Tobacco | 158 | 3,340 | 14,002 |
+| Tobacco | 157 | 3,309 | 13,857 |
 | Chemical | 52 | 826 | 3,355 |
 | Drug | 12 | 234 | 979 |
 | Fossil Fuel | 6 | 72 | 285 |
@@ -47,10 +69,15 @@ pages in every tier, and going from `s` to `l` adds only UCSF-style distractors.
 The table is cumulative, since tiers are nested. `meta.tier` on a page records
 the smallest tier it is in, not its cumulative membership.
 
-UCSF pages carry 14,002 `letterhead_author` band boxes. None of them belongs to
-a class: they are raw material for the proposed
-UCSF classes (#3921, #3922). Until those pass the same audits, **UCSF holds no
-positives for anything.**
+UCSF pages carry 13,857 `letterhead_author` band boxes, none of which belongs
+to a class: they were the raw material for the proposed UCSF classes (#3921,
+#3922).
+
+**Those classes passed their audit, so as of v4.0 UCSF does hold positives.**
+Four of them — `bat_leaf`, `bw_oval_emblem`, `p_lorillard_crest` and
+`rjr_script` — carry 315 instances over 315 UCSF pages. Anything that scored
+every UCSF page as a negative on the strength of the older claim is wrong for
+those four classes and needs re-checking (#4050).
 
 ### The roster
 
@@ -61,24 +88,28 @@ positives for anything.**
 | `spods/logo_00014_0` | logo | 31 | 393 × 379 |
 | `spods/logo_00023_0` | logo | 31 | 377 × 391 |
 | `spods/logo_00029_0` | logo | 31 | 294 × 372 |
-| `spods/stamp_00293_1` | stamp | 33 | 263 × 263 |
+| `spods/stamp_00293_1` | stamp | 34 | 263 × 263 |
 | `spods/stamp_00546_1` | stamp | 32 | 389 × 168 |
 | `spods/stamp_00577_1` | stamp | 32 | 444 × 243 |
 | `spods/stamp_00612_1` | stamp | 32 | 531 × 242 |
 | `spods/stamp_00769_1` | stamp | 32 | 448 × 214 |
-| `spods/stamp_00931_1` | stamp | 31 | 376 × 82 |
-| `staver/stamp_stampds-00213_1` | stamp | 18 | 560 × 300 |
-| `staver/stamp_stampds-00230_0` | stamp | 8 | 317 × 183 |
-| `tobacco800/logo_aah97e00-page02_1_0` | logo | 63 | 316 × 193 |
-| `tobacco800/logo_aeq93a00_1` | logo | 14 | 217 × 105 |
-| `tobacco800/logo_afm90c00-first_1_0` | logo | 82 | 114 × 94 |
-| `tobacco800/logo_ajj10e00_1` | logo | 50 | 720 × 216 |
-| `tobacco800/logo_ald41a00-ernest_1` | logo | 51 | 237 × 99 |
-| `tobacco800/logo_asg54f00_1` | logo | 14 | 174 × 173 |
+| `spods/stamp_00931_1` | stamp | 32 | 376 × 82 |
+| `staver/stamp_stampds-00213_1` | stamp | 20 | 558 × 292 |
+| `staver/stamp_stampds-00230_0` | stamp | 8 | 317 × 184 |
+| `tobacco800/logo_aah97e00-page02_1_0` | logo | 370 | 120 × 72 |
+| `tobacco800/logo_aeq93a00_1` | logo | 130 | 94 × 39 |
+| `tobacco800/logo_afm90c00-first_1_0` | logo | 112 | 95 × 95 |
+| `tobacco800/logo_ajj10e00_1` | logo | 399 | 312 × 79 |
+| `tobacco800/logo_ald41a00-ernest_1` | logo | 206 | 156 × 45 |
+| `tobacco800/logo_asg54f00_1` | logo | 18 | 147 × 147 |
 | `tobacco800/logo_azb11c00_1` | logo | 33 | 69 × 78 |
 | `tobacco800/logo_bqz95d00_1` | logo | 10 | 173 × 214 |
-| `tobacco800/logo_cgr96c00_1` | logo | 9 | 170 × 177 |
-| `tobacco800/logo_ciy01a00-page02_1_0` | logo | 22 | 192 × 184 |
+| `tobacco800/logo_cgr96c00_1` | logo | 10 | 172 × 179 |
+| `tobacco800/logo_ciy01a00-page02_1_0` | logo | 24 | 192 × 184 |
+| `ucsf/logo_bat_leaf` | logo | 194 | 55 × 41 |
+| `ucsf/logo_bw_oval_emblem` | logo | 30 | 100 × 33 |
+| `ucsf/logo_p_lorillard_crest` | logo | 23 | 209 × 73 |
+| `ucsf/logo_rjr_script` | logo | 68 | 280 × 59 |
 
 The roster was picked by hand, and deliberately not from the top of the
 shortlist ranking, whose top 24 were 21 SPODS logos. Plain shapes (a red cross,
@@ -94,20 +125,30 @@ See [`2026-09-13-docmarks-v3`](../../../docs/experiments/2026-09-13-docmarks-v3/
 | version | date | what changed | instances |
 |---|---|---|---:|
 | v3 | 2026-09-14 | roster countersigned; every instance and all 276 pairs adjudicated | 613 |
-| **v3.1** | 2026-09-17 | completeness pass applied (#3927); cells relabelled, no pages added or removed | **721** |
+| v3.1 | 2026-09-17 | completeness pass applied (#3927); cells relabelled, no pages added or removed | 721 |
+| **v4.0** | 2026-09-20 | UCSF classes admitted (#3953), second completeness pass, query-crop alternates; duplicate page records removed (#4054) | **2,004** |
 
 The pages and tiers are identical between v3 and v3.1. Only labels moved: 108
 pages that v3 scored as **negatives** for a class are positives in v3.1.
 
-- **A number measured on v3 is not a v3.1 number.** That covers every study up
-  to and including #3904, #3911, #3912, #3914 and #3928.
-- It is comparable only after re-scoring against the relabelled cells.
-
 Versioning rule: a label-only change to the same page set bumps the minor
 version; a new page set, tier cut or roster bumps the major.
+
+**v4.0 is a major bump, and by that rule it had to be.** The roster went from 23
+classes to 27, which is the clause that decides it; the page set moved as well,
+from 200,000 records to 199,855, when 137 UCSF pages that had been ingested more
+than once were collapsed to one record each (#4054).
+
+- **A number measured on v3 or v3.1 is not a v4.0 number.** That covers every
+  study up to and including #3904, #3911, #3912, #3914 and #3928.
+- A minor bump is comparable after re-scoring against the relabelled cells. A
+  major one is not: at v4.0 the baselines are **re-run**, because the roster, the
+  positive sets and the page list all moved.
+
 `build_report.json` records `corpus_version` from builds after v3.1. The
 on-disk v3.1 corpus predates that field, and is recognisable by
-`added_marks.json` holding 7 boxes and 721 roster instances.
+`added_marks.json` holding 7 boxes and 721 roster instances; v4.0 holds 1,268
+boxes and 2,004 roster instances.
 
 ## Where the labels come from
 

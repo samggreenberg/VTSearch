@@ -1,0 +1,2759 @@
+{
+ "bad": [
+  {
+   "boxes_shown": [
+    [
+     0.486,
+     0.42933333333333334,
+     0.654,
+     0.5546666666666666
+    ]
+   ],
+   "cid": null,
+   "filename": "2335523.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "b274c0f1601eb73b",
+   "label": "bad",
+   "md5": "c974d427707d7bbfb159922adcd6ddef",
+   "media_type": "image",
+   "name": "2335523.jpg",
+   "origin_name": "2335523.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.764,
+     0.8336798336798337,
+     0.814,
+     0.8669438669438669
+    ]
+   ],
+   "cid": null,
+   "filename": "2339148.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "d43a873566d73274",
+   "label": "bad",
+   "md5": "b740bad9490eca1cffd927fe7e211368",
+   "media_type": "image",
+   "name": "2339148.jpg",
+   "origin_name": "2339148.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.396,
+     0.6036036036036037,
+     0.434,
+     0.6516516516516516
+    ]
+   ],
+   "cid": null,
+   "filename": "2343585.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "e4baa4caea2d984e",
+   "label": "bad",
+   "md5": "10496d1147424a7853e8207d799d4125",
+   "media_type": "image",
+   "name": "2343585.jpg",
+   "origin_name": "2343585.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.9226666666666666,
+     0.52,
+     0.9973333333333333,
+     0.566
+    ]
+   ],
+   "cid": null,
+   "filename": "2360040.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "7af0e30166652232",
+   "label": "bad",
+   "md5": "c328886664a6d111aa057571652087c8",
+   "media_type": "image",
+   "name": "2360040.jpg",
+   "origin_name": "2360040.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.73,
+     0.4199288256227758,
+     0.786,
+     0.5551601423487544
+    ]
+   ],
+   "cid": null,
+   "filename": "2389523.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "57583f2da90f82a5",
+   "label": "bad",
+   "md5": "89616528a26136aa66ec9f1a014c0b6f",
+   "media_type": "image",
+   "name": "2389523.jpg",
+   "origin_name": "2389523.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.41711229946524064,
+     0.344,
+     0.4893048128342246,
+     0.388
+    ]
+   ],
+   "cid": null,
+   "filename": "2390720.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "1f86ae4d82a99f08",
+   "label": "bad",
+   "md5": "5c3052ef5ddcea2d916d6ca4cdc9fc95",
+   "media_type": "image",
+   "name": "2390720.jpg",
+   "origin_name": "2390720.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  }
+ ],
+ "class": "bicycle",
+ "complete": true,
+ "detector_name": "bicycle incl trikes not motorcycles -- seat check",
+ "exported": "2026-09-17",
+ "framings": "Every element was voted on a side-padded render (slate_render.draw_with_side_inset): the photo at the canvas origin with the magnified box beside it on black padding. A drawn region_box is normalised to that CANVAS, so it is kept as region_box_canvas and region_box is converted to the photo with slate_render.side_inset_to_original, clipped at the photo's edge. boxes_shown is what the reviewer was shown; group says which population the seat came from.",
+ "good": [
+  {
+   "boxes_shown": [
+    [
+     0.6882352941176471,
+     0.7421875,
+     0.7073529411764706,
+     0.7822265625
+    ]
+   ],
+   "cid": null,
+   "filename": "1159328.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "30075aa3b0f46219",
+   "label": "good",
+   "md5": "974b328bc3c09ceed8ffc04bc3b4f582",
+   "media_type": "image",
+   "name": "1159328.jpg",
+   "origin_name": "1159328.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.1767578125,
+     0.58203125,
+     0.421875,
+     0.9544270833333334
+    ]
+   ],
+   "cid": null,
+   "filename": "1159490.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "2f40ed32463c3d63",
+   "label": "good",
+   "md5": "086f7f26a13fa575f47e03b275a74f04",
+   "media_type": "image",
+   "name": "1159490.jpg",
+   "origin_name": "1159490.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.1416015625,
+     0.4895833333333333,
+     0.166015625,
+     0.5403645833333334
+    ]
+   ],
+   "cid": null,
+   "filename": "1160114.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "4dcfdab4170f6f7b",
+   "label": "good",
+   "md5": "7cf3c914b44a266ff7fd5160ba8b90a4",
+   "media_type": "image",
+   "name": "1160114.jpg",
+   "origin_name": "1160114.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.40875,
+     0.6916666666666667,
+     0.4575,
+     0.7583333333333333
+    ]
+   ],
+   "cid": null,
+   "filename": "1409.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "3f6dc6af926c6447",
+   "label": "good",
+   "md5": "6938cb60fa8ac62070a01b842ac92677",
+   "media_type": "image",
+   "name": "1409.jpg",
+   "origin_name": "1409.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.75875,
+     0.615,
+     0.81,
+     0.67
+    ]
+   ],
+   "cid": null,
+   "filename": "1529.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "0f46737c1e1c3d20",
+   "label": "good",
+   "md5": "3fe07364c559fc37b2a9b42e11470387",
+   "media_type": "image",
+   "name": "1529.jpg",
+   "origin_name": "1529.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.4856770833333333,
+     0.515625,
+     1.0,
+     1.0
+    ]
+   ],
+   "cid": null,
+   "filename": "1592284.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "c0eaf6ff70b08172",
+   "label": "good",
+   "md5": "bfe6f2349598abf410183e3ad948d40c",
+   "media_type": "image",
+   "name": "1592284.jpg",
+   "origin_name": "1592284.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.5810546875,
+     0.23156342182890854,
+     0.6220703125,
+     0.3053097345132743
+    ]
+   ],
+   "cid": null,
+   "filename": "1593235.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "93736e84e5d956e2",
+   "label": "good",
+   "md5": "197d8ac543abe7b70503bfe6f8917005",
+   "media_type": "image",
+   "name": "1593235.jpg",
+   "origin_name": "1593235.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.6933333333333334,
+     0.5025,
+     0.735,
+     0.55125
+    ]
+   ],
+   "cid": null,
+   "filename": "1899.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "d3eedb6d4c6b9195",
+   "label": "good",
+   "md5": "d26aca4fedbaec4eeac02854ca138456",
+   "media_type": "image",
+   "name": "1899.jpg",
+   "origin_name": "1899.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.008,
+     0.14666666666666667,
+     1.0,
+     0.9253333333333333
+    ]
+   ],
+   "cid": null,
+   "filename": "2319745.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "c5ee37e47bba20d6",
+   "label": "good",
+   "md5": "ce9eeab5ab8a22a22cde76cd70c7e761",
+   "media_type": "image",
+   "name": "2319745.jpg",
+   "origin_name": "2319745.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.2275449101796407,
+     0.672,
+     0.26646706586826346,
+     0.726
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 500,
+    "canvas_w": 761,
+    "orig_h": 500,
+    "orig_w": 334
+   },
+   "cid": null,
+   "filename": "2320154.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "c7d78f81a5da3489",
+   "label": "good",
+   "md5": "21d026b1ceca822fd9bfab562637e509",
+   "media_type": "image",
+   "name": "2320154.jpg",
+   "origin_name": "2320154.jpg",
+   "region_box": [
+    0.8084065412457888,
+    0.756542366389365,
+    1.0,
+    0.8886229033021167
+   ],
+   "region_box_canvas": [
+    0.35480655029710045,
+    0.756542366389365,
+    0.4415874549703933,
+    0.8886229033021167
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.324,
+     0.44610778443113774,
+     0.71,
+     0.8293413173652695
+    ]
+   ],
+   "cid": null,
+   "filename": "2321296.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "9c83855a75df4015",
+   "label": "good",
+   "md5": "5ea9d8a1e80fe134fdb1f541d069df01",
+   "media_type": "image",
+   "name": "2321296.jpg",
+   "origin_name": "2321296.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.4924924924924925,
+     0.916,
+     0.5345345345345346,
+     0.94
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 500,
+    "canvas_w": 872,
+    "orig_h": 500,
+    "orig_w": 333
+   },
+   "cid": null,
+   "filename": "2321321.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "28ef49c71b53b4bb",
+   "label": "good",
+   "md5": "970b5628b66d7e20edfac8d36de21bee",
+   "media_type": "image",
+   "name": "2321321.jpg",
+   "origin_name": "2321321.jpg",
+   "region_box": [
+    0.21021196276521625,
+    0.7213422818791948,
+    0.3105807879662564,
+    0.7610738255033557
+   ],
+   "region_box_canvas": [
+    0.08027589862479015,
+    0.7213422818791948,
+    0.11860481925775615,
+    0.7610738255033557
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.092,
+     0.28,
+     0.46,
+     0.6586666666666666
+    ]
+   ],
+   "cid": null,
+   "filename": "2322124.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "d0ab262c5fdb5865",
+   "label": "good",
+   "md5": "6659c2f2ea43ec679e0ca19f24bdfbd8",
+   "media_type": "image",
+   "name": "2322124.jpg",
+   "origin_name": "2322124.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.23975409836065573,
+     0.528,
+     0.4733606557377049,
+     0.994
+    ]
+   ],
+   "cid": null,
+   "filename": "2322175.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "99a1a43363e45fbf",
+   "label": "good",
+   "md5": "c8682fdb86de35c6f2b2e68edb278c66",
+   "media_type": "image",
+   "name": "2322175.jpg",
+   "origin_name": "2322175.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.184,
+     0.46846846846846846,
+     0.368,
+     0.8318318318318318
+    ]
+   ],
+   "cid": null,
+   "filename": "2322511.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "310ae246a00a2dd1",
+   "label": "good",
+   "md5": "77639ca86845cee9eaf406a2fabdb793",
+   "media_type": "image",
+   "name": "2322511.jpg",
+   "origin_name": "2322511.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.274,
+     0.68,
+     0.47,
+     0.9466666666666667
+    ]
+   ],
+   "cid": null,
+   "filename": "2324208.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "4852839ab5ef85eb",
+   "label": "good",
+   "md5": "6e9342527cbcf80591d2b36112225506",
+   "media_type": "image",
+   "name": "2324208.jpg",
+   "origin_name": "2324208.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.09774436090225563,
+     0.506,
+     0.8646616541353384,
+     0.928
+    ],
+    [
+     0.7593984962406015,
+     0.358,
+     0.9097744360902256,
+     0.57
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 500,
+    "canvas_w": 800,
+    "orig_h": 500,
+    "orig_w": 399
+   },
+   "cid": null,
+   "filename": "2324234.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "f9780e2dd34f9605",
+   "label": "good",
+   "md5": "b5f20ae5ef7e0c3ff41d982698607cde",
+   "media_type": "image",
+   "name": "2324234.jpg",
+   "origin_name": "2324234.jpg",
+   "region_box": [
+    0.09251316209988057,
+    0.5154362416107383,
+    0.8898084136515785,
+    0.9355704697986578
+   ],
+   "region_box_canvas": [
+    0.04614093959731544,
+    0.5154362416107383,
+    0.4437919463087248,
+    0.9355704697986578
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.354,
+     0.6186186186186187,
+     0.422,
+     0.8378378378378378
+    ]
+   ],
+   "cid": null,
+   "filename": "2324576.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "0d600f344dcd00f5",
+   "label": "good",
+   "md5": "acb926f0f2902559c6b8ecc624637c7d",
+   "media_type": "image",
+   "name": "2324576.jpg",
+   "origin_name": "2324576.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.354,
+     0.39457831325301207,
+     0.434,
+     0.4608433734939759
+    ]
+   ],
+   "cid": null,
+   "filename": "2327819.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "5e9bcf666d211e97",
+   "label": "good",
+   "md5": "2b95387b49c1478b91983b3b72cc6f63",
+   "media_type": "image",
+   "name": "2327819.jpg",
+   "origin_name": "2327819.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.8825,
+     0.7066666666666667,
+     0.94625,
+     0.7766666666666666
+    ]
+   ],
+   "cid": null,
+   "filename": "2329.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "a44cb45debfca4d1",
+   "label": "good",
+   "md5": "121bfce045d251dd3dd9e0f2a761f80d",
+   "media_type": "image",
+   "name": "2329.jpg",
+   "origin_name": "2329.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.046,
+     0.5786666666666667,
+     0.102,
+     0.6426666666666667
+    ]
+   ],
+   "cid": null,
+   "filename": "2331367.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "f7d75a78c9a808a8",
+   "label": "good",
+   "md5": "31529424ffa4431ef921c2564424b14c",
+   "media_type": "image",
+   "name": "2331367.jpg",
+   "origin_name": "2331367.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.17328,
+     0.7345323741007194,
+     0.29296000000000005,
+     0.9161510791366907
+    ]
+   ],
+   "cid": null,
+   "filename": "2332554.jpg",
+   "framing": "side-right",
+   "group": "coco_audit",
+   "id": "db89ba7480994686",
+   "label": "good",
+   "md5": "a53bfd45c4b804ca6b386a0386935ff8",
+   "media_type": "image",
+   "name": "2332554.jpg",
+   "origin_name": "2332554.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.8,
+     0.7463556851311953,
+     0.91,
+     0.9970845481049563
+    ]
+   ],
+   "cid": null,
+   "filename": "2333403.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "91235b76deac1d8d",
+   "label": "good",
+   "md5": "f337603e54fe35f4cfd8041f642ab56c",
+   "media_type": "image",
+   "name": "2333403.jpg",
+   "origin_name": "2333403.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.02,
+     0.088,
+     0.08,
+     0.224
+    ]
+   ],
+   "cid": null,
+   "filename": "2334345.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "51b4f9ba2337f18c",
+   "label": "good",
+   "md5": "09c11dcb5b38041647904a2c5ddd07d4",
+   "media_type": "image",
+   "name": "2334345.jpg",
+   "origin_name": "2334345.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.21,
+     0.5484764542936288,
+     1.0,
+     0.9944598337950139
+    ]
+   ],
+   "cid": null,
+   "filename": "2334957.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "610d9011922085a7",
+   "label": "good",
+   "md5": "121f2258bbf99f606bd3c47348707a8b",
+   "media_type": "image",
+   "name": "2334957.jpg",
+   "origin_name": "2334957.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.76,
+     0.5173333333333333,
+     0.934,
+     0.8266666666666667
+    ]
+   ],
+   "cid": null,
+   "filename": "2335060.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "8f765ea2a5862847",
+   "label": "good",
+   "md5": "80d6fbfc6745f813c235f8eb9c354e11",
+   "media_type": "image",
+   "name": "2335060.jpg",
+   "origin_name": "2335060.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.760140625,
+     0.6637470725995317,
+     0.800953125,
+     0.7203044496487119
+    ]
+   ],
+   "cid": null,
+   "filename": "2335471.jpg",
+   "framing": "side-right",
+   "group": "coco_audit",
+   "id": "a1abd3122f3b4f92",
+   "label": "good",
+   "md5": "931489c7b9e0ce98284b5e4d35c73175",
+   "media_type": "image",
+   "name": "2335471.jpg",
+   "origin_name": "2335471.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.9610625,
+     0.13744730679156908,
+     1.0,
+     0.21501170960187355
+    ]
+   ],
+   "cid": null,
+   "filename": "2335764.jpg",
+   "framing": "side-right",
+   "group": "coco_audit",
+   "id": "53923c2ed1852b0b",
+   "label": "good",
+   "md5": "db801465c425a639edc90065389414ea",
+   "media_type": "image",
+   "name": "2335764.jpg",
+   "origin_name": "2335764.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.208,
+     0.3153153153153153,
+     0.712,
+     0.8858858858858859
+    ]
+   ],
+   "cid": null,
+   "filename": "2335990.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "43f9c9487e5c738a",
+   "label": "good",
+   "md5": "7d47ff613dc30d2a4e7015e2aa2a2803",
+   "media_type": "image",
+   "name": "2335990.jpg",
+   "origin_name": "2335990.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.468,
+     0.5165165165165165,
+     0.506,
+     0.5315315315315315
+    ]
+   ],
+   "cid": null,
+   "filename": "2336267.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "952e2952c36ed9c3",
+   "label": "good",
+   "md5": "8e3d935a3a1e3ed92aed1f4225127d5b",
+   "media_type": "image",
+   "name": "2336267.jpg",
+   "origin_name": "2336267.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.826,
+     0.21021021021021022,
+     0.964,
+     0.5315315315315315
+    ]
+   ],
+   "cid": null,
+   "filename": "2336716.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "7b437a6159bdf390",
+   "label": "good",
+   "md5": "5af9b604a7b386247f139179ac6264db",
+   "media_type": "image",
+   "name": "2336716.jpg",
+   "origin_name": "2336716.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.038,
+     0.224,
+     0.884,
+     0.9946666666666667
+    ]
+   ],
+   "cid": null,
+   "filename": "2336937.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "81b231f857eca758",
+   "label": "good",
+   "md5": "65053770ee2cc06e5d5849353d18491a",
+   "media_type": "image",
+   "name": "2336937.jpg",
+   "origin_name": "2336937.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.838,
+     0.4594594594594595,
+     0.956,
+     0.5855855855855856
+    ]
+   ],
+   "cid": null,
+   "filename": "2340771.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "eab7d1fd913ee24e",
+   "label": "good",
+   "md5": "6a6f53624a991ca5e6d6dc2d39d69f89",
+   "media_type": "image",
+   "name": "2340771.jpg",
+   "origin_name": "2340771.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.05105105105105105,
+     0.598,
+     0.42342342342342343,
+     0.766
+    ]
+   ],
+   "cid": null,
+   "filename": "2342212.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "72e00368acccd528",
+   "label": "good",
+   "md5": "3227998bb025f5289cb387f637025b53",
+   "media_type": "image",
+   "name": "2342212.jpg",
+   "origin_name": "2342212.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.09,
+     0.23582089552238805,
+     0.182,
+     0.39104477611940297
+    ]
+   ],
+   "cid": null,
+   "filename": "2342823.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "bf5a0709e55a408b",
+   "label": "good",
+   "md5": "f6b90632826741723f78029923711203",
+   "media_type": "image",
+   "name": "2342823.jpg",
+   "origin_name": "2342823.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.646,
+     0.5013333333333333,
+     0.684,
+     0.5653333333333334
+    ]
+   ],
+   "cid": null,
+   "filename": "2342947.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "15aec2f8b7ea7c38",
+   "label": "good",
+   "md5": "766046ec77b58ec1a0b4bb6921f50b05",
+   "media_type": "image",
+   "name": "2342947.jpg",
+   "origin_name": "2342947.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.012,
+     0.094,
+     0.078,
+     0.168
+    ]
+   ],
+   "cid": null,
+   "filename": "2343267.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "b23e7659660b765b",
+   "label": "good",
+   "md5": "cfedc62ce180fc773861ffe129b1d594",
+   "media_type": "image",
+   "name": "2343267.jpg",
+   "origin_name": "2343267.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.0,
+     0.5245398773006135,
+     0.518,
+     0.9969325153374233
+    ]
+   ],
+   "cid": null,
+   "filename": "2344135.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "545ea9a103021e99",
+   "label": "good",
+   "md5": "69e37b974b5117ff30663bf3f4f3cc42",
+   "media_type": "image",
+   "name": "2344135.jpg",
+   "origin_name": "2344135.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.278,
+     0.5315315315315315,
+     0.694,
+     1.0
+    ]
+   ],
+   "cid": null,
+   "filename": "2345174.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "1cb9df880b85fbcf",
+   "label": "good",
+   "md5": "962ec697d03880097211b3883c5c909b",
+   "media_type": "image",
+   "name": "2345174.jpg",
+   "origin_name": "2345174.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.0,
+     0.27466666666666667,
+     0.732,
+     0.9946666666666667
+    ],
+    [
+     0.078,
+     0.52,
+     0.486,
+     0.9013333333333333
+    ]
+   ],
+   "cid": null,
+   "filename": "2345826.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "9b4118d8308ea6db",
+   "label": "good",
+   "md5": "4ea67fabe87035e3c1b6372625bfbcb7",
+   "media_type": "image",
+   "name": "2345826.jpg",
+   "origin_name": "2345826.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.334,
+     0.624,
+     0.378,
+     0.7226666666666667
+    ]
+   ],
+   "cid": null,
+   "filename": "2347256.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "0ee4c0ea6bfa9013",
+   "label": "good",
+   "md5": "1ae2a91e48adb3c749dde3bc0d4f0a5f",
+   "media_type": "image",
+   "name": "2347256.jpg",
+   "origin_name": "2347256.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.036,
+     0.6333333333333333,
+     0.17,
+     0.7515151515151515
+    ]
+   ],
+   "cid": null,
+   "filename": "2347297.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "57e79a59c8cb94f2",
+   "label": "good",
+   "md5": "1f257ad5c6f44f7b3e711be41dc0a40a",
+   "media_type": "image",
+   "name": "2347297.jpg",
+   "origin_name": "2347297.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.702,
+     0.5146666666666667,
+     0.998,
+     0.9946666666666667
+    ]
+   ],
+   "cid": null,
+   "filename": "2347406.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "025a5e829006440c",
+   "label": "good",
+   "md5": "87e0ac149bc7df02f7c28be8c015c003",
+   "media_type": "image",
+   "name": "2347406.jpg",
+   "origin_name": "2347406.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.412,
+     0.754,
+     0.558,
+     0.87
+    ]
+   ],
+   "cid": null,
+   "filename": "2347767.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "5181ff0d8696fa06",
+   "label": "good",
+   "md5": "e94b9d9cedf6c45ec704a2744b0123fe",
+   "media_type": "image",
+   "name": "2347767.jpg",
+   "origin_name": "2347767.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.21,
+     0.4624624624624625,
+     0.41,
+     0.9819819819819819
+    ]
+   ],
+   "cid": null,
+   "filename": "2351820.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "904f49cd0a512bd6",
+   "label": "good",
+   "md5": "9206da98e3a2d64426ae248b7a56077c",
+   "media_type": "image",
+   "name": "2351820.jpg",
+   "origin_name": "2351820.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.89746875,
+     0.5102107728337237,
+     0.928671875,
+     0.576768149882904
+    ],
+    [
+     0.9082968749999999,
+     0.523864168618267,
+     0.9370624999999999,
+     0.5804215456674473
+    ]
+   ],
+   "cid": null,
+   "filename": "2354328.jpg",
+   "framing": "side-right",
+   "group": "coco_audit",
+   "id": "84e9a74e1211d22b",
+   "label": "good",
+   "md5": "4b4b7cbd68709da268e97e24d95b70a3",
+   "media_type": "image",
+   "name": "2354328.jpg",
+   "origin_name": "2354328.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.22,
+     0.5363408521303258,
+     0.83,
+     0.9799498746867168
+    ]
+   ],
+   "cid": null,
+   "filename": "2359132.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "ec6b8b5ace6afbea",
+   "label": "good",
+   "md5": "cf7ebe708939f0fe42a91f48a50ae7eb",
+   "media_type": "image",
+   "name": "2359132.jpg",
+   "origin_name": "2359132.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.132,
+     0.3933933933933934,
+     0.174,
+     0.43843843843843844
+    ]
+   ],
+   "cid": null,
+   "filename": "2359621.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "394232364f7d49c8",
+   "label": "good",
+   "md5": "6f13a0e679a48b9ec072cc5ab001302e",
+   "media_type": "image",
+   "name": "2359621.jpg",
+   "origin_name": "2359621.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.0,
+     0.5405405405405406,
+     0.23,
+     0.8978978978978979
+    ]
+   ],
+   "cid": null,
+   "filename": "2360445.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "e601263e947083cb",
+   "label": "good",
+   "md5": "8c56a010e6b784d7e433c9296918f466",
+   "media_type": "image",
+   "name": "2360445.jpg",
+   "origin_name": "2360445.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.502,
+     0.48859934853420195,
+     0.928,
+     0.9837133550488599
+    ],
+    [
+     0.468,
+     0.8371335504885994,
+     0.84,
+     0.990228013029316
+    ]
+   ],
+   "cid": null,
+   "filename": "2365612.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "a948bfd9f3cf4b9a",
+   "label": "good",
+   "md5": "0511cd7c084694633df8cbf6afd61492",
+   "media_type": "image",
+   "name": "2365612.jpg",
+   "origin_name": "2365612.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.038,
+     0.30933333333333335,
+     0.382,
+     0.7386666666666667
+    ]
+   ],
+   "cid": null,
+   "filename": "2367043.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "135f63f41a439d39",
+   "label": "good",
+   "md5": "d557f70b338326b9b5a96def4f1587c6",
+   "media_type": "image",
+   "name": "2367043.jpg",
+   "origin_name": "2367043.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.07,
+     0.021021021021021023,
+     0.96,
+     0.6036036036036037
+    ]
+   ],
+   "cid": null,
+   "filename": "2367050.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "3faa37358f469886",
+   "label": "good",
+   "md5": "2b7c20e5566b2cb6fbbbc567d991a619",
+   "media_type": "image",
+   "name": "2367050.jpg",
+   "origin_name": "2367050.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.1955193482688391,
+     0.184,
+     0.6985743380855397,
+     1.0
+    ]
+   ],
+   "cid": null,
+   "filename": "2368015.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "fd28656e03493e40",
+   "label": "good",
+   "md5": "e68d718f515dce61da1e0174d13ab2de",
+   "media_type": "image",
+   "name": "2368015.jpg",
+   "origin_name": "2368015.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.466,
+     0.5902140672782875,
+     0.868,
+     0.9388379204892966
+    ]
+   ],
+   "cid": null,
+   "filename": "2368476.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "bcc4b26f7cce7a8b",
+   "label": "good",
+   "md5": "c163059ea60e50fe14060a7491d56155",
+   "media_type": "image",
+   "name": "2368476.jpg",
+   "origin_name": "2368476.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.0,
+     0.37333333333333335,
+     0.394,
+     0.9973333333333333
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 825,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "filename": "2369282.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "aa21193a90460907",
+   "label": "good",
+   "md5": "e715aa771d327e87315735a817a7db10",
+   "media_type": "image",
+   "name": "2369282.jpg",
+   "origin_name": "2369282.jpg",
+   "region_box": [
+    0.4367014341590612,
+    0.5365710560625815,
+    0.8497392438070405,
+    1.0
+   ],
+   "region_box_canvas": [
+    0.2646675358539765,
+    0.5365710560625815,
+    0.5149934810951761,
+    1.0
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.196,
+     0.4189189189189189,
+     0.504,
+     0.7601351351351351
+    ]
+   ],
+   "cid": null,
+   "filename": "2369646.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "bc0cf13095fcc5a1",
+   "label": "good",
+   "md5": "31f010213b90f2939553de479094740c",
+   "media_type": "image",
+   "name": "2369646.jpg",
+   "origin_name": "2369646.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.332,
+     0.2670807453416149,
+     0.904,
+     0.9161490683229814
+    ]
+   ],
+   "cid": null,
+   "filename": "2369776.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "09ea562cc96da30e",
+   "label": "good",
+   "md5": "c69a0ba4ed339c05f36ed13da6eaf381",
+   "media_type": "image",
+   "name": "2369776.jpg",
+   "origin_name": "2369776.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.042042042042042045,
+     0.024,
+     0.7357357357357357,
+     0.266
+    ]
+   ],
+   "cid": null,
+   "filename": "2370347.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "58e708485c6e804d",
+   "label": "good",
+   "md5": "0e2c026fc9f549fa0b1c1377f93cb8c0",
+   "media_type": "image",
+   "name": "2370347.jpg",
+   "origin_name": "2370347.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.384,
+     0.384,
+     0.514,
+     0.7786666666666666
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 787,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "filename": "2372693.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "253e52694b6392cf",
+   "label": "good",
+   "md5": "55050f56dbd73a34c0771ffb7c18a46f",
+   "media_type": "image",
+   "name": "2372693.jpg",
+   "origin_name": "2372693.jpg",
+   "region_box": [
+    0.418638852672751,
+    0.5663528900478053,
+    0.47712516297262064,
+    0.7469421990438938
+   ],
+   "region_box_canvas": [
+    0.26597131681877445,
+    0.5663528900478053,
+    0.303129074315515,
+    0.7469421990438938
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.0,
+     0.45481927710843373,
+     0.254,
+     0.9036144578313253
+    ]
+   ],
+   "cid": null,
+   "filename": "2372755.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "a38a35c37e32813d",
+   "label": "good",
+   "md5": "6de61aa29da7e55aeace0a9166780773",
+   "media_type": "image",
+   "name": "2372755.jpg",
+   "origin_name": "2372755.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.206,
+     0.44011976047904194,
+     0.27,
+     0.4940119760479042
+    ]
+   ],
+   "cid": null,
+   "filename": "2372922.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "1250bd8c0ed63cb4",
+   "label": "good",
+   "md5": "443bf9d09c97b002e0a0f529e87a9e16",
+   "media_type": "image",
+   "name": "2372922.jpg",
+   "origin_name": "2372922.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.194,
+     0.6460176991150443,
+     0.376,
+     0.9085545722713865
+    ]
+   ],
+   "cid": null,
+   "filename": "2373802.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "f0f9a30e713c3b25",
+   "label": "good",
+   "md5": "1ca09c173001b662aafc383140d8f64e",
+   "media_type": "image",
+   "name": "2373802.jpg",
+   "origin_name": "2373802.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.886,
+     0.792,
+     0.982,
+     0.8693333333333333
+    ]
+   ],
+   "cid": null,
+   "filename": "2375160.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "78297bb558b1e6e3",
+   "label": "good",
+   "md5": "a346d78a8b7f028682b21233f090f4f6",
+   "media_type": "image",
+   "name": "2375160.jpg",
+   "origin_name": "2375160.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.626,
+     0.41333333333333333,
+     0.962,
+     0.7946666666666666
+    ]
+   ],
+   "cid": null,
+   "filename": "2375734.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "c1b868b6181e81d9",
+   "label": "good",
+   "md5": "e2fc1ca61584d61a88a92cba9b76622b",
+   "media_type": "image",
+   "name": "2375734.jpg",
+   "origin_name": "2375734.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.536,
+     0.472,
+     0.706,
+     0.6053333333333333
+    ]
+   ],
+   "cid": null,
+   "filename": "2375909.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "cb614360df320f1c",
+   "label": "good",
+   "md5": "e679d4593298caf1fd29b623a89d93ed",
+   "media_type": "image",
+   "name": "2375909.jpg",
+   "origin_name": "2375909.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.24,
+     0.5632530120481928,
+     0.454,
+     0.7801204819277109
+    ]
+   ],
+   "cid": null,
+   "filename": "2375927.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "f3db9ce0601a1065",
+   "label": "good",
+   "md5": "36e2588dc5f9c4afebc1637cc52b20b6",
+   "media_type": "image",
+   "name": "2375927.jpg",
+   "origin_name": "2375927.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.0,
+     0.25825825825825827,
+     0.16,
+     0.7387387387387387
+    ]
+   ],
+   "cid": null,
+   "filename": "2376567.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "cc4e234935ca8c4b",
+   "label": "good",
+   "md5": "515ec20dd46af1f7fcc2b8048d7f43dc",
+   "media_type": "image",
+   "name": "2376567.jpg",
+   "origin_name": "2376567.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.074,
+     0.7653333333333333,
+     0.284,
+     0.9626666666666667
+    ]
+   ],
+   "cid": null,
+   "filename": "2377111.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "d7f5051c5ca7ac61",
+   "label": "good",
+   "md5": "d05e86a5da1c7f3559f906b843bd4f6d",
+   "media_type": "image",
+   "name": "2377111.jpg",
+   "origin_name": "2377111.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.5837237237237237,
+     0.00156,
+     1.0,
+     0.7907799999999999
+    ]
+   ],
+   "cid": null,
+   "filename": "2378325.jpg",
+   "framing": "side-right",
+   "group": "coco_audit",
+   "id": "f74c1945c70e006e",
+   "label": "good",
+   "md5": "8ff1b9753a8faaa4bda76601cb0fede7",
+   "media_type": "image",
+   "name": "2378325.jpg",
+   "origin_name": "2378325.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.45112500000000005,
+     0.6945,
+     0.47684375,
+     0.8844583333333333
+    ]
+   ],
+   "cid": null,
+   "filename": "2378558.jpg",
+   "framing": "side-right",
+   "group": "coco_audit",
+   "id": "73b6cb104c12d00b",
+   "label": "good",
+   "md5": "9db518b37b981439053c702c191ad066",
+   "media_type": "image",
+   "name": "2378558.jpg",
+   "origin_name": "2378558.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.94278125,
+     0.7108541666666667,
+     0.96384375,
+     0.7729583333333333
+    ]
+   ],
+   "cid": null,
+   "filename": "2379561.jpg",
+   "framing": "side-right",
+   "group": "coco_audit",
+   "id": "2ff9d9d9a9a4b440",
+   "label": "good",
+   "md5": "f20f55a0112323087632f891445db547",
+   "media_type": "image",
+   "name": "2379561.jpg",
+   "origin_name": "2379561.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.346,
+     0.6465256797583081,
+     0.736,
+     1.0
+    ]
+   ],
+   "cid": null,
+   "filename": "2380420.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "77486a684f6fd9ae",
+   "label": "good",
+   "md5": "ee5ededcd8b1827807569739493a7b3c",
+   "media_type": "image",
+   "name": "2380420.jpg",
+   "origin_name": "2380420.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.294,
+     0.592,
+     0.322,
+     0.6373333333333333
+    ]
+   ],
+   "cid": null,
+   "filename": "2380579.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "211fe8cc5c6cce2b",
+   "label": "good",
+   "md5": "45163e37cb4591601a3989835cf9a003",
+   "media_type": "image",
+   "name": "2380579.jpg",
+   "origin_name": "2380579.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.75,
+     0.5466666666666666,
+     0.794,
+     0.5866666666666667
+    ]
+   ],
+   "cid": null,
+   "filename": "2381538.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "bb92b7b0c3e33dc3",
+   "label": "good",
+   "md5": "ce700c37115ef7536cb0645b811d4d3c",
+   "media_type": "image",
+   "name": "2381538.jpg",
+   "origin_name": "2381538.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.214,
+     0.6773333333333333,
+     0.58,
+     0.888
+    ]
+   ],
+   "cid": null,
+   "filename": "2381861.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "13d98dabfccbdd87",
+   "label": "good",
+   "md5": "9d9bc68793f3423437eda74e54d3b7da",
+   "media_type": "image",
+   "name": "2381861.jpg",
+   "origin_name": "2381861.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.9519519519519519,
+     0.944,
+     0.996996996996997,
+     0.988
+    ]
+   ],
+   "cid": null,
+   "filename": "2383302.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "136b4184b8f41ab3",
+   "label": "good",
+   "md5": "32b89302b43ac514afcbded03c3699e8",
+   "media_type": "image",
+   "name": "2383302.jpg",
+   "origin_name": "2383302.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.546,
+     0.45045045045045046,
+     0.696,
+     0.7237237237237237
+    ]
+   ],
+   "cid": null,
+   "filename": "2386299.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "9eee5318e136a0be",
+   "label": "good",
+   "md5": "6d6ebd26712cbc7b153f441aeca97c3f",
+   "media_type": "image",
+   "name": "2386299.jpg",
+   "origin_name": "2386299.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.186,
+     0.02666666666666667,
+     0.758,
+     0.512
+    ]
+   ],
+   "cid": null,
+   "filename": "2386608.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "4b4d62f836cb21ea",
+   "label": "good",
+   "md5": "b4a0a86bbb06c7c8c887b8fc1f3294d3",
+   "media_type": "image",
+   "name": "2386608.jpg",
+   "origin_name": "2386608.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.644,
+     0.5333333333333333,
+     0.748,
+     0.8533333333333334
+    ]
+   ],
+   "cid": null,
+   "filename": "2387404.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "f1242ab6d33d1041",
+   "label": "good",
+   "md5": "986bcb81844ba3e102e81a5e075fbda1",
+   "media_type": "image",
+   "name": "2387404.jpg",
+   "origin_name": "2387404.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.548,
+     0.3626666666666667,
+     0.682,
+     0.5653333333333334
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 375,
+    "canvas_w": 825,
+    "orig_h": 375,
+    "orig_w": 500
+   },
+   "cid": null,
+   "filename": "2388483.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "db31abf5bdd4c9a9",
+   "label": "good",
+   "md5": "a96d7903f69904f8523e7fba89180324",
+   "media_type": "image",
+   "name": "2388483.jpg",
+   "origin_name": "2388483.jpg",
+   "region_box": [
+    0.43885267275097783,
+    0.5207953063885268,
+    0.5055410691003911,
+    0.7588657105606258
+   ],
+   "region_box_canvas": [
+    0.26597131681877445,
+    0.5207953063885268,
+    0.30638852672750977,
+    0.7588657105606258
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.518,
+     0.6686746987951807,
+     0.57,
+     0.822289156626506
+    ]
+   ],
+   "cid": null,
+   "filename": "2388531.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "1252b80b5d547bc2",
+   "label": "good",
+   "md5": "6a77238194b17fc74db4c707a5b48856",
+   "media_type": "image",
+   "name": "2388531.jpg",
+   "origin_name": "2388531.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.534,
+     0.6246246246246246,
+     0.736,
+     0.8018018018018018
+    ]
+   ],
+   "cid": null,
+   "filename": "2389152.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "e09cc8c62ec7444b",
+   "label": "good",
+   "md5": "4cc075f140f6b4faddc7d388587530e3",
+   "media_type": "image",
+   "name": "2389152.jpg",
+   "origin_name": "2389152.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.2731839622641509,
+     0.523890625,
+     0.5119811320754717,
+     0.9123750000000002
+    ]
+   ],
+   "cid": null,
+   "filename": "2390106.jpg",
+   "framing": "side-right",
+   "group": "coco_audit",
+   "id": "e7e51aaffb4d81bb",
+   "label": "good",
+   "md5": "e3397d2224ff6b76de58786bdb960685",
+   "media_type": "image",
+   "name": "2390106.jpg",
+   "origin_name": "2390106.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.426,
+     0.4281437125748503,
+     0.712,
+     0.8532934131736527
+    ]
+   ],
+   "cid": null,
+   "filename": "2392602.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "583901384102361e",
+   "label": "good",
+   "md5": "b1748128c6166715cfef5066a4ef31c4",
+   "media_type": "image",
+   "name": "2392602.jpg",
+   "origin_name": "2392602.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.23466666666666666,
+     0.672,
+     0.37866666666666665,
+     0.916
+    ]
+   ],
+   "cid": null,
+   "filename": "2392960.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "c479ae0e6ed896ac",
+   "label": "good",
+   "md5": "1ab4713e2d77f0aa9d760e1d12cee9c8",
+   "media_type": "image",
+   "name": "2392960.jpg",
+   "origin_name": "2392960.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.1934673366834171,
+     0.692,
+     0.8090452261306532,
+     1.0
+    ]
+   ],
+   "cid": null,
+   "filename": "2394210.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "344776fc842b285f",
+   "label": "good",
+   "md5": "c055a2d77a5987c5a9be80c9fbdc4b85",
+   "media_type": "image",
+   "name": "2394210.jpg",
+   "origin_name": "2394210.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.26559374999999996,
+     0.5726041666666667,
+     0.29484374999999996,
+     0.6335833333333334
+    ]
+   ],
+   "cid": null,
+   "filename": "2395420.jpg",
+   "framing": "side-right",
+   "group": "coco_audit",
+   "id": "f2c838dd93955043",
+   "label": "good",
+   "md5": "02b3db34075bc476dce2ba8dd8b340cf",
+   "media_type": "image",
+   "name": "2395420.jpg",
+   "origin_name": "2395420.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.06306306306306306,
+     0.49,
+     0.984984984984985,
+     0.924
+    ]
+   ],
+   "cid": null,
+   "filename": "2395441.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "9495eb7e1bf5a5c2",
+   "label": "good",
+   "md5": "94ffd4951dfc599cb1c76bf09cff3cf6",
+   "media_type": "image",
+   "name": "2395441.jpg",
+   "origin_name": "2395441.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.016,
+     0.38636363636363635,
+     0.28,
+     0.7681818181818182
+    ]
+   ],
+   "cid": null,
+   "filename": "2395584.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "15c735e54a27042a",
+   "label": "good",
+   "md5": "4e5790e814c33fe1058452226a616aa3",
+   "media_type": "image",
+   "name": "2395584.jpg",
+   "origin_name": "2395584.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.07344632768361582,
+     0.804,
+     0.12146892655367232,
+     0.852
+    ]
+   ],
+   "cid": null,
+   "filename": "2398340.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "847b3cab075db083",
+   "label": "good",
+   "md5": "a847f810d93bb18a8856d0e2d0360891",
+   "media_type": "image",
+   "name": "2398340.jpg",
+   "origin_name": "2398340.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.547296875,
+     0.5780962343096234,
+     0.65703125,
+     0.7080753138075313
+    ]
+   ],
+   "cid": null,
+   "filename": "2399092.jpg",
+   "framing": "side-right",
+   "group": "coco_audit",
+   "id": "6232f2c44db03c2a",
+   "label": "good",
+   "md5": "44c2b32a4b310e244778157bb47576c0",
+   "media_type": "image",
+   "name": "2399092.jpg",
+   "origin_name": "2399092.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.352,
+     0.4251497005988024,
+     0.822,
+     0.8772455089820359
+    ]
+   ],
+   "cid": null,
+   "filename": "2400943.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "5747f1d4325967ab",
+   "label": "good",
+   "md5": "84e4a8a7b7f721994ca64015556f8cd1",
+   "media_type": "image",
+   "name": "2400943.jpg",
+   "origin_name": "2400943.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.238,
+     0.2552552552552553,
+     0.786,
+     0.9309309309309309
+    ],
+    [
+     0.25,
+     0.43243243243243246,
+     0.784,
+     0.9279279279279279
+    ]
+   ],
+   "canvas": {
+    "canvas_h": 333,
+    "canvas_w": 733,
+    "orig_h": 333,
+    "orig_w": 500
+   },
+   "cid": null,
+   "filename": "2401410.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "1aa295a273eed1d5",
+   "label": "good",
+   "md5": "4b9efad007da41cb46ed19a16f587734",
+   "media_type": "image",
+   "name": "2401410.jpg",
+   "origin_name": "2401410.jpg",
+   "region_box": [
+    0.2522972620599739,
+    0.4677138024595652,
+    0.7874732724902216,
+    0.9182856259127445
+   ],
+   "region_box_canvas": [
+    0.17209908735332463,
+    0.4677138024595652,
+    0.5371577574967406,
+    0.9182856259127445
+   ],
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.206,
+     0.46546546546546547,
+     0.732,
+     0.96996996996997
+    ]
+   ],
+   "cid": null,
+   "filename": "2405586.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "c88d6989625c0105",
+   "label": "good",
+   "md5": "9d83ac4fbceefa3b32dc47c9ad88130e",
+   "media_type": "image",
+   "name": "2405586.jpg",
+   "origin_name": "2405586.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.482,
+     0.44266666666666665,
+     0.828,
+     0.8
+    ]
+   ],
+   "cid": null,
+   "filename": "2409760.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "491316317203e90c",
+   "label": "good",
+   "md5": "a34c6fa46f5fafb4979efe94a9d73c92",
+   "media_type": "image",
+   "name": "2409760.jpg",
+   "origin_name": "2409760.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.412,
+     0.535,
+     0.432,
+     0.57
+    ]
+   ],
+   "cid": null,
+   "filename": "2417464.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "753dc6d3a23b638c",
+   "label": "good",
+   "md5": "9f3bde693ff8b79440aa76fe62c9d515",
+   "media_type": "image",
+   "name": "2417464.jpg",
+   "origin_name": "2417464.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.17663817663817663,
+     0.6985138004246284,
+     0.24786324786324787,
+     0.7452229299363057
+    ]
+   ],
+   "cid": null,
+   "filename": "3631.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "e3950130e1fa2e06",
+   "label": "good",
+   "md5": "abcb194842e619a2f27e9675452c7a77",
+   "media_type": "image",
+   "name": "3631.jpg",
+   "origin_name": "3631.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.6083333333333333,
+     0.49125,
+     0.6566666666666666,
+     0.5225
+    ]
+   ],
+   "cid": null,
+   "filename": "3833.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "37bf8a78edba0297",
+   "label": "good",
+   "md5": "f2fee1252bdb1413e4a6006ef7aebc56",
+   "media_type": "image",
+   "name": "3833.jpg",
+   "origin_name": "3833.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.8775,
+     0.5880149812734082,
+     0.97875,
+     0.7546816479400749
+    ]
+   ],
+   "cid": null,
+   "filename": "3855.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "71d376fe6cab7dbb",
+   "label": "good",
+   "md5": "c0b5dac1a2849c02cfc219a6fb2e91ef",
+   "media_type": "image",
+   "name": "3855.jpg",
+   "origin_name": "3855.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.18,
+     0.61,
+     0.2375,
+     0.6733333333333333
+    ]
+   ],
+   "cid": null,
+   "filename": "421.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "5f75b0bb492254f6",
+   "label": "good",
+   "md5": "2d0761b895b29c34377bad7344578edf",
+   "media_type": "image",
+   "name": "421.jpg",
+   "origin_name": "421.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.45875,
+     0.7433333333333333,
+     0.5575,
+     0.9216666666666666
+    ]
+   ],
+   "cid": null,
+   "filename": "4386.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "f931f9d5423b051a",
+   "label": "good",
+   "md5": "d0988935ce8a185f16f5e347f6a42db0",
+   "media_type": "image",
+   "name": "4386.jpg",
+   "origin_name": "4386.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.545,
+     0.54,
+     0.805,
+     0.765
+    ]
+   ],
+   "cid": null,
+   "filename": "484.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "83b3880f56c03c29",
+   "label": "good",
+   "md5": "298696518a98c7a76d2c59b4e5f6d0a3",
+   "media_type": "image",
+   "name": "484.jpg",
+   "origin_name": "484.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.056640625,
+     0.10677083333333333,
+     0.673828125,
+     0.8385416666666666
+    ]
+   ],
+   "cid": null,
+   "filename": "497988.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "cb3ab04967e941bb",
+   "label": "good",
+   "md5": "9ba198a1e47d790542643fa2c47ba56e",
+   "media_type": "image",
+   "name": "497988.jpg",
+   "origin_name": "497988.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.4407027818448023,
+     0.400390625,
+     1.0,
+     0.7099609375
+    ],
+    [
+     0.6222547584187409,
+     0.3720703125,
+     0.9970717423133236,
+     0.701171875
+    ]
+   ],
+   "cid": null,
+   "filename": "498185.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "0dbcc93a5bb874bc",
+   "label": "good",
+   "md5": "976914b45a4fe986023903c407e92247",
+   "media_type": "image",
+   "name": "498185.jpg",
+   "origin_name": "498185.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.03875,
+     0.7233333333333334,
+     0.2175,
+     0.9983333333333333
+    ],
+    [
+     0.0,
+     0.74,
+     0.13,
+     1.0016666666666667
+    ]
+   ],
+   "cid": null,
+   "filename": "55.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "10eeef50af51c21e",
+   "label": "good",
+   "md5": "5819582edb38fb147c5744f00cd8a7a2",
+   "media_type": "image",
+   "name": "55.jpg",
+   "origin_name": "55.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  },
+  {
+   "boxes_shown": [
+    [
+     0.65375,
+     0.5883333333333334,
+     0.79625,
+     0.8416666666666667
+    ],
+    [
+     0.595,
+     0.59,
+     0.6875,
+     0.8366666666666667
+    ]
+   ],
+   "cid": null,
+   "filename": "879.jpg",
+   "framing": "side-right",
+   "group": "vg_only",
+   "id": "29dae892df25a132",
+   "label": "good",
+   "md5": "601b22cc4487e9c6b36c61ab8294eaf6",
+   "media_type": "image",
+   "name": "879.jpg",
+   "origin_name": "879.jpg",
+   "region_box": null,
+   "score": -1.0,
+   "time": -1.0
+  }
+ ],
+ "kind": "seatcheck",
+ "question": "is the box on an instance of the class, and the most prominent one? (redraw if not; bad if none)",
+ "rule": "bicycle incl trikes not motorcycles",
+ "rule_digest": "b57acb12221e",
+ "source": "OWLv2-screened per-class review, exported from the live app"
+}

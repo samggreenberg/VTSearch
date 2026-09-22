@@ -958,6 +958,39 @@ def _refs_for_class(pages: list[Page], class_id: str) -> list[Any]:
     ]
 
 
+def dedupe_manifest(path: Path, *, apply: bool = False) -> int:
+    """Repair a corpus.jsonl that already holds duplicate page records (#4054).
+
+    ``write_manifest`` now dedupes on the way out, so this is only for a file
+    written before that.  Names every id it would collapse, and every id whose
+    copies disagreed about the marks, before writing anything.
+    """
+    from sources._common import dedupe_pages, read_manifest, write_manifest  # noqa: PLC0415
+
+    pages = list(read_manifest(path))
+    seen: dict[str, int] = {}
+    marks: dict[str, set[int]] = {}
+    for page in pages:
+        seen[page.page_id] = seen.get(page.page_id, 0) + 1
+        marks.setdefault(page.page_id, set()).add(len(page.marks))
+    dups = {k: v for k, v in seen.items() if v > 1}
+    if not dups:
+        print(f"no duplicate page_id in {path} ({len(pages)} record(s))")
+        return 0
+    divergent = sorted(k for k in dups if len(marks[k]) > 1)
+    print(f"{len(dups)} duplicated page_id(s) over {sum(v - 1 for v in dups.values())} extra record(s)")
+    print(f"  {len(dups) - len(divergent)} identical, {len(divergent)} disagreeing about the marks:")
+    for page_id in divergent:
+        print(f"    {page_id}: mark counts {sorted(marks[page_id])}")
+    kept, counts = dedupe_pages(pages)
+    if not apply:
+        print(f"would write {len(kept)} record(s) — dry run, pass --apply to write")
+        return 0
+    n = write_manifest(kept, path)
+    print(f"wrote {n} record(s) to {path} (was {counts['records']})")
+    return 0
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument(
@@ -1000,6 +1033,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         action="store_true",
         help="stamp the mark index onto legacy page-id-only adjudications, then exit",
     )
+    ap.add_argument(
+        "--tidy-added-marks",
+        action="store_true",
+        help="rewrite added_marks.json without rows repeating a (page_id, box, class_id) already in it, then exit",
+    )
+    ap.add_argument(
+        "--dedupe-manifest",
+        action="store_true",
+        help="rewrite corpus.jsonl with one record per page_id, keeping the longest mark list, then exit",
+    )
     ap.add_argument("--cluster-backend", default=cfg.CLUSTER_BACKEND, choices=("phash", "siglip"))
     ap.add_argument("--cluster-threshold", type=float, default=cfg.CLUSTER_THRESHOLD)
     ap.add_argument("--min-mark-px", type=int, default=cfg.MIN_MARK_PX)
@@ -1009,6 +1052,34 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     manifest_path = args.corpus / "corpus.jsonl"
     adjudications_path = args.corpus / "adjudications.json"
     classes = json.loads(classes_path.read_text(encoding="utf-8"))
+
+    if args.dedupe_manifest:
+        return dedupe_manifest(args.corpus / "corpus.jsonl", apply=args.apply)
+
+    if args.tidy_added_marks:
+        # The repair for a store written before saving deduped (#4042): a
+        # re-applied class stored every box it had already contributed again.
+        from completeness import ADDED_MARKS, added_mark_key, load_added_marks, save_added_marks  # noqa: PLC0415
+
+        store = args.corpus / ADDED_MARKS
+        rows = load_added_marks(store)
+        seen: set[Any] = set()
+        kept, duplicates = [], []
+        for row in rows:
+            key = added_mark_key(row)
+            (duplicates if key in seen else kept).append(row)
+            seen.add(key)
+        for row in duplicates:
+            print(f"  duplicate: {row['page_id']} {row['box']} {row.get('class_id')}")
+        print(f"{len(duplicates)} duplicate row(s) of {len(rows)} in {store}")
+        if not duplicates:
+            return 0
+        if args.apply:
+            save_added_marks(kept, store)
+            print(f"wrote {store} with {len(kept)} row(s)")
+        else:
+            print("dry run — pass --apply to write")
+        return 0
 
     if args.migrate_adjudications:
         from cluster_marks import load_adjudication_rows, save_adjudications
@@ -1176,14 +1247,27 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(f"  wrote {len(new_merges)} merge(s) and {len(new_separations)} separation(s) to {adjudications_path}")
 
     if new_added_marks:
-        from completeness import ADDED_MARKS, load_added_marks, save_added_marks  # noqa: PLC0415
+        from completeness import (  # noqa: PLC0415
+            ADDED_MARKS,
+            dedupe_added_marks,
+            load_added_marks,
+            save_added_marks,
+        )
 
         # Before classes.json and the manifest: a new box that is on a page but
         # not in the store would vanish at the next rebuild while its must-link
         # still names it, which is the drift this store exists to prevent.
         store = args.corpus / ADDED_MARKS
-        save_added_marks(load_added_marks(store) + new_added_marks, store)
-        print(f"  appended {len(new_added_marks)} hand-added mark(s) to {store}")
+        # Re-applying a class proposes every box it already contributed again
+        # (#4042), so count what the store actually gained rather than what the
+        # pass offered.
+        before = dedupe_added_marks(load_added_marks(store))
+        written = save_added_marks(before + new_added_marks, store)
+        already = len(new_added_marks) - (len(written) - len(before))
+        print(
+            f"  appended {len(written) - len(before)} hand-added mark(s) to {store}"
+            + (f" ({already} already on file)" if already else "")
+        )
 
     if new_reviewed_negatives or new_exclusions:
         import roster  # noqa: PLC0415

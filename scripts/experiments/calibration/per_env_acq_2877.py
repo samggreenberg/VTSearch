@@ -23,11 +23,15 @@ import pandas as pd
 sys.path.insert(0, ".")
 import analyze_acq as A
 
+from study_paths import require_study_dir
+
 ap = argparse.ArgumentParser(description="Per-environment ship rule for the #2877 pile run.")
 ap.add_argument("--analysis", default="/expscratch/sgreenberg/acq-2877/analysis")
 ap.add_argument("--figures", action="store_true", help="also draw one figure set per environment")
 ap.add_argument("--markdown", default=None, help="write the report's per-environment tables here")
 args = ap.parse_args()
+
+args.analysis = str(require_study_dir(args.analysis, "--analysis"))
 
 ANALYSIS = pathlib.Path(args.analysis)
 traj = pd.read_csv(ANALYSIS / "agg" / "trajectories.csv")

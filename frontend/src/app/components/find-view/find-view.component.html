@@ -97,10 +97,12 @@
     <vt-center-panel
       [media]="mediaState.selectedMedia"
       [disabled]="waiting"
-      [exhausted]="queueEmpty()"
+      [exhausted]="centreExhausted()"
       exhaustedHeading="All items reviewed"
       exhaustedDetail="Every item on both sides of the cutoff has been verified. Check Stats or export your results."
+      placeholderHint="Pick one from the work queue on the left, or score the dataset to build one."
       (mediaVoted)="onMediaVoted($event)"
+      (navigateRequested)="onNavigate($event)"
     />
   </div>
   <div

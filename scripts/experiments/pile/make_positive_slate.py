@@ -32,40 +32,13 @@ import sys
 from pathlib import Path
 
 import pile_config as pc
-from slate_render import inset_crop
+from slate_render import draw_with_inset
 
 pc.setup_env()
 
 
 def log(msg: str) -> None:
     print(f"[posslate] {msg}", flush=True)
-
-
-def draw_with_inset(src: Path, box: tuple[float, float, float, float], dest: Path) -> tuple[int, int]:
-    """Write *src* with *box* outlined and a magnified inset of its contents over a bottom corner.
-
-    The crop is :func:`slate_render.inset_crop`, shared with the side-padded framing
-    (``slate_render.draw_with_side_inset``), which leaves the whole photo visible.
-    """
-    from PIL import Image, ImageDraw  # noqa: PLC0415
-
-    with Image.open(src) as im:
-        im = im.convert("RGB")
-        W, H = im.size
-        crop, (x0, y0, x1, y1), lw = inset_crop(im, box)
-
-        out = im.copy()
-        d = ImageDraw.Draw(out)
-        d.rectangle([x0, y0, x1, y1], outline=(255, 32, 32), width=lw)
-
-        # Inset in whichever bottom corner is furthest from the box, so the
-        # magnifier never covers the thing it is magnifying.
-        ix = 0 if (x0 + x1) / 2 > W / 2 else W - crop.width
-        iy = H - crop.height
-        out.paste(crop, (ix, iy))
-        d.rectangle([ix, iy, ix + crop.width - 1, iy + crop.height - 1], outline=(255, 32, 32), width=lw)
-        out.save(dest, quality=92)
-        return out.size
 
 
 def main() -> int:

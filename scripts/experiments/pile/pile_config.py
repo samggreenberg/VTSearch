@@ -57,6 +57,43 @@ COCO_VAL_ZIP = COCO_ROOT / "images" / "val2017.zip"
 COCO_IMAGES = COCO_ROOT / "images" / "val2017"
 COCO_ANNOTATIONS = COCO_ROOT / "derived" / "objects_flat_val2017.jsonl.gz"
 
+#: COCO 2017 **train** pixels -- 118,287 images, 94% of `coco_quarry`'s corpus
+#: (#3983, #3991). Staged in the same shared tree as the val zip and referenced
+#: nowhere in this repo until now, which is why #3991 was filed believing an
+#: 18 GB fetch was still owed: it is not, the archive has been there since July.
+#:
+#: **Read members in place; do not extract.** Measured 2026-09-18: all 118,287
+#: members are STORED, not deflated (ratio 1.000), so a read is a seek and a raw
+#: read with no inflate. Read + decode costs 6.4 ms/image from the zip against
+#: 4.0 ms from an extracted tree -- about 13 min versus 8 min over the whole
+#: corpus, against an embed run of ~6 hours (#3988). Extraction would pay ~11
+#: minutes and **19.3 GB** of scratch to save ~5 minutes, i.e. 1.4% of the run,
+#: on the filesystem that run needs for its own 36 GB of output.
+#:
+#: `zipfile.ZipFile` is not thread-safe, so a parallel reader wants one handle
+#: per worker. That is cheap: parsing the 118k-entry central directory costs
+#: well under a tenth of a second.
+COCO_TRAIN_ZIP = COCO_ROOT / "images" / "train2017.zip"
+#: Where the train images live *if* somebody extracts them anyway. Optional and
+#: not part of any rebuild path, exactly like :data:`COCO_IMAGES` -- and carrying
+#: the same warning, because #3299 was a canary checking this kind of directory
+#: while the builder opened the zip.
+COCO_TRAIN_IMAGES = COCO_ROOT / "images" / "train2017"
+
+#: The COCO 2017 *annotations* -- `instances_train2017.json` and
+#: `instances_val2017.json` -- as `coco_anchor.py --fetch` stages them. Named
+#: here because `coco_quarry` reads them at build time and a build input spelled
+#: only in an `--anchor-dir` argument is a build input nobody can check (#3299).
+#:
+#: Not the same file as :data:`COCO_ANNOTATIONS`, which is the val-only flattened
+#: `.jsonl.gz` the `coco_val` loader reads. Two sources, two names, on purpose.
+COCO_ANCHOR_DIR = Path(os.environ.get("VTS_COCO_ANCHOR_DIR", str(PILE / "coco_anchor")))
+
+#: How many shards the full-corpus patch column is cut into. Chosen so each cell
+#: lands near 4.7 GB, which is what `vg_scale__dinov3_patch.pkl` already is and
+#: therefore a size the harness is known to load.
+COCO_QUARRY_SHARDS = 8
+
 #: Datasets in the pile. ``boxed`` means the medias carry ground-truth region
 #: boxes, which is what a region-voting arm drags — necessary but not
 #: sufficient (the embedder must also be patch-capable; see region_capable).
@@ -67,13 +104,52 @@ DATASETS: dict[str, dict] = {
     "visual_genome_m": {"boxed": True, "kind": "demo", "source_dir": "visual_genome"},
     "caltech101_m": {"boxed": False, "kind": "demo", "source_dir": "caltech-101"},
     "coco_val": {"boxed": True, "kind": "coco"},
+    # `vg_scale`'s question asked of COCO 2017 with no Visual Genome at all
+    # (#3983): the same 25 classes and three bands, drawn from 123,287 images
+    # instead of the half of VG that COCO sourced. A separate dataset rather
+    # than a rebuild of `vg_scale`, because rebuilding a cell silently changes
+    # what it is and five-plus shipped studies are conditioned on the VG-built
+    # ones -- they stay readable under their own name, and nothing new is built
+    # on them.
+    "coco_quarry": {"boxed": True, "kind": "coco_quarry"},
+    # The same corpus with NO designation draw: every COCO 2017 image embedded,
+    # so a cell is a filter over a fixed set rather than a build-time choice.
+    # That is what lets `SCALE_N_POS`/`SCALE_N_NEG` and the prevalence axis
+    # (#3987) become export-time queries instead of re-embeds. `on_request`
+    # because it is ~6.8x the designated build and nobody wants it by default.
+    #
+    # Single-vector columns only, and that is a measured limit rather than a
+    # preference: `build_pile.py` holds the whole cell in RAM and writes it in
+    # one `pickle.dump`, and every consumer reads it back through `load_medias`
+    # into one dict. A full-corpus `dinov3_patch` cell is ~37 GB of patch grids
+    # -- unwritable at any sane `--mem` once the thinned copy is counted, and
+    # unreadable afterwards. The patch column stays on `coco_quarry`.
+    "coco_quarry_full": {"boxed": True, "kind": "coco_quarry", "full_corpus": True, "on_request": True},
+    # The patch column over the same full corpus, in shards. One cell would be
+    # ~37 GB of grids: `build_pile.py` holds a whole cell in RAM and writes it
+    # with one `pickle.dump`, and every consumer reads it back through
+    # `load_medias` into one dict, so a single cell is unwritable at any sane
+    # `--mem` and unreadable afterwards. At COCO_QUARRY_SHARDS each is ~4.7 GB --
+    # the size of the `vg_scale` patch cell studies already load.
+    #
+    # The shard is a slice of the EMIT set only. Supply, banding and the clean
+    # pool are computed over the whole corpus first, so a cell means the same
+    # thing in every shard; the split is by `image_id % n`, so each carries every
+    # class and band in proportion rather than an arbitrary contiguous range.
+    **{
+        f"coco_quarry_full_s{i}": {
+            "boxed": True,
+            "kind": "coco_quarry",
+            "full_corpus": True,
+            "on_request": True,
+            "shard": (i, COCO_QUARRY_SHARDS),
+        }
+        for i in range(COCO_QUARRY_SHARDS)
+    },
     # Box-size-banded VG, drawn from the WHOLE source (all 108k images, full
     # free-text vocabulary) rather than the demo pipeline's 100 curated
     # categories on a 4% slice.  The `_s`/`_m`/`_l` on `visual_genome_*` is a
     # dataset *size* tier and says nothing about boxes; these are the box bands.
-    "vg_box_small": {"boxed": True, "kind": "vg_band", "band": "small"},
-    "vg_box_medium": {"boxed": True, "kind": "vg_band", "band": "medium"},
-    "vg_box_large": {"boxed": True, "kind": "vg_band", "band": "large"},
     # The same-class-across-bands set (#3156). One pickle, one class list, one
     # negative pool; the band lives on the category name (`bus@small`). Not a
     # replacement for `vg_box_*` -- those measured what they measured and stay
@@ -86,7 +162,6 @@ DATASETS: dict[str, dict] = {
     # is 0.76, and 1.4% of the images it calls negative actually hold the object
     # (`coco_anchor.py`). At 80 positives per cell that would be ~54 hidden
     # positives sitting in the negatives.
-    "vg_scale": {"boxed": True, "kind": "vg_scale", "labels": "coco"},
     # `vg_scale` with the box-size band collapsed away (#3115): the same images,
     # boxes and corrections, keyed on the bare class.  A calibration study wants
     # uniform prevalence across cells and does not care how big the box is;
@@ -104,7 +179,6 @@ DATASETS: dict[str, dict] = {
     # is now enforced twice -- `build_pile.py` pulls this dataset into any run
     # that rebuilds its parent, and `--verify` compares the parent-label digest
     # stamped on each derived media against the parent's live one.
-    "vg_scale_any": {"boxed": True, "kind": "vg_scale_any"},
     # `vg_scale_any`'s construction with the BAND DROPPED FROM SELECTION rather
     # than from the key, and sized for a long labelling session (#3547).
     #
@@ -129,7 +203,6 @@ DATASETS: dict[str, dict] = {
     # the default sweep. A bare `build_pile.py` would otherwise quietly add five
     # cells nobody asked for, one of them a ~7 GB `dinov3_patch` grid. Name it
     # to build it: `--datasets vg_scale_deep --embedders siglip`.
-    "vg_scale_deep": {"boxed": True, "kind": "vg_scale_deep", "on_request": True},
 }
 
 #: Box-size bands, as a fraction of image area, anchored to the patch
@@ -160,15 +233,29 @@ SCALE_CROSS_CLASS_NEGATIVES = True
 #: is not a region, it is the image.
 #:
 #: **The band is a VIEW over every instance, not a replacement for them, and
-#: that is a decision** (2026-09-07, ``docs/plans/vg-scale-exhaustive-annotation.md``).
+#: that is a decision** (2026-09-07).
 #: :func:`~pilebuild.loaders.vg_scale.band_for` summarises a class's boxes in an
-#: image by their **union**, which is what one Good vote drags in the app and is
-#: what #3156 measured -- and the build keeps every instance box behind it
+#: image by their **union**, which is what the harness's SIMULATED Good vote
+#: drags and is what #3156 measured -- and the build keeps every instance box
+#: behind it
 #: (``band_candidates`` stores them all; ``_emit_medias`` writes one region per
 #: box). Keep it that way. The union is derivable from the instances and the
 #: instances are not derivable from the union, so a summary chosen at eval time
 #: -- largest, smallest, count, density -- stays available at no cost, while
 #: collapsing the set at build time would end that permanently and silently.
+#:
+#: **The union is a modelling choice, not a reproduction of the app** (2026-09-18).
+#: A real Good vote carries at most ONE box -- ``MediaVoteRequest.region_box`` is
+#: four numbers and ``good_region_boxes`` holds one box per media -- drawn by a
+#: person around one object, plausibly the most prominent. The union is what
+#: :func:`vtscore.eval.labels.region_box_for_category` returns when it has to
+#: invent that drag from *N* ground-truth boxes, and its own docstring justifies
+#: it only against picking one **arbitrarily** ("would depend on annotation
+#: order"), which does not rule out picking the **largest**. So the union is an
+#: assumption about the simulated user that nothing has validated against a real
+#: one. It is not eval/app drift -- there is no app function to mirror, because
+#: the app has a human -- but it is not a fact about the app either, and this
+#: file used to say it was.
 #:
 #: The shipped band statistic does **not** move as a result: changing it now
 #: would restate what #3156 measured under its own name. What the decision buys
@@ -340,6 +427,35 @@ def scale_study_exclusion(name: str) -> str | None:
 #: can annotate consistently is a judgement, and re-deriving it would silently
 #: change what the study measures whenever the scan is re-run.
 #:
+#: **Fifty-three since #4056**, and the widening was made on a rule rather
+#: than a judgement: a class is in if it clears ``SCALE_N_POS`` in all three
+#: bands. #3983 measured that at 54 of COCO's 80; `wine glass` is held out by
+#: owner ruling because :data:`SCALE_CLASS_MERGES` folds it into `cup`, which
+#: leaves 53. That is the ONLY exception, and it is about class identity.
+#:
+#: **Rebuilding across the widening costs a published cell -0.03 AP, and
+#: almost all of that is prevalence.** Measured on the rebuilt set against the
+#: preserved 25-class build, over the 75 cells that existed before: paired dAP
+#: **-0.030 +- 0.004** (`siglip`) and **-0.028 +- 0.004** (`siglip2_l`) as
+#: shipped, but **-0.003 / +0.001** once the negative count is held still, and
+#: dAUC **+0.002** -- and AUC cannot see prevalence. A rebuilt cell simply
+#: carries 23,891 negatives against 16,535.
+#:
+#: The shared pool IS drawn as *holds none of C*, so a wider C leaves fewer and
+#: emptier candidates -- 49,503 clean images at 25 against 16,091 at 53, and the
+#: mean count of C-classes held by a clean pool image falls 1.163 -> 0.000.
+#: **That mechanism is real and does not reach the benchmark**, because the
+#: barren draw is capped at :data:`SCALE_N_NEG` in both builds while #3667's
+#: cross-class negatives more than double (6,635 -> 13,991). An earlier
+#: measurement varied the barren component alone and read +0.24 AP; that is a
+#: pool `coco_quarry` never ships, and the #4056 report records the correction.
+#: A design that let the barren pool scale with its candidate set WOULD inherit
+#: it, so this constrains any future change to how the pool is sized.
+#:
+#: :data:`SCALE_CLASSES_25` still freezes the old roster, and the 25-class build
+#: is preserved at ``/expscratch/sgreenberg/keep/coco-quarry-25-20260920/``, so
+#: a published number can be reproduced rather than merely disclaimed.
+#:
 #: **Twenty-five since #3588**, and the thirteen were added on the same terms as
 #: the first twelve: measured supply, a measured name audit, and a human review
 #: of every class before it shipped. What #3588 bought is the *context* axis --
@@ -355,6 +471,15 @@ def scale_study_exclusion(name: str) -> str | None:
 #: / #3666 numbers are conditioned on that list, and re-running those scripts
 #: against twenty-five would silently restate what they measured.
 SCALE_CLASSES: tuple[str, ...] = (
+    # #3588 added `truck` beside `car`; #4056 merged them, owner ruling
+    # 2026-09-20. COCO carries the boundary well at the IMAGE level -- 0.01%
+    # contradictory negatives -- but not at the BOX level, which is the unit
+    # REGION VOTING uses: 9.6% of car/truck boxes carry the MINORITY COCO label
+    # for their own LVIS object type (107 sedans called `truck`, 50 minivans
+    # called `truck`, 23 pickups called `car`). Merging reaches all 203 and needs
+    # no LVIS, which covers 16% of the corpus; excluding minivans would have
+    # fixed 50 of 203.
+    "enclosed road vehicle",
     "clock",
     "bird",
     "boat",
@@ -369,6 +494,95 @@ SCALE_CLASSES: tuple[str, ...] = (
     "stop sign",
     # Added by #3588, in the order that issue ranked them: the four same-scene
     # partners first, then the nine whose surroundings ARE their negative pool.
+    "fork",
+    "spoon",
+    # `cup` U `wine glass`, owner ruling 2026-09-20 (#4056, resolving #4074).
+    # COCO's stem branch WORKS -- mugs and teacups are `cup` 100% of the time,
+    # real stemware is `wine glass` 97% -- but the STEMLESS GLASS is not
+    # classifiable: `glass_(drink_container)`, 817 boxes and the largest type,
+    # is called `cup` 75% and `wine glass` 25%. 36% of the pair's boxes sit in a
+    # 20-80% split type and 10.7% carry the minority label, which is the
+    # region-voting rate and worse than the vehicles' 9.6%. Holding `wine glass`
+    # OUT did not protect `cup` -- `cup` already held 613 plain glasses and 17
+    # wineglasses -- it only left 204 identical glasses outside the roster, free
+    # to serve as negative regions against positives they cannot be told from.
+    "single serving drinking vessel",
+    "bowl",
+    "bottle",
+    "vase",
+    "bench",
+    "chair",
+    "sink",
+    "cell phone",
+    "fire hydrant",
+    # Added by #4056. The rule is the count and nothing else: a class is in if
+    # it clears SCALE_N_POS in all three bands, which #3983 measured as 54 of
+    # COCO's 80 -- 28 here, because `wine glass` is held out below.
+    # Selection deliberately ignores scatter and purity -- both
+    # correlate with how hard a class is to detect, so filtering on either
+    # would make the benchmark easier and bias every result optimistically.
+    # Alphabetical, because provenance is the comment's job, not the order's.
+    "airplane",
+    "apple",
+    "banana",
+    "baseball bat",
+    "dining table",
+    "frisbee",
+    "handbag",
+    "keyboard",
+    "laptop",
+    "microwave",
+    "motorcycle",
+    "mouse",
+    "orange",
+    "parking meter",
+    "person",
+    "potted plant",
+    "remote",
+    "scissors",
+    "skateboard",
+    "skis",
+    "snowboard",
+    "suitcase",
+    "surfboard",
+    "tennis racket",
+    "tie",
+    "toothbrush",
+    "traffic light",
+    "tv",
+    # `wine glass` clears the count rule and is DELIBERATELY NOT HERE (#4056,
+    # owner ruling 2026-09-20). SCALE_CLASS_MERGES folds it into `cup`, so
+    # admitting it would redefine `cup` and cost every published `cup` number
+    # its meaning. The purity measurement says the same from the other side:
+    # `cup` is 39% glass_(drink_container) and `wine glass` is 24% of that
+    # same synset, so the two are not disjoint classes waiting to be split.
+    # This is the ONLY exception to count-only selection, and it is an
+    # exception about class IDENTITY, not difficulty -- selecting on scatter
+    # or purity stays forbidden.
+)
+
+#: The twenty-five *C* held before #4056, frozen as a historical roster.
+#:
+#: Every published `coco_quarry` measurement is conditioned on a shared
+#: negative pool drawn as *holds none of these twenty-five* -- 49,503 clean
+#: candidates, where the widened roster leaves 16,058. The pool DRAWN is
+#: ``SCALE_N_NEG`` either way, so no cell changes size, but the images in it
+#: come from a different candidate set. A script that compares against a
+#: published number reads this tuple; the builders read
+#: :data:`SCALE_CLASSES`. Same reason :data:`SCALE_CLASSES_ORIGINAL` exists.
+SCALE_CLASSES_25: tuple[str, ...] = (
+    "clock",
+    "bird",
+    "boat",
+    "umbrella",
+    "kite",
+    "book",
+    "dog",
+    "backpack",
+    "knife",
+    "bicycle",
+    "bus",
+    "stop sign",
     "truck",
     "car",
     "fork",
@@ -1644,76 +1858,148 @@ class ClassRule(NamedTuple):
 #: :func:`review_name` falls back to the bare class name for them. A class need
 #: not be in :data:`SCALE_CLASSES` to appear here: `cell phone` is a #3588
 #: candidate whose first slate is already voted.
+#: What each class in *C* is actually MADE OF, measured rather than asserted.
+#:
+#: :data:`SCALE_CLASS_RULES` says what a reviewer should count as Good. This says
+#: what COCO's annotators *did* count -- which is a different fact, and under a
+#: pure-COCO build it is the one that governs, because nobody reviews COCO's
+#: labels. A result on `cup` is a result on whatever COCO put in `cup`, and that
+#: turns out to be three things.
+#:
+#: Measured by matching COCO boxes to LVIS boxes on the same image (mutual best
+#: match, IoU >= 0.7) and reading off what LVIS's 1,203 *defined* synsets call
+#: them -- ``coco_class_purity.py``, study
+#: ``docs/experiments/2026-09-18-coco-only-supply-3983/``. COCO's own vocabulary
+#: cannot answer this: it is curated and disjoint, so an annotator records one
+#: label and no disagreement, and two COCO classes almost never box the same
+#: pixels (3.4% collision, with no separation between the classes whose reviews
+#: split and the rest). A finer vocabulary over the same pixels is the only way
+#: to see inside a class without a review pass.
+#:
+#: **Read these as composition, not as error.** Three different things appear:
+#:
+#: * **Subtype spread** -- `bottle` is wine/water/beer bottles, `bird` is
+#:   duck/gull/pigeon. Harmless; the class is what it says, at finer grain.
+#: * **A genuine boundary contest** -- 17% of `truck` is what LVIS calls a car,
+#:   against 2% the other way, and both are in *C*. That asymmetry is real and is
+#:   the one open decision the measurement surfaced.
+#: * **A minority a reader would not expect** -- `stop sign` is 20% generic
+#:   `street_sign`, `book` 6% magazines, `cell phone` 4% landlines. Small, and
+#:   exactly the cases that split #3612's review: a 4% minority splits two
+#:   reviewers as surely as a 40% one when neither has a rule to consult.
+#:
+#: So **share does not rank difficulty** and no threshold should be read off this
+#: table. Every class whose review actually split is homogeneous -- `book` 85%,
+#: `cell phone` 89%, `knife` 93%, `bench` 93%. The table's job is to be quotable
+#: beside a published number, and to be the source text when a rule is written.
+#:
+#: Percentages are of matched boxes and members under 1% are dropped, so a row
+#: need not sum to 100. Regenerate with ``coco_class_purity.py --out``.
+SCALE_CLASS_CONTENTS: dict[str, str] = {
+    "single serving drinking vessel": "glass_(drink_container) 34%, wineglass 24%, cup 20%, mug 12%, bowl 1%, Dixie_cup 1%, candle 1%, teacup 1%, vase 1%, pitcher_(vessel_for_liquid) 1%, bucket 1% -- the union of COCO `cup` and `wine glass` (#4056), n=2196",
+    "enclosed road vehicle": "car_(automobile) 63%, truck 12%, minivan 9%, pickup_truck 6%, cab_(taxi) 2%, trailer_truck 2%, fire_engine 2%, bus_(vehicle) 1%, police_cruiser 1% -- the union of COCO `car` and `truck` (#4056), n=1935",
+    "dining table": "tablecloth 34%, table 31%, dining_table 10%, place_mat 5%, plate 5%, coffee_table 3%, tray 3%, desk 3%, chopping_board 1%, pizza 1%, kitchen_table 1%, cabinet 1%, bench 1%",
+    "tv": "television_set 50%, monitor_(computer_equipment) computer_monitor 47%, signboard 1%, fireplace 1%",
+    "remote": "remote_control 56%, control 41%, cellular_telephone 1%, telephone 1%",
+    "handbag": "handbag 63%, suitcase 8%, backpack 7%, shoulder_bag 5%, tote_bag 4%, plastic_bag 4%, shopping_bag 3%, strap 2%, duffel_bag 1%, briefcase 1%, basket 1%",
+    "person": "person 64%, wet_suit 8%, jacket 5%, dress 3%, coat 2%, shirt 2%, sweater 1%, jersey 1%, suit_(clothing) 1%, jean 1%, statue_(sculpture) 1%, trousers 1%, sweatshirt 1%, polo_shirt 1%, pajamas 1%",
+    "potted plant": "flower_arrangement 75%, flowerpot 21%, Christmas_tree 2%, vase 1%, jar 1%",
+    "orange": "orange_(fruit) 77%, mandarin_orange 7%, lemon 6%, peach 3%, carrot 2%, lime 1%, apple 1%, egg 1%",
+    "apple": "apple 80%, pear 5%, peach 4%, lime 2%, radish 2%, orange_(fruit) 1%, tomato 1%, basket 1%, crate 1%, lemon 1%",
+    "tie": "necktie 89%, bow-tie 7%, bow_(decorative_ribbons) 2%, scarf 1%",
+    "motorcycle": "motorcycle 89%, motor_scooter 8%, dirt_bike 1%, bicycle 1%, tarp 1%",
+    "airplane": "airplane 91%, fighter_jet 7%, jet_plane 2%",
+    "suitcase": "suitcase 93%, trunk 2%, duffel_bag 2%, backpack 1%, box 1%, briefcase 1%",
+    "snowboard": "snowboard 94%, ski 5%",
+    "microwave": "microwave_oven 96%, toaster_oven 2%, coffee_maker 1%, stove 1%",
+    "laptop": "laptop_computer 97%, monitor_(computer_equipment) computer_monitor 2%",
+    "skis": "ski 97%, snowboard 2%",
+    "traffic light": "traffic_light 98%, street_sign 1%, streetlight 1%",
+    "scissors": "scissors 98%, shears 1%",
+    "tennis racket": "tennis_racket 98%, racket 1%",
+    "keyboard": "computer_keyboard 99%, laptop_computer 1%",
+    "baseball bat": "baseball_bat 99%, toy 1%",
+    "toothbrush": "toothbrush 99%, handle 1%, screwdriver 1%",
+    "surfboard": "surfboard 99%",
+    "frisbee": "frisbee 99%, toy 1%",
+    "mouse": "mouse_(computer_equipment) 99%, control 1%",
+    "skateboard": "skateboard 99%",
+    "banana": "banana 99%",
+    "parking meter": "parking_meter 100%",
+    "fire hydrant": "fireplug 100% -- the only class in C with no second member at all",
+    "fork": "fork 97%",
+    "bicycle": "bicycle 96%, wheel 2%",
+    "umbrella": "umbrella 94%, awning 4% -- an awning is not an umbrella; small but not zero",
+    "dog": "dog 94%, puppy 2%, pet 1%",
+    "boat": "boat 93%, canoe 2%, raft 1%",
+    "knife": "knife 93%, handle 3%, spatula 2%",
+    "bench": "bench 93%, table 2%, desk 1%, chair 1%, pew 1%",
+    "kite": "kite 92%, parasail 4%, flag 2%",
+    "clock": "clock 90%, wall_clock 3%, watch 2%, alarm_clock 2%, clock_tower 2% -- a"
+    " wristwatch and a clock tower are both `clock`",
+    "cell phone": "cellular_telephone 89%, telephone 4%, camera 3%, iPod 1% -- the 4% landlines"
+    " are what split the first slate (#3612), at 4%",
+    "bus": "bus_(vehicle) 88%, school_bus 5%, car_(automobile) 4%",
+    "vase": "vase 87%, flowerpot 6%, pitcher 1%, pottery 1% -- planters are in, though #3784"
+    " retired 21 of them under the reviewer rule",
+    "book": "book 85%, magazine 6%, notebook 2%, binder 2% -- the 6% magazines are the whole of #3612's 21-vs-49 split",
+    "backpack": "backpack 82%, suitcase 8%, duffel_bag 3%, handbag 2%",
+    "stop sign": "stop_sign 79%, street_sign 20%, signboard 1% -- a fifth of this class is a"
+    " sign that is not a stop sign, the largest unexpected minority in C",
+    "spoon": "spoon 78%, ladle 6%, fork 5%, wooden_spoon 4%, soupspoon 3%, spatula 2%, knife 2%",
+    "sink": "sink 76%, kitchen_sink 20%, bathtub 2% -- a subtype split, not a boundary",
+    "bird": "bird 76%, duck 7%, gull 5%, pigeon 3%, goose 2%, pelican 1% -- subtype spread",
+    "bowl": "bowl 72%, plate 5%, basket 3%, pot 3%, dish 3%, cup 2%, bucket 2%, pan 1%",
+    "chair": "chair 66%, armchair 11%, deck_chair 8%, stool 5%, bench 2%, folding_chair 1%,"
+    " sofa 1%, rocking_chair 1% -- a stool has no back, and is still `chair` here",
+    "bottle": "bottle 42%, wine_bottle 18%, water_bottle 9%, beer_bottle 7%, soap 4%,"
+    " condiment 2%, jar 2%, alcohol 2%, soda 2%, shampoo 2% -- mostly subtype spread,"
+    " but the soap/shampoo/jar tail is ~8% of non-drink containers",
+}
+
 SCALE_CLASS_RULES: dict[str, ClassRule] = {
+    "single serving drinking vessel": ClassRule(
+        name="single serving drinking vessel any stem",
+        test=(
+            "Good: anything a person drinks a single serving from -- mugs, teacups, "
+            "paper and plastic cups, tumblers and highballs, wine glasses, champagne "
+            "flutes, martini glasses, goblets, beer glasses. STEM OR NO STEM IS "
+            "IRRELEVANT, which is the point of the class. Bad: BOWLS and BOTTLES, their "
+            "own classes in C; jugs, pitchers, carafes and teapots, which serve more than "
+            "one; vases; and a candle that happens to sit in a cup. "
+            "THE CUP/WINE-GLASS DISTINCTION IS DELIBERATELY GONE (#4056, owner ruling "
+            "2026-09-20, resolving #4074). COCO's stem branch works where a stem is "
+            "visible -- `mug` and `teacup` are `cup` 100% of the time, `wineglass` is "
+            "`wine glass` 97% -- but the STEMLESS GLASS defeats it: "
+            "`glass_(drink_container)`, 817 boxes and the pair's largest type, is called "
+            "`cup` 75% and `wine glass` 25%. 10.7% of the pair's boxes carry the minority "
+            "COCO label for their own object type, which is the rate REGION VOTING reads "
+            "and worse than the vehicles' 9.6%."
+        ),
+    ),
+    "enclosed road vehicle": ClassRule(
+        name="enclosed road vehicle not bus or bike",
+        test=(
+            "Good: cars, taxis, minivans, SUVs, pickups, vans, box trucks, semis and "
+            "tractor units, flatbeds, tow, fire and garbage trucks -- anything that is a "
+            "SELF-PROPELLED, ENCLOSED road vehicle carrying people or goods. Bad: BUSES "
+            "and MOTORCYCLES, their own classes in C; bicycles; a detached trailer, which "
+            "is not self-propelled; and plant machinery that WORKS AT A SITE rather than "
+            "carrying down a road -- cranes on tracks, tractors, forklifts, bulldozers. "
+            "THE CAR/TRUCK DISTINCTION IS DELIBERATELY GONE (#4056, owner ruling "
+            "2026-09-20). COCO draws it well at the IMAGE level and badly at the BOX "
+            "level, and region voting reads boxes: 9.6% of its car/truck boxes carry the "
+            "MINORITY COCO label for their own LVIS object type -- 107 sedans called "
+            "`truck`, 50 minivans called `truck`, 23 pickups called `car` -- so a reviewer "
+            "applying goods-versus-people would contradict the ground truth about once in "
+            "ten. `enclosed` excludes motorcycles without a size rule, `road` excludes "
+            "boats and aircraft, and `bus` stays out because COCO annotates it separately "
+            "and consistently (88% `bus_(vehicle)`)."
+        ),
+    ),
     # Candidates from #3588, each rule measured with `coco_folds.py` before it
     # was written: the fold-in names the boundary case a reviewer will actually
     # meet. Long form, with the counts, in the annotation guide.
-    "truck": ClassRule(
-        name="truck incl vans not SUVs",
-        test=(
-            "Good: pickups, box trucks, semis and tractor units, flatbeds, tow, fire and "
-            "food trucks, full-size cargo and panel vans. Bad: SUVs, crossovers and "
-            "passenger minivans (those are `car`), and a detached trailer with no cab. "
-            "Three tests, in order. (1) Is it a self-propelled road vehicle, or the "
-            "powered unit of one? No -> neither Car nor Truck, whatever it is carrying: "
-            "that excludes a detached trailer, a bike trailer, a handcart, a caravan "
-            "under tow, and it keeps a bobtail tractor unit as the powered half. Not "
-            "`does it have a cab`, which fails on any open driving position. "
-            "(2) Does the body CARRY a load down a road, or PERFORM WORK at a site? "
-            "Carrying is a Truck -- fire engine (fire truck 35 / fire engine 11 / "
-            "firetruck 12, none on car), ambulance 19, dump truck 18, tow truck 7, "
-            "garbage truck 4, cement mixer 3. Working is neither: a CRANE, and likewise "
-            "tractor 24, forklift 2, bulldozer, excavator, backhoe. Plant machinery is "
-            "the real reason those are excluded; the old `towed and pushed things` "
-            "rationale was wrong about a tractor. A crane on a road-going lorry chassis "
-            "is a Truck, a tracked or lattice-boom one is not, and `crane` occurs twice "
-            "in the whole overlap. (3) Use the BODY, not the badge, and ask what it was "
-            "BUILT FOR: goods is a Truck, people is a Car. Cargo space is the cue, not "
-            "the definition -- a bobtail tractor has no cargo space and is a Truck (its "
-            "fifth wheel says so), while a car with a tow hitch is still a Car. A "
-            "two-seater sportscar is a Car (sports car/coupe/convertible/hatchback are "
-            "0 Truck to 15 Car). Accessories change nothing. Never squint inside to "
-            "count rows. A long-exposure night shot where traffic is only headlight "
-            "streaks has no locatable instance at all: vote Good with NO box, which "
-            "excludes the image rather than filing a photograph of traffic as confirmed "
-            "no-Car. Same for a photo taken from INSIDE a car -- the Car contains the "
-            "camera, so it has no box, and boxing the sun visor would band the visor; "
-            "MAX_VOTED_AREA says the same thing, over 80% is not a region but the image. "
-            "Car vs BUS is barely a boundary (car->bus 15, bus->car 19, ~0.5% each way) "
-            "-- do not spend time there; the case that needs a call is a minibus, which "
-            "is boarded through its own door rather than entered by row. A TAXI is not "
-            "the hard case either: `taxi` lands on bus ONCE against 62 on car. Service "
-            "is a borrowing, not a property -- built-as beats used-as, the same rule "
-            "that makes a jar of flowers a Bottle -- so a saloon cab is a Car and a "
-            "minibus running as a shared taxi is a Bus. `van` names THREE vehicles and "
-            "COCO splits it 261 truck / 318 car / 37 bus; `suv` "
-            "does not (62 / 222, an SUV is a Car) and neither does `minivan` (5 / 51). "
-            "Disagreement on vans is a known cost of this class, not a mistake."
-        ),
-    ),
-    "car": ClassRule(
-        name="car incl SUVs and minivans",
-        test=(
-            "Good: sedans, hatchbacks, coupes, estates, SUVs, crossovers, passenger "
-            "minivans, taxis and cabs -- COCO folds every passenger body into `car`. "
-            "Bad: pickups and cargo vans, which are `truck`."
-        ),
-    ),
-    # Ruled 2026-09-10 by the owner, on finishing the fork slate. Three cases the
-    # enumeration did not cover, and one principle that decides all of them: a
-    # SPORK is a fork (it has tines); a PASTA STRAINER is not, even the kind with
-    # protruding fingers, because those are for separating pasta from water rather
-    # than piercing; a CARVING FORK is, on two tines, so the count never mattered.
-    #
-    # Written as a test rather than three more list entries, because the list was
-    # what let these through. `spoon` is amended in the same change to disclaim the
-    # spork: leaving both rules silent about one object is how `vase` and `bowl`
-    # came to contradict each other about planters (#3784), found only when a
-    # reviewer hit it mid-pass.
-    #
-    # The fork pass was already complete (396 of 396, 134 good) when this was
-    # ruled. The verdicts stand: no spork or strainer case was reported as
-    # contested, and the ruling names what was already being done.
     "fork": ClassRule(
         name="fork incl sporks not strainers",
         test=(
@@ -1745,25 +2031,6 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "every partly buried spoon."
         ),
     ),
-    "cup": ClassRule(
-        name="cup incl mugs glasses and stemware",
-        test=(
-            "Good: a plain drinking glass IS a cup, as are mugs, teacups, paper and "
-            "plastic cups, tumblers, pints -- and STEMWARE, which this class was merged "
-            "with (see SCALE_CLASS_MERGES): a wine glass, champagne flute, martini glass "
-            "or snifter counts. A glass holding cut flowers is still a cup, since `vase` "
-            "is only a vessel made as one. Bad: a JAR however it is drunk from (a jar is "
-            "a `bottle`; 25 jar boxes are COCO cups), a can, a tin, a carton, and "
-            "anything that serves MORE THAN ONE -- a pitcher, jug, carafe, teapot or "
-            "thermos is a `bottle`; a bucket is a general-purpose container made for "
-            "nothing in particular. The test is portion, not shape: A CUP IS HAND-HELD "
-            "AND A SINGLE SERVING."
-        ),
-    ),
-    # `bowl` is the class whose plain name misleads most: `container` is its
-    # fourth-largest fold-in (143 boxes), ahead of `pot` and `basket`, and the
-    # first name -- "incl plates and dishes" -- said nothing about it. Renamed
-    # mid-slate once that showed up.
     "bowl": ClassRule(
         name="bowl incl plates not planters or wrappers",
         test=(
@@ -2170,6 +2437,332 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
     # and `magazines` (30). Each name below states the boundary case that
     # measurement found, and the long form now lives in each entry's ``test``
     # above -- filled in as each class was slated (#3588).
+    # --- Added by #4056 ------------------------------------------------------
+    # The twenty-five above were each measured with `coco_folds.py` before the
+    # rule was written. That script was deleted by the VG retirement (#4038) and
+    # is not coming back: fold-in asked which VG NAME lands on a COCO box, and
+    # there are no VG names any more (#4060 tracks the guides that still name
+    # it). Under a pure-COCO build the question changed -- nobody reviews COCO's
+    # labels, so what a brief must be written against is what COCO's annotators
+    # actually PUT in the class. That is `coco_class_purity.py` against LVIS's
+    # defined synsets, the same measurement :data:`SCALE_CLASS_CONTENTS` carries,
+    # quoted below wherever it names a boundary a reviewer will really meet.
+    #
+    # Five are cross-class pairs INSIDE C, which is the `truck`/`car` situation
+    # and the one a reviewer gets wrong silently, because each side looks correct
+    # alone: `skis`/`snowboard`, `backpack`/`handbag`/`suitcase`, `apple`/
+    # `orange`, `tv`/`laptop`, `potted plant`/`vase`.
+    "parking meter": ClassRule(
+        name="parking meter head not post",
+        test=(
+            "Good: on-street parking meters, single and twin head, and multi-space pay "
+            "stations. Bad: ticket machines that are not for parking, post boxes, "
+            "bollards, utility pillars. 100% pure over 89 LVIS matches -- the cleanest "
+            "class in C, so membership is never the question. The risk is the BOX: take "
+            "the head and its housing, not the run of pole down to the pavement."
+        ),
+    ),
+    "banana": ClassRule(
+        name="banana fruit",
+        test=(
+            "Good: single bananas, hands and whole bunches, green or ripe, on a stall, a "
+            "tree or a plate. Bad: plantains presented as plantains, and banana in a cut "
+            "fruit mix where no whole fruit survives. 99% pure; pineapple, pear and "
+            "carrot at 0.2% each are the only competing names, so the BOX is the whole "
+            "question and membership almost never is."
+        ),
+    ),
+    "skateboard": ClassRule(
+        name="skateboard deck",
+        test=(
+            "Good: skateboards, longboards and cruisers -- ridden, carried, or lying on "
+            "the ground; box the deck with its trucks and wheels. Bad: kick scooters, "
+            "which have a handlebar and are not in C at all. 99% pure; `toy` at 0.4% is "
+            "the only competing name."
+        ),
+    ),
+    "mouse": ClassRule(
+        name="mouse computer not animal",
+        test=(
+            "Good: computer mice, wired or wireless. Bad: the ANIMAL, which is the error "
+            "the bare class name invites and which a reviewer will admit by reflex. Also "
+            "bad: trackpads and trackballs built into another device. 99.3% of this "
+            "class's boxes are `mouse_(computer_equipment)` and the remaining 0.7% is "
+            "`control`; not one is an animal, so an animal here is an annotation error, "
+            "not a boundary case."
+        ),
+    ),
+    "frisbee": ClassRule(
+        name="frisbee disc",
+        test=(
+            "Good: throwing discs of any colour -- in flight, held, or on the ground, "
+            "including golf discs. Bad: plates, pan lids and toy rings. 99% pure; `toy` "
+            "at 0.7% is the same object read more generically, not a different one."
+        ),
+    ),
+    "surfboard": ClassRule(
+        name="surfboard not snowboard",
+        test=(
+            "Good: surfboards, longboards, bodyboards and paddleboards -- in the water, "
+            "under an arm, or stacked on a rack. Bad: SNOWBOARDS, which are their own "
+            "class in C, and water skis. 99% pure, but `snowboard` and `water_ski` each "
+            "appear at 0.2% and the confusion is one a reviewer makes from the outline "
+            "alone once the scene is cropped away. Use the scene: water or beach is a "
+            "surfboard, snow is a snowboard."
+        ),
+    ),
+    "toothbrush": ClassRule(
+        name="toothbrush manual or electric",
+        test=(
+            "Good: manual and electric toothbrushes, single or in a holder, including a "
+            "brush head on its handle. Bad: hairbrushes, paintbrushes, and the bare "
+            "charging base of an electric brush with no brush on it. 99% pure; `handle` "
+            "and `screwdriver` at 0.6% each are the only competitors, and the "
+            "screwdriver reading is a real one on a long plain electric handle."
+        ),
+    ),
+    "baseball bat": ClassRule(
+        name="baseball bat not pipe",
+        test=(
+            "Good: baseball and softball bats -- swung, held, racked, or on the ground; "
+            "wood or metal. Bad: cricket bats, hockey sticks and tennis rackets, which "
+            "are a different implement, and a bare pipe or post. 99% pure; `toy` 0.6% "
+            "and `pipe` 0.3% are the only competing names."
+        ),
+    ),
+    "keyboard": ClassRule(
+        name="keyboard computer not piano",
+        test=(
+            "Good: computer keyboards, standalone or wireless. Bad: MUSICAL keyboards "
+            "and pianos -- the error the bare class name invites, and `piano` does "
+            "appear on 0.3% of these boxes. Also bad: on-screen keyboards. A laptop's "
+            "own keyboard belongs here only where COCO boxed it apart from the machine; "
+            "otherwise the object is `laptop`, which is its own class in C. 98.5% is "
+            "`computer_keyboard`."
+        ),
+    ),
+    "tennis racket": ClassRule(
+        name="tennis racket not other rackets",
+        test=(
+            "Good: tennis rackets -- held, swung, bagged, or on the ground. Bad: "
+            "badminton and squash rackets and table-tennis bats, which LVIS calls the "
+            "generic `racket` and which appear at 1.3%. Head size and the court settle "
+            "it. 98% pure."
+        ),
+    ),
+    "scissors": ClassRule(
+        name="scissors not shears or pliers",
+        test=(
+            "Good: scissors of any size, open or closed, including kitchen and craft "
+            "scissors. Bad: garden shears and secateurs (`shears`, 1.0%), pliers (0.5%) "
+            "and tongs (0.5%). The test is the pivot and TWO RING HANDLES; a sprung tool "
+            "with no rings is not scissors. 98% pure."
+        ),
+    ),
+    "traffic light": ClassRule(
+        name="traffic light not street sign",
+        test=(
+            "Good: vehicle and pedestrian signal heads -- on a pole, gantry or wire, lit "
+            "or unlit, any aspect count. Bad: street signs (1.5%) and plain street "
+            "lights (1.0%), which share the pole and the silhouette. The test is whether "
+            "it SIGNALS, not whether it is mounted high. 97.5% pure. VG could not carry "
+            "this class at all -- its head noun `light` is not an object, so "
+            "`scale_study_exclusion` barred it; COCO's vocabulary has no head nouns, "
+            "which is the only reason it is admissible here."
+        ),
+    ),
+    "skis": ClassRule(
+        name="skis pair not poles",
+        test=(
+            "Good: skis -- on feet, carried, planted in the snow, or racked; a pair is "
+            "one object wherever COCO boxed it as one. Bad: SNOWBOARDS, their own class "
+            "in C, at 2.3%; and ski poles and boots (`ski_pole`, `ski_boot`, 0.5% each), "
+            "which are never this class however tightly they sit beside it. 96.8% is "
+            "`ski`."
+        ),
+    ),
+    "laptop": ClassRule(
+        name="laptop not a monitor",
+        test=(
+            "Good: laptops and notebooks, open or closed, including one sitting on a "
+            "dock. Bad: desktop MONITORS, which appear here at 2.2% and which `tv` -- "
+            "also in C -- takes 47% of the time. The test is the HINGE: a screen joined "
+            "to its own keyboard is a laptop, a screen on a stand is not. 96.7% is "
+            "`laptop_computer`."
+        ),
+    ),
+    "microwave": ClassRule(
+        name="microwave oven not toaster",
+        test=(
+            "Good: microwave ovens, counter-top or built-in, door open or shut. Bad: "
+            "toaster ovens (2.4%), conventional ovens and stoves (0.6%) and coffee "
+            "makers (0.6%) -- all a box with a door at about the same height. The "
+            "turntable and the control panel down one side are the cue. 96.5% pure."
+        ),
+    ),
+    "snowboard": ClassRule(
+        name="snowboard not skis",
+        test=(
+            "Good: snowboards -- ridden, carried, planted in the snow, or on a rack. "
+            "Bad: SKIS, their own class in C, at 4.6%; and surfboards at 0.4%. One board "
+            "under both feet is a snowboard; two narrow boards are skis. 94% pure, the "
+            "lowest of the board classes, and the ski confusion is nearly all of it."
+        ),
+    ),
+    "suitcase": ClassRule(
+        name="suitcase not bag",
+        test=(
+            "Good: wheeled and unwheeled suitcases, hard and soft, upright or flat, on a "
+            "carousel or a rack; an old cabin `trunk` (1.8%) is Good. Bad: BACKPACKS "
+            "(1.1%) and HANDBAGS (0.1%), both their own classes in C, duffel bags (1.6%) "
+            "and briefcases (0.5%). The test is the LID: a case opens on a hinge into "
+            "two halves, a bag opens at the top. 93% pure."
+        ),
+    ),
+    "airplane": ClassRule(
+        name="airplane fixed wing",
+        test=(
+            "Good: fixed-wing aircraft of any size -- airliners, light aircraft, "
+            "military jets (`fighter_jet`, 6.7%) and gliders, on the ground or in the "
+            "air. Bad: HELICOPTERS (0.2%) and anything rotary, which the class name does "
+            "not cover. 91% pure, and the 9% is almost entirely other names for the same "
+            "object rather than other objects."
+        ),
+    ),
+    "motorcycle": ClassRule(
+        name="motorcycle incl scooters",
+        test=(
+            "Good: motorcycles, mopeds and motor scooters (`motor_scooter`, 8.1%) and "
+            "dirt bikes (0.9%) -- ridden or parked. Bad: BICYCLES, their own class in C, "
+            "at 0.7%; and a machine under a cover where only the tarp is visible "
+            "(`tarp`, 0.5%). The test is the ENGINE, not the size or the step-through "
+            "frame: a scooter with a motor is this class, a pedal cycle with a battery "
+            "is `bicycle`. 89% pure."
+        ),
+    ),
+    "tie": ClassRule(
+        name="tie necktie incl bow ties",
+        test=(
+            "Good: neckties, worn or hung -- and BOW TIES, which are In, at 7.3% of this "
+            "class's boxes. Bad: scarves (0.5%), necklaces (0.2%) and lanyards. COCO "
+            "puts `bow-tie` in `tie`, which a reviewer reading the bare word narrowly "
+            "will reject, so the bow-tie case is settled here rather than left to taste. "
+            "89% is `necktie`."
+        ),
+    ),
+    "apple": ClassRule(
+        name="apple not other round fruit",
+        test=(
+            "Good: apples -- whole, on a tree, in a bowl, or on a stall, any colour. "
+            "Bad: pears (5.1%), peaches (4.1%), tomatoes (1.0%) and ORANGES, their own "
+            "class in C, at 1.4%. 80% pure, and the 20% is almost all other round fruit, "
+            "so a mixed fruit bowl is where a reviewer's accuracy goes. Judge each "
+            "FRUIT, never the bowl."
+        ),
+    ),
+    "orange": ClassRule(
+        name="orange citrus fruit",
+        test=(
+            "Good: oranges and mandarins (`mandarin_orange`, 6.6%) -- whole, on a tree "
+            "or a stall. Bad: LEMONS (6.5%) and limes (1.4%), a different fruit however "
+            "similar the shape; peaches (2.7%); carrots (1.8%); and APPLES, their own "
+            "class in C, at 1.4%. 77% pure, second-lowest in C. Colour alone is not the "
+            "test -- a green orange and a lime look alike."
+        ),
+    ),
+    "potted plant": ClassRule(
+        name="potted plant incl cut arrangements",
+        test=(
+            "Good: plants in a pot or planter (`flowerpot`, 20.7%) AND cut-flower "
+            "arrangements, which are 75.1% of this class's boxes under LVIS's "
+            "`flower_arrangement`. Bad: Christmas trees (2.4%), and a bare VASE with "
+            "nothing in it -- its own class in C, at 1.2%. This is the least intuitive "
+            "name in C: the class is overwhelmingly cut flowers rather than potted "
+            "plants, so reading the name literally would reject three quarters of it. "
+            "Where a vase holds flowers both classes can be right on one image, and each "
+            "is judged on its own object."
+        ),
+    ),
+    "person": ClassRule(
+        name="person whole not garment",
+        test=(
+            "Good: people -- whole or partly occluded, any pose, any scale, including "
+            "someone in the background. Bad: statues and figurines (1.2% together), "
+            "depictions in a painting or on a sign, and mannequins. Read the composition "
+            "note with care: the class is 64% `person` and most of the rest is CLOTHING "
+            "(`wet_suit` 7.8%, `jacket` 5.4%, `dress` 2.7%, `coat` 2.4%, `shirt` 2.2%). "
+            "That is not a definitional split -- LVIS boxes the garment where COCO boxes "
+            "the wearer, and mutual best match pairs the two. The object is always the "
+            "PERSON, never the garment."
+        ),
+    ),
+    "handbag": ClassRule(
+        name="handbag not backpack or suitcase",
+        test=(
+            "Good: handbags, shoulder bags (4.8%), tote bags (4.3%), clutches and purses "
+            "-- carried, worn, or set down. Bad: BACKPACKS (6.5%) and SUITCASES (7.8%), "
+            "both their own classes in C; and plastic or paper shopping bags "
+            "(`plastic_bag` 4.2%, `shopping_bag` 2.7%). 63% pure and the confusion is "
+            "with two classmates, so this is the `truck`/`car` situation: decide on the "
+            "STRAPS and the CLOSURE, not the size. Two straps over both shoulders is a "
+            "backpack; a rigid hinged case is a suitcase; everything else carried in the "
+            "hand or on one shoulder is this."
+        ),
+    ),
+    "remote": ClassRule(
+        name="remote control handheld",
+        test=(
+            "Good: handheld remote controls for a television, projector or console, and "
+            "game controllers. Bad: cell phones (0.7%), their own class in C; telephones "
+            "(0.7%); calculators (0.4%). The 56% / 41% split between `remote_control` "
+            "and `control` in the composition note is ONE object under two LVIS names, "
+            "not two kinds of thing -- effective purity is about 97%, and membership is "
+            "rarely the question."
+        ),
+    ),
+    "tv": ClassRule(
+        name="tv incl computer monitors",
+        test=(
+            "OWNER RULED 2026-09-20 over 40 questions: monitors are IN, at the same rate "
+            "as televisions -- `television_set` 20/21 Good, `monitor_(computer_equipment)` "
+            "18/19. The question put was the retrieval one a cell actually scores (the "
+            "query is `a tv`), not a definitional one about objects, because the honest "
+            "answer to `is this a tv` depends on USE -- the same panel is a tv with a "
+            "console on it and arguably not one with a spreadsheet on it, and COCO's "
+            "annotators never conditioned on that. In practice the distinction did not "
+            "survive the images. "
+            "Good: televisions AND desktop computer monitors -- both, deliberately. The "
+            "class is 50.4% `television_set` and 46.9% "
+            "`monitor_(computer_equipment)`, so it is a SCREEN class, not a television "
+            "class, and reading the name literally would reject half of it. Bad: "
+            "LAPTOPS, their own class in C, whose screen is never boxed here; projected "
+            "images; framed pictures (`painting` 0.4%); signboards (0.9%). The hinge "
+            "settles it again: a screen attached to its own keyboard is `laptop`, a "
+            "standalone screen on a stand or a wall is this."
+        ),
+    ),
+    "dining table": ClassRule(
+        name="dining table surface in dining use",
+        test=(
+            "THE RULE IS FUNCTION, NOT FURNITURE. Owner ruled 2026-09-20 over 48 "
+            "questions, and the answer separates sharply by what the surface is DOING: "
+            "`tray` 4/4 Good, `plate` 4/4, `place_mat` 4/4, `dining_table` 4/4, "
+            "`tablecloth` 14/15 -- against generic `table` 7/13 and `coffee_table` 1/4. "
+            "Good: any surface in dining use and whatever covers it -- a laid table, a "
+            "cloth-covered table, a tray or place setting shot close enough that the "
+            "surface fills the frame. A close-up whose best LVIS match is the `plate` is "
+            "still the surface, and is Good; an earlier version of this rule called "
+            "those Bad and the ruling overturned it. "
+            "Bad: coffee tables and other living-room furniture with no meal on them "
+            "(3 of 4 rejected); CHAIRS and BENCHES, their own classes in C. A bare "
+            "generic table is genuinely a coin-flip (7/13) -- if nothing says dining, it "
+            "is not this class. "
+            "The class is 34.2% `tablecloth`, 30.5% generic `table` and only 10.4% "
+            "`dining_table` by LVIS, the lowest purity in C, admitted because the "
+            "selection rule is the count and nothing else. Quote the composition note "
+            "beside any `dining table` number; the name does not describe the class."
+        ),
+    ),
 }
 
 
@@ -3010,13 +3603,51 @@ def scale_ambiguous_for(cls: str) -> tuple[str, ...]:
 #: (#3603). It costs a negative-pool redraw at build time for those 1,469, and
 #: it makes `cup` the first class in this study that is not a plain COCO class.
 SCALE_CLASS_MERGES: dict[str, tuple[str, ...]] = {
-    "cup": ("cup", "wine glass"),
+    # `car` U `truck`, owner ruling 2026-09-20 (#4056). See the roster comment.
+    "enclosed road vehicle": ("car", "truck"),
+    # `cup` U `wine glass`, owner ruling 2026-09-20. Declared here for months and
+    # never applied (#4074): measured on the built cell, 0 of 300 `cup` positives
+    # had been admitted on a wine glass, so the union its own docstring priced
+    # was simply absent. Now applied, and the class renamed -- `cup` was never a
+    # fair name for a set that is 27% plain glasses and 26% stemware.
+    "single serving drinking vessel": ("cup", "wine glass"),
 }
 
 
 def coco_classes_for(cls: str) -> set[str]:
     """The COCO classes whose boxes count as *cls*, merges applied."""
     return set(SCALE_CLASS_MERGES.get(cls, (cls,)))
+
+
+#: Rule names for classes that have LEFT *C*, frozen so the committed human
+#: record stays readable.
+#:
+#: #3814 made a labelset carry the rule it was voted under, and the readers
+#: REFUSE a file whose rule is not the one in force -- which is the right
+#: behaviour, because a verdict cast under a different definition is not a
+#: verdict about this class. But #4056 merged `car` + `truck` and `cup` +
+#: `wine glass`, and `scripts/experiments/pile/human_record/` holds thousands of
+#: vg_scale-era verdicts voted under the retired names. Without this table every
+#: one of them fails the check at once, which reads as corruption rather than as
+#: history.
+#:
+#: This is a record of what WAS, exactly like :data:`SCALE_CLASSES_ORIGINAL` and
+#: :data:`SCALE_CLASSES_25`. Nothing here licenses voting under a retired name
+#: again: :func:`review_name` still returns only the current rule.
+SCALE_CLASS_RULES_RETIRED: dict[str, str] = {
+    "car": "car incl SUVs and minivans",
+    "truck": "truck incl vans not SUVs",
+    "cup": "cup incl mugs glasses and stemware",
+}
+
+
+def rule_names_ever(cls: str) -> set[str]:
+    """Every rule name *cls* has been voted under -- the current one, then retired."""
+    names = {review_name(cls)}
+    retired = SCALE_CLASS_RULES_RETIRED.get(cls)
+    if retired:
+        names.add(retired)
+    return names
 
 
 def scale_class_dataset_name(category: str) -> str:

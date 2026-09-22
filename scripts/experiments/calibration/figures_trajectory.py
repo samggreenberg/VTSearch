@@ -44,6 +44,8 @@ from _cells_paths import main_frame_files
 
 from figures_overview import BANDS, MODE_COLORS, band_of, mean_se
 
+from study_paths import require_study_dir
+
 #: Metrics worth a curve, and which direction is good.  ``cost`` is the study's
 #: headline (the harness's operating-point cost); ``average_precision`` is the
 #: ranking's own quality, which is what improves first when the detector learns
@@ -411,6 +413,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--by-band", action="store_true", default=True)
     ap.add_argument("--no-by-band", dest="by_band", action="store_false")
     args = ap.parse_args(argv)
+
+    args.exp = str(require_study_dir(args.exp, "--exp"))
 
     import matplotlib
 

@@ -1,0 +1,2624 @@
+{
+  "name": "chair incl stools not couches (any in image, no box)",
+  "text_query": "chair",
+  "media_example": "",
+  "media_type": "image",
+  "examples": [
+    {
+      "type": "text",
+      "value": "chair"
+    }
+  ],
+  "created_at": 1789582474.105523,
+  "embedder_type": "semantic",
+  "labelset": {
+    "labels": [
+      {
+        "md5": "c4cc560f92e69a3b7996d8cac05c69b8",
+        "label": "good",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2393794.jpg",
+        "filename": "2393794.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 22,
+            "score_at_vote": -0.0158
+          }
+        },
+        "region_box": [
+          0.5183114093959732,
+          0.42818791946308726,
+          0.6792590604026846,
+          0.763758389261745
+        ]
+      },
+      {
+        "md5": "484738233236df21c64109b0389862a0",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2404527.jpg",
+        "filename": "2404527.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 98,
+            "score_at_vote": -0.0592
+          }
+        }
+      },
+      {
+        "md5": "aa57f7afc7159c275148c0032e98eaa6",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2398774.jpg",
+        "filename": "2398774.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 0,
+            "score_at_vote": 0.0232
+          }
+        }
+      },
+      {
+        "md5": "2cdc6322c0046b49973e9842af1ab264",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2404123.jpg",
+        "filename": "2404123.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 1,
+            "score_at_vote": 0.0172
+          }
+        }
+      },
+      {
+        "md5": "6961294f0ed155cf062ad98162088ea5",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2357362.jpg",
+        "filename": "2357362.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 2,
+            "score_at_vote": 0.005
+          }
+        }
+      },
+      {
+        "md5": "3bba703a9352c799f18dc31b31292af2",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2322175.jpg",
+        "filename": "2322175.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 3,
+            "score_at_vote": 0.0021
+          }
+        }
+      },
+      {
+        "md5": "449cead06867d77d70ea34520fd988bc",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2366709.jpg",
+        "filename": "2366709.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 4,
+            "score_at_vote": 0.0014
+          }
+        }
+      },
+      {
+        "md5": "724f3a590e22c01074d6f3065ceb4fc2",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2361552.jpg",
+        "filename": "2361552.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 5,
+            "score_at_vote": -0.0011
+          }
+        }
+      },
+      {
+        "md5": "a995a68ba54bb39c71f4b7b96bc812f6",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2334345.jpg",
+        "filename": "2334345.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 6,
+            "score_at_vote": -0.0034
+          }
+        }
+      },
+      {
+        "md5": "04608e17db565394289410feda2b0573",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2331803.jpg",
+        "filename": "2331803.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 7,
+            "score_at_vote": -0.0034
+          }
+        }
+      },
+      {
+        "md5": "eb068f6310ae2874f6b68f61c534816a",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2368295.jpg",
+        "filename": "2368295.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 8,
+            "score_at_vote": -0.0063
+          }
+        }
+      },
+      {
+        "md5": "e892bc0a0dbb36fb318bb4bcdf43302b",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2370.jpg",
+        "filename": "2370.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 9,
+            "score_at_vote": -0.0064
+          }
+        }
+      },
+      {
+        "md5": "ed562c2fd4654a05496f616dcd96eff3",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2360860.jpg",
+        "filename": "2360860.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 10,
+            "score_at_vote": -0.0071
+          }
+        }
+      },
+      {
+        "md5": "69457e6b634b2d364d6be2c95d813a76",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2359891.jpg",
+        "filename": "2359891.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 11,
+            "score_at_vote": -0.0075
+          }
+        }
+      },
+      {
+        "md5": "ec567dedb015d31552f93aa6fbf92bd5",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "124.jpg",
+        "filename": "124.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 12,
+            "score_at_vote": -0.0099
+          }
+        }
+      },
+      {
+        "md5": "0761ba6a487649f57a90585bd3f4aaf1",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2377659.jpg",
+        "filename": "2377659.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 13,
+            "score_at_vote": -0.0107
+          }
+        }
+      },
+      {
+        "md5": "a816df78be72064750538503e7770f0f",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2348130.jpg",
+        "filename": "2348130.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 14,
+            "score_at_vote": -0.0131
+          }
+        }
+      },
+      {
+        "md5": "e3111ed6b377801a4c1ee19468f79703",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "713675.jpg",
+        "filename": "713675.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 15,
+            "score_at_vote": -0.0132
+          }
+        }
+      },
+      {
+        "md5": "8d891b87da0214a70977cb969d24f092",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2340252.jpg",
+        "filename": "2340252.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 16,
+            "score_at_vote": -0.0134
+          }
+        }
+      },
+      {
+        "md5": "a35990c7c12c9d93891e1ae9b1031098",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2368167.jpg",
+        "filename": "2368167.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 17,
+            "score_at_vote": -0.0138
+          }
+        }
+      },
+      {
+        "md5": "c7beddb79ef2cfe8429e7412aa8a3722",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2381551.jpg",
+        "filename": "2381551.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 18,
+            "score_at_vote": -0.014
+          }
+        }
+      },
+      {
+        "md5": "b9e084f0f1ac82eb5652f55775c8da0d",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2400231.jpg",
+        "filename": "2400231.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 19,
+            "score_at_vote": -0.0144
+          }
+        }
+      },
+      {
+        "md5": "0368ccb55474d4bda54348dd386df0bf",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2356468.jpg",
+        "filename": "2356468.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 20,
+            "score_at_vote": -0.0147
+          }
+        }
+      },
+      {
+        "md5": "d9b30f2171931dc4a1f8c551ab1a87f7",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2335092.jpg",
+        "filename": "2335092.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 21,
+            "score_at_vote": -0.0156
+          }
+        }
+      },
+      {
+        "md5": "42c5d36a8ace631a6f9dc5d706cbc9bf",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "4890.jpg",
+        "filename": "4890.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 23,
+            "score_at_vote": -0.0162
+          }
+        }
+      },
+      {
+        "md5": "217cc6d124c8fd932334d65b531b26a3",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2319150.jpg",
+        "filename": "2319150.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 24,
+            "score_at_vote": -0.0163
+          }
+        }
+      },
+      {
+        "md5": "9b3f49fb8d09fc887c15959c657d1e16",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2351861.jpg",
+        "filename": "2351861.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 25,
+            "score_at_vote": -0.0188
+          }
+        }
+      },
+      {
+        "md5": "09ebe9e97727d4a07ce8ca51f5811603",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2390197.jpg",
+        "filename": "2390197.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 26,
+            "score_at_vote": -0.0191
+          }
+        }
+      },
+      {
+        "md5": "080661a37f6404b75a3e3be3d5307212",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2376567.jpg",
+        "filename": "2376567.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 27,
+            "score_at_vote": -0.0201
+          }
+        }
+      },
+      {
+        "md5": "0bacc1892a712453f1a4727741412dc7",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2399470.jpg",
+        "filename": "2399470.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 28,
+            "score_at_vote": -0.0205
+          }
+        }
+      },
+      {
+        "md5": "3c3d7de9ff3cc6f02be25527d8c31af1",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2320221.jpg",
+        "filename": "2320221.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 29,
+            "score_at_vote": -0.0207
+          }
+        }
+      },
+      {
+        "md5": "342a22fd60fd7d860c9d69aaedc6e35e",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2355403.jpg",
+        "filename": "2355403.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 30,
+            "score_at_vote": -0.0209
+          }
+        }
+      },
+      {
+        "md5": "cfa55f514bd8ab00beabcfa938d6825d",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2383186.jpg",
+        "filename": "2383186.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 31,
+            "score_at_vote": -0.0209
+          }
+        }
+      },
+      {
+        "md5": "2825f388e2757ecc1fbfdca95afcf6c0",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2389108.jpg",
+        "filename": "2389108.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 32,
+            "score_at_vote": -0.0217
+          }
+        }
+      },
+      {
+        "md5": "f1b64f6a2200266027528867bd30725c",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "498364.jpg",
+        "filename": "498364.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 33,
+            "score_at_vote": -0.0227
+          }
+        }
+      },
+      {
+        "md5": "c51b5c109d8ae7438adbde98d426e37d",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2338459.jpg",
+        "filename": "2338459.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 34,
+            "score_at_vote": -0.0232
+          }
+        }
+      },
+      {
+        "md5": "4433544b3cbf00f927e680e3a6f831da",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2398929.jpg",
+        "filename": "2398929.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 35,
+            "score_at_vote": -0.0237
+          }
+        }
+      },
+      {
+        "md5": "4bb160bc47e25fccc5df7794d99d2e6e",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "4012.jpg",
+        "filename": "4012.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 36,
+            "score_at_vote": -0.0238
+          }
+        }
+      },
+      {
+        "md5": "4ea839e66f0efb62d140b82a4d8bae4d",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2368691.jpg",
+        "filename": "2368691.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 37,
+            "score_at_vote": -0.0239
+          }
+        }
+      },
+      {
+        "md5": "3cbe10f9b031adba347efa6b2cb7a5e8",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2386939.jpg",
+        "filename": "2386939.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 38,
+            "score_at_vote": -0.0249
+          }
+        }
+      },
+      {
+        "md5": "159f786a10d70c49f58483c2f2f730aa",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2343537.jpg",
+        "filename": "2343537.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 39,
+            "score_at_vote": -0.0261
+          }
+        }
+      },
+      {
+        "md5": "c8ef49ff50c6a585e4ba5251eb24ab22",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2326860.jpg",
+        "filename": "2326860.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 40,
+            "score_at_vote": -0.0263
+          }
+        }
+      },
+      {
+        "md5": "a7debe2a0aed65cdce0059e2e765ef1f",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2416793.jpg",
+        "filename": "2416793.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 41,
+            "score_at_vote": -0.0265
+          }
+        }
+      },
+      {
+        "md5": "79f4219b3a6fe8258ffbba83858f0030",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2373705.jpg",
+        "filename": "2373705.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 42,
+            "score_at_vote": -0.0269
+          }
+        }
+      },
+      {
+        "md5": "284eb09c8c2e6702bf7da492de9600d1",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "107908.jpg",
+        "filename": "107908.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 43,
+            "score_at_vote": -0.0271
+          }
+        }
+      },
+      {
+        "md5": "c271fe96fa6bb16a9419685171417794",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2372607.jpg",
+        "filename": "2372607.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 44,
+            "score_at_vote": -0.0277
+          }
+        }
+      },
+      {
+        "md5": "dff7e4b5f5d31cd7f47900b569dcafb0",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2339889.jpg",
+        "filename": "2339889.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 45,
+            "score_at_vote": -0.0278
+          }
+        }
+      },
+      {
+        "md5": "2717e30d75d2c5ec5ae3e8f4d5777be6",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2371944.jpg",
+        "filename": "2371944.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 46,
+            "score_at_vote": -0.0279
+          }
+        }
+      },
+      {
+        "md5": "8bd7d40b0a9135eca0f47cd2bf5b066e",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2407015.jpg",
+        "filename": "2407015.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 47,
+            "score_at_vote": -0.0284
+          }
+        }
+      },
+      {
+        "md5": "e405d4ac30253ad04c16376a88aa379f",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2376109.jpg",
+        "filename": "2376109.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 48,
+            "score_at_vote": -0.0287
+          }
+        }
+      },
+      {
+        "md5": "148b0419126592d3791dd226d28e3d78",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2357911.jpg",
+        "filename": "2357911.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 49,
+            "score_at_vote": -0.0292
+          }
+        }
+      },
+      {
+        "md5": "e7930acb5378c53f34f5a1d64fc0e03f",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2318291.jpg",
+        "filename": "2318291.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 50,
+            "score_at_vote": -0.0307
+          }
+        }
+      },
+      {
+        "md5": "c845c491773b8bb3de194ea63454c82e",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2381051.jpg",
+        "filename": "2381051.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 51,
+            "score_at_vote": -0.0308
+          }
+        }
+      },
+      {
+        "md5": "695f0be9623a46ef6942bb33c151bea5",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2410058.jpg",
+        "filename": "2410058.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 52,
+            "score_at_vote": -0.0308
+          }
+        }
+      },
+      {
+        "md5": "a54198a9cf81204ae196f3c54c7204ea",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2429.jpg",
+        "filename": "2429.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 53,
+            "score_at_vote": -0.0316
+          }
+        }
+      },
+      {
+        "md5": "2e5dbb5be56d77b46f44c1abb7e0e3e0",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2403454.jpg",
+        "filename": "2403454.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 54,
+            "score_at_vote": -0.0318
+          }
+        }
+      },
+      {
+        "md5": "07376e69ad709048408aec79291690cd",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2387881.jpg",
+        "filename": "2387881.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 55,
+            "score_at_vote": -0.032
+          }
+        }
+      },
+      {
+        "md5": "fa25b19ca64d0b12f8609afba8872923",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2317033.jpg",
+        "filename": "2317033.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 56,
+            "score_at_vote": -0.0323
+          }
+        }
+      },
+      {
+        "md5": "355347c3355b903046082de08c77ae83",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2360438.jpg",
+        "filename": "2360438.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 57,
+            "score_at_vote": -0.0324
+          }
+        }
+      },
+      {
+        "md5": "460ed59b0e1e8ea8c19f542861b963c7",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2340266.jpg",
+        "filename": "2340266.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 58,
+            "score_at_vote": -0.0337
+          }
+        }
+      },
+      {
+        "md5": "54aa634ad9ebf3da08aa4436a9c7c3fa",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2342547.jpg",
+        "filename": "2342547.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 59,
+            "score_at_vote": -0.0341
+          }
+        }
+      },
+      {
+        "md5": "d788e38a1f174b4ad1fe5341e7c6930f",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2326225.jpg",
+        "filename": "2326225.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 60,
+            "score_at_vote": -0.0348
+          }
+        }
+      },
+      {
+        "md5": "ac6dfc4c1668d5aa1036157467d2480c",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2397911.jpg",
+        "filename": "2397911.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 61,
+            "score_at_vote": -0.035
+          }
+        }
+      },
+      {
+        "md5": "e1b404f29f94def65ff63f6a4a0b9bd7",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2321482.jpg",
+        "filename": "2321482.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 62,
+            "score_at_vote": -0.0354
+          }
+        }
+      },
+      {
+        "md5": "01bc0a23551a6026cc9225efa32aed02",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2338.jpg",
+        "filename": "2338.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 63,
+            "score_at_vote": -0.0359
+          }
+        }
+      },
+      {
+        "md5": "85330b9243a3ee6ec1af7c4ebc071989",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2334734.jpg",
+        "filename": "2334734.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 64,
+            "score_at_vote": -0.0362
+          }
+        }
+      },
+      {
+        "md5": "d568dee8769c4fe913445a0a3f986f5d",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2334759.jpg",
+        "filename": "2334759.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 65,
+            "score_at_vote": -0.0366
+          }
+        }
+      },
+      {
+        "md5": "e8b9cfa7cb6d3d0795b4affefb1fe9f7",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2320341.jpg",
+        "filename": "2320341.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 66,
+            "score_at_vote": -0.0369
+          }
+        }
+      },
+      {
+        "md5": "8964c8993741c99075db9398d84959c4",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2372626.jpg",
+        "filename": "2372626.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 67,
+            "score_at_vote": -0.037
+          }
+        }
+      },
+      {
+        "md5": "6424a6055fb7db44f217237fc15b9e07",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2356020.jpg",
+        "filename": "2356020.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 68,
+            "score_at_vote": -0.0372
+          }
+        }
+      },
+      {
+        "md5": "f2faafd6bf32b80f3e0381634ed3e4d9",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2379024.jpg",
+        "filename": "2379024.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 69,
+            "score_at_vote": -0.0374
+          }
+        }
+      },
+      {
+        "md5": "bcdcf6d745ba97d2ffa96cfe5f64abe1",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2344692.jpg",
+        "filename": "2344692.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 70,
+            "score_at_vote": -0.0375
+          }
+        }
+      },
+      {
+        "md5": "678d80632fb8188fc5d2d0b3504ad507",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2332738.jpg",
+        "filename": "2332738.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 71,
+            "score_at_vote": -0.0378
+          }
+        }
+      },
+      {
+        "md5": "e88d2724ccea1df6789b012ff9f11f62",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "226.jpg",
+        "filename": "226.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 72,
+            "score_at_vote": -0.0383
+          }
+        }
+      },
+      {
+        "md5": "001780ef996f56000b4cc86ecb7884be",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2340233.jpg",
+        "filename": "2340233.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 73,
+            "score_at_vote": -0.0387
+          }
+        }
+      },
+      {
+        "md5": "2d035a71a1a2a99d3bbde68e1d66f908",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2370526.jpg",
+        "filename": "2370526.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 74,
+            "score_at_vote": -0.0387
+          }
+        }
+      },
+      {
+        "md5": "650390caee1fd523440f73f775a9ce6f",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2389122.jpg",
+        "filename": "2389122.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 75,
+            "score_at_vote": -0.0387
+          }
+        }
+      },
+      {
+        "md5": "547a8908d7cc9f00b061c43f0d218cc7",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2345805.jpg",
+        "filename": "2345805.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 76,
+            "score_at_vote": -0.0391
+          }
+        }
+      },
+      {
+        "md5": "41559d95c228d2c0027649d8c65792be",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2377897.jpg",
+        "filename": "2377897.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 77,
+            "score_at_vote": -0.0404
+          }
+        }
+      },
+      {
+        "md5": "7ea4073d06e1b3671d5c07b68296a4dd",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2393306.jpg",
+        "filename": "2393306.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 78,
+            "score_at_vote": -0.0406
+          }
+        }
+      },
+      {
+        "md5": "4f04fc71fc73622c223315ffb3f402cc",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2367287.jpg",
+        "filename": "2367287.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 79,
+            "score_at_vote": -0.0412
+          }
+        }
+      },
+      {
+        "md5": "955adad7dbf4c21d669a2871d5785d89",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2327316.jpg",
+        "filename": "2327316.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 80,
+            "score_at_vote": -0.0413
+          }
+        }
+      },
+      {
+        "md5": "80d2bbc00e8faf2a3b8765c01c313a3f",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2382288.jpg",
+        "filename": "2382288.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 81,
+            "score_at_vote": -0.0417
+          }
+        }
+      },
+      {
+        "md5": "da0d3fefc7b9e8bce6bbc37ab16abfa4",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2417464.jpg",
+        "filename": "2417464.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 82,
+            "score_at_vote": -0.0422
+          }
+        }
+      },
+      {
+        "md5": "99b4468ae26ced6519c735f2b43a745b",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2389474.jpg",
+        "filename": "2389474.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 83,
+            "score_at_vote": -0.0423
+          }
+        }
+      },
+      {
+        "md5": "34fbe9d8ea679e559e40aed1451929aa",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2413700.jpg",
+        "filename": "2413700.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 84,
+            "score_at_vote": -0.0435
+          }
+        }
+      },
+      {
+        "md5": "1b4f42e96538c18b52dc575d8a02761f",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2386746.jpg",
+        "filename": "2386746.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 85,
+            "score_at_vote": -0.0442
+          }
+        }
+      },
+      {
+        "md5": "ec460a4471ae9d0ee8a570fc28621498",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2412205.jpg",
+        "filename": "2412205.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 86,
+            "score_at_vote": -0.0446
+          }
+        }
+      },
+      {
+        "md5": "1554e6b4a0cf714c9ab39f57560c79c0",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2393665.jpg",
+        "filename": "2393665.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 87,
+            "score_at_vote": -0.0457
+          }
+        }
+      },
+      {
+        "md5": "b445e44aa347aa71c9f908959b172f6d",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2336246.jpg",
+        "filename": "2336246.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 88,
+            "score_at_vote": -0.0476
+          }
+        }
+      },
+      {
+        "md5": "51b398651a2af2552d7c0234fd6dcf03",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2391183.jpg",
+        "filename": "2391183.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 89,
+            "score_at_vote": -0.0495
+          }
+        }
+      },
+      {
+        "md5": "73bf5e3862ac2b4c83caf65c8829e3df",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2378345.jpg",
+        "filename": "2378345.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 90,
+            "score_at_vote": -0.0498
+          }
+        }
+      },
+      {
+        "md5": "769fec27cb5b8d781108d3813bd4c43b",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2346923.jpg",
+        "filename": "2346923.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 91,
+            "score_at_vote": -0.0507
+          }
+        }
+      },
+      {
+        "md5": "eb21f0af79521e91719bb9417c8b59c1",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2359095.jpg",
+        "filename": "2359095.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 92,
+            "score_at_vote": -0.0516
+          }
+        }
+      },
+      {
+        "md5": "ae36435bd02a0fdc8ac346eaa8984457",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "592.jpg",
+        "filename": "592.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 93,
+            "score_at_vote": -0.0529
+          }
+        }
+      },
+      {
+        "md5": "b44f825ed2871ba42b296c6781dfda83",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2344939.jpg",
+        "filename": "2344939.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 94,
+            "score_at_vote": -0.0556
+          }
+        }
+      },
+      {
+        "md5": "6327d60597e0819d45974273b7727c87",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2327776.jpg",
+        "filename": "2327776.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 95,
+            "score_at_vote": -0.0559
+          }
+        }
+      },
+      {
+        "md5": "999eedc021697fe31b0424e74a471067",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2346866.jpg",
+        "filename": "2346866.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 96,
+            "score_at_vote": -0.0572
+          }
+        }
+      },
+      {
+        "md5": "85bac621bb4b7503675000cbda01f1bc",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2396857.jpg",
+        "filename": "2396857.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 97,
+            "score_at_vote": -0.0579
+          }
+        }
+      },
+      {
+        "md5": "fab05706603bc36d5f51329a85828afe",
+        "label": "bad",
+        "origin": {
+          "importer": "server_folder",
+          "params": {
+            "media_type": "image",
+            "path": "/expscratch/sgreenberg/vlm-3720/belowcut19/chair/images",
+            "recursive": "false",
+            "dig_archives": "false"
+          }
+        },
+        "origin_name": "2370863.jpg",
+        "filename": "2370863.jpg",
+        "category": "custom",
+        "metadata": {
+          "vt:provenance": {
+            "v": 1,
+            "flow": "list_review",
+            "select_mode": "top",
+            "sort_kind": "text",
+            "rank_at_vote": 99,
+            "score_at_vote": -0.0594
+          }
+        }
+      }
+    ]
+  }
+}

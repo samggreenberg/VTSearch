@@ -33,8 +33,10 @@ implementation is to filter the media pool **once per cell** rather than thread
 a third value through every scorer: `calibration/prepare_data.py`,
 `voting_iterations.py`, `text_baseline.py`.
 
-**Size means the union box.** `region_box_for_category` already returns the
-union over a category's instances, because that is what one Good vote drags.
+**Size means the union box.** `region_box_for_category` returns the union over a
+category's instances. That is the **harness's** choice when simulating a Good
+vote from *N* ground-truth boxes, not a reproduction of the app: a real vote
+carries one box a person drew (#3983 follow-up).
 An image holding one foreground bus and three background buses is therefore a
 foreground-bus image — which is the honest reading of "find buses in the
 middleground".
@@ -156,44 +158,16 @@ Two measurements constrain what comes next:
 
 ## Open work
 
-<!-- item-sep -->
-
-- **Finish the review and close the loop.** The negative review is drafted by a
-  triage pass and awaits the reviewer's audit slate (`make_audit_pass.py`: the
-  flags, whose disagreement rate is the triage's precision, plus an unflagged
-  random sample, which is the only thing that can bound what it missed). Then
-  re-run `verdicts_to_corrections.py` and rebuild. **Check
-  `check_review_coverage.py` before trusting any rebuilt cell** — no structural
-  check implies coverage, and three rebuilds once retired 577 of 743 reviewed
-  images while every other check passed. (human + Sonnet 5)
+**The correction loop is retired.** Every item that stood here was about bounding
+the error on labels *inferred* from Visual Genome — finishing the negative
+review, reporting the residual rate it bounds, the corrected re-run and delta,
+and what the review guide should tell a reviewer about a better example. #3983
+measured that COCO 2017 supplies every cell without VG, so the inferred half no
+longer exists and none of it is owed. The construction above is unchanged and
+still live; only its image source moves.
 
 <!-- item-sep -->
 
-- **Report the residual error rate the review actually bounds.** Per band, from
-  the random stratum only, with the small band's limit stated rather than
-  hidden: boxed review confirms ~2/3 of sub-patch positives and the model fails
-  the same ones, so a small-band "not confirmed" is recorded as unconfirmed and
-  the label stands. That number belongs in the report beside any small-band
-  result. (Sonnet 5)
-
-<!-- item-sep -->
-
-- **Corrected re-run and delta report.** Re-run the affected overview-bench
-  cells against corrected labels and publish the before/after, so the size of
-  the label-noise effect is on the record rather than assumed. (Sonnet 5)
-
-<!-- item-sep -->
-
-- **Decide what the review guide tells a reviewer to do with a better example.**
-  `audit_band_drift.py` measures how often VG's boxes band an image below the
-  largest instance it actually holds; what to do about the ones a *reviewer*
-  spots is still open, and the guide currently says the opposite of the decision
-  taken in #3616. It was amended to "on a pre-boxed positive, judge the object in
-  the box and redraw only to correct the extent of the *same* object", which
-  makes the drift stop — by asking the reviewer to leave an annotation error in
-  place once they have seen it. That is the wrong trade if the mis-banding is
-  common, and the audit is what says whether it is. The guide is not in this
-  repo, so the amendment has to be reverted by hand once the rate is known.
-  (human)
+- [ ] What remains is the migration itself — see [`coco-quarry.md`](coco-quarry.md)
 
 <!-- item-sep -->

@@ -9,6 +9,7 @@ import { VoteStateService } from './vote-state.service';
 import { AutopilotStateService } from './autopilot-state.service';
 import { configureZoneless } from '../testing/zoneless-testbed';
 import { provideHttpTesting } from '../testing/test-providers';
+import { settleResource } from '../testing/settle-resource';
 
 /**
  * `SortRunnerService` in isolation.
@@ -254,6 +255,37 @@ describe('SortRunnerService', () => {
     httpMock.expectNone((req) => req.url.startsWith('/api/coverage-atlas/next'));
   });
 
+  it('peeks the same pick it would select, and selects nothing (#3896)', () => {
+    sortState.setSelectMode('top');
+    sortState.setSortResults(
+      [
+        { id: 1, score: 0.9 },
+        { id: 2, score: 0.8 },
+      ],
+      0.5,
+    );
+
+    // The image prefetch runs off this while the reviewer is still looking at
+    // item 1, so it must answer for the item *after* the one on screen without
+    // moving anybody off it.
+    expect(runner.peekNextMedia(1)).toEqual({ kind: 'media', id: 2 });
+    expect(mediaState.selectedId()).toBeNull();
+
+    runner.autoSelectNext(1);
+    expect(mediaState.selectedId()).toBe(2);
+  });
+
+  it('peeks `diversity` without firing the atlas probe (#3896)', () => {
+    sortState.setSelectMode('new');
+    sortState.setSortResults([{ id: 1, score: 0.9 }], 0.5);
+
+    // A `new`-mode pick is a server round-trip, which a prefetch must not fire:
+    // the probe is what *chooses* the next item, so calling it speculatively
+    // would consume a choice the reviewer has not arrived at yet.
+    expect(runner.peekNextMedia(1)).toEqual({ kind: 'diversity' });
+    httpMock.expectNone((req) => req.url.startsWith('/api/coverage-atlas/next'));
+  });
+
   // --- inclusion ------------------------------------------------------------
 
   it('pushes the inclusion value and re-advances the selection', () => {
@@ -331,6 +363,57 @@ describe('SortRunnerService', () => {
         .flush({ id: 7, coverage_level: 3 });
       expect(runner.queueExhausted()).toBe(false);
       expect(mediaState.selectedId()).toBe(7);
+    });
+  });
+
+  // --- the dataset, and the advance, running out (#4028) -------------------
+
+  /** Answer the dataset stub load with `ids`, and let the resource settle. */
+  async function seedMedias(...ids: number[]): Promise<void> {
+    mediaState.loadMedias();
+    // The `rxResource` loader runs in an effect, so the GET is not issued until
+    // the TestBed ticks (see `settle-resource.ts`).
+    TestBed.tick();
+    httpMock
+      .expectOne('/api/medias/ids')
+      .flush(ids.map((id) => ({ id, media_type: 'image' })));
+    await settleResource();
+  }
+
+  /**
+   * `queueExhausted` is about the loaded *ranking*, so it is false whenever no
+   * sort has run — which is exactly the state manual labelling and a fresh
+   * entry to a finished detector are both in.
+   */
+  describe('datasetExhausted', () => {
+    it('is false before the dataset stubs have loaded', () => {
+      expect(runner.datasetExhausted()).toBe(false);
+    });
+
+    it('is false while one item in the dataset is still unlabeled', async () => {
+      await seedMedias(1, 2);
+      voteState.applyOptimisticState(1, 'good');
+
+      expect(runner.datasetExhausted()).toBe(false);
+    });
+
+    it('is true once every item is labeled, with no sort ever having run', async () => {
+      await seedMedias(1, 2);
+      voteState.applyOptimisticState(1, 'good');
+      voteState.applyOptimisticState(2, 'bad');
+
+      // The ranking is empty, so the #3887 flag cannot speak for this state.
+      expect(runner.queueExhausted()).toBe(false);
+      expect(runner.datasetExhausted()).toBe(true);
+    });
+
+    it('goes back to false when an undo un-votes a row', async () => {
+      await seedMedias(1);
+      voteState.applyOptimisticState(1, 'good');
+      expect(runner.datasetExhausted()).toBe(true);
+
+      voteState.applyOptimisticState(1, 'none');
+      expect(runner.datasetExhausted()).toBe(false);
     });
   });
 });

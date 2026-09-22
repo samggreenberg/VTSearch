@@ -268,7 +268,7 @@ exist to be re-measured.
   mode rescues, and the log line says which verb applies.
 - **The fold now runs *after* `anchor_to_coco`**, in `vg_scale` and in
   `vg_scale_deep` alike. This is a no-op on what gets built — verified, not
-  asserted: `band_fold.py` carries `dev`'s pass order as a fourth supply arm and
+  asserted: `band_fold.py` (retired with Visual Genome — see `docs/plans/coco-quarry.md`) carries `dev`'s pass order as a fourth supply arm and
   it designates **identical ids in all 36 cells**. It is what makes `contested`
   exact, and it fixed a second thing nobody had noticed: the old order reported
   **5,142** boxes folded where the build actually keeps **2,559**. *Half of every
@@ -278,7 +278,7 @@ exist to be re-measured.
   `fold`. A mode whose entire decision is a measurement it cannot take is not a
   mode.
 - `pile_config.SCALE_FOLD_MODE` selects the arm, defaulting to `fold`, and
-  `tests_lib/meta/test_pile_vg_scale.py` pins each mode's behaviour on the
+  `test_pile_vg_scale.py` pins each mode's behaviour on the
   scatter case plus the invariant that matters most: **every mode still adds an
   image the class cannot see**, since the repair is the point of the table.
 
@@ -330,7 +330,7 @@ nothing is written to the pile.
 
 | | |
 |---|---|
-| measurement | [`scripts/experiments/pile/band_fold.py`](../../../scripts/experiments/pile/band_fold.py) |
+| measurement | `band_fold.py` (retired with Visual Genome) |
 | figures | [`figures.py`](figures.py), from [`measurements/band-fold.json`](measurements/band-fold.json) and #3618's `name-coverage.json` |
 | numbers | `measurements/band-fold.json`, `measurements/unbanded.json` (all 225 rows, with their boxes and all three verdicts) |
 | worktree | `/exp/sgreenberg/projects/vts-fold-3637`, artifacts `/expscratch/sgreenberg/fold-3637/` |

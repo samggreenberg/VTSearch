@@ -524,6 +524,7 @@ class TestApiEmbeddersResponseShape:
             "eupe_single",
             "eupe_patch",
             "sift_vlad",
+            "sift_vlad_doc",
         }
         # Shape: every entry has the three capability fields, with bool /
         # Optional[str] types.

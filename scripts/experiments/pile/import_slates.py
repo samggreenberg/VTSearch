@@ -61,6 +61,13 @@ def main() -> int:
     ap.add_argument("--timeout", type=int, default=1800, help="seconds to wait for one import")
     args = ap.parse_args()
 
+    # The slate images and their index went with the study dir (#4001), and
+    # neither is in the committed record -- the record keeps each slate's
+    # `manifest.csv`, which says what was asked, not the rendered images.
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "calibration"))
+    from study_paths import require_study_dir  # noqa: PLC0415
+
+    require_study_dir(args.slates, "--slates")
     index = json.loads((Path(args.slates) / "slates.json").read_text())
     log(f"{len(index)} slates under {args.slates}")
     total_images = sum(int(e.get("n") or 0) for e in index)

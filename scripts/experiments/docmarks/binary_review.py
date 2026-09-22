@@ -26,6 +26,23 @@ Sub-commands::
 nothing here deletes a dataset or a detector: the vg_scale campaign shares the
 dashboard, and a detector is often the only copy of a human review.
 
+**``bank`` merges; it never rewrites a verdict file from the app alone.** A
+finished queue is cleared off the dashboard once its votes are banked, so the
+app is a record of the *unfinished* work only.  Banking again from ``--api``
+after a clear therefore found no votes for the cleared queues and wrote their
+verdicts back empty -- 1,725 answered questions in one afternoon.  Votes are now
+read from three places and merged, in increasing precedence: the ``.cleared``
+detector backups taken when a queue was removed, the ``votes_*.json`` archive
+this command writes beside every queue on every run, and the live app.  A write
+that would answer fewer items than the file already on disk is refused unless
+``--allow-loss`` is passed.
+
+Nothing here clears a queue -- that is done by hand against the registry API --
+but the order matters, and is why the backups exist: **copy the detector JSON to**
+:data:`CLEARED` ``/detectors-cleared-<date>/<name>.json.cleared`` **before deleting
+the pair**, because the labels in that file are the votes themselves, where a
+verdict file holds only what they were translated into.
+
 Other passes (``completeness_multi.py``) build :class:`Question` objects and
 call :func:`emit`; their ``bank`` translation is a :data:`TRANSLATORS` entry.
 
@@ -39,7 +56,9 @@ from __future__ import annotations
 
 import datetime
 import json
+import os
 import re
+import shutil
 import sys
 import time
 import urllib.error
@@ -55,6 +74,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 #: Every queue name starts with this; ``bank`` ignores any other detector.
 PREFIX = "docmarks"
 ROOT = Path("/expscratch/sgreenberg/docmarks/binary")
+#: A regrouped queue's directory; kept apart so the per-pass dirs stay readable as vote archives.
+MERGED_SUFFIX = "__merged"
+#: Detector JSONs copied out of the app before a finished queue was cleared, under
+#: ``detectors-cleared-<date>/``.  A cleared queue is gone from the dashboard, so
+#: these are the only record of its votes and ``bank`` reads them as a source.
+CLEARED = Path("/expscratch/sgreenberg/keep")
 CANVAS = (1400, 700)
 LEFT_W = 540
 HEADER_H = 78
@@ -107,6 +132,41 @@ class Question:
     outline: bool = True
     #: Small print under the image (e.g. which methods proposed the candidate).
     detail: str = ""
+    #: Shave the near-solid margin off the candidate before fitting it to the
+    #: panel.  A scanned page is mostly white paper, so the mark renders small
+    #: while the reviewer pays for margin -- twice, since the sheet is fetched
+    #: whole and then again as a thumbnail.  Uses
+    #: :func:`vtscore.media.image.edge_trim.solid_edge_box`, the same detector
+    #: the thumbnailer and the embedding cleaner use, so a page whose border is
+    #: not near-solid (a skewed scan frame, a black ring that is not uniform)
+    #: simply does not trim rather than trimming wrongly.
+    #:
+    #: **Only for questions that draw no box.**  ``outline`` coordinates are
+    #: relative to the untrimmed region, so trimming under a drawn box would
+    #: move the box off the thing it points at.
+    trim_border: bool = False
+    #: Render greyscale and at this JPEG quality.  A scanned page IS greyscale,
+    #: so three colour channels at q90 buy nothing and cost a lot: the review
+    #: sheet is fetched whole over a tunnel for every vote, and the centre panel
+    #: goes black until it lands.  Measured on these sheets, RGB q90 is a 198 KB
+    #: median / 450 KB p90; greyscale q80 at 0.9 scale is 111 KB / 245 KB --
+    #: lighter than the 124 KB median of the passes that reviewed at a page a
+    #: second.  Only for sheets whose colour carries nothing; a task that draws
+    #: the red proposal box needs the default.
+    greyscale: bool = False
+    quality: int = 90
+    #: Suppress the page id in the footer.  A planted control is only a check
+    #: on attention while it is indistinguishable from the rest of the queue,
+    #: and a footer reading ``spods/00882`` among twenty ``ucsf/...`` pages
+    #: announces it.
+    anonymous: bool = False
+    #: Canvas override, ``(width, height)``.  The default is landscape, which
+    #: letterboxes a *portrait* page into a third of the panel -- fine for a box
+    #: on a page, useless for "is the mark anywhere on this page", where the
+    #: page itself has to be legible.  A contamination question renders the page
+    #: 2.3x wider this way, which is the difference between a 35 px letterhead
+    #: crest and an 87 px one.
+    canvas: Optional[list[int]] = None
 
 
 def short_class(class_id: str) -> str:
@@ -153,6 +213,25 @@ def panel_scale(region: tuple[int, int, int, int], mark_long: int, panel: tuple[
     return min(fit, max(want, 1.0))
 
 
+def sheet_size(q: "Question") -> tuple[int, int]:
+    """Canvas for *q* -- its override, else the shared landscape default."""
+    return (int(q.canvas[0]), int(q.canvas[1])) if q.canvas else CANVAS
+
+
+def footer_text(q: "Question") -> str:
+    """The small print under the sheet.
+
+    An ``anonymous`` question shows only its ``detail``: a planted attention
+    control is a check on whether the reviewer looked, and a footer naming
+    ``spods/00882`` among twenty ``ucsf/...`` pages answers the question for
+    them.  The same applies to the arm a question was drawn from -- knowing a
+    page was ranked highly by SigLIP is a reason to look harder at it.
+    """
+    if q.anonymous:
+        return q.detail
+    return f"{q.item}   ·   {q.page_id}" + (f"   ·   {q.detail}" if q.detail else "")
+
+
 def _open_page(page: Any, corpus: Path):
     from PIL import Image  # noqa: PLC0415
 
@@ -173,8 +252,9 @@ def render(q: Question, pages: dict[str, Any], corpus: Path, out: Path) -> Path:
 
     from completeness import _font  # noqa: PLC0415
 
-    W, H = CANVAS
-    img = Image.new("RGB", CANVAS, "white")
+    size = sheet_size(q)
+    W, H = size
+    img = Image.new("RGB", size, "white")
     draw = ImageDraw.Draw(img)
     draw.rectangle([0, 0, W, HEADER_H], fill="#111111")
     draw.text((20, 16), q.question, fill="white", font=_font(38, bold=True))
@@ -209,7 +289,18 @@ def render(q: Question, pages: dict[str, Any], corpus: Path, out: Path) -> Path:
     with _open_page(page, corpus) as im:
         crop = im.convert("RGB").crop(region)
     panel = (W - LEFT_W - 32, body_h)
-    s = panel_scale(region, max(q.box[2], q.box[3]), panel)
+    if q.trim_border and not q.outline:
+        from vtscore.media.image.edge_trim import solid_edge_box  # noqa: PLC0415
+
+        trimmed = solid_edge_box(crop)
+        if trimmed:
+            crop = crop.crop(trimmed)
+        # The mark-size enlargement below is keyed to the untrimmed region, so
+        # a trimmed crop just fills the panel: there is no box to keep legible,
+        # only the page.
+        s = min(panel[0] / crop.width, panel[1] / crop.height)
+    else:
+        s = panel_scale(region, max(q.box[2], q.box[3]), panel)
     crop = crop.resize((max(1, int(crop.width * s)), max(1, int(crop.height * s))), Image.Resampling.LANCZOS)
     ox = LEFT_W + 16 + (panel[0] - crop.width) // 2
     oy = body_top + (panel[1] - crop.height) // 2
@@ -234,10 +325,12 @@ def render(q: Question, pages: dict[str, Any], corpus: Path, out: Path) -> Path:
     if q.outline:
         outline(q.box, "#e0201c")
     draw.rectangle([0, H - FOOTER_H, W, H], fill="#eeeeee")
-    footer = f"{q.item}   ·   {q.page_id}" + (f"   ·   {q.detail}" if q.detail else "")
+    footer = footer_text(q)
     draw.text((16, H - FOOTER_H + 6), footer, fill="#333333", font=_font(18))
     path = out / q.filename
-    img.save(path, quality=90)
+    if q.greyscale:
+        img = img.convert("L")
+    img.save(path, quality=q.quality, optimize=True)
     return path
 
 
@@ -480,6 +573,84 @@ def emit_completeness2(source: Path, classes, pages) -> list[tuple[str, list[Que
     return queues
 
 
+def merged_name(class_id: str) -> str:
+    """The one pair a class gets once its passes are regrouped."""
+    return f"{PREFIX} {short_class(class_id)} -- read the question on each image"
+
+
+def regroup(
+    root: Path,
+    cleared: Path = CLEARED,
+    base: Optional[str] = None,
+    skip_tasks: Sequence[str] = ("box_tighten",),
+) -> list[tuple[str, Path, int]]:
+    """Rebuild what is left of every pass as ONE queue per class, dropping answered questions.
+
+    A class reaches the dashboard twice -- a 4-12 question ``query_crops`` pair and
+    a 36-question ``completeness2`` one -- for what is a single sitting, and every
+    image already carries its own question in large type.  This merges what is
+    still unanswered, **copying the rendered images rather than re-rendering
+    them**, so a question seen after the regroup is pixel-identical to the one
+    before it.
+
+    Answered questions are dropped, which is the point: re-asking one wastes the
+    reviewer's time and invites a second, contradicting vote.  The per-pass
+    directories are left in place because their ``votes_*.json`` archives are
+    what :func:`collect_votes` reads for a queue that is no longer on the
+    dashboard.
+
+    ``box_tighten`` is skipped by default: "is this red box right?" is a
+    different act from "is this the same mark", and mixing the two is the
+    confusion this is meant to remove.
+    """
+    by_queue, _ = collect_votes(base, root, cleared)
+    # by filename, not by queue: a question answered in some other detector is
+    # still answered, and re-asking it is the thing this is meant to avoid
+    votes, _conflicts, _unplaceable = vote_index(by_queue)
+    remaining: dict[str, list[tuple[Path, str, dict[str, Any]]]] = defaultdict(list)
+    for mf in sorted(root.glob("*/manifest.json")):
+        if mf.parent.name.endswith(MERGED_SUFFIX):
+            continue
+        m = json.loads(mf.read_text(encoding="utf-8"))
+        for fn, q in sorted(m["questions"].items()):
+            if fn in votes or q["task"] in skip_tasks:
+                continue
+            class_id = (q.get("key") or {}).get("class_id")
+            if not class_id:
+                raise SystemExit(f"{mf}: {fn} has no key.class_id, so it cannot be grouped by class")
+            remaining[class_id].append((mf.parent / "images" / fn, fn, q))
+    out = []
+    for class_id, items in sorted(remaining.items()):
+        name = merged_name(class_id)
+        qdir = root / (slug(name.split(" -- ")[0]) + MERGED_SUFFIX)
+        images = qdir / "images"
+        images.mkdir(parents=True, exist_ok=True)
+        wanted = {fn for _src, fn, _q in items}
+        for stale in sorted(images.glob("*.jpg")):
+            # a question answered since the last regroup: leaving the file would re-ask it
+            if stale.name not in wanted:
+                stale.unlink()
+                print(f"  {name}: dropped {stale.name}, answered since the last regroup")
+        for src, fn, _q in items:
+            dest = images / fn
+            if dest.exists():
+                continue
+            try:
+                os.link(src, dest)  # same filesystem: no second copy of the bytes
+            except OSError:
+                shutil.copy2(src, dest)
+        manifest = {
+            "dataset_name": name,
+            "tasks": sorted({q["task"] for _src, _fn, q in items}),
+            "created": datetime.date.today().isoformat(),
+            "merged_from": sorted({src.parent.parent.name for src, _fn, _q in items}),
+            "questions": {fn: q for _src, fn, q in items},
+        }
+        (qdir / "manifest.json").write_text(json.dumps(manifest, indent=1) + "\n", encoding="utf-8")
+        out.append((name, qdir, len(items)))
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Banking: votes -> each audit's verdict rows
 # ---------------------------------------------------------------------------
@@ -580,12 +751,24 @@ def translate_box_tighten(rows, questions, votes):
     return out, unanswered
 
 
+def needs_drawn_box(tile: bool, candidate: Optional[dict[str, Any]]) -> bool:
+    """A tile-box Good that no existing mark can stand in for.
+
+    A tile says "the mark is somewhere in here", so it cannot become a mark's box.
+    But when a boxed mark already sits under the tile, ``apply_completeness``
+    reassigns *that* mark and never reads the tile box -- nothing needs drawing.
+    Only a tile over bare page does (#4040).
+    """
+    return bool(tile) and (candidate is None or candidate.get("mark_index") is None)
+
+
 def translate_completeness2(rows, questions, votes):
-    """Good candidates become the completeness verdict -- except tile boxes.
+    """Good candidates become the completeness verdict -- except undrawn tile boxes.
 
     A Good vote on a SigLIP-tile candidate says the mark is on that page, but its
-    box is the tile.  Passing it through would add a tile-sized mark, so those
-    indices go to ``needs_tight_box`` and stay out of ``verdict`` until a box is drawn.
+    box is the tile.  Where no mark is already boxed under that tile, passing it
+    through would add a tile-sized mark, so those indices go to ``needs_tight_box``
+    and stay out of ``verdict`` until a box is drawn.
     """
     got: dict[str, dict[int, tuple[Optional[str], bool]]] = defaultdict(dict)
     for fn, q in questions.items():
@@ -602,8 +785,12 @@ def translate_completeness2(rows, questions, votes):
             )
             out.append(r)
             continue
-        keep = sorted(i for i, (v, tile) in asked.items() if v == "good" and not tile)
-        tight = sorted(i for i, (v, tile) in asked.items() if v == "good" and tile)
+        # The row's own candidates, not the manifest, say whether a mark is already
+        # boxed under a tile: a queue built before #4040 has no such key to read.
+        cands = {int(c["index"]): c for c in r.get("candidates", []) if c.get("index") is not None}
+        good = [i for i, (v, _tile) in asked.items() if v == "good"]
+        keep = sorted(i for i in good if not needs_drawn_box(asked[i][1], cands.get(i)))
+        tight = sorted(i for i in good if needs_drawn_box(asked[i][1], cands.get(i)))
         r["verdict"] = ",".join(map(str, keep)) if keep else "none"
         r["needs_tight_box"] = tight
         r["verdict_source"] = "vtsearch"
@@ -724,25 +911,175 @@ def load_queue(base: str, queue: Path, wait: int = 1800) -> str:
     return f"{name}: dataset {got}/{n} items, detector ok"
 
 
-def bank(base: str, root: Path, corpus: Path, date: str) -> int:
+def labels_of(detector: dict[str, Any]) -> dict[str, str]:
+    """A detector JSON -- a ``.cleared`` backup or a live export -- to {filename: "good"|"bad"}."""
+    votes: dict[str, str] = {}
+    for row in (detector.get("labelset") or {}).get("labels") or []:
+        fn = row.get("filename") or row.get("origin_name")
+        if fn and row.get("label") in ("good", "bad"):
+            votes[fn] = row["label"]
+    return votes
+
+
+def collect_votes(base: Optional[str], root: Path, cleared: Path) -> tuple[dict[str, dict[str, str]], dict[str, int]]:
+    """Every vote ever cast, per queue, whether or not the queue is still on the dashboard.
+
+    Later sources win, so a live answer overrides an archived one for the same
+    image.  ``base`` of ``None`` reads the on-disk sources only, which is what a
+    test (and a run against a dead app) needs.
+    """
+    votes: dict[str, dict[str, str]] = defaultdict(dict)
+    seen: dict[str, int] = defaultdict(int)
+    for path in sorted(cleared.glob("detectors-cleared-*/*.json.cleared")):
+        backup = json.loads(path.read_text(encoding="utf-8"))
+        name, got = backup.get("name"), labels_of(backup)
+        if name and got:
+            votes[name].update(got)
+            seen["cleared backup"] += 1
+    for path in sorted(root.glob("*/votes_*.json")):
+        d = json.loads(path.read_text(encoding="utf-8"))
+        name = (d.get("detector") or {}).get("name")
+        got = votes_from_labels(d.get("labels") or {})
+        if name and got:
+            votes[name].update(got)
+            seen["archive"] += 1
+    if base:
+        for d in docmarks_detectors(api(base, "/api/detectors/registry").get("detectors", [])):
+            got = votes_from_labels(api(base, f"/api/detectors/{urllib.parse.quote(d['name'])}/labels-detail"))
+            if got:
+                votes[d["name"]].update(got)
+                seen["live detector"] += 1
+    return dict(votes), dict(seen)
+
+
+def question_index(manifests: dict[str, tuple[Path, dict[str, Any]]]) -> dict[str, dict[str, Any]]:
+    """``{filename: question}`` across every queue.
+
+    A filename is claimed by several manifests as a matter of course: a regrouped
+    queue hardlinks its predecessors' images, so the same question appears in the
+    pass that first asked it and in the merged pair that still asks it.  That is
+    benign only while the two describe the *same* question, so a filename claimed
+    twice with differing entries raises rather than letting one silently win.
+    """
+    index: dict[str, dict[str, Any]] = {}
+    claimed: dict[str, list[str]] = defaultdict(list)
+    for name, (_qdir, m) in sorted(manifests.items()):
+        for fn, q in (m.get("questions") or {}).items():
+            claimed[fn].append(name)
+            prev = index.get(fn)
+            if prev is not None and json.dumps(prev, sort_keys=True) != json.dumps(q, sort_keys=True):
+                raise SystemExit(
+                    f"{fn} is claimed by {claimed[fn]} with different questions; "
+                    "a vote on it cannot be routed, so nothing was banked"
+                )
+            index[fn] = q
+    return index
+
+
+def vote_index(
+    by_queue: dict[str, dict[str, str]], questions: Optional[dict[str, dict[str, Any]]] = None
+) -> tuple[dict[str, str], list[str], list[str]]:
+    """``{filename: label}`` for every vote, whatever detector it was cast in.
+
+    A vote is an answer to the QUESTION its filename names, not to the dataset
+    folder it happens to sit in: loading a second dataset into one detector puts
+    a foreign queue's votes there, and keying by folder drops every one of them.
+    Returns the index plus what could not be resolved -- ``conflicts`` (one
+    filename voted both ways in different queues, where no rule can say which
+    click was later) and ``unplaceable`` (a vote naming a question no manifest
+    has).  Both are reported rather than guessed at or dropped in silence.
+    """
+    per_file: dict[str, dict[str, str]] = defaultdict(dict)
+    for queue, votes in by_queue.items():
+        for fn, label in votes.items():
+            per_file[fn][queue] = label
+    index: dict[str, str] = {}
+    conflicts: list[str] = []
+    unplaceable: list[str] = []
+    for fn, per in sorted(per_file.items()):
+        if questions is not None and fn not in questions:
+            unplaceable.append(f"{fn}: voted in {sorted(per)} but no manifest asks it")
+            continue
+        labels = set(per.values())
+        if len(labels) > 1:
+            conflicts.append(f"{fn}: {', '.join(f'{q}={v}' for q, v in sorted(per.items()))}")
+            continue
+        index[fn] = next(iter(labels))
+    return index, conflicts, unplaceable
+
+
+def archive_votes(qdir: Path, date: str, payload: dict[str, Any]) -> Path:
+    """Keep this run's votes beside the queue, without shrinking an earlier archive.
+
+    A re-imported queue can answer with fewer votes than the archive already
+    holds, and that archive may be the only copy once the queue is cleared.
+    """
+    n = sum(len((payload.get("labels") or {}).get(k) or []) for k in ("good", "bad"))
+    dest = qdir / f"votes_{date}.json"
+    if dest.exists():
+        old = json.loads(dest.read_text(encoding="utf-8")).get("labels") or {}
+        have = sum(len(old.get(k) or []) for k in ("good", "bad"))
+        if have > n:
+            dest = qdir / f"votes_{date}T{datetime.datetime.now():%H%M%S}.json"
+            print(f"  WARNING {qdir.name}: app has {n} vote(s), archive has {have}; wrote {dest.name} instead")
+    dest.write_text(json.dumps(payload, indent=1) + "\n", encoding="utf-8")
+    return dest
+
+
+def answered(rows: Sequence[dict[str, Any]]) -> int:
+    """Rows a translator has filled in from votes."""
+    return sum(1 for r in rows if r.get("verdict_source") == "vtsearch")
+
+
+def guard_write(dest: Path, out_rows: Sequence[dict[str, Any]], cleared: Path, allow_loss: bool) -> None:
+    """Refuse a write that answers fewer items than the file already on disk.
+
+    The same shape as ``pilebuild.corrections.dropped_rows``: the guard exists
+    because the thing being overwritten is human work, and the flag that skips it
+    has to be typed on purpose.
+    """
+    before = answered(read_jsonl(dest)) if dest.exists() else 0
+    now = answered(out_rows)
+    if now < before and not allow_loss:
+        raise SystemExit(
+            f"refusing to write {dest}: it answers {before} item(s) and this run answers {now}.\n"
+            f"  Votes for a cleared queue live only in its votes_*.json archive or a .cleared backup "
+            f"under {cleared} -- check those are readable before overwriting, or pass --allow-loss."
+        )
+
+
+def bank(
+    base: str,
+    root: Path,
+    corpus: Path,
+    date: str,
+    cleared: Path = CLEARED,
+    allow_loss: bool = False,
+) -> int:
     manifests = {}
     for mf in sorted(root.glob("*/manifest.json")):
         m = json.loads(mf.read_text(encoding="utf-8"))
         manifests[m["dataset_name"]] = (mf.parent, m)
-    dets = docmarks_detectors(api(base, "/api/detectors/registry").get("detectors", []))
-    by_task: dict[str, tuple[dict[str, Any], dict[str, str]]] = defaultdict(lambda: ({}, {}))
-    for d in dets:
+    # archive what the app holds now, before reading anything back
+    for d in docmarks_detectors(api(base, "/api/detectors/registry").get("detectors", [])) if base else []:
         name = d["name"]
         if name not in manifests:
             print(f"  {name}: no manifest under {root}, skipped")
             continue
-        qdir, m = manifests[name]
         detail = api(base, f"/api/detectors/{urllib.parse.quote(name)}/labels-detail")
-        (qdir / f"votes_{date}.json").write_text(
-            json.dumps({"detector": d, "labels": detail}, indent=1) + "\n", encoding="utf-8"
-        )
-        votes = votes_from_labels(detail)
-        print(f"  {name}: {len(votes)} of {len(m['questions'])} answered")
+        archive_votes(manifests[name][0], date, {"detector": d, "labels": detail})
+    by_queue, sources = collect_votes(base, root, cleared)
+    print(f"  vote sources: {', '.join(f'{v} {k}(s)' for k, v in sorted(sources.items())) or 'none'}")
+    questions = question_index(manifests)
+    votes, conflicts, unplaceable = vote_index(by_queue, questions)
+    for line in conflicts:
+        print(f"  CONFLICT {line}")
+    for line in unplaceable:
+        print(f"  UNPLACEABLE {line}")
+    by_task: dict[str, tuple[dict[str, Any], dict[str, str]]] = defaultdict(lambda: ({}, {}))
+    for name, (_qdir, m) in sorted(manifests.items()):
+        got = sum(1 for fn in m["questions"] if fn in votes)
+        print(f"  {name}: {got} of {len(m['questions'])} answered")
         for fn, q in m["questions"].items():
             src = TRANSLATORS[q["task"]][0](corpus)
             qs, vs = by_task[str(src)]
@@ -755,6 +1092,7 @@ def bank(base: str, root: Path, corpus: Path, date: str) -> int:
         rows = read_jsonl(src)
         out_rows, unanswered = translator(rows, qs, vs)
         dest = src.with_name("verdicts.from_vtsearch.jsonl")
+        guard_write(dest, out_rows, cleared, allow_loss)
         dest.write_text("".join(json.dumps(r) + "\n" for r in out_rows), encoding="utf-8")
         print(f"{src.parent.name}: wrote {dest} ({len(vs)} votes); {len(unanswered)} item(s) not fully answered")
         for u in unanswered[:40]:
@@ -779,11 +1117,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ld = sub.add_parser("load")
     ld.add_argument("--queue", type=Path, action="append", required=True)
     ld.add_argument("--api", default=None)
+    rg = sub.add_parser("regroup")
+    rg.add_argument("--root", type=Path, default=ROOT)
+    rg.add_argument("--api", default=None, help="read live votes too, so an in-flight answer is not re-asked")
+    rg.add_argument("--cleared", type=Path, default=CLEARED)
     b = sub.add_parser("bank")
     b.add_argument("--corpus", type=Path, default=cfg.OUT)
     b.add_argument("--root", type=Path, default=ROOT)
     b.add_argument("--api", default=None)
     b.add_argument("--date", default=datetime.date.today().isoformat())
+    b.add_argument("--cleared", type=Path, default=CLEARED, help="root holding detectors-cleared-*/ backups")
+    b.add_argument(
+        "--allow-loss",
+        action="store_true",
+        help="write even when the result answers fewer items than the file on disk (it is human work)",
+    )
     args = ap.parse_args(argv)
 
     if args.cmd == "load":
@@ -792,7 +1140,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(load_queue(base, q), flush=True)
         return 0
     if args.cmd == "bank":
-        return bank(args.api or app_base(), args.root, args.corpus, args.date)
+        return bank(args.api or app_base(), args.root, args.corpus, args.date, args.cleared, args.allow_loss)
+    if args.cmd == "regroup":
+        for name, qdir, n in regroup(args.root, args.cleared, args.api or app_base()):
+            print(f"  {name}: {n} question(s) -> {qdir}", flush=True)
+        return 0
 
     classes = json.loads((args.corpus / "classes.json").read_text(encoding="utf-8"))
     pages = {p.page_id: p for p in read_manifest(args.corpus / "corpus.jsonl")}

@@ -229,6 +229,40 @@ TIMING_COLUMNS: frozenset[str] = frozenset(
 )
 
 
+#: The per-size breakdown of the miss rate (#4044), NaN on every run that did
+#: not ask for ``test_bands``.
+#:
+#: **One threshold, one FPR, three FNRs.**  A scale-banded class's three bands
+#: share their negative pool by construction -- the ``3 *`` in
+#: ``pile_config.SCALE_PREVALENCE`` -- so a negative holds no instance of the
+#: class and therefore has no size *for* it.  There is exactly one false-positive
+#: rate per arm and it is the row's own ``fpr``; asking for ``fpr_small`` is
+#: asking for a quantity with no referent.  The miss rate is the half that does
+#: decompose, because a positive has a size.
+#:
+#: Read at the row's shipped ``threshold``, so these do **not** move with
+#: ``pool_variant``: every row a step emits carries the same breakdown.
+#:
+#: ``recall_<band>`` is exactly ``1 - fnr_<band>`` and is emitted anyway, for the
+#: reason ``recall`` is (#3281): inverting a rate in your head is where the
+#: reading errors come from.  ``n_test_pos_<band>`` is the count behind each, so
+#: a band whose cohort is thin is visible rather than merely noisy -- and so a
+#: mix's FNR can be re-derived as the mix-weighted average of these without
+#: going back to the cells, which is what makes a **test-side** size mix need no
+#: run of its own.
+BAND_COLUMNS: tuple[str, ...] = (
+    "fnr_small",
+    "fnr_medium",
+    "fnr_large",
+    "recall_small",
+    "recall_medium",
+    "recall_large",
+    "n_test_pos_small",
+    "n_test_pos_medium",
+    "n_test_pos_large",
+)
+
+
 VOTING_COLUMNS: tuple[str, ...] = (
     *IDENT_COLUMNS,
     "cost",
@@ -248,6 +282,7 @@ VOTING_COLUMNS: tuple[str, ...] = (
     "n_flagged",
     "auroc",
     "average_precision",
+    *BAND_COLUMNS,
     #: The fold count the STEP lived at (#3314).  Equal to the run's
     #: `calibrate_count` everywhere except under `fold_count_schedule`, where it
     #: is what the schedule resolved for this step's vote count.  On the plain
@@ -371,6 +406,7 @@ CALIBRATION_COLUMNS: tuple[str, ...] = (
     "n_flagged",
     "auroc",
     "average_precision",
+    *BAND_COLUMNS,
     "oracle_threshold",
     "oracle_cost",
     "oracle_fpr",

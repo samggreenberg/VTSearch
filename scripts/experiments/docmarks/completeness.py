@@ -27,7 +27,10 @@ sources, so hand-added marks live in their own store, ``added_marks.json``, whic
 ``build_corpus.py`` replays onto the pages before identity clustering.  They are
 appended in store order and unclassed, exactly as they were when the verdict was
 applied, so the must-link recorded against ``(page_id, mark_index)`` binds the
-same mark after a rebuild.
+same mark after a rebuild.  The store is written deduped on
+``(page_id, box, class_id)``, so re-applying a class -- with ``--supersede``
+after a corrected verdict, say -- does not store the boxes it already
+contributed a second time (#4042).
 
 The candidate pool is **anchor pages only** (SPODS, StaVer, Tobacco800): every
 anchor page is in tier ``s``, so one tier-``s`` run covers every page a roster
@@ -165,8 +168,36 @@ def load_added_marks(path: Path) -> list[dict[str, Any]]:
     return json.loads(path.read_text(encoding="utf-8")).get("marks", [])
 
 
-def save_added_marks(rows: Sequence[dict[str, Any]], path: Path) -> None:
-    path.write_text(json.dumps({"marks": list(rows)}, indent=2) + "\n", encoding="utf-8")
+def added_mark_key(row: dict[str, Any]) -> tuple[str, tuple[int, ...], Optional[str]]:
+    """What makes two stored rows the same hand-added mark."""
+    return (row["page_id"], tuple(int(v) for v in row["box"]), row.get("class_id"))
+
+
+def dedupe_added_marks(rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop rows repeating a ``(page_id, box, class_id)`` already seen, keeping the first.
+
+    Re-applying a class -- with ``--supersede`` after a corrected verdict, say --
+    proposes every box the class already contributed a second time, so without
+    this the store grows on each re-apply (#4042).  A duplicate is inert at
+    rebuild (:func:`replay_added_marks` refuses a box the page already carries),
+    so the first row is kept verbatim and its note with it.
+    """
+    seen: set[tuple[str, tuple[int, ...], Optional[str]]] = set()
+    kept: list[dict[str, Any]] = []
+    for row in rows:
+        key = added_mark_key(row)
+        if key in seen:
+            continue
+        seen.add(key)
+        kept.append(row)
+    return kept
+
+
+def save_added_marks(rows: Sequence[dict[str, Any]], path: Path) -> list[dict[str, Any]]:
+    """Write the store deduped, and return the rows actually written."""
+    kept = dedupe_added_marks(rows)
+    path.write_text(json.dumps({"marks": kept}, indent=2) + "\n", encoding="utf-8")
+    return kept
 
 
 def replay_added_marks(
@@ -288,8 +319,18 @@ def apply_completeness(
             problems.append(f"{class_id}: no existing instance to link accepted candidates to")
             continue
 
+        # Indices the reviewer voted Good on but that were parked for a hand-drawn
+        # box.  They are NOT rejections: every index outside ``verdict`` falls to
+        # the else-branch below, which writes a cannot-link or an unboxed
+        # rejection, and ``completeness_multi.decided()`` reads both back so the
+        # mark would never be proposed again.  That is #4040 -- a held vote
+        # recorded as its opposite -- and a hold has to sit outside the verdict
+        # entirely or not exist at all.
+        held = {int(i) for i in (row.get("needs_tight_box") or [])}
         added, reassigned, rejected_pages = 0, 0, []
         for i, cand in enumerate(cands):
+            if i in held:
+                continue
             page = by_id.get(cand["page_id"])
             if page is None:
                 problems.append(f"{class_id}: candidate {i} page {cand['page_id']} is not in the manifest")
@@ -357,11 +398,14 @@ def apply_completeness(
             "reviewed_on": date.today().isoformat(),
             "n_candidates": len(cands),
             "accepted": len(accepted),
+            "held_for_box": sorted(held),
             "unboxed_rejected_page_ids": sorted(rejected_pages),
         }
         changes.append(
             f"{class_id}: {len(accepted)} of {len(cands)} candidate(s) accepted "
-            f"({reassigned} reassigned, {added} new box(es)); {meta['n_instances']} instance(s)"
+            f"({reassigned} reassigned, {added} new box(es)"
+            + (f", {len(held)} held for a box" if held else "")
+            + f"); {meta['n_instances']} instance(s)"
         )
     return changes, problems, merges, separations, added_rows
 

@@ -20,6 +20,14 @@ trap 'echo "ABORTED: $0 line $LINENO exited $?" >&2' ERR
 WT="${VTS_REPO:-/exp/$USER/projects/vts-goodmine-3267}"
 HERE="$WT/scripts/experiments/calibration"
 export CALIB_EXP="${CALIB_EXP:-/expscratch/$USER/good-mining-3267}"
+
+# The study output dir is read, not created: fail naming it (#4001).
+if [ ! -d "$CALIB_EXP" ]; then
+  echo "$CALIB_EXP does not exist: this study's output was deleted 2026-09-18 (see #4001 and /expscratch/sgreenberg/keep/deleted-20260918.md)." >&2
+  echo "Re-run the study, or set CALIB_EXP to a directory that has its results." >&2
+  exit 2
+fi
+
 export CALIB_RESULTS="${CALIB_RESULTS:-$CALIB_EXP/results}"
 OUT="${GM_OUT:-$CALIB_EXP/analysis}"
 MODE="${1:-all}"

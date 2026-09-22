@@ -8,6 +8,7 @@ import { RegionBox } from './image-viewer/image-viewer.component';
 import { ANIMATIONS_OFF_CLASS, ANIMATIONS_ON_CLASS } from '../../utils/reduced-motion';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleZoneless } from '../../testing/settle-resource';
+import { provideRouter, Router } from '@angular/router';
 import { provideHttpTesting } from '../../testing/test-providers';
 import { voteBodyWithoutProvenance } from '../../testing/mocks';
 
@@ -48,7 +49,7 @@ describe('CenterPanelComponent (zoneless keyboard canary)', () => {
   beforeEach(async () => {
     configureZoneless({
       imports: [CenterPanelComponent],
-      providers: [...provideHttpTesting()],
+      providers: [...provideHttpTesting(), provideRouter([])],
     });
     fixture = TestBed.createComponent(CenterPanelComponent);
     component = fixture.componentInstance;
@@ -158,6 +159,48 @@ describe('CenterPanelComponent (zoneless keyboard canary)', () => {
     await settleZoneless(fixture);
 
     expect(component.voteState.goodVotes.has(1)).toBe(false);
+  });
+
+  /**
+   * Down/Up emit the navigation request rather than acting on it: the host owns
+   * the selection and the "next unlabeled" rule (#4032). They stay live while
+   * the queue is exhausted — walking back to a voted item is one of the ways
+   * out of that pane — and go quiet while the host is mid-score (`disabled`).
+   */
+  it('emits navigation on ArrowDown / ArrowUp, including while exhausted', async () => {
+    const seen: string[] = [];
+    fixture.componentRef.instance.navigateRequested.subscribe((d) => seen.push(d));
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+    await settleZoneless(fixture);
+    expect(seen).toEqual(['back', 'forward']);
+
+    fixture.componentRef.setInput('exhausted', true);
+    await settleZoneless(fixture);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+    await settleZoneless(fixture);
+    expect(seen).toEqual(['back', 'forward', 'back']);
+
+    fixture.componentRef.setInput('disabled', true);
+    await settleZoneless(fixture);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+    await settleZoneless(fixture);
+    expect(seen).toEqual(['back', 'forward', 'back']);
+  });
+
+  it('adjusts volume on Shift+ArrowUp / Shift+ArrowDown', async () => {
+    const start = component.volume();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', shiftKey: true }));
+    await settleZoneless(fixture);
+    for (const req of httpMock.match((r) => r.url.includes('settings'))) req.flush({});
+    expect(component.volume()).toBeCloseTo(start - 0.05, 5);
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', shiftKey: true }));
+    await settleZoneless(fixture);
+    for (const req of httpMock.match((r) => r.url.includes('settings'))) req.flush({});
+    expect(component.volume()).toBeCloseTo(start, 5);
   });
 });
 
@@ -630,6 +673,78 @@ describe('CenterPanelComponent', () => {
   });
 
   /**
+   * The vote-swipe animation ends `forwards`, so the outgoing node stays
+   * parked off-screen until the class that put it there is cleared — and the
+   * only thing that clears it is the media-change effect. A host with nowhere
+   * to advance never produces that change, so mid-dataset votes left the pane
+   * blank with the item still selected (#4028).
+   */
+  describe('the swipe un-pins itself when nothing replaces the item (#4028)', () => {
+    const docMedia: Media = { ...mockMedia, media_type: 'document' };
+
+    afterEach(() => {
+      document.documentElement.classList.remove(ANIMATIONS_ON_CLASS);
+      document.documentElement.classList.add(ANIMATIONS_OFF_CLASS);
+    });
+
+    it('clears the swipe class once the vote has been handed to the host', async () => {
+      // jsdom reports `prefers-reduced-motion: reduce`, which would take the
+      // un-animated branch; opt in the way the id-pinning specs above do.
+      document.documentElement.classList.remove(ANIMATIONS_OFF_CLASS);
+      document.documentElement.classList.add(ANIMATIONS_ON_CLASS);
+      fixture.componentRef.setInput('media', docMedia);
+      component.showAnimations.set(true);
+      TestBed.tick();
+
+      component.castVote('good');
+      httpMock.expectOne('/api/medias/1/vote').flush({ state: 'good', click_time: 1 });
+      TestBed.tick();
+      // Mid-animation the node is deliberately off-screen.
+      expect(component.swipeClass()).toBe('swipe-right');
+
+      // The host is free not to advance, and with no ranking loaded it never
+      // does — the media input stays on the item just voted on.
+      await new Promise<void>((resolve) => setTimeout(resolve, 250));
+      TestBed.tick();
+
+      expect(component.swipeClass()).toBe('');
+      const wrapper = fixture.nativeElement.querySelector('.media-swipe-wrapper') as HTMLElement;
+      expect(wrapper).toBeTruthy();
+      expect(wrapper.className).not.toContain('swipe-right');
+      expect(wrapper.className).not.toContain('swipe-left');
+    });
+  });
+
+  /**
+   * The other empty pane: nothing is selected at all. It used to be one line of
+   * grey text in an otherwise black rectangle, which reads as a broken view
+   * rather than as a state — and it says "select a media item" without saying
+   * where from (#4028).
+   */
+  describe('nothing-selected placeholder (#4028)', () => {
+    it('names where to pick one from, and takes the host\'s wording', () => {
+      TestBed.tick();
+      const pane = fixture.nativeElement.querySelector('.placeholder-pane');
+      expect(pane).toBeTruthy();
+      expect(pane.querySelector('.placeholder-text').textContent).toContain('Select a media item');
+      expect(pane.querySelector('.placeholder-hint').textContent).toContain('on the left');
+
+      fixture.componentRef.setInput('placeholderHint', 'Score the dataset to build a queue.');
+      TestBed.tick();
+      expect(fixture.nativeElement.querySelector('.placeholder-hint').textContent)
+        .toContain('Score the dataset to build a queue.');
+    });
+
+    it('yields to the exhausted pane, which is a different fact', () => {
+      fixture.componentRef.setInput('exhausted', true);
+      TestBed.tick();
+
+      expect(fixture.nativeElement.querySelector('.placeholder-pane')).toBeNull();
+      expect(fixture.nativeElement.querySelector('.exhausted-pane')).toBeTruthy();
+    });
+  });
+
+  /**
    * #3887: voting on the last unlabeled item left this pane blank. The swipe
    * animation pins the outgoing media node off-screen with `forwards` until a
    * new item replaces it; the host has nothing to advance to, and `media()` is
@@ -675,6 +790,39 @@ describe('CenterPanelComponent', () => {
         .toContain('All items reviewed');
       expect(fixture.nativeElement.querySelector('.exhausted-body').textContent)
         .toContain('Check Stats or export.');
+    });
+
+    /**
+     * Picking another dataset or detector is the likely next move once a
+     * detector is finished, and both live on the Dashboard — so the pane that
+     * announces the end offers the way there rather than leaving the user to
+     * find the top bar.
+     */
+    it('offers the way out to the Dashboard, and takes it', async () => {
+      const router = TestBed.inject(Router);
+      const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+      exhaust();
+
+      const action = fixture.nativeElement.querySelector(
+        '.exhausted-pane .empty-state__action',
+      ) as HTMLButtonElement;
+      expect(action).toBeTruthy();
+      expect(action.textContent).toContain('Return to Dashboard');
+      expect(action.disabled).toBe(false);
+
+      action.click();
+      await settleZoneless(fixture);
+
+      expect(navigate).toHaveBeenCalledWith(['/dashboard']);
+    });
+
+    it('keeps the way out to itself — the placeholder is not a dead end', () => {
+      // Nothing selected is a "pick one" state, not a finished one: the grid
+      // beside the pane is full of items, so an exit button there would compete
+      // with the thing the user should actually click.
+      TestBed.tick();
+      expect(fixture.nativeElement.querySelector('.placeholder-pane .empty-state__action'))
+        .toBeNull();
     });
 
     it('renders both vote buttons disabled and unhighlighted', () => {

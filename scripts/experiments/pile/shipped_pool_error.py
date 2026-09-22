@@ -43,6 +43,14 @@ Usage::
 JSONs on scratch and in the running app's data dir and rewrites
 ``verdicts.csv``, so the archive can be checked against the source rather than
 trusted. Everything else reads the CSV and needs neither.
+
+**``--rebank`` is now permanently guarded, and cannot be repointed at the CSV**
+(#4012). Its whole purpose is to re-derive that CSV *from its sources* so the
+archive can be checked rather than trusted; sourcing it from the CSV would check
+the file against itself. The sources are gone -- `negbank/`, `polarity.json` and
+`seeded.json` were deleted on 2026-09-18 (#4001), and the app's detector store
+holds only the current confirm-the-box pass -- so the honest outcome is that the
+analysis keeps working from the committed CSV and the re-derivation does not.
 """
 
 from __future__ import annotations
@@ -62,6 +70,8 @@ import pile_config as pc  # noqa: E402
 #: `--rebank` distils out of it into the committed CSV rather than the analysis
 #: reading it directly.
 BANK = Path("/expscratch/sgreenberg/classes-3588")
+#: #3729's committed record, which holds the stratum manifest `--rebank` reads.
+HUMAN_RECORD = Path(__file__).resolve().parent / "human_record"
 #: The running app's detector store. Two passes (`Backpack`, `Umbrella`) were
 #: finished after the last banking run and exist only here.
 LIVE = Path("/exp/sgreenberg/projects/VTSearch/data/detectors")
@@ -87,7 +97,8 @@ PREDICTED_3635 = Path("/expscratch/sgreenberg/stopsign-3635/contam-sign.json")
 #:   unverifiable -- the pixels do not settle it
 #:
 #: **A fold-in count is not admission, and reading one as admission mis-ruled two
-#: of these nine.** `coco_folds.py` (run over the twelve for #3673) shows COCO's
+#: of these nine.** `coco_folds.py` (run over the twelve for #3673, and retired
+#: with Visual Genome since -- #4038) showed COCO's
 #: annotators landing `watch` on a COCO clock box 35 times, and `canopy` 32 +
 #: `tent` 26 on umbrella boxes -- which looks like the `book`/magazine split, and
 #: is not. Fold-in is a BOX test conditioned the wrong way round (#3618): the
@@ -305,10 +316,19 @@ def rebank(out: Path) -> None:
       detector store, which is why both directories are read and the live copy
       wins.
     """
+    # Only `--rebank` reads the bank: the analysis reads the committed CSV this
+    # distils, which is why the deletion (#4001) costs the default path nothing.
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "calibration"))
+    from study_paths import require_study_dir  # noqa: PLC0415
+
+    require_study_dir(BANK, "--rebank")
     pol = json.loads((BANK / "polarity.json").read_text())
     old, new = pol["old"]["detectors"], pol["new"]["detectors"]
     seeded = json.loads((BANK / "seeded.json").read_text())
-    man = {int(r["image_id"]): r for r in csv.DictReader((BANK / "slates/Table_Objects/manifest.csv").open())}
+    man = {
+        int(r["image_id"]): r
+        for r in csv.DictReader((HUMAN_RECORD / "WORK3588__slates__Table_Objects__manifest.csv").open())
+    }
 
     rows, seen = [], set()
     for p in sorted(list(LIVE.glob("*.json")) + list((BANK / "negbank").glob("*.json"))):
@@ -364,8 +384,15 @@ def candidate_pool_error() -> dict[str, tuple[int, int]]:
     The comparison this study exists to make is *shipped against candidate*, and
     a number retyped out of a table is not evidence about the table.
     """
-    src = BANK / "verdicts_20260904.json"
-    if not src.exists():
+    # #3729's record holds this verdicts file; the scratch copy went with the
+    # study dir (#4001). Reading the record means the comparison this study
+    # exists to make survives the deletion -- it used to return {} here, which
+    # dropped the candidates' column from the report with no word said.
+    src = HUMAN_RECORD / "WORK3588__verdicts_20260904.json"
+    if not src.exists():  # pragma: no cover - the record is committed
+        src = BANK / "verdicts_20260904.json"
+    if not src.exists():  # pragma: no cover - and if neither, say so
+        print(f"NOTE: no candidate verdicts at {src}; the candidates' column is omitted (#4001)", file=sys.stderr)
         return {}
     per: dict[str, list] = defaultdict(list)
     for v in json.loads(src.read_text()):

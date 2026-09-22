@@ -164,6 +164,59 @@ describe('LeftPanelComponent', () => {
     expect(component.mediaSelect.emit).toHaveBeenCalledWith(42);
   });
 
+  /**
+   * The grid lists every item, labeled or not, each with its own vote badge —
+   * so the count in the header says nothing about whether any of them are
+   * still worth clicking. The note is what distinguishes "there is nothing
+   * left to pick" from "what I want is further down" (#4028).
+   */
+  describe('the "All labeled" note (#4028)', () => {
+    const stub = (id: number): Media => ({ id, media_type: 'image' }) as Media;
+    const note = () =>
+      (fixture.nativeElement as HTMLElement).querySelector('.all-labeled-note');
+
+    function show(inputs: Record<string, unknown>): void {
+      component.setTab('manual');
+      for (const [k, v] of Object.entries(inputs)) fixture.componentRef.setInput(k, v);
+      TestBed.tick();
+    }
+
+    it('stays away while an item is unlabeled', () => {
+      show({
+        medias: [stub(1), stub(2)],
+        goodVotes: new Set([1]),
+        badVotes: new Set<number>(),
+      });
+      expect(component.allLabeled()).toBe(false);
+      expect(note()).toBeNull();
+    });
+
+    it('appears once every item in the grid carries a label', () => {
+      show({
+        medias: [stub(1), stub(2)],
+        goodVotes: new Set([1]),
+        badVotes: new Set([2]),
+      });
+      expect(component.allLabeled()).toBe(true);
+      expect(note()!.textContent).toContain('All labeled');
+    });
+
+    it('stays away in Find mode, where the queue is measured by verified', () => {
+      show({
+        panelMode: 'find',
+        medias: [stub(1)],
+        goodVotes: new Set([1]),
+        badVotes: new Set<number>(),
+      });
+      expect(component.allLabeled()).toBe(false);
+    });
+
+    it('stays away on an empty grid — nothing loaded is not nothing left', () => {
+      show({ medias: [], goodVotes: new Set<number>(), badVotes: new Set<number>() });
+      expect(component.allLabeled()).toBe(false);
+    });
+  });
+
   describe('grid header (mediaTypeName)', () => {
     const stub = (media_type: string): Media => ({ id: 1, media_type }) as Media;
 

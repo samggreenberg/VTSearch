@@ -6,7 +6,7 @@ Run from the repo root:
     python slides/figs/src/make-dataset-figs.py            # everything it can draw offline
     python slides/figs/src/make-dataset-figs.py --no-media # skip the cards that need pixels
 
-Two kinds of figure, and the difference matters more than it looks.
+Three kinds of figure, and the differences matter more than they look.
 
 **Story figures** say how a dataset *came about* — the sources it started from,
 what was done to them, and what a reader may conclude. `vg_scale` and DocMarks
@@ -16,6 +16,14 @@ the construction assemble rather than reading a paragraph.
 **Cards** say what a dataset *is*: how much of it there is, where to download
 it, and — the part a drawing cannot fake — what the media look like. Every
 card's strip is real pixels, fetched by `dataset_samples.py`.
+
+**Argument figures** say why a dataset is *shaped* the way it is. There is one,
+`coco_quarry`'s complement build, and it draws set theory rather than data: it
+carries no counts at all, because the thing it is arguing about — that an
+exhaustively annotated corpus can name the images a class is *absent* from —
+is true of three classes and eighty alike. A dataset gets one of these only
+where the design decision is the interesting part and a number would not say
+it.
 
 **Where the numbers come from.** Nothing here is typed in twice.
 
@@ -46,6 +54,7 @@ import argparse
 import contextlib
 import importlib.util
 import io
+import math
 import re
 import sys
 import textwrap
@@ -56,7 +65,8 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
-from matplotlib.patches import Rectangle  # noqa: E402
+import numpy as np  # noqa: E402
+from matplotlib.patches import Circle, Rectangle  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -1001,6 +1011,397 @@ def fig_card_vg_box(pc: Any) -> plt.Figure:
 
 
 # --------------------------------------------------------------------------
+# coco_quarry
+# --------------------------------------------------------------------------
+
+#: The Venn, in the drawing's own units. `QUARRY_D` is how far each circle's
+#: centre sits from the group's, and the ratio to `QUARRY_R` is what decides
+#: how big the three-way cell in the middle comes out — the one that has to
+#: hold `ABC` and a superscript. At 0.46 / 0.70 that cell is 0.24 units of
+#: inradius, which is 108 slide pixels across against a 45px label; the
+#: textbook 0.55 / 0.70 halves it and the label spills over the lens edges.
+QUARRY_R = 0.70
+QUARRY_D = 0.46
+#: The universe rectangle: every image there is, drawn so that "outside the
+#: circles" is a *region* with room to be shaded and labelled rather than the
+#: margin of the page.
+QUARRY_RECT = (-1.55, -1.35, 3.10, 2.70)
+
+#: The deck's calibration palette, not a pair of tints of it. Every shaded
+#: region here is a *training side* — the Good pile or the Bad pile — which is
+#: the thing `make-calib-figs._data_block` already draws, so it is drawn the
+#: same way: hollow, white-faced, hatched in the deck's own red and green, the
+#: hatch leaning the way that file leans it. Two solid fills side by side read
+#: as a chart of two quantities; two hatches read as two *kinds*, and they stay
+#: apart for a viewer who cannot separate the hues at all.
+QUARRY_GOOD = "#0d8a5f"
+QUARRY_BAD = "#b91c1c"
+GOOD_HATCH = "//////"
+BAD_HATCH = "\\\\\\"
+
+#: The empty set is written **Ø** (U+00D8, the Latin letter O with stroke) and
+#: not ∅ (U+2205, the mathematical empty set), for the one reason a deck cares
+#: about: the proper symbol is a math glyph and does not take the bold face's
+#: weight. Measured over DejaVu Sans Bold as ink area over bounding box,
+#: `emptyset` fills 0.43 of its box against 0.51 for `A` and 0.56 for `O`,
+#: while `Oslash` is 0.58 — right in with the letters. Beside a bold `A⁺` the
+#: correct character reads as something pasted in from another document, which
+#: is the same objection `slides/STYLE.md` raises against setting a formula in
+#: Computer Modern. This is a *typographic* substitution of a glyph the symbol
+#: was derived from, so it is written once, here, and referred to by name.
+#:
+#: The superscripts were checked the same way and are fine: `⁺` and `⁼` carry
+#: exactly the ink of a full-size `+` and `=` in the bold face. They look light
+#: because they are small, which is what a superscript is.
+EMPTY = "\u00d8"
+
+#: Characters per line in the left column, which is `RIGHT_X - LEFT_X` wide —
+#: 357 slide pixels, about 31 characters of the 15pt body face.
+#: The left column's two registers, in points, and the rhythm they are set on
+#: in figure fractions. A *definition* is one line — bold term, then its gloss
+#: in the body face on the same baseline — because a term over its own gloss is
+#: two lines that look exactly like a heading over its own caption, and the
+#: column then reads as six headings with no hierarchy at all (which is what it
+#: did). A *heading* is the other register: half again the size, on its own
+#: line, with room above it, so the two experiments read as the titles of the
+#: two halves of the argument rather than as two more entries in a list.
+TERM_PT = FLOOR_PT + 3
+HEAD_PT = FLOOR_PT + 11
+#: Gap between a term and its gloss on the shared baseline. Wider than a word
+#: space: the point is that the two are different registers, not one phrase.
+TERM_GAP = 0.009
+#: Three gaps, and their *order* is the hierarchy the column is asking the eye
+#: to read: tightest between two definitions, wider after a heading where the
+#: argument moves on, widest of all above a heading.
+DEF_PITCH = 0.075
+HEAD_LEAD = 0.050
+HEAD_PITCH = 0.095
+#: The column starts a shade above `LEFT_TOP` because these are baselines and
+#: that one is a top: the tallest thing here rises about 0.025 over its own
+#: baseline, so 0.706 puts the first cap-height at 0.731, still clear of the
+#: title notch's 0.761. The floor is the last baseline, not the flow position
+#: after it — trailing air is not overflow.
+STACK_TOP = LEFT_TOP - 0.010
+STACK_FLOOR = 0.035
+#: How wide a definition line may be, in figure fractions: the left column's
+#: own width, less the gutter before the drawing starts.
+STACK_MAX_W = 0.275
+
+#: Every label sits on a chip of its own background, because most of them land
+#: on hatching. Tight padding: the chip is there to stop the strokes running
+#: through the glyphs, not to box the word.
+QUARRY_CHIP = {"boxstyle": "square,pad=0.18", "facecolor": "white", "edgecolor": "none"}
+
+#: The column, in the order the build introduces it, as `(kind, term, gloss)`.
+#: A heading carries no gloss: the verdict on each experiment is a thing the
+#: presenter says, and a slide that also writes it down is asking the room to
+#: read the sentence it is being told.
+#:
+#: The two kinds alternate by accident of the argument rather than by design,
+#: and the grouping they produce is the reason the order is worth reading:
+#: two definitions, the easy experiment they buy, two more definitions, and the
+#: hard experiment *those* buy.
+#:
+#: **A gloss is an instruction to the images, not a description of the set.**
+#: `A⁺` does not hold an A — the pictures in it do, every one of them — so the
+#: gloss is written as the entry requirement each of them meets: *Hold an A,
+#: maybe more.* Which is also why all four start with the same verb: the sets
+#: differ in what they demand, not in what kind of demand it is.
+#:
+#: The `Easy:` heading is the one entry whose term moves — the experiment is
+#: shown three times, once per class, and `_quarry_easy_term` supplies the
+#: spelling for the frame being drawn.
+QUARRY_BLOCKS = [
+    ("def", "A⁺", "Hold an A, maybe more."),
+    ("def", EMPTY, "Hold none of the three."),
+    ("head", f"Easy: A⁺ vs {EMPTY}", None),
+    ("def", "AB⁼", "Hold exactly A and B."),
+    ("def", "¬A", "Hold no A."),
+    ("head", "Hard: A⁺ vs ¬A", None),
+]
+
+#: One entry per frame: `(good, negatives, cells, blocks)`.
+#:
+#: `good` is the circle hatched as the positive pile, `negatives` is `None`,
+#: `"outside"` (∅ alone) or `"not_a"` (everything but A), `cells` says whether
+#: the seven exact-set labels are drawn, and `blocks` is how much of the
+#: notation column has been introduced.
+#:
+#: **The middle three frames rotate rather than accumulate**, which is why the
+#: fragment declares `frames: equal`. Frame *c* is not frame *b* plus ink — it
+#: is the same experiment run for a different class, and that is the whole
+#: argument of those three pages: whichever one you look at, the crescents are
+#: never shown to anybody. A build-up would have to pick one of them to stand
+#: for the other two, which is the sentence ("and you'd rotate for the other
+#: two") the three frames exist to not have to say.
+#:
+#: The cells arrive at *e* and not before. Until ¬A needs naming there is
+#: nothing for `AB⁼` to do but sit on the drawing being read, and the
+#: shading is carrying the argument on its own up to that point.
+QUARRY_FRAMES = [
+    (None, None, False, 2),
+    (0, "outside", False, 3),
+    (1, "outside", False, 3),
+    (2, "outside", False, 3),
+    (None, None, True, 4),
+    (None, "not_a", True, 5),
+    (0, "not_a", True, 6),
+]
+
+
+def _quarry_easy_term(frame: int) -> str:
+    """The `Easy:` block's spelling on `frame`.
+
+    It follows the rotation through B and C and then comes back to A, so that
+    the last three frames read `Easy: A⁺ vs ∅` directly above
+    `Better: A⁺ vs ¬A` — the two experiments named for the same class,
+    which is the comparison the slide closes on. Leaving it on C would compare
+    two different detectors.
+    """
+    return f"Easy: {'ABC'[frame - 1] if 1 <= frame <= 3 else 'A'}⁺ vs {EMPTY}"
+
+
+def _quarry_centres() -> list[tuple[float, float]]:
+    """The three circle centres, as a group centred on the universe rectangle.
+
+    The triangle of centres is not symmetric about its own midline — one
+    circle is up and two are down — so placing them at `QUARRY_D` from the
+    origin and stopping would hang the whole Venn above centre by half a
+    radius. The drop is the group's own midline, computed rather than nudged.
+    """
+    raw = [
+        (QUARRY_D * math.cos(math.radians(angle)), QUARRY_D * math.sin(math.radians(angle)))
+        for angle in (90.0, 210.0, 330.0)
+    ]
+    drop = ((QUARRY_D + QUARRY_R) + (-QUARRY_D / 2 - QUARRY_R)) / 2
+    return [(x, y - drop) for x, y in raw]
+
+
+def _quarry_cells(centres: list[tuple[float, float]]) -> dict[int, tuple[float, float]]:
+    """Where each of the seven exact-set labels goes: `{membership bits: (x, y)}`.
+
+    Measured off a raster of the drawing rather than derived from the centres.
+    The seven regions of a three-circle Venn are four different shapes, and the
+    three single-class ones are crescents whose middle is nowhere near the
+    circle's own centre — so arithmetic on the centres puts `A` on the rim of
+    the lens below it. Each centroid is then checked to fall inside the cell it
+    names, which is what makes a later edit to `QUARRY_R` or `QUARRY_D` fail
+    here instead of printing `AB` into the wrong lens.
+    """
+    axis = np.linspace(-1.2, 1.2, 601)
+    grid_x, grid_y = np.meshgrid(axis, axis)
+    inside = [((grid_x - cx) ** 2 + (grid_y - cy) ** 2) <= QUARRY_R**2 for cx, cy in centres]
+    cells: dict[int, tuple[float, float]] = {}
+    for bits in range(1, 8):
+        want = [bool(bits >> i & 1) for i in range(3)]
+        selected = np.ones_like(grid_x, dtype=bool)
+        for i in range(3):
+            selected &= inside[i] if want[i] else ~inside[i]
+        x, y = float(grid_x[selected].mean()), float(grid_y[selected].mean())
+        held = [((x - cx) ** 2 + (y - cy) ** 2) <= QUARRY_R**2 for cx, cy in centres]
+        if held != want:
+            raise SystemExit(
+                f"venn cells: the centroid of {quarry_cell_name(bits)} lands outside its own cell "
+                f"at ({x:.3f}, {y:.3f}). QUARRY_R / QUARRY_D have moved far enough that a region "
+                f"is no longer convex about its own middle — place that label by hand, or put the "
+                f"circles back."
+            )
+        cells[bits] = (x, y)
+    return cells
+
+
+def quarry_cell_name(bits: int) -> str:
+    """`AB⁼` for the cell holding exactly A and B, and so on."""
+    return "".join(c for i, c in enumerate("ABC") if bits >> i & 1) + "⁼"
+
+
+def _text_width(fig: plt.Figure, text: "matplotlib.text.Text") -> float:
+    """`text`'s rendered width as a fraction of the figure's own width."""
+    return text.get_window_extent(fig.canvas.get_renderer()).width / fig.bbox.width
+
+
+def _quarry_stack(fig: plt.Figure, frame: int) -> None:
+    """The left column: the notation, introduced one block per frame.
+
+    Laid out by flow over *every* block whether this frame draws it or not, so
+    a block arriving never moves the ones above it and the `Easy:` term can
+    change spelling without anything below it shifting. Both guards below
+    measure the whole column for the same reason — a reworded gloss fails on
+    the first figure rather than on the last one.
+
+    Definitions set their gloss on the term's own baseline, which means
+    measuring the term: the gap between the two is a gap between *registers*
+    and has to be the same however wide the term is, so it cannot be a column
+    position. `A⁺` and `AB⁼` differ by half the gloss's own indent.
+    """
+    shown = QUARRY_FRAMES[frame][3]
+    y = lowest = STACK_TOP
+    for index, (kind, term, gloss) in enumerate(QUARRY_BLOCKS):
+        draw = index < shown
+        if kind == "head":
+            y -= HEAD_LEAD
+            if draw:
+                fig.text(
+                    LEFT_X,
+                    y,
+                    _quarry_easy_term(frame) if index == 2 else term,
+                    fontsize=HEAD_PT,
+                    color=INK,
+                    fontweight="bold",
+                    va="baseline",
+                )
+            lowest, y = y, y - HEAD_PITCH
+            continue
+        head = fig.text(LEFT_X, y, term, fontsize=TERM_PT, color=INK, fontweight="bold", va="baseline")
+        width = _text_width(fig, head)
+        body = fig.text(LEFT_X + width + TERM_GAP, y, gloss, fontsize=FLOOR_PT, color=SOFT, va="baseline")
+        line = width + TERM_GAP + _text_width(fig, body)
+        if line > STACK_MAX_W:
+            raise SystemExit(
+                f'notation column: "{term} {gloss}" sets {line:.3f} of the figure wide, over the '
+                f"{STACK_MAX_W} the left column has. A definition is one line by design — shorten "
+                f"the gloss rather than letting it wrap, which would make it look like a heading."
+            )
+        if not draw:
+            head.remove()
+            body.remove()
+        lowest, y = y, y - DEF_PITCH
+    if lowest < STACK_FLOOR:
+        raise SystemExit(
+            f"notation column: the {len(QUARRY_BLOCKS)} blocks overflow the slide (last baseline "
+            f"at {lowest:.3f}, floor {STACK_FLOOR}). Drop a block, or tighten DEF_PITCH / "
+            f"HEAD_PITCH."
+        )
+
+
+def _quarry_chip(ax: plt.Axes, x: float, y: float, text: str, size: float, colour: str = INK, **kwargs) -> None:
+    """A label on a chip of background, so hatching does not run through it."""
+    ax.text(x, y, text, fontsize=size, color=colour, bbox=dict(QUARRY_CHIP), zorder=6, **kwargs)
+
+
+def _quarry_tone(bits: int, good: int | None, negatives: str | None) -> str:
+    """The colour a region's own label takes: the colour that region is shaded.
+
+    `bits` is a membership mask over (A, B, C), with `0` meaning the outside.
+    A label names one pile or it names none, so this answers only for regions
+    that are *entirely* one pile — every cell of the Venn, and the outside. It
+    is not true of a whole circle once A is the positive side: B is then green
+    where it crosses A and red where it does not, and its label stays ink.
+    Circle labels are coloured by the caller for that reason.
+    """
+    if good is not None and bits and bits >> good & 1:
+        return QUARRY_GOOD
+    if negatives == "outside" and not bits:
+        return QUARRY_BAD
+    if negatives == "not_a" and not bits & 1:
+        return QUARRY_BAD
+    return INK
+
+
+def fig_coco_quarry_complement(frame: int = len(QUARRY_FRAMES) - 1) -> plt.Figure:
+    """Why `coco_quarry` needs COCO's exhaustive annotation: the complement.
+
+    Seven frames over one Venn. The circles are three classes, the rectangle is
+    every image there is, and the slide walks the two ways to pick negatives
+    for a detector. The cheap way is the outside of all three circles — run
+    once per class, which is what frames *b* to *d* do — and it never once
+    asks a detector to tell an A from a B, because nothing in the crescents is
+    ever shown to it. The better way is the outside of *A* alone, which is only
+    nameable because COCO answers for all eighty of its classes on every image
+    it touches.
+    """
+    fig = _blank_fig()
+    x0, y0, w, h = QUARRY_RECT
+    # The axes take the rectangle's own aspect, so the drawing fills them
+    # exactly instead of letterboxing inside a slot picked by hand — and a
+    # later change to QUARRY_RECT keeps doing so.
+    ax_h = 0.91
+    ax = fig.add_axes((0.342, 0.045, ax_h * FIG_H * (w / h) / FIG_W, ax_h))
+    ax.set_aspect("equal")
+    ax.axis("off")
+    ax.set_xlim(x0, x0 + w)
+    ax.set_ylim(y0, y0 + h)
+
+    good, negatives, cells, _ = QUARRY_FRAMES[frame]
+    centres = _quarry_centres()
+    ax.add_patch(Rectangle((x0, y0), w, h, facecolor="white", edgecolor=SOFT, linewidth=1.6, zorder=1))
+    if negatives:
+        ax.add_patch(
+            Rectangle(
+                (x0, y0),
+                w,
+                h,
+                facecolor="none",
+                edgecolor=QUARRY_BAD,
+                hatch=BAD_HATCH,
+                linewidth=0,
+                zorder=2,
+            )
+        )
+        # Knocked back out of the Bad pile: under "outside" every circle is,
+        # because only ∅ is a negative there; under "not_a" only A is, and the
+        # crescents stay hatched — which is the whole of the last reveal.
+        kept = centres if negatives == "outside" else centres[:1]
+        for centre in kept:
+            ax.add_patch(Circle(centre, QUARRY_R, facecolor="white", edgecolor="none", zorder=3))
+    if good is not None:
+        ax.add_patch(
+            Circle(
+                centres[good],
+                QUARRY_R,
+                facecolor="none",
+                edgecolor=QUARRY_GOOD,
+                hatch=GOOD_HATCH,
+                linewidth=0,
+                zorder=4,
+            )
+        )
+    for centre in centres:
+        ax.add_patch(Circle(centre, QUARRY_R, facecolor="none", edgecolor=INK, linewidth=2.0, zorder=5))
+
+    # Each circle is named from just outside its own rim, anchored by the
+    # corner facing the circle so the word grows *away* from the drawing —
+    # centring it on the radial instead straddles the outline, and a label
+    # lying across the thing it names is the one placement that reads as a
+    # mistake rather than as a gap (`slides/STYLE.md`, *A label is closer*).
+    for index, ((cx, cy), (dx, dy), anchor, name) in enumerate(
+        zip(
+            centres,
+            ((0.0, 1.0), (-0.866, -0.5), (0.866, -0.5)),
+            (("center", "bottom"), ("right", "top"), ("left", "top")),
+            "ABC",
+        )
+    ):
+        _quarry_chip(
+            ax,
+            cx + dx * (QUARRY_R + 0.06),
+            cy + dy * (QUARRY_R + 0.06),
+            f"{name}⁺",
+            FLOOR_PT + 5,
+            QUARRY_GOOD if good == index else INK,
+            fontweight="bold",
+            ha=anchor[0],
+            va=anchor[1],
+        )
+    # ∅ bottom-left, ¬A top-right: they name nested regions once both are on
+    # screen, so they go in opposite corners rather than along one edge.
+    empty = _quarry_tone(0, good, negatives)
+    _quarry_chip(ax, x0 + 0.13, y0 + 0.13, EMPTY, FLOOR_PT + 7, empty, fontweight="bold", ha="left", va="bottom")
+    if cells:
+        for bits, (x, y) in _quarry_cells(centres).items():
+            tone = _quarry_tone(bits, good, negatives)
+            _quarry_chip(ax, x, y, quarry_cell_name(bits), FLOOR_PT, tone, ha="center", va="center")
+    if negatives == "not_a":
+        # ¬A is red throughout by construction — it *is* the Bad pile here.
+        _quarry_chip(
+            ax, x0 + w - 0.13, y0 + h - 0.13, "¬A", FLOOR_PT + 7, QUARRY_BAD, fontweight="bold", ha="right", va="top"
+        )
+
+    _quarry_stack(fig, frame)
+    return fig
+
+
+# --------------------------------------------------------------------------
 
 
 def main() -> int:
@@ -1036,6 +1437,16 @@ def main() -> int:
         )
     save(fig_docmarks_build(dc, facts), OUT, "dataset-docmarks-build.png", column=FULL_BLEED, tight=False)
     save(fig_docmarks_shape(dc, facts), OUT, "dataset-docmarks-shape.png", column=FULL_BLEED, tight=False)
+
+    for n in range(len(QUARRY_FRAMES) - 1):
+        save(
+            fig_coco_quarry_complement(frame=n),
+            OUT,
+            f"dataset-coco-quarry-complement.build{n + 1}.png",
+            column=FULL_BLEED,
+            tight=False,
+        )
+    save(fig_coco_quarry_complement(), OUT, "dataset-coco-quarry-complement.png", column=FULL_BLEED, tight=False)
 
     save(fig_card_vg_box(pc), OUT, "dataset-card-vg-box.png", column=FULL_BLEED, tight=False)
     if args.no_media:

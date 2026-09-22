@@ -196,6 +196,7 @@ Depends on the embedder — each one declares its dimensionality via the
 | `eupe_patch` | `image` | 768 |
 | `eupe_single` | `image` | 768 |
 | `sift_vlad` | `image` | 8192 |
+| `sift_vlad_doc` | `image` | 8192 |
 | `siglip2` | `image` | 768 |
 | `siglip2_l` | `image` | 1152 |
 | `siglip_l` | `image` | 1152 |

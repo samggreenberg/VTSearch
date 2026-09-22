@@ -498,9 +498,9 @@ rate at the single α the guard actually uses. Neither alone is a verdict.*
 
 **No combiner is calibrated, and the shipped one is best at exactly the number
 anyone would check.** `mean` gives a 4.3 % flag rate against a nominal 5 % —
-close enough that a spot check passes — while being second-worst in overall
-shape. `median` is a third closer to uniform overall (0.071 vs 0.103, 16 SE
-apart) but over-flags at α. That combination is precisely how the
+close enough that a spot check passes — while sitting 0.103 from uniform.
+`median` is a third closer to uniform overall (0.071 vs 0.103, 16 SE apart)
+but over-flags at α, so neither candidate is good at both. That combination is precisely how the
 `dinov3_patch` failure below stayed invisible: the guard's aggregate operating
 point looks right while its distribution is wrong, and the average over
 embedders hides the one that is badly wrong.

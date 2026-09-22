@@ -13,7 +13,8 @@ import { SortStateService, SortMode, SelectMode } from './sort-state.service';
 import { SortingApiService } from './sorting-api.service';
 import { ToastService } from './toast.service';
 import { VoteStateService } from './vote-state.service';
-import { autoSelectNext as pickNextMedia } from '../utils/auto-select-next';
+import { allItemsLabeled } from '../utils/all-labeled';
+import { autoSelectNext as pickNextMedia, type AutoSelectPick } from '../utils/auto-select-next';
 import type { LearnedSortResponse } from '../generated/api-client/models/learned-sort-response';
 
 /**
@@ -95,6 +96,35 @@ export class SortRunnerService {
     const bad = this.voteState.badVotes;
     return !sortOrder.some((s) => !good.has(s.id) && !bad.has(s.id));
   });
+
+  /**
+   * True when every item in the *dataset* is labeled — whatever the current
+   * sort window holds, and whether or not a sort has ever run.
+   *
+   * {@link queueExhausted} is deliberately about the loaded ranking, so it is
+   * false whenever `sortOrder` is empty. That leaves two ways to end up staring
+   * at a pane with nothing in it and nothing saying why (#4028):
+   *
+   * - **Manual labelling with no sort.** Clicking items out of the left grid
+   *   and voting never populates a ranking, so the last vote hits the same
+   *   pinned-off-screen blank pane #3887 named, with `queueExhausted` false.
+   * - **Coming back to a finished detector.** A fresh entry ranks nothing (see
+   *   `seedRankingIfUnranked`), so the centre falls to its "Select a media
+   *   item" placeholder — which asks the user to pick something when there is
+   *   nothing left to pick.
+   *
+   * Both are the *dataset* being finished rather than the window, and they want
+   * a different sentence from the window case: there is no "load more" or
+   * "change the sort" that would produce another item.
+   *
+   * Derived rather than latched, for the same reason {@link queueExhausted} is:
+   * an undo un-labels a row and puts the user straight back to work.
+   */
+  readonly datasetExhausted = computed(() => allItemsLabeled(
+    this.mediaState.mediasSignal(),
+    this.voteState.goodVotes,
+    this.voteState.badVotes,
+  ));
 
   private learnedSortPending = false;
 
@@ -514,8 +544,16 @@ export class SortRunnerService {
    * applying the selection, or firing the coverage-atlas probe the `new` mode
    * asks for.
    */
-  autoSelectNext(excludeId?: number): void {
-    const pick = pickNextMedia({
+  /**
+   * What {@link autoSelectNext} *would* pick, with nothing applied.
+   *
+   * Exists so the image prefetch (#3896) can warm the next item during the
+   * reviewer's think time through the same rule that will later select it —
+   * a second copy of the rule would prefetch the wrong item every time the
+   * two drifted, which is worse than not prefetching at all.
+   */
+  peekNextMedia(excludeId?: number): AutoSelectPick {
+    return pickNextMedia({
       sortOrder: this.sortState.sortOrder,
       selectMode: this.sortState.selectMode,
       acqThreshold: this.sortState.acqThreshold,
@@ -523,6 +561,10 @@ export class SortRunnerService {
       badVotes: this.voteState.badVotes,
       excludeId,
     });
+  }
+
+  autoSelectNext(excludeId?: number): void {
+    const pick = this.peekNextMedia(excludeId);
     if (pick.kind === 'media') {
       this.mediaState.selectMedia(pick.id);
       this.diversityExhausted.set(false);

@@ -326,6 +326,76 @@ def relabel(corpus: Path, *, apply: bool = False, chunk: int = REWRITE_CHUNK) ->
     return 0
 
 
+def _first_of_each(medias: "Iterator[tuple[int, dict]]", wanted: "set[str]") -> "Iterator[tuple[int, dict]]":
+    """Yield the first media for each wanted ``origin_name``, dropping the rest."""
+    seen: set[str] = set()
+    for cid, media in medias:
+        name = media.get("origin_name")
+        if name not in wanted or name in seen:
+            continue
+        seen.add(name)
+        yield cid, media
+
+
+def prune(corpus: Path, *, apply: bool = False, chunk: int = REWRITE_CHUNK) -> int:
+    """Drop cell medias the manifest no longer holds, re-embedding nothing.
+
+    The mirror of :func:`relabel`: that one repairs a cell whose *labels* went
+    stale, this one repairs a cell whose *row list* did.  Both exist for the
+    same reason -- the labels and the row list do not depend on the vectors, so
+    neither is worth a re-embed.
+
+    The case it was written for (#4054): ``corpus.jsonl`` held the same UCSF
+    page more than once, 145 extra records over 137 ids, and the cells were
+    built from that list -- 1 extra row at tier ``s``, 31 at ``m``, 145 at
+    ``l``.  Deduping the manifest left the cells holding pages the corpus no
+    longer lists, and a duplicated page is scored twice.
+
+    **Nothing is re-embedded, because nothing about a page changed.** A
+    duplicate is the same image at the same path: its two rows carry the same
+    vector, so dropping one loses no information and recomputing it would cost
+    ~15 h of GPU to obtain the numbers already on disk.
+
+    Streamed in two passes like :func:`relabel`, so *chunk* medias are resident
+    rather than the tier, and the rewrite is all-or-nothing.
+    """
+    io = _cells_io()
+    dropped_total = 0
+    for tier in cfg.TIER_ORDER:
+        wanted: Optional[set[str]] = None
+        for embedder in EMBEDDERS:
+            path = cell_path(tier, embedder)
+            if not path.exists():
+                continue
+            if wanted is None:
+                wanted = {page.page_id for page in pages_for_tier(corpus, tier)}
+            n_medias = 0
+            seen: set[str] = set()
+            duplicated = 0
+            unlisted = 0
+            for _cid, media in io.iter_medias(path):
+                n_medias += 1
+                name = media.get("origin_name")
+                if name not in wanted:
+                    unlisted += 1
+                elif name in seen:
+                    duplicated += 1
+                else:
+                    seen.add(name)
+            drop = duplicated + unlisted
+            print(
+                f"  {path.name}: {n_medias} medias, {drop} to drop"
+                + (f" ({duplicated} duplicated, {unlisted} not in the manifest)" if drop else "")
+            )
+            if not drop:
+                continue
+            dropped_total += drop
+            if apply:
+                _rewrite_cell(io, path, _first_of_each(io.iter_medias(path), wanted), chunk=chunk)
+    print(f"\n{dropped_total} media(s) dropped" + ("" if apply else " — dry run, pass --force to write"))
+    return 0
+
+
 def repair(corpus: Path, *, apply: bool = False, chunk: int = REWRITE_CHUNK) -> int:
     """Re-embed only the medias an existing cell holds no vector for.
 
@@ -624,6 +694,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "vectors alone; the repair for an audit verdict that lands after a cell was built",
     )
     ap.add_argument(
+        "--prune",
+        action="store_true",
+        help="drop cell medias the manifest no longer holds (dry run unless --force)",
+    )
+    ap.add_argument(
         "--repair",
         action="store_true",
         help="re-embed only the medias an existing cell has no vector for; the repair for a "
@@ -642,6 +717,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.verify:
         return verify(args.corpus)
 
+    if args.prune:
+        return prune(args.corpus, apply=args.force)
     if args.relabel:
         return relabel(args.corpus, apply=args.force)
 

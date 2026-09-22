@@ -76,11 +76,8 @@ _VG_SCALE_TEXTS = {
     # is `cup` U `wine glass` (SCALE_CLASS_MERGES) and `truck` excludes SUVs
     # (SCALE_CLASS_RULES), but nobody hunting either types the boundary into the
     # search box. Encoding the ruling here would measure an opening no user has.
-    "truck": "a truck",
-    "car": "a car on the street",
     "fork": "a fork",
     "spoon": "a spoon",
-    "cup": "a cup",
     "bowl": "a bowl",
     "bottle": "a bottle",
     "vase": "a vase",
@@ -89,6 +86,48 @@ _VG_SCALE_TEXTS = {
     "sink": "a sink",
     "cell phone": "a cell phone",
     "fire hydrant": "a fire hydrant",
+    # The two merged classes (#4056). Neither is a COCO category, so neither
+    # can be taken verbatim from `_COCO_TEXTS` the way every other entry here
+    # is; each names BOTH halves, because that is what the class contains and
+    # what someone hunting it would type. Naming one half would make the
+    # opening a biased sort over a class that is half something else.
+    "enclosed road vehicle": "a car or truck",
+    "single serving drinking vessel": "a cup or glass",
+    # The twenty-eight #4056 added, taken VERBATIM from `_COCO_TEXTS` on the
+    # same terms as the thirteen above -- `a person wearing a necktie` and
+    # `a laptop computer` included, scene and qualifier untouched. The class
+    # RULE for several of these settles a boundary the query deliberately does
+    # not mention (`tv` admits computer monitors, `potted plant` is mostly cut
+    # flowers, `mouse` is never the animal), because nobody hunting any of them
+    # types the ruling into the search box.
+    "airplane": "an airplane",
+    "apple": "an apple",
+    "banana": "a banana",
+    "baseball bat": "a baseball bat",
+    "dining table": "a dining table",
+    "frisbee": "a frisbee",
+    "handbag": "a handbag",
+    "keyboard": "a computer keyboard",
+    "laptop": "a laptop computer",
+    "microwave": "a microwave oven",
+    "motorcycle": "a motorcycle",
+    "mouse": "a computer mouse",
+    "orange": "an orange fruit",
+    "parking meter": "a parking meter",
+    "person": "a person",
+    "potted plant": "a potted plant",
+    "remote": "a tv remote control",
+    "scissors": "a pair of scissors",
+    "skateboard": "a skateboard",
+    "skis": "a pair of skis",
+    "snowboard": "a snowboard",
+    "suitcase": "a suitcase",
+    "surfboard": "a surfboard",
+    "tennis racket": "a tennis racket",
+    "tie": "a person wearing a necktie",
+    "toothbrush": "a toothbrush",
+    "traffic light": "a traffic light",
+    "tv": "a television screen",
 }
 
 #: COCO-2017-val's 80 categories as **typed queries**.
@@ -193,6 +232,20 @@ _COCO_TEXTS = {
 
 EXPERIMENT_QUERIES: dict[str, dict[str, str]] = {
     "vg_scale": {
+        f"{cls}@{band}": text for cls, text in _VG_SCALE_TEXTS.items() for band in ("small", "medium", "large")
+    },
+    # `coco_quarry` (#4044/#4051) is `vg_scale`'s question asked of COCO with no
+    # Visual Genome, on the SAME 25 `SCALE_CLASSES` and the same three bands -- so
+    # it takes the same texts, under the same `class@band` keying.
+    #
+    # The VG-named constant serving a COCO dataset is deliberate, not an
+    # oversight. Every entry in it was taken byte-identically from `_COCO_TEXTS`
+    # in the first place (see its own note), and `vg_scale` vs `coco_quarry` is
+    # exactly the comparison a drifted query would ruin: the two sets exist to be
+    # read against each other, so an opening that differed between them would put
+    # a seeding axis inside the source axis. Sharing the dict is what makes that
+    # impossible rather than merely unlikely.
+    "coco_quarry": {
         f"{cls}@{band}": text for cls, text in _VG_SCALE_TEXTS.items() for band in ("small", "medium", "large")
     },
     "coco_val": _COCO_TEXTS,
@@ -315,6 +368,20 @@ DATASET_EMBEDDERS: dict[str, list[str]] = {
     # `run_cells.py --index`, a preflight run without the env -- which are
     # exactly the ones with no launcher comment to warn them.
     "vg_scale": os.environ.get("CALIB_VGSCALE_EMBEDDERS", "siglip,siglip+dinov3_patch").split(","),
+    # `coco_quarry` (#4051): `vg_scale`'s construction on COCO 2017, same 25
+    # classes, same three bands. Its own env var rather than sharing
+    # `CALIB_VGSCALE_EMBEDDERS`, because the two datasets are meant to be run
+    # against each other and a shared knob would move both columns at once --
+    # which is the one edit that could silently make a source contrast into a
+    # column contrast.
+    #
+    # The region arm is the PAIR `siglip+dinov3_patch`, for the reason spelled
+    # out on `vg_scale` above and not because the pile happens to offer it: bare
+    # `dinov3_patch` has no text tower, so it would open on three random
+    # known-goods while the whole-image arms opened on a text sort, putting a
+    # seeding difference inside the voting-mode axis (#3276, #3278). Both halves
+    # are built for this dataset, so the pair is available rather than aspirational.
+    "coco_quarry": os.environ.get("CALIB_COCO_QUARRY_EMBEDDERS", "siglip,siglip+dinov3_patch").split(","),
 }
 
 #: Region voting (drag the ground-truth box) only makes sense on a boxed dataset.
@@ -364,6 +431,15 @@ BOXED_BY_DATASET: dict[str, bool] = {
     # same passes. Necessary but not sufficient: no patch cell is built, so in
     # practice every `vg_scale_deep` arm binary-votes (see the note above).
     "vg_scale_deep": True,
+    # Boxed, and the boxes are COCO's own rather than VG's carried through
+    # (#4051). This entry is load-bearing in the silent direction: with it
+    # missing, `styles_for` reads the dataset as boxless and falls the patch
+    # embedder back to `whole_image` without a word, so the region arm of a
+    # 7,500-cell grid would run as a second binary arm and every output would
+    # look like success. That is what the note above cost 108 cells to learn, and
+    # `test_pile_boxed_datasets_are_registered` is now the guard rather than this
+    # comment.
+    "coco_quarry": True,
 }
 
 
@@ -406,6 +482,26 @@ REPOOL_STYLE = "max_patch_pca_hac"
 #: the question is learned set-pooling, not another fixed rule.
 REPOOL_VARIANTS = [v for v in os.environ.get("CALIB_REPOOL_VARIANTS", "").split(",") if v]
 REPOOL_TOPK = int(os.environ.get("CALIB_REPOOL_TOPK", "4"))
+
+#: Report the miss rate per **size band** beside the headline one (#4044), off
+#: by default.  ``CALIB_TEST_BANDS=all`` takes every band the cell's class has;
+#: a comma list names them.
+#:
+#: A cell is ``class@band`` and until now that band was the train set *and* the
+#: test set -- train on small cars, test on small cars.  With this set, an arm
+#: trained at one size is scored at all three, which is what turns three
+#: independent arms into a 3x3 matrix.  Only the FNR decomposes: the bands share
+#: one negative pool by construction, so a negative has no size for the class and
+#: there is exactly one FPR per arm.  Adds
+#: :data:`vtscore.eval.voting_columns.BAND_COLUMNS` and moves no existing column.
+#:
+#: Cannot be combined with a prevalence-thinned arm; the harness refuses that
+#: pair at the door rather than reporting a table whose cells do not pair.
+TEST_BANDS = os.environ.get("CALIB_TEST_BANDS", "").strip() or None
+if TEST_BANDS and TEST_BANDS != "all":
+    TEST_BANDS = [b.strip() for b in TEST_BANDS.split(",") if b.strip()]
+elif TEST_BANDS == "all":
+    TEST_BANDS = "auto"
 
 #: Inclusion values the fold orderings are re-thresholded at for the budget sweep.
 INCLUSION_SWEEP_KS = [int(k) for k in os.environ.get("CALIB_SWEEP_KS", "-4,-2,-1,0,1,2,4").split(",")]

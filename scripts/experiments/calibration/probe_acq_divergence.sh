@@ -10,6 +10,14 @@ set -u
 source /exp/sgreenberg/projects/vts-acq-2877/gridenv.sh >/dev/null 2>&1
 cd /exp/sgreenberg/projects/vts-acq-2877/scripts/experiments/calibration || exit 1
 export CALIB_EXP=/expscratch/sgreenberg/acq-2877/sizing
+
+# The study output dir is read, not created: fail naming it (#4001).
+if [ ! -d "$CALIB_EXP" ]; then
+  echo "$CALIB_EXP does not exist: this study's output was deleted 2026-09-18 (see #4001 and /expscratch/sgreenberg/keep/deleted-20260918.md)." >&2
+  echo "Re-run the study, or set CALIB_EXP to a directory that has its results." >&2
+  exit 2
+fi
+
 CUDA_VISIBLE_DEVICES= python - <<'PY'
 import glob
 import pathlib

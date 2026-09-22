@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import sys
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -124,6 +125,109 @@ class TestRendering:
         assert br.short_class("tobacco800/logo_ajj10e00_1") == "t800 logo_ajj10e00_1"
 
 
+class TestSheetPresentation:
+    """A review sheet is fetched whole for every vote, so how it is drawn is not cosmetic.
+
+    Two failures this covers, both found the hard way on 2026-09-20:
+
+    * a portrait page letterboxed into the landscape default rendered ~448 px
+      wide, where a letterhead crest is ~35 px and cannot be ruled in or out;
+    * RGB at quality 90 made the sheets 198 KB median / 450 KB p90 against the
+      124 KB the reviewer labels at a page a second, and he got six-second
+      stalls waiting on the centre panel.
+    """
+
+    def _q(self, br, **kw):
+        base = {
+            "filename": "x.jpg",
+            "task": "contamination",
+            "question": "is the mark on this page?",
+            "refs": [],
+            "page_id": "ucsf/a#0",
+            "box": [0, 0, 100, 100],
+        }
+        return br.Question(**{**base, **kw})
+
+    def test_canvas_defaults_to_the_shared_landscape_sheet(self, br):
+        assert br.sheet_size(self._q(br)) == br.CANVAS
+
+    def test_a_portrait_question_overrides_the_canvas(self, br):
+        assert br.sheet_size(self._q(br, canvas=[1530, 1350])) == (1530, 1350)
+
+    def test_the_footer_names_the_page_by_default(self, br):
+        q = self._q(br, item="7/50", detail="ranked")
+        assert br.footer_text(q) == "7/50   ·   ucsf/a#0   ·   ranked"
+
+    def test_an_anonymous_question_gives_the_reviewer_no_tell(self, br):
+        """A planted control must not be identifiable from its footer."""
+        q = self._q(br, item="7/50", detail="", anonymous=True)
+        assert br.footer_text(q) == ""
+        assert "ucsf" not in br.footer_text(q)
+
+    def test_anonymous_still_shows_detail_when_one_is_set(self, br):
+        assert br.footer_text(self._q(br, detail="note", anonymous=True)) == "note"
+
+
+class TestRenderedSheetWeight:
+    """The knobs that decide what a sheet costs, exercised through a real render."""
+
+    @staticmethod
+    def _page(tmp_path, w=600, h=800):
+        from PIL import Image
+
+        path = tmp_path / "page.png"
+        img = Image.new("RGB", (w, h), "white")
+        # a dark block in the middle, white margin all round: something to find,
+        # and something for the border trim to shave.
+        for x in range(w // 4, 3 * w // 4):
+            for y in range(h // 3, 2 * h // 3):
+                img.putpixel((x, y), (10, 10, 10) if (x + y) % 3 else (200, 30, 30))
+        img.save(path)
+
+        return SimpleNamespace(page_id="ucsf/a#0", path=str(path), width=w, height=h, marks=[])
+
+    def _q(self, br, **kw):
+        base = {
+            "filename": "sheet.jpg",
+            "task": "contamination",
+            "question": "is the mark on this page?",
+            "refs": [],
+            "page_id": "ucsf/a#0",
+            "box": [0, 0, 600, 800],
+            "outline": False,
+        }
+        return br.Question(**{**base, **kw})
+
+    def test_greyscale_writes_a_single_channel_sheet(self, br, tmp_path):
+        from PIL import Image
+
+        page = self._page(tmp_path)
+        out = tmp_path / "out"
+        out.mkdir()
+        br.render(self._q(br, greyscale=True, quality=80), {"ucsf/a#0": page}, tmp_path, out)
+        with Image.open(out / "sheet.jpg") as im:
+            assert im.mode == "L", "a scanned page is greyscale; three channels are paid for and unused"
+
+    def test_greyscale_at_q80_is_smaller_than_rgb_at_q90(self, br, tmp_path):
+        page = self._page(tmp_path)
+        pages = {"ucsf/a#0": page}
+        heavy, light = tmp_path / "heavy", tmp_path / "light"
+        heavy.mkdir()
+        light.mkdir()
+        br.render(self._q(br), pages, tmp_path, heavy)
+        br.render(self._q(br, greyscale=True, quality=80), pages, tmp_path, light)
+        assert (light / "sheet.jpg").stat().st_size < (heavy / "sheet.jpg").stat().st_size
+
+    def test_the_canvas_override_reaches_the_written_sheet(self, br, tmp_path):
+        from PIL import Image
+
+        out = tmp_path / "out"
+        out.mkdir()
+        br.render(self._q(br, canvas=[900, 1100]), {"ucsf/a#0": self._page(tmp_path)}, tmp_path, out)
+        with Image.open(out / "sheet.jpg") as im:
+            assert im.size == (900, 1100)
+
+
 class TestCompleteness2:
     def test_tile_box_goods_are_held_back_for_a_tight_box(self, br):
         qs = {
@@ -137,6 +241,344 @@ class TestCompleteness2:
         assert rows[0]["verdict"] == "0" and rows[0]["needs_tight_box"] == [1]
         assert any("tile box" in n for n in notes)
 
+    def test_a_tile_over_a_boxed_mark_is_an_ordinary_accept(self, br):
+        """#4040: the applier reassigns the mark under the tile and never reads the tile box.
+
+        Holding these back did not merely delay them: the un-accepted indices were
+        written to ``adjudications.json`` as cannot-links, recording the opposite
+        of the vote that was cast.
+        """
+        qs = {
+            "c0": {"task": "completeness2", "key": {"class_id": "c", "index": 0, "tile_box": True}},
+            "c1": {"task": "completeness2", "key": {"class_id": "c", "index": 1, "tile_box": True}},
+        }
+        row = {
+            "class_id": "c",
+            "verdict": "none",
+            "candidates": [
+                {"index": 0, "page_id": "p0", "box": [0, 0, 216, 206], "mark_index": 5},
+                {"index": 1, "page_id": "p1", "box": [0, 0, 216, 206], "mark_index": None},
+            ],
+        }
+        rows, notes = br.translate_completeness2([row], qs, {"c0": "good", "c1": "good"})
+        assert rows[0]["verdict"] == "0", "a tile over a boxed mark is a reassignment"
+        assert rows[0]["needs_tight_box"] == [1], "only a tile over bare page needs drawing"
+        assert any("tile box" in n for n in notes)
+
+    def test_a_tile_box_without_candidates_still_needs_a_box(self, br):
+        """A queue built before #4040 carries no candidate list to consult."""
+        qs = {"c0": {"task": "completeness2", "key": {"class_id": "c", "index": 0, "tile_box": True}}}
+        rows, _ = br.translate_completeness2([{"class_id": "c", "verdict": "none"}], qs, {"c0": "good"})
+        assert rows[0]["verdict"] == "none" and rows[0]["needs_tight_box"] == [0]
+
     def test_sig_only_candidates_are_tiles(self, br):
         assert br.tile_box({"methods": "SIG"})
         assert not br.tile_box({"methods": "OCR+SIG"})
+
+
+def _archive(root: Path, queue: str, name: str, votes: dict) -> None:
+    """A ``votes_<date>.json`` beside a queue, in the shape ``bank`` writes."""
+    import json
+
+    d = root / queue
+    d.mkdir(parents=True, exist_ok=True)
+    labels = {"good": [], "bad": []}
+    for fn, label in votes.items():
+        labels[label].append({"filename": fn, "label": label})
+    (d / "votes_2026-09-19.json").write_text(
+        json.dumps({"detector": {"name": name}, "labels": labels}), encoding="utf-8"
+    )
+
+
+def _cleared(root: Path, name: str, votes: dict) -> None:
+    """A ``.cleared`` detector backup, in the shape the app exports."""
+    import json
+
+    d = root / "detectors-cleared-20260919"
+    d.mkdir(parents=True, exist_ok=True)
+    labels = [{"filename": fn, "label": label} for fn, label in votes.items()]
+    (d / f"{name.replace(' ', '_')}.json.cleared").write_text(
+        json.dumps({"name": name, "labelset": {"labels": labels}}), encoding="utf-8"
+    )
+
+
+class TestBankMergesEveryVoteSource:
+    """#3964: banking from the app alone emptied the verdicts of every CLEARED queue."""
+
+    def test_a_cleared_queue_survives_a_later_bank(self, br, tmp_path):
+        root, keep = tmp_path / "binary", tmp_path / "keep"
+        name = "docmarks pm_crest -- right logo same as left?"
+        # banked, then cleared off the dashboard: the app no longer holds it
+        _archive(root, "docmarks_pm_crest", name, {"a.jpg": "good", "b.jpg": "bad"})
+        _cleared(keep, name, {"a.jpg": "good", "b.jpg": "bad"})
+        votes, sources = br.collect_votes(None, root, keep)
+        assert votes[name] == {"a.jpg": "good", "b.jpg": "bad"}
+        assert sources == {"archive": 1, "cleared backup": 1}
+
+    def test_the_live_app_wins_where_sources_disagree(self, br, tmp_path, monkeypatch):
+        root, keep = tmp_path / "binary", tmp_path / "keep"
+        name = "docmarks rjr_block -- right logo same as left?"
+        _cleared(keep, name, {"a.jpg": "bad"})
+        monkeypatch.setattr(br, "docmarks_detectors", lambda _d: [{"name": name}])
+        monkeypatch.setattr(
+            br,
+            "api",
+            lambda base, path, *a, **k: (
+                {"good": [{"filename": "a.jpg"}], "bad": []} if "labels-detail" in path else {"detectors": []}
+            ),
+        )
+        votes, _ = br.collect_votes("http://app", root, keep)
+        assert votes[name]["a.jpg"] == "good"  # the later vote, not the backup's
+
+    def test_a_backup_without_labels_is_not_a_queue(self, br, tmp_path):
+        keep = tmp_path / "keep"
+        _cleared(keep, "docmarks empty -- same?", {})
+        votes, sources = br.collect_votes(None, tmp_path / "binary", keep)
+        assert votes == {} and sources == {}
+
+
+class TestGuardWrite:
+    """The same shape as ``dropped_rows``: the thing overwritten is human work."""
+
+    ANSWERED = [{"verdict_source": "vtsearch", "verdict": "all"}, {"verdict_source": "vtsearch", "verdict": "none"}]
+
+    def _dest(self, tmp_path, rows):
+        import json
+
+        d = tmp_path / "verdicts.from_vtsearch.jsonl"
+        d.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+        return d
+
+    def test_a_shrinking_write_is_refused_and_names_the_backups(self, br, tmp_path):
+        dest = self._dest(tmp_path, self.ANSWERED)
+        with pytest.raises(SystemExit) as exc:
+            br.guard_write(dest, [{"verdict": ""}], tmp_path / "keep", allow_loss=False)
+        assert "answers 2 item(s) and this run answers 0" in str(exc.value)
+        assert ".cleared" in str(exc.value)
+
+    def test_allow_loss_is_the_way_past_it(self, br, tmp_path):
+        dest = self._dest(tmp_path, self.ANSWERED)
+        br.guard_write(dest, [{"verdict": ""}], tmp_path / "keep", allow_loss=True)
+
+    def test_growing_and_equal_writes_pass(self, br, tmp_path):
+        dest = self._dest(tmp_path, self.ANSWERED)
+        br.guard_write(dest, self.ANSWERED + [{"verdict_source": "vtsearch"}], tmp_path / "keep", allow_loss=False)
+        br.guard_write(dest, self.ANSWERED, tmp_path / "keep", allow_loss=False)
+
+    def test_a_first_write_has_nothing_to_lose(self, br, tmp_path):
+        br.guard_write(tmp_path / "missing.jsonl", [], tmp_path / "keep", allow_loss=False)
+
+
+class TestArchiveVotes:
+    def test_an_archive_is_never_shrunk(self, br, tmp_path):
+        import json
+
+        q = tmp_path / "docmarks_pm_crest"
+        q.mkdir()
+        big = {"detector": {"name": "x"}, "labels": {"good": [{"filename": f"{i}.jpg"} for i in range(5)], "bad": []}}
+        first = br.archive_votes(q, "2026-09-19", big)
+        second = br.archive_votes(q, "2026-09-19", {"detector": {"name": "x"}, "labels": {"good": [], "bad": []}})
+        assert first.name == "votes_2026-09-19.json"
+        assert second != first  # the fuller archive is still there
+        assert len(json.loads(first.read_text())["labels"]["good"]) == 5
+
+
+def _queue(root: Path, dirname: str, name: str, questions: dict) -> Path:
+    """A per-pass queue directory: a manifest and one rendered image per question."""
+    import json
+
+    d = root / dirname
+    (d / "images").mkdir(parents=True, exist_ok=True)
+    for fn in questions:
+        (d / "images" / fn).write_bytes(b"jpeg")
+    (d / "manifest.json").write_text(
+        json.dumps(
+            {
+                "dataset_name": name,
+                "tasks": sorted({q["task"] for q in questions.values()}),
+                "questions": questions,
+            }
+        ),
+        encoding="utf-8",
+    )
+    return d
+
+
+def _crop(i, cid="t/logo_a"):
+    return {"task": "query_crops", "key": {"class_id": cid, "index": i, "n": 3}}
+
+
+def _compl(i, cid="t/logo_a"):
+    return {"task": "completeness2", "key": {"class_id": cid, "index": i, "tile_box": False}}
+
+
+class TestRegroupOnePairPerClass:
+    """Sam, 2026-09-19: one pair per class when the passes are this small; the image carries the question."""
+
+    def test_both_passes_merge_and_answered_questions_are_dropped(self, br, tmp_path):
+        root, keep = tmp_path / "binary", tmp_path / "keep"
+        _queue(root, "q", "docmarks t logo_a -- good extra query crop?", {"c0.jpg": _crop(0), "c1.jpg": _crop(1)})
+        _queue(
+            root,
+            "c",
+            "docmarks t logo_a -- right mark same as left? (completeness 2)",
+            {"m0.jpg": _compl(0), "m1.jpg": _compl(1)},
+        )
+        _archive(root, "q", "docmarks t logo_a -- good extra query crop?", {"c0.jpg": "good"})
+        (out,) = br.regroup(root, keep, base=None)
+        name, qdir, n = out
+        assert name == "docmarks t logo_a -- read the question on each image"
+        assert n == 3  # c0 is answered, so it is not asked again
+        assert sorted(x.name for x in (qdir / "images").glob("*.jpg")) == ["c1.jpg", "m0.jpg", "m1.jpg"]
+
+    def test_the_merged_manifest_keeps_each_question_task_so_bank_still_routes_it(self, br, tmp_path):
+        import json
+
+        root, keep = tmp_path / "binary", tmp_path / "keep"
+        _queue(root, "q", "docmarks t logo_a -- good extra query crop?", {"c0.jpg": _crop(0)})
+        _queue(root, "c", "docmarks t logo_a -- right mark same as left? (completeness 2)", {"m0.jpg": _compl(0)})
+        (_name, qdir, _n) = br.regroup(root, keep, base=None)[0]
+        m = json.loads((qdir / "manifest.json").read_text())
+        assert m["tasks"] == ["completeness2", "query_crops"]
+        assert {fn: q["task"] for fn, q in m["questions"].items()} == {
+            "c0.jpg": "query_crops",
+            "m0.jpg": "completeness2",
+        }
+        # bank groups by the question's own task, so one queue reaches two slates
+        assert {br.TRANSLATORS[q["task"]][1] for q in m["questions"].values()} == {
+            br.translate_query_crops,
+            br.translate_completeness2,
+        }
+
+    def test_box_tighten_is_left_as_its_own_pair(self, br, tmp_path):
+        root, keep = tmp_path / "binary", tmp_path / "keep"
+        _queue(
+            root,
+            "b",
+            "docmarks staver boxes -- red box right?",
+            {"b0.jpg": {"task": "box_tighten", "key": {"class_id": "t/logo_a", "index": 0}}},
+        )
+        assert br.regroup(root, keep, base=None) == []
+
+    def test_a_question_answered_since_the_last_regroup_is_removed_from_the_merged_queue(self, br, tmp_path):
+        root, keep = tmp_path / "binary", tmp_path / "keep"
+        _queue(root, "q", "docmarks t logo_a -- good extra query crop?", {"c0.jpg": _crop(0), "c1.jpg": _crop(1)})
+        (_n1, qdir, first) = br.regroup(root, keep, base=None)[0]
+        assert first == 2
+        _archive(root, "q", "docmarks t logo_a -- good extra query crop?", {"c0.jpg": "bad"})
+        (_n2, qdir2, second) = br.regroup(root, keep, base=None)[0]
+        assert (qdir2, second) == (qdir, 1)
+        # the stale image is gone: load_queue imports the folder, so leaving it would re-ask it
+        assert [x.name for x in (qdir / "images").glob("*.jpg")] == ["c1.jpg"]
+
+    def test_a_question_without_a_class_is_refused_rather_than_grouped_wrongly(self, br, tmp_path):
+        root, keep = tmp_path / "binary", tmp_path / "keep"
+        _queue(
+            root,
+            "u",
+            "docmarks pm_crest -- right logo same as left?",
+            {"s0.jpg": {"task": "ucsf_classes", "key": {"sheet": "p__a_00.png", "cell": 0}}},
+        )
+        with pytest.raises(SystemExit, match="key.class_id"):
+            br.regroup(root, keep, base=None)
+
+
+class TestVotesRouteByQuestionNotByFolder:
+    """Sam, 2026-09-19: he loaded a second dataset into one detector while voting.
+
+    The 90 labels that detector held were answers to two classes' questions, and
+    keying votes by the folder they sat in dropped all 47 belonging to the other
+    class.  A vote answers the QUESTION its filename names.
+    """
+
+    def _two_queues(self, br, tmp_path):
+        root = tmp_path / "binary"
+        _queue(root, "a", "docmarks t logo_a -- read the question on each image", {"qcrop__a__c0.jpg": _crop(0)})
+        _queue(
+            root,
+            "b",
+            "docmarks t logo_b -- read the question on each image",
+            {"compl2__b__c0.jpg": _compl(0, "t/logo_b")},
+        )
+        manifests = {}
+        for mf in sorted(root.glob("*/manifest.json")):
+            import json
+
+            m = json.loads(mf.read_text())
+            manifests[m["dataset_name"]] = (mf.parent, m)
+        return root, manifests
+
+    def test_a_detector_holding_two_queues_routes_each_vote_to_its_own_slate(self, br, tmp_path):
+        root, manifests = self._two_queues(br, tmp_path)
+        # both votes cast in queue a's detector, as the merged dataset produced
+        by_queue = {
+            "docmarks t logo_a -- read the question on each image": {
+                "qcrop__a__c0.jpg": "good",
+                "compl2__b__c0.jpg": "bad",
+            }
+        }
+        questions = br.question_index(manifests)
+        index, conflicts, unplaceable = br.vote_index(by_queue, questions)
+        assert (conflicts, unplaceable) == ([], [])
+        assert index == {"qcrop__a__c0.jpg": "good", "compl2__b__c0.jpg": "bad"}
+        # and they land on different slates
+        assert questions["qcrop__a__c0.jpg"]["task"] == "query_crops"
+        assert questions["compl2__b__c0.jpg"]["task"] == "completeness2"
+
+    def test_the_same_question_in_several_manifests_is_not_a_conflict(self, br, tmp_path):
+        """A regrouped queue hardlinks its predecessor's images: 770 of 2,738 filenames are claimed twice."""
+        root = tmp_path / "binary"
+        _queue(root, "old", "docmarks t logo_a -- good extra query crop?", {"c0.jpg": _crop(0)})
+        _queue(root, "new", "docmarks t logo_a -- read the question on each image", {"c0.jpg": _crop(0)})
+        import json
+
+        manifests = {
+            json.loads(mf.read_text())["dataset_name"]: (mf.parent, json.loads(mf.read_text()))
+            for mf in sorted(root.glob("*/manifest.json"))
+        }
+        assert br.question_index(manifests)["c0.jpg"] == _crop(0)
+
+    def test_a_filename_claimed_twice_with_different_questions_raises(self, br, tmp_path):
+        root = tmp_path / "binary"
+        _queue(root, "one", "docmarks t logo_a -- read the question on each image", {"c0.jpg": _crop(0)})
+        _queue(root, "two", "docmarks t logo_b -- read the question on each image", {"c0.jpg": _compl(0, "t/logo_b")})
+        import json
+
+        manifests = {
+            json.loads(mf.read_text())["dataset_name"]: (mf.parent, json.loads(mf.read_text()))
+            for mf in sorted(root.glob("*/manifest.json"))
+        }
+        with pytest.raises(SystemExit, match="claimed by"):
+            br.question_index(manifests)
+
+    def test_a_vote_naming_no_question_is_reported_not_dropped(self, br, tmp_path):
+        _root, manifests = self._two_queues(br, tmp_path)
+        questions = br.question_index(manifests)
+        index, _conflicts, unplaceable = br.vote_index(
+            {"docmarks t logo_a -- read the question on each image": {"ghost.jpg": "good"}}, questions
+        )
+        assert index == {}
+        assert len(unplaceable) == 1 and "ghost.jpg" in unplaceable[0]
+
+    def test_one_question_voted_both_ways_in_two_queues_is_reported_not_guessed(self, br, tmp_path):
+        _root, manifests = self._two_queues(br, tmp_path)
+        questions = br.question_index(manifests)
+        index, conflicts, _unplaceable = br.vote_index(
+            {
+                "docmarks t logo_a -- read the question on each image": {"qcrop__a__c0.jpg": "good"},
+                "docmarks t logo_b -- read the question on each image": {"qcrop__a__c0.jpg": "bad"},
+            },
+            questions,
+        )
+        assert index == {}  # no rule can say which click was later
+        assert len(conflicts) == 1 and "qcrop__a__c0.jpg" in conflicts[0]
+
+    def test_regroup_does_not_re_ask_a_question_answered_in_a_foreign_detector(self, br, tmp_path):
+        root, keep = tmp_path / "binary", tmp_path / "keep"
+        _queue(root, "q", "docmarks t logo_a -- good extra query crop?", {"c0.jpg": _crop(0), "c1.jpg": _crop(1)})
+        # c0 was answered while the queue was loaded into some OTHER detector
+        _archive(root, "q", "docmarks t logo_z -- read the question on each image", {"c0.jpg": "good"})
+        (out,) = br.regroup(root, keep, base=None)
+        _name, qdir, n = out
+        assert n == 1
+        assert [x.name for x in (qdir / "images").glob("*.jpg")] == ["c1.jpg"]

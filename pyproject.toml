@@ -239,11 +239,22 @@ extend_exclude = [
     "model_cache",
 ]
 
-# Sibling modules that slides/figs/src/*.py and .claude/hooks/*.py import off
-# their own directory (they are scripts run by path, not an installed package,
-# so deptry reads the imports as third-party). Everything else under slides/
-# and .claude/ is still checked.
-known_first_party = ["coco_fixture", "dataset_samples", "report_svg", "slide_figure", "hook_payload"]
+# Sibling modules that slides/figs/src/*.py, .claude/hooks/*.py and the study
+# scripts under docs/experiments/ import off a directory they put on sys.path
+# (they are scripts run by path, not an installed package, so deptry reads the
+# imports as third-party). Everything else under slides/, .claude/ and
+# docs/ is still checked.
+known_first_party = [
+    "coco_fixture",
+    "dataset_samples",
+    "report_svg",
+    "slide_figure",
+    "hook_payload",
+    # scripts/experiments/pile and .../calibration, put on sys.path by a study
+    # script so it reads the same cell definitions the build used.
+    "pile_config",
+    "_cells_io",
+]
 
 # Module name → distribution name. Deptry needs these when the importable
 # module differs from the PyPI package.

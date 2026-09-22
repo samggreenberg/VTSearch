@@ -1,9 +1,10 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, DestroyRef, effect, ElementRef, inject, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, inject, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { Subscription, pairwise } from 'rxjs';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
+import type { NavDirection } from '../../services/keyboard.service';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
 import {
   ContextMenuComponent,
@@ -24,6 +25,7 @@ import { DetectorsRegistryApiService } from '../../services/detectors-registry-a
 import { LabelSessionService } from '../../services/label-session.service';
 import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
+import { VoteHistoryService } from '../../services/vote-history.service';
 import { LabelsetStateService } from '../../services/labelset-state.service';
 import { SortStateService, SortMode, SelectMode } from '../../services/sort-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
@@ -36,6 +38,7 @@ import { ResortPromptModalComponent, ResortResult } from '../modals/resort-promp
 import type { LabelingStatusResponse } from '../../generated/api-client/models/labeling-status-response';
 import { snapPanelWidthToGridColumns, iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 import { PanelResizeDirective } from '../../directives/panel-resize.directive';
+import { MediaPrefetchService } from '../../services/media-prefetch.service';
 import { LabelViewPanelStateService } from './label-view-panel-state.service';
 import { buildMediaContextMenuItems } from './media-context-menu-items';
 
@@ -64,6 +67,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private labelSession = inject(LabelSessionService);
   mediaState = inject(MediaStateService);
   voteState = inject(VoteStateService);
+  private voteHistory = inject(VoteHistoryService);
   private labelsetState = inject(LabelsetStateService);
   sortState = inject(SortStateService);
   private settingsState = inject(SettingsStateService);
@@ -79,6 +83,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  `autoSelectNext` each one ends on. Private — the template's surface is the
    *  one-line handlers below, which forward to it. */
   private readonly sortRunner = inject(SortRunnerService);
+  private readonly mediaPrefetch = inject(MediaPrefetchService);
 
   readonly layoutRef = viewChild.required<ElementRef<HTMLElement>>('layout');
   readonly centerPanel = viewChild(CenterPanelComponent);
@@ -106,6 +111,72 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  pane the vote-swipe animation otherwise leaves behind (#3887). Aliased
    *  from {@link SortRunnerService}, which owns the advance rule. */
   readonly queueExhausted = this.sortRunner.queueExhausted;
+  /** True when every item in the *dataset* is labeled, sort or no sort. Aliased
+   *  from {@link SortRunnerService}; see its doc for the two paths that reach
+   *  it without {@link queueExhausted} ever being true (#4028). */
+  readonly datasetExhausted = this.sortRunner.datasetExhausted;
+
+  /**
+   * The centre pane has nothing left to show and should say so, for any of the
+   * three reasons below. They are one input because the pane renders one
+   * message; they are kept apart in {@link exhaustedHeading} /
+   * {@link exhaustedDetail} because the way out differs — a finished ranking
+   * has "load more", a finished dataset has only undo and export.
+   */
+  readonly centreExhausted = computed(
+    () => (this.autopilotExhausted() || this.datasetExhausted() || this.queueExhausted())
+      && !this.viewingPick(),
+  );
+
+  /**
+   * The item the user picked by hand while the "nothing left" pane was up, or
+   * `null`.
+   *
+   * The pane replaces the viewer, so without this it swallows every click in
+   * the grid and in the vote piles — and the pane's own message sends the user
+   * to those piles to review their labels. Picking something is an explicit
+   * "show me this one", so it wins over a message about the queue.
+   *
+   * Stored as the id rather than as a flag so it expires on its own: a pair
+   * change clears the selection, which no longer matches, and the pane comes
+   * back for the new pair without anything having to reset it. A vote clears it
+   * outright — that is the user going back to labelling, where the message is
+   * the point again.
+   */
+  private readonly pickedWhileDone = signal<number | null>(null);
+
+  /** True while the selection is still the item {@link pickedWhileDone}
+   *  recorded. Both being `null` is not a match: that is "nothing picked and
+   *  nothing selected", which is the state a fresh entry is in. */
+  private readonly viewingPick = computed(() => {
+    const picked = this.pickedWhileDone();
+    return picked !== null && this.mediaState.selectedId() === picked;
+  });
+
+  /** Whether the dataset is finished (no more items anywhere) or merely the
+   *  loaded ranking is. Autopilot reaching `exhausted` means the former: its
+   *  own terminal state is "every item in this dataset is labeled". */
+  private readonly wholeDatasetDone = computed(
+    () => this.autopilotExhausted() || this.datasetExhausted(),
+  );
+
+  readonly exhaustedHeading = computed(() =>
+    this.wholeDatasetDone() ? 'Nothing left to label' : 'Nothing left in this ranking',
+  );
+
+  readonly exhaustedDetail = computed(() => {
+    // Deliberately one sentence for both halves of `wholeDatasetDone`. The
+    // pane used to credit Autopilot by name here, but `autopilotExhausted`
+    // tracks the phase machine whether or not Autopilot is the thing the user
+    // is running — so a hand-labeled dataset was told Autopilot had labeled it.
+    // "Every item is labeled" is true either way and costs nothing.
+    if (this.wholeDatasetDone()) {
+      return 'Every item in this dataset is labeled. Review your labels in the side panels, '
+        + 'export them, or press Cmd/Ctrl-Z to undo the last one.';
+    }
+    return 'Every item in the current ranking is labeled. Load more results, change the sort, '
+      + 'or pick an item from the list on the left.';
+  });
   progressModalMetric: ProgressMetric | null = null;
 
   // SortStateService / VoteStateService are now signal-backed (their value
@@ -193,6 +264,21 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private pendingSelectOnPairChange = false;
 
   constructor() {
+    // Warm the next review image while the reviewer is looking at this one
+    // (#3896). The fetch used to be issued only once the vote POST had come
+    // back, so its ~300 ms client gap, its transfer and its decode were all
+    // paid with somebody waiting; think time is ~600 ms-2 s of idle network.
+    //
+    // Keyed off the *selection*, not the vote, so the warm starts as soon as an
+    // item is on screen. The prediction can be wrong — a learned re-sort lands,
+    // or the reviewer clicks a different item — and a wrong prediction costs
+    // one unused fetch, never a wrong image: the store hands bytes back only
+    // for the URL they were fetched from.
+    effect(() => {
+      const id = this.mediaState.selectedId();
+      untracked(() => this.warmNextImage(id));
+    });
+
     effect(() => {
       const settings = this.settingsState.settingsSignal();
       if (!settings) return;
@@ -765,7 +851,27 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   // --- Media selection ---
 
   onMediaSelect(id: number): void {
+    this.pickedWhileDone.set(id);
     this.mediaState.selectMedia(id);
+  }
+
+  /**
+   * Down / Up from the centre pane (#4032).
+   *
+   * `back` walks the trail of items already voted on, one press per step, and
+   * counts as an explicit pick (so the "nothing left" pane gets out of the
+   * way, exactly as clicking the item in a pile would). `forward` is the same
+   * advance a vote makes — the top unlabeled item of the ranking — and is the
+   * user saying they are done looking back, so it releases that pick.
+   */
+  onNavigate(direction: NavDirection): void {
+    if (direction === 'back') {
+      const id = this.voteHistory.stepBack(this.mediaState.selectedId());
+      if (id !== null) this.onMediaSelect(id);
+      return;
+    }
+    this.pickedWhileDone.set(null);
+    this.sortRunner.autoSelectNext();
   }
 
   // --- Right-click media context menu ---
@@ -906,7 +1012,25 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     return m?.filename || m?.origin_name || `#${id}`;
   }
 
+  /**
+   * Prefetch the image the auto-advance would land on next (#3896).
+   *
+   * Only for `image` media: the other types paint through their own viewers
+   * (audio waveform, video frame), which this store does not feed. A non-image
+   * selection simply warms nothing.
+   */
+  private warmNextImage(currentId: number | null): void {
+    if (currentId === null) return;
+    const pick = this.sortRunner.peekNextMedia(currentId);
+    if (pick.kind !== 'media') return;
+    if (this.mediaState.getMedia(pick.id)?.media_type !== 'image') return;
+    this.mediaPrefetch.warm(this.activeContext.mediaUrl(`/api/medias/${pick.id}/image`));
+  }
+
   onMediaVoted(event: { id: number; vote: 'good' | 'bad' }): void {
+    // Back to labelling, so the "nothing left" pane is welcome again if the
+    // advance below has nowhere to go — see {@link pickedWhileDone}.
+    this.pickedWhileDone.set(null);
     // Local vote state is already reconciled from the POST response inside
     // submitToggleVote; loadVotes() only refreshes derived counters.
     this.voteState.loadVotes();

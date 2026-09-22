@@ -1,0 +1,856 @@
+[
+ {
+  "boxes": [],
+  "class": "bicycle",
+  "image_id": 4186,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "bicycle",
+  "image_id": 498127,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "bicycle",
+  "image_id": 1159493,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "bicycle",
+  "image_id": 1591784,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "bicycle",
+  "image_id": 2317323,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "bicycle",
+  "image_id": 2329621,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "bicycle",
+  "image_id": 2331463,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "bicycle",
+  "image_id": 2366293,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "bicycle",
+  "image_id": 2376775,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "bicycle",
+  "image_id": 2378783,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "bicycle",
+  "image_id": 2382011,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "bicycle",
+  "image_id": 2389591,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "bicycle",
+  "image_id": 2391557,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "bicycle",
+  "image_id": 2391693,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "bicycle",
+  "image_id": 2392571,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "bicycle",
+  "image_id": 2396937,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "bicycle",
+  "image_id": 2403358,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "bicycle",
+  "image_id": 2417856,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "bicycle",
+  "image_id": 2417961,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "boat",
+  "image_id": 2316807,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "boat",
+  "image_id": 2324802,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "boat",
+  "image_id": 2333770,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "boat",
+  "image_id": 2361820,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "boat",
+  "image_id": 2370133,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "boat",
+  "image_id": 2373385,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "boat",
+  "image_id": 2404637,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "book",
+  "image_id": 382,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "book",
+  "image_id": 2315437,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "book",
+  "image_id": 2330512,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "book",
+  "image_id": 2340101,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "book",
+  "image_id": 2369399,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "book",
+  "image_id": 2387595,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "book",
+  "image_id": 2388433,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "book",
+  "image_id": 2391763,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "bus",
+  "image_id": 2321,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "bus",
+  "image_id": 713503,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "bus",
+  "image_id": 713792,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "bus",
+  "image_id": 1159774,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "bus",
+  "image_id": 1591950,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "bus",
+  "image_id": 2383834,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "clock",
+  "image_id": 1159859,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "clock",
+  "image_id": 2328001,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "clock",
+  "image_id": 2329127,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "clock",
+  "image_id": 2340518,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "clock",
+  "image_id": 2392509,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "clock",
+  "image_id": 2393320,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "clock",
+  "image_id": 2394287,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "clock",
+  "image_id": 2398553,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "clock",
+  "image_id": 2414120,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "dog",
+  "image_id": 2317277,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "dog",
+  "image_id": 2328716,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "dog",
+  "image_id": 2331560,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "dog",
+  "image_id": 2337963,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "dog",
+  "image_id": 2341929,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "dog",
+  "image_id": 2360312,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "dog",
+  "image_id": 2361435,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "dog",
+  "image_id": 2372586,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "dog",
+  "image_id": 2381036,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "dog",
+  "image_id": 2405193,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "dog",
+  "image_id": 2407397,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "kite",
+  "image_id": 2328716,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "kite",
+  "image_id": 2328919,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "kite",
+  "image_id": 2381787,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "kite",
+  "image_id": 2400291,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "kite",
+  "image_id": 2402627,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "kite",
+  "image_id": 2404330,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "kite",
+  "image_id": 2411842,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "kite",
+  "image_id": 2417117,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "knife",
+  "image_id": 4779,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "knife",
+  "image_id": 4822,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "knife",
+  "image_id": 1159625,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "knife",
+  "image_id": 2315892,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "knife",
+  "image_id": 2318351,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "knife",
+  "image_id": 2318894,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "knife",
+  "image_id": 2322204,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "knife",
+  "image_id": 2341961,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "knife",
+  "image_id": 2343964,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "knife",
+  "image_id": 2344692,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "knife",
+  "image_id": 2381884,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "knife",
+  "image_id": 2382170,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "knife",
+  "image_id": 2390345,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "knife",
+  "image_id": 2398490,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "knife",
+  "image_id": 2402637,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "knife",
+  "image_id": 2405346,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "knife",
+  "image_id": 2411873,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "knife",
+  "image_id": 2416567,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "stop sign",
+  "image_id": 5000,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "stop sign",
+  "image_id": 2317082,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "stop sign",
+  "image_id": 2318201,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "stop sign",
+  "image_id": 2320830,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "stop sign",
+  "image_id": 2321424,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "stop sign",
+  "image_id": 2332526,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "stop sign",
+  "image_id": 2343021,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "stop sign",
+  "image_id": 2349493,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "stop sign",
+  "image_id": 2354702,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "stop sign",
+  "image_id": 2370519,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "stop sign",
+  "image_id": 2373888,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "stop sign",
+  "image_id": 2374373,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "stop sign",
+  "image_id": 2376820,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "stop sign",
+  "image_id": 2379325,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "stop sign",
+  "image_id": 2386217,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "stop sign",
+  "image_id": 2394639,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "stop sign",
+  "image_id": 2397293,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "stop sign",
+  "image_id": 2413721,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "umbrella",
+  "image_id": 2325,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "umbrella",
+  "image_id": 4263,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "umbrella",
+  "image_id": 498085,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "umbrella",
+  "image_id": 1159493,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "umbrella",
+  "image_id": 2318224,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "umbrella",
+  "image_id": 2320605,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "umbrella",
+  "image_id": 2331453,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "umbrella",
+  "image_id": 2337804,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "umbrella",
+  "image_id": 2340429,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "umbrella",
+  "image_id": 2341653,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "umbrella",
+  "image_id": 2343805,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "umbrella",
+  "image_id": 2351014,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "umbrella",
+  "image_id": 2359098,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "umbrella",
+  "image_id": 2361028,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "umbrella",
+  "image_id": 2393128,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "umbrella",
+  "image_id": 2397655,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "umbrella",
+  "image_id": 2400291,
+  "present": true,
+  "source": "claude_triage"
+ },
+ {
+  "boxes": [],
+  "class": "umbrella",
+  "image_id": 2410872,
+  "present": true,
+  "source": "claude_triage"
+ }
+]

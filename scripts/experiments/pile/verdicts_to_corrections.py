@@ -11,6 +11,34 @@ reproduce the live file exactly -- 0 rows dropped, 0 changed once the
 `box_space` field and the `claude_triage` -> `human_review` relabel that later
 commits introduced are accounted for.
 
+**This script is step 2 of 3, and step 2 alone reproduces 872 of the live file's
+4,709 rows.** That is not a defect in the file; it is what this script covers.
+The full chain is documented in ``pass_verdicts.py``'s usage block, and running
+all three steps reproduces `corrections.json` **exactly** -- 4,709 rows, 0 rows
+only-live, 0 only-new, 0 differing, verified 2026-09-18::
+
+    python pass_verdicts.py --out pass.json
+    python verdicts_to_corrections.py --verdicts "<the three defaults>,pass.json" --out scratch.json
+    python apply_recheck.py --corrections scratch.json
+
+Attribution of the 4,709, so a partial run can be recognised for what it is:
+
+* **791** from the #3156/#3588 two-campaign recipe this script owns;
+* **81** that this script produces and ``apply_recheck.py`` then re-answers (21
+  retired) or stamps with the rule they were given under (60);
+* **3,837** from the #3926/#3940 per-class pass, which reaches this script only
+  as the extra ``--verdicts`` file ``pass_verdicts.py`` writes.
+
+**Running this script alone and reading its output as "the recipe" is the trap**,
+and it is an easy one: this file is named after the output and its docstring opens
+on a near-loss. ``regenerate_corrections.py`` now runs all three steps as one
+command and diffs the result against the committed copy, so reach for that rather
+than this (#4007). A short regeneration is
+therefore the expected result of a partial run, not evidence that the file is
+unreproducible -- :func:`~pilebuild.corrections.dropped_rows` refuses it, and
+that refusal is the guard working. **Never reach for ``--allow-loss`` to get past
+it**: from step 2 alone it would destroy 3,837 rows of human work.
+
 Keep it that way: an input added to a campaign has to be added here, or the next
 regeneration is a deletion. :func:`~pilebuild.corrections.dropped_rows` refuses
 one that shrinks the file, which is the backstop rather than the plan.
@@ -104,8 +132,31 @@ from pathlib import Path
 
 import pile_config as pc
 from pilebuild.corrections import dropped_rows, write_json_locked
+from pilebuild.slates import slate_manifests
 
 pc.setup_env()
+
+
+#: #3729's committed human record, which is where every surviving input to this
+#: recipe now lives. The previous defaults read from study output directories --
+#: `vgscale-3156/` and `classes-3588/` under /expscratch -- and a housekeeping
+#: pass deleted both (#4001), taking six of the eight inputs with them (#4003).
+#: Nothing human was lost, because #3729 had already committed it; what broke was
+#: this script, which pointed at the copies rather than the record. Defaults now
+#: resolve inside the repository, so a recipe input cannot be deleted by anyone
+#: tidying a filesystem.
+HUMAN_RECORD = Path(__file__).resolve().parent / "human_record"
+
+
+#: The #3156/#3588 campaign verdicts this step owns, as files rather than a
+#: string, so `regenerate_corrections.py` can append the pass to them without
+#: spelling the list a second time -- a default spelled twice is a default that
+#: drifts, which is how the #3588 campaign went missing in the first place.
+DEFAULT_VERDICTS = (
+    HUMAN_RECORD / "WORK__verdicts_20260820b.json",
+    HUMAN_RECORD / "LABELSETS__verdicts_audit_20260825.json",
+    HUMAN_RECORD / "LABELSETS__verdicts_redef_20260825.json",
+)
 
 
 def log(msg: str) -> None:
@@ -152,24 +203,23 @@ def main() -> int:
     base = pc.PILE.parent / "vgscale-3156"
     ap.add_argument(
         "--verdicts",
-        default=",".join(
-            [
-                str(base / "verdicts_20260820b.json"),
-                str(pc.SCALE_LABELSETS / "verdicts_audit_20260825.json"),
-                str(pc.SCALE_LABELSETS / "verdicts_redef_20260825.json"),
-            ]
-        ),
+        default=",".join(str(p) for p in DEFAULT_VERDICTS),
         help="verdict files, comma-separated; later files win",
     )
     ap.add_argument(
         "--merge",
-        default=str(pc.SCALE_WORK_3588 / "corrections_13.json"),
+        default=str(HUMAN_RECORD / "WORK3588__corrections_13.json"),
         help="corrections files from OTHER campaigns, merged in after this run's rows; later wins",
     )
     ap.add_argument("--triage", default=str(base / "tri_flags_all.json"))
-    ap.add_argument("--adjudication", default=str(base / "adjudication_ml_20260820.json"))
+    ap.add_argument(
+        "--triage-rows",
+        default=str(HUMAN_RECORD / "WORK__triage_rows_20260820.json"),
+        help="frozen output of the triage pass, used when --triage/--sheets are gone (#4003)",
+    )
+    ap.add_argument("--adjudication", default=str(HUMAN_RECORD / "WORK__adjudication_ml_20260820.json"))
     ap.add_argument("--sheets", default=str(base / "sheets_neg"))
-    ap.add_argument("--slates", default=f"{base / 'slates'},{base / 'slates_pos2'}")
+    ap.add_argument("--slates", default=str(HUMAN_RECORD))
     ap.add_argument("--include-maybes", action="store_true", help="apply triage maybes too (default: no)")
     ap.add_argument("--out", default=str(pc.PILE / "corrections.json"))
     ap.add_argument(
@@ -182,7 +232,10 @@ def main() -> int:
     # (image, class) -> manifest row, for the band of a reviewed positive.
     cells: dict[tuple[int, str], str] = {}
     for root in args.slates.split(","):
-        for man in sorted(Path(root).glob("*/manifest.csv")):
+        # Both layouts, resolved by `pilebuild.slates` rather than here: the same
+        # rule is needed by `make_contact_sheets.py`, and a layout spelled twice
+        # is a layout that drifts (#4006).
+        for man in slate_manifests(root):
             for r in csv.DictReader(man.open()):
                 if r.get("cell"):
                     cells[(int(r["image_id"]), r["class"])] = r["cell"]
@@ -330,7 +383,26 @@ def main() -> int:
         stats[f"IGNORED_unknown_stratum:{v['stratum']}"] += 1
 
     # --- triage flags: contaminated negatives, no boxes, so they exclude
-    if Path(args.triage).exists():
+    #
+    # Both of this pass's inputs were deleted (#4003) and neither is recoverable:
+    # `tri_flags_all.json` was a model pass over the ranked negatives, and
+    # `sheets_neg/*/index.json` mapped its (sheet, tile) coordinates back to image
+    # ids. Its 122 output rows are frozen in the record instead, and applied here
+    # under exactly the same rule as the live path: a pair a human ruled on, in
+    # either direction, is never overruled by a triage flag. Re-running the pass
+    # would find different negatives on a different ranking -- it would not
+    # restore these rows, it would replace them.
+    if not Path(args.triage).exists() and Path(args.triage_rows).exists():
+        frozen = json.loads(Path(args.triage_rows).read_text())
+        for row in frozen:
+            key = (int(row["image_id"]), row["class"])
+            if key in ruled:
+                stats["triage_deferred_to_human"] += 1
+                continue
+            out[key] = dict(row)
+            stats["negative_excluded_by_frozen_triage"] += 1
+        log(f"  triage inputs absent; applied {len(frozen)} frozen rows from {Path(args.triage_rows).name}")
+    elif Path(args.triage).exists():
         flags = json.loads(Path(args.triage).read_text())
         for cls, kinds in flags.items():
             idx_path = Path(args.sheets) / cls.replace(" ", "_") / "index.json"

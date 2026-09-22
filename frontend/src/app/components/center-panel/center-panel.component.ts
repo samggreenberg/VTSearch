@@ -1,9 +1,10 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, input, OnDestroy, output, signal, untracked, viewChild } from '@angular/core';
 import { KeyValuePipe, TitleCasePipe } from '@angular/common';
+import { Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { EmbedderInfo, Media, PayloadVariant } from '../../models/api.models';
 import { MediasApiService } from '../../services/medias-api.service';
-import { KeyboardService } from '../../services/keyboard.service';
+import { KeyboardService, NavDirection } from '../../services/keyboard.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { SortStateService } from '../../services/sort-state.service';
@@ -45,6 +46,7 @@ export class CenterPanelComponent implements OnDestroy {
   private settingsState = inject(SettingsStateService);
   private sortState = inject(SortStateService);
   private datasetsListingsApi = inject(DatasetsListingsApiService);
+  private router = inject(Router);
   private destroyRef = inject(DestroyRef);
 
   readonly media = input<Media | null>(null);
@@ -70,10 +72,27 @@ export class CenterPanelComponent implements OnDestroy {
     'Every item in the current ranking has been labeled. Load more results, ' +
       'change the sort, or export your labels.',
   );
+  /**
+   * The line under "Select a media item to view". The host knows what the list
+   * beside the pane actually is — a ranking to label, or a work queue to verify
+   * — so it names the way out rather than leaving the pane to imply one (#4028).
+   */
+  readonly placeholderHint = input(
+    'Pick one from the list on the left, or run a sort to rank them.',
+  );
   readonly mediaVoted = output<{
     id: number;
     vote: 'good' | 'bad';
 }>();
+
+  /**
+   * Down / Up: walk back to an item already voted on, or return to the queue
+   * (#4032).  Emitted rather than handled here because "the next unlabeled
+   * item" is the host's rule, not the pane's — Train advances down the
+   * ranking, Find walks outward from the cutoff — and the host also owns the
+   * selection the walk moves.
+   */
+  readonly navigateRequested = output<NavDirection>();
 
   readonly audioPlayer = viewChild(AudioPlayerComponent);
   readonly imageViewer = viewChild(ImageViewerComponent);
@@ -229,6 +248,15 @@ export class CenterPanelComponent implements OnDestroy {
           }
           break;
         }
+        case 'navigate':
+          // Navigation moves the selection, never the labels, so an exhausted
+          // queue is no reason to block it — walking back to a voted item is
+          // one of the ways *out* of that state. `disabled` still gates it:
+          // there the host is mid-score and owns the selection.
+          if (action.navDirection && !this.disabled()) {
+            this.navigateRequested.emit(action.navDirection);
+          }
+          break;
         case 'undo':
           if (!this.disabled() && !this.isVoting()) this.voteState.undo();
           break;
@@ -371,6 +399,16 @@ export class CenterPanelComponent implements OnDestroy {
     return (media as any)['custom_metadata'] as Record<string, unknown> || {};
   }
 
+  /**
+   * Leave for the Dashboard. Offered from the "nothing left" pane because that
+   * is where the work ends: the remaining moves are picking another dataset or
+   * detector, and both live there. Every other exit from this pane — undo,
+   * export, reviewing the piles — is already a control the user can see.
+   */
+  goToDashboard(): void {
+    this.router.navigate(['/dashboard']);
+  }
+
   /** Human-readable label for an item used in undo toasts. */
   private mediaDisplayName(media: Media): string {
     return media.filename || media.origin_name || `#${media.id}`;
@@ -424,6 +462,22 @@ export class CenterPanelComponent implements OnDestroy {
             setTimeout(() => {
               this.mediaVoted.emit({ id: votedId, vote });
               this.isVoting.set(false);
+              // Un-pin the swipe. The animation ends `forwards`, so the node
+              // stays parked off-screen until something clears the class —
+              // and the only thing that does is the media-change effect
+              // above. When the host has nowhere to advance (no ranking
+              // loaded, so every vote takes the pick rule's `none` branch)
+              // that change never comes, and the pane goes blank mid-dataset
+              // with the item still selected: #3887's symptom, from a cause
+              // its `exhausted` flag does not cover (#4028).
+              //
+              // Unconditional, and it has to run after the emit rather than
+              // instead of it: if the host *did* advance, the media-change
+              // effect clears the class to the same '' a beat later, so this
+              // is a no-op; if it did not, the item slides back into view
+              // with its vote registered — which is exactly what the
+              // animations-off path has always done.
+              this.swipeClass.set('');
             }, 180);
           } else {
             this.mediaVoted.emit({ id: votedId, vote });

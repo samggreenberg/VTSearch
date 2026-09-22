@@ -4,13 +4,17 @@ import { Subject } from 'rxjs';
 export type VoteDirection = 'good' | 'bad';
 export type ZoomDirection = 'in' | 'out';
 export type RotateDirection = 'left' | 'right';
+/** `back` walks the trail of items already voted on; `forward` returns to the
+ *  queue (the next unlabeled item the host's advance rule picks). */
+export type NavDirection = 'back' | 'forward';
 
 export interface KeyboardAction {
-  type: 'vote' | 'volume' | 'playback' | 'zoom' | 'rotate' | 'undo' | 'redo';
+  type: 'vote' | 'volume' | 'playback' | 'zoom' | 'rotate' | 'undo' | 'redo' | 'navigate';
   direction?: VoteDirection;
   volumeDelta?: number;
   zoomDirection?: ZoomDirection;
   rotateDirection?: RotateDirection;
+  navDirection?: NavDirection;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -87,15 +91,32 @@ export class KeyboardService implements OnDestroy {
         (document.activeElement as HTMLElement)?.blur();
         this.action$.next({ type: 'vote', direction: 'bad' });
         break;
+      // Up/Down navigate the labelling queue (#4032): Down returns to the item
+      // just voted on, Up goes back to the next unlabeled one. Volume, which
+      // these keys used to carry, moves to Shift+Up / Shift+Down — the rarer
+      // command gets the modifier. Like a vote, navigation is a discrete press
+      // and ignores OS auto-repeat (a held Down would otherwise race backwards
+      // through the whole trail); volume still repeats, since holding the key
+      // to slide the level continuously is the point of it.
       case 'ArrowUp':
         e.preventDefault();
         (document.activeElement as HTMLElement)?.blur();
-        this.action$.next({ type: 'volume', volumeDelta: 0.05 });
+        if (e.shiftKey) {
+          this.action$.next({ type: 'volume', volumeDelta: 0.05 });
+          break;
+        }
+        if (e.repeat) break;
+        this.action$.next({ type: 'navigate', navDirection: 'forward' });
         break;
       case 'ArrowDown':
         e.preventDefault();
         (document.activeElement as HTMLElement)?.blur();
-        this.action$.next({ type: 'volume', volumeDelta: -0.05 });
+        if (e.shiftKey) {
+          this.action$.next({ type: 'volume', volumeDelta: -0.05 });
+          break;
+        }
+        if (e.repeat) break;
+        this.action$.next({ type: 'navigate', navDirection: 'back' });
         break;
       case ' ':
         e.preventDefault();

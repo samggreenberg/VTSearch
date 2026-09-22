@@ -65,6 +65,9 @@ from pathlib import Path
 
 import pile_config as pc
 
+#: #3729's committed human record, as `verdicts_to_corrections.py` resolves it.
+HUMAN_RECORD = Path(__file__).resolve().parent / "human_record"
+
 #: Below this many eligible images a coverage figure is not worth quoting. The
 #: `by rule` column can legitimately excuse most of a review, and a gate that
 #: reports 100% off a handful of survivors is worse than one that says it cannot
@@ -128,7 +131,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     base = pc.PILE.parent / "vgscale-3156"
     ap.add_argument("--cell", default=str(pc.EMBEDDINGS / "vg_scale__siglip.pkl"))
-    ap.add_argument("--verdicts", default=str(base / "verdicts_20260820b.json"))
+    ap.add_argument("--verdicts", default=str(HUMAN_RECORD / "WORK__verdicts_20260820b.json"))
     ap.add_argument("--sheets", default=str(base / "sheets_neg"))
     ap.add_argument("--corrections", default=str(pc.PILE / "corrections.json"))
     ap.add_argument("--min", type=float, default=0.85, help="fail below this coverage")
@@ -168,6 +171,18 @@ def main() -> int:
             tri.add(r["image_id"])
     if tri:
         rows.append(("triaged negatives", tri, negatives))
+    elif not Path(args.sheets).is_dir():
+        # NOT fatal, and not silent either. The sheet indexes were deleted with
+        # the study dir (#4001) and are not in the record, so this population
+        # cannot be measured any more -- but the other two still can, and a gate
+        # that quietly judges less than it claims is worse than one that says so.
+        print(
+            f"NOTE: {args.sheets} is gone (deleted 2026-09-18, #4001), so the triaged-negative\n"
+            "      population is not judged below. The triage rows themselves are frozen in\n"
+            "      human_record/WORK__triage_rows_20260820.json, but those are its OUTPUT\n"
+            "      (the flagged images), not the population it looked at, so they are not a\n"
+            "      substitute for this row.\n"
+        )
 
     pos_pairs = {(v["image_id"], v["class"]) for v in verdicts if v["stratum"] == "positive_boxed"}
     pos_ok = {

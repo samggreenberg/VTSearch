@@ -71,6 +71,24 @@ slides:
   # the sweep that justified it, and it comes up only if someone asks.
   split-fraction-result
 
+  # Appendix — the Coverage Atlas: how autopilot decides what to ask when the
+  # answer is not "whatever is nearest the line". Parked after the end for now
+  # because section 1 is deliberately three beats to the threshold and this is
+  # a fourth; the argument it belongs in is *Pics on a Plane*'s last page, which
+  # already says the threshold decides what gets asked, and the honest reading
+  # of these four is "and here is the half of that the threshold does not do".
+  # Move them in front of section 2 when section 1 can afford them.
+  #
+  # The order is the argument, not the code: the blind spot the atlas exists
+  # for, the structure, the second job that structure also does, and how badly
+  # it does it. That last one stays last whatever happens to the rest — it is
+  # the only slide here that reports a loss, and a loss read before the
+  # mechanism is just a reason not to listen.
+  atlas-blindspot
+  atlas-cells
+  atlas-depth
+  atlas-pvalues
+
   # Appendix — what "logo detection" actually means. Parked after the end for
   # now, to be worked into the argument later: it is the `book` slide's claim
   # made a second time, in the one domain where a room expects a concept to
@@ -78,7 +96,7 @@ slides:
   # time, and the presenter asks about each without answering.
   logo-grid
 
-  # Appendix — the data. Nine slides that come *before* any experimental
+  # Appendix — the data. Ten slides that come *before* any experimental
   # result that used them, and sit here only because the deck does not show
   # those results yet (#3958). Move them in front of the results section when
   # it arrives rather than leaving them parked.
@@ -87,6 +105,13 @@ slides:
   # sets somebody else made, then the two we made out of them. Visual Genome
   # and COCO have to be on screen before `vg_scale`'s construction makes any
   # sense, because two of its five steps are "and then we used COCO".
+  #
+  # `data-coco-quarry-complement` is the successor's argument rather than its
+  # card, which is why it sits after `vg_scale`'s three and carries no counts:
+  # `coco_quarry` is not built yet (see docs/plans/coco-quarry.md), and the one
+  # thing about it that is already decided is the one this slide draws — what
+  # exhaustive annotation buys that a designation cannot. Give it a card of its
+  # own once there is a built set to count.
   #
   # Both `vg_scale` and DocMarks are moving. The figures are generated from the
   # config the pile builds against and from the DocMarks datasheet, so a rebuilt
@@ -99,5 +124,6 @@ slides:
   data-vg-scale-build
   data-vg-scale-bands
   data-vg-scale-cells
+  data-coco-quarry-complement
   data-docmarks-build
   data-docmarks-shape

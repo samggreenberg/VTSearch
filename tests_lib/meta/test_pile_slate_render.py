@@ -80,8 +80,11 @@ class TestRender:
         r, gg, b = px[:3]
         assert abs(r - 0) < 20 and abs(gg - 90) < 20 and abs(b - 200) < 20
 
-    def test_every_instance_is_outlined_when_there_are_several(self, sr, tmp_path):
-        """A VG positive is banded by ALL its instances, so the review render must show each one."""
+    def test_several_instances_are_drawn_thin_under_the_red_union(self, sr, tmp_path):
+        """The band comes from the union, so the union is the red box and each annotation is amber.
+
+        VG holds 21 overlapping boxes for one bench; all-red made the image unreadable.
+        """
         from PIL import Image
 
         src = _photo(tmp_path, 640, 480)
@@ -89,11 +92,10 @@ class TestRender:
         g = sr.draw_with_side_inset(src, (0.05, 0.05, 0.15, 0.15), dest, also=[(0.60, 0.60, 0.75, 0.75)])
         with Image.open(dest) as im:
             assert im.size == (g["canvas_w"], g["canvas_h"])
-            # the left edge of the SECOND box, at its vertical middle, is drawn red
-            px = im.getpixel((int(0.60 * 640) + 1, int(0.675 * 480)))
-        assert isinstance(px, tuple)
-        r, gg, b = px[:3]
-        assert r > 180 and gg < 90 and b < 90
+            second = im.getpixel((int(0.60 * 640), int(0.675 * 480)))  # the second annotation's edge
+            union_left = im.getpixel((int(0.05 * 640) + 1, int(0.40 * 480)))  # union's left edge, between the two
+        assert isinstance(second, tuple) and second[0] > 180 and second[1] > 140, "an annotation is amber"
+        assert isinstance(union_left, tuple) and union_left[0] > 180 and union_left[1] < 90, "the union is red"
 
     def test_no_extra_boxes_renders_exactly_as_before(self, sr, tmp_path):
         src = _photo(tmp_path, 640, 480)
@@ -112,23 +114,168 @@ class TestRender:
         assert g["canvas_h"] == 500
         assert abs(pw / ph - 333 / 500) < 0.01, f"panel {pw}x{ph} is not 333:500"
 
-    def test_the_box_is_drawn_inside_the_panel_where_it_sits_on_the_photo(self, sr, tmp_path):
-        """What the reviewer compares: a pixel on the box's edge in the panel is red, a pixel inside is not."""
+    def test_the_panel_carries_no_outline_at_all(self, sr, tmp_path):
+        """The photo says WHERE the box is; the panel says what is UNDER it, so nothing is drawn on it."""
         from PIL import Image
 
         src = _photo(tmp_path, 640, 480)
         dest = tmp_path / "boxed.jpg"
         g = sr.draw_with_side_inset(src, (0.40, 0.40, 0.60, 0.60), dest)
         with Image.open(dest) as im:
-            W = 640
-            rows = [im.getpixel((x, 240)) for x in range(W, g["canvas_w"])]
-            centre = im.getpixel(((W + g["canvas_w"]) // 2, 240))
-        panel = [p for p in rows if isinstance(p, tuple) and p[0] > 180 and p[1] < 90]
-        assert len(panel) >= 2, "the box's left and right edges are drawn in the panel"
-        assert isinstance(centre, tuple) and centre[2] > 150, "the box's interior shows the photo, not a frame"
+            photo = [im.getpixel((x, 240)) for x in range(640)]
+            panel = [im.getpixel((x, y)) for x in range(646, g["canvas_w"]) for y in range(10, 470, 7)]
+        red = lambda p: isinstance(p, tuple) and p[0] > 150 and p[1] < 110 and p[2] < 110  # noqa: E731
+        assert sum(map(red, photo)) >= 2, "the photo still carries the box"
+        assert not any(map(red, panel)), "nothing red is drawn over the panel"
 
     def test_the_canvas_stays_within_the_wide_screen_aspect(self, sr, tmp_path):
         """A small box on a landscape photo would magnify to a panel as wide as the photo; it is capped."""
         src = _photo(tmp_path, 800, 534)
         g = sr.draw_with_side_inset(src, (0.05, 0.02, 0.08, 0.06), tmp_path / "wide.jpg")
         assert g["canvas_w"] / g["canvas_h"] <= sr.MAX_CANVAS_ASPECT + 0.01
+
+    def test_near_duplicate_annotations_are_collapsed_for_display(self, sr):
+        """VG annotates one object many times; only distinct ones are outlined."""
+        big = [0.10, 0.10, 0.50, 0.50]
+        nudged = [0.11, 0.11, 0.51, 0.51]  # the same object, annotated again
+        inside = [0.20, 0.20, 0.25, 0.25]  # wholly within the big one
+        other = [0.70, 0.70, 0.90, 0.90]
+
+        kept = sr.distinct_boxes([big, nudged, inside, other])
+
+        assert [list(b) for b in kept] == [big, other]
+
+    def test_the_union_still_comes_from_every_annotation(self, sr, tmp_path):
+        """Dedupe is for drawing only: a duplicate outside the kept boxes still widens the red union."""
+        from PIL import Image
+
+        src = _photo(tmp_path, 640, 480)
+        dest = tmp_path / "dup.jpg"
+        sr.draw_with_side_inset(src, (0.10, 0.10, 0.50, 0.50), dest, also=[(0.11, 0.11, 0.95, 0.95)])
+        with Image.open(dest) as im:
+            edge = im.getpixel((int(0.95 * 640) - 1, int(0.50 * 480)))
+        assert isinstance(edge, tuple) and edge[0] > 180 and edge[1] < 90, "the union reaches the far annotation"
+
+
+class TestCanvasBoxToOriginal:
+    """A reviewer draws on whichever half shows the object best; both convert."""
+
+    def test_a_box_drawn_on_the_photo_is_a_rescale(self, sr, tmp_path):
+        src = _photo(tmp_path, 640, 480)
+        shown = [(0.40, 0.40, 0.60, 0.60)]
+        g = sr.draw_with_side_inset(src, shown[0], tmp_path / "a.jpg")
+        canvas = [0.40 * 640 / g["canvas_w"], 0.40, 0.60 * 640 / g["canvas_w"], 0.60]
+        out, where = sr.canvas_box_to_original(canvas, g, shown)
+        assert where == "photo"
+        assert out == pytest.approx([0.40, 0.40, 0.60, 0.60], abs=1e-6)
+
+    def test_a_box_drawn_on_the_panel_lands_on_the_same_object(self, sr, tmp_path):
+        """The panel magnifies a known rectangle, so a box on it maps back through that rectangle."""
+        src = _photo(tmp_path, 640, 480)
+        shown = [(0.40, 0.40, 0.60, 0.60)]
+        g = sr.draw_with_side_inset(src, shown[0], tmp_path / "b.jpg")
+        # the object as the reviewer sees it in the panel: re-derive the panel's own geometry
+        W, H, cw, ch = g["orig_w"], g["orig_h"], g["canvas_w"], g["canvas_h"]
+        cx0, cy0, cx1, cy1 = sr.side_crop_rect(W, H, (0.40 * W, 0.40 * H, 0.60 * W, 0.60 * H))
+        lw = max(2, int(min(W, H) * 0.006))
+        gap = max(4, 2 * lw)
+        pw = cw - W - 2 * gap
+        ph = max(1, round((cy1 - cy0) * (pw / (cx1 - cx0))))
+        ix, iy = W + gap, (ch - ph) // 2
+        # the box's own corners, expressed on the panel
+        corners = []
+        for ox, oy in ((0.40 * W, 0.40 * H), (0.60 * W, 0.60 * H)):
+            corners += [(ix + (ox - cx0) * pw / (cx1 - cx0)) / cw, (iy + (oy - cy0) * ph / (cy1 - cy0)) / ch]
+        out, where = sr.canvas_box_to_original(corners, g, shown)
+
+        assert where == "panel"
+        assert out == pytest.approx([0.40, 0.40, 0.60, 0.60], abs=0.01)
+
+    def test_a_photo_box_dragged_into_the_padding_is_clipped(self, sr, tmp_path):
+        src = _photo(tmp_path, 640, 480)
+        shown = [(0.10, 0.10, 0.90, 0.95)]
+        g = sr.draw_with_side_inset(src, shown[0], tmp_path / "c.jpg")
+        out, where = sr.canvas_box_to_original([0.05, 0.10, 640 / g["canvas_w"] + 0.01, 0.99], g, shown)
+        assert where == "across both"
+        assert out[2] == 1.0 and all(0.0 <= v <= 1.0 for v in out)
+
+
+class TestCornerInset:
+    """The corner framing (#3961): one scale for both axes, and a grey surround.
+
+    It used to cap the magnified crop's width and height to the same target
+    independently, which resized every non-square crop into a square, and to frame
+    the result in red -- around the padded context rather than around the box.
+    """
+
+    @pytest.mark.parametrize(("w", "h"), [(800, 600), (480, 800), (333, 500), (600, 600)])
+    def test_a_frame_filling_crop_is_magnified_at_the_photos_own_aspect(self, sr, tmp_path, w, h):
+        """Box plus context padding reaches every edge, so the crop IS the photo: no re-derivation."""
+        from PIL import Image
+
+        with Image.open(_photo(tmp_path, w, h, f"{w}x{h}.jpg")) as im:
+            crop, _, _ = sr.inset_crop(im.convert("RGB"), (0.03, 0.03, 0.97, 0.97))
+        assert abs(crop.width / crop.height / (w / h) - 1.0) < 0.02, f"{crop.size} is not {w}:{h}"
+
+    def test_a_non_square_crop_is_not_squashed_into_a_square(self, sr, tmp_path):
+        """The bug itself: on a SQUARE photo, only the crop's own shape can make the inset non-square."""
+        from PIL import Image
+
+        with Image.open(_photo(tmp_path, 600, 600, "sq.jpg")) as im:
+            im = im.convert("RGB")
+            wide, _, _ = sr.inset_crop(im, (0.20, 0.47, 0.80, 0.53))  # 10:1 box -> a wide crop
+            tall, _, _ = sr.inset_crop(im, (0.47, 0.20, 0.53, 0.80))  # its transpose
+        assert wide.width > wide.height, f"wide crop rendered {wide.size}"
+        assert tall.height > tall.width, f"tall crop rendered {tall.size}"
+        assert wide.size == (tall.height, tall.width), "transposed boxes should transpose the inset"
+
+    def test_the_inset_fills_its_target_on_the_longer_side_and_never_exceeds_it(self, sr, tmp_path):
+        """The magnification the old 3x floor was meant to give, without the squash paying for it."""
+        from PIL import Image
+
+        with Image.open(_photo(tmp_path, 800, 600)) as im:
+            im = im.convert("RGB")
+            target = int(600 * sr.INSET_FRAC)
+            for box in ((0.10, 0.40, 0.60, 0.52), (0.50, 0.50, 0.52, 0.53), (0.40, 0.05, 0.47, 0.75)):
+                crop, _, _ = sr.inset_crop(im, box)
+                assert max(crop.size) == target, f"{box}: {crop.size} does not reach {target}"
+                assert min(crop.size) <= target, f"{box}: {crop.size} exceeds {target}"
+
+    def test_the_inset_is_framed_in_grey_not_red(self, sr, tmp_path):
+        """A red frame around the padded context reads as the box, which is drawn red too."""
+        from PIL import Image
+
+        box = (0.40, 0.40, 0.60, 0.60)
+        src = _photo(tmp_path, 640, 480)
+        dest = tmp_path / "corner.jpg"
+        sr.draw_with_inset(src, box, dest)
+        with Image.open(dest) as im:
+            assert im.size == (640, 480), "the corner framing leaves the canvas alone"
+            crop, _, _ = sr.inset_crop(im.convert("RGB"), box)
+            inset = [im.getpixel((x, y)) for x in range(640 - crop.width, 640) for y in range(480 - crop.height, 480)]
+            photo_box_edge = [im.getpixel((x, int(0.40 * 480) + 1)) for x in range(640 - crop.width)]
+        red = lambda p: isinstance(p, tuple) and p[0] > 150 and p[1] < 110 and p[2] < 110  # noqa: E731
+        assert sum(map(red, photo_box_edge)) >= 2, "the photo still carries the red box"
+        assert not any(map(red, inset)), "nothing red is drawn in or around the inset"
+
+    def test_the_inset_goes_in_whichever_bottom_corner_is_furthest_from_the_box(self, sr, tmp_path):
+        """So the magnifier never covers the thing it is magnifying."""
+        from PIL import Image
+
+        src = _photo(tmp_path, 640, 480)
+        for box, left in (((0.70, 0.70, 0.90, 0.90), True), ((0.10, 0.70, 0.30, 0.90), False)):
+            dest = tmp_path / f"c{left}.jpg"
+            sr.draw_with_inset(src, box, dest)
+            with Image.open(dest) as im:
+                crop, _, _ = sr.inset_crop(im.convert("RGB"), box)
+                ix = 0 if left else 640 - crop.width
+                # The photo is a flat colour and the inset magnifies more of the same, so the
+                # grey frame is what says which corner it landed in.
+                edge = im.getpixel((ix + 1, 480 - crop.height))
+                far = im.getpixel(((640 - crop.width if left else 0) + 2, 478))
+            assert isinstance(edge, tuple) and all(abs(c - 110) < 45 for c in edge[:3]), (
+                f"{box}: no grey frame in the {'left' if left else 'right'} corner, got {edge}"
+            )
+            assert isinstance(far, tuple) and all(
+                abs(a - b) < 25 for a, b in zip(far[:3], (0, 90, 200), strict=False)
+            ), f"{box}: the other corner should be untouched photo, got {far}"
