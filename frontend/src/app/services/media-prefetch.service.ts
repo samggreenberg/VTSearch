@@ -50,12 +50,16 @@ import { Injectable, OnDestroy } from '@angular/core';
  */
 export const PREFETCH_DEPTH = 2;
 
-/** How many warmed images to retain: the {@link PREFETCH_DEPTH} upcoming items
- *  plus the one on screen, whose bytes must survive a retarget that lands
- *  before the viewer has claimed them. A safety bound, not a cache — the
- *  targets passed to {@link MediaPrefetchService.prefetch} already drop
- *  everything else. */
-export const PREFETCH_CAPACITY = PREFETCH_DEPTH + 1;
+/** How many warmed images to retain: the {@link PREFETCH_DEPTH} upcoming items,
+ *  the one on screen (whose bytes must survive a retarget that lands before the
+ *  viewer has claimed them), and one more.
+ *
+ *  The spare is for a prediction that flip-flops. Under a learned sort every
+ *  vote re-ranks, and measured on a live instance the pick for "next" moved
+ *  back to an item it had just moved off often enough that dropping held bytes
+ *  on every retarget re-downloaded ~1 image in 3. Bytes already paid for are
+ *  kept until something wanted needs the room. */
+export const PREFETCH_CAPACITY = PREFETCH_DEPTH + 2;
 
 interface InFlight {
   controller: AbortController;
@@ -78,6 +82,8 @@ export class MediaPrefetchService implements OnDestroy {
   /** The urls {@link prefetch} was last asked for, in priority order. Fetched
    *  one at a time, see {@link pump}. */
   private targets: string[] = [];
+  /** {@link targets} plus the caller's `keep`: what eviction spares first. */
+  private wanted = new Set<string>();
 
   /** True when this environment can hold bytes for us (jsdom, by default,
    *  cannot). Read once per call rather than cached, so a test that stubs
@@ -93,10 +99,11 @@ export class MediaPrefetchService implements OnDestroy {
    * This is what a review flow calls whenever its *prediction* of the next
    * items changes — a new selection, but equally a learned re-sort landing, a
    * vote reconciling, or the select mode or cut moving while the same item
-   * stays on screen. A stale prediction is dropped rather than left to finish:
-   * its fetch is aborted, because on an ~11 Mbps tunnel it would otherwise
-   * compete for bandwidth with the image the reviewer is about to need, and its
-   * held bytes are revoked.
+   * stays on screen. A stale prediction's *fetch* is aborted rather than left
+   * to finish, because on an ~11 Mbps tunnel it would otherwise compete for
+   * bandwidth with the image the reviewer is about to need. Its *held* bytes
+   * are kept, first in line for eviction ({@link PREFETCH_CAPACITY}): they cost
+   * nothing more, and a re-ranking often wants them back.
    *
    * `keep` is the item on screen. Its bytes may still be held or in flight when
    * this runs — the selection effect that calls this and the viewer's effect
@@ -114,12 +121,9 @@ export class MediaPrefetchService implements OnDestroy {
       entry.controller.abort();
       this.inFlight.delete(url);
     }
-    for (const [url, objectUrl] of this.ready) {
-      if (wanted.has(url)) continue;
-      this.ready.delete(url);
-      this.revoke(objectUrl);
-    }
+    this.wanted = wanted;
     this.targets = targets.filter(Boolean);
+    this.evict();
     this.pump();
   }
 
@@ -222,6 +226,7 @@ export class MediaPrefetchService implements OnDestroy {
    *  caller was last handed. For teardown. */
   clear(): void {
     this.targets = [];
+    this.wanted = new Set();
     for (const entry of this.inFlight.values()) {
       entry.claimed = false;
       entry.controller.abort();
@@ -251,12 +256,21 @@ export class MediaPrefetchService implements OnDestroy {
     this.lastConsumed = objectUrl;
   }
 
+  /** Trim {@link ready} to {@link PREFETCH_CAPACITY}, oldest first, sparing
+   *  what the last {@link prefetch} wanted for as long as anything else can go. */
   private evict(): void {
     while (this.ready.size > PREFETCH_CAPACITY) {
-      const oldest = this.ready.keys().next();
-      if (oldest.done) return;
-      const objectUrl = this.ready.get(oldest.value);
-      this.ready.delete(oldest.value);
+      let victim: string | undefined;
+      for (const url of this.ready.keys()) {
+        if (!this.wanted.has(url)) {
+          victim = url;
+          break;
+        }
+      }
+      victim ??= this.ready.keys().next().value;
+      if (victim === undefined) return;
+      const objectUrl = this.ready.get(victim);
+      this.ready.delete(victim);
       if (objectUrl) this.revoke(objectUrl);
     }
   }

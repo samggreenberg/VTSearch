@@ -303,7 +303,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
         ),
       );
     });
-    this.destroyRef.onDestroy(() => this.mediaPrefetch.prefetch([]));
+    this.destroyRef.onDestroy(() => this.mediaPrefetch.clear());
   }
 
   ngOnInit(): void {

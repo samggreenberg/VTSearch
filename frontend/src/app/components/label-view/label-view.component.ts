@@ -293,7 +293,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       const upcoming = this.sortRunner.peekUpcomingMedia(id, PREFETCH_DEPTH);
       untracked(() => this.warmUpcomingImages(id, upcoming));
     });
-    this.destroyRef.onDestroy(() => this.mediaPrefetch.prefetch([]));
+    this.destroyRef.onDestroy(() => this.mediaPrefetch.clear());
 
     effect(() => {
       const settings = this.settingsState.settingsSignal();

@@ -191,13 +191,28 @@ describe('MediaPrefetchService', () => {
       expect(pending.has(B)).toBe(true);
     });
 
-    it('revokes held bytes that are no longer predicted', async () => {
+    it('keeps held bytes a retarget drops, and hands them out if wanted back', async () => {
       svc.prefetch([A]);
       pending.get(A)?.resolve(true);
       await flush();
+      // A re-rank moves the pick off A, then back onto it: the bytes are
+      // already paid for, so no second download.
       svc.prefetch([B]);
-      expect(revoked).toContain(created[0]);
-      expect(svc.resolve(A)).toBe(A);
+      expect(revoked).not.toContain(created[0]);
+      svc.prefetch([A]);
+      expect(svc.resolve(A)).toBe(created[0]);
+    });
+
+    it('evicts what the prediction no longer wants before what it does', async () => {
+      const urls = Array.from({ length: PREFETCH_CAPACITY }, (_, i) => `/api/medias/${i + 20}/image`);
+      for (const url of urls) await warmed(url);
+      // Everything held is stale except the oldest entry, which is wanted again.
+      svc.prefetch([urls[0], C]);
+      pending.get(C)?.resolve(true);
+      await flush();
+      expect(svc.resolve(urls[0])).toBe(created[0]);
+      expect(revoked).toContain(created[1]);
+      expect(svc.resolve(C)).toBe(created[PREFETCH_CAPACITY]);
     });
 
     it('keeps the on-screen item held until the viewer takes it', async () => {
@@ -226,7 +241,7 @@ describe('MediaPrefetchService', () => {
       expect(pending.size).toBe(0);
     });
 
-    it('an empty prediction drops everything', async () => {
+    it('an empty prediction aborts what is in flight', async () => {
       svc.prefetch([A, B]);
       pending.get(A)?.resolve(true);
       await flush();
@@ -234,7 +249,6 @@ describe('MediaPrefetchService', () => {
       expect(pending.has(B)).toBe(true);
       svc.prefetch([]);
       expect(pending.get(B)?.aborted).toBe(true);
-      expect(revoked).toContain(created[0]);
     });
   });
 
