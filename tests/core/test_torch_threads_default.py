@@ -103,6 +103,7 @@ class TestSuiteRunsAtTheLibraryDefault:
                     and call.func.attr == "setdefault"
                     and call.args
                     and isinstance(call.args[0], ast.Constant)
+                    and isinstance(call.args[0].value, str)
                 ):
                     pinned.add(call.args[0].value)
         missing = set(self._PINNED) - pinned
