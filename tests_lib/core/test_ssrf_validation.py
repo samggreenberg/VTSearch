@@ -737,6 +737,25 @@ class TestValidateBrowserUrl:
         with pytest.raises(ValueError, match="http or https"):
             validate_browser_url(url)
 
+    @pytest.mark.parametrize(
+        "url", ["localhost:8000/viewer", "127.0.0.1:9000/r?ids=a", "localhost/viewer", "example.com/no-scheme"]
+    )
+    def test_missing_scheme_suggests_http(self, url):
+        """A bare ``host:port`` must not be reported as a scheme named after the host (#4078)."""
+        from vtscore.security.url_validation import validate_browser_url
+
+        with pytest.raises(ValueError, match="has none") as exc:
+            validate_browser_url(url)
+        assert f"'http://{url}'" in str(exc.value)
+
+    @pytest.mark.parametrize("url", ["javascript:alert(1)", "data:text/html,x", "mailto:a@b.c", "ftp://example.com/x"])
+    def test_real_schemes_are_not_mistaken_for_a_missing_one(self, url):
+        from vtscore.security.url_validation import validate_browser_url
+
+        with pytest.raises(ValueError, match="got: ") as exc:
+            validate_browser_url(url)
+        assert "Did you mean" not in str(exc.value)
+
     def test_rejects_missing_hostname(self):
         from vtscore.security.url_validation import validate_browser_url
 
