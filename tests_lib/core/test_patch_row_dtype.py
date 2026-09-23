@@ -12,6 +12,7 @@ shipped value, and that every site actually reads the name.
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any
 
 import numpy as np
 import pytest
@@ -50,7 +51,7 @@ def test_every_site_follows_the_name(monkeypatch, dtype):
     monkeypatch.setattr(matrix, "PATCH_ROW_DTYPE", dtype)
 
     # 1. ingest storage
-    media = {"id": 1}
+    media: dict[str, Any] = {"id": 1}
     raw = np.full((GRID, GRID, DIM), 0.1, dtype=np.float32)
     _attach_patch_grid_to_media(media, SimpleNamespace(patch_grid=raw))
     assert media["patch_grid"].dtype == dtype
