@@ -3,6 +3,11 @@
 #
 #   srun --ntasks=1 --partition=cpu --mem=2G --time=01:00:00 \
 #       bash scripts/grid/prune-worktrees.sh [--apply] [--keep NAME_OR_GLOB ...] [--keep-file FILE]
+#       bash scripts/grid/prune-worktrees.sh --apply --only /expscratch/$USER/worktrees/vts-<issue>
+#
+# --only NAME_OR_PATH (repeatable) judges just those worktrees and skips the 24 h
+# check: it is how you remove YOUR worktree right after its PR merges, when the
+# recency rule would otherwise keep it. Every other check still applies.
 #
 # Run it through srun: it walks every worktree (du, find) and `git worktree
 # remove` deletes many files, which is login-node load (see "Worktrees on the
@@ -28,13 +33,15 @@
 set -uo pipefail
 
 APPLY=0
+ONLY=()
 KEEPS=(vts-annq-3720)   # the vg_scale peer's bank_verdicts.py / retire_finished.py hard-code this path
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --apply) APPLY=1 ;;
         --keep) KEEPS+=("$2"); shift ;;
+        --only) ONLY+=("$(basename "$2")"); shift ;;
         --keep-file) while IFS= read -r l; do [[ -n "$l" && "$l" != \#* ]] && KEEPS+=("$l"); done <"$2"; shift ;;
-        -h|--help) sed -n '2,28p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,33p' "$0"; exit 0 ;;
         *) echo "unknown argument: $1" >&2; exit 2 ;;
     esac
     shift
@@ -82,6 +89,10 @@ keep() { printf 'KEEP    %-28s %s\n' "$1" "$2"; kept=$((kept + 1)); }
 while IFS=$'\t' read -r wt br locked prunable; do
     name="$(basename "$wt")"
     real="$(readlink -f "$wt" 2>/dev/null || echo "$wt")"
+    if [[ ${#ONLY[@]} -gt 0 ]]; then
+        hit=0; for o in "${ONLY[@]}"; do [[ "$name" == "$o" ]] && hit=1; done
+        [[ $hit == 1 ]] || continue
+    fi
     [[ "$real" == "$SHARED" ]] && { keep "$name" "the shared checkout (common .git)"; continue; }
     [[ "$real" == "$DEPLOY" ]] && { keep "$name" "the deploy clone"; continue; }
     [[ -n "$prunable" ]] && { keep "$name" "directory is gone; 'git worktree prune' drops the record"; continue; }
@@ -103,7 +114,7 @@ while IFS=$'\t' read -r wt br locked prunable; do
     [[ "$dirty" -gt 0 ]] && { keep "$name" "DIRTY: $dirty modified/staged tracked file(s)"; continue; }
     untracked="$(git -C "$real" ls-files --others --exclude-standard 2>/dev/null | wc -l)"
     [[ "$untracked" -gt 0 ]] && { keep "$name" "$untracked untracked file(s); move them out first"; continue; }
-    if [[ -n "$(find "$real" -path "$real/.git" -prune -o -type f -mmin "-$RECENT_MIN" -print -quit 2>/dev/null)" ]]; then
+    if [[ ${#ONLY[@]} -eq 0 && -n "$(find "$real" -path "$real/.git" -prune -o -type f -mmin "-$RECENT_MIN" -print -quit 2>/dev/null)" ]]; then
         keep "$name" "touched in the last $((RECENT_MIN / 60)) h"; continue
     fi
 
