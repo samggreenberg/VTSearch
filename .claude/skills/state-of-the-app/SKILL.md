@@ -25,7 +25,11 @@ same edit.
     text sort.
 - **Shipped defaults** for everything else: the text opening (refused
   otherwise), the fused threshold, and no variant arms.
-- **Seeds:** start with 1 seed to settle the presentation, then add seeds.
+- **Scale up in one step (owner, 2026-09-23):** settle the presentation on a
+  **small set of classes** at 1 seed, which is effectively an elaborate smoke
+  test. Then widen the **classes and the seeds together**. The first round used
+  8 classes: `airplane`, `dining table`, `book`, `bag or luggage`, `banana`,
+  `traffic light`, `person` and `dog`, which is 23 cells and 46 runs.
 - **Every curve runs left to right:** the **text-only score at click 0**, then
   the clicks, then the **full-label ceiling** (`skyline_train_full`) on the
   right. The region path's ceiling is supervised with each positive's
@@ -43,7 +47,8 @@ same edit.
 ```bash
 cd scripts/experiments/state_of_app
 srun -p cpu --mem=8G -c 2 -t 60 bash launch.sh prepare    # its checks are too heavy for the login node
-srun -p cpu --mem=8G -c 2 -t 60 bash launch.sh cells      # the array; SOTA_SEEDS=N for more seeds
+srun -p cpu --mem=8G -c 2 -t 60 bash launch.sh subset "airplane,dining table,book"   # a few classes, every band, both paths
+srun -p cpu --mem=8G -c 2 -t 60 bash launch.sh cells      # the full array; SOTA_SEEDS=N for more seeds
 bash launch.sh status
 srun -p cpu --mem=24G -c 4 -t 4:00:00 bash analyze.sh     # after the array finishes
 ```

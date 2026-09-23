@@ -46,4 +46,32 @@ export CALIB_JOB_NAME="${CALIB_JOB_NAME:-sota-$SOTA_DATE}"
 export CALIB_MEM="${CALIB_MEM:-12G}"
 export CALIB_TIME="${CALIB_TIME:-6:00:00}"
 
+# `subset "<class>,<class>,..."`: run only those classes (every band, both
+# paths) out of an already-prepared grid. Indices are the grid's own, so the
+# cells land exactly where the full run would put them and a later full run
+# can skip them. The owner's rule: settle the presentation on a few classes,
+# then widen classes and seeds together.
+if [[ "${1:-}" == "subset" ]]; then
+  CLASSES="${2:?usage: launch.sh subset \"airplane,dining table,...\"}"
+  IDX=$(python3 - "$CALIB_EXP/results/prepare_info.json" "$CLASSES" "$CALIB_N_SEEDS" <<'PYIDX'
+import json, sys
+info = json.load(open(sys.argv[1]))["datasets"]["coco_quarry"]
+keep = {c.strip() for c in sys.argv[2].split(",") if c.strip()}
+n_seeds = int(sys.argv[3])
+# array_cells order at CALIB_CELL_ORDER=seed: seed-major, then embedder, then category.
+one, per_seed = [], 0
+for emb in ("siglip", "siglip+dinov3_patch"):
+    cats = info[emb]["selected_categories"]
+    unknown = keep - {c.split("@")[0] for c in cats}
+    if unknown:
+        raise SystemExit(f"not in the grid: {sorted(unknown)}")
+    one += [per_seed + i for i, c in enumerate(cats) if c.split("@")[0] in keep]
+    per_seed += len(cats)
+print(",".join(str(s * per_seed + i) for s in range(n_seeds) for i in one))
+PYIDX
+  )
+  echo "$IDX" > "$CALIB_EXP/subset-indices.txt"
+  exec bash "$CALIB/launch_bands.sh" redo "$IDX"
+fi
+
 exec bash "$CALIB/launch_bands.sh" "$@"
