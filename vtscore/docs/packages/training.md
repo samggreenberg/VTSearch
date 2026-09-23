@@ -280,7 +280,10 @@ about the matches (F1 0.17 -> 0.39) and is 4x more stable under a bootstrap
 resample. It is worse on the Inclusion-0 rate cost (+0.053). It also fails on an
 unseparated majority-class query, a limitation that is documented and pinned by
 `tests_lib/sorting/test_text_sort_threshold.py`. The study is issue #3826
-(its report is `2026-09-22-text-cut-3826` under `docs/experiments/`).
+(its report is `2026-09-22-text-cut-3826` under `docs/experiments/`). The rule is off by default because
+the trajectory A/B (`docs/experiments/2026-09-23-text-cut-ab-3826/REPORT.md`) found that it makes
+Autopilot's opening worse: the Bad phase votes at this line (Δcost +0.016 ± 0.005). A display-only
+version is #4136.
 
 ### `calculate_gmm_threshold(scores)`
 

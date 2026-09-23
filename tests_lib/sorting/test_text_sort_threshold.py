@@ -76,24 +76,20 @@ class TestDefaultRuleIsTheShippedLine:
 
 
 class TestTheFlagIsReadFromTheEnvironment:
-    """``VTSEARCH_TEXT_SORT_CUT`` selects the rule; a typo degrades to the default."""
+    """``VTSEARCH_TEXT_SORT_CUT`` selects the rule; a typo or no value degrades to the default.
 
-    def _reload_rule(self, monkeypatch, value):
-        import importlib
+    Tested through the resolver rather than by reloading the module: a reload
+    re-creates every module-level object under the other tests in the worker,
+    and the package re-export identity test is the first to notice.
+    """
 
-        monkeypatch.setenv("VTSEARCH_TEXT_SORT_CUT", value)
-        mod = importlib.reload(G)
-        try:
-            return mod.TEXT_SORT_CUT_RULE
-        finally:
-            monkeypatch.delenv("VTSEARCH_TEXT_SORT_CUT")
-            importlib.reload(G)
+    @pytest.mark.parametrize(("value", "rule"), [(" Guarded_Tail ", "guarded_tail"), ("gmm_midpoint", "gmm_midpoint")])
+    def test_known_values(self, value, rule):
+        assert G.resolve_text_sort_cut_rule(value) == rule
 
-    def test_guarded_tail_is_selectable(self, monkeypatch):
-        assert self._reload_rule(monkeypatch, " Guarded_Tail ") == "guarded_tail"
-
-    def test_a_typo_falls_back_to_the_default(self, monkeypatch):
-        assert self._reload_rule(monkeypatch, "guarded-tail") == "gmm_midpoint"
+    @pytest.mark.parametrize("value", [None, "", "guarded-tail", "tail"])
+    def test_unknown_or_unset_falls_back_to_the_default(self, value):
+        assert G.resolve_text_sort_cut_rule(value) == "gmm_midpoint"
 
 
 class TestTheTailBranch:
@@ -102,6 +98,7 @@ class TestTheTailBranch:
     def test_a_shoulder_takes_the_tail_branch(self):
         scores, _ = _shoulder()
         fit = fit_score_gmm(G.gmm_fit_array(scores.tolist()))
+        assert fit is not None
         assert ashman_d(fit) < TEXT_SORT_SEPARATION_D
         _cut, branch = guarded_text_sort_threshold(scores.tolist())
         assert branch == "tail"
@@ -156,8 +153,11 @@ class TestTheMixtureBranch:
         scores, _ = _separated()
         arr = G.gmm_fit_array(scores.tolist())
         shipped = fit_score_gmm(arr)
+        assert shipped is not None
+        converged = converge_score_gmm(arr, shipped)
+        assert converged is not None
         cut, _ = guarded_text_sort_threshold(scores.tolist())
-        assert cut == converge_score_gmm(arr, shipped).midpoint()
+        assert cut == converged.midpoint()
 
     def test_convergence_removes_the_start_from_the_answer(self):
         """The reason the separated branch converges: from two different starts the
@@ -170,9 +170,11 @@ class TestTheMixtureBranch:
             k / xs.size, float(xs[:k].mean()), float(xs[:k].var()),
             1 - k / xs.size, float(xs[k:].mean()), float(xs[k:].var()),
         )  # fmt: skip
-        a = converge_score_gmm(arr, G._two_means_init(xs)).midpoint()
-        b = converge_score_gmm(arr, other).midpoint()
-        assert a == pytest.approx(b, abs=1e-6)
+        start = G._two_means_init(xs)
+        assert start is not None
+        a, b = converge_score_gmm(arr, start), converge_score_gmm(arr, other)
+        assert a is not None and b is not None
+        assert a.midpoint() == pytest.approx(b.midpoint(), abs=1e-6)
 
 
 class TestKnownFailureMajorityClass:

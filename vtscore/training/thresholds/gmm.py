@@ -1222,15 +1222,24 @@ def calculate_gmm_threshold(scores: list[float]) -> float:
 #: Which one :func:`text_sort_threshold` uses is :data:`TEXT_SORT_CUT_RULE`.
 TEXT_SORT_CUT_RULES = ("gmm_midpoint", "guarded_tail")
 
+
 #: The rule every cosine/text sort draws its line with, and Autopilot's opening
 #: reads, from the ``VTSEARCH_TEXT_SORT_CUT`` environment variable.  **Off by
-#: default**: #3826 chose the guarded rule, and it waits on the trajectory A/B
-#: of its effect on Autopilot's opening before becoming the default.  An
+#: default**: #3826 chose the guarded rule, and its trajectory A/B failed the
+#: pre-registered ship rule.  Autopilot's Bad phase votes near this line, and at
+#: the guarded line it samples the top of the ranking, so the first detectors see
+#: only near-miss negatives (Δcost +0.016 ± 0.005 over 100 clicks, +0.071 at 6-20
+#: votes; ``docs/experiments/2026-09-23-text-cut-ab-3826/REPORT.md``).  A
+#: display-only version, with the midpoint kept as the acquisition cut, is #4136.  An
 #: unrecognised value falls back to the default instead of raising, so a typo
 #: cannot take the sort route down.
-TEXT_SORT_CUT_RULE = os.environ.get("VTSEARCH_TEXT_SORT_CUT", "gmm_midpoint").strip().lower()
-if TEXT_SORT_CUT_RULE not in TEXT_SORT_CUT_RULES:
-    TEXT_SORT_CUT_RULE = "gmm_midpoint"
+def resolve_text_sort_cut_rule(value: str | None) -> str:
+    """Normalise a ``VTSEARCH_TEXT_SORT_CUT`` value to a rule name; unknown or unset -> the default."""
+    rule = (value or "").strip().lower()
+    return rule if rule in TEXT_SORT_CUT_RULES else "gmm_midpoint"
+
+
+TEXT_SORT_CUT_RULE = resolve_text_sort_cut_rule(os.environ.get("VTSEARCH_TEXT_SORT_CUT"))
 
 #: Ashman's D at or above which the two fitted components count as separated
 #: and the mixture's midpoint is kept.  2 is the textbook bimodality criterion
