@@ -629,6 +629,40 @@ def must_contain(knob, var, shipped, effective):
 
 
 pinned("head", "CALIB_HEAD", PRODUCTION_HEAD)
+
+# The heads' own fit knobs are app env vars, not CALIB_* ones (#3197), so a
+# launcher that exports them changes the detector without touching any knob
+# above.  Their shipped values are the literal defaults in `config/runtime.py`,
+# read from its source because `vtscore.config` has already resolved them from
+# THIS run's environment - comparing the env var against the imported constant
+# would compare the pin against itself.
+import inspect  # noqa: E402
+import re  # noqa: E402
+
+from vtscore.config import runtime as _RT  # noqa: E402
+
+_RT_SRC = inspect.getsource(_RT)
+
+
+def pinned_app_env(knob, var):
+    v = env(var)
+    if v is None:
+        return
+    m = re.search(r'os\.environ\.get\(\s*"%s"\s*,\s*"([^"]*)"' % re.escape(var), _RT_SRC)
+    if m is None:
+        rows.append((knob, v, "<shipped default not found in config/runtime.py>"))
+        return
+    try:
+        same = float(v) == float(m.group(1))
+    except ValueError:
+        same = v == m.group(1)
+    if not same:
+        rows.append((knob, v, m.group(1)))
+
+
+pinned_app_env("svm_head_c", "VTSEARCH_SVM_HEAD_C")
+pinned_app_env("train_epochs", "VTSEARCH_TRAIN_EPOCHS")
+pinned_app_env("train_patience", "VTSEARCH_TRAIN_PATIENCE")
 pinned("acq_offset", "CALIB_ACQ_INCLUSION_OFFSET", T.ACQUISITION_INCLUSION_OFFSET)
 pinned("calibrate_count", "CALIB_CALIBRATE_COUNT", 2)
 # The LIVE cut rule (#3557) - unset resolves to FOLD_ANCHOR_CUT_RULE inside the

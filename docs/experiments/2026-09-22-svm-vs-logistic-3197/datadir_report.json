@@ -1,0 +1,44 @@
+{
+  "caltech101_m__siglip.pkl": {
+    "action": "linked",
+    "n_medias": 838,
+    "pile_norm_min": 1.0,
+    "pile_norm_median": 1.0,
+    "pile_norm_max": 1.0
+  },
+  "caltech101_m__siglip2_l.pkl": {
+    "action": "linked",
+    "n_medias": 838,
+    "pile_norm_min": 1.0,
+    "pile_norm_median": 1.0,
+    "pile_norm_max": 1.0
+  },
+  "coco_val__siglip.pkl": {
+    "action": "normalised-copy",
+    "n_medias": 4952,
+    "pile_norm_min": 11.939,
+    "pile_norm_median": 14.948,
+    "pile_norm_max": 18.625
+  },
+  "coco_val__siglip2_l.pkl": {
+    "action": "linked",
+    "n_medias": 4952,
+    "pile_norm_min": 1.0,
+    "pile_norm_median": 1.0,
+    "pile_norm_max": 1.0
+  },
+  "visual_genome_m__siglip.pkl": {
+    "action": "linked",
+    "n_medias": 4193,
+    "pile_norm_min": 1.0,
+    "pile_norm_median": 1.0,
+    "pile_norm_max": 1.0
+  },
+  "visual_genome_m__siglip2_l.pkl": {
+    "action": "linked",
+    "n_medias": 4193,
+    "pile_norm_min": 1.0,
+    "pile_norm_median": 1.0,
+    "pile_norm_max": 1.0
+  }
+}

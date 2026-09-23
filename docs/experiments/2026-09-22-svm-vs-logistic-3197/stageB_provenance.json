@@ -1,0 +1,62 @@
+{
+  "svm": {
+    "n_files": 480,
+    "n_read": 480,
+    "unreadable": 0,
+    "zero_byte": 0,
+    "no_positive_found": 0,
+    "no_base_rows": 0,
+    "n_rows_all": 2328729,
+    "n_rows": 70621
+  },
+  "linear": {
+    "n_files": 480,
+    "n_read": 480,
+    "unreadable": 0,
+    "zero_byte": 0,
+    "no_positive_found": 0,
+    "no_base_rows": 0,
+    "n_rows_all": 2327934,
+    "n_rows": 70621
+  },
+  "mlp": {
+    "n_files": 480,
+    "n_read": 480,
+    "unreadable": 0,
+    "zero_byte": 0,
+    "no_positive_found": 0,
+    "no_base_rows": 0,
+    "n_rows_all": 2327926,
+    "n_rows": 70621
+  },
+  "linconv": {
+    "n_files": 480,
+    "n_read": 480,
+    "unreadable": 0,
+    "zero_byte": 0,
+    "no_positive_found": 0,
+    "no_base_rows": 0,
+    "n_rows_all": 2328310,
+    "n_rows": 70621
+  },
+  "svmc01": {
+    "n_files": 480,
+    "n_read": 480,
+    "unreadable": 0,
+    "zero_byte": 0,
+    "no_positive_found": 0,
+    "no_base_rows": 0,
+    "n_rows_all": 2329043,
+    "n_rows": 70621
+  },
+  "svmc10": {
+    "n_files": 480,
+    "n_read": 480,
+    "unreadable": 0,
+    "zero_byte": 0,
+    "no_positive_found": 0,
+    "no_base_rows": 0,
+    "n_rows_all": 2328563,
+    "n_rows": 70621
+  }
+}
