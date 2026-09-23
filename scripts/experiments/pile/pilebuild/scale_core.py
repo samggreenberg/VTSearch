@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 from collections import defaultdict
+from collections.abc import Mapping, Sequence
 
 import pile_config as pc
 
@@ -33,7 +34,7 @@ SCATTERED = "scattered"
 OVERSIZE = "oversize"
 
 
-def band_for(boxes: list[list[float]], W: int, H: int) -> str:
+def band_for(boxes: Sequence[Sequence[float]], W: int, H: int) -> str:
     """The band one class's boxes put an image in, or why they put it in none.
 
     Returns a key of :data:`pile_config.BOX_BANDS`, or :data:`SCATTERED` /
@@ -63,12 +64,19 @@ def band_for(boxes: list[list[float]], W: int, H: int) -> str:
     return OVERSIZE
 
 
+def largest_box(boxes: list[list[float]]) -> list[float]:
+    """The largest of *boxes* by area; ties go to the top-left, never to annotation order."""
+    return max(boxes, key=lambda b: ((b[2] - b[0]) * (b[3] - b[1]), -b[1], -b[0], -b[3], -b[2]))
+
+
 def band_candidates(
-    labels: dict[int, dict[str, list[list[float]]]],
+    labels: Mapping[int, Mapping[str, Sequence[Sequence[float]]]],
     box_dims: dict[int, tuple[int, int]],
     unbanded: set[tuple[int, str]],
     classes: tuple[str, ...] | None = None,
     designated: dict[tuple[int, str], list[list[float]]] | None = None,
+    excluded: set[tuple[int, str]] | None = None,
+    largest: bool = False,
 ) -> tuple[dict[str, dict[str, list[int]]], dict[tuple[int, str], list[list[float]]], list[int]]:
     """Sort every image into ``(class, band)`` supply, or into the clean pool.
 
@@ -90,6 +98,16 @@ def band_candidates(
     rather than by a second implementation in the slate builder that would be
     free to drift from it (#3588). The default keeps every existing caller
     byte-identical.
+
+    *excluded* is ``(image, class)`` pairs that may never be a positive, such as
+    a COCO box :data:`pile_config.SCALE_LUMP_FILTER` found drawn round a pile
+    (#3985). The class stays in *labels*, so the image is not a negative for it
+    either, and it cannot join ``clean`` because it holds a class.
+
+    *largest* bands each pair on its largest instance and records ONLY that box
+    in ``boxes_for``, which is what the media's regions -- and so the simulated
+    drag -- are built from (#4096). A single box cannot be scattered, so only an
+    oversize one still misses every band. A reviewer's designation still wins.
     """
     classes = tuple(classes) if classes is not None else pc.SCALE_CLASSES
     supply: dict[str, dict[str, list[int]]] = {c: {b: [] for b in pc.BOX_BANDS} for c in classes}
@@ -104,16 +122,20 @@ def band_candidates(
                 clean.append(iid)
             continue
         for name, bs in by_name.items():
+            if excluded and (iid, name) in excluded:
+                continue
             # The band is a claim about the object this cell is about, so a
             # reviewer's designation decides it and the other instances do not
             # drag it (#3726). Without a designation this is exactly the old
             # behaviour: the union over everything the class has here.
             picked = (designated or {}).get((iid, name))
+            if picked is None and largest:
+                picked = [largest_box(bs)]
             band = band_for(picked or bs, W, H)
             if band not in pc.BOX_BANDS:  # scattered, or bigger than a region
                 continue
             supply[name][band].append(iid)
-            boxes_for[(iid, pc.scale_cell(name, band))] = bs
+            boxes_for[(iid, pc.scale_cell(name, band))] = picked if largest else bs
     return supply, boxes_for, clean
 
 
@@ -151,6 +173,8 @@ def designate_cells(
         for band in pc.BOX_BANDS:
             pool = sorted(supply[c][band])
             cell = pc.scale_cell(c, band)
+            if cell in pc.SCALE_DROPPED_CELLS:
+                continue
             if len(pool) < pc.SCALE_N_POS:
                 # Say so rather than quietly building a smaller cell: unequal
                 # prevalence between bands is the defect this construction
@@ -402,16 +426,6 @@ def scale_media(
     if vw <= 0 or vh <= 0:
         return None
 
-    # Normalised region boxes are resolution-independent, so they must be
-    # divided by the size of the image the coordinates came from -- which is
-    # the COCO original for a repaired image, not the VG copy carrying the
-    # pixels.
-    W, H = box_dims
-    regions = [
-        {"box": [b[0] / W, b[1] / H, b[2] / W, b[3] / H], "label": cell}
-        for cell in cats
-        for b in boxes_for.get((iid, cell), [])
-    ]
     return {
         "id": iid,
         "media_type": "image",
@@ -423,6 +437,61 @@ def scale_media(
         "media_bytes": data,
         "media_string": None,
         "filename": filename,
+        **scale_label_fields(
+            iid=iid,
+            box_dims=box_dims,
+            cats=cats,
+            boxes_for=boxes_for,
+            cells=cells,
+            neg_set=neg_set,
+            labels=labels,
+            coco_scored=coco_scored,
+            exhaustive=exhaustive,
+            reviewed_absent=reviewed_absent,
+            reviewed_present=reviewed_present,
+        ),
+        "origin": {"importer": importer, "params": {"embedder": embedder_name, "labels": "coco"}},
+        "origin_name": origin_name,
+    }
+
+
+#: The fields of a scale media that come from the LABELS rather than the pixels.
+#: Everything else in the dict is fixed once the image is embedded.
+LABEL_FIELDS = ("category", "categories", "evaluable_categories", "labels_exhaustive", "coco_scored", "regions")
+
+
+def scale_label_fields(
+    *,
+    iid: int,
+    box_dims: tuple[int, int],
+    cats: list[str],
+    boxes_for: dict[tuple[int, str], list[list[float]]],
+    cells: list[str],
+    neg_set: set[int],
+    labels: dict[int, dict[str, list[list[float]]]],
+    coco_scored: set[int],
+    exhaustive: set[int],
+    reviewed_absent: set[tuple[int, str]],
+    reviewed_present: set[tuple[int, str]],
+) -> dict:
+    """The :data:`LABEL_FIELDS` of one scale media -- :func:`scale_media` minus the pixels.
+
+    Split out so a cell whose LABELS moved can be relabelled in place without
+    re-embedding (`build_pile.py --relabel`, #4091), through the very function
+    a build uses: a relabel that computed these a second way would be free to
+    drift from a rebuild, which is the one thing it must never do.
+    """
+    # Normalised region boxes are resolution-independent, so they must be
+    # divided by the size of the image the coordinates came from -- which is
+    # the COCO original for a repaired image, not the VG copy carrying the
+    # pixels.
+    W, H = box_dims
+    regions = [
+        {"box": [b[0] / W, b[1] / H, b[2] / W, b[3] / H], "label": cell}
+        for cell in cats
+        for b in boxes_for.get((iid, cell), [])
+    ]
+    return {
         "category": cats[0] if cats else "",
         "categories": cats,
         # A designated cell membership, not a closed world: a positive is
@@ -441,6 +510,4 @@ def scale_media(
         # is what makes a negative provable rather than merely reviewed.
         "coco_scored": iid in coco_scored,
         "regions": regions,
-        "origin": {"importer": importer, "params": {"embedder": embedder_name, "labels": "coco"}},
-        "origin_name": origin_name,
     }

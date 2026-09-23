@@ -1,0 +1,89 @@
+{
+ "classes": [
+  "potted plant",
+  "vase"
+ ],
+ "types": [
+  {
+   "lvis_type": "vase",
+   "n": 3644,
+   "by_class": {
+    "vase": 3632,
+    "potted plant": 12
+   },
+   "minority": 12
+  },
+  {
+   "lvis_type": "flower_arrangement",
+   "n": 1110,
+   "by_class": {
+    "potted plant": 1095,
+    "vase": 15
+   },
+   "minority": 15
+  },
+  {
+   "lvis_type": "flowerpot",
+   "n": 823,
+   "by_class": {
+    "potted plant": 505,
+    "vase": 318
+   },
+   "minority": 318
+  },
+  {
+   "lvis_type": "pottery",
+   "n": 63,
+   "by_class": {
+    "vase": 61,
+    "potted plant": 2
+   },
+   "minority": 2
+  },
+  {
+   "lvis_type": "pitcher_(vessel_for_liquid)",
+   "n": 55,
+   "by_class": {
+    "vase": 55
+   },
+   "minority": 0
+  },
+  {
+   "lvis_type": "bottle",
+   "n": 36,
+   "by_class": {
+    "vase": 35,
+    "potted plant": 1
+   },
+   "minority": 1
+  },
+  {
+   "lvis_type": "jar",
+   "n": 26,
+   "by_class": {
+    "vase": 25,
+    "potted plant": 1
+   },
+   "minority": 1
+  },
+  {
+   "lvis_type": "candle_holder",
+   "n": 21,
+   "by_class": {
+    "vase": 19,
+    "potted plant": 2
+   },
+   "minority": 2
+  },
+  {
+   "lvis_type": "Christmas_tree",
+   "n": 20,
+   "by_class": {
+    "potted plant": 20
+   },
+   "minority": 0
+  }
+ ],
+ "minority": 351,
+ "total": 5798
+}

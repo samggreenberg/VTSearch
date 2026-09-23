@@ -43,14 +43,35 @@ instance than the frame's main one 8.3% of the time (#3924, #3925). There is no
 cheaper read available either — every one of VG's 2,516,939 objects carries a
 `names` list of length one (#3618).
 
-**What the switch does not buy is difficulty.** Supply is not hardness, and
-`anchor_to_coco`'s claim that dropping VG's non-COCO half loses "VG's non-COCO
-diversity for nothing" is still unmeasured. It is the one live argument for VG
-and it is cheap to settle — see the first item below.
+**What the switch does not buy is difficulty — and it does not cost any
+either.** Supply is not hardness, and `anchor_to_coco` (retired with VG) claimed
+that dropping VG's non-COCO half loses "VG's non-COCO diversity for nothing".
+#3997 measured it: off-COCO is differently distributed (AUC 0.53–0.54 matched)
+but **not harder** on the shipped head, so there is no difficulty argument for
+keeping VG. See the first item below.
 
 ## Open work
 
-**State, 2026-09-19.** The build is finished: `coco_quarry` and `coco_quarry_full` are built and verified, the export layer is in, and the VG machinery is retired. What is left is three things — the band re-validation, the `truck`/`car` ruling, and the studies the set exists to support. Widening *C* landed 2026-09-20 (#4056) and is marked DONE below. Items below marked **DONE** keep their original argument, because a plan whose history is deleted reads as though every decision was obvious.
+**State, 2026-09-23: ready for studies.** Both builds are current and verified: the designated `coco_quarry`, and `coco_quarry_full` with every image in COCO 2017. The definitional work is finished. What remains is the studies the set exists to support. Items below marked **DONE** keep their original argument, because a plan whose history is deleted reads as though every decision was obvious.
+
+**What the set is now:**
+
+- **49 classes in 144 cells.** Each cell holds 100 positives against a shared pool of 9,900 negatives (+1,000 spares), about 1% prevalence. The three fruit `@small` cells are dropped (`SCALE_DROPPED_CELLS`) because no honest supply fills them.
+- **The owner's rulings are built in:**
+  - Two merges: `enclosed road vehicle`, `single serving drinking vessel` (#4056), `bag or luggage` and `vase or potted plant` (#4119).
+  - One unit per class (`ClassRule.unit`).
+  - LVIS pile filters for fruit and `book` (#3985).
+  - Banding and the simulated drag use the **largest instance**, not the union (#4096).
+- **Each positive carries exactly one region.** That is the box the simulated user drags.
+
+**Using it in a study:**
+
+- **Environment:** `CALIB_DATASETS=coco_quarry`.
+- **Arms:** the whole-image arm (`siglip`) and the region arm (`siglip+dinov3_patch`, which opens in SigLIP and learns in DINOv3 space). `CALIB_COCO_QUARRY_EMBEDDERS` overrides them.
+- **Other prevalences or pool shapes:** cut a manifest from `coco_quarry_full` with `quarry_export.py`. Nothing is re-embedded.
+- **Vectors are unit-norm** in the pile (`build_pile.py --verify` enforces it), and the harness renormalises on load (#4095, #4099).
+- **Comparability boundary:** numbers measured on `coco_quarry` before #4106 (2026-09-22) and #4124 (2026-09-23) are **not comparable** with later ones. Membership changed in almost every cell.
+- **After a rules change:** `build_pile.py --datasets coco_quarry_full,... --relabel` rewrites the full corpus's labels in about 8 minutes. It never re-embeds, and it refuses to write if a vector moved (#4091). The designated build is a `--force` rebuild, about 1 hour on a v100.
 
 <!-- item-sep -->
 
@@ -93,7 +114,9 @@ and it is cheap to settle — see the first item below.
 
 <!-- item-sep -->
 
-- **Re-validate the band rule against COCO's boxes at full scale.** #3637 scored
+- **DONE — #3985, #4085, #4096, #4106.** COCO draws one box around a pile of fruit or a stack of books, and the scatter guard could not see a compact pile. The fix is an LVIS per-box check, calibrated on 176 owner votes. Banding also moved from the union to the largest instance, which returned 39% of image-class pairs that the union rule had called "scattered". Report: `docs/experiments/2026-09-22-band-granularity-3985/`.
+
+  **Re-validate the band rule against COCO's boxes at full scale.** #3637 scored
   the band statistic against COCO's exhaustive boxes on the VG∩COCO overlap and
   found COCO right where VG disagreed. Under pure COCO that overlap becomes the
   whole dataset, so the scatter guard and the oversize cut now act on adjudicated
@@ -226,7 +249,9 @@ and it is cheap to settle — see the first item below.
 
 <!-- item-sep -->
 
-- **Decide the `truck`/`car` pair on the measurement.** 17% of COCO `truck` boxes
+- **DONE — #4056 merged `car`/`truck`; #4119 ruled the other three contests** (bags merged, vase/potted plant merged, skis/snowboard kept), all on the box-level minority rate (`boundary_contest.py`).
+
+  **Decide the `truck`/`car` pair on the measurement.** 17% of COCO `truck` boxes
   are objects LVIS calls `car_(automobile)`, against 2% the other way. #3588 added
   `truck` beside `car` as a same-scene partner; the asymmetry says the pair is
   partly one population relabelled rather than two. Either keep both and say so
@@ -247,12 +272,15 @@ and it is cheap to settle — see the first item below.
 
 <!-- item-sep -->
 
-- **Ask the questions the set was built for.** Co-occurrence (does a class get
-  harder when a same-scene partner is present?), natural-composition negatives
-  instead of a designed ratio, multi-label arms, and calibration at a prevalence
-  chosen per question. None are reachable under a designation; all are one query
-  away under an annotated set. File them as they become concrete rather than
-  listing them here. (Sonnet 5)
+- **Use it as a bench for METHOD comparisons (owner, 2026-09-23).** The data is
+  never ours to choose in the field, so the value is A vs B, or A across settings,
+  with `coco_quarry`'s classes and bands as strata to report ACROSS rather than as
+  the variable under study. Data-property studies (#4051, #4043, #3589, #3807)
+  were closed on that ruling. The queued method studies that want this bench
+  include the head (#4114, #4115), the fused threshold once positives run out
+  (#4121), the acquisition offset under region voting (#3261, #2910), region
+  styles (#2895), and, on `coco_quarry_full` exports at rare prevalence, the GP
+  head (#3959) and `_GMM_MAX_SAMPLES` (#3827).
 
 <!-- item-sep -->
 

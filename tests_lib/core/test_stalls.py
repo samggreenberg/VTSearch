@@ -13,6 +13,7 @@ import gc
 import logging
 import re
 import threading
+import time
 
 import pytest
 
@@ -144,6 +145,14 @@ class TestPhaseClock:
         eight slow votes in the captured trace were slow *alone*, which says
         they released the GIL - but nothing recorded whether they had done
         work or blocked, so the candidates could not be separated.
+
+        The two phases are compared against *each other* rather than each
+        against its own wall clock. ``cpu >= total * 0.5`` reads as the same
+        claim and is not: wall time absorbs whatever the scheduler took away,
+        so under ``-n auto`` on a loaded box a spin loop's share of its own
+        wall clock falls below half and the assertion fails on machine load
+        rather than on anything the clock got wrong. A sleeping phase burns
+        no CPU at any load, which makes the comparison load-independent.
         """
         monkeypatch.setenv(stalls.SLOW_PHASE_MS_ENV, "0")
         with caplog.at_level(logging.WARNING, logger=LOGGER):
@@ -151,12 +160,12 @@ class TestPhaseClock:
                 n = 0
                 for i in range(200_000):
                     n += i
-        msg = _messages(caplog, "slow phase: busy")[0].getMessage()
-        cpu_ms = _field_ms(msg, "cpu")
-        total_ms = _field_ms(msg, "total ")
-        assert cpu_ms > 0, msg
-        # Spin loops do not block, so CPU must account for the wall clock.
-        assert cpu_ms >= total_ms * 0.5, msg
+            with PhaseClock("waiting"):
+                time.sleep(0.05)
+        busy = _messages(caplog, "slow phase: busy")[0].getMessage()
+        waiting = _messages(caplog, "slow phase: waiting")[0].getMessage()
+        assert _field_ms(busy, "cpu") > 0, busy
+        assert _field_ms(busy, "cpu") > _field_ms(waiting, "cpu"), f"{busy!r} vs {waiting!r}"
 
     def test_reports_the_gc_pause_that_landed_inside_it(self, caplog, monkeypatch):
         """A collection holds the GIL, so it is charged to whatever phase was

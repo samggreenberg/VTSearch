@@ -19,6 +19,7 @@ from vtscore.training.thresholds import (
     FOLD_ANCHOR_COMBINE,
     FOLD_ANCHOR_CUT_RULE,
     FOLD_ANCHOR_WEIGHT,
+    FOLD_LEVEL_CUT_RULES,
     anchored_gmm_fit,
     fold_anchored_gmm_threshold,
     gmm_cut_from_fit,
@@ -161,7 +162,7 @@ def _anchored_variant_rows(
         if fit is None:
             continue
         for rule in rules:
-            if rule in ("mid_tilt", "q_tilt"):
+            if rule in FOLD_LEVEL_CUT_RULES:
                 # Fold-level rules, defined in fold-quantile space: a single
                 # label-anchored fit has no folds to tilt across.  The fold
                 # family below sweeps them; here they are skipped rather than

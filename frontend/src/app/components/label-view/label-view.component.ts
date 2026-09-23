@@ -38,9 +38,16 @@ import { ResortPromptModalComponent, ResortResult } from '../modals/resort-promp
 import type { LabelingStatusResponse } from '../../generated/api-client/models/labeling-status-response';
 import { snapPanelWidthToGridColumns, iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 import { PanelResizeDirective } from '../../directives/panel-resize.directive';
-import { MediaPrefetchService } from '../../services/media-prefetch.service';
+import {
+  MediaPrefetchService,
+  PREFETCH_DEPTH,
+  imageUrlsWhileImages,
+} from '../../services/media-prefetch.service';
 import { LabelViewPanelStateService } from './label-view-panel-state.service';
 import { buildMediaContextMenuItems } from './media-context-menu-items';
+
+/** What armed a {@link LabelViewComponent.seedRankingIfUnranked} run. */
+type SeedTrigger = 'entry' | 'pair' | 'retrain';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -237,13 +244,15 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   // than the pair scope, or `reloadForNewPair`'s teardown would kill the
   // request it just issued for the new pair.
   private statusPolling$: Subscription | null = null;
-  /** Armed by `reloadForNewPair`, consumed once the new pair's votes land: the
-   *  backstop that ranks a freshly-switched pair when nothing else did. See
-   *  {@link seedRankingIfUnranked}. */
-  private pendingSeedOnPairReload = false;
+  /** Armed by `ngOnInit` (`'entry'`) and `reloadForNewPair` (`'pair'`),
+   *  consumed once the pair's votes land: the backstop that ranks the pair
+   *  when nothing else did. See {@link seedRankingIfUnranked}. */
+  private pendingSeed: SeedTrigger | null = null;
   /** Live {@link scheduleSeedRanking} timer, so a later switch (or the view
    *  closing) supersedes the seed an earlier one armed. */
   private seedTimer: ReturnType<typeof setTimeout> | null = null;
+  /** What armed the live {@link seedTimer}. */
+  private seedTrigger: SeedTrigger = 'pair';
   /** How long a scheduled seed waits. Long enough for an Autopilot phase change
    *  riding the same vote load to fire its own sort first — the seed then sees
    *  that ranking and stands down, instead of both training the same model. */
@@ -270,14 +279,21 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // paid with somebody waiting; think time is ~600 ms-2 s of idle network.
     //
     // Keyed off the *selection*, not the vote, so the warm starts as soon as an
-    // item is on screen. The prediction can be wrong — a learned re-sort lands,
-    // or the reviewer clicks a different item — and a wrong prediction costs
-    // one unused fetch, never a wrong image: the store hands bytes back only
-    // for the URL they were fetched from.
+    // item is on screen — and the next PREFETCH_DEPTH items, not just one.
+    //
+    // The peek reads the ranking, the votes, the select mode and the cut as
+    // well, so the effect re-runs whenever the prediction can change with the
+    // same item still on screen: most often a learned re-sort landing after the
+    // previous vote, which reorders the queue the warm was computed from. The
+    // store then drops the stale picks and fetches the new ones. A prediction
+    // that is still wrong at vote time costs one unused fetch, never a wrong
+    // image: the store hands bytes back only for the URL they were fetched from.
     effect(() => {
       const id = this.mediaState.selectedId();
-      untracked(() => this.warmNextImage(id));
+      const upcoming = this.sortRunner.peekUpcomingMedia(id, PREFETCH_DEPTH);
+      untracked(() => this.warmUpcomingImages(id, upcoming));
     });
+    this.destroyRef.onDestroy(() => this.mediaPrefetch.clear());
 
     effect(() => {
       const settings = this.settingsState.settingsSignal();
@@ -396,9 +412,10 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     effect(() => {
       const votesLoaded = this.voteState.votesLoaded;
       untracked(() => {
-        if (!this.pendingSeedOnPairReload || !votesLoaded) return;
-        this.pendingSeedOnPairReload = false;
-        this.scheduleSeedRanking();
+        if (!this.pendingSeed || !votesLoaded) return;
+        const trigger = this.pendingSeed;
+        this.pendingSeed = null;
+        this.scheduleSeedRanking(trigger);
       });
     });
   }
@@ -406,7 +423,13 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   ngOnInit(): void {
     this.autopilotStateService.clear();
     this.embedderCaps.ensureLoaded();
-    this.voteState.clear();
+    // Train and Find share the singleton sort/vote state, so a Dashboard entry
+    // still holds the previous session's ranking — media ids of a pair that may
+    // not be this one. Drop it, as a pair switch does; the sort *controls* stay,
+    // and the seed below re-runs them against this pair (#4092).
+    this.pairScope.clearPairState();
+    this.pendingSeed = 'entry';
+    this.pendingSelectOnPairChange = true;
     this.layoutRef().nativeElement.style.setProperty('--left-width', `${this.leftWidth()}px`);
     this.layoutRef().nativeElement.style.setProperty('--right-width', `${this.rightWidth()}px`);
     this.pendingSnapOnLoad = true;
@@ -445,7 +468,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         // follow it even though the phase did not move. Scheduled rather than
         // fired: the same vote load usually moves the phase as well, and that
         // branch below sorts on its own.
-        if (!prev.retrainMode && curr.retrainMode) this.scheduleSeedRanking();
+        if (!prev.retrainMode && curr.retrainMode) this.scheduleSeedRanking('retrain');
         if (prev.phase === curr.phase) return;
         this.autopilotExhausted.set(curr.phase === 'exhausted');
         if (curr.phase === 'good') {
@@ -492,7 +515,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       this.sortRunner.quiesce();
       this.cancelSeedRanking();
       // Read by the votes effect when the reload below lands.
-      this.pendingSeedOnPairReload = true;
+      this.pendingSeed = 'pair';
       // Read by the medias effect when the reload below lands.
       this.pendingSnapOnLoad = true;
       // Read by the seed effect when the new pair's first ranking lands.
@@ -502,31 +525,36 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   /**
-   * Rank the pair on screen the way a fresh entry would, if nothing else has.
+   * Rank the pair on screen, if nothing else has.
    *
-   * Two callers, one rule. A **pair switch** re-runs none of what entry does —
-   * it only reloads medias and votes — so the pair it lands on can end up with
-   * an empty ranking, an empty work queue and a placeholder in the centre,
-   * where a fresh entry to that same pair produces all three (#3510). And
-   * Autopilot's **retrain mode** only becomes true once the labelset stops
-   * being a zeroed default, which is after its activation sort has already
-   * gone out on the text hint (#3535); the ranking has to follow the
-   * correction.
+   * Three callers, one rule. A **fresh entry** drops the previous session's
+   * ranking but keeps its sort controls (#4092). A **pair switch** re-runs none
+   * of what entry does — it only reloads medias and votes — so the pair it
+   * lands on can end up with an empty ranking, an empty work queue and a
+   * placeholder in the centre (#3510). And Autopilot's **retrain mode** only
+   * becomes true once the labelset stops being a zeroed default, which is after
+   * its activation sort has already gone out on the text hint (#3535); the
+   * ranking has to follow the correction.
    *
    * This is deliberately a **backstop**, not a competing trigger: a re-rank
    * that an Autopilot phase change fires off the same vote load gets there
    * first (hence {@link SEED_DELAY_MS}), and this then stands down. It stands
-   * down on a sort already in flight, and on a ranking the *model itself*
-   * produced — but not on a text ranking, which is exactly what a late retrain
-   * correction has to replace. What is left for it is what the phase machinery
-   * cannot cover, because that only ever sorts on a phase *change*: a pair
-   * whose phase is the one we left it in, or which never transitions at all.
+   * down on a sort already in flight.
    *
-   * The sort it picks is the one a fresh entry would land on — learned when the
-   * detector has both label classes, else Autopilot's text / example seed sort.
-   * Autopilot being off narrows that to the learned rehydration only: a manual
-   * entry ranks nothing until the user sorts, and hijacking their chosen sort
-   * mode is not this method's business.
+   * **With Autopilot running**, Autopilot owns the sort. On entry its own
+   * activation already fired the seed sort, so there is nothing to add. After a
+   * switch or a retrain flip, it stands down on a ranking the *model itself*
+   * produced — but not on a text ranking, which is exactly what a late retrain
+   * correction has to replace — and otherwise picks what Autopilot would:
+   * learned when the detector has both label classes, else its text / example
+   * seed sort. What is left for it is what the phase machinery cannot cover,
+   * because that only ever sorts on a phase *change*: a pair whose phase is the
+   * one we left it in, or which never transitions at all.
+   *
+   * **With Autopilot off**, the user's sort carries over and is re-run on this
+   * pair — see {@link SortRunnerService.rerunCarriedSort} for the rule, and for
+   * what falls back to Text when the new pair can't run it (#4092). Any ranking
+   * already present means someone sorted since the reset, so it stands down.
    *
    * Every sort runs with `autoSelect: false`. The centre is seeded by the
    * pair-change effect above, which declines to override a selection the user
@@ -535,23 +563,31 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   private seedRankingIfUnranked(): void {
     this.seedTimer = null;
+    const trigger = this.seedTrigger;
     if (this.sortState.sortBusy) return;
-    if (this.sortState.sortMode === 'learned' && (this.sortState.sortOrder?.length ?? 0) > 0) return;
-    const autopilotRunning = this.autopilotStateService.running;
-    if (this.voteState.learnedSortAvailable
-        && (autopilotRunning || this.sortState.sortMode === 'learned')) {
+    const ranked = (this.sortState.sortOrder?.length ?? 0) > 0;
+    if (!this.autopilotStateService.running) {
+      if (!ranked) this.sortRunner.rerunCarriedSort(this.textSupported);
+      return;
+    }
+    if (trigger === 'entry') return;
+    if (this.sortState.sortMode === 'learned' && ranked) return;
+    if (this.voteState.learnedSortAvailable) {
       this.sortState.setSortMode('learned');
       this.sortRunner.onLearnedSort(false);
       return;
     }
-    if (autopilotRunning) this.onAutopilotStart(false);
+    this.onAutopilotStart(false);
   }
 
   /** Run {@link seedRankingIfUnranked} after {@link SEED_DELAY_MS}. A second
    *  call supersedes the first, so the seed runs once however many triggers
-   *  ride the same vote load. */
-  private scheduleSeedRanking(): void {
+   *  ride the same vote load — as the stronger of them: an entry seed never
+   *  downgrades a switch or retrain seed it replaces. */
+  private scheduleSeedRanking(trigger: SeedTrigger): void {
+    const merged = this.seedTimer && this.seedTrigger !== 'entry' ? this.seedTrigger : trigger;
     this.cancelSeedRanking();
+    this.seedTrigger = merged;
     this.seedTimer = setTimeout(() => this.seedRankingIfUnranked(), this.SEED_DELAY_MS);
   }
 
@@ -559,7 +595,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private cancelSeedRanking(): void {
     if (this.seedTimer) clearTimeout(this.seedTimer);
     this.seedTimer = null;
-    this.pendingSeedOnPairReload = false;
+    this.pendingSeed = null;
   }
 
   /**
@@ -1013,18 +1049,20 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   /**
-   * Prefetch the image the auto-advance would land on next (#3896).
+   * Prefetch the images the auto-advance would land on next (#3896).
    *
-   * Only for `image` media: the other types paint through their own viewers
-   * (audio waveform, video frame), which this store does not feed. A non-image
-   * selection simply warms nothing.
+   * Only `image` media: the other types paint through their own viewers
+   * (audio waveform, video frame), which this store does not feed. The queue
+   * stops at the first non-image pick rather than skipping it, since the order
+   * of the fetches is the order the reviewer will need them in.
    */
-  private warmNextImage(currentId: number | null): void {
-    if (currentId === null) return;
-    const pick = this.sortRunner.peekNextMedia(currentId);
-    if (pick.kind !== 'media') return;
-    if (this.mediaState.getMedia(pick.id)?.media_type !== 'image') return;
-    this.mediaPrefetch.warm(this.activeContext.mediaUrl(`/api/medias/${pick.id}/image`));
+  private warmUpcomingImages(currentId: number | null, upcoming: number[]): void {
+    this.mediaPrefetch.prefetch(
+      imageUrlsWhileImages(upcoming, (id) => this.mediaState.getMedia(id)?.media_type, (path) =>
+        this.activeContext.mediaUrl(path),
+      ),
+      currentId === null ? [] : [this.activeContext.mediaUrl(`/api/medias/${currentId}/image`)],
+    );
   }
 
   onMediaVoted(event: { id: number; vote: 'good' | 'bad' }): void {

@@ -222,6 +222,33 @@ def apply_vote_exclusion(
 #: and nothing should ship at it.
 FOLD_ANCHOR_QTILT_STEP = 0.02
 
+#: The **eval-only** sign-dependent ("hinge") rules of issue #3557, all defined
+#: in fold-quantile space and all identical to the shipped ``mid_tilt`` at every
+#: ``k >= 0``.  Below ``k = 0`` they read ``cross_tilt`` - the rule that keeps the
+#: fitted mixture weights as class priors (see :func:`gmm_cut_from_fit`) and that
+#: #2865 measured beating ``mid_tilt`` there by up to 0.034 while losing above:
+#:
+#: * ``"hinge_raw"`` - the issue's literal rule, ``q_cross(k)`` for ``k < 0``.
+#:   **Not nested in general**: nothing orders ``q_cross(0)`` against ``q_mid``,
+#:   so wherever ``q_cross(0-) < q_mid`` a slider step that asks for *fewer*
+#:   false alarms admits *more*.  It exists to measure how often that happens.
+#: * ``"hinge"`` - the guarded candidate, ``max(q_cross(k), q_mid_tilt(k))`` for
+#:   ``k < 0``.  Nested by construction (see :meth:`FoldAnchoredCut._quantile_at`):
+#:   it follows ``cross_tilt`` wherever ``cross_tilt`` is the stricter of the two
+#:   and ``mid_tilt`` elsewhere, so it can only ever be *less* inclusive than the
+#:   incumbent below zero - which is the direction the knob is asking for there.
+#: * ``"hinge_cont"`` - ``q_mid + (q_cross(k) - q_cross(0))`` for ``k < 0``: the
+#:   cross rule's *slope* grafted onto the midpoint's *location*, continuous at
+#:   the seam and nested by construction.  A decomposition arm: if it matches
+#:   ``hinge`` the win is the tilt's shape, if it matches ``mid_tilt`` the win is
+#:   ``cross_tilt``'s location.
+FOLD_ANCHOR_HINGE_RULES: tuple[str, ...] = ("hinge", "hinge_raw", "hinge_cont")
+
+#: Every rule defined over a :class:`FoldAnchoredCut`'s combined folds rather than
+#: per fit - so :func:`gmm_cut_from_fit` (correctly) rejects them, and a
+#: single-fit arm family has to skip them.
+FOLD_LEVEL_CUT_RULES: tuple[str, ...] = ("mid_tilt", "q_tilt", *FOLD_ANCHOR_HINGE_RULES)
+
 
 @dataclass(frozen=True, eq=False)
 class FoldAnchoredCut:
@@ -342,18 +369,81 @@ class FoldAnchoredCut:
         Gaussians happen to imply.  Its step size is a free parameter with no
         principled value (:data:`FOLD_ANCHOR_QTILT_STEP`), which is the whole of
         what it trades away for that guarantee.
+
+        The ``"hinge*"`` rules (**eval-only**, issue #3557;
+        :data:`FOLD_ANCHOR_HINGE_RULES`) are ``mid_tilt`` wherever
+        ``fnr_weight >= fpr_weight`` (inclusion ``k >= 0``) and read the
+        prior-keeping ``cross_tilt`` quantile ``q_cross`` below it.  Writing
+        ``M(k)`` for ``mid_tilt`` and ``C(k)`` for ``q_cross``, both are
+        non-increasing in ``k`` (the chain in :meth:`threshold_at`; ``C`` is
+        :func:`gmm_cut_from_fit`'s ``_rate_cut`` at ``lam = 2**k``, monotone in
+        ``lam`` by the same argument as ``rate``).  Then for the guarded
+        ``"hinge"``, ``H(k) = max(C(k), M(k))`` on ``k < 0``: a max of
+        non-increasing functions is non-increasing, and across the seam, for any
+        ``k < 0 <= k'``, ``H(k) >= M(k) >= M(0) >= M(k') = H(k')``.  So ``H`` is
+        non-increasing on the whole knob and the admitted sets stay nested.
+        ``"hinge_cont"`` is ``q_mid + C(k) - C(0)`` below zero, which is
+        ``>= q_mid = M(0)`` because ``C`` is non-increasing, so it is nested by
+        the same seam argument.  ``"hinge_raw"`` has no such guarantee: it is
+        nested exactly when ``C(0-) >= q_mid``, which no fit is obliged to
+        satisfy (``C(0)`` and ``q_mid`` answer different questions).
         """
         if self.cut_rule == "mid_tilt":
+            return self._mid_tilt_quantile(fpr_weight, fnr_weight)
+        if self.cut_rule in FOLD_ANCHOR_HINGE_RULES:
+            q_tilt = self._mid_tilt_quantile(fpr_weight, fnr_weight)
+            if fnr_weight >= fpr_weight:
+                return q_tilt
+            q_cross = self._combined_fold_quantile("cross_tilt", fpr_weight, fnr_weight)
+            if self.cut_rule == "hinge_raw":
+                return q_cross
+            if self.cut_rule == "hinge":
+                return max(q_cross, q_tilt)
             q_mid = self._combined_fold_quantile("mid", 1.0, 1.0)
-            q_rate = self._combined_fold_quantile("rate", fpr_weight, fnr_weight)
-            q_rate_zero = self._combined_fold_quantile("rate", *inclusion_cost_weights(0))
-            return q_mid + (q_rate - q_rate_zero)
+            q_cross_zero = self._combined_fold_quantile("cross_tilt", *inclusion_cost_weights(0))
+            return q_mid + (q_cross - q_cross_zero)
         if self.cut_rule == "q_tilt":
             q_mid = self._combined_fold_quantile("mid", 1.0, 1.0)
             return q_mid - self.qtilt_step * math.log2(fnr_weight / fpr_weight)
         return self._combined_fold_quantile(self.cut_rule, fpr_weight, fnr_weight)
 
-    def quantile_at(self, inclusion_value: int) -> float:
+    def _mid_tilt_quantile(self, fpr_weight: float, fnr_weight: float) -> float:
+        """``q_mid + (q_rate(weights) - q_rate(equal weights))`` - the shipped rule."""
+        q_mid = self._combined_fold_quantile("mid", 1.0, 1.0)
+        q_rate = self._combined_fold_quantile("rate", fpr_weight, fnr_weight)
+        q_rate_zero = self._combined_fold_quantile("rate", *inclusion_cost_weights(0))
+        return q_mid + (q_rate - q_rate_zero)
+
+    def seam_diagnostics(self) -> dict[str, float]:
+        """The quantities the #3557 hinge turns on, read off this fit.
+
+        ``q_mid`` is where every hinge sits at inclusion 0; ``q_cross0`` is
+        where ``cross_tilt`` would sit there, so ``q_cross0 < q_mid`` is exactly
+        the condition under which ``"hinge_raw"`` breaks nesting at the seam.
+        ``q_rate0`` completes the triangle (``mid_tilt - rate`` is the constant
+        ``q_mid - q_rate0``).  The two fit summaries are fold means of
+        ``log2(w_lo / w_hi)`` - the prior odds ``cross_tilt`` keeps and ``rate``
+        divides out, in the knob's own units of bits - and of
+        ``log2(var_hi / var_lo)``, the variance asymmetry #2864 proposed as why
+        ``mid`` beats ``rate`` at inclusion 0.  A fold with a non-positive
+        weight or variance contributes NaN rather than a clipped number.
+        """
+        odds, var_ratio = [], []
+        for fit in self.fits:
+            ok_w = fit.w_lo > 0.0 and fit.w_hi > 0.0
+            ok_v = fit.var_lo > 0.0 and fit.var_hi > 0.0
+            odds.append(math.log2(fit.w_lo / fit.w_hi) if ok_w else float("nan"))
+            var_ratio.append(math.log2(fit.var_hi / fit.var_lo) if ok_v else float("nan"))
+        zero = inclusion_cost_weights(0)
+        return {
+            "seam_q_mid": self._combined_fold_quantile("mid", 1.0, 1.0),
+            "seam_q_cross0": self._combined_fold_quantile("cross_tilt", *zero),
+            "seam_q_rate0": self._combined_fold_quantile("rate", *zero),
+            "fit_log2_prior_odds": float(np.mean(odds)) if odds else float("nan"),
+            "fit_log2_var_ratio": float(np.mean(var_ratio)) if var_ratio else float("nan"),
+        }
+
+    def quantile_at(self, inclusion_value: float) -> float:
         """The combined fold quantile this estimator admits at *inclusion_value*.
 
         :meth:`threshold_at` realizes this quantile on the final model's

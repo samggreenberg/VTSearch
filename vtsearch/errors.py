@@ -235,7 +235,17 @@ def _handle_dataset_not_loaded(exc):
     with stale data (logical-bug-audit H16). The frontend can
     distinguish 409 + ``error_code="dataset_not_loaded"`` from a generic
     500 and offer a load action.
+
+    An id with no registry entry at all is a 404 ``dataset_not_found``
+    instead: no load will ever cure it (see :func:`_is_registered`).
     """
+    if not _is_registered("dataset", exc.dataset_id):
+        return error_response(
+            "This dataset no longer exists (it was deleted); reload the page",
+            404,
+            dataset_id=exc.dataset_id,
+            error_code="dataset_not_found",
+        )
     return error_response(
         "Dataset is not loaded",
         409,
@@ -246,12 +256,41 @@ def _handle_dataset_not_loaded(exc):
 
 def _handle_detector_not_loaded(exc):
     """Detector counterpart of :func:`_handle_dataset_not_loaded` (H16/H34)."""
+    if not _is_registered("detector", exc.detector_id):
+        return error_response(
+            "This detector no longer exists (it was deleted); reload the page",
+            404,
+            detector_id=exc.detector_id,
+            error_code="detector_not_found",
+        )
     return error_response(
         "Detector is not loaded",
         409,
         detector_id=exc.detector_id,
         error_code="detector_not_loaded",
     )
+
+
+def _is_registered(kind: str, item_id: str) -> bool:
+    """Whether *item_id* still has a ``kind`` ("dataset"/"detector") registry entry.
+
+    Separates "named an id that isn't loaded *yet*" (a 409 the client can
+    wait out or cure with a load) from "named an id that no longer exists"
+    -- typically a tab still open on something deleted since (issue #4086).
+    Calling the latter "not loaded" sent the user looking for a load that
+    could never succeed.  A registry that can't be read answers ``True`` so
+    the reply falls back to the long-standing 409 rather than asserting a
+    deletion nobody observed.
+    """
+    try:
+        if kind == "dataset":
+            from vtscore.datasets.registry import get_dataset as lookup
+        else:
+            from vtscore.detectors.registry import get_detector as lookup
+        return lookup(item_id) is not None
+    except Exception:
+        logging.getLogger(__name__).exception("Registry lookup for %s %s failed", kind, item_id)
+        return True
 
 
 def _handle_request_missing_context(exc):

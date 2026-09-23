@@ -66,3 +66,56 @@ class TestAppPrelude:
         head = src.split("# Configure structured logging", 1)[0]
         assert "OMP_NUM_THREADS" in head and "MKL_NUM_THREADS" in head
         assert "_THREADS_ENV" in head, "app.py must re-export the resolved count for vtscore.config"
+
+
+class TestSuiteRunsAtTheLibraryDefault:
+    """The *test* process must not inherit the server's allocation-sized default.
+
+    ``tests/conftest.py`` imports ``app``, so the prelude above runs in every
+    xdist worker. Left to size itself from the allocation it gave each worker one
+    math thread per core -- workers x cores threads on the same cores -- and the
+    full suite ran ~3x slower (~3 min -> ~10 min on 4 vCPUs) with nothing failing.
+    """
+
+    _PINNED = ("VTSEARCH_TORCH_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS")
+
+    def test_conftest_pins_threads_before_its_first_heavy_import(self):
+        """Source order, because the runtime check below cannot see it under xdist.
+
+        The xdist master imports this conftest (and so ``app``) before spawning
+        workers, which inherit whatever env it ended with -- so inside a worker
+        a regression looks self-consistent. The one place it is visible is here.
+        """
+        import ast
+        from pathlib import Path
+
+        tree = ast.parse((Path(__file__).resolve().parents[1] / "conftest.py").read_text(encoding="utf-8"))
+        pinned: set[str] = set()
+        for node in tree.body:
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                names = [a.name for a in node.names] if isinstance(node, ast.Import) else [node.module or ""]
+                if names != ["os"]:
+                    break
+            for call in ast.walk(node):
+                if (
+                    isinstance(call, ast.Call)
+                    and isinstance(call.func, ast.Attribute)
+                    and call.func.attr == "setdefault"
+                    and call.args
+                    and isinstance(call.args[0], ast.Constant)
+                    and isinstance(call.args[0].value, str)
+                ):
+                    pinned.add(call.args[0].value)
+        missing = set(self._PINNED) - pinned
+        assert not missing, f"tests/conftest.py must setdefault {sorted(missing)} before importing anything but os"
+
+    def test_no_native_threadpool_is_wider_than_the_library_setting(self):
+        import torch
+        from threadpoolctl import threadpool_info
+
+        import vtscore.config as config
+
+        expected = config.TORCH_THREADS
+        assert torch.get_num_threads() == expected
+        wide = [(p["internal_api"], p["num_threads"]) for p in threadpool_info() if p["num_threads"] > expected]
+        assert not wide, f"native threadpools wider than TORCH_THREADS={expected}: {wide}"

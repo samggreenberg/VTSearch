@@ -1,0 +1,369 @@
+{
+ "class": "apple",
+ "lvis_names": [
+  "apple"
+ ],
+ "seed": 20260922,
+ "items": [
+  {
+   "file": "apple_d2a273610c16.jpg",
+   "image_id": 536248,
+   "bbox": [
+    158.49,
+    380.38,
+    276.23,
+    249.05
+   ],
+   "ann_id": 1048569,
+   "ratio": 0.952175457791425,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "clean"
+  },
+  {
+   "file": "apple_80e7a7ebf122.jpg",
+   "image_id": 289309,
+   "bbox": [
+    11.55,
+    343.07,
+    190.92,
+    95.62
+   ],
+   "ann_id": 1049215,
+   "ratio": 4.731412635810256,
+   "n_coco": 1,
+   "n_lvis": 4,
+   "arm": "lumped"
+  },
+  {
+   "file": "apple_6e0f7e796aed.jpg",
+   "image_id": 339759,
+   "bbox": [
+    414.62,
+    268.93,
+    78.79,
+    94.98
+   ],
+   "ann_id": 1048416,
+   "ratio": 1.020009344290999,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "clean"
+  },
+  {
+   "file": "apple_c705d6891ace.jpg",
+   "image_id": 236316,
+   "bbox": [
+    0.0,
+    77.93,
+    190.87,
+    222.49
+   ],
+   "ann_id": 1048324,
+   "ratio": 0.9880090651026804,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "clean"
+  },
+  {
+   "file": "apple_7b21280a2c48.jpg",
+   "image_id": 544329,
+   "bbox": [
+    344.41,
+    105.74,
+    94.67,
+    92.65
+   ],
+   "ann_id": 1048794,
+   "ratio": 1.1853980421857875,
+   "n_coco": 3,
+   "n_lvis": 4,
+   "arm": "clean"
+  },
+  {
+   "file": "apple_28a7f5cbbc75.jpg",
+   "image_id": 429281,
+   "bbox": [
+    356.84,
+    0.0,
+    123.16,
+    61.19
+   ],
+   "ann_id": 1908064,
+   "ratio": 11.256479922415737,
+   "n_coco": 4,
+   "n_lvis": 1,
+   "arm": "lumped"
+  },
+  {
+   "file": "apple_952fca58970c.jpg",
+   "image_id": 169529,
+   "bbox": [
+    419.95,
+    176.74,
+    189.33,
+    190.34
+   ],
+   "ann_id": 1049869,
+   "ratio": 0.9833593735829385,
+   "n_coco": 3,
+   "n_lvis": 3,
+   "arm": "clean"
+  },
+  {
+   "file": "apple_5f806719e173.jpg",
+   "image_id": 388903,
+   "bbox": [
+    84.34,
+    201.5,
+    156.98,
+    130.5
+   ],
+   "ann_id": 1047942,
+   "ratio": 53.55663506328091,
+   "n_coco": 1,
+   "n_lvis": 37,
+   "arm": "lumped"
+  },
+  {
+   "file": "apple_942d70d919f5.jpg",
+   "image_id": 479596,
+   "bbox": [
+    404.53,
+    246.33,
+    71.32,
+    70.12
+   ],
+   "ann_id": 1548744,
+   "ratio": 2.586230031715015,
+   "n_coco": 13,
+   "n_lvis": 111,
+   "arm": "lumped"
+  },
+  {
+   "file": "apple_d64f314d7654.jpg",
+   "image_id": 229250,
+   "bbox": [
+    166.21,
+    200.21,
+    59.37,
+    34.67
+   ],
+   "ann_id": 1549740,
+   "ratio": 18.111638104957084,
+   "n_coco": 7,
+   "n_lvis": 26,
+   "arm": "lumped"
+  },
+  {
+   "file": "apple_fd93c968f41d.jpg",
+   "image_id": 91336,
+   "bbox": [
+    199.64,
+    267.72,
+    49.03,
+    34.73
+   ],
+   "ann_id": 1047590,
+   "ratio": 0.872037663487995,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "clean"
+  },
+  {
+   "file": "apple_2ad82d7b08e2.jpg",
+   "image_id": 479155,
+   "bbox": [
+    224.57,
+    89.34,
+    78.62,
+    50.82
+   ],
+   "ann_id": 1049487,
+   "ratio": 18.135484501172183,
+   "n_coco": 6,
+   "n_lvis": 62,
+   "arm": "lumped"
+  },
+  {
+   "file": "apple_e0f5fe0d295f.jpg",
+   "image_id": 461009,
+   "bbox": [
+    228.08,
+    257.81,
+    118.89,
+    104.03
+   ],
+   "ann_id": 1047311,
+   "ratio": 1.0453491356814288,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "clean"
+  },
+  {
+   "file": "apple_f0cb79ca54fc.jpg",
+   "image_id": 342478,
+   "bbox": [
+    42.16,
+    551.15,
+    123.49,
+    81.32
+   ],
+   "ann_id": 1048241,
+   "ratio": 0.913469694697826,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "clean"
+  },
+  {
+   "file": "apple_f01b0f91cf6e.jpg",
+   "image_id": 127623,
+   "bbox": [
+    0.05,
+    283.62,
+    220.36,
+    217.19
+   ],
+   "ann_id": 1048060,
+   "ratio": 0.9980189839688837,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "clean"
+  },
+  {
+   "file": "apple_81f6763d5cbe.jpg",
+   "image_id": 500043,
+   "bbox": [
+    38.2,
+    413.76,
+    321.35,
+    80.9
+   ],
+   "ann_id": 1548274,
+   "ratio": 3.1249108237319345,
+   "n_coco": 7,
+   "n_lvis": 34,
+   "arm": "lumped"
+  },
+  {
+   "file": "apple_cd75556991e2.jpg",
+   "image_id": 331724,
+   "bbox": [
+    198.2,
+    272.6,
+    252.76,
+    99.65
+   ],
+   "ann_id": 1550887,
+   "ratio": 19.428173767924186,
+   "n_coco": 2,
+   "n_lvis": 35,
+   "arm": "lumped"
+  },
+  {
+   "file": "apple_27733c897a78.jpg",
+   "image_id": 481407,
+   "bbox": [
+    329.79,
+    145.69,
+    170.54,
+    167.16
+   ],
+   "ann_id": 1049777,
+   "ratio": 1.835072305487457,
+   "n_coco": 6,
+   "n_lvis": 10,
+   "arm": "lumped"
+  },
+  {
+   "file": "apple_09f1ce080aa7.jpg",
+   "image_id": 60855,
+   "bbox": [
+    24.26,
+    208.04,
+    177.04,
+    176.13
+   ],
+   "ann_id": 1548656,
+   "ratio": 0.9906753236641272,
+   "n_coco": 2,
+   "n_lvis": 2,
+   "arm": "clean"
+  },
+  {
+   "file": "apple_382227ae5d5d.jpg",
+   "image_id": 154868,
+   "bbox": [
+    291.31,
+    162.02,
+    193.22,
+    90.53
+   ],
+   "ann_id": 1549861,
+   "ratio": 21.333108397410196,
+   "n_coco": 3,
+   "n_lvis": 81,
+   "arm": "lumped"
+  },
+  {
+   "file": "apple_58e98fbd54e5.jpg",
+   "image_id": 81504,
+   "bbox": [
+    71.44,
+    198.04,
+    121.18,
+    125.84
+   ],
+   "ann_id": 1048547,
+   "ratio": 1.001305783130108,
+   "n_coco": 1,
+   "n_lvis": 1,
+   "arm": "clean"
+  },
+  {
+   "file": "apple_61874aad8100.jpg",
+   "image_id": 198375,
+   "bbox": [
+    0.0,
+    81.68,
+    202.36,
+    328.97
+   ],
+   "ann_id": 1050164,
+   "ratio": 24.085578088284866,
+   "n_coco": 5,
+   "n_lvis": 73,
+   "arm": "lumped"
+  },
+  {
+   "file": "apple_004bac03fc1e.jpg",
+   "image_id": 110999,
+   "bbox": [
+    199.42,
+    439.72,
+    83.56,
+    89.53
+   ],
+   "ann_id": 1048877,
+   "ratio": 1.1281982180824075,
+   "n_coco": 3,
+   "n_lvis": 3,
+   "arm": "clean"
+  },
+  {
+   "file": "apple_dbaec96c4499.jpg",
+   "image_id": 117679,
+   "bbox": [
+    387.1,
+    127.62,
+    159.46,
+    215.08
+   ],
+   "ann_id": 1049601,
+   "ratio": 4.026770787678696,
+   "n_coco": 1,
+   "n_lvis": 5,
+   "arm": "lumped"
+  }
+ ]
+}

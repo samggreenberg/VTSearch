@@ -73,6 +73,17 @@ contract, and it is MCP-only because `gh issue edit`'s `--add-label` /
 `--remove-label` are surgical and cannot make the mistake. See
 `_experiment_drop_problems`.
 
+A fourth job, added by #4144: the write that adds `solved` must also clear the
+assignee (CLAUDE.md, "Assign the owner while you are working an issue").
+`solved` means nobody is working the issue any more, so an assignee left on it
+makes solved work look taken in the `no:assignee` view -- and until this guard
+the unassign half of the rule was prose only, which is how it went unfollowed.
+On the `gh` path a `gh issue edit ... --add-label solved` must carry
+`--remove-assignee <anyone>` in the *same* invocation; on the MCP path a
+`labels` array containing `solved` must come with `assignees: []`. This is pure
+parsing with no lookup, and a segment that will not tokenise allows. See
+`_gh_edit_problems` and `_solved_assignee_problems`.
+
 Contract: read the PreToolUse payload on stdin, exit 2 to block (stderr is fed
 back to Claude as the reason), exit 0 to allow. Anything unexpected -- a
 payload we cannot parse, a tool we do not police -- allows, because a hook that
@@ -106,6 +117,7 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -197,6 +209,33 @@ GH_ISSUE_TARGET = re.compile(r"^#?(\d+)$|^https?://[^\s]*/issues/(\d+)/?$")
 # Flags of `gh issue close` that swallow the next token, so a numeric value
 # (`--comment 3`) is never mistaken for the issue number.
 GH_CLOSE_VALUE_FLAGS = frozenset({"-c", "--comment", "-r", "--reason", "-R", "--repo"})
+
+# `gh issue edit`, located the same way as the close. Only an edit that adds
+# `solved` is policed (see `_gh_edit_problems`); every other edit passes.
+GH_ISSUE_EDIT = re.compile(r"(?<![\w./-])gh\s+issue\s+edit\b")
+
+# Flags of `gh issue edit` that swallow the next token, so their values are
+# never read as issue numbers or as flags of their own.
+GH_EDIT_VALUE_FLAGS = frozenset(
+    {
+        "--add-label",
+        "--remove-label",
+        "--add-assignee",
+        "--remove-assignee",
+        "--add-project",
+        "--remove-project",
+        "-t",
+        "--title",
+        "-b",
+        "--body",
+        "-F",
+        "--body-file",
+        "-m",
+        "--milestone",
+        "-R",
+        "--repo",
+    }
+)
 
 # Seconds to wait for the label lookup. A hook runs in front of the user's
 # command, so a slow answer must be abandoned rather than waited out; the
@@ -629,6 +668,123 @@ def _gh_close_target(segment: str) -> str | None:
     return candidates[0] if len(candidates) == 1 else None
 
 
+def _gh_edit_segments(command: str) -> list[str]:
+    """The argument text of every `gh issue edit` actually *invoked* here.
+
+    Same command-position rule and the same segment cut as `_gh_close_segments`:
+    a mention (commit message, doc line, an issue body about this rule) is not a
+    call, and a chained second command's flags do not belong to this one. That
+    cut is also what makes "the same invocation" literal -- a `--remove-assignee`
+    on a *separate* `gh issue edit` after `&&` does not rescue the first one.
+    """
+    segments = []
+    for match in GH_ISSUE_EDIT.finditer(command):
+        if not GH_COMMAND_POSITION.search(command[: match.start()]):
+            continue
+        tail = command[match.end() :]
+        cut = GH_SEGMENT_END.search(tail)
+        segments.append(tail[: cut.start()] if cut else tail)
+    return segments
+
+
+def _gh_edit_flags(tokens: list[str]) -> tuple[dict[str, list[str]], list[str]]:
+    """Split `gh issue edit` tokens into value-flag values and issue targets."""
+    flags: dict[str, list[str]] = {}
+    targets: list[str] = []
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        index += 1
+        if token.startswith("-"):
+            flag, has_inline, inline = token.partition("=")
+            if flag not in GH_EDIT_VALUE_FLAGS:
+                continue
+            if has_inline:
+                value = inline
+            elif index < len(tokens):
+                value = tokens[index]
+                index += 1
+            else:
+                value = ""
+            flags.setdefault(flag, []).append(value)
+            continue
+        match = GH_ISSUE_TARGET.match(token)
+        if match:
+            targets.append(match.group(1) or match.group(2))
+    return flags, targets
+
+
+def _gh_edit_adds_solved_without_unassign(segment: str) -> list[str] | None:
+    """The issue targets of an edit that adds `solved` but clears no assignee.
+
+    Returns `None` when the edit is fine *or* when it cannot be read: this is
+    pure parsing with no lookup, so a segment `shlex` cannot tokenise (a cut
+    through a quoted body, a heredoc) is "could not tell", which allows. An
+    empty list means "blocked, but the issue number could not be read".
+
+    Tokenising with `shlex` rather than regexes over the raw text is what keeps
+    `--body "use --add-label solved"` from reading as adding the label: inside
+    a quoted value the flag is one word of prose, not a flag.
+    """
+    if GH_HELP.search(segment):
+        return None
+    try:
+        tokens = shlex.split(segment)
+    except ValueError:
+        return None
+
+    flags, targets = _gh_edit_flags(tokens)
+    adds_solved = any(
+        piece.strip().lower() == SOLVED_LABEL for value in flags.get("--add-label", []) for piece in value.split(",")
+    )
+    clears_assignee = any(value.strip() for value in flags.get("--remove-assignee", []))
+
+    if adds_solved and not clears_assignee:
+        return targets
+    return None
+
+
+def _gh_edit_problems(command: str) -> list[str]:
+    """Police `gh issue edit --add-label solved`: the same write must unassign.
+
+    `solved` means nobody is working the issue any more, only merges remain,
+    so an assignee left on it asserts something false and hides the issue from
+    the `no:assignee` view. The assign half of that rule is a habit; this is
+    the unassign half, made mechanical (#4144). No I/O: the fix is visible in
+    the command itself or it is not.
+    """
+    found: list[str] = []
+    for segment in _gh_edit_segments(command):
+        targets = _gh_edit_adds_solved_without_unassign(segment)
+        if targets is None:
+            continue
+        for number in targets or ["<n>"]:
+            problem = SOLVED_KEEPS_ASSIGNEE.format(number=number)
+            if problem not in found:
+                found.append(problem)
+    return found
+
+
+def _solved_assignee_problems(args: dict) -> list[str]:
+    """The MCP twin of `_gh_edit_problems`: `labels` with `solved` needs `assignees: []`.
+
+    A `labels` value that is not a list is something this hook does not
+    understand, and "does not understand" allows. A missing or non-empty
+    `assignees` is not doubt: omitting it leaves the assignee on, which is
+    exactly the mistake.
+    """
+    raw = args.get("labels")
+    if not isinstance(raw, list):
+        return []
+    if SOLVED_LABEL not in {str(item).strip().lower() for item in raw}:
+        return []
+    assignees = args.get("assignees")
+    if isinstance(assignees, list) and not assignees:
+        return []
+    number = str(args.get("issue_number") or "").strip() or "<n>"
+    return [MCP_SOLVED_KEEPS_ASSIGNEE.format(number=number)]
+
+
 def _gh_repo(segment: str) -> str | None:
     match = GH_REPO_FLAG.search(segment)
     return match.group(2) if match else None
@@ -740,6 +896,28 @@ EXPERIMENT_DROPPED = (
     "  This is not a guess: the hook asked GitHub, and the label is there."
 ).format(experiment=EXPERIMENT_LABEL)
 
+SOLVED_KEEPS_ASSIGNEE = (
+    "ADDS `{solved}` BUT KEEPS THE ASSIGNEE: `{solved}` means nobody is working the issue any more "
+    "(only merges remain), so the assignee must come off in the SAME `gh issue edit`. A stale "
+    "assignee makes solved work look taken in the `no:assignee` view.\n"
+    "  Re-issue it as:\n"
+    "    gh issue edit {{number}} --add-label {solved} --remove-assignee samggreenberg\n"
+    "  `--add-assignee` does not count, and neither does a second `gh issue edit` chained after it."
+).format(solved=SOLVED_LABEL)
+
+MCP_SOLVED_KEEPS_ASSIGNEE = (
+    "ADDS `{solved}` BUT KEEPS THE ASSIGNEE: this update's `labels` includes `{solved}`, and it does "
+    "not pass `assignees: []`. `{solved}` means nobody is working the issue any more, so clear the "
+    "assignee in the same write (omitting `assignees` leaves it on).\n"
+    "  The `gh` equivalent is:\n"
+    "    gh issue edit {{number}} --add-label {solved} --remove-assignee samggreenberg"
+).format(solved=SOLVED_LABEL)
+
+SOLVED_ASSIGNEE_FOOTER = (
+    "\nSee CLAUDE.md, 'Assign the owner while you are working an issue': the assignee goes on\n"
+    f"  when work starts and comes off in the write that adds `{SOLVED_LABEL}`."
+)
+
 EXPERIMENT_DROP_FOOTER = (
     f"\nSee CLAUDE.md, '`{EXPERIMENT_LABEL}` — does closing it require a run?'.\n"
     f"  `label:{EXPERIMENT_LABEL}` is the queue of work that needs machine time booked;\n"
@@ -766,27 +944,38 @@ def _deny(headline: str, problems: list[str], footer: str) -> int:
     return 2
 
 
+def _bash_verdict(command: str) -> int:
+    """Every `gh` guard, in order; the first that finds a problem blocks."""
+    found = _gh_create_problems(command)
+    if found:
+        return _deny(
+            "BLOCKED: this `gh issue create` is missing a required label (CLAUDE.md, 'Label every issue you file').",
+            found,
+            GH_CREATE_FOOTER,
+        )
+    found = _gh_close_problems(command)
+    if found:
+        return _deny(
+            f"BLOCKED: this `gh issue close` mishandles the `{SOLVED_LABEL}` label.",
+            found,
+            GH_CLOSE_FOOTER,
+        )
+    found = _gh_edit_problems(command)
+    if found:
+        return _deny(
+            f"BLOCKED: this `gh issue edit` adds `{SOLVED_LABEL}` without clearing the assignee.",
+            found,
+            SOLVED_ASSIGNEE_FOOTER,
+        )
+    return 0
+
+
 def main() -> int:
     payload = read_payload()
 
     bash_args = tool_arguments(payload, BASH_TOOL, bare_keys=("command",))
     if bash_args is not None:
-        command = str(bash_args.get("command") or "")
-        found = _gh_create_problems(command)
-        if found:
-            return _deny(
-                "BLOCKED: this `gh issue create` is missing a required label (CLAUDE.md, 'Label every issue you file').",
-                found,
-                GH_CREATE_FOOTER,
-            )
-        found = _gh_close_problems(command)
-        if found:
-            return _deny(
-                f"BLOCKED: this `gh issue close` mishandles the `{SOLVED_LABEL}` label.",
-                found,
-                GH_CLOSE_FOOTER,
-            )
-        return 0
+        return _bash_verdict(str(bash_args.get("command") or ""))
 
     args = tool_arguments(payload, TOOL_SUFFIX, bare_keys=("method", "repo"))
     if args is None:
@@ -798,12 +987,18 @@ def main() -> int:
         headline = "BLOCKED: this issue is missing a required label (CLAUDE.md, 'Label every issue you file')."
     elif method == "update":
         close_found = _close_problems(args)
-        found = close_found + _experiment_drop_problems(args)
+        # A close that keeps `solved` is already wrong for a bigger reason; the
+        # assignee complaint would only muddy that message.
+        assignee_found = [] if close_found else _solved_assignee_problems(args)
+        found = close_found + assignee_found + _experiment_drop_problems(args)
         # A close problem keeps the close wording; a bare label drop gets its own,
         # since most updates that reach the new guard are not closing anything.
         if close_found:
             footer = CLOSE_FOOTER
             headline = f"BLOCKED: this close mishandles the `{SOLVED_LABEL}` label."
+        elif assignee_found:
+            footer = SOLVED_ASSIGNEE_FOOTER
+            headline = f"BLOCKED: this update adds `{SOLVED_LABEL}` without clearing the assignee."
         else:
             footer = EXPERIMENT_DROP_FOOTER
             headline = f"BLOCKED: this update drops the `{EXPERIMENT_LABEL}` label."

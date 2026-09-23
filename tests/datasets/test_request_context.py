@@ -113,16 +113,37 @@ class TestRequestScopedDataset:
             with pytest.raises(DatasetNotLoadedError):
                 _ = 300 in medias
 
-    def test_header_with_unloaded_id_returns_409(self, client):
-        """End-to-end: a request with an unloaded X-Dataset-Id gets 409."""
+    def test_header_with_unloaded_id_returns_409(self, client, tmp_path):
+        """End-to-end: a request with a registered-but-unloaded X-Dataset-Id gets 409."""
+        from vtscore.datasets.registry import register_dataset
+
         _make_dataset("req_e2e_loaded", [400])
+        entry = register_dataset(
+            name="Unloaded",
+            media_type="audio",
+            num_items=0,
+            pkl_path=str(tmp_path / "unloaded.pkl"),
+            embedder="",
+            created_by="default",
+        )
 
         # A route that touches the medias proxy via snapshot_medias().
-        resp = client.get("/api/medias/ids", headers={"X-Dataset-Id": "nope"})
+        resp = client.get("/api/medias/ids", headers={"X-Dataset-Id": entry["id"]})
         assert resp.status_code == 409
         body = resp.get_json()
         assert body["error_code"] == "dataset_not_loaded"
+        assert body["dataset_id"] == entry["id"]
+
+    def test_header_with_deleted_id_returns_404(self, client):
+        """An X-Dataset-Id the registry no longer lists is gone, not unloaded (#4086)."""
+        _make_dataset("req_e2e_loaded", [400])
+
+        resp = client.get("/api/medias/ids", headers={"X-Dataset-Id": "nope"})
+        assert resp.status_code == 404
+        body = resp.get_json()
+        assert body["error_code"] == "dataset_not_found"
         assert body["dataset_id"] == "nope"
+        assert "deleted" in body["message"]
 
     def test_unloaded_header_does_not_block_routes_that_skip_proxies(self, client):
         """Routes that don't touch the dataset proxies still respond 200.
@@ -241,11 +262,69 @@ class TestRequestScopedModel:
 
         set_thread_detector_context(get_detector_context("req_det_fb"))
 
-        resp = client.get("/api/votes", headers={"X-Detector-Id": "nonexistent"})
+        from vtscore.detectors.registry import register_detector
+
+        entry = register_detector(name="Unloaded", media_type="audio")
+
+        resp = client.get("/api/votes", headers={"X-Detector-Id": entry["id"]})
         assert resp.status_code == 409
         body = resp.get_json()
         assert body["error_code"] == "detector_not_loaded"
-        assert body["detector_id"] == "nonexistent"
+        assert body["detector_id"] == entry["id"]
+
+    def test_model_header_with_deleted_id_returns_404(self, client):
+        """An X-Detector-Id the registry no longer lists is gone, not unloaded (#4086).
+
+        A tab left open on a detector deleted through the registry API kept
+        sending its id; "Detector is not loaded" sent the user looking for a
+        load that could never succeed.
+        """
+        from vtscore.detectors.registry import register_detector, unregister_detector
+
+        entry = register_detector(name="Doomed", media_type="audio")
+        unregister_detector(entry["id"])
+
+        resp = client.get("/api/votes", headers={"X-Detector-Id": entry["id"]})
+        assert resp.status_code == 404
+        body = resp.get_json()
+        assert body["error_code"] == "detector_not_found"
+        assert body["detector_id"] == entry["id"]
+        assert "deleted" in body["message"]
+
+    def test_registry_load_succeeds_with_deleted_detector_header(self, client):
+        """Loading a live detector must not fail because the tab's header names a dead one (#4086).
+
+        The load is exactly how the tab gets off the deleted detector, so the
+        vote flush for the outgoing detector must skip rather than raise.
+        """
+        from vtscore.detectors.registry import register_detector
+
+        live = register_detector(name="Live", media_type="audio")
+
+        resp = client.post(
+            "/api/detectors/registry/load",
+            json={"detector_id": live["id"]},
+            headers={"X-Detector-Id": "deleted_detector"},
+        )
+        assert resp.status_code == 200, resp.get_json()
+        assert resp.get_json()["ok"] is True
+
+    def test_registry_unload_with_deleted_detector_header_is_noop(self, client):
+        resp = client.post(
+            "/api/detectors/registry/load",
+            json={"detector_id": None},
+            headers={"X-Detector-Id": "deleted_detector"},
+        )
+        assert resp.status_code == 200, resp.get_json()
+        assert resp.get_json()["ok"] is True
+
+    def test_registry_load_of_deleted_detector_returns_404(self, client):
+        resp = client.post(
+            "/api/detectors/registry/load",
+            json={"detector_id": "deleted_detector"},
+            headers={"X-Detector-Id": "deleted_detector"},
+        )
+        assert resp.status_code == 404
 
     def test_header_resolves_correct_detector_in_request(self, client):
         """Verify the proxy objects resolve correctly inside a request context."""

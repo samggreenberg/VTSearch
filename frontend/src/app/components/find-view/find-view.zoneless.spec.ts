@@ -7,6 +7,9 @@ import { FindViewComponent } from './find-view.component';
 import { ActiveContextService } from '../../services/active-context.service';
 import { SortStateService } from '../../services/sort-state.service';
 import { BrowseSubsetService } from '../../services/browse-subset.service';
+import { MediaPrefetchService } from '../../services/media-prefetch.service';
+import { MediaStateService } from '../../services/media-state.service';
+import { VoteStateService } from '../../services/vote-state.service';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleResource, settleZoneless } from '../../testing/settle-resource';
 import { provideHttpTesting } from '../../testing/test-providers';
@@ -434,5 +437,100 @@ describe('FindViewComponent (inclusion supersession)', () => {
     expect(retry.request.body).toEqual({ inclusion: 4 });
     retry.flush({ inclusion: 4, threshold: 0.6 });
     expect(sortState.threshold).toBe(0.6);
+  });
+});
+
+/**
+ * #3896 in Find: the boundary walk advances only once the vote POST is back,
+ * the same shape as the Train view, so it warms the next images the same way.
+ */
+describe('FindViewComponent prefetching the next review images (#3896)', () => {
+  let fixture: ComponentFixture<FindViewComponent>;
+  let httpMock: HttpTestingController;
+  let prefetch: ReturnType<typeof vi.spyOn>;
+
+  // Descending by score; the cutoff at 0.5 sits between ids 2 and 3.
+  const ranking = [
+    { id: 1, score: 0.9 },
+    { id: 2, score: 0.6 },
+    { id: 3, score: 0.4 },
+    { id: 4, score: 0.2 },
+  ];
+  const url = (id: number) =>
+    TestBed.inject(ActiveContextService).mediaUrl(`/api/medias/${id}/image`);
+  const lastCall = () => prefetch.mock.calls[prefetch.mock.calls.length - 1];
+
+  beforeEach(async () => {
+    await configureZoneless({
+      imports: [FindViewComponent],
+      providers: [...provideHttpTesting(), provideRouter([])],
+    }).compileComponents();
+    fixture = TestBed.createComponent(FindViewComponent);
+    httpMock = TestBed.inject(HttpTestingController);
+    prefetch = vi.spyOn(TestBed.inject(MediaPrefetchService), 'prefetch');
+
+    TestBed.tick();
+    for (let i = 0; i < 3; i++) {
+      await settleResource();
+      httpMock
+        .match('/api/medias/ids')
+        .forEach((req) => req.flush(ranking.map(({ id }) => ({ id, media_type: 'image' }))));
+      httpMock.match('/api/votes').forEach((req) =>
+        req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
+      );
+      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8 }));
+      httpMock.match('/api/inclusion').forEach((req) => req.flush({ inclusion: 0 }));
+      httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
+      httpMock.match('/api/embedders').forEach((req) => req.flush([]));
+    }
+    httpMock.match('/api/dataset/status').forEach((req) => req.flush({ display_name: 'x' }));
+    await settleZoneless(fixture);
+  });
+
+  afterEach(() => {
+    fixture.destroy();
+    TestBed.inject(VoteStateService).stopPolling();
+    httpMock.match(() => true).forEach((req) => {
+      if (!req.cancelled) req.flush([]);
+    });
+  });
+
+  it('warms the next two items of the boundary walk, alternating sides', () => {
+    TestBed.inject(SortStateService).setSortResults(ranking, 0.5);
+    // The walk's seed is the marginal positive, so `below` is served next.
+    TestBed.inject(MediaStateService).selectMedia(2);
+    // Mirror what advanceToBoundary leaves behind after taking `above`.
+    (fixture.componentInstance as unknown as { nextFindSide: string }).nextFindSide = 'below';
+    TestBed.tick();
+
+    expect(lastCall()).toEqual([[url(3), url(1)], [url(2)]]);
+  });
+
+  it('retargets when an item is verified with the same item on screen', () => {
+    TestBed.inject(SortStateService).setSortResults(ranking, 0.5);
+    TestBed.inject(MediaStateService).selectMedia(2);
+    (fixture.componentInstance as unknown as { nextFindSide: string }).nextFindSide = 'below';
+    TestBed.tick();
+
+    TestBed.inject(VoteStateService).setOptimisticVerified(3, true);
+    TestBed.tick();
+
+    expect(lastCall()).toEqual([[url(4), url(1)], [url(2)]]);
+  });
+
+  it('retargets when the cutoff moves', () => {
+    const sortState = TestBed.inject(SortStateService);
+    sortState.setSortResults(ranking, 0.5);
+    TestBed.inject(MediaStateService).selectMedia(2);
+    (fixture.componentInstance as unknown as { nextFindSide: string }).nextFindSide = 'below';
+    TestBed.tick();
+
+    // An inclusion slide re-thresholds with 2 still on screen. Cut at 0.3:
+    // above = {1, 2, 3}, below = {4}. `below` first → 4, then the nearest item
+    // above the line that is not on screen → 3.
+    sortState.setSortResults(ranking, 0.3);
+    TestBed.tick();
+
+    expect(lastCall()).toEqual([[url(4), url(3)], [url(2)]]);
   });
 });

@@ -73,6 +73,30 @@ TOBACCO_CLASSES = (
     "tobacco800/logo_cgr96c00_1",
 )
 SPOT_CLASSES = ("spods/logo_00003_0", "staver/stamp_stampds-00213_1")
+#: The four roster classes whose own source is excluded from their distractors,
+#: so they are ranked against ~2,900 pages where every other class faces ~45,000
+#: and no mean over all 27 means one thing (#3922).
+UCSF_CLASSES = (
+    "ucsf/logo_bat_leaf",
+    "ucsf/logo_rjr_script",
+    "ucsf/logo_p_lorillard_crest",
+    "ucsf/logo_bw_oval_emblem",
+)
+#: Share of the UCSF draw taken from the Food industry.
+#:
+#: The un-banded UCSF pages hold **zero** Tobacco documents -- the letterhead
+#: pull targeted tobacco authors, so every Tobacco page in the corpus is banded
+#: -- and these four classes are all tobacco marks.  A BAT leaf on an Opioids
+#: pharma letter is implausible on corporate lineage, not on detectability,
+#: which is the kind of argument that fails independently of how faint a mark
+#: is.  Food is the documented exception: ``CONTAMINATES`` already warns that
+#: "the same company's letterhead recurs across industries (Philip Morris
+#: reaches Food through Kraft)", and RJR owned Nabisco.  So the draw is weighted
+#: there without abandoning the rest, which still has to be checked rather than
+#: assumed.
+FOOD_SHARE = 0.75
+N_UCSF_UNIFORM = 50
+N_UCSF_RANKED = 30
 N_UNIFORM = 50
 N_RANKED = 50
 N_SPOT = 20
@@ -101,6 +125,36 @@ def pools_for(classes: dict[str, Any], pages_by_source, industry_of) -> dict[str
         )
         out[cid] = sorted(p for p in own["presumed_negative"] if p.startswith("ucsf/"))
     return out
+
+
+def unbanded_ucsf(pages: dict[str, Any], industry_of) -> tuple[list[str], list[str]]:
+    """The UCSF pages the letterhead pull never looked at, split Food / not.
+
+    "Un-banded" means the page was not a single-page ``type:letter`` from a
+    listed author -- a metadata query, not a detector.  It never looked at the
+    pixels, so its misses do not correlate with how small or faint a mark is,
+    which is what makes it safe to reason about by provenance.
+    """
+    food, other = [], []
+    for pid, page in pages.items():
+        if page.source != "ucsf" or (page.meta or {}).get("letterhead_author"):
+            continue
+        (food if (industry_of.get(pid) == "Food") else other).append(pid)
+    return sorted(food), sorted(other)
+
+
+def food_weighted(food: Sequence[str], other: Sequence[str], rng, n: int) -> list[str]:
+    """*n* pages, :data:`FOOD_SHARE` of them from Food.
+
+    Not a uniform draw over the un-banded pool, and deliberately so: a uniform
+    draw would spend 64% of the reviewer's effort on Opioids and Chemical pages
+    where a tobacco mark is implausible on corporate lineage.  The weights are
+    known, so a rate can still be reported per stratum; what is lost is a single
+    pooled rate, which would have been the wrong summary anyway.
+    """
+    want_food = min(len(food), round(n * FOOD_SHARE))
+    want_other = min(len(other), n - want_food)
+    return rng.sample(list(food), want_food) + rng.sample(list(other), want_other)
 
 
 def siglip_rank(class_id: str, candidates: Sequence[str], classes, tier: str) -> list[str]:
@@ -216,6 +270,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--tier", default="m")
     ap.add_argument("--no-ranked", action="store_true", help="uniform arm only")
+    ap.add_argument(
+        "--mode",
+        choices=("anchor", "ucsf-unbanded"),
+        default="anchor",
+        help="anchor: each class's unchecked UCSF pool. ucsf-unbanded: the four "
+        "UCSF classes against the pages the letterhead pull never looked at (#3922)",
+    )
     args = ap.parse_args(argv)
 
     order = list(cfg.TIER_ORDER)
@@ -235,7 +296,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     unchecked = pools_for(classes, pages_by_source, industry_of)
     rng = random.Random(SEED)
-    plan = [(c, N_UNIFORM, N_RANKED) for c in TOBACCO_CLASSES] + [(c, N_SPOT, 0) for c in SPOT_CLASSES]
+    weighted_draw = None
+    if args.mode == "ucsf-unbanded":
+        plan = [(c, N_UCSF_UNIFORM, N_UCSF_RANKED) for c in UCSF_CLASSES]
+        food, other = unbanded_ucsf(pages, industry_of)
+        print(f"  un-banded UCSF frame: {len(food)} Food, {len(other)} other")
+        # The ranked arm ranks the WHOLE frame -- the top of a ranking over the
+        # pool is where an unlabelled positive would actually distort AP, and a
+        # top-30 of a pre-drawn subset is not that.
+        unchecked = {c: food + other for c in UCSF_CLASSES}
+        weighted_draw = lambda n: food_weighted(food, other, rng, n)  # noqa: E731
+    else:
+        plan = [(c, N_UNIFORM, N_RANKED) for c in TOBACCO_CLASSES] + [(c, N_SPOT, 0) for c in SPOT_CLASSES]
 
     written = []
     for class_id, n_uniform, n_ranked in plan:
@@ -244,7 +316,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(f"  {class_id}: no unchecked UCSF pages in pool, skipped")
             continue
         refs = class_refs(class_id, classes, pages)
-        uniform = rng.sample(frame, min(n_uniform, len(frame)))
+        uniform = weighted_draw(n_uniform) if weighted_draw else rng.sample(frame, min(n_uniform, len(frame)))
         items = [(p, "uniform") for p in uniform]
         if n_ranked and not args.no_ranked:
             taken = set(uniform)

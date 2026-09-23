@@ -17,10 +17,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import pile_config as pc  # noqa: E402
 
 #: The question is the RETRIEVAL one, not a definitional one about objects.
 #: "Is this a tv?" cannot be answered for COCO's `tv`, because the class is 50%
@@ -68,6 +73,13 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--api", default="http://rack5n04:11850")
     ap.add_argument("--queues", type=Path, default=Path("/expscratch/sgreenberg/ruling-queues"))
+    ap.add_argument(
+        "--name-template",
+        default="",
+        help="e.g. 'coco_quarry {cls} - is the red box around {unit}?'. When given, every "
+        "subdirectory of --queues is registered under it and QUESTION is ignored. {unit} is "
+        "the class's ClassRule.unit, falling back to 'ONE <class>'.",
+    )
     ap.add_argument("--wait", type=int, default=600)
     ap.add_argument(
         "--replace",
@@ -103,7 +115,21 @@ def main() -> int:
         dets = {d["name"] for d in api(args.api, "/api/detectors/registry").get("detectors", [])}
 
     rc = 0
-    for klass, name in QUESTION.items():
+    questions = QUESTION
+    if args.name_template:
+        # Discover, so a new task needs no edit here. The class comes from the
+        # manifest rather than the directory name, because the directory is
+        # slugged and the class is what the question has to say.
+        questions = {}
+        for d in sorted(p for p in args.queues.iterdir() if p.is_dir()):
+            man = d / "manifest.json"
+            if not man.exists():
+                continue
+            cls = json.loads(man.read_text())["class"]
+            rule = pc.SCALE_CLASS_RULES.get(cls)
+            unit = (rule.unit if rule else "") or f"ONE {cls}"
+            questions[cls] = args.name_template.format(cls=cls, unit=unit)
+    for klass, name in questions.items():
         folder = args.queues / klass.replace(" ", "_") / "images"
         n = len(list(folder.glob("*.jpg")))
         if n == 0:
@@ -152,8 +178,8 @@ def main() -> int:
                 "name": name,
                 "media_type": "image",
                 "embedder_type": "semantic",
-                "text_query": TEXT[klass],
-                "examples": [{"type": "text", "value": TEXT[klass]}],
+                "text_query": TEXT.get(klass, f"a {klass}"),
+                "examples": [{"type": "text", "value": TEXT.get(klass, f"a {klass}")}],
             },
             method="POST",
         )

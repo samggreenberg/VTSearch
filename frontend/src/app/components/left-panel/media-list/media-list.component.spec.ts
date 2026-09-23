@@ -100,6 +100,32 @@ describe('MediaListComponent', () => {
     expect(fixture.nativeElement.querySelector('.empty-list')?.textContent).toContain('No media loaded');
   });
 
+  it('renders nothing for an empty ranking rather than falling back to the dataset', () => {
+    // An empty ranking is not "no ranking": something ranked the items and
+    // nothing came back. Find's work queue empties exactly this way once every
+    // item is verified, and the panel used to answer by dumping the whole
+    // dataset back in, unsorted (#4080).
+    fixture.componentRef.setInput('sortOrder', []);
+    TestBed.tick();
+    expect(component.cachedOrderedItems.length).toBe(0);
+    expect(fixture.nativeElement.querySelectorAll('vt-media-item').length).toBe(0);
+  });
+
+  it('shows the caller\'s note when a ranking exists but is empty', () => {
+    fixture.componentRef.setInput('sortOrder', []);
+    fixture.componentRef.setInput('emptyRankingNote', 'All verified — nothing left to review.');
+    TestBed.tick();
+    expect(fixture.nativeElement.querySelector('.empty-list')?.textContent).toContain(
+      'All verified',
+    );
+  });
+
+  it('still renders the dataset order when there is no ranking at all', () => {
+    fixture.componentRef.setInput('sortOrder', null);
+    TestBed.tick();
+    expect(component.cachedOrderedItems.map((i) => i.media.id)).toEqual([1, 2, 3]);
+  });
+
   it('should render threshold line in DOM', () => {
     fixture.componentRef.setInput('sortOrder', [
       { id: 1, score: 0.8 },

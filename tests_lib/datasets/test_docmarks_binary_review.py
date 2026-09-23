@@ -582,3 +582,200 @@ class TestVotesRouteByQuestionNotByFolder:
         _name, qdir, n = out
         assert n == 1
         assert [x.name for x in (qdir / "images").glob("*.jpg")] == ["c1.jpg"]
+
+
+@pytest.fixture(scope="module")
+def cs():
+    sys.path.insert(0, str(_DOCMARKS))
+    try:
+        yield importlib.import_module("contamination_sample")
+    finally:
+        sys.path.remove(str(_DOCMARKS))
+
+
+class TestUcsfUnbandedFrame:
+    """The #3922 draw: UCSF pages the letterhead pull never looked at, Food-weighted."""
+
+    @staticmethod
+    def _page(source, author=None):
+        return SimpleNamespace(source=source, meta={"letterhead_author": author} if author else {})
+
+    def test_a_banded_page_or_another_source_is_never_in_the_frame(self, cs):
+        pages = {
+            "ucsf/a": self._page("ucsf"),
+            "ucsf/b": self._page("ucsf", author="Philip Morris"),
+            "ucsf/c": self._page("ucsf"),
+            "tobacco800/d": self._page("tobacco800"),
+        }
+        food, other = cs.unbanded_ucsf(pages, {"ucsf/a": "Food", "ucsf/c": "Opioids", "ucsf/b": "Tobacco"})
+        assert (food, other) == (["ucsf/a"], ["ucsf/c"])
+
+    def test_the_draw_takes_the_food_share_and_fills_the_rest_elsewhere(self, cs):
+        import random
+
+        food = [f"f{i}" for i in range(100)]
+        other = [f"o{i}" for i in range(100)]
+        drawn = cs.food_weighted(food, other, random.Random(0), 40)
+        assert len(drawn) == len(set(drawn)) == 40
+        assert sum(p.startswith("f") for p in drawn) == round(40 * cs.FOOD_SHARE)
+
+    def test_a_short_stratum_is_taken_whole_rather_than_padded(self, cs):
+        import random
+
+        drawn = cs.food_weighted(["f0", "f1"], [f"o{i}" for i in range(100)], random.Random(0), 40)
+        assert {"f0", "f1"} <= set(drawn)
+        assert len(drawn) == len(set(drawn))
+
+
+class TestInkCrop:
+    """Whole-page questions crop to the inked region; a speck does not hold the crop open."""
+
+    @staticmethod
+    def _page(specks=True):
+        from PIL import Image, ImageDraw
+
+        im = Image.new("L", (1000, 1400), 255)
+        d = ImageDraw.Draw(im)
+        d.rectangle([300, 400, 700, 900], fill=0)  # the content
+        if specks:
+            for x, y in [(20, 20), (980, 1380), (15, 700), (990, 60)]:
+                d.point((x, y), fill=0)
+        return im
+
+    def test_specks_at_the_border_are_ignored(self, br):
+        left, top, right, bottom = br.ink_box(self._page())
+        assert 280 <= left <= 300 and 380 <= top <= 400 and 700 <= right <= 720 and 900 <= bottom <= 920
+
+    def test_a_faint_stamp_made_of_fragments_is_kept(self, br):
+        from PIL import ImageDraw
+
+        im = self._page(specks=False)
+        d = ImageDraw.Draw(im)
+        for i in range(12):  # broken strokes 4 px apart: each tiny, together a mark
+            d.rectangle([850 + 8 * (i % 4), 1200 + 8 * (i // 4), 853 + 8 * (i % 4), 1203 + 8 * (i // 4)], fill=0)
+        assert br.ink_box(im)[2] >= 880 and br.ink_box(im)[3] >= 1220
+
+    def test_a_blank_page_is_left_alone(self, br):
+        from PIL import Image
+
+        assert br.ink_box(Image.new("L", (100, 100), 255)) is None
+
+
+class TestClassRefs:
+    def test_a_band_located_or_page_sized_instance_is_never_a_reference(self, br):
+        Mark = SimpleNamespace
+        pages = {
+            "u/band": SimpleNamespace(
+                width=1000,
+                height=1000,
+                marks=[Mark(class_id="c", box=[0, 0, 900, 200], provenance="ucsf_classes_band")],
+            ),
+            "u/wide": SimpleNamespace(
+                width=1000, height=1000, marks=[Mark(class_id="c", box=[0, 0, 800, 300], provenance="ucsf_classes")]
+            ),
+            "u/tight": SimpleNamespace(
+                width=1000, height=1000, marks=[Mark(class_id="c", box=[5, 5, 60, 60], provenance="ucsf_classes")]
+            ),
+        }
+        classes = {"c": {"query_crop": "/q.png", "page_ids": ["u/band", "u/wide", "u/tight"]}}
+        refs = br.class_refs("c", classes, pages)
+        assert [r.page_id for r in refs] == [None, "u/tight"]
+
+
+class TestRealPixelsFirst:
+    """#4073: widen the window to real pixels before enlarging a small mark."""
+
+    def test_a_small_mark_is_shown_at_most_at_the_cap_with_real_context(self, br):
+        panel = (958, 1232)
+        region = br.expand([600, 200, 24, 20], None, 1240, 1680, 0.25)
+        wide = br.widen_to_real_pixels(region, 24, panel, 1240, 1680)
+        w, h = wide[2] - wide[0], wide[3] - wide[1]
+        scale = min(panel[0] / w, panel[1] / h)
+        assert scale <= br.MAX_UPSCALE + 1e-6
+        assert wide[0] <= 600 and wide[1] <= 200 and wide[2] >= 624 and wide[3] >= 220  # the mark stays in view
+        assert 0 <= wide[0] and 0 <= wide[1] and wide[2] <= 1240 and wide[3] <= 1680
+
+    def test_the_window_shifts_rather_than_leaving_the_page(self, br):
+        wide = br.widen_to_real_pixels((0, 0, 40, 30), 30, (958, 1232), 1240, 1680)
+        assert wide[0] == 0 and wide[1] == 0 and wide[2] > 40 and wide[3] > 30
+
+    def test_a_large_mark_is_not_widened_past_what_fills_the_panel(self, br):
+        region = (100, 100, 1100, 1400)
+        assert br.widen_to_real_pixels(region, 1000, (958, 1232), 1240, 1680) == region
+
+    def test_the_band_box_queue_routes_to_its_own_slate(self, br):
+        src, _translator = br.TRANSLATORS["box_tighten_band"]
+        assert src(Path("/c")) == Path("/c/audit/box_tighten_band/verdicts.jsonl")
+        rows = [{"class_id": "c", "members": [{"index": 0}, {"index": 1}], "verdict": ""}]
+        questions = {"a.jpg": {"task": "box_tighten_band", "key": {"class_id": "c", "index": 1}}}
+        filled, unanswered = br.TRANSLATORS["box_tighten_band"][1](rows, questions, {"a.jpg": "good"})
+        assert filled[0]["verdict"] == "1" and unanswered == []
+
+
+class TestDrawnBoxes:
+    """#4109: a box the reviewer draws with a Good vote replaces the proposal, mapped back to the page."""
+
+    def _q(self, br):
+        return br.Question(
+            filename="a.jpg",
+            task="box_tighten_band",
+            question="?",
+            refs=[],
+            page_id="u/p",
+            box=[263, 388, 84, 27],
+            key={"class_id": "c", "index": 0},
+        )
+
+    def test_a_box_drawn_on_the_sheet_maps_back_to_the_page_pixels_it_covered(self, br):
+        q, page = self._q(br), SimpleNamespace(width=1240, height=1680)
+        region, s, ox, oy = br.outlined_placement(q, page)
+        W, H = br.sheet_size(q)
+        x, y, w, h = q.box
+        norm = [
+            (ox + (x - region[0]) * s) / W,
+            (oy + (y - region[1]) * s) / H,
+            (ox + (x + w - region[0]) * s) / W,
+            (oy + (y + h - region[1]) * s) / H,
+        ]
+        assert br.sheet_box_to_page(q, page, norm) == [263, 388, 84, 27]
+
+    def test_a_drawn_box_is_clipped_to_what_the_sheet_showed(self, br):
+        q, page = self._q(br), SimpleNamespace(width=1240, height=1680)
+        region, *_ = br.outlined_placement(q, page)
+        x, y, w, h = br.sheet_box_to_page(q, page, [0.0, 0.0, 1.0, 1.0])
+        assert x >= region[0] and y >= region[1] and x + w <= region[2] and y + h <= region[3]
+
+    def test_the_drawn_box_replaces_the_proposal_and_keeps_it_for_the_record(self, br):
+        rows = [{"class_id": "c", "members": [{"index": 0, "new_box": [1, 1, 5, 5]}], "verdict": ""}]
+        questions = {"a.jpg": {"task": "box_tighten_band", "key": {"class_id": "c", "index": 0}}}
+        filled, _ = br.TRANSLATORS["box_tighten_band"][1](
+            rows, questions, {"a.jpg": "good"}, drawn={"a.jpg": [9, 9, 30, 20]}
+        )
+        m = filled[0]["members"][0]
+        assert filled[0]["verdict"] == "0" and m["new_box"] == [9, 9, 30, 20]
+        assert m["proposed_box"] == [1, 1, 5, 5] and m["drawn_by_reviewer"] is True
+
+
+class TestBoxDraw:
+    """#4125: only a drawn box changes a mark; Bad is reported, never applied."""
+
+    def test_drawn_confirmed_and_bad_votes(self, br):
+        rows = [
+            {
+                "class_id": "c",
+                "members": [
+                    {"index": 0, "page_id": "u/a", "new_box": None},
+                    {"index": 1, "page_id": "u/b", "new_box": None},
+                    {"index": 2, "page_id": "u/c", "new_box": None},
+                ],
+                "verdict": "",
+            }
+        ]
+        questions = {f"{i}.jpg": {"task": "box_draw", "key": {"class_id": "c", "index": i}} for i in range(3)}
+        votes = {"0.jpg": "good", "1.jpg": "good", "2.jpg": "bad"}
+        out, notes = br.TRANSLATORS["box_draw"][1](rows, questions, votes, drawn={"0.jpg": [5, 6, 7, 8]})
+        m = out[0]["members"]
+        assert out[0]["verdict"] == "0" and m[0]["new_box"] == [5, 6, 7, 8]
+        assert m[1].get("confirmed_as_is") and m[1]["new_box"] is None
+        assert m[2].get("reviewer_says_not_on_page") and any("u/c" in n for n in notes)
+        assert "box_draw" in br.DRAWN_BOX_TASKS

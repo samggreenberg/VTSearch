@@ -12,6 +12,7 @@ import { AutopilotStateService } from '../../services/autopilot-state.service';
 import { EmbedderCapabilityService } from '../../services/embedder-capability.service';
 import type { EmbedderInfo } from '../../models/api.models';
 import { ActiveContextService } from '../../services/active-context.service';
+import { MediaPrefetchService } from '../../services/media-prefetch.service';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleResource, settleZoneless } from '../../testing/settle-resource';
 import { provideHttpTesting } from '../../testing/test-providers';
@@ -145,19 +146,20 @@ describe('LabelViewComponent', () => {
   // requests are driven by `timer(0, …)`, which only fires on a real macrotask
   // after the synchronous test body returns, so they are NOT flushed here —
   // they are drained by `afterEach`'s catch-all instead.
-  function flushInitialRequests(votes?: Record<string, unknown>): void {
+  function flushInitialRequests(
+    votes?: Record<string, unknown>,
+    medias: { id: number; media_type: string }[] = [
+      { id: 1, media_type: 'audio' },
+      { id: 2, media_type: 'audio' },
+    ],
+  ): void {
     TestBed.tick();
     // The medias and settings reads ride `rxResource`, whose loader runs in a
     // root effect rather than synchronously during `detectChanges()`; tick so
     // the GETs are actually issued before we match them.
     TestBed.tick();
     // /api/medias/ids
-    httpMock.match('/api/medias/ids').forEach(req =>
-      req.flush([
-        { id: 1, media_type: 'audio' },
-        { id: 2, media_type: 'audio' },
-      ]),
-    );
+    httpMock.match('/api/medias/ids').forEach(req => req.flush(medias));
     // /api/find/end-session (the Train window's hand-off out of a Find
     // session, #3212); loadVotes is chained onto its response, so the GET
     // below only exists after this POST is answered and the tick lands it.
@@ -239,6 +241,89 @@ describe('LabelViewComponent', () => {
   });
 
   /**
+   * #3896: the next image used to be requested only once the vote POST came
+   * back. The view now hands the prefetch store the next PREFETCH_DEPTH images
+   * as soon as an item is on screen — and again whenever the prediction moves
+   * with that item still on screen, which is the case a selection-only trigger
+   * missed.
+   */
+  describe('prefetching the next review images (#3896)', () => {
+    const images = [1, 2, 3, 4].map((id) => ({ id, media_type: 'image' }));
+    const ranking = [
+      { id: 1, score: 0.9 },
+      { id: 2, score: 0.8 },
+      { id: 3, score: 0.7 },
+      { id: 4, score: 0.6 },
+    ];
+    let prefetch: ReturnType<typeof vi.spyOn>;
+    const url = (id: number) =>
+      TestBed.inject(ActiveContextService).mediaUrl(`/api/medias/${id}/image`);
+    const lastCall = () => prefetch.mock.calls[prefetch.mock.calls.length - 1];
+
+    beforeEach(() => {
+      prefetch = vi.spyOn(TestBed.inject(MediaPrefetchService), 'prefetch');
+    });
+
+    it('warms the next two images, keeping the one on screen', async () => {
+      flushInitialRequests(undefined, images);
+      await settleResource();
+      component.sortState.setSelectMode('top');
+      component.sortState.setSortResults(ranking, 0.5);
+      component.mediaState.selectMedia(1);
+      TestBed.tick();
+
+      expect(lastCall()).toEqual([[url(2), url(3)], [url(1)]]);
+    });
+
+    it('retargets when a re-sort lands with the same item on screen', async () => {
+      flushInitialRequests(undefined, images);
+      await settleResource();
+      component.sortState.setSelectMode('top');
+      component.sortState.setSortResults(ranking, 0.5);
+      component.mediaState.selectMedia(1);
+      TestBed.tick();
+
+      // The learned sort scheduled by the previous vote comes back and puts 4
+      // next. The selection never moved, which is exactly when a warm keyed on
+      // the selection alone kept fetching the old pick.
+      component.sortState.setSortResults(
+        [ranking[0], ranking[3], ranking[2], ranking[1]],
+        0.5,
+      );
+      TestBed.tick();
+
+      expect(component.mediaState.selectedId()).toBe(1);
+      expect(lastCall()).toEqual([[url(4), url(3)], [url(1)]]);
+    });
+
+    it('retargets when a vote on an upcoming item lands', async () => {
+      flushInitialRequests(undefined, images);
+      await settleResource();
+      component.sortState.setSelectMode('top');
+      component.sortState.setSortResults(ranking, 0.5);
+      component.mediaState.selectMedia(1);
+      TestBed.tick();
+
+      // Labeled from the side panel, say: it drops out of the queue.
+      component.voteState.applyOptimisticState(2, 'bad');
+      TestBed.tick();
+
+      expect(lastCall()).toEqual([[url(3), url(4)], [url(1)]]);
+    });
+
+    it('warms nothing for non-image media', async () => {
+      flushInitialRequests();
+      await settleResource();
+      component.sortState.setSelectMode('top');
+      component.sortState.setSortResults(ranking.slice(0, 2), 0.5);
+      component.mediaState.selectMedia(1);
+      TestBed.tick();
+
+      expect(lastCall()?.[0]).toEqual([]);
+    });
+  });
+
+  /**
    * #4028: the centre pane could run out in three more ways than #3887 named,
    * and every one of them left it blank — or, worse, showing "Select a media
    * item to view" when there was nothing left to select.
@@ -252,9 +337,9 @@ describe('LabelViewComponent', () => {
     const pane = () => fixture.nativeElement.querySelector('vt-center-panel .exhausted-pane');
 
     it('says the dataset is done on a fresh entry to a finished detector', async () => {
-      // A fresh entry ranks nothing (`seedRankingIfUnranked` is armed by a pair
-      // *reload*, not by ngOnInit), so this is the state the user comes back
-      // to: every item labeled, `sortOrder` empty.
+      // A fresh entry with no sort to carry over ranks nothing (the default
+      // controls are Text with an empty query, #4092), so this is the state the
+      // user comes back to: every item labeled, `sortOrder` empty.
       flushInitialRequests(allLabeled);
       await settleResource();
 
@@ -1122,6 +1207,55 @@ describe('LabelViewComponent', () => {
     });
   });
 
+  // Issue #4092: opening Train from the dashboard on a new pair kept the last
+  // session's sort controls *and* its ranking, and re-ran neither — so the
+  // controls claimed a sort ("aaa") that was not the one on screen. The rule
+  // now: the controls carry over, the ranking is dropped and re-derived.
+  describe('fresh entry carries the sort over (#4092)', () => {
+    async function enterWithVotes(): Promise<void> {
+      flushInitialRequests();
+      // The entry seed is deferred a beat, as the pair-switch one is.
+      await new Promise<void>((resolve) => setTimeout(resolve, 400));
+    }
+
+    it('drops the previous session\'s ranking', async () => {
+      component.autopilotEnabled.set(false);
+      // A ranking left behind by the last Train/Find session, on other ids.
+      component.sortState.setSortResults([{ id: 99, score: 0.9 }], 0.5);
+
+      await enterWithVotes();
+
+      expect(component.sortState.sortOrder).toEqual([]);
+    });
+
+    it('re-runs the carried text query against this pair with Autopilot off', async () => {
+      component.autopilotEnabled.set(false);
+      component.sortState.setTextQuery('aaa');
+
+      await enterWithVotes();
+
+      const textSort = httpMock.match('/api/sort');
+      expect(textSort.length).toBe(1);
+      expect(textSort[0].request.body).toEqual({ text: 'aaa' });
+      textSort[0].flush({ results: [{ id: 2, similarity: 0.9 }, { id: 1, similarity: 0.1 }], threshold: 0.5 });
+      TestBed.tick();
+      // The first ranking seeds the centre, as it does after a pair switch.
+      expect(component.mediaState.selectedId()).toBe(2);
+    });
+
+    it('leaves the sort to Autopilot when it is running', async () => {
+      component.sortState.setTextQuery('aaa');
+      TestBed.inject(LabelSessionService).textQuery = 'the hint';
+
+      await enterWithVotes();
+
+      // Only Autopilot's own seed sort, on the detector's hint — the backstop
+      // does not add a second one on the carried query.
+      const bodies = httpMock.match('/api/sort').map((r) => r.request.body);
+      expect(bodies).not.toContainEqual({ text: 'aaa' });
+    });
+  });
+
   // Issue #3510: a pair switch reloads medias and votes but re-ran no sort, so
   // the pair it landed on kept the empty ranking the reset left behind — an
   // empty work queue and a placeholder in the centre, where a fresh entry to
@@ -1251,11 +1385,52 @@ describe('LabelViewComponent', () => {
       activeContext.setActivePair('ds2', 'det2');
       await flushPairReload({ good: [], bad: [] });
 
-      // Entering the window with Autopilot off ranks nothing until the user
-      // sorts, so a switch must not rank either — and must not hijack the sort
-      // mode they chose.
+      // The carried-over sort is Text with an empty query, so there is nothing
+      // to re-run — and the detector's own hint must not hijack the sort mode
+      // they chose (#4092: the sort carries over; Autopilot owns the hint).
       httpMock.expectNone('/api/sort');
       httpMock.expectNone('/api/learned-sort');
+    });
+
+    it('re-runs the carried text sort on the new pair with Autopilot off (#4092)', async () => {
+      const activeContext = seedPair();
+      component.autopilotEnabled.set(false);
+      flushInitialRequests();
+      flushDetectorRegistry();
+      TestBed.inject(AutopilotStateService).clear();
+      await new Promise<void>((resolve) => setTimeout(resolve, 400));
+      httpMock.match('/api/sort');
+      // The user's own sort: Text, "aaa". The new detector's hint is different,
+      // and is Autopilot's to use, not the manual controls'.
+      component.sortState.setTextQuery('aaa');
+      TestBed.inject(LabelSessionService).textQuery = 'the new hint';
+
+      activeContext.setActivePair('ds2', 'det2');
+      await flushPairReload({ good: [], bad: [] });
+
+      const textSort = httpMock.match('/api/sort');
+      expect(textSort.length).toBe(1);
+      expect(textSort[0].request.body).toEqual({ text: 'aaa' });
+      expect(component.sortState.sortMode).toBe('text');
+    });
+
+    it('falls a carried learned sort back to Text when the new pair has no labelset (#4092)', async () => {
+      const activeContext = seedPair();
+      component.autopilotEnabled.set(false);
+      flushInitialRequests();
+      flushDetectorRegistry();
+      TestBed.inject(AutopilotStateService).clear();
+      await new Promise<void>((resolve) => setTimeout(resolve, 400));
+      component.sortState.setSortMode('learned');
+      component.sortState.setTextQuery('aaa');
+
+      activeContext.setActivePair('ds2', 'det2');
+      await flushPairReload({ good: [], bad: [] });
+
+      // The Learned radio is disabled on this pair, so it must not stay checked.
+      httpMock.expectNone('/api/learned-sort');
+      expect(component.sortState.sortMode).toBe('text');
+      expect(httpMock.match('/api/sort').map((r) => r.request.body)).toEqual([{ text: 'aaa' }]);
     });
 
     it('stands down when something already ranked the new pair', async () => {

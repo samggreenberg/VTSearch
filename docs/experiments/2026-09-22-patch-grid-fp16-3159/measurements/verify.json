@@ -1,0 +1,47 @@
+{
+  "visual_genome_m": {
+    "n_fp32": 4193,
+    "n_pile": 4193,
+    "same_ids": true,
+    "same_categories": true,
+    "same_boxes": true,
+    "grid_dtypes(fp32/pile)": [
+      "float32/float16"
+    ],
+    "cls_bit_identical": "4193/4193",
+    "cls_max_abs_diff": 0.0,
+    "cast_grid_bit_identical_medias": "4193/4193",
+    "cast_grid_elements_differing": "0/631163904",
+    "verdict": "PASS: pile cell == this fp32 cell through the storage cast"
+  },
+  "coco_val": {
+    "n_fp32": 4952,
+    "n_pile": 4952,
+    "same_ids": true,
+    "same_categories": true,
+    "same_boxes": true,
+    "grid_dtypes(fp32/pile)": [
+      "float32/float16"
+    ],
+    "cls_bit_identical": "4952/4952",
+    "cls_max_abs_diff": 0.0,
+    "cast_grid_bit_identical_medias": "4952/4952",
+    "cast_grid_elements_differing": "0/745414656",
+    "verdict": "PASS: pile cell == this fp32 cell through the storage cast"
+  },
+  "caltech101_m": {
+    "n_fp32": 838,
+    "n_pile": 838,
+    "same_ids": true,
+    "same_categories": true,
+    "same_boxes": true,
+    "grid_dtypes(fp32/pile)": [
+      "float32/float16"
+    ],
+    "cls_bit_identical": "838/838",
+    "cls_max_abs_diff": 0.0,
+    "cast_grid_bit_identical_medias": "838/838",
+    "cast_grid_elements_differing": "0/126142464",
+    "verdict": "PASS: pile cell == this fp32 cell through the storage cast"
+  }
+}

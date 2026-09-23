@@ -7,6 +7,7 @@ import { SortStateService } from './sort-state.service';
 import { MediaStateService } from './media-state.service';
 import { VoteStateService } from './vote-state.service';
 import { AutopilotStateService } from './autopilot-state.service';
+import { ActiveContextService } from './active-context.service';
 import { configureZoneless } from '../testing/zoneless-testbed';
 import { provideHttpTesting } from '../testing/test-providers';
 import { settleResource } from '../testing/settle-resource';
@@ -286,6 +287,79 @@ describe('SortRunnerService', () => {
     httpMock.expectNone((req) => req.url.startsWith('/api/coverage-atlas/next'));
   });
 
+  describe('peekUpcomingMedia (#3896)', () => {
+    const ranking = [
+      { id: 1, score: 0.9 },
+      { id: 2, score: 0.8 },
+      { id: 3, score: 0.6 },
+      { id: 4, score: 0.4 },
+      { id: 5, score: 0.2 },
+    ];
+
+    it('lists the next items the advance would show, skipping labeled ones', () => {
+      sortState.setSelectMode('top');
+      sortState.setSortResults(ranking, 0.5);
+      voteState.applyOptimisticState(2, 'bad');
+
+      expect(runner.peekUpcomingMedia(1, 2)).toEqual([3, 4]);
+      expect(mediaState.selectedId()).toBeNull();
+    });
+
+    /**
+     * The queue is only worth anything if each entry is what the advance will
+     * actually pick once the reviewer gets there. Walk it for real: vote, let
+     * `autoSelectNext` choose, and compare with the peek taken beforehand.
+     */
+    it.each(['top', 'hard'] as const)('matches what successive votes select in `%s` mode', (mode) => {
+      sortState.setSelectMode(mode);
+      sortState.setSortResults(ranking, 0.5);
+      runner.autoSelectNext();
+      const current = mediaState.selectedId()!;
+      const predicted = runner.peekUpcomingMedia(current, 2);
+
+      const walked: number[] = [];
+      let on = current;
+      for (let i = 0; i < 2; i++) {
+        voteState.applyOptimisticState(on, 'good');
+        runner.autoSelectNext(on);
+        on = mediaState.selectedId()!;
+        walked.push(on);
+      }
+      expect(predicted).toEqual(walked);
+    });
+
+    it('follows the ranking when a re-sort lands with the same item on screen', () => {
+      sortState.setSelectMode('top');
+      sortState.setSortResults(ranking, 0.5);
+      expect(runner.peekUpcomingMedia(1, 2)).toEqual([2, 3]);
+
+      sortState.setSortResults(
+        [ranking[0], ranking[4], ranking[3], ranking[2], ranking[1]],
+        0.5,
+      );
+      expect(runner.peekUpcomingMedia(1, 2)).toEqual([5, 4]);
+    });
+
+    it('stops short when the ranking runs out', () => {
+      sortState.setSelectMode('top');
+      sortState.setSortResults(ranking.slice(0, 2), 0.5);
+      expect(runner.peekUpcomingMedia(1, 2)).toEqual([2]);
+    });
+
+    it('stops at a `new`-mode pick and fires no probe', () => {
+      sortState.setSelectMode('new');
+      sortState.setSortResults(ranking, 0.5);
+      expect(runner.peekUpcomingMedia(1, 2)).toEqual([]);
+      httpMock.expectNone((req) => req.url.startsWith('/api/coverage-atlas/next'));
+    });
+
+    it('is empty with nothing on screen', () => {
+      sortState.setSelectMode('top');
+      sortState.setSortResults(ranking, 0.5);
+      expect(runner.peekUpcomingMedia(null, 2)).toEqual([]);
+    });
+  });
+
   // --- inclusion ------------------------------------------------------------
 
   it('pushes the inclusion value and re-advances the selection', () => {
@@ -414,6 +488,130 @@ describe('SortRunnerService', () => {
 
       voteState.applyOptimisticState(1, 'none');
       expect(runner.datasetExhausted()).toBe(false);
+    });
+  });
+  // --- carrying a sort to a new pair (#4092) ---------------------------------
+
+  /**
+   * The rule for a Train entry or pair switch: the sort controls carry over and
+   * are re-run against the new pair; a sort the new pair cannot run falls back
+   * to Text, so the controls never claim a sort that is not the one on screen.
+   */
+  describe('rerunCarriedSort', () => {
+    it('re-runs the carried text query', () => {
+      sortState.setTextQuery('aaa');
+
+      runner.rerunCarriedSort(true);
+
+      expect(httpMock.expectOne('/api/sort').request.body).toEqual({ text: 'aaa' });
+      expect(sortState.sortMode).toBe('text');
+    });
+
+    it('ranks nothing when the carried text box is empty', () => {
+      runner.rerunCarriedSort(true);
+
+      httpMock.expectNone('/api/sort');
+    });
+
+    it('does not fire a text sort the dataset\'s embedder cannot run', () => {
+      sortState.setTextQuery('aaa');
+
+      runner.rerunCarriedSort(false);
+
+      httpMock.expectNone('/api/sort');
+    });
+
+    it('re-runs a learned sort when the new detector can train one', () => {
+      enableLearnedSort();
+      sortState.setSortMode('learned');
+
+      runner.rerunCarriedSort(true);
+
+      httpMock.expectOne('/api/learned-sort');
+      expect(sortState.sortMode).toBe('learned');
+    });
+
+    it('falls back to Text when the new detector cannot train a learned sort', () => {
+      sortState.setSortMode('learned');
+      sortState.setTextQuery('aaa');
+
+      runner.rerunCarriedSort(true);
+
+      httpMock.expectNone('/api/learned-sort');
+      expect(sortState.sortMode).toBe('text');
+      expect(httpMock.expectOne('/api/sort').request.body).toEqual({ text: 'aaa' });
+    });
+
+    it('re-scores with the same detector for a detector Load sort', () => {
+      runner.onModelSelected('det-x');
+      httpMock.expectOne('/api/find-label').flush({ results: [], threshold: 0.5, detector_name: 'X' });
+      expect(sortState.loadSortSource).toEqual({ kind: 'detector', detectorId: 'det-x' });
+
+      runner.rerunCarriedSort(true);
+
+      expect(httpMock.expectOne('/api/find-label').request.body).toEqual({ detector_id: 'det-x' });
+      expect(sortState.sortMode).toBe('load');
+    });
+
+    it('re-runs server example files', () => {
+      sortState.setSortMode('load');
+      sortState.setLoadSortSource({ kind: 'files', filenames: ['a.wav', 'b.wav'] });
+
+      runner.rerunCarriedSort(true);
+
+      expect(httpMock.expectOne('/api/example-sort-server').request.body).toEqual({
+        filenames: ['a.wav', 'b.wav'],
+      });
+    });
+
+    it('re-uploads an uploaded example', () => {
+      const file = new File(['x'], 'ex.wav', { type: 'audio/wav' });
+      sortState.setSortMode('load');
+      sortState.setLoadSortSource({ kind: 'upload', file });
+
+      runner.rerunCarriedSort(true);
+
+      httpMock.expectOne('/api/example-sort').flush({ results: [{ id: 3, similarity: 0.7 }], threshold: 0.5 });
+      expect(sortState.sortOrder).toEqual([{ id: 3, score: 0.7, bestRegion: undefined }]);
+      // The re-run keeps its recipe, so it can carry over again.
+      expect(sortState.loadSortSource).toEqual({ kind: 'upload', file, cropParams: undefined });
+    });
+
+    it('re-runs "Sort by this" while its dataset is still the active one', () => {
+      TestBed.inject(ActiveContextService).setActive('ds1', 'det1');
+      runner.runExampleSortById(4, 'clip.wav');
+      httpMock.expectOne('/api/example-sort-by-id').flush({ results: [], threshold: 0.5 });
+      TestBed.inject(ActiveContextService).setActive('ds1', 'det2');
+
+      runner.rerunCarriedSort(true);
+
+      expect(httpMock.expectOne('/api/example-sort-by-id').request.body).toEqual({ media_id: 4 });
+    });
+
+    it('falls back to Text for "Sort by this" on another dataset, whose ids mean nothing here', () => {
+      TestBed.inject(ActiveContextService).setActive('ds1', 'det1');
+      runner.runExampleSortById(4, 'clip.wav');
+      httpMock.expectOne('/api/example-sort-by-id').flush({ results: [], threshold: 0.5 });
+      sortState.setTextQuery('aaa');
+      TestBed.inject(ActiveContextService).setActive('ds2', 'det1');
+
+      runner.rerunCarriedSort(true);
+
+      httpMock.expectNone('/api/example-sort-by-id');
+      expect(sortState.sortMode).toBe('text');
+      expect(sortState.loadSortLabel).toBe('');
+      expect(sortState.loadSortSource).toBeNull();
+      expect(httpMock.expectOne('/api/sort').request.body).toEqual({ text: 'aaa' });
+    });
+
+    it('falls back to Text for a Load ranking with no recorded source', () => {
+      sortState.setSortMode('load');
+      sortState.setLoadSortLabel('Find detector');
+
+      runner.rerunCarriedSort(true);
+
+      expect(sortState.sortMode).toBe('text');
+      expect(sortState.loadSortLabel).toBe('');
     });
   });
 });

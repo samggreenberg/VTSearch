@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
 import { SortingApiService } from '../../../services/sorting-api.service';
+import type { LoadSortSource } from '../../../services/sort-state.service';
 import { DatasetsCrudApiService } from '../../../services/datasets-crud-api.service';
 import { DatasetsListingsApiService } from '../../../services/datasets-listings-api.service';
 import { DatasetsUiApiService } from '../../../services/datasets-ui-api.service';
@@ -116,7 +117,10 @@ export class LoadSortModalComponent implements OnInit {
     this.sortingApi.exampleSort(result.file, result.cropParams).subscribe({
       next: (data) => {
         this.status.set('');
-        this.exampleSortStarted.emit(data);
+        // The source rides along so the Train window can re-run this sort on
+        // another pair (#4092).
+        const source: LoadSortSource = { kind: 'upload', file: result.file, cropParams: result.cropParams };
+        this.exampleSortStarted.emit({ ...data, source });
         this.closed.emit();
       },
       error: () => {
@@ -145,7 +149,8 @@ export class LoadSortModalComponent implements OnInit {
     this.sortingApi.exampleSortServer({ filenames: [filename] }).subscribe({
       next: (data) => {
         this.status.set('');
-        this.exampleSortStarted.emit(data);
+        const source: LoadSortSource = { kind: 'files', filenames: [filename] };
+        this.exampleSortStarted.emit({ ...data, source });
         this.closed.emit();
       },
       error: () => {

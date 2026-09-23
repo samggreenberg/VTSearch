@@ -9,9 +9,8 @@ rule that a plan may *reference* an issue but must never duplicate its body).
 **Where the other archive lives.** Finished measurements are written up in
 [`docs/experiments/`](../experiments/) — one directory per study, holding its
 `REPORT.md`, the generated tables and figures, and (for a long study) a
-self-contained `report.html` reading copy. See [its
-index](../experiments/README.md). A plan links *into* those; it does not restate
-them.
+self-contained `report.html` reading copy. The directories are dated, so `ls`
+is the index. A plan links *into* those; it does not restate them.
 
 This index groups plans by area and deliberately says nothing about their
 contents: what's owed lives in each plan file alone, so there is no summary here

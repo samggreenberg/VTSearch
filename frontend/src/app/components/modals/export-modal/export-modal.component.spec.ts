@@ -852,4 +852,99 @@ describe('ExportModalComponent', () => {
     });
   });
 
+  // A `hidden` field is the plugin author's to fill, not the user's: the value
+  // is fixed in `default` and the form renders no widget for it. An exporter
+  // whose fields are *all* hidden therefore shows just its action button
+  // (issue #4078) — while still exporting on the author's values.
+  describe('hidden fields', () => {
+    const fixedUrlExporter = {
+      name: 'our_site',
+      display_name: 'Open in Our Site',
+      opens_url: true,
+      fields: [
+        {
+          key: 'url_template',
+          label: 'URL Template',
+          field_type: 'text',
+          hidden: true,
+          default: 'https://our-site/review?ids={ids}',
+          required: true,
+        },
+        {
+          key: 'separator',
+          label: 'Separator',
+          field_type: 'text',
+          default: ',',
+          required: false,
+        },
+      ],
+      supported_payloads: ['labelset'],
+    };
+
+    /** The same exporter with nothing left for the user to fill in. */
+    const allHiddenExporter = {
+      ...fixedUrlExporter,
+      name: 'our_site_only',
+      fields: fixedUrlExporter.fields.map((f) => ({ ...f, hidden: true })),
+    };
+
+    it('leaves a hidden field out of the rendered form', async () => {
+      await flushInit([...mockExporters, fixedUrlExporter]);
+      component.selectExporterTab(fixedUrlExporter as never);
+      expect(component.activeTabExporterFields.map((f) => f.key)).toEqual([
+        'separator',
+      ]);
+    });
+
+    it('renders no input for a hidden field', async () => {
+      await flushInit([...mockExporters, fixedUrlExporter]);
+      component.selectExporterTab(fixedUrlExporter as never);
+      fixture.detectChanges();
+      const host = fixture.nativeElement as HTMLElement;
+      expect(host.querySelector('#field-url_template')).toBeNull();
+      expect(host.querySelector('#field-separator')).not.toBeNull();
+    });
+
+    // Hiding the widget must not hide the value: the export still has to run
+    // on the template the plugin author fixed.
+    it('still seeds and submits the hidden default', async () => {
+      await flushInit([...mockExporters, fixedUrlExporter]);
+      component.selectExporterTab(fixedUrlExporter as never);
+      component.submitExporterTab();
+      const req = httpMock.expectOne('/api/exporters/export');
+      expect(req.request.body.field_values.url_template).toBe(
+        'https://our-site/review?ids={ids}',
+      );
+      req.flush({ success: true });
+    });
+
+    it('collapses to a bare button when every field is hidden', async () => {
+      await flushInit([...mockExporters, allHiddenExporter]);
+      component.selectExporterTab(allHiddenExporter as never);
+      fixture.detectChanges();
+      expect(component.activeTabExporterFields).toEqual([]);
+      const host = fixture.nativeElement as HTMLElement;
+      expect(host.querySelectorAll('.tab-field').length).toBe(0);
+      expect(host.textContent).toContain('Open Labelset in Open in Our Site');
+    });
+
+    // `startExporter` short-circuits when there is nothing to ask the user.
+    // It used to post `{}` in that case, which was harmless while "no fields"
+    // meant "no values"; with hidden fields it would drop the author's.
+    it('exports immediately on the hidden defaults when nothing is visible', async () => {
+      await flushInit([...mockExporters, allHiddenExporter]);
+      const openSpy = vi
+        .spyOn(window, 'open')
+        .mockReturnValue({ closed: false, opener: {}, location: { href: '' }, close: vi.fn() } as never);
+      component.startExporter(allHiddenExporter as never);
+      const req = httpMock.expectOne('/api/exporters/export');
+      expect(req.request.body.field_values).toEqual({
+        url_template: 'https://our-site/review?ids={ids}',
+        separator: ',',
+      });
+      req.flush({ success: true, open_url: 'https://our-site/review?ids=a' });
+      openSpy.mockRestore();
+    });
+  });
+
 });

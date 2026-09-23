@@ -36,6 +36,10 @@ import pandas as pd  # noqa: E402
 
 import precision_config as pcfg  # noqa: E402
 
+sys.path.insert(0, str(HERE.parent / "calibration"))
+from _cells_io import _base_rows  # noqa: E402
+from _cells_paths import main_frame_files  # noqa: E402
+
 #: The metrics a ship decision actually reads.  Split by whether the 0.005
 #: decision margin even *applies*: it is a margin on error RATES in [0, 1].
 #: Comparing it to a count of positives is a category error — the first run of
@@ -76,14 +80,20 @@ def pm(mean: float, se: float) -> str:
 
 def load_arm(root: Path, arm: str) -> tuple[pd.DataFrame, dict]:
     cells = root / arm / "results" / "cells"
-    files = sorted(f for f in cells.glob("task_*.csv") if not any(k in f.name for k in ("sweep", "cutdiag", "cutincl")))
+    # Main frames only.  A hand-rolled exclusion list here once named three of
+    # the five side-frame suffixes, so `__picks` and `__fitq` rows (#3159's
+    # grid emits both) would have been concatenated in as cells.
+    files = main_frame_files(cells)
     frames, bad = [], []
     for f in files:
         if f.stat().st_size == 0:
             bad.append((f.name, "zero-byte"))
             continue
         try:
-            df = pd.read_csv(f)
+            # The production row only.  Since #3400 turned safe thresholds on by
+            # default every step also carries ~32 counterfactual rows
+            # (`gmm_variant`), and pairing on `t` alone cross-joins them.
+            df = _base_rows(pd.read_csv(f))
             if df.empty:
                 bad.append((f.name, "header only"))
                 continue

@@ -494,7 +494,10 @@ def embed_missing(
 
 
 def _attach_patch_grid_to_media(media: dict, patch_out) -> None:
-    """Attach the raw ``(H, W, D)`` patch grid to *media*, float16.
+    """Attach the raw ``(H, W, D)`` patch grid to *media*, as ``PATCH_ROW_DTYPE``.
+
+    That dtype (:data:`vtscore.embedding.matrix.PATCH_ROW_DTYPE`) is float16;
+    #3159 measured what the cast costs the region path.
 
     That is the *whole* patch side-channel now.  Ingest used to also build a
     24-node HAC region tree per image here (``build_region_tree(patch_out,
@@ -505,9 +508,9 @@ def _attach_patch_grid_to_media(media: dict, patch_out) -> None:
     per-patch saliency ``patch_out`` also carries is not stored: nothing
     downstream reads it now that leaf pooling is gone.
     """
-    import numpy as np  # noqa: PLC0415
+    from vtscore.embedding import matrix  # noqa: PLC0415
 
-    media["patch_grid"] = patch_out.patch_grid.astype(np.float16, copy=False)
+    media["patch_grid"] = patch_out.patch_grid.astype(matrix.PATCH_ROW_DTYPE, copy=False)
 
 
 def _ordered_load_embedders(medias: dict[int, dict[str, Any]], requested: list[str]) -> list[str]:
