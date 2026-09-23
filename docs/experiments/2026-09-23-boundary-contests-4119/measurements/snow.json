@@ -1,0 +1,37 @@
+{
+ "classes": [
+  "skis",
+  "snowboard"
+ ],
+ "types": [
+  {
+   "lvis_type": "ski",
+   "n": 2720,
+   "by_class": {
+    "skis": 2612,
+    "snowboard": 108
+   },
+   "minority": 108
+  },
+  {
+   "lvis_type": "snowboard",
+   "n": 1838,
+   "by_class": {
+    "snowboard": 1790,
+    "skis": 48
+   },
+   "minority": 48
+  },
+  {
+   "lvis_type": "ski_pole",
+   "n": 24,
+   "by_class": {
+    "skis": 22,
+    "snowboard": 2
+   },
+   "minority": 2
+  }
+ ],
+ "minority": 158,
+ "total": 4582
+}

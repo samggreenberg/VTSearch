@@ -98,11 +98,13 @@ class TestTheStamp:
         assert pc.rule_digest("bench") != before, "but the wording behind it has"
 
     def test_the_digest_moves_when_the_name_is_rewritten(self, pc, monkeypatch):
-        before = pc.rule_digest(_CLASS)
-        rule = pc.SCALE_CLASS_RULES[_CLASS]
-        monkeypatch.setitem(pc.SCALE_CLASS_RULES, _CLASS, rule._replace(name="vase incl planters"))
+        # A LIVE rule, so a class still in C: `vase` left it in #4119 and its
+        # rule is frozen (SCALE_CLASS_RULES_FROZEN), which is the point of freezing it.
+        before = pc.rule_digest("bench")
+        rule = pc.SCALE_CLASS_RULES["bench"]
+        monkeypatch.setitem(pc.SCALE_CLASS_RULES, "bench", rule._replace(name="bench incl pews"))
 
-        assert pc.rule_digest(_CLASS) != before
+        assert pc.rule_digest("bench") != before
 
     def test_the_digest_is_stable_across_calls(self, pc):
         """A stamp written twice must compare equal, or every row reads as edited."""
