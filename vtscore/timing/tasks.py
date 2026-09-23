@@ -133,21 +133,19 @@ TASKS: dict[str, TaskSpec] = {
     # coverage atlas, ~10 ms when the cached atlas restores and a hierarchical
     # k-means rebuild when it does not.
     #
-    # That rebuild is *seconds*, not minutes, at every size anybody has swept.
-    # Driven cold on a V100 with cuML active it fits 0.0026 s/item (r^2 0.95)
-    # over n = 412..2954 -- 0.98 s to 7.7 s. The same fit reaches ~26 s at
-    # n = 10 000 and ~131 s (2.2 min) only near COVERAGE_ATLAS_AUTO_THRESHOLD
-    # (50 000), so "minutes" is true near the threshold and off by two orders
-    # of magnitude below ~3000 items. Both of those figures extrapolate a fit
-    # whose largest point is 2954, across a 17x gap nothing has measured, and
-    # hierarchical k-means need not be linear there
-    # (docs/experiments/2026-09-03-drive-cold-3521/REPORT.md section 2, #3595).
+    # That rebuild is linear in n and measured, not extrapolated, to 36 500
+    # items: on a V100 with cuML active it costs 0.0027 s/item for image
+    # (r^2 0.999 over n = 412..36 497; 1.3 s, 13 s at 5110, 26 s at 10 220,
+    # 100 s at 36 497) and 0.0025 s/item for audio (n = 1960..8732). A rebuild
+    # is therefore seconds below ~20 000 items and reaches minutes only near
+    # COVERAGE_ATLAS_AUTO_THRESHOLD (50 000), where the fit gives ~140 s
+    # (docs/experiments/2026-09-22-atlas-rebuild-3595/REPORT.md, #3595).
     #
-    # The 0.85 below is a direction, not a measurement: the rebuild does
-    # dominate step 1 whenever it runs, but the weight was never fitted and is
-    # roughly 100x too generous at the small end. Re-deriving it waits on a
-    # sweep past 2954 (#3595) -- and no single weight can pace both branches
-    # anyway, since the restore is ~700x cheaper at n = 2954 (#3594).
+    # The 0.85 below is now checked for image: a rebuilding open spends
+    # 0.81-0.94 of its time in the coverage step at every n from 838 to
+    # 36 497. It over-budgets audio, whose rebuild share is 0.52-0.63 because
+    # its items step is heavier (#4105). On a restore the share is <= 0.01, and
+    # that branch is re-weighted by the route once known (#3594).
     "dataset_open": _linear(
         "dataset_open",
         ("items", "coverage"),

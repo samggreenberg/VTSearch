@@ -207,10 +207,10 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
     # Pace the unified bar against the real phase split. Step 1 (pickle read +
     # convert + the near-instant exact-dedup) is seconds at most; step 2 is the
     # coverage atlas, ~10 ms when the cached atlas restores and a hierarchical
-    # k-means rebuild when it doesn't. That rebuild measures 0.0026 s/item
-    # (r^2 0.95) over n = 412..2954, so it is 1-8 s at the sizes swept and only
-    # approaches minutes near COVERAGE_ATLAS_AUTO_THRESHOLD, where the same fit
-    # extrapolates to ~131 s at n = 50 000 (#3595). Weighting step 2 as the
+    # k-means rebuild when it doesn't. That rebuild is linear in n, measured
+    # to 36 500 items at 0.0027 s/item for image and 0.0025 for audio (V100 +
+    # cuML): ~1 s at 400 items, 26 s at 10 000, 100 s at 36 500, and ~140 s
+    # at COVERAGE_ATLAS_AUTO_THRESHOLD (#3595). Weighting step 2 as the
     # dominant slice keeps a rebuild advancing the bar across its whole span
     # instead of the old equal split, where the instant dedup drove step 2
     # to ~100% and the bar then sat frozen there through the entire rebuild.
@@ -331,7 +331,7 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
                 # Which of the three branches ran is the single most important
                 # thing about this step's timing and the one thing its duration
                 # cannot say. A restore is milliseconds and a rebuild is
-                # minutes; #3345's sweep opened 16 datasets, restored on every
+                # 0.0027 s/item (#3595); #3345's sweep opened 16 datasets, restored on every
                 # one, and produced a profile pricing the atlas at 2 % of a bar
                 # whose shipped default gives it 85 % — both correct about
                 # different branches, with nothing recording which (#3521).

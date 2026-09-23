@@ -289,7 +289,8 @@ def cheap_branch_only(samples: list[dict]) -> bool:
     sweep never saw one built". Both are correct measurements; only one of them
     is a cost model, and ``tasks.py`` weights that step at 0.85 of the bar
     precisely because the branch nobody measured is the one that does the work:
-    a rebuild costs 0.0026 s/item, ~700x the restore at n = 2954 (#3595).
+    a rebuild costs 0.0027 s/item (linear to n = 36 497), ~1000x the restore
+    at n = 2954 and ~5000x at 36 497 (#3595).
     """
     dear, cheap, unmarked = branch_split(samples)
     return bool(cheap) and not dear and not unmarked
