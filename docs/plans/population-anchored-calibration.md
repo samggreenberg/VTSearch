@@ -52,6 +52,14 @@ folds.
   shown not to break the nesting contract
   `test_inclusion_slide_recut.py::test_slide_is_monotone_across_the_whole_knob`
   pins.
+  **Priced by #3557 ([report](../experiments/2026-09-22-hinge-tilt-3557/REPORT.md)):
+  nothing ships.** The guarded hinge (`max(cross, mid_tilt)` below 0) is nested by
+  construction (0 violations in 184,686 cell-steps; the literal hinge breaks on
+  1.9%). As a *reporting* re-cut it wins at 40 of 105 stops and loses at none, up
+  to −0.027±0.003. But shipped, it also moves the acquisition cut, and VG sessions
+  end worse (+0.025 binary, +0.014 region). The mechanism is the opposite of the
+  "admit more" reading above: the prior-keeping cut sits *stricter* than the
+  midpoint. The reporting-only split is **#4118**.
 
 <!-- item-sep -->
 

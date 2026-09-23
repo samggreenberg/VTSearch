@@ -1,6 +1,6 @@
 # Price a sign-dependent tilt: the `hinge` cut rule (#3557)
 
-**Status: pre-registered 2026-09-22, before the first cell ran.** The decision
+**Status: pre-registered 2026-09-22, before the first cell ran. Run and reported: see [REPORT.md](REPORT.md) - nothing ships.** The decision
 rule below is fixed now; the report records the measurement against it.
 
 ## The question
