@@ -57,9 +57,9 @@ a report's committed-figure requirement points at.
 
 ### The studies
 
-Newest last, matching [`docs/experiments/`](../../../docs/experiments/README.md)'s
-own ordering in reverse. A study's report is the record of what it found; the
-files here are how it was produced.
+Newest last, matching an `ls` of [`docs/experiments/`](../../../docs/experiments/).
+A study's report is the record of what it found; the files here are how it was
+produced.
 
 | Study | Files |
 |---|---|

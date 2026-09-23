@@ -229,6 +229,41 @@ pass against code you did not write.
 
 ## Writing the report
 
+### Where a study lives
+
+**One directory per study under `docs/experiments/`, named `YYYY-MM-DD-<slug>`**,
+dated when its report first landed. It holds the `REPORT.md`, the generated
+tables and figures, and (for a long study) `viewer.html` and `report.html`. The
+date is the *study's*, not its last edit: a report that is later corrected,
+re-skinned or extended keeps the name it was filed under, because every link in
+the tree points at that name. These directories are **the record of what a run
+produced**: archives, not plans, and not pruned when the work they justified
+ships. (`docs/plans/` holds work still owed.) `scripts/check-docs.py` enforces
+the name shape.
+
+**There is no index file.** The date prefix makes `ls docs/experiments/` sort
+chronologically, and a report opens with its question as the H1 and its verdict
+right under it, so
+
+```bash
+head -n 8 docs/experiments/*/REPORT.md
+```
+
+is the index, generated fresh and never out of date. A study that is
+pre-registered but not yet run holds only its `PLAN.md` or `PREREG.md`, and
+`ls` shows it all the same. A hand-maintained table
+repeated every report's opening in one shared file, so every pair of study PRs
+in flight conflicted on it (#4138). **So the opening is load-bearing:** the H1
+states the question (or the headline answer), and the first paragraph gives the
+verdict with its numbers. A reader skimming the `head` output should learn what
+each study found without opening it.
+
+A few early studies are **narrative-only**, from before the CSV-and-figures
+convention: their `report.html` *is* the record and the `REPORT.md` beside it is
+a short pointer carrying the question and the verdict.
+
+### What a report owes its reader
+
 A `REPORT.md` is read by someone deciding what to do next, and it has to survive
 their disbelief. Three things earn that, and all three were missing from the
 overview-bench report until its owner asked for them:
@@ -360,6 +395,26 @@ Four rules it enforces, none of which is optional:
   nothing. The last remaining chip is **locked** rather than silently snapped
   back on — both stop the same thing, but only one of them tells the reader why
   the click did nothing, and a control that ignores a click reads as broken.
+
+Two draw toggles decide the shape. **Overlay** puts every varying dimension on
+one chart in distinct hues; with it off, each gets its own chart with the ±1 SD
+shadow, which is the only place that shadow is readable. **Oracle threshold**
+adds the cut the test labels say the model should have used, dotted beside the
+solid line it achieved. Two more reference marks sit in the margins: the free
+text sort at the left and, for a run launched with `CALIB_SKYLINE_ARMS`, the
+supervised skyline at the right.
+
+**A page can be re-skinned without its results.** The template carries all of
+the viewer's behaviour and the payload carries only the study's numbers, so
+`python viewer.py --reskin docs/experiments/*/viewer.html` pushes a template
+improvement onto every committed report, even one whose results directory is
+long gone. It cannot add data the payload never carried, so a new *series* still
+needs a rebuild from the cell CSVs. Both series added in #3325 were backfilled
+that way in #3326. The oracle cut was free to recover, because its inputs are on
+every base row ever emitted. The skyline is vote-independent, so it was measured
+by a second, cheaper pass over the same cells and merged in with
+`--skyline-results`; re-running the loop for it would have replaced the
+performance rows the reports' tables were read off.
 
 `selftest_viewer.py` is its planted-answer test: it checks the codec round-trip,
 the weighted pooling against a hand-computed answer, the click-0 anchor, and the
