@@ -41,6 +41,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from _cells_paths import side_frame_files
 
 #: Deep regime, #2865's band: past this many votes the cut rule rather than the
 #: anchor supply is what is measured.
@@ -260,7 +261,7 @@ def _reduce_cell(args: tuple[str, str]) -> dict:
 
 
 def load_arm(arm: str, results: Path, workers: int) -> list[dict]:
-    files = sorted((results / "cells").glob("task_*__cutincl.csv"))
+    files = side_frame_files(results / "cells", "__cutincl")
     with ProcessPoolExecutor(max_workers=workers) as ex:
         return list(ex.map(_reduce_cell, [(arm, str(f)) for f in files], chunksize=4))
 
