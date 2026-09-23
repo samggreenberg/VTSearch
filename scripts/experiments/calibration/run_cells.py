@@ -97,7 +97,7 @@ def _text_seed_vectors(ds: str, emb: str, medias: dict) -> tuple[dict, str]:
             f"paired embedder {emb!r} needs {text_emb} vectors: neither the cell's medias nor "
             f"{text_pkl.name} (which does not exist) supplies them"
         )
-    text_medias = load_medias(text_pkl)
+    text_medias = load_medias(text_pkl, repair=True)  # as the app holds them (#4095)
     missing = sorted(set(medias) - set(text_medias))
     if missing:
         raise ValueError(
@@ -286,7 +286,7 @@ def main(argv: list[str] | None = None) -> int:
     from _cells_io import load_medias  # noqa: PLC0415
 
     pkl = EMBEDDINGS_DIR / cfg.pickle_name(ds, emb)
-    medias: dict[int, dict] = load_medias(pkl)
+    medias: dict[int, dict] = load_medias(pkl, repair=True)  # as the app holds them (#4095)
     common.log(f"loaded {len(medias)} medias from {pkl}")
 
     seed_scores = _text_seed_scores(ds, emb, cat, medias)

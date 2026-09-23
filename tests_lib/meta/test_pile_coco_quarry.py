@@ -336,13 +336,18 @@ class TestLumpFilter:
             3: {"banana": [[0, 0, 50, 50]]},  # LVIS never boxed a banana here
             4: {},
         }
+        boxes: dict[int, list[tuple[str, list[float]]]] = {
+            1: [("banana", [0, 0, 48, 48])],
+            2: [
+                ("banana", [0, 0, 20, 20]),
+                ("banana", [30, 0, 20, 20]),
+                ("banana", [0, 30, 20, 20]),
+                ("banana", [30, 30, 20, 20]),
+            ],
+        }
         lvis = _lvis(
             tmp_path,
-            {
-                1: [("banana", [0, 0, 48, 48])],
-                2: [("banana", [0, 0, 20, 20]), ("banana", [30, 0, 20, 20]), ("banana", [0, 30, 20, 20])]
-                + [("banana", [30, 30, 20, 20])],
-            },
+            boxes,
         )
         assert mod.lump_exclusions(labels, lvis) == {(2, "banana"), (3, "banana")}, (
             "a pile goes, and so does a box nothing vouches for"
@@ -430,7 +435,7 @@ class TestLargestInstance:
         from pilebuild import scale_core
 
         # a big book and two small ones far apart: the union is scattered
-        bs = [[0, 0, 30, 30], [70, 70, 75, 75], [90, 0, 95, 5]]
+        bs: list[list[float]] = [[0, 0, 30, 30], [70, 70, 75, 75], [90, 0, 95, 5]]
         assert scale_core.band_for(bs, 100, 100) == scale_core.SCATTERED
         supply, boxes_for, _ = scale_core.band_candidates(
             {1: {"book": bs}}, {1: (100, 100)}, unbanded=set(), classes=("book",), largest=True
@@ -442,14 +447,15 @@ class TestLargestInstance:
     def test_the_union_rule_is_unchanged_without_the_flag(self):
         from pilebuild import scale_core
 
-        bs = [[0, 0, 30, 30], [70, 70, 75, 75]]
+        bs: list[list[float]] = [[0, 0, 30, 30], [70, 70, 75, 75]]
         supply, _, _ = scale_core.band_candidates({1: {"book": bs}}, {1: (100, 100)}, unbanded=set(), classes=("book",))
         assert not any(supply["book"].values())
 
     def test_ties_do_not_depend_on_annotation_order(self):
         from pilebuild import scale_core
 
-        a, b = [10, 10, 20, 20], [50, 50, 60, 60]
+        a: list[float] = [10, 10, 20, 20]
+        b: list[float] = [50, 50, 60, 60]
         assert scale_core.largest_box([a, b]) == scale_core.largest_box([b, a]) == a
 
     def test_coco_quarry_uses_it(self):

@@ -470,12 +470,14 @@ def repair_norms(medias: dict[int, dict[str, Any]], where: str = "") -> int:
     return fixed
 
 
-def load_medias(path: str | Path, repair: bool = True) -> dict[int, dict[str, Any]]:
+def load_medias(path: str | Path, repair: bool = False) -> dict[int, dict[str, Any]]:
     """Load a cell pickle written by :func:`dump_medias` or :class:`CellWriter`.
 
-    Vectors come back unit-norm, as the app would hold them (:func:`repair_norms`);
-    ``repair=False`` returns them exactly as stored, which is what an audit of
-    the pile itself has to read.
+    Returns the cell exactly as stored. ``repair=True`` renormalises non-unit
+    vectors (:func:`repair_norms`), which is what a harness that trains and
+    scores the APP's detector must ask for; it is not the default because this
+    reader is shared with pipelines whose vectors never pass through the app
+    (DocMarks' structural descriptors among them), where a norm is data.
 
     Tolerates the pre-#2886 ``RegionVector`` nodes in cached pickles; see
     :class:`_StaleRegionVector`.

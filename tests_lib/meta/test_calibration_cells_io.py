@@ -432,7 +432,7 @@ class TestRepairNorms:
 
         path = tmp_path / "raw.pkl"
         cells_io.dump_medias({1: {"embeddings": {"siglip": np.array([3.0, 4.0], dtype=np.float32)}}}, path)
-        vec = cells_io.load_medias(path)[1]["embeddings"]["siglip"]
+        vec = cells_io.load_medias(path, repair=True)[1]["embeddings"]["siglip"]
         assert abs(float(np.linalg.norm(vec)) - 1.0) < 1e-6
 
     def test_a_unit_vector_is_left_bit_identical(self, cells_io, tmp_path: Path):
@@ -442,15 +442,23 @@ class TestRepairNorms:
         v = np.array([0.6, 0.8000001], dtype=np.float32)
         path = tmp_path / "unit.pkl"
         cells_io.dump_medias({1: {"embeddings": {"siglip": v}}}, path)
-        assert cells_io.load_medias(path)[1]["embeddings"]["siglip"].tobytes() == v.tobytes()
+        assert cells_io.load_medias(path, repair=True)[1]["embeddings"]["siglip"].tobytes() == v.tobytes()
 
-    def test_an_audit_reads_what_is_stored(self, cells_io, tmp_path: Path):
+    def test_the_default_reads_what_is_stored(self, cells_io, tmp_path: Path):
+        """Shared with DocMarks, whose structural vectors are not the app's: a norm is data there."""
         import numpy as np
 
         path = tmp_path / "raw.pkl"
         cells_io.dump_medias({1: {"embeddings": {"siglip": np.array([3.0, 4.0], dtype=np.float32)}}}, path)
-        raw = cells_io.load_medias(path, repair=False)[1]["embeddings"]["siglip"]
+        raw = cells_io.load_medias(path)[1]["embeddings"]["siglip"]
         assert float(np.linalg.norm(raw)) == 5.0, "verify must see the defect, not a repaired copy"
+
+    def test_the_harness_asks_for_the_repair(self):
+        """run_cells and prepare_data train and score the APP's detector, so they repair."""
+        for script in ("run_cells.py", "prepare_data.py"):
+            text = (CALIB / script).read_text()
+            loads = [ln for ln in text.splitlines() if "load_medias(" in ln and "def " not in ln]
+            assert loads and all("repair=True" in ln for ln in loads), (script, loads)
 
     def test_patch_grids_are_not_touched(self, cells_io):
         import numpy as np
