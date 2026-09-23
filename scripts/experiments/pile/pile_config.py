@@ -287,37 +287,74 @@ BAND_MIN_IMAGES = int(os.environ.get("VTS_BAND_MIN_IMAGES", "50"))
 LVIS_DIR = Path(os.environ.get("VTS_LVIS_DIR", str(PILE / "lvis")))
 LVIS_SPLITS = ("train", "val")
 
-#: Classes whose COCO box must agree with LVIS before the image may be a
-#: positive, mapped to the LVIS names that count as the same object (#3985).
+#: Band each (image, class) on its LARGEST instance, not the union of all of them,
+#: and record only that box as the cell's region, so the simulated user drags one
+#: object (#4096). Under the union rule an image whose instances are spread out
+#: (union > ``BAND_MAX_INFLATION`` x the largest) was SCATTERED and never a
+#: positive: 111,324 of 287,303 image-class pairs in C, 39%, and 58% of `book`.
+#: Positives then leaned toward images holding one isolated instance and left
+#: out busy scenes -- a street of cars, a table of cups. Owner ruling, 2026-09-22:
+#: use the most obvious instance, which is the largest.
+SCALE_BAND_ON_LARGEST = True
+
+
+class LumpRule(NamedTuple):
+    """How LVIS decides whether one class's picked COCO box is ONE object (#3985)."""
+
+    #: LVIS names that count as the same object.
+    lvis_names: tuple[str, ...]
+    #: This many LVIS instances inside the box make it a pile.
+    pile_at: int = 2
+    #: Whether a box with NO LVIS instance inside is excluded too. Right where
+    #: LVIS boxes the class reliably (fruit); wrong for `book`, where 63% of
+    #: picked boxes hold no LVIS book at all and absence proves nothing.
+    require_lvis: bool = True
+
+
+#: Classes whose picked COCO box must be ONE object by LVIS's reckoning before
+#: the image may be a positive (#3985).
 #:
-#: COCO draws one box round a bunch of bananas, a bowl of apples or a pile of
-#: oranges, and the band is then the size of the pile, not of ONE fruit -- the
-#: unit the owner ruled (`ClassRule.unit`). 120 owner votes put that at roughly
-#: half of `banana`'s images, a third of `apple`'s and a fifth of `orange`'s, and
-#: found no COCO-only signal that separates them. An image is kept only if LVIS
-#: boxed the class there AND COCO's mean box is under :data:`SCALE_LUMP_CUT`
-#: times LVIS's. An excluded image keeps its label, so it is never scored as a
+#: COCO draws one box round a bunch of bananas, a bowl of apples or a stack of
+#: books, and the band is then the size of the pile, not of ONE object -- the
+#: unit the owner ruled (`ClassRule.unit`). The test is on the box the simulated
+#: user drags (:data:`SCALE_BAND_ON_LARGEST`): keep it only if EXACTLY ONE LVIS
+#: instance lies inside it (:data:`SCALE_LUMP_CONTAIN`). None means nothing
+#: vouches for the box; two or more means LVIS drew several objects where COCO
+#: drew one. An excluded image keeps its label, so it is never scored as a
 #: negative for its own class -- it is simply not a positive.
 #:
-#: NOT `skis` or `potted plant`, although their ratios are as high: there the
-#: owner ruled COCO's box IS the object (a pair; a pot with its plant) and 23 of
-#: 24 high-ratio images were voted Good. The name sets are
+#: Scored on the owner's 72 fruit votes, which were cast on exactly this box:
+#: 28 of 29 piles caught and 5 of 43 Good boxes lost. The per-image mean-area
+#: ratio it replaces (cut 1.8, #4085) caught the same 28 and lost 6, and needed a
+#: tuned cut; this needs none.
+#:
+#: `book` is its own rule, set on 56 owner votes over two rounds. LVIS sees
+#: overlapping and neighbouring volumes inside one COCO book box: at 2-4 LVIS
+#: books inside, all 15 votes were Good; at 10+, 9 of 10 were a stack or shelf.
+#: ``pile_at=6`` catches 12 of the 13 stacks and loses 3 Good books (the edge
+#: rests on few votes: 3 Good at 5; 1 Good, 2 Bad at 6). Absence is not
+#: evidence for books, so ``require_lvis`` is off.
+#:
+#: NOT `skis` or `vase or potted plant` (voted as `potted plant`), although
+#: their ratios are as high: there the owner ruled COCO's box IS the object (a
+#: pair; a pot with its plant) and 23 of 24 high-ratio images were voted Good. The name sets are
 #: `coco_box_granularity.SAME`'s curated ones: `apple` without `pear`, `orange`
 #: without `lemon`.
-SCALE_LUMP_FILTER: dict[str, tuple[str, ...]] = {
-    "banana": ("banana",),
-    "apple": ("apple",),
-    "orange": ("orange_(fruit)", "mandarin_orange"),
+SCALE_LUMP_FILTER: dict[str, LumpRule] = {
+    "banana": LumpRule(("banana",)),
+    "apple": LumpRule(("apple",)),
+    "orange": LumpRule(("orange_(fruit)", "mandarin_orange")),
+    "book": LumpRule(("book", "magazine"), pile_at=6, require_lvis=False),
 }
-#: Mean-box-area ratio, COCO over LVIS, at or above which the COCO box is a pile.
-#: Chosen on the owner's votes: 1.8 catches 28 of 29 piles and loses 6 of 43 Good
-#: images (1.6 lost 8 for the same 28; 2.0 let 4 through).
-SCALE_LUMP_CUT = 1.8
+#: Share of an LVIS box that must lie inside the picked COCO box for the LVIS
+#: instance to count as inside it.
+SCALE_LUMP_CONTAIN = 0.5
 
 #: Cells not built at all, because no honest supply reaches ``SCALE_N_POS``.
-#: LVIS rarely boxes a SMALL fruit, so after :data:`SCALE_LUMP_FILTER` these
-#: hold 45 / 32 / 22 positives; built short, their prevalence -- and so their
-#: AP -- would not be comparable with any other cell. Owner ruling, 2026-09-22.
+#: Built short, their prevalence -- and so their AP -- would not be comparable
+#: with any other cell. LVIS rarely boxes a SMALL fruit, so even under
+#: :data:`SCALE_BAND_ON_LARGEST` these reach only 35 / 83 / 60 positives
+#: (banana / apple / orange). Owner ruling, 2026-09-22.
 SCALE_DROPPED_CELLS: frozenset[str] = frozenset({"banana@small", "apple@small", "orange@small"})
 
 #: VG is annotated with free text, so its vocabulary is not a list of objects.
@@ -527,7 +564,13 @@ SCALE_CLASSES: tuple[str, ...] = (
     "kite",
     "book",
     "dog",
-    "backpack",
+    # `backpack` U `handbag` U `suitcase`, owner ruling 2026-09-23 (#4119). Box
+    # level, the rate region voting reads: 10.6% of their boxes carry the
+    # MINORITY COCO label for their own LVIS type -- the car/truck rate (10.7%
+    # on the same instrument). Suitcases filed as backpack or handbag 6% each,
+    # duffel bags 41/31/28. `suitcase` alone was clean (2.9%); the two bags each
+    # lost ~15% of their boxes to classmates.
+    "bag or luggage",
     "knife",
     "bicycle",
     "bus",
@@ -549,7 +592,9 @@ SCALE_CLASSES: tuple[str, ...] = (
     "single serving drinking vessel",
     "bowl",
     "bottle",
-    "vase",
+    # `vase` U `potted plant`, owner ruling 2026-09-23 (#4119). 6.1% minority,
+    # nearly all one type: COCO calls an LVIS `flowerpot` `vase` 39% of the time.
+    "vase or potted plant",
     "bench",
     "chair",
     "sink",
@@ -568,7 +613,6 @@ SCALE_CLASSES: tuple[str, ...] = (
     "baseball bat",
     "dining table",
     "frisbee",
-    "handbag",
     "keyboard",
     "laptop",
     "microwave",
@@ -577,13 +621,11 @@ SCALE_CLASSES: tuple[str, ...] = (
     "orange",
     "parking meter",
     "person",
-    "potted plant",
     "remote",
     "scissors",
     "skateboard",
     "skis",
     "snowboard",
-    "suitcase",
     "surfboard",
     "tennis racket",
     "tie",
@@ -1948,19 +1990,18 @@ class ClassRule(NamedTuple):
 #: need not sum to 100. Regenerate with ``coco_class_purity.py --out``.
 SCALE_CLASS_CONTENTS: dict[str, str] = {
     "single serving drinking vessel": "glass_(drink_container) 34%, wineglass 24%, cup 20%, mug 12%, bowl 1%, Dixie_cup 1%, candle 1%, teacup 1%, vase 1%, pitcher_(vessel_for_liquid) 1%, bucket 1% -- the union of COCO `cup` and `wine glass` (#4056), n=2196",
+    "bag or luggage": "suitcase 42%, backpack 24%, handbag 23%, duffel_bag 2%, shoulder_bag 2%, strap 2%, plastic_bag 1%, shopping_bag 1%, tote_bag 1%, trunk 1% -- the union of COCO `backpack`, `handbag` and `suitcase` (#4119), mutual best IoU>=0.5 on LVIS train+val, n=12557",
+    "vase or potted plant": "vase 63%, flower_arrangement 19%, flowerpot 14%, pottery 1%, pitcher_(vessel_for_liquid) 1%, bottle 1% -- the union of COCO `vase` and `potted plant` (#4119), mutual best IoU>=0.5 on LVIS train+val, n=5798",
     "enclosed road vehicle": "car_(automobile) 63%, truck 12%, minivan 9%, pickup_truck 6%, cab_(taxi) 2%, trailer_truck 2%, fire_engine 2%, bus_(vehicle) 1%, police_cruiser 1% -- the union of COCO `car` and `truck` (#4056), n=1935",
     "dining table": "tablecloth 34%, table 31%, dining_table 10%, place_mat 5%, plate 5%, coffee_table 3%, tray 3%, desk 3%, chopping_board 1%, pizza 1%, kitchen_table 1%, cabinet 1%, bench 1%",
     "tv": "television_set 50%, monitor_(computer_equipment) computer_monitor 47%, signboard 1%, fireplace 1%",
     "remote": "remote_control 56%, control 41%, cellular_telephone 1%, telephone 1%",
-    "handbag": "handbag 63%, suitcase 8%, backpack 7%, shoulder_bag 5%, tote_bag 4%, plastic_bag 4%, shopping_bag 3%, strap 2%, duffel_bag 1%, briefcase 1%, basket 1%",
     "person": "person 64%, wet_suit 8%, jacket 5%, dress 3%, coat 2%, shirt 2%, sweater 1%, jersey 1%, suit_(clothing) 1%, jean 1%, statue_(sculpture) 1%, trousers 1%, sweatshirt 1%, polo_shirt 1%, pajamas 1%",
-    "potted plant": "flower_arrangement 75%, flowerpot 21%, Christmas_tree 2%, vase 1%, jar 1%",
     "orange": "orange_(fruit) 77%, mandarin_orange 7%, lemon 6%, peach 3%, carrot 2%, lime 1%, apple 1%, egg 1%",
     "apple": "apple 80%, pear 5%, peach 4%, lime 2%, radish 2%, orange_(fruit) 1%, tomato 1%, basket 1%, crate 1%, lemon 1%",
     "tie": "necktie 89%, bow-tie 7%, bow_(decorative_ribbons) 2%, scarf 1%",
     "motorcycle": "motorcycle 89%, motor_scooter 8%, dirt_bike 1%, bicycle 1%, tarp 1%",
     "airplane": "airplane 91%, fighter_jet 7%, jet_plane 2%",
-    "suitcase": "suitcase 93%, trunk 2%, duffel_bag 2%, backpack 1%, box 1%, briefcase 1%",
     "snowboard": "snowboard 94%, ski 5%",
     "microwave": "microwave_oven 96%, toaster_oven 2%, coffee_maker 1%, stove 1%",
     "laptop": "laptop_computer 97%, monitor_(computer_equipment) computer_monitor 2%",
@@ -1991,10 +2032,7 @@ SCALE_CLASS_CONTENTS: dict[str, str] = {
     "cell phone": "cellular_telephone 89%, telephone 4%, camera 3%, iPod 1% -- the 4% landlines"
     " are what split the first slate (#3612), at 4%",
     "bus": "bus_(vehicle) 88%, school_bus 5%, car_(automobile) 4%",
-    "vase": "vase 87%, flowerpot 6%, pitcher 1%, pottery 1% -- planters are in, though #3784"
-    " retired 21 of them under the reviewer rule",
     "book": "book 85%, magazine 6%, notebook 2%, binder 2% -- the 6% magazines are the whole of #3612's 21-vs-49 split",
-    "backpack": "backpack 82%, suitcase 8%, duffel_bag 3%, handbag 2%",
     "stop sign": "stop_sign 79%, street_sign 20%, signboard 1% -- a fifth of this class is a"
     " sign that is not a stop sign, the largest unexpected minority in C",
     "spoon": "spoon 78%, ladle 6%, fork 5%, wooden_spoon 4%, soupspoon 3%, spatula 2%, knife 2%",
@@ -2027,6 +2065,36 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "COCO label for their own object type, which is the rate REGION VOTING reads "
             "and worse than the vehicles' 9.6%."
         ),
+    ),
+    "bag or luggage": ClassRule(
+        name="bag or luggage incl backpacks and suitcases",
+        test=(
+            "Good: any bag or case made to CARRY BELONGINGS -- backpacks and rucksacks, "
+            "handbags, purses, shoulder, tote and messenger bags, suitcases, duffels, "
+            "trunks and briefcases -- worn, carried, rolled or set down. Bad: a garment "
+            "or strap on its own, a basket, a box or crate, and a plastic or paper "
+            "carrier bag used as packaging. THE BACKPACK/HANDBAG/SUITCASE DISTINCTION IS "
+            "DELIBERATELY GONE (#4119, owner ruling 2026-09-23): 10.6% of their boxes carry "
+            "the MINORITY COCO label for their own LVIS object type -- the car/truck rate "
+            "-- with suitcases filed as a backpack or a handbag 6% of the time each and "
+            "duffels split 41/31/28, so a reviewer applying straps-versus-lid would "
+            "contradict the ground truth about once in ten."
+        ),
+    ),
+    "vase or potted plant": ClassRule(
+        name="vase or potted plant incl cut flowers",
+        test=(
+            "Good: a vase, urn or decorative vessel, empty or holding cut flowers; a "
+            "flowerpot or planter with or without a plant; and a cut-flower arrangement. "
+            "Bad: a cooking pot, a plain bowl, a jar or bottle, a Christmas tree on its "
+            "own, and a bed of plants growing in the ground. THE VASE/PLANTER LINE IS "
+            "DELIBERATELY GONE (#4119, owner ruling 2026-09-23): COCO calls an LVIS "
+            "`flowerpot` `vase` 39% of the time, and `vase not planters` asked a reviewer "
+            "to draw exactly the line COCO did not."
+        ),
+        # The potted plant unit carries over (#3985): the container WITH what is in
+        # it is one object.
+        unit="ONE vase or pot with whatever is in it, not several",
     ),
     "enclosed road vehicle": ClassRule(
         name="enclosed road vehicle not bus or bike",
@@ -2119,6 +2187,11 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "`jar` (120) and `jug` (28) fold in and barely have one."
         ),
     ),
+    # HISTORY of the retired `vase not planters` rule, kept because the 394 VG-era
+    # vase verdicts were cast under it. #4119 (owner ruling 2026-09-23) merged
+    # `vase` and `potted plant` into `vase or potted plant`, so the line below
+    # is no longer drawn; the rule now lives on that class.
+    #
     # Until 2026-09-09 `vase` claimed "flower pots, planters" and "a potted
     # plant's pot is a vase", and `bowl` pointed planters AT `vase`. The reviewer
     # rejected planters through the whole finished vase slate and reported the
@@ -2145,25 +2218,8 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
     # `flower pot` above `vase`, against 18 of the 116 accepts. Applying the old
     # wording literally would have roughly doubled vase's positives, so this
     # keeps the 394 verdicts as cast rather than voiding them.
-    "vase": ClassRule(
-        name="vase not planters",
-        test=(
-            "Good: only a vessel MADE as one -- vases, urns, decorative pottery. "
-            "Against an ornamental BOWL, use the box: a vase is TALLER THAN "
-            "WIDE (median h/w 1.58, 84% of boxes) and a bowl is wider than tall (0.66, "
-            "13%); the middle halves do not overlap. Size does not help -- bowl's median "
-            "box is the larger. "
-            "A VESSEL MADE TO HOLD A GROWING PLANT is neither a vase nor a bowl -- a "
-            "flower pot, planter or window box is out of C entirely, whether or not a "
-            "plant is in it, because the plant is not what decides it. If you cannot "
-            "tell a planter from a vase and it is empty, use the shape test above. "
-            "Bad: a cooking pot on a stove, a plain bowl, and any BORROWED vessel however "
-            "it is used -- a jar of cut flowers is a `bottle`, a glass of them a `cup`. "
-            "A pitcher or jug of them is a `bottle`: COCO split them (pitcher to cup 30, "
-            "jug to bottle 28), so the call is made on portion instead. "
-            "Costs 192 boxes, 8.2% of COCO vase, which is the largest narrowing here."
-        ),
-    ),
+    #
+    # (end of vase history)
     # The guide first named `chair` (53 boxes) as this class's confusion. It is
     # third: `seat` (64) and `table` (58) both outrank it, and each turns on a
     # question COCO's annotators do not ask.
@@ -2315,19 +2371,6 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "The near-miss this settles is a rank of pop-up canopies at a skate park (#3666)."
         ),
     ),
-    "backpack": ClassRule(
-        name="backpack not handbags or luggage",
-        test=(
-            "Good: a bag made to be carried on the back on shoulder straps -- rucksacks, "
-            "daypacks, school bags, hiking packs -- whether worn, held or set down. Bad: a "
-            "handbag, a shoulder or messenger bag, a suitcase, a duffel, a camera bag. COCO "
-            "carries `handbag` and `suitcase` as their own classes, so this line is COCO's "
-            "too. Two straps over two shoulders is the cue; a single diagonal strap is a "
-            "shoulder bag. `bookbag` is on the ambiguous list (85% precision, 88% box) and "
-            "`pack` is not a name for anything (38%). The near-miss this settles is the "
-            "hump under a motorcyclist's leathers, which the pass could not call (#3666)."
-        ),
-    ),
     "stop sign": ClassRule(
         name="stop sign not other signs",
         test=(
@@ -2357,6 +2400,9 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "land on no COCO class, the worst of the twenty-five -- and the bound test "
             "narrows it without repairing that."
         ),
+        # A stack or a shelf is several books however tightly packed; a book is
+        # one volume, never one page (owner, 2026-09-22).
+        unit="ONE book, not a stack or a shelf of them",
     ),
     # Ruled 2026-09-10 (#3789). The rule said "any LIVE bird" and the reviewer hit
     # a case it did not reach: a dead robin held in another bird's beak, at least
@@ -2667,16 +2713,6 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "lowest of the board classes, and the ski confusion is nearly all of it."
         ),
     ),
-    "suitcase": ClassRule(
-        name="suitcase not bag",
-        test=(
-            "Good: wheeled and unwheeled suitcases, hard and soft, upright or flat, on a "
-            "carousel or a rack; an old cabin `trunk` (1.8%) is Good. Bad: BACKPACKS "
-            "(1.1%) and HANDBAGS (0.1%), both their own classes in C, duffel bags (1.6%) "
-            "and briefcases (0.5%). The test is the LID: a case opens on a hinge into "
-            "two halves, a bag opens at the top. 93% pure."
-        ),
-    ),
     "airplane": ClassRule(
         name="airplane fixed wing",
         test=(
@@ -2730,22 +2766,6 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
         ),
         unit="ONE orange, not a pile or bowl",
     ),
-    "potted plant": ClassRule(
-        name="potted plant incl cut arrangements",
-        test=(
-            "Good: plants in a pot or planter (`flowerpot`, 20.7%) AND cut-flower "
-            "arrangements, which are 75.1% of this class's boxes under LVIS's "
-            "`flower_arrangement`. Bad: Christmas trees (2.4%), and a bare VASE with "
-            "nothing in it -- its own class in C, at 1.2%. This is the least intuitive "
-            "name in C: the class is overwhelmingly cut flowers rather than potted "
-            "plants, so reading the name literally would reject three quarters of it. "
-            "Where a vase holds flowers both classes can be right on one image, and each "
-            "is judged on its own object."
-        ),
-        # Container WITH its contents, so COCO's box is right and LVIS's pot-only
-        # `flowerpot` box is the odd one out (area ratio 5.92, count 1.40).
-        unit="ONE pot or vase with its plant or flowers, not several",
-    ),
     "person": ClassRule(
         name="person whole not garment",
         test=(
@@ -2757,19 +2777,6 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "That is not a definitional split -- LVIS boxes the garment where COCO boxes "
             "the wearer, and mutual best match pairs the two. The object is always the "
             "PERSON, never the garment."
-        ),
-    ),
-    "handbag": ClassRule(
-        name="handbag not backpack or suitcase",
-        test=(
-            "Good: handbags, shoulder bags (4.8%), tote bags (4.3%), clutches and purses "
-            "-- carried, worn, or set down. Bad: BACKPACKS (6.5%) and SUITCASES (7.8%), "
-            "both their own classes in C; and plastic or paper shopping bags "
-            "(`plastic_bag` 4.2%, `shopping_bag` 2.7%). 63% pure and the confusion is "
-            "with two classmates, so this is the `truck`/`car` situation: decide on the "
-            "STRAPS and the CLOSURE, not the size. Two straps over both shoulders is a "
-            "backpack; a rigid hinged case is a suitcase; everything else carried in the "
-            "hand or on one shoulder is this."
         ),
     ),
     "remote": ClassRule(
@@ -2838,7 +2845,7 @@ def review_name(cls: str, suffix: str = "") -> str:
     the reviewer whichever pass they are voting -- the first pass included,
     which is where a definition split does its damage.
     """
-    rule = SCALE_CLASS_RULES.get(cls)
+    rule = SCALE_CLASS_RULES.get(cls) or SCALE_CLASS_RULES_FROZEN.get(cls)
     return f"{rule.name if rule else cls}{f' {suffix}' if suffix else ''}"
 
 
@@ -2884,7 +2891,8 @@ def is_scale_review(detector: str, text_query: str) -> bool:
     detector left over from before a ruling still banks, without a digest), so the
     name is tested by its prefix rather than against the rule in force.
     """
-    if text_query not in SCALE_CLASSES:
+    # A queue left over from a class merged out of C (#4119) is still ours to bank.
+    if text_query not in SCALE_CLASSES and text_query not in SCALE_CLASS_RULES_FROZEN:
         return False
     rule = rule_of_review_name(detector.split(" [")[0].split(" (")[0])
     return rule == text_query or rule.startswith(f"{text_query} ")
@@ -2938,7 +2946,7 @@ def rule_digest(cls: str) -> str:
     Twelve hex characters, which is a hash to compare rather than a hash to
     defend: the adversary here is a forgotten edit, not a forger.
     """
-    rule = SCALE_CLASS_RULES.get(cls)
+    rule = SCALE_CLASS_RULES.get(cls) or SCALE_CLASS_RULES_FROZEN.get(cls)
     payload = f"{rule.name if rule else cls}\n{rule.test if rule else ''}"
     return hashlib.sha256(payload.encode()).hexdigest()[:12]
 
@@ -3674,6 +3682,96 @@ SCALE_CLASS_MERGES: dict[str, tuple[str, ...]] = {
     # was simply absent. Now applied, and the class renamed -- `cup` was never a
     # fair name for a set that is 27% plain glasses and 26% stemware.
     "single serving drinking vessel": ("cup", "wine glass"),
+    # Owner rulings 2026-09-23 (#4119), same test as the two above: the share of
+    # boxes carrying the minority COCO label for their own LVIS type, measured
+    # by `boundary_contest.py` on LVIS train+val. 10.6% for the three carriers,
+    # 6.1% for vase/potted plant. skis/snowboard (3.4%, no type split 20-80%)
+    # was ruled a boundary COCO carries and stays two classes.
+    "bag or luggage": ("backpack", "handbag", "suitcase"),
+    "vase or potted plant": ("vase", "potted plant"),
+}
+
+
+#: The full rules of classes that have LEFT *C* by a merge, frozen exactly as
+#: they stood (#4119). :data:`SCALE_CLASS_RULES_RETIRED` keeps only a retired
+#: rule's NAME, which was enough while nothing replayed a retired class's review.
+#: `apply_recheck.py` does: the corrections recipe re-applies the VG-era `vase`
+#: recheck and stamps each row with the rule's name AND digest, and the digest is
+#: a hash of the whole rule. Deleting the rule made history unreproducible, so
+#: :func:`review_name` and :func:`rule_digest` fall back here. Nothing here may
+#: be voted under again -- no queue is built for a class outside *C*.
+SCALE_CLASS_RULES_FROZEN: dict[str, ClassRule] = {
+    "backpack": ClassRule(
+        name="backpack not handbags or luggage",
+        test=(
+            "Good: a bag made to be carried on the back on shoulder straps -- rucksacks, "
+            "daypacks, school bags, hiking packs -- whether worn, held or set down. Bad: a "
+            "handbag, a shoulder or messenger bag, a suitcase, a duffel, a camera bag. COCO "
+            "carries `handbag` and `suitcase` as their own classes, so this line is COCO's "
+            "too. Two straps over two shoulders is the cue; a single diagonal strap is a "
+            "shoulder bag. `bookbag` is on the ambiguous list (85% precision, 88% box) and "
+            "`pack` is not a name for anything (38%). The near-miss this settles is the "
+            "hump under a motorcyclist's leathers, which the pass could not call (#3666)."
+        ),
+    ),
+    "handbag": ClassRule(
+        name="handbag not backpack or suitcase",
+        test=(
+            "Good: handbags, shoulder bags (4.8%), tote bags (4.3%), clutches and purses "
+            "-- carried, worn, or set down. Bad: BACKPACKS (6.5%) and SUITCASES (7.8%), "
+            "both their own classes in C; and plastic or paper shopping bags "
+            "(`plastic_bag` 4.2%, `shopping_bag` 2.7%). 63% pure and the confusion is "
+            "with two classmates, so this is the `truck`/`car` situation: decide on the "
+            "STRAPS and the CLOSURE, not the size. Two straps over both shoulders is a "
+            "backpack; a rigid hinged case is a suitcase; everything else carried in the "
+            "hand or on one shoulder is this."
+        ),
+    ),
+    "suitcase": ClassRule(
+        name="suitcase not bag",
+        test=(
+            "Good: wheeled and unwheeled suitcases, hard and soft, upright or flat, on a "
+            "carousel or a rack; an old cabin `trunk` (1.8%) is Good. Bad: BACKPACKS "
+            "(1.1%) and HANDBAGS (0.1%), both their own classes in C, duffel bags (1.6%) "
+            "and briefcases (0.5%). The test is the LID: a case opens on a hinge into "
+            "two halves, a bag opens at the top. 93% pure."
+        ),
+    ),
+    "vase": ClassRule(
+        name="vase not planters",
+        test=(
+            "Good: only a vessel MADE as one -- vases, urns, decorative pottery. "
+            "Against an ornamental BOWL, use the box: a vase is TALLER THAN "
+            "WIDE (median h/w 1.58, 84% of boxes) and a bowl is wider than tall (0.66, "
+            "13%); the middle halves do not overlap. Size does not help -- bowl's median "
+            "box is the larger. "
+            "A VESSEL MADE TO HOLD A GROWING PLANT is neither a vase nor a bowl -- a "
+            "flower pot, planter or window box is out of C entirely, whether or not a "
+            "plant is in it, because the plant is not what decides it. If you cannot "
+            "tell a planter from a vase and it is empty, use the shape test above. "
+            "Bad: a cooking pot on a stove, a plain bowl, and any BORROWED vessel however "
+            "it is used -- a jar of cut flowers is a `bottle`, a glass of them a `cup`. "
+            "A pitcher or jug of them is a `bottle`: COCO split them (pitcher to cup 30, "
+            "jug to bottle 28), so the call is made on portion instead. "
+            "Costs 192 boxes, 8.2% of COCO vase, which is the largest narrowing here."
+        ),
+    ),
+    "potted plant": ClassRule(
+        name="potted plant incl cut arrangements",
+        test=(
+            "Good: plants in a pot or planter (`flowerpot`, 20.7%) AND cut-flower "
+            "arrangements, which are 75.1% of this class's boxes under LVIS's "
+            "`flower_arrangement`. Bad: Christmas trees (2.4%), and a bare VASE with "
+            "nothing in it -- its own class in C, at 1.2%. This is the least intuitive "
+            "name in C: the class is overwhelmingly cut flowers rather than potted "
+            "plants, so reading the name literally would reject three quarters of it. "
+            "Where a vase holds flowers both classes can be right on one image, and each "
+            "is judged on its own object."
+        ),
+        # Container WITH its contents, so COCO's box is right and LVIS's pot-only
+        # `flowerpot` box is the odd one out (area ratio 5.92, count 1.40).
+        unit="ONE pot or vase with its plant or flowers, not several",
+    ),
 }
 
 
@@ -3701,7 +3799,9 @@ SCALE_CLASS_RULES_RETIRED: dict[str, str] = {
     "car": "car incl SUVs and minivans",
     "truck": "truck incl vans not SUVs",
     "cup": "cup incl mugs glasses and stemware",
+    # #4119's five come from SCALE_CLASS_RULES_FROZEN, below, not a second copy.
 }
+SCALE_CLASS_RULES_RETIRED.update({cls: rule.name for cls, rule in SCALE_CLASS_RULES_FROZEN.items()})
 
 
 def rule_names_ever(cls: str) -> set[str]:

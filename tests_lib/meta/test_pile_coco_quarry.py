@@ -310,7 +310,7 @@ def _lvis(tmp_path: Path, boxes: dict[int, list[tuple[str, list[float]]]]) -> Pa
     """Both LVIS splits, everything in `train`: ``{image_id: [(name, xywh), ...]}``."""
     d = tmp_path / "lvis"
     d.mkdir(exist_ok=True)
-    names = ["banana", "apple", "orange_(fruit)", "mandarin_orange", "ski"]
+    names = ["banana", "apple", "orange_(fruit)", "mandarin_orange", "ski", "book", "magazine"]
     cats = [{"id": i + 1, "name": n} for i, n in enumerate(names)]
     anns = [
         {"id": k, "image_id": iid, "category_id": names.index(n) + 1, "bbox": b}
@@ -322,33 +322,52 @@ def _lvis(tmp_path: Path, boxes: dict[int, list[tuple[str, list[float]]]]) -> Pa
 
 
 class TestLumpFilter:
-    """#3985: a fruit box is a positive only if LVIS says it is ONE fruit.
+    """#3985: a fruit box is a positive only if LVIS counts exactly ONE fruit in it.
 
     COCO draws one box round a bunch or a bowl, and the band is then the size of
-    the pile. The owner voted 120 of these and the LVIS ratio was the only signal
-    that separated them.
+    the pile. The owner voted 120 of these; LVIS was the only referee that
+    separated them, asked about the box the simulated user drags (#4096).
     """
 
     def test_one_fruit_is_kept_and_a_pile_is_not(self, mod, tmp_path: Path):
         labels = {
-            1: {"banana": [[0, 0, 50, 50]]},  # LVIS agrees: one banana, same size
-            2: {"banana": [[0, 0, 60, 60]]},  # LVIS saw four small ones inside it
+            1: {"banana": [[0, 0, 50, 50]]},  # LVIS agrees: one banana inside
+            2: {"banana": [[0, 0, 60, 60]]},  # LVIS saw four inside it
             3: {"banana": [[0, 0, 50, 50]]},  # LVIS never boxed a banana here
             4: {},
         }
         lvis = _lvis(
             tmp_path,
-            {1: [("banana", [0, 0, 48, 48])], 2: [("banana", [0, 0, 20, 20])] * 4},
+            {
+                1: [("banana", [0, 0, 48, 48])],
+                2: [("banana", [0, 0, 20, 20]), ("banana", [30, 0, 20, 20]), ("banana", [0, 30, 20, 20])]
+                + [("banana", [30, 30, 20, 20])],
+            },
         )
         assert mod.lump_exclusions(labels, lvis) == {(2, "banana"), (3, "banana")}, (
             "a pile goes, and so does a box nothing vouches for"
         )
 
-    def test_the_cut_is_on_the_mean_box_not_the_count(self, mod, tmp_path: Path):
-        """Two apples COCO boxed separately are two agreeing boxes, not a pile."""
-        labels = {1: {"apple": [[0, 0, 30, 30], [40, 40, 70, 70]]}}
-        lvis = _lvis(tmp_path, {1: [("apple", [0, 0, 29, 29]), ("apple", [40, 40, 29, 29])]})
+    def test_only_the_picked_box_is_asked_about(self, mod, tmp_path: Path):
+        """Two apples COCO boxed separately: the largest holds one LVIS apple, so it stays."""
+        labels = {1: {"apple": [[0, 0, 30, 30], [40, 40, 80, 80]]}}
+        lvis = _lvis(tmp_path, {1: [("apple", [0, 0, 29, 29]), ("apple", [41, 41, 38, 38])]})
         assert mod.lump_exclusions(labels, lvis) == set()
+
+    def test_an_lvis_box_mostly_outside_does_not_count(self, mod, tmp_path: Path):
+        """A neighbour that only overlaps the edge is not a second fruit IN the box."""
+        labels = {1: {"orange": [[0, 0, 40, 40]]}}
+        lvis = _lvis(tmp_path, {1: [("orange_(fruit)", [0, 0, 40, 40]), ("orange_(fruit)", [35, 0, 40, 40])]})
+        assert mod.lump_exclusions(labels, lvis) == set()
+
+    def test_book_is_a_stack_only_at_six_and_needs_no_lvis(self, mod, tmp_path: Path):
+        """LVIS sees neighbouring volumes inside one book box; only a shelf reaches six."""
+        spine = lambda i: ("book", [i * 10, 0, 9, 40])  # noqa: E731
+        labels = {1: {"book": [[0, 0, 100, 40]]}, 2: {"book": [[0, 0, 100, 40]]}, 3: {"book": [[0, 0, 100, 40]]}}
+        lvis = _lvis(tmp_path, {1: [spine(i) for i in range(3)], 2: [spine(i) for i in range(6)]})
+        assert mod.lump_exclusions(labels, lvis) == {(2, "book")}, (
+            "three inside is a book with neighbours, six is a shelf, none is no evidence at all"
+        )
 
     def test_either_lvis_name_vouches_for_orange(self, mod, tmp_path: Path):
         labels = {1: {"orange": [[0, 0, 30, 30]]}}
@@ -359,7 +378,7 @@ class TestLumpFilter:
         """`skis` has a ratio as high as the fruit, but COCO's pair IS the object."""
         import pile_config as pc
 
-        assert "skis" not in pc.SCALE_LUMP_FILTER and "potted plant" not in pc.SCALE_LUMP_FILTER
+        assert "skis" not in pc.SCALE_LUMP_FILTER and "vase or potted plant" not in pc.SCALE_LUMP_FILTER
         labels = {1: {"skis": [[0, 0, 80, 20]]}}
         assert mod.lump_exclusions(labels, _lvis(tmp_path, {})) == set()
 
@@ -373,7 +392,7 @@ class TestLumpFilter:
     def test_an_excluded_pair_is_neither_positive_nor_clean(self, mod):
         from pilebuild import scale_core
 
-        labels = {1: {"banana": [[10, 10, 40, 40]]}, 2: {"banana": [[10, 10, 40, 40]]}}
+        labels = {1: {"banana": [[10.0, 10.0, 40.0, 40.0]]}, 2: {"banana": [[10.0, 10.0, 40.0, 40.0]]}}
         dims = {1: (100, 100), 2: (100, 100)}
         supply, _, clean = scale_core.band_candidates(
             labels, dims, unbanded=set(), classes=("banana",), excluded={(1, "banana")}
@@ -386,6 +405,7 @@ class TestLumpFilter:
         from pilebuild import scale_core
 
         monkeypatch.setattr(pc, "SCALE_CLASSES", ("banana",))
+        monkeypatch.setattr(pc, "SCALE_DROPPED_CELLS", frozenset({"banana@small"}))
         supply = {"banana": {b: [1, 2] for b in pc.BOX_BANDS}}
         chosen = scale_core.designate_cells(supply, corrections={}, roster={})
         assert "banana@small" not in chosen and "banana@large" in chosen
@@ -397,3 +417,68 @@ class TestLumpFilter:
         for cell in pc.SCALE_DROPPED_CELLS:
             cls, band = cell.split("@")
             assert cls in pc.SCALE_CLASSES and band in pc.BOX_BANDS, cell
+
+
+class TestLargestInstance:
+    """#4096: band on the most obvious instance and drag only that box.
+
+    Under the union rule three books spread over a table were SCATTERED and never
+    a positive -- 39% of all image-class pairs in C.
+    """
+
+    def test_spread_instances_band_on_the_largest(self):
+        from pilebuild import scale_core
+
+        # a big book and two small ones far apart: the union is scattered
+        bs = [[0, 0, 30, 30], [70, 70, 75, 75], [90, 0, 95, 5]]
+        assert scale_core.band_for(bs, 100, 100) == scale_core.SCATTERED
+        supply, boxes_for, _ = scale_core.band_candidates(
+            {1: {"book": bs}}, {1: (100, 100)}, unbanded=set(), classes=("book",), largest=True
+        )
+        (band,) = [b for b, ids in supply["book"].items() if ids]
+        assert band == scale_core.band_for([[0, 0, 30, 30]], 100, 100)
+        assert boxes_for[(1, f"book@{band}")] == [[0, 0, 30, 30]], "the drag is the one box, not the union"
+
+    def test_the_union_rule_is_unchanged_without_the_flag(self):
+        from pilebuild import scale_core
+
+        bs = [[0, 0, 30, 30], [70, 70, 75, 75]]
+        supply, _, _ = scale_core.band_candidates({1: {"book": bs}}, {1: (100, 100)}, unbanded=set(), classes=("book",))
+        assert not any(supply["book"].values())
+
+    def test_ties_do_not_depend_on_annotation_order(self):
+        from pilebuild import scale_core
+
+        a, b = [10, 10, 20, 20], [50, 50, 60, 60]
+        assert scale_core.largest_box([a, b]) == scale_core.largest_box([b, a]) == a
+
+    def test_coco_quarry_uses_it(self):
+        import pile_config as pc
+
+        assert pc.SCALE_BAND_ON_LARGEST is True
+
+
+class TestTheCarrierAndVesselMerges:
+    """#4119: two more classes COCO cannot carry at the box level, merged."""
+
+    def test_the_roster_holds_the_unions_and_not_their_members(self):
+        import pile_config as pc
+
+        for merged, members in (
+            ("bag or luggage", {"backpack", "handbag", "suitcase"}),
+            ("vase or potted plant", {"vase", "potted plant"}),
+        ):
+            assert merged in pc.SCALE_CLASSES
+            assert pc.coco_classes_for(merged) == members
+            assert not members & set(pc.SCALE_CLASSES), f"{members} would be positives twice"
+        assert {"skis", "snowboard"} <= set(pc.SCALE_CLASSES), "ruled a boundary COCO carries"
+
+    def test_a_merged_away_class_still_resolves_to_the_rule_it_was_voted_under(self):
+        """apply_recheck replays the VG-era vase recheck and stamps name AND digest."""
+        import pile_config as pc
+
+        for cls, rule in pc.SCALE_CLASS_RULES_FROZEN.items():
+            assert cls not in pc.SCALE_CLASSES
+            assert pc.review_name(cls) == rule.name
+            assert pc.SCALE_CLASS_RULES_RETIRED[cls] == rule.name
+        assert pc.rule_digest("vase") == "29e5d90e768c", "the digest the committed record was stamped with"

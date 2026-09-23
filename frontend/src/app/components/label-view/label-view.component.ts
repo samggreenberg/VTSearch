@@ -38,7 +38,11 @@ import { ResortPromptModalComponent, ResortResult } from '../modals/resort-promp
 import type { LabelingStatusResponse } from '../../generated/api-client/models/labeling-status-response';
 import { snapPanelWidthToGridColumns, iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 import { PanelResizeDirective } from '../../directives/panel-resize.directive';
-import { MediaPrefetchService } from '../../services/media-prefetch.service';
+import {
+  MediaPrefetchService,
+  PREFETCH_DEPTH,
+  imageUrlsWhileImages,
+} from '../../services/media-prefetch.service';
 import { LabelViewPanelStateService } from './label-view-panel-state.service';
 import { buildMediaContextMenuItems } from './media-context-menu-items';
 
@@ -275,14 +279,21 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // paid with somebody waiting; think time is ~600 ms-2 s of idle network.
     //
     // Keyed off the *selection*, not the vote, so the warm starts as soon as an
-    // item is on screen. The prediction can be wrong — a learned re-sort lands,
-    // or the reviewer clicks a different item — and a wrong prediction costs
-    // one unused fetch, never a wrong image: the store hands bytes back only
-    // for the URL they were fetched from.
+    // item is on screen — and the next PREFETCH_DEPTH items, not just one.
+    //
+    // The peek reads the ranking, the votes, the select mode and the cut as
+    // well, so the effect re-runs whenever the prediction can change with the
+    // same item still on screen: most often a learned re-sort landing after the
+    // previous vote, which reorders the queue the warm was computed from. The
+    // store then drops the stale picks and fetches the new ones. A prediction
+    // that is still wrong at vote time costs one unused fetch, never a wrong
+    // image: the store hands bytes back only for the URL they were fetched from.
     effect(() => {
       const id = this.mediaState.selectedId();
-      untracked(() => this.warmNextImage(id));
+      const upcoming = this.sortRunner.peekUpcomingMedia(id, PREFETCH_DEPTH);
+      untracked(() => this.warmUpcomingImages(id, upcoming));
     });
+    this.destroyRef.onDestroy(() => this.mediaPrefetch.clear());
 
     effect(() => {
       const settings = this.settingsState.settingsSignal();
@@ -1038,18 +1049,20 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   /**
-   * Prefetch the image the auto-advance would land on next (#3896).
+   * Prefetch the images the auto-advance would land on next (#3896).
    *
-   * Only for `image` media: the other types paint through their own viewers
-   * (audio waveform, video frame), which this store does not feed. A non-image
-   * selection simply warms nothing.
+   * Only `image` media: the other types paint through their own viewers
+   * (audio waveform, video frame), which this store does not feed. The queue
+   * stops at the first non-image pick rather than skipping it, since the order
+   * of the fetches is the order the reviewer will need them in.
    */
-  private warmNextImage(currentId: number | null): void {
-    if (currentId === null) return;
-    const pick = this.sortRunner.peekNextMedia(currentId);
-    if (pick.kind !== 'media') return;
-    if (this.mediaState.getMedia(pick.id)?.media_type !== 'image') return;
-    this.mediaPrefetch.warm(this.activeContext.mediaUrl(`/api/medias/${pick.id}/image`));
+  private warmUpcomingImages(currentId: number | null, upcoming: number[]): void {
+    this.mediaPrefetch.prefetch(
+      imageUrlsWhileImages(upcoming, (id) => this.mediaState.getMedia(id)?.media_type, (path) =>
+        this.activeContext.mediaUrl(path),
+      ),
+      currentId === null ? [] : [this.activeContext.mediaUrl(`/api/medias/${currentId}/image`)],
+    );
   }
 
   onMediaVoted(event: { id: number; vote: 'good' | 'bad' }): void {

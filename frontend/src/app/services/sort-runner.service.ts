@@ -665,6 +665,43 @@ export class SortRunnerService {
     });
   }
 
+  /**
+   * The next `depth` items the auto-advance would show if the reviewer voted on
+   * `currentId` and then on each pick in turn, with the ranking unchanged —
+   * the prefetch's queue (#3896).
+   *
+   * Each step is {@link peekNextMedia}'s rule with the earlier picks counted as
+   * voted, so the first entry is exactly what the next vote selects. The later
+   * ones are a forecast: a learned re-sort landing between votes can reorder
+   * them, which is why the review views recompute this whenever the ranking or
+   * the votes change rather than only when the selection does. Stops at the
+   * first non-`media` pick: a `new`-mode advance is a server round-trip, and
+   * nothing past it is knowable.
+   *
+   * Reads the sort and vote signals, so a caller inside an `effect` re-runs
+   * when any of them moves.
+   */
+  peekUpcomingMedia(currentId: number | null, depth: number): number[] {
+    if (currentId === null) return [];
+    const sortOrder = this.sortState.sortOrder;
+    const selectMode = this.sortState.selectMode;
+    const acqThreshold = this.sortState.acqThreshold;
+    const badVotes = this.voteState.badVotes;
+    let goodVotes: ReadonlySet<number> = this.voteState.goodVotes;
+    let excludeId = currentId;
+    const upcoming: number[] = [];
+    while (upcoming.length < depth) {
+      const pick = pickNextMedia({ sortOrder, selectMode, acqThreshold, goodVotes, badVotes, excludeId });
+      if (pick.kind !== 'media') break;
+      upcoming.push(pick.id);
+      // Count the item just stepped past as voted (its polarity is irrelevant
+      // to every mode's rule) and step onto the pick.
+      goodVotes = new Set(goodVotes).add(excludeId);
+      excludeId = pick.id;
+    }
+    return upcoming;
+  }
+
   autoSelectNext(excludeId?: number): void {
     const pick = this.peekNextMedia(excludeId);
     if (pick.kind === 'media') {

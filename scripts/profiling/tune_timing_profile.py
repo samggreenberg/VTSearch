@@ -39,7 +39,8 @@ never at live user data.
 cheap side of each fork is what a driven sweep hits by default: a demo import
 whose embeddings pkl already exists embeds nothing, and a dataset open whose
 pickle carries a cached coverage atlas restores it in milliseconds instead of
-rebuilding a hierarchical k-means for minutes. Both are correct measurements of
+rebuilding a hierarchical k-means (0.0027 s/item: seconds at demo sizes,
+~100 s at 36 500 items, #3595). Both are correct measurements of
 a branch nobody waits on, and a profile fitted from them inverts the bar (#3521).
 
 So ``--drive`` does two things about it, and the split is deliberate:
@@ -159,7 +160,7 @@ def _parse_args() -> argparse.Namespace:
     ap.add_argument(
         "--cold-atlas",
         action="store_true",
-        help="also rebuild each dataset's coverage atlas through the on-demand endpoint (minutes per dataset)",
+        help="also rebuild each dataset's coverage atlas through the on-demand endpoint (0.0027 s/item; ~100 s at 36 500 items)",
     )
     ap.add_argument(
         "--min-samples",

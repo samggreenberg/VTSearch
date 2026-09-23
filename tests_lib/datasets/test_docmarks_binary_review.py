@@ -582,3 +582,101 @@ class TestVotesRouteByQuestionNotByFolder:
         _name, qdir, n = out
         assert n == 1
         assert [x.name for x in (qdir / "images").glob("*.jpg")] == ["c1.jpg"]
+
+
+@pytest.fixture(scope="module")
+def cs():
+    sys.path.insert(0, str(_DOCMARKS))
+    try:
+        yield importlib.import_module("contamination_sample")
+    finally:
+        sys.path.remove(str(_DOCMARKS))
+
+
+class TestUcsfUnbandedFrame:
+    """The #3922 draw: UCSF pages the letterhead pull never looked at, Food-weighted."""
+
+    @staticmethod
+    def _page(source, author=None):
+        return SimpleNamespace(source=source, meta={"letterhead_author": author} if author else {})
+
+    def test_a_banded_page_or_another_source_is_never_in_the_frame(self, cs):
+        pages = {
+            "ucsf/a": self._page("ucsf"),
+            "ucsf/b": self._page("ucsf", author="Philip Morris"),
+            "ucsf/c": self._page("ucsf"),
+            "tobacco800/d": self._page("tobacco800"),
+        }
+        food, other = cs.unbanded_ucsf(pages, {"ucsf/a": "Food", "ucsf/c": "Opioids", "ucsf/b": "Tobacco"})
+        assert (food, other) == (["ucsf/a"], ["ucsf/c"])
+
+    def test_the_draw_takes_the_food_share_and_fills_the_rest_elsewhere(self, cs):
+        import random
+
+        food = [f"f{i}" for i in range(100)]
+        other = [f"o{i}" for i in range(100)]
+        drawn = cs.food_weighted(food, other, random.Random(0), 40)
+        assert len(drawn) == len(set(drawn)) == 40
+        assert sum(p.startswith("f") for p in drawn) == round(40 * cs.FOOD_SHARE)
+
+    def test_a_short_stratum_is_taken_whole_rather_than_padded(self, cs):
+        import random
+
+        drawn = cs.food_weighted(["f0", "f1"], [f"o{i}" for i in range(100)], random.Random(0), 40)
+        assert {"f0", "f1"} <= set(drawn)
+        assert len(drawn) == len(set(drawn))
+
+
+class TestInkCrop:
+    """Whole-page questions crop to the inked region; a speck does not hold the crop open."""
+
+    @staticmethod
+    def _page(specks=True):
+        from PIL import Image, ImageDraw
+
+        im = Image.new("L", (1000, 1400), 255)
+        d = ImageDraw.Draw(im)
+        d.rectangle([300, 400, 700, 900], fill=0)  # the content
+        if specks:
+            for x, y in [(20, 20), (980, 1380), (15, 700), (990, 60)]:
+                d.point((x, y), fill=0)
+        return im
+
+    def test_specks_at_the_border_are_ignored(self, br):
+        left, top, right, bottom = br.ink_box(self._page())
+        assert 280 <= left <= 300 and 380 <= top <= 400 and 700 <= right <= 720 and 900 <= bottom <= 920
+
+    def test_a_faint_stamp_made_of_fragments_is_kept(self, br):
+        from PIL import ImageDraw
+
+        im = self._page(specks=False)
+        d = ImageDraw.Draw(im)
+        for i in range(12):  # broken strokes 4 px apart: each tiny, together a mark
+            d.rectangle([850 + 8 * (i % 4), 1200 + 8 * (i // 4), 853 + 8 * (i % 4), 1203 + 8 * (i // 4)], fill=0)
+        assert br.ink_box(im)[2] >= 880 and br.ink_box(im)[3] >= 1220
+
+    def test_a_blank_page_is_left_alone(self, br):
+        from PIL import Image
+
+        assert br.ink_box(Image.new("L", (100, 100), 255)) is None
+
+
+class TestClassRefs:
+    def test_a_band_located_or_page_sized_instance_is_never_a_reference(self, br):
+        Mark = SimpleNamespace
+        pages = {
+            "u/band": SimpleNamespace(
+                width=1000,
+                height=1000,
+                marks=[Mark(class_id="c", box=[0, 0, 900, 200], provenance="ucsf_classes_band")],
+            ),
+            "u/wide": SimpleNamespace(
+                width=1000, height=1000, marks=[Mark(class_id="c", box=[0, 0, 800, 300], provenance="ucsf_classes")]
+            ),
+            "u/tight": SimpleNamespace(
+                width=1000, height=1000, marks=[Mark(class_id="c", box=[5, 5, 60, 60], provenance="ucsf_classes")]
+            ),
+        }
+        classes = {"c": {"query_crop": "/q.png", "page_ids": ["u/band", "u/wide", "u/tight"]}}
+        refs = br.class_refs("c", classes, pages)
+        assert [r.page_id for r in refs] == [None, "u/tight"]

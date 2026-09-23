@@ -17,6 +17,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **A tab left open on a deleted detector or dataset now says so, and can move
+  off it** (issue #4086). Requests naming an id the registry no longer lists
+  answered 409 "Detector is not loaded", which sent you looking for a load
+  that could never succeed. They now answer 404 with `error_code`
+  `detector_not_found` / `dataset_not_found` and a message telling you to
+  reload. Loading a different detector from such a tab no longer fails on the
+  stale one either.
 - **Opening Train on a new dataset/detector pair now re-runs the sort you
   left it on, instead of showing a stale one** (issue #4092). The sort
   controls (Sort mode, Select mode, the text query) carried over from the last
