@@ -209,6 +209,8 @@ def operating_metrics(
         "xcal_threshold": round6(float(threshold)),
         "gmm_cut": nan,
         "blend_weight": nan,
+        "shipped_provenance": "",
+        "fold_fallback": "",
         # Fold-count study columns (issue #2897); only the fold-count arms set
         # them.  ``n_cal_scores`` is the pooled calibration-set size the
         # conformal quantile is taken over, which is what K actually buys.

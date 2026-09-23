@@ -72,6 +72,7 @@ correct union of the two branches with no judgement involved.
 
 | Date | Lesson | Issue |
 |---|---|---|
+| 2026-09-22 | [`sbatch --wrap` runs `/bin/sh`, so `source gridenv.sh` searches PATH](lessons/2026-09-22-sbatch-wrap-source-is-not-bash.md) | #3551 |
 | 2026-09-17 | [merged worktrees filled the 50 GB /exp home](lessons/2026-09-17-merged-worktrees-filled-exp.md) | #3877 |
 | 2026-09-15 | [the diagnosis kit did not match the deployment](lessons/2026-09-15-the-diagnosis-kit-did-not-match-the-deployment.md) | #3853 |
 | 2026-09-13 | [a harness fitted at the library default, not the shipped one](lessons/2026-09-13-a-harness-fitted-at-the-library-default.md) | #3825 |

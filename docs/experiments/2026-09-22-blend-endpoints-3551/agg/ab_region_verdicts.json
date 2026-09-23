@@ -1,0 +1,15 @@
+{
+  "ab-region-corridor_w_0.05": {
+    "pooled": {
+      "n": 576,
+      "mean": -0.00014604068671357536,
+      "se": 7.690267384082913e-05,
+      "ci_hi": 4.68855401444972e-06,
+      "resolvable": false
+    },
+    "clause1_pooled_ci_below_0": false,
+    "clause2_every_env_ci_below_+0.01": true,
+    "clause3_no_reweighting_resolvably_worse": false,
+    "ships": false
+  }
+}
