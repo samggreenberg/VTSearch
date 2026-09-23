@@ -72,6 +72,36 @@ Then check the two things a script cannot:
   horizon can be far cheaper than it looks — and a region/patch cell can be 10×
   a whole-image one, which changes the arm budget entirely.
 
+### Size an A/B before you launch it (#3840)
+
+A trajectory A/B's resolution is known in advance, so decide the grid from it
+rather than discovering the floor in the write-up:
+
+> **SE of the paired mean Δcost = σ/√n, σ ≈ 0.04** for any two arms whose
+> thresholds differ. To resolve δ at 2 SE: **n = (2σ/δ)²** paired cells
+> (80% power: (2.8σ/δ)²).
+
+| δ | 0.02 | 0.01 | 0.005 | 0.004 | 0.002 |
+|---|---|---|---|---|---|
+| cells at 2 SE | 16 | 64 | 260 | 400 | 1,600 |
+
+Validated on 399 fresh cells against a pre-registered prediction
+(`docs/experiments/2026-09-22-ab-resolution-3840/REPORT.md`). What goes with it:
+
+- **A small change does not get a cheaper A/B.** Trajectories part by vote ~5 and
+  σ is 0.034–0.066 whether an arm moves 0.05% of the haystack or 20%. If δ needs
+  more cells than you can run, the admitted-set **gate** is the instrument.
+- **Grow by seeds.** One seed on the #3585 environments adds 57 cells, and a seed
+  buys what a new category buys (category variance component 0 at 7 seeds).
+- **Allocate by cell cost, keep the weights.** `max_patch` cells cost ~8x a
+  `whole_image` cell. n_e ∝ W_e/√cost_e gives the same SE for 0.5–0.8 of the
+  compute. Do not allocate by per-environment σ, which does not carry from one arm
+  pair to the next.
+- **Pair only grids from the same commit.** Eleven days of `dev` alone give a
+  per-cell σ of ~0.01. Reuse a same-commit baseline grid instead of an old one.
+- σ is this environment set's. On another, read it off the first seeds and
+  re-size (#3796 saw 0.056 on `vg_scale_any` at 150 votes).
+
 ## After launching — confirm it started
 
 **A submission is not a launch.** Verify every arm came back with a numeric job

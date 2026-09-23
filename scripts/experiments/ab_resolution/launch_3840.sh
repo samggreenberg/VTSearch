@@ -4,6 +4,7 @@
 #   bash launch_3840.sh ab         # seeds 0..8 of `baseline` and `ll1e-8`, plus a same-code repeat
 #   bash launch_3840.sh frames     # collapse every grid to the compact per-step frame
 #   bash launch_3840.sh analyse    # the curve, the breakdowns, the check against the prediction
+#   bash launch_3840.sh abfigures  # quality-over-clicks pair + viewer for the validation grid
 #   bash launch_3840.sh status
 #
 # WHY A RUN AT ALL.  The curve itself is re-analysis: subsample the paired-cell
@@ -77,6 +78,23 @@ analyse)
     --wrap="source $WT/gridenv.sh && cd $HERE && python resolution_3840.py --steps $EXP/frames/steps.csv.gz --out $EXP/analysis && python figures_3840.py --analysis $EXP/analysis")
   [[ "$J" =~ ^[0-9]+$ ]] || { echo "analyse SUBMIT FAILED" >&2; exit 1; }
   echo "analyse -> job $J"
+  ;;
+
+abfigures)
+  # The quality-over-clicks pair and the viewer every simulated-user study owes,
+  # for the validation grid.  Click 0 is the free text sort, computed on the
+  # validation cells themselves (seeds 0-8), not borrowed from #3585's 2 seeds.
+  CALIB="$WT/scripts/experiments/calibration"
+  ARMS_ROOT="$EXP/arms"
+  mkdir -p "$ARMS_ROOT" "$EXP/analysis/figures"
+  ln -sfn "$EXP/ab_baseline/results" "$ARMS_ROOT/baseline"
+  ln -sfn "$EXP/ab_ll1e-8/results" "$ARMS_ROOT/ll1e-8"
+  source "$WT/scripts/experiments/pile/pile_env.sh"
+  J=$(sbatch --parsable --job-name=abres-3840-abfig --partition=cpu --mem=24G --cpus-per-task=2 --time=3:00:00 \
+    --output="$LOGS/abfig-%j.out" \
+    --wrap="source $WT/gridenv.sh && export VTSEARCH_DATA_DIR=$VTSEARCH_DATA_DIR VTSEARCH_MODELS_DIR=$VTSEARCH_MODELS_DIR HF_HOME=$HF_HOME CALIB_RESULTS=$EXP/ab_baseline/results CALIB_DATASETS=visual_genome_m,caltech101_m,coco_val CALIB_VG_EMBEDDERS=siglip,dinov3_patch CALIB_CALTECH_EMBEDDERS=siglip,dinov3_patch CALIB_COCO_EMBEDDERS=siglip,dinov3_patch CALIB_PATCH_STYLES=whole_image,max_patch CALIB_CATEGORY_MODE=all CALIB_N_SEEDS=9 CALIB_CELL_ORDER=seed && cd $CALIB && python text_baseline.py --results $EXP/ab_baseline/results --out $EXP/analysis/text_baseline.csv && python curves.py --results $ARMS_ROOT --arms baseline,ll1e-8 --out $EXP/analysis/figures --baseline $EXP/analysis/text_baseline.csv && python viewer.py --results $ARMS_ROOT --arms baseline=baseline,ll1e-8=ll1e-8 --out $EXP/analysis/viewer.html --title 'The #3840 validation grid: parameter rule vs ll1e-8' --baseline $EXP/analysis/text_baseline.csv")
+  [[ "$J" =~ ^[0-9]+$ ]] || { echo "abfigures SUBMIT FAILED" >&2; exit 1; }
+  echo "abfigures -> job $J"
   ;;
 
 status)
