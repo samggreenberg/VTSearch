@@ -3,6 +3,7 @@
 #
 #   bash launch_3839.sh gate       # the #3585 fold corpus through every arm in arms_3839.py, sharded
 #   AB_ARMS=cap2000 bash launch_3839.sh ab   # the trajectory A/B for the gate's pick
+#   AB_ARMS=cap2000 bash launch_3839.sh abanalyze  # pair it with #3840's v_ll1e-8 grid
 #   bash launch_3839.sh analyse    # the tables and figures
 #   bash launch_3839.sh status
 #
@@ -55,6 +56,19 @@ ab)
   CALIB_EXP="$EXP" CALIB_N_SEEDS="${CALIB_N_SEEDS:-9}" CALIB_CONC="${CALIB_CONC:-16}" CALIB_CPUS=1 CALIB_MEM=7G \
     CALIB_JOB_NAME=maxiter-3839 AB_RUNNER=run_cells_arm_3839.py AB_ARMS="$AB_ARMS" \
     bash "$HERE/launch_3825.sh" ab
+  ;;
+
+abanalyze)
+  # Pair the candidate with #3840's `v_ll1e-8` grid (the shipped rule, same dev,
+  # same seeds 0-8) through the standard analyzer, then pool it.
+  : "${AB_ARMS:?set AB_ARMS to the candidate arm(s)}"
+  OFF="${AB_OFF:-/expscratch/$USER/abres-3840/ab_ll1e-8/results}"
+  CALIB="$WT/scripts/experiments/calibration"
+  for arm in $AB_ARMS; do
+    submit "abanalyze_$arm" --job-name="maxiter-3839-abanalyze-$arm" "${DEP_ARG[@]}" --partition=cpu --mem=48G \
+      --cpus-per-task=2 --time=2:00:00 --output="$LOGS/abanalyze-$arm-%j.out" \
+      --wrap="source $WT/gridenv.sh && export CALIB_AB_ON=$EXP/ab_$arm/results CALIB_AB_OFF=$OFF CALIB_AB_OUT=$ANALYSIS/ab_$arm && mkdir -p $ANALYSIS/ab_$arm && cd $CALIB && python analyze_ab.py && cd $HERE && python ab_summary_3839.py --paired $ANALYSIS/ab_$arm/agg/ab_paired_cells.csv --out $ANALYSIS/ab_$arm"
+  done
   ;;
 
 analyse)
