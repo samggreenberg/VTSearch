@@ -378,7 +378,7 @@ class TestLumpFilter:
         """`skis` has a ratio as high as the fruit, but COCO's pair IS the object."""
         import pile_config as pc
 
-        assert "skis" not in pc.SCALE_LUMP_FILTER and "potted plant" not in pc.SCALE_LUMP_FILTER
+        assert "skis" not in pc.SCALE_LUMP_FILTER and "vase or potted plant" not in pc.SCALE_LUMP_FILTER
         labels = {1: {"skis": [[0, 0, 80, 20]]}}
         assert mod.lump_exclusions(labels, _lvis(tmp_path, {})) == set()
 
@@ -456,3 +456,29 @@ class TestLargestInstance:
         import pile_config as pc
 
         assert pc.SCALE_BAND_ON_LARGEST is True
+
+
+class TestTheCarrierAndVesselMerges:
+    """#4119: two more classes COCO cannot carry at the box level, merged."""
+
+    def test_the_roster_holds_the_unions_and_not_their_members(self):
+        import pile_config as pc
+
+        for merged, members in (
+            ("bag or luggage", {"backpack", "handbag", "suitcase"}),
+            ("vase or potted plant", {"vase", "potted plant"}),
+        ):
+            assert merged in pc.SCALE_CLASSES
+            assert pc.coco_classes_for(merged) == members
+            assert not members & set(pc.SCALE_CLASSES), f"{members} would be positives twice"
+        assert {"skis", "snowboard"} <= set(pc.SCALE_CLASSES), "ruled a boundary COCO carries"
+
+    def test_a_merged_away_class_still_resolves_to_the_rule_it_was_voted_under(self):
+        """apply_recheck replays the VG-era vase recheck and stamps name AND digest."""
+        import pile_config as pc
+
+        for cls, rule in pc.SCALE_CLASS_RULES_FROZEN.items():
+            assert cls not in pc.SCALE_CLASSES
+            assert pc.review_name(cls) == rule.name
+            assert pc.SCALE_CLASS_RULES_RETIRED[cls] == rule.name
+        assert pc.rule_digest("vase") == "29e5d90e768c", "the digest the committed record was stamped with"

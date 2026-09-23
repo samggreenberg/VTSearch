@@ -102,7 +102,6 @@ def main() -> int:
     ap.add_argument("--exclude", type=Path, nargs="*", default=[], help="manifests whose annotations are not re-asked")
     args = ap.parse_args()
 
-
     coco: dict = collections.defaultdict(lambda: collections.defaultdict(list))
     dims: dict = {}
     for split in ("val2017", "train2017"):
@@ -140,12 +139,24 @@ def main() -> int:
             ann = xyxy[tuple(pick)]
             if ann in asked or band_for([pick], w, h) not in pc.BOX_BANDS:
                 continue
-            inside = sum(_share_inside([x, y, x + bw, y + bh], pick) >= pc.SCALE_LUMP_CONTAIN for (x, y, bw, bh), _ in lb)
+            inside = sum(
+                _share_inside([x, y, x + bw, y + bh], pick) >= pc.SCALE_LUMP_CONTAIN for (x, y, bw, bh), _ in lb
+            )
             t = stratum(inside)
             if t is not None:
                 bx = [pick[0], pick[1], pick[2] - pick[0], pick[3] - pick[1]]
-                rows.append({"image_id": iid, "bbox": bx, "ann_id": ann, "ratio": float(inside), "n_coco": len(cb),
-                             "n_lvis": len(lb), "arm": t, "lvis_inside": inside})
+                rows.append(
+                    {
+                        "image_id": iid,
+                        "bbox": bx,
+                        "ann_id": ann,
+                        "ratio": float(inside),
+                        "n_coco": len(cb),
+                        "n_lvis": len(lb),
+                        "arm": t,
+                        "lvis_inside": inside,
+                    }
+                )
             continue
         if not cb or not lb:
             continue
@@ -245,7 +256,15 @@ def _render(picked: list, args, dims: dict) -> int:
 
     kb.sort()
     (args.out / slug / "manifest.json").write_text(
-        json.dumps({"class": args.klass, "lvis_names": [n.strip() for n in args.lvis_names.split(",")], "seed": args.seed, "items": manifest}, indent=1)
+        json.dumps(
+            {
+                "class": args.klass,
+                "lvis_names": [n.strip() for n in args.lvis_names.split(",")],
+                "seed": args.seed,
+                "items": manifest,
+            },
+            indent=1,
+        )
     )
     print(f"  wrote {len(manifest)} crops; size median {kb[len(kb) // 2]:.0f} KB, p90 {kb[int(0.9 * len(kb))]:.0f} KB")
     return 0

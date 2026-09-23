@@ -1,0 +1,161 @@
+{
+ "classes": [
+  "car",
+  "truck"
+ ],
+ "types": [
+  {
+   "lvis_type": "car_(automobile)",
+   "n": 7939,
+   "by_class": {
+    "car": 7335,
+    "truck": 604
+   },
+   "minority": 604
+  },
+  {
+   "lvis_type": "truck",
+   "n": 1526,
+   "by_class": {
+    "truck": 1332,
+    "car": 194
+   },
+   "minority": 194
+  },
+  {
+   "lvis_type": "minivan",
+   "n": 992,
+   "by_class": {
+    "car": 721,
+    "truck": 271
+   },
+   "minority": 271
+  },
+  {
+   "lvis_type": "pickup_truck",
+   "n": 780,
+   "by_class": {
+    "truck": 600,
+    "car": 180
+   },
+   "minority": 180
+  },
+  {
+   "lvis_type": "cab_(taxi)",
+   "n": 359,
+   "by_class": {
+    "car": 356,
+    "truck": 3
+   },
+   "minority": 3
+  },
+  {
+   "lvis_type": "trailer_truck",
+   "n": 276,
+   "by_class": {
+    "truck": 275,
+    "car": 1
+   },
+   "minority": 1
+  },
+  {
+   "lvis_type": "fire_engine",
+   "n": 183,
+   "by_class": {
+    "truck": 182,
+    "car": 1
+   },
+   "minority": 1
+  },
+  {
+   "lvis_type": "bus_(vehicle)",
+   "n": 83,
+   "by_class": {
+    "truck": 68,
+    "car": 15
+   },
+   "minority": 15
+  },
+  {
+   "lvis_type": "police_cruiser",
+   "n": 82,
+   "by_class": {
+    "car": 79,
+    "truck": 3
+   },
+   "minority": 3
+  },
+  {
+   "lvis_type": "toy",
+   "n": 62,
+   "by_class": {
+    "truck": 24,
+    "car": 38
+   },
+   "minority": 24
+  },
+  {
+   "lvis_type": "jeep",
+   "n": 55,
+   "by_class": {
+    "truck": 28,
+    "car": 27
+   },
+   "minority": 27
+  },
+  {
+   "lvis_type": "tow_truck",
+   "n": 42,
+   "by_class": {
+    "truck": 40,
+    "car": 2
+   },
+   "minority": 2
+  },
+  {
+   "lvis_type": "motor_vehicle",
+   "n": 38,
+   "by_class": {
+    "car": 28,
+    "truck": 10
+   },
+   "minority": 10
+  },
+  {
+   "lvis_type": "camper_(vehicle)",
+   "n": 33,
+   "by_class": {
+    "truck": 30,
+    "car": 3
+   },
+   "minority": 3
+  },
+  {
+   "lvis_type": "tractor_(farm_equipment)",
+   "n": 25,
+   "by_class": {
+    "truck": 24,
+    "car": 1
+   },
+   "minority": 1
+  },
+  {
+   "lvis_type": "ambulance",
+   "n": 24,
+   "by_class": {
+    "truck": 24
+   },
+   "minority": 0
+  },
+  {
+   "lvis_type": "garbage_truck",
+   "n": 23,
+   "by_class": {
+    "truck": 23
+   },
+   "minority": 0
+  }
+ ],
+ "minority": 1339,
+ "total": 12522
+}
