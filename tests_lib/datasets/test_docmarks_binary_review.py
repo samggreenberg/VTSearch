@@ -710,3 +710,47 @@ class TestRealPixelsFirst:
         questions = {"a.jpg": {"task": "box_tighten_band", "key": {"class_id": "c", "index": 1}}}
         filled, unanswered = br.TRANSLATORS["box_tighten_band"][1](rows, questions, {"a.jpg": "good"})
         assert filled[0]["verdict"] == "1" and unanswered == []
+
+
+class TestDrawnBoxes:
+    """#4109: a box the reviewer draws with a Good vote replaces the proposal, mapped back to the page."""
+
+    def _q(self, br):
+        return br.Question(
+            filename="a.jpg",
+            task="box_tighten_band",
+            question="?",
+            refs=[],
+            page_id="u/p",
+            box=[263, 388, 84, 27],
+            key={"class_id": "c", "index": 0},
+        )
+
+    def test_a_box_drawn_on_the_sheet_maps_back_to_the_page_pixels_it_covered(self, br):
+        q, page = self._q(br), SimpleNamespace(width=1240, height=1680)
+        region, s, ox, oy = br.outlined_placement(q, page)
+        W, H = br.sheet_size(q)
+        x, y, w, h = q.box
+        norm = [
+            (ox + (x - region[0]) * s) / W,
+            (oy + (y - region[1]) * s) / H,
+            (ox + (x + w - region[0]) * s) / W,
+            (oy + (y + h - region[1]) * s) / H,
+        ]
+        assert br.sheet_box_to_page(q, page, norm) == [263, 388, 84, 27]
+
+    def test_a_drawn_box_is_clipped_to_what_the_sheet_showed(self, br):
+        q, page = self._q(br), SimpleNamespace(width=1240, height=1680)
+        region, *_ = br.outlined_placement(q, page)
+        x, y, w, h = br.sheet_box_to_page(q, page, [0.0, 0.0, 1.0, 1.0])
+        assert x >= region[0] and y >= region[1] and x + w <= region[2] and y + h <= region[3]
+
+    def test_the_drawn_box_replaces_the_proposal_and_keeps_it_for_the_record(self, br):
+        rows = [{"class_id": "c", "members": [{"index": 0, "new_box": [1, 1, 5, 5]}], "verdict": ""}]
+        questions = {"a.jpg": {"task": "box_tighten_band", "key": {"class_id": "c", "index": 0}}}
+        filled, _ = br.TRANSLATORS["box_tighten_band"][1](
+            rows, questions, {"a.jpg": "good"}, drawn={"a.jpg": [9, 9, 30, 20]}
+        )
+        m = filled[0]["members"][0]
+        assert filled[0]["verdict"] == "0" and m["new_box"] == [9, 9, 30, 20]
+        assert m["proposed_box"] == [1, 1, 5, 5] and m["drawn_by_reviewer"] is True
