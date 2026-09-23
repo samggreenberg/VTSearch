@@ -10,6 +10,15 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`maybe_structural_rerank_example` takes a sequence of templates** (issue
+  #4161). The example-sort Stage-2 re-rank in
+  `vtscore.training.structural_similarity` accepts either one
+  `StructuralFeatures` or a sequence of them (`None` and empty entries are
+  dropped) and scores each candidate as the max over templates, the rule
+  `maybe_structural_rerank` already applies to a detector's RegionYes
+  templates. `query_sort.example_sort_from_paths` now passes every example
+  through it instead of skipping Stage 2 when given more than one. Additive:
+  a single `StructuralFeatures` argument behaves exactly as before.
 - **`PluginField.opened_in_browser`, for a `url` field only the browser opens**
   (issue #4078). Every `field_type="url"` value went through the SSRF guard
   `validate_url`, which refuses `localhost` and private addresses - right for a
