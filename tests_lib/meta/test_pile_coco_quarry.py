@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import sys
 import zipfile
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import pytest
@@ -306,7 +307,7 @@ def test_every_declared_merge_is_a_real_union_named_in_c():
         assert cls not in parts, f"{cls!r} is named as its own part; the roster name must be the NEW one"
 
 
-def _lvis(tmp_path: Path, boxes: dict[int, list[tuple[str, list[float]]]]) -> Path:
+def _lvis(tmp_path: Path, boxes: Mapping[int, Sequence[tuple[str, Sequence[float]]]]) -> Path:
     """Both LVIS splits, everything in `train`: ``{image_id: [(name, xywh), ...]}``."""
     d = tmp_path / "lvis"
     d.mkdir(exist_ok=True)
@@ -449,7 +450,7 @@ class TestLargestInstance:
     def test_ties_do_not_depend_on_annotation_order(self):
         from pilebuild import scale_core
 
-        a, b = [10, 10, 20, 20], [50, 50, 60, 60]
+        a, b = [10.0, 10.0, 20.0, 20.0], [50.0, 50.0, 60.0, 60.0]
         assert scale_core.largest_box([a, b]) == scale_core.largest_box([b, a]) == a
 
     def test_coco_quarry_uses_it(self):
