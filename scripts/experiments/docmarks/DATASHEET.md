@@ -350,6 +350,33 @@ those copies is scored down for it, and SIFT is not.
   **0 of 516** carried the mark. Each run can queue its own
   (`eval_retrieval.py` writes `surprise_hits.json`; `surprise_review.py`).
 
+### Scoring a new idea
+
+`score_ranker.py` scores any ranker the way the reference numbers below were
+scored (#4108). Write a CSV (optionally gzipped) of `class_id,page_id,score`,
+where higher means "more likely to carry this class's mark", then:
+
+```
+python score_ranker.py score --scores my_idea.csv.gz --tiers s,m --name my_idea --out <dir>
+```
+
+- It uses the headline `own_verified` pool and the same ranking and tie-break
+  as `eval_retrieval.py` and `eval_sift_rank.py`. It reproduces their SIFT and
+  SigLIP APs exactly, class for class.
+- Every number sits beside two **mark-blind controls**: `source_prior` and
+  `provenance_prior` (same source *and* industry as the positives). A result
+  that doesn't clear the provenance control is not evidence the method sees the
+  mark.
+- It writes `surprise_hits.json`, the method's top-ranked presumed negatives.
+  Queue them with `surprise_review.py`: if one carries the mark, the method was
+  right and the labels were not (#4089).
+- Every result is stamped with the corpus version, and with whether the corpus
+  on disk still matches that version's frozen manifest in `versions/`.
+
+To start from a built-in method, `score_ranker.py export --method siglip --tier m`
+writes SigLIP's scores in that format. Export from the tier you score, because
+each tier's cell was embedded separately.
+
 ### Reference points, not targets
 
 These are recorded so a new idea has something to stand next to. `own_verified`
