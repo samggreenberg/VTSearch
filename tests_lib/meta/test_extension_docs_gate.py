@@ -14,6 +14,7 @@ reintroduce them.
 
 from __future__ import annotations
 
+import functools
 import importlib.util
 import sys
 import time
@@ -35,8 +36,20 @@ def _load_gate():
 
 
 gate = _load_gate()
-CLASSES = gate._index_classes()
-MODULE_LEVEL = gate._index_module_level()
+
+# One worker, so the ~4s AST index below is built once per run rather than on
+# every xdist worker that draws a test from this file.
+pytestmark = pytest.mark.xdist_group("extension-docs-gate")
+
+
+@functools.cache
+def _real_index():
+    """The class and module-level indexes of the real tree, built on first use.
+
+    Lazily, not at import: module scope runs at collection, so an eager index
+    cost every worker ~4s whether or not it ran a test from this file.
+    """
+    return gate._index_classes(), gate._index_module_level()
 
 
 def check(
@@ -53,12 +66,13 @@ def check(
     prose against the shipped ABCs — but the doc under test is synthetic, so a
     test can describe a defect without editing a real guide.
     """
+    index = _real_index()  # before ROOT is pointed at the synthetic tree
     doc = tmp_path / "synthetic.md"
     doc.write_text(f"## {heading}\n\n{body}\n", encoding="utf-8")
     monkeypatch.setattr(gate, "ROOT", tmp_path)
     monkeypatch.setattr(gate, "SECTIONS", [("synthetic.md", heading, classes)])
     monkeypatch.setattr(gate, "IGNORE", {("synthetic.md", heading): ignore} if ignore else {})
-    return gate._check_sections(CLASSES, MODULE_LEVEL)
+    return gate._check_sections(*index)
 
 
 class TestRepoIsClean:

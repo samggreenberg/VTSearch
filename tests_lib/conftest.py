@@ -61,6 +61,7 @@ from tests_shared.state_reset import (  # noqa: E402
     TEST_TRAIN_EPOCHS,  # noqa: F401  (re-exported: tests_lib/core/test_training_budget_isolation.py)
     allow_test_tmp_paths as _allow_test_tmp_paths,  # noqa: F401  (autouse fixture)
     capture_startup_host_seams,
+    freeze_collected_heap,
     freeze_startup_heap,
     install_startup_contexts,
     pin_training_budget,
@@ -71,6 +72,11 @@ from tests_shared.state_reset import (  # noqa: E402
 def pytest_collection_modifyitems(items, config):
     """Auto-assign group markers based on the test file's parent directory."""
     add_group_markers(items, root_dir_name="tests_lib")
+
+
+def pytest_collection_finish(session):
+    """Freeze the heap collection built, so ``gc.collect()`` stops rescanning it."""
+    freeze_collected_heap()
 
 
 pin_training_budget()
