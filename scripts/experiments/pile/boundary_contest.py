@@ -138,12 +138,18 @@ def main() -> int:
     for k in classes:
         own = sum(c[k] for _, _, c in rows)
         wrong = sum(c[k] for _, _, c in rows if max(c, key=c.get) != k)
-        print(f"  `{k}`: {own:,} matched boxes, {wrong:,} ({100 * wrong / max(1, own):.1f}%) in a type another class wins")
+        print(
+            f"  `{k}`: {own:,} matched boxes, {wrong:,} ({100 * wrong / max(1, own):.1f}%) in a type another class wins"
+        )
     print(f"\n{contested:,} of {total:,} boxes ({100 * contested / total:.0f}%) sit in a type COCO splits 20-80%.")
-    print(f"MINORITY-label boxes: {minority:,} of {total:,} = {100 * minority / total:.1f}%   <- the region-voting rate")
+    print(
+        f"MINORITY-label boxes: {minority:,} of {total:,} = {100 * minority / total:.1f}%   <- the region-voting rate"
+    )
     print("(reference, #4056 on LVIS val: car/truck 9.6%, cup/wine glass 10.7% -- both merged)")
     if args.out:
-        args.out.write_text(json.dumps({"classes": classes, "types": table, "minority": minority, "total": total}, indent=1))
+        args.out.write_text(
+            json.dumps({"classes": classes, "types": table, "minority": minority, "total": total}, indent=1)
+        )
     return 0
 
 

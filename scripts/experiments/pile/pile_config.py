@@ -297,6 +297,7 @@ LVIS_SPLITS = ("train", "val")
 #: use the most obvious instance, which is the largest.
 SCALE_BAND_ON_LARGEST = True
 
+
 class LumpRule(NamedTuple):
     """How LVIS decides whether one class's picked COCO box is ONE object (#3985)."""
 
