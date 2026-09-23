@@ -337,13 +337,18 @@ class TestLumpFilter:
             3: {"banana": [[0, 0, 50, 50]]},  # LVIS never boxed a banana here
             4: {},
         }
+        boxes: dict[int, list[tuple[str, list[float]]]] = {
+            1: [("banana", [0, 0, 48, 48])],
+            2: [
+                ("banana", [0, 0, 20, 20]),
+                ("banana", [30, 0, 20, 20]),
+                ("banana", [0, 30, 20, 20]),
+                ("banana", [30, 30, 20, 20]),
+            ],
+        }
         lvis = _lvis(
             tmp_path,
-            {
-                1: [("banana", [0, 0, 48, 48])],
-                2: [("banana", [0, 0, 20, 20]), ("banana", [30, 0, 20, 20]), ("banana", [0, 30, 20, 20])]
-                + [("banana", [30, 30, 20, 20])],
-            },
+            boxes,
         )
         assert mod.lump_exclusions(labels, lvis) == {(2, "banana"), (3, "banana")}, (
             "a pile goes, and so does a box nothing vouches for"
@@ -431,7 +436,7 @@ class TestLargestInstance:
         from pilebuild import scale_core
 
         # a big book and two small ones far apart: the union is scattered
-        bs = [[0, 0, 30, 30], [70, 70, 75, 75], [90, 0, 95, 5]]
+        bs: list[list[float]] = [[0, 0, 30, 30], [70, 70, 75, 75], [90, 0, 95, 5]]
         assert scale_core.band_for(bs, 100, 100) == scale_core.SCATTERED
         supply, boxes_for, _ = scale_core.band_candidates(
             {1: {"book": bs}}, {1: (100, 100)}, unbanded=set(), classes=("book",), largest=True
@@ -443,7 +448,7 @@ class TestLargestInstance:
     def test_the_union_rule_is_unchanged_without_the_flag(self):
         from pilebuild import scale_core
 
-        bs = [[0, 0, 30, 30], [70, 70, 75, 75]]
+        bs: list[list[float]] = [[0, 0, 30, 30], [70, 70, 75, 75]]
         supply, _, _ = scale_core.band_candidates({1: {"book": bs}}, {1: (100, 100)}, unbanded=set(), classes=("book",))
         assert not any(supply["book"].values())
 
@@ -483,3 +488,64 @@ class TestTheCarrierAndVesselMerges:
             assert pc.review_name(cls) == rule.name
             assert pc.SCALE_CLASS_RULES_RETIRED[cls] == rule.name
         assert pc.rule_digest("vase") == "29e5d90e768c", "the digest the committed record was stamped with"
+
+
+class TestRelabel:
+    """#4091: a full-corpus cell's LABELS can be brought up to date without re-embedding.
+
+    The contract is equality with a rebuild: whatever a fresh `load` would label
+    an image, a relabel must label it the same, because the two share one plan.
+    """
+
+    @pytest.fixture
+    def full(self, mod, tmp_path: Path, monkeypatch):
+        import pile_config as pc
+
+        anchor = _corpus(tmp_path)
+        monkeypatch.setattr(pc, "COCO_ANCHOR_DIR", anchor)
+        monkeypatch.setattr(pc, "COCO_VAL_ZIP", tmp_path / "images" / "val2017.zip")
+        monkeypatch.setattr(pc, "COCO_TRAIN_ZIP", tmp_path / "images" / "train2017.zip")
+        monkeypatch.setattr(pc, "LVIS_DIR", _lvis(tmp_path, {}))
+        monkeypatch.setattr(pc, "SCALE_CLASSES", ("bus", "clock"))
+        monkeypatch.setitem(pc.DATASETS, "fixture_full", {"kind": "coco_quarry", "full_corpus": True})
+        mod._CORPUS.clear()
+        yield "fixture_full"
+        mod._CORPUS.clear()
+
+    def test_a_relabel_reproduces_what_a_build_labels(self, mod, full):
+        from pilebuild.scale_core import LABEL_FIELDS
+
+        built: dict = {}
+        mod.load(full, built, "siglip")
+        assert built, "the fixture corpus emitted nothing"
+        stale = {
+            iid: {**m, "categories": [], "category": "", "regions": [], "evaluable_categories": []}
+            for iid, m in built.items()
+        }
+        stats = mod.relabel(full, stale)
+        for iid, m in built.items():
+            for k in LABEL_FIELDS:
+                assert stale[iid][k] == m[k], (iid, k)
+        assert stats["n_medias"] == len(built)
+        assert stats["changed"], "the scrambled fields were reported as changed"
+
+    def test_a_relabel_leaves_every_other_field_alone(self, mod, full):
+        built: dict = {}
+        mod.load(full, built, "siglip")
+        for m in built.values():
+            m["embeddings"] = {"siglip": [1.0, 2.0]}
+        before = {iid: {k: v for k, v in m.items()} for iid, m in built.items()}
+        mod.relabel(full, built)
+        for iid, m in built.items():
+            assert m["embeddings"] == before[iid]["embeddings"]
+            assert m["media_bytes"] == before[iid]["media_bytes"]
+
+    def test_a_designated_cell_is_refused(self, mod):
+        with pytest.raises(SystemExit) as err:
+            mod.relabel("coco_quarry", {})
+        assert "full-corpus" in str(err.value), "a rule change moves WHICH images it holds; that needs pixels"
+
+    def test_a_cell_holding_an_image_the_plan_would_not_emit_is_refused(self, mod, full):
+        with pytest.raises(SystemExit) as err:
+            mod.relabel(full, {999_999: {}})
+        assert "would not emit" in str(err.value)

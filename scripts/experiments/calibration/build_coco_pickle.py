@@ -109,7 +109,10 @@ def build(embedder: str, cache: Path, annotations: Path, out_dir: Path) -> Path:
             # neither a positive nor a meaningful negative.  Skip it.
             continue
         with np.load(npz_path) as z:
+            # Unit-norm, as the app would hold it: the #2790 cache stores the raw
+            # whole_vec, and copying it straight in shipped norms of 12-19 (#4095).
             whole = np.asarray(z["whole_vec"], dtype=np.float32)
+            whole = whole / max(float(np.linalg.norm(whole)), 1e-12)
         if whole.ndim != 1:
             missing_vectors.append(image_id)
             continue
