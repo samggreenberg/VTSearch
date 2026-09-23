@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 from collections import defaultdict
+from collections.abc import Mapping, Sequence
 
 import pile_config as pc
 
@@ -33,7 +34,7 @@ SCATTERED = "scattered"
 OVERSIZE = "oversize"
 
 
-def band_for(boxes: list[list[float]], W: int, H: int) -> str:
+def band_for(boxes: Sequence[Sequence[float]], W: int, H: int) -> str:
     """The band one class's boxes put an image in, or why they put it in none.
 
     Returns a key of :data:`pile_config.BOX_BANDS`, or :data:`SCATTERED` /
@@ -69,7 +70,7 @@ def largest_box(boxes: list[list[float]]) -> list[float]:
 
 
 def band_candidates(
-    labels: dict[int, dict[str, list[list[float]]]],
+    labels: Mapping[int, Mapping[str, Sequence[Sequence[float]]]],
     box_dims: dict[int, tuple[int, int]],
     unbanded: set[tuple[int, str]],
     classes: tuple[str, ...] | None = None,
