@@ -1,0 +1,36 @@
+{'index': 80, 'stride': 5, 'dataset': 'coco_val', 'category': 'clock', 'seed': 1, 'region_voting': True, 'styles': ['whole_image', 'max_patch'], 'embedder': 'dinov3_patch'}
+final haystack 2396; folds 2; anchors per fold [40, 40]
+
+[shipped] threshold 0.379957 admits 1141/2396  provenance fold_anchored_maxiter1[1/2]
+  fold 0: inverted_means -> unanchored fallback
+  fold 1: iters 200 converged 0 w_hi 0.0258 mu_lo 0.4289 mu_hi 0.4613 midpoint 0.4451 (fold quantile 0.6244) objective 1.7281002
+
+[cap1000] threshold 0.430036 admits 293/2396  provenance fold_anchored[2/2]
+  fold 0: iters 384 converged 1 w_hi 0.0119 mu_lo 0.4384 mu_hi 0.4933 midpoint 0.4659 (fold quantile 0.7755) objective 1.8271223
+  fold 1: iters 289 converged 1 w_hi 0.0052 mu_lo 0.4289 mu_hi 0.5905 midpoint 0.5097 (fold quantile 0.9804) objective 1.7299505
+
+[cap2000] threshold 0.430036 admits 293/2396  provenance fold_anchored[2/2]
+  fold 0: iters 384 converged 1 w_hi 0.0119 mu_lo 0.4384 mu_hi 0.4933 midpoint 0.4659 (fold quantile 0.7755) objective 1.8271223
+  fold 1: iters 289 converged 1 w_hi 0.0052 mu_lo 0.4289 mu_hi 0.5905 midpoint 0.5097 (fold quantile 0.9804) objective 1.7299505
+
+[limit] threshold 0.430457 admits 288/2396  provenance fold_anchored[2/2]
+  fold 0: iters 477 converged 1 w_hi 0.0118 mu_lo 0.4384 mu_hi 0.4942 midpoint 0.4663 (fold quantile 0.7775) objective 1.8271224
+  fold 1: iters 397 converged 1 w_hi 0.0052 mu_lo 0.4289 mu_hi 0.5920 midpoint 0.5105 (fold quantile 0.9821) objective 1.7299506
+
+[stall1e-4] threshold 0.379957 admits 1141/2396  provenance fold_anchored_maxiter1[1/2]
+  fold 0: inverted_means -> unanchored fallback
+  fold 1: iters 200 converged 0 w_hi 0.0258 mu_lo 0.4289 mu_hi 0.4613 midpoint 0.4451 (fold quantile 0.6244) objective 1.7281002
+
+[fallback] threshold 0.368716 admits 1360/2396  provenance fold_anchored[0/2]
+  fold 0: em_failed -> unanchored fallback
+  fold 1: em_failed -> unanchored fallback
+
+trace of fold 1 (|Δ midpoint| 0.0653), n=2396, anchors 40 (29 Good)
+  iter    10: objective 1.70364846  last step 5.80e-04  w_hi 0.5863 mu_lo 0.4065 mu_hi 0.4461 midpoint 0.4263
+  iter    50: objective 1.71428497  last step 1.69e-04  w_hi 0.5089 mu_lo 0.4317 mu_hi 0.4279 midpoint 0.4298
+  iter   100: objective 1.71661907  last step 4.34e-05  w_hi 0.3628 mu_lo 0.4323 mu_hi 0.4252 midpoint 0.4288
+  iter   200: objective 1.72787958  last step 2.27e-04  w_hi 0.0258 mu_lo 0.4289 mu_hi 0.4613 midpoint 0.4451
+  iter   400: objective 1.72995057  last step 6.46e-14  w_hi 0.0052 mu_lo 0.4289 mu_hi 0.5920 midpoint 0.5105
+  iter  1000: objective 1.72995057  last step 0.00e+00  w_hi 0.0052 mu_lo 0.4289 mu_hi 0.5920 midpoint 0.5105
+  iter  2000: objective 1.72995057  last step 0.00e+00  w_hi 0.0052 mu_lo 0.4289 mu_hi 0.5920 midpoint 0.5105
+  iter  5000: objective 1.72995057  last step 0.00e+00  w_hi 0.0052 mu_lo 0.4289 mu_hi 0.5920 midpoint 0.5105

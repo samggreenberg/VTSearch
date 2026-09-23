@@ -1,0 +1,12 @@
+{
+  "visual_genome_m": {
+    "cls_adopted": 661,
+    "n": 4193,
+    "worst_abs_diff": 2.9802322387695312e-08
+  },
+  "caltech101_m": {
+    "cls_adopted": 128,
+    "n": 838,
+    "worst_abs_diff": 2.9802322387695312e-08
+  }
+}

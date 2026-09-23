@@ -706,6 +706,7 @@ ANCHORED_CHECKPOINTS = [
     int(c) for c in os.environ.get("CALIB_ANCHORED_CHECKPOINTS", "20,50,100,200,300").split(",") if c
 ]
 
+
 #: Inclusion values the **fold-anchored cut rules** are swept over (issue
 #: #2865), into the ``__cutincl.csv`` side frame.  Empty (the default) = off,
 #: and every other study runs exactly as before.
@@ -718,7 +719,25 @@ ANCHORED_CHECKPOINTS = [
 #: The arms are :data:`ANCHORED_WEIGHTS` x :data:`ANCHORED_RULES` x
 #: :data:`ANCHORED_FOLD_COMBINES`, so a run that wants the #2865 candidate set
 #: sets ``CALIB_ANCHORED_RULES=mid,mid_tilt,rate,cross_tilt,q_tilt``.
-CUT_INCLUSION_KS = [int(k) for k in os.environ.get("CALIB_CUT_INCL_KS", "").split(",") if k.strip()]
+def _knob_stop(text: str) -> "int | float":
+    """One inclusion stop: an int when integral, so the frames every earlier study
+    wrote keep their ``-1``/``0`` spelling, else the float (issue #3557 audits the
+    hinge's seam at fractional stops like ``-0.25``, which the knob accepts)."""
+    value = float(text)
+    return int(value) if value.is_integer() else value
+
+
+CUT_INCLUSION_KS = [_knob_stop(k) for k in os.environ.get("CALIB_CUT_INCL_KS", "").split(",") if k.strip()]
+
+#: The fold-anchored cut rule the **live** threshold uses (issue #3557).  Empty
+#: (the default) = the app's own ``FOLD_ANCHOR_CUT_RULE``, resolved inside the
+#: harness, so an unset variable IS the production arm.  Naming a rule makes a
+#: RUN-LEVEL arm: the acquisition cut re-cuts the same estimator at
+#: ``inclusion + ACQUISITION_INCLUSION_OFFSET`` (below zero), so a rule that
+#: moves the cut there changes which media get voted, and the arm needs its own
+#: ``CALIB_EXP`` and a declared ``--diverges live_cut_rule``.  Contrast
+#: :data:`ANCHORED_RULES`, which are re-cuts riding the live trajectory.
+LIVE_CUT_RULE: str | None = os.environ.get("CALIB_LIVE_CUT_RULE", "").strip() or None
 
 #: Step sizes the eval-only ``q_tilt`` rule expands over - its free parameter,
 #: in combined-fold-quantile units per inclusion step.  Every other rule ignores

@@ -1,0 +1,31 @@
+{
+  "driver_identical": [
+    4516,
+    4516
+  ],
+  "cases": 2258,
+  "folds": 4516,
+  "capped_cases": [
+    243,
+    2258
+  ],
+  "capped_folds": {
+    "n": 331,
+    "remaining_gain_median": 9.448200000150564e-06,
+    "remaining_gain_p90": 0.00034109359999989763,
+    "remaining_gain_max": 0.024218403699999946,
+    "midpoint_move_median": 0.0011321238212745888,
+    "midpoint_move_p90": 0.008215310256695307,
+    "midpoint_move_max": 0.1390891938049622,
+    "limit_iters_median": 750.0,
+    "limit_iters_p90": 1982.0,
+    "limit_iters_max": 20000,
+    "limit_capped": 1
+  },
+  "converged_folds": {
+    "n": 4160,
+    "midpoint_move_median": 4.4274900705743025e-05,
+    "midpoint_move_p90": 0.0001437784475948445,
+    "remaining_gain_median": 1.9599999845354432e-08
+  }
+}

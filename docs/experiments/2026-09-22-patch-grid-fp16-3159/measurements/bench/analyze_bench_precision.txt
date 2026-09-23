@@ -1,0 +1,41 @@
+================================================================================================
+COVERAGE — everything dropped is counted, not silently excluded
+================================================================================================
+  fp16              624 cell files,  91996 rows,  624 distinct cells, 0 unusable []
+  fp32              624 cell files,  91996 rows,  624 distinct cells, 0 unusable []
+
+================================================================================================
+fp32  vs  fp16   (paired; margin = 0.005)
+================================================================================================
+paired steps: 91996  paired cells: 624  (ref had 624, arm had 624)
+steps where cost is bit-identical: 2.2%  (2054/91996)
+steps where average_precision is bit-identical: 3.9%  (3599/91996)
+steps choosing the threshold the same way: 94.8%
+
+Deep regime (t >= 100), paired difference per CELL then averaged.
+SE is over cells, not steps: steps within a cell are autocorrelated and a
+step-level SE would be anti-conservative (#2825).
+
+metric                   ref mean   arm mean         paired diff ± SE  cells                      verdict
+cost                         0.17       0.17          0.0019 ± 0.0013    624      below margin (resolved)
+regret                      0.048      0.049           0.001 ± 0.0011    624      below margin (resolved)
+average_precision            0.76       0.76         2.9e-04 ± 0.0015    624      below margin (resolved)
+fnr                         0.064      0.064         7.0e-04 ± 0.0012    624      below margin (resolved)
+fpr                          0.11       0.11          0.0012 ± 0.0014    624      below margin (resolved)
+rule_inefficiency          -0.028     -0.028        -7.6e-05 ± 0.0024    624      below margin (resolved)
+calibration_shift           0.075      0.077          0.0011 ± 0.0021    624     cannot resolve at this n
+n_good                         30         30              0.25 ± 0.34    624          count: within noise
+
+Same difference, split by embedder (a pooled average across a crossover
+is precisely the number that hides it):
+  siglip+dinov3_patch (624 cells)  cost 0.0019 ± 0.0013   regret 0.001 ± 0.0011   average_precision 2.9e-04 ± 0.0015
+
+Power: 1 rate metric(s) could not be resolved against the 0.005 margin.
+Cells needed for 2*SE < margin, at this between-cell spread:
+  calibration_shift      have  624 cells (SE 0.0021) -> need ~448
+A 3e-6 vector change reroutes the vote sequence, so the trajectory
+decorrelates and the per-cell spread is set by that, not by the
+perturbation size. This test bounds a SYSTEMATIC effect; it cannot be
+made tight cheaply.
+
+wrote /expscratch/sgreenberg/patchgrid-3159/bench/paired_fp32_vs_fp16.csv
