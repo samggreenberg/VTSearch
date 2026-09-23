@@ -274,9 +274,9 @@ class TestPlanRefCheck:
 
 
 class TestStudyDirCheck:
-    """Study directories are dated and indexed, or the archive is unbrowsable."""
+    """Study directories are dated, or `ls` stops sorting the archive."""
 
-    def test_repo_studies_are_all_dated_and_indexed(self):
+    def test_repo_studies_are_all_dated(self):
         assert gate.check_study_dirs(DIRS) == []
 
     def test_undated_study_directory_fires(self):
@@ -285,11 +285,10 @@ class TestStudyDirCheck:
         assert [f.check for f in failures] == ["STUDY"]
         assert "YYYY-MM-DD" in failures[0].message
 
-    def test_dated_but_unindexed_study_directory_fires(self):
+    def test_dated_study_directory_passes_without_any_index(self):
+        # No index file to keep in step (#4138): a dated directory is enough.
         dirs = DIRS | {"docs/experiments/2026-01-01-brand-new-study"}
-        failures = gate.check_study_dirs(frozenset(dirs))
-        assert [f.check for f in failures] == ["STUDY"]
-        assert "no row" in failures[0].message
+        assert gate.check_study_dirs(frozenset(dirs)) == []
 
     def test_nested_directories_inside_a_study_are_not_studies(self):
         # `figures/`, `agg/` and friends live one level down and are not named
@@ -298,22 +297,8 @@ class TestStudyDirCheck:
             "docs/experiments/2026-01-01-brand-new-study",
             "docs/experiments/2026-01-01-brand-new-study/figures",
         }
-        # One failure, not two: the study itself is unindexed, and `figures/`
-        # is not a study at all.
-        assert [f.message for f in gate.check_study_dirs(frozenset(dirs))] == [
-            "study '2026-01-01-brand-new-study' has no row in docs/experiments/README.md"
-        ]
-
-    def test_every_index_row_points_at_a_directory_that_exists(self):
-        # The other direction: the LINK check already proves each row's target
-        # resolves, so a row can only rot into a link failure, never a silent one.
-        rows = [
-            line
-            for line in (REPO_ROOT / "docs" / "experiments" / "README.md").read_text(encoding="utf-8").splitlines()
-            if line.startswith("| [`")
-        ]
-        studies = {d.split("/")[2] for d in DIRS if d.startswith("docs/experiments/") and d.count("/") == 2}
-        assert len(rows) == len(studies)
+        # Undated `figures/` would fire if it were taken for a study.
+        assert gate.check_study_dirs(frozenset(dirs)) == []
 
 
 class TestAllowlistsStayHonest:

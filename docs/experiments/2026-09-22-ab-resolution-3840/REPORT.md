@@ -29,8 +29,7 @@ The #3585 environments hold **57 (environment, category) pairs**, so one seed ad
 have seen 0.004.
 
 It is written into the `grid-experiments` skill ("Size an A/B before you launch
-it"), where every launch starts, and into the short form in
-`docs/experiments/README.md`. Making it a preflight check is
+it"), where every launch starts. Making it a preflight check is
 [#4111](https://github.com/samggreenberg/VTSearch/issues/4111).
 
 ## The short version

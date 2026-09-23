@@ -22,6 +22,12 @@
 # The residual risk is the dev checkout being mid-`git pull` at submit time,
 # the same risk every other script run from that checkout carries.
 #
+# At the end it posts a GitHub commit status, context `suite-grid`, on the SHA it
+# tested: success or failure, with the pass count or the gate that blocked. dev's
+# branch protection requires that status, so a PR merges only once this script
+# has passed on its exact HEAD. A failure to post is a WARNING in the log and
+# never changes the exit code; SUITE_POST_STATUS=0 skips it.
+#
 # The worktree and ref are ARGUMENTS, not baked in: editing a copy of this file
 # with sed is how job 507084 ended up sourcing a gridenv.sh that did not exist,
 # ran with no venv, and still reported COMPLETED to SLURM.
@@ -127,8 +133,68 @@ echo "=== HEAD $(git log --oneline -1)"
 echo "=== ref  $_refnote"
 echo
 
-./run-tests.sh
-status=$?
+# Keep a copy of the output to read the verdict from; the job log still gets all of it.
+_out="$(mktemp "${TMPDIR:-/tmp}/suite-out.XXXXXX")" || _out=/dev/null
+./run-tests.sh 2>&1 | tee "$_out"
+status=${PIPESTATUS[0]}
 echo "RUN_TESTS_EXIT=$status"
+
+# Post the verdict as a GitHub commit status on the SHA that was tested, context
+# `suite-grid`, which dev's branch protection requires (#4133). There are no
+# GitHub Actions in this repo, so this is the only machine-readable record that a
+# commit passed the suite; before it, "green" meant a human reading a log.
+#
+# This must never change the job's outcome: every failure below is a WARNING and
+# `status` is untouched. SUITE_POST_STATUS=0 turns it off.
+post_suite_status() {
+    [[ "${SUITE_POST_STATUS:-1}" == 0 ]] && { echo "=== suite-grid status: skipped (SUITE_POST_STATUS=0)"; return 0; }
+    local sha state desc summary gate repo
+    sha="$(git rev-parse HEAD 2>/dev/null)" || { echo "WARNING: suite-grid status not posted: no HEAD"; return 0; }
+    # A status on a SHA claims the SHA's tree passed. If the tree was not the
+    # SHA's (a tracked file modified under the run), claim nothing.
+    if [[ -n "$(git status --porcelain --untracked-files=no 2>/dev/null)" ]]; then
+        echo "WARNING: suite-grid status not posted: tracked files modified in $WT, so the run did not test $sha alone"
+        return 0
+    fi
+    # pytest's own summary line ("11332 passed, 6 skipped ... in 234.79s", or
+    # "3 failed, 11329 passed ..."), not a lane's: Vitest prints "N passed" too.
+    local pyline; pyline="$(grep -aE '^(=+ )?[0-9]+ (failed|passed)' "$_out" | tail -1)"
+    summary="$(grep -oE '[0-9]+ passed' <<<"$pyline")"
+    if [[ $status -eq 0 ]]; then
+        state=success
+        if grep -aq 'RUN PASSED, EXCEPT' "$_out"; then
+            desc="passed${summary:+ ($summary)}; $(grep -aoE 'EXCEPT [0-9]+ GATE' "$_out" | tail -1 | sed 's/EXCEPT/except/;s/GATE/gate(s) did not run/')"
+        else
+            desc="RUN PASSED${summary:+: $summary}"
+        fi
+    else
+        state=failure
+        gate="$(grep -aE '^TESTS BLOCKED: ' "$_out" | head -1 | sed 's/^TESTS BLOCKED: //')"
+        if [[ -n "$gate" ]]; then
+            desc="blocked: $gate"
+        else
+            desc="$(grep -aE '^RUN FAILED: ' "$_out" | tail -1)"
+            desc="${desc:-run-tests.sh exited $status}"
+            local failed; failed="$(grep -oE '[0-9]+ failed' <<<"$pyline")"
+            [[ -n "$failed" ]] && desc="$desc ($failed${summary:+, $summary})"
+        fi
+    fi
+    desc="$desc - job ${SLURM_JOB_ID:-?} $(hostname -s)"
+    desc="${desc:0:140}"
+    repo="$(git remote get-url origin 2>/dev/null | sed -E 's#^(https://github.com/|git@github.com:)##; s#\.git$##')"
+    if ! command -v gh >/dev/null; then
+        echo "WARNING: suite-grid status not posted: gh not on PATH"; return 0
+    fi
+    if timeout 60 gh api -X POST "repos/$repo/statuses/$sha" \
+            -f state="$state" -f context=suite-grid -f description="$desc" >/dev/null 2>"$_out.gh"; then
+        echo "=== suite-grid status: $state on $sha ($repo): $desc"
+    else
+        echo "WARNING: suite-grid status not posted for $sha: $(tail -1 "$_out.gh" 2>/dev/null)"
+    fi
+    return 0
+}
+post_suite_status || true
+rm -f "$_out" "$_out.gh"
+
 # Propagate it, so `sacct` State is the answer and not just a formality.
 exit $status
