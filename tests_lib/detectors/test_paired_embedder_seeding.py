@@ -250,7 +250,7 @@ def _cells_io_stub(text_medias):
     """A ``_cells_io`` whose ``load_medias`` returns *text_medias* (or refuses)."""
     module: Any = types.ModuleType("_cells_io")
 
-    def load_medias(_path):
+    def load_medias(_path, repair=False):
         if text_medias is None:
             raise AssertionError("load_medias must not be called on this path")
         return text_medias
