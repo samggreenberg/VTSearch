@@ -47,17 +47,24 @@ same edit.
 ```bash
 cd scripts/experiments/state_of_app
 srun -p cpu --mem=8G -c 2 -t 60 bash launch.sh prepare    # its checks are too heavy for the login node
-srun -p cpu --mem=8G -c 2 -t 60 bash launch.sh subset "airplane,dining table,book"   # a few classes, every band, both paths
-srun -p cpu --mem=8G -c 2 -t 60 bash launch.sh cells      # the full array; SOTA_SEEDS=N for more seeds
+bash launch.sh subset "airplane,dining table,book"   # login node: a few classes, every band, both paths
+bash launch.sh cells                                  # login node: the full array; SOTA_SEEDS=N for more seeds
 bash launch.sh status
 srun -p cpu --mem=24G -c 4 -t 4:00:00 bash analyze.sh     # after the array finishes
 ```
 
 - **Output:** everything lands in `/expscratch/$USER/state-of-the-app/<date>/`,
   one directory per review.
-- **Size:** at 1 seed there are 288 runs. A whole-image run takes about 1 min.
-  A region run takes 10-20 min and holds up to ~5 GB. The memory QOS sets the
-  wall clock: at 10 concurrent tasks, about 4 h.
+- **Size (measured 2026-09-23, not the vg_scale guess):** at 1 seed there are
+  288 runs. A whole-image run takes about 5 min. A **region run takes about
+  1 h and peaks at 66-70 GB**, so the launcher asks for 80 GB. The memory QOS
+  sets the wall clock: 144 region runs at a handful concurrent is most of a
+  day. The first review lost an hour to 12 GB out-of-memory kills.
+- **Submit `subset` / `redo` / `cells` from the LOGIN node** (they only call
+  `sbatch`). Twice, `srun -c 1 ... launch.sh redo` submitted the array TWICE,
+  so every cell would have run in duplicate and raced its twin on the same
+  output files. Only the `prepare` checks need a compute node. After any
+  submission, count the jobs.
 - **Before a report is written,** check that `prepare_info.json` lists all 144
   cells for BOTH paths. `CALIB_REQUIRE_SEED_QUERY=1` silently drops a class
   that has no typed query.

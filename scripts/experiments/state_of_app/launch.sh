@@ -42,9 +42,13 @@ export CALIB_REQUIRE_OPENING=text
 export CALIB_REQUIRE_SEED_QUERY=1
 export CALIB_EMIT_PICKS=1
 export CALIB_JOB_NAME="${CALIB_JOB_NAME:-sota-$SOTA_DATE}"
-# The region cells dominate: ~13-20 min and up to ~5 GB each on vg_scale.
-export CALIB_MEM="${CALIB_MEM:-12G}"
-export CALIB_TIME="${CALIB_TIME:-6:00:00}"
+# Sized on the first review (2026-09-23), NOT on vg_scale: a coco_quarry REGION
+# run peaks at 66-70 GB (the 7.5 GB half-precision patch cell expands several-
+# fold) and takes ~1 h; at 12 GB 12 of 23 died within minutes. A whole-image
+# run is ~5 min and small, but one array carries both, so it is sized for the
+# region runs. Expect the memory QOS, not the CPU count, to set the wall clock.
+export CALIB_MEM="${CALIB_MEM:-80G}"
+export CALIB_TIME="${CALIB_TIME:-4:00:00}"
 
 # `subset "<class>,<class>,..."`: run only those classes (every band, both
 # paths) out of an already-prepared grid. Indices are the grid's own, so the
