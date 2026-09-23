@@ -135,6 +135,7 @@ class TestApply:
                 "class_id": "c",
                 "old_box": [10, 10, 50, 30],
                 "new_box": [12, 12, 30, 20],
+                "provenance": "gt",
                 "reviewed_by": "sam",
             }
         ]
@@ -188,3 +189,60 @@ class TestReplay:
             == 0
         )
         assert len(warnings) == 2 and "no longer has box" in warnings[0] and "gone" in warnings[1]
+
+
+class TestBandLocated:
+    """#4109: a mark located only by its letterhead band gets a real box, and says so."""
+
+    def _band_corpus(self, mods):
+        Mark, Page = mods["common"].Mark, mods["common"].Page
+        page = Page(
+            page_id="ucsf/a#0",
+            source="ucsf",
+            path="x.png",
+            width=1240,
+            height=1680,
+            marks=[
+                Mark("logo", (0, 0, 1240, 370), None, "candidate"),
+                Mark("logo", (0, 0, 1240, 370), "ucsf/logo_x", "ucsf_classes_band"),
+            ],
+        )
+        tight = Page(
+            page_id="ucsf/b#0",
+            source="ucsf",
+            path="x.png",
+            width=1240,
+            height=1680,
+            marks=[Mark("logo", (500, 100, 60, 40), "ucsf/logo_x", "ucsf_classes")],
+        )
+        return [page, tight], {"ucsf/logo_x": {"page_ids": ["ucsf/a#0", "ucsf/b#0"], "query_page_id": "ucsf/q#0"}}
+
+    def test_band_only_proposes_just_the_band_located_marks(self, mods):
+        pages, classes = self._band_corpus(mods)
+        by_id = {p.page_id: p for p in pages}
+        got = mods["b"].members("ucsf/logo_x", classes["ucsf/logo_x"], by_id, band_only=True)
+        assert [(p.page_id, p.mark_index) for p in got] == [("ucsf/a#0", 1)]
+        assert len(mods["b"].members("ucsf/logo_x", classes["ucsf/logo_x"], by_id)) == 2
+
+    def test_an_accepted_box_makes_the_mark_located_and_a_rebuild_keeps_it(self, mods):
+        b = mods["b"]
+        pages, classes = self._band_corpus(mods)
+        row = {
+            "class_id": "ucsf/logo_x",
+            "members": [
+                {"page_id": "ucsf/a#0", "mark_index": 1, "old_box": [0, 0, 1240, 370], "new_box": [480, 90, 70, 50]}
+            ],
+            "verdict": "0",
+        }
+        store: list = []
+        _, problems, _ = b.apply_box_tighten(pages, classes, [row], store)
+        assert problems == []
+        assert pages[0].marks[1].provenance == "ucsf_classes" and pages[0].marks[1].box == (480, 90, 70, 50)
+        assert pages[0].marks[0].provenance == "candidate"  # the band itself is untouched
+        rebuilt, _ = self._band_corpus(mods)
+        assert b.replay_box_overrides(rebuilt, store) == 1
+        assert rebuilt[0].marks[1].provenance == "ucsf_classes"
+
+    def test_a_located_provenance_is_left_alone(self, mods):
+        assert mods["b"].located_provenance("gt") == "gt"
+        assert mods["b"].located_provenance("ucsf_classes_band") == "ucsf_classes"

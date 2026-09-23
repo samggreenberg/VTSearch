@@ -680,3 +680,33 @@ class TestClassRefs:
         classes = {"c": {"query_crop": "/q.png", "page_ids": ["u/band", "u/wide", "u/tight"]}}
         refs = br.class_refs("c", classes, pages)
         assert [r.page_id for r in refs] == [None, "u/tight"]
+
+
+class TestRealPixelsFirst:
+    """#4073: widen the window to real pixels before enlarging a small mark."""
+
+    def test_a_small_mark_is_shown_at_most_at_the_cap_with_real_context(self, br):
+        panel = (958, 1232)
+        region = br.expand([600, 200, 24, 20], None, 1240, 1680, 0.25)
+        wide = br.widen_to_real_pixels(region, 24, panel, 1240, 1680)
+        w, h = wide[2] - wide[0], wide[3] - wide[1]
+        scale = min(panel[0] / w, panel[1] / h)
+        assert scale <= br.MAX_UPSCALE + 1e-6
+        assert wide[0] <= 600 and wide[1] <= 200 and wide[2] >= 624 and wide[3] >= 220  # the mark stays in view
+        assert 0 <= wide[0] and 0 <= wide[1] and wide[2] <= 1240 and wide[3] <= 1680
+
+    def test_the_window_shifts_rather_than_leaving_the_page(self, br):
+        wide = br.widen_to_real_pixels((0, 0, 40, 30), 30, (958, 1232), 1240, 1680)
+        assert wide[0] == 0 and wide[1] == 0 and wide[2] > 40 and wide[3] > 30
+
+    def test_a_large_mark_is_not_widened_past_what_fills_the_panel(self, br):
+        region = (100, 100, 1100, 1400)
+        assert br.widen_to_real_pixels(region, 1000, (958, 1232), 1240, 1680) == region
+
+    def test_the_band_box_queue_routes_to_its_own_slate(self, br):
+        src, _translator = br.TRANSLATORS["box_tighten_band"]
+        assert src(Path("/c")) == Path("/c/audit/box_tighten_band/verdicts.jsonl")
+        rows = [{"class_id": "c", "members": [{"index": 0}, {"index": 1}], "verdict": ""}]
+        questions = {"a.jpg": {"task": "box_tighten_band", "key": {"class_id": "c", "index": 1}}}
+        filled, unanswered = br.TRANSLATORS["box_tighten_band"][1](rows, questions, {"a.jpg": "good"})
+        assert filled[0]["verdict"] == "1" and unanswered == []

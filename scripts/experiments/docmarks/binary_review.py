@@ -87,6 +87,11 @@ FOOTER_H = 34
 #: The candidate's mark is enlarged to at least this many pixels on its long side
 #: when the panel allows it.
 MIN_MARK_PX = 400
+#: An outlined candidate is never enlarged past this (#4073).  400 interpolated
+#: pixels from a 24 px mark are not more information than 24 px; instead the
+#: window widens until the panel is filled with real pixels, and the outline
+#: says which mark is the question.
+MAX_UPSCALE = 2.0
 MARGIN = 0.25
 #: Extra query crops kept per class, in inlier-rank order.
 QUERY_CROP_CAP = 4
@@ -256,6 +261,37 @@ def expand(
     return max(0, x0 - pad), max(0, y0 - pad), min(width, x1 + pad), min(height, y1 + pad)
 
 
+def widen_to_real_pixels(
+    region: tuple[int, int, int, int], mark_long: int, panel: tuple[int, int], width: int, height: int
+) -> tuple[int, int, int, int]:
+    """Widen *region* so filling *panel* never enlarges it past :data:`MAX_UPSCALE` (#4073).
+
+    The target scale is the one that brings the mark to :data:`MIN_MARK_PX`,
+    capped at :data:`MAX_UPSCALE` and never below 1.  The window grows about its
+    centre to the size that fills the panel at that scale, shifted to stay on
+    the page, and never shrinks.  Only for a question that outlines its box: a
+    wider window makes "which mark?" ambiguous without one.
+    """
+    target = min(max(MIN_MARK_PX / max(1, mark_long), 1.0), MAX_UPSCALE)
+    x0, y0, x1, y1 = region
+
+    def grow(lo: int, hi: int, need: float, limit: int) -> tuple[int, int]:
+        need = min(float(limit), need)
+        if hi - lo >= need:
+            return lo, hi
+        extra = need - (hi - lo)
+        lo, hi = lo - extra / 2, hi + extra / 2
+        if lo < 0:
+            lo, hi = 0, hi - lo
+        if hi > limit:
+            lo, hi = max(0, lo - (hi - limit)), limit
+        return int(round(lo)), int(round(hi))
+
+    x0, x1 = grow(x0, x1, panel[0] / target, width)
+    y0, y1 = grow(y0, y1, panel[1] / target, height)
+    return x0, y0, x1, y1
+
+
 def panel_scale(region: tuple[int, int, int, int], mark_long: int, panel: tuple[int, int]) -> float:
     """Enlarge so the mark reaches MIN_MARK_PX, but never past the panel."""
     rw, rh = max(1, region[2] - region[0]), max(1, region[3] - region[1])
@@ -340,10 +376,12 @@ def render(q: Question, pages: dict[str, Any], corpus: Path, out: Path) -> Path:
 
     # right: one candidate, enlarged
     page = pages[q.page_id]
+    panel = (W - left_w - 32, body_h)
     region = expand(q.box, q.old_box, page.width, page.height, q.margin)
+    if q.outline:
+        region = widen_to_real_pixels(region, max(q.box[2], q.box[3]), panel, page.width, page.height)
     with _open_page(page, corpus) as im:
         crop = im.convert("RGB").crop(region)
-    panel = (W - left_w - 32, body_h)
     if (q.trim_border or q.crop_to_ink) and not q.outline:
         from vtscore.media.image.edge_trim import solid_edge_box  # noqa: PLC0415
 
@@ -609,6 +647,39 @@ def emit_box_tighten(audit: Path, classes, pages) -> list[tuple[str, list[Questi
     return [(f"{PREFIX} staver boxes -- red box right?", qs)]
 
 
+def emit_box_band(audit: Path, classes, pages) -> list[tuple[str, list[Question]]]:
+    """One queue per class: is the proposed box tight on a band-located mark? (#4109)
+
+    The band itself is not drawn: it spans the letterhead, and showing it would
+    widen the window until the mark is small again.  The references are the
+    class's tight crops.
+    """
+    queues = []
+    for r in read_jsonl(audit / "verdicts.jsonl"):
+        cid = r["class_id"]
+        refs = class_refs(cid, classes, pages)
+        qs = [
+            Question(
+                filename=f"band__{slug(cid)}__m{m['index']:03d}.jpg",
+                task="box_tighten_band",
+                question="Is the red box tight around the mark on the left?",
+                refs=refs,
+                page_id=m["page_id"],
+                box=list(m["new_box"]),
+                key={"class_id": cid, "index": m["index"]},
+                item=f"{cid} member {m['index']}",
+                greyscale=False,
+                ref_labels=False,
+                anonymous=True,
+            )
+            for m in r["members"]
+            if box_questionable(m) and m["page_id"] in pages
+        ]
+        if qs:
+            queues.append((f"{PREFIX} {cid.split('/')[-1]} -- red box tight on the mark?", qs))
+    return queues
+
+
 COMPLETENESS2 = Path("/expscratch/sgreenberg/docmarks/completeness2/verdicts.suggested.jsonl")
 
 
@@ -811,9 +882,9 @@ def translate_query_crops(rows, questions, votes, cap: int = QUERY_CROP_CAP):
     return out, unanswered
 
 
-def translate_box_tighten(rows, questions, votes):
+def translate_box_tighten(rows, questions, votes, task: str = "box_tighten"):
     """Members voted Good accept the red box; members never asked keep their box."""
-    got = _per_class(questions, votes, "box_tighten")
+    got = _per_class(questions, votes, task)
     out, unanswered = [], []
     for r in rows:
         r = dict(r)
@@ -898,6 +969,11 @@ TRANSLATORS: dict[str, tuple[Callable[[Path], Path], Callable[..., Any]]] = {
     # Top-ranked presumed negatives of a run (#4089); the translator lives with its pass.
     "surprise": (lambda corpus: corpus / "audit" / "surprise" / "verdicts.jsonl", _translate_surprise),
     "box_tighten": (lambda corpus: corpus / "audit" / "box_tighten" / "verdicts.jsonl", translate_box_tighten),
+    # Band-located marks given a real box (#4109); applied with --task box_tighten --audit-dir box_tighten_band.
+    "box_tighten_band": (
+        lambda corpus: corpus / "audit" / "box_tighten_band" / "verdicts.jsonl",
+        lambda rows, questions, votes: translate_box_tighten(rows, questions, votes, task="box_tighten_band"),
+    ),
     "completeness2": (lambda corpus: COMPLETENESS2, translate_completeness2),
 }
 
@@ -1199,7 +1275,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     e = sub.add_parser("emit")
-    e.add_argument("--task", choices=["ucsf_classes", "query_crops", "box_tighten", "completeness2"], required=True)
+    e.add_argument(
+        "--task",
+        choices=["ucsf_classes", "query_crops", "box_tighten", "box_tighten_band", "completeness2"],
+        required=True,
+    )
     e.add_argument("--corpus", type=Path, default=cfg.OUT)
     e.add_argument("--root", type=Path, default=ROOT)
     e.add_argument("--cross", type=Path, default=Path("/expscratch/sgreenberg/docmarks/ucsf-3921/cross.json"))
@@ -1246,6 +1326,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         queues = emit_query_crops(audit, classes, pages, cap=args.cap)
     elif args.task == "completeness2":
         queues = emit_completeness2(COMPLETENESS2, classes, pages)
+    elif args.task == "box_tighten_band":
+        queues = emit_box_band(audit, classes, pages)
     else:
         queues = emit_box_tighten(audit, classes, pages)
     # a class can have queues from several passes: the pass keeps their dirs apart
