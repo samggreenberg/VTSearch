@@ -43,7 +43,7 @@ When the user's whole prompt is just a number — `#3421`, or bare `3421` — it
 2. **Read it, then evaluate it.** Decide whether the premise is correct and whether you agree with the solution it proposes. This is a real gate, not a formality: an issue can be stale, already fixed, based on a misreading, or right about the symptom and wrong about the fix.
 3. **If you disagree — or the right scope is unclear — stop and ask** via `AskUserQuestion` before writing any code. Say what the issue claims, what you found instead, and what you'd do differently.
 4. **If you agree, do the work off a fresh `dev`:** `git fetch origin --prune && git checkout -B <branch> origin/dev`. Never build on whatever the branch happened to be pointing at.
-5. **If the issue carries the `experiment` label, do the work entirely on the GRID, on a fresh worktree.** See the `grid-experiments` skill for how those runs are launched and monitored.
+5. **If the issue carries the `experiment` label, do the work entirely on the GRID, on a fresh worktree.** See the `grid-experiments` skill for how those runs are launched and monitored. Worktrees go under `/expscratch/$USER/worktrees/vts-<issue>`, never commit in the shared `/exp/$USER/projects/VTSearch` checkout or the deploy clone (a hook refuses it), and prune a worktree after its PR merges: see "Worktrees on the GRID" in that skill.
 6. **Run the rest of the issue lifecycle**, per the sections below: open the PR with `base=dev` and a closing keyword; comment `Addressed in #M` on the issue; add `solved` and clear the assignee; leave the issue open for the `dev`→`main` sweep to close.
 
 ### If `#N` is a pull request
