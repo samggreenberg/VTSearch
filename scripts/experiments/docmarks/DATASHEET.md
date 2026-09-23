@@ -309,7 +309,7 @@ those copies is scored down for it, and SIFT is not.
 | **Per-class** AP or recall | **supported with n beside it** | Classes run from 8 to 82 instances. One miss moves recall by 1/8 on `staver/stamp_stampds-00230_0` and by 1/82 on `afm90c00`. |
 | Is class X **harder** than class Y? | **read with the known-gaps list** | Label residuals differ by class (below). `spods/stamp_00931_1` (OUTWARD-) had the weakest SIFT evidence of any class, so its completeness is least certain. |
 | Telling **near-identical marks** apart | **supported** | All 276 roster pairs adjudicated; the three leaf marks, two chiefs and four Secretary stamps are separate classes by ruling, and cannot-links are permanent. |
-| **Localisation** (box IoU, detection mAP) | **supported for the four UCSF classes; not supported for StaVer; unmeasured elsewhere** | UCSF (v4.3, #4109): 303 boxes were proposed by fitting the query crop's ink outline with SIFT, padded 10%, and each was accepted or redrawn by hand. **The tolerance:** a box counts as tight if it clips only the tips of descending loops, and not if it cuts off substantial strokes such as the tops of letters (owner's rule, 2026-09-23). A loose-IoU criterion suits that tolerance; a strict one does not. The 30 marks no proposal fitted were boxed by hand (#4125), and the 3 query pages carry their crop's own extent. One inconsistency: 4 hand-drawn rjr_script boxes include the "Tobacco Company" line under the script, where the query crop and the other 64 boxes are the script alone. Other sources' boxes come from source masks and were never audited for tightness, except the query crops. StaVer boxes on `stampds-00213_1` are wide enough to take in the separate EINGEGANGEN AM date stamp. |
+| **Localisation** (box IoU, detection mAP) | **supported for the four UCSF classes; not supported for StaVer; unmeasured elsewhere** | UCSF (v4.3, #4109): 303 boxes were proposed by fitting the query crop's ink outline with SIFT, padded 10%, and each was accepted or redrawn by hand. **The tolerance:** a box counts as tight if it clips only the tips of descending loops, and not if it cuts off substantial strokes such as the tops of letters (owner's rule, 2026-09-23). A loose-IoU criterion suits that tolerance; a strict one does not. The 30 marks no proposal fitted were boxed by hand (#4125), and the 3 query pages carry their crop's own extent. The rjr_script logo is the script. The "Tobacco Company" line is printed under it on some letters and not others, and does not change what the mark is (owner, 2026-09-23). So a box with or without that line is correct: 4 hand-drawn boxes take it in, because the script's loops hug it, and the query crop and the other 64 do not. Other sources' boxes come from source masks and were never audited for tightness, except the query crops. StaVer boxes on `stampds-00213_1` are wide enough to take in the separate EINGEGANGEN AM date stamp. |
 | **Query sensitivity**: how much does the crop matter? | **not yet** | One crop per class until #3949 is applied. `tobacco800/logo_aeq93a00_1`'s crop has 211 SIFT keypoints and sits at the bottom of every ranking, so a per-class result mixes the method with that crop. |
 | Retrieval **of UCSF letterheads** (the four roster classes) | **supported at tier `m`, with the control beside it** | At v4.2 a mark-blind Tobacco-industry control scores AP 0.15–0.17 at `m` (above). Quote it beside any UCSF-class number, and read tiers `s` and `l` with their residuals. The other band classes proposed in #3902 are still audit candidates (#3921, #3922). |
 | Compare against a number measured **before 2026-09-17 07:40** | **not comparable** | That is v3: 108 of today's positives were negatives then. Re-score against the relabelled cells. |
@@ -349,6 +349,35 @@ those copies is scored down for it, and SIFT is not.
   highest-ranked presumed negatives from a real SigLIP run at tiers `s` and `m`:
   **0 of 516** carried the mark. Each run can queue its own
   (`eval_retrieval.py` writes `surprise_hits.json`; `surprise_review.py`).
+
+### Scoring a new idea
+
+`score_ranker.py` scores any ranker the way the reference numbers below were
+scored (#4108). Write a CSV (optionally gzipped) of `class_id,page_id,score`,
+where higher means "more likely to carry this class's mark", then:
+
+```
+python score_ranker.py score --scores my_idea.csv.gz --tiers s,m --name my_idea --out <dir>
+```
+
+- It uses the headline `own_verified` pool and the same ranking and tie-break
+  as `eval_retrieval.py` and `eval_sift_rank.py`. It reproduces their SIFT and
+  SigLIP APs exactly, class for class.
+- Every number sits beside two **mark-blind controls**: `source_prior` and
+  `provenance_prior` (same source *and* industry as the positives). A result
+  that doesn't clear the provenance control is not evidence the method sees the
+  mark.
+- It writes `surprise_hits.json`, the method's top-ranked presumed negatives.
+  Queue them with `surprise_review.py`: if one carries the mark, the method was
+  right and the labels were not (#4089).
+- Every result is stamped with the corpus version, and with whether the corpus
+  on disk still matches that version's frozen manifest in `versions/`. v4.3 is
+  the first frozen version: `versions/v4.3.json` checksums the six files that
+  define it and all 27 query crops. A version bump runs `score_ranker.py freeze`.
+
+To start from a built-in method, `score_ranker.py export --method siglip --tier m`
+writes SigLIP's scores in that format. Export from the tier you score, because
+each tier's cell was embedded separately.
 
 ### Reference points, not targets
 

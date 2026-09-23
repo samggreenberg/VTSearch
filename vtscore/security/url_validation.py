@@ -351,8 +351,27 @@ def validate_browser_url(url: str) -> str:
 
     parsed = urlparse(cleaned)
     if parsed.scheme not in ("http", "https"):
+        if _lacks_scheme(cleaned, parsed.scheme):
+            raise ValueError(
+                f"URL must use http or https scheme, but has none: {cleaned!r}. Did you mean 'http://{cleaned}'?"
+            )
         raise ValueError(f"URL must use http or https scheme, got: {parsed.scheme!r}")
     if not parsed.hostname:
         raise ValueError("URL must contain a hostname.")
 
     return cleaned
+
+
+def _lacks_scheme(url: str, scheme: str) -> bool:
+    """Return True if *url* reads as a bare ``host[:port]/path`` with no scheme.
+
+    ``urlparse`` takes whatever precedes the first colon as the scheme, so
+    ``localhost:8000/viewer`` comes back with scheme ``'localhost'`` and the
+    plain error would blame a scheme the author never wrote.  A real scheme is
+    followed by ``//`` or by its payload (``javascript:alert(1)``); a port is
+    followed by digits, so that is what tells the two apart.
+    """
+    if not scheme:
+        return True
+    rest = url[len(scheme) + 1 :]
+    return not rest.startswith("//") and rest[:1].isdigit()

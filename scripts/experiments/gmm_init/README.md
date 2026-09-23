@@ -96,3 +96,16 @@ init it was handed. This refit **is** the shipped threshold: between it and the
 green/red line there is a quantile and a snap, and nothing else. Two arms
 (`param1e-6`, `iter400`) exist purely so the candidates' numbers can be read
 against what perturbing the incumbent does.
+
+## `arms_3839.py` and friends — what a capped anchored refit costs (#3839)
+
+Same corpus again. The arms are the three answers #3839 named (a budget or
+tolerance, a stall / relative / Aitken rule, fallback-as-degeneracy), each read
+against `shipped` **and** against `limit`, the same loop run to 1e-13 with 20,000
+iterations, because a capped fit only matters to the extent that finishing it
+moves the line. Rules the shipped loop does not have are run by stepping the
+real loop one iteration at a time (`_drive`). `drv_shipped` is the control that
+the stepping is exact, and `analyze_3839.py` refuses to run unless it matches bit
+for bit. `gate_3839.py` is `gate_3825.py` with this module installed, sharded
+(`launch_3839.sh gate`). The A/B (`run_cells_arm_3839.py`) pairs against #3840's
+`v_ll1e-8` grid rather than running its own baseline: same commit, same cells.

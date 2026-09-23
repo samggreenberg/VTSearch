@@ -978,3 +978,48 @@ class TestFoldAnchoredConvergenceProvenance:
         assert cut.fold_iterations == ()
         assert cut.n_unconverged == 0
         assert cut.provenance == "fold_anchored[1/1]"
+
+
+class TestAnchoredRefitBudget:
+    """The refit's iteration budget is sized to let slow folds finish (#3839).
+
+    At 200 iterations 7.4% of real fold refits left on the cap, and they were
+    not near their limit: finishing them moved the admitted set on 98% of the
+    cases they belonged to (median 0.73% of the haystack, max 36%).  They are
+    slow *migrations* - the minority component still walking out to the high
+    mode - not noise at the tolerance.  The fixture below is one: two lumps
+    whose small upper one the refit only reaches after several hundred
+    iterations, and whose midpoint moves by 0.02 getting there.
+    """
+
+    @staticmethod
+    def _slow_fold():
+        rng = np.random.default_rng(135)
+        n, w, mu_hi, sd = 2000, rng.uniform(0.003, 0.03), rng.uniform(0.5, 0.62), rng.uniform(0.015, 0.03)
+        n_hi = int(n * w)
+        x = np.concatenate([rng.normal(0.43, sd, n - n_hi), rng.normal(mu_hi, 0.02, n_hi)])
+        n_good, n_bad = int(rng.integers(5, 30)), int(rng.integers(5, 30))
+        a = np.concatenate([rng.normal(mu_hi, 0.03, n_good), rng.normal(0.43, sd, n_bad)])
+        lbl = np.concatenate([np.ones(n_good), np.zeros(n_bad)])
+        return x, a, lbl
+
+    def test_a_slow_fold_converges_inside_the_shipped_budget(self):
+        from vtscore.training.thresholds import gmm as gmm_mod
+
+        x, a, lbl = self._slow_fold()
+        stats: dict[str, float] = {}
+        fit, prov = fit_anchored_score_gmm(x, a, lbl, anchor_weight=0.3, stats=stats)
+        assert prov == "anchored" and fit is not None
+        assert stats["converged"] == 1.0
+        # It is a fold the old budget would have cut short - which is the point.
+        assert 200 < stats["n_iter"] < gmm_mod._ANCHORED_EM_MAX_ITER
+
+    def test_the_old_budget_stopped_it_mid_migration(self):
+        x, a, lbl = self._slow_fold()
+        capped: dict[str, float] = {}
+        short, _ = fit_anchored_score_gmm(x, a, lbl, anchor_weight=0.3, max_iter=200, stats=capped)
+        full, _ = fit_anchored_score_gmm(x, a, lbl, anchor_weight=0.3)
+        assert short is not None and full is not None
+        assert capped["converged"] == 0.0
+        # The capped fit's midpoint sits low: the cut over-admits.
+        assert full.midpoint() - short.midpoint() > 0.01

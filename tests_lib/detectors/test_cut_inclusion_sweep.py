@@ -257,3 +257,92 @@ def test_operating_cost_agrees_with_the_frame():
     wf, wn = inclusion_weights(2)
     cost, fpr, fnr = operating_cost(scores, labels, 0.5, wf, wn)
     assert cost == pytest.approx(wf * fpr + wn * fnr)
+
+
+class TestHingeRulesInTheFrame:
+    """Issue #3557: the sign-dependent rules ride the same re-cut as #2865's arms."""
+
+    _HINGE_RULES = ["mid_tilt", "cross_tilt", "hinge", "hinge_raw", "hinge_cont"]
+    _HINGE_KS = [-4, -1, -0.25, 0, 1, 4]
+
+    def test_hinges_match_the_incumbent_at_and_above_zero_and_carry_the_seam(self):
+        sink = _run(ks=self._HINGE_KS, rules=self._HINGE_RULES)
+        assert {r["cut_rule"] for r in sink} == set(self._HINGE_RULES)
+        by = {(r["t"], r["cut_rule"], r["inclusion_k"]): r for r in sink}
+        steps = {t for (t, _rule, _k) in by}
+        assert steps
+        for t in steps:
+            for k in (0, 1, 4):
+                for rule in ("hinge", "hinge_raw", "hinge_cont"):
+                    assert by[(t, rule, k)]["cut_threshold"] == by[(t, "mid_tilt", k)]["cut_threshold"]
+            # The seam columns are per-step constants of the shared fit.
+            seams = {(r["seam_q_mid"], r["seam_q_cross0"]) for r in sink if r["t"] == t}
+            assert len(seams) == 1
+            # And they are the quantities the rules read: mid_tilt sits at q_mid
+            # at inclusion 0, which is exactly what the frame's quantile says.
+            assert by[(t, "mid_tilt", 0)]["fold_quantile"] == pytest.approx(
+                by[(t, "mid_tilt", 0)]["seam_q_mid"], abs=2e-6
+            )
+            # The guarded hinge is never more inclusive than the incumbent below 0.
+            for k in (-4, -1, -0.25):
+                assert by[(t, "hinge", k)]["cut_threshold"] >= by[(t, "mid_tilt", k)]["cut_threshold"]
+
+    def test_fractional_stops_are_scored_at_their_own_weights(self):
+        sink = _run(ks=self._HINGE_KS, rules=self._HINGE_RULES)
+        rows = [r for r in sink if r["inclusion_k"] == -0.25]
+        assert rows
+        wf, wn = inclusion_weights(-0.25)
+        for r in rows:
+            assert r["cut_cost"] == pytest.approx(wf * r["cut_fpr"] + wn * r["cut_fnr"], abs=(wf + wn) * 1e-6)
+
+
+def test_live_cut_rule_moves_the_live_threshold_onto_that_rule():
+    """The #3557 run-level knob: with ``live_cut_rule`` set and reporting at
+    inclusion -8 (well below the hinge's seam, where
+    the planted fixture's rules actually separate), every fold-anchored step's live
+    threshold is the frame's re-cut of that same rule at k=-8 - so a run-level
+    arm and the paired re-cut are the same object - and the default arm is the
+    incumbent's.  ``mid`` rides along because the planted fixture's fits are
+    near 50/50, where every hinge coincides with ``mid_tilt``: the inert rule is
+    the one that proves the knob reached the live cut at all."""
+    medias, _ = _planted_dataset(n_per_cat=40, seed=0)
+
+    def run(live):
+        sink: list[dict] = []
+        rows = simulate_voting_iterations(
+            medias,
+            target_category="cat0",
+            seed=0,
+            dataset_name="planted",
+            inclusion=-8,
+            region_voting=True,
+            safe_thresholds=True,
+            max_steps=10,
+            style="max_patch",
+            emit_calibration_metrics=True,
+            anchored_thresholds=True,
+            anchored_weights=[0.3],
+            anchored_rules=["mid_tilt", "mid", "hinge"],
+            anchored_fold_combines=["qmean"],
+            cut_inclusion_ks=[-8],
+            cut_inclusion_sink=sink,
+            live_cut_rule=live,
+        )
+        return rows, sink
+
+    for live, rule in ((None, "mid_tilt"), ("mid", "mid"), ("hinge", "hinge")):
+        rows, sink = run(live)
+        recut = {r["t"]: r["cut_threshold"] for r in sink if r["cut_rule"] == rule}
+        live_rows = [
+            r
+            for r in rows
+            if not r.get("gmm_variant") and str(r.get("threshold_provenance", "")).startswith("fold_anchored")
+        ]
+        assert live_rows, "no fold-anchored steps to compare"
+        compared = [r for r in live_rows if r["t"] in recut]
+        assert compared
+        for r in compared:
+            assert r["threshold"] == pytest.approx(recut[r["t"]], abs=2e-6), (live, r["t"])
+        if live == "mid":
+            incumbent = {r["t"]: r["cut_threshold"] for r in sink if r["cut_rule"] == "mid_tilt"}
+            assert any(abs(r["threshold"] - incumbent[r["t"]]) > 1e-4 for r in compared), "knob never reached the cut"

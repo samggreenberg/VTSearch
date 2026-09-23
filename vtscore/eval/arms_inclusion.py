@@ -73,7 +73,7 @@ def _cut_inclusion_rows(
     base_labels: "np.ndarray",
     fold_haystacks: list,
     sim_scores: list[float],
-    ks: list[int],
+    ks: "list[int] | list[float]",
     weights: list[float],
     rules: list[str],
     fold_combines: list[str],
@@ -142,8 +142,18 @@ def _cut_inclusion_rows(
 
     arms = _cut_inclusion_arms(fold_hay, orderings, final_scores, weights, rules, fold_combines, qtilt_steps)
 
+    # The #3557 seam quantities depend only on the fit, which every arm of one
+    # anchor weight shares - so they are read once per weight, not per arm.
+    seam_by_weight: dict[float, dict[str, Any]] = {}
+    for arm, arm_cut in arms:
+        if arm["anchor_weight"] not in seam_by_weight:
+            seam_by_weight[arm["anchor_weight"]] = {
+                name: round6(value) for name, value in arm_cut.seam_diagnostics().items()
+            }
+
     out: list[dict[str, Any]] = []
     for arm, arm_cut in arms:
+        seam = seam_by_weight[arm["anchor_weight"]]
         for k in ks:
             wf, wn, o_thr, o_cost = oracle_by_k[k]
             thr = arm_cut.threshold_at(k)
@@ -166,6 +176,7 @@ def _cut_inclusion_rows(
                     "admitted_frac": round6(n_admitted / n_test if n_test else 0.0),
                     "n_admitted": n_admitted,
                     "n_test": n_test,
+                    **seam,
                 }
             )
     return out
