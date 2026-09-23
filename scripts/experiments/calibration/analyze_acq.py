@@ -196,6 +196,26 @@ TRAJ_KEYS: tuple[str, ...] = ("arm", "dataset", "embedder", "style", "category",
 PAIR_KEYS: tuple[str, ...] = TRAJ_KEYS[1:]
 
 
+def _positives_by(g: pd.DataFrame, t_max: int) -> int:
+    """Positives in the labelset after the last step at or before ``t_max``."""
+    head = g[g["t"] <= t_max]
+    return int(head["n_good"].max()) if len(head) else 0
+
+
+def upgrade_legacy_trajectories(traj: pd.DataFrame) -> pd.DataFrame:
+    """Read an ``agg/trajectories.csv`` written before #3602 in today's schema.
+
+    Such a file has no ``positives_final``, and its ``positives_100`` IS the
+    final-step value (the bug #3602 fixed).  Rename it to what it is and leave
+    ``positives_100`` absent rather than guessing it: a deep wave's t=100 value
+    is not recoverable from the old endpoint, and a reader that needs it must
+    re-run this analyzer on the raw cells.
+    """
+    if "positives_final" in traj.columns or "positives_100" not in traj.columns:
+        return traj
+    return traj.rename(columns={"positives_100": "positives_final"})
+
+
 def trajectory_stats(df: pd.DataFrame) -> pd.DataFrame:
     """One row per ``(arm, dataset, embedder, style, category, seed)``."""
     keys = [k for k in TRAJ_KEYS if k in df.columns]
@@ -215,8 +235,17 @@ def trajectory_stats(df: pd.DataFrame) -> pd.DataFrame:
         rec.update(
             n_steps=int(len(g)),
             # --- mechanism ---
-            positives_100=int(g["n_good"].iloc[-1]),
-            positives_50=int(g[g["t"] <= 50]["n_good"].max()) if (g["t"] <= 50).any() else 0,
+            # Positives at the trajectory's LAST step, whatever horizon the wave
+            # ran to -- the labelling-efficiency number, and what the ship rule
+            # reads.  This column was called `positives_100` until #3602: at
+            # CALIB_MAX_STEPS=100 the two coincide, so the name was right for
+            # every shallow wave and silently wrong (t=400) on every deep one.
+            positives_final=int(g["n_good"].iloc[-1]),
+            # Positives genuinely at t=100 and t=50.  These are what make a deep
+            # wave comparable to a shallow environment; on a 100-click wave
+            # `positives_100 == positives_final`.
+            positives_100=_positives_by(g, 100),
+            positives_50=_positives_by(g, 50),
             # --- decision ---
             final_cost=float(cost[-1]),
             mean_cost_warm=float(np.nanmean(cost[warm])) if warm.any() else np.nan,
@@ -336,6 +365,7 @@ def _core_summary(traj: pd.DataFrame) -> dict:
             "label": ARM_LABEL.get(arm, arm),
             "k_acq": ARM_K.get(arm),
             "n_trajectories": int(len(a)),
+            "median_positives_final": float(a["positives_final"].median()),
             "median_positives_100": float(a["positives_100"].median()),
             "median_positives_50": float(a["positives_50"].median()),
             "median_final_cost": float(a["final_cost"].median()),
@@ -352,6 +382,7 @@ def _core_summary(traj: pd.DataFrame) -> dict:
         if arm == CONTROL or arm not in per_arm:
             continue
         contrasts[arm] = {
+            "positives_final": _paired(traj, "positives_final", arm),
             "positives_100": _paired(traj, "positives_100", arm),
             "positives_50": _paired(traj, "positives_50", arm),
             "final_cost": _paired(traj, "final_cost", arm),
@@ -371,14 +402,16 @@ def _core_summary(traj: pd.DataFrame) -> dict:
     # --- the pre-registered ship rule ---
     falsifier_ok = False
     if FALSIFIER in contrasts:
-        f = contrasts[FALSIFIER]["positives_100"]
+        f = contrasts[FALSIFIER]["positives_final"]
         falsifier_ok = f.get("median_delta", 0) < 0 and f.get("p", 1.0) < ALPHA
 
     ship = {}
     for arm, c in contrasts.items():
         if arm == FALSIFIER:
             continue
-        pos, cost, deep = c["positives_100"], c["final_cost"], c["deep_incidence"]
+        # Positives at the wave's own horizon: the rule was pre-registered on a
+        # 100-click wave, where this equals positives@100 (#3602).
+        pos, cost, deep = c["positives_final"], c["final_cost"], c["deep_incidence"]
         c1 = pos.get("median_delta", 0) > 0 and pos.get("p", 1.0) < ALPHA
         c2 = cost.get("ci95_hi", float("inf")) < COST_REGRESSION_TOLERANCE
         c3 = not (deep.get("arm_rate", 0) > deep.get("control_rate", 0) and deep.get("p_exact", 1.0) < ALPHA)
@@ -470,7 +503,7 @@ def mode_did(traj: pd.DataFrame) -> dict:
     keys = [k for k in ("dataset", "embedder", "category", "seed") if k in t.columns]
     out: dict = {"embedders": spanning, "contrasts": {}}
     rng = np.random.default_rng(2877)
-    for metric in ("final_cost", "final_ap", "positives_100", "final_oracle_cost"):
+    for metric in ("final_cost", "final_ap", "positives_final", "final_oracle_cost"):
         if metric not in t.columns:
             continue
         per_metric = {}
@@ -568,8 +601,8 @@ def make_figures(traj: pd.DataFrame, summary: dict, outdir: Path, prefix: str = 
     ks = [summary["per_arm"][a]["k_acq"] for a in order if summary["per_arm"][a]["k_acq"] is not None]
     karms = [a for a in order if summary["per_arm"][a]["k_acq"] is not None]
 
-    axes[0].plot(ks, [summary["per_arm"][a]["median_positives_100"] for a in karms], "o-", color="#1f6f78")
-    axes[0].set_xlabel("acquisition inclusion $k$"), axes[0].set_ylabel("median positives found by t=100")
+    axes[0].plot(ks, [summary["per_arm"][a]["median_positives_final"] for a in karms], "o-", color="#1f6f78")
+    axes[0].set_xlabel("acquisition inclusion $k$"), axes[0].set_ylabel("median positives found by the final step")
     axes[0].set_title("mechanism: does the lever pull?", fontsize=9)
     axes[0].invert_xaxis()
     axes[0].grid(alpha=0.25, ls=":")
@@ -581,7 +614,7 @@ def make_figures(traj: pd.DataFrame, summary: dict, outdir: Path, prefix: str = 
     axes[1].grid(alpha=0.25, ls=":")
 
     for a in order:
-        x = summary["per_arm"][a]["median_positives_100"]
+        x = summary["per_arm"][a]["median_positives_final"]
         y = summary["per_arm"][a]["median_final_cost"]
         m = "s" if a == "rank_pin" else ("D" if a == CONTROL else "o")
         axes[2].scatter(x, y, s=70, marker=m, zorder=4)
@@ -684,17 +717,18 @@ def _mode_sections(A, s: dict, heading: str, note: str = "") -> None:
 
     A("\n### Per-arm\n")
     A(
-        "| arm | trajectories | positives @100 | positives @50 | final cost | mean warm cost | "
-        "final AP | oracle cost | genuine blips |"
+        "| arm | trajectories | positives @final | positives @100 | positives @50 | final cost | "
+        "mean warm cost | final AP | oracle cost | genuine blips |"
     )
-    A("|---|---:|---:|---:|---:|---:|---:|---:|---:|")
+    A("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
     for a in ARMS:
         v = s["per_arm"].get(a)
         if not v:
             continue
         A(
             f"| `{a}` — {ARM_LABEL.get(a, a)} | {v['n_trajectories']} | "
-            f"{_f(v['median_positives_100'], 1)} | {_f(v['median_positives_50'], 1)} | "
+            f"{_f(v['median_positives_final'], 1)} | {_f(v['median_positives_100'], 1)} | "
+            f"{_f(v['median_positives_50'], 1)} | "
             f"{_f(v['median_final_cost'])} | {_f(v['median_mean_cost_warm'])} | "
             f"{_f(v['median_final_ap'])} | {_f(v['median_final_oracle_cost'])} | "
             f"{100 * v['genuine_blip_rate']:.1f}% |"
@@ -707,7 +741,14 @@ def _mode_sections(A, s: dict, heading: str, note: str = "") -> None:
         c = s["contrasts_vs_control"].get(arm)
         if not c:
             continue
-        for metric in ("positives_100", "final_cost", "mean_cost_warm", "final_oracle_cost", "final_ap"):
+        for metric in (
+            "positives_final",
+            "positives_100",
+            "final_cost",
+            "mean_cost_warm",
+            "final_oracle_cost",
+            "final_ap",
+        ):
             r = c[metric]
             if not r.get("n_pairs"):
                 continue
@@ -914,7 +955,8 @@ def main(argv: list[str] | None = None) -> int:
             if not v:
                 continue
             print(
-                f"  {a:9s} pos@100={v['median_positives_100']:5.1f}  final_cost={v['median_final_cost']:.3f}  "
+                f"  {a:9s} pos@final={v['median_positives_final']:5.1f}  pos@100={v['median_positives_100']:5.1f}  "
+                f"final_cost={v['median_final_cost']:.3f}  "
                 f"genuine_blips={100 * v['genuine_blip_rate']:5.1f}%  "
                 f"acq_pct={s['lever_verification'][a]['median_acq_pool_percentile']:.4f}"
             )

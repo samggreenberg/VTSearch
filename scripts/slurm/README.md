@@ -50,3 +50,28 @@ symlink it into each data dir with
 Demo sources may also already exist elsewhere on the cluster (other groups'
 dataset folders); anything matching the extraction layout can be copied
 straight into the cache.
+
+## Running the test suite on a cluster cpu node
+
+[`suite.sbatch`](suite.sbatch) runs `./run-tests.sh` for one branch on a cpu
+node. It takes the worktree to test and the ref as **arguments**, checks the ref
+out (detached) in that worktree, refuses to run when the local branch and
+`origin/<ref>` disagree (behind, ahead or diverged — it names which and exits 2
+rather than guessing), and puts the worktree back on its original checkout when
+the job ends.
+
+Submit the copy in your **`dev` checkout**, never the one inside the worktree
+under test, so a branch cannot edit the gate that judges it:
+
+```bash
+sbatch --job-name=suite-<n> --output=<logdir>/tests-%j.out \
+    /exp/$USER/projects/VTSearch/scripts/slurm/suite.sbatch <tests-worktree> <branch>
+```
+
+`sbatch` copies the script into slurmd's spool at submit time, so the running
+job is not affected by the checkout it performs, or by a later `git pull` of
+the `dev` checkout. Give the suite a worktree of its own (`git worktree add
+--detach`): it moves that worktree's HEAD for the length of the job. Read the
+log's `=== HEAD` and `=== ref` lines to see which commit actually ran.
+`tests_lib/meta/test_suite_sbatch.py` runs the real script against a throwaway
+origin to pin the guard's behaviour.

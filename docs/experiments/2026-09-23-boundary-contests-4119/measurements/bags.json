@@ -1,0 +1,155 @@
+{
+ "classes": [
+  "backpack",
+  "handbag",
+  "suitcase"
+ ],
+ "types": [
+  {
+   "lvis_type": "suitcase",
+   "n": 5324,
+   "by_class": {
+    "suitcase": 4681,
+    "backpack": 328,
+    "handbag": 315
+   },
+   "minority": 643
+  },
+  {
+   "lvis_type": "backpack",
+   "n": 2960,
+   "by_class": {
+    "backpack": 2711,
+    "handbag": 221,
+    "suitcase": 28
+   },
+   "minority": 249
+  },
+  {
+   "lvis_type": "handbag",
+   "n": 2847,
+   "by_class": {
+    "handbag": 2767,
+    "backpack": 77,
+    "suitcase": 3
+   },
+   "minority": 80
+  },
+  {
+   "lvis_type": "duffel_bag",
+   "n": 277,
+   "by_class": {
+    "backpack": 114,
+    "handbag": 85,
+    "suitcase": 78
+   },
+   "minority": 163
+  },
+  {
+   "lvis_type": "shoulder_bag",
+   "n": 196,
+   "by_class": {
+    "handbag": 167,
+    "backpack": 29
+   },
+   "minority": 29
+  },
+  {
+   "lvis_type": "strap",
+   "n": 192,
+   "by_class": {
+    "handbag": 137,
+    "backpack": 51,
+    "suitcase": 4
+   },
+   "minority": 55
+  },
+  {
+   "lvis_type": "plastic_bag",
+   "n": 172,
+   "by_class": {
+    "handbag": 160,
+    "backpack": 8,
+    "suitcase": 4
+   },
+   "minority": 12
+  },
+  {
+   "lvis_type": "shopping_bag",
+   "n": 144,
+   "by_class": {
+    "handbag": 138,
+    "backpack": 4,
+    "suitcase": 2
+   },
+   "minority": 6
+  },
+  {
+   "lvis_type": "tote_bag",
+   "n": 141,
+   "by_class": {
+    "handbag": 130,
+    "backpack": 10,
+    "suitcase": 1
+   },
+   "minority": 11
+  },
+  {
+   "lvis_type": "trunk",
+   "n": 95,
+   "by_class": {
+    "suitcase": 95
+   },
+   "minority": 0
+  },
+  {
+   "lvis_type": "jacket",
+   "n": 56,
+   "by_class": {
+    "backpack": 29,
+    "handbag": 26,
+    "suitcase": 1
+   },
+   "minority": 27
+  },
+  {
+   "lvis_type": "briefcase",
+   "n": 54,
+   "by_class": {
+    "handbag": 33,
+    "suitcase": 21
+   },
+   "minority": 21
+  },
+  {
+   "lvis_type": "shirt",
+   "n": 37,
+   "by_class": {
+    "backpack": 20,
+    "handbag": 17
+   },
+   "minority": 17
+  },
+  {
+   "lvis_type": "basket",
+   "n": 36,
+   "by_class": {
+    "handbag": 31,
+    "backpack": 3,
+    "suitcase": 2
+   },
+   "minority": 5
+  },
+  {
+   "lvis_type": "coat",
+   "n": 26,
+   "by_class": {
+    "handbag": 12,
+    "backpack": 14
+   },
+   "minority": 12
+  }
+ ],
+ "minority": 1330,
+ "total": 12557
+}

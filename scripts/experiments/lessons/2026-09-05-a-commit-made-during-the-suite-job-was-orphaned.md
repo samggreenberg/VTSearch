@@ -55,9 +55,9 @@ git ls-remote origin <branch>        # compare to git rev-parse HEAD
 **Status: advice, not prevented.** The real fix is for the suite launcher to
 stop borrowing the caller's worktree — `git worktree add` a throwaway checkout
 for the ref under test, run there, and delete it — which removes the window
-entirely rather than asking every session to remember it. `suite.sbatch` lives
-outside the repo (`/exp/sgreenberg/suite.sbatch`), so that change is not in this
-tree and is not something `preflight.sh` can gate: preflight guards experiment
+entirely rather than asking every session to remember it. `suite.sbatch` lived
+outside the repo when this was written (it is `scripts/slurm/suite.sbatch` since
+#3694), and the change is not something `preflight.sh` can gate: preflight guards experiment
 *launches*, and this is a hazard of the interval *after* one.
 
 Until then the rule is the simple one: **do not commit in a worktree while a

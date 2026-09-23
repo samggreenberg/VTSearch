@@ -12,6 +12,7 @@ import { AutopilotStateService } from '../../services/autopilot-state.service';
 import { EmbedderCapabilityService } from '../../services/embedder-capability.service';
 import type { EmbedderInfo } from '../../models/api.models';
 import { ActiveContextService } from '../../services/active-context.service';
+import { MediaPrefetchService } from '../../services/media-prefetch.service';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleResource, settleZoneless } from '../../testing/settle-resource';
 import { provideHttpTesting } from '../../testing/test-providers';
@@ -145,19 +146,20 @@ describe('LabelViewComponent', () => {
   // requests are driven by `timer(0, …)`, which only fires on a real macrotask
   // after the synchronous test body returns, so they are NOT flushed here —
   // they are drained by `afterEach`'s catch-all instead.
-  function flushInitialRequests(votes?: Record<string, unknown>): void {
+  function flushInitialRequests(
+    votes?: Record<string, unknown>,
+    medias: { id: number; media_type: string }[] = [
+      { id: 1, media_type: 'audio' },
+      { id: 2, media_type: 'audio' },
+    ],
+  ): void {
     TestBed.tick();
     // The medias and settings reads ride `rxResource`, whose loader runs in a
     // root effect rather than synchronously during `detectChanges()`; tick so
     // the GETs are actually issued before we match them.
     TestBed.tick();
     // /api/medias/ids
-    httpMock.match('/api/medias/ids').forEach(req =>
-      req.flush([
-        { id: 1, media_type: 'audio' },
-        { id: 2, media_type: 'audio' },
-      ]),
-    );
+    httpMock.match('/api/medias/ids').forEach(req => req.flush(medias));
     // /api/find/end-session (the Train window's hand-off out of a Find
     // session, #3212); loadVotes is chained onto its response, so the GET
     // below only exists after this POST is answered and the tick lands it.
@@ -236,6 +238,89 @@ describe('LabelViewComponent', () => {
     flushInitialRequests();
     await settleResource();
     expect(component.mediaState.mediasSignal().length).toBe(2);
+  });
+
+  /**
+   * #3896: the next image used to be requested only once the vote POST came
+   * back. The view now hands the prefetch store the next PREFETCH_DEPTH images
+   * as soon as an item is on screen — and again whenever the prediction moves
+   * with that item still on screen, which is the case a selection-only trigger
+   * missed.
+   */
+  describe('prefetching the next review images (#3896)', () => {
+    const images = [1, 2, 3, 4].map((id) => ({ id, media_type: 'image' }));
+    const ranking = [
+      { id: 1, score: 0.9 },
+      { id: 2, score: 0.8 },
+      { id: 3, score: 0.7 },
+      { id: 4, score: 0.6 },
+    ];
+    let prefetch: ReturnType<typeof vi.spyOn>;
+    const url = (id: number) =>
+      TestBed.inject(ActiveContextService).mediaUrl(`/api/medias/${id}/image`);
+    const lastCall = () => prefetch.mock.calls[prefetch.mock.calls.length - 1];
+
+    beforeEach(() => {
+      prefetch = vi.spyOn(TestBed.inject(MediaPrefetchService), 'prefetch');
+    });
+
+    it('warms the next two images, keeping the one on screen', async () => {
+      flushInitialRequests(undefined, images);
+      await settleResource();
+      component.sortState.setSelectMode('top');
+      component.sortState.setSortResults(ranking, 0.5);
+      component.mediaState.selectMedia(1);
+      TestBed.tick();
+
+      expect(lastCall()).toEqual([[url(2), url(3)], [url(1)]]);
+    });
+
+    it('retargets when a re-sort lands with the same item on screen', async () => {
+      flushInitialRequests(undefined, images);
+      await settleResource();
+      component.sortState.setSelectMode('top');
+      component.sortState.setSortResults(ranking, 0.5);
+      component.mediaState.selectMedia(1);
+      TestBed.tick();
+
+      // The learned sort scheduled by the previous vote comes back and puts 4
+      // next. The selection never moved, which is exactly when a warm keyed on
+      // the selection alone kept fetching the old pick.
+      component.sortState.setSortResults(
+        [ranking[0], ranking[3], ranking[2], ranking[1]],
+        0.5,
+      );
+      TestBed.tick();
+
+      expect(component.mediaState.selectedId()).toBe(1);
+      expect(lastCall()).toEqual([[url(4), url(3)], [url(1)]]);
+    });
+
+    it('retargets when a vote on an upcoming item lands', async () => {
+      flushInitialRequests(undefined, images);
+      await settleResource();
+      component.sortState.setSelectMode('top');
+      component.sortState.setSortResults(ranking, 0.5);
+      component.mediaState.selectMedia(1);
+      TestBed.tick();
+
+      // Labeled from the side panel, say: it drops out of the queue.
+      component.voteState.applyOptimisticState(2, 'bad');
+      TestBed.tick();
+
+      expect(lastCall()).toEqual([[url(3), url(4)], [url(1)]]);
+    });
+
+    it('warms nothing for non-image media', async () => {
+      flushInitialRequests();
+      await settleResource();
+      component.sortState.setSelectMode('top');
+      component.sortState.setSortResults(ranking.slice(0, 2), 0.5);
+      component.mediaState.selectMedia(1);
+      TestBed.tick();
+
+      expect(lastCall()?.[0]).toEqual([]);
+    });
   });
 
   /**

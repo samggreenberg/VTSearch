@@ -155,8 +155,11 @@ def main() -> int:
 
         # 5. Direction sanity: positives must rise monotonically m1 -> m2.
         pa = s["per_arm"]
-        if not pa["acq_m1"]["median_positives_100"] < pa["acq_m2"]["median_positives_100"]:
+        if not pa["acq_m1"]["median_positives_final"] < pa["acq_m2"]["median_positives_final"]:
             fails.append("planted positive ordering lost")
+        # On a 100-click wave the two horizons are the same number.
+        if not (traj["positives_100"] == traj["positives_final"]).all():
+            fails.append("positives_100 != positives_final on a 100-step wave")
 
         # 6. Withheld verdict propagates to the report.
         s_bad = dict(s)
@@ -181,7 +184,7 @@ def main() -> int:
 
 
 # --- scenario 2: a grid holding both voting modes ---------------------------
-#: ``(positives@100, final cost, acq percentile)`` per arm, per mode.  The plant
+#: ``(positives at the final step, final cost, acq percentile)`` per arm, per mode.  The plant
 #: is a DISAGREEMENT, and specifically one sized so that POOLING HIDES IT.
 #: Every negative-k arm buys positives in both modes.  In binary they are free
 #: (deltas within +/-0.001 of `prod`); in region they cost a ramp of +0.002 /
@@ -362,5 +365,39 @@ def main_modes() -> int:
         shutil.rmtree(base, ignore_errors=True)
 
 
+# --- scenario 3: a deep wave's two horizons (#3602) -------------------------
+def main_horizons() -> int:
+    """``positives_100`` is read AT t=100; ``positives_final`` at the last step.
+
+    Before #3602 ``positives_100`` was the last row, which is t=400 on a deep
+    wave: 160 "positives at 100" in 100 clicks is how it was noticed.  The plant
+    finds one positive every 2 clicks, so the three horizons are 25 / 50 / 200.
+    """
+    rng = np.random.default_rng(3602)
+    cell = _cell("prod", "cat0", 0, rng).iloc[[0]]
+    t = np.arange(1, 401)
+    deep = pd.concat([cell] * len(t), ignore_index=True)
+    deep["t"], deep["n_good"] = t, t // 2
+    deep["n_bad"] = t - deep["n_good"]
+    deep["cost"] = deep["oracle_cost"] = 0.1
+    deep["arm"] = "prod"
+    row = A.trajectory_stats(deep).iloc[0]
+    fails = []
+    want = {"positives_50": 25, "positives_100": 50, "positives_final": 200}
+    for col, v in want.items():
+        if int(row[col]) != v:
+            fails.append(f"{col} = {row[col]}, planted {v}")
+    legacy = A.upgrade_legacy_trajectories(pd.DataFrame({"positives_100": [200], "positives_50": [25]}))
+    if list(legacy.columns) != ["positives_final", "positives_50"] or int(legacy["positives_final"][0]) != 200:
+        fails.append(f"a pre-#3602 trajectories.csv was not upgraded: {list(legacy.columns)}")
+    if fails:
+        print("SELFTEST FAILED (horizons):")
+        for f in fails:
+            print("  -", f)
+        return 1
+    print("selftest OK: deep-wave horizons @50/@100/@final = 25/50/200")
+    return 0
+
+
 if __name__ == "__main__":
-    raise SystemExit(main() or main_modes())
+    raise SystemExit(main() or main_modes() or main_horizons())

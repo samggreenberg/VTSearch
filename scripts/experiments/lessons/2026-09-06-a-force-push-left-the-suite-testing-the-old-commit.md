@@ -66,3 +66,8 @@ The guard lives in `/exp/sgreenberg/suite.sbatch`, **outside this repository**, 
 nothing here reviews it, tests it, or notices if it is edited away — the previous
 version is kept beside it as `suite.sbatch.bak.20260906`. That gap is filed as
 **#3694**.
+
+*Update (#3694):* the launcher is now tracked at `scripts/slurm/suite.sbatch`,
+submitted from the `dev` checkout, and `tests_lib/meta/test_suite_sbatch.py`
+exercises all four states (plus diverged and a force-push) against the real
+script.

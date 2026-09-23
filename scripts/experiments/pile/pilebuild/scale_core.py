@@ -63,6 +63,11 @@ def band_for(boxes: list[list[float]], W: int, H: int) -> str:
     return OVERSIZE
 
 
+def largest_box(boxes: list[list[float]]) -> list[float]:
+    """The largest of *boxes* by area; ties go to the top-left, never to annotation order."""
+    return max(boxes, key=lambda b: ((b[2] - b[0]) * (b[3] - b[1]), -b[1], -b[0], -b[3], -b[2]))
+
+
 def band_candidates(
     labels: dict[int, dict[str, list[list[float]]]],
     box_dims: dict[int, tuple[int, int]],
@@ -70,6 +75,7 @@ def band_candidates(
     classes: tuple[str, ...] | None = None,
     designated: dict[tuple[int, str], list[list[float]]] | None = None,
     excluded: set[tuple[int, str]] | None = None,
+    largest: bool = False,
 ) -> tuple[dict[str, dict[str, list[int]]], dict[tuple[int, str], list[list[float]]], list[int]]:
     """Sort every image into ``(class, band)`` supply, or into the clean pool.
 
@@ -96,6 +102,11 @@ def band_candidates(
     a COCO box :data:`pile_config.SCALE_LUMP_FILTER` found drawn round a pile
     (#3985). The class stays in *labels*, so the image is not a negative for it
     either, and it cannot join ``clean`` because it holds a class.
+
+    *largest* bands each pair on its largest instance and records ONLY that box
+    in ``boxes_for``, which is what the media's regions -- and so the simulated
+    drag -- are built from (#4096). A single box cannot be scattered, so only an
+    oversize one still misses every band. A reviewer's designation still wins.
     """
     classes = tuple(classes) if classes is not None else pc.SCALE_CLASSES
     supply: dict[str, dict[str, list[int]]] = {c: {b: [] for b in pc.BOX_BANDS} for c in classes}
@@ -117,11 +128,13 @@ def band_candidates(
             # drag it (#3726). Without a designation this is exactly the old
             # behaviour: the union over everything the class has here.
             picked = (designated or {}).get((iid, name))
+            if picked is None and largest:
+                picked = [largest_box(bs)]
             band = band_for(picked or bs, W, H)
             if band not in pc.BOX_BANDS:  # scattered, or bigger than a region
                 continue
             supply[name][band].append(iid)
-            boxes_for[(iid, pc.scale_cell(name, band))] = bs
+            boxes_for[(iid, pc.scale_cell(name, band))] = picked if largest else bs
     return supply, boxes_for, clean
 
 

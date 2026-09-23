@@ -109,7 +109,7 @@ extras (e.g. `available`, `missing_fields`, `dataset_id`):
 |-------|------|
 | `errors` | Schema validation failed; maps location → field → messages (see the 422 example in [file-browser.md](api/file-browser.md)) |
 | `detail` | 500s; the exception type and its first line, e.g. `"RuntimeError: embedder X not loaded"` |
-| `error_code` | A machine-readable slug where the client branches on the *kind* of failure: `auth_required`, `dataset_not_loaded`, `detector_not_loaded` |
+| `error_code` | A machine-readable slug where the client branches on the *kind* of failure: `auth_required`, `dataset_not_loaded` / `detector_not_loaded` (409: the id is registered but not in memory yet, so a load cures it), `dataset_not_found` / `detector_not_found` (404: the registry no longer lists the id — it was deleted) |
 
 Status codes follow standard HTTP semantics: 200 OK, 201 Created, 204 No
 Content, 400 Bad Request, 404 Not Found, 409 Conflict, 500 Internal Server

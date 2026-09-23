@@ -541,8 +541,30 @@ class TestContamination:
         assert mods["cfg"].eligible_distractor("spods", "ucsf", "Tobacco")
 
     def test_no_source_is_its_own_distractor(self, mods):
-        for source in ("spods", "staver", "tobacco800", "ucsf", "synth"):
+        for source in ("spods", "staver", "tobacco800", "synth"):
             assert not mods["cfg"].eligible_distractor(source, source)
+
+    def test_a_ucsf_class_never_uses_the_banded_tobacco_pages(self, mods):
+        # The letterhead pull banded exactly UCSF's Tobacco industry, and the
+        # band classes miss most of their own mark there (#3922), so those
+        # pages hold unlabelled positives.
+        assert not mods["cfg"].eligible_distractor("ucsf", "ucsf", "Tobacco")
+
+    def test_a_ucsf_class_may_use_the_unbanded_industries(self, mods):
+        # Admitted at v4.1 on corporate lineage and a hand check: 0 of 200
+        # sampled and 0 of 120 top-ranked un-banded pages carried a UCSF mark.
+        # Food is included, because it was the stratum the check weighted.
+        for industry in ("Food", "Opioids", "Chemical", "Drug", "Fossil Fuel"):
+            assert mods["cfg"].eligible_distractor("ucsf", "ucsf", industry)
+
+    def test_every_pulled_industry_is_decided_for_a_ucsf_class(self, mods):
+        # Tobacco is the only industry a UCSF class may not use, and it is a
+        # pulled industry -- a renamed or re-spelled industry would otherwise
+        # quietly start scoring the banded pages as negatives.
+        cfg = mods["cfg"]
+        assert "Tobacco" in cfg.UCSF_INDUSTRIES
+        banned = [i for i in cfg.UCSF_INDUSTRIES if not cfg.eligible_distractor("ucsf", "ucsf", i)]
+        assert banned == ["Tobacco"]
 
 
 # ------------------------------------------------------------ class admission
