@@ -63,6 +63,7 @@ from pilebuild.loaders import loader_for  # noqa: E402
 from pilebuild.manifest import write_manifest  # noqa: E402
 from pilebuild.provenance import (  # noqa: E402
     cell_fingerprint,
+    code_record,
     effective_embed_batch_size,
     write_provenance,
 )
@@ -173,11 +174,60 @@ def build_cell(dataset: str, embedder: str, force: bool = False) -> dict:
     return summary
 
 
+def relabel_cell(dataset: str, embedder: str) -> dict:
+    """Rewrite one existing cell's label fields from today's rules; keep every vector (#4091).
+
+    The vectors are proven untouched, not assumed: the cell's vector fingerprint
+    is recomputed after relabelling and must equal the one its provenance sidecar
+    recorded at build time, or nothing is written. The relabel is appended to the
+    sidecar, so the cell says both which code EMBEDDED it and which code last
+    LABELLED it -- two different commits, and a reader needs both.
+    """
+    import json  # noqa: PLC0415
+
+    out = pc.cell_path(dataset, embedder)
+    side = pc.provenance_path(dataset, embedder)
+    if not out.exists():
+        log(f"skip {dataset} x {embedder}: no cell to relabel")
+        return {"dataset": dataset, "embedder": embedder, "status": "missing"}
+    record = json.loads(side.read_text()) if side.exists() else {}
+    before = (record.get("fingerprint") or {}).get("vectors_sha256")
+    if not before:
+        raise SystemExit(f"{side.name}: no recorded vector fingerprint, so a relabel could not prove it kept the vectors")
+    kind = pc.DATASETS[dataset]["kind"]
+    loader = loader_for(dataset, kind)
+    if not hasattr(loader, "relabel"):
+        raise SystemExit(f"{dataset}: loader {kind!r} has no relabel; rebuild instead")
+    log(f"=== relabel {dataset} x {embedder} ===")
+    t0 = time.time()
+    medias = cells_io().load_medias(out)
+    stats = loader.relabel(dataset, medias)
+    after = cell_fingerprint(dataset, embedder, medias)["vectors_sha256"]
+    if after != before:
+        raise SystemExit(f"{out.name}: vector fingerprint moved ({before[:12]} -> {after[:12]}); refusing to write")
+    # Written aside and swapped in: `dump_medias` truncates in place, and a
+    # relabel that died mid-write would destroy a cell whose re-embed is hours.
+    tmp = out.with_name(out.name + ".relabel-tmp")
+    nbytes = cells_io().dump_medias(medias, tmp)
+    os.replace(tmp, out)
+    record.setdefault("relabels", []).append(
+        {"at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "code": code_record(), **stats}
+    )
+    side.write_text(json.dumps(record, indent=2) + "\n")
+    log(f"  wrote {out.name}: {nbytes / 1e6:.0f} MB in {time.time() - t0:.0f}s, vectors unchanged ({after[:12]})")
+    return {"dataset": dataset, "embedder": embedder, "status": "relabelled", **stats}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--datasets", help="comma-separated subset (default: all)")
     ap.add_argument("--embedders", help="comma-separated subset (default: all)")
     ap.add_argument("--force", action="store_true", help="rebuild cells that already exist")
+    ap.add_argument(
+        "--relabel",
+        action="store_true",
+        help="rewrite the LABELS of existing full-corpus cells from today's rules, keeping their vectors (#4091)",
+    )
     ap.add_argument("--list", action="store_true", help="show cell status and exit")
     ap.add_argument("--verify", action="store_true", help="load every cell and check geometry")
     ap.add_argument(
@@ -243,6 +293,13 @@ def main() -> int:
         datasets += derived
 
     summaries = []
+    if args.relabel:
+        for ds in datasets:
+            for emb in embedders:
+                summaries.append(relabel_cell(ds, emb))
+        done = [s for s in summaries if s["status"] == "relabelled"]
+        log(f"done: {len(done)} relabelled, {len(summaries) - len(done)} without a cell")
+        return 0
     for ds in datasets:
         for emb in embedders:
             summaries.append(build_cell(ds, emb, force=args.force))

@@ -425,16 +425,6 @@ def scale_media(
     if vw <= 0 or vh <= 0:
         return None
 
-    # Normalised region boxes are resolution-independent, so they must be
-    # divided by the size of the image the coordinates came from -- which is
-    # the COCO original for a repaired image, not the VG copy carrying the
-    # pixels.
-    W, H = box_dims
-    regions = [
-        {"box": [b[0] / W, b[1] / H, b[2] / W, b[3] / H], "label": cell}
-        for cell in cats
-        for b in boxes_for.get((iid, cell), [])
-    ]
     return {
         "id": iid,
         "media_type": "image",
@@ -446,6 +436,61 @@ def scale_media(
         "media_bytes": data,
         "media_string": None,
         "filename": filename,
+        **scale_label_fields(
+            iid=iid,
+            box_dims=box_dims,
+            cats=cats,
+            boxes_for=boxes_for,
+            cells=cells,
+            neg_set=neg_set,
+            labels=labels,
+            coco_scored=coco_scored,
+            exhaustive=exhaustive,
+            reviewed_absent=reviewed_absent,
+            reviewed_present=reviewed_present,
+        ),
+        "origin": {"importer": importer, "params": {"embedder": embedder_name, "labels": "coco"}},
+        "origin_name": origin_name,
+    }
+
+
+#: The fields of a scale media that come from the LABELS rather than the pixels.
+#: Everything else in the dict is fixed once the image is embedded.
+LABEL_FIELDS = ("category", "categories", "evaluable_categories", "labels_exhaustive", "coco_scored", "regions")
+
+
+def scale_label_fields(
+    *,
+    iid: int,
+    box_dims: tuple[int, int],
+    cats: list[str],
+    boxes_for: dict[tuple[int, str], list[list[float]]],
+    cells: list[str],
+    neg_set: set[int],
+    labels: dict[int, dict[str, list[list[float]]]],
+    coco_scored: set[int],
+    exhaustive: set[int],
+    reviewed_absent: set[tuple[int, str]],
+    reviewed_present: set[tuple[int, str]],
+) -> dict:
+    """The :data:`LABEL_FIELDS` of one scale media -- :func:`scale_media` minus the pixels.
+
+    Split out so a cell whose LABELS moved can be relabelled in place without
+    re-embedding (`build_pile.py --relabel`, #4091), through the very function
+    a build uses: a relabel that computed these a second way would be free to
+    drift from a rebuild, which is the one thing it must never do.
+    """
+    # Normalised region boxes are resolution-independent, so they must be
+    # divided by the size of the image the coordinates came from -- which is
+    # the COCO original for a repaired image, not the VG copy carrying the
+    # pixels.
+    W, H = box_dims
+    regions = [
+        {"box": [b[0] / W, b[1] / H, b[2] / W, b[3] / H], "label": cell}
+        for cell in cats
+        for b in boxes_for.get((iid, cell), [])
+    ]
+    return {
         "category": cats[0] if cats else "",
         "categories": cats,
         # A designated cell membership, not a closed world: a positive is
@@ -464,6 +509,4 @@ def scale_media(
         # is what makes a negative provable rather than merely reviewed.
         "coco_scored": iid in coco_scored,
         "regions": regions,
-        "origin": {"importer": importer, "params": {"embedder": embedder_name, "labels": "coco"}},
-        "origin_name": origin_name,
     }

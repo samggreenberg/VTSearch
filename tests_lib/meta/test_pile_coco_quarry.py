@@ -482,3 +482,60 @@ class TestTheCarrierAndVesselMerges:
             assert pc.review_name(cls) == rule.name
             assert pc.SCALE_CLASS_RULES_RETIRED[cls] == rule.name
         assert pc.rule_digest("vase") == "29e5d90e768c", "the digest the committed record was stamped with"
+
+class TestRelabel:
+    """#4091: a full-corpus cell's LABELS can be brought up to date without re-embedding.
+
+    The contract is equality with a rebuild: whatever a fresh `load` would label
+    an image, a relabel must label it the same, because the two share one plan.
+    """
+
+    @pytest.fixture
+    def full(self, mod, tmp_path: Path, monkeypatch):
+        import pile_config as pc
+
+        anchor = _corpus(tmp_path)
+        monkeypatch.setattr(pc, "COCO_ANCHOR_DIR", anchor)
+        monkeypatch.setattr(pc, "COCO_VAL_ZIP", tmp_path / "images" / "val2017.zip")
+        monkeypatch.setattr(pc, "COCO_TRAIN_ZIP", tmp_path / "images" / "train2017.zip")
+        monkeypatch.setattr(pc, "LVIS_DIR", _lvis(tmp_path, {}))
+        monkeypatch.setattr(pc, "SCALE_CLASSES", ("bus", "clock"))
+        monkeypatch.setitem(pc.DATASETS, "fixture_full", {"kind": "coco_quarry", "full_corpus": True})
+        mod._CORPUS.clear()
+        yield "fixture_full"
+        mod._CORPUS.clear()
+
+    def test_a_relabel_reproduces_what_a_build_labels(self, mod, full):
+        from pilebuild.scale_core import LABEL_FIELDS
+
+        built: dict = {}
+        mod.load(full, built, "siglip")
+        assert built, "the fixture corpus emitted nothing"
+        stale = {iid: {**m, "categories": [], "category": "", "regions": [], "evaluable_categories": []} for iid, m in built.items()}
+        stats = mod.relabel(full, stale)
+        for iid, m in built.items():
+            for k in LABEL_FIELDS:
+                assert stale[iid][k] == m[k], (iid, k)
+        assert stats["n_medias"] == len(built)
+        assert stats["changed"], "the scrambled fields were reported as changed"
+
+    def test_a_relabel_leaves_every_other_field_alone(self, mod, full):
+        built: dict = {}
+        mod.load(full, built, "siglip")
+        for m in built.values():
+            m["embeddings"] = {"siglip": [1.0, 2.0]}
+        before = {iid: {k: v for k, v in m.items()} for iid, m in built.items()}
+        mod.relabel(full, built)
+        for iid, m in built.items():
+            assert m["embeddings"] == before[iid]["embeddings"]
+            assert m["media_bytes"] == before[iid]["media_bytes"]
+
+    def test_a_designated_cell_is_refused(self, mod):
+        with pytest.raises(SystemExit) as err:
+            mod.relabel("coco_quarry", {})
+        assert "full-corpus" in str(err.value), "a rule change moves WHICH images it holds; that needs pixels"
+
+    def test_a_cell_holding_an_image_the_plan_would_not_emit_is_refused(self, mod, full):
+        with pytest.raises(SystemExit) as err:
+            mod.relabel(full, {999_999: {}})
+        assert "would not emit" in str(err.value)

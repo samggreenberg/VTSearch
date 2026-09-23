@@ -218,6 +218,11 @@ def _code_record() -> dict:
     }
 
 
+def code_record() -> dict:
+    """Public spelling of :func:`_code_record`, for a relabel that stamps its own code."""
+    return _code_record()
+
+
 def cell_fingerprint(dataset: str, embedder: str, medias: dict | None = None) -> dict:
     """A hash of the cell's vectors, in a fixed media-id order.
 
