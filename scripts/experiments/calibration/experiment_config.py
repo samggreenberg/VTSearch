@@ -233,9 +233,10 @@ EXPERIMENT_QUERIES: dict[str, dict[str, str]] = {
     "vg_scale": {
         f"{cls}@{band}": text for cls, text in _VG_SCALE_TEXTS.items() for band in ("small", "medium", "large")
     },
-    # `coco_quarry` (#4044/#4051) is `vg_scale`'s question asked of COCO with no
-    # Visual Genome, on the SAME 25 `SCALE_CLASSES` and the same three bands -- so
-    # it takes the same texts, under the same `class@band` keying.
+    # `coco_quarry` (#4044) is `vg_scale`'s question asked of COCO with no Visual
+    # Genome, on `SCALE_CLASSES` (49 since #4119) and the same three bands -- so it
+    # takes the same texts, under the same `class@band` keying. A dropped cell
+    # (`SCALE_DROPPED_CELLS`) keeps its text here; it is never built, so never asked.
     #
     # The VG-named constant serving a COCO dataset is deliberate, not an
     # oversight. Every entry in it was taken byte-identically from `_COCO_TEXTS`
