@@ -148,6 +148,8 @@ def cell_table(base: pd.DataFrame, sky: pd.DataFrame, ts: dict, picks: pd.DataFr
     important row, so it is listed from its picks with an empty curve rather
     than dropped."""
     found = picks.groupby(RUN_KEY)["picked_label"].sum().to_dict() if not picks.empty else {}
+    tail = base.sort_values("t").groupby(RUN_KEY).tail(1)
+    base_last = {tuple(k): (p, r) for *k, p, r in tail[RUN_KEY + ["precision", "recall"]].itertuples(index=False)}
     rows = []
     skyd = {}
     if not sky.empty:
@@ -169,12 +171,18 @@ def cell_table(base: pd.DataFrame, sky: pd.DataFrame, ts: dict, picks: pd.DataFr
         }
         for c in CHECKPOINTS:
             at = s[s.index <= c]
-            row[f"cost_{c}"] = at["cost"].iloc[-1] if len(at) else np.nan
-            row[f"f1_{c}"] = at["f1"].iloc[-1] if len(at) else np.nan
+            # Before a detector exists, what the user sees IS the text sort, so
+            # the text score stands in -- never a gap, which would let the mean
+            # at a checkpoint silently skip the runs that are still starving.
+            row[f"cost_{c}"] = at["cost"].iloc[-1] if len(at) else text[0]
+            row[f"f1_{c}"] = at["f1"].iloc[-1] if len(at) else text[1]
         row["final_t"] = int(s.index.max())
         row["final_cost"] = s["cost"].iloc[-1]
         row["final_f1"] = s["f1"].iloc[-1]
         row["final_ap"] = s["average_precision"].iloc[-1]
+        last = base_last.get(key)
+        row["final_precision"] = last[0] if last else np.nan
+        row["final_recall"] = last[1] if last else np.nan
         row["ceiling_cost"] = skyd.get((ds, cat, emb, style, int(seed)), np.nan)
         row["clicks_bought"] = row["text_cost"] - row["final_cost"]
         row["headroom"] = row["final_cost"] - row["ceiling_cost"]
@@ -196,14 +204,62 @@ def cell_table(base: pd.DataFrame, sky: pd.DataFrame, ts: dict, picks: pd.DataFr
                 "seed": int(seed),
                 "text_cost": text[0],
                 "text_f1": text[1],
+                # No detector was ever trained, so the user is left with the
+                # text sort all the way: that IS this run's score at every click.
+                **{f"cost_{c}": text[0] for c in CHECKPOINTS},
+                **{f"f1_{c}": text[1] for c in CHECKPOINTS},
+                "final_cost": text[0],
+                "final_f1": text[1],
+                "clicks_bought": 0.0,
                 "ceiling_cost": skyd.get((ds, cat, emb, style, int(seed)), np.nan),
                 "positives_found": int(n),
                 "never_trained": True,
             }
         )
     out = pd.DataFrame(rows)
-    out["never_trained"] = out.get("never_trained", pd.Series(False, index=out.index)).fillna(False).astype(bool)
+    out["never_trained"] = (
+        out.get("never_trained", pd.Series(False, index=out.index)).astype("boolean").fillna(False).astype(bool)
+    )
+    out["headroom"] = out["final_cost"] - out["ceiling_cost"]
     return out
+
+
+def curves(cells: pd.DataFrame, base: pd.DataFrame, horizon: int = 150) -> pd.DataFrame:
+    """Every run on a common click grid 0..horizon, as the USER would see it.
+
+    Click 0 is the text-only score; until the first scored click the user still
+    sees the text sort, so it carries forward; after that the last scored value
+    carries forward. A run that never trained stays at its text score.
+    """
+    by_run = {tuple(k): g.groupby("t")[["cost", "f1"]].mean() for k, g in base.groupby(RUN_KEY)}
+    grid = np.arange(0, horizon + 1)
+    rows = []
+    for r in cells.itertuples():
+        key = (r.dataset, r.category, _emb_of(r.arm), _style_of(r.arm), int(r.seed))
+        s = by_run.get(key)
+        cost = np.full(len(grid), r.text_cost, dtype=float)
+        f1 = np.full(len(grid), r.text_f1, dtype=float)
+        if s is not None and len(s):
+            idx = np.searchsorted(s.index.to_numpy(), grid, side="right") - 1
+            have = idx >= 0
+            cost[have] = s["cost"].to_numpy()[idx[have]]
+            f1[have] = s["f1"].to_numpy()[idx[have]]
+            cost[0], f1[0] = r.text_cost, r.text_f1
+        rows.append(
+            pd.DataFrame({"arm": r.arm, "category": r.category, "seed": r.seed, "t": grid, "cost": cost, "f1": f1})
+        )
+    return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
+
+
+_ARM_OF = {v: k for k, v in ARMS.items()}
+
+
+def _emb_of(arm: str) -> str:
+    return _ARM_OF[arm][0]
+
+
+def _style_of(arm: str) -> str:
+    return _ARM_OF[arm][1]
 
 
 def roll_up(inf: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -253,7 +309,18 @@ def summary(cells: pd.DataFrame, img: pd.DataFrame, det: pd.DataFrame, out: Path
         lines += ["## Runs that never found a positive (no detector was ever trained)", "", _md(nt, index=False), ""]
     if not cells.empty:
         lines += ["## Per path, over all cells", ""]
-        cols = ["text_cost", "cost_25", "cost_50", "final_cost", "ceiling_cost", "text_f1", "f1_50", "final_f1"]
+        cols = [
+            "text_cost",
+            "cost_25",
+            "cost_50",
+            "final_cost",
+            "ceiling_cost",
+            "text_f1",
+            "f1_50",
+            "final_f1",
+            "final_precision",
+            "final_recall",
+        ]
         g = cells.groupby("arm")[cols].mean().round(3)
         lines += [_md(g), ""]
         lines += ["## Per path and band", ""]
@@ -306,6 +373,7 @@ def main() -> int:
     inf = attribute(base, picks, ts)
     img, det = roll_up(inf)
     cells.to_csv(args.out / "cells.csv", index=False)
+    curves(cells, base).to_csv(args.out / "curves.csv", index=False)
     inf.to_csv(args.out / "influence.csv", index=False)
     img.to_csv(args.out / "images.csv", index=False)
     det.to_csv(args.out / "image_detector.csv", index=False)
