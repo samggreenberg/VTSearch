@@ -40,27 +40,6 @@ folds.
 
 <!-- item-sep -->
 
-- **Price a sign-dependent tilt (`cross_tilt`'s asymmetry).** The #2865 sweep
-  found the one rule that genuinely reads the acquisition-biased mixture weights
-  is *better* than the shipped `mid_tilt` below inclusion 0 — by up to
-  −0.034±0.005 at k=−1 on binary COCO, the largest effect anywhere on that
-  table — and worse above it (up to +0.073±0.012). Those weights push the cut in
-  the "admit more" direction, which is what the knob wants when it asks for
-  fewer false alarms and the opposite of what it wants above zero. A rule that
-  reads them only on one side of the knob is not obviously wrong, but it is a
-  *new* rule: it needs its own pre-registration, and a hinge at k=0 has to be
-  shown not to break the nesting contract
-  `test_inclusion_slide_recut.py::test_slide_is_monotone_across_the_whole_knob`
-  pins.
-  **Priced by #3557 ([report](../experiments/2026-09-22-hinge-tilt-3557/REPORT.md)):
-  nothing ships.** The guarded hinge (`max(cross, mid_tilt)` below 0) is nested by
-  construction (0 violations in 184,686 cell-steps; the literal hinge breaks on
-  1.9%). As a *reporting* re-cut it wins at 40 of 105 stops and loses at none, up
-  to −0.027±0.003. But shipped, it also moves the acquisition cut, and VG sessions
-  end worse (+0.025 binary, +0.014 region). The mechanism is the opposite of the
-  "admit more" reading above: the prior-keeping cut sits *stricter* than the
-  midpoint. The reporting-only split is **#4118**.
-
 <!-- item-sep -->
 
 - **Explain the k=0 loss on `coco_val × dinov3_patch`.** `rate` is worse than
