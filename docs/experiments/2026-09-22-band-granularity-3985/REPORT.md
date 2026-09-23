@@ -1,11 +1,11 @@
 # COCO boxes a pile as one object — and it is three faults, not one
 
-**Issues:** #3985, #3992. **Dataset:** `coco_quarry`, *C* = 52.
-**Date:** 2026-09-22. **Unit rulings, 120 owner votes and the fruit remedy, 2026-09-22.**
+**Issues:** #3985, #3992, #4096. **Dataset:** `coco_quarry`, *C* = 52.
+**Date:** 2026-09-22. **Unit rulings, 176 owner votes, the fruit and book remedy, and largest-instance banding, 2026-09-22.**
 
 ## Verdict
 
-**The measurement is extended and corrected, and the fruit remedy is built.** Two of
+**The measurement is extended and corrected, and the remedy is built for fruit and `book`, on largest-instance banding (#4096).** Two of
 the worst-affected classes had never been measured, the single "area ratio"
 turns out to conflate three different faults that want different fixes, and
 three of the four classes #3985 named as lumpers are not lumping.
@@ -150,6 +150,11 @@ found, and on this evidence it may not exist.
 
 ## The remedy, as built — owner rulings, 2026-09-22
 
+> **Superseded in part by the second rebuild below.** The 1.8 ratio cut
+> described here was replaced by a count of LVIS instances inside the picked
+> box, and banding moved to the largest instance (#4096). The fruit rulings
+> themselves stand.
+
 **A fruit box is a positive only if LVIS says it is ONE fruit.** For `banana`,
 `apple` and `orange`, an image stays a positive only if LVIS boxed the class
 there **and** COCO's mean box area is under **1.8×** LVIS's. An excluded image
@@ -200,6 +205,89 @@ The build has 153 cells, 15,298 positives and 9,900 negatives, with the same
 - **Vectors are unchanged**: 24,936 of the 25,012 shared images match
   bit-for-bit. The other 76 differ by at most 1e-6, which is batch-composition
   noise from a changed media set (#3683), not a change of input.
+
+## Second rebuild — the largest instance (#4096), and `book`
+
+### Band on the most obvious instance
+
+The build used to band each image on the **union** of every instance of the
+class, and the evaluator's simulated user dragged that same union. When the
+instances were spread out (union > 1.5× the largest), the image was
+*scattered* and never a positive. That was **111,324 of 287,303 image-class
+pairs in C (39%)**, led by `traffic light` 70%, `book` 58% and
+`enclosed road vehicle` 55%. So positives leaned toward images holding one
+isolated object, and busy scenes were mostly missing.
+
+The owner ruled to use the most obvious instance, the largest box. The build
+now bands on it, and the media records **only that box** as the cell's region,
+so the simulated user drags one object (`SCALE_BAND_ON_LARGEST`,
+`scale_core.largest_box`, where ties go top-left, never to annotation order).
+In a dry run over all of C, total banded supply rose from **166,845 to
+270,921**. The largest gains were busy scenes: `person@medium` 6,634 → 19,518,
+`traffic light@small` 745 → 2,555, `chair@small` 430 → 1,149.
+
+### The pile test moves to the same box
+
+The per-image mean-area ratio no longer describes the box that is dragged. The
+test is now a count: **how many LVIS instances lie at least half inside the
+picked box**. For the fruit, keep the box only when exactly one does. On the 72
+fruit votes, which were cast on this very box, that catches 28 of 29 piles and
+loses 5 of 43 Good boxes. The ratio at 1.8 caught the same 28 and lost 6.
+
+### `book` needs its own rule — 56 owner votes over two rounds
+
+| LVIS books inside the picked box | Good | Bad |
+|---|---:|---:|
+| 0 | 8 | 1 |
+| 2–4 | **15** | **0** |
+| 5 | 3 | 0 |
+| 6–9 | 2 | 3 |
+| 10+ | 1 | **9** |
+
+Two votes of round 1 are left out of the table: a puzzle box and a toy book,
+which were Bad because they are not books at all. Round 1 sampled the old
+population with the ratio arms. Round 2 sampled the new population, 8 per
+stratum.
+
+- **LVIS sees neighbouring volumes inside one COCO book box.** Two to four LVIS
+  books inside is still one book, 15 of 15 times. The fruit rule would have
+  thrown those away.
+- **Absence proves nothing for books.** 63% of picked book boxes have no LVIS
+  book inside at all, so books do not require LVIS confirmation.
+- **A stack at 6 or more inside** catches 12 of the 13 stacks and loses 3 Good
+  books. The one stack it misses has no LVIS book inside, so no LVIS rule could
+  catch it. The edge between 5 and 6 rests on few votes, and `pile_at` is one
+  constant to move.
+- **Largest-box banding brought the shelves back.** Five or more LVIS books
+  inside is 1% of the population the old rule banded and 10% of the returning
+  one, which is why `book` needed a rule now.
+
+Each class carries a `LumpRule(lvis_names, pile_at, require_lvis)`: the fruit
+use `(…, 2, True)` and `book` uses `(("book", "magazine"), 6, False)`. The fruit
+`@small` cells stay dropped. Even on the largest box they reach only 35 / 83 / 60
+positives (banana / apple / orange).
+
+**Numbers from before this rebuild are not comparable with numbers after it.**
+Membership changes in every multi-instance cell.
+
+**Rebuilt and verified 2026-09-22** (job 679144, v100, commit `30de11db9`;
+the only uncommitted file at build time was this report).
+
+- **153 cells, 15,300 positives: every cell is full.** `apple@large`, 98 in
+  the first rebuild, now fills from images the union rule had called
+  scattered.
+- **Excluded as positives** (not ONE by LVIS): `banana` 1,714 of 2,346,
+  `apple` 1,058 of 1,662, `orange` 1,268 of 1,784, `book` 290 of 5,562.
+- **`--verify` passes on all five columns**, 25,255 medias each.
+- **Every positive (media, cell) pair now carries exactly one region**, so the
+  simulated drag is one object in every case.
+- **Against the previous 153-cell build:** all 10,900 negatives and spares are
+  the same images. Membership moved in 152 of 153 cells, with a median of 70 of
+  100 images kept. The busy-scene cells moved most: `traffic light@medium`
+  kept 20, `person@small` 29, `book@small` 34. Vectors of the 21,218 shared
+  images are unchanged: 16,683 match bit-for-bit, and the rest differ by at
+  most 4e-7, which is batch-composition noise.
+
 
 ## Limits
 
