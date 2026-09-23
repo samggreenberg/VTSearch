@@ -7,8 +7,8 @@
 branch name, and its `git fetch origin` is not forced — so a non-fast-forward
 update is refused, the grid's local branch stays where it was, and the job
 checks out the **previous** commit. It then failed the docs gate for a missing
-`docs/experiments/README.md` row that the new commit adds, which reads exactly
-like a real finding about the branch under test. The `=== HEAD <sha> <subject>`
+row in the experiments index (a file since removed, #4138) that the new commit
+adds, which reads exactly like a real finding about the branch under test. The `=== HEAD <sha> <subject>`
 line the job prints is what gave it away, and it is the only thing that did.
 
 Force-fetching the ref by hand was not enough either: the local branch is
