@@ -33,8 +33,10 @@ export CALIB_CATEGORY_MODE=all
 export CALIB_N_SEEDS="${SOTA_SEEDS:-1}"
 export CALIB_MAX_STEPS="${SOTA_MAX_STEPS:-150}"
 export CALIB_SKYLINE_ARMS=skyline_train_full
-# Cross-band scoring is #4051's question, closed as out of scope: off.
-export CALIB_TEST_BANDS=""
+# launch_bands.sh turns an empty value into `all`. That only ADDS per-band FNR
+# columns (BAND_COLUMNS) and moves no headline one, so it is left on: free
+# context for "does this detector miss the other sizes" without it being a study.
+export CALIB_TEST_BANDS=all
 export CALIB_SAFE_THRESHOLDS=1
 export CALIB_REQUIRE_OPENING=text
 export CALIB_REQUIRE_SEED_QUERY=1

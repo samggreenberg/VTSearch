@@ -176,12 +176,14 @@ PYCHK
   # or queued: three FNRs are readable against ONE FPR only if the images behind
   # that FPR are the same for each band. True by construction -- and #3667 and
   # #3986 both changed what a negative IS, after the guarantee was written down.
-  ( cd "$WT/scripts/experiments/pile" && for c in $(python - <<'PYC'
+  # One class per LINE: since #4056 a class name can hold spaces
+  # (`enclosed road vehicle`), and word-splitting a space-joined list checked
+  # three "classes" that do not exist and died on the first.
+  ( cd "$WT/scripts/experiments/pile" && python - <<'PYC' | while IFS= read -r c; do python quarry_export.py --check-bands "$c" || exit 1; done ) || {
 import sys; sys.path.insert(0, ".")
 import pile_config as pc
-print(" ".join(pc.SCALE_CLASSES))
+print("\n".join(pc.SCALE_CLASSES))
 PYC
-  ); do python quarry_export.py --check-bands "$c" || exit 1; done ) || {
     echo "SHARED NEGATIVE POOL CHECK FAILED — the matrix would not be paired" >&2; exit 5; }
   echo "CALIB_EXP=$CALIB_EXP  datasets=$CALIB_DATASETS  embedders=$CALIB_COCO_QUARRY_EMBEDDERS  seeds=$CALIB_N_SEEDS  test_bands=$CALIB_TEST_BANDS"
   submit prepare --job-name=bands-prep --mem=96G --cpus-per-task=8 \
