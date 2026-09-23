@@ -142,7 +142,12 @@ def attribute(base: pd.DataFrame, picks: pd.DataFrame, ts: dict) -> pd.DataFrame
     return inf
 
 
-def cell_table(base: pd.DataFrame, sky: pd.DataFrame, ts: dict) -> pd.DataFrame:
+def cell_table(base: pd.DataFrame, sky: pd.DataFrame, ts: dict, picks: pd.DataFrame) -> pd.DataFrame:
+    """One row per run. A run that never found a positive has no scored steps
+    (the head cannot train without a Good), and it is the review's most
+    important row, so it is listed from its picks with an empty curve rather
+    than dropped."""
+    found = picks.groupby(RUN_KEY)["picked_label"].sum().to_dict() if not picks.empty else {}
     rows = []
     skyd = {}
     if not sky.empty:
@@ -173,8 +178,32 @@ def cell_table(base: pd.DataFrame, sky: pd.DataFrame, ts: dict) -> pd.DataFrame:
         row["ceiling_cost"] = skyd.get((ds, cat, emb, style, int(seed)), np.nan)
         row["clicks_bought"] = row["text_cost"] - row["final_cost"]
         row["headroom"] = row["final_cost"] - row["ceiling_cost"]
+        row["positives_found"] = int(found.get(key, 0))
         rows.append(row)
-    return pd.DataFrame(rows)
+    scored = {tuple(k) for k in base[RUN_KEY].drop_duplicates().itertuples(index=False)}
+    for key, n in found.items():
+        if tuple(key) in scored:
+            continue
+        ds, cat, emb, style, seed = key
+        text = _text_for(ts, ds, cat, emb, int(seed)) or (np.nan, np.nan)
+        rows.append(
+            {
+                "arm": ARMS.get((emb, style), f"{emb}/{style}"),
+                "dataset": ds,
+                "category": cat,
+                "class": cat.split("@")[0],
+                "band": cat.split("@")[1] if "@" in cat else "",
+                "seed": int(seed),
+                "text_cost": text[0],
+                "text_f1": text[1],
+                "ceiling_cost": skyd.get((ds, cat, emb, style, int(seed)), np.nan),
+                "positives_found": int(n),
+                "never_trained": True,
+            }
+        )
+    out = pd.DataFrame(rows)
+    out["never_trained"] = out.get("never_trained", pd.Series(False, index=out.index)).fillna(False).astype(bool)
+    return out
 
 
 def roll_up(inf: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -219,6 +248,9 @@ def _md(df: pd.DataFrame, index: bool = True) -> str:
 
 def summary(cells: pd.DataFrame, img: pd.DataFrame, det: pd.DataFrame, out: Path) -> None:
     lines = ["# State of the App -- summary tables", ""]
+    if not cells.empty and cells["never_trained"].any():
+        nt = cells[cells["never_trained"]][["arm", "category", "positives_found", "text_cost", "ceiling_cost"]]
+        lines += ["## Runs that never found a positive (no detector was ever trained)", "", _md(nt, index=False), ""]
     if not cells.empty:
         lines += ["## Per path, over all cells", ""]
         cols = ["text_cost", "cost_25", "cost_50", "final_cost", "ceiling_cost", "text_f1", "f1_50", "final_f1"]
@@ -270,7 +302,7 @@ def main() -> int:
     if base.empty:
         raise SystemExit(f"no cells under {args.exp}/results/cells")
     ts = text_scores(args.baseline)
-    cells = cell_table(base, sky, ts)
+    cells = cell_table(base, sky, ts, picks)
     inf = attribute(base, picks, ts)
     img, det = roll_up(inf)
     cells.to_csv(args.out / "cells.csv", index=False)

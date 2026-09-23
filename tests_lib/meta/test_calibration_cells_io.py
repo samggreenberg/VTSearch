@@ -467,3 +467,30 @@ class TestRepairNorms:
         medias = {1: {"embeddings": {"dinov3_patch": np.array([1.0, 0.0], dtype=np.float32)}, "patch_grid": grid}}
         cells_io.repair_norms(medias)
         assert medias[1]["patch_grid"] is grid
+
+
+def test_a_starved_cell_that_wrote_only_its_skyline_row_is_starved_not_a_tag_bug(tmp_path: Path) -> None:
+    """#4159: the skyline row is written once per run whatever the votes did.
+
+    `person@small` found no positive in 150 clicks on both paths, so it wrote its
+    skyline row and nothing else. That is the starvation case, and the guard
+    that exists to catch a mis-tagged cell must not refuse the whole analysis.
+    """
+    cells_io = _load_cells_io()
+    cells = tmp_path / "arm" / "cells"
+    cells.mkdir(parents=True)
+    (cells / "task_0000.csv").write_text("t,cost,gmm_variant,schedule,pool_variant\n1,0.5,,,\n")
+    (cells / "task_0001.csv").write_text("t,cost,gmm_variant,schedule,pool_variant\n,0.2,skyline_train_full,,\n")
+    frame, prov = cells_io.load_arm(tmp_path / "arm")
+    assert len(frame) == 1
+    assert "task_0001.csv" in prov["no_positive_found"]
+    assert prov["no_base_rows"] == []
+
+
+def test_a_mis_tagged_cell_still_trips_the_guard(tmp_path: Path) -> None:
+    cells_io = _load_cells_io()
+    cells = tmp_path / "arm" / "cells"
+    cells.mkdir(parents=True)
+    (cells / "task_0000.csv").write_text("t,cost,gmm_variant,schedule,pool_variant\n1,0.5,weird_variant,,\n")
+    with pytest.raises(SystemExit, match="check tag columns"):
+        cells_io.load_arm(tmp_path / "arm")
