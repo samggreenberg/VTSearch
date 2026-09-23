@@ -1069,6 +1069,12 @@ def translate_completeness2(rows, questions, votes):
     return out, unanswered
 
 
+def _roster_review():
+    import roster_review  # noqa: PLC0415
+
+    return roster_review
+
+
 def _translate_surprise(rows, questions, votes):
     from surprise_review import translate_surprise  # noqa: PLC0415
 
@@ -1087,6 +1093,19 @@ TRANSLATORS: dict[str, tuple[Callable[[Path], Path], Callable[..., Any]]] = {
     "surprise": (lambda corpus: corpus / "audit" / "surprise" / "verdicts.jsonl", _translate_surprise),
     "box_tighten": (lambda corpus: corpus / "audit" / "box_tighten" / "verdicts.jsonl", translate_box_tighten),
     # Band-located marks given a real box (#4109); applied with --task box_tighten --audit-dir box_tighten_band.
+    # New roster classes (#4143): identity against existing classes, and membership.
+    "roster_identity": (
+        lambda corpus: corpus / "audit" / "roster_identity" / "verdicts.jsonl",
+        lambda rows, questions, votes: _roster_review().translate_identity(rows, questions, votes),
+    ),
+    "roster_membership": (
+        lambda corpus: corpus / "audit" / "roster_membership" / "verdicts.jsonl",
+        lambda rows, questions, votes: _roster_review().translate_membership(rows, questions, votes),
+    ),
+    "roster_completeness": (
+        lambda corpus: corpus / "audit" / "completeness" / "verdicts.jsonl",
+        lambda rows, questions, votes: _roster_review().translate_completeness(rows, questions, votes),
+    ),
     # Boxes drawn by hand on marks no proposal fitted (#4125); applied like box_tighten_band.
     "box_draw": (lambda corpus: corpus / "audit" / "box_draw" / "verdicts.jsonl", translate_box_draw),
     "box_tighten_band": (
