@@ -58,7 +58,7 @@ class TestProductionFidelity:
 
     def test_each_voting_mode_gets_the_schedule_the_study_chose(self):
         assert production_schedule_for(region_voting=True) == "slow_cap50"
-        assert production_schedule_for(region_voting=False) == "cap50"
+        assert production_schedule_for(region_voting=False) == "corridor20"
         assert production_schedule_for(region_voting=None) == PRODUCTION_SCHEDULE
 
     def test_every_shipped_schedule_beats_the_old_ramp_on_its_own_mode(self):
@@ -305,3 +305,32 @@ class TestParametricNames:
     def test_parametric_names_can_never_be_production(self):
         for name in {*PRODUCTION_SCHEDULE_BY_MODE.values(), PRODUCTION_SCHEDULE}:
             assert ":" not in name
+
+
+class TestCorridor20:
+    """#3551's binary fold-fallback schedule."""
+
+    FIT = GmmFit1D(w_lo=0.7, mu_lo=0.2, var_lo=0.01, w_hi=0.3, mu_hi=0.8, var_hi=0.01)
+
+    def test_is_the_width_point_the_study_measured(self):
+        for n in (1, 5, 13, 40):
+            for xcal in (0.01, 0.45, 0.99, NO_GOOD_THRESHOLD):
+                a = blend_gmm_threshold(xcal, 0.5, _ctx(n), schedule="corridor20", fit=self.FIT)
+                b = blend_gmm_threshold(xcal, 0.5, _ctx(n), schedule="corridor:w=0.2", fit=self.FIT)
+                assert a == b
+
+    @pytest.mark.parametrize("n", [2, 7, 10, 19, 40])
+    def test_the_fallback_sentinel_never_becomes_admit_nothing(self, n):
+        """The defect it replaces: past 6 votes `cap50` blended the sentinel into
+        the cut and admitted nothing.  The corridor keeps it inside the scores."""
+        ctx = BlendContext(n_labels=n, n_good=n - 1, n_bad=1)
+        out = blend_gmm_threshold(NO_GOOD_THRESHOLD, 0.5, ctx, schedule="corridor20", fit=self.FIT)
+        assert out == pytest.approx(0.5 + 0.2 * 0.3)
+        assert blend_gmm_threshold(NO_GOOD_THRESHOLD, 0.5, _ctx(10), schedule="cap50", fit=self.FIT) > 0.8
+
+    def test_without_a_fit_it_is_cap50(self):
+        for n in (1, 6, 13, 40):
+            for xcal in (0.01, 0.9, NO_GOOD_THRESHOLD):
+                a = blend_gmm_threshold(xcal, 0.5, _ctx(n), schedule="corridor20", fit=None)
+                b = blend_gmm_threshold(xcal, 0.5, _ctx(n), schedule="cap50", fit=None)
+                assert a == b

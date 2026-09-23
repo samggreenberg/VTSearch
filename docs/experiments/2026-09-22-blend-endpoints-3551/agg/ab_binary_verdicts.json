@@ -1,0 +1,28 @@
+{
+  "ab-binary-corridor_w_0.3": {
+    "pooled": {
+      "n": 768,
+      "mean": -0.00023255199333615826,
+      "se": 2.0762918781588946e-05,
+      "ci_hi": -0.00019185667252424394,
+      "resolvable": true
+    },
+    "clause1_pooled_ci_below_0": true,
+    "clause2_every_env_ci_below_+0.01": true,
+    "clause3_no_reweighting_resolvably_worse": false,
+    "ships": false
+  },
+  "ab-binary-corridor_w_0.2": {
+    "pooled": {
+      "n": 768,
+      "mean": -0.00017836385397252828,
+      "se": 1.9263694072919383e-05,
+      "ci_hi": -0.0001406070135896063,
+      "resolvable": true
+    },
+    "clause1_pooled_ci_below_0": true,
+    "clause2_every_env_ci_below_+0.01": true,
+    "clause3_no_reweighting_resolvably_worse": true,
+    "ships": true
+  }
+}

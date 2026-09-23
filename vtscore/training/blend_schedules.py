@@ -244,8 +244,12 @@ class CorridorSchedule(BlendSchedule):
     nothing".  That discontinuity confounded any sweep of the corridor (#3551),
     and holding the corridor is also what the unramped variant's thesis says.
 
-    Falls back to the plain blend when no GMM fit is available (the median
-    fallback path), so the corridor never silently becomes a no-op cut.
+    With no GMM fit (the median/degenerate fallbacks) there are no component
+    means to clamp between.  ``no_fit`` then names the schedule to combine
+    under instead; unset, the corridor falls back to a plain blend at its own
+    skip weight, i.e. the x-cal cut unclamped - which is what the #2841 arms
+    measured, but on the fold fallback that cut is the ``NO_GOOD_THRESHOLD``
+    sentinel, so a shipped corridor must name a real schedule here.
     """
 
     name: str
@@ -254,6 +258,7 @@ class CorridorSchedule(BlendSchedule):
     hi: float = 20.0
     ramped: bool = True
     width: float = 1.0
+    no_fit: str | None = None
 
     def openness(self, ctx: BlendContext) -> float:
         """Fraction of the way from the GMM cut to each component mean, in ``[0, width]``."""
@@ -276,6 +281,8 @@ class CorridorSchedule(BlendSchedule):
         mu_lo = getattr(fit, "mu_lo", None)
         mu_hi = getattr(fit, "mu_hi", None)
         if mu_lo is None or mu_hi is None:
+            if self.no_fit is not None:
+                return get_schedule(self.no_fit).combine(xcal, cut, ctx, fit)
             return super().combine(xcal, cut, ctx, fit)
         lo_mean, hi_mean = (mu_lo, mu_hi) if mu_lo <= mu_hi else (mu_hi, mu_lo)
         f = self.openness(ctx)
@@ -335,6 +342,16 @@ _SCHEDULES: tuple[BlendSchedule, ...] = (
     # --- family E: bound the x-cal cut instead of averaging it ---
     CorridorSchedule("corridor", "Clamp x-cal between the component means", ramped=False),
     CorridorSchedule("corridor_ramp", "Corridor opening from the midpoint over 6→20, then held", ramped=True),
+    # --- the #3551 ship: the binary-voting fold fallback ---
+    # A corridor at a fifth of the way to each component mean, constant.  On a
+    # fold-fallback step the x-cal side is the NO_GOOD_THRESHOLD sentinel, so
+    # this is "the GMM midpoint, raised 20% of the way toward the Good mean";
+    # it never lets a ramp blend the sentinel into an admit-nothing cut, which
+    # `cap50` did on 75-100% of the fallback steps it reached past 6 votes.
+    # Without a fit it combines exactly as `cap50` does.
+    CorridorSchedule(
+        "corridor20", "Clamp x-cal to 0.2 of the way to each component mean", ramped=False, width=0.2, no_fit="cap50"
+    ),
 )
 
 SAFE_BLEND_SCHEDULES: dict[str, BlendSchedule] = {s.name: s for s in _SCHEDULES}
@@ -350,22 +367,32 @@ SAFE_BLEND_SCHEDULES: dict[str, BlendSchedule] = {s.name: s for s in _SCHEDULES}
 #:   101-200 votes), while capping at half keeps improving (-0.082).  So the
 #:   shipped curve is the slow ramp **with** the cap - best or tied in every
 #:   vote band and strictly better than ``cap50`` at every positive count.
-#: * ``binary`` - one vector per media.  Here a longer ramp wins only by cutting
-#:   lower, which reverses under reweighting; what survives is keeping a
-#:   permanent half-share of the label-free GMM cut, which reduces the *spread*
-#:   of the threshold rather than relocating it (−0.0173, p=7.6e-43).
+#: * ``binary`` - one vector per media.  #2841 shipped ``cap50`` here when the
+#:   blend was the whole threshold.  Since #2861 the blend is only the fused
+#:   cut's fold *fallback* (0.75-1.1% of steps, all before vote 20), where the
+#:   x-cal side is the ``NO_GOOD_THRESHOLD`` sentinel - and ``cap50`` blends it
+#:   in once its ramp starts, admitting nothing on 75-100% of the fallback
+#:   steps past 6 votes.  #3551 re-tuned the fallback on that stack and
+#:   ``corridor20`` is the one candidate that cleared the pre-registered ship
+#:   rule in the A/B (pooled −0.00018 ± 0.00002 cost, every environment
+#:   resolvable, neither reweighting worse).  The effect is small because the
+#:   fallback is rare; see
+#:   ``docs/experiments/2026-09-22-blend-endpoints-3551/``.  Its region
+#:   counterpart (``corridor:w=0.05``) failed the rule, so region is unchanged.
 #:
 #: The old single ramp (``prod``) is retained in the registry as the measurement
 #: baseline and as the thing to compare against if this is ever revisited.
 PRODUCTION_SCHEDULE_BY_MODE: dict[str, str] = {
     "region": "slow_cap50",
-    "binary": "cap50",
+    "binary": "corridor20",
 }
 
 #: Fallback when the voting mode is unknown.  ``cap50`` is the safe default: it
 #: is the only schedule #2841 found that improves **both** modes under **every**
 #: cost weighting tested, so a caller that cannot say which mode it is in still
-#: gets a strict improvement over the old ramp.
+#: gets a strict improvement over the old ramp.  (#3551's ``corridor20`` is not
+#: a candidate here: on region voting the corridor was resolvably worse at
+#: ``fnr x4`` in the screen.)
 PRODUCTION_SCHEDULE = "cap50"
 
 

@@ -38,14 +38,12 @@ import pandas as pd  # noqa: E402
 
 import _cells_io  # noqa: E402
 
-#: The fallback schedule production resolves per voting mode.  Read from the
-#: registry rather than restated, so a future ship cannot leave this stale.
-from vtscore.training.blend_schedules import production_schedule_for  # noqa: E402
-
-SHIPPED = {
-    "region": production_schedule_for(region_voting=True),
-    "binary": production_schedule_for(region_voting=False),
-}
+#: The fallback schedule production resolved per voting mode **when this study
+#: ran** - the comparator every contrast is against, and what the fidelity gate
+#: checks the live threshold against.  Pinned, not read from the registry:
+#: #3551 itself moved binary to ``corridor20``, and re-analysing these cells
+#: against the new constant would fail the gate on every binary fallback step.
+SHIPPED = {"region": "slow_cap50", "binary": "cap50"}
 
 #: Cost weightings: (w_fpr, w_fnr).  1:1 is inclusion 0; the other two are the
 #: #2841 robustness check, on both sides of it.
