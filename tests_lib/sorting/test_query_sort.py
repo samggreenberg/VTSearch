@@ -21,6 +21,7 @@ from vtscore.training.query_sort import (
     apply_crop_or_keep,
     cosine_sort_active,
     embed_external_labels,
+    example_sort_from_paths,
     parse_label_file,
 )
 
@@ -121,6 +122,54 @@ class TestCosineSortActive:
         query = _fill_active_medias(n=4)
         results, _ = cosine_sort_active(query)
         assert len(results) == 4
+
+
+class TestExampleSortFromPathsStructural:
+    """On a structural dataset the example sort hands *every* example's local
+    features to the Stage-2 re-rank as a template (issue #4161); it used to
+    skip the re-rank for anything but a single example."""
+
+    class _StructuralEmb:
+        supports_geometric_verification = True
+
+        def __init__(self, query: np.ndarray):
+            self._query = query
+
+        def embed_media(self, media):
+            return self._query
+
+        def local_features_forward(self, media):
+            return f"features-of-{media['path']}"
+
+    @pytest.fixture
+    def rerank_calls(self, monkeypatch, tmp_path):
+        query = _fill_active_medias()
+        calls: list[list] = []
+
+        def _fake_rerank(results, threshold, snap, example_features, *, score_key):
+            calls.append(list(example_features))
+            return results, threshold
+
+        monkeypatch.setattr(
+            "vtscore.training.query_sort.score_embedder_for_active",
+            lambda snap: (self._StructuralEmb(query), "sift_vlad"),
+        )
+        monkeypatch.setattr("vtscore.media.embedder.media_from_path", lambda p: {"path": p.name})
+        monkeypatch.setattr(
+            "vtscore.training.structural_similarity.maybe_structural_rerank_example",
+            _fake_rerank,
+        )
+        return calls
+
+    def test_every_example_becomes_a_template(self, rerank_calls, tmp_path):
+        paths = [tmp_path / "a.png", tmp_path / "b.png", tmp_path / "c.png"]
+        results, _ = example_sort_from_paths(paths)
+        assert len(results) == 6
+        assert rerank_calls == [["features-of-a.png", "features-of-b.png", "features-of-c.png"]]
+
+    def test_single_example_is_a_one_template_list(self, rerank_calls, tmp_path):
+        example_sort_from_paths([tmp_path / "only.png"])
+        assert rerank_calls == [["features-of-only.png"]]
 
 
 class TestApplyCropOrKeep:

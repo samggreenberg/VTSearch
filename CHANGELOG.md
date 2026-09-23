@@ -17,6 +17,16 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **Sorting a SIFT/VLAD dataset by several examples now geometrically
+  verifies against every example** (issue #4161). The example sort ran its
+  Stage-2 RANSAC re-rank only when given exactly one example; with two or
+  more it silently fell back to the VLAD centroid, which on a structural
+  dataset ranks at chance. Every example is now a template and a candidate
+  scores as the max over templates, the same rule a detector applies to its
+  Good-vote templates, so several crops of one mark, or of several marks,
+  each find their own instances. Also `vtscore`:
+  `maybe_structural_rerank_example` accepts a sequence of templates
+  (a single `StructuralFeatures` still works).
 - **A tab left open on a deleted detector or dataset now says so, and can move
   off it** (issue #4086). Requests naming an id the registry no longer lists
   answered 409 "Detector is not loaded", which sent you looking for a load

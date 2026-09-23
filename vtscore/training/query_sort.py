@@ -118,7 +118,10 @@ def example_sort_from_paths(file_paths: list[Path]) -> tuple[list[dict], float]:
     dataset.  A single example sorts by cosine similarity to its vector;
     multiple examples sort against their centroid (the mean of the
     L2-normalised example vectors), so each example contributes equally
-    regardless of its embedding norm.
+    regardless of its embedding norm.  On a structural (SIFT/VLAD) dataset
+    that Stage-1 order is then geometrically re-ranked against *every*
+    example as a template, max-over-templates, exactly as the voted path
+    treats its RegionYes templates.
     """
     import numpy as np
 
@@ -156,14 +159,17 @@ def example_sort_from_paths(file_paths: list[Path]) -> tuple[list[dict], float]:
 
     # Stage-2 structural re-rank (a no-op for non-structural datasets): for a
     # SIFT/VLAD dataset, geometrically verify the VLAD shortlist against the
-    # uploaded example's own local features.  The example is the template; any
-    # crop was already applied to the file above, so it restricts the template.
-    # Geometric verification needs a single template, so the multi-example
-    # centroid path skips it and keeps the pure cosine ranking.
-    if len(medias) == 1 and getattr(emb, "supports_geometric_verification", False):
+    # uploaded examples' own local features.  Every example is a template and
+    # a candidate scores as the max over templates - the same rule the voted
+    # path applies to its RegionYes templates - so several crops of one mark
+    # (or several marks) widen what verifies instead of collapsing into the
+    # Stage-1 centroid alone, which on a structural dataset ranks at chance.
+    # Any crop was already applied to the file above, so it restricts the
+    # template.
+    if getattr(emb, "supports_geometric_verification", False):
         from vtscore.training.structural_similarity import maybe_structural_rerank_example
 
-        example_features = emb.local_features_forward(medias[0])
+        example_features = [emb.local_features_forward(m) for m in medias]
         results, threshold = maybe_structural_rerank_example(
             results, threshold, snap, example_features, score_key="similarity"
         )
