@@ -3,6 +3,7 @@ import { ElementRef } from '@angular/core';
 
 import { ImageViewerComponent, RegionBox } from './image-viewer.component';
 import { ActiveContextService } from '../../../services/active-context.service';
+import { MediaPrefetchService } from '../../../services/media-prefetch.service';
 import { Media } from '../../../models/api.models';
 import { configureZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
@@ -1000,5 +1001,110 @@ describe('ImageViewerComponent Escape guard', () => {
     component.regionBox.set([0.1, 0.2, 0.5, 0.6]);
     pressEscape();
     expect(component.regionBox()).toBeNull();
+  });
+});
+
+/**
+ * The viewer's side of the review prefetch (#3896): paint held bytes at once,
+ * and when the vote beat the prefetch, wait for that fetch rather than start a
+ * second download of the same image.
+ */
+describe('ImageViewerComponent with the review prefetch', () => {
+  let component: ImageViewerComponent;
+  let fixture: ComponentFixture<ImageViewerComponent>;
+  let held: Map<string, string>;
+  let inFlight: Map<string, { promise: Promise<string | null>; settle: (u: string | null) => void }>;
+  let released: string[];
+
+  const media = (id: number): Media => ({
+    id,
+    media_type: 'image',
+    filename: `${id}.jpg`,
+    md5: `m${id}`,
+    custom_metadata: {},
+  });
+
+  beforeEach(async () => {
+    held = new Map();
+    inFlight = new Map();
+    released = [];
+    const stub = {
+      resolve: (url: string) => {
+        const h = held.get(url);
+        if (h === undefined) return url;
+        held.delete(url);
+        return h;
+      },
+      claim: (url: string) => inFlight.get(url)?.promise ?? null,
+      release: (url: string) => void released.push(url),
+    };
+    await configureZoneless({
+      imports: [ImageViewerComponent],
+      providers: [ActiveContextService, { provide: MediaPrefetchService, useValue: stub }],
+    }).compileComponents();
+    fixture = TestBed.createComponent(ImageViewerComponent);
+    component = fixture.componentInstance;
+  });
+
+  const inFlightFor = (url: string) => {
+    let settle!: (u: string | null) => void;
+    const promise = new Promise<string | null>((r) => (settle = r));
+    inFlight.set(url, { promise, settle });
+    return settle;
+  };
+
+  it('paints held bytes without touching the network URL', () => {
+    held.set('/api/medias/5/image', 'blob:held/5');
+    fixture.componentRef.setInput('media', media(5));
+    TestBed.tick();
+    expect(component.imageSrc()).toBe('blob:held/5');
+  });
+
+  it('waits for an in-flight prefetch instead of fetching again', async () => {
+    fixture.componentRef.setInput('media', media(4));
+    TestBed.tick();
+    component.onImageLoad();
+
+    const settle = inFlightFor('/api/medias/5/image');
+    fixture.componentRef.setInput('media', media(5));
+    TestBed.tick();
+    // Still the previous src, hidden: no second request for 5 was issued.
+    expect(component.imageSrc()).toBe('/api/medias/4/image');
+    expect(component.imageReady()).toBe(false);
+    // A late load event from the previous src must not unhide it under 5's id.
+    component.onImageLoad();
+    expect(component.imageReady()).toBe(false);
+
+    settle('blob:claimed/5');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(component.imageSrc()).toBe('blob:claimed/5');
+    component.onImageLoad();
+    expect(component.imageReady()).toBe(true);
+  });
+
+  it('falls back to the network URL when the prefetch fails', async () => {
+    const settle = inFlightFor('/api/medias/5/image');
+    fixture.componentRef.setInput('media', media(5));
+    TestBed.tick();
+    settle(null);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(component.imageSrc()).toBe('/api/medias/5/image');
+  });
+
+  it('releases the claim and ignores its bytes when the viewer moves on first', async () => {
+    const settle = inFlightFor('/api/medias/5/image');
+    fixture.componentRef.setInput('media', media(5));
+    TestBed.tick();
+    fixture.componentRef.setInput('media', media(6));
+    TestBed.tick();
+    expect(released).toEqual(['/api/medias/5/image']);
+    expect(component.imageSrc()).toBe('/api/medias/6/image');
+
+    settle('blob:claimed/5');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(component.imageSrc()).toBe('/api/medias/6/image');
   });
 });
